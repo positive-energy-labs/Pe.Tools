@@ -16,40 +16,39 @@ const filename = (targetKey: string, route: string) =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** Indexed Work carries its identity; unreadable records remain available for inspection. */
+/** Indexed Work carries its identity; invalid records are discarded on read (ADR 0033 rule 5). */
 export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
   mkdirSync(dir, { recursive: true });
   return {
     getState: async ({ targetKey, route }) => {
       const path = join(dir, filename(targetKey, route));
       if (!existsSync(path)) return null;
-      // ADR 0033 rule 5 exception (2026-11-07, PROVISIONAL pending kaitpw): refuse and keep
-      // all unreadable bytes. Only a proven older schema permits explicit Start fresh to set
-      // bytes aside; corruption, newer/unknown schemas and identity mismatches get no reset.
-      // No migration or conversion is permitted.
-      const unreadable = (reason: string) =>
-        Object.assign(Error(`Stored Work '${targetKey}' (${route}) cannot be read: ${reason}`), {
-          code: "WorkUnreadable",
-          key: targetKey,
-          reason,
-        });
+      const discard = (reason: string) => {
+        rmSync(path);
+        console.warn(`Discarded stored Work '${path}': ${reason.replace(/\s+/g, " ")}`);
+        return null;
+      };
       let raw: unknown;
       try {
         raw = JSON.parse(readFileSync(path, "utf8"));
       } catch (error) {
-        if (error instanceof SyntaxError) throw unreadable(error.message);
+        if (error instanceof SyntaxError) return discard(error.message);
         throw error;
       }
       const parsed = recordSchema.safeParse(raw);
-      if (!parsed.success) throw unreadable(parsed.error.message);
+      if (!parsed.success) return discard(parsed.error.message);
       const record = parsed.data;
       if (record.targetKey !== targetKey || record.route !== route)
-        throw unreadable("Stored Work identity does not match its address");
+        return discard("Stored Work identity does not match its address");
       return record.value;
     },
-    setState: async ({ targetKey, route, value }) => {
+    setState: async ({ targetKey, route, value, reason }) => {
       const path = join(dir, filename(targetKey, route));
-      if (value == null) return rmSync(path, { force: true });
+      if (value == null) {
+        rmSync(path, { force: true });
+        if (reason) console.warn(`Discarded stored Work '${path}': ${reason.replace(/\s+/g, " ")}`);
+        return;
+      }
       writeFileSync(
         `${path}.tmp`,
         JSON.stringify({ format: "route-state-record-v2", targetKey, route, value }),

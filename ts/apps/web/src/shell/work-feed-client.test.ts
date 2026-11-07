@@ -230,12 +230,7 @@ test.each([
     received: scope.fingerprint,
   },
   {
-    kind: "migration-failed",
-    routeKey: "note",
-    fromVersion: 1,
-    toVersion: 2,
-    step: 1,
-    message: "upgrade failed",
+    kind: "failed", code: "WorkReadFailed", message: "read failed",
   },
   { kind: "failed", code: "HostUnavailable", message: "offline" },
 ] as const)(

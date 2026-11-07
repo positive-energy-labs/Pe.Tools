@@ -42,35 +42,3 @@ export const asyncPresenter: Present = {
   // @ts-expect-error Presenters must return synchronously.
   run: async () => "late",
 };
-
-const recoveryData = {
-  ...builtinData,
-  salvage: "salvage",
-  salvagePresent: "recoveryPresentation",
-  salvageDeps: { page: ["density"], work: ["amount"], readings: ["total"] },
-} as const;
-type RecoveryPresent = BodyBindings<
-  typeof recoveryData,
-  typeof schemas,
-  typeof entries
->["recoveryPresentation"];
-export const recoveryPresent: RecoveryPresent = {
-  slot: "salvagePresent",
-  kind: "present",
-  source: present.source,
-  run: (patches, evidence) => {
-    const amount: number = evidence.work.amount;
-    // @ts-expect-error Undeclared Page fields are absent.
-    void evidence.page.search;
-    // @ts-expect-error No authority is available to a display body.
-    void evidence.workBasis;
-    // @ts-expect-error Evidence is immutable.
-    evidence.work.amount = 3;
-    return `${patches.length} patches for ${amount}`;
-  },
-};
-export const asyncRecoveryPresenter: RecoveryPresent = {
-  ...recoveryPresent,
-  // @ts-expect-error Recovery presentation is synchronous too.
-  run: async () => "late",
-};

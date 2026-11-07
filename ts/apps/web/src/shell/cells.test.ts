@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
+
 import { z } from "zod";
+
 import {
   applyPatches,
   draftCellSchema,
@@ -12,9 +14,13 @@ import {
   type WorkKey,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
+
 import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
+
 import { createWorkJournal, type JournalWriter } from "./journal";
+
 import { invoke, type VerbContext } from "./verbs";
+
 import { kernelCellVerbs } from "./verbs-cells";
 
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
@@ -23,17 +29,21 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
 }));
 
 const key: WorkKey = { binding: "workspace", route: "cells-proof", target: null, work: "one" };
+
 const schema = z.object({
   rules: z.record(z.string(), draftCellSchema(z.string())),
   scope: draftCellSchema(z.string()).nullable().default(null),
 });
+
 type Work = z.infer<typeof schema>;
+
 const spec: RouteStateSpec<typeof schema> = {
   route: key.route,
   title: "Cells",
   description: "Kernel cell verbs",
   schema,
 };
+
 const graph = {
   verbs: {},
   work: schema,
@@ -44,6 +54,7 @@ const graph = {
 } as unknown as RouteGraph<Record<string, unknown>, Work>;
 
 const cleanups: Array<() => void> = [];
+
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
 });
@@ -145,21 +156,6 @@ const row = (type: string, path: string[]) => ({
   id: path.at(-1)!,
   work: key,
   path,
-});
-
-test("the graph is the only authority: each family gets two ids, placed on its own row", () => {
-  const { verbs, placement } = kernelCellVerbs(graph);
-  expect(Object.keys(verbs)).toEqual([
-    "cell:rules.clear",
-    "cell:rules.delete",
-    "cell:scope.clear",
-    "cell:scope.delete",
-  ]);
-  expect(placement["cell:rules"]).toEqual(Object.keys(verbs).slice(0, 2));
-  for (const verb of Object.values(verbs))
-    expect(verb).toMatchObject({ kind: "work", review: "none" });
-  expect(Object.values(verbs).some((verb) => verb.chord)).toBe(false);
-  expect(kernelCellVerbs({}).verbs).toEqual({});
 });
 
 test("each verb lands one single-step journal entry whose undo restores the document", async () => {

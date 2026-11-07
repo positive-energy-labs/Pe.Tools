@@ -1,8 +1,4 @@
-import { worksharingOf, type VerbPresentation } from "./review-contract";
-import { legacyLiveVerbs, type LegacyVerbEnvironment } from "./legacy-environment-bridge";
-import { createWorkScopeAcceptance, type WorkScopeAcceptance } from "./work-scope-acceptance";
-import { reviewChanges } from "./review-value";
-import { z } from "zod";
+import type { createRouteOwner } from "#/shell/owner";
 import {
   canonicalRouteInput,
   invocationOutcome,
@@ -23,15 +19,19 @@ import {
   type WorkKey,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
+import { z } from "zod";
 import {
   runSemanticAction,
   actionResult,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import type { createRouteOwner } from "#/shell/owner";
 import { refuse, writeRefusal, type Refusal } from "../route/refusal";
 import { DEFAULT_WAIT_S } from "../route/waits";
-import type { ReadingState } from "./source-contract";
 import type { JournalDetail } from "./journal";
+import { legacyLiveVerbs, type LegacyVerbEnvironment } from "./legacy-environment-bridge";
+import { worksharingOf, type VerbPresentation } from "./review-contract";
+import { reviewChanges } from "./review-value";
+import type { ReadingState } from "./source-contract";
+import { createWorkScopeAcceptance, type WorkScopeAcceptance } from "./work-scope-acceptance";
 
 export interface WorkHistory<I> {
   /** Complete the metadata only from fresh Readings of the acknowledged Work revision. */
@@ -63,15 +63,11 @@ export interface VerbSnapshot {
   readonly basis: unknown;
   readonly failure?: string | null;
   readonly closed?: boolean;
-  /** Work the host holds but cannot read; only a recovery verb acts on it. */
-  readonly unreadable?: WorkKey | null;
   /**
    * Advances every time the Target or Work key changes, so A -> B -> A is three generations: a
    * result admitted for the first must not land in the third.
    */
   readonly generation?: number;
-  /** Patches the host's set-aside Work would add to this readable Work; only `work.salvage` acts on them. */
-  readonly salvage?: readonly RouteStatePatch[] | null;
 }
 export interface VerbContext<C extends Caller = Caller> {
   readonly acceptance?: WorkScopeAcceptance;
@@ -101,8 +97,6 @@ export interface VerbContext<C extends Caller = Caller> {
   ) => Promise<RouteStateWriteResult>;
   readonly changed?: (state: InvocationState, press: string | null) => void;
   readonly waitSeconds?: number;
-  /** The kernel's start-fresh door; absent means that recovery cannot run. Salvage is a plain Work write. */
-  readonly recover?: (key: WorkKey) => Promise<RouteStateWriteResult>;
 }
 export interface VerbScope {
   readonly page: Readonly<Record<string, unknown>>;
@@ -157,13 +151,6 @@ export type VerbDelivery =
       acknowledgement?: WorkWriteAck;
     }
   | {
-      state: "done";
-      press: string;
-      kind: "recovery";
-      recovery: Recovery;
-      acknowledgement: WorkWriteAck;
-    }
-  | {
       state: "refused" | "failed" | "stale";
       press: string | null;
       refusal: Refusal;
@@ -209,26 +196,6 @@ export interface QueryReceipt {
   readonly value: unknown;
   readonly subject: string | null;
 }
-export type Recovery = "start-fresh" | "salvage";
-/** Each recovery's own predicate: the stage lists its verb, and the verb refuses, only while it holds. */
-const offeredWhen: Record<Recovery, (snapshot: VerbSnapshot) => string | null> = {
-  "start-fresh": (snapshot) =>
-    snapshot.unreadable ? null : "This Work is readable; there is nothing to recover",
-  salvage: (snapshot) =>
-    snapshot.failure ??
-    (snapshot.unreadable
-      ? "Start fresh first; the Work cannot take a write yet"
-      : !snapshot.work
-        ? "Work has not been read yet"
-        : snapshot.salvage?.length
-          ? null
-          : "Nothing set aside is missing from this Work"),
-};
-/** Whether a kernel recovery verb belongs on the stage now. */
-export const recoveryOffered = (verb: VerbDecl, snapshot: VerbSnapshot): boolean => {
-  const recovery = implementationOf(verb)?.recover;
-  return recovery !== undefined && offeredWhen[recovery](snapshot) === null;
-};
 type Terminal = Exclude<VerbDelivery, { state: "review" }>;
 export type InvocationPhase<C extends Caller> =
   | { kind: "press" }
@@ -270,7 +237,6 @@ interface Binding {
   waitSeconds?: number;
   query?: ReadEntry;
   subject?: (value: unknown) => string | null;
-  recover?: Recovery;
 }
 const implementation = Symbol("verb implementation");
 class VerbImplementation {
@@ -486,26 +452,6 @@ export function queryVerb<R extends z.ZodType, S extends z.ZodType>(
   return verb;
 }
 
-/** A kernel recovery: no route patches, no command; a shown review (Pea may skip it, rule 11). */
-export function recoveryVerb<S extends z.ZodType>(
-  recovery: Recovery,
-  declaration: Omit<VerbDecl<S>, "kind" | "review">,
-): VerbDecl<S> {
-  const verb: VerbDecl<S> = { ...declaration, kind: "recovery", review: "shown" };
-  bindImplementation(verb, {
-    recover: recovery,
-    ready: (scope) => offeredWhen[recovery](scope.snapshot),
-    prepare: (scope) =>
-      recovery === "salvage"
-        ? {
-            work: workKey(scope.snapshot.work!.handle.key),
-            members: scope.snapshot.salvage!.map((patch) => patch.path),
-          }
-        : { work: workKey(scope.snapshot.unreadable!) },
-  });
-  return verb;
-}
-
 /** Preview commands use the same admitted transport as commit, and return host-owned evidence. */
 export async function prepareCommand<K extends SemanticActionKey>(
   scope: VerbScope,
@@ -571,9 +517,9 @@ function resolve(
 ): VerbScope | Refusal {
   if (verb.caller === "human" && ctx.caller !== "human")
     return refuse("not-ready", "Only a person can invoke this host door");
-  if (snapshot.closed && verb.kind !== "page" && implementationOf(verb)?.recover !== "start-fresh")
+  if (snapshot.closed && verb.kind !== "page")
     return refuse("not-ready", snapshot.failure ?? "This Work only reads");
-  if (snapshot.failure && verb.kind !== "query" && verb.kind !== "recovery" && verb.kind !== "page")
+  if (snapshot.failure && verb.kind !== "query" && verb.kind !== "page")
     return refuse("not-ready", snapshot.failure);
   if (!verb.subject)
     return subject
@@ -878,35 +824,6 @@ async function invokeCore<C extends Caller>(
                 press,
                 page: binding.page(fresh, input),
               });
-            if (verb.kind === "recovery") {
-              if (!binding.recover)
-                return finish(
-                  failure("refused", "This route has no recovery for this Work", press),
-                );
-              let result: RouteStateWriteResult;
-              if (binding.recover === "salvage") {
-                // Carrying over is an ordinary Work write: one ack, one journal step, undoable.
-                result = await ctx.write(current.work!.handle.key, {
-                  patches: structuredClone(current.salvage!) as RouteStatePatch[],
-                  expectedRevision: current.work!.handle.revision,
-                  press,
-                });
-              } else {
-                if (!ctx.recover || !current.unreadable)
-                  return finish(
-                    failure("refused", "This route has no recovery for this Work", press),
-                  );
-                result = await ctx.recover(structuredClone(current.unreadable));
-              }
-              if (!result.ok) return finish(resultOf(writeRefusal(result)!, press));
-              return finish({
-                state: "done",
-                kind: "recovery",
-                recovery: binding.recover,
-                press,
-                acknowledgement: result.write,
-              });
-            }
             if (verb.kind === "query") {
               if (!binding.query || !binding.intent)
                 return finish(failure("refused", "This query has no read binding", press));

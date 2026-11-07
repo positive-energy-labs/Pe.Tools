@@ -1,4 +1,4 @@
-import {hostReadSource} from "./host-read-source.ts";
+import { hostReadSource } from "./host-read-source.ts";
 import { Context, Effect, Fiber, Layer, Schema, Option } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import {
@@ -7,7 +7,7 @@ import {
 } from "../../../../packages/host-internal/src/native-read.ts";
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import rosterCapture from "../../../../packages/host-contracts/src/fixtures/k2-roster.json" with { type: "json" };
+import rosterCapture from "../../../../packages/host-contracts/src/fixtures/k2-roster.json";
 import { hostOwnership } from "../../../host/src/host-ownership.ts";
 import { HostDocumentMarks } from "../../../host/src/document-marks.ts";
 import { HostSessionInventory } from "../../../host/src/session-inventory.ts";

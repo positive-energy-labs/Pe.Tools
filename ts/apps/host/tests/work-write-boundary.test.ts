@@ -1,17 +1,17 @@
-import { testDocumentMarks } from "./effect-test.ts";
-import { expect, test, vi } from "vite-plus/test";
+import { NodeCrypto } from "@effect/platform-node";
+import { commands, tools, writePreviewSchema, type Command, type ActionReceipt } from "@pe/agent-contracts";
 import { Context, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
-import { NodeCrypto } from "@effect/platform-node";
-import { RunConsents } from "../src/run-consent.ts";
-import { detachedBridge, sessionView, effectTest } from "./effect-test.ts";
+import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { commands, tools, writePreviewSchema, type Command, type ActionReceipt } from "@pe/agent-contracts";
-import { workWriteBoundary } from "../src/work-write-boundary.ts";
-import { assertSealed } from "../src/document-marks.ts";
-import type { CommandContext } from "../src/command-executor.ts";
 import type { ActionExecution } from "../src/action-journal.ts";
+import type { CommandContext } from "../src/command-executor.ts";
+import { assertSealed } from "../src/document-marks.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
+import { RunConsents } from "../src/run-consent.ts";
+import { workWriteBoundary } from "../src/work-write-boundary.ts";
+import { testDocumentMarks } from "./effect-test.ts";
+import { detachedBridge, sessionView, effectTest } from "./effect-test.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
 const writes = Object.entries(commands).filter(([, definition]) => "writeBoundary" in definition);
@@ -250,14 +250,12 @@ test("refetching the same dependency set in a different order preserves the prev
   });
 });
 
-
 test("write admission refuses a producer without a semantic projection", () => {
   expect(() => workWriteBoundary({
     definition: commands["schedule.apply"], prepared: z.unknown(),
     bind: async () => ({ effects: [] }), run: async () => null,
   }, detachedBridge())).toThrow("producer-owned seal projection");
 });
-
 
 test("re-pricing a changed preview remains a successful read and never runs a write", async () => {
   const f = await fixture();
@@ -271,17 +269,6 @@ test("re-pricing a changed preview remains a successful read and never runs a wr
   }
   expect(f.run).not.toHaveBeenCalled();
 });
-
-test("empty salvage crosses the HTTP response contract as 200 null", async () => {
-  const { servePeRoute } = await import("@pe/agent-contracts/pe-api");
-  const response = await servePeRoute(
-    new Request("http://local/pe/route-state/families/salvage"),
-    async () => Response.json(null),
-  );
-  expect(response.status).toBe(200);
-  expect(await response.json()).toBeNull();
-});
-
 
 test("an older preview refuses changed request and Work; a fresh preview keeps its seal across 60 seconds", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -315,7 +302,6 @@ test("an older preview refuses changed request and Work; a fresh preview keeps i
     expect(fresh.run).toHaveBeenCalledOnce();
   } finally { vi.useRealTimers(); }
 });
-
 
 effectTest("preview seal survives the real 60-second run-consent auto-approval", () =>
   Effect.gen(function* () {

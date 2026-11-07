@@ -1,8 +1,8 @@
-import { FAN_READ_MAX } from "./fans-read.ts";
-import { DUCTS_SYSTEM_MAX } from "./ducts-read.ts";
-import type { CatalogAxes, CatalogLink } from "./catalog.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import type { CatalogAxes, CatalogLink } from "./catalog.ts";
+import { DUCTS_SYSTEM_MAX } from "./ducts-read.ts";
+import { FAN_READ_MAX } from "./fans-read.ts";
 import type { PeRouteId } from "./pe-api.ts";
 
 type Declaration = Omit<CatalogLink, "key">;
@@ -207,9 +207,7 @@ export function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId,
     "route-settings.get": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "route-settings.set": axes("None", "One", ["Metadata"], "SessionWrite", "Cheap", []),
     "work.get": axes("Document", "One", ["Metadata"], "Read", "Bounded", []),
-    "work.salvage": axes("Document", "One", ["Metadata"], "Read", "Bounded", []),
     "work.apply": axes("Document", "One", ["Metadata"], "SessionWrite", "Bounded", []),
-    "work.fresh": axes("Document", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "work.history": axes("Document", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "reads.value": axes("None","One",["Metadata"],"Read","Bounded",[]),
     "reads.events": axes("None", "Many", ["Metadata"], "Read", "Cheap", []),

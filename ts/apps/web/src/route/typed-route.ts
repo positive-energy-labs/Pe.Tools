@@ -1,6 +1,3 @@
-import { identityCodecs, subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
-import { salvageWork } from "@pe/agent-contracts/route-state";
-import { z } from "zod";
 import type {
   HostRouteModule,
   Immutable,
@@ -15,6 +12,9 @@ import type {
   WorkHistoryPort,
   Many,
 } from "@pe/agent-contracts";
+import { identityCodecs, subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
+import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
+import { z } from "zod";
 import type { Publication } from "./host-read.ts";
 
 type Field = {
@@ -123,7 +123,6 @@ export interface ActionHandle extends importPlanHandle {
   readonly consent: { until: string; run(): void } | null;
   run(input?: unknown): Promise<unknown>;
 }
-import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 
 type Owner = { state: RouteStateSpec<z.ZodObject>; value?: string };
 export type Owners = Readonly<Record<string, Owner>>;
@@ -202,8 +201,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   const edits = spec.edits;
   const declared = edits?.work;
   const work = !declared ? undefined : "schema" in declared ? declared : { route: spec.key, title: spec.name,
-    description: declared.description ?? spec.directory.summary, schema: declared, schemaVersion: 1,
-    salvage: (raw:unknown) => salvageWork(declared,raw).doc };
+    description: declared.description ?? spec.directory.summary, schema: declared, schemaVersion: 1, };
   const owners = work && edits ? { ...edits.owners, [work.route]: {state:work,value:edits.value} } : {};
   const normalized = { ...spec, needs: spec.needs ?? "project", commands: spec.commands ?? {},
     edits: work && edits ? {...edits,work,owners} : undefined };
@@ -213,9 +211,13 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     schemas.historyDetail=edits.history instanceof z.ZodObject ? edits.history.omit({label:true}) : edits.history;
   }
   const fields: Record<string,RouteGraphJson["fields"][string]> = {};
+  const fieldSchemas: Record<string,string> = {};
   for (const [key,field] of Object.entries(spec.fields)) {
-    schemas[key]=field.schema;
-    fields[key]={role:field.role === "subject" ? "query" : field.role,schema:key,codec:key,
+    let schema=key;
+    while(Object.hasOwn(schemas,schema)) schema=`page:${schema}`;
+    fieldSchemas[key]=schema;
+    schemas[schema]=field.schema;
+    fields[key]={role:field.role === "subject" ? "query" : field.role,schema,codec:key,
       ...(field.initial === undefined ? {} : {initial:field.initial}),url:field.url,share:true,agent:"set"};
   }
   const readIds = new Map<HostRead,string>();
@@ -224,7 +226,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   for(const [id,pane] of Object.entries(spec.panes)) if(pane.read&&!readIds.has(pane.read)) readIds.set(pane.read,id);
   const subjectRead=spec.subject ? readIds.get(spec.subject.read ?? spec.core!) : undefined;
   if(spec.subject && !subjectRead) throw Error("Subject read must be declared by the route");
-  if(spec.subject) fields[spec.subject.field]={...fields[spec.subject.field],role:"subject",schema:spec.subject.field,
+  if(spec.subject) fields[spec.subject.field]={...fields[spec.subject.field],role:"subject",schema:fieldSchemas[spec.subject.field]!,
     codec:spec.subject.field,initial:spec.fields[spec.subject.field]!.initial,url:"push",share:true,agent:"set",
     cardinality:"many",identity:"subject",picker:{reading:subjectRead!,options:"subject"}};
   fields.selected={role:"selection",kinds:["focus"]};
@@ -242,12 +244,15 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
       ...(["document","project","family"].includes(normalized.needs)?["geometry" as const]:[])],fields,
     identities:{subject:{kind:"local",codec:"local"},focus:{kind:"local",codec:"local"}},
     ...(spec.subject?{subject:{field:spec.subject.field,noun:spec.subject.noun,pane:spec.subject.pane,roster:subjectRead!,detail:subjectRead!}}:{}),
-    ...(work?{historyDetail:"historyDetail",work:{schema:"work",route:work.route,version:work.schemaVersion??1,migrations:{}}}:{}),
-    workFields:{},cells:{},panes:Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,
+    ...(work?{historyDetail:"historyDetail",work:{schema:"work",route:work.route,version:work.schemaVersion??1,}}:{}),
+    workFields:Object.fromEntries(Object.entries(work?.schema.shape ?? {}).flatMap(([key,schema])=>{
+      const meta=(schema as z.ZodType).meta();
+      return meta?.title ? [[key,{label:meta.title,internal:meta.internal === true}]] : [];
+    })),cells:{},panes:Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,
       draws:p.read?[readIds.get(p.read)!]:[],verbs:Object.keys(verbs)}])),readings,verbs,seeds:{},layout:discoveryLayout(spec.layout),
     needs:normalized.needs === "browser" || normalized.needs === "host" ? "nothing" : normalized.needs,
     predicates:{},observe:[],resetOnTarget:[],stageOrder:[stage],stages:{[stage]:{panes:Object.keys(spec.panes),verbs:Object.keys(verbs),word:spec.name}}};
-  const host:HostRouteModule={data,schemas,bodies:{},...(work?{workState:work,readWorks:Object.keys(owners).filter(id=>id!==work.route)}:{})};
+  const host:HostRouteModule={data,schemas,...(work?{workState:work,readWorks:Object.keys(owners).filter(id=>id!==work.route)}:{})};
   const entries:Record<string,EntryContract>=Object.fromEntries([...[...readIds.keys()].map(read=>[read.key,read]),
     ...Object.values(normalized.commands).flatMap(c=>[[c.entry,c.contract],...("plan" in c?[[c.plan,c.planContract]]:[])])]);
   return {spec:normalized,data,host,entries};

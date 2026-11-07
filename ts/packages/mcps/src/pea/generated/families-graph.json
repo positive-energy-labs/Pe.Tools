@@ -68,8 +68,7 @@
   "work": {
     "schema": "work",
     "route": "families",
-    "version": 1,
-    "migrations": {}
+    "version": 1
   },
   "readings": {
     "value": {
@@ -211,7 +210,24 @@
   ],
   "predicates": {},
   "cells": {},
-  "workFields": {},
+  "workFields": {
+    "excluded": {
+      "label": "excluded families",
+      "internal": false
+    },
+    "executionOptions": {
+      "label": "execution options",
+      "internal": false
+    },
+    "pod": {
+      "label": "Pod",
+      "internal": false
+    },
+    "takenAt": {
+      "label": "capture time",
+      "internal": true
+    }
+  },
   "seeds": {},
   "needs": "project",
   "resetOnTarget": [],

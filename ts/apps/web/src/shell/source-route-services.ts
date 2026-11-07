@@ -8,7 +8,6 @@ import {
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { callOp } from "../host/catalog-client";
-import { createGeometryReadDoor } from "./geometry-read-door";
 import type { KernelServices, ResolvedRead } from "@pe/agent-contracts";
 import type { AcceptanceToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import type { ReadingSnapshot } from "@pe/agent-contracts";
@@ -47,7 +46,7 @@ export const sourceReadingEvidence = (services: KernelServices) =>
 /** Application adapter for existing domain sources. Acceptance and validation stay in the mount. */
 export function sourceRouteServices(
   sources: Record<string, ReadingSource>,
-  composition: Pick<KernelServices, "target" | "geometry"> = {},
+  composition: Pick<KernelServices, "target"> = {},
   history?: { point?: string; pose(): import("@pe/agent-contracts").HistoryPose },
 ): KernelServices {
   const idlePublications: { subscription: string; generation: number }[] = [];
@@ -83,7 +82,6 @@ export function sourceRouteServices(
       new AbortController().signal,
     );
   const services: KernelServices = {
-    geometry: composition.geometry ?? createGeometryReadDoor(),
     target: composition.target,
     reads: {
       lifetime: "read",

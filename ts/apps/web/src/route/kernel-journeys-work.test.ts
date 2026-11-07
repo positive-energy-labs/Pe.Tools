@@ -8,7 +8,6 @@ import {
 } from "../../../host/node_modules/@effect/platform-node/dist/index.js";
 import { expect, test, vi } from "vite-plus/test";
 import {
-  workKey,
   actionReceiptSchema,
   workFingerprintSchema,
   type Caller,
@@ -35,7 +34,6 @@ import type { ConsentEvent } from "../../../host/src/run-consent";
 import { module as fans } from "../fans/route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import { fileRouteDocumentStore } from "../../../host/src/route-document-store";
 import { routeInput } from "./host";
 import { localId } from "./typed-route";
 import type { Readings } from "../host/resource-stream";
@@ -365,38 +363,6 @@ test("JW2 receive Pea proposals, accept and deny individual cells without changi
   } finally {
     await j.close();
   }
-}, 60_000);
-
-
-test("JW7 typed recovery sets only proven older owner Work aside through the host door", async () => {
-  const j = await journey();
-  try {
-    await j.start();
-    const scope = j.m.owner("ducts")!.scope.key;
-    j.m.dispose();
-    const store = fileRouteDocumentStore(join(j.host.dir, "work"));
-    const older = { version: 1, schemaVersion: 1, revision: 4, doc: { retired: true } };
-    await store.setState({ targetKey: workKey(scope), route: "ducts", value: older });
-    const m = j.mount();
-    await vi.waitFor(() => expect(m.problem()).toContain("older schema"));
-    expect(m.recoveryOwners()).toEqual(["ducts"]);
-    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
-      const parsed = new URL(String(url), "http://host");
-      return j.request(parsed.pathname + parsed.search, init?.body ? JSON.parse(String(init.body)) : undefined);
-    });
-    await m.startFresh("ducts");
-    await vi.waitFor(() => expect(m.owner("ducts")?.ready).toBe(true));
-    expect(await store.getState({ targetKey: workKey(scope), route: "ducts:aside:1" })).toEqual(older);
-    expect(m.recoveryOwners()).toEqual([]);
-    m.dispose();
-    const newer = { ...older, schemaVersion: 99 };
-    await store.setState({ targetKey: workKey(scope), route: "ducts", value: newer });
-    const refused = j.mount();
-    await vi.waitFor(() => expect(refused.problem()).toContain("cannot be read"));
-    expect(refused.recoveryOwners()).toEqual([]);
-    await expect(refused.startFresh("ducts")).rejects.toThrow("Only proven older");
-    expect(await store.getState({ targetKey: workKey(scope), route: "ducts" })).toEqual(newer);
-  } finally { vi.unstubAllGlobals(); await j.close(); }
 }, 60_000);
 
 test("JM H27 interleave a second writer, refuse the original undo and keep its named history", async () => {

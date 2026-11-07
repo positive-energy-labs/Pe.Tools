@@ -72,7 +72,6 @@ test("Snowdon computes copper voltage drop only in its tracked host read", async
     await import("../../../examples/pods/snowdon-circuits/routes/voltage-drop/host.ts");
   const { evaluate } = await import("../host/src/reads/evaluator.ts");
   expect(module.host.schemas.work.parse({})).toEqual({ version: 2, inputs: initial });
-  expect(data.work?.migrations).toEqual({});
   const result = await evaluate(
     calculation,
     {},

@@ -170,7 +170,6 @@ export function createAdmittedReadingPlan(options: {
       id: string,
       state: ReadingPlanContext,
       acquire: (request: ResolvedRead<unknown>) => ReadingSnapshot<unknown>,
-      geometry?: (id: string, context: unknown, input: unknown) => ReadingSnapshot<unknown>,
       invocationFor?: (id: string) => { readonly input: unknown } | undefined,
       cache = new Map<string, ReadingSnapshot<unknown>>(),
     ): ReadingSnapshot<unknown> {
@@ -204,21 +203,6 @@ export function createAdmittedReadingPlan(options: {
               hash: z.string().parse(contentHash(value)),
             };
           } else {
-            if (reading.kind === "use" && reading.geometry) {
-              const linked = bindings();
-              const invocation = invocationFor?.(id);
-              const args = invocation ? invocation.input : reading.args
-                ? linked.bodies[reading.args]!.run(context) : {};
-              // Null is the adapter's unavailable signal, as for every non-geometry reading.
-              if (args === null && !invocation)
-                return unavailable(`Reading arguments unavailable: ${id}`);
-              const input = linked.entries[reading.entry]!.input.parse(args);
-              result = geometry
-                ? geometry(id, context, input)
-                : unavailable("Geometry composition unavailable");
-              cache.set(id, result);
-              return result;
-            }
             const descriptor = request(id, context, invocationFor?.(id));
             result = descriptor
               ? acquire(descriptor)

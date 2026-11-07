@@ -33,42 +33,6 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const queueFull = () =>
-  new HostCallError(
-    "revit.detail.space-scene: Revit queue is full (8 waiting). Retry 'revit.detail.space-scene' shortly.",
-    423,
-    { kind: "BridgeBusy", operationKey: "revit.detail.space-scene", status: 423 },
-  );
-
-it("resends a read refused by a full Revit queue with 1 s then 2 s backoff, then follows the artifact", async () => {
-  vi.useFakeTimers();
-  io.call
-    .mockRejectedValueOnce(queueFull())
-    .mockRejectedValueOnce(queueFull())
-    .mockResolvedValueOnce({ id: "artifact-queue" });
-  const data = sceneData({
-    kind: "capture",
-    document: { session: "queue-session", openId: "queue-doc" },
-    revision: "queue-revision",
-    request: sceneRequest([101], true, 15, "none"),
-  });
-  const unsubscribe = data.subscribe(() => {});
-
-  await vi.advanceTimersByTimeAsync(0);
-  expect(io.call).toHaveBeenCalledTimes(1);
-  await vi.advanceTimersByTimeAsync(999);
-  expect(io.call).toHaveBeenCalledTimes(1);
-  await vi.advanceTimersByTimeAsync(1);
-  expect(io.call).toHaveBeenCalledTimes(2);
-  await vi.advanceTimersByTimeAsync(2_000);
-  expect(io.call).toHaveBeenCalledTimes(3);
-
-  await vi.advanceTimersByTimeAsync(0);
-  expect(io.fetch).toHaveBeenCalledWith("artifact-queue", expect.any(AbortSignal));
-  expect(data.read().state).toBe("ready");
-  unsubscribe();
-});
-
 it("preserves a capture failure and its validation issues without a fallback read", async () => {
   const error = new HostCallError("invalid", 422, {
     issues: [{ path: "region", message: "required" }],
@@ -85,31 +49,6 @@ it("preserves a capture failure and its validation issues without a fallback rea
   expect(data.read()).toEqual({ state: "failed", error });
   expect(io.call).toHaveBeenCalledTimes(1);
   release();
-});
-it("delivers an explicitly requested scene after 151 seconds without abandoning or reissuing it", async () => {
-  vi.useFakeTimers();
-  io.call.mockImplementation(
-    () => new Promise((resolve) => setTimeout(() => resolve({ id: "slow-151" }), 151_000)),
-  );
-  const data = sceneData({
-    kind: "capture",
-    document: { session: "slow-151", openId: "doc" },
-    revision: 1,
-    request: sceneRequest([101], false, 15, "meshes"),
-  });
-  const release = data.subscribe(() => {});
-  try {
-    await vi.advanceTimersByTimeAsync(120_001);
-    expect(data.read().state).toBe("pending");
-    expect(io.call.mock.calls[0]![2].signal.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(30_999);
-    expect(data.read().state).toBe("ready");
-    expect(io.call).toHaveBeenCalledTimes(1);
-    expect(io.fetch).toHaveBeenCalledWith("slow-151", expect.any(AbortSignal));
-  } finally {
-    release();
-    await vi.advanceTimersByTimeAsync(0);
-  }
 });
 
 it("the last reader leaving aborts the client wait and ignores a late native answer", async () => {

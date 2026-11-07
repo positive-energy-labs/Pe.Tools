@@ -403,14 +403,14 @@ const verdictSchema = z.enum(["accept", "dismiss"]);
  */
 const takeoffsDocumentSchema = z
   .strictObject({
-    writeIntent: writeIntentSchema.optional(),
-    edits: z.record(keyed(2, "edit"), editCellSchema).default({}),
-    bases: z.record(z.string(), roomEditSchema).default({}),
+    writeIntent: writeIntentSchema.optional().meta({ title: "Write scope", internal: true }),
+    edits: z.record(keyed(2, "edit"), editCellSchema).default({}).meta({ title: "Room edits" }),
+    bases: z.record(z.string(), roomEditSchema).default({}).meta({ title: "Baseline room values" }),
     /** Keyed by candidate (`<view>:<elementId>`). */
-    adopt: z.record(z.string(), draftCellSchema(adoptChoiceSchema)).default({}),
-    decisions: z.record(keyed(2, "decision"), draftCellSchema(verdictSchema)).default({}),
+    adopt: z.record(z.string(), draftCellSchema(adoptChoiceSchema)).default({}).meta({ title: "Adoption choices" }),
+    decisions: z.record(keyed(2, "decision"), draftCellSchema(verdictSchema)).default({}).meta({ title: "Flag decisions" }),
     /** A flag has no commit verb: the edited set is the durable judgment and the export. */
-    reviewFlags: z.record(keyed(2, "review flag"), draftCellSchema(z.literal(true))).default({}),
+    reviewFlags: z.record(keyed(2, "review flag"), draftCellSchema(z.literal(true))).default({}).meta({ title: "Review flags" }),
   })
   .superRefine((doc, ctx) => {
     // Each edit's rungs hold a value that field accepts.

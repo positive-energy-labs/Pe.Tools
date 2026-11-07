@@ -56,8 +56,6 @@ export interface MountAdapters<P, W> extends VerbReadingEdges {
   workHistory?: WorkHistory<{ request: WorkWrite; label: string }>;
   write(key: WorkKey, write: WorkWrite): Promise<RouteStateWriteResult>;
   subscribeAcceptedDeltas(key: WorkKey, onAck: (ack: WorkWriteAck) => void): () => void;
-  /** The recovery door behind the start-fresh verb (`useWorkScope`); absent only in tests that never reach unreadable Work. */
-  startFresh?(key: WorkKey): Promise<RouteStateWriteResult>;
   /** Asks the host for this Work again (the conflict banner's one control); absent in tests that never conflict. */
   reread?(key: WorkKey): void;
   subjects?: VerbContext["subjects"];

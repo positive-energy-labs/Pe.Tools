@@ -1,49 +1,5 @@
 // Extracted metadata only; no old declaration or runtime is imported.
-// Root ruling 2026-11-07: keep the six Takeoffs entries through Phase 1. Remove
-// those entries and their links with the atlas demos in the same gated Phase 2 commit.
 export const retainedFixtureCatalogue = [
-  {
-    "route": "takeoffs",
-    "path": "/takeoffs",
-    "action": "adopt",
-    "title": "project-a — regions drawn, nothing adopted",
-    "href": "/takeoffs?fixture=adopt"
-  },
-  {
-    "route": "takeoffs",
-    "path": "/takeoffs",
-    "action": "partition",
-    "title": "project-a — zones adopted, ready to partition",
-    "href": "/takeoffs?fixture=partition"
-  },
-  {
-    "route": "takeoffs",
-    "path": "/takeoffs",
-    "action": "refresh",
-    "title": "project-a — a stale model waiting for a re-read",
-    "href": "/takeoffs?fixture=refresh"
-  },
-  {
-    "route": "takeoffs",
-    "path": "/takeoffs",
-    "action": "sync",
-    "title": "project-a — partitioned, .r10 bound, sync unreviewed",
-    "href": "/takeoffs?fixture=sync"
-  },
-  {
-    "route": "takeoffs",
-    "path": "/takeoffs",
-    "action": "launch",
-    "title": "project-a — synced, RHVAC not open",
-    "href": "/takeoffs?fixture=launch"
-  },
-  {
-    "route": "takeoffs",
-    "path": "/takeoffs",
-    "action": "retry-r10",
-    "title": "project-a — the .r10 read failed",
-    "href": "/takeoffs?fixture=retry-r10"
-  },
   {
     "route": "session-admin",
     "path": "/session-admin",

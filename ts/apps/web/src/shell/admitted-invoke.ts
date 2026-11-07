@@ -496,7 +496,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
           },
         });
         if (retained.kind === "overload") throw new InvocationOverload("preparing");
-        beginQuery(readingId, { input: intent, invocation }, false);
+        beginQuery(readingId, { input: intent, invocation });
         const review = reviews.get(id);
         return review ? { kind: "review", preview: review.preview } : { kind: "preview" };
       }

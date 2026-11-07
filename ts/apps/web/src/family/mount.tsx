@@ -26,16 +26,17 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
     page = ctx.page.read();
   const [failure, setFailure] = useState<string | null>(null),
     [source, setSource] = useState("");
+  const [destination, setDestination] = useState<{ pod: string; text: string } | null>(null);
   const list = useList({
     value: ctx.value,
     rowsOf: (data) =>
       data.pods.flatMap((pod) =>
         pod.members
           .filter((member) => isSpecOf(member.schema ?? null, FAMILY_MODEL_SCHEMA))
-          .map((member) => ({ ...member, pod: pod.id })),
+          .map((member) => ({ ...member, pod: pod.id, podName: pod.name })),
       ),
     keyOf: (row) => `${row.pod}/${row.path}`,
-    search: (row) => ({ text: [row.pod, row.path] }),
+    search: (row) => ({ text: [row.podName, row.path] }),
     select: "single",
     onPick: (row) => ctx.page.query({ pod: row.pod, path: row.path }),
   });
@@ -76,8 +77,13 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
             Destination pod
             <Input
               aria-label="Destination pod"
-              value={page.pod}
-              onChange={(event) => ctx.page.query({ pod: event.target.value, path: "" })}
+              value={destination?.pod === page.pod ? destination.text : data?.pods.find((pod) => pod.id === page.pod)?.name ?? ""}
+              onChange={(event) => {
+                const text = event.target.value;
+                const pod = data?.pods.find((pod) => pod.name === text)?.id ?? text;
+                setDestination({ pod, text });
+                ctx.page.query({ pod, path: "" });
+              }}
             />
           </label>
           <Button
@@ -123,7 +129,7 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
           empty={{ message: "No saved family members", exit: "Save a family into a pod" }}
           row={(row) => ({
             label: row.path,
-            sub: row.pod,
+            sub: row.podName,
             active: page.pod === row.pod && page.path === row.path,
             actions: (
               <Button

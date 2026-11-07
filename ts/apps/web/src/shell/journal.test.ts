@@ -5,7 +5,6 @@ import {
   type RouteStatePatch,
   type WorkAuthor,
   type WorkWrite,
-  type WorkWriteAck,
 } from "@pe/agent-contracts";
 import { z } from "zod";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
@@ -41,7 +40,7 @@ function fixture() {
     }),
   };
   const stored = new Map<string, unknown>([
-    [workKey(key), { version: 1, revision: 0, doc: initial }],
+    [workKey(key), { version: 1, schemaVersion: 1, revision: 0, doc: initial }],
   ]);
   const workspace = new RouteWorkspace({
     registrations: [{ spec }],
@@ -191,24 +190,6 @@ test("a missed accepted revision retains superseded history rather than restorin
   expect(await f.journal.undo(f.writer)).toMatchObject({ ok: false, code: "barrier" });
   expect(f.requests).toEqual([]);
   expect(f.journal.read().revision).toBe(4);
-});
-
-test("non-undoable start-fresh acknowledgement clears undo and redo", async () => {
-  const f = fixture();
-  const ack = await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
-  await f.journal.undo(f.writer);
-  const fresh: WorkWriteAck = {
-    ...ack,
-    kind: "start-fresh",
-    base: 2,
-    revision: 3,
-    press: null,
-    undoable: false,
-    patches: [{ path: [], value: {} }],
-    inverse: [],
-  };
-  f.journal.accept(fresh);
-  expect(f.journal.read()).toMatchObject({ revision: 3, undo: [], redo: [] });
 });
 
 test("interleaved disjoint presses remain one step each and undo in last-acknowledged order", async () => {

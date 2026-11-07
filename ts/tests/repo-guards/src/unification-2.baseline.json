@@ -360,6 +360,7 @@
     "family",
     "instances",
     "parameter-links",
+    "pod-admin",
     "pods",
     "rhvac-sync",
     "rooms",

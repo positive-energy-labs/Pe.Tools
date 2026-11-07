@@ -213,10 +213,7 @@ export function createWorkJournal(key: WorkKey) {
     if (revision !== null && ack.base !== revision)
       for (const step of [...undo, ...redo]) supersede(step, ack.revision, []);
     revision = ack.revision;
-    if (ack.kind === "start-fresh") {
-      clear();
-      return;
-    }
+
     const ownRestore =
       ack.kind === "restore" &&
       sending?.expectedRevision === ack.base &&
@@ -328,7 +325,7 @@ export function createWorkJournal(key: WorkKey) {
     move("apply", undo.at(-1)!, pea ? "pea" : "human", ack.at ?? Date.now());
   };
 
-  // Receipts outlive the visible revision and undo branch, including start-fresh.
+  // Receipts outlive the visible revision and undo branch.
   const receipts = new Map<number, WorkWriteAck>();
   const reconcile = (
     ack: WorkWriteAck,

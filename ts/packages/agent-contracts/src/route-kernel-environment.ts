@@ -1,4 +1,4 @@
-import type { GeometryReadDoor, ResolvedReadDescriptor } from "./native-read-door.ts";
+import type { ResolvedReadDescriptor } from "./native-read-door.ts";
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 import type { z } from "zod";
 import type { AdmittedRoute } from "./route-kernel-admission.ts";
@@ -398,7 +398,6 @@ export type KernelServices = Pick<
 > & {
   readonly local?: LocalCommandPort;
   readonly work?: import("./work-journal-door.ts").WorkJournalDoor;
-  readonly geometry?: GeometryReadDoor<unknown>;
   readonly target?: () => ScopeToken["identity"]["target"];
   readonly nativeWrite?: import("./work-journal-door.ts").WorkJournalDoor;
   readonly submitNative?: import("./work-journal-door.ts").WorkJournalDoor["submit"];

@@ -71,7 +71,7 @@ export const roomsDocumentSchema = z
       )
       .default({}),
     marks: z.record(z.string(), draftCellSchema(markSchema)).default({}),
-    notes: z.record(z.string(), noteSchema).default({}),
+    notes: z.record(z.string(), noteSchema).default({}).meta({ title: "room notes" }),
   })
   .superRefine((doc, ctx) => {
     for (const [key, cell] of Object.entries(doc.edits)) {

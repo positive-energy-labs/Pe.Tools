@@ -177,10 +177,10 @@ export const scheduleGridDocumentSchema = z.object({
        */
       stale: z.array(z.object({ key: z.string(), was: z.string().nullable() })).optional(),
     })
-    .nullish(),
+    .nullish().meta({ title: "schedule reading", internal: true }),
   cells: z.record(z.string(), scheduleGridCellSchema).default({}),
   /** When the Reading these staged rungs rest on was taken, on the host's clock. The change mark compares against this. */
-  takenAt: z.string().nullable().default(null),
+  takenAt: z.string().nullable().default(null).meta({ title: "capture time", internal: true }),
 });
 export type ScheduleGridDocument = z.infer<typeof scheduleGridDocumentSchema>;
 export const scheduleGridRouteState = {

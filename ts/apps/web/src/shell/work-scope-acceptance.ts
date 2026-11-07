@@ -26,7 +26,7 @@ export interface WorkScopeAcceptance {
 }
 
 type WorkGraph = RouteGraphJson & {
-  work: { schema: "work"; route: string; version: number; migrations: Record<string, string> };
+  work: { schema: "work"; route: string; version: number; };
 };
 
 /** B owns revision acceptance even while legacy callers observe React-delayed snapshots. */

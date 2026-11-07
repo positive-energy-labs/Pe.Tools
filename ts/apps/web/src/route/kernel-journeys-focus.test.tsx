@@ -20,7 +20,7 @@ import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
 import { KeyScopeHost } from "@pe/kit/keys";
 import { module as families } from "../families/route";
-import { createFixtureWorkDoor } from "../shell/fixture-work-door";
+import { familyDraftRouteState } from "@pe/agent-contracts";
 import { module as family } from "../family/route";
 import { detailResponse } from "../../../host/tests/schedule-fixture";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
@@ -223,6 +223,116 @@ test("JZ Ducts chooser query keys preserve open systems until an explicit choice
     expect(requests.length).toBeGreaterThan(count);
   } finally { view?.unmount(); mount.dispose(); unregister(); await host.close(); }
 });
+import { createFixtureWorkDoor } from "../shell/fixture-work-door";
+import { evaluate } from "../../../host/src/reads/evaluator";
+import { reads as familyReads } from "../../../host/src/reads/family";
+import { FAMILY_MODEL_SCHEMA } from "../family/page";
+import { leaks } from "../shell/visible-text";
+
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+test("D G07 Family renders named picker, member roster, Work and stage words without internal identities", async () => {
+  const pod = "f88cf37a-6fda-4ee6-9f20-5b39b47d29ba", member = "Box.family.json";
+  const reading = JSON.stringify({ family: { name: "Box" },
+    parameters: { Width: { dataType: "Length", value: "24in" }, Height: { dataType: "Length", value: "12in" } },
+    types: { Standard: {}, Wide: { Width: "36in" } },
+    connectors: { c1: { domain: "Duct", shape: "Round", diameter: "6in", on: "Front" } },
+  });
+  const original = familyDraftRouteState.schema.parse({ reading, cells: { "/types/Wide/Width": { edit: { value: "40in" } } } });
+  const door = createFixtureWorkDoor(familyDraftRouteState, original);
+  const ready = Promise.withResolvers<void>();
+  let accepted: { key: any; revision: number; doc: unknown };
+  const work: WorkJournalDoor = { ...door, open: scope => ({ subscribe(deliver, end) {
+    return door.open(scope).subscribe(state => {
+      if (state.kind === "ready") {
+        accepted = { key: state.snapshot.handle.key, revision: state.snapshot.revision, doc: state.snapshot.value };
+        ready.resolve();
+      }
+      deliver(state);
+    }, end);
+  } }) };
+  const pending = new Set<Promise<unknown>>(), roster = Promise.withResolvers<void>();
+  let memberReads = 0;
+  const source: UseSource = { kind: "use", open(ctx, deliver) {
+    const task = (async () => {
+      await ready.promise; await roster.promise;
+      const value = await evaluate(familyReads.workspace, { ...(ctx.args as { member: { pod: string; path: string } | null }), target: ctx.target }, {
+        evaluation: crypto.randomUUID(), origin: { kind: "d-rendered-family" }, revision: () => accepted.revision,
+        async take(name) {
+          if (name === "work-scope") return accepted.key;
+          if (name === "work") return { doc: accepted.doc, revision: accepted.revision };
+          if (name === "local:pod.member.read") { memberReads++; return { content: reading, sha256: "a".repeat(64), bytesBase64: "" }; }
+          if (name === "local:pod.member.compose") return { sha256: "a".repeat(64), schemaUrl: FAMILY_MODEL_SCHEMA,
+            schemaJson: null, composed: reading, source: { id: pod, path: member, sha256: "a".repeat(64), bytesBase64: "", origin: "SavedMember" },
+            diagnostics: [], dependencies: [], schemaValidation: "no-schema", semanticValidation: "not-run" };
+          if (name === "file:family-spec") return { doc: null, error: null };
+          if (name === "local:pod.list") return { pods: [{ id: pod, name: "Mechanical library", version: "1.0.0",
+            folder: "mechanical", entrypoints: [], contributions: [], diagnostics: [], members: [
+            { path: member, sha256: "a".repeat(64), schema: FAMILY_MODEL_SCHEMA },
+          ] }], unreadable: [] };
+          throw Error(`Unexpected Family input: ${name}`);
+        },
+      });
+      if (!ctx.signal.aborted) deliver({ kind: "complete", revision: accepted.revision + 1,
+        value: { key: "family.workspace", generation: 0, version: accepted.revision + 1, state: "current", value } });
+    })().catch(error => deliver({ kind: "failure", error }));
+    pending.add(task); void task.finally(() => pending.delete(task));
+    return () => {};
+  } };
+  let search = new URLSearchParams({ pod });
+  const mount = mounts.mountTypedRoute(family, {
+    address: { read: () => new URLSearchParams(search), write: next => { search = new URLSearchParams(next); }, subscribe: () => () => {} },
+    target: { kind: "host" }, fixture: null, custody: { current: () => true }, memory: () => ({}),
+    work: { address: null, open: null },
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work, sources: { "family.workspace": source } });
+  function Journey() { return <TypedChrome mount={mount} document={<span>Family library</span>} />; }
+  const root = createRootRoute({ component: Journey });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/family"] }) });
+  const view = render(<RouterProvider router={router} />);
+  const cleanWords = (where: string) => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), text: string[] = [];
+    while (walker.nextNode()) text.push(walker.currentNode.textContent ?? "");
+    const words = [...text, ...Array.from(document.body.querySelectorAll("[aria-label], [title]"))
+      .flatMap(node => [node.getAttribute("aria-label") ?? "", node.getAttribute("title") ?? ""]),
+      ...Array.from(document.body.querySelectorAll("input")).map(input => input.value)];
+    expect.soft(words.flatMap(word => leaks(word)), where).toEqual([]);
+    expect.soft(words.join(" "), where).not.toContain(pod);
+  };
+  try {
+    await screen.findByText("Family library");
+    await ready.promise;
+    expect(mount.value().current).toBe(false);
+    cleanWords("C746: before the roster publication, no raw identity fallback");
+    roster.resolve();
+    await waitFor(() => expect(mount.value().current, JSON.stringify(mount.value())).toBe(true));
+    expect(mount.owner()?.doc).toEqual(original);
+    expect.soft(await screen.findByText(member)).toBeTruthy();
+    expect.soft(screen.queryByText("Mechanical library")).toBeTruthy();
+    cleanWords("C747: actual Work and member payload display strings");
+    fireEvent.click(screen.getByText(member));
+    await waitFor(() => expect(memberReads).toBeGreaterThan(0));
+    await waitFor(() => expect(mount.value().current).toBe(true));
+    expect(mount.page.read()).toMatchObject({ pod, path: member });
+    expect.soft((screen.getByRole("textbox", { name: "Destination pod" }) as HTMLInputElement).value).toBe("Mechanical library");
+    cleanWords("C746: selected roster member keeps its canonical key off the surface");
+    await act(async () => fireEvent.click(screen.getAllByRole("button", { name: /^bind/ })[0]!));
+    const picker = await screen.findByRole("listbox", { name: "bind c1.diameter" });
+    expect(within(picker).getAllByRole("option").some(option => option.textContent?.includes("Width"))).toBe(true);
+    cleanWords("C746: rendered binding picker labels");
+    fireEvent.keyDown(picker, { key: "Escape", code: "Escape" });
+    for (const stage of ["audit", "apply", "history"] as const) {
+      await act(async () => mount.page.pose({ stage }));
+      expect(mount.page.read().stage).toBe(stage);
+      expect(view.container.textContent).toContain("Family");
+      cleanWords(`C746: rendered Family route/stage words in ${stage}`);
+    }
+    fireEvent.change(screen.getByRole("textbox", { name: "Destination pod" }), { target: { value: "new-mechanical" } });
+    expect(mount.page.read()).toMatchObject({ pod: "new-mechanical", path: "" });
+    expect((screen.getByRole("textbox", { name: "Destination pod" }) as HTMLInputElement).value).toBe("new-mechanical");
+    expect(mount.owner()?.doc).toEqual(original);
+  } finally { roster.resolve(); view.unmount(); mount.dispose(); await Promise.all(pending); }
+}, 30_000);
+
 
 test("JM H17 browse an optional host route without a pin, then refuse malformed document pins", async () => {
   const module = route({ ...family.spec, edits: undefined, core: undefined, commands: {}, reads: {},

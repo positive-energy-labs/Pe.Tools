@@ -1,6 +1,6 @@
-import {projectWork} from "./host-projection.ts";
 import { registerHooks } from "node:module";
 import ts from "typescript";
+import { projectWork } from "./host-projection.ts";
 // Receipts describe production resolution even when a dev/test launcher verifies them.
 process.env.NODE_ENV = "production";
 // Styles have no bearing on a metadata projection. No component is rendered.
@@ -13,15 +13,15 @@ registerHooks({
 });
 /** Graph declarations own the directory and Pea projections; browser bodies never ship to MCP. */
 import { createJiti } from "jiti";
+import { readdir, mkdir, writeFile, readFile } from "node:fs/promises";
+import { dirname, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { familyFixturesDir } from "../checkout-paths.ts";
 import {
   buildBuiltinClosures,
   routeSourceHash,
   writeBuiltinClosurePin,
 } from "../route-source-hash.ts";
-import { readdir, mkdir, writeFile, readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { dirname, relative, resolve } from "node:path";
-import { familyFixturesDir } from "../checkout-paths.ts";
 const jiti = createJiti(import.meta.url, {
   fsCache: false,
   jsx: { runtime: "automatic" },
@@ -193,7 +193,7 @@ for (const key of keys) {
     let workImport="",workBody="";
     if(typed.spec.edits) {
     const workDestination = new URL(`../../../packages/agent-contracts/src/generated/${key}-work.ts`, import.meta.url);
-    const projected=await projectWork(entry,typed,fileURLToPath(workDestination),`${identifier}RouteState`,"../route-state.ts",
+    const projected=await projectWork(entry,typed,fileURLToPath(workDestination),`${identifier}RouteState`,
       specifier=>jiti.import<Record<string,{schema?:unknown}>>(specifier));
     await emit(workDestination,`// Generated from ${key}/route.ts by codegen:routes. Do not edit.\n${projected.definition}`);
     workImport=`import { ${identifier}RouteState as work } from "../../../../packages/agent-contracts/src/generated/${key}-work.ts";\n`;
@@ -214,11 +214,9 @@ for (const key of keys) {
       }
     }
     await emit(new URL(`../src/${folder}/neutral.generated.ts`,import.meta.url),
-      `// Generated from route.ts by codegen:routes. Neutral projection only.\n${workImport}${typed.spec.edits?'import {z} from "zod";\n':""}import {RouteGraphJson} from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type {HostRouteModule} from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with {type:"json"};\nconst data=RouteGraphJson.parse(closure.envelope.data);\nexport const host:HostRouteModule={data,bodies:{},${workBody||"schemas:{},"}};\n`);
+      `// Generated from route.ts by codegen:routes. Neutral projection only.\n${workImport}${typed.spec.edits?'import {z} from "zod";\n':""}import {RouteGraphJson} from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type {HostRouteModule} from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with {type:"json"};\nconst data=RouteGraphJson.parse(closure.envelope.data);\nexport const host:HostRouteModule={data,${workBody||"schemas:{},"}};\n`);
     await emit(new URL(`../src/${folder}/host.generated.ts`,import.meta.url),
       `// Generated from route.ts by codegen:routes. Host only.\nimport {host as neutral} from "./neutral.generated.ts";\n${runtime?`import * as runtime from ${JSON.stringify(runtime)};\n`:""}import type {HostRouteModule} from "@pe/agent-contracts";\nexport const host:HostRouteModule={...neutral,${runtime?'reads:(runtime as Pick<HostRouteModule,"reads">).reads,':""}};\n`);
-
-
 
   }
   builtinOptions.push({

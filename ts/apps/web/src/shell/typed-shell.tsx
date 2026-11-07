@@ -32,7 +32,6 @@ import { PrimaryRouteControls, useHasGlobalNavigation } from "../navigation/rout
 import { useRouteViewBridge } from "../route/view-bridge";
 import { createContext, useInsertionEffect, useLayoutEffect } from "react";
 import { useRouteCurrent } from "../route/activity";
-import { ReviewSurface } from "./review-surface";
 import { mountTypedRoute, type TypedMount } from "./typed-mount";
 import type { TypedRoute } from "../route/typed-route";
 import type { RouteFingerprint } from "@pe/agent-contracts";
@@ -122,7 +121,7 @@ export function TypedChrome({ mount, document, thread }: { mount: TypedMount; do
   } }} />;
   const head=<SituationBand name={spec.name} context={<>{document}<TypedSubject mount={mount} />{spec.edits && mount.work()?<span>{`r${mount.work()!.revision}`}</span>:null}</>}
     alerts={<>{mount.value().value!==undefined&&!mount.value().current?<span role="status">{retainedValueLabel(mount.value())}</span>:null}{mount.problem() ? <span role="alert">{mount.problem()}</span> : null}{mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}<CatalogWorkReviews mount={mount} /></>}
-    verbs={[...mount.recoveryOwners().map(owner=><TypedRecovery key={owner} mount={mount} owner={owner}/>),...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),...Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />)]}
+    verbs={[...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),...Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />)]}
     timeline={<TimelineHead owner={mount} history={<GraphHistory owner={mount} />} />} />;
   return <SubjectDoor.Provider value={subject}>{view}<KeyScopeHost id={`route:${spec.key}`} hidden={!visible} className="flex min-h-0 flex-1 flex-col">
     <ScopeKeys keys={actionScopeKeys((["undo","redo"] as const).map(direction=>({id:`work.${direction}`,label:direction,bindings:direction==="undo"?["Mod+Z"]:["Mod+Shift+Z","Mod+Y"],
@@ -188,14 +187,6 @@ function TypedStart({mount}:{mount:TypedMount}) {
 
 export function retainedValueLabel(value:{current:boolean;status:string;value?:unknown}) {
   return value.current||value.value===undefined?null:value.status === "pending"?"Showing previous Value; refreshing":"Showing previous Value; refresh needed";
-}
-
-function TypedRecovery({mount,owner}:{mount:TypedMount;owner:string}) {
-  const [review,setReview]=useState(false);
-  return <><Button label="Start fresh" busy={mount.recoveryPending()} onClick={()=>setReview(true)}>Start fresh</Button>
-    {mount.recoveryFailure()?<span role="alert">{mount.recoveryFailure()}</span>:null}
-    {review?<ReviewSurface label="Start fresh" sentence={`Set aside older Work for ${owner} and start empty Work. The saved bytes are kept.`}
-      rows={[]} enabled={!mount.recoveryPending()} confirm={()=>void mount.startFresh(owner).then(()=>setReview(false)).catch(()=>{})} cancel={()=>setReview(false)}/>:null}</>;
 }
 
 type View = Parameters<typeof useRouteViewBridge>[0];

@@ -1,5 +1,5 @@
-import type { AppExposure, AppRouteMount, AppSurface } from "./route-directory.ts";
 import { z } from "zod";
+import type { AppExposure, AppRouteMount, AppSurface } from "./route-directory.ts";
 import { stableKeyKinds, type History, type RouteField } from "./route-field.ts";
 import type { RouteStatePatch } from "./route-state.ts";
 import type { RouteViewRefusalCode } from "./route-view.ts";
@@ -94,12 +94,11 @@ export type Chord = string;
 
 /**
  * `work` writes Work patches, `command` runs a semantic command, `query` runs a host read outside
- * the command table, `recovery` is the kernel's own way out of Work it cannot read: no patches,
- * no command.
+ * the command table, and `page` changes Page only.
  */
 export interface VerbDecl<S extends z.ZodType = z.ZodType> {
   caller?: "human" | "any";
-  kind: "work" | "command" | "query" | "recovery" | "page";
+  kind: "work" | "command" | "query" | "page";
   /** Semantic command or host read identity, retained in the graph's agent projection. */
   does?: string;
   /** A query whose result names the subject Work the graph's `workSubject` field then selects. */
@@ -217,7 +216,7 @@ export interface CellsDecl<W = unknown> {
 
 export interface WorkFieldDecl {
   label: string;
-  internal?: true;
+  internal?: boolean;
 }
 
 /** The subject type of a cell family's rows, and the reserved verb ids derived from it. */
@@ -225,29 +224,6 @@ export const cellSubjectType = (family: Pick<CellsDecl, "segment" | "key">): str
   `cell:${family.segment ?? family.key}`;
 export const cellVerbId = (family: Pick<CellsDecl, "segment" | "key">, kind: CellVerbKind) =>
   `${cellSubjectType(family)}.${kind}`;
-
-/** The kernel's recovery for Work the host cannot read; reserved on every graph with Work. */
-export const START_FRESH_VERB = "work.start-fresh";
-export const startFreshVerb = {
-  kind: "recovery",
-  label: "Start fresh",
-  says: "Set the unreadable Work aside and start it empty; its old bytes are kept beside it",
-  review: "shown",
-  input: z.strictObject({}).default({}),
-} as const satisfies VerbDecl;
-
-/**
- * The kernel's carry-over of what the host set aside (or cannot read) into readable Work: one
- * Work write, so one journal step. Declared on every graph whose `salvage` hook is set.
- */
-export const SALVAGE_VERB = "work.salvage";
-export const salvageVerb = {
-  kind: "recovery",
-  label: "Carry over",
-  says: "Carry what the set-aside Work held into this Work, as one undoable edit",
-  review: "shown",
-  input: z.strictObject({}).default({}),
-} as const satisfies VerbDecl;
 
 export interface RouteDirectory {
   path: string;
@@ -321,16 +297,6 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   capture?: keyof P & string;
   /** Page scope owned by a Target; reset to field defaults on a subsequent Target change. */
   resetOnTarget?: readonly (keyof P & string)[];
-  /**
-   * What the host's salvage read (`work.salvage`) carries over, as the patches this Work still
-   * lacks: empty when everything is already here. The kernel applies them as one Work write.
-   */
-  salvage?: (
-    salvaged: unknown,
-    work: W | null,
-    /** The current reading states, so an ID-only carry-over can resolve names from the exact catalog. */
-    scope: { readings: Readonly<Record<string, { readonly current: unknown }>> },
-  ) => readonly RouteStatePatch[];
   /** Authored segments of Work; the kernel owns clear and delete for them. */
   cells?: readonly CellsDecl<W>[];
   /**
@@ -448,14 +414,7 @@ export function projectRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphJson
       Object.fromEntries(
         Object.entries(graph.seeds).map(([name, seed]) => [name, { title: seed.title }]),
       ),
-    // Kernel-owned verbs are part of what Pea may invoke; the cell verbs derive from `cells`.
-    verbs: graph.work
-      ? {
-          ...graph.verbs,
-          [START_FRESH_VERB]: startFreshVerb,
-          ...(graph.salvage && { [SALVAGE_VERB]: salvageVerb }),
-        }
-      : graph.verbs,
+    verbs: graph.verbs,
     fields,
     stageOrder: graph.stageOrder ?? Object.keys(graph.stages),
   }) as unknown as RouteGraphJson;
@@ -680,16 +639,6 @@ export function validateRouteGraph<P, W>(
         }
       }
     }
-    if (graph.work && Object.hasOwn(graph.verbs, START_FRESH_VERB))
-      refuse(
-        "reserved-verb",
-        `verbs.${START_FRESH_VERB}`,
-        `'${START_FRESH_VERB}' is a kernel verb id`,
-      );
-    if (graph.work && Object.hasOwn(graph.verbs, SALVAGE_VERB))
-      refuse("reserved-verb", `verbs.${SALVAGE_VERB}`, `'${SALVAGE_VERB}' is a kernel verb id`);
-    if (graph.salvage && !graph.work)
-      refuse("invalid-graph", "salvage", "Only a graph with Work can carry salvage over");
     for (const id of graph.observe ?? []) {
       if (!graph.work || !graph.verbs[id] || graph.verbs[id]!.review !== "none")
         refuse(
@@ -705,7 +654,7 @@ export function validateRouteGraph<P, W>(
         refuse("invalid-graph", "workSubject", `Unknown Page field '${graph.workSubject}'`);
     }
     for (const [id, verb] of Object.entries(graph.verbs)) {
-      if (!["work", "command", "query", "recovery", "page"].includes(verb.kind))
+      if (!["work", "command", "query", "page"].includes(verb.kind))
         refuse("invalid-graph", `verbs.${id}.kind`, "Unknown verb kind");
       if (verb.kind === "page" && (verb.review !== "none" || verb.subject || verb.does))
         refuse(
@@ -715,8 +664,6 @@ export function validateRouteGraph<P, W>(
         );
       if (verb.selects === "work" && graph.workSubject === undefined)
         refuse("invalid-graph", `verbs.${id}`, "A query that selects Work needs `workSubject`");
-      if (verb.kind === "recovery")
-        refuse("reserved-verb", `verbs.${id}`, "Recovery verbs are kernel-owned");
     }
     const families = new Set<string>();
     const shape = graph.work ? unwrapSchema(graph.work).shape : undefined;

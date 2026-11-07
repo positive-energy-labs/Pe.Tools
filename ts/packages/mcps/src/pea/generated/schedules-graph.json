@@ -97,8 +97,7 @@
   "work": {
     "schema": "work",
     "route": "schedules",
-    "version": 1,
-    "migrations": {}
+    "version": 1
   },
   "readings": {
     "value": {
@@ -255,7 +254,16 @@
   ],
   "predicates": {},
   "cells": {},
-  "workFields": {},
+  "workFields": {
+    "basis": {
+      "label": "schedule reading",
+      "internal": true
+    },
+    "takenAt": {
+      "label": "capture time",
+      "internal": true
+    }
+  },
   "seeds": {},
   "needs": "project",
   "resetOnTarget": [],

@@ -173,10 +173,6 @@ test("a recorded workspace with no store serves the delivered Work, feed and his
   const recorded = new RouteWorkspace({
     registrations: [],
     recorded: recordedWorkSource(await reader(dir)),
-    authorizeMutation: (verb) => {
-      if (verb === "start-fresh")
-        throw Object.assign(Error("historical Work is read-only"), { code: "WorkHistorical" });
-    },
   });
   await admit(recorded);
   const { context: again } = await consumer(
@@ -208,10 +204,7 @@ test("a recorded workspace with no store serves the delivered Work, feed and his
       2,
     ),
   ).rejects.toThrow("recorded workspace refuses Work edit");
-  // The injected policy's own refusal wins over the store-less guard.
-  await expect(recorded.startFresh(key, "fans", "human")).rejects.toMatchObject({
-    code: "WorkHistorical",
-  });
+
   // The two feed shapes are not interchangeable, and root's handle/revision/history invariants hold.
   const feed = delivered.feed as { revision: number; handle: object };
   expect(await decodes(workFeedCodecs["work-acks"], feed)).toBe(true);

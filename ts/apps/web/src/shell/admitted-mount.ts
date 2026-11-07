@@ -15,12 +15,10 @@ import {
   createAdmittedRouteRegistry,
   resolveRouteBindings,
 } from "../../../../packages/agent-contracts/src/route-module.ts";
-import * as recoveryHost from "../route/host.ts";
 import { createAdmittedAddress } from "./admitted-address.ts";
 import { createAdmittedBody } from "./admitted-body.ts";
 import { createAdmittedCellActions, createAdmittedCells } from "./admitted-cells.ts";
 import type { MountContext } from "./admitted-context.ts";
-import { createAdmittedGeometry } from "./admitted-geometry.ts";
 import { createAdmittedHistory } from "./admitted-history.ts";
 import { createAdmittedInvocation } from "./admitted-invoke.ts";
 import { canonicalEnvironmentInput } from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
@@ -33,7 +31,6 @@ import { createAdmittedReadings } from "./admitted-readings.ts";
 import { createAdmittedEnvironment, createAdmittedScope } from "./admitted-scope.ts";
 import { createAdmittedWork } from "./admitted-work.ts";
 import { createApplicationWorkRegistry } from "./application-work-registry.ts";
-import { fixtureGeometryDoor } from "./fixture-geometry-door.ts";
 import { recordedWorkDoor } from "./history.ts";
 import { createNamedFixtureRouteEnvironment } from "./fixture-lane";
 import { createAttention } from "./admitted-attention.ts";
@@ -163,7 +160,6 @@ export function createRouteShell(
         cells,
         observers,
         work: () => work,
-        geometry: () => geometry,
         environment: () => environment,
         readings: () => readings,
         invocation: () => invocation,
@@ -185,7 +181,6 @@ export function createRouteShell(
             drawing = false;
           }
         },
-        recoveryHost: fixture === null && !input.history ? recoveryHost : undefined,
         sourceEvidence: {
           dependencies: evidence?.dependencies.bind(evidence),
           observe: fixture === null && !input.history ? evidence?.observe.bind(evidence) : undefined,
@@ -207,7 +202,6 @@ export function createRouteShell(
                 ...services,
                 work: route.data.work ? { read: liveDoor, submit: liveDoor } : undefined,
                 submitNative,
-                geometry: undefined,
               },
             })
           : createNamedFixtureRouteEnvironment({
@@ -237,14 +231,6 @@ export function createRouteShell(
         (scope) => entryFor(scope.key).connect(scope, door!),
         (key) => entryFor(key).refusedEdits,
       );
-      const geometry = createAdmittedGeometry({
-        route,
-        owner,
-        issuer: environmentIssuer,
-        entries: bindings.entries,
-        door: fixture === null ? services.geometry : fixtureGeometryDoor(plan.seed(fixture)),
-        notify: () => schedule(),
-      });
       const action = () => {
         if (drawing) throw Error("Admitted action cannot run during render");
         if (invocation.presenting()) throw Error("Admitted action cannot run during presentation");
@@ -270,7 +256,6 @@ export function createRouteShell(
         unsubscribeOwner();
         transport?.close();
         readings.suspend();
-        geometry.close();
         work.close();
         environment.close();
         plan.close();
@@ -355,7 +340,6 @@ export function createRouteShell(
           invocation.suspend();
           resources = "released";
           readings.suspend();
-          for (const id of Object.keys(route.data.readings)) geometry.suspend(id);
         },
         dispose: close,
         invoke,

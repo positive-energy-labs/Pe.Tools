@@ -59,7 +59,7 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
       throw Error(`Unsupported admitted mount body slot: ${body.slot}`);
     }
   // Migration bodies execute only in host admission. The Work feed proves registration
-  // and finishes persistent migration before exposing Work; no body or schema is sent here.
+  // and validates stored Work before exposing it; no body or schema is sent here.
   // Result landing owns presentation for verbs without a sealed ModelWrite preview.
   for (const [id, verb] of Object.entries(route.data.verbs)) {
     if (

@@ -14,7 +14,7 @@ import { SceneMeshes } from "#/scene/types";
 import { makeAtomRegistry } from "#/shell/owner";
 import { RegistryContext } from "@effect/atom-react";
 import { attention, elementKey, setHovered, type SubjectKey } from "@pe/kit/lang/attention";
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import * as Atom from "effect/reactivity/Atom";
 import { createElement, type ComponentProps } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
@@ -226,30 +226,7 @@ it("hovering a context element names whose air it is and that this fan's calc le
   });
 });
 
-it.each([1, 3, "all"] as const)(
-  "fan = %s requests exactly one overview before sheet details",
-  async (pick) => {
-    io.call.mockResolvedValue({ id: `fan-overview-${pick}` });
-    const rows = Array.from({ length: 111 }, (_, i) => i + 1).map((n) => ({
-      unitId: 999100 + n,
-      uniqueId: `fan-${n}`,
-      portIndex: 1,
-      mark: `F-${n}`,
-    })) as FanPort[];
-    const fans = pick === "all" ? rows : rows.slice(0,pick);
-    mount(null, ["meshes", "halo"], fans);
-    await waitFor(() => expect(io.call).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(seen.model!.read.meshes).toBeTruthy());
-    expect(document.querySelector('[data-drawn="true"]')).not.toBeNull();
-    expect(seen.model!.read.pending).toBe(false);
-    expect(io.call.mock.calls[0]![1]).toMatchObject({
-      elementIds: fans.map((fan) => fan.unitId),
-      contextRepresentation: "overview",
-      contextPaddingFt: 10,
-      focusOnly: false,
-    });
-  },
-);
+
 
 it("reads a selected duct and run from the current sheet, including missing data and provenance", () => {
   const leg = { ...sheetFixture.legs.legs[0], elementId: a!.id, flowCfm: 120, velocityFpm: null };

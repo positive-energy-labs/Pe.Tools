@@ -14,7 +14,6 @@ import type {
   SchemaValue,
   WorkOf,
 } from "./route-kernel-page.ts";
-import type { RouteStateSpec } from "./route-state.ts";
 import type { WorkSchema } from "./route-kernel-page.ts";
 import type { ExecutionTarget } from "./target.ts";
 import type { JournalSubmission, Observation, WorkWriteOutcome } from "./work-journal-door.ts";
@@ -127,7 +126,7 @@ export interface BodyContext<
   readonly work: Immutable<Pick<WorkOf<G, S>, Extract<DepKeys<D, "work">, keyof WorkOf<G, S>>>>;
   readonly readings: Reads<G, S, E, DepKeys<D, "readings">>;
 }
-/** Predicates/salvage are global observers: invalidate on every Page/Work/reading
+/** Predicates are global observers: invalidate on every Page/Work/reading
  * publication. They are never scheduled under a reading's narrower dependency declaration. */
 export interface GlobalBodyContext<
   G extends RouteGraphJson,
@@ -262,18 +261,6 @@ export interface WorkHistoryPort<Meta = import("./route-graph.ts").GraphJsonValu
   redo(press?: string): unknown;
   revert(press?: string): unknown;
 }
-/** Recovery is composed by the mount. Routes never receive a raw reset or Work key. */
-export interface WorkRecoveryPort {
-  state(): Readonly<{
-    sentence: string | null;
-    startFresh: boolean;
-    carryOver: boolean;
-    busy: boolean;
-    problem: string | null;
-  }>;
-  startFresh(): Promise<unknown>;
-  carryOver(): Promise<unknown>;
-}
 export type PaneContext<
   G extends RouteGraphJson,
   S extends SchemaTable,
@@ -289,22 +276,11 @@ export type PaneContext<
     ) => Observation<WorkWriteOutcome>;
   };
   readonly history?: "work" extends keyof G ? WorkHistoryPort<HistoryMeta<G, S>> : never;
-  readonly recovery?: "work" extends keyof G ? WorkRecoveryPort : never;
   readonly work: Immutable<WorkOf<G, S>> | null;
   /** Issued with this rendered Work value. Its token.scope.identity.work is the handle
    * and workRevision is the accepted revision. Kernel membership rejects copied bases. */
   readonly workBasis: InvocationToken | null;
   readonly readings: Reads<G, S, E, G["panes"][P]["draws"][number]>;
-  /** Declared explicit geometry readings only. The mount owns invocation and refresh. */
-  readonly readingActions?: {
-    readonly [K in Extract<
-      G["panes"][P]["draws"][number],
-      keyof G["readings"]
-    > as G["readings"][K] extends { geometry: { representation: "detailed" } } ? K : never]: {
-      readDetailed(): void;
-      refresh(): void;
-    };
-  };
   /** Event-only row placement; the mount refuses dispatch during pane draw. */
   readonly place?: G["panes"][P]["verbs"] extends { row: infer R; allowed: readonly (infer V)[] }
     ? (
@@ -312,7 +288,6 @@ export type PaneContext<
         input: unknown,
       ) => Readonly<Partial<Record<Extract<V, string>, () => unknown>>>
     : never;
-  readonly readCosts?: Readonly<Record<string, import("./native-read-door.ts").ReadCost>>;
   readonly visible: boolean;
   /** Presentational Place provenance only; never Target, Work or dispatch authority. */
   readonly fixture: string | null;
@@ -549,16 +524,6 @@ export type BodySlots<
   E extends EntryTable,
   Render = unknown,
 > =
-  | (G extends { work: { migrations: infer M } }
-      ? {
-          [K in keyof M & string]: Slot<
-            M[K],
-            `work.migrations.${K}`,
-            "migration",
-            NonNullable<RouteStateSpec<z.ZodType>["migrations"]>[number]
-          >;
-        }[keyof M & string]
-      : never)
   | ReadingSlots<G, S, E>
   | PickerSlots<G, S, E>
   | VerbSlots<G, S, E>
@@ -604,21 +569,7 @@ export type BodySlots<
         ctx: BodyContext<G, S, E, { deps: At<G, "transitionDeps"> }>,
       ) => DecodeResult<PagePatch<G, S>>
     >
-  | Slot<
-      At<G, "salvagePresent">,
-      "salvagePresent",
-      "present",
-      (
-        result: WorkPatches<G, S>,
-        evidence: Immutable<BodyContext<G, S, E, { deps: At<G, "salvageDeps"> }>>,
-      ) => Presentation
-    >
-  | Slot<
-      At<G, "salvage">,
-      "salvage",
-      "salvage",
-      (old: unknown, ctx: GlobalBodyContext<G, S, E>) => DecodeResult<WorkPatches<G, S>>
-    >;
+;
 export type BodyBindings<
   G extends RouteGraphJson,
   S extends SchemaTable,

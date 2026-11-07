@@ -19,7 +19,7 @@ test("the builtin closure producer hashes fans without another route", async () 
         key: "fans",
         address: "/fans",
         capabilities: ["work"],
-        work: { route: "fans", schema: "work", version: 1, migrations: {} },
+        work: { route: "fans", schema: "work", version: 1, },
       },
       hostVersion: "w1c-fixture",
       inputs: [],

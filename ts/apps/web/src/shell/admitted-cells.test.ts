@@ -76,7 +76,7 @@ test("schema-derived typed Work paths agree with runtime admission", () => {
 test("root cell families enumerate only their declared keys", () => {
   const cells = createAdmittedCells(
     {
-      work: { route: "fans", schema: "work", version: 1, migrations: {} },
+      work: { route: "fans", schema: "work", version: 1, },
       cells: {
         designFriction: {
           segment: null,

@@ -23,13 +23,14 @@ async function fixture(
   salt = "first",
   native?: { key: string; cost: "Cheap" | "Bounded" },
   address = `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}`,
+  initialWork = false,
 ) {
   const data = {
     ...builtinData,
     key: "pod.fixture.tool",
     address,
     name: `Fixture ${salt}`,
-    work: { schema: "work", route: "pod.fixture.tool", version: 2, migrations: {} },
+    work: { schema: "work", route: "pod.fixture.tool", version: 2, },
   };
   const entry = join(root, "entry.ts");
   const imports = fileURLToPath(
@@ -39,6 +40,7 @@ async function fixture(
     entry,
     `import { builtinModule } from ${JSON.stringify(imports)};
 export const module = { ...builtinModule, data: ${JSON.stringify(data)},
+${initialWork ? `schemas: {...builtinModule.schemas, work: builtinModule.schemas.work.extend({amount: builtinModule.schemas.work.shape.amount.default(0), note: builtinModule.schemas.work.shape.note.default("")})},` : ""}
 entries: {...builtinModule.entries, roster: {...builtinModule.entries.roster, ${native ? `native: [${JSON.stringify(native.key)}], axes: {...builtinModule.entries.roster.axes, cost: '${native.cost}'}` : ""}}}, bodies: {
 ...Object.fromEntries(Object.entries(builtinModule.bodies).map(([key, body]) => [key, {...body, source: {module:'route.js', export:key}}])),
 
@@ -145,10 +147,10 @@ const currentWork = {
   doc: { amount: 4, note: "first" },
   history: [],
 };
-async function setup(saved: unknown = currentWork, blockRead = false) {
+async function setup(saved: unknown = currentWork, blockRead = false, initialWork = false) {
   const root = await mkdtemp(join(tmpdir(), "pe-p2-"));
   try {
-    const artifact = await fixture(root);
+    const artifact = await fixture(root, "first", undefined, undefined, initialWork);
     const lifecycle = createPackageLifecycle({
       packages: () => listPackages(join(root, "Pods")),
       decisionsPath: join(root, "enabled.json"),
@@ -313,32 +315,6 @@ test("trusted Pod transports complete evidence and opens fingerprint-bound curre
     expect(acks.at(-1)).toMatchObject({
       kind: "failure",
       failure: { code: "WorkRouteUnregistered" },
-    });
-  } finally {
-    await f.close();
-  }
-}, 30_000);
-
-test("undecodable Pod Work refuses both feeds and preserves its stored bytes", async () => {
-  const f = await setup({
-    version: 1,
-    schemaVersion: 1,
-    revision: 7,
-    doc: { oldAmount: 3 },
-    history: [],
-  });
-  try {
-    const [row] = await f.routes.list();
-    await f.routes.trust(row!.key, f.artifact.fingerprint, true);
-    const snapshot = f.feed("work"),
-      acks = f.feed("work-acks");
-    f.unblock();
-    await vi.waitFor(() => expect(snapshot[0]).toMatchObject({ kind: "failure" }));
-    await vi.waitFor(() => expect(acks[0]).toMatchObject({ kind: "failure" }));
-    expect(await readFile(f.savedPath, "utf8")).toBe(f.original);
-    await expect(f.workspace.read(f.key, f.key.route)).rejects.toMatchObject({
-      code: "WorkUnreadable",
-      key: f.key,
     });
   } finally {
     await f.close();
@@ -574,33 +550,3 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
     await rm(root, { recursive: true, force: true });
   }
 }, 60_000);
-
-test("corrupt stored Work refuses direct reads and the file remains byte-for-byte inspectable", async () => {
-  const f = await setup({
-    version: 1,
-    schemaVersion: 1,
-    revision: 7,
-    doc: { oldAmount: 3 },
-    history: [],
-  });
-  try {
-    const [row] = await f.routes.list();
-    await f.routes.trust(row!.key, f.artifact.fingerprint, true);
-    const refused = await f.readStored();
-    expect(refused?.status).toBe(403);
-    expect(await refused!.json()).toMatchObject({
-      failure: { code: "WorkUnreadable", key: f.key, reason: expect.any(String) },
-    });
-    expect(await readFile(f.savedPath, "utf8")).toBe(f.original);
-    const corrupt = "{not JSON";
-    await writeFile(f.savedPath, corrupt);
-    const corruptResponse = await f.readStored();
-    expect(corruptResponse?.status).toBe(403);
-    expect(await corruptResponse!.json()).toMatchObject({
-      failure: { code: "WorkUnreadable", key: workKey(f.key), reason: expect.any(String) },
-    });
-    expect(await readFile(f.savedPath, "utf8")).toBe(corrupt);
-  } finally {
-    await f.close();
-  }
-}, 30_000);

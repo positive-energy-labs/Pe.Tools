@@ -1,40 +1,6 @@
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
-import { HostInputContext } from "./input-context.ts";
-import { InvalidRead } from "./native-reads.ts";
-import { httpProblems, isDoorFailure } from "./http-problems.ts";
-import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/request-contracts";
-import type { DocumentRow } from "./session-inventory.ts";
 import type { DocumentRef } from "@pe/agent-contracts";
-import { createScheduledTasks } from "./scheduled-tasks.ts";
-import { createRouteSettings } from "./route-settings.ts";
-import { productRouteSettingsPath } from "./product-paths.ts";
-import { graphRouteIds } from "./reads/routes.ts";
-import { eligibleThreads, threadHistory } from "./thread-history.ts";
-import { normalizePeError } from "@pe/host-contracts/pe-api";
-import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
-import {
-  httpRoutes as peRoutes,
-  peRouteUrl,
-  servePeRoute,
-  matchPeRoute,
-} from "@pe/agent-contracts/pe-api";
-import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import { resolveSdkSession } from "./sdk-session.ts";
-import {
-  createDuctsAnalysis,
-  ductsNativeRead,
-  type DuctsAnalysisSources,
-} from "./ducts-analysis.ts";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
-import type { MachineShareAdapter } from "./machine.ts";
-import { Context, Effect, Layer, Option, Stream } from "effect";
-import {
-  HttpEffect,
-  HttpRouter,
-  HttpServer,
-  HttpServerRequest,
-  HttpServerResponse,
-} from "effect/http";
 import {
   addressSchema,
   sameAddress,
@@ -47,7 +13,6 @@ import {
   routeViewSchema,
   readingKey,
   recentRows,
-  START_FRESH,
   contributionKey,
   isCanonicalSlug,
   parseContributionKey,
@@ -63,6 +28,18 @@ import {
   type Caller,
   HOST_LOG_PAGE_MAX,
 } from "@pe/agent-contracts";
+import { receiptQuerySchema } from "@pe/agent-contracts";
+
+import {
+  httpRoutes as peRoutes,
+  peRouteUrl,
+  servePeRoute,
+  matchPeRoute,
+} from "@pe/agent-contracts/pe-api";
+import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
+import type { HostSessionScope } from "@pe/host-contracts/operation-types";
+import { normalizePeError } from "@pe/host-contracts/pe-api";
+import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/request-contracts";
 import {
   createCapabilityCatalogSource,
   createRouteRegistrations,
@@ -70,12 +47,6 @@ import {
   publishPeaSkills,
   peaAgentInstructions,
 } from "@pe/mcps";
-import {
-  captureUserShellPath,
-  userCodexConfigPath,
-  userCodexMcpServers,
-  writePeaCodexProjectConfig,
-} from "./harness/user-shell.ts";
 import {
   observeResources,
   OwnerReads,
@@ -89,32 +60,23 @@ import {
   type RouteWorkspaceRegistration,
   type ThreadHeadSource,
 } from "@pe/runtime";
+import { Context, Effect, Layer, Option, Stream } from "effect";
+import {
+  HttpEffect,
+  HttpRouter,
+  HttpServer,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/http";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { z } from "zod";
+import type { CapabilityContent } from "../../../packages/mcps/src/pea/capabilities.ts";
+import { skillSnapshot } from "../../../packages/mcps/src/pea/skill-publication.ts";
+import { alignBootstrap } from "./bootstrap.ts";
 import { RevitBridge } from "./bridge.ts";
-import { HostDocumentMarks } from "./document-marks.ts";
-import { runPods } from "./family-actions.ts";
-import { DuctFiles } from "./ducts-files.ts";
 import { PictureCaptureStore } from "./captures-route.ts";
-import { createProviders } from "./harness/providers.ts";
-import { peaMcpServer } from "./harness/adapter.ts";
-import { makeHarnessThreads } from "./harness/threads.ts";
-import { Spawner } from "./harness/spawner.ts";
-import { hostOwnership } from "./host-ownership.ts";
-import {
-  productDuctsAnalysesPath,
-  productHarnessThreadsPath,
-  productRouteWorkPath,
-} from "./product-paths.ts";
-import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
-import { CaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
-import {
-  MachineOwner,
-  hostMachineFace,
-  type MachineOptions,
-  machineAcquisition,
-  machineSessionAcquisition,
-  machineSources,
-} from "./machine.ts";
 import {
   bindControl,
   callerThread,
@@ -123,52 +85,91 @@ import {
   workAuthorOf,
   threadHead,
 } from "./control.ts";
-import { bindRevoke } from "./revoke.ts";
-import { HostReceipts } from "./gateway-owner.ts";
-import { RunConsents } from "./run-consent.ts";
-import type { HostLog } from "./host-log.ts";
-import { UpdateReader } from "./update-reader.ts";
-import { makeInstalledUpdateReader } from "./update-route.ts";
-import { resolveHostVersion } from "./host-lifecycle.ts";
+import { HostDocumentMarks } from "./document-marks.ts";
+import {
+  createDuctsAnalysis,
+  ductsNativeRead,
+  type DuctsAnalysisSources,
+} from "./ducts-analysis.ts";
+import { DuctFiles } from "./ducts-files.ts";
+import { runPods } from "./family-actions.ts";
 import { familySpecAsset } from "./family-spec.ts";
-import { fileRouteDocumentStore } from "./route-document-store.ts";
+import { HostReceipts } from "./gateway-owner.ts";
+import { peaMcpServer } from "./harness/adapter.ts";
+import { createProviders } from "./harness/providers.ts";
+import { Spawner } from "./harness/spawner.ts";
+import { makeHarnessThreads } from "./harness/threads.ts";
+import {
+  captureUserShellPath,
+  userCodexConfigPath,
+  userCodexMcpServers,
+  writePeaCodexProjectConfig,
+} from "./harness/user-shell.ts";
+import { resolveHostVersion } from "./host-lifecycle.ts";
+import type { HostLog } from "./host-log.ts";
+import { hostOwnership } from "./host-ownership.ts";
+import { httpProblems, isDoorFailure } from "./http-problems.ts";
+import { HostInputContext } from "./input-context.ts";
+import { importShippedPods } from "./installed-pods.ts";
+import type { MachineShareAdapter } from "./machine.ts";
+import {
+  MachineOwner,
+  hostMachineFace,
+  type MachineOptions,
+  machineAcquisition,
+  machineSessionAcquisition,
+  machineSources,
+} from "./machine.ts";
+
+import { InvalidRead } from "./native-reads.ts";
 import {
   readNavigation,
   readThreadWork,
   resumeWork,
   type NavigationSources,
 } from "./navigation.ts";
+import { createNotices } from "./notices.ts";
+import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
 import {
   captureDirectory,
   capturePackage,
   listPackages,
   type AdmittedPackage,
 } from "./packages.ts";
-import { skillSnapshot } from "../../../packages/mcps/src/pea/skill-publication.ts";
-import type { CapabilityContent } from "../../../packages/mcps/src/pea/capabilities.ts";
 import {
   packagePageDescriptors,
   pageFolderCollisions,
   scratchPageDescriptors,
   type PageDescriptor,
 } from "./page-libraries.ts";
-import { join } from "node:path";
-import { readFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
-import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
+import { observePluginOperations } from "./plugin-receipts.ts";
 import { createPluginsHandler } from "./plugins-handler.ts";
 import { createPodRoutes } from "./pod-routes.ts";
-import { observePluginOperations } from "./plugin-receipts.ts";
-import { importShippedPods } from "./installed-pods.ts";
-import { receiptQuerySchema } from "@pe/agent-contracts";
+import { productRouteSettingsPath } from "./product-paths.ts";
+import {
+  productDuctsAnalysesPath,
+  productHarnessThreadsPath,
+  productRouteWorkPath,
+} from "./product-paths.ts";
+import { graphRouteIds } from "./reads/routes.ts";
 import {
   ReceiptExport,
   createThreadReceiptAdapter,
   type AgentReportContext,
   type ReceiptExporter,
 } from "./receipt-export.ts";
-import { createNotices } from "./notices.ts";
-import { alignBootstrap } from "./bootstrap.ts";
+import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
+import { bindRevoke } from "./revoke.ts";
+import { fileRouteDocumentStore } from "./route-document-store.ts";
+import { createRouteSettings } from "./route-settings.ts";
+import { RunConsents } from "./run-consent.ts";
+import { createScheduledTasks } from "./scheduled-tasks.ts";
+import { resolveSdkSession } from "./sdk-session.ts";
+import type { DocumentRow } from "./session-inventory.ts";
+import { CaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
+import { eligibleThreads, threadHistory } from "./thread-history.ts";
+import { UpdateReader } from "./update-reader.ts";
+import { makeInstalledUpdateReader } from "./update-route.ts";
 export { fileRouteDocumentStore } from "./route-document-store.ts";
 
 export interface HostWork {
@@ -374,13 +375,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
         const { direction, expectedRevision } = body as z.infer<typeof historyBody>;
         return work.step(scope, route, by, direction, expectedRevision);
       },
-    },
-    // Authenticated authors share recovery; the workspace preserves unreadable source bytes.
-    [START_FRESH]: {
-      schema: z.object({}),
-      hint: "expected {}",
-      run: (scope: WorkKey, route: string, by: "pea" | "human") =>
-        work.startFresh(scope, route, by),
     },
   } as Record<
     string,
@@ -764,21 +758,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
           return view ? json(view) : json({ error: `unknown route '${route}'` }, 404);
         } catch (error) {
           if (isDoorFailure(error)) throw error;
-          if (error instanceof Error && "code" in error && error.code === "WorkUnreadable")
-            return json({error: error.message, failure: {code: error.code,
-              ...("key" in error ? {key: error.key} : {}),
-              ...("reason" in error ? {reason: error.reason} : {}),
-            }},403);
           return json({ error: message(error) }, 403);
         }
-      }
-      // Human-only and read-only; any other caller is refused by name, not 404.
-      if (method === "GET" && route && verb === "salvage") {
-        const scope = workKey(url, route, "read");
-        if (scope instanceof Response) return scope;
-        const salvaged = await work.salvage(scope, route);
-        if (!salvaged) return json(null);
-        return "ok" in salvaged ? json(salvaged, 403) : json(salvaged);
       }
       const write = method === "POST" && route && verb ? writes[verb] : undefined;
       if (write && route && caller.kind !== "human" && caller.kind !== "pea")

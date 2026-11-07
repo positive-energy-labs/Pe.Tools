@@ -44,9 +44,6 @@ export function resumeRefusal(
   return target.url ? undefined : (target.reason ?? "No resumable destination");
 }
 export function friendlyObservation(observation: string) {
-  const older = /^([0-9]+) legacy hash-only files/.exec(observation);
-  if (older)
-    return `${older[1]} older saved Works cannot be included in search yet. They remain available in their original tool and document.`;
   const unreadable = /^([0-9]+) stored files could not be read or verified/.exec(observation);
   if (unreadable)
     return `${unreadable[1]} saved items could not be read. They were left unchanged.`;

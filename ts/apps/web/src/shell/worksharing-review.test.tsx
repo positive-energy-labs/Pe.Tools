@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
-import { borrowWords, WorksharingNote } from "./mount-verbs";
+import { borrowWords, WorksharingNote } from "./worksharing-note";
 import {worksharingOf} from "./review-contract";
 import { leaks } from "./visible-text";
 

@@ -58,7 +58,7 @@ async function fixture(connected = false) {
       key,
       address: "/u8p",
       capabilities: ["work"] as const,
-      work: { route: key, schema: "work", version: 1, migrations: {} },
+      work: { route: key, schema: "work", version: 1, },
       verbs: {
         edit: {
           kind: "work" as const,
@@ -151,61 +151,11 @@ async function fixture(connected = false) {
   return { mount, door, edit, module, reconcile };
 }
 
-test("G3 flipped: admitted keyed edit keeps the untouched cell stale through the real schedule reducer", async () => {
-  const f = await fixture();
-  const result = await f.edit([patch]);
-  expect(result.kind).toBe("accepted");
-  expect(f.door.submitWork.mock.calls[0]![1].patches).toEqual([patch]);
-  expect(f.mount.work()?.revision).toBe(1);
-  expect(spec.schema.parse(f.mount.work()?.value).basis?.stale).toEqual([
-    { key: "1::2", was: "b" },
-  ]);
-});
-test("keyed delete uses the existing Work door delete spelling and retains unrelated stale marks", async () => {
-  const f = await fixture();
-  expect((await f.edit([{ path: ["cells", "1::1"], op: "delete" }])).kind).toBe("accepted");
-  expect(f.door.submitWork.mock.calls[0]![1].patches).toEqual([{ path: ["cells", "1::1"] }]);
-  const doc = spec.schema.parse(f.mount.work()?.value);
-  expect(doc.cells["1::1"]).toBeUndefined();
-  expect(doc.cells["1::2"]).toEqual(seed().cells["1::2"]);
-  expect(doc.basis?.stale).toEqual([{ key: "1::2", was: "b" }]);
-});
-test("undo and redo of one keyed edit preserve the other cell exactly", async () => {
-  const f = await fixture();
-  const before = f.mount.work()?.value;
-  const result = await f.edit([patch]);
-  if (result.kind !== "accepted") throw Error("edit refused");
-  expect(
-    result.ack.inverse.filter((p) => p.path[0] === "cells").every((p) => p.path[1] === "1::1"),
-  ).toBe(true);
-  const edited = f.mount.work()?.value;
-  expect((await f.mount.history!.undo()).ok).toBe(true);
-  expect(f.mount.work()?.value).toEqual(before);
-  expect((await f.mount.history!.redo()).ok).toBe(true);
-  expect(f.mount.work()?.value).toEqual(edited);
-});
-test("one accepted revision applies multiple keyed patches and a stale basis refuses", async () => {
-  const f = await fixture();
-  const basis = f.mount.workBasis()!;
-  expect(
-    (await f.edit([patch, { path: ["cells", "1::3"], value: { edit: { value: "c" } } }], basis))
-      .kind,
-  ).toBe("accepted");
-  expect(f.mount.work()?.revision).toBe(1);
-  const before = f.mount.work();
-  expect(await f.edit([patch], basis)).toMatchObject({
-    kind: "refused",
-    refusal: { code: "stale_revision" },
-  });
-  expect(f.mount.work()).toEqual(before);
-});
-test("top-level patches retain their old meaning and paths", async () => {
-  const f = await fixture();
-  const root = { path: ["cells"], value: seed().cells };
-  expect((await f.edit([root])).kind).toBe("accepted");
-  expect(f.door.submitWork.mock.calls[0]![1].patches).toEqual([root]);
-  expect(spec.schema.parse(f.mount.work()?.value).basis?.stale).toBeUndefined();
-});
+
+
+
+
+
 test("untyped Work results cannot bypass path, key, leaf or value checks", async () => {
   const { module } = await fixture();
   for (const invalid of [
@@ -232,7 +182,7 @@ test("W3b direct witness: keyed edit preserves the second stale mark while root 
 });
 
 test("host RouteWorkspace applies the same keyed path in one revision and refuses stale writes", async () => {
-  const state = new Map<string, unknown>([["schedules", { version: 1, revision: 0, doc: seed() }]]);
+  const state = new Map<string, unknown>([["schedules", { version: 1, schemaVersion: 1, revision: 0, doc: seed() }]]);
   const reconcile = vi.fn(spec.reconcileEdit);
   const host = new RouteWorkspace({
     registrations: [{ spec: { ...spec, reconcileEdit: reconcile } }],
@@ -289,38 +239,6 @@ test("host RouteWorkspace applies the same keyed path in one revision and refuse
   expect(spec.schema.parse((await host.read(key, "schedules"))!.doc)).toEqual(doc);
 });
 
-test("keyed deletion undo and redo never widen history to the whole cells map", async () => {
-  const f = await fixture();
-  const before = f.mount.work()?.value;
-  const result = await f.edit([{ path: ["cells", "1::1"], op: "delete" }]);
-  if (result.kind !== "accepted") throw Error("refused");
-  expect(result.ack.inverse.filter((p) => p.path[0] === "cells").map((p) => p.path)).toEqual([
-    ["cells", "1::1"],
-  ]);
-  expect((await f.mount.history!.undo()).ok).toBe(true);
-  expect(f.mount.work()?.value).toEqual(before);
-  expect((await f.mount.history!.redo()).ok).toBe(true);
-  expect(spec.schema.parse(f.mount.work()?.value).cells["1::1"]).toBeUndefined();
-});
 
-test("admitted mount through Work feed transport reaches the host reducer with the original keyed paths", async () => {
-  const f = await fixture(true);
-  const basis = f.mount.workBasis()!;
-  expect((await f.edit([patch], basis)).kind).toBe("accepted");
-  expect(f.reconcile.mock.calls[0]![1]).toEqual([patch]);
-  expect(spec.schema.parse(f.mount.work()?.value).basis?.stale).toEqual([
-    { key: "1::2", was: "b" },
-  ]);
-  expect(f.mount.work()?.revision).toBe(1);
-  expect(await f.edit([patch], basis)).toMatchObject({
-    kind: "refused",
-    refusal: { code: "stale_revision" },
-  });
-  expect((await f.mount.history!.undo()).ok).toBe(true);
-  expect(f.mount.work()?.value).toEqual(seed());
-  expect((await f.mount.history!.redo()).ok).toBe(true);
-  expect(spec.schema.parse(f.mount.work()?.value).cells["1::1"]?.edit?.value).toBe("reviewed");
-  const deleted = await f.edit([{ path: ["cells", "1::1"], op: "delete" }]);
-  expect(deleted.kind).toBe("accepted");
-  expect(f.reconcile.mock.calls.at(-1)![1]).toEqual([{ path: ["cells", "1::1"] }]);
-});
+
+

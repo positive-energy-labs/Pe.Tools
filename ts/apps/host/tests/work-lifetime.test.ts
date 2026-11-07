@@ -1,14 +1,4 @@
-import { PictureCaptureStore } from "../src/captures-route.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
-import { HostDocumentMarks } from "../src/document-marks.ts";
-import { detachedBridge, consentService } from "./effect-test.ts";
-import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createServer } from "node:http";
-import { afterEach, expect, test } from "vite-plus/test";
-import { z } from "zod";
+import { NodeServices } from "@effect/platform-node";
 import {
   address,
   routeBindingsSchema,
@@ -20,19 +10,31 @@ import {
   workKey,
   type ThreadHead,
 } from "@pe/agent-contracts";
-import { RouteWorkspace, type RouteWorkspaceRegistration } from "@pe/runtime";
-import { Effect, Layer, PubSub } from "effect";
-import { NodeServices } from "@effect/platform-node";
-import { MachineOwner } from "../src/machine.ts";
-import { HostReceipts } from "../src/gateway-owner.ts";
-import { createReceiptExport } from "../src/receipt-export.ts";
-import type { HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
-import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src/pe-routes.ts";
-import { withInvocationContext } from "@pe/runtime/context";
 import type { Caller } from "@pe/agent-contracts";
-import { human, pea } from "./callers.ts";
+
 import { peRoutes } from "@pe/agent-contracts/pe-api";
+import { RouteWorkspace } from "@pe/runtime";
+import { withInvocationContext } from "@pe/runtime/context";
+import { Effect, Layer, PubSub } from "effect";
+import { mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, expect, test } from "vite-plus/test";
+import { z } from "zod";
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
+import type { HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
+import { PictureCaptureStore } from "../src/captures-route.ts";
 import { admitCrossing, bindControl } from "../src/control.ts";
+import { HostDocumentMarks } from "../src/document-marks.ts";
+import { DuctFiles } from "../src/ducts-files.ts";
+import { HostReceipts } from "../src/gateway-owner.ts";
+import { Spawner } from "../src/harness/spawner.ts";
+import { MachineOwner } from "../src/machine.ts";
+import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src/pe-routes.ts";
+import { createReceiptExport } from "../src/receipt-export.ts";
+import { human, pea } from "./callers.ts";
+import { detachedBridge, consentService } from "./effect-test.ts";
 
 afterEach(() =>
   bindControl({
@@ -597,21 +599,6 @@ test("HTTP authored writes enforce short local revision checks", async () => {
       await post("/pe/route-state/test-route/apply", { ...edit, expectedRevision: 99 })
     ).json(),
   ).toMatchObject({ ok: false, code: "stale_revision" });
-  // Both authors share recovery; readable Work has nothing to set aside.
-  expect(
-    await (await post("/pe/route-state/test-route/start-fresh", {}, pea())).json(),
-  ).toMatchObject({ ok: false, error: "this route's Work is readable" });
-  expect(await (await post("/pe/route-state/test-route/start-fresh", {})).json()).toMatchObject({
-    ok: false,
-    error: "this route's Work is readable",
-  });
-  // A route that declares no salvage has nothing for either author.
-  const salvage = (as: Caller) =>
-    withInvocationContext({ caller: as }, () =>
-      app.fetch(new Request(`http://local/pe/route-state/test-route/salvage?${queryA}`)),
-    );
-  expect(await (await salvage(human)).json()).toBeNull();
-  expect(await (await salvage(pea())).json()).toBeNull();
   // Work has no execution endpoint; consequential commands belong to the journal door.
   expect(
     (await post("/pe/route-state/test-route/command", { command: "external", input: {} })).status,
@@ -630,4 +617,3 @@ test("HTTP Work writes use the producer schema including restore identity", () =
     }),
   ).toMatchObject({ restoreOf: 12 });
 });
-import { Spawner } from "../src/harness/spawner.ts";

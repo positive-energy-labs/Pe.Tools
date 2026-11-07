@@ -83,8 +83,7 @@
   "work": {
     "schema": "work",
     "route": "pods",
-    "version": 1,
-    "migrations": {}
+    "version": 1
   },
   "readings": {
     "value": {
@@ -308,7 +307,12 @@
   ],
   "predicates": {},
   "cells": {},
-  "workFields": {},
+  "workFields": {
+    "basis": {
+      "label": "member read",
+      "internal": true
+    }
+  },
   "seeds": {},
   "needs": "nothing",
   "resetOnTarget": [],

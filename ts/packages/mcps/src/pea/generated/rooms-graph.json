@@ -106,8 +106,7 @@
   "work": {
     "schema": "work",
     "route": "rooms",
-    "version": 1,
-    "migrations": {}
+    "version": 1
   },
   "readings": {
     "value": {
@@ -241,7 +240,12 @@
   ],
   "predicates": {},
   "cells": {},
-  "workFields": {},
+  "workFields": {
+    "notes": {
+      "label": "room notes",
+      "internal": false
+    }
+  },
   "seeds": {},
   "needs": "project",
   "resetOnTarget": [],

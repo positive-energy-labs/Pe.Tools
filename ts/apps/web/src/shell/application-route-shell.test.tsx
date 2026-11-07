@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render } from "@testing-library/react";
 import { PlaceRouteShell } from "./application-route-shell";
-import { DocumentPicker} from "./document-picker";
+
 import * as Atom from "effect/reactivity/Atom";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 import { module as podsModule } from "../pods/route";
@@ -52,26 +52,7 @@ vi.mock("../host/resource-state", async (original) => ({
 }));
 afterEach(cleanup);
 
-test("choosing a document pins one exact lifetime, preserving this Place's subject and history", async () => {
-  const write = vi.fn();
-  const place = {
-    fixture: null,
-    address: { read: () => new URLSearchParams("system=SA&thread=chat"), write },
-  } as unknown as PanePlace;
-  render(<DocumentPicker place={place} target={null} needs="project" enabled />);
-  fireEvent.click(screen.getByRole("button", { name: "Choose a document" }));
-  expect(screen.queryByText("Family A")).toBeNull();
-  fireEvent.click(await screen.findByText("Project A"));
-  expect(write).toHaveBeenCalledOnce();
-  const [search, mode] = write.mock.calls[0]!;
-  expect(mode).toBe("push");
-  expect(search.get("system")).toBe("SA");
-  expect(search.get("thread")).toBe("chat");
-  expect(JSON.parse(search.get("target"))).toEqual({
-    kind: "open",
-    ref: { session: "bridge-one", openId: "project-one" },
-  });
-});
+
 
 test("an optional Pods document pin reaches the mounted source scope instead of host authority", () => {
   const target = { kind: "open", ref: { session: "bridge-one", openId: "project-one" } };

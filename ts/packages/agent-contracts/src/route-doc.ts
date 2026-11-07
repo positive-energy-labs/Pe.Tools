@@ -11,7 +11,7 @@ export type RouteRefusalCode = "stale_revision";
 
 export interface RouteEnvelope<D> {
   version: 1;
-  /** Missing on existing Work: unknown age, never evidence that recovery is safe. */
+  /** Current decoded Work schema stamp. */
   schemaVersion?: number;
   revision: number;
   doc: D;
@@ -19,28 +19,6 @@ export interface RouteEnvelope<D> {
 
 export type WorkAuthor = "pea" | "human";
 
-/** Every path's answer when saved Work fails the route's schema: fail-closed, never migrated. */
-export const UNREADABLE_WORK =
-  "This tool's saved Work is in a shape this version cannot read, so it was left untouched; it cannot be opened here.";
-export const OLDER_WORK = `${UNREADABLE_WORK} It was written by an older schema; Start fresh can set it aside.`;
-
-export function workSchemaAge(
-  raw: unknown,
-  spec: Pick<RouteStateSpec<z.ZodType>, "schemaVersion">,
-) {
-  const version = isRecord(raw) ? raw.schemaVersion : undefined;
-  if (typeof version !== "number" || !Number.isSafeInteger(version) || version < 1)
-    return "unknown";
-  const current = spec.schemaVersion ?? 1;
-  return version < current ? "older" : version > current ? "newer" : "current";
-}
-/**
- * The human-only verb offered on an UNREADABLE_WORK route: `POST <route-state>/:route/start-fresh`
- * with `{}`. The old document is kept, unparsed, at `<route>:aside:<n>` (routes never contain ':');
- * an empty Work takes its place.
- */
-export const START_FRESH = "start-fresh";
-export const START_FRESH_ASIDE = ":aside:";
 export type RouteRefusal = {
   ok: false;
   kind: RouteWriteKind;

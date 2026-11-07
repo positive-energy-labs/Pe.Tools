@@ -1,4 +1,5 @@
 import { applyPatches, type WorkHandle } from "@pe/agent-contracts";
+import { z } from "zod";
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
 import {
   canonicalEnvironmentInput,
@@ -16,7 +17,6 @@ import {
 } from "./admitted-reading-plan.ts";
 import { freezePage } from "./page-port.ts";
 import { contentHash } from "./readings.ts";
-import { z } from "zod";
 const unavailable = (reason: string): Extract<ReadingSnapshot<unknown>, { current: false }> => ({
   status: "unavailable",
   current: false,
@@ -41,7 +41,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
     environmentIssuer,
     observers,
     cells,
-    geometry,
     environment,
     schedule,
     notify,
@@ -209,7 +208,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
       generations.set(key, (generations.get(key) ?? 0) + 1);
       retire(key);
       retained.delete(key);
-      geometry().invalidate(key);
     }
     readings = Object.freeze({
       ...readings,
@@ -328,7 +326,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
             if (declaration.refresh === "explicit" && declaration.deps.work.length)
               demanded.delete(id);
         explicitWorkRevision = revision;
-        context.history().sync();
         if (evidenceScope !== read().scope) {
           evidenceScope = read().scope;
           for (const [id, reading] of Object.entries(route.data.readings))
@@ -338,7 +335,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
               previous.delete(id);
             }
         }
-        geometry().syncSubject();
         for (const [id, query] of queryInputs) {
           // Read currency follows declared arguments; previews keep their exact basis.
           if (
@@ -350,7 +346,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
           queryInputs.delete(id);
           demanded.delete(id);
           retire(id);
-          geometry().cancel(id);
         }
         const used = new Set<string>();
         observers.update({
@@ -365,7 +360,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
           const declaration = route.data.readings[id]!;
           if (
             (declaration.demand === "explicit" &&
-              !(declaration.kind === "use" && declaration.geometry) &&
               !demanded.has(id)) ||
             (declaration.demand === "subject" && read().page[subjectField] === null)
           ) {
@@ -374,14 +368,8 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
           }
           if (!wanted.has(id)) {
             next[id] = readings[id] ?? unavailable("Pane hidden");
-            geometry().suspend(id);
             continue;
           }
-          if (declaration.kind === "use" && declaration.geometry)
-            dependencies.set(
-              id,
-              target?.kind === "document" ? [{ kind: "document", ref: target.ref }] : [],
-            );
           next[id] = plan.read(
             id,
             {
@@ -485,7 +473,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
               }
               return read.snapshot;
             },
-            geometry().read,
             (key) => queryInputs.get(key),
             cache,
           );
@@ -531,11 +518,8 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
             continue;
           const declaration = route.data.readings[readingId]!;
           if (declaration.kind === "derive" || declaration.kind === "work") continue;
-          const value =
-            declaration.kind === "use" && declaration.geometry
-              ? (result.value as { kind: string; value?: unknown }).value
-              : result.value;
-          // Source acceptance (or geometry acceptance) already decoded this exact value.
+          const value = result.value;
+          // Source acceptance already decoded this exact value.
           query.phase = "landed";
           queryLandings.set(readingId, { kind: "decoded", value });
           // A current read publishes Page against the accepted state at completion.
@@ -562,8 +546,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
     for (const id of readingClosure(route, roots)) {
       demanded.add(id);
       invalidate(id);
-      if (route.data.readings[id]?.kind === "use" && route.data.readings[id]?.geometry)
-        geometry().refresh(id, false);
     }
     schedule();
   };
@@ -581,7 +563,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
         }),
       ),
     plan,
-    beginQuery(id: string, query: Omit<ReadingQuery, "phase">, refreshGeometry = true) {
+    beginQuery(id: string, query: Omit<ReadingQuery, "phase">) {
       const previous = queryInputs.get(id);
       if (previous) owner.retire(previous.invocation.token);
       queryLandings.delete(id);
@@ -589,9 +571,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
       demanded.add(id);
       generations.set(id, (generations.get(id) ?? 0) + 1);
       retire(id);
-      const reading = route.data.readings[id];
-      if (refreshGeometry && reading?.kind === "use" && reading.geometry) geometry().refresh(id);
-      else schedule();
+      schedule();
     },
     queryLandings,
     demanded,
@@ -608,7 +588,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
       for (const read of workReads.values()) read.stop();
       workReads.clear();
       for (const id of active.keys()) retire(id);
-      for (const id of Object.keys(route.data.readings)) geometry().suspend(id);
     },
     picker: (field: string) => pickerOptions[field],
     public: {
@@ -623,7 +602,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
           snapshot: readings[id] ?? unavailable("Not read"),
           previous: previous.get(id),
           demanded: input.custody.current() && wantedReadings().has(id),
-          leased: !!active.get(id)?.handle || geometry().leased(id),
+          leased: !!active.get(id)?.handle,
         });
       },
       refreshPane(pane: string) {
