@@ -212,13 +212,15 @@ export function createWorkFeedClient(
           let acquiring = true;
           let revision: number | null = null;
           let stopAcks = () => {};
+          let stopSnapshot = () => {};
           const buffered: WorkWriteAck[] = [];
           const admission = { routeKey: scope.route, fingerprint: scope.fingerprint, ...(scope.reading ? { reading: scope.reading } : {}) };
-          const request = { kind: "work-acks" as const, work: scope.key, admission };
+          const request = { ...scope.key, kind: "work" as const, admission };
           const stop = () => {
             if (closed) return;
             closed = true;
             stopAcks();
+            stopSnapshot();
           };
           const emit = (state: WorkFeedState) => {
             if (!closed) deliver(state);
@@ -279,7 +281,7 @@ export function createWorkFeedClient(
             return stop;
           }
           try {
-            // The host acquires snapshot, history and the live tail atomically on its write queue.
+            // A synchronous replay is buffered before the snapshot subscription even exists.
             stopAcks = source.subscribe(
               { kind: "work-acks", work: scope.key, admission },
               (frame) => {
@@ -317,7 +319,34 @@ export function createWorkFeedClient(
                 drain();
               },
             );
-            if (closed) stopAcks();
+            if (closed) {
+              stopAcks();
+              return stop;
+            }
+            stopSnapshot = source.subscribe(request, (frame) => {
+              if (closed) return;
+              if (frame.kind === "stale" || ("stale" in frame && frame.stale)) {
+                acquiring = true; emit({ kind: "pending" }); return;
+              }
+              if (frame.kind === "failure")
+                return fail(
+                  frame.failure ? workFeedFailureMessage(frame.failure) : frame.error,
+                  frame.failure,
+                );
+              if (!acquiring || frame.kind !== "snapshot") return;
+              if (frame.value === null) { buffered.length = 0; revision = null; emit({ kind: "pending" }); return; }
+              const parsed = snapshotSchema.safeParse(frame.value);
+              if (!parsed.success) return fail(parsed.error.message);
+              revision = parsed.data.revision;
+              acquiring = false;
+              emit({
+                kind: "ready",
+                snapshot: { handle: parsed.data.handle, revision, value: parsed.data.doc },
+                history: parsed.data.history,
+              });
+              drain();
+            });
+            if (closed) stopSnapshot();
           } catch (error) {
             fail(error instanceof Error ? error.message : String(error));
           }

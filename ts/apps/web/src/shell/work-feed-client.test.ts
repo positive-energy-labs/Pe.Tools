@@ -42,22 +42,9 @@ const snapshot = (revision: number) =>
       history: { from: revision + 1, acks: [] },
     },
   }) as Frame;
-test("reload has one atomic Work snapshot/history authority, with no second currency latch", () => {
-  const h = harness();
-  h.emit("work-acks", snapshot(1));
-  expect(h.values.at(-1)).toMatchObject({ kind: "ready", snapshot: { revision: 1 } });
-  // A second snapshot observer can deliver stale after the atomic feed is already ready.
-  // Its unchanged reconnect snapshot may be suppressed by PeReadings, locking edits forever.
-  h.emit("work", { kind: "stale", key: "work" });
-  expect(h.values.at(-1)).toMatchObject({ kind: "ready", snapshot: { revision: 1 } });
-  h.emit("work-acks", { kind: "stale", key: "acks" });
-  h.emit("work-acks", snapshot(1));
-  expect(h.values.at(-1)).toMatchObject({ kind: "ready", snapshot: { revision: 1 } });
-  h.unsubscribe();
-});
 function harness(replay: Frame[] = []) {
   const listeners = new Map<string, (frame: Frame) => void>();
-  const stops = [vi.fn()];
+  const stops = [vi.fn(), vi.fn()];
   const order: string[] = [];
   const source: Readings = {
     subscribe(request, listener) {
@@ -80,18 +67,18 @@ function harness(replay: Frame[] = []) {
     order,
     source,
     unsubscribe,
-    emit: (kind: string, frame: Frame) => listeners.get(kind)?.(frame),
+    emit: (kind: string, frame: Frame) => listeners.get(kind)!(frame),
   };
 }
 test("absent Work stays pending without failing or releasing feeds, then accepts current Work", () => {
   const h = harness();
   h.emit("work-acks", { kind: "snapshot", key: "acks", value: null });
-  h.emit("work-acks", { kind: "snapshot", key: "work", value: null });
+  h.emit("work", { kind: "snapshot", key: "work", value: null });
   expect(h.values.at(-1)).toEqual({ kind: "pending" });
   expect(h.values.some((state) => state.kind === "failed")).toBe(false);
   expect(h.end).not.toHaveBeenCalled();
   expect(h.stops.every((stop) => stop.mock.calls.length === 0)).toBe(true);
-  h.emit("work-acks", snapshot(0));
+  h.emit("work", snapshot(0));
   expect(h.values.at(-1)).toMatchObject({ kind: "ready", snapshot: { revision: 0, value: { amount: 0 } } });
   h.unsubscribe();
   expect(h.stops.every((stop) => stop.mock.calls.length === 1)).toBe(true);
@@ -99,10 +86,10 @@ test("absent Work stays pending without failing or releasing feeds, then accepts
 
 test("subscribe before snapshot, buffer and sort acks, drop revisions covered by snapshot", () => {
   const h = harness([ack(3), ack(1), ack(2)]);
-  expect(h.order).toEqual(["work-acks"]);
+  expect(h.order).toEqual(["work-acks", "work"]);
   expect(h.values).toEqual([{ kind: "pending" }]);
   const frame = snapshot(1) as Extract<Frame, { kind: "snapshot" }>;
-  h.emit("work-acks", {
+  h.emit("work", {
     ...frame,
     value: {
       ...(frame.value as object),
@@ -123,11 +110,11 @@ test("subscribe before snapshot, buffer and sort acks, drop revisions covered by
 });
 test("gap emits pending and fresh ready in band, keeps the original ack subscription", () => {
   const h = harness([ack(4)]);
-  h.emit("work-acks", snapshot(1));
+  h.emit("work", snapshot(1));
   expect(h.values.slice(-2)).toEqual([{ kind: "gap", from: 2, to: 4 }, { kind: "pending" }]);
   expect(h.source.dirty).toHaveBeenCalledOnce();
   h.emit("work-acks", ack(5));
-  h.emit("work-acks", snapshot(3));
+  h.emit("work", snapshot(3));
   expect(h.values.map((value) => value.kind)).toEqual([
     "pending",
     "ready",
@@ -137,15 +124,15 @@ test("gap emits pending and fresh ready in band, keeps the original ack subscrip
     "ack",
     "ack",
   ]);
-  expect(h.order).toEqual(["work-acks"]);
+  expect(h.order).toEqual(["work-acks", "work"]);
   h.emit("work-acks", ack(7));
   expect(h.values.slice(-2)).toEqual([{ kind: "gap", from: 6, to: 7 }, { kind: "pending" }]);
   h.unsubscribe();
 });
-test.each(["work-acks"])("%s failure is terminal and releases both observers", (kind) => {
+test.each(["work", "work-acks"])("%s failure is terminal and releases both observers", (kind) => {
   const h = harness();
   h.emit(kind, { kind: "failure", key: "failed", error: "gone" });
-  h.emit("work-acks", snapshot(0));
+  h.emit("work", snapshot(0));
   h.emit("work-acks", ack(1));
   expect(h.values.map((value) => value.kind)).toEqual(["pending", "failed"]);
   expect(h.end).toHaveBeenCalledOnce();
@@ -160,7 +147,7 @@ test("synchronous ack subscription failure never acquires a snapshot", () => {
 });
 test("fresh snapshot failure and malformed or foreign acknowledgements fail closed", () => {
   for (const [kind, frame] of [
-    ["work-acks", { kind: "snapshot", key: "work", value: {} }],
+    ["work", { kind: "snapshot", key: "work", value: {} }],
     ["work-acks", { kind: "event", key: "acks", value: {} }],
     [
       "work-acks",
@@ -178,8 +165,8 @@ test("fresh snapshot failure and malformed or foreign acknowledgements fail clos
 });
 test("synchronous recovery snapshot drains buffered acks without another wire event", () => {
   const h = harness([ack(4), ack(5)]);
-  vi.mocked(h.source.dirty).mockImplementation(() => h.emit("work-acks", snapshot(3)));
-  h.emit("work-acks", snapshot(1));
+  vi.mocked(h.source.dirty).mockImplementation(() => h.emit("work", snapshot(3)));
+  h.emit("work", snapshot(1));
   expect(h.values.map((value) => value.kind)).toEqual([
     "pending",
     "ready",
@@ -218,6 +205,7 @@ test("Work acquisition preserves the admitted source and digest on snapshot and 
       work: key,
       admission: { routeKey: scope.route, fingerprint: scope.fingerprint },
     },
+    { ...key, kind: "work", admission: { routeKey: scope.route, fingerprint: scope.fingerprint } },
   ]);
   stop();
 });
@@ -241,8 +229,8 @@ test.each([
   "$kind is terminal and preserved unchanged; later frames cannot revive it",
   (failure) => {
     const h = harness();
-    h.emit("work-acks", { kind: "failure", key: "work", error: "refused", failure });
-    h.emit("work-acks", snapshot(10));
+    h.emit("work", { kind: "failure", key: "work", error: "refused", failure });
+    h.emit("work", snapshot(10));
     h.emit("work-acks", ack(11));
     expect(h.values).toEqual([{ kind: "pending" }, { kind: "failed", failure }]);
     expect(h.end).toHaveBeenCalledOnce();
@@ -258,14 +246,14 @@ test("registration mismatch survives client and shell recreation on the same tab
     expected: scope.fingerprint,
     received: scope.fingerprint,
   };
-  h.emit("work-acks", { kind: "failure", key: "work", error: "reload", failure });
+  h.emit("work", { kind: "failure", key: "work", error: "reload", failure });
   const afterRemount: WorkFeedState[] = [];
   const end = vi.fn();
   createWorkFeedClient(h.source)
     .open(scope)
     .subscribe((state) => afterRemount.push(state), end)();
   expect(afterRemount).toEqual([{ kind: "pending" }, { kind: "failed", failure }]);
-  expect(h.order).toEqual(["work-acks"]);
+  expect(h.order).toEqual(["work-acks", "work"]);
   expect(end).toHaveBeenCalledOnce();
 });
 
@@ -278,7 +266,7 @@ test("a stale presenter refusal does not poison an up-to-date owner on the same 
     expected: fingerprint,
     received: scope.fingerprint,
   };
-  h.emit("work-acks", { kind: "failure", key: "work", error: "reload", failure });
+  h.emit("work", { kind: "failure", key: "work", error: "reload", failure });
   const values: WorkFeedState[] = [];
   const stop = createWorkFeedClient(h.source)
     .open({ ...scope, fingerprint })
@@ -287,7 +275,7 @@ test("a stale presenter refusal does not poison an up-to-date owner on the same 
       () => {},
     );
   expect(values).toEqual([{ kind: "pending" }]);
-  expect(h.order).toEqual(["work-acks", "work-acks"]);
+  expect(h.order).toEqual(["work-acks", "work", "work-acks", "work"]);
   stop();
 });
 
@@ -295,7 +283,7 @@ test("atomic ack-feed acquisition wins the redundant snapshot and delivers the r
   const h = harness();
   h.emit("work-acks", snapshot(0));
   h.emit("work-acks", ack(1));
-  h.emit("work-acks", snapshot(1));
+  h.emit("work", snapshot(1));
   h.emit("work-acks", ack(1));
   expect(h.values.map((value) => value.kind)).toEqual(["pending", "ready", "ack"]);
   h.unsubscribe();
