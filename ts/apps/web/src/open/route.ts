@@ -1,11 +1,13 @@
+import { read } from "../route/defaults";
+import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { valueRead } from "@pe/agent-contracts";
-import { route, field, sessionCommand, type DrawContext } from "../route/typed-route";
+import { route, field, sessionCommand } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
 import { EMPTY_DRAFT } from "./model";
 import { openData } from "@pe/agent-contracts";
-const fields = {
+export const fields = {
   draft: field(
     z.object({
       doc: z.string().nullable(),
@@ -29,11 +31,8 @@ const fields = {
     "query",
   ),
 };
-const loaded = {
-  ...hostRead(valueRead("open.documents", z.object({}), openData)),
-  args: () => ({}),
-};
-export type OpenContext = DrawContext<z.output<typeof openData>, typeof fields, never, never>;
+export const loaded = read(hostRead(valueRead("open.documents", z.object({}), openData)));
+export type { Context as OpenContext } from "./context.generated";
 export const module = route({
   key: "open",
   name: "Open document",
@@ -57,7 +56,6 @@ export const module = route({
     documents: {
       title: "Documents",
       purpose: "Choose a model and destination Revit",
-      read: loaded,
       draw: draw(() => import("./mount"), "OpenBody"),
     },
   },
@@ -78,5 +76,5 @@ export const module = route({
       input: (_context, supplied) => supplied,
     },
   },
-  layout: { kind: "pane", id: "documents" },
+  layout: paneLayout("documents"),
 });

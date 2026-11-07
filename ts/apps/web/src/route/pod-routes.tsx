@@ -3,8 +3,8 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { message, type PodRouteDescriptor } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { readPeError } from "@pe/host-contracts/pe-api";
-import { registerRoute } from "../shell/route-registration";
-import { admitPodArtifact } from "./pod-artifact";
+import { registerTypedRoute } from "../shell/route-registration";
+import { loadPodRoute } from "./pod-artifact";
 import { createPodRouteLoader } from "./pod-loader";
 
 import {PodRoutesContext} from "./pod-route-context";
@@ -32,9 +32,9 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
           if (!response.ok) throw Error((await readPeError(response)).message);
           artifact = await response.json();
         }
-        const route = await admitPodArtifact(row, artifact);
+        const route = await loadPodRoute(row, artifact);
         if (!current()) return () => {};
-        return registerRoute(route);
+        return registerTypedRoute(route.module, route.fingerprint);
       } catch (error) {
         if (current()) setErrors((prior) => ({ ...prior, [row.key]: message(error) }));
         throw error;

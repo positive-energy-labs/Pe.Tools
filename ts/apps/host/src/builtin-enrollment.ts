@@ -1,4 +1,4 @@
-import { builtins } from "../../web/src/route/builtins.neutral.ts";
+import { builtins } from "./reads/builtins.generated.ts";
 import type { BuiltinClosure } from "@pe/agent-contracts";
 import type { HostRouteModule } from "@pe/agent-contracts";
 

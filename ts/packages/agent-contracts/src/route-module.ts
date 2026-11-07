@@ -183,6 +183,8 @@ export async function routeFingerprint(input: RouteFingerprintInput): Promise<Ro
  * Contract bytes include catalog/schema/codec/kernel implementations or their pinned bundle.
  * This is loader evidence, not a sandbox for a malicious JavaScript loader. */
 export interface PackageRouteAdmissionEvidence {
+  /** Typed package host exports use the same neutral projection as builtins. */
+  readonly host?: true;
   /** Exact exports evaluated by the loader from the byte closure below. Admission
    * captures their references before hashing, so a replacement function cannot reuse a stamp. */
   readonly loadedBindings: unknown;
@@ -436,7 +438,8 @@ export class AdmittedRoute<
         if (fingerprint !== owned.fingerprint) throw Error("Builtin closure fingerprint mismatch");
       } else {
         envelope = fingerprintEnvelope(evidence.artifact);
-        loadedBindings = routeBindingSchema.parse(evidence.loadedBindings);
+        if (evidence.host) hostModule = captureHostModule(evidence.loadedBindings as HostRouteModule);
+        else loadedBindings = routeBindingSchema.parse(evidence.loadedBindings);
         // Copy all loader evidence before the first await; callers cannot race verification.
         const contracts = evidence.contracts.map((item) => ({
           id: item.id,
@@ -595,7 +598,7 @@ export class AdmittedRoute<
     return {
       admitHost(module) {
         if (diagnostics.length) return { ok: false, diagnostics };
-        if (!source || !fingerprint || !hostModule)
+        if ((!source && !envelope) || !fingerprint || !hostModule)
           return {
             ok: false,
             diagnostics: [
@@ -604,13 +607,13 @@ export class AdmittedRoute<
                 "module",
                 "",
                 "host builtin evidence",
-                "Host admission requires a neutral builtin inventory",
+                "Host admission requires verified neutral exports",
                 "identity",
               ),
             ],
           };
         try {
-          return admitHostProjection(captureHostModule(module), hostModule, source, fingerprint);
+          return admitHostProjection(captureHostModule(module), hostModule, source ?? {data:envelope!.data}, fingerprint, source ? "builtin-closure" : "pod-bytes");
         } catch (error) {
           return {
             ok: false,
@@ -787,8 +790,9 @@ const hostBindings = new WeakMap<HostAdmittedRoute, HostRouteModule>();
 function admitHostProjection(
   module: HostRouteModule,
   captured: HostRouteModule,
-  closure: BuiltinClosure,
+  closure: Pick<BuiltinClosure,"data">,
   fingerprint: RouteFingerprint,
+  source: "builtin-closure" | "pod-bytes" = "builtin-closure",
 ): HostRouteAdmission {
   const decoded = decodeRouteGraph(module.data);
   if (!decoded.ok) return decoded;
@@ -868,7 +872,7 @@ function admitHostProjection(
   }
   const work = data.work;
   let resolvedWork: HostAdmittedRoute["resolvedWork"];
-  let workFingerprint = `builtin-closure:${fingerprint}` as RouteFingerprint;
+  let workFingerprint = `${source}:${fingerprint}` as RouteFingerprint;
   if (work && !data.capabilities.includes("work")) fail("work", "Work capability is missing");
   if (!work && data.capabilities.includes("work")) fail("work", "Work declaration is missing");
   if (work) {

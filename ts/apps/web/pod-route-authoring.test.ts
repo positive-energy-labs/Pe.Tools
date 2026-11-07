@@ -68,3 +68,40 @@ test("Snowdon declares current Work and retains the copper calculation", () => {
   expect(result.drop).toBeCloseTo((Math.sqrt(3) * 12.9 * 24 * 150) / 10380);
   expect(bodies.show.run(data.fields.worksheet.initial)).toBe("Copper voltage-drop worksheet");
 });
+
+// One falsifier for ADR 0028 rule 7: the authored module crosses exact-byte host and web admission.
+test("typed Pod bytes register through the builtin door; changed bytes never acquire Work", async () => {
+  const {mkdir,mkdtemp,writeFile,rm}=await import("node:fs/promises");
+  const {resolve}=await import("node:path");
+  const {createJiti}=await import("jiti");
+  const {podRouteSkeleton}=await import("./src/route/pod-skeleton.ts");
+  const {loadPodRoute}=await import("./src/route/pod-artifact.ts");
+  const {admitPodArtifact:hostAdmit}=await import("../host/src/pod-artifact.ts");
+  const {registerTypedRoute}=await import("./src/shell/route-registration.ts");
+  const {publicRoutes}=await import("./src/route/route-discovery.ts");
+  const {podRouteDescriptorSchema}=await import("@pe/agent-contracts");
+  await mkdir(resolve(process.cwd(),".artifacts"),{recursive:true});
+  const dir=await mkdtemp(resolve(process.cwd(),".artifacts/typed-pod-"));
+  try {
+    const entry=resolve(dir,"module.ts");
+    await writeFile(entry,podRouteSkeleton("typed-proof","worksheet"));
+    const loaded=await createJiti(import.meta.url).import<{module:import("./src/route/typed-route.ts").TypedRoute}>(entry);
+    const built=await publishPodRoute({entry,root:dir,data:loaded.module.data,slug:"worksheet",name:"Worksheet",description:"Typed proof",contracts:[]});
+    const artifact=JSON.parse(new TextDecoder().decode(built.bytes));
+    const row=podRouteDescriptorSchema.parse({...built.declaration,key:"route:@typed-proof/routes/worksheet/route.artifact",packageId:"typed-proof",workRoute:"pod.typed-proof.worksheet",trusted:true});
+    const host=await hostAdmit(artifact,row.fingerprint);
+    expect(host.workFingerprint).toBe(row.fingerprint);
+    expect(host.resolvedWork?.schema.parse({})).toEqual({notes:{}});
+    const web=await loadPodRoute(row,{fingerprint:row.fingerprint,artifact},evaluate);
+    const stop=registerTypedRoute(web.module,web.fingerprint);
+    try {
+      expect(publicRoutes.typed(row.workRoute)).toBe(web.module);
+      expect(publicRoutes.get(row.workRoute)?.work?.admission?.fingerprint).toBe(host.workFingerprint);
+      expect(publicRoutes.typed(publicRoutes.byAddress(web.module.data.address)!.manifest.key)).toBe(web.module);
+    } finally {stop();}
+    artifact.executables[0].members[0].bytes[0]^=1;
+    await expect(hostAdmit(artifact,row.fingerprint)).rejects.toThrow("differ");
+    await expect(loadPodRoute(row,{fingerprint:row.fingerprint,artifact},evaluate)).rejects.toThrow("differ");
+    expect(publicRoutes.get(row.workRoute)).toBeUndefined();
+  } finally {await rm(dir,{recursive:true,force:true});}
+},60000);

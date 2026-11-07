@@ -1,3 +1,8 @@
+import { bindings } from "./bindings";
+import { routeLinks } from "../route/links.generated";
+import { read } from "../route/defaults";
+import { stageField } from "../route/defaults";
+import { listFields } from "../route/defaults";
 import { fansDocumentSchema } from "../../../../packages/agent-contracts/src/fans.ts";
 import { z } from "zod";
 import {
@@ -5,10 +10,7 @@ import {
   ductsSheetEditsSchema,
   fansSheetCapability,
   ductsPictureFields,
-  fansSheetData,
-  listSearchSchema,
   type Immutable,
-  type FansRouteDocument,
 } from "@pe/agent-contracts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
 import {
@@ -19,8 +21,7 @@ import {
   namesOf,
   command,
   split,
-  type DrawContext,
-} from "../route/typed-route.ts";
+} from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 import { fanLabel } from "../ducts/sheet/model.ts";
@@ -31,11 +32,10 @@ import { presentLosses } from "../ducts/reviews.ts";
 const shared = ductsPictureFields;
 const fan = subjectSchema(32);
 
-const fields = {
+export const fields = {
   fan: field(fan, { kind: "ids", ids: [] }, "subject", "push"),
-  stage: field(z.enum(["sheet"]), "sheet", "stage", "push"),
-  inputSort: field(z.enum(["", "name"]), "", "query"),
-  inputSearch: field(listSearchSchema, { keywords: "", pills: [], v: 1 }, "query"),
+  stage: stageField(["sheet"]),
+  ...listFields("input"),
   contextRadiusFt: field(shared.contextRadiusFt.schema, 10, "pose"),
   contextStyle: field(shared.contextStyle.schema, "glass", "pose"),
   encoding: field(shared.encoding.schema, "health", "pose", "push"),
@@ -46,29 +46,18 @@ const fields = {
     "push",
   ),
   picture: field(shared.picture.schema, "model", "pose", "push"),
-  rosterSearch: field(listSearchSchema, { keywords: "", pills: [], v: 1 }, "query"),
-  rosterSort: field(z.enum(["", "name"]), "", "query"),
+  ...listFields("roster"),
   sceneView: field(shared.sceneView.schema, { preset: "all", section: null }, "pose"),
   sheetPath: field(z.string(), "", "query"),
   viewport: field(shared.viewport.schema, null, "pose"),
 };
-const sheet = {
-  ...hostRead(fansSheetCapability, sheetValueFixtures),
-  args: (page: { fan: Immutable<z.output<typeof fan>>; sheetPath: string }) => ({
+export const sheet = read(hostRead(fansSheetCapability, sheetValueFixtures), (page: { fan: Immutable<z.output<typeof fan>>; sheetPath: string }) => ({
     fan: namesOf(page.fan),
     sheetPath: page.sheetPath,
-  }),
-};
-const roster = {
-  ...hostRead(fansSheetCapability, sheetValueFixtures),
-  args: () => ({ fan: [], sheetPath: "" }),
-};
-export type FansDrawContext = DrawContext<
-  z.output<typeof fansSheetData>,
-  typeof fields,
-  FansRouteDocument,
-  z.output<typeof ductsSheetEditsSchema>
->;
+  }));
+const roster = read(hostRead(fansSheetCapability, sheetValueFixtures), () => ({ fan: [], sheetPath: "" }));
+export type { Context as FansDrawContext } from "./context.generated";
+import type { Context as FansDrawContext } from "./context.generated";
 export const module = route({
   key: "fans",
   name: "Fans",
@@ -103,25 +92,25 @@ export const module = route({
     "sheet-roster": {
       title: "Fans",
       purpose: "Open fan ports",
-      read: sheet,
+      bindings,
       draw: draw(() => import("../ducts/sheet/mount.tsx"), "RosterBody"),
     },
     "sheet-inputs": {
       title: "Inputs",
       purpose: "Edit fan inputs",
-      read: sheet,
+      bindings,
       draw: draw(() => import("../ducts/sheet/mount.tsx"), "InputsBody"),
     },
     "sheet-picture": {
       title: "Picture",
       purpose: "Inspect fan paths",
-      read: sheet,
+      bindings,
       draw: draw(() => import("../ducts/sheet/mount.tsx"), "PictureBody"),
     },
     "sheet-ledger": {
       title: "Ledger",
       purpose: "Inspect ESP and provenance",
-      read: sheet,
+      bindings,
       draw: draw(() => import("../ducts/sheet/mount.tsx"), "LedgerBody"),
     },
   },
@@ -170,12 +159,8 @@ export const module = route({
 export const fansData = module.data;
 export const fansHostModule = module.host;
 export function fansLink(ids: readonly string[], search: Readonly<Record<string, unknown>>) {
-  const params = new URLSearchParams();
-  for (const key of ["target", "fixture", "thread"])
-    if (typeof search[key] === "string") params.set(key, search[key]);
-  params.set(
-    "fan",
-    JSON.stringify({ kind: "ids", ids: ids.map((id) => localId("ducts-fan", id)) }),
-  );
-  return `/fans?${params}`;
+  return routeLinks.fans({
+    ...Object.fromEntries(["target", "fixture", "thread"].flatMap(key => typeof search[key] === "string" ? [[key,search[key]]] : [])),
+    fan: { kind: "ids", ids: ids.map(id=>localId("ducts-fan",id)) },
+  });
 }

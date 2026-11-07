@@ -60,7 +60,7 @@ async function sha256(bytes: Uint8Array): Promise<string> {
 /** Verify BEFORE evaluation, then give A the exports from those exact bytes. A loader is
  * trusted code, not a sandbox. This door never publishes or registers a refused module. */
 // Pod discovery uses this byte verifier; builtin routes use build-owned source closures.
-export async function loadRouteArtifact(
+export async function verifyRouteArtifact(
   input: RouteArtifactBytes,
   catalog: readonly CatalogLink[],
   evaluate: (bytes: Uint8Array) => Promise<unknown>,
@@ -147,13 +147,10 @@ export async function loadRouteArtifact(
     .parse(loaded);
   if (canonicalRouteJson(module.data) !== canonicalRouteJson(artifact.data))
     throw Error("Loaded graph differs from artifact");
-  const admission = await createRouteAdmission({
-    loadedBindings: module,
-    artifact,
-    expectedFingerprint,
-    contracts,
-    executables,
-    catalog: linkedCatalog,
-  });
-  return admission.admitUnknown({ ...module, artifact });
+  return { module, artifact, expectedFingerprint, contracts, executables, catalog: linkedCatalog };
+}
+export async function loadRouteArtifact(...args: Parameters<typeof verifyRouteArtifact>) {
+  const verified = await verifyRouteArtifact(...args);
+  const admission = await createRouteAdmission({ ...verified, loadedBindings: verified.module });
+  return admission.admitUnknown({ ...verified.module, artifact: verified.artifact });
 }

@@ -57,15 +57,6 @@
       "share": true,
       "agent": "set"
     },
-    "inputSort": {
-      "role": "query",
-      "schema": "inputSort",
-      "codec": "inputSort",
-      "initial": "",
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
     "inputSearch": {
       "role": "query",
       "schema": "inputSearch",
@@ -75,6 +66,15 @@
         "pills": [],
         "v": 1
       },
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "inputSort": {
+      "role": "query",
+      "schema": "inputSort",
+      "codec": "inputSort",
+      "initial": "",
       "url": "replace",
       "share": true,
       "agent": "set"
@@ -223,8 +223,8 @@
         "page": [
           "fan",
           "stage",
-          "inputSort",
           "inputSearch",
+          "inputSort",
           "contextRadiusFt",
           "contextStyle",
           "encoding",
@@ -254,8 +254,8 @@
         "page": [
           "fan",
           "stage",
-          "inputSort",
           "inputSearch",
+          "inputSort",
           "contextRadiusFt",
           "contextStyle",
           "encoding",

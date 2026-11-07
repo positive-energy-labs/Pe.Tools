@@ -1,13 +1,15 @@
+import { read } from "../route/defaults";
+import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
-import { field, route, localId, type DrawContext } from "../route/typed-route.ts";
+import { field, route, localId } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
 import { chatArgs, chatValue } from "../../../../packages/agent-contracts/src/chat-read.ts";
-const loaded = { ...hostRead(valueRead("chat.context", chatArgs, chatValue)), args: () => ({}) };
-const fields = { mode: field(z.enum(["threads", "world"]), "threads", "query") };
-export type ChatHandle = DrawContext<z.output<typeof chatValue>, typeof fields, never, never>;
+export const loaded = read(hostRead(valueRead("chat.context", chatArgs, chatValue)));
+export const fields = { mode: field(z.enum(["threads", "world"]), "threads", "query") };
+export type { Context as ChatHandle } from "./context.generated";
 export const threadIdentity = (thread: string) => localId("chat", thread);
 export const chatLayout = {
   kind: "split",
@@ -47,9 +49,11 @@ export const module = route({
     main: {
       title: "Pea",
       purpose: "Read and compose",
-      read: loaded,
       draw: draw(() => import("./chat-drawing.tsx"), "ChatDrawing"),
     },
   },
-  layout: { kind: "pane", id: "main" },
+  layout: paneLayout("main"),
 });
+
+/** RouteDock owns this retained surface; the URL uses the conversation address contract. */
+export const router = { contract: "pea", dock: true } as const;
