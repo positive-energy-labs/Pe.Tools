@@ -9,6 +9,10 @@ import {
 import type { TakingObserver } from "./native-recording.ts";
 import { ductsInputPort, type DuctsReadSources } from "./reads/ducts-inputs.ts";
 import { Publications } from "./reads/evaluator.ts";
+import { History, localHistory } from "./reads/history.ts";
+import { historyRoutes } from "./reads/history-routes.ts";
+import { historyPoseSchema, addressSchema } from "@pe/agent-contracts";
+import { HostReceipts } from "./gateway-owner.ts";
 import { readEvents } from "./reads/events.ts";
 import { readInvalidations } from "./reads/invalidations.ts";
 import { graphRoute, graphRouteIds } from "./reads/routes.ts";
@@ -157,6 +161,17 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     marks = Context.get(services, HostDocumentMarks);
   const readSets = Context.get(services, HostInputReadSets);
   const publications = new Publications();
+  const history = writer ? new History(writer, run, writer, publications) : recorded ? new History(lane.recordingStore, run) : undefined;
+  if (history) {
+    const receipts = yield* Effect.serviceOption(HostReceipts);
+    const stop = Option.isSome(receipts) ? receipts.value.journal.subscribe({ kinds: ["action"] }, (receipt) => {
+      if (receipt.body.kind !== "action") return;
+      const row = receipt.body.value;
+      if (row.state === "succeeded" && row.target.kind === "document" && row.steps.some((s) => s.state === "succeeded" && s.effect !== "Read" && s.effect !== "TransactRead"))
+        history.afterWrite(row.target.ref, row.id);
+    }) : () => {};
+    yield* Effect.addFinalizer(() => Effect.promise(async () => { stop(); await history.close(); }));
+  }
   const invalidations = readInvalidations(
     workspace,
     marks,
@@ -249,6 +264,18 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     });
     const graph = graphRouteIds.includes(declared.id) ? graphRoute(declared.id, input.body) : null;
     const graphRequest = graph?.publication;
+    const at = web.headers.get("x-pe-history-point");
+    if (at && web.headers.get("x-pe-history-compare") !== "now" && graph) {
+      return { readGraph: async () => {
+        localHistory(identity.caller);
+        if (!graphRequest) throw new InvalidRead({ message: "This read was never published at this point", status: 409, problem: "history.unavailable" });
+        if (graphRequest.release) return { key: "", generation: graphRequest.generation, version: 0, value: null, state: "superseded" };
+        if (!history) throw new InvalidRead({ message: "History storage is unavailable", status: 409, problem: "history.unavailable" });
+        const pose = historyPoseSchema.parse(JSON.parse(decodeURIComponent(web.headers.get("x-pe-history-page") ?? "")));
+        const raw = await history.publication(at, pose.instance, graph.name, graph.key);
+        return { ...(raw as object), generation: graphRequest.generation };
+      } };
+    }
     if (graphRequest?.release)
       return {
         readGraph: async () => {
@@ -693,6 +720,14 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                     canonicalJson([identity.caller, graph.publication.subscription]),
                     graph.publication.generation,
                     port,
+                    history && writer ? async (publication) => {
+                      const row = await scoped(consumption!)(inventory.document((graph.args as { target: import("@pe/agent-contracts").DocumentRef }).target).pipe(Effect.provideService(RequestIdentity, identity)));
+                      const address = addressSchema.parse(row.address);
+                      await complete(consumption!);
+                      const raw = web.headers.get("x-pe-history-page");
+                      const pose = raw ? historyPoseSchema.parse(JSON.parse(decodeURIComponent(raw))) : { instance: graph.name, route: graph.name.split(".")[0]!, page: {}, href: `/${graph.name.split(".")[0]}` };
+                      return history.keep(canonicalJson([identity.caller, graph.publication!.subscription]), graph.name, pose, address, row, publication);
+                    } : undefined,
                   )
                 : graph.evaluate(port).catch((error: unknown) => {
                     if (isDoorFailure(error)) throw error;
@@ -730,7 +765,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         }
         try {
           if ("response" in result && result.response.ok) {
-            await complete(consumption!);
+            if (!graph?.publication || !history || !writer) await complete(consumption!);
           }
         } catch {
           const at = writer?.capture.begin();
@@ -842,7 +877,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       Effect.ensuring(root.close),
     );
   });
-  return { work, invocation, retainedCall, nativeCall, nativeBody, services, publications };
+  return { work, invocation, retainedCall, nativeCall, nativeBody, services, publications, history };
 });
 
 export type ReadOwnerOptions = NonNullable<Parameters<typeof makeReadOwner>[1]>;
@@ -866,6 +901,7 @@ const readCoreRoutes = (
       });
       return Layer.mergeAll(
         peCoreRoutes(routes, reads.invocation, inputs),
+        historyRoutes(reads.history),
         nativeReadResolveRoute,
         nativeCallRouteFor(reads.retainedCall, reads.nativeCall),
       ).pipe(

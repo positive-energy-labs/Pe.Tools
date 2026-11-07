@@ -39,6 +39,8 @@ export const recordingPointSchema = Schema.Struct({
   identity: Schema.Struct({ build: Schema.String, catalog: Schema.String }),
   takingRange: Schema.Struct({ start: cursor, end: cursor }),
   bindings: Schema.Array(recordingPointBindingSchema),
+  /** Host publication ledger and Page pose. Input-only points have no published pane Values. */
+  history: Schema.optionalKey(Schema.Json),
 });
 export type RecordingPoint = typeof recordingPointSchema.Type;
 export type RecordingBasis =

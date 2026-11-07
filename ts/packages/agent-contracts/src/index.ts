@@ -33,3 +33,5 @@ export type { KernelServices, ResolvedRead } from "./route-kernel-environment.ts
 export { commandCatalogAxes } from "./command-axes.ts";
 export { ductsAddress } from "./routes/ducts.ts";
 export { threadListFields } from "./routes/shared.ts";
+export * from "./history.ts";
+export type { WorkJournalDoor } from "./work-journal-door.ts";

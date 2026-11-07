@@ -359,6 +359,7 @@ export class Publications {
       ),
     );
   }
+  publication(id: string) { return this.slots.get(id)?.published; }
   invalidate(matches: (trace: Trace) => boolean) {
     for (const [id, slot] of this.slots) {
       const previous = slot.published;
@@ -391,6 +392,7 @@ export class Publications {
     definition: Read<I, O>,
     args: I,
     port: InputPort,
+    keep?: (publication: Publication<O>) => Promise<() => void>,
   ): Promise<Publication<O>> {
     const key = fingerprint([definition.name, definition.input.parse(args)]);
     let owner = this.keys.get(key);
@@ -447,9 +449,18 @@ export class Publications {
       const nextBytes = this.bytes - (this.retainedBytes.get(id) ?? 0) + bytes;
       if (nextBytes > this.byteLimit)
         throw Error("Published Values exceed the shared byte bound; old Value retained");
-      this.bytes = nextBytes;
+      const dependencies = keep ? published.value!.trace.filter((trace) => trace.outcome === "answered")
+        .map((trace) => ({ trace, revision: port.revision(trace.name, trace.args) })) : [];
+      const commit = await keep?.(published);
+      if (!mine()) return obsolete();
+      if (dependencies.some(({ trace, revision }) => port.revision(trace.name, trace.args) !== revision))
+        throw new RefreshNeeded("Inputs invalidated while persisting the publication");
+      const retainedBytes = this.bytes - (this.retainedBytes.get(id) ?? 0) + bytes;
+      if (retainedBytes > this.byteLimit) throw Error("Published Values exceed the shared byte bound; old Value retained");
+      this.bytes = retainedBytes;
       this.retainedBytes.set(id, bytes);
       slot.published = published;
+      commit?.();
       this.notify(id);
       return published;
     } catch (error) {

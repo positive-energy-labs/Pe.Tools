@@ -58,7 +58,7 @@ export const hostInputs = (stamp: ReceiptStamp | null, selection: HostInputSelec
     const reader = yield* openRecordingReader(selection.directory, identity, bounds);
     return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null, bindings: selection.bindings && new Map(selection.bindings) })));
   }
-  const directory = join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "recordings", createHash("sha256").update(identity.build).digest("hex"), identity.catalog, stamp.processSessionId);
+  const directory = join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "recordings", createHash("sha256").update(identity.build).digest("hex"), identity.catalog, "history");
   // Automatic capture is ancillary to live input: a store that cannot open (full or I/O) stops
   // recording before its first taking, not the host. Identity and tamper problems stay strict.
   const lane = yield* openRecordingWriter(directory, identity, bounds).pipe(

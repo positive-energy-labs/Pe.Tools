@@ -100,6 +100,7 @@ const sha256Name = Schema.String.check(
 const FORMAT = 3;
 /** What one taking recorded: a native read, or one input owner's exact read shape. */
 const recordedInput = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("publication"), key: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("native"), key: Schema.String, args: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("document"), scope: Schema.String }),
   Schema.Struct({
@@ -343,6 +344,12 @@ const loadBundle = Effect.fn("Recording.load")(function* (
       used += (yield* io(() => stat(join(observations, `${sha}.json`)))).size;
     }
   }
+  // A crash between the blob and taking append must not recover uncharged disk capacity.
+  for (const name of yield* io(() => readdir(observations).catch((error: unknown) => missing(error) ? [] : Promise.reject(error)))) {
+    const sha = yield* Schema.decodeUnknownEffect(sha256Name)(name.endsWith(".json") ? name.slice(0, -5) : null)
+      .pipe(Effect.mapError(() => refuse("tamper", "Observation filename is not a SHA-256")));
+    if (!stored.has(sha)) used += (yield* io(() => stat(join(observations, name)))).size;
+  }
   const names = yield* io(() =>
     readdir(join(dir, READ_SETS)).catch((error: unknown) => (missing(error) ? [] : Promise.reject(error))),
   );
@@ -421,7 +428,7 @@ const loadBundle = Effect.fn("Recording.load")(function* (
         Effect.mapError(() => refuse("tamper", `Observation ${sha} is not JSON`)),
       );
     }),
-    coverage: () => [...new Set(takings.map((taking) => taking.input.kind))],
+    coverage: () => [...new Set(takings.flatMap((taking) => taking.input.kind === "publication" ? [] : [taking.input.kind]))],
     truncation,
     readSets: {
       ids: () => sets.slice(),
