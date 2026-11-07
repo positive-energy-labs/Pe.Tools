@@ -7,7 +7,7 @@ import { TypedShell } from "#/shell/typed-shell";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { usePodRoutes } from "#/route/pod-routes";
 import { PaneErrorBoundary } from "@pe/kit/lang/pane";
-import { message } from "@pe/agent-contracts";
+import { readableRefusal } from "#/route/readable-refusal";
 
 export const Route = createFileRoute("/tool/$key")({ component: PodTool });
 function PodTool() {
@@ -50,7 +50,7 @@ function PodTool() {
             label={`Trust ${row.name} at this fingerprint`}
             busy={inventory?.loading}
             onClick={() => {
-              void inventory?.trust(row, true).catch((cause: unknown) => setError(message(cause)));
+              void inventory?.trust(row, true).catch((cause: unknown) => setError(readableRefusal(cause, "Pod trust refused: the artifact does not match its typed route contract. Rebuild this Pod and inspect its current bytes.")));
             }}
           >
             Trust this fingerprint

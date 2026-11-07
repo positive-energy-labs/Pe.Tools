@@ -3,18 +3,11 @@ import { writeReject } from "./catalog-work-reviews";
 import { harnessClient } from "../workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "../workbench/config";
 import { z } from "zod";
+import { readableRefusal } from "../route/readable-refusal";
 
 /** Host refusals carry serialized issues; local Value decoding throws the same issues. */
 function valueRefusal(error: unknown, read: string): string {
-  const message = error instanceof Error ? error.message : String(error);
-  let issues: unknown = error instanceof z.ZodError ? error.issues : null;
-  if (!issues) {
-    try { issues = JSON.parse(message); } catch { /* Domain refusals remain readable as supplied. */ }
-  }
-  return Array.isArray(issues) && issues.length > 0 && issues.every(issue =>
-    issue !== null && typeof issue === "object" && "code" in issue && "path" in issue)
-    ? `Value unavailable (${read}): the model reading does not match its contract. Refresh to try again.`
-    : message;
+  return readableRefusal(error, `Value unavailable (${read}): the model reading does not match its contract. Refresh to try again.`);
 }
 import { decodeField } from "../route/field-codec";
 import { applyPatches, bindWork, cellPatches, commands, commandTarget, canonicalRouteInput, workKey,

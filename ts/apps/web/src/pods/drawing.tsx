@@ -14,6 +14,7 @@ import { schemaFormModel } from "#/settings/schema-form";
 import { isSpecOf } from "#/route/workflow";
 import { member, type PodsContext, type PodsRosterContext } from "./route.ts";
 import { runRow } from "./run-row.tsx";
+import { podDiagnostic } from "../route/readable-refusal";
 
 export function Members({ ctx }: { ctx: PodsRosterContext }) {
   const page = ctx.page.read(),
@@ -37,7 +38,7 @@ export function Members({ ctx }: { ctx: PodsRosterContext }) {
       {value.value?.pods.flatMap((pod) =>
         pod.diagnostics.map((diagnostic, i) => (
           <p key={`${pod.id}:${i}`} role="alert">
-            {pod.name}: {diagnostic.message}
+            {pod.name}: {podDiagnostic(diagnostic)}
           </p>
         )),
       )}
