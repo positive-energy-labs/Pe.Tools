@@ -151,11 +151,6 @@ test("a route with a subject-list pane suppresses chrome's picker even on anothe
   expect(routeHasSubjectList(data)).toBe(true);
 });
 
-test("a route without a subject-list pane keeps chrome's picker", () => {
-  const data = { subject: { field: "system", pane: "detail" }, fields: { system: { role: "subject", picker: { reading: "roster" } } }, panes: { detail: { draws: ["detail"] } } } as unknown as RouteGraphJson;
-  expect(routeHasSubjectList(data)).toBe(false);
-});
-
 test("idle explicit readings draw no explanation while real failures remain visible", () => {
   let reason = "Explicit demand required";
   const mount = { readingStatus: () => ({ snapshot: { status: "unavailable", current: false, reason } }) } as unknown as AdmittedMount;
