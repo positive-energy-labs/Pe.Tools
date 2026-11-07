@@ -1,14 +1,14 @@
-import {routeAddress,type RouteKey} from "@pe/agent-contracts";
-import type {SearchSchemaInput} from "@tanstack/react-router";
-import {routeSearch} from "./owner";
-import {routeUrlPage} from "../route/url";
-export function routeFile<R extends RouteKey>(route: R) {
-  const url = routeUrlPage(route);
+import type { routeAddress, RouteKey } from "@pe/agent-contracts";
+import type { SearchSchemaInput } from "@tanstack/react-router";
+import type { routeSearch } from "./owner";
+type AddressSearch<R extends RouteKey> = ReturnType<
+  ReturnType<typeof routeAddress<R>>["read"]
+>["page"];
+/** The typed mount owns field decoding. Router validation preserves the original search object. */
+export function routeFile<R extends RouteKey>(_route: R) {
   return {
-    validateSearch: (search: SearchSchemaInput & Record<string, unknown>) => ({
-      ...routeSearch(search),
-      ...routeAddress(route).read(search).page,
-    }),
-    search: { middlewares: [...url.middlewares] },
+    validateSearch: (search: SearchSchemaInput & Record<string, unknown>) =>
+      // Exception to no casts: router search types are projected; runtime is identity and Page decodes only in typed-mount.decodePage.
+      search as unknown as ReturnType<typeof routeSearch> & AddressSearch<R>,
   };
 }

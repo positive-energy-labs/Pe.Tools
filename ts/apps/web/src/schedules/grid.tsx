@@ -1,3 +1,4 @@
+import { PreviewAction } from "@pe/kit/lang/write-action";
 import { useState } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
@@ -12,10 +13,6 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
   const page = ctx.page.read();
   const refusal = !ctx.cells.ready ? ctx.cells.refusal : data?.editRefusal;
   const snapshot = shown ? scheduleReadingSchema.parse(shown).snapshot : null;
-  const native =
-    ctx.target?.kind === "document" &&
-    shown?.target.session === ctx.target.ref.session &&
-    shown?.target.openId === ctx.target.ref.openId;
   const state: ScheduleGridState = {
     at: (key) => {
       const cell = ctx.cells.at(["cells", key]);
@@ -39,11 +36,6 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
     documentScope: shown
       ? { bridgeSessionId: shown.target.session, openDocumentId: shown.target.openId }
       : undefined,
-    nativeObservation: {
-      scope: shown
-        ? { document: native ? shown.target : null, source: native ? "native" : "saved" }
-        : null,
-    },
     snapshot,
     refused: data?.outcome.refused ?? {},
     freshness: ctx.value.current ? "current" : "changed",
@@ -82,9 +74,7 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
       <Button label="Bind schedule" onClick={() => run("bind")}>
         Bind schedule
       </Button>
-      <Button label="Apply cells" onClick={() => ctx.write("push").plan()}>
-        Apply cells
-      </Button>
+      <PreviewAction handle={ctx.write("push")} label="Apply cells" />
       {!ctx.value.current && (
         <OutcomeLine kind="advisory" label="Schedule reading" says={ctx.value.reason} />
       )}

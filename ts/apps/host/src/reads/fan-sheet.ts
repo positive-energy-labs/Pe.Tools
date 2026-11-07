@@ -31,9 +31,42 @@ import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 import { workLayer } from "../ducts-inputs.ts";
 import { followAcceptedJoins, mergeSnapshots } from "../ducts-walk.ts";
-import { catalogs, designLayers, native } from "./ducts-inputs.ts";
+import { designLayers } from "./ducts-design.ts";
+import { nativeRead } from "./inputs.ts";
+import { catalogs } from "../builtin-read-handles.ts";
 import { fingerprint, read } from "./evaluator.ts";
 const snapshotSchema = nativeResponseSchema("ducts.snapshot.walk");
+export const espOptions = read("fans.esp-options", {
+  input: z.object({ target: ductsRosterRequestSchema.shape.target, units: z.array(z.string()) }),
+  output: z.object({
+    espOptions: nativeResponseSchema("revit.catalog.field-options").nullable(),
+    espOptionsError: z.string().nullable(),
+  }),
+  async run(ctx, { target, units }) {
+    if (!units.length)
+      return { espOptions: null, espOptionsError: "No unit identities in this fan scope" };
+    try {
+      const response = await ctx.read(nativeRead("revit.catalog.field-options"), {
+        role: "none",
+        target: { kind: "document", ref: target },
+        request: {
+          key: "parameter-identities",
+          context: {
+            ElementUniqueIds: [...new Set(units)].sort().join(","),
+            ParameterScope: "instanceThenType",
+            StorageType: "Double",
+          },
+        },
+      });
+      return { espOptions: response.body, espOptionsError: null };
+    } catch (error) {
+      return {
+        espOptions: null,
+        espOptionsError: error instanceof Error ? error.message : String(error),
+      };
+    }
+  },
+});
 const details = ductsSheetResponseSchema.options;
 const enginePath = z.object({
   side: z.enum(["supply", "return"]),
@@ -107,14 +140,14 @@ const subject = ({
   ...args
 }: DuctsSheetRequest): DuctsSheetRequest => args;
 const walk = read("fans.walk", {
-  input: native.input,
+  input: nativeRead("ducts.snapshot.walk").input,
   output: z.object({ seed: z.number(), snapshot: snapshotSchema }),
   async run(ctx, args) {
-    if (!("selector" in args.request) || args.request.selector.kind !== "from")
+    if (!("selector" in args.request) || args.request.selector?.kind !== "from")
       throw Error("Fan walk requires a seed");
     return {
       seed: args.request.selector.unitId,
-      snapshot: snapshotSchema.parse((await ctx.read(native, args)).body),
+      snapshot: (await ctx.read(nativeRead("ducts.snapshot.walk"), args)).body,
     };
   },
 });
@@ -147,15 +180,15 @@ const sheetModel = read("fans.calculation", {
               ...tolerances,
             },
     };
-    const response = await ctx.read(native, {
-      key: "ducts.snapshot.walk",
+    const response = await ctx.read(nativeRead("ducts.snapshot.walk"), {
+      role: "acquire",
       request: acquisition,
-      target: request.target,
+      target: { kind: "document", ref: request.target },
     });
-    const tables = await ctx.read(native, {
-      key: "ducts.tables",
+    const tables = await ctx.read(nativeRead("ducts.tables"), {
+      role: "acquire",
       request: tableRequest,
-      target: request.target,
+      target: { kind: "document", ref: request.target },
     });
     if (!response.version || !tables.version)
       throw Error("Ducts read did not return an observation version");
@@ -168,7 +201,7 @@ const sheetModel = read("fans.calculation", {
       firm: saved.firm.firm,
       catalogs: catalog.tables,
     });
-    const first = snapshotSchema.parse(response.body);
+    const first = response.body;
     const snapshot = await followAcceptedJoins(
       first,
       resolveInputs(layersOf(first)).rulings.joins,
@@ -177,8 +210,7 @@ const sheetModel = read("fans.calculation", {
           read: walk,
           batch: 1,
           args: ([id]) => ({
-            key: "ducts.snapshot.walk" as const,
-            target: request.target,
+            target: { kind: "document" as const, ref: request.target },
             role: "join" as const,
             request: {
               ...(Object.keys(slots).length ? { slots } : {}),
@@ -225,8 +257,7 @@ const sheetModel = read("fans.calculation", {
         read: walk,
         batch: 1,
         args: ([unitId]) => ({
-          key: "ducts.snapshot.walk" as const,
-          target: request.target,
+          target: { kind: "document" as const, ref: request.target },
           role: "beyond" as const,
           request: {
             ...(Object.keys(slots).length ? { slots } : {}),
@@ -475,12 +506,12 @@ export const fanRoster = read("fans.roster", {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const slots = stagedDucts(design, design).parameters;
-    const response = await ctx.read(native, {
-      key: "ducts.snapshot.roster",
-      target,
+    const response = await ctx.read(nativeRead("ducts.snapshot.roster"), {
+      role: "acquire",
+      target: { kind: "document", ref: target },
       request: { ...(Object.keys(slots).length ? { slots } : {}), selector: { kind: "roster" } },
     });
-    const snapshot = snapshotSchema.parse(response.body);
+    const snapshot = response.body;
     const inputs = resolveInputs({
       snapshot,
       work: workLayer(design),

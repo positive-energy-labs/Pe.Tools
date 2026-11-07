@@ -1,3 +1,4 @@
+import type { OwnedCell } from "../route/typed-route";
 import type { SettingsFieldState } from "@pe/agent-contracts";
 import { token } from "@pe/kit/lib/token";
 import { EmptyState } from "@pe/kit/lang/empty";
@@ -143,6 +144,7 @@ export function SpecSheet({
  */
 export function ProposalCard({
   suggestion,
+  owned,
   wire,
   cell,
   focused,
@@ -154,6 +156,7 @@ export function ProposalCard({
   register,
 }: {
   suggestion: ProtoProposal;
+  owned:OwnedCell;
   wire: CellWire;
   /** The Work field the suggestion stands on. */
   cell: SettingsFieldState;
@@ -171,24 +174,7 @@ export function ProposalCard({
   const locked =
     wire.lockOf?.(suggestion.id) ??
     (wire.revision === null ? "Read the current Work before reviewing cells" : null);
-  // CHEAT(gap 7b): adopt/clear the existing stage until generic accept/deny transitions land.
-  // The host stamps the human adoption; keep every citation, not a second acceptance state.
-  const decide = async (keep: boolean) => {
-    if (locked) return { message: locked };
-    const revision = wire.revision;
-    if (revision === null) return { message: "Read the current Work before reviewing cells" };
-    if (!cell.edit) return { message: "This cell is no longer staged" };
-    const { by: _by, at: _at, base: _base, ...stage } = cell.edit;
-    return wire.write(
-      [
-        {
-          path: [...(wire.segment === null ? [] : [wire.segment]), suggestion.id, "edit"],
-          value: keep ? stage : null,
-        },
-      ],
-      revision,
-    );
-  };
+  const decide=(keep:boolean)=>locked?Promise.resolve({message:locked}):keep?owned.accept({label:"Keep family proposal"}):owned.deny({label:"Revert family proposal"});
   const target = suggestion.constituent
     ? `${suggestion.constituent.section} · ${suggestion.constituent.slug}${
         suggestion.constituent.property ? ` · ${suggestion.constituent.property}` : ""

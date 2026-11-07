@@ -28,12 +28,29 @@
       "types": "./src/product-map.ts",
       "import": "./src/product-map.ts"
     },
+    "./route-kernel-codecs": {
+      "types": "./src/route-kernel-codecs.ts",
+      "import": "./src/route-kernel-codecs.ts"
+    },
+    "./route-state": {
+      "types": "./src/route-state.ts",
+      "import": "./src/route-state.ts"
+    },
+    "./semantic-actions": {
+      "types": "./src/semantic-actions.ts",
+      "import": "./src/semantic-actions.ts"
+    },
+    "./command-axes": {
+      "types": "./src/command-axes.ts",
+      "import": "./src/command-axes.ts"
+    },
     "./work-value": "./src/work-value.ts",
     "./space-view": "./src/space-view.ts",
     "./ducts-guide": {
       "types": "./src/ducts-guide.ts",
       "import": "./src/ducts-guide.ts"
-    }
+    },
+    "./value": "./src/value.ts"
   },
   "publishConfig": {
     "access": "public"

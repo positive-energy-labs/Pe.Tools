@@ -322,7 +322,7 @@ export function createWorkFeedClient(
                   if (frame.value === null) {
                     buffered.length = 0;
                     revision = null;
-                    emit({ kind: "pending" });
+                    emit({ kind: "absent" });
                     return;
                   }
                   const parsed = snapshotSchema.safeParse(frame.value);
@@ -366,7 +366,7 @@ export function createWorkFeedClient(
               if (frame.value === null) {
                 buffered.length = 0;
                 revision = null;
-                emit({ kind: "pending" });
+                emit({ kind: "absent" });
                 return;
               }
               const parsed = snapshotSchema.safeParse(frame.value);

@@ -72,5 +72,9 @@
       "esbuild",
       "lightningcss"
     ]
+  },
+  "exports": {
+    "./route": "./src/route/defaults.ts",
+    "./host-read": "./src/route/host-read.ts"
   }
 }

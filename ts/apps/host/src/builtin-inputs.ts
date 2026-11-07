@@ -1,5 +1,15 @@
-import {hostOpSafety} from "@pe/host-contracts/generated";
-import {executionTargetSchema,documentRefSchema,DUCTS_BODY_VERSION_HEADER} from "@pe/agent-contracts";
+import { captureInput, replayInput, type RecordedInput } from "./native-recording.ts";
+import { readLocal } from "./local-inputs.ts";
+import { readFamilySpec } from "./family-file-input.ts";
+import { PictureCaptureStore } from "./captures-route.ts";
+import { createHash } from "node:crypto";
+import { nativeOutputLayer } from "./native-output.ts";
+import { hostOpSafety } from "@pe/host-contracts/generated";
+import {
+  executionTargetSchema,
+  documentRefSchema,
+  DUCTS_BODY_VERSION_HEADER,
+} from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
 import {
   CurrentInputConsumption,
@@ -9,7 +19,7 @@ import {
   type ReadSetId,
 } from "./input-occurrence.ts";
 import type { TakingObserver } from "./native-recording.ts";
-import { ductsInputPort, type DuctsReadSources } from "./reads/ducts-inputs.ts";
+import { inputPort, type ReadSources } from "./reads/inputs.ts";
 import { Publications } from "./reads/evaluator.ts";
 import { History, localHistory } from "./reads/history.ts";
 import { historyRoutes } from "./reads/history-routes.ts";
@@ -112,12 +122,24 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
   if (!recorded && (!live || !options.store))
     return yield* Effect.die(Error("Live input graph needs its real live inputs and Work store"));
   const writer = lane.kind === "live" ? lane.captureStore : undefined;
+  const pictureService = yield* Effect.serviceOption(PictureCaptureStore);
+  const pictures = recorded
+    ? undefined
+    : Option.isSome(pictureService)
+      ? pictureService.value
+      : yield* PictureCaptureStore.pipe(Effect.provide(PictureCaptureStore.layer()));
   const services = yield* Layer.build(
     Layer.mergeAll(
       HostInputReadSets.layer(lane),
       guardedNativeRead().pipe(
         Layer.provide(
-          hostNativeReadFor(lane, recorded ? liveNativeRecipe : live!.native, basis?.observed),
+          hostNativeReadFor(
+            lane,
+            recorded
+              ? liveNativeRecipe
+              : nativeOutputLayer(pictures!).pipe(Layer.provide(live!.native)),
+            basis?.observed,
+          ),
         ),
         Layer.provide(Layer.succeed(HostInputContext, inputs)),
       ),
@@ -163,16 +185,33 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     marks = Context.get(services, HostDocumentMarks);
   const readSets = Context.get(services, HostInputReadSets);
   const publications = new Publications();
-  const history = writer ? new History(writer, run, writer, publications) : recorded ? new History(lane.recordingStore, run) : undefined;
+  const history = writer
+    ? new History(writer, run, writer, publications)
+    : recorded
+      ? new History(lane.recordingStore, run)
+      : undefined;
   if (history) {
     const receipts = yield* Effect.serviceOption(HostReceipts);
-    const stop = Option.isSome(receipts) ? receipts.value.journal.subscribe({ kinds: ["action"] }, (receipt) => {
-      if (receipt.body.kind !== "action") return;
-      const row = receipt.body.value;
-      if (row.state === "succeeded" && row.target.kind === "document" && row.steps.some((s) => s.state === "succeeded" && s.effect !== "Read" && s.effect !== "TransactRead"))
-        history.afterWrite(row.target.ref, row.id);
-    }) : () => {};
-    yield* Effect.addFinalizer(() => Effect.promise(async () => { stop(); await history.close(); }));
+    const stop = Option.isSome(receipts)
+      ? receipts.value.journal.subscribe({ kinds: ["action"] }, (receipt) => {
+          if (receipt.body.kind !== "action") return;
+          const row = receipt.body.value;
+          if (
+            row.state === "succeeded" &&
+            row.target.kind === "document" &&
+            row.steps.some(
+              (s) => s.state === "succeeded" && s.effect !== "Read" && s.effect !== "TransactRead",
+            )
+          )
+            history.afterWrite(row.target.ref, row.id);
+        })
+      : () => {};
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(async () => {
+        stop();
+        await history.close();
+      }),
+    );
   }
   const invalidations = readInvalidations(
     workspace,
@@ -184,6 +223,47 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
   yield* Effect.addFinalizer(() => Effect.sync(invalidations.close));
   const json = (value: unknown) =>
     Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value)));
+  const assetInput = (sha: string) => ({ kind: "files" as const, file: `capture:${sha}` });
+  const asset = (sha: string) => {
+    if (!/^[0-9a-f]{64}$/.test(sha)) throw Error("Invalid capture hash");
+    const input = assetInput(sha);
+    const read: Effect.Effect<string, import("@pe/host-internal/request-contracts").DoorFailure> =
+      recorded
+        ? replayInput(
+            lane.recordingStore,
+            input,
+            "{}",
+            Schema.String,
+            lane.recordingStore.candidates(canonicalJson(input)).find((t) => t.scope === "{}")?.id,
+          )
+        : (() => {
+            const value = Effect.tryPromise({
+              try: async () => {
+                const bytes = await pictures!.blob(sha);
+                if (!bytes || createHash("sha256").update(bytes).digest("hex") !== sha)
+                  throw Error(`Capture ${sha} has no valid retained PNG`);
+                return bytes.toString("base64");
+              },
+              catch: (error) =>
+                new InvalidRead({
+                  message: String(error),
+                  status: 404,
+                  problem: "capture.missing",
+                }),
+            });
+            return writer
+              ? captureInput(writer, input, "{}", Schema.String, value, options.observed)
+              : value;
+          })();
+    return read.pipe(
+      Effect.map((encoded) => {
+        const bytes = Buffer.from(encoded, "base64");
+        if (createHash("sha256").update(bytes).digest("hex") !== sha)
+          throw Error("Recorded capture bytes do not match their address");
+        return bytes;
+      }),
+    );
+  };
   const child = (parent: InputConsumption, recipe: ConsumerRecipe) => {
     const next = parent.child(recipe);
     if (Result.isFailure(next)) throw next.failure;
@@ -215,7 +295,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     current: InputConsumption,
     input: NativeReadInput,
     readOptions: { version?: string; refresh?: string },
-    role: "acquire" | "validate" | "join" | "beyond" | undefined,
+    role: "acquire" | "validate" | "join" | "beyond" | "none",
     document: HostSessionInventory["Service"]["document"],
   ) =>
     Effect.gen(function* () {
@@ -266,17 +346,41 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     });
     const graph = graphRouteIds.includes(declared.id) ? graphRoute(declared.id, input.body) : null;
     const graphRequest = graph?.publication;
+    const historyDocument = documentRefSchema.safeParse(
+      (graph?.args as { target?: unknown } | undefined)?.target,
+    );
     const at = web.headers.get("x-pe-history-point");
     if (at && web.headers.get("x-pe-history-compare") !== "now" && graph) {
-      return { readGraph: async () => {
-        localHistory(identity.caller);
-        if (!graphRequest) throw new InvalidRead({ message: "This read was never published at this point", status: 409, problem: "history.unavailable" });
-        if (graphRequest.release) return { key: "", generation: graphRequest.generation, version: 0, value: null, state: "superseded" };
-        if (!history) throw new InvalidRead({ message: "History storage is unavailable", status: 409, problem: "history.unavailable" });
-        const pose = historyPoseSchema.parse(JSON.parse(decodeURIComponent(web.headers.get("x-pe-history-page") ?? "")));
-        const raw = await history.publication(at, pose.instance, graph.name, graph.key);
-        return { ...(raw as object), generation: graphRequest.generation };
-      } };
+      return {
+        readGraph: async () => {
+          localHistory(identity.caller);
+          if (!graphRequest)
+            throw new InvalidRead({
+              message: "This read was never published at this point",
+              status: 409,
+              problem: "history.unavailable",
+            });
+          if (graphRequest.release)
+            return {
+              key: "",
+              generation: graphRequest.generation,
+              version: 0,
+              value: null,
+              state: "superseded",
+            };
+          if (!history)
+            throw new InvalidRead({
+              message: "History storage is unavailable",
+              status: 409,
+              problem: "history.unavailable",
+            });
+          const pose = historyPoseSchema.parse(
+            JSON.parse(decodeURIComponent(web.headers.get("x-pe-history-page") ?? "")),
+          );
+          const raw = await history.publication(at, pose.instance, graph.name, graph.key);
+          return { ...(raw as object), generation: graphRequest.generation };
+        },
+      };
     }
     if (graphRequest?.release)
       return {
@@ -326,7 +430,37 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       }
     };
     const inventory = Context.get(services, HostSessionInventory);
-    const sources = (current: InputConsumption): DuctsReadSources => {
+    // Every host-only input starts a taking in the same evaluation as native and Work inputs.
+    const takeOwner = (
+      current: InputConsumption,
+      input: RecordedInput,
+      live: () => Promise<unknown>,
+    ) => {
+      const scope = "{}";
+      const codec = Schema.Json;
+      const effect = recorded
+        ? replayInput(lane.recordingStore, input, scope, codec)
+        : (() => {
+            const value = Effect.tryPromise({
+              try: async () => json(await live()),
+              catch: (error) =>
+                new InvalidRead({ message: String(error), status: 409, problem: "input.failed" }),
+            });
+            return writer
+              ? captureInput(writer, input, scope, codec, value, options.observed)
+              : value;
+          })();
+      return scoped(current)(effect);
+    };
+    const takeFile = (name: string, args: unknown, current: InputConsumption) =>
+      takeOwner(current, { kind: "files", file: canonicalJson([name, json(args)]) }, () =>
+        name.startsWith("local:")
+          ? readLocal(name.slice(6), args)
+          : name === "family-spec"
+            ? readFamilySpec(args)
+            : Promise.reject(Error(`Unknown file input ${name}`)),
+      );
+    const sources = (current: InputConsumption): ReadSources => {
       const context = Context.add(admitted, CurrentInputConsumption, current);
       const invoke = <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) =>
         runPods({}, Effect.provide(effect, context));
@@ -344,35 +478,71 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       const document = (ref: import("@pe/agent-contracts").DocumentRef) =>
         invoke(documentRead(ref));
       return {
-        firm: () => invoke(files.firm),
-        catalogs: () => invoke(files.ductCatalogs),
+        file: (name, args) =>
+          name === "firm"
+            ? invoke(files.firm)
+            : name === "catalogs"
+              ? invoke(files.ductCatalogs)
+              : name === "capture"
+                ? scoped(current)(asset(String(args))).then(() => String(args))
+                : takeFile(name, args, current),
         workKey: async (ref) => bindWork("ducts", (await document(ref)).address, undefined, ref),
         inputs: {
           consumption: current,
           run: scoped(current),
           work: workReadContext(current, scoped(current)),
         },
-        resource: request => new Promise((resolve,reject)=> {
-          let settled=false,stop=()=>{};
-          stop=observe(request as Parameters<ResourceObserver>[0],frame=> {
-            if(frame.kind === "snapshot") {settled=true;resolve(frame.value);stop();}
-            else if(frame.kind === "failure") {settled=true;reject(Error(frame.error));stop();}
-          },0);
-          if(settled) stop();
-        }),
+        resource: (request) =>
+          takeOwner(
+            current,
+            { kind: "resource", key: "snapshot", args: canonicalJson(json(request)) },
+            () => {
+              if ((request as { kind: string }).kind === "captures")
+                return (async () => {
+                  const captures = await pictures!.list();
+                  return { captures };
+                })();
+              return new Promise((resolve, reject) => {
+                let settled = false,
+                  stop = () => {};
+                stop = fallback(
+                  request as Parameters<ResourceObserver>[0],
+                  (frame) => {
+                    if (frame.kind === "snapshot") {
+                      settled = true;
+                      resolve(frame.value);
+                      stop();
+                    } else if (frame.kind === "failure") {
+                      settled = true;
+                      reject(Error(frame.error));
+                      stop();
+                    }
+                  },
+                  0,
+                );
+                if (settled) stop();
+              });
+            },
+          ),
         call: async (key, input, target, version, role) => {
-          const requestTarget=executionTargetSchema.safeParse(target);
-          const chosen=requestTarget.success?requestTarget.data:{kind:"document" as const,ref:documentRefSchema.parse(target)};
-          const safety=hostOpSafety[key as keyof typeof hostOpSafety];
-          if(!safety || safety.intent !== "Read") throw Error(`Native leaf is not a catalog Read: ${key}`);
-          const ref=chosen.kind === "document"?chosen.ref:null;
-          if(!["ducts.snapshot.roster","ducts.snapshot.walk","ducts.tables"].includes(key)) {
-            const native=Context.get(services,HostNativeRead);
-            const scope=ref?{bridgeSessionId:ref.session,openDocumentId:ref.openId}:chosen.kind === "session"?{bridgeSessionId:chosen.session}:{};
-            const answer=await invoke(native.read({key,input,scope}));
-            return new Response(JSON.stringify(answer.value),{headers:{[DUCTS_BODY_VERSION_HEADER]:canonicalJson(json(answer.freshness))}});
+          const chosen = executionTargetSchema.parse(target);
+          const safety = hostOpSafety[key as keyof typeof hostOpSafety];
+          if (!safety || safety.intent !== "Read")
+            throw Error(`Native leaf is not a catalog Read: ${key}`);
+          const ref = chosen.kind === "document" ? chosen.ref : null;
+          if (!["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"].includes(key)) {
+            const native = Context.get(services, HostNativeRead);
+            const scope = ref
+              ? { bridgeSessionId: ref.session, openDocumentId: ref.openId }
+              : chosen.kind === "session"
+                ? { bridgeSessionId: chosen.session }
+                : {};
+            const answer = await invoke(native.read({ key, input, scope }));
+            return new Response(JSON.stringify(answer.value), {
+              headers: { [DUCTS_BODY_VERSION_HEADER]: canonicalJson(json(answer.freshness)) },
+            });
           }
-          if(!ref) throw Error("Retained document read requires a document target");
+          if (!ref) throw Error("Retained document read requires a document target");
           const scope = {
             bridgeSessionId: ref.session,
             ...(key === "ducts.tables" ? {} : { openDocumentId: ref.openId }),
@@ -727,9 +897,9 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       ...(graph && source
         ? {
             readGraph: async () => {
-              const port = ductsInputPort({
+              const port = inputPort({
+                leaves: registeredReads.leaves,
                 source,
-                leaves:registeredReads.leaves,
                 workspace,
                 marks,
                 run: scoped(consumption!),
@@ -743,14 +913,35 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                     canonicalJson([identity.caller, graph.publication.subscription]),
                     graph.publication.generation,
                     port,
-                    history && writer && documentRefSchema.safeParse((graph.args as {target?:unknown}).target).success ? (publication) => history.record(async () => {
-                      const row = await scoped(consumption!)(inventory.document((graph.args as { target: import("@pe/agent-contracts").DocumentRef }).target).pipe(Effect.provideService(RequestIdentity, identity)));
-                      const address = addressSchema.parse(row.address);
-                      await complete(consumption!);
-                      const raw = web.headers.get("x-pe-history-page");
-                      const pose = raw ? historyPoseSchema.parse(JSON.parse(decodeURIComponent(raw))) : { instance: graph.name, route: graph.name.split(".")[0]!, page: {}, href: `/${graph.name.split(".")[0]}` };
-                      return [canonicalJson([identity.caller, graph.publication!.subscription]), graph.name, pose, address, row, publication];
-                    }) : undefined,
+                    history && writer && historyDocument.success
+                      ? (publication) =>
+                          history.record(async () => {
+                            const row = await scoped(consumption!)(
+                              inventory
+                                .document(historyDocument.data)
+                                .pipe(Effect.provideService(RequestIdentity, identity)),
+                            );
+                            const address = addressSchema.parse(row.address);
+                            await complete(consumption!);
+                            const raw = web.headers.get("x-pe-history-page");
+                            const pose = raw
+                              ? historyPoseSchema.parse(JSON.parse(decodeURIComponent(raw)))
+                              : {
+                                  instance: graph.name,
+                                  route: graph.name.split(".")[0]!,
+                                  page: {},
+                                  href: `/${graph.name.split(".")[0]}`,
+                                };
+                            return [
+                              canonicalJson([identity.caller, graph.publication!.subscription]),
+                              graph.name,
+                              pose,
+                              address,
+                              row,
+                              publication,
+                            ];
+                          })
+                      : undefined,
                   )
                 : graph.evaluate(port).catch((error: unknown) => {
                     if (isDoorFailure(error)) throw error;
@@ -788,7 +979,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         }
         try {
           if ("response" in result && result.response.ok) {
-            if (!graph?.publication || !history || !writer) await complete(consumption!);
+            if (!graph?.publication || !history || !writer || !historyDocument.success)
+              await complete(consumption!);
           }
         } catch {
           const at = writer?.capture.begin();
@@ -858,21 +1050,40 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         Effect.provideService(HostNativeRead, Context.get(services, HostNativeRead)),
       );
     });
-  const commandRead = async <A>(admission: import("@pe/agent-contracts").ActionAdmission,
-    method: "read" | "view", key: import("@pe/agent-contracts").WorkKey, route: string,
-    read: (context: import("@pe/runtime").WorkReadContext) => Promise<A>) => {
-    const current = await run(readSets.open({key: `command.work.${method}`,
-      input: json({id: admission.id, command: admission.key, key, route}), scope: canonicalJson(admission.target)}, null));
-    const scoped: WorkInputRunner = effect => run(Effect.provideService(effect, CurrentInputConsumption, current));
+  const commandRead = async <A>(
+    admission: import("@pe/agent-contracts").ActionAdmission,
+    method: "read" | "view",
+    key: import("@pe/agent-contracts").WorkKey,
+    route: string,
+    read: (context: import("@pe/runtime").WorkReadContext) => Promise<A>,
+  ) => {
+    const current = await run(
+      readSets.open(
+        {
+          key: `command.work.${method}`,
+          input: json({ id: admission.id, command: admission.key, key, route }),
+          scope: canonicalJson(admission.target),
+        },
+        null,
+      ),
+    );
+    const scoped: WorkInputRunner = (effect) =>
+      run(Effect.provideService(effect, CurrentInputConsumption, current));
     try {
       const value = await read(workReadContext(current, scoped));
       if (writer && !writer.capture.truncated()) await scoped(sealed(current));
       return value;
-    } finally { await run(current.close); }
+    } finally {
+      await run(current.close);
+    }
   };
-  const commandReads: NonNullable<import("./command-executor.ts").CommandResources["workReads"]> = admission => ({
-    read: (key, route) => commandRead(admission, "read", key, route, context => workspace.read(key, route, context)),
-    view: (key, route) => commandRead(admission, "view", key, route, context => workspace.view(key, route, context)),
+  const commandReads: NonNullable<import("./command-executor.ts").CommandResources["workReads"]> = (
+    admission,
+  ) => ({
+    read: (key, route) =>
+      commandRead(admission, "read", key, route, (context) => workspace.read(key, route, context)),
+    view: (key, route) =>
+      commandRead(admission, "view", key, route, (context) => workspace.view(key, route, context)),
   });
   const work = { workspace, registrations, pointers: options.pointers, reads: commandReads };
   const nativeCall = Effect.fn("Reads.nativeBody")(function* (raw: NativeReadInput) {
@@ -918,7 +1129,17 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       Effect.ensuring(root.close),
     );
   });
-  return { work, invocation, retainedCall, nativeCall, nativeBody, services, publications, history };
+  return {
+    work,
+    invocation,
+    retainedCall,
+    nativeCall,
+    nativeBody,
+    services,
+    publications,
+    history,
+    asset,
+  };
 });
 
 export type ReadOwnerOptions = NonNullable<Parameters<typeof makeReadOwner>[1]>;
@@ -941,6 +1162,22 @@ const readCoreRoutes = (
         registrations: reads.work.registrations,
       });
       return Layer.mergeAll(
+        inputs.lane.kind === "recording"
+          ? HttpRouter.add("GET", "/captures/:asset", (req) => {
+              const sha =
+                new URL(req.url, "http://host").pathname
+                  .split("/")
+                  .at(-1)
+                  ?.replace(/\.png$/, "") ?? "";
+              return reads
+                .asset(sha)
+                .pipe(
+                  Effect.map((bytes) =>
+                    HttpServerResponse.uint8Array(bytes, { contentType: "image/png" }),
+                  ),
+                );
+            })
+          : Layer.empty,
         peCoreRoutes(routes, reads.invocation, inputs),
         historyRoutes(reads.history),
         nativeReadResolveRoute,

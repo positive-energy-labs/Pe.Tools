@@ -16,7 +16,7 @@ const HELD: WriteHeld = { word: "heal · planned 3", summary: "3 pass · 1 refus
 const spy = vi.fn();
 
 test("a plan handle is resampled after settling; an unsealed review never arms apply", async () => {
-  let review: unknown = null;
+  let review: import("../src/components/lang/write-action").PlanReview | null = null;
   const handle = {
     read: () => review,
     plan: vi.fn(async () => { review = { sentence: "1 change", rows: ["Inspect this change"], stale: false }; }),

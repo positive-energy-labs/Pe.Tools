@@ -791,6 +791,31 @@ export class RouteWorkspace {
   }
 
   /** Observations and conditional retirement are host facts, never raw client edits. */
+  validateSeed(scope: WorkKey, seed: unknown): unknown {
+    const registration=this.#registry.get(scope.route);
+    if(!registration) throw Error(`Unknown Work route ${scope.route}`);
+    return registration.spec.schema.parse(seed);
+  }
+
+  /** The journal calls this only after consent. The write tail makes absence a compare-and-set. */
+  async start(scope:WorkKey,seed:unknown,by:WorkAuthor,receiptId?:string):Promise<RouteStateWriteResult> {
+    this.#authorize("publish");
+    const doc=this.validateSeed(scope,seed);
+    const spec=this.#registry.get(scope.route)!.spec;
+    return this.#serialized(async()=>{
+      if(await this.#store.getState({targetKey:workKey(scope),route:scope.route}) != null)
+        return refuse("refused","Work already exists","Open the existing Work.");
+      const write:WorkWriteAck={key:workHandle(scope,1).key,kind:"publish",by,press:null,
+        base:0,revision:1,patches:[],inverse:[],undoable:false,at:Date.now(),...(receiptId?{receiptId}:{})};
+      await this.#persist(scope,scope.route,{version:1,doc,schemaVersion:spec.schemaVersion ?? 1,revision:1},[{write,after:doc}]);
+      this.#inverses.set(workKey(scope),[{write,after:doc}]);
+      try {this.#accept(write);} finally {
+        await this.#publish({type:"route_workspace",scope,route:scope.route,...write,action:"publish",ok:true});
+      }
+      return {ok:true,revision:1,handle:workHandle(scope,1),doc:structuredClone(doc),write};
+    });
+  }
+
   publish(
     scope: WorkKey,
     route: string,
@@ -1021,7 +1046,7 @@ export class RouteWorkspace {
       const listeners = this.#acceptedListeners.get(key) ?? new Set();
       this.#acceptedListeners.set(key, listeners);
       listeners.add(listener);
-      const envelope = await this.#load(scope, spec, true);
+      const envelope = await this.#load(scope, spec, false);
       if (disposed) return;
       if (!envelope) { snapshot(null); return; }
       const records = this.#retain(this.#inverses.get(key) ?? [], envelope.revision);
@@ -1067,7 +1092,7 @@ export class RouteWorkspace {
     const request = { kind: "feed", key: scope, admission, shape } as const;
     if (!recorded && !capture)
       return shape === "work"
-        ? this.observe(scope, scope.route, deliver, true, true)
+        ? this.observe(scope, scope.route, deliver, false, true)
         : this.observeFeed(scope, (value) => deliver({ value }), ack, failed);
     let closed = false;
     let stop = () => {};
@@ -1155,7 +1180,7 @@ export class RouteWorkspace {
             if (got && !closed) deliver(got, carriage);
           }).catch(end);
         },
-        true,
+        false,
         true,
       );
     } else {
@@ -1209,9 +1234,15 @@ export class RouteWorkspace {
     let envelope: RouteEnvelope<unknown> | null = null;
     if (raw != null) {
       try { envelope = parseEnvelope(raw, spec); }
-      catch {
-        // ADR 0033 rule 5: delete Work that does not decode; never convert it.
-        await this.#store.setState({ targetKey: workKey(scope), route: spec.route, value: null });
+      catch (error) {
+        // Reads preserve corrupt bytes for inspection. Recovery is an explicit authored action.
+        const reason = error instanceof Error
+          ? "reason" in error && typeof error.reason === "string" ? error.reason : error.message
+          : String(error);
+        throw Object.assign(
+          new Error(`Stored Work '${workKey(scope)}' cannot be read: ${reason}`),
+          { code: "WorkUnreadable", key: scope, reason },
+        );
       }
     }
     if (!envelope) {
@@ -1404,13 +1435,14 @@ const aside = (route: string, slot: number) => `${route}${START_FRESH_ASIDE}${sl
 
 function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {
   const age = workSchemaAge(raw, spec);
-  if (age === "newer") throw new Error(UNREADABLE_WORK);
+  if (age === "newer") throw Object.assign(new Error(UNREADABLE_WORK),
+    {reason: `schemaVersion exceeds the current version ${spec.schemaVersion ?? 1}`});
   const refusal = age === "older" ? OLDER_WORK : UNREADABLE_WORK;
   const parsed = envelopeSchema.safeParse(raw);
-  if (!parsed.success) throw new Error(refusal);
+  if (!parsed.success) throw Object.assign(new Error(refusal), {reason: parsed.error.message});
   const schema = spec.schema instanceof z.ZodObject ? spec.schema.strict() : spec.schema;
   const doc = schema.safeParse(parsed.data.doc);
-  if (!doc.success) throw new Error(refusal);
+  if (!doc.success) throw Object.assign(new Error(refusal), {reason: doc.error.message});
   return {
     version: ENVELOPE_VERSION,
     ...(age !== "unknown" && { schemaVersion: (raw as { schemaVersion: number }).schemaVersion }),
@@ -1421,7 +1453,8 @@ function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnve
 
 /** A write over saved Work the schema refuses answers in the one sentence and writes nothing. */
 function unreadable(error: unknown): RouteRefusal {
-  if (error instanceof Error && [UNREADABLE_WORK, OLDER_WORK].includes(error.message))
+  if (error instanceof Error && ([UNREADABLE_WORK, OLDER_WORK].includes(error.message) ||
+      "code" in error && error.code === "WorkUnreadable"))
     return refuse(
       "refused",
       error.message,

@@ -1,52 +1,20 @@
-import { z } from "zod";
+import { workRead } from "./inputs.ts";
 import {
-  scheduleReadingSchema,
-  scheduleCatalogSchema,
-  scheduleGridRouteState,
-  workKeySchema,
-  actionReceiptListDecoder,
-  canonicalRouteInput,
-  documentRefSchema,
-} from "@pe/agent-contracts";
+  scheduleCatalog,
+  scheduleRetained,
+  scheduleSaved,
+  scheduleReceipts,
+} from "../builtin-read-handles.ts";
+
+import { scheduleGridRouteState, canonicalRouteInput } from "@pe/agent-contracts";
 import {
   schedulesViewArgs,
   schedulesViewData,
 } from "../../../../packages/agent-contracts/src/schedules-read.ts";
-import { read, leaf, workValue } from "@pe/host/read-graph";
-import { documentMark } from "./ducts-inputs.ts";
+import { read } from "@pe/host/read-graph";
+import { documentMark } from "./inputs.ts";
 import { scheduleOutcome } from "./schedule-outcome.ts";
-const scheduleCatalog = leaf(
-  "resource",
-  z.object({
-    kind: z.literal("schedule-reading"),
-    subject: z.literal("catalog"),
-    target: documentRefSchema,
-  }),
-  scheduleCatalogSchema,
-);
-const scheduleRetained = leaf(
-  "resource",
-  z.object({
-    kind: z.literal("schedule-reading"),
-    subject: z.literal("work"),
-    id: z.string().min(1),
-  }),
-  scheduleReadingSchema.nullable(),
-);
-const scheduleSaved = leaf(
-  "resource",
-  z.object({
-    kind: z.literal("schedule-reading"),
-    subject: z.literal("saved"),
-    id: z.string().min(1),
-  }),
-  scheduleReadingSchema.nullable(),
-);
-const scheduleReceipts = leaf(
-  "resource",
-  z.object({ kind: z.literal("receipts"), work: workKeySchema }),
-  actionReceiptListDecoder(),
-);
+
 /** One selected schedule owns one workspace Work, independently of its native capture. */
 export const schedulesView = read("schedules.view", {
   input: schedulesViewArgs,
@@ -61,7 +29,9 @@ export const schedulesView = read("schedules.view", {
     const scope = args.workspaceId
       ? { binding: "workspace" as const, route: "schedules", target: null, work: args.workspaceId }
       : null;
-    const view = scope ? workValue.parse(await ctx.work("schedules", scope)) : null;
+    const view = scope
+      ? await ctx.read(workRead("schedules", scheduleGridRouteState.schema), scope)
+      : null;
     const work = scheduleGridRouteState.schema.parse(view?.doc ?? {});
     const retained = args.workspaceId
       ? await ctx.read(scheduleRetained, {

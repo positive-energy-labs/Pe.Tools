@@ -1,15 +1,14 @@
-import { z } from "zod";
-import { readingRequestSchema } from "@pe/agent-contracts";
-import { leaf, read } from "@pe/host/read-graph";
+import { resources } from "../builtin-read-handles.ts";
+
+import { read } from "@pe/host/read-graph";
 import { settingsArgs, settingsValue } from "@pe/agent-contracts";
 
-const resource = leaf("resource", readingRequestSchema, z.unknown());
 export const reads = {
   machine: read("settings.machine", {
     input: settingsArgs,
     output: settingsValue,
     async run(ctx) {
-      return settingsValue.parse({ machine: await ctx.read(resource, { kind: "machine" }) });
+      return { machine: await ctx.read(resources.machine, { kind: "machine" }) };
     },
   }),
 };

@@ -1,6 +1,7 @@
+import {createJiti} from "jiti";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
-import { pathToFileURL, fileURLToPath } from "node:url";
+import { fileURLToPath } from "node:url";
 import { publishPodRoute } from "../pod-route-authoring.ts";
 import type { RouteGraphJson } from "../../../packages/agent-contracts/src/route-kernel-data.ts";
 
@@ -9,7 +10,7 @@ const [directory, slug] = process.argv.slice(2);
 if (!directory || !slug) throw Error("Expected Pod directory and route slug");
 const root = resolve(directory);
 const entry = join(root, "routes", slug, "module.ts");
-const { module } = (await import(pathToFileURL(entry).href)) as {
+const { module } = (await createJiti(import.meta.url,{fsCache:false}).import(entry)) as {
   module: { data: RouteGraphJson };
 };
 const repo = fileURLToPath(new URL("../../../../", import.meta.url));

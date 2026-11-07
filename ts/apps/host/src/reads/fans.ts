@@ -9,7 +9,9 @@ import {
 import { sheetSnapshot } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import { sheetState } from "@pe/ducts-domain/sheet/state";
 import { z } from "zod";
-import { designLayers, native } from "./ducts-inputs.ts";
+import { designLayers } from "./ducts-design.ts";
+import { nativeRead } from "./inputs.ts";
+
 import { read } from "./evaluator.ts";
 import {
   fanElements,
@@ -18,6 +20,7 @@ import {
   fanOverview,
   fanRoster,
   fanWorksheet,
+  espOptions,
 } from "./fan-sheet.ts";
 const openFan = read("fans.open", {
   input: fansReadArgs
@@ -76,6 +79,10 @@ export const fansSheet = read("fans.sheet", {
             if (!row) throw Error(`Fan '${key}' is unavailable; choose it from the roster`);
             return row;
           });
+    const options = await ctx.read(espOptions, {
+      target: args.target,
+      units: chosen.flatMap((row) => (row.uniqueId ? [row.uniqueId] : [])),
+    });
     if (chosen.length > FAN_READ_MAX) throw Error("Open at most 32 fan ports in one sheet");
     const opened = await ctx.collect(chosen, {
       read: openFan,
@@ -130,17 +137,18 @@ export const fansSheet = read("fans.sheet", {
       ),
     ].sort((a, b) => a - b);
     const geometry = ids.length
-      ? await ctx.read(native, {
-          key: "ducts.snapshot.walk",
+      ? await ctx.read(nativeRead("ducts.snapshot.walk"), {
+          role: "acquire",
           request: {
             slots: staged.parameters,
             labelParameter: staged.labelParameter ?? undefined,
             selector: { kind: "ids", ids },
           },
-          target: args.target,
+          target: { kind: "document", ref: args.target },
         })
       : null;
     return ctx.compute(fansSheetData, { opened, rows, fans, geometry }, (data) => ({
+      ...options,
       open: data.opened[0] ?? null,
       opened: [...data.opened],
       rows: data.rows,

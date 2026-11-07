@@ -1,3 +1,7 @@
+import {hostReadSource} from "./host-read-source.ts";
+import { writeReject } from "./admitted-chrome";
+import { harnessClient } from "../workbench/provider/harness-client";
+import { resolveWorkbenchConfig } from "../workbench/config";
 import { z } from "zod";
 import { decodeField } from "../route/field-codec";
 import { applyPatches, bindWork, cellPatches, commands, commandTarget, canonicalRouteInput, workKey,
@@ -53,7 +57,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   const owners = new Map<string, {
     scope: WorkScope; config: import("../route/typed-route").Owners[string]; handle: WorkHandle | null;
-    doc: any; ready: boolean; problem: string | null; failure: WorkFeedFailure | null;
+    doc: any; ready: boolean; absent:boolean; problem: string | null; failure: WorkFeedFailure | null;
     lease: ReturnType<typeof registry.acquire>;
   }>();
   let page: Record<string, any> = decodePage();
@@ -92,7 +96,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     const parsed = record.config.state.schema.parse(doc);
     if (record.handle?.revision === handle.revision && canonicalRouteInput(record.doc) !== canonicalRouteInput(parsed))
       throw Error("Contradictory Work revision; refresh this route");
-    record.handle = freezePage(handle); record.doc = freezePage(parsed); record.ready = true; record.problem = null; record.failure = null;
+    record.absent=false; record.handle = freezePage(handle); record.doc = freezePage(parsed); record.ready = true; record.problem = null; record.failure = null;
     record.lease.entry.journal.observe({ revision: handle.revision, doc: parsed });
     if (handle.key.route === own) gate.acceptWork(workAttempt,
       { kind: "snapshot", handle, value: parsed, hash: canonicalRouteInput(parsed) });
@@ -111,7 +115,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       target: input.target, subject: null };
     const lease = registry.acquire(scope.key);
     const record = { scope, config, handle: null as WorkHandle | null, doc: null as any,
-      ready: false, problem: null as string | null, failure: null as WorkFeedFailure | null, lease };
+      ready: false, absent:false, problem: null as string | null, failure: null as WorkFeedFailure | null, lease };
     owners.set(id, record);
     ownerStops.push(() => lease.release());
     lease.entry.connect(scope, door);
@@ -134,8 +138,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           lease.entry.journal.accept(ack);
         } else if (state.kind !== "ack") {
           record.ready = false;
+          record.absent=state.kind === "absent";
+          if(record.absent){record.doc=null;record.handle=null;}
           record.failure=state.kind === "failed"?state.failure:null;
-          record.problem = record.failure ? workFeedFailureMessage(record.failure) : "Reading Work...";
+          record.problem = record.failure ? workFeedFailureMessage(record.failure) : record.absent ? "Start this Work to edit" : "Reading Work...";
         }
       } catch (error) { record.ready = false; record.problem = String(error); }
       notify();
@@ -153,10 +159,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const project = "args" in read && typeof read.args === "function" ? read.args : spec.core?.args ?? (()=>({}));
       const args = read.input.parse(project(page as never)), signature = canonicalRouteInput(args);
       if (!force && signature === reads.get(read)?.args) continue;
-      const previous = reads.get(read)?.snapshot.value;
+      const previous = reads.get(read)?.snapshot;
+      const retained=previous?.publication?freezePage({...previous.publication,freshness:"refresh-needed" as const}):null;
       reads.get(read)?.stop();
       const controller = new AbortController();
-      const record: {snapshot:Value;args:string;stop():void} = { args: signature, snapshot: { ...unavailable("Reading...", previous),status:"pending" }, stop: () => controller.abort() };
+      const record: {snapshot:Value;args:string;stop():void} = { args: signature, snapshot: { ...unavailable("Reading...", previous?.value,retained),status:"pending" }, stop: () => controller.abort() };
       reads.set(read, record);
       const deliver = (frame: Parameters<Extract<ReadingSource, { kind: "use" | "feed" }>["open"]>[1] extends (arg: infer P) => any ? P : never) => {
         if (controller.signal.aborted || disposed || reads.get(read) !== record) return;
@@ -167,9 +174,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             const current = frame.kind === "complete" && frame.fresh !== false && packet.state === "current" &&
               !!packet.value && !packet.value.coverage.unknown.length && !packet.value.coverage.refused.length;
             record.snapshot = current ? { status: "ready", current: true, value: publication!.data, publication, hash: packet.value!.evaluation }
-              : unavailable(frame.reason ?? packet.reason ?? "Incomplete Value", publication?.data, publication);
+              : unavailable(frame.reason ?? packet.reason ?? "Incomplete Value", publication?.data??record.snapshot.value, publication??record.snapshot.publication);
           } catch (error) { record.snapshot = unavailable(String(error), record.snapshot.value, record.snapshot.publication); }
-        } else if (frame.kind !== "log") record.snapshot = unavailable(frame.kind === "failure" ? String(frame.error) : "Reading...", record.snapshot.value, record.snapshot.publication);
+        } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(String(frame.error),record.snapshot.value,record.snapshot.publication):{...unavailable("Reading...",record.snapshot.value,record.snapshot.publication),status:"pending"};
         notify();
       };
       if (input.fixture !== null) {
@@ -181,7 +188,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           historyPose: input.publicationInstance ? publicationPose(input.publicationInstance,spec.key,page) : undefined,
           work: null, page, args, signal: controller.signal, inputs: {},
           attempt: { target: input.target!, workKey: key, generation: revision }, trigger: { kind: "demand" } };
-        const source = ports.sources?.[read.key] ?? read.source;
+        const source = ports.sources?.[read.key] ?? hostReadSource(read);
         if (source.kind !== "use" && source.kind !== "feed") throw Error("Typed panes require a host Value");
         Promise.resolve(source.open(ctx, deliver)).then(stop => {
           if (controller.signal.aborted) stop?.();
@@ -268,6 +275,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         patches:step.transitions.slice(0,step.cursor).reverse().flatMap(t=>t.inverse)},token);
     } };
   const reviews = new Map<string, { preview: z.output<typeof writePreviewSchema>; input: Record<string, unknown>; token: InvocationToken; signature: string; presentation: any }>();
+  const consentReviews = new Map<string, ReturnType<typeof reviews.get>>();
   const problems = new Map<string,string>();
   const plans = new Map<string,InvocationToken>();
   const workSignature = () => canonicalRouteInput([...owners].map(([id,o]) => [id,o.ready,o.handle]));
@@ -305,6 +313,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     } catch { return refused(`${spec.subject?.noun ?? "Subject"} is malformed`); }
   };
   const results = new Map<string,unknown>();
+  const pending = new Set<string>();
   const run = async (id: string, apply = false, supplied?:unknown) => {
     requireWritable();
     if (input.fixture !== null) throw Error("Fixture has no native writes");
@@ -334,9 +343,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (apply) {
       const held = reviews.get(id);
       if (!held || held.signature !== workSignature() || !gate.current(held.token)) throw Error("Review is stale; prepare it again");
-      reviews.delete(id); notify();
-      const result = await settleNative(door.submit({ id: crypto.randomUUID(), key: cmd.entry, target: input.target!, input: held.input }));
-      syncReads(true); return result;
+      consentReviews.set(id,held); reviews.delete(id); notify();
+      try {
+        const result = await settleNative(door.submit({ id: crypto.randomUUID(), key: cmd.entry, target: input.target!, input: held.input }));
+        syncReads(true); return result;
+      } finally {consentReviews.delete(id);notify();}
     }
     let token: InvocationToken | undefined;
     try {
@@ -368,6 +379,45 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   syncReads();
   const mounted = {
     spec, subjectState, move,
+    absentOwners:()=>[...owners].filter(([id,owner])=>id!==own&&owner.absent).map(([route])=>route),
+    startAction():import("../route/typed-route").ActionHandle|null {
+      const record=owners.get(own);
+      if(!record?.absent||!edits?.seed||!key||input.readOnly||input.history) return null;
+      const selected=key;
+      const run=async()=>{
+        requireWritable();
+        if(canonicalRouteInput(selected)!==canonicalRouteInput(selectedKey())) throw Error("Selected Work changed; Start the current member");
+        if(pending.has("work.start")) throw Error("Start already pending");
+        pending.add("work.start");problems.delete("work.start");notify();
+        try {
+          const request=commands["work.start"].input.parse({key:selected,seed:edits.seed!(page as never,input.target)});
+          await settleNative(door.submit({id:crypto.randomUUID(),key:"work.start",target:{kind:"host"},input:request}));
+          if(canonicalRouteInput(selected)!==canonicalRouteInput(selectedKey())) return;
+          ownerKey=undefined;syncWork();syncReads(true);
+        } catch(error){problems.set("work.start",error instanceof Error?error.message:String(error));throw error;}
+        finally{pending.delete("work.start");notify();}
+      };
+      return {label:"Start",get pending(){return pending.has("work.start");},refusal:null,
+        get failure(){return problems.get("work.start")??null;},
+        get consent(){return writeReject(mounted.timeline(),["work.start"],(thread,request)=>void harnessClient(resolveWorkbenchConfig().origin).permission(thread,request,"stop_writes"));},
+        run,plan:run,apply:run,cancel:()=>{},read:()=>null};
+    },
+    action(id: string): import("../route/typed-route").ActionHandle {
+      const command=spec.commands[id];
+      if(!command) throw Error(`Unknown command ${id}`);
+      const perform=async(apply=false,supplied?:unknown)=>{
+        if(pending.has(id)) throw Error("Action already pending");
+        pending.add(id); notify();
+        try { return await run(id,apply,supplied); }
+        catch(error) { problems.set(id,error instanceof Error?error.message:String(error)); throw error; }
+        finally {pending.delete(id);notify();}
+      };
+      return {label:command.label, get pending(){return pending.has(id);},
+        get refusal(){return mounted.commandRefusal(id);}, get failure(){return problems.get(id)??null;},
+        get consent(){return writeReject(mounted.timeline(),[command.entry],(thread,request)=>void harnessClient(resolveWorkbenchConfig().origin).permission(thread,request,"stop_writes"));},
+        run:(supplied)=>perform(false,supplied),plan:()=>perform(),apply:()=>perform(true),
+        cancel:()=>mounted.cancel(id),read:()=>mounted.review(id)};
+    },
     journal: () => {
       const journals=[...owners.values()].map(o=>o.lease.entry.journal.read()),base=owners.get(own)?.lease.entry.journal.read() ?? {revision:null,from:0,busy:false,receipts:[],undo:[],redo:[],moves:[],last:null};
       return {...base, undo:journals.flatMap(j=>j.undo).sort((a,b)=>a.at-b.at), redo:journals.flatMap(j=>j.redo).sort((a,b)=>a.at-b.at),
@@ -389,14 +439,14 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     refresh: (read?:import("../route/host-read").HostRead) => {
       requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true);
     }, run, result:(id:string)=>results.get(id),
-    review: (id: string) => { const r=reviews.get(id); if(!r) return null;
+    review: (id: string) => { const r=reviews.get(id)??consentReviews.get(id); if(!r) return null;
       const stale = r.signature !== workSignature() || !gate.current(r.token);
-      return { preview: stale ? undefined : r.preview, sentence: stale ? null : r.presentation.sentence,
+      return { preview: stale || !reviews.has(id) ? undefined : r.preview, sentence: stale ? null : r.presentation.sentence,
         rows: stale ? [] : r.presentation.rows, cells: stale ? [] : r.presentation.cells, stale }; },
     reviewProblem: (id: string) => problems.get(id) ?? null,
     cancel: (id: string) => { const token=plans.get(id);if(token) gate.retire(token.token);plans.delete(id);reviews.delete(id);notify(); },
     timeline: () => [...owners.values()].flatMap(o => o.lease.entry.timeline()),
-    draw(id: string) {
+    draw(id: string, render?: (ctx: DrawContext<any,any,any,any>)=>unknown) {
       const pane = spec.panes[id]!;
       const value = pane.read ? reads.get(pane.read)?.snapshot ?? unavailable(pane.read.demand === "explicit"?"Press Read":"Reading...") : unavailable("No read declared");
       const core = spec.core ? reads.get(spec.core)?.snapshot ?? unavailable("Reading...") : unavailable("No read declared");
@@ -433,20 +483,38 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const cells: DrawContext<any, any, any, any>["cells"] = {
         doc: owners.get(own)?.doc ?? null, basis: token, ready, refusal: basisRefusal(), history,
         owner(path) { const route=ownerOf(path); return {route,label:route===own?"Work":`from /${route}`}; },
-        at(path,preferred) {
+        at(path,preferred,facts={}) {
           const route=ownerOf(path,preferred), address=[...path];
           const value=address.reduce((doc,key)=>doc?.[key],owners.get(route)!.doc)??{};
           const clear=(detail?:EditHistory)=>patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,{kind:"clear"}),detail,route);
-          return {owner:{route,label:route===own?"Work":`from /${route}`},value, refusal: basisRefusal(), clear,
-            stage:(value2,detail)=>patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,{kind:"set",rung:{value:value2}}),detail,route),
-            transitions:(detail)=>ready&&value.edit?[{kind:"clear",run:()=>clear(detail)}]:[]};
+          const record=owners.get(route)!;
+          const accepted = value.edit;
+          const accept=(detail?:EditHistory) => {
+            if(!accepted) return Promise.resolve({code:"not-staged",message:"This cell is no longer staged"});
+            const {by:_by,at:_at,base:_base,...rung}=accepted;
+            return patch([{path:[...address,"edit"],value:rung}],detail,route);
+          };
+          // A cell may undo only a press whose entire footprint is this address.
+          const step=record.lease.entry.journal.read().undo.findLast(step=>!step.barrier&&!step.superseded&&step.transitions.every(t=>t.paths.every(p=>address.every((key,i)=>String(p[i])===key))));
+          const undo=async():Promise<EditFailure>=>{
+            if(!ready||!token||!gate.current(token)||canonicalRouteInput(record.handle)!==canonicalRouteInput(handles.get(route))) return {code:"stale-cell",message:"Owning Work changed since this cell was drawn"};
+            if(!step) return {code:"no-cell-undo",message:"No isolated edit for this cell"};
+            const result=await restore("undo",step.press);
+            return result.ok?null:{code:"undo-refused",message:"message" in result?String(result.message):"Cell undo refused"};
+          };
+          return {owner:{route,label:route===own?"Work":`from /${route}`},value, facts:{...facts,baseline:facts.baseline??value.base?.value},
+            freshness:ready?"current":owners.get(route)!.doc===null&&core.value===undefined?"never":"stale", refusal: basisRefusal(), clear, accept,deny:clear,undo,
+            stage:(value2,detail)=> facts.readOnly ? Promise.resolve({code:"read-only",message:"This cell is read-only"}) :
+              patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,
+                Object.hasOwn(facts,"baseline")&&canonicalRouteInput(value2)===canonicalRouteInput(facts.baseline)?{kind:"clear"}:{kind:"set",rung:{value:value2}}),detail,route),
+            transitions:(detail)=>!ready?[]:[...(value.edit?[{kind:"clear" as const,run:()=>clear(detail)},...(value.edit.by==="pea"?[{kind:"take" as const,run:()=>accept(detail)},{kind:"unsuggest" as const,run:()=>clear(detail)}]:[])]:[]),...(step?[{kind:"undo" as const,run:undo}]:[])]};
         },
         label(input,label) { const foreign=[...new Set(edits!.patches(input,core.value).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} · ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
         patch,
         edit: (edit,detail)=>patch(()=>edits!.patches(edits!.input.parse(edit),core.value),detail),
       };
-      return pane.draw({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
-        write:(id:string)=>({run:(input?:unknown)=>run(id,false,input),plan:()=>run(id),apply:()=>run(id,true),cancel:()=>mounted.cancel(id),read:()=>results.has(id)?results.get(id):mounted.review(id)}) } as any);
+      return (render ?? pane.draw)({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
+        write:mounted.action } as any);
     },
     release() { released = true; for (const r of reads.values()) {r.args="";r.stop();} },
     dispose() { if (disposed) return; disposed=true; cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },

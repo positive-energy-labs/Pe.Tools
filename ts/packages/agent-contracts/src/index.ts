@@ -53,6 +53,7 @@ export * from "./captures-read.ts";
 export * from "./chat-read.ts";
 export * from "./duct-loss-read.ts";
 export * from "./ducts-read.ts";
+export * from "./native-output-read.ts";
 export * from "./families-read.ts";
 export * from "./family-read.ts";
 export * from "./fans-read.ts";

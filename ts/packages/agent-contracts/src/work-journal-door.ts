@@ -78,6 +78,7 @@ export type WorkAdmission = z.infer<typeof workAdmissionSchema>;
 
 export type WorkFeedState =
   | { readonly kind: "pending" }
+  | { readonly kind: "absent" }
   | {
       readonly kind: "failed";
       readonly failure: WorkFeedFailure;

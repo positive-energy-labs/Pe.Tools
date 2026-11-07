@@ -43,6 +43,7 @@ export const snapshot = {
   ],
   nodes: [100, 2, 4, 6].map((id) => ({
     id,
+    uniqueId:`fixture:${id}`,
     flowParameter: "Observed flow",
     kind: id === 100 ? "equipment" : id === 2 ? "fitting" : "terminal",
     category: "duct node",
@@ -56,6 +57,7 @@ export const snapshot = {
   })),
   segments: [1, 3, 5].map((id) => ({
     id,
+    uniqueId:`fixture:${id}`,
     kind: "duct",
     curveKind: "line",
     shape: "round",

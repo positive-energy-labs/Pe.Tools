@@ -1,5 +1,5 @@
-import { registerRoute } from "../shell/route-registration";
-import { publicRoutes, typedWorkCells } from "./route-discovery";
+import { registerRoute, registerTypedRoute } from "../shell/route-registration";
+import { publicRoutes } from "./route-discovery";
 import { builtinRouteKeys, builtinRouteStamp, loadBuiltinRoute, typedBuiltin } from "./builtin-inventory";
 import { sessionsGraph } from "#/sessions/graph";
 import { lazy, type ComponentType } from "react";
@@ -11,7 +11,6 @@ import { workFingerprintSchema } from "@pe/agent-contracts";
 /** A route body stays out of the shell chunk until a pane mounts it. */
 const named = <K extends string, P>(load: () => Promise<Record<K, ComponentType<P>>>, name: K) =>
   lazy(() => load().then((module) => ({ default: module[name] })));
-const HostedTypedRoute = named(() => import("../shell/typed-shell"), "HostedTypedRoute");
 const TakeoffsPane = named(() => import("#/takeoff/pane"), "TakeoffsPane");
 export { publicRoutes };
 export const publicRoutesReady = Promise.all(
@@ -19,9 +18,7 @@ export const publicRoutesReady = Promise.all(
     const typed=typedBuiltin(key);
     if (typed) {
       const fingerprint = workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp(key)}`);
-      publicRoutes.register({ manifest: { key, name: typed.spec.name, needs: typed.data.needs }, typed,
-        ...(typed.spec.edits?{work: { route: key, schema: typed.spec.edits.work.schema, ...(typed.spec.edits.key?{memberKey:true as const}:{}), cells: typedWorkCells(typed), workFields: {}, admission: { routeKey: key, fingerprint } }}:{}),
-        hosted: props => <HostedTypedRoute module={typed} fingerprint={fingerprint} {...props} /> });
+      registerTypedRoute(typed, fingerprint);
       return;
     }
     const result = await loadBuiltinRoute(key, builtinRouteStamp(key));

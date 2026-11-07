@@ -1027,7 +1027,7 @@ function pathRows(
  * each terminal's own path, and each smaller fan's worst run across its junction. Null with none.
  */
 export function worstRun(
-  result: LossResult,
+  result: Pick<LossResult,"paths"|"byGroup">,
   groups: readonly string[],
   terminals: ReadonlySet<number>,
   unitId?: number,

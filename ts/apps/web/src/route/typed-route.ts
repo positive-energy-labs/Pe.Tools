@@ -1,21 +1,19 @@
+import { identityCodecs, subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
+import { salvageWork } from "@pe/agent-contracts/route-state";
 import { z } from "zod";
-import {
-  identityCodecs,
-  commands,
-  commandCatalogAxes,
-  type HostRouteModule,
-  type Immutable,
-  type RouteGraphJson,
-  type RouteStatePatch,
-  salvageWork,
-  type RouteStateSpec,
-  type ReadingSnapshot,
-  type LayoutJson,
-  type InvocationToken,
-  type IdentityId,
-  type EntryContract,
-  type WorkHistoryPort,
-  type Many,
+import type {
+  HostRouteModule,
+  Immutable,
+  RouteGraphJson,
+  RouteStatePatch,
+  RouteStateSpec,
+  ReadingSnapshot,
+  LayoutJson,
+  InvocationToken,
+  IdentityId,
+  EntryContract,
+  WorkHistoryPort,
+  Many,
 } from "@pe/agent-contracts";
 import type { Publication } from "./host-read.ts";
 
@@ -53,49 +51,7 @@ export const localId = (namespace: string, subject: string) => {
 };
 export const namesOf = (value: Many<IdentityId<"local">>): string[] | "all" =>
   value.kind === "all" ? "all" : value.ids.map((id) => identityCodecs.local.parts(id).subject);
-export { subjectSchema } from "@pe/agent-contracts";
-type ResultCommand = {
-  [K in keyof typeof commands]: (typeof commands)[K] extends { result: z.ZodType } ? K : never;
-}[keyof typeof commands];
-export const commandContract = <K extends keyof typeof commands & keyof typeof commandCatalogAxes>(key:K) => {
-  const declaration=commands[key];
-  return {input:declaration.input,output:"result" in declaration?declaration.result:z.unknown(),axes:commandCatalogAxes[key]};
-};
-type WriteCommand = {
-  [K in keyof typeof commands]: (typeof commands)[K] extends { writeBoundary: { phase: "apply" } }
-    ? K
-    : never;
-}[keyof typeof commands];
-export const command = <K extends WriteCommand & keyof typeof commandCatalogAxes>(key: K) => {
-  const plan = commands[key].writeBoundary.previewKey;
-  if (!Object.hasOwn(commands, plan) || !Object.hasOwn(commandCatalogAxes, plan))
-    throw Error(`Missing plan contract for ${key}`);
-  return {
-    entry: key,
-    plan,
-    contract: commandContract(key),
-    planContract: commandContract(plan as ResultCommand & keyof typeof commandCatalogAxes),
-  };
-};
-type SessionCommandKey = { [K in keyof typeof commandCatalogAxes]:
-  "SessionWrite" extends (typeof commandCatalogAxes)[K]["effect"] ? K : never }[keyof typeof commandCatalogAxes];
-export const sessionCommand = <K extends SessionCommandKey & keyof typeof commands>(key: K) => {
-  if(commandCatalogAxes[key].effect !== "SessionWrite") throw Error("Session commands require a SessionWrite contract");
-  return {kind:"session" as const,entry:key,contract:commandContract(key)};
-};
-type DirectCommandKey = { [K in keyof typeof commandCatalogAxes]:
-  (typeof commandCatalogAxes)[K]["effect"] extends "Read"|"SessionWrite" ? K : never }[keyof typeof commandCatalogAxes];
-export const catalogAction = <K extends DirectCommandKey & keyof typeof commands>(key:K) => {
-  if(!["Read","SessionWrite"].includes(commandCatalogAxes[key].effect) || "writeBoundary" in commands[key])
-    throw Error("Direct catalog actions cannot cross a model write boundary");
-  return {kind:"catalog" as const,entry:key,contract:commandContract(key)};
-};
-const directAction = <R extends z.ZodType>(kind:"query"|"rpc",entry:import("@pe/agent-contracts").ReadEntry<R>) => ({
-  kind,entry:entry.key,contract:{input:entry.input,output:z.unknown(),axes:{subject:"Document",touches:["Metadata"],
-    effect:kind === "query"?"Read":"SessionWrite",cost:"Cheap",cardinality:"One"} as const},invoke:entry.run,
-});
-export const queryAction = <R extends z.ZodType>(entry:import("@pe/agent-contracts").ReadEntry<R>) => directAction("query",entry);
-export const rpcAction = <R extends z.ZodType>(entry:import("@pe/agent-contracts").ReadEntry<R>) => directAction("rpc",entry);
+export { subjectSchema };
 export type Fields = Readonly<Record<string, Field>>;
 type FieldValues<F extends Fields> = {
   readonly [K in keyof F]: Immutable<z.output<F[K]["schema"]>>;
@@ -117,7 +73,13 @@ export type DrawPage<F extends Fields> = {
 };
 export type EditHistory = { label: string; [key: string]: unknown };
 export type EditFailure = { code: string; message: string } | null;
+export type CellFacts = Pick<import("@pe/kit/lang/cell").HandleCellProps, "model" | "source" | "options" | "parse" | "format"> & { baseline?: unknown; readOnly?: boolean };
 export interface OwnedCell {
+  readonly facts: CellFacts;
+  readonly freshness: "current" | "stale" | "never";
+  accept(history?: EditHistory): Promise<EditFailure>;
+  deny(history?: EditHistory): Promise<EditFailure>;
+  undo(): Promise<EditFailure>;
   readonly owner: { route: string; label: string };
   readonly value: import("@pe/agent-contracts").CellLike;
   readonly refusal: string | null;
@@ -132,12 +94,17 @@ export interface EditableCells<W, Edit> {
   readonly refusal: string | null;
   readonly history: WorkHistoryPort<any>;
   owner(path: readonly string[]): { route: string; label: string };
-  at(path: readonly [string, ...string[]], owner?: string): OwnedCell;
+  at(path: readonly [string, ...string[]], owner?: string, facts?: CellFacts): OwnedCell;
   label(input: Edit, label: string): string;
   edit(input: Edit, history?: EditHistory): Promise<EditFailure>;
   /** Mixed claim edits still use multiple paths; retire with their drawing adapters in wave 4. */
   patch(patches: readonly RouteStatePatch[], history?: EditHistory): Promise<EditFailure>;
 }
+export type PaneBindings = {
+  selected?: readonly import("@pe/kit/lang/attention").SubjectKey[];
+  members?: import("@pe/kit/lang/attention").Members;
+  observation?: import("../revit/observation").NativeObservation;
+};
 export interface DrawContext<D, F extends Fields, W, Edit> {
   readonly target: import("@pe/agent-contracts").ExecutionTarget | null;
   read<R extends HostRead>(read: R): ReadingSnapshot<ReadData<R>>;
@@ -146,8 +113,18 @@ export interface DrawContext<D, F extends Fields, W, Edit> {
   readonly selection: { read(): Page<F>["selected"]; set(value: Page<F>["selected"]): unknown };
   readonly cells: EditableCells<W, Edit>;
   refresh(read?: HostRead): void;
-  write(command: string): { run(input?:unknown): Promise<unknown>; plan(): unknown; apply(): unknown; cancel(): unknown; read(): unknown };
+  write(command: string): ActionHandle;
 }
+export interface ActionHandle extends importPlanHandle {
+  readonly label: string;
+  readonly pending: boolean;
+  readonly refusal: string | null;
+  readonly failure: string | null;
+  readonly consent: { until: string; run(): void } | null;
+  run(input?: unknown): Promise<unknown>;
+}
+import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
+
 type Owner = { state: RouteStateSpec<z.ZodObject>; value?: string };
 export type Owners = Readonly<Record<string, Owner>>;
 type HostRead = import("./host-read.ts").HostRead;
@@ -183,13 +160,14 @@ export type Specification<
       title: string;
       purpose: string;
       read?: Reads[K];
+      bindings?(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): PaneBindings;
       draw(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): unknown;
     };
   };
   edits?: {
     work: W | RouteStateSpec<W>;
     key?(page: Page<F>): string | null;
-    seed?(): z.output<W>;
+    seed?(page: Page<F>, target: import("@pe/agent-contracts").ExecutionTarget | null): z.output<W>;
     value?: keyof D & string;
     owners: Owners;
     input: Edit;

@@ -1,10 +1,11 @@
+import { read } from "../route/defaults";
 import { z } from "zod";
 import { valueRead, GALVANIZED_STEEL_ROUGHNESS } from "@pe/agent-contracts";
-import { route, field, type DrawContext } from "../route/typed-route";
+import { route, field } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
 import { ductLossArgs, ductLossData } from "@pe/agent-contracts";
-const fields = {
+export const fields = {
   shape: field(ductLossArgs.shape.shape, "round", "query", "push"),
   a: field(z.number(), 12, "query"),
   b: field(z.number(), 8, "query"),
@@ -14,17 +15,12 @@ const fields = {
   density: field(z.number(), 0.075, "query"),
   face: field(z.enum(["commercial", "residential"]), "commercial", "pose", "push"),
 };
-const loaded = {
-  ...hostRead(valueRead("duct-loss.result", ductLossArgs, ductLossData)),
-  args: (page: { [K in keyof typeof fields]: z.output<(typeof fields)[K]["schema"]> }) =>
+export const loaded = read(
+  hostRead(valueRead("duct-loss.result", ductLossArgs, ductLossData)),
+  (page: { [K in keyof typeof fields]: z.output<(typeof fields)[K]["schema"]> }) =>
     ductLossArgs.parse(page),
-};
-export type DuctLossContext = DrawContext<
-  z.output<typeof ductLossData>,
-  typeof fields,
-  never,
-  never
->;
+);
+export type { Context as DuctLossContext } from "./context.generated";
 export const module = route({
   key: "duct-loss",
   name: "Duct Loss",
@@ -48,19 +44,16 @@ export const module = route({
     wheel: {
       title: "Wheel",
       purpose: "Drag diameter or airflow",
-      read: loaded,
       draw: draw(() => import("./route.tsx"), "WheelBody"),
     },
     inputs: {
       title: "Inputs",
       purpose: "Type a duct and read its loss",
-      read: loaded,
       draw: draw(() => import("./route.tsx"), "InputsBody"),
     },
     charts: {
       title: "Charts",
       purpose: "Inspect the friction law",
-      read: loaded,
       draw: draw(() => import("./route.tsx"), "ChartsBody"),
     },
   },

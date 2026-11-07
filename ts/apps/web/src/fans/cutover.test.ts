@@ -25,6 +25,7 @@ const settle = (write: Observation<WorkWriteOutcome>) =>
 const witness = () => createWitness(closes);
 test("human slot/drop/flow edits stay in Fans Work, preserve siblings and restore named history after a cold shell reload", async () => {
   const f = await witness();
+
   await vi.waitFor(() => {
     expect(f.owner.workBasis()).not.toBeNull();
     expect(f.fans.workBasis()).not.toBeNull();

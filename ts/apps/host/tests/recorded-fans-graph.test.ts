@@ -1,3 +1,4 @@
+import { unavailableFieldOptions } from "./effect-test.ts";
 import { readFileSync, existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -161,7 +162,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       normalizedInput: canonicalJson(JSON.parse(JSON.stringify(input.input))), freshnessGeneration: "captured:g1", representation: "overview" as const })),
     read: (input) => admitNativeCaller(input.key).pipe(Effect.tap(() => mode === "truncated" && input.key === "ducts.snapshot.roster"
       ? Effect.promise(() => { nativeEntered.resolve(); return releaseNative.promise; }) : Effect.void), Effect.map(() => ({
-      value: input.key === "ducts.tables" ? { folder: "captured-native", tables: {}, missing: (input.input as {ids:string[]}).ids, unsupported: {} } : snapshot,
+      value: input.key === "revit.catalog.field-options" ? unavailableFieldOptions : input.key === "ducts.tables" ? { folder: "captured-native", tables: {}, missing: (input.input as {ids:string[]}).ids, unsupported: {} } : snapshot,
       nativeRequestId: `native-${++nativeCalls}`, actualTarget: input.key === "ducts.tables" ?
         { ...actualTarget, openDocumentLifetime: { kind: "session-only" as const } } : actualTarget,
       freshness: { freshnessGeneration: "captured:g1" }, cost: {}, outcome: "committed" as const,
@@ -506,6 +507,10 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     const acquiredWalk = storedOverview.children.filter((entry) => entry.recipe.key === "ducts.retained" &&
       Schema.is(Schema.Struct({ key: Schema.Literal("ducts.snapshot.walk"), role: Schema.Literal("acquire") }))(entry.recipe.input));
     expect(acquiredWalk).toHaveLength(1);
+    const acquiredSet = await run(writer.readSets.get(acquiredWalk[0]!.readSetId));
+    const acquiredTaking = writer.taking(acquiredSet.takingLinks.native!);
+    expect(acquiredTaking?.input).toMatchObject({kind: "native", key: "ducts.snapshot.walk"});
+    expect(acquiredTaking?.outputVersion).toBe(snapshotContract.version);
     const acquisition = Schema.decodeUnknownSync(Schema.Struct({ request: Schema.Json }))(acquiredWalk[0]!.recipe.input);
     const beforeHit = nativeCalls;
     await capture("/call", { key: "ducts.snapshot.walk", request: acquisition.request });

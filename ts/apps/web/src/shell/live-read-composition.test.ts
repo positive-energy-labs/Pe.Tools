@@ -1,3 +1,4 @@
+import {hostReadSource} from "./host-read-source.ts";
 import { Context, Effect, Layer, Schema, Option } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import {
@@ -227,7 +228,7 @@ test("mounted Fans core and roster cannot supersede one another through their sh
   const stops: (() => void)[] = [];
   try {
     const read = hostRead(fansSheetCapability);
-    const services = sourceRouteServices({ [read.key]: read.source });
+    const services = sourceRouteServices({ [read.key]: hostReadSource(read) });
     const issuer = createRouteTokenIssuer();
     const scope = issuer.scope({ target: { kind: "document", ref: host.target }, work: null });
     const open = (id: string, generation = 1) => {

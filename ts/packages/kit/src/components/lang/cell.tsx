@@ -1,3 +1,4 @@
+import { usePaneValue } from "./value";
 import { land } from "./land";
 import { reachProps } from "./reach";
 import { useWork } from "./work";
@@ -59,7 +60,7 @@ type StateCellProps,
 import { ListPopup } from "./list-popup";
 import { TooltipHint } from "./tooltip";
 import { handleCellProps, type HandleCellProps } from "./cell-handle";
-export { handleCellProps, cellSource } from "./cell-handle";
+export { useCellCollection, useCollectionCell, handleCellProps, cellSource } from "./cell-handle";
 export type { CellHandle, HandleCellProps } from "./cell-handle";
 
 export {
@@ -84,6 +85,9 @@ StateCellProps
 /** Each kind's glyph, key and plain sentence. The caller's `reason` overrides the sentence. */
 const TRANSITION: Record<CellTransitionKind, { key: string; says: string }> = {
   clear: { key: "u", says: "Clear the edit value" },
+  take: { key: "a", says: "Keep the staged value and its sources" },
+  unsuggest: { key: "d", says: "Deny the staged proposal" },
+  undo: { key: "z", says: "Undo this cell edit" },
 };
 
 /**
@@ -130,7 +134,8 @@ const RefusalDetail = ({ detail }: { detail: string }) => (
 export const CellHost = createContext<RefObject<HTMLElement | null> | null>(null);
 
 export function StateCell(input: StateCellProps | HandleCellProps) {
-  const props = "cell" in input ? handleCellProps(input) : input;
+  const paneValue=usePaneValue();
+  const props = "cell" in input ? handleCellProps({...input,value:input.value??paneValue??undefined}) : input;
   const { value, modelValue, capReason, grounding, confidence, note } = props;
   const read = readCell(props);
   const reviewed = read.unsettled === "drift" && props.reviewed !== undefined && modelValue != null;
@@ -713,3 +718,5 @@ export function CellStateKey() {
     </div>
   );
 }
+
+export type { CellCollection } from "./cell-handle";

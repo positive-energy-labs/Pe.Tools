@@ -7,7 +7,8 @@
       "apps/*",
       "packages/*",
       "tests/*",
-      "tools/*"
+      "tools/*",
+      "../examples/pods/snowdon-circuits"
     ],
     "catalog": {
       "vite": "npm:@voidzero-dev/vite-plus-core@0.2.1",

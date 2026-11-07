@@ -1,7 +1,9 @@
 import { HostInputContext } from "./input-context.ts";
 
 import { HostNativeRead } from "@pe/host-internal/native-read";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Option } from "effect";
+import { PictureCaptureStore } from "./captures-route.ts";
+import { nativeOutputLayer } from "./native-output.ts";
 import { HttpRouter } from "effect/http";
 import { RevitBridgeLive } from "./bridge.ts";
 import { HostNativeReadLive } from "./native-read.ts";
@@ -47,9 +49,11 @@ export const nativeReadRoot =
           ),
         );
         const backend = HostNativeReadLive.pipe(Layer.provide(Layer.succeedContext(base)));
+        const supplied=yield* Effect.serviceOption(PictureCaptureStore);
+        const pictures=Option.isSome(supplied)?supplied.value:yield* PictureCaptureStore.pipe(Effect.provide(PictureCaptureStore.layer()));
         const reads = yield* Layer.build(
           guardedNativeRead().pipe(
-            Layer.provide(backend),
+            Layer.provide(nativeOutputLayer(pictures).pipe(Layer.provide(backend))),
             Layer.provideMerge(Layer.succeed(HostInputContext, source)),
           ),
         );

@@ -1,7 +1,9 @@
+import { read } from "../route/defaults";
+import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { SETTINGS_SECTIONS } from "../../../../packages/agent-contracts/src/settings-sections.ts";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
-import { field, route, type DrawContext } from "../route/typed-route.ts";
+import { field, route } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
@@ -9,20 +11,12 @@ import {
   settingsArgs,
   settingsValue,
 } from "../../../../packages/agent-contracts/src/settings-read.ts";
-const loaded = {
-  ...hostRead(valueRead("settings.machine", settingsArgs, settingsValue)),
-  args: () => ({}),
-};
-const fields = {
+export const loaded = read(hostRead(valueRead("settings.machine", settingsArgs, settingsValue)));
+export const fields = {
   section: field(z.enum(["none", ...SETTINGS_SECTIONS]).optional(), undefined, "query", "push"),
   session: field(z.string(), "", "pose"),
 };
-export type SettingsContext = DrawContext<
-  z.output<typeof settingsValue>,
-  typeof fields,
-  never,
-  never
->;
+export type { Context as SettingsContext } from "./context.generated";
 export const module = route({
   key: "settings",
   name: "Settings",
@@ -56,9 +50,8 @@ export const module = route({
     settings: {
       title: "Settings",
       purpose: "Configure this machine and every route",
-      read: loaded,
       draw: draw(() => import("./drawing.tsx"), "SettingsDrawing"),
     },
   },
-  layout: { kind: "pane", id: "settings" },
+  layout: paneLayout("settings"),
 });

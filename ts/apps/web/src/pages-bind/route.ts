@@ -1,19 +1,22 @@
+import { rpcAction, queryAction } from "../route/typed-actions.ts";
+import { read } from "../route/defaults";
+import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { valueRead } from "@pe/agent-contracts";
 import { pageBindRpc } from "../../../../packages/mcps/src/shared/rpc-client";
-import { route, field, rpcAction, queryAction, type DrawContext } from "../route/typed-route";
+import { route, field } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
 import { bindData } from "@pe/agent-contracts";
 import { readPageTarget } from "./client";
-const fields = {
+export const fields = {
   page: field(z.string(), "", "query", "push"),
   view: field(z.boolean(), false, "pose"),
   query: field(z.record(z.string(), z.string()), {}, "query"),
   fragment: field(z.string(), "", "pose"),
 };
-const loaded = { ...hostRead(valueRead("bind.picker", z.object({}), bindData)), args: () => ({}) };
-export type BindContext = DrawContext<z.output<typeof bindData>, typeof fields, never, never>;
+export const loaded = read(hostRead(valueRead("bind.picker", z.object({}), bindData)));
+export type { Context as BindContext } from "./context.generated";
 export const module = route({
   key: "bind",
   name: "Bind",
@@ -37,7 +40,6 @@ export const module = route({
     main: {
       title: "Bind Page",
       purpose: "Choose a Page binding",
-      read: loaded,
       draw: draw(() => import("./mount"), "BindBody"),
     },
   },
@@ -57,5 +59,5 @@ export const module = route({
       input: ({ page }) => ({ slug: page.page }),
     },
   },
-  layout: { kind: "pane", id: "main" },
+  layout: paneLayout("main"),
 });

@@ -1,12 +1,12 @@
-import { ductsInputPort, type DuctsReadSources } from "../src/reads/ducts-inputs.ts";
+import { inputPort, type ReadSources } from "../src/reads/inputs.ts";
 import type { RouteWorkspace } from "@pe/runtime";
 import { hostMarks } from "../src/document-marks.ts";
 import { settle } from "./effect-test.ts";
 
 /** Deterministic native fixtures have no external document events. */
-export function sheetPort(source: DuctsReadSources, workspace: RouteWorkspace) {
-  return ductsInputPort({
-    source,
+export function sheetPort(source: Omit<ReadSources,"file"|"resource"> & { firm:()=>Promise<unknown>;catalogs:()=>Promise<unknown> }, workspace: RouteWorkspace) {
+  return inputPort({
+    source:{...source,file:async name=>name === "firm" ? source.firm():source.catalogs(),resource:async()=>{throw Error("Fixture has no resources");}},
     workspace,
     marks: hostMarks({
       observedSince: 0,

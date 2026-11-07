@@ -11,13 +11,11 @@ import { FamilyProvider } from "./workspace";
 import { FamilyWorkspaceAnatomy } from "./workspace-anatomy";
 import { FamilyWorkspaceTable } from "./workspace-table";
 import { FamilyWorkspaceDocPane } from "./workspace-doc-pane";
-import { useFamilyOwner } from "./typed-owner";
 import { useFamilyWorkspace } from "./workspace-context";
 import type { FamilyContext } from "./route";
 export function FamilyBody({ ctx }: { ctx: FamilyContext }) {
-  const owner = useFamilyOwner(ctx);
   return (
-    <FamilyProvider owner={owner} cells={ctx.cells} value={ctx.value}>
+    <FamilyProvider ctx={ctx}>
       <Workspace ctx={ctx} />
     </FamilyProvider>
   );

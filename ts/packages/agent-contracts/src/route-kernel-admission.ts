@@ -38,7 +38,7 @@ export interface RouteFingerprintInput {
   readonly data: RouteGraphJson;
   readonly contracts: readonly { readonly id: string; readonly sha256: string }[];
   readonly executables: readonly {
-    readonly client: "web" | "pea" | "shared";
+    readonly client: "web" | "pea" | "shared" | "host";
     readonly entry: string;
     readonly members: readonly ExecutableMember[];
   }[];

@@ -57,7 +57,7 @@ test("7 MB upload refusal reaches the typed Family action reason", async () => {
   const request = (url: any, init?: RequestInit) => {
     if (init?.method === "POST" && new URL(String(url), "http://localhost").pathname === "/actions") {
       const admission = JSON.parse(String(init.body));
-      outboxes.push(readOutbox(`pe-action::${admission.id}:${canonicalRouteInput(null)}`));
+      if(admission.key === "family.attach-spec") outboxes.push(readOutbox(`pe-action::${admission.id}:${canonicalRouteInput(null)}`));
     }
     return withInvocationContext({caller}, () => web.handler(new Request(new URL(String(url), "http://localhost"), init),
     Context.make(RequestIdentity, admittedRequestIdentity(caller, {}))));
@@ -78,11 +78,14 @@ test("7 MB upload refusal reaches the typed Family action reason", async () => {
     target: {kind: "host"}, work: {address: null, open: null}, fixture: null, custody: {current: () => true}, memory: () => ({}) },
     fingerprint, {work: door});
   try {
+    await vi.waitFor(() => expect(mount.startAction()).not.toBeNull());
+    expect(mount.owner()?.handle).toBeNull();
+    await mount.startAction()!.run();
     await vi.waitFor(() => expect(mount.owner()?.handle).toBeTruthy());
     const run = mount.run("attach", false, {member, source: {fileName: "source.pdf", base64: (await readFile(pdf)).toString("base64")}});
     await expect(run).rejects.toThrow("PDF parser refused this source");
     expect(mount.reviewProblem("attach")).toContain("PDF parser refused this source");
-    const receipt = (await journal.list())[0]!;
+    const receipt = (await journal.list()).find(row=>row.key === "family.attach-spec")!;
     await expect(recoverAction(receipt.id, "family.attach-spec", {
       ...receipt.input, source: {...(receipt.input.source as object), fileName: "another.pdf"},
     }, receipt.target)).rejects.toThrow("conflicts with its original intent");

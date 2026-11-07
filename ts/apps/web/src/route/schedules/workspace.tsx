@@ -25,7 +25,7 @@ import {
   type ScheduleCellWrites,
 } from "./columns";
 import type { Refusal } from "#/route/refusal";
-import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
+import { useNativeObservation, type NativeObservation } from "#/revit/observation";
 
 export interface ScheduleGridState {
   slice: ScheduleGridDocument | null;
@@ -71,7 +71,6 @@ export function useScheduleCellWrites({
   snapshot,
   refused,
   documentScope,
-  nativeObservation,
 }: Pick<
   ScheduleGridState,
   "slice" | "at" | "snapshot" | "refused" | "documentScope" | "nativeObservation"
@@ -81,6 +80,7 @@ export function useScheduleCellWrites({
   const bindingAt = (key: string) => bindingOf(snapshot, key);
   /** The measured cell's one call, owned by this snapshot: a re-read aborts what is in flight. */
   const parse = useMeasuredParse(snapshot, documentScope);
+  const nativeObservation=useNativeObservation();
   const parseMeasured: ScheduleCellWrites["parseMeasured"] = (key, text) => {
     const scope = nativeObservation?.scope;
     if (
@@ -115,7 +115,6 @@ export function ScheduleGridWorkspace({
     refused,
     freshness,
     documentScope,
-    nativeObservation,
     table: tableState,
     setTable: setTableState,
     cell: locatedCell,
@@ -155,7 +154,6 @@ export function ScheduleGridWorkspace({
     snapshot,
     refused,
     documentScope,
-    nativeObservation,
   });
   const { stageEdit, parseMeasured } = writes;
 
@@ -251,7 +249,7 @@ export function ScheduleGridWorkspace({
 
   return (
     // Focus arriving from outside the grid's pane is the edge a stage revalidates on.
-    <NativeObservationScope value={nativeObservation ?? { scope: null }}>
+    <>
       <div className="contents">
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col">
@@ -337,6 +335,6 @@ export function ScheduleGridWorkspace({
           </div>
         </section>
       </div>
-    </NativeObservationScope>
+    </>
   );
 }

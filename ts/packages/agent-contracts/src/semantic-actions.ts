@@ -8,6 +8,7 @@ import { stagedRoomEditSchema } from "./takeoffs.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
 import { z } from "zod";
 import { executionTargetSchema } from "./target.ts";
+import { workKeySchema } from "./route-state.ts";
 
 import type { Command } from "./command.ts";
 export type { ActionNeed } from "./command.ts";
@@ -402,6 +403,11 @@ export const tools = {
   },
 } satisfies Record<string, Tool>;
 export const commands = {
+  "work.start": {
+    says:"Start this Work", needs:"nothing", effect:"command", dirties:[],
+    input:z.object({key:workKeySchema,seed:z.json()}),
+    axes:{subject:"None",touches:["Metadata"],effect:"SessionWrite",cost:"Mutation",cardinality:"One"},
+  } as const,
   ...catalogWorkCommands,
   ...tools.pods.commands,
   ...tools.family.commands,

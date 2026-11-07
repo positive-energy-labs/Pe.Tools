@@ -19,6 +19,7 @@ export const inputKinds = [
   "clock",
   "artifacts",
   "receipts",
+  "resource",
 ] as const;
 export type InputKind = (typeof inputKinds)[number];
 

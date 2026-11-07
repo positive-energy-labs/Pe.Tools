@@ -1,3 +1,7 @@
+import { command, sessionCommand } from "../route/typed-actions.ts";
+import { bindings } from "./bindings";
+import { read } from "../route/defaults";
+import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import {
   scheduleGridRouteState,
@@ -5,23 +9,11 @@ import {
   splitScheduleCellKey,
   showCellValue,
 } from "@pe/agent-contracts";
-import {
-  schedulesViewCapability,
-  schedulesViewData,
-} from "../../../../packages/agent-contracts/src/schedules-read.ts";
-import {
-  route,
-  field,
-  subjectSchema,
-  namesOf,
-  localId,
-  command,
-  sessionCommand,
-  type DrawContext,
-} from "../route/typed-route.ts";
+import { schedulesViewCapability } from "../../../../packages/agent-contracts/src/schedules-read.ts";
+import { route, field, subjectSchema, namesOf, localId } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
-const fields = {
+export const fields = {
   workspaceId: field(subjectSchema(1), { kind: "ids", ids: [] }, "subject", "push"),
   table: field(
     z.object({
@@ -39,25 +31,20 @@ const workspace = (page: { workspaceId: Parameters<typeof namesOf>[0] }) => {
   if (ids === "all") throw Error("Choose one schedule");
   return ids[0] ?? null;
 };
-const view = {
-  ...hostRead(schedulesViewCapability),
-  args: (page: { workspaceId: Parameters<typeof namesOf>[0] }) => ({
+export const view = read(
+  hostRead(schedulesViewCapability),
+  (page: { workspaceId: Parameters<typeof namesOf>[0] }) => ({
     workspaceId: workspace(page),
   }),
-};
-const roster = { ...hostRead(schedulesViewCapability), args: () => ({ workspaceId: null }) };
-const edit = z
+);
+const roster = read(hostRead(schedulesViewCapability), () => ({ workspaceId: null }));
+export const edit = z
   .array(routeStatePatchSchema)
   .refine(
     (patches) => patches.every((p) => p.path[0] === "cells" && p.path.length > 1),
     "Edit individual schedule cells",
   );
-export type SchedulesDrawContext = DrawContext<
-  z.output<typeof schedulesViewData>,
-  typeof fields,
-  z.output<typeof scheduleGridRouteState.schema>,
-  z.output<typeof edit>
->;
+export type { Context as SchedulesDrawContext } from "./context.generated";
 export const module = route({
   key: "schedules",
   name: "Schedules",
@@ -93,7 +80,7 @@ export const module = route({
     grid: {
       title: "Schedules",
       purpose: "Inspect and edit schedule cells",
-      read: view,
+      bindings,
       draw: draw(() => import("./grid.tsx"), "SchedulesGrid"),
     },
   },
@@ -153,7 +140,7 @@ export const module = route({
       },
     },
   },
-  layout: { kind: "pane", id: "grid" },
+  layout: paneLayout("grid"),
 });
 export const schedulesData = module.data;
 export const schedulesHostModule = module.host;

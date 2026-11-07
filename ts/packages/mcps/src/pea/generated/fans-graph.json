@@ -30,55 +30,6 @@
     "resume": "document"
   },
   "fields": {
-    "fan": {
-      "role": "subject",
-      "schema": "fan",
-      "codec": "fan",
-      "initial": {
-        "kind": "ids",
-        "ids": []
-      },
-      "url": "push",
-      "share": true,
-      "agent": "set",
-      "cardinality": "many",
-      "identity": "subject",
-      "picker": {
-        "reading": "roster",
-        "options": "subject"
-      }
-    },
-    "stage": {
-      "role": "stage",
-      "schema": "stage",
-      "codec": "stage",
-      "initial": "sheet",
-      "url": "push",
-      "share": true,
-      "agent": "set"
-    },
-    "inputSort": {
-      "role": "query",
-      "schema": "inputSort",
-      "codec": "inputSort",
-      "initial": "",
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "inputSearch": {
-      "role": "query",
-      "schema": "inputSearch",
-      "codec": "inputSearch",
-      "initial": {
-        "keywords": "",
-        "pills": [],
-        "v": 1
-      },
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
     "contextRadiusFt": {
       "role": "pose",
       "schema": "contextRadiusFt",
@@ -132,6 +83,76 @@
       "share": true,
       "agent": "set"
     },
+    "sceneView": {
+      "role": "pose",
+      "schema": "sceneView",
+      "codec": "sceneView",
+      "initial": {
+        "preset": "all",
+        "section": null
+      },
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "viewport": {
+      "role": "pose",
+      "schema": "viewport",
+      "codec": "viewport",
+      "initial": null,
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "fan": {
+      "role": "subject",
+      "schema": "fan",
+      "codec": "fan",
+      "initial": {
+        "kind": "ids",
+        "ids": []
+      },
+      "url": "push",
+      "share": true,
+      "agent": "set",
+      "cardinality": "many",
+      "identity": "subject",
+      "picker": {
+        "reading": "roster",
+        "options": "subject"
+      }
+    },
+    "stage": {
+      "role": "stage",
+      "schema": "stage",
+      "codec": "stage",
+      "initial": "sheet",
+      "url": "push",
+      "share": true,
+      "agent": "set"
+    },
+    "inputSearch": {
+      "role": "query",
+      "schema": "inputSearch",
+      "codec": "inputSearch",
+      "initial": {
+        "keywords": "",
+        "pills": [],
+        "v": 1
+      },
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "inputSort": {
+      "role": "query",
+      "schema": "inputSort",
+      "codec": "inputSort",
+      "initial": "",
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
     "rosterSearch": {
       "role": "query",
       "schema": "rosterSearch",
@@ -154,32 +175,11 @@
       "share": true,
       "agent": "set"
     },
-    "sceneView": {
-      "role": "pose",
-      "schema": "sceneView",
-      "codec": "sceneView",
-      "initial": {
-        "preset": "all",
-        "section": null
-      },
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
     "sheetPath": {
       "role": "query",
       "schema": "sheetPath",
       "codec": "sheetPath",
       "initial": "",
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "viewport": {
-      "role": "pose",
-      "schema": "viewport",
-      "codec": "viewport",
-      "initial": null,
       "url": "replace",
       "share": true,
       "agent": "set"
@@ -221,20 +221,20 @@
       "entry": "fans.sheet",
       "deps": {
         "page": [
-          "fan",
-          "stage",
-          "inputSort",
-          "inputSearch",
           "contextRadiusFt",
           "contextStyle",
           "encoding",
           "layers",
           "picture",
+          "sceneView",
+          "viewport",
+          "fan",
+          "stage",
+          "inputSearch",
+          "inputSort",
           "rosterSearch",
           "rosterSort",
-          "sceneView",
           "sheetPath",
-          "viewport",
           "selected"
         ],
         "work": [],
@@ -252,20 +252,20 @@
       "entry": "fans.sheet",
       "deps": {
         "page": [
-          "fan",
-          "stage",
-          "inputSort",
-          "inputSearch",
           "contextRadiusFt",
           "contextStyle",
           "encoding",
           "layers",
           "picture",
+          "sceneView",
+          "viewport",
+          "fan",
+          "stage",
+          "inputSearch",
+          "inputSort",
           "rosterSearch",
           "rosterSort",
-          "sceneView",
           "sheetPath",
-          "viewport",
           "selected"
         ],
         "work": [],

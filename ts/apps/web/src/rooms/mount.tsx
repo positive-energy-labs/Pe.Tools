@@ -25,7 +25,7 @@ type Body = {
   verbs: (row: { kind?: string; id?: string }) => React.ReactNode;
 };
 
-function ScopeBody({ ctx, page }: Body) {
+export function ScopeBody({ page }: Body) {
   const { snapshot, pending, error, document, view, setPage } = useRoomsWorkspace();
   const levels = snapshot?.levels ?? [];
   const level = levels.find((item) => item.views.includes(view));
@@ -38,7 +38,7 @@ function ScopeBody({ ctx, page }: Body) {
         : "this document has no levels with plan views";
   return (
     <Ladder
-      disabled={!ctx.value.current}
+      disabled={!snapshot || !document}
       levels={[
         {
           key: "level",

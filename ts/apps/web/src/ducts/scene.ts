@@ -6,7 +6,6 @@
 import type { DuctNode, EncodingFacts, Issue, Segment, SegmentFacts } from "./encoding";
 import type { Claim, Leg, Place, SubjectCut } from "./legs";
 import type { LossResult } from "@pe/ducts-domain/losses";
-import type { Priced } from "@pe/ducts-domain/pricing";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { drawnGraph, type DuctGraph } from "@pe/ducts-domain/drawn-graph";
@@ -51,14 +50,14 @@ const push = <K, V>(map: Map<K, V[]>, key: K, value: V) => {
 };
 
 // Pricing replaces changed results; scopes only read this projection of an immutable result.
-const lossCache = new WeakMap<LossResult, Map<number, number>>();
+const lossCache = new WeakMap<object, Map<number, number>>();
 
 /**
  * Pe's loss per element from a priced result. Every terminal path repeats the rows it shares, so
  * rows are counted once by (element, kind, leg, desc): a duct's friction intervals add, while a
  * fitting's or terminal's legs are alternatives and show the largest.
  */
-function lossesOf(result: LossResult): Map<number, number> {
+function lossesOf(result: Pick<LossResult,"paths">): Map<number, number> {
   const cached = lossCache.get(result);
   if (cached) return cached;
   const unique = new Map<string, LossResult["paths"][number]["rows"][number]>();
@@ -75,7 +74,7 @@ function lossesOf(result: LossResult): Map<number, number> {
   return losses;
 }
 
-export function indexOf(snapshot: DuctSnapshot, priced: Priced | null = null): DuctIndex {
+export function indexOf(snapshot: DuctSnapshot, priced: {next:Pick<LossResult,"paths">} | null = null): DuctIndex {
   const levels = [...snapshot.levels].sort((a, b) => a.elevationFt - b.elevationFt);
   const flows = new Map(snapshot.flows.map((flow) => [flow.segmentId, flow.cfm]));
   const issuesOf = new Map<number, Issue[]>();
