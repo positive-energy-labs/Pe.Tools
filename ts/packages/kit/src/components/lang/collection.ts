@@ -5,7 +5,7 @@ import { rowDamage } from "../master-table/model";
 import type { Mark, Span } from "./scroll-project";
 import type { Virtualizer } from "@tanstack/react-virtual";
 import { valueRows, type ValueItems } from "./value";
-export { valueRows, useValue } from "./value";
+export { ValueScope, usePaneValue, valueRows, useValue } from "./value";
 export type { ValueHandle } from "./value";
 
 export const VIRTUAL_FROM = 60;

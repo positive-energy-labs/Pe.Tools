@@ -1,3 +1,5 @@
+import type { RoomsContext } from "./route";
+import { useValue } from "@pe/kit/lang/collection";
 import { roomSelection } from "./selection";
 import * as Atom from "effect/reactivity/Atom";
 import { RegistryContext } from "@effect/atom-react";
@@ -15,21 +17,19 @@ import { railsOf, type TraceRead } from "./layers";
 import { roomRows } from "./table";
 import type { PlanReading } from "./plan-reading";
 
-export type RoomsOwner = GraphMount<RoomsPage, RoomsRouteDocument>;
 const Workspace = createContext<ReturnType<typeof useWorkspace> | null>(null);
 export const useRoomsWorkspace = () => useContext(Workspace)!;
 
-function useWorkspace(owner: RoomsOwner) {
-  const page = owner.view.read().page;
-  const fixture = !!owner.fixture;
+function useWorkspace(ctx: RoomsContext) {
+  const page = {...ctx.page.read(),selected:ctx.page.read().picked,epoch:0};
+  const fixture = false;
+  const data=useValue(ctx.value);
   const view = page.view;
-  const state = owner.readings.get("snapshot");
-  const snapshot = readingValue<RoomsSnapshot.Res.Response>(state);
-  const error = state.status === "failed" ? (state.error ?? "unknown error") : null;
-  const pending = state.status === "pending" || state.status === "stale";
-  const doc = owner.snapshot().target;
-  const document = doc.kind === "document" ? doc.ref : null;
-  const work = owner.snapshot().work;
+  const snapshot=data?.snapshot;
+  const error=ctx.value.current?null:ctx.value.reason;
+  const pending=ctx.value.status === "pending";
+  const document=ctx.target?.kind === "document"?ctx.target.ref:null;
+  const work=ctx.cells.doc?{doc:ctx.cells.doc}:null;
   const levelNames = useMemo(
     () =>
       [...(snapshot?.levels ?? [])]
@@ -48,10 +48,8 @@ function useWorkspace(owner: RoomsOwner) {
     [work, snapshot, view],
   );
   const labels = useMemo(() => new Map(rows.map((row) => [row.region.guid, row.label])), [rows]);
-  const traceState = owner.readings.get("trace");
-  const trace = readingValue<TraceRead>(traceState) ?? { data: null, none: null };
-  const planState = owner.readings.get("plan");
-  const plan = readingValue<Exclude<PlanReading, null>>(planState);
+  const trace={data:data?.trace??null,none:data?.traceError??null};
+  const plan=data?.plan;
   const empty = fixture
     ? null
     : !document
@@ -64,7 +62,7 @@ function useWorkspace(owner: RoomsOwner) {
             ? { says: "no plan view chosen", exit: "choose a level and a view" }
             : null;
   return {
-    owner,
+    ctx,
     page,
     view,
     fixture,
@@ -78,70 +76,15 @@ function useWorkspace(owner: RoomsOwner) {
     regions,
     cards,
     labels,
-    trace: {
-      ...trace,
-      ...(traceState.status === "failed"
-        ? { none: `rooms.trace failed: ${traceState.error}` }
-        : {}),
-    },
+    trace,
     plan,
-    planError: planState.status === "failed" ? (planState.error ?? "unknown error") : null,
+    planError:data?.planError??null,
     empty,
   };
 }
 
-/** Shared projections only: the graph and kernel own acquisition, writes, verbs and layout. */
-export function RoomsProvider({ owner, children }: { owner: RoomsOwner; children: ReactNode }) {
-  const value = useWorkspace(owner);
-  const selection = useMemo(
-    () =>
-      Atom.make(
-        (): ReadonlySet<SubjectKey> =>
-          new Set<SubjectKey>(
-            roomSelection(
-              value.page.selected,
-              value.cards,
-              value.regions.map((region) => region.guid),
-            ).guids.map((guid): SubjectKey => `room:${guid}`),
-          ),
-      ),
-    [owner, value.cards, value.page.selected, value.regions],
-  );
-  const members = useMemo(
-    () =>
-      new Map(
-        value.snapshot?.regions.map((region): [SubjectKey, SubjectKey[]] => [
-          `room:${region.guid}`,
-          [elementKey(region.elementId)],
-        ]) ?? [],
-      ),
-    [value.snapshot],
-  );
-  const observation = useMemo<NativeObservation>(
-    () => ({
-      scope: {
-        document: value.fixture || !value.snapshot ? null : value.document,
-        source: value.fixture ? "fixture" : "native",
-      },
-      references: [
-        ...(value.snapshot?.regions ?? []).map((region) => ({ elementId: region.elementId })),
-        ...(value.trace.data
-          ? railsOf(value.trace.data).map((rail) => ({ elementId: rail.elementId }))
-          : []),
-      ],
-    }),
-    [value.fixture, value.document, value.snapshot, value.trace.data],
-  );
-  const attentionDoc = value.document
-    ? `${value.document.session}/${value.document.openId}`
-    : "fixture:rooms:plan";
-  return (
-    <RegistryContext value={owner.registry}>
-      <Workspace value={value}>
-        <AttentionScope doc={attentionDoc} selected={selection} members={members}>
-          <NativeObservationScope value={observation}>{children}</NativeObservationScope>
-        </AttentionScope>
-      </Workspace>
-    </RegistryContext>
-  );
+/** Domain projection only; the shell installs attention and native observation. */
+export function RoomsProvider({ctx,children}:{ctx:RoomsContext;children:ReactNode}) {
+  const value=useWorkspace(ctx);
+  return <Workspace value={value}>{children}</Workspace>;
 }

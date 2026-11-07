@@ -9,7 +9,7 @@ import { SubjectDoor } from "../shell/subject";
 import fixture from "../ducts/sheet/sheet.fixture.json";
 import { ductsRosterResponseSchema } from "@pe/agent-contracts";
 
-const parameterCell = (stage:OwnedCell["stage"] = vi.fn(async()=>null)):OwnedCell => ({owner:{route:"fans",label:"Work"},value:{},refusal:null,stage,clear:async()=>null,transitions:()=>[]});
+const parameterCell = (stage:OwnedCell["stage"] = vi.fn(async()=>null)):OwnedCell => ({facts:{},freshness:"current",accept:async()=>null,deny:async()=>null,undo:async()=>null,owner:{route:"fans",label:"Work"},value:{},refusal:null,stage,clear:async()=>null,transitions:()=>[]});
 const live = vi.hoisted(() => ({ state: "ready", result: "Success", read: vi.fn() }));
 vi.mock("../shell/readings-hooks", async (original) => ({
   ...(await original<object>()),

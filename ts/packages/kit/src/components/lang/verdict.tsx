@@ -8,9 +8,9 @@ import { Check, Undo2, X } from "lucide-react";
 import "./lang.css";
 import "./cell.css";
 
-export type VerdictKind = "take" | "unsuggest" | "clear";
+export type VerdictKind = "take" | "unsuggest" | "clear" | "undo";
 
-const ICON = { take: Check, unsuggest: X, clear: Undo2 } as const;
+const ICON = { take: Check, unsuggest: X, clear: Undo2, undo: Undo2 } as const;
 
 export function Verdict({
   kind,

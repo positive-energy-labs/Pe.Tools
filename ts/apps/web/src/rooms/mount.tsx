@@ -12,14 +12,13 @@ import { Ladder } from "#/route/ladder";
 import type { CellWire } from "#/components/work/band";
 import type { MountBody } from "#/shell/mount";
 import type { RoomsContext } from "./route";
-import { useRoomsOwner } from "./typed-owner";
 import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { cardsMarkdown, coverage, newestRun, type Card } from "./cards";
 import { cardLine, FeedbackCard, RoomsInbox } from "./inbox";
 import type { RoomsPage } from "./page";
 
-import { RoomsProvider, useRoomsWorkspace, type RoomsOwner } from "./workspace";
+import { RoomsProvider, useRoomsWorkspace } from "./workspace";
 import { RoomsSketch, type Drop } from "./sketch";
 import { snapPlan } from "./snap";
 import { RoomsPlan } from "./plan";
@@ -28,11 +27,15 @@ import type { Point2 } from "#/lib/affine-frame";
 
 import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
 
-type Body = MountBody<RoomsPage, RoomsRouteDocument>;
-const refusalOf = (result: Awaited<ReturnType<ReturnType<RoomsOwner["control"]>["run"]>>) =>
-  "refusal" in result ? result.refusal : null;
+type Body = {ctx:RoomsContext;page:RoomsPage;verbs:(row:any)=>React.ReactNode};
+const move=(ctx:RoomsContext,patch:Partial<RoomsPage>)=>{
+  const {view,show,selected,...pose}=patch;
+  if(view!==undefined) ctx.page.query({view});
+  if(show!==undefined) ctx.page.query({show});
+  ctx.page.pose({...pose,...(selected!==undefined?{picked:selected}:{})});
+};
 
-function ScopeBody({ owner, page }: Body) {
+function ScopeBody({ ctx, page }: Body) {
   const { snapshot, pending, error, document, view } = useRoomsWorkspace();
   const levels = snapshot?.levels ?? [];
   const level = levels.find((item) => item.views.includes(view));
@@ -45,7 +48,7 @@ function ScopeBody({ owner, page }: Body) {
         : "this document has no levels with plan views";
   return (
     <Ladder
-      disabled={owner.busy() !== null}
+      disabled={ctx.value.status === "pending"}
       levels={[
         {
           key: "level",
@@ -61,7 +64,7 @@ function ScopeBody({ owner, page }: Body) {
           note,
           picked: (id) => id === level?.name,
           pick: (id) =>
-            owner.view.setPage({
+            move(ctx,{
               view: levels.find((item) => item.name === id)?.views[0] ?? "",
               selected: [],
               viewport: null,
@@ -74,39 +77,25 @@ function ScopeBody({ owner, page }: Body) {
           options: level ? level.views.map((id) => ({ id, label: id })) : null,
           note: level ? "this level has no plan views" : "choose a level first",
           picked: (id) => id === page.view,
-          pick: (id) => owner.view.setPage({ view: id, selected: [], viewport: null }),
+          pick: (id) => move(ctx,{ view: id, selected: [], viewport: null }),
         },
       ]}
     />
   );
 }
 
-/** Rendering adapters invoke graph verbs; the kernel keeps each accepted Work inverse. */
-function workWire(owner: RoomsOwner): CellWire {
-  const revision = owner.snapshot().work?.handle.revision ?? null;
-  return {
-    segment: "edits",
-    revision,
-    write: async (patches, expectedRevision = revision ?? -1) =>
-      refusalOf(await owner.control("edit", { patches, expectedRevision }).run()),
-  };
+function workWire(ctx:RoomsContext):CellWire {
+  return {segment:"edits",revision:ctx.cells.basis?.workRevision??null,write:(patches)=>ctx.cells.patch(patches,{label:"Edit rooms"})};
 }
-function cellTransitions(owner: RoomsOwner, key: string): CellTransition[] {
-  const row = { segment: "edits", key };
-  return ([["clear", "clear"]] as const).flatMap(([kind, verb]) => {
-    const control = owner.control(`cell:edits.${verb}`, row);
-    return control.refusal ? [] : [{ kind, run: async () => refusalOf(await control.run()) }];
-  });
-}
-function RegionsBody({ owner }: Body) {
+function RegionsBody({ ctx }: Body) {
   const { work, rows, empty } = useRoomsWorkspace();
   return (
     <RoomsTable
       rows={rows}
       cells={work?.doc.edits ?? {}}
-      wire={workWire(owner)}
-      transitions={(key) => cellTransitions(owner, key)}
-      onSelect={(guids) => owner.view.setPage({ selected: [...guids] })}
+      wire={workWire(ctx)}
+      transitions={(key) => ctx.cells.at(["edits",key]).transitions({label:"Edit room"})}
+      onSelect={(guids) => move(ctx,{ selected: [...guids] })}
       empty={
         empty ?? {
           says: "no zones or room regions in this document",
@@ -117,7 +106,7 @@ function RegionsBody({ owner }: Body) {
   );
 }
 
-function PlanBody({ owner, page, verbs, renderPane }: Body & { renderPane: PaneApi }) {
+function PlanBody({ ctx, page, verbs, renderPane }: Body & { renderPane: PaneApi }) {
   const { onView, regions, snapshot, empty, cards, labels, view, plan, planError, trace } =
     useRoomsWorkspace();
   const selected = new Set(
@@ -133,8 +122,8 @@ function PlanBody({ owner, page, verbs, renderPane }: Body & { renderPane: PaneA
     regions.map((region) => region.guid),
   );
   const setPinned = (id: string | null) =>
-    owner.view.setPage({ selected: id ? [`card:${id}`] : [] });
-  const wire = workWire(owner);
+    move(ctx,{ selected: id ? [`card:${id}`] : [] });
+  const wire = workWire(ctx);
   const level = snapshot?.levels.find((item) => item.views.includes(view))?.name ?? "";
   const onDrop = async (drop: Drop) => {
     if (!snapshot) return "the snapshot is not read yet";
@@ -190,7 +179,7 @@ function PlanBody({ owner, page, verbs, renderPane }: Body & { renderPane: PaneA
       planError={planError}
       empty={empty}
       onSelect={(guid, add) => {
-        owner.view.setPage({
+        move(ctx,{
           selected: !guid
             ? []
             : !add
@@ -213,7 +202,7 @@ function PlanBody({ owner, page, verbs, renderPane }: Body & { renderPane: PaneA
       }}
       trace={trace}
       page={{ ...page, view }}
-      setPage={owner.view.setPage}
+      setPage={patch=>move(ctx,patch)}
       overlay={
         page.stage === "review"
           ? (geo) => (
@@ -223,7 +212,7 @@ function PlanBody({ owner, page, verbs, renderPane }: Body & { renderPane: PaneA
                 regions={regions}
                 pinned={pinned}
                 setPinned={setPinned}
-                onClear={() => owner.view.setPage({ selected: [] })}
+                onClear={() => move(ctx,{ selected: [] })}
                 card={card}
                 onDrop={onDrop}
                 onNote={onNote}
@@ -235,7 +224,7 @@ function PlanBody({ owner, page, verbs, renderPane }: Body & { renderPane: PaneA
   );
 }
 
-function FeedbackBody({ owner, page, renderPane }: Body & { renderPane: PaneApi }) {
+function FeedbackBody({ ctx, page, renderPane }: Body & { renderPane: PaneApi }) {
   const { work, snapshot, cards, regions, labels, view } = useRoomsWorkspace();
   return (
     <RoomsInbox
@@ -250,9 +239,9 @@ function FeedbackBody({ owner, page, renderPane }: Body & { renderPane: PaneApi 
           regions.map((region) => region.guid),
         ).pinned
       }
-      onPin={(card) => owner.view.setPage({ selected: [`card:${card}`] })}
+      onPin={(card) => move(ctx,{ selected: [`card:${card}`] })}
       show={page.show}
-      onShow={(show) => owner.view.setPage({ show })}
+      onShow={(show) => move(ctx,{ show })}
       markdown={() => (work && snapshot ? cardsMarkdown(work.doc, snapshot) : "")}
       snap={() => snapPlan(view)}
     />
@@ -267,10 +256,9 @@ function AttentionRoomsSketch(props: Omit<React.ComponentProps<typeof RoomsSketc
 }
 
 export function RoomsBody({ ctx }: { ctx: RoomsContext }) {
-  const owner = useRoomsOwner(ctx),
-    page = owner.view.read().page;
+  const page={...ctx.page.read(),selected:[...ctx.page.read().picked],epoch:0} as RoomsPage;
   const body = {
-    owner,
+    ctx,
     page,
     visible: true,
     thread: undefined,
@@ -278,7 +266,7 @@ export function RoomsBody({ ctx }: { ctx: RoomsContext }) {
       row.kind === "note" && row.id ? (
         <Button
           label="Delete room note"
-          onClick={() => void owner.control("delete-note", { id: row.id }).run()}
+          onClick={() => void ctx.cells.patch([{path:["notes",row.id!]}],{label:"Delete room note"})}
         >
           Delete note
         </Button>
@@ -310,7 +298,7 @@ export function RoomsBody({ ctx }: { ctx: RoomsContext }) {
       label: `Choose ${key} scope`,
     });
   return (
-    <RoomsProvider owner={owner}>
+    <RoomsProvider ctx={ctx}>
       <div className="flex min-h-0 flex-1 flex-col gap-(--gutter)">
         <div className="shrink-0 p-(--gutter)">
           <ScopeBody {...body} />

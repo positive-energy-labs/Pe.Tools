@@ -233,7 +233,7 @@ export function readMeasuredText(
       };
 }
 
-export type CellTransitionKind = "clear";
+export type CellTransitionKind = "clear" | "take" | "unsuggest" | "undo";
 
 export interface CellTransition {
   kind: CellTransitionKind;
