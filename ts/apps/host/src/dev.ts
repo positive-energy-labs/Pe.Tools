@@ -64,9 +64,10 @@ const program = hostProgram(
       const url = yield* Effect.tryPromise({
         try: () =>
           new Promise<string>((resolve, reject) => {
+            // Bridge, not tuned: double route-closure build measured ~57s at 38% load; commit 2 reuses the host projection.
             const timeout = setTimeout(
-              () => reject(new Error("Dev frontend did not start within 60s")),
-              60_000,
+              () => reject(new Error("Dev frontend did not start within 180s")),
+              180_000,
             );
             child.once("error", (error) => {
               clearTimeout(timeout);
