@@ -5,7 +5,7 @@ import { DocumentPicker, PlaceRouteShell } from "./application-route-shell";
 import * as Atom from "effect/reactivity/Atom";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 import { module as podsModule } from "../pods/route";
-const podsData=podsModule.data;
+const podsData={...podsModule.data,optionalTarget:"document" as const};
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import type { PlaceInput } from "./admitted-place";
 import type { PanePlace } from "./admitted-pane";

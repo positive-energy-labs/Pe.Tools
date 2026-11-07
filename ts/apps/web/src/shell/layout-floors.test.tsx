@@ -82,8 +82,7 @@ for (const width of [720, 1280, 1920]) {
         bodies={bodies}
       />,
     );
-    expect(container.querySelector('[data-pane-id="operation"]')).toBeTruthy();
-    expect(container.querySelector('[data-pane-id="receipts"]')).toBeTruthy();
+    for(const id of Object.keys(opsGraph.panes)) expect(container.querySelector(`[data-pane-id="${id}"]`)).toBeTruthy();
   });
 }
 

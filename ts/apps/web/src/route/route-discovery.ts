@@ -25,6 +25,7 @@ export interface DiscoveredWork<W = any> {
   cells: readonly CellsDecl<W>[];
   workFields: RouteGraph<any, W>["workFields"];
   admission?: WorkAdmission;
+  memberKey?: true;
 }
 type Legacy = ReturnType<typeof legacyRouteDiscovery.entries>[number];
 export type DiscoveredRoute = Omit<Legacy, "manifest"> & {

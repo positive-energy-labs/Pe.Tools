@@ -58,7 +58,7 @@ export function useHeadWorks(
   const headed = useMemo(
     () =>
       publicRoutes.entries().flatMap(({ manifest, work }) =>
-        manifest.needs && work?.cells.length
+        manifest.needs && work?.cells.length && !work.memberKey
           ? [
               {
                 route: manifest.key,

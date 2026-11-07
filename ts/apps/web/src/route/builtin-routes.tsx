@@ -20,7 +20,7 @@ export const publicRoutesReady = Promise.all(
     if (typed) {
       const fingerprint = workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp(key)}`);
       publicRoutes.register({ manifest: { key, name: typed.spec.name, needs: typed.data.needs }, typed,
-        ...(typed.spec.edits?{work: { route: key, schema: typed.spec.edits.work.schema, cells: typedWorkCells(typed), workFields: {}, admission: { routeKey: key, fingerprint } }}:{}),
+        ...(typed.spec.edits?{work: { route: key, schema: typed.spec.edits.work.schema, ...(typed.spec.edits.key?{memberKey:true as const}:{}), cells: typedWorkCells(typed), workFields: {}, admission: { routeKey: key, fingerprint } }}:{}),
         hosted: props => <HostedTypedRoute module={typed} fingerprint={fingerprint} {...props} /> });
       return;
     }
