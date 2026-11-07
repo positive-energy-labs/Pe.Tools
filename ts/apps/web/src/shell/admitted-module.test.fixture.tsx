@@ -173,7 +173,7 @@ export const bodies = {
         null,
         !reading.current && createElement("p", null, reading.reason),
         createElement(CapturesList, {
-          value: { current: reading.current, status: reading.current ? "ready" : "unavailable", value: { captures }, reason: reading.reason },
+          value: { current: reading.current, status: reading.current ? "ready" : "unavailable", value: { captures }, reason: reading.current ? undefined : reading.reason },
           focus:
             (page.selected[0]?.id ?? page.sha)
               ? identityCodecs.local.parts((page.selected[0]?.id ?? page.sha)!).subject
