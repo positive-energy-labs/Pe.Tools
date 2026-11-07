@@ -295,3 +295,8 @@ export const acknowledgedReadBridge = (bridge: RevitBridge["Service"]): RevitBri
 });
 
 export const testInputContext = () => Context.get(testScoped(HostInputContext.layer({ kind: "live" })), HostInputContext);
+/** The native fixture has no parameter catalog; disclose that without inventing model options. */
+export const unavailableFieldOptions = {
+  descriptor:{key:"parameter-identities",mode:"Constraint",allowsCustomValue:false,dependsOn:[],requiredRuntimeMode:"LiveDocument"},
+  items:[],result:{kind:"Unsupported",message:"Fixture does not provide parameter options"},
+};

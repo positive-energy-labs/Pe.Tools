@@ -1,3 +1,4 @@
+import { unavailableFieldOptions } from "./effect-test.ts";
 import { readFileSync, existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -161,7 +162,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       normalizedInput: canonicalJson(JSON.parse(JSON.stringify(input.input))), freshnessGeneration: "captured:g1", representation: "overview" as const })),
     read: (input) => admitNativeCaller(input.key).pipe(Effect.tap(() => mode === "truncated" && input.key === "ducts.snapshot.roster"
       ? Effect.promise(() => { nativeEntered.resolve(); return releaseNative.promise; }) : Effect.void), Effect.map(() => ({
-      value: input.key === "ducts.tables" ? { folder: "captured-native", tables: {}, missing: (input.input as {ids:string[]}).ids, unsupported: {} } : snapshot,
+      value: input.key === "revit.catalog.field-options" ? unavailableFieldOptions : input.key === "ducts.tables" ? { folder: "captured-native", tables: {}, missing: (input.input as {ids:string[]}).ids, unsupported: {} } : snapshot,
       nativeRequestId: `native-${++nativeCalls}`, actualTarget: input.key === "ducts.tables" ?
         { ...actualTarget, openDocumentLifetime: { kind: "session-only" as const } } : actualTarget,
       freshness: { freshnessGeneration: "captured:g1" }, cost: {}, outcome: "committed" as const,

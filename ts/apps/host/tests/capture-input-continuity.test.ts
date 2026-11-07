@@ -1,3 +1,4 @@
+import { unavailableFieldOptions } from "./effect-test.ts";
 import { readFileSync } from "node:fs";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -86,7 +87,7 @@ async function setup(mode = "normal") {
       admitNativeCaller(input.key).pipe(
         Effect.map(() => ({
           value:
-            input.key === "ducts.tables"
+            input.key === "revit.catalog.field-options" ? unavailableFieldOptions : input.key === "ducts.tables"
               ? {
                   folder: "test",
                   tables: {},
