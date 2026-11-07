@@ -9,12 +9,13 @@ import {
   ductsDesign,
   stagedDucts,
 } from "@pe/agent-contracts";
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { pricingResult } from "@pe/ducts-domain/pricing-result";
-import { native, designLayers, catalogs } from "./ducts-inputs.ts";
+import { designLayers } from "./ducts-design.ts";
+import { nativeRead } from "./inputs.ts";
+import { catalogs } from "../builtin-read-handles.ts";
 import { read } from "./evaluator.ts";
 import { systemList } from "@pe/ducts-domain/system-list";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
@@ -27,8 +28,7 @@ export const ductsRoster = read("ducts.roster", {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const staged = stagedDucts(design, design);
-    const response = await ctx.read(native, {
-      key: "ducts.snapshot.roster",
+    const response = await ctx.read(nativeRead("ducts.snapshot.roster"), {
       target,
       request: {
         slots: staged.parameters,
@@ -37,7 +37,7 @@ export const ductsRoster = read("ducts.roster", {
       },
     });
     if (!response.version) throw Error("Duct roster has no observation version");
-    const snapshot = nativeResponseSchema("ducts.snapshot.roster").parse(response.body);
+    const snapshot = response.body;
     return { ...snapshot, rows: systemList(snapshot, null), sourceVersion: response.version };
   },
 });
@@ -48,8 +48,7 @@ const systems = read("ducts.systems", {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const staged = stagedDucts(design, design);
-    const response = await ctx.read(native, {
-      key: "ducts.snapshot.walk",
+    const response = await ctx.read(nativeRead("ducts.snapshot.walk"), {
       target,
       request: {
         slots: staged.parameters,
@@ -58,7 +57,7 @@ const systems = read("ducts.systems", {
       },
     });
     if (!response.version) throw Error("Duct network has no observation version");
-    const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(response.body);
+    const snapshot = response.body;
     return {
       ...snapshot,
       sourceVersion: response.version,
@@ -126,8 +125,7 @@ export const ductsPricing = read("ducts.pricing", {
     const network = await ctx.read(ductsNetwork, args);
     const layers = await ctx.read(designLayers, args.target),
       catalog = await ctx.read(catalogs, null);
-    const tables = await ctx.read(native, {
-      key: "ducts.tables",
+    const tables = await ctx.read(nativeRead("ducts.tables"), {
       target: args.target,
       request: { ids: [...TABLE_IDS] },
     });
