@@ -8,9 +8,11 @@ vi.mock("#/host/runtime", () => ({
 afterEach(cleanup);
 test("a retained picture names its runtime owner and reports a failed image", async () => {
   const sha = "a".repeat(64);
-  render(
-    <CapturesList
-      captures={[
+  const value = {
+    current: true,
+    status: "ready",
+    value: {
+      captures: [
         {
           id: "taking",
           sha,
@@ -23,12 +25,10 @@ test("a retained picture names its runtime owner and reports a failed image", as
           byteSize: 93823,
           url: `/captures/${sha}.png`,
         },
-      ]}
-      focus={sha}
-      open={[sha]}
-      onPage={() => {}}
-    />,
-  );
+      ],
+    },
+  };
+  const mounted = render(<CapturesList value={value} focus={sha} open={[sha]} onPage={() => {}} />);
   const image = await screen.findByRole("img", { name: /Ground plan.*MEP/ });
   expect(image.getAttribute("src")).toContain("pe-runtime=checkout");
   fireEvent.error(image);
@@ -36,4 +36,14 @@ test("a retained picture names its runtime owner and reports a failed image", as
   expect(screen.getByRole("link", { name: "open png" }).getAttribute("href")).toContain(
     "pe-runtime=checkout",
   );
+  mounted.rerender(
+    <CapturesList
+      value={{ ...value, current: false, status: "failed", reason: "Capture list unavailable" }}
+      focus={sha}
+      open={[sha]}
+      onPage={() => {}}
+    />,
+  );
+  expect(screen.getByText("Capture list unavailable")).toBeTruthy();
+  expect(screen.getByRole("link", { name: "open png" })).toBeTruthy();
 });
