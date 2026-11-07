@@ -36,8 +36,8 @@ import { mountTypedRoute } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { routeInput } from "./host";
 import { localId } from "./typed-route";
-import type { Readings } from "../readings";
-import type { UseSource } from "../shell/readings";
+import type { Readings } from "../host/resource-stream";
+import type { UseSource } from "../shell/source-contract";
 import type { DrawContext } from "./typed-route";
 
 // Only recorded native inputs and the address bar are adapters. Work, HTTP, SSE,
