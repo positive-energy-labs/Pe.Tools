@@ -1,3 +1,6 @@
+import {route as declareRoute} from "../route/typed-route";
+import {module as familiesDeclaration} from "../families/route";
+import {workFingerprintSchema} from "@pe/agent-contracts";
 import {localId,localSubject} from "../ducts/identity";
 import type {TypedRoute} from "../route/typed-route";
 import type {RouteFingerprint} from "@pe/agent-contracts";
@@ -21,16 +24,12 @@ import { appAtomRegistry } from "#/shell/owner";
 import { createChatPageStore } from "./store";
 import { RouteDock } from "./route-panes";
 import { useRouteCurrent } from "#/route/activity";
-import { useRouteLease } from "#/route/view-bridge";
-import { useGraphRoute } from "#/shell/mount";
-import { familyGraph as familiesGraph } from "#/family/graph";
 import { AdmittedPane } from "#/shell/admitted-place.test-fixture";
 import { admittedRouterAddress } from "#/shell/admitted-pane";
 import { createRouteShell } from "#/shell/admitted-mount";
 import { sourceRouteServices } from "#/shell/source-route-services";
 import { admittedSources } from "#/shell/admitted-sources";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
-import { useRouteThread } from "#/shell/binding";
 import { useRestoreTabPage } from "#/route/url";
 
 const store = createChatPageStore({
@@ -106,44 +105,14 @@ const call = vi.hoisted(() =>
 );
 vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 
-const familiesProbeGraph: typeof familiesGraph = {
-  ...familiesGraph,
-  key: "families",
-  name: "Families",
-  subjectField: { ...familiesGraph.subjectField, noun: "draft", roster: "probe", detail: "probe" },
-  fields: Object.fromEntries(
-    Object.entries(familiesGraph.fields).map(([id, value]) => [
-      id,
-      { ...value, picker: undefined },
-    ]),
-  ) as typeof familiesGraph.fields,
-  work: undefined,
-  workSubject: undefined,
-  salvage: undefined,
-  observe: undefined,
-  refresh: undefined,
-  needs: undefined,
-  readings: { probe: { kind: "derive" as const, source: "probe", retire: "never" as const } },
-  verbs: {},
-  cells: undefined,
-  layout: { kind: "pane" as const, id: "probe" },
-  panes: { probe: { label: "Probe", purpose: "Retention proof", draws: [], verbs: [] } },
-  stageOrder: ["probe"],
-  stages: { probe: { word: "Probe", panes: ["probe"], verbs: [] } },
-};
-const familiesProbeAdapters = {
-  sources: { probe: { kind: "derive" as const, derive: () => [] } },
-  bodies: {},
-};
+// The retention/lease witness uses the typed Page contract without acquiring native evidence or Work.
+const familiesProbe=declareRoute({
+  ...familiesDeclaration.spec, needs:"browser",core:undefined,edits:undefined,commands:{},
+  panes:{probe:{title:"Probe",purpose:"Retention proof",draw:ctx=><output data-families-probe="">{ctx.page.read().focus}</output>}},
+  layout:{kind:"pane",id:"probe"},
+});
 function FamiliesProbe() {
-  const handle = useGraphRoute(familiesProbeGraph, familiesProbeAdapters, {
-    thread: useRouteThread() ?? undefined,
-  });
-  const page = handle.owner.view.read().page;
-  useRouteLease("families", [page, (patch) => handle.owner.view.setPage(patch)], {
-    thread: handle.thread ?? undefined,
-  });
-  return <output data-families-probe="">{JSON.stringify(page.sort ?? "")}</output>;
+  return <TypedShell module={familiesProbe} fingerprint={workFingerprintSchema.parse(`builtin-closure:${"0".repeat(64)}`)} />;
 }
 
 let mounts = 0;
@@ -732,7 +701,7 @@ test("a Pea open of a new tool keeps its first lease instance, and a set against
       commandId: "55555555-5555-4555-8555-555555555555",
       revision: 1,
       patch: {
-        sort: familiesProbeGraph.fields.sort!.codec.encode({columns:[{key:"Name",dir:"asc"}]}),
+        focus: routeAddress("families").agent.write({focus:"[\"Family\",\"Type\",\"Name\"]"}).focus!,
       },
     }),
   );
