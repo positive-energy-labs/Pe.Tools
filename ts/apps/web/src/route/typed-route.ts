@@ -25,6 +25,9 @@ type Field = {
   role: "pose" | "query" | "subject" | "stage";
   url: "push" | "replace";
 };
+export const whenSubject = (child: string | LayoutJson): LayoutJson => ({
+  kind: "gate", when: "subject", child: typeof child === "string" ? { kind: "pane", id: child } : child,
+});
 export const split = (
   axis: "h" | "v",
   children: readonly (string | LayoutJson)[],
@@ -110,9 +113,11 @@ export interface EditableCells<W, Edit> {
   at(path: readonly [string, ...string[]], owner?: string): OwnedCell;
   label(input: Edit, label: string): string;
   edit(input: Edit, history?: EditHistory): Promise<EditFailure>;
+  patch(patches: readonly RouteStatePatch[], history?: EditHistory): Promise<EditFailure>;
 }
 export interface DrawContext<D, F extends Fields, W, Edit> {
   readonly target: import("@pe/agent-contracts").ExecutionTarget | null;
+  read<R extends HostRead>(read: R): ReadingSnapshot<ReadData<R>>;
   readonly value: ReadingSnapshot<D> & { readonly publication: Immutable<Publication<D>["value"]> };
   readonly page: DrawPage<F>;
   readonly selection: { read(): Page<F>["selected"]; set(value: Page<F>["selected"]): unknown };
@@ -129,6 +134,7 @@ export type Specification<
   W extends z.ZodObject,
   Edit extends z.ZodType,
   Reads extends Readonly<Record<string, HostRead>> = Readonly<Record<string, HostRead>>,
+  SubjectRead extends HostRead = HostRead,
 > = {
   key: string;
   name: string;
@@ -137,10 +143,12 @@ export type Specification<
     field: keyof F & string;
     noun: string;
     pane: string;
-    options(data: Immutable<D>): readonly { id: IdentityId<"local">; label: string }[];
+    read?: SubjectRead;
+    options(data: Immutable<ReadData<SubjectRead>>): readonly { id: IdentityId<"local">; label: string }[];
   };
   core: HostRead & { output: z.ZodType<Publication<D>>; args(page: Page<F>): unknown };
   fields: F;
+  reads?: Readonly<Record<string, HostRead & { args(page: Page<F>): unknown }>>;
   panes: {
     readonly [K in keyof Reads]: {
       title: string;
@@ -150,7 +158,7 @@ export type Specification<
     };
   };
   edits: {
-    work: W;
+    work: W | RouteStateSpec<W>;
     value: keyof D & string;
     owners: Owners;
     input: Edit;
@@ -175,9 +183,10 @@ export type Specification<
 };
 /** The shell executes this typed module. Data is a one-way discovery/host admission projection. */
 export function route<D, const F extends Fields, W extends z.ZodObject, Edit extends z.ZodType,
-  const Reads extends Readonly<Record<string, HostRead>>>(spec: Specification<D, F, W, Edit, Reads>) {
-  const work = { route: spec.key, title: spec.name, description: spec.edits.work.description ?? spec.directory.summary,
-    schema: spec.edits.work, schemaVersion: 1, salvage: (raw:unknown) => salvageWork(spec.edits.work,raw).doc };
+  const Reads extends Readonly<Record<string, HostRead>>, SubjectRead extends HostRead>(spec: Specification<D, F, W, Edit, Reads, SubjectRead>) {
+  const declared = spec.edits.work;
+  const work = "schema" in declared ? declared : { route: spec.key, title: spec.name, description: declared.description ?? spec.directory.summary,
+    schema: declared, schemaVersion: 1, salvage: (raw:unknown) => salvageWork(declared,raw).doc };
   const schemas: Record<string, z.ZodType> = { work: work.schema,
     historyDetail: spec.edits.history instanceof z.ZodObject ? spec.edits.history.omit({ label: true }) : spec.edits.history };
   const fields: Record<string, RouteGraphJson["fields"][string]> = {};
@@ -186,9 +195,12 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     fields[key] = { role: field.role === "subject" ? "query" : field.role, schema: key, codec: key,
       initial: field.initial, url: field.url, share: true, agent: "set" };
   }
+  const readIds = new Map<HostRead,string>([[spec.core,"value"],...Object.entries(spec.reads ?? {}).map(([id,read]) => [read,id] as [HostRead,string])]);
+  const subjectRead = spec.subject.read ? readIds.get(spec.subject.read) : "value";
+  if (!subjectRead) throw Error("Subject read must be declared by the route");
   fields[spec.subject.field] = { ...fields[spec.subject.field], role: "subject", schema: spec.subject.field,
     codec: spec.subject.field, initial: spec.fields[spec.subject.field]!.initial, url: "push", share: true,
-    agent: "set", cardinality: "many", identity: "subject", picker: { reading: "value", options: "subject" } };
+    agent: "set", cardinality: "many", identity: "subject", picker: { reading: subjectRead, options: "subject" } };
   fields.selected = { role: "selection", kinds: ["focus"] };
   const owners = { ...spec.edits.owners,
     [work.route]: { state: work, value: spec.edits.value } };
@@ -196,6 +208,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   const readings: Record<string, RouteGraphJson["readings"][string]> = {
     value: { ...policy, kind: "use", entry: spec.core.key, deps: { page: Object.keys(fields), work: [], readings: [] } },
   };
+  for (const [read,id] of readIds) readings[id] = { ...policy, kind: "use", entry: read.key, deps: {page:Object.keys(fields),work:[],readings:[]} };
   // Host Work admission projects ownership edges. The browser subscribes to owners, never readings.
   for (const [owner, config] of Object.entries(owners)) if (owner !== work.route) {
     schemas[owner] = config.state.schema;
@@ -211,15 +224,23 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   const data: RouteGraphJson = { version: 1, key: spec.key, address: `/${spec.key}`, name: spec.name,
     directory: spec.directory, capabilities: ["work", "native-write", "geometry"], fields,
     identities: { subject: { kind: "local", codec: "local" }, focus: { kind: "local", codec: "local" } },
-    subject: { field: spec.subject.field, noun: spec.subject.noun, pane: spec.subject.pane, roster: "value", detail: "value" }, historyDetail: "historyDetail",
+    subject: { field: spec.subject.field, noun: spec.subject.noun, pane: spec.subject.pane, roster: subjectRead, detail: "value" }, historyDetail: "historyDetail",
     work: { schema: "work", route: work.route, version: work.schemaVersion ?? 1, migrations: {} },
     workFields: {}, cells: {}, panes: Object.fromEntries(Object.entries(spec.panes).map(([id,p]) => [id,
       { label: p.title, purpose: p.purpose, draws: ["value"], verbs: Object.keys(verbs) }])),
-    readings, verbs, seeds: {}, layout: spec.layout, needs: "project", predicates: {}, observe: [],
+    readings, verbs, seeds: {}, layout: discoveryLayout(spec.layout), needs: "project", predicates: {}, observe: [],
     resetOnTarget: [], stageOrder: [stage], stages: { [stage]: { panes: Object.keys(spec.panes), verbs: Object.keys(verbs), word: spec.name } } };
   schemas.none = z.strictObject({});
   const host: HostRouteModule = { data, schemas, bodies: {}, workState: work };
-  const entries: Record<string, EntryContract> = Object.fromEntries([[spec.core.key, spec.core], ...Object.values(spec.commands).flatMap(c => [[c.entry,c.contract],[c.plan,c.planContract]])]);
+  const entries: Record<string, EntryContract> = Object.fromEntries([...[...readIds.keys()].map(read=>[read.key,read]), ...Object.values(spec.commands).flatMap(c => [[c.entry,c.contract],[c.plan,c.planContract]])]);
   return { spec: { ...spec, edits: { ...spec.edits, work, owners } }, data, host, entries };
 }
-export type TypedRoute = ReturnType<typeof route<any, Fields, z.ZodObject, z.ZodType, Record<string, HostRead>>>;
+export type TypedRoute = ReturnType<typeof route<any, Fields, z.ZodObject, z.ZodType, Record<string, HostRead>, HostRead>>;
+
+/** Data discovery has no executable predicate slots; the native shell owns subject gates. */
+function discoveryLayout(node: LayoutJson): LayoutJson {
+  return node.kind === "gate" ? discoveryLayout(node.child) : node.kind === "split" ? {...node,children:node.children.map(discoveryLayout)} : node;
+}
+export function projectValue<A,B>(reading: ReadingSnapshot<A>, select:(value:Immutable<A>)=>B): ReadingSnapshot<B> {
+  return {...reading,...(reading.value === undefined ? {} : {value:select(reading.value)})} as ReadingSnapshot<B>;
+}

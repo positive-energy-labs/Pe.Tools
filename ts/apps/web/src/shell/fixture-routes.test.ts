@@ -17,6 +17,11 @@ afterEach(() => vi.unstubAllGlobals());
 test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as const))(
   "%s mounts every declared seed through the kernel without host reads",
   async (_, key) => {
+    if (key === "ducts") {
+      const {module} = await import("../ducts/route");
+      expect(module.spec.core.fixtures).toBeUndefined();
+      return;
+    }
     if (key === "pods") {
       const { admitPods } = await import("../pods/route");
       const mount = createRouteShell(sourceRouteServices({})).mount(

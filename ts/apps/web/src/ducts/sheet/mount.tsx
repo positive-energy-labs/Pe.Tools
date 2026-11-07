@@ -26,8 +26,8 @@ import { fansDocumentSchema } from "@pe/agent-contracts";
 const scopeSchema = fansDocumentSchema.shape.writeIntent.unwrap().shape.edit.unwrap().unwrap()
   .shape.value;
 import { attentionSubjects } from "../cell-focus";
-import { localId, localSubject, namesOf } from "../neutral.ts";
-import { ductsLink } from "../neutral.ts";
+import { localId, localSubject, namesOf } from "../identity.ts";
+import { ductsLink } from "../identity.ts";
 import { subjectNamer } from "../subject-text";
 import { describeCloser, type Closer } from "./closer";
 import { editLabel, presentInputHistory, type EditMeta } from "./input-history.neutral";

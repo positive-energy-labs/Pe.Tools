@@ -1,9 +1,8 @@
 /** Picture findings share domain identity and numbering with the inbox. */
 import { useMemo } from "react";
 
-import { healFindings, healPlan } from "@pe/ducts-domain/heal";
+import { healFindings, type HealPlan } from "@pe/ducts-domain/heal";
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
-import { survey } from "@pe/ducts-domain/survey";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 
@@ -35,6 +34,7 @@ function cumulativeOf(priced: Priced | null): Map<number, number> {
 export function useMarks({
   snapshot,
   priced,
+  heal,
   scene,
   claims,
   work,
@@ -44,6 +44,7 @@ export function useMarks({
 }: {
   snapshot: DuctSnapshot;
   priced: Priced | null;
+  heal: HealPlan | null;
   scene: Scene;
   claims: readonly Claim[];
   work: LossesWork;
@@ -63,10 +64,7 @@ export function useMarks({
     const out: (Ruling extends infer R ? (R extends Ruling ? Omit<R, "n"> : never) : never)[] = [];
     for (const claim of claims)
       if (claim.at[0] != null) out.push({ kind: "claim", at: claim.at[0], claim });
-    const findings = healFindings(
-      priced?.findings ?? survey(snapshot, work.doc).findings,
-      healPlan(snapshot, work.doc),
-    ).filter(
+    const findings = (heal ? healFindings(priced?.findings ?? [], heal) : []).filter(
       (f) =>
         (INFERRED_KINDS.has(f.kind) || f.findingIds.length > 1) &&
         f.findingIds.some((id) => annotated.has(id)) &&
@@ -90,7 +88,7 @@ export function useMarks({
         (at) => ({ ...r, at, n: i + 1 }),
       ),
     );
-  }, [claims, priced, snapshot, work.doc, drawn, issueScope, annotated]);
+  }, [claims, priced, heal, snapshot, work.doc, drawn, issueScope, annotated]);
 
   // A subject's legs carry their totals; a group scene has none, so each terminal carries its path's.
   const labels = useMemo<Label[]>(

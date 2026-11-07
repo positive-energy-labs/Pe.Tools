@@ -69,3 +69,24 @@ export type PicturePage<_L extends string = string, F extends string = string> =
     z.output<PictureFields[K]["schema"]>
   >;
 } & { layers: readonly string[] | "all"; picture: "model" | F };
+
+export const DUCTS_LAYERS = [
+  "meshes",
+  "system-colours",
+  "stub-labels",
+  "halo",
+  "context",
+  "centrelines",
+  "no-run",
+  "labels",
+  "findings",
+] as const;
+
+/** The picture's keys; the default encoding is this view's choice. */
+export const ductsPictureFields = pictureFields(
+  DUCTS_LAYERS,
+  ["meshes", "system-colours", "stub-labels", "halo", "no-run", "labels", "findings"],
+  "health",
+  "schematic",
+);
+

@@ -10,7 +10,7 @@ import { admittedSubjectDoor } from "../shell/admitted-chrome";
 import { SubjectDoor } from "../shell/subject";
 import { makeAtomRegistry } from "../shell/owner";
 import { cellFocusOf,cellFocusSubject } from "./cell-focus";
-import { ductsLink,localId,localSubject } from "./neutral";
+import { ductsLink,localId,localSubject } from "./identity";
 import { snapshot } from "./test-fixture";
 import sheetFixture from "./sheet/sheet.fixture.json";
 
@@ -54,7 +54,7 @@ function registry() {
 test("F16 the sidebar navigates the document roster before pricing and keeps atomic all/clear", async () => {
   const f = await createWitness(closes, new Map(), { "ducts.tables": { kind: "use", open() {} } });
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
-  expect(f.owner.readingStatus("pricing").snapshot.value).toBeFalsy();
+  expect(f.owner.readingStatus("value").snapshot.value).toBeFalsy();
   render(<RegistryContext value={registry()}>
     <SubjectDoor value={admittedSubjectDoor(f.owner, f.admitted.owner.data)}>
       {nodeFor(f.owner, "e-systems")}
@@ -149,7 +149,7 @@ test("a restored semantic cell selection lands on that fitting cell through the 
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
   f.owner.controls.subject({ kind: "ids", ids: [localId("ducts-system", "SA")] });
   await vi.waitFor(() => {
-    const state = f.owner.readingStatus("pricing").snapshot;
+    const state = f.owner.readingStatus("value").snapshot;
     if (state.status === "failed") throw Error(state.reason);
     expect(state.current).toBe(true);
   });
@@ -265,7 +265,7 @@ test("a rule owner crossing without system context still lands on its rule", asy
   const url = new URL(ductsLink([], { fixture: "scene" }, { kind: "rule", key: "tap-std" }), "http://127.0.0.1");
   const destination = f.mount(f.admitted.owner, url.searchParams, "rule-no-system");
   expect(destination.page.read().selected.map((item: {id:Parameters<typeof localSubject>[0]}) => localSubject(item.id))).toEqual(["rule:tap-std"]);
-  await vi.waitFor(() => expect(destination.readingStatus("pricing").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(destination.readingStatus("value").snapshot.current).toBe(true));
   const view = render(<RegistryContext value={registry()}>{nodeFor(destination, "e-rules-all")}</RegistryContext>);
   const row = view.container.querySelector('[data-key="tap-std"]');
   expect(row).not.toBeNull();

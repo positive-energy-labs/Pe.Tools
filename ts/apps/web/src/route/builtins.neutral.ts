@@ -5,7 +5,7 @@ import { z } from "zod";
 import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
 import type { BuiltinClosure } from "../../../../packages/agent-contracts/src/route-module.ts";
 import type { HostRouteModule } from "../../../../packages/agent-contracts/src/host-route-admission.ts";
-import { ductsHostModule } from "../ducts/neutral.ts";
+import { host as ductsHostModule } from "../ducts/host.generated.ts";
 import { host as fansHostModule } from "../fans/host.generated.ts";
 import { familiesHostModule } from "../families/neutral.ts";
 import { podsHostModule } from "../pods/neutral.ts";

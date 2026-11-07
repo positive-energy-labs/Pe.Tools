@@ -2,9 +2,9 @@ import {
   builtinClosureFingerprint,
   createBuiltinRouteInventory,
 } from "../../../../packages/agent-contracts/src/route-module";
-import { module as ducts } from "../ducts/kernel";
+import { module as ducts } from "../ducts/route";
 import { module as fans } from "./route";
-import { ductsHostModule } from "../ducts/neutral";
+import { ductsHostModule } from "../ducts/route";
 import { fansHostModule } from "./route";
 const catalog = Object.entries(ducts.entries).map(([key, entry]) => ({
   key,
@@ -24,11 +24,6 @@ export async function admit(hostVersion = "fans-fixture") {
   };
   const ownerFingerprint = await builtinClosureFingerprint(ownerEnvelope);
   const ownerInventory = createBuiltinRouteInventory({
-    web: {
-      module: ducts,
-      closure: { envelope: ownerEnvelope, fingerprint: ownerFingerprint },
-      catalog,
-    },
     host: {
       module: ductsHostModule,
       host: true,
@@ -36,11 +31,9 @@ export async function admit(hostVersion = "fans-fixture") {
       catalog,
     },
   });
-  const owner = (await ownerInventory.prepare("web", ownerFingerprint)).admit(ducts);
   const hostOwner = (await ownerInventory.prepare("host", ownerFingerprint)).admitHost(
     ductsHostModule,
   );
-  if (!owner.ok) throw Error(JSON.stringify(owner.diagnostics));
   if (!hostOwner.ok) throw Error(JSON.stringify(hostOwner.diagnostics));
   const envelope = { ...ownerEnvelope, data: fans.data };
   const fingerprint = await builtinClosureFingerprint(envelope);
@@ -50,5 +43,5 @@ export async function admit(hostVersion = "fans-fixture") {
   });
   const hostPresenter = (await inventory.prepare("host", fingerprint)).admitHost(fansHostModule);
   if (!hostPresenter.ok) throw Error(JSON.stringify(hostPresenter.diagnostics));
-  return { owner: owner.route, presenter: { typed: fans, data: fans.data, workFingerprint: hostPresenter.route.workFingerprint }, hostOwner: hostOwner.route, hostPresenter: hostPresenter.route };
+  return { owner: { typed: ducts, data: ducts.data, workFingerprint: hostOwner.route.workFingerprint }, presenter: { typed: fans, data: fans.data, workFingerprint: hostPresenter.route.workFingerprint }, hostOwner: hostOwner.route, hostPresenter: hostPresenter.route };
 }

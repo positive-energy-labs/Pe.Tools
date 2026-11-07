@@ -3,17 +3,11 @@ import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 import { systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";
 import { SCENE_FIXTURE } from "./scene.fixture";
-import { pricingJob } from "./pricing-job";
+import { pricingResult } from "@pe/ducts-domain/pricing-result";
 
 test("navigation fixture reaches production pricing with three systems, long lists and a shared finding", () => {
   const { snapshot, grids } = NAVIGATION_FIXTURE;
-  const answer = pricingJob()({
-    id: 1,
-    doc: null,
-    base: { snapshot, grids, catalogs: EMPTY_CATALOGS },
-  });
-  if (!("result" in answer)) throw Error("error" in answer ? answer.error : "No pricing result");
-  const { priced, analysis } = answer.result;
+  const { priced, analysis } = pricingResult(snapshot, grids, EMPTY_CATALOGS, null);
   expect(analysis.systems.map((system) => system.name).sort()).toEqual([
     "EA Lab",
     "SA Lab",

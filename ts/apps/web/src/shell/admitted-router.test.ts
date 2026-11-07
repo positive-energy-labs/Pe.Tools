@@ -2,9 +2,9 @@
 import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-router";
 import { expect, test } from "vite-plus/test";
 import { module as fans } from "../fans/route.ts";
-import { module as ducts } from "../ducts/kernel.tsx";
+import { module as ducts } from "../ducts/route.ts";
 import { fansLink } from "../fans/route.ts";
-import { ductsLink, localId } from "../ducts/neutral.ts";
+import { ductsLink, localId } from "../ducts/identity.ts";
 import { jsonCodec } from "@pe/agent-contracts";
 import { admittedRouteSearch } from "./admitted-pane.tsx";
 
@@ -21,7 +21,7 @@ test("fan and system links survive router parsing, validation and URL canonicali
     const validated = admittedRouteSearch(module.data)(parsed);
     const canonical = new URL(linked.pathname + defaultStringifySearch(validated), linked);
     expect(canonical.searchParams.get(field)).toBe(linked.searchParams.get(field));
-    const codec = field === "fan" ? jsonCodec(fans.spec.fields.fan.schema) : ducts.codecs.system;
+    const codec = field === "fan" ? jsonCodec(fans.spec.fields.fan.schema) : jsonCodec(ducts.spec.fields.system.schema);
     expect(codec.decode(canonical.searchParams.get(field) ?? "")).toEqual({
       ok: true, value: { kind: "ids", ids: [expected] },
     });

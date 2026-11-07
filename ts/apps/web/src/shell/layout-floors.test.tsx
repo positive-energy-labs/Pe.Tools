@@ -6,7 +6,7 @@ import {
   GraphLayoutView,
   type PaneApi,
 } from "../../../../packages/kit/src/components/lang/graph-layout";
-import { ductsData } from "#/ducts/neutral";
+import { ductsData } from "#/ducts/route";
 import { fansData } from "#/fans/route";
 const ductsGraph = ductsData;
 const layoutPanes = (panes: Readonly<Record<string, { label: string; purpose: string }>>) =>

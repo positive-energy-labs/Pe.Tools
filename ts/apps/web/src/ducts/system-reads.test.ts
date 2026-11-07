@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { mergeSnapshots, nextSystemsRead } from "./system-reads";
+import { mergeSnapshots, nextSystemsRead } from "@pe/ducts-domain/system-reads";
 
 const part = (over: Partial<DuctSnapshot>): DuctSnapshot =>
   ({

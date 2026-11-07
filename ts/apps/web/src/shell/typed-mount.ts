@@ -53,8 +53,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   }>();
   let page: Record<string, any> = decodePage();
   const key = bindWork(own, input.work.address, input.address.read().get("work") || undefined, input.work.open ?? undefined);
-  const reads = new Map<import("../route/host-read").HostRead, { snapshot: Value; stop(): void }>();
-  const dependencies = () => Object.fromEntries([...reads].filter(([,r])=>r.snapshot.current).map(([read,r])=>[read.key,r.snapshot.current?r.snapshot.hash??"":""]));
+  const reads = new Map<import("../route/host-read").HostRead, { snapshot: Value; args: string; stop(): void }>();
+  const dependencies = () => Object.fromEntries([...reads].filter(([read,r])=>read === spec.core && r.snapshot.current).map(([read,r])=>[read.key,r.snapshot.current?r.snapshot.hash??"":""]));
   const gate = createRouteScopeGate({
     workSchema: spec.edits.work.schema, hashWork: canonicalRouteInput,
     journal: key => owners.get(key.route)!.lease.entry.journal,
@@ -121,18 +121,17 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     }, notify);
     cleanups.push(stopFeed);
   }
-  const readArgs = () => spec.core.input.parse(spec.core.args(page as never));
-  let argsKey = "";
+  const allReads = new Set([spec.core,...Object.values(spec.reads ?? {}),...Object.values(spec.panes).map(p=>p.read)]);
   const syncReads = (force = false) => {
     if (disposed || released) return;
-    const args = readArgs(), signature = canonicalRouteInput(args);
-    if (!force && signature === argsKey) return;
-    argsKey = signature;
-    for (const read of new Set([spec.core, ...Object.values(spec.panes).map(p => p.read)])) {
+    for (const read of allReads) {
+      const project = "args" in read && typeof read.args === "function" ? read.args : spec.core.args;
+      const args = read.input.parse(project(page as never)), signature = canonicalRouteInput(args);
+      if (!force && signature === reads.get(read)?.args) continue;
       const previous = reads.get(read)?.snapshot.value;
       reads.get(read)?.stop();
       const controller = new AbortController();
-      const record: {snapshot:Value;stop():void} = { snapshot: { ...unavailable("Reading...", previous),status:"pending" }, stop: () => controller.abort() };
+      const record: {snapshot:Value;args:string;stop():void} = { args: signature, snapshot: { ...unavailable("Reading...", previous),status:"pending" }, stop: () => controller.abort() };
       reads.set(read, record);
       const deliver = (frame: Parameters<Extract<ReadingSource, { kind: "use" | "feed" }>["open"]>[1] extends (arg: infer P) => any ? P : never) => {
         if (controller.signal.aborted || disposed || reads.get(read) !== record) return;
@@ -239,7 +238,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     try {
       const field = spec.subject.field;
       const subject = spec.fields[field]!.schema.parse(search[field] === undefined ? page[field] : JSON.parse(String(search[field]))) as {kind:string;ids?:string[];active?:string};
-      const core = reads.get(spec.core)?.snapshot;
+      const core = reads.get(spec.subject.read ?? spec.core)?.snapshot;
       if (!core?.value) return refused("Reading the subject roster");
       const options=spec.subject.options(core.value), ids=subject.kind==="all"?options.map(o=>o.id):subject.ids??[];
       if (ids.some(id=>!options.some(o=>o.id===id))) return refused(`A ${spec.subject.noun} in this link is not in this model; choose it again from the roster`);
@@ -360,12 +359,13 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             transitions:(detail)=>ready&&value.edit?[{kind:"clear",run:()=>clear(detail)}]:[]};
         },
         label(input,label) { const foreign=[...new Set(spec.edits.patches(input,core.value).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} · ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
+        patch,
         edit: (edit,detail)=>patch(spec.edits.patches(spec.edits.input.parse(edit),core.value),detail),
       };
-      return pane.draw({ target: input.target, value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
+      return pane.draw({ target: input.target, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
         write:(id:string)=>({plan:()=>run(id),apply:()=>run(id,true),cancel:()=>mounted.cancel(id),read:()=>mounted.review(id)}) } as any);
     },
-    release() { released = true; argsKey=""; for (const r of reads.values()) r.stop(); },
+    release() { released = true; for (const r of reads.values()) {r.args="";r.stop();} },
     dispose() { if (disposed) return; disposed=true; cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },
   };
   const stopSubject=observeSubject(spec.key,{current:()=>!disposed&&!released&&input.custody.current(),read:subjectState,subscribe:mounted.subscribe});

@@ -31,6 +31,7 @@ export { jsonCodec, identityCodecs } from "./route-kernel-codecs.ts";
 export { captureHostModule } from "./host-route-admission.ts";
 export type { KernelServices, ResolvedRead } from "./route-kernel-environment.ts";
 export { commandCatalogAxes } from "./command-axes.ts";
+export { ductsPictureFields } from "./routes/picture.ts";
 export { ductsAddress } from "./routes/ducts.ts";
 export { threadListFields } from "./routes/shared.ts";
 

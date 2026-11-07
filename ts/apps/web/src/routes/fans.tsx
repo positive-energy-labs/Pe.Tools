@@ -4,6 +4,6 @@ import { module } from "../fans/route";
 import { builtins } from "../route/builtins.neutral";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 export const Route = createFileRoute("/fans")({
-  validateSearch: (search: Record<string, unknown>): { fixture?: unknown } => search,
+  validateSearch: (search: Record<string, unknown>) => search as Partial<Record<keyof typeof module.spec.fields | "selected", string>> & {fixture?: string},
   component: () => <TypedShell module={module} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtins.fans.closure.fingerprint}`)} />,
 });

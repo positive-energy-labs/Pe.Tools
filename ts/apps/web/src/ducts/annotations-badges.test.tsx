@@ -199,6 +199,7 @@ it("one gap repair has one row, two named subjects, two pins and one evidence se
   expect(row.note?.match(/15.0 in apart/g)).toHaveLength(1);
   const { result } = renderHook(() =>
     useMarks({
+      heal,
       snapshot,
       priced: { findings, next: { paths: {} } } as never,
       scene: { segments: segments.map((segment) => ({ segment })), nodes: [] } as never,

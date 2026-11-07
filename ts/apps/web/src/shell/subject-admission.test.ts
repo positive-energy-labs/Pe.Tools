@@ -4,7 +4,7 @@ import { waitFor } from "@testing-library/react";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { z } from "zod";
 import { identityCodecs } from "./page-port";
-import { localId } from "../ducts/neutral";
+import { localId } from "../ducts/identity";
 import { subjectState } from "./subject";
 import { tabTitle } from "../workbench/route-tabs";
 import { admit } from "../fans/admission.fixture";
@@ -22,7 +22,7 @@ test("admitted Fans uses its actual picker labels and decoded subject; foreign a
   const input = placeInput(admittedRouterAddress(history));
   const mount = nativeTestAdapter(mountTypedRoute(presenter.typed,input,presenter.workFingerprint),createWorkFeedClient());
   mounts.push(mount);
-  await waitFor(() => expect(mount.readingStatus("fans").snapshot.current).toBe(true));
+  await waitFor(() => expect(mount.readingStatus("value").snapshot.current).toBe(true));
   const options = z
     .array(z.object({ id: z.unknown(), label: z.string() }))
     .parse(mount.picker("fan"));
@@ -52,7 +52,7 @@ test("admitted Fans uses its actual picker labels and decoded subject; foreign a
     history.location.search ? new URLSearchParams(history.location.search).get("fan") : null,
   );
   mount.controls.subject({ kind: "ids", ids: [ids[1]!] });
-  expect(mount.subjectState(search())?.label).toBe(options[1]!.label);
+  await waitFor(() => expect(mount.subjectState(search())?.label).toBe(options[1]!.label));
   expect(mount.subjectState({ ...search(), fan: "{broken" })).toMatchObject({
     ready: false,
     refusal: expect.stringContaining("malformed"),

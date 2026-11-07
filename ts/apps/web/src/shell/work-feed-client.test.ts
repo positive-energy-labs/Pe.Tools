@@ -84,6 +84,19 @@ test("absent Work stays pending without failing or releasing feeds, then accepts
   expect(h.stops.every((stop) => stop.mock.calls.length === 1)).toBe(true);
 });
 
+test("ack invalidation after a ready snapshot requests a new snapshot instead of stranding Work", () => {
+  const h = harness();
+  h.emit("work", snapshot(1));
+  h.emit("work-acks", { kind: "stale", key: "acks" });
+  expect(h.values.at(-1)).toEqual({ kind: "pending" });
+  expect(h.source.dirty).toHaveBeenCalledWith(expect.objectContaining({ kind: "work" }));
+  h.emit("work", snapshot(1));
+  expect(h.values.at(-1)).toMatchObject({ kind: "ready", snapshot: { revision: 1 } });
+  h.emit("work-acks", ack(2));
+  expect(h.values.at(-1)).toMatchObject({ kind: "ack", ack: { revision: 2 } });
+  h.unsubscribe();
+});
+
 test("subscribe before snapshot, buffer and sort acks, drop revisions covered by snapshot", () => {
   const h = harness([ack(3), ack(1), ack(2)]);
   expect(h.order).toEqual(["work-acks", "work"]);

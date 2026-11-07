@@ -1,16 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AdmittedRouteView, admittedRouteSearch } from "../shell/admitted-pane";
-import { applicationRouteShell } from "../shell/application-route-shell";
-import { ductsData } from "../ducts/neutral";
-import { builtinRouteStamp, loadBuiltinRoute } from "../route/builtin-inventory";
-export const admitDucts = async () => {
-  const admitted = await loadBuiltinRoute("ducts", builtinRouteStamp("ducts"));
-  if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
-  return admitted.route;
-};
+import { TypedShell } from "../shell/typed-shell";
+import { module } from "../ducts/route";
+import { builtins } from "../route/builtins.neutral";
+import { workFingerprintSchema } from "@pe/agent-contracts";
 export const Route = createFileRoute("/ducts")({
-  validateSearch: admittedRouteSearch(ductsData),
-  component: () => (
-    <AdmittedRouteView shell={applicationRouteShell} load={admitDucts} />
-  ),
+  validateSearch: (search: Record<string, unknown>) => search as Partial<Record<keyof typeof module.spec.fields | "selected", string>> & {fixture?: string},
+  component: () => <TypedShell module={module} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtins.ducts.closure.fingerprint}`)} />,
 });

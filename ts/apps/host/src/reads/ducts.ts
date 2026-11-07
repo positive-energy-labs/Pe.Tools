@@ -16,6 +16,9 @@ import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { pricingResult } from "@pe/ducts-domain/pricing-result";
 import { native, designLayers, catalogs } from "./ducts-inputs.ts";
 import { read } from "./evaluator.ts";
+import { systemList } from "@pe/ducts-domain/system-list";
+import { withStoredRulings } from "@pe/ducts-domain/rulings";
+import { fanRoster } from "./fan-sheet.ts";
 
 export const ductsRoster = read("ducts.roster", {
   input: ductsRosterArgs,
@@ -34,10 +37,8 @@ export const ductsRoster = read("ducts.roster", {
       },
     });
     if (!response.version) throw Error("Duct roster has no observation version");
-    return {
-      ...nativeResponseSchema("ducts.snapshot.roster").parse(response.body),
-      sourceVersion: response.version,
-    };
+    const snapshot = nativeResponseSchema("ducts.snapshot.roster").parse(response.body);
+    return { ...snapshot, rows: systemList(snapshot, null), sourceVersion: response.version };
   },
 });
 const systems = read("ducts.systems", {
@@ -140,24 +141,43 @@ export const ductsPricing = read("ducts.pricing", {
       network.systemReads.missing.length
     )
       throw Error("Pricing requires every requested system batch; read the network coverage");
+    const fans = await ctx.read(fanRoster, { target: args.target });
     return ctx.compute(
       ductsPricingData,
-      { network, layers, catalog, tables },
-      ({ network, layers, catalog, tables }) => {
+      { roster, fans, network, layers, catalog, tables },
+      ({ roster, fans, network, layers, catalog, tables }) => {
         const { sourceVersion: _version, systemReads: _coverage, ...snapshot } = network;
-        return {
-          ...ductsPricingData
-            .omit({ network: true, ductsWork: true, fansWork: true, catalogFindings: true })
-            .parse(
-              wire(
-                pricingResult(
-                  snapshot,
-                  toGrids(tables.body),
-                  catalog.tables,
-                  ductsDesign(layers.ducts, layers.fans),
-                ),
+        const result = ductsPricingData
+          .omit({
+            fanRows: true,
+            design: true,
+            effectiveDesign: true,
+            network: true,
+            ductsWork: true,
+            fansWork: true,
+            catalogFindings: true,
+          })
+          .parse(
+            wire(
+              pricingResult(
+                snapshot,
+                toGrids(tables.body),
+                catalog.tables,
+                ductsDesign(layers.ducts, layers.fans),
               ),
             ),
+          );
+        const priced = new Map(result.analysis.systems.map((row) => [row.key, row]));
+        const design = ductsDesign(layers.ducts, layers.fans);
+        return {
+          ...result,
+          analysis: {
+            ...result.analysis,
+            systems: roster.rows.map((row) => priced.get(row.key) ?? row),
+          },
+          effectiveDesign: withStoredRulings(design, snapshot.store) ?? design,
+          fanRows: fans.rows,
+          design,
           network,
           ductsWork: layers.ducts,
           fansWork: layers.fans,

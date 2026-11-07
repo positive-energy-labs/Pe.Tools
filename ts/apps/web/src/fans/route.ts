@@ -4,7 +4,7 @@ import {
   ductsRouteState,
   ductsSheetEditsSchema,
   fansSheetCapability,
-  ductsAddress,
+  ductsPictureFields,
   fansSheetData,
   listSearchSchema,
   type Immutable,
@@ -28,14 +28,14 @@ import { describeInputHistory, editMetaSchema } from "../ducts/sheet/input-histo
 import { sheetValueFixtures } from "../ducts/sheet/value-fixtures.ts";
 import { presentLosses } from "../ducts/reviews.ts";
 
-const shared = ductsAddress.fields;
+const shared = ductsPictureFields;
 const fan = subjectSchema(32);
 
 const fields = {
   fan: field(fan, { kind: "ids", ids: [] }, "subject", "push"),
   stage: field(z.enum(["sheet"]), "sheet", "stage", "push"),
-  inputSort: field(shared.inputSort.schema, "", "query"),
-  inputSearch: field(shared.inputSearch.schema, { keywords: "", pills: [], v: 1 }, "query"),
+  inputSort: field(z.enum(["", "name"]), "", "query"),
+  inputSearch: field(listSearchSchema, { keywords: "", pills: [], v: 1 }, "query"),
   contextRadiusFt: field(shared.contextRadiusFt.schema, 10, "pose"),
   contextStyle: field(shared.contextStyle.schema, "glass", "pose"),
   encoding: field(shared.encoding.schema, "health", "pose", "push"),
@@ -58,6 +58,10 @@ const sheet = {
     fan: namesOf(page.fan),
     sheetPath: page.sheetPath,
   }),
+};
+const roster = {
+  ...hostRead(fansSheetCapability, sheetValueFixtures),
+  args: () => ({ fan: [], sheetPath: "" }),
 };
 export type FansDrawContext = DrawContext<
   z.output<typeof fansSheetData>,
@@ -83,6 +87,7 @@ export const module = route({
   },
   subject: {
     field: "fan",
+    read: roster,
     noun: "fan",
     pane: "sheet-roster",
     options: (data: FansDrawContext["value"]["value"]) =>
@@ -92,6 +97,7 @@ export const module = route({
       })),
   },
   core: sheet,
+  reads: { roster },
   fields,
   panes: {
     "sheet-roster": {

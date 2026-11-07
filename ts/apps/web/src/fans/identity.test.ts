@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createWitness } from "./cutover.test-support";
 import { admit } from "./admission.fixture";
-import { localId } from "../ducts/neutral";
+import { localId } from "../ducts/identity";
 import { stableFanKey } from "../ducts/sheet/model";
 import { workFeedFailureMessage } from "../../../../packages/agent-contracts/src/work-journal-door";
 import fixture from "../ducts/sheet/sheet.fixture.json";

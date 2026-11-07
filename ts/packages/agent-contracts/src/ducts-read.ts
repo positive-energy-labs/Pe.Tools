@@ -5,8 +5,23 @@ import { ductsDocumentSchema } from "./ducts.ts";
 import { fansDocumentSchema } from "./fans.ts";
 import { ductFindingSchema, DUCT_INFERENCE_GRADES } from "./ducts-analysis.ts";
 import { catalogTableSchema } from "./duct-catalog.ts";
-import { fansReadRequest, fansReadResponse } from "./fans-read.ts";
+import { fansReadRequest, fansReadResponse, fansSheetData } from "./fans-read.ts";
 
+const numberOrNull = z.number().nullable();
+const systemRow = z
+  .object({
+    key: z.string(),
+    name: z.string(),
+    kind: z.literal("system"),
+    groups: z.array(z.string()),
+    classification: z.string().nullable(),
+    sub: z.string(),
+    rating: numberOrNull,
+    total: numberOrNull,
+    fanless: z.boolean(),
+    blocked: z.boolean(),
+  })
+  .catchall(z.json().transform((value): unknown => value));
 export const ductsRosterArgs = z.object({ target: documentRefSchema });
 export const DUCTS_SYSTEM_MAX = 512;
 export const ductsNetworkArgs = ductsRosterArgs.extend({
@@ -19,9 +34,8 @@ export const ductsNetworkData = nativeResponseSchema("ducts.snapshot.walk").and(
   }),
 );
 export const ductsRosterData = nativeResponseSchema("ducts.snapshot.roster").and(
-  z.object({ sourceVersion: z.string() }),
+  z.object({ sourceVersion: z.string(), rows: z.array(systemRow) }),
 );
-const numberOrNull = z.number().nullable();
 const record = <T extends z.ZodType>(schema: T) => z.record(z.string(), schema);
 const flow = z.object({
   cfm: numberOrNull,
@@ -123,6 +137,9 @@ const loss = z.object({
   ),
 });
 export const ductsPricingData = z.object({
+  fanRows: fansSheetData.shape.rows,
+  design: fansDocumentSchema.extend(ductsDocumentSchema.shape),
+  effectiveDesign: fansDocumentSchema.extend(ductsDocumentSchema.shape),
   network: ductsNetworkData,
   ductsWork: ductsDocumentSchema,
   fansWork: fansDocumentSchema,
@@ -188,22 +205,7 @@ export const ductsPricingData = z.object({
       ),
     }),
     notes: record(z.object({ fix: z.number(), set: z.number() })),
-    systems: z.array(
-      z
-        .object({
-          key: z.string(),
-          name: z.string(),
-          kind: z.literal("system"),
-          groups: z.array(z.string()),
-          classification: z.string().nullable(),
-          sub: z.string(),
-          rating: numberOrNull,
-          total: numberOrNull,
-          fanless: z.boolean(),
-          blocked: z.boolean(),
-        })
-        .catchall(z.json()),
-    ),
+    systems: z.array(systemRow),
     inference: z.object({
       joints: z.array(z.json()),
       taps: z.array(z.json()),
@@ -245,3 +247,35 @@ export const ductsReadResponse = z.union([
 export type DuctsRosterData = z.infer<typeof ductsRosterData>;
 export type DuctsNetworkData = z.infer<typeof ductsNetworkData>;
 export type DuctsPricingData = z.infer<typeof ductsPricingData>;
+
+const axes = {
+  subject: "Document",
+  touches: ["Metadata"],
+  effect: "Read",
+  cost: "Cheap",
+  cardinality: "One",
+} as const;
+export const ductsRosterCapability = {
+  key: "ducts.roster.value",
+  endpoint: "ducts.read",
+  request: () => ({ read: "ducts.roster" }),
+  input: ductsRosterArgs.omit({ target: true }),
+  output: ductsRosterReadResponse,
+  axes,
+} as const;
+export const ductsNetworkCapability = {
+  key: "ducts.network.value",
+  endpoint: "ducts.read",
+  request: () => ({ read: "ducts.network" }),
+  input: ductsNetworkArgs.omit({ target: true }),
+  output: ductsNetworkReadResponse,
+  axes,
+} as const;
+export const ductsPricingCapability = {
+  key: "ducts.pricing.value",
+  endpoint: "ducts.read",
+  request: () => ({ read: "ducts.pricing" }),
+  input: ductsNetworkArgs.omit({ target: true }),
+  output: ductsPricingReadResponse,
+  axes,
+} as const;

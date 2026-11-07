@@ -1,7 +1,7 @@
 /** An ids read draws under one sheet group; absence never claims native evidence. */
 import { expect, it } from "vite-plus/test";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { schemas } from "../neutral.ts";
+import { fansSheetData } from "@pe/agent-contracts";
 import { snapshot as networkSnapshot } from "../test-fixture.ts";
 import { indexOf, sceneOf } from "../scene.ts";
 import { EMPTY_SNAPSHOT, SHEET_GROUP, sheetSnapshot, sheetSystems } from "./scoped-snapshot.ts";
@@ -20,11 +20,11 @@ it("a raw ids read draws every element under the one sheet group", () => {
 });
 
 it("decodes absence separately and keeps native timestamp validation strict", () => {
-  expect(schemas.sheetSnapshot.parse({ kind: "absent" })).toEqual({ kind: "absent" });
-  expect(schemas.sheetSnapshot.safeParse(EMPTY_SNAPSHOT).success).toBe(false);
+  expect(fansSheetData.shape.sheetSnapshot.parse({ kind: "absent" })).toEqual({ kind: "absent" });
+  expect(fansSheetData.shape.sheetSnapshot.safeParse(EMPTY_SNAPSHOT).success).toBe(false);
   const native = { ...networkSnapshot, document: { ...networkSnapshot.document, readAt: "2026-11-04T13:25:39.031595+00:00" } };
   expect(nativeResponseSchema("ducts.snapshot.walk").safeParse(native).success).toBe(true);
-  expect(schemas.sheetSnapshot.safeParse(native).success).toBe(true);
+  expect(fansSheetData.shape.sheetSnapshot.safeParse(native).success).toBe(true);
 });
 
 it("owner links scope only canonical roster entries and omit scope for bounded ids snapshots", () => {

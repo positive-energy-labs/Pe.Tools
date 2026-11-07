@@ -6,13 +6,12 @@ import type { RouteDiagnostic } from "../../../../packages/agent-contracts/src/r
 import { module as captures } from "../captures/kernel";
 import { module as schedules } from "../schedules/kernel";
 import { module as families } from "../families/kernel";
-import { module as ducts } from "../ducts/kernel";
 import { module as pods } from "../pods/kernel";
 import { module as chat } from "../chat/kernel";
 import { builtins, type BuiltinKey } from "./builtins.neutral";
 
-const modules = { captures, schedules, families, ducts, chat, pods } satisfies Record<
-  Exclude<BuiltinKey, "fans">,
+const modules = { captures, schedules, families, chat, pods } satisfies Record<
+  Exclude<BuiltinKey, "fans" | "ducts">,
   unknown
 >;
 type Admitted =
@@ -30,7 +29,7 @@ export function loadBuiltinRoute(key: BuiltinKey, expectedFingerprint: string) {
 }
 async function admit(key: BuiltinKey, expectedFingerprint: string): Promise<Admitted> {
   const { closure } = builtins[key];
-  if (key === "fans") throw Error("Typed routes mount directly");
+  if (key === "fans" || key === "ducts") throw Error("Typed routes mount directly");
   const module = modules[key];
   const inventory = createBuiltinRouteInventory({
     [key]: {

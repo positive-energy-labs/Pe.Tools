@@ -152,8 +152,10 @@ for (const key of admittedBuiltinKeys) {
     const schemaImport = binding.specifier.startsWith(".")
       ? JSON.stringify(relative(dirname(fileURLToPath(workDestination)), resolve(dirname(entry),binding.specifier)).replaceAll("\\","/"))
       : binding.from;
-    await emit(workDestination,
-      `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nimport { ${binding.imported} as schema } from ${schemaImport};\nimport { salvageWork } from "../route-state.ts";\nexport const ${key}RouteState = { route: ${JSON.stringify(key)}, title: ${JSON.stringify(typed.spec.name)}, description: schema.description ?? ${JSON.stringify(typed.spec.directory.summary)}, schema, schemaVersion: 1, salvage: (raw:unknown)=>salvageWork(schema,raw).doc };\n`);
+    const definitions = await jiti.import<Record<string, {schema?: unknown}>>(binding.specifier.startsWith(".") ? resolve(dirname(entry),binding.specifier) : binding.specifier);
+    await emit(workDestination, definitions[binding.imported]!.schema
+      ? `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nexport { ${binding.imported} as ${key}RouteState } from ${schemaImport};\n`
+      : `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nimport { ${binding.imported} as schema } from ${schemaImport};\nimport { salvageWork } from "../route-state.ts";\nexport const ${key}RouteState = { route: ${JSON.stringify(key)}, title: ${JSON.stringify(typed.spec.name)}, description: schema.description ?? ${JSON.stringify(typed.spec.directory.summary)}, schema, schemaVersion: 1, salvage: (raw:unknown)=>salvageWork(schema,raw).doc };\n`);
     const history = typed.host.schemas.historyDetail!;
     await emit(new URL(`../src/${key}/host.generated.ts`, import.meta.url),
       `// Generated from route.ts by codegen:routes. Do not edit.\nimport { ${key}RouteState as work } from "../../../../packages/agent-contracts/src/generated/${key}-work.ts";\nimport { z } from "zod";\nimport { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type { HostRouteModule } from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with { type: "json" };\nconst data = RouteGraphJson.parse(closure.envelope.data);\nexport const host: HostRouteModule = { data, workState: work, schemas: { [data.work!.schema!]: work.schema, [data.historyDetail!]: z.fromJSONSchema(${JSON.stringify(z.toJSONSchema(history,{io:"input"}))}) }, bodies: {} };\n`);

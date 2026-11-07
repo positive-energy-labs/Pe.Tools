@@ -114,7 +114,7 @@ function TypedChrome({ mount, document }: { mount: TypedMount; document: ReactNo
   const slot=usePaneActionSlot();
   const subject=useMemo(()=>{
     const update=(op:(set:ReturnType<typeof openSet<unknown>>,value:any)=>unknown)=>{
-      const value=mount.value().value;
+      const value=mount.value(spec.subject.read ?? spec.core).value;
       const set=openSet<unknown>(canonicalRouteInput,value?spec.subject.options(value).map(o=>o.id):[]);
       mount.page.subject(op(set,mount.page.read()[spec.subject.field]));
     };
@@ -135,7 +135,7 @@ function TypedChrome({ mount, document }: { mount: TypedMount; document: ReactNo
       options:{ignoreInputs:true},invoke:()=>{if(visible) void mount.history[direction]();}})))} />
     {portal ? <PrimaryRouteControls route={spec.key} slot="situation">{head}</PrimaryRouteControls> : head}
     <GraphLayoutView layout={layout(spec.layout)} panes={Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,draws:[],verbs:[]}]))}
-      active={()=>true} state={{panes,onChange:next=>{setPanes(next);writeLayoutState(`route:${spec.key}`,next);}}}
+      active={when=>when === "subject" && (mount.page.read()[spec.subject.field]?.kind === "all" || !!mount.page.read()[spec.subject.field]?.ids?.length)} state={{panes,onChange:next=>{setPanes(next);writeLayoutState(`route:${spec.key}`,next);}}}
       bodies={Object.fromEntries(Object.keys(spec.panes).map(id=>[id,pane=>pane(mount.draw(id) as ReactNode,{actions:<>{slot(id)}<Button label={`Refresh ${spec.panes[id]!.title}`} onClick={mount.refresh}>Refresh</Button></>})]))} />
   </div></KeyScope></SubjectDoor.Provider>;
 }

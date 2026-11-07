@@ -21,6 +21,7 @@ export function createAdmittedBody<W extends Record<string, unknown>>(context: M
       return current.bodies[body]!.run({
         place: (row: unknown, input: unknown) => place(pane, row, input, basis),
         page: ports.page,
+        target: read().scope.identity.target,
         work: read().work?.value ?? null,
         workBasis: basis,
         history,

@@ -1,5 +1,6 @@
 import { createElement } from "react";
 import { RosterBody, InputsBody, PictureBody, LedgerBody } from "../ducts/sheet/mount";
+import * as networkBodies from "../ducts/proto/e/screen";
 import type { TypedMount } from "../shell/typed-mount";
 import type { AdmittedMount } from "../shell/admitted-mount";
 import type { FansRouteDocument } from "@pe/agent-contracts";
@@ -14,6 +15,7 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
       return record?.ready ? { current: true, status: "ready", value: record.doc, handle: record.handle, hash: JSON.stringify(record.doc) }
         : { current: false, status: "unavailable", reason: record?.problem };
     }
+    if (mount.spec.reads?.[id]) return mount.value(mount.spec.reads[id]);
     const value = mount.value();
     const data = id === "value" ? {value:{data:value.value}} : id === "sheet" ? value.value : value.value?.[id];
     return {...value,value:data};
@@ -21,7 +23,7 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
   const adapter = {
     ...mount, native: mount, read: (id:string) => {
       const body=mount.draw(id) as {props:{ctx:unknown}};
-      const Component=({"sheet-roster":RosterBody,"sheet-inputs":InputsBody,"sheet-picture":PictureBody,"sheet-ledger":LedgerBody} as Record<string,any>)[id];
+      const Component=({"sheet-roster":RosterBody,"sheet-inputs":InputsBody,"sheet-picture":PictureBody,"sheet-ledger":LedgerBody,"e-systems":networkBodies.SystemsPane,"e-sidebar":networkBodies.TreePane,"e-rules-all":networkBodies.AllRulesBody,"e-rules":networkBodies.RulesBody,"e-picture":networkBodies.PictureBody,"e-inbox":networkBodies.InboxBody} as Record<string,any>)[id];
       return createElement(Component,{ctx:body.props.ctx});
     }, close: mount.dispose,
     controls: { subject: mount.page.subject, query: (key:string,value:unknown)=>mount.page.query({[key]:value}) },
@@ -33,7 +35,7 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
     reviewRefusal: (id:string)=>mount.reviewProblem(id)?Error(mount.reviewProblem(id)!):null,
     confirm:(id:string)=>{if(mount.review(id)?.stale) throw Error("Review stale");return mount.run(id,true);},
     readingStatus: (id:string)=>({snapshot:snapshot(id)}),
-    picker: () => mount.value().value ? mount.spec.subject.options(mount.value().value) : [],
+    picker: () => {const value=mount.value(mount.spec.subject.read ?? mount.spec.core).value;return value ? mount.spec.subject.options(value) : [];},
     journal: () => mount.owner()!.lease.entry.journal.read(),
     setPaneDemand() {},
     refresh: mount.refresh,
