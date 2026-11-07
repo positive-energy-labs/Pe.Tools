@@ -2,13 +2,16 @@ import { randomUUID, createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
+import { Context, Effect } from "effect";
 import { commands, parsedDocViewSchema, tools, type ActionStep } from "@pe/agent-contracts";
 import { z } from "zod";
 import { command, refused, type CommandExecutor } from "./command-executor.ts";
 import { runPods, type PodDependencies } from "./family-actions.ts";
 import { podFolder } from "./settings.ts";
-import { hostOwnership } from "./host-ownership.ts";
+/** The app owns the parser address; commands never infer a frontend from a port or file. */
+export class FamilyPdfParser extends Context.Service<FamilyPdfParser, {
+  parse(file: File): Promise<unknown>;
+}>()("pe/FamilyPdfParser") {}
 
 const safePath = (root: string, path: string) => {
   const full = resolve(root, path);
@@ -131,35 +134,8 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
         ],
         effects: [{ kind: "directory", path: dirname(safePath(root, member.path)) }],
         prepare: async () => {
-          const form = new FormData();
-          form.append("file", file);
-          // The dev frontend receipt is tied to this checkout's host identity, never a guessed port.
-          const port = Number(
-            await readFile(
-              join(
-                hostOwnership.rootPath,
-                "state",
-                "service",
-                `${hostOwnership.serviceName}-web.port`,
-              ),
-              "utf8",
-            ),
-          );
-          if (!Number.isInteger(port) || port <= 0) throw Error("The web parser is unavailable");
-          const parsed = await fetch(`http://127.0.0.1:${port}/api/pdf-audit/parse`, {
-            method: "POST",
-            body: form,
-          });
-          const payload = await parsed.json();
-          if (!parsed.ok)
-            throw Error(
-              typeof payload === "object" &&
-                payload !== null &&
-                "error" in payload &&
-                typeof payload.error === "string"
-                ? payload.error
-                : `Parse failed (${parsed.status})`,
-            );
+          if (!deps.parsePdf) throw Error("The web PDF parser is unavailable");
+          const payload = await deps.parsePdf(file);
           const doc = parsedDocViewSchema.parse(payload);
           const dir = dirname(member.path).replaceAll("\\", "/");
           const name = basename(file.name, extname(file.name)).replace(/[^a-zA-Z0-9_-]/g, "-");
