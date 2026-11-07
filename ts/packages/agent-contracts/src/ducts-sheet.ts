@@ -475,6 +475,7 @@ export const ductsSheetResponseSchema = z.discriminatedUnion("kind", [
   z.object({
     ...responseBase,
     kind: z.literal("inputs"),
+    directionOverride: z.string().nullable().optional(),
     inputs: ductsInputsSchema,
     /** The firm layer: the file's version, or "seed" with present false when the file is absent. */
     firm: z.strictObject({ version: z.string(), path: z.string(), present: z.boolean() }),
