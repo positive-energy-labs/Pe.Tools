@@ -216,6 +216,7 @@ async function journey(options: { catalogue?: ReturnType<typeof gate>; snapshot?
               previewOnly: true,
               derivedRequest: {},
               seal: {
+                caller: { kind: "human", via: "local" },
                 requestHash: "recorded",
                 work: { handle: command.input.work },
                 documentMark: { ...ref, observedSince: 1, changedAt: 10 },
