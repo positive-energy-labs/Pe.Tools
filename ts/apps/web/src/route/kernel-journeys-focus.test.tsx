@@ -312,7 +312,8 @@ test.each([false, true])(
       f.typed.page.pose({ layers: [] });
     });
     expect(f.fans.work()!.revision).toBe(stagedRevision);
-    expect(f.calls.get("fans:fans.sheet")).toBe(beforeReads);
+    expect(f.calls.get("fans:fans.sheet")).toBeGreaterThan(beforeReads!);
+    await waitFor(() => expect(f.typed.value().current).toBe(true));
     expect(f.typed.value().publication!.evaluation).toBe(beforeSwitch);
     await act(async () =>
       plan({

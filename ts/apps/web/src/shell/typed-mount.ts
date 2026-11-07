@@ -569,9 +569,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       return (render ?? pane.draw)({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
         write:mounted.action } as any);
     },
-    // Visibility suspends gestures, not the retained Place's input subscriptions or Plan review.
-    // dispose owns cancellation; real Work/native invalidations must still reach a hidden Place.
-    release() { released = true; },
+    // Retaining hidden read connections was a Plan-identity workaround; content fingerprints
+    // now survive reconnect. Keep Work journals/receipts connected so pending edits settle.
+    release() { released = true; for (const r of reads.values()) { r.args=""; r.stop(); } },
     dispose() { if (disposed) return; disposed=true; cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },
   };
   const stopSubject=observeSubject(spec.key,{current:()=>!disposed&&!released&&input.custody.current(),read:subjectState,subscribe:mounted.subscribe});
