@@ -60,7 +60,7 @@ type StateCellProps,
 import { ListPopup } from "./list-popup";
 import { TooltipHint } from "./tooltip";
 import { handleCellProps, type HandleCellProps } from "./cell-handle";
-export { handleCellProps, cellSource } from "./cell-handle";
+export { useCellCollection, useCollectionCell, handleCellProps, cellSource } from "./cell-handle";
 export type { CellHandle, HandleCellProps } from "./cell-handle";
 
 export {
@@ -718,3 +718,5 @@ export function CellStateKey() {
     </div>
   );
 }
+
+export type { CellCollection } from "./cell-handle";

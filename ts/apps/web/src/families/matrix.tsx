@@ -6,7 +6,7 @@ import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import type { FamiliesDrawContext } from "./route";
 import { TypeGrid } from "./pivot-grid";
-import { useLiveCells } from "./matrix-columns";
+import { useCellCollection } from "@pe/kit/lang/cell";
 import { useMeasuredParse } from "#/host/measured-parse";
 export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
   const [failure, setFailure] = useState<string | null>(null);
@@ -37,7 +37,7 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
   };
   const catalog = data?.catalog.families ?? [];
   const categories = data?.categories ?? [];
-  const live = useLiveCells(work?.cells ?? {}, (key) => ctx.cells.at(["cells", key]));
+  const live = useCellCollection(work?.cells ?? {}, (key) => ctx.cells.at(["cells", key]));
   const focus = ctx.page.read().focus;
   let landed: { row: number; col: number; n: number } | null = null;
   if (focus) {
