@@ -722,7 +722,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
         if (!result || "ok" in result) return json(result ?? { ok: false, error: "view unavailable" }, 409);
         const mounted = mountedWorkKeySchema.safeParse(result.context.work);
         const mountedWork = mounted.success && mounted.data.route === route
-          ? await work.view(mounted.data, route, invocation.work) : null;
+          ? await (invocation.work ? work.view(mounted.data, route, invocation.work) : work.viewUncaptured(mounted.data, route)) : null;
         return json({ ...result, ...(mountedWork ? { work: mountedWork } : {}) });
       }
       if (method === "POST" && instance === "set") {
