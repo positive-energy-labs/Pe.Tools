@@ -290,8 +290,8 @@ function NetworkFrame({
         fanRoster: data.fanRoster,
       }}
     >
-      <NativeObservationScope value={data.observation}>
-        <AttentionRoot doc={data.attentionDoc}>
+
+
           <PointerCite
             route="ducts"
             refs={(place) =>
@@ -324,8 +324,8 @@ function NetworkFrame({
             )}
             {children}
           </SubjectTextContext.Provider>
-        </AttentionRoot>
-      </NativeObservationScope>
+
+
     </DuctsOwner>
   );
 }

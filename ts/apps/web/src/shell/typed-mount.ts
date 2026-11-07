@@ -1,3 +1,6 @@
+import { writeReject } from "./admitted-chrome";
+import { harnessClient } from "../workbench/provider/harness-client";
+import { resolveWorkbenchConfig } from "../workbench/config";
 import { z } from "zod";
 import { applyPatches, bindWork, cellPatches, commands, commandTarget, canonicalRouteInput, workKey,
   writePreviewSchema, presentationSchema, workHandleSchema, workFeedFailureMessage, type WorkFeedFailure, type WorkHandle, type WorkWrite, type RouteStatePatch,
@@ -304,6 +307,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     } catch { return refused(`${spec.subject?.noun ?? "Subject"} is malformed`); }
   };
   const results = new Map<string,unknown>();
+  const pending = new Set<string>();
   const run = async (id: string, apply = false, supplied?:unknown) => {
     requireWritable();
     if (input.fixture !== null) throw Error("Fixture has no native writes");
@@ -367,6 +371,22 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   syncReads();
   const mounted = {
     spec, subjectState, move,
+    action(id: string): import("../route/typed-route").ActionHandle {
+      const command=spec.commands[id];
+      if(!command) throw Error(`Unknown command ${id}`);
+      const perform=async(apply=false,supplied?:unknown)=>{
+        if(pending.has(id)) throw Error("Action already pending");
+        pending.add(id); notify();
+        try { return await run(id,apply,supplied); }
+        catch(error) { problems.set(id,error instanceof Error?error.message:String(error)); throw error; }
+        finally {pending.delete(id);notify();}
+      };
+      return {label:command.label, get pending(){return pending.has(id);},
+        get refusal(){return mounted.commandRefusal(id);}, get failure(){return problems.get(id)??null;},
+        get consent(){return writeReject(mounted.timeline(),[command.entry],(thread,request)=>void harnessClient(resolveWorkbenchConfig().origin).permission(thread,request,"stop_writes"));},
+        run:(supplied)=>perform(false,supplied),plan:()=>perform(),apply:()=>perform(true),
+        cancel:()=>mounted.cancel(id),read:()=>mounted.review(id)};
+    },
     journal: () => {
       const journals=[...owners.values()].map(o=>o.lease.entry.journal.read()),base=owners.get(own)?.lease.entry.journal.read() ?? {revision:null,from:0,busy:false,receipts:[],undo:[],redo:[],moves:[],last:null};
       return {...base, undo:journals.flatMap(j=>j.undo).sort((a,b)=>a.at-b.at), redo:journals.flatMap(j=>j.redo).sort((a,b)=>a.at-b.at),
@@ -395,7 +415,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     reviewProblem: (id: string) => problems.get(id) ?? null,
     cancel: (id: string) => { const token=plans.get(id);if(token) gate.retire(token.token);plans.delete(id);reviews.delete(id);notify(); },
     timeline: () => [...owners.values()].flatMap(o => o.lease.entry.timeline()),
-    draw(id: string) {
+    draw(id: string, render?: (ctx: DrawContext<any,any,any,any>)=>unknown) {
       const pane = spec.panes[id]!;
       const value = pane.read ? reads.get(pane.read)?.snapshot ?? unavailable(pane.read.demand === "explicit"?"Press Read":"Reading...") : unavailable("No read declared");
       const core = spec.core ? reads.get(spec.core)?.snapshot ?? unavailable("Reading...") : unavailable("No read declared");
@@ -432,20 +452,38 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const cells: DrawContext<any, any, any, any>["cells"] = {
         doc: owners.get(own)?.doc ?? null, basis: token, ready, refusal: basisRefusal(), history,
         owner(path) { const route=ownerOf(path); return {route,label:route===own?"Work":`from /${route}`}; },
-        at(path,preferred) {
+        at(path,preferred,facts={}) {
           const route=ownerOf(path,preferred), address=[...path];
           const value=address.reduce((doc,key)=>doc?.[key],owners.get(route)!.doc)??{};
           const clear=(detail?:EditHistory)=>patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,{kind:"clear"}),detail,route);
-          return {owner:{route,label:route===own?"Work":`from /${route}`},value, refusal: basisRefusal(), clear,
-            stage:(value2,detail)=>patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,{kind:"set",rung:{value:value2}}),detail,route),
-            transitions:(detail)=>ready&&value.edit?[{kind:"clear",run:()=>clear(detail)}]:[]};
+          const record=owners.get(route)!;
+          const accepted = value.edit;
+          const accept=(detail?:EditHistory) => {
+            if(!accepted) return Promise.resolve({code:"not-staged",message:"This cell is no longer staged"});
+            const {by:_by,at:_at,base:_base,...rung}=accepted;
+            return patch([{path:[...address,"edit"],value:rung}],detail,route);
+          };
+          // A cell may undo only a press whose entire footprint is this address.
+          const step=record.lease.entry.journal.read().undo.findLast(step=>!step.barrier&&!step.superseded&&step.transitions.every(t=>t.paths.every(p=>address.every((key,i)=>String(p[i])===key))));
+          const undo=async():Promise<EditFailure>=>{
+            if(!ready||!token||!gate.current(token)||canonicalRouteInput(record.handle)!==canonicalRouteInput(handles.get(route))) return {code:"stale-cell",message:"Owning Work changed since this cell was drawn"};
+            if(!step) return {code:"no-cell-undo",message:"No isolated edit for this cell"};
+            const result=await restore("undo",step.press);
+            return result.ok?null:{code:"undo-refused",message:"message" in result?String(result.message):"Cell undo refused"};
+          };
+          return {owner:{route,label:route===own?"Work":`from /${route}`},value, facts:{...facts,baseline:facts.baseline??value.base?.value},
+            freshness:value === undefined?"never":ready?"current":"stale", refusal: basisRefusal(), clear, accept,deny:clear,undo,
+            stage:(value2,detail)=> facts.readOnly ? Promise.resolve({code:"read-only",message:"This cell is read-only"}) :
+              patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,
+                Object.hasOwn(facts,"baseline")&&canonicalRouteInput(value2)===canonicalRouteInput(facts.baseline)?{kind:"clear"}:{kind:"set",rung:{value:value2}}),detail,route),
+            transitions:(detail)=>!ready?[]:[...(value.edit?[{kind:"clear" as const,run:()=>clear(detail)},...(value.edit.by==="pea"?[{kind:"take" as const,run:()=>accept(detail)},{kind:"unsuggest" as const,run:()=>clear(detail)}]:[])]:[]),...(step?[{kind:"undo" as const,run:undo}]:[])]};
         },
         label(input,label) { const foreign=[...new Set(edits!.patches(input,core.value).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} · ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
         patch,
         edit: (edit,detail)=>patch(()=>edits!.patches(edits!.input.parse(edit),core.value),detail),
       };
-      return pane.draw({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
-        write:(id:string)=>({run:(input?:unknown)=>run(id,false,input),plan:()=>run(id),apply:()=>run(id,true),cancel:()=>mounted.cancel(id),read:()=>results.has(id)?results.get(id):mounted.review(id)}) } as any);
+      return (render ?? pane.draw)({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
+        write:mounted.action } as any);
     },
     release() { released = true; for (const r of reads.values()) {r.args="";r.stop();} },
     dispose() { if (disposed) return; disposed=true; cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },

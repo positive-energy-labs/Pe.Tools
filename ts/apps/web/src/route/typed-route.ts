@@ -117,7 +117,13 @@ export type DrawPage<F extends Fields> = {
 };
 export type EditHistory = { label: string; [key: string]: unknown };
 export type EditFailure = { code: string; message: string } | null;
+export type CellFacts = Pick<import("@pe/kit/lang/cell").HandleCellProps, "model" | "source" | "options" | "parse" | "format"> & { baseline?: unknown; readOnly?: boolean };
 export interface OwnedCell {
+  readonly facts: CellFacts;
+  readonly freshness: "current" | "stale" | "never";
+  accept(history?: EditHistory): Promise<EditFailure>;
+  deny(history?: EditHistory): Promise<EditFailure>;
+  undo(): Promise<EditFailure>;
   readonly owner: { route: string; label: string };
   readonly value: import("@pe/agent-contracts").CellLike;
   readonly refusal: string | null;
@@ -132,12 +138,17 @@ export interface EditableCells<W, Edit> {
   readonly refusal: string | null;
   readonly history: WorkHistoryPort<any>;
   owner(path: readonly string[]): { route: string; label: string };
-  at(path: readonly [string, ...string[]], owner?: string): OwnedCell;
+  at(path: readonly [string, ...string[]], owner?: string, facts?: CellFacts): OwnedCell;
   label(input: Edit, label: string): string;
   edit(input: Edit, history?: EditHistory): Promise<EditFailure>;
   /** Mixed claim edits still use multiple paths; retire with their drawing adapters in wave 4. */
   patch(patches: readonly RouteStatePatch[], history?: EditHistory): Promise<EditFailure>;
 }
+export type PaneBindings = {
+  selected?: readonly import("@pe/kit/lang/attention").SubjectKey[];
+  members?: import("@pe/kit/lang/attention").Members;
+  observation?: import("../revit/observation").NativeObservation;
+};
 export interface DrawContext<D, F extends Fields, W, Edit> {
   readonly target: import("@pe/agent-contracts").ExecutionTarget | null;
   read<R extends HostRead>(read: R): ReadingSnapshot<ReadData<R>>;
@@ -146,8 +157,18 @@ export interface DrawContext<D, F extends Fields, W, Edit> {
   readonly selection: { read(): Page<F>["selected"]; set(value: Page<F>["selected"]): unknown };
   readonly cells: EditableCells<W, Edit>;
   refresh(read?: HostRead): void;
-  write(command: string): { run(input?:unknown): Promise<unknown>; plan(): unknown; apply(): unknown; cancel(): unknown; read(): unknown };
+  write(command: string): ActionHandle;
 }
+export interface ActionHandle extends importPlanHandle {
+  readonly label: string;
+  readonly pending: boolean;
+  readonly refusal: string | null;
+  readonly failure: string | null;
+  readonly consent: { until: string; run(): void } | null;
+  run(input?: unknown): Promise<unknown>;
+}
+import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
+
 type Owner = { state: RouteStateSpec<z.ZodObject>; value?: string };
 export type Owners = Readonly<Record<string, Owner>>;
 type HostRead = import("./host-read.ts").HostRead;
@@ -183,13 +204,14 @@ export type Specification<
       title: string;
       purpose: string;
       read?: Reads[K];
+      bindings?(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): PaneBindings;
       draw(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): unknown;
     };
   };
   edits?: {
     work: W | RouteStateSpec<W>;
     key?(page: Page<F>): string | null;
-    seed?(): z.output<W>;
+    seed?(page: Page<F>, target: import("@pe/agent-contracts").ExecutionTarget | null): z.output<W>;
     value?: keyof D & string;
     owners: Owners;
     input: Edit;

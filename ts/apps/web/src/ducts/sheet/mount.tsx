@@ -611,7 +611,7 @@ function SheetFrame({
       ? jump.current(elementKey(id))
       : ctx.selection.set([{ kind: "focus", id: localId("ducts-focus", String(id)) }]);
   return (
-    <AttentionRoot doc={attentionDoc}>
+    <>
       {"kind" in snapshot ? null : (
         <PointerCite
           route="fans"
@@ -619,23 +619,9 @@ function SheetFrame({
         />
       )}
       <SubjectTextContext.Provider value={{ doc: attentionDoc, nameOf, go, refProps }}>
-        <NativeObservationScope
-          value={{
-            scope: {
-              document: ctx.value.current ? document : null,
-              source: "native",
-            },
-            references: ("kind" in snapshot ? [] : [...snapshot.nodes, ...snapshot.segments]).map(
-              ({ id, uniqueId }) => ({
-                elementId: id,
-                uniqueId,
-              }),
-            ),
-          }}
-        >
           {children}
-        </NativeObservationScope>
+
       </SubjectTextContext.Provider>
-    </AttentionRoot>
+    </>
   );
 }

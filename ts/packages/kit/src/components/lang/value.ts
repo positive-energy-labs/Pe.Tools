@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { createContext, useContext, useMemo } from "react";
 
 /** A drawing's accepted Value handle. Availability is owned by its producer. */
 export interface ValueHandle<Data> {
@@ -46,3 +46,7 @@ export function valueRows<Data, Row>(
 export type ValueItems<Row, Data> =
   | { items: readonly Row[]; value?: never; rowsOf?: never }
   | { value: ValueHandle<Data>; rowsOf: (data: Data) => readonly Row[]; items?: never };
+
+/** The shell installs the accepted pane Value once; nested drawings share its freshness. */
+export const ValueScope = createContext<ValueHandle<unknown> | null>(null);
+export const usePaneValue = () => useContext(ValueScope);
