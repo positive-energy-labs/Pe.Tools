@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { solve } from "./math";
+import { solve } from "@pe/ducts-domain/duct-loss-math";
 
 const std = { roughness: 0.0003, density: 0.075, length: 100 };
 

@@ -10,7 +10,6 @@ import {
 } from "@pe/host-contracts/operation-types";
 import { callOp, callCompose } from "#/shell/readings-api";
 
-
 import { runOp } from "./run";
 import type { HostOperationCatalogEntry } from "./manifest";
 export type OpsCatalog = { operations?: HostOperationCatalogEntry[]; bridgeCatalogError?: string };

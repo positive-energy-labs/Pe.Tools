@@ -1,10 +1,15 @@
-import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
-import { useGraphRoute, type GraphMount, type RouteAdapters } from "#/shell/mount";
-import type { VerbCompletion } from "#/shell/verbs";
+import type { ReactNode } from "react";
+import { useGraphRoute, type RouteAdapters } from "#/shell/mount";
 import { openControls as openGraph, type OpenPageState } from "./graph";
 import { openSources } from "./sources";
-import {OpenOwnerContext} from "./context";
-export {OpenOwnerContext,OpenControlScope,useOpenKernel,useOpenOwner,outcomeOf} from "./context";
+import { OpenOwnerContext } from "./context";
+export {
+  OpenOwnerContext,
+  OpenControlScope,
+  useOpenKernel,
+  useOpenOwner,
+  outcomeOf,
+} from "./context";
 export const openControlAdapters: RouteAdapters<OpenPageState, unknown> = {
   sources: openSources(),
   bodies: {},

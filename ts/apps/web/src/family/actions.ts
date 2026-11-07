@@ -74,7 +74,8 @@ export function familyCell(row: unknown, scope: FamilyScope) {
   let authored: unknown = null;
   try {
     authored = JSON.parse(scope.work.doc.reading ?? "null");
-  } catch (error) { console.warn("ts/apps/web/src/family/actions.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/web/src/family/actions.ts: fallback after failure", error);
     return null;
   }
   if (familyLockOf(authored)(value.key)) return null;

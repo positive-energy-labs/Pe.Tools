@@ -2,7 +2,9 @@ import { Link } from "@tanstack/react-router";
 import { DesignSystemLaws } from "./laws";
 import { DesignSystemSpecimens } from "./specimens/index";
 import { ThesisSpecimen } from "./specimens/thesis";
-export function DesignSystemBody({ ctx: _ctx }: { ctx: unknown }) { return <DesignSystem />; }
+export function DesignSystemBody({ ctx: _ctx }: { ctx: unknown }) {
+  return <DesignSystem />;
+}
 
 function DesignSystem() {
   return (

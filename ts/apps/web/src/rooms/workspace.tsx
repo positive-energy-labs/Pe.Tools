@@ -8,7 +8,7 @@ import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import { AttentionScope } from "#/attention";
 import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
 import type { GraphMount } from "#/shell/mount";
-import { readingValue } from "./actions";
+import { readingValue } from "./value";
 import { inboxCards } from "./cards";
 import type { RoomsPage } from "./page";
 import { railsOf, type TraceRead } from "./layers";
@@ -98,9 +98,11 @@ export function RoomsProvider({ owner, children }: { owner: RoomsOwner; children
       Atom.make(
         (): ReadonlySet<SubjectKey> =>
           new Set<SubjectKey>(
-            roomSelection(value.page.selected, value.cards, value.regions.map(region => region.guid)).guids.map(
-              (guid): SubjectKey => `room:${guid}`,
-            ),
+            roomSelection(
+              value.page.selected,
+              value.cards,
+              value.regions.map((region) => region.guid),
+            ).guids.map((guid): SubjectKey => `room:${guid}`),
           ),
       ),
     [owner, value.cards, value.page.selected, value.regions],

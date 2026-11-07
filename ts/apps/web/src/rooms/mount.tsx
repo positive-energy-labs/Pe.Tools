@@ -1,5 +1,5 @@
 import { roomSelection } from "./selection";
-import { useContext, useMemo } from "react";
+import { useContext } from "react";
 import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attention";
 import {
   cellPatches,
@@ -14,6 +14,7 @@ import type { MountBody } from "#/shell/mount";
 import type { RoomsContext } from "./route";
 import { useRoomsOwner } from "./typed-owner";
 import { Button } from "@pe/kit/lang/button";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { cardsMarkdown, coverage, newestRun, type Card } from "./cards";
 import { cardLine, FeedbackCard, RoomsInbox } from "./inbox";
 import type { RoomsPage } from "./page";
@@ -23,7 +24,6 @@ import { RoomsSketch, type Drop } from "./sketch";
 import { snapPlan } from "./snap";
 import { RoomsPlan } from "./plan";
 import { RoomsTable } from "./table";
-import { useNativeObservation } from "#/revit/observation";
 import type { Point2 } from "#/lib/affine-frame";
 
 import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
@@ -121,13 +121,9 @@ function PlanBody({
   owner,
   page,
   verbs,
-  thread,
-  visible,
   renderPane,
 }: Body & { renderPane: PaneApi }) {
-  const { scope } = useNativeObservation();
   const {
-    work,
     onView,
     regions,
     snapshot,
@@ -138,10 +134,7 @@ function PlanBody({
     plan,
     planError,
     trace,
-    pending,
-    error,
   } = useRoomsWorkspace();
-  const token = useMemo(() => crypto.randomUUID(), [snapshot]);
   const selected = new Set(
     roomSelection(
       page.selected,
@@ -206,21 +199,6 @@ function PlanBody({
   return (
     <RoomsPlan
       renderPane={renderPane}
-      fixture={scope?.source === "fixture"}
-      lease={{
-        thread: thread ?? undefined,
-        ready: visible && !!snapshot && !pending && !error,
-        context: {
-          source: scope?.source ?? "native",
-          document: scope?.document ?? null,
-          acquiredEpoch: page.epoch,
-          snapshotToken: token,
-          stage: page.stage,
-          view,
-          work: work?.handle.key ?? null,
-          workRevision: work?.handle.revision ?? null,
-        },
-      }}
       rows={onView}
       plan={plan && "plan" in plan ? plan.plan : null}
       planRefusal={plan && "refusal" in plan ? plan.refusal : null}
@@ -303,21 +281,57 @@ function AttentionRoomsSketch(props: Omit<React.ComponentProps<typeof RoomsSketc
   return <RoomsSketch {...props} hovered={region?.guid ?? null} />;
 }
 
-
-export function RoomsBody({ctx}:{ctx:RoomsContext}) {
-  const owner=useRoomsOwner(ctx),page=owner.view.read().page;
-  const body={owner,page,visible:true,thread:undefined,verbs:()=>null,focusRow:()=>{}} as unknown as Body;
-  const frame:PaneApi=(content)=> <div className="flex min-h-0 flex-1 flex-col">{content}</div>;
-  const stage=async(key:string,input:unknown)=>ctx.cells.patch([{path:["writeIntent",key],value:{edit:{value:input}}}],{label:`Choose ${key} scope`});
-  return <RoomsProvider owner={owner}>
-    <div className="flex min-h-0 flex-1 flex-col gap-(--gutter)">
-      <div className="shrink-0 p-(--gutter)"><ScopeBody {...body}/>
-        <Button label="Stage partition view" refusal={!page.view?"Choose a level and plan view":ctx.cells.refusal} onClick={()=>void stage("rooms.partition",{view:page.view})}>Stage partition view</Button>
-        <Button label="Stage selected room merge" refusal={page.selected.length<2?"Select two or more rooms":ctx.cells.refusal} onClick={()=>void stage("rooms.merge",{view:page.view,guids:page.selected})}>Stage room merge</Button>
+export function RoomsBody({ ctx }: { ctx: RoomsContext }) {
+  const owner = useRoomsOwner(ctx),
+    page = owner.view.read().page;
+  const body = {
+    owner,
+    page,
+    visible: true,
+    thread: undefined,
+    verbs: (row: {kind?:string;id?:string}) => row.kind === "note" && row.id ? <Button label="Delete room note" onClick={()=>void owner.control("delete-note",{id:row.id}).run()}>Delete note</Button> : row.kind === "merge" && row.id ? <Button label="Stage marked room merge" onClick={()=>{
+      const mark=ctx.cells.doc?.marks[row.id!]?.edit?.value;
+      if(mark?.kind==="merge")void ctx.cells.patch([{path:["writeIntent","rooms.merge"],value:{edit:{value:{view:mark.anchor.view,guids:mark.guids??[]}}}}],{label:"Choose marked room merge"});
+    }}>Stage merge</Button>:null,
+    focusRow: () => {},
+  } as unknown as Body;
+  const frame: PaneApi = (content) => <div className="flex min-h-0 flex-1 flex-col">{content}</div>;
+  const stage = async (key: string, input: unknown) =>
+    ctx.cells.patch([{ path: ["writeIntent", key], value: { edit: { value: input } } }], {
+      label: `Choose ${key} scope`,
+    });
+  return (
+    <RoomsProvider owner={owner}>
+      <div className="flex min-h-0 flex-1 flex-col gap-(--gutter)">
+        <div className="shrink-0 p-(--gutter)">
+          <ScopeBody {...body} />
+          <Switcher ariaLabel="Rooms view" value={ctx.page.read().stage} onChange={stage=>ctx.page.pose({stage})} options={[{value:"partition",label:"Partition"},{value:"review",label:"Review"}]}/>
+          <Button
+            label="Stage partition view"
+            refusal={!page.view ? "Choose a level and plan view" : ctx.cells.refusal}
+            onClick={() => {
+              const rejected=Object.values(ctx.cells.doc?.marks??{}).flatMap(cell=>cell.edit?.value?.kind==="reject"&&cell.edit.value.anchor.view===page.view?[cell.edit.value.anchor.polygon]:[]);
+              void stage("rooms.partition", {view:page.view,...(rejected.length?{rejected}:{})});
+            }}
+          >
+            Stage partition view
+          </Button>
+          <Button
+            label="Stage selected room merge"
+            refusal={page.selected.length < 2 ? "Select two or more rooms" : ctx.cells.refusal}
+            onClick={() => void stage("rooms.merge", { view: page.view, guids: page.selected })}
+          >
+            Stage room merge
+          </Button>
+        </div>
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-(--gutter) min-[1100px]:grid-cols-2">
+          <PlanBody {...body} renderPane={frame} />
+          <div className="flex min-h-0 flex-col">
+            <RegionsBody {...body} />
+            <FeedbackBody {...body} renderPane={frame} />
+          </div>
+        </div>
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-(--gutter) min-[1100px]:grid-cols-2">
-        <PlanBody {...body} renderPane={frame}/><div className="flex min-h-0 flex-col"><RegionsBody {...body}/><FeedbackBody {...body} renderPane={frame}/></div>
-      </div>
-    </div>
-  </RoomsProvider>;
+    </RoomsProvider>
+  );
 }

@@ -3,7 +3,7 @@ import { roomEditKey, roomsRouteState, stagedRoomWrites } from "@pe/agent-contra
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
 import { DEMO_PLAN, DEMO_ROOMS, DEMO_VIEW } from "./demo";
-import { roomsPageSchema } from "./graph";
+import { roomsPageSchema } from "./page";
 import { RoomsPlan } from "./plan";
 import { Pane } from "@pe/kit/lang/pane";
 import { RoomsTable, roomRows } from "./table";

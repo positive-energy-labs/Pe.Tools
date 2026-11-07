@@ -1,10 +1,18 @@
 import { z } from "zod";
 import { route, field, type DrawContext } from "../route/typed-route";
 import { draw } from "../route/draw";
-import {threadListFields} from "../../../../packages/agent-contracts/src/routes/shared";
+import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
 const fields = {
-  threadSearch: field(threadListFields.threadSearch.schema, threadListFields.threadSearch.schema.parse(undefined), "query"),
-  threadSort: field(threadListFields.threadSort.schema, threadListFields.threadSort.schema.parse(undefined), "query"),
+  threadSearch: field(
+    threadListFields.threadSearch.schema,
+    threadListFields.threadSearch.schema.parse(undefined),
+    "query",
+  ),
+  threadSort: field(
+    threadListFields.threadSort.schema,
+    threadListFields.threadSort.schema.parse(undefined),
+    "query",
+  ),
   query: field(z.string(), "", "query"),
   exposure: field(z.enum(["All", "Main", "Preview", "Archive"]), "All", "query", "push"),
   sort: field(z.enum(["workflow", "name"]), "workflow", "query", "push"),
@@ -12,11 +20,29 @@ const fields = {
 };
 export type HomeContext = DrawContext<never, typeof fields, never, never>;
 export const module = route({
-  key: "home", name: "Home", address: "/", needs: "browser",
-  directory: { label: "Home", exposure: "Main", group: "Start / open work", icon: "Home",
-    runtimeNeed: "Host activity and tool directory", summary: "Find tools and resume open work",
-    aliases: [], listed: false, satellites: [], surfaces: { web: "full", pwa: "full", tray: false } },
+  key: "home",
+  name: "Home",
+  address: "/",
+  needs: "browser",
+  directory: {
+    label: "Home",
+    exposure: "Main",
+    group: "Start / open work",
+    icon: "Home",
+    runtimeNeed: "Host activity and tool directory",
+    summary: "Find tools and resume open work",
+    aliases: [],
+    listed: false,
+    satellites: [],
+    surfaces: { web: "full", pwa: "full", tray: false },
+  },
   fields,
-  panes: { main: { title: "Home", purpose: "Find tools and inspect activity", draw: draw(() => import("./mount"), "HomeBody") } },
+  panes: {
+    main: {
+      title: "Home",
+      purpose: "Find tools and inspect activity",
+      draw: draw(() => import("./mount"), "HomeBody"),
+    },
+  },
   layout: { kind: "pane", id: "main" },
 });

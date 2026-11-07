@@ -12,7 +12,6 @@ import { OpForm, seedValues, type FormValues } from "./form";
 import { isMutation } from "./manifest";
 import { outputRenderers } from "./renderers";
 
-
 type Value = {
   op: string;
   request: unknown;
@@ -20,19 +19,24 @@ type Value = {
   elapsedMs: number;
   document: DocumentRef | null;
 };
-export function Operation({ ctx }: {ctx: OpsContext}) {
-  const page=ctx.page.read(),observed=ctx.value.value?.catalog;
-  const [values,setValues]=useState<FormValues>({}),[value,setValue]=useState<Value|null>(null),[failure,setFailure]=useState<string|null>(null);
+export function Operation({ ctx }: { ctx: OpsContext }) {
+  const page = ctx.page.read(),
+    observed = ctx.value.value?.catalog;
+  const [values, setValues] = useState<FormValues>({}),
+    [value, setValue] = useState<Value | null>(null),
+    [failure, setFailure] = useState<string | null>(null);
   const operations = observed?.operations ?? [];
   const selected = operations.find((entry) => entry.key === page.op);
 
   const Output = value ? outputRenderers[value.op] : undefined;
   useEffect(() => {
     if (selected)
-      setValues(seedValues(
+      setValues(
+        seedValues(
           selected.requestSchemaJson,
           selected.requestExamples?.[0]?.json ?? selected.safeDefaultRequestJson ?? undefined,
-        ));
+        ),
+      );
     setValue(null);
   }, [selected?.key]);
   return (
@@ -92,12 +96,32 @@ export function Operation({ ctx }: {ctx: OpsContext}) {
               schemaJson={selected.requestSchemaJson}
               values={values}
               onChange={setValues}
-              target={ctx.target??{kind:"host"}}
+              target={ctx.target ?? { kind: "host" }}
             />
           </section>
-          <Button label="Run operation read" refusal={isMutation(selected)?"Use a semantic command with Plan and Apply for mutations":!ctx.value.current?ctx.value.reason:null}
-            onClick={()=>void ctx.write("run").run({op:selected,request:requestOf(values)}).then(result=>{setValue(result as Value);setFailure(null);}).catch(error=>setFailure(String(error)))}>Run read</Button>
-          {failure&&<p role="alert">{failure}</p>}
+          <Button
+            label="Run operation read"
+            refusal={
+              isMutation(selected)
+                ? "Use a semantic command with Plan and Apply for mutations"
+                : !ctx.value.current
+                  ? ctx.value.reason
+                  : null
+            }
+            onClick={() =>
+              void ctx
+                .write("run")
+                .run({ op: selected, request: requestOf(values) })
+                .then((result) => {
+                  setValue(result as Value);
+                  setFailure(null);
+                })
+                .catch((error) => setFailure(String(error)))
+            }
+          >
+            Run read
+          </Button>
+          {failure && <p role="alert">{failure}</p>}
           {value ? (
             <section className="flex flex-col gap-2">
               <h2>

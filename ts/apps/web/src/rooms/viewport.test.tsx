@@ -3,7 +3,7 @@ import { useState } from "react";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { DEMO_PLAN, DEMO_ROOMS, DEMO_VIEW } from "./demo";
-import { roomsPageSchema, type RoomsPage } from "./graph";
+import { roomsPageSchema, type RoomsPage } from "./page";
 import { RoomsPlan } from "./plan";
 import { Pane } from "@pe/kit/lang/pane";
 import { roomRows } from "./table";

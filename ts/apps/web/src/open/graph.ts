@@ -159,7 +159,7 @@ export const openControls: RouteGraph<OpenPageState> = defineRouteGraph({
       source: "open.recents",
       args: (p) => p.epoch,
     },
-    threads: {  source: "open.threads", args: (p) => p.epoch },
+    threads: { source: "open.threads", args: (p) => p.epoch },
     receipts: {
       source: "open.receipts",
       args: (p) => p.epoch,
