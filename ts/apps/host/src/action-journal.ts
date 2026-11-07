@@ -1,3 +1,4 @@
+import { retainUpload } from "./action-blobs.ts";
 import type { HostInputContext } from "./input-context.ts";
 import type {
   CommandContext,
@@ -1124,6 +1125,7 @@ export class ActionJournal implements ReceiptReader {
     const inputRefusal = this.inputContext?.check({ kind: "command", key: raw.key });
     if (inputRefusal) throw inputRefusal;
     const admission = actionAdmissionSchema.parse(structuredClone(raw));
+    if (admission.key === "family.attach-spec") admission.input = await retainUpload(admission.input);
     const portable = commands[admission.key as keyof typeof commands];
     if (portable)
       admission.input = portable.input.parse(admission.input) as Record<string, unknown>;
@@ -1979,11 +1981,18 @@ export class ActionJournal implements ReceiptReader {
     const version = JSON.parse(originalBytes.toString("utf8").split("\n")[0]!)?.version;
     // ponytail: archive file naming, not an event time; wall time keeps names unique under a fixed test clock.
     const archive = `${this.path}.v${String(version)}.${Date.now()}.archived`;
-    const snapshot = readJournalSnapshot(originalBytes, archive);
+    // ADR 0033 rule 5: inline Family PDF rows are reset, never migrated into executable intent.
+    const inlineFamily = originalBytes.toString("utf8").split("\n").slice(1).some((line) => {
+      try {
+        const value = JSON.parse(line)?.receipt?.body?.value;
+        return value?.key === "family.attach-spec" && /"(?:bytesBase64|base64)"\s*:/.test(JSON.stringify(value));
+      } catch { return false; } // The journal decoder below owns torn-tail/corruption rules.
+    });
+    const snapshot = inlineFamily ? null : readJournalSnapshot(originalBytes, archive);
     if (!snapshot) {
       await renameReplacing(this.path, archive);
       console.warn(
-        `${this.path} has unsupported journal version ${String(version)}; archived as ${archive}`,
+        `${this.path} has unsupported journal data (${inlineFamily ? "inline Family PDF bytes" : String(version)}); archived as ${archive}`,
       );
       return;
     }
