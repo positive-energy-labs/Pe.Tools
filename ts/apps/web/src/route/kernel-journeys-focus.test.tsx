@@ -3,7 +3,7 @@ import { useState, useSyncExternalStore } from "react";
 import { journey as takeoffJourney, Drawing as TakeoffDrawing } from "../takeoff/adoption.test.fixture";
 import { adoptionData } from "@pe/agent-contracts/takeoff-read";
 import { createPortal } from "react-dom";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { route } from "./typed-route";
@@ -22,6 +22,130 @@ import { KeyScopeHost } from "@pe/kit/keys";
 import { module as families } from "../families/route";
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
 import { module as family } from "../family/route";
+import { detailResponse } from "../../../host/tests/schedule-fixture";
+import { createPeClient } from "@pe/agent-contracts/pe-api";
+import { contextFetch } from "@pe/runtime/context";
+import { routeInput } from "./host";
+
+test("JZ Schedules Description Enter stages r3, reviews BEFORE to AFTER, and shows a refused edit at its cell", async () => {
+  const host = await scheduleHost({ cold: true });
+  const detail = detailResponse();
+  const entry = detail.entries[0]!;
+  entry.columns[1]!.headerText = "Description";
+  entry.rows[0]!.values = ["SH1", "Duct heater"];
+  Object.assign(entry.rows[0]!.bindings[0]!, {
+    parameterName: "PE_G___Description", storageType: "String", rawValue: "Duct heater",
+    displayValue: "Duct heater", targetElementIds: [7],
+    targets: [{ ...entry.rows[0]!.bindings[0]!.targets[0]!, storageType: "String", rawValue: "Duct heater" }],
+  });
+  const second = structuredClone(entry.rows[0]!);
+  second.rowNumber = 2;
+  second.values[0] = "SH2";
+  second.subjectIds = [8];
+  second.bindings[0]!.targetElementIds = [8];
+  second.bindings[0]!.targets[0]!.elementId = 8;
+  entry.rows.push(second);
+  host.setDetail(detail);
+  const client = createPeClient(host.base, contextFetch);
+  const pending = new Set<Promise<void>>();
+  const listeners = new Set<(state: any) => void>();
+  const publishWork = async () => {
+    const state = await host.view();
+    for (const deliver of listeners) deliver(state.revision === 0 ? { kind: "absent" } : {
+      kind: "ready", history: { from: 0, acks: [] },
+      snapshot: { handle: { key: host.scope, revision: state.revision }, revision: state.revision, value: state.doc },
+    });
+  };
+  // Replay the existing fixture's HTTP inspection transport. Every state and refusal
+  // comes from the production host; no fixture code chooses a revision or edited value.
+  const native = createWorkFeedClient({ subscribe: () => () => {}, dirty() {} }, {
+    write: async (key, body) => {
+      const response = await client.response("work.apply", { ...routeInput(key.route, key), body });
+      const wire = await response.json();
+      return response.ok ? wire : wire.error.details;
+    },
+    submit: async command => {
+      const response = await host.post("/actions", command);
+      if (response.status >= 400) throw Error(JSON.stringify(response.value));
+      const result = await host.owner().wait(command.id);
+      await publishWork();
+      return result;
+    },
+  });
+  const work: WorkJournalDoor = { ...native, open: () => ({ subscribe(deliver) {
+    listeners.add(deliver); const task = publishWork(); pending.add(task);
+    void task.finally(() => pending.delete(task));
+    return () => { listeners.delete(deliver); };
+  } }) };
+  const source: UseSource = { kind: "use", open(ctx, deliver) {
+    const task = host.post("/pe/reads/value", {
+      read: "schedules.view", subscription: crypto.randomUUID(), generation: 1,
+      args: { target: host.b, ...(ctx.args as object) },
+    }).then(response => {
+      expect(response.status).toBe(200);
+      if (!ctx.signal.aborted) deliver({ kind: "complete", value: response.value, revision: 1 });
+    });
+    pending.add(task); void task.finally(() => pending.delete(task)); return () => {};
+  } };
+  const search = new URLSearchParams();
+  const mount = mounts.mountTypedRoute(schedules, {
+    address: { read: () => new URLSearchParams(search), write: next => { for (const [k,v] of next) search.set(k,v); }, subscribe: () => () => {} },
+    fixture: null, target: { kind: "document", ref: host.b }, work: { address: null, open: host.b },
+    custody: { current: () => true }, memory: () => ({}),
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work, sources: { "schedules.view": source } });
+  function Journey() {
+    useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
+    return <KeyScopeHost id="schedules-cell-edit"><TypedChrome mount={mount} document={<span>Project schedules</span>} /></KeyScopeHost>;
+  }
+  const router = createRouter({ routeTree: createRootRoute({ component: Journey }), history: createMemoryHistory({ initialEntries: ["/schedules"] }) });
+  const view = render(<RouterProvider router={router} />);
+  try {
+    fireEvent.click(await screen.findByRole("button", { name: "Choose schedule" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Panel" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    await waitFor(() => expect(mount.work()?.handle.revision).toBe(1));
+    await waitFor(() => expect(mount.value().current).toBe(true));
+    fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" })[1]!);
+    await waitFor(() => expect(mount.work()?.handle.revision).toBe(2));
+    await waitFor(() => expect(mount.problem()).toBeNull());
+    await screen.findByText("SH1");
+    await screen.findByText("SH2");
+    const input = (await screen.findAllByDisplayValue("Duct heater"))[0] as HTMLInputElement;
+    // Driver clicked the cell's left edge, then Ctrl+A and Input.insertText.
+    // A mouse-selected editable cell must give native text insertion an input.
+    const cell = input.closest("td")!;
+    act(() => cell.focus()); // jsdom has no browser default mousedown focus.
+    fireEvent.mouseDown(cell);
+    fireEvent.mouseUp(cell);
+    fireEvent.click(cell);
+    expect.soft(document.activeElement, "A clicked editable cell receives native text input before Enter").toBe(input);
+    const active = document.activeElement!;
+    fireEvent.keyDown(active, { key: "a", code: "KeyA", ctrlKey: true });
+    // Native insertText has no printable keydown. It can edit only a focused editor.
+    if (active === input) fireEvent.input(input, { target: { value: "Duct heater - gate review" }, inputType: "insertText", data: "Duct heater - gate review" });
+    fireEvent.keyDown(active, { key: "Enter", code: "Enter" });
+    await waitFor(async () => expect(await host.view()).toMatchObject({ revision: 3, doc: { cells: { "1::2": { edit: { value: "Duct heater - gate review" } } } } }));
+    // This recorded HTTP read adapter has no invalidation socket; Refresh re-reads host Value.
+    act(() => mount.refresh());
+    await waitFor(() => expect(mount.problem()).toBeNull());
+    await screen.findByDisplayValue("Duct heater - gate review");
+    fireEvent.click(screen.getByRole("button", { name: /plan Apply cells/i }));
+    await screen.findByText(/SH1.*Description: Duct heater → Duct heater - gate review/);
+    act(() => mount.cancel("push"));
+    // Another writer advances Work behind the drawn cell. The host must refuse the
+    // stale revision and its real reason must remain beside the user's cell.
+    await host.patch([{ path: ["cells", "1::2"], value: { edit: { value: "Other writer" } } }]);
+    const current = screen.getByDisplayValue("Duct heater - gate review");
+    fireEvent.mouseDown(current);
+    fireEvent.mouseUp(current);
+    fireEvent.click(current);
+    expect(document.activeElement).toBe(current);
+    fireEvent.change(current, { target: { value: "Must visibly refuse" } });
+    fireEvent.keyDown(current, { key: "Enter", code: "Enter" });
+    await waitFor(() => expect(within(current.closest("td")!).getByText(/document moved|revision|changed/i)).toBeTruthy());
+    expect(await host.view()).toMatchObject({ revision: 4, doc: { cells: { "1::2": { edit: { value: "Other writer" } } } } });
+  } finally { view.unmount(); mount.dispose(); await Promise.all(pending); }
+}, 30_000);
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 

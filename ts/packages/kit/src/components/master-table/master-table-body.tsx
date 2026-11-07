@@ -605,9 +605,8 @@ export function MasterTableBody<Row extends RowData>({
                             }
                             onMouseDown={(event) => {
                               // A click SELECTS the cell (F-J3-5a): an idle editor under the pointer
-                              // would take the caret and make typing append. The td takes focus; the
-                              // first printable key then replaces the value, and a double-click, F2 or
-                              // Enter edits in place.
+                              // would take the caret and make typing append. The td takes focus during
+                              // selection; mouse-up gives a single selected editor the whole value.
                               const target = event.target as HTMLElement;
                               const interceptEditor =
                                 target.matches(CELL_EDITOR) && document.activeElement !== target;
@@ -619,6 +618,24 @@ export function MasterTableBody<Row extends RowData>({
                               }
                               if (!isInteractive(event.target) || interceptEditor)
                                 cell.getSelectionStartHandler(document)(event);
+                            }}
+                            onMouseUp={(event) => {
+                              // Keep range selection on the td, but give a single-cell edit a native
+                              // input: IME/paste/insertText may supply no printable keydown to open it.
+                              if (
+                                event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey ||
+                                table.getSelectedCellCount() > 1
+                              ) return;
+                              const target = event.target as HTMLElement;
+                              const editor = event.currentTarget.querySelector<
+                                HTMLInputElement | HTMLTextAreaElement
+                              >(CELL_EDITOR);
+                              if (
+                                !editor || document.activeElement === editor ||
+                                (target !== event.currentTarget && target !== editor)
+                              ) return;
+                              editor.focus();
+                              editor.select();
                             }}
                             onDoubleClick={(event) => {
                               if (document.activeElement === event.currentTarget)

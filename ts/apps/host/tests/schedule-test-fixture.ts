@@ -65,7 +65,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
-export async function setup() {
+export async function setup(options: { cold?: boolean } = {}) {
   vi.stubEnv("PE_LANE", "dev");
   const dir = await mkdtemp(join(tmpdir(), "pe-schedule-chain-"));
   cleanup.push(() => rm(dir, { recursive: true, force: true, maxRetries: 5 }));
@@ -327,10 +327,12 @@ export async function setup() {
     if (receipt.state !== "succeeded") throw Error(JSON.stringify(receipt));
     return receipt.result;
   };
-  await bindReading({ readingId: reading.id, expectedRevision: 0, reading });
-  expect(
-    await patch([{ path: ["cells", "1::2"], value: { edit: { value: "150 VA" } } }]),
-  ).toMatchObject({ ok: true });
+  if (!options.cold) {
+    await bindReading({ readingId: reading.id, expectedRevision: 0, reading });
+    expect(
+      await patch([{ path: ["cells", "1::2"], value: { edit: { value: "150 VA" } } }]),
+    ).toMatchObject({ ok: true });
+  }
   const admission = async (id = crypto.randomUUID(), ref = b): Promise<ActionAdmission> => {
     const value: ActionAdmission = {
       id,
