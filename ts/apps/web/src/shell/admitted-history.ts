@@ -2,7 +2,7 @@ import { OLDER_WORK, UNREADABLE_WORK } from "@pe/agent-contracts";
 import { z } from "zod";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import type { createWorkJournal } from "../../../../packages/runtime/src/work-journal.ts";
-import { peReadings } from "../readings.ts";
+import { peReadings } from "../host/resource-stream";
 import { admittedWorkPatches } from "./admitted-cells.ts";
 import type { MountContext } from "./admitted-context.ts";
 import { currentReadingHashes, projectEvidence } from "./admitted-context.ts";

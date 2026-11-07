@@ -21,7 +21,9 @@ import baseline from "./host-door.baseline.json" with { type: "json" };
 const INFRASTRUCTURE = new Set(
   [
     // Shared subscription/read transport, including receipt observation.
-    "readings.ts",
+    "host/resource-stream.ts",
+    // Catalog transport extracted from the retired shell reading adapter.
+    "host/catalog-client.ts",
     // Persisted Work transport used by the shell's write and recovery paths.
     "route/host.ts",
     // Typed /call transport, including exact session/document headers and host errors.

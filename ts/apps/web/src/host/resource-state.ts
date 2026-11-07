@@ -1,7 +1,6 @@
 import { canonicalRouteInput } from "../../../../packages/agent-contracts/src/route-doc";
 /**
- * Transport subjects over the one source lifecycle admitted readings use (`openSourceReading`, which
- * owns deadline, failure and recovery); `#/readings` is only the wire. Hooks project its snapshot
+ * Host-owned resource snapshots, with a bounded wait and retained evidence. Hooks project the wire
  * onto the contract `Reading` so a View reads one vocabulary.
  *
  * A reading never feeds the page-wide busy sweep (ADR 0027 rule 9): pane heads say status.
@@ -25,10 +24,7 @@ import {
 } from "@pe/host-contracts/operation-types";
 import { Schema, Exit } from "effect";
 import { reportFault } from "#/host/diagnostics";
-import { peReadings, type Readings } from "#/readings";
-import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import type { UseSource } from "./readings";
-import { demandContext, openSourceReading } from "./readings-use";
+import { peReadings, type Readings } from "./resource-stream";
 
 export type { Lane };
 
@@ -77,88 +73,43 @@ function subject(
   publish: (reading: Reading<unknown>) => void,
 ): () => void {
   const request = JSON.parse(serialized) as ReadingRequest;
-  const meta: { changed?: boolean; reason: "gap" | "disconnected" } = { reason: "disconnected" };
   const deadline = Date.now() + SUBJECT_WAIT_S * 1000;
-  const live: UseSource = {
-    kind: "use",
-    open(_context, deliver) {
-      let revision = 0;
-      return source.subscribe(request, (frame) => {
-        if (frame.kind === "snapshot") {
-          const inventory =
-            request.kind === "inventory"
-              ? Schema.decodeUnknownExit(bridgeSessionsListSchema)(frame.value)
-              : null;
-          if (inventory && Exit.isFailure(inventory)) {
-            deliver({ kind: "failure", error: "Host inventory does not decode." });
-            return;
-          }
-          meta.changed = frame.changed;
-          deliver({
-            kind: "complete",
-            value: inventory && Exit.isSuccess(inventory) ? inventory.value : frame.value,
-            revision: ++revision,
-            fresh: !frame.stale,
-          });
-        } else if (frame.kind === "failure") deliver({ kind: "failure", error: frame.error });
-        else if (frame.kind === "stale" || frame.kind === "gap") {
-          meta.reason = frame.kind === "gap" ? "gap" : "disconnected";
-          deliver({ kind: "stale" });
-        }
-      });
-    },
-  };
-  const project = (snapshot: ReadingSnapshot<unknown>): Reading<unknown> => {
-    if (snapshot.status === "ready" && snapshot.current)
-      return {
-        state: "ready",
-        observation: snapshot.value,
-        ...(meta.changed === undefined ? {} : { changed: meta.changed }),
-      };
-    if (snapshot.status === "failed")
-      return {
-        state: "failed",
-        message: snapshot.reason ?? "unknown error",
-        ...(snapshot.value !== undefined && { previous: snapshot.value }),
-      };
-    if (snapshot.value !== undefined)
-      return { state: "stale", previous: snapshot.value, reason: meta.reason };
-    if (meta.reason === "gap" && snapshot.status === "unavailable") return absent;
-    return { state: "loading", requestId: serialized, deadline };
-  };
+  let closed = false;
   let last: Reading<unknown> = absent;
-  const emit = (snapshot: ReadingSnapshot<unknown>) => {
-    const next = project(snapshot);
-    // Identical evidence keeps its identity (the transport already reuses identical frames).
-    if (shallowSame(next, last)) return;
+  let previous: unknown;
+  const emit = (next: Reading<unknown>) => {
+    if (closed || shallowSame(next, last)) return;
     last = next;
     publish(next);
   };
-  emit({ status: "pending", current: false, reason: "Reading pending" });
-  const controller = new AbortController();
-  const close = openSourceReading(
-    live,
-    demandContext({ kind: "host" }, 0, null, controller.signal),
-    emit,
-    {
-      live: {
-        waitS: SUBJECT_WAIT_S,
-        onTimeout: () =>
-          reportFault(
-            {
-              code: "reading.timeout",
-              elapsedMs: SUBJECT_WAIT_S * 1000,
-              readingKind: request.kind,
-            },
-            Error(`reading ${serialized}: the host sent nothing before its deadline`),
-          ),
-      },
-    },
-  );
-  return () => {
-    controller.abort();
-    close();
-  };
+  emit({ state: "loading", requestId: serialized, deadline });
+  const timer = setTimeout(() => {
+    if (previous !== undefined) return emit({ state: "stale", previous, reason: "disconnected" });
+    reportFault({ code: "reading.timeout", elapsedMs: SUBJECT_WAIT_S * 1000, readingKind: request.kind },
+      Error(`reading ${serialized}: the host sent nothing before its deadline`));
+    emit({ state: "failed", message: `Source sent no answer after ${SUBJECT_WAIT_S}s; explicitly refresh to retry` });
+  }, SUBJECT_WAIT_S * 1000);
+  const release = source.subscribe(request, frame => {
+    if (closed) return;
+    if (frame.kind === "snapshot") {
+      const decoded = request.kind === "inventory" ? Schema.decodeUnknownExit(bridgeSessionsListSchema)(frame.value) : null;
+      if (decoded && Exit.isFailure(decoded)) {
+        clearTimeout(timer);
+        return emit({ state: "failed", message: "Host inventory does not decode.", previous });
+      }
+      previous = decoded && Exit.isSuccess(decoded) ? decoded.value : frame.value;
+      if (frame.stale) return emit({ state: "stale", previous, reason: "disconnected" });
+      clearTimeout(timer);
+      emit({ state: "ready", observation: previous, ...(frame.changed === undefined ? {} : { changed: frame.changed }) });
+    } else if (frame.kind === "failure") {
+      clearTimeout(timer);
+      emit({ state: "failed", message: frame.error, ...(previous === undefined ? {} : { previous }) });
+    } else if ((frame.kind === "gap" || frame.kind === "stale") && last.state !== "failed") {
+      emit(previous !== undefined ? { state: "stale", previous, reason: frame.kind === "gap" ? "gap" : "disconnected" }
+        : frame.kind === "gap" ? absent : { state: "loading", requestId: serialized, deadline });
+    }
+  });
+  return () => { closed = true; clearTimeout(timer); release(); };
 }
 
 const families = new WeakMap<Readings, (key: string) => Atom.Atom<Reading<unknown>>>();

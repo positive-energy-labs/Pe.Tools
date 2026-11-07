@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type {HostRead} from "../route/host-read.ts";
-import type {ReadingContext,UseSource} from "./readings.ts";
+import type {ReadingContext,UseSource} from "./source-contract.ts";
 import type {PeRouteId} from "@pe/agent-contracts/pe-api";
 // Transport inspects the frame only; the mount is the sole decoder of Value data.
 const publicationFrame=z.looseObject({
@@ -14,7 +14,7 @@ export function hostReadSource(read:HostRead):UseSource {
   const contract=read,key=read.key;
   return {...read.source,
       async open(ctx: ReadingContext, deliver: Parameters<UseSource["open"]>[1]) {
-        const { callCompose, publicationSource } = await import("../shell/readings-api.ts");
+        const [{ callCompose }, { publicationSource }] = await Promise.all([import("../host/catalog-client.ts"), import("../host/publication-source.ts")]);
         if (ctx.signal.aborted) return;
         return publicationSource({
           async read(context, publication, release) {

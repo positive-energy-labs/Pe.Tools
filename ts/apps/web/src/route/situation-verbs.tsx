@@ -10,7 +10,7 @@ import type { LucideIcon } from "lucide-react";
 import { FactChip } from "@pe/kit/lang/chip";
 import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
-import { changedInRevit } from "#/shell/readings-hooks";
+import { changedInRevit } from "#/host/resource-state";
 import type { ActionHandle, RouteHandle } from "./handle";
 import { useSituationPresentation } from "#/navigation/route-controls";
 

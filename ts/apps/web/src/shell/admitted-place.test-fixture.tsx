@@ -1,8 +1,8 @@
 import { createElement, useMemo } from "react";
-import type { AdmittedAddressPort } from "./admitted-address";
-import type { PlaceInput } from "./admitted-place";
+import type { AdmittedAddressPort } from "./typed-address";
+import type { PlaceInput } from "./typed-place";
 import { AdmittedPlaceBoundary, AdmittedPlacePane, type AdmittedPaneProps } from "./admitted-pane";
-import { fixtureName } from "./fixture-lane";
+import { fixtureName } from "./fixture-name";
 
 export function placeInput(
   address: AdmittedAddressPort,

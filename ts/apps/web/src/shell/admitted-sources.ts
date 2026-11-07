@@ -4,7 +4,7 @@ import {
   createAdmittedRouteRegistry,
   resolveRouteBindings,
 } from "../../../../packages/agent-contracts/src/route-module";
-import type { ReadingSource } from "./readings";
+import type { ReadingSource } from "./source-contract";
 const source = z.custom<ReadingSource>(
   (value) =>
     !!value &&

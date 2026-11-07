@@ -12,14 +12,14 @@ import { KeyScope, ScopeKeys, actionScopeKeys } from "@pe/kit/keys";
 import { routeOf, routeAddress, canonicalRouteInput, type LayoutNode } from "@pe/agent-contracts";
 import { useRouteTarget } from "../route/route-target";
 import { appAtomRegistry } from "./owner";
-import { admittedRouterAddress, PlaceBoundary } from "./admitted-pane";
-import type { AdmittedPlace, PlaceInput } from "./admitted-place";
+import { admittedRouterAddress, PlaceBoundary } from "./typed-place-boundary";
+import type { AdmittedPlace, PlaceInput } from "./typed-place";
 import { HistoryBoundary, HistoryRail } from "./history-rail";
 import { historyRequest, publicationPose, type HistorySnapshot } from "./history";
-import { DocumentPicker } from "./application-route-shell";
+import { DocumentPicker } from "./document-picker";
 import { RouteVisibility } from "../route/activity";
 import { SituationBand, TimelineHead } from "./situation-band";
-import { CatalogWorkReviews } from "./admitted-chrome";
+import { CatalogWorkReviews } from "./catalog-work-reviews";
 import { readLayoutState, writeLayoutState } from "./mount-page";
 import { GraphHistory } from "./mount-timeline";
 import { PaneActionSlots, usePaneActionSlot } from "./pane-actions";
@@ -30,7 +30,7 @@ import { useRouteViewBridge } from "../route/view-bridge";
 import { mountTypedRoute, type TypedMount } from "./typed-mount";
 import type { TypedRoute } from "../route/typed-route";
 import type { RouteFingerprint } from "@pe/agent-contracts";
-import type { AdmittedAddressPort } from "./admitted-address";
+import type { AdmittedAddressPort } from "./typed-address";
 import { hostedRouteAddress, type HostedRouteProps } from "../workbench/hosted-route";
 
 /** A typed route bypasses web admission. Only its host Work registration needs the closure stamp. */

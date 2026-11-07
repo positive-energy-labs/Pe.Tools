@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vite-plus/test";
-import type { ReadingContext, ReadingDelivery } from "./readings";
+import type { ReadingContext, ReadingDelivery } from "./source-contract";
 import { acquireSource, openSourceReading } from "./readings-use";
 
 test("only a fresh complete source publication is current, and close fences late output", () => {

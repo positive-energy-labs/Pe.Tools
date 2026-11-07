@@ -1,12 +1,10 @@
-import { currentFixture } from "#/shell/fixture-lane";
+import { currentFixture } from "../shell/fixture-name";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { hostFetch, runtimeStreamUrl } from "#/host/runtime";
 /**
  * The wire. One EventSource per tab: SSE frames, fences, reconnect backoff.
  *
- * This module is a transport only. Every reading's lifecycle (demand, deadline, failure,
- * retention, status) belongs to the shell reading engine (`#/shell/readings`); a View reads a
- * transport subject through `#/shell/readings-hooks` or a graph `subscriptionSource`. A write is
+ * This module is a transport only. Host resource snapshots and typed Values own their lifecycle; this module carries frames only. A write is
  * not a Reading: it is a plain async call whose success calls `dirty(request)`, which reacquires
  * that subject's snapshot from the host.
  */
@@ -20,7 +18,7 @@ import {
   type ReadingRequest,
   actionReceiptSchema,
 } from "@pe/agent-contracts";
-import { bindActionObserver } from "../../../packages/mcps/src/shared/takeoff-action-client";
+import { bindActionObserver } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { useEffect, useRef } from "react";
 import { reportFault } from "#/host/diagnostics";
 import { resolveWorkbenchConfig } from "#/workbench/config.ts";

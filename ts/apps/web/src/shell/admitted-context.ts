@@ -28,7 +28,7 @@ export type MountContext<W extends Record<string, unknown>> = ReturnType<
   typeof import("./admitted-scope.ts").createAdmittedScope<W>
 > & {
   route: MountedRoute<W>;
-  input: import("./admitted-place.ts").PlaceInput;
+  input: import("./typed-place.ts").PlaceInput;
   environmentIssuer: ReturnType<
     typeof import("../../../../packages/agent-contracts/src/route-kernel-environment.ts").createRouteEnvironmentIssuer
   >;

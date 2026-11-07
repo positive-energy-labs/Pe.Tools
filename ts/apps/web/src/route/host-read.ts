@@ -1,5 +1,5 @@
 import type { EntryContract } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
-import type { UseSource } from "../shell/readings.ts";
+import type { UseSource } from "../shell/source-contract.ts";
 import { z } from "zod";
 import type { PeRouteId } from "@pe/agent-contracts/pe-api";
 export interface Publication<D = unknown> {

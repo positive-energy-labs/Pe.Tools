@@ -13,14 +13,14 @@ import {
   type TargetResolution,
 } from "@pe/agent-contracts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { peReadings } from "#/readings";
+import { peReadings } from "#/host/resource-stream";
 import {
   readingAtom,
   inventoryOf,
   previousOf,
   targetInventory,
   retainTargetInventory,
-} from "#/shell/readings-hooks";
+} from "#/host/resource-state";
 import { soleUserDocument } from "#/chat/scope";
 import { useOwned } from "#/shell/owner";
 

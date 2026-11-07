@@ -16,7 +16,7 @@ import {
 } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { reportFault } from "#/host/diagnostics";
-import { useHostEvents } from "#/readings";
+import { useHostEvents } from "#/host/resource-stream";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { applyPageIntent, type PageIntent } from "./view-owner";
 import { useRouteCurrent, useRouteSearchSlice } from "./activity";

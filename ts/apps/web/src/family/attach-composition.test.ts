@@ -25,7 +25,7 @@ import { SdkDriver } from "../../../host/src/sdk-session.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../../../host/src/request-services.ts";
 import { hostResourceObserver } from "../../../host/src/resource-adapters.ts";
 import { detachedBridge, testHostInputs } from "../../../host/tests/effect-test.ts";
-import { bindActionReadings, type Readings } from "../readings";
+import { bindActionReadings, type Readings } from "../host/resource-stream";
 import { submitAction, recoverAction } from "../../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import { withInvocationContext, readOutbox } from "@pe/runtime/context";
 

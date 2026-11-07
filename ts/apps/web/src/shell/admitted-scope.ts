@@ -15,7 +15,7 @@ import type {
   Snapshots,
 } from "./admitted-context.ts";
 import { currentReadingHashes, projectEvidence } from "./admitted-context.ts";
-import type { PlaceInput } from "./admitted-place.ts";
+import type { PlaceInput } from "./typed-place.ts";
 import { createApplicationWorkRegistry } from "./application-work-registry.ts";
 import { createPagePolicy } from "./page-port.ts";
 import { admittedSeed } from "./admitted-reading-plan";

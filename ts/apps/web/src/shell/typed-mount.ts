@@ -1,5 +1,5 @@
 import {hostReadSource} from "./host-read-source.ts";
-import { writeReject } from "./admitted-chrome";
+import { writeReject } from "./catalog-work-reviews";
 import { harnessClient } from "../workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "../workbench/config";
 import { z } from "zod";
@@ -15,8 +15,8 @@ import { createFixtureWorkDoor } from "./fixture-work-door";
 import { publicationPose, recordedWorkDoor } from "./history";
 import { settleWork } from "./work-door-observation";
 import { freezePage } from "./page-port";
-import type { PlaceInput } from "./admitted-place";
-import type { ReadingContext, ReadingSource } from "./readings";
+import type { PlaceInput } from "./typed-place";
+import type { ReadingContext, ReadingSource } from "./source-contract";
 import type { DrawContext, EditFailure, EditHistory, TypedRoute } from "../route/typed-route";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";

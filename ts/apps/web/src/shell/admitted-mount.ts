@@ -28,7 +28,7 @@ import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";
 import { openSet, type OpenSet } from "./open-set.neutral";
 import { z } from "zod";
 import { createAdmittedObservers } from "./admitted-observers.ts";
-import type { PlaceInput } from "./admitted-place.ts";
+import type { PlaceInput } from "./typed-place.ts";
 import { createAdmittedReadings } from "./admitted-readings.ts";
 import { createAdmittedEnvironment, createAdmittedScope } from "./admitted-scope.ts";
 import { createAdmittedWork } from "./admitted-work.ts";

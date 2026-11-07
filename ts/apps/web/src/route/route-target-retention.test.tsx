@@ -6,8 +6,8 @@ import { address } from "@pe/agent-contracts";
 import { useRouteTarget } from "./route-target";
 
 const world = vi.hoisted(() => ({ inventory: {} as unknown }));
-vi.mock("#/shell/readings-hooks", async (original) => ({
-  ...(await original<typeof import("#/shell/readings-hooks")>()),
+vi.mock("#/host/resource-state", async (original) => ({
+  ...(await original<typeof import("#/host/resource-state")>()),
   readingAtom: (request: { kind: string }) => request,
 }));
 vi.mock("#/shell/owner", async (original) => ({

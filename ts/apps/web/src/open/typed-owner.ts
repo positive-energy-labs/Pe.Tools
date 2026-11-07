@@ -10,7 +10,7 @@ export function useOpenTypedOwner(ctx: OpenContext): OpenOwner {
         subscribe: () => () => {},
         version: () => 0,
         fixture: null,
-        busy: () => null,
+        busy: () => ["start", "open", "close", "stop", "restart"].find(id => current.current.write(id).pending) ?? null,
         view: {
           read: () => ({
             page: {
@@ -54,6 +54,6 @@ export function useOpenTypedOwner(ctx: OpenContext): OpenOwner {
           },
         }),
       }) as unknown as OpenOwner,
-    [],
+    [ctx],
   );
 }

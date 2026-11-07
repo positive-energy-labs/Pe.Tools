@@ -56,8 +56,8 @@ vi.mock("./providers", () => {
 });
 // No composer document: the machine has none to offer.
 vi.mock("#/machine/use-machine", () => ({ useMachineSlice: () => null }));
-vi.mock("#/readings", () => ({ useHostEvents: () => {} }));
-vi.mock("#/shell/readings-hooks", () => {
+vi.mock("#/host/resource-stream", () => ({ useHostEvents: () => {} }));
+vi.mock("#/host/resource-state", () => {
   const host = { known: true };
   return {
     previousOf: () => undefined,

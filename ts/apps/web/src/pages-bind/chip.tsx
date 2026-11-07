@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { routeAddress, type PageTargetReading } from "@pe/agent-contracts";
 import { useRouteSearch } from "#/route/activity";
-import { openEventSource } from "#/readings";
+import { openEventSource } from "#/host/resource-stream";
 import { peClient } from "#/host/pe-client";
 import { readPageTarget } from "./client";
 import { TooltipHint } from "@pe/kit/lang/tooltip";

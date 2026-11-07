@@ -15,14 +15,7 @@ import { resolveRouteBindings } from "../../../../packages/agent-contracts/src/r
 import { routeBindingSchema } from "../../../../packages/agent-contracts/src/route-bodies";
 import { createPagePolicy, selectionCodec } from "./page-port";
 
-export type AddressHistory = "push" | "replace";
-
-/** Application/router adapter. Search values are codec text, never router-decoded JSON. */
-export interface AdmittedAddressPort {
-  read(): URLSearchParams;
-  write(search: URLSearchParams, history: AddressHistory): void;
-  subscribe(listener: () => void): () => void;
-}
+import type { AdmittedAddressPort } from "./typed-address";
 
 const decodedValue = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), value: z.unknown() }),

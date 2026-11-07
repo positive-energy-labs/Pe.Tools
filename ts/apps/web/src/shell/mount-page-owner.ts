@@ -7,7 +7,7 @@ import { type RouteGraph } from "@pe/agent-contracts";
 import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
 import { createViewOwner } from "../route/view-owner";
 import { refuse, causeRefusal } from "../route/refusal";
-import { type ReadingState } from "./readings";
+import { type ReadingState } from "./source-contract";
 import { graphFields, type MountAdapters } from "./mount-contracts";
 /** Owns Page initialization, transitions, subject admission and stage selection. */
 export function createMountPage<P, W>(

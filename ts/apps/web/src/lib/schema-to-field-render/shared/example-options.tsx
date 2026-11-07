@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { changedInRevit, previousOf, useFieldOptionsReading } from "#/shell/readings-hooks";
+import { changedInRevit, previousOf, useFieldOptionsReading } from "#/host/resource-state";
 import type { SchemaNodeRef } from "@pe/schema-core";
 import { normalizeFieldOptionMode, readPathValue } from "@pe/schema-core";
 import type { FieldOptionItem, FieldOptionState, FieldRendererProps } from "./field-option";

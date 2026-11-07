@@ -95,6 +95,42 @@
     }
   },
   "verbs": {
+    "stop": {
+      "kind": "command",
+      "input": "none",
+      "label": "Stop Revit",
+      "review": "shown",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "instances.stop",
+      "intent": "stop"
+    },
+    "restart": {
+      "kind": "command",
+      "input": "none",
+      "label": "Hot reload Revit",
+      "review": "shown",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "instances.restart",
+      "intent": "restart"
+    },
     "start": {
       "kind": "command",
       "input": "none",
@@ -158,6 +194,8 @@
         "value"
       ],
       "verbs": [
+        "stop",
+        "restart",
         "start",
         "open",
         "close"
@@ -175,6 +213,8 @@
         "documents"
       ],
       "verbs": [
+        "stop",
+        "restart",
         "start",
         "open",
         "close"

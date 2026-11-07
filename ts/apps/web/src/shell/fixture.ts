@@ -10,11 +10,11 @@ import {
   type GraphSeedData,
 } from "@pe/agent-contracts";
 import { createGraphMount, type MountAdapters, type MountScope } from "./mount-owner";
-import type { ReadingSource } from "./readings";
+import type { ReadingSource } from "./source-contract";
 import { createSettingsOwner, settingFields } from "./settings";
 import type { WorkScopePorts } from "./use-work-scope";
 
-export { fixtureName, currentFixture } from "./fixture-lane";
+export { fixtureName, currentFixture } from "./fixture-name";
 
 interface FixtureMountEnvironment<P, W> {
   graph: RouteGraph<P, W>;

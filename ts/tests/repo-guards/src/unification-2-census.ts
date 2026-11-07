@@ -240,6 +240,8 @@ const compositionRoots = new Set([
   `${WEB}shell/typed-shell.tsx`,
   `${WEB}shell/mount-work.tsx`,
   `${WEB}shell/fixture-lane.ts`,
+  // The shared selector was extracted without the retired fixture engine.
+  `${WEB}shell/fixture-name.ts`,
   `${WEB}chat/owner.tsx`,
   `${WEB}shell/admitted-scope.ts`,
   `${WEB}shell/admitted-body.ts`,

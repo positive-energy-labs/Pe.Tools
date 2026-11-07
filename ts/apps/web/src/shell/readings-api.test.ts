@@ -1,8 +1,9 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { callOp, callCompose, ductsBodySource } from "./readings-api";
+import { ductsBodySource } from "./readings-api";
+import { callOp, callCompose} from "../host/catalog-client";
 import { DUCTS_BODY_VERSION_HEADER, readingKey } from "@pe/agent-contracts";
 import { demandContext } from "./readings-use";
-import { peReadings } from "../readings";
+import { peReadings } from "../host/resource-stream";
 const fetched = vi.hoisted(() => ({ host: vi.fn() }));
 vi.mock("../host/runtime", () => ({ hostFetch: fetched.host }));
 afterEach(() => fetched.host.mockReset());

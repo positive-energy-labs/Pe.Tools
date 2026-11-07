@@ -4,7 +4,7 @@ import {
 } from "@pe/host-contracts/contracts";
 import { z } from "zod";
 import { webBuildStamp } from "./build-stamp";
-import { currentFixture } from "#/shell/fixture-lane";
+import { currentFixture } from "../shell/fixture-name";
 import { createReadFetch } from "./read-fetch";
 
 const readFetch = createReadFetch((...args) => fetch(...args));

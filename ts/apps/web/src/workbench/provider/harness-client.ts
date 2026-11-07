@@ -19,7 +19,7 @@ import { followThread } from "@pe/agent-contracts/chat-state";
 import { fromStandardSchema } from "@pe/host-contracts/contracts";
 import { Cause, Exit, Schema } from "effect";
 import type { z } from "zod";
-import { openEventSource, peReadings } from "#/readings";
+import { openEventSource, peReadings } from "#/host/resource-stream";
 
 /** What a send posts: text, attachments, mentions (`promptRequestSchema`); the client mints its id. */
 export type PromptRequest = Omit<z.input<typeof promptRequestSchema>, "id">;

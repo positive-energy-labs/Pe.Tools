@@ -21,7 +21,7 @@ import type { DeviceListing, Pairing } from "@pe/host-contracts/pe-api";
 import { peClient } from "#/host/pe-client";
 import { LoadingContext } from "#/route/loading-context";
 import { HOST_READ_WAIT_S } from "#/route/waits";
-import { useEnvironmentAccess } from "#/shell/environment-readings";
+import { useEnvironmentAccess } from "#/host/environment-state";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 type Access =

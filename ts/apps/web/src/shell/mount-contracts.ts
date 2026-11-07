@@ -19,7 +19,7 @@ import {
   type WorkWriteAck,
 } from "@pe/agent-contracts";
 
-import { type ReadingLog, type ReadingSource, type ReadingState } from "./readings";
+import { type ReadingLog, type ReadingSource, type ReadingState } from "./source-contract";
 
 import { type TimelineEntry } from "./timeline";
 import { validateGraphChords } from "./keys";

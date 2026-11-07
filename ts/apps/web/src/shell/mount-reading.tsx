@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { RefreshCw } from "lucide-react";
 import type { ListReading } from "@pe/kit/lang/collection";
-import type { ReadingState } from "./readings";
+import type { ReadingState } from "./source-contract";
 import type { GraphMount } from "./mount-owner";
 
 /**

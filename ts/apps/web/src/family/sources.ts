@@ -1,5 +1,5 @@
 // Test-only bridge: the protected cells witness supplies its Work directly.
-import type { ReadingSource } from "../shell/readings";
+import type { ReadingSource } from "../shell/source-contract";
 import type { GraphMount } from "#/shell/mount";
 import type { FamilyPage } from "./page";
 import type { FamilyDraft } from "@pe/agent-contracts";

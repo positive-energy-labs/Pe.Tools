@@ -29,7 +29,7 @@ import {
 import type { createRouteOwner } from "#/shell/owner";
 import { refuse, writeRefusal, type Refusal } from "../route/refusal";
 import { DEFAULT_WAIT_S } from "../route/waits";
-import type { ReadingState } from "./readings";
+import type { ReadingState } from "./source-contract";
 import type { JournalDetail } from "./journal";
 
 export interface WorkHistory<I> {

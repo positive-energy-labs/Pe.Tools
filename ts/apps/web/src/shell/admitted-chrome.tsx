@@ -1,4 +1,4 @@
-import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
+import { CatalogWorkReviews, writeReject } from "./catalog-work-reviews";
 import { HostedChrome } from "../route/hosted-chrome";
 import { useMemo, useRef, useState, useEffect, useContext, createContext, type ReactNode } from "react";
 import { z } from "zod";
@@ -10,10 +10,7 @@ import {
   GraphLayoutView,
   type GraphLayoutState,
 } from "../../../../packages/kit/src/components/lang/graph-layout";
-import { catalogWorkCommands, catalogWorks, refusalText, workKey, workHandleSchema, type LayoutNode } from "@pe/agent-contracts";
-import { CatalogWorkReview, type CatalogWorkClient } from "../components/work/catalog-work";
-import { peReadings } from "#/readings";
-import { browserWorkPorts } from "./work-feed-client";
+import { type LayoutNode } from "@pe/agent-contracts";
 import type {
   RouteGraphJson,
   LayoutJson,
@@ -27,18 +24,15 @@ import {
   useRouteKeysPrimary,
   useHasGlobalNavigation,
 } from "../navigation/route-controls";
-import { SituationBand, TimelineHead, consentThread } from "./situation-band";
+import { SituationBand, TimelineHead } from "./situation-band";
 import { ReviewSurface } from "./review-surface";
 import { WriteAction, writeWord, type WriteCell, type WriteRun } from "@pe/kit/lang/write-action";
 import { writeResponseSchema } from "@pe/agent-contracts";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
-import { projectTimeline } from "./timeline";
 import { GraphHistory } from "./mount-timeline";
 import { PointerList } from "./pointer-list";
-import { secondsLeft } from "./countdown";
 import { worksharingOf } from "./verbs";
-import type { TimelineEntry } from "./timeline";
 
 import { RouteVisibility } from "../route/activity";
 import { SubjectDoor, type AdmittedSubject } from "./subject";
@@ -46,54 +40,6 @@ import { PaneActionSlots, usePaneActionSlot } from "./pane-actions";
 import { openSet, type OpenSet } from "./open-set.neutral";
 
 export const RouteDocument = createContext<ReactNode>(null);
-
-const catalogSnapshot = z.object({ doc: z.unknown(), handle: workHandleSchema });
-const catalogClient: CatalogWorkClient = {
-  watch: (key, receive, fail) => peReadings.subscribe({ ...key, kind: "work" }, (frame) => {
-    if (frame.kind === "failure") return fail(frame.error);
-    if (frame.kind === "gap" || ("stale" in frame && frame.stale)) return fail("Read the current Work before editing");
-    if (frame.kind !== "snapshot") return;
-    const parsed = catalogSnapshot.safeParse(frame.value);
-    if (parsed.success) receive(parsed.data);
-    else fail("Work could not be read. Refresh this page to reconnect.");
-  }),
-  write: async (handle, patches, label) => {
-    const result = await browserWorkPorts.write(handle.key, {
-      kind: "apply", press: crypto.randomUUID(), expectedRevision: handle.revision,
-      patches, label,
-    });
-    return result.ok ? null : { code: "refused", message: refusalText(result) };
-  },
-  submit: async (admission) => {
-    const result = await browserWorkPorts.submit(admission);
-    if (result.state === "detached") throw Error("Write transport detached; inspect History before retrying");
-    return result;
-  },
-};
-
-export function CatalogWorkReviews({ mount }: { mount: Pick<AdmittedMount,"work"|"workBasis"|"timeline"> & {page:{read():Readonly<Record<string,unknown>>}} }) {
-  const visible = useContext(RouteVisibility);
-  const key = mount.work()?.handle.key;
-  const target = mount.workBasis()?.token.scope.identity.target;
-  const identity = key ? workKey(key) : null;
-  const owners = useMemo(() => key
-    ? (Object.keys(catalogWorks) as (keyof typeof catalogWorks)[]).map((owner) => ({ owner, at: { ...key, route: owner } }))
-    : [], [identity]);
-  if (!visible || !key || target?.kind !== "document") return null;
-  return <Popover>
-    <PopoverTrigger aria-label="Open Work">Work</PopoverTrigger>
-    <SubjectPopoverContent aria-label="Work" className="max-h-(--available-height) overflow-y-auto p-(--gutter)">
-    {owners.map(({ owner, at }) => {
-      const apply = Object.entries(catalogWorkCommands).find(([, command]) =>
-        command.work.route === owner && command.writeBoundary.phase === "apply")![0];
-      return <CatalogWorkReview key={owner} owner={owner} at={at} target={target.ref} client={catalogClient}
-        reject={writeReject(mount.timeline(), [apply], (thread, requestId) =>
-          void harnessClient(resolveWorkbenchConfig().origin).permission(thread, requestId, "stop_writes"),
-          typeof mount.page.read().thread === "string" ? String(mount.page.read().thread) : undefined)} />;
-    })}
-    </SubjectPopoverContent>
-  </Popover>;
-}
 
 /** K4 owns reading state and deduplicated pane closure refresh. */
 const rosterSchema = z.array(z.object({ id: z.unknown(), label: z.string() }));
@@ -284,26 +230,6 @@ export function admittedLayout(
 /** A reviewed command is a write: the one kit button draws it (ADR 0030 rule 6). */
 const drawsWrite = (verb: RouteGraphJson["verbs"][string] | undefined) =>
   verb?.kind === "command" && verb.review === "shown";
-/** The open Reject? window on this verb's receipt; the ActionJournal receipt is its only source. */
-export function writeReject(
-  entries: readonly TimelineEntry[],
-  ids: readonly string[],
-  reject: (thread: string, requestId: string) => void,
-  boundThread?: string,
-) {
-  const open = projectTimeline(entries, {}).find((row) => {
-    const key = (row.entry.basis as { receipt?: { key?: string } } | undefined)?.receipt?.key;
-    return row.kind === "consent" && ids.includes(key ?? row.entry.verb ?? "");
-  });
-  if (!open) return null;
-  const thread = consentThread(open.entry, boundThread);
-  if (!thread) return null;
-  const requestId = open.outcome!.consentWindow!.requestId;
-  return {
-    until: open.consentUntil ? `${secondsLeft(open.consentUntil)}s` : "awaiting approval",
-    run: () => reject(thread, requestId),
-  };
-}
 /** What a held plan says: armed only from a sealed Read; any consumed change makes it stale. */
 export function writeHeld(
   label: string,

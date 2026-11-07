@@ -7,7 +7,7 @@
 import { machineNoticeSchema } from "@pe/host-contracts/native-adapter";
 import type { MachineNotice, ReadingFrame } from "@pe/agent-contracts";
 
-import { openEventSource } from "#/readings";
+import { openEventSource } from "#/host/resource-stream";
 import { readingsUrl, type OpenEvents } from "#/workbench/provider/harness-client";
 
 export function followNotices(options: {

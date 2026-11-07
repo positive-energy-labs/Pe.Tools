@@ -59,13 +59,13 @@ test("web callers cannot use raw JSON transport or hand response objects", () =>
   const found = globSync("**/*.{ts,tsx}", { cwd: source })
     .filter(
       (file) =>
-        !/\.(test|fixture)\./.test(file) && file.replaceAll("\\", "/") !== "shell/readings-api.ts",
+        !/\.(test|fixture)\./.test(file) && file.replaceAll("\\", "/") !== "host/catalog-client.ts",
     )
     .flatMap((file) =>
       violations(readFileSync(resolve(source, file), "utf8")).map((v) => `${file}: ${v}`),
     );
   expect(found).toEqual([]);
-  expect(readFileSync(resolve(source, "shell/readings-api.ts"), "utf8")).not.toMatch(
+  expect(readFileSync(resolve(source, "host/catalog-client.ts"), "utf8")).not.toMatch(
     /export (?:async )?function requestJson/,
   );
 });

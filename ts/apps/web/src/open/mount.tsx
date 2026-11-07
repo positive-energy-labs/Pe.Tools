@@ -1,4 +1,4 @@
-import type { ReadingState } from "#/shell/readings";
+import type { ReadingState } from "#/shell/source-contract";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { HarnessThreadSummary, Machine } from "@pe/agent-contracts";
 import type { OpenContext } from "./route";

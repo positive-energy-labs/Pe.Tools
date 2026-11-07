@@ -1,17 +1,17 @@
 import { type Machine } from "@pe/agent-contracts";
-import { routeFromGraph, mountRoute, type RouteAdapters, type MountBody } from "#/shell/mount";
+
 import { ListView } from "@pe/kit/lang/list-view";
 import { useList } from "@pe/kit/lang/collection";
 import { Button } from "@pe/kit/lang/button";
-import { OpenOwnerContext, openControlAdapters } from "../open/kernel";
+import { OpenControls, useOpenOwner } from "../open/kernel";
 import { keyOf } from "#/machine/session";
 import { lifecycleRequest } from "../open/lifecycle";
 import { readingList } from "#/shell/mount-reading";
-import type { ReadingState } from "#/shell/readings";
-import { sessionsGraph } from "./graph";
-import type { OpenPageState } from "../open/graph";
-type Page = OpenPageState;
-function Sessions({ owner, page, verbs }: MountBody<Page, unknown>) {
+import type { ReadingState } from "#/shell/source-contract";
+function Sessions() {
+  const owner = useOpenOwner();
+  const page = owner.view.read().page;
+  const session = page.draft.target ?? "";
   const reading = owner.readings.get("machine") as ReadingState<Machine>;
   const machine = reading.value ?? reading.previous;
   const sessions = readingList(reading, (value) => value.revit.sessions ?? []);
@@ -26,16 +26,16 @@ function Sessions({ owner, page, verbs }: MountBody<Page, unknown>) {
   const list = useList({
     ...sessions,
     keyOf,
-    followSelection: { key: page.session || null },
+    followSelection: { key: session || null },
     search: (row) => ({ text: [keyOf(row), String(row.row.year)] }),
     select: "single",
-    onPick: (row) => owner.view.setPage({ session: keyOf(row) }),
+    onPick: (row) => owner.view.setPage({ draft: { ...page.draft, target: keyOf(row) } }),
   });
-  const selected = rows.find((row) => keyOf(row) === page.session);
+  const selected = rows.find((row) => keyOf(row) === session);
   return (
     <>
       <a
-        href={`/open?draft=${encodeURIComponent(JSON.stringify({ ...page.draft, target: page.session }))}`}
+        href={`/open?draft=${encodeURIComponent(JSON.stringify({ ...page.draft, target: session }))}`}
       >
         Open a document in this session
       </a>
@@ -45,7 +45,7 @@ function Sessions({ owner, page, verbs }: MountBody<Page, unknown>) {
         row={(row) => ({
           label: keyOf(row),
           sub: `Revit ${row.row.year}`,
-          active: keyOf(row) === page.session,
+          active: keyOf(row) === session,
         })}
         empty={{ message: sessions.failure ?? "No running sessions", exit: "Start Revit" }}
       />
@@ -81,17 +81,12 @@ function Sessions({ owner, page, verbs }: MountBody<Page, unknown>) {
       )}
       {(machine?.revit.years ?? []).map((year) => (
         <div key={year}>
-          {verbs({ request: { year: String(year), owner: "you", addins: "on" }, refusal: null })}
+          <Button label={`Start Revit ${year}`} onClick={() => void owner.control("start", { request: { year: String(year), owner: "you", addins: "on" }, refusal: null }).run()}>Start Revit {year}</Button>
         </div>
       ))}
     </>
   );
 }
-export const sessionsAdapters: RouteAdapters<Page, unknown> = {
-  ...openControlAdapters,
-  verbDepends: { start: ["machine"], stop: ["machine"], restart: ["machine"] },
-  wrap: (owner, children) => <OpenOwnerContext value={owner}>{children}</OpenOwnerContext>,
-  bodies: { sessions: (body) => <Sessions {...body} /> },
-};
-export const sessionsRoute = routeFromGraph(sessionsGraph, sessionsAdapters, "/session-admin");
-export const SessionsRoute = mountRoute(sessionsGraph, sessionsAdapters);
+export function SessionsRoute() {
+  return <OpenControls><Sessions /></OpenControls>;
+}

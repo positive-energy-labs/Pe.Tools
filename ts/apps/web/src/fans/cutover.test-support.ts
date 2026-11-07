@@ -11,7 +11,7 @@ import { RouteWorkspace, observeResources } from "@pe/runtime";
 import sheet from "../ducts/sheet/sheet.fixture.json";
 import { snapshot } from "../ducts/test-fixture";
 import { placeInput } from "../shell/admitted-place.test-fixture";
-import type { ReadingSource } from "../shell/readings";
+import type { ReadingSource } from "../shell/source-contract";
 import { browserWorkPorts, createWorkFeedClient } from "../shell/work-feed-client";
 
 import { mountTypedRoute } from "../shell/typed-mount";
@@ -22,7 +22,7 @@ export async function createWitness(
   closes: (() => void)[],
   saved = new Map<string, unknown>(),
   overrides: Readonly<Record<string, ReadingSource>> = {},
-  work?: import("../shell/admitted-place").PlaceInput["work"],
+  work?: import("../shell/typed-place").PlaceInput["work"],
   receipts?: import("@pe/agent-contracts").WorkJournalDoor["receipts"],
 ) {
   const admitted = await admit();

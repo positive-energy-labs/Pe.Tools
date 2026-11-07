@@ -1,6 +1,7 @@
-import { sessionsRoute } from "./sessions/route";
+import { SessionsRoute } from "./sessions/route";
 import {
   createRouter as createTanStackRouter,
+  createRoute,
   Link,
   type AnyRoute,
   type ErrorComponentProps,
@@ -11,6 +12,7 @@ import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
 import { takeoffsRoute } from "./takeoff/route";
 import { Route as rootRoute } from "./routes/__root";
+const sessionsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/session-admin", component: SessionsRoute });
 
 // Use the unannotated root: the generated tree's file-only type map excludes code routes.
 // `addChildren` mutates the root and returns it, so `routeTree.children` already holds the code

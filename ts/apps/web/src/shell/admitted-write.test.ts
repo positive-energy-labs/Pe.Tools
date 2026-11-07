@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vite-plus/test";
 import type { TimelineEntry } from "./timeline";
-import { writeHeld, writeReject } from "./admitted-chrome";
+import { writeHeld} from "./admitted-chrome";
+import { writeReject } from "./catalog-work-reviews";
 
 const seal = {
   requestHash: "h",

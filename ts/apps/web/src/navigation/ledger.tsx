@@ -7,7 +7,7 @@ import { ListView } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
 import { Button } from "@pe/kit/lang/button";
 import type { HarnessThreadSummary } from "@pe/agent-contracts";
-import { currentFixture } from "#/shell/fixture-lane";
+import { currentFixture } from "../shell/fixture-name";
 import { peClient } from "#/host/pe-client";
 import { useMachine } from "#/machine/use-machine";
 import { attention, machineOf } from "#/machine/model";

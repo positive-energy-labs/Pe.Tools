@@ -22,7 +22,7 @@ import {
 } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { focusQuiet } from "@pe/kit/lib/utils";
-import { useHostEvents } from "#/readings";
+import { useHostEvents } from "#/host/resource-stream";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import type { Resumed } from "#/chat/thread-work";
 import { useWorkbench } from "./provider";

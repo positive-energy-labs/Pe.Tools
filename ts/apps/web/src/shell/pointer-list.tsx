@@ -6,7 +6,7 @@ import { PlainList } from "@pe/kit/lang/list-view";
 import { cite, clearCitation, type SubjectReference } from "@pe/kit/lang/attention";
 import type { Pointer } from "../../../../packages/agent-contracts/src/pointers.ts";
 import { WorkbenchContext } from "#/workbench/provider/thread-summary";
-import { callOp } from "./readings-api";
+import { callOp } from "../host/catalog-client";
 
 /** ponytail: polled, ceiling one host read per 2 s per open route; upgrade to a host feed if lists grow. */
 const POLL_MS = 2000;

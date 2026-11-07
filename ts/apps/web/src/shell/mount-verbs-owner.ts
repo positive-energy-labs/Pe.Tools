@@ -12,7 +12,7 @@ import {
 } from "@pe/agent-contracts";
 
 import { causeRefusal, refuse, writeRefusal } from "../route/refusal";
-import { type ReadingAttempt } from "./readings";
+import { type ReadingAttempt } from "./source-contract";
 
 import { kernelCellVerbs } from "./verbs-cells";
 import {

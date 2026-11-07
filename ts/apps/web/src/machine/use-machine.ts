@@ -6,9 +6,9 @@
 import { useCallback, useState } from "react";
 import type { Machine, Reading } from "@pe/agent-contracts";
 
-import { useEnvironmentReading, useEnvironmentReadingSlice } from "#/shell/environment-readings";
+import { useEnvironmentReading, useEnvironmentReadingSlice } from "#/host/environment-state";
 import { acknowledgeUpdate } from "#/host/install";
-import { dirty } from "#/readings";
+import { dirty } from "#/host/resource-stream";
 
 import { useAction } from "#/actions/use-action";
 

@@ -19,7 +19,7 @@ import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
 import type { HostActiveDocumentSummary } from "@pe/host-contracts/operation-types";
 import type { PodRouteDescriptor } from "@pe/host-contracts/pe-api";
 import type { Machine } from "@pe/agent-contracts";
-import { previousOf, useInventory, useReading } from "#/shell/readings-hooks";
+import { previousOf, useInventory, useReading } from "#/host/resource-state";
 import { usePodRoutes } from "#/route/pod-routes";
 import { hostFetch } from "#/host/runtime";
 

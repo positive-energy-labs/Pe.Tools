@@ -25,7 +25,7 @@ import { createChatPageStore } from "./store";
 import { RouteDock } from "./route-panes";
 import { useRouteCurrent } from "#/route/activity";
 import { AdmittedPane } from "#/shell/admitted-place.test-fixture";
-import { admittedRouterAddress } from "#/shell/admitted-pane";
+import { admittedRouterAddress } from "#/shell/typed-place-boundary";
 import { createRouteShell } from "#/shell/admitted-mount";
 import { sourceRouteServices } from "#/shell/source-route-services";
 import { admittedSources } from "#/shell/admitted-sources";
@@ -79,9 +79,9 @@ const hostEvents = vi.hoisted(() => {
 });
 vi.mock("#/chat/chat-shell", () => ({ ChatShell: () => <div data-chat-probe="" /> }));
 vi.mock("#/route/situation-ladder", async () => ({ ChatPlanIntent: (await import("react")).createContext(null) }));
-vi.mock("#/readings", async (actual) => {
+vi.mock("#/host/resource-stream", async (actual) => {
   const { useEffect } = await import("react");
-  const real = await actual<typeof import("#/readings")>();
+  const real = await actual<typeof import("#/host/resource-stream")>();
   // Readings are quiet here: no stream subscription leaves the test.
   real.peReadings.subscribe = () => () => {};
   return {
@@ -94,8 +94,8 @@ vi.mock("#/readings", async (actual) => {
       }, [enabled, onEvent]),
   };
 });
-vi.mock("#/shell/readings-hooks", async (actual) => ({
-  ...(await actual<typeof import("#/shell/readings-hooks")>()),
+vi.mock("#/host/resource-state", async (actual) => ({
+  ...(await actual<typeof import("#/host/resource-state")>()),
   useReading: () => ({ state: "pending" }),
   previousOf: () => undefined,
 }));

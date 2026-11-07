@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { DocumentRef } from "@pe/agent-contracts";
 
-import { callOp } from "#/shell/readings-api";
+import { callOp } from "../host/catalog-client";
 
 /** rhvac.open extracts the Jet file; only rhvac.launch starts the RHVAC application. */
 export const takeoffReads = {

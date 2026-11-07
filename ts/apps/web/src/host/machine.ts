@@ -4,7 +4,7 @@ import { hostFetch } from "#/host/runtime";
  * The machine's mutations other than update (`install.ts`): the share switch, and the tray's two
  * host verbs. Each is a plain call; the Machine reading is the only state, so success dirties it.
  */
-import { dirty } from "#/readings";
+import { dirty } from "#/host/resource-stream";
 import type { ActionReceipt } from "@pe/agent-contracts";
 
 export async function alignRevitBootstrap(

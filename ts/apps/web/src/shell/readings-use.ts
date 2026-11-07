@@ -1,17 +1,18 @@
 import type { ReadingRequest } from "@pe/agent-contracts";
-import type { Readings } from "../readings";
+import type { Readings } from "../host/resource-stream";
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { Immutable } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import { z } from "zod";
 import {
   contentHash,
   openSource,
+} from "./readings";
+import {
   type DeriveSource,
   type ReadingContext,
   type ReadingPublication,
   type ReadingSource,
-  type UseSource,
-} from "./readings";
+  type UseSource} from "./source-contract";
 
 /** A demand attempt's context: no Page or Work, only its target, attempt generation and args. */
 export const demandContext = (
@@ -186,7 +187,7 @@ export function subscriptionSource<T>(options: {
     dirties: options.dirties,
     async open(context, deliver) {
       // Lazy import keeps the graph React-free and construction free of browser/service effects.
-      const resources = options.resources ?? (await import("../readings")).peReadings;
+      const resources = options.resources ?? (await import("../host/resource-stream")).peReadings;
       if (context.signal.aborted) return;
       let revision = 0;
       let value: T | undefined;
