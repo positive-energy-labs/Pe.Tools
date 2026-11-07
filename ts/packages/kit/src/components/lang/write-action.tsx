@@ -87,7 +87,12 @@ export function PreviewAction({ handle, label, children, says = `Plan ${label} f
   const raw = handle.read();
   const parsed = reviewSchema.safeParse(raw);
   const review = parsed.success ? parsed.data : null;
-  const nativeWrites = z.object({ value: z.object({ writes: z.array(z.object({ outcome: z.string() })) }) }).safeParse(review?.preview);
+  const nativeWrites = z.object({ value: z.object({ writes: z.array(z.object({ outcome: z.string(), reason: z.string().optional() })) }) }).safeParse(review?.preview);
+  const refused = nativeWrites.success ? nativeWrites.data.value.writes.filter(write => write.outcome === "refused") : [];
+  const planRefusal = z.object({ planRefusal: z.string() }).safeParse(review?.preview);
+  const refusal = planRefusal.success ? planRefusal.data.planRefusal : refused.length
+    ? [...new Set(refused.map(write => write.reason).filter(Boolean))].join("; ") || `${refused.length} planned writes were refused.`
+    : null;
   const empty = nativeWrites.success && (!nativeWrites.data.value.writes.some((write ) => write.outcome === "planned") ||
       nativeWrites.data.value.writes.some((write) => write.outcome === "refused"));
   const sealed = !!review && !review.stale && writeResponseSchema.safeParse(review.preview).success;
@@ -108,7 +113,7 @@ export function PreviewAction({ handle, label, children, says = `Plan ${label} f
     } : null}
     stale={review?.stale ? "changed since plan" : null}
     plan={() => run(() => handle.plan())}
-    apply={{ hidden: empty, label, says: `${label} what the plan sealed`, refusal: sealed ? null : "Plan the current Work first",
+    apply={{ hidden: empty, label, says: `${label} what the plan sealed`, refusal: refusal ?? (sealed ? null : "Plan the current Work first"),
       run: () => run(() => handle.apply()), done: `${label} sent` ,
       }} />);
 }
@@ -264,6 +269,10 @@ export function WriteAction({
           </p>
         ) : null}
         {reject?.content}
+        {/* E8-03: the action refusal is an exception to sentence-free working surfaces; a hidden Apply must explain its hold. */}
+        {armed && !reject && apply.refusal ? (
+          <p role="status" data-tone="caution" className="t-small">Apply is held: {apply.refusal}</p>
+        ) : null}
         {(armed || reject) && outcome?.kind !== "done" ? (
           <div className="mt-2 flex items-center justify-between gap-2">
             {reject ? (
