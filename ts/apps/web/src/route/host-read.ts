@@ -67,7 +67,7 @@ export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
               const input = contract.input.parse(args);
               const value = provider(input);
               const id = `fixture:${key}:${name}:${JSON.stringify(input)}`;
-              return contract.output.parse({
+              return {
                 key: id,
                 generation: 0,
                 version: 1,
@@ -80,7 +80,7 @@ export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
                   trace: [],
                   freshness: "current",
                 },
-              });
+              };
             },
           }
         : {}),
