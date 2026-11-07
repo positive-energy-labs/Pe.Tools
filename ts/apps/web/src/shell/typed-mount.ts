@@ -376,6 +376,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   syncReads();
   const mounted = {
     spec, subjectState, move,
+    absentOwners:()=>[...owners].filter(([id,owner])=>id!==own&&owner.absent).map(([route])=>route),
     startAction():import("../route/typed-route").ActionHandle|null {
       const record=owners.get(own);
       if(!record?.absent||!edits?.seed||!key||input.readOnly||input.history) return null;

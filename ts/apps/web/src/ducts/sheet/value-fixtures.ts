@@ -48,7 +48,7 @@ const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly strin
     .map((row) => `${row.uniqueId}@${row.portIndex}`);
   const ductsWork = ductsDocumentSchema.parse({}),
     fansWork = fansDocumentSchema.parse({});
-  const data = fansSheetData.parse({
+  const data = fansSheetData.parse({espOptions:null,espOptionsError:"Fixture has no native parameter options",
     open,
     opened,
     rows,

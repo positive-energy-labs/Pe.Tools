@@ -1,3 +1,4 @@
+import { useRef, useLayoutEffect, useSyncExternalStore } from "react";
 import type { CellLike } from "@pe/agent-contracts";
 import {
   cellFromDraft,
@@ -128,4 +129,20 @@ export function handleCellProps({
         onCommit: cell.facts?.readOnly ? undefined : async (text) =>
           cell.stage(parse ? parse(text) : facts.numeric ? Number(text) : text, history),
       };
+}
+
+/** Keyed drawing subscriptions share the owner snapshot; no acquisition or writable copy. */
+export interface CellCollection<C> {
+  cells:Readonly<Record<string,C>>;
+  at(key:string):CellHandle;
+  listeners:Set<()=>void>;
+}
+export function useCellCollection<C>(cells:Readonly<Record<string,C>>,at:CellCollection<C>["at"]):CellCollection<C> {
+  const live=useRef<CellCollection<C>>({cells,at,listeners:new Set()}).current;
+  live.cells=cells;live.at=at;
+  useLayoutEffect(()=>{for(const notify of live.listeners)notify();},[live,cells,at]);
+  return live;
+}
+export function useCollectionCell<C>(live:CellCollection<C>,key:string):C|undefined {
+  return useSyncExternalStore(notify=>{live.listeners.add(notify);return ()=>{live.listeners.delete(notify);};},()=>live.cells[key]);
 }

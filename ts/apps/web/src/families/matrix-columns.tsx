@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import {
   familyCellAddress,
   familyCellKey,
@@ -7,7 +7,7 @@ import {
   type FamilyCellValue,
   type MeasuredDisplayUnit,
 } from "@pe/agent-contracts";
-import type { CellHandle } from "@pe/kit/lang/cell";
+import {useCollectionCell,type CellCollection} from "@pe/kit/lang/cell";
 import { ReadCell } from "@pe/kit/table/cells";
 import { useCellNavigation } from "@pe/kit/table/cell-navigation";
 import { cellFromDraft, StateCell, type CellRefusal, type CellTransition } from "@pe/kit/lang/cell";
@@ -90,38 +90,7 @@ function cellReason(row: TypeRow, key: string, instance: boolean): string {
   return `Type "${row.typeName}" of ${row.familyName}: ${what}${observed} currently. Type to stage your value. Clear restores the model value. Plan generates the spec from staged values only.`;
 }
 
-/**
- * A drawn pivot cell subscribes to its Work key. A Work change redraws the affected cells without
- * rebuilding the type grid's row and column windows.
- */
-export interface LiveCells {
-  cells: Readonly<Record<string, FamilyCellState>>;
-  at: (key: string) => CellHandle;
-  listeners: Set<() => void>;
-}
-
-export function useLiveCells(
-  cells: Readonly<Record<string, FamilyCellState>>,
-  at: LiveCells["at"],
-): LiveCells {
-  const live = useRef<LiveCells>({ cells, at, listeners: new Set() }).current;
-  live.cells = cells;
-  live.at = at;
-  useLayoutEffect(() => {
-    for (const notify of live.listeners) notify();
-  }, [live, cells, at]);
-  return live;
-}
-
-function useCellAt(live: LiveCells, key: string): FamilyCellState | undefined {
-  return useSyncExternalStore(
-    (notify) => {
-      live.listeners.add(notify);
-      return () => void live.listeners.delete(notify);
-    },
-    () => live.cells[key],
-  );
-}
+export type LiveCells=CellCollection<FamilyCellState>;
 
 /** One parameter cell: subscribed to its own key, so a Work change redraws it and nothing else. */
 export function ParamCell({
@@ -141,7 +110,7 @@ export function ParamCell({
   // name, never its element id, which Revit reissues on every reload.
   const address = { familyName: row.familyName, typeName: row.typeName, parameter: col.name };
   const key = familyCellKey(address);
-  const cell = useCellAt(live, key);
+  const cell = useCollectionCell(live, key);
   const scopeOf = row.scopes[col.key];
   const value = row.values[col.key] ?? "";
   const unresolved = !scopeOf || scopeOf === "Unresolved";
