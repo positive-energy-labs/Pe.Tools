@@ -167,7 +167,7 @@ type ProjectedField<K, R extends Field["role"]> = R extends "subject"
       agent: "set";
       cardinality: "many";
       identity: "subject";
-      picker: { reading: "value"; options: "pickSubject" };
+      picker: { reading: string; options: "pickSubject" };
     }
   : {
       role: R;
