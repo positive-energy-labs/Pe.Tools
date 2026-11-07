@@ -720,14 +720,14 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                     canonicalJson([identity.caller, graph.publication.subscription]),
                     graph.publication.generation,
                     port,
-                    history && writer ? async (publication) => {
+                    history && writer ? (publication) => history.record(async () => {
                       const row = await scoped(consumption!)(inventory.document((graph.args as { target: import("@pe/agent-contracts").DocumentRef }).target).pipe(Effect.provideService(RequestIdentity, identity)));
                       const address = addressSchema.parse(row.address);
                       await complete(consumption!);
                       const raw = web.headers.get("x-pe-history-page");
                       const pose = raw ? historyPoseSchema.parse(JSON.parse(decodeURIComponent(raw))) : { instance: graph.name, route: graph.name.split(".")[0]!, page: {}, href: `/${graph.name.split(".")[0]}` };
-                      return history.keep(canonicalJson([identity.caller, graph.publication!.subscription]), graph.name, pose, address, row, publication);
-                    } : undefined,
+                      return [canonicalJson([identity.caller, graph.publication!.subscription]), graph.name, pose, address, row, publication];
+                    }) : undefined,
                   )
                 : graph.evaluate(port).catch((error: unknown) => {
                     if (isDoorFailure(error)) throw error;
@@ -835,7 +835,23 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         Effect.provideService(HostNativeRead, Context.get(services, HostNativeRead)),
       );
     });
-  const work = { workspace, registrations, pointers: options.pointers };
+  const commandRead = async <A>(admission: import("@pe/agent-contracts").ActionAdmission,
+    method: "read" | "view", key: import("@pe/agent-contracts").WorkKey, route: string,
+    read: (context: import("@pe/runtime").WorkReadContext) => Promise<A>) => {
+    const current = await run(readSets.open({key: `command.work.${method}`,
+      input: json({id: admission.id, command: admission.key, key, route}), scope: canonicalJson(admission.target)}, null));
+    const scoped: WorkInputRunner = effect => run(Effect.provideService(effect, CurrentInputConsumption, current));
+    try {
+      const value = await read(workReadContext(current, scoped));
+      if (writer && !writer.capture.truncated()) await scoped(sealed(current));
+      return value;
+    } finally { await run(current.close); }
+  };
+  const commandReads: NonNullable<import("./command-executor.ts").CommandResources["workReads"]> = admission => ({
+    read: (key, route) => commandRead(admission, "read", key, route, context => workspace.read(key, route, context)),
+    view: (key, route) => commandRead(admission, "view", key, route, context => workspace.view(key, route, context)),
+  });
+  const work = { workspace, registrations, pointers: options.pointers, reads: commandReads };
   const nativeCall = Effect.fn("Reads.nativeBody")(function* (raw: NativeReadInput) {
     const { answer } = yield* nativeBody(raw, Context.get(services, HostNativeRead).read(raw));
     return HttpServerResponse.jsonUnsafe(answer.value, {

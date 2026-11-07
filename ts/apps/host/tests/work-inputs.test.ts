@@ -361,7 +361,7 @@ test("Work that cannot be recorded truncates capture; the live Work still answer
     return begun.ok ? begun.carriage : undefined;
   };
   await capture.read(key, "raw", undefined, carriage("raw")); // an undefined root is not a recorded null
-  expect(writer.truncation).toEqual({ at: 2, reason: "encoding" });
+  expect(writer.truncation).toEqual({ at: 2, stoppedAt: expect.any(Number), reason: "encoding" });
   await capture.read(key, "view", missingTitle, carriage("view"));
   // Capture stopped at the first loss; later live reads answer and keep no taking.
   expect(await live.view(key, "fans", request.context)).toMatchObject({ revision: 0 });
@@ -370,7 +370,7 @@ test("Work that cannot be recorded truncates capture; the live Work still answer
   await expect(
     consumer({ kind: "recording", recordingStore: await reader(dir), at: null }, request.consumption.id),
   ).rejects.toMatchObject({ problem: "recording.context" });
-  expect((await reader(dir)).truncation).toEqual({ at: 2, reason: "encoding" });
+  expect((await reader(dir)).truncation).toEqual({ at: 2, stoppedAt: expect.any(Number), reason: "encoding" });
 });
 
 test("a failing taking observer truncates capture without failing the live read", async () => {
@@ -510,4 +510,25 @@ test("absent Work feeds capture and replay null without stopping recording", asy
     if (!begun.ok) throw begun.error;
     expect(await source.feed(key, admission, shape, begun.carriage)).toBeNull();
   }
+});
+
+test("command Work reads carry context through binding and revalidation",async()=>{
+  const {dir,writer}=await bundle();
+  const { ActionJournal }=await import("../src/action-journal.ts");
+  const { commands,tools }=await import("@pe/agent-contracts");
+  const { z }=await import("zod");
+  const { crossingOf }=await import("./callers.ts");
+  const workspace=new RouteWorkspace({registrations:[{spec:tools.fans.work}],store:memory(),capture:capturedWorkReads(writer,run)});
+  const journal=new ActionJournal(join(dir,"journal.json"),Date.now);
+  const request=await consumer({kind:"live",captureStore:writer});
+  journal.bindCommands({work:workspace,workReads:()=>({read:(key,route)=>workspace.read(key,route,request.context),view:(key,route)=>workspace.view(key,route,request.context)}),probe:async()=>true,resolve:()=>({definition:commands["ducts.plan-losses"],prepared:z.unknown(),bind:async ctx=>{await ctx.selectWork(tools.fans.work,{key,revision:0});return{prepare:async()=>null,effects:[]};},run:async()=>({previewOnly:true,derivedRequest:{},seal:{requestHash:"fixture",work:{handle:{key,revision:0}},documentMark:{session:"s",openId:"open",observedSince:null,changedAt:null},incarnation:{},dependencies:"fixture"}})})});
+  const id=crypto.randomUUID();
+  await journal.invoke({id,key:"ducts.plan-losses",target:{kind:"document",ref:{session:"s",openId:"open"}},input:{work:{key,revision:0}}},crossingOf());
+  const row=await journal.wait(id);expect(row.state,JSON.stringify(row)).toBe("succeeded");
+  expect(writer.capture.truncated()).toBeNull();
+  await run(request.consumption.seal);
+  const store=await reader(dir);
+  const replay=new RouteWorkspace({registrations:[{spec:tools.fans.work}],recorded:recordedWorkSource(store)});
+  const again=await consumer({kind:"recording",recordingStore:store,at:null},request.consumption.id);
+  expect((await replay.view(key,"fans",again.context))?.revision).toBe(0);
 });

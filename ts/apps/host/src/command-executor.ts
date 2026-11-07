@@ -69,7 +69,7 @@ export interface CommandContext {
   caller: Caller;
   basis: Basis | null;
   /** The same owner the journal gates and publishes. Throws only when a workless fixture uses it. */
-  readonly work: RouteWorkspace;
+  readonly work: Pick<RouteWorkspace, "read" | "view" | "publish">;
   consumed: Consumed[];
   selectWork<S extends z.ZodType>(
     spec: WorkSpec<S>,
@@ -121,6 +121,7 @@ export type CommandRegistry = (key: string) => CommandExecutor;
 /** Resource I/O only. Control hooks belong to the stable registry entries. */
 export interface CommandResources {
   work?: RouteWorkspace;
+  workReads?: (admission: ActionAdmission) => Pick<RouteWorkspace, "read" | "view">;
   probe(dependency: Exclude<Consumed, { kind: "work" }>): Promise<unknown>;
   target?(target: ExecutionTarget, needs: ActionNeed): Promise<void>;
   effectPath?(effect: Extract<Effect, { kind: "member" }>): Promise<string | undefined>;

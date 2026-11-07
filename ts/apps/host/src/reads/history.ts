@@ -59,7 +59,26 @@ export class History {
     private readonly ledger?: Publications,
   ) {}
 
-  async keep(
+  /** Recording is ancillary: losing it must not retire a live Value (K4). */
+  async record(prepare: () => Promise<Parameters<History["keep"]>>): Promise<() => void> {
+    if (!this.writer || this.writer.capture.truncated()) return () => {};
+    try {
+      const commit = await this.keep(...await prepare());
+      return this.writer.capture.truncated() ? () => {} : commit;
+    } catch (error) {
+      const at = this.writer.capture.begin();
+      const problem = error instanceof InvalidRead ? error.problem : undefined;
+      if (at !== null) await this.run(this.writer.capture.stop(at,
+        problem === "recording.full" ? "full" : problem === "recording.unsupported" ? "unsupported" : "io"));
+      return () => {};
+    }
+  }
+  private stopped() {
+    const stop = this.reader.truncation;
+    return stop ? `History stopped at ${new Date(stop.stoppedAt).toISOString()}: ${stop.reason}` : null;
+  }
+
+  private async keep(
     subscription: string,
     read: string,
     pose: HistoryPose,
@@ -67,10 +86,7 @@ export class History {
     target: DocumentRef,
     publication: Publication<unknown>,
   ): Promise<() => void> {
-    if (!this.writer || this.writer.capture.truncated())
-      throw fail(
-        `History storage is full or unavailable; Value was not published (${JSON.stringify(this.writer?.capture.truncated())})`,
-      );
+    if (!this.writer || this.writer.capture.truncated()) return () => {};
     const value = publication.value;
     if (!value) throw fail("No Value to record");
     await this.run(recordingReadSetReferences(this.reader, documentId(address), value.inputs));
@@ -164,6 +180,7 @@ export class History {
       // Every root must still be complete; an ancillary input capture failure cannot mint a point.
       for (const binding of historyPointSchema.parse(point).history.publications)
         await this.run(readSetRecords(this.reader, binding.inputs));
+      if (this.writer!.capture.truncated()) throw fail(this.stopped()!);
       await this.run(this.writer!.points.keep(point));
       this.problem = null;
       return historyPointSchema.parse(point);
@@ -196,7 +213,7 @@ export class History {
       if (point.document === documentId(address) && point.history)
         points.push(historyPointSchema.parse(point));
     }
-    return { points: points.sort((a, b) => b.at - a.at), problem: this.problem };
+    return { points: points.sort((a, b) => b.at - a.at), problem: this.stopped() ?? this.problem };
   }
   async get(id: string) {
     await this.pending;

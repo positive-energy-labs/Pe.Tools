@@ -172,7 +172,7 @@ effectTest(
       expect(inputs.source).toEqual({
         kind: "live",
         capturing: false,
-        truncated: { at: 1, reason: "setup" },
+        truncated: { at: 1, stoppedAt: expect.any(Number), reason: "setup" },
       });
       expect(inputs.lane.kind === "live" && inputs.lane.captureStore).toBeFalsy();
       // Missing identity is never guessed into a recording.

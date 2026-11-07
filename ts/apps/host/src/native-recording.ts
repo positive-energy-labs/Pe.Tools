@@ -571,7 +571,7 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
       stop: (at, reason) =>
         Effect.suspend(() => {
           if (truncated) return Effect.void;
-          truncated = { at, reason };
+          truncated = { at, stoppedAt: clock.currentTimeMillisUnsafe(), reason };
           // ponytail: best-effort marker; on an already failed disk only this process knows.
           return io(() => writeFile(join(dir, TRUNCATION), JSON.stringify(truncated))).pipe(
             Effect.orElseSucceed(() => undefined),
