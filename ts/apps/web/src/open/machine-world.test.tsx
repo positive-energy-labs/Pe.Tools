@@ -5,6 +5,7 @@ import { PHASE_TONE, custodyOf, executionRefusal, phaseOf, pidOf } from "#/machi
 import { discoveryMachine, machineInventory, type DiscoveryMachine } from "@pe/agent-contracts";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
+import { sdkSchema } from "@pe/host-contracts/decoders";
 import { peFind } from "../../../../packages/mcps/src/pea/capability-tools.ts";
 import { fakeRuntimeHost } from "../../../../packages/mcps/tests/runtime-host-fixture.ts";
 import { machineOwner, type PromiseMachineSources } from "../../../host/tests/effect-test.ts";
@@ -61,7 +62,7 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
     process: { ...controlled.process, pid: 46 },
     bridge: { ...controlled.bridge, documents: null },
   };
-  const failed = {
+  const failed = sdkSchema("SessionObservation").parse({
     ...controlled,
     case: "failed-receipt" as const,
     id: "failed-payload",
@@ -74,7 +75,7 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
       message: "Payload failed",
       process: { ...controlled.process, pid: 47 },
     },
-  };
+  });
   const knownHoldings = [
     {
       openId: controlled.bridge.documents[0]!.openId!,
