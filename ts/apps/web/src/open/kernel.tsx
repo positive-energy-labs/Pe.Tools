@@ -1,10 +1,15 @@
-import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
-import { useGraphRoute, type GraphMount, type RouteAdapters } from "#/shell/mount";
-import type { VerbCompletion } from "#/shell/verbs";
+import type { ReactNode } from "react";
+import { useGraphRoute, type RouteAdapters } from "#/shell/mount";
 import { openControls as openGraph, type OpenPageState } from "./graph";
 import { openSources } from "./sources";
-export type OpenOwner = GraphMount<OpenPageState, unknown>;
-export const OpenOwnerContext = createContext<OpenOwner | null>(null);
+import { OpenOwnerContext } from "./context";
+export {
+  OpenOwnerContext,
+  OpenControlScope,
+  useOpenKernel,
+  useOpenOwner,
+  outcomeOf,
+} from "./context";
 export const openControlAdapters: RouteAdapters<OpenPageState, unknown> = {
   sources: openSources(),
   bodies: {},
@@ -26,27 +31,4 @@ export const openControlAdapters: RouteAdapters<OpenPageState, unknown> = {
 export function OpenControls({ children }: { children: ReactNode }) {
   const { owner } = useGraphRoute(openGraph, openControlAdapters, { url: false });
   return <OpenOwnerContext value={owner}>{children}</OpenOwnerContext>;
-}
-export function OpenControlScope({ children }: { children: ReactNode }) {
-  const owner = useContext(OpenOwnerContext);
-  return owner ? children : <OpenControls>{children}</OpenControls>;
-}
-export function useOpenKernel() {
-  const inherited = useContext(OpenOwnerContext);
-  const { owner } = useGraphRoute(openGraph, openControlAdapters, { url: false });
-  const selected = inherited ?? owner;
-  useSyncExternalStore(selected.subscribe, selected.version, selected.version);
-  return selected;
-}
-export function useOpenOwner() {
-  const owner = useContext(OpenOwnerContext);
-  if (!owner) throw Error("Open controls must mount through OpenControlScope");
-  useSyncExternalStore(owner.subscribe, owner.version, owner.version);
-  return owner;
-}
-export function outcomeOf(result: VerbCompletion) {
-  if (result.state === "done" && "receipt" in result)
-    return { kind: "receipt" as const, label: `${result.receipt.key} ${result.outcome.state}` };
-  if ("refusal" in result) return { kind: "refused" as const, label: result.refusal.message };
-  return { kind: "advisory" as const, label: result.outcome.state };
 }

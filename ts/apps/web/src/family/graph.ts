@@ -1,166 +1,50 @@
-import { defineRouteGraph } from "@pe/agent-contracts";
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-family Declaration 213 > 60 after kernel defaults. Read/build/apply/capture workflows and receipt dependencies remain distinct.
-import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
+// Test-only bridge for the byte-frozen DocLab cells witness. Product mounts route.ts.
 import { z } from "zod";
-import { field } from "../../../../packages/agent-contracts/src/route-field";
 import {
-  commands,
+  defineRouteGraph,
   familyDraftRouteState,
-  familyPlanResultSchema,
-  familyReads,
-  gate,
-  pane,
-  podMemberSourceSchema,
-  routeAddress,
   routeStatePatchSchema,
-  settingsFieldSegments,
-  split,
-  type FamilyDraft,
   type RouteGraph,
+  type FamilyDraft,
 } from "@pe/agent-contracts";
-import { familyAddress } from "../../../../packages/agent-contracts/src/routes/family";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
-import { commandVerb, prepareCommand, queryVerb, workVerb, pageVerb } from "#/shell/verbs";
-import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
-import { presentFamilyPlan } from "./review";
-
-export const FAMILY_MODEL_SCHEMA = "/schemas/settings/FamilyFoundry/models.json";
-export const familyPageSchema = routeAddress("family").schema.extend({ family: z.enum(["current"]).default("current") });
-export type FamilyPage = z.output<typeof familyPageSchema>;
-const fields = { ...threadListFields, ...familyAddress.fields };
-const refusal = z.string().nullable().default(null);
-const familyCellParameter = (key: string) => {
-  if (!key.startsWith("/")) return null;
-  const [root, name] = settingsFieldSegments(key);
-  return root === "parameters" && name ? name : null;
-};
-
+import { field } from "../../../../packages/agent-contracts/src/route-field";
+import { workVerb } from "../shell/verbs";
+import { familyPageSchema, type FamilyPage } from "./page";
+export { familyPageSchema, FAMILY_MODEL_SCHEMA, type FamilyPage } from "./page";
 export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph({
   directory: {
     path: "/family",
     title: "Family",
     label: "Family Foundry",
-    exposure: "Main",
-    runtimeNeed: "Revit for capture/apply; portable authoring is separate",
-    icon: "Boxes",
     category: "Build / audit families",
-    blurb:
-      "One family, two lanes: an authored family.json (anatomy, matrix, build) or the family open in Revit's editor. Binding picks the lane; capture bridges them.",
-    aliases: ["rfa", "author", "build", "capture", "matrix"],
+    icon: "Boxes",
+    blurb: "Frozen DocLab witness",
+    exposure: "Main",
+    aliases: [],
     listed: true,
     satellites: [],
-    surfaces: {
-      web: "full",
-      pwa: "full",
-      tray: false,
-    },
-    resume: "document",
+    surfaces: { web: "full", pwa: "full", tray: false },
   },
-  key: familyDraftRouteState.route,
+  key: "family",
   address: "family",
   name: "Family",
-  seeds: {
-    box: { title: "box", load: () => import("./graph-seeds").then((m) => m.familySeeds["box"]!) },
-    grd: { title: "grd", load: () => import("./graph-seeds").then((m) => m.familySeeds["grd"]!) },
-    bath: {
-      title: "bath",
-      load: () => import("./graph-seeds").then((m) => m.familySeeds["bath"]!),
-    },
-    refline: {
-      title: "refline",
-      load: () => import("./graph-seeds").then((m) => m.familySeeds["refline"]!),
-    },
-  },
-  needs: "family",
   work: familyDraftRouteState.schema,
-  // A saved member is input to the document-owned draft, not a different Work.
-  subjectField: { kind: "singleton", field: "family", noun: "family document", keyKind: "name", roster: "document", detail: "family", pane: "matrix", },
   fields: {
-    family: { ...field(familyPageSchema.shape.family, {}) },
-    threadSearch: { ...fields.threadSearch, role: "query" },
-    threadSort: { ...fields.threadSort, role: "query" },
-    stage: fields.stage,
-    pod: { ...fields.pod, role: "query" },
-    path: { ...fields.path, role: "query" },
-    pane: { ...fields.pane, url: false },
-    query: { ...fields.query, role: "query" },
-    sort: { ...fields.sort, role: "query" },
-    hidden: fields.hidden,
-    overlay: fields.overlay,
-    drill: { ...fields.drill, role: "query" },
-    inspector: { ...fields.inspector, role: "selection" },
-    doc: fields.doc,
+    ...threadListFields,
+    ...Object.fromEntries(Object.entries(familyPageSchema.shape).map(([key,schema])=>[key,field(schema,{})])),
+    family: field(familyPageSchema.shape.family, {}),
   },
-  workFields: {
-    reading: { label: "reading", internal: true },
-    spec: { label: "attached spec" },
-    takenAt: { label: "capture time", internal: true },
-  },
-  cells: [
-    {
-      segment: "cells",
-      groupOf: (key) => [familyCellParameter(key) ?? key],
-      nouns: ["parameter"],
-      focus: (key): Record<string, string> => {
-        const name = familyCellParameter(key);
-        return name ? { inspector: `param:${name}` } : {};
-      },
-    },
-  ],
-  readings: {
-    family: { kind: "derive", source: "family.draft", retire: "page", deps: ["profile", "captureReceipt"] },
-    document: { kind: "derive", source: "family.document", },
-    profile: {
-      source: "family.profile",
-      args: (page) => [page.pod, page.path],
-    },
-    receipts: {  source: "family.receipts", },
-    applyReceipt: {
-      source: "family.apply-receipt",
-      deps: ["receipts"],
-    },
-    captureReceipt: {
-      source: "family.capture-receipt",
-      deps: ["receipts"],
-    },
-    buildReceipt: {
-      source: "family.build-receipt",
-      deps: ["receipts", "profile"],
-      args: (page) => [page.pod, page.path],
-    },
-    spec: {
-      source: "family.spec",
-      args: (page) => [page.pod, page.path],
-    },
-    pods: {  source: "family.pods", retire: "never" },
-  },
+  cells: [{ segment: "cells", groupOf: (key) => [key], nouns: ["parameter"] }],
+  readings: {},
   verbs: {
-    read: queryVerb(
-      familyQueries["family.read"],
-      { label: "Read family", review: "none", input: z.strictObject({ refusal }) },
-      {
-        ready: (_, input) => input.refusal,
-        intent: (scope) => ({
-          readId: crypto.randomUUID(),
-          expectedRevision: scope.snapshot.work!.handle.revision,
-        }),
-        cancel: {
-          key: familyQueries["family.cancel-read"],
-          input: (request) => ({ readId: request.readId }),
-        },
-      },
-    ),
-    "close-inspector": pageVerb(
-      { label: "Close inspector", input: z.object({}).default({}), chord: "Escape" },
-      { page: () => ({ inspector: "" }) },
-    ),
     edit: workVerb(
       {
         label: "Edit family cells",
         input: z.strictObject({
           patches: z.array(routeStatePatchSchema),
           expectedRevision: z.number().int(),
-          refusal,
+          refusal: z.string().nullable().default(null),
         }),
       },
       {
@@ -172,180 +56,11 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph
         patches: (_, input) => input.patches,
       },
     ),
-    saved: queryVerb(
-      familyQueries["family.saved"],
-      {
-        label: "Read saved family",
-        review: "none",
-        input: z.strictObject({ request: familyReads["family.saved"].input, refusal }),
-      },
-      {
-        ready: (_, input) => input.refusal,
-        intent: (_, input) => input.request,
-      },
-    ),
-    open: commandVerb(
-      "family.observe",
-      {
-        label: "Open family member",
-        review: "none",
-        input: z.strictObject({ source: podMemberSourceSchema, refusal }),
-      },
-      {
-        ready: (_, input) => input.refusal,
-        intent: (_, input) => ({ source: input.source }),
-      },
-    ),
-    apply: commandVerb(
-      "family.apply",
-      {
-        label: "Apply family",
-        review: "shown",
-        chord: "Mod+Enter",
-        input: z.strictObject({ refusal }),
-        says: "Preview this exact family draft, then apply the sealed plan",
-      },
-      {
-        waitSeconds: NATIVE_APPLY_WAIT_S,
-        ready: (_, input) => input.refusal,
-        present: presentFamilyPlan,
-        prepare: async (scope) => {
-          const preview = await prepareCommand(scope, "family.plan", {}, NATIVE_APPLY_WAIT_S);
-          return { ...preview, plan: familyPlanResultSchema.parse(preview.response) };
-        },
-        stage: () => ({ include: "all" }),
-        intent: () => ({}),
-      },
-    ),
-    capture: commandVerb(
-      "family.capture",
-      {
-        label: "Save family to pod",
-        review: "none",
-        input: z.strictObject({ pod: z.string(), spec: z.string().optional(), refusal }),
-      },
-      {
-        ready: (_, input) => input.refusal,
-        stage: (_, input) => ({ pod: input.pod, ...(input.spec ? { spec: input.spec } : {}) }),
-        intent: () => ({}),
-        lands: (result) => {
-          const member = z
-            .object({ member: z.object({ pod: z.string(), path: z.string() }) })
-            .parse(result).member;
-          return { pod: member.pod, path: member.path };
-        },
-      },
-    ),
-    build: commandVerb(
-      "family.build",
-      {
-        label: "Build .rfa",
-        review: "shown",
-        input: z.strictObject({ source: podMemberSourceSchema.nullable(), refusal }),
-        says: "Review the saved member's exact hash, then build those bytes",
-      },
-      {
-        waitSeconds: NATIVE_APPLY_WAIT_S,
-        ready: (_, input) => input.refusal,
-        prepare: (scope, input) => ({ source: input.source, target: scope.snapshot.target }),
-        present: (result) => {
-          const source = (result as { source?: z.output<typeof podMemberSourceSchema> }).source;
-          return source
-            ? {
-                sentence: `Build ${source.path}`,
-                rows: [`Pod: ${source.pod}`, `SHA-256: ${source.sha256}`],
-              }
-            : { sentence: "Family build completed.", rows: [] };
-        },
-        stage: (_, input) => ({ source: input.source! }),
-        intent: () => ({}),
-      },
-    ),
-    "attach-spec": commandVerb(
-      "family.attach-spec",
-      { label: "Attach PDF", review: "none", input: commands["family.attach-spec"].input },
-      { intent: (_, input) => input },
-    ),
   },
-  panes: {
-    anatomy: {
-      label: "Family anatomy",
-      purpose: "Inspect authored family geometry",
-      draws: ["profile", "receipts", "applyReceipt", "captureReceipt", "buildReceipt"],
-      verbs: ["read"],
-    },
-    table: {
-      label: "Family parameters",
-      purpose: "Edit one family's parameters across its types",
-      draws: ["profile", "receipts", "applyReceipt", "captureReceipt", "buildReceipt"],
-    },
-    doc: {
-      label: "Family document",
-      purpose: "Inspect attached cut-sheet evidence",
-      draws: ["spec"],
-    },
-    work: {
-      label: "Family Work",
-      purpose: "Review keyed cells and original receipts",
-      draws: ["receipts"],
-    },
-    spec: {
-      label: "Family members",
-      purpose: "Open a saved model into the family draft",
-      draws: ["pods", "profile"],
-      verbs: Object.assign(
-        (row: unknown) => ((row as { source?: unknown } | null)?.source ? ["open"] : []),
-        { ids: ["open"] },
-      ),
-    },
-    history: {
-      label: "Saved family readings",
-      purpose: "Inspect immutable captures",
-      verbs: Object.assign(
-        (row: unknown) => ((row as { readingId?: unknown } | null)?.readingId ? ["saved"] : []),
-        { ids: ["saved"] },
-      ),
-    },
-  },
-  layout: split(
-    "family-body",
-    { axis: "h", sized: "end", size: 340 },
-    split(
-      "family-main",
-      { axis: "v", sized: "end", size: 160 },
-      split(
-        "family-audit",
-        { axis: "v", sized: "start", size: 220 },
-        gate("editing", pane("anatomy")),
-        gate("editing", pane("table")),
-      ),
-      gate("editing", pane("work")),
-    ),
-    split(
-      "family-support",
-      { axis: "v", sized: "end", size: 240 },
-      gate("editing", pane("doc")),
-      split(
-        "family-members",
-        { axis: "v", sized: "start", size: 240 },
-        gate("editing", pane("spec")),
-        gate("history", pane("history")),
-      ),
-    ),
-  ),
-  predicates: { editing: (page) => page.stage !== "history" },
+  panes: { table: { label: "Family parameters", purpose: "Frozen DocLab witness", draws: [] } },
+  layout: { kind: "pane", id: "table" },
   stages: {
-    audit: {
-      word: "Auditing",
-      panes: ["anatomy", "table", "doc", "work", "spec"],
-      verbs: ["capture", "close-inspector"],
-    },
-    apply: {
-      word: "Applying",
-      panes: ["anatomy", "table", "doc", "work", "spec"],
-      verbs: ["apply", "build", "capture", "close-inspector"],
-    },
-    history: { word: "History", panes: ["history"], verbs: ["close-inspector"] },
+    audit: { word: "Auditing", panes: ["table"] },
+    history: { word: "History", panes: ["table"] },
   },
-  stageOrder: ["audit", "apply", "history"],
 });

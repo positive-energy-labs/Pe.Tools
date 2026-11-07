@@ -1,14 +1,16 @@
 import type { ReadingState } from "#/shell/readings";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { HarnessThreadSummary, Machine } from "@pe/agent-contracts";
-import { mountRoute, routeFromGraph, type MountBody, type RouteAdapters } from "#/shell/mount";
+import type { OpenContext } from "./route";
+import { useOpenTypedOwner } from "./typed-owner";
 import { Scroll } from "@pe/kit/lang/scroll";
 import { PatchBay, type BayLayout } from "./bay";
-import { openGraph, type OpenPageState } from "./graph";
-import { OpenOwnerContext, openControlAdapters } from "./kernel";
+
+import { OpenOwnerContext } from "./context";
 import { modelRows } from "./model";
 import type { Recents } from "./sources";
-function BayBody({ owner }: MountBody<OpenPageState, unknown>) {
+export function OpenBody({ ctx }: { ctx: OpenContext }) {
+  const owner = useOpenTypedOwner(ctx);
   const container = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<BayLayout>("stack");
   useLayoutEffect(() => {
@@ -39,31 +41,29 @@ function BayBody({ owner }: MountBody<OpenPageState, unknown>) {
       data-testid="open-route"
       aria-busy={!reading.current && reading.status !== "failed"}
     >
-      <a href={`/session-admin?session=${encodeURIComponent(owner.view.read().page.draft.target ?? "")}`}>Manage destination session</a>
+      <a
+        href={`/session-admin?session=${encodeURIComponent(owner.view.read().page.draft.target ?? "")}`}
+      >
+        Manage destination session
+      </a>
       <p className="m-0 text-ink-2">
         {layout === "stack"
           ? "Choose a document and a Revit below."
           : "Documents on the left, Revits on the right."}{" "}
         Pick a document, patch it into a Revit, and press the one verb that names what happens.
       </p>
-      <PatchBay
-        administration={false}
-        machine={machine}
-        loading={!machine && ["absent", "pending"].includes(reading.status)}
-        refusal={reading.current ? null : "Refresh the machine reading before changing Revit"}
-        rows={rows}
-        threads={threads}
-        fixture={!!owner.fixture}
-        layout={layout}
-      />
+      <OpenOwnerContext value={owner}>
+        <PatchBay
+          administration={false}
+          machine={machine}
+          loading={!machine && ["absent", "pending"].includes(reading.status)}
+          refusal={reading.current ? null : "Refresh the machine reading before changing Revit"}
+          rows={rows}
+          threads={threads}
+          fixture={false}
+          layout={layout}
+        />
+      </OpenOwnerContext>
     </Scroll>
   );
 }
-export const openAdapters: RouteAdapters<OpenPageState, unknown> = {
-  ...openControlAdapters,
-  verbDepends: { open: ["machine"], close: ["machine"] },
-  wrap: (owner, children) => <OpenOwnerContext value={owner}>{children}</OpenOwnerContext>,
-  bodies: { bay: (body) => <BayBody {...body} /> },
-};
-export const openRoute = routeFromGraph(openGraph, openAdapters, "/open");
-export const OpenPage = mountRoute(openGraph, openAdapters);

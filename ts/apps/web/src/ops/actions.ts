@@ -1,7 +1,7 @@
 import { effectDecoder } from "@pe/host-contracts/decoders";
 import { hostOperationDefinitionSchema } from "@pe/host-contracts/contracts";
 import { z } from "zod";
-import { actionReceiptSchema, actionStatusSchema, type ReadEntry } from "@pe/agent-contracts";
+import { type ReadEntry } from "@pe/agent-contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
@@ -9,8 +9,7 @@ import {
   isTsOnlyOperationKey,
 } from "@pe/host-contracts/operation-types";
 import { callOp, callCompose } from "#/shell/readings-api";
-import { subscriptionSource } from "#/shell/readings-use";
-import type { ReadingSource } from "#/shell/readings";
+
 import { runOp } from "./run";
 import type { HostOperationCatalogEntry } from "./manifest";
 export type OpsCatalog = { operations?: HostOperationCatalogEntry[]; bridgeCatalogError?: string };
@@ -65,42 +64,3 @@ export const receiptControlRpc: ReadEntry<typeof receiptControlInput> = {
     return callCompose(context, key, { body: { id } });
   },
 };
-export function opsSources(): Readonly<Record<string, ReadingSource>> {
-  return {
-    "ops.operation": {
-      kind: "derive",
-      derive: ({ args, inputs }) =>
-        (inputs.catalog?.value as OpsCatalog | undefined)?.operations?.find(
-          (op) => op.key === args,
-        ) ?? null,
-    },
-    "ops.catalog": subscriptionSource({
-      request: ({ target }) => ({
-        kind: "ops-catalog",
-        ...(target.kind === "document"
-          ? { session: target.ref.session }
-          : target.kind === "session"
-            ? { session: target.session }
-            : {}),
-      }),
-      decode: (value) => value as OpsCatalog,
-    }),
-    "ops.receipt": {
-      kind: "use",
-      open(ctx, deliver) {
-        const id = (ctx.page as { actionId: string }).actionId;
-        if (!id) return deliver({ kind: "complete", value: [], revision: 0 });
-        return subscriptionSource({
-          request: () => ({ kind: "receipts", id }),
-          decode: (value) => z.array(actionReceiptSchema).parse(value),
-          dirties: ["receipts"],
-        }).open(ctx, deliver);
-      },
-    },
-    "ops.receipts": subscriptionSource({
-      request: () => ({ kind: "receipts" }),
-      decode: (value) => z.array(actionStatusSchema).parse(value),
-      dirties: ["receipts"],
-    }),
-  };
-}

@@ -13,7 +13,7 @@ import { Information } from "./popover";
 import type { NavigationWork } from "./navigation-client";
 import { PrimaryRouteControls } from "./route-controls";
 import { RouteHelpButton } from "#/route/help";
-import { useRouteLease, type AddressPage } from "#/route";
+
 import { usePublishRouteOptions } from "#/settings/options";
 import type { PageOption } from "#/settings/option-state";
 import type { DirectorySearch } from "./directory-search";
@@ -106,11 +106,11 @@ function NavigationStatus() {
     </div>
   );
 }
-export function Directory({ page: address }: { page: AddressPage<"home"> }) {
+export function Directory({ page: address }: { page: readonly [DirectorySearch, (patch: Partial<DirectorySearch>) => void] }) {
   const pods = usePodRoutes();
   const [page, setPage] = address;
   const { query, exposure, sort, folded } = page;
-  usePublishRouteOptions("index", "Tools", directoryOptions, page, setPage);
+  usePublishRouteOptions("home", "Tools", directoryOptions, page, setPage);
   const { snapshot, loading, error } = useNavigation();
   const go = useDestination();
   const tools = TOOLS.filter((tool) => exposure === "All" || tool.exposure === exposure);
@@ -187,16 +187,6 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
       if (url) go(url);
     },
   });
-  useRouteLease("home", address, {
-    facts: {
-      tools: list.rows
-        .filter((item) => item.item.kind === "tool")
-        .slice(0, 200)
-        .map(({ item }) =>
-          item.kind === "tool" ? { to: item.tool.to, exposure: item.tool.exposure } : {},
-        ),
-    },
-  });
   const row = (item: DirectoryItem): ListRowParts => {
     if (item.kind === "work")
       return {
@@ -255,7 +245,7 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
   return (
     <Scroll className="size-full">
       <main className="mx-auto w-full max-w-6xl p-5">
-        <PrimaryRouteControls route="index">
+        <PrimaryRouteControls route="home">
           <RouteHelpButton
             name="Tool directory"
             docs="Find a tool by task or description. Main, Preview and Archive are provisional exposure choices, not quality certification. Saved Works stay under the tool that owns them; unavailable destinations explain why they cannot resume. Ctrl Shift K searches tools, saved Works and Pea threads. Search and Home open explicit destinations; route-owned guards retain control of edit changes."
