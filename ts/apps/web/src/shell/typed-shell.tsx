@@ -34,7 +34,7 @@ import { hostedRouteAddress, type HostedRouteProps } from "../workbench/hosted-r
 export function TypedRouteView({ module, fingerprint, address: supplied }: { module: TypedRoute; fingerprint: RouteFingerprint; address?: AdmittedAddressPort }) {
   const router = useRouter();
   const address = useMemo(() => supplied ?? admittedRouterAddress(router.history), [router,supplied]);
-  return <PlaceBoundary<{mount:TypedMount;dispose():void}> identity={module} path={`/${module.spec.key}`} address={address}>
+  return <PlaceBoundary<{mount:TypedMount;dispose():void}> identity={module} path={module.data.address} address={address}>
     {place => <HistoryBoundary address={place.address}>{snapshot => <TypedPlace module={module} place={place} fingerprint={fingerprint} snapshot={snapshot} />}</HistoryBoundary>}
   </PlaceBoundary>;
 }
@@ -47,9 +47,12 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
   const [liveInstance] = useState(() => `${module.spec.key}:${crypto.randomUUID()}`);
   const poses = snapshot?.point.history.poses.filter(p => p.route === module.spec.key && (!params.get("atInstance") || p.instance === params.get("atInstance"))) ?? [];
   const pose = poses.length === 1 ? poses[0] : undefined, instance = pose?.instance ?? liveInstance;
-  const seed = useMemo(() => history ? { target: { kind: "document" as const, ref: history.point.history.target } } : fixture === null ? undefined : {}, [history,fixture]);
-  const target = useRouteTarget({ needs: "project" }, appAtomRegistry, seed, compare ? snapshot.point.history.address : params.get("target"));
-  const resolved = target.resolution.kind === "resolved" ? target.resolution.target : null;
+  const pin=compare?snapshot.point.history.address:params.get("target");
+  const needs=module.spec.needs;
+  const required=needs === "host" ? (pin ? module.spec.optionalTarget : undefined) : needs === "browser" ? undefined : needs;
+  const seed = useMemo(() => history ? { target: { kind: "document" as const, ref: history.point.history.target } } : fixture === null && required ? undefined : {}, [history,fixture,required]);
+  const target = useRouteTarget({ needs: required === "session" ? "document" : required }, appAtomRegistry, seed, pin);
+  const resolved = needs === "browser" ? null : target.resolution.kind === "resolved" ? target.resolution.target : null;
   const signature = canonicalRouteInput([resolved, target.workAddress, target.workOpen, history?.point.id, !!snapshot, instance]);
   const current = useRef(signature); current.current = signature;
   const input = useMemo<PlaceInput>(() => ({ address: place.address, fixture, target: resolved, history, readOnly: !!snapshot, publicationInstance: instance,
@@ -59,7 +62,7 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
   const [problem,setProblem] = useState<string | null>(null);
   useEffect(() => {
     place.setVisible(visible);
-    if (snapshot && !pose || !input.target && !input.work.address && !input.work.open) return;
+    if (snapshot && !pose || needs !== "browser" && !input.target && !input.work.address && !input.work.open) return;
     let state: { mount: TypedMount; input?: PlaceInput; dispose(): void };
     try {
       state = place.state(() => ({ mount: mountTypedRoute(module,input,fingerprint), input, dispose() { this.mount.dispose(); } }));
@@ -85,7 +88,7 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
     remember();
     return mount.subscribe(remember);
   }, [mount,place,history,snapshot,target.workAddress,instance,fixture,module]);
-  const document = <DocumentPicker place={place} target={resolved} needs="project" enabled={fixture === null && !snapshot} />;
+  const document = <DocumentPicker place={place} target={resolved} needs={module.spec.optionalTarget ?? needs} enabled={fixture === null && !snapshot && (!!module.spec.optionalTarget || !["browser","host"].includes(needs))} />;
   if (snapshot && !pose) return <p role="status">This route was never published at this point, or its Page is ambiguous</p>;
   return <><HistoryRail document={snapshot?.point.history.address ?? target.workAddress} route={module.spec.key} address={place.address} snapshot={snapshot} compare={compare} />
     <section className="flex min-h-0 flex-1 flex-col" data-tone={history ? "caution" : undefined} data-wash={history ? "" : undefined} aria-label={history ? "Recorded view, read-only" : undefined}>
@@ -100,10 +103,12 @@ function TypedChrome({ mount, document }: { mount: TypedMount; document: ReactNo
   const [panes,setPanes]=useState<GraphLayoutState>(()=>readLayoutState(`route:${spec.key}`));
   const slot=usePaneActionSlot();
   const subject=useMemo(()=>{
+    if(!spec.subject) return null;
+    const subjectSpec=spec.subject;
     const update=(op:(set:ReturnType<typeof openSet<unknown>>,value:any)=>unknown)=>{
-      const value=mount.value(spec.subject.read ?? spec.core).value;
-      const set=openSet<unknown>(canonicalRouteInput,value?spec.subject.options(value).map(o=>o.id):[]);
-      mount.page.subject(op(set,mount.page.read()[spec.subject.field]));
+      const value=mount.value(subjectSpec.read ?? spec.core).value;
+      const set=openSet<unknown>(canonicalRouteInput,value?subjectSpec.options(value).map(o=>o.id):[]);
+      mount.page.subject(op(set,mount.page.read()[subjectSpec.field]));
     };
     return { toggle:(id:unknown)=>update((set,value)=>set.toggle(value,id)), add:(ids:readonly unknown[])=>update((set,value)=>set.add(value,ids)),
       remove:(id:unknown)=>update((set,value)=>set.remove(value,id)),setActive:(id:unknown)=>update((set,value)=>set.setActive(value,id)),
@@ -113,7 +118,7 @@ function TypedChrome({ mount, document }: { mount: TypedMount; document: ReactNo
   useRouteViewBridge({ route:spec.key,codec,visible,surface:"route",page:mount.page.read(),context:{},facts:{},apply:patch=>{
     mount.move(patch as Record<string,unknown>,"push"); return {ok:true,moved:true,receipt:{current:()=>visible,rendered:page=>canonicalRouteInput(page)===canonicalRouteInput(mount.page.read())}};
   } });
-  const head=<SituationBand name={spec.name} context={<>{document}<span>{mount.work()?.revision === undefined ? "Reading Work..." : `r${mount.work()!.revision}`}</span></>}
+  const head=<SituationBand name={spec.name} context={<>{document}{spec.edits?<span>{mount.work()?.revision === undefined ? "Reading Work..." : `r${mount.work()!.revision}`}</span>:null}</>}
     alerts={<>{mount.problem() ? <span role="alert">{mount.problem()}</span> : null}<CatalogWorkReviews mount={mount} /></>}
     verbs={Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />)}
     timeline={<TimelineHead owner={mount} history={<GraphHistory owner={mount} />} />} />;
@@ -122,12 +127,13 @@ function TypedChrome({ mount, document }: { mount: TypedMount; document: ReactNo
       options:{ignoreInputs:true},invoke:()=>{if(visible) void mount.history[direction]();}})))} />
     {portal ? <PrimaryRouteControls route={spec.key} slot="situation">{head}</PrimaryRouteControls> : head}
     <GraphLayoutView layout={layout(spec.layout)} panes={Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,draws:[],verbs:[]}]))}
-      active={when=>when === "subject" && (mount.page.read()[spec.subject.field]?.kind === "all" || !!mount.page.read()[spec.subject.field]?.ids?.length)} state={{panes,onChange:next=>{setPanes(next);writeLayoutState(`route:${spec.key}`,next);}}}
-      bodies={Object.fromEntries(Object.keys(spec.panes).map(id=>[id,pane=>pane(mount.draw(id) as ReactNode,{actions:<>{slot(id)}<Button label={`Refresh ${spec.panes[id]!.title}`} onClick={mount.refresh}>Refresh</Button></>})]))} />
+      active={when=>when === "subject" && !!spec.subject && (mount.page.read()[spec.subject.field]?.kind === "all" || !!mount.page.read()[spec.subject!.field]?.ids?.length)} state={{panes,onChange:next=>{setPanes(next);writeLayoutState(`route:${spec.key}`,next);}}}
+      bodies={Object.fromEntries(Object.keys(spec.panes).map(id=>[id,pane=>pane(mount.draw(id) as ReactNode,{actions:<>{slot(id)}<Button label={`${spec.panes[id]!.read?.demand === "explicit"?"Read":"Refresh"} ${spec.panes[id]!.title}`} onClick={()=>mount.refresh(spec.panes[id]!.read)}>{spec.panes[id]!.read?.demand === "explicit"?"Read":"Refresh"}</Button></>})]))} />
   </div></KeyScope></SubjectDoor.Provider>;
 }
 export function TypedWrite({ mount, id }: { mount: TypedMount; id: string }) {
   const command=mount.spec.commands[id]!,review=mount.review(id),held=writeHeld(command.label,review);
+  if("kind" in command) return <Button label={command.label} refusal={mount.commandRefusal(id)} onClick={()=>void mount.run(id).catch(()=>{})}>{command.label}</Button>;
   const run=async(apply=false)=>{try{await mount.run(id,apply);return null;}catch(error){return {message:error instanceof Error?error.message:String(error)};}};
   return <WriteAction label={`plan ${command.label}`} says={`Plan ${command.label} from current Work`}
     refusal={mount.writeRefusal()} held={held.held} stale={held.stale} failed={mount.reviewProblem(id)} plan={()=>run()}

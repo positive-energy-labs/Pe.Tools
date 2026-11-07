@@ -166,7 +166,7 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
   const ownerOptions = {
     dependencies: () => currentReadingHashes(snapshots()),
     scopeFields: [
-      route.data.subject.field,
+      route.data.subject!.field,
       ...(route.data.workSubject ? [route.data.workSubject] : []),
     ],
     identityForPage,

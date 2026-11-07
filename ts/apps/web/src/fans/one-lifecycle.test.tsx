@@ -23,9 +23,9 @@ test("typed panes share declared Values; recorded Fans and Ducts use frozen Work
     const history = historySnapshotSchema.parse({
       point: { id:crypto.randomUUID(),document,at:Date.now(),takingRange:{start:0,end:0},reason:{kind:"captured"},
         history:{address:document,target:{session:"fixture",openId:"fans"},poses:[{instance:"recorded",route:route.data.key,href:`/${route.data.key}`,page:recordedPage}],publications:[]} },
-      work: Object.keys(f.typed.spec.edits.owners).map(id => { const owner=f.typed.owner(id)!;return {handle:owner.handle,revision:owner.handle!.revision,doc:owner.doc}; }),
+      work: Object.keys(f.typed.spec.edits!.owners).map(id => { const owner=f.typed.owner(id)!;return {handle:owner.handle,revision:owner.handle!.revision,doc:owner.doc}; }),
     });
-    const recorded = mountTypedRoute(route.typed,{...input,history,readOnly:true,publicationInstance:"recorded",memory:()=>recordedPage},route.workFingerprint,{sources:Object.fromEntries([route.typed.spec.core,...Object.values(route.typed.spec.reads ?? {})].map(read=>[read.key,{kind:"use",open}]))});
+    const recorded = mountTypedRoute(route.typed,{...input,history,readOnly:true,publicationInstance:"recorded",memory:()=>recordedPage},route.workFingerprint,{sources:Object.fromEntries([route.typed.spec.core,...Object.values(route.typed.spec.reads ?? {})].map(read=>[read!.key,{kind:"use",open}]))});
     try {
       expect(recorded.owner()?.ready).toBe(true);
       expect(recorded.page.read().contextRadiusFt).toBe(23);
@@ -38,4 +38,56 @@ test("typed panes share declared Values; recorded Fans and Ducts use frozen Work
 
   } finally { closes.reverse().forEach(close => close()); }
   await vi.waitFor(() => expect(stop).toHaveBeenCalledTimes(7));
+});
+
+
+test("optional Work, explicit demand and invocation arguments share one typed scope", async () => {
+  const {z}=await import("zod");
+  const {route,field,sessionCommand,queryAction}=await import("../route/typed-route");
+  const {module:reference}=await import("./route");
+  const {hostRead}=await import("../route/host-read");
+  const {valueRead,workFingerprintSchema}=await import("@pe/agent-contracts");
+  const source=vi.fn();
+  const read=hostRead({...valueRead("probe.value",z.object({}),z.object({answer:z.number()})),demand:"explicit"});
+  const declaration={key:"wave4-probe",address:"/",name:"Probe",needs:"host" as const,directory:reference.data.directory,
+    fields:{member:field(z.string(),"","query")},core:{...read,args:()=>({})},
+    panes:{main:{title:"Probe",purpose:"Scope falsifier",read,draw:(ctx:unknown)=>ctx}},layout:{kind:"pane" as const,id:"main"}};
+  const calls:unknown[]=[],queries:unknown[]=[];
+  const door={
+    lifetime:"subscription",receipts:()=>({subscribe:()=>()=>{}}),
+    open:(scope:import("@pe/agent-contracts").WorkScope)=>{calls.push(scope.key);return {subscribe:(deliver:(state:unknown)=>void)=>{
+      deliver({kind:"ready",snapshot:{handle:{key:scope.key,revision:7},revision:7,value:{note:{edit:{value:scope.key.work}}}},history:{acks:[],from:0}});
+      return ()=>{};
+    }};},
+    submit:vi.fn((input:unknown)=>({accepted:{subscribe:(deliver:(state:unknown)=>void)=>{
+      deliver({kind:"accepted-native",outcome:"committed",result:input,receiptId:"probe"});return ()=>{};
+    }}})),
+  } as unknown as import("@pe/agent-contracts").WorkJournalDoor;
+  let search=new URLSearchParams();
+  const input={address:{read:()=>new URLSearchParams(search),write:(next:URLSearchParams)=>{search=new URLSearchParams(next);},subscribe:()=>()=>{}},
+    fixture:null,target:{kind:"host" as const},work:{address:null,open:null},custody:{current:()=>true},memory:()=>({})};
+  const fingerprint=workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
+  const browser=mountTypedRoute(route({...declaration,needs:"browser",core:undefined,panes:{main:{title:"Probe",purpose:"Browser",draw:(ctx:unknown)=>ctx}}}),{...input,target:null},fingerprint,{work:door});
+  try {expect(calls).toEqual([]);expect(browser.workBasis()).toBeNull();browser.page.query({member:"local"});expect(browser.page.read().member).toBe("local");}
+  finally {browser.dispose();}
+  search=new URLSearchParams();
+  const module=route({...declaration,
+    edits:{work:z.object({note:z.object({edit:z.object({value:z.string()}).optional()})}),key:page=>page.member||null,
+      owners:{},input:z.string(),patches:()=>[],history:z.object({label:z.string()}),describe:(detail:{label:string})=>detail},
+    commands:{start:{...sessionCommand("instances.start"),label:"Start"},echo:{...queryAction({key:"probe.echo",input:z.object({blob:z.string()}),
+      run:async(args,context)=>{queries.push({args,context});return args;}}),label:"Echo"}},
+  });
+  const mounted=mountTypedRoute(module,input,fingerprint,{work:door,sources:{"probe.value":{kind:"use",open:source}}});
+  try {
+    const stop=mounted.subscribe(()=>{});mounted.page.query({member:"A"});
+    expect(source).not.toHaveBeenCalled();expect(door.submit).not.toHaveBeenCalled();
+    expect(calls.every(key=>(key as {work:string}).work === "A")).toBe(true);
+    mounted.page.query({member:"B"});expect(mounted.owner()?.handle?.key).toMatchObject({binding:"workspace",work:"B"});
+    mounted.refresh(module.spec.core);expect(source).toHaveBeenCalledOnce();
+    await mounted.run("echo",false,{blob:"invocation only"});
+    expect(queries).toEqual([{args:{blob:"invocation only"},context:{target:{kind:"host"},work:expect.objectContaining({key:expect.objectContaining({work:"B"}),revision:7})}}]);
+    await mounted.run("start",false,{year:"2026",owner:"you",addins:"on"});expect(door.submit).toHaveBeenCalledOnce();
+    expect(mounted.page.read()).toMatchObject({member:"B"});expect(search.has("blob")).toBe(false);
+    mounted.page.query({member:""});expect(mounted.owner()).toBeUndefined();expect(mounted.workBasis()).toBeNull();stop();
+  } finally {mounted.dispose();}
 });

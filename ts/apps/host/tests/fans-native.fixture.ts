@@ -330,8 +330,10 @@ export async function nativeFixture(
           ),
         ),
     );
-    const readDucts: DuctsReadSources["call"] = (op, input, ref, version) =>
-      request(
+    const readDucts: DuctsReadSources["call"] = (op, input, raw, version) => {
+      const ref="kind" in raw ? raw.kind === "document"?raw.ref:null : raw;
+      if(!ref) throw Error("Fixture requires a document target");
+      return request(
         new Request("http://fixture/call", {
           method: "POST",
           headers: {
@@ -343,6 +345,7 @@ export async function nativeFixture(
           body: JSON.stringify({ key: op, request: input }),
         }),
       );
+    };
     const api = createPeRoutes({
       workspace: saved,
       registrations: [],

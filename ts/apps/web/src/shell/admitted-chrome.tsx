@@ -131,10 +131,10 @@ function DocumentKeys({ keys }: { keys: readonly ScopeKey[] }) {
 /** The subject field as one read: its roster, what is open, which member is active, and the
  * moves every door shares (`openSet`). */
 export function subjectOf(mount: AdmittedMount, data: RouteGraphJson) {
-  const field = data.fields[data.subject.field];
+  const field = data.fields[data.subject!.field];
   if (field?.role !== "subject") return null;
-  const options = rosterSchema.parse(mount.picker(data.subject.field) ?? []);
-  const value = mount.page.read()[data.subject.field];
+  const options = rosterSchema.parse(mount.picker(data.subject!.field) ?? []);
+  const value = mount.page.read()[data.subject!.field];
   const many = field.cardinality === "many";
   const known = (id: unknown) => options.some((o) => identity(o.id) === identity(id));
   const set = openSet(
@@ -176,7 +176,7 @@ export function subjectOf(mount: AdmittedMount, data: RouteGraphJson) {
   };
 }
 export function routeHasSubjectList(data: RouteGraphJson) {
-  const field = data.fields[data.subject.field];
+  const field = data.fields[data.subject!.field];
   return field?.role === "subject" && Object.values(data.panes).some((pane) => pane.draws.includes(field.picker.reading));
 }
 
@@ -190,7 +190,7 @@ export function AdmittedSubjectPicker({
   const subject = subjectOf(mount, data);
   if (!subject) return null;
   const { options, many, all, selected, active, unknown } = subject;
-  const noun = data.subject.noun;
+  const noun = data.subject!.noun;
   const open = options.filter((o) => selected.includes(identity(o.id)));
   return (
     <>
@@ -568,10 +568,10 @@ function Chrome({
                     </>,
                     {
                       // Open-subject chips need their label width; the title keeps its floor.
-                      fit: id === data.subject.pane ? "wrap" : undefined,
+                      fit: id === data.subject!.pane ? "wrap" : undefined,
                       actions: (
                         <>
-                          {id === data.subject.pane && !routeHasSubjectList(data) && (
+                          {id === data.subject!.pane && !routeHasSubjectList(data) && (
                             <AdmittedSubjectPicker mount={mount} data={data} />
                           )}
                           {/* Pane-owned controls only: route verbs render once, in the situation band
@@ -636,7 +636,7 @@ export function PaneStatus({ mount, draws }: { mount: AdmittedMount; draws: read
 }
 
 export function admittedSubjectDoor(mount: AdmittedMount, data: RouteGraphJson): AdmittedSubject {
-  const field = data.fields[data.subject.field];
+  const field = data.fields[data.subject!.field];
   return {
     toggle: (id) => subjectOf(mount, data)?.toggle(id),
     add: (ids) => subjectOf(mount, data)?.add(ids),

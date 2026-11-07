@@ -30,6 +30,11 @@ export interface HostRouteModule extends Omit<HostWorkRegistration, "spec"> {
   readonly workState?: Readonly<RouteStateSpec<z.ZodType>>;
   /** Typed modules name Work owners directly, without executable reading slots. */
   readonly readWorks?: readonly string[];
+  readonly reads?: Readonly<Record<string, {
+    readonly name:string; readonly input:z.ZodType; readonly output:z.ZodType;
+    readonly run:(context:any,args:any)=>unknown;
+  }>>;
+  readonly leaves?: Readonly<Record<string,(args:unknown,services:HostLeafServices)=>Promise<unknown>>>;
   readonly bodies: Readonly<
     Record<
       string,
@@ -41,6 +46,12 @@ export interface HostRouteModule extends Omit<HostWorkRegistration, "spec"> {
       }
     >
   >;
+}
+export interface HostLeafServices {
+  readonly evaluation:string;
+  readonly origin:unknown;
+  take(name:string,args:unknown):Promise<unknown>;
+  revision(name:string,args:unknown):number;
 }
 export type HostRouteAdmission =
   | { readonly ok: true; readonly route: HostAdmittedRoute }
@@ -85,6 +96,9 @@ const hostModuleSchema = hostZ.strictObject({
     hostZ.custom<z.ZodType>((v) => v instanceof hostZ.ZodType),
   ),
   readWorks: hostZ.array(hostZ.string().min(1)).max(128).optional(),
+  reads: hostZ.record(hostZ.string(),hostZ.object({name:hostZ.string(),input:hostZ.custom<z.ZodType>(v=>v instanceof hostZ.ZodType),
+    output:hostZ.custom<z.ZodType>(v=>v instanceof hostZ.ZodType),run:hostZ.custom<(context:any,args:any)=>unknown>(v=>typeof v === "function")})).optional(),
+  leaves:hostZ.record(hostZ.string(),hostZ.custom<NonNullable<HostRouteModule["leaves"]>[string]>(v=>typeof v === "function")).optional(),
   admit: hostZ.custom<RouteWriteAdmission>((v) => typeof v === "function").optional(),
   workState: hostZ
     .custom<RouteStateSpec<z.ZodType>>((v) => workStateSchema.safeParse(v).success)
@@ -106,6 +120,8 @@ export function captureHostModule(input: unknown): HostRouteModule {
     data: structuredClone(value.data),
     schemas: Object.freeze({ ...value.schemas }),
     ...(value.readWorks ? {readWorks:Object.freeze([...value.readWorks])} : {}),
+    ...(value.reads?{reads:Object.freeze(Object.fromEntries(Object.entries(value.reads).map(([key,read])=>[key,Object.freeze({...read})])))}:{}),
+    ...(value.leaves?{leaves:Object.freeze({...value.leaves})}:{}),
     ...(Object.hasOwn(value, "admit") ? { admit: value.admit } : {}),
     ...(value.workState
       ? {

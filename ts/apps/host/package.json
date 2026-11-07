@@ -48,5 +48,11 @@
       "where": "where.exe",
       "attrib": "attrib.exe"
     }
+  },
+  "exports": {
+    "./settings": "./src/settings.ts",
+    "./family-actions": "./src/family-actions.ts",
+    "./family-spec": "./src/family-spec.ts",
+    "./read-graph": "./src/reads/evaluator.ts"
   }
 }

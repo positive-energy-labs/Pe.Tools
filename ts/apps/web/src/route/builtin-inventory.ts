@@ -3,22 +3,20 @@ import {
   type AdmittedRoute,
 } from "../../../../packages/agent-contracts/src/route-module";
 import type { RouteDiagnostic } from "../../../../packages/agent-contracts/src/route-kernel-data";
-import { module as captures } from "../captures/kernel";
-import { module as schedules } from "../schedules/kernel";
-import { module as families } from "../families/kernel";
-import { module as pods } from "../pods/kernel";
-import { module as chat } from "../chat/kernel";
-import { builtins, type BuiltinKey } from "./builtins.neutral";
+import {builtinClosures} from "./builtin-closures.generated";
+import {closureSchema} from "./builtin-closure";
+import {builtinModules} from "./builtin-modules.generated";
+import type {TypedRoute} from "./typed-route";
+export type BuiltinKey=keyof typeof builtinModules;
+export const typedBuiltin = (key:BuiltinKey):TypedRoute | null => {
+  const module=builtinModules[key]; return "spec" in module ? module as TypedRoute : null;
+};
 
-const modules = { captures, schedules, families, chat, pods } satisfies Record<
-  Exclude<BuiltinKey, "fans" | "ducts">,
-  unknown
->;
 type Admitted =
   | { readonly ok: true; readonly route: AdmittedRoute }
   | { readonly ok: false; readonly diagnostics: readonly RouteDiagnostic[] };
-export const builtinRouteKeys = Object.keys(builtins) as BuiltinKey[];
-export const builtinRouteStamp = (key: BuiltinKey) => builtins[key].closure.fingerprint;
+export const builtinRouteKeys = Object.keys(builtinModules) as BuiltinKey[];
+export const builtinRouteStamp = (key: BuiltinKey) => builtinClosures[key].fingerprint;
 // One admission per (key, stamp).
 const admissions = new Map<string, Promise<Admitted>>();
 export function loadBuiltinRoute(key: BuiltinKey, expectedFingerprint: string) {
@@ -28,9 +26,9 @@ export function loadBuiltinRoute(key: BuiltinKey, expectedFingerprint: string) {
   return pending;
 }
 async function admit(key: BuiltinKey, expectedFingerprint: string): Promise<Admitted> {
-  const { closure } = builtins[key];
-  if (key === "fans" || key === "ducts") throw Error("Typed routes mount directly");
-  const module = modules[key];
+  const closure=closureSchema.parse(builtinClosures[key]);
+  if (typedBuiltin(key)) throw Error("Typed routes mount directly");
+  const module = builtinModules[key];
   const inventory = createBuiltinRouteInventory({
     [key]: {
       module,

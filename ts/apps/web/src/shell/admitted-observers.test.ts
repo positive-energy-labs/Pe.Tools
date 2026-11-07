@@ -37,7 +37,7 @@ test("observers validate booleans and strings, freeze global context and cache g
   ).toThrow();
   expect(() =>
     createAdmittedObservers(
-      { ...graph, subject: { ...graph.subject, show: undefined }, predicates: {} },
+      { ...graph, subject: { ...graph.subject!, show: undefined }, predicates: {} },
       { text: { run: () => [] } },
     ).update({ page: {} }),
   ).toThrow();

@@ -36,7 +36,7 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
     reviewRefusal: (id:string)=>mount.reviewProblem(id)?Error(mount.reviewProblem(id)!):null,
     confirm:(id:string)=>{if(mount.review(id)?.stale) throw Error("Review stale");return mount.run(id,true);},
     readingStatus: (id:string)=>({snapshot:snapshot(id)}),
-    picker: () => {const value=mount.value(mount.spec.subject.read ?? mount.spec.core).value;return value ? mount.spec.subject.options(value) : [];},
+    picker: () => {const value=mount.value(mount.spec.subject!.read ?? mount.spec.core).value;return value ? mount.spec.subject!.options(value) : [];},
     journal: () => mount.owner()!.lease.entry.journal.read(),
     setPaneDemand() {},
     refresh: mount.refresh,
@@ -46,7 +46,7 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
       if(!mount.current(basis)) throw Error("Stale accepted Work basis");
       return completion<WorkWriteOutcome>({kind:"pending"},async()=>{
         const record=mount.owner()!;
-        const result = await _door.submitWork(record.scope,{kind:"apply",expectedRevision:basis.workRevision!, patches:input.patches, press:crypto.randomUUID(),...mount.spec.edits.describe(input.history??{label:"Edit Work"}) as any},basis);
+        const result = await _door.submitWork(record.scope,{kind:"apply",expectedRevision:basis.workRevision!, patches:input.patches, press:crypto.randomUUID(),...mount.spec.edits!.describe(input.history??{label:"Edit Work"}) as any},basis);
         return await new Promise<WorkWriteOutcome>(resolve=>result.subscribe(value=>{if(value.kind!=="pending") resolve(value);},()=>{}));
       });
     },
