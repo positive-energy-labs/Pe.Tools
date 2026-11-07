@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { useState, useSyncExternalStore } from "react";
+import { journey as takeoffJourney, Drawing as TakeoffDrawing } from "../takeoff/adoption.test.fixture";
+import { adoptionData } from "@pe/agent-contracts/takeoff-read";
 import { createPortal } from "react-dom";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -197,11 +199,10 @@ test("JZ Fans Plan integrity: inspect refused flow and computed losses without a
 });
 // Plan reviews seal model inputs, never browser pane visibility or Page pose.
 import { useEffect, useReducer } from "react";
-import { act } from "@testing-library/react";
 import realMuas from "../../../../packages/ducts-domain/src/sheet/fixtures/muas-local-20261102.json";
 import { createWitness } from "../fans/cutover.test-support";
 import { StateCell } from "@pe/kit/lang/cell";
-import { actionStatusSchema, type WorkJournalDoor } from "@pe/agent-contracts";
+import { actionStatusSchema } from "@pe/agent-contracts";
 import type { ReceiptFeedState, ReceiptCursor } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { TypedWrite } from "../shell/typed-shell";
 import type { ReadingDelivery } from "../shell/source-contract";
@@ -550,3 +551,39 @@ async function pendingFamiliesChoice() {
     expect(familiesRouteState.schema.parse(mount.work()?.value).scope.edit).toBeUndefined();
   } finally { release.resolve(); view.unmount(); mount.dispose(); await Promise.all(tasks); }
 }
+test("JZ H01 H17 saved takeoff choice preserves authored Work and live Initialize while History captures", async () => {
+  const j = await takeoffJourney();
+  try {
+    await j.ready();
+    expect((await j.host.journal.list()).some(row => row.key === "work.start" && row.state === "succeeded"), "ordinary Start crossed the real /actions handler").toBe(true);
+    const originalWork = j.mount.owner()!.handle;
+    expect(originalWork).toBeTruthy();
+    render(<TakeoffDrawing mount={j.mount} />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose views" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Zoning plan" }));
+    await waitFor(() => expect(j.mount.value().current).toBe(true), {timeout:20000});
+    await waitFor(() => expect(j.mount.owner()?.ready || j.mount.owner()?.absent).toBe(true));
+    expect(j.mount.owner()!.handle, "H01: view choice cannot select another Work through serialized Page fields").toEqual(originalWork);
+    await j.ready();
+    const capture = adoptionData.parse(j.mount.value().value).captures[0]!;
+    fireEvent.click(screen.getByRole("button", { name: "Choose capture" }));
+    const option = (await screen.findAllByRole("option")).find(row => row.textContent?.includes(capture.capturedAt));
+    expect(option, "choose this exact saved capture").toBeTruthy();
+    fireEvent.click(option!);
+    await waitFor(() => expect(j.mount.value().current).toBe(true), {timeout:20000});
+    await waitFor(() => expect(j.mount.owner()?.ready || j.mount.owner()?.absent).toBe(true));
+    expect(screen.getByText(/Archived takeoff/)).toBeTruthy();
+    expect(j.mount.owner()!.handle, "H01: a saved-evidence id cannot select another Work").toEqual(originalWork);
+    expect(j.host.inputs.source).toMatchObject({capturing:true});
+    fireEvent.click(screen.getByRole("button", {name:"live"}));
+    await j.ready();
+    await screen.findByRole("checkbox", {name:"Select Office zone in Zoning plan"});
+    expect(j.mount.owner()!.handle).toEqual(originalWork);
+    expect((screen.getByRole("button", {name:"initialize"}) as HTMLButtonElement).disabled, "H17: live readiness uses the current document and its original Work").toBe(false);
+    expect(j.mount.value().value.initialize.refusal).toBeNull();
+    expect(j.host.inputs.source).toMatchObject({capturing:true});
+    expect(j.host.inputs.lane.kind).toBe("live");
+    if(j.host.inputs.lane.kind === "live")
+      expect(j.host.inputs.lane.captureStore!.capture.truncated(), "zero capture stops").toBeNull();
+  } finally { await j.close(); }
+}, 60000);
