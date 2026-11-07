@@ -1,11 +1,13 @@
 /** Presentation of the single semantic Families Apply result. */
 // TODO: F3a live write proof remains owed: Broan reload refused system compatibility (7524f854-2853-4b41-9929-d551a7d8319e); see .artifacts/accept/u2-f3a/RESULTS.md.
-import {
-  familyApplyResultSchema,
-  writePreviewSchema,
-  type ActionReceipt,
-} from "@pe/agent-contracts";
-type OutcomeReceipt={state:ActionReceipt["state"];steps:readonly unknown[];result?:unknown;notDispatched?:boolean;error?:string};
+import { familyApplyResultSchema, writePreviewSchema } from "@pe/agent-contracts";
+type ApplyReceipt = {
+  readonly state: string;
+  readonly result?: unknown;
+  readonly error?: string;
+  readonly notDispatched?: boolean;
+  readonly steps: readonly unknown[];
+};
 type Refusal = { code: "not-ready" | "failed" | "partial"; message: string };
 const refuse = (code: Refusal["code"], message: string): Refusal => ({ code, message });
 
@@ -14,13 +16,13 @@ export const applyResults = (result: unknown) => {
   const parsed = familyApplyResultSchema.parse(result);
   return "results" in parsed ? parsed.results : [parsed];
 };
-const receiptsOf = (action: OutcomeReceipt) =>
+const receiptsOf = (action: ApplyReceipt) =>
   action.state === "succeeded"
     ? applyResults(action.result).flatMap((result) => result.native.receipts)
     : [];
 
 /** Counts and the common artifact parent, straight from the host result. */
-export function applyTally(action: OutcomeReceipt) {
+export function applyTally(action: ApplyReceipt) {
   const receipts = receiptsOf(action);
   const dirs = [
     ...new Set(receipts.flatMap((r) => (r.artifactDirectory ? [r.artifactDirectory] : []))),
@@ -42,10 +44,7 @@ export function applyTally(action: OutcomeReceipt) {
   };
 }
 
-export function applyOutcome(
-  action: OutcomeReceipt,
-  families: readonly string[],
-): Refusal | null {
+export function applyOutcome(action: ApplyReceipt, families: readonly string[]): Refusal | null {
   if (action.state !== "succeeded") {
     const noDispatch = action.state === "failed" && action.notDispatched === true;
     const reason = "error" in action ? action.error : `families.apply ${action.state}`;

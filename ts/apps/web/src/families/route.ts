@@ -72,6 +72,7 @@ export const module = route({
   },
   edits: {
     work: familiesRouteState,
+    seed: () => familiesRouteState.schema.parse({}),
     value: "familiesWork",
     owners: {},
     input: edit,
