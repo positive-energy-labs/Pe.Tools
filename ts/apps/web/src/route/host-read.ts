@@ -80,7 +80,7 @@ export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
                   trace: [],
                   freshness: "current",
                 },
-              };
+              } satisfies Publication;
             },
           }
         : {}),
