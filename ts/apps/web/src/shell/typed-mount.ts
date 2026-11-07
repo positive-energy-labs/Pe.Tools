@@ -466,8 +466,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     journal: () => {
       const journals=[...owners.values()].map(o=>o.lease.entry.journal.read()),base=owners.get(own)?.lease.entry.journal.read() ?? {revision:null,from:0,busy:false,receipts:[],undo:[],redo:[],moves:[],last:null};
       return {...base, undo:journals.flatMap(j=>j.undo).sort((a,b)=>a.at-b.at), redo:journals.flatMap(j=>j.redo).sort((a,b)=>a.at-b.at),
-        moves:journals.flatMap(j=>j.moves).sort((a,b)=>a.at-b.at), last:journals.flatMap(j=>j.last?[j.last]:[]).sort((a,b)=>a.step.at-b.step.at).at(-1)??null};
+        intents:journals.flatMap(j=>j.intents), moves:journals.flatMap(j=>j.moves).sort((a,b)=>a.at-b.at), last:journals.flatMap(j=>j.last?[j.last]:[]).sort((a,b)=>a.step.at-b.step.at).at(-1)??null};
     },
+    discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.journal.discardIntent(id); notify(); },
     restoreWork: restore, journalRefusal: () => input.readOnly || input.history ? "needs live Revit" : [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
@@ -496,7 +497,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const value = pane.read ? reads.get(pane.read)?.snapshot ?? unavailable(pane.read.demand === "explicit"?"Press Read":"Reading...") : unavailable("No read declared");
       const core = spec.core ? reads.get(spec.core)?.snapshot ?? unavailable("Reading...") : unavailable("No read declared");
       const token = basis();
+      const drawnOwners = new Map(owners);
       const handles = new Map([...owners].map(([id,o]) => [id,o.handle]));
+      const docs = new Map([...owners].map(([id,o]) => [id,o.doc]));
       const ready = !!token && (!pane.read || value.current);
       const ownerOf = (path: readonly string[], preferred?: string) => {
         const id = preferred ?? (Object.hasOwn(edits!.work.schema.shape,path[0]!) ? own : [...owners].find(([,o]) => Object.hasOwn(o.config.state.schema.shape,path[0]!))?.[0]);
@@ -506,21 +509,30 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const patch = async (request: readonly RouteStatePatch[] | (()=>readonly RouteStatePatch[]), detail: EditHistory = {label:"Edit"}, preferred?: string): Promise<EditFailure> => {
         if (!ready || !token) return {code:"unavailable",message:basisRefusal() ?? (!value.current ? value.reason : "Read the current Value before editing")};
         try {
-          requireWritable();
-          if (!basis() || !gate.current(token)) throw Error("Stale accepted Work basis");
           const patches = typeof request === "function" ? request() : request;
           const groups = new Map<string,RouteStatePatch[]>();
           for (const p of patches) { const id=ownerOf(p.path.map(String),preferred); groups.set(id,[...(groups.get(id)??[]),p]); }
           await Promise.all([...groups].map(async ([id, patches]) => {
-            const record=owners.get(id)!, handle=handles.get(id)!;
-            if (!record.ready || canonicalRouteInput(record.handle) !== canonicalRouteInput(handle)) throw Error("Owning Work changed since this cell was drawn");
-            const applied=applyPatches(record.config.state,{version:1,revision:handle.revision,doc:record.doc},"human",patches,handle.revision,false,true);
+            const record=drawnOwners.get(id)!, handle=handles.get(id)!;
+            const applied=applyPatches(record.config.state,{version:1,revision:handle.revision,doc:docs.get(id)},"human",patches,handle.revision,false,true);
             if (!applied.ok) throw Error(applied.error);
             // Scalar cells travel whole; record cells keep their narrow keys (host inverse authority).
             const normalized=[...new Set(patches.map(p=>String(p.path[0])))].flatMap(key => bare(record.config.state.schema.shape[key]!) instanceof z.ZodRecord
               ? patches.filter(p=>String(p.path[0])===key) : [{path:[key],value:(applied.envelope.doc as any)[key]}]);
             const label=id===own ? detail.label : `${detail.label} · from /${id}`;
-            await submit(record,{kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))},token);
+            const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
+            const journal=record.lease.entry.journal, intent=journal.retainIntent(write,label);
+            notify();
+            try {
+              requireWritable();
+              if (!basis() || !gate.current(token)) throw Error("Stale accepted Work basis");
+              if (owners.get(id)!==record || !record.ready || canonicalRouteInput(record.handle)!==canonicalRouteInput(handle)) throw Error("Owning Work changed since this cell was drawn");
+              await submit(record,write,token);
+              journal.discardIntent(intent);
+            } catch(error) {
+              journal.refuseIntent(intent,error instanceof Error?error.message:String(error));
+              throw error;
+            } finally { notify(); }
           }));
           return null;
         } catch(error) { return {code:"refused",message:error instanceof Error?error.message:String(error)}; }

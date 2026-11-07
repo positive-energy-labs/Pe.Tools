@@ -62,8 +62,10 @@ export function createApplicationWorkRegistry() {
       release() {
         if (--refs === 0) {
           stop?.();
+          stop = undefined;
           listeners.clear();
-          entries.delete(workKey(key));
+          // Unacknowledged input belongs to this exact Work even after its last Place leaves.
+          if (!journal.read().intents.length) entries.delete(workKey(key));
         }
       },
       connect(scope: WorkScope, door: Pick<WorkJournalDoor, "receipts">) {
