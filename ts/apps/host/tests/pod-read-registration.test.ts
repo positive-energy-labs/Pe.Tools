@@ -45,11 +45,18 @@ test("digest-verified Pod host reads enter reads.value and retire with their Wor
 process.env.${sentinel} = 'loaded';
 const input=z.object({}), output=z.object({total:z.number()}), work=z.object({amount:z.number()});
 export const module={data:${JSON.stringify(data)},schemas:{work},bodies:{},
-workState:{route:'pod.registry.tool',schema:work,schemaVersion:1},
+workState:{route:'pod.registry.tool',title:'Registry',description:'Host input admission',schema:work,schemaVersion:1},
 reads:{value:{name:'${name}',input,output,run:(ctx)=>ctx.read({name:'${leaf}',input,output,leaf:true,validate:false},{})}},
 leaves:{'${leaf}':async()=>({total:17})}};`,
   );
-  const host = await buildRouteArtifact({ entry: source, root, data, contracts: [] });
+  const host = await buildRouteArtifact({
+    entry: source,
+    root,
+    data,
+    contracts: [
+      { id: "registry-contract", bytes: new TextEncoder().encode("pod host read registration") },
+    ],
+  });
   const browserBytes = new TextEncoder().encode(
     "throw Error('Browser entry reached host registry')",
   );
@@ -70,9 +77,10 @@ leaves:{'${leaf}':async()=>({total:17})}};`,
   const artifact = {
     version: 1 as const,
     data,
-    contracts: [],
+    contracts: host.artifact.contracts,
     executables: executables.map((entry) => ({
-      ...entry,
+      client: entry.client,
+      entry: entry.entry,
       members: entry.members.map((member) => ({
         path: member.path,
         sha256: createHash("sha256").update(member.bytes).digest("hex"),
@@ -82,7 +90,7 @@ leaves:{'${leaf}':async()=>({total:17})}};`,
   const fingerprint = `pod-bytes:${await routeFingerprint(artifact)}`;
   const wire = JSON.parse(
     JSON.stringify(
-      { artifact, fingerprint: fingerprint.slice(10), contracts: [], executables },
+      { artifact, fingerprint: fingerprint.slice(10), contracts: host.contracts, executables },
       (_key, value) => (value instanceof Uint8Array ? [...value] : value),
     ),
   );
