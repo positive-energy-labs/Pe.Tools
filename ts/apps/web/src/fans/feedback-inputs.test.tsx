@@ -10,7 +10,7 @@ import fixture from "../ducts/sheet/sheet.fixture.json";
 import { ductsRosterResponseSchema } from "@pe/agent-contracts";
 
 const parameterCell = (stage:OwnedCell["stage"] = vi.fn(async()=>null)):OwnedCell => ({facts:{},freshness:"current",accept:async()=>null,deny:async()=>null,undo:async()=>null,owner:{route:"fans",label:"Work"},value:{},refusal:null,stage,clear:async()=>null,transitions:()=>[]});
-const options = {result:{kind:"Success",message:""},items:[{value:"shared:esp|instance",label:"Available ESP · instance",metadata:{name:"Available ESP",kind:"Shared",scope:"instance",storageType:"Double",dataTypeId:"pressure"}}]} as import("@pe/host-contracts/operation-types").OpResponseOf<"revit.catalog.field-options">;
+const options = {result:{kind:"Success",message:""},items:[{value:"shared:esp|instance",label:"Available ESP Â· instance",metadata:{name:"Available ESP",kind:"Shared",scope:"instance",storageType:"Double",dataTypeId:"pressure"}}]} as import("@pe/host-contracts/operation-types").OpResponseOf<"revit.catalog.field-options">;
 afterEach(cleanup);
 
 test("F6 an acknowledged role edit renders the option label with its author, never its object", () => {
@@ -50,7 +50,7 @@ test("F5 live parameter metadata reaches the picker and the slot stages the name
     />,
   );
   fireEvent.click(screen.getByRole("button", { name: "Old ESP" }));
-  expect(await screen.findByText("Shared · Double · pressure")).toBeTruthy();
+  expect(await screen.findByText("Shared Â· Double Â· pressure")).toBeTruthy();
   fireEvent.click(screen.getByRole("option", { name: /Available ESP/ }));
   await waitFor(() => expect(commit).toHaveBeenCalledWith("Available ESP", {label:"Unit ESP"}));
 });

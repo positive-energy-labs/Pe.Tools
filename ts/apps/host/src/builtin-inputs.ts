@@ -2,6 +2,7 @@ import { captureInput, replayInput, type RecordedInput } from "./native-recordin
 import { readLocal } from "./local-inputs.ts";
 import { readFamilySpec } from "./family-file-input.ts";
 import { PictureCaptureStore } from "./captures-route.ts";
+import { createHash } from "node:crypto";
 import {hostOpSafety} from "@pe/host-contracts/generated";
 import {executionTargetSchema,documentRefSchema,DUCTS_BODY_VERSION_HEADER} from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
@@ -21,7 +22,7 @@ import { historyPoseSchema, addressSchema } from "@pe/agent-contracts";
 import { HostReceipts } from "./gateway-owner.ts";
 import { readEvents } from "./reads/events.ts";
 import { readInvalidations } from "./reads/invalidations.ts";
-import { graphRoute, graphRouteIds, registeredReads } from "./reads/routes.ts";
+import { graphRoute, graphRouteIds } from "./reads/routes.ts";
 import { ResourceConnectionOwner } from "./request-services.ts";
 import {
   capturedWorkReads,
@@ -191,6 +192,26 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
   yield* Effect.addFinalizer(() => Effect.sync(invalidations.close));
   const json = (value: unknown) =>
     Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value)));
+  const assetInput=(sha:string)=>({kind:"files" as const,file:`capture:${sha}`});
+  const asset = (sha:string) => {
+    if(!/^[0-9a-f]{64}$/.test(sha)) throw Error("Invalid capture hash");
+    const input=assetInput(sha);
+    const read:Effect.Effect<string,import("@pe/host-internal/request-contracts").DoorFailure>=recorded ? replayInput(lane.recordingStore,input,"{}",Schema.String,
+      lane.recordingStore.candidates(canonicalJson(input)).find(t=>t.scope === "{}")?.id)
+      : (()=>{
+        const value=Effect.tryPromise({try:async()=>{
+          const bytes=await pictures!.blob(sha);
+          if(!bytes || createHash("sha256").update(bytes).digest("hex") !== sha) throw Error(`Capture ${sha} has no valid retained PNG`);
+          return bytes.toString("base64");
+        },catch:error=>new InvalidRead({message:String(error),status:404,problem:"capture.missing"})});
+        return writer?captureInput(writer,input,"{}",Schema.String,value,options.observed):value;
+      })();
+    return read.pipe(Effect.map(encoded=>{
+      const bytes=Buffer.from(encoded,"base64");
+      if(createHash("sha256").update(bytes).digest("hex") !== sha) throw Error("Recorded capture bytes do not match their address");
+      return bytes;
+    }));
+  };
   const child = (parent: InputConsumption, recipe: ConsumerRecipe) => {
     const next = parent.child(recipe);
     if (Result.isFailure(next)) throw next.failure;
@@ -364,7 +385,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       const document = (ref: import("@pe/agent-contracts").DocumentRef) =>
         invoke(documentRead(ref));
       return {
-        file: (name,args) => name === "firm" ? invoke(files.firm) : name === "catalogs" ? invoke(files.ductCatalogs) : takeFile(name,args,current),
+        file: (name,args) => name === "firm" ? invoke(files.firm) : name === "catalogs" ? invoke(files.ductCatalogs)
+          : name === "capture" ? scoped(current)(asset(String(args))).then(bytes=>bytes.toString("base64")) : takeFile(name,args,current),
         workKey: async (ref) => bindWork("ducts", (await document(ref)).address, undefined, ref),
         inputs: {
           consumption: current,
@@ -372,11 +394,10 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           work: workReadContext(current, scoped(current)),
         },
         resource: request => takeOwner(current,{kind:"resource",key:"snapshot",args:canonicalJson(json(request))},()=> {
-          if((request as {kind:string}).kind === "captures") return (async()=>({captures:await Promise.all((await pictures!.list()).map(async receipt=>{
-            const bytes=await pictures!.blob(receipt.sha);
-            if(!bytes) throw Error(`Capture ${receipt.id} has no retained PNG`);
-            return {...receipt,url:`data:image/png;base64,${bytes.toString("base64")}`};
-          }))}))();
+          if((request as {kind:string}).kind === "captures") return (async()=>{
+            const captures=await pictures!.list();
+            return {captures};
+          })();
           return new Promise((resolve,reject)=> {
             let settled=false,stop=()=>{};
             stop=fallback(request as Parameters<ResourceObserver>[0],frame=> {
@@ -387,8 +408,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           });
         }),
         call: async (key, input, target, version, role) => {
-          const requestTarget=executionTargetSchema.safeParse(target);
-          const chosen=requestTarget.success?requestTarget.data:{kind:"document" as const,ref:documentRefSchema.parse(target)};
+          const chosen=executionTargetSchema.parse(target);
           const safety=hostOpSafety[key as keyof typeof hostOpSafety];
           if(!safety || safety.intent !== "Read") throw Error(`Native leaf is not a catalog Read: ${key}`);
           const ref=chosen.kind === "document"?chosen.ref:null;
@@ -941,7 +961,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       Effect.ensuring(root.close),
     );
   });
-  return { work, invocation, retainedCall, nativeCall, nativeBody, services, publications, history };
+  return { work, invocation, retainedCall, nativeCall, nativeBody, services, publications, history, asset };
 });
 
 export type ReadOwnerOptions = NonNullable<Parameters<typeof makeReadOwner>[1]>;
@@ -964,6 +984,10 @@ const readCoreRoutes = (
         registrations: reads.work.registrations,
       });
       return Layer.mergeAll(
+        inputs.lane.kind === "recording" ? HttpRouter.add("GET","/captures/:asset",req=>{
+          const sha=new URL(req.url,"http://host").pathname.split("/").at(-1)?.replace(/\.png$/,"") ?? "";
+          return reads.asset(sha).pipe(Effect.map(bytes=>HttpServerResponse.uint8Array(bytes,{contentType:"image/png"})));
+        }) : Layer.empty,
         peCoreRoutes(routes, reads.invocation, inputs),
         historyRoutes(reads.history),
         nativeReadResolveRoute,

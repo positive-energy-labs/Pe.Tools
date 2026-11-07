@@ -1,24 +1,14 @@
+import { workRead } from "./inputs.ts";
 import { scheduleCatalog, scheduleRetained, scheduleSaved, scheduleReceipts } from "../builtin-read-handles.ts";
-import { z } from "zod";
-import {
-  scheduleReadingSchema,
-  scheduleCatalogSchema,
-  scheduleGridRouteState,
-  workKeySchema,
-  actionReceiptListDecoder,
-  canonicalRouteInput,
-  documentRefSchema,
-} from "@pe/agent-contracts";
+
+import { scheduleGridRouteState, canonicalRouteInput } from "@pe/agent-contracts";
 import {
   schedulesViewArgs,
   schedulesViewData,
 } from "../../../../packages/agent-contracts/src/schedules-read.ts";
-import { read, workValue } from "@pe/host/read-graph";
+import { read } from "@pe/host/read-graph";
 import { documentMark } from "./inputs.ts";
 import { scheduleOutcome } from "./schedule-outcome.ts";
-
-
-
 
 /** One selected schedule owns one workspace Work, independently of its native capture. */
 export const schedulesView = read("schedules.view", {
@@ -34,7 +24,7 @@ export const schedulesView = read("schedules.view", {
     const scope = args.workspaceId
       ? { binding: "workspace" as const, route: "schedules", target: null, work: args.workspaceId }
       : null;
-    const view = scope ? workValue.parse(await ctx.work("schedules", scope)) : null;
+    const view = scope ? await ctx.read(workRead("schedules", scheduleGridRouteState.schema),scope) : null;
     const work = scheduleGridRouteState.schema.parse(view?.doc ?? {});
     const retained = args.workspaceId
       ? await ctx.read(scheduleRetained, {

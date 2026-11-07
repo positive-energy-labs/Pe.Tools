@@ -58,7 +58,7 @@ const evidence = (
 ) => ({
   page: { stage: "network" as const },
   work,
-  heal: data ? data.analysis.heal as import("@pe/ducts-domain/heal").HealPlan : null,
+  heal: data ? data.analysis.heal : null,
   readings: { ducts: { value: data?.network }, fansWork: { value: data?.fansWork } },
 });
 export const module = route({

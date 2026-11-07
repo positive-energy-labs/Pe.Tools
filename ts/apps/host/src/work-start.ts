@@ -1,5 +1,5 @@
 import { commands, refusalText } from "@pe/agent-contracts";
-import { z } from "zod";
+
 import { command, refused } from "./command-executor.ts";
 import type { RouteWorkspace } from "@pe/runtime";
 import { productRouteWorkPath } from "./product-paths.ts";

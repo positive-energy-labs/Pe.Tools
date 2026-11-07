@@ -74,7 +74,7 @@ export function readInvalidations(
   };
   const stopFiles = recorded
     ? undefined
-    : subscribeFiles?.((name) => changed((input) => input === name));
+    : subscribeFiles?.((name) => changed((input) => input === `file:${name}`));
   return {
     revision: readRevision,
     close: () => {
