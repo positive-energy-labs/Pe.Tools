@@ -7,7 +7,7 @@ import { Context, Effect, Layer } from "effect";
 import { NodeServices, NodeHttpClient } from "../../../host/tests/family-attach-host.fixture.ts";
 import { HttpRouter } from "effect/http";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
-import { bindWork, familyDraftRouteState, READING_MAX_FRAME_BYTES } from "@pe/agent-contracts";
+import { bindWork, canonicalRouteInput, familyDraftRouteState, READING_MAX_FRAME_BYTES } from "@pe/agent-contracts";
 import { module } from "./route";
 import { mountTypedRoute } from "../shell/typed-mount.ts";
 import { createWorkFeedClient } from "../shell/work-feed-client.ts";
@@ -53,12 +53,11 @@ test("7 MB upload refusal reaches the typed Family action reason", async () => {
     Layer.provide(testHostInputs), Layer.provideMerge(Layer.mergeAll(Layer.succeed(RevitBridge, bridge), NodeServices.layer, NodeHttpClient.layerUndici)),
   ), { disableLogger: true });
   const caller = { kind: "human" as const, via: "local" as const };
+  const outboxes: ReturnType<typeof readOutbox>[] = [];
   const request = (url: any, init?: RequestInit) => {
     if (init?.method === "POST" && new URL(String(url), "http://localhost").pathname === "/actions") {
       const admission = JSON.parse(String(init.body));
-      const pending = readOutbox(`pe-action::${admission.id}:null`);
-      expect(pending?.admission?.input.source).toMatchObject({fileName: "source.pdf", size: 7 * 1024 * 1024 + 5});
-      expect(JSON.stringify(pending).length).toBeLessThan(1024);
+      outboxes.push(readOutbox(`pe-action::${admission.id}:${canonicalRouteInput(null)}`));
     }
     return withInvocationContext({caller}, () => web.handler(new Request(new URL(String(url), "http://localhost"), init),
     Context.make(RequestIdentity, admittedRequestIdentity(caller, {}))));
@@ -90,6 +89,8 @@ test("7 MB upload refusal reaches the typed Family action reason", async () => {
     expect(JSON.stringify(receipt)).not.toMatch(/"(?:base64|bytesBase64)"/);
     expect(JSON.stringify(frames)).not.toMatch(/"(?:base64|bytesBase64)"/);
     expect(await readFile(join(dir, "journal.jsonl"), "utf8")).not.toMatch(/"(?:base64|bytesBase64)"/);
+    expect(outboxes[0]?.admission?.input.source).toMatchObject({fileName: "source.pdf", size: 7 * 1024 * 1024 + 5});
+    expect(JSON.stringify(outboxes[0]).length).toBeLessThan(1024);
     expect(parsePdf).toHaveBeenCalledOnce();
     expect(frames.length).toBeGreaterThan(0);
   } finally { mount.dispose(); stop(); vi.unstubAllGlobals(); await journal.close(); await web.dispose(); await Effect.runPromise(Scope.close(scope, Exit.void)); await rm(dir, {recursive: true, force: true}); }
