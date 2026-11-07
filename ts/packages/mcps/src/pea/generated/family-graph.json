@@ -400,7 +400,28 @@
   ],
   "predicates": {},
   "cells": {},
-  "workFields": {},
+  "workFields": {
+    "writeIntent": {
+      "label": "Write scope",
+      "internal": true
+    },
+    "reading": {
+      "label": "Family reading",
+      "internal": false
+    },
+    "spec": {
+      "label": "Attached PDF",
+      "internal": false
+    },
+    "cells": {
+      "label": "Family fields",
+      "internal": false
+    },
+    "takenAt": {
+      "label": "Captured at",
+      "internal": false
+    }
+  },
   "seeds": {},
   "needs": "nothing",
   "resetOnTarget": [],

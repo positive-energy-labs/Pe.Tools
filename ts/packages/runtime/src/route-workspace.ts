@@ -1240,7 +1240,7 @@ export class RouteWorkspace {
           ? "reason" in error && typeof error.reason === "string" ? error.reason : error.message
           : String(error);
         throw Object.assign(
-          new Error(`Stored Work '${workKey(scope)}' cannot be read: ${reason}`),
+          new Error(`Stored Work '${workKey(scope)}' cannot be read: ${reason}`, { cause: error }),
           { code: "WorkUnreadable", key: scope, reason },
         );
       }

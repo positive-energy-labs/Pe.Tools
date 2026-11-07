@@ -76,6 +76,9 @@ export function observeResources(
             (error) => {
               const typed = workFeedFailureSchema.safeParse(error);
               if (typed.success) return refuse(typed.data);
+              if (error instanceof Error && "code" in error && error.code === "WorkUnreadable")
+                return refuse({ kind: "failed", code: "WorkUnreadable",
+                  message: error.cause instanceof Error ? error.cause.message : error.message });
               publish({
                 kind: "failure",
                 key,

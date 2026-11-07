@@ -217,7 +217,7 @@ export interface CellsDecl<W = unknown> {
 
 export interface WorkFieldDecl {
   label: string;
-  internal?: true;
+  internal?: boolean;
 }
 
 /** The subject type of a cell family's rows, and the reserved verb ids derived from it. */

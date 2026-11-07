@@ -8,7 +8,7 @@ export function registerTypedRoute(typed: import("../route/typed-route").TypedRo
   const key=typed.data.key;
   return publicRoutes.register({manifest:typed.data, typed,
     ...(typed.spec.edits ? {work:{route:key,schema:typed.spec.edits.work.schema,
-      ...(typed.spec.edits.key?{memberKey:true as const}:{}),cells:typedWorkCells(typed),workFields:{},
+      ...(typed.spec.edits.key?{memberKey:true as const}:{}),cells:typedWorkCells(typed),workFields:typed.data.workFields,
       admission:{routeKey:key,fingerprint}}}:{}),
     hosted:props=>createElement(HostedTypedRoute,{module:typed,fingerprint,...props})});
 }

@@ -116,7 +116,7 @@
     },
     "work": {
       "role": "query",
-      "schema": "work",
+      "schema": "page:work",
       "codec": "work",
       "initial": "",
       "url": "push",
@@ -309,7 +309,32 @@
   ],
   "predicates": {},
   "cells": {},
-  "workFields": {},
+  "workFields": {
+    "writeIntent": {
+      "label": "Write scope",
+      "internal": true
+    },
+    "edits": {
+      "label": "Room edits",
+      "internal": false
+    },
+    "bases": {
+      "label": "Baseline room values",
+      "internal": false
+    },
+    "adopt": {
+      "label": "Adoption choices",
+      "internal": false
+    },
+    "decisions": {
+      "label": "Flag decisions",
+      "internal": false
+    },
+    "reviewFlags": {
+      "label": "Review flags",
+      "internal": false
+    }
+  },
   "seeds": {},
   "needs": "project",
   "resetOnTarget": [],

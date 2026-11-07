@@ -20,6 +20,8 @@ import type { ReadingContext, ReadingSource } from "./source-contract";
 import type { DrawContext, EditFailure, EditHistory, TypedRoute } from "../route/typed-route";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";
+import { OLDER_WORK } from "@pe/agent-contracts";
+import { startFreshRouteWork } from "../route/host";
 
 type Value = DrawContext<any, any, any, any>["value"];
 const unavailable = (reason: string, value?: any, publication: Value["publication"] = null): Extract<Value,{current:false}> =>
@@ -27,7 +29,7 @@ const unavailable = (reason: string, value?: any, publication: Value["publicatio
 
 /** Typed routes execute declarations directly. No graph admission, body slots or reading scheduler. */
 export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerprint: RouteFingerprint,
-  ports: { work?: WorkJournalDoor; sources?: Record<string, ReadingSource> } = {}) {
+  ports: { work?: WorkJournalDoor; sources?: Record<string, ReadingSource>; startFresh?: typeof startFreshRouteWork } = {}) {
   const cleanups: (() => void)[] = [];
   try {
   const { spec } = module;
@@ -380,6 +382,28 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const mounted = {
     spec, subjectState, move,
     absentOwners:()=>[...owners].filter(([id,owner])=>id!==own&&owner.absent).map(([route])=>route),
+    startFreshAction() {
+      const record=owners.get(own),selected=selectedKey();
+      if(!selected||record?.failure?.kind!=="failed"||record.failure.message!==OLDER_WORK||input.readOnly||input.history||input.fixture!==null) return null;
+      const attempt=workAttempt,failure=record.failure;
+      return {
+        get pending(){return pending.has("work.start-fresh");},
+        get current(){return !disposed&&!released&&input.custody.current()&&workAttempt===attempt&&canonicalRouteInput(selected)===canonicalRouteInput(selectedKey())&&owners.get(own)?.failure===failure;},
+        async run() {
+          requireWritable();
+          const failure=owners.get(own)?.failure;
+          if(workAttempt!==attempt||canonicalRouteInput(selected)!==canonicalRouteInput(selectedKey())||failure?.kind!=="failed"||failure.message!==OLDER_WORK)
+            throw Error("Work recovery changed; review the current Work again");
+          if(pending.has("work.start-fresh")) throw Error("Start fresh already pending");
+          pending.add("work.start-fresh");notify();
+          try {
+            const result=await (ports.startFresh??startFreshRouteWork)(selected);
+            if(!result.ok) throw Error("error" in result?result.error:JSON.stringify(result));
+            ownerKey=undefined;syncWork();syncReads(true);
+          } finally { pending.delete("work.start-fresh");notify(); }
+        },
+      };
+    },
     startAction():import("../route/typed-route").ActionHandle|null {
       const record=owners.get(own);
       if(!record?.absent||!edits?.seed||!key||input.readOnly||input.history) return null;
