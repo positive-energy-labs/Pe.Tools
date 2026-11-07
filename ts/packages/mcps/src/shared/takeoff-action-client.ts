@@ -271,10 +271,12 @@ export async function submitAction(
   slot = retentionKey(base, admission.id, null),
 ): Promise<ActionReceipt | DetachedAction> {
   admission = structuredClone(actionAdmissionSchema.parse(admission));
+  const retainedAdmission = {...admission, input: await normalizedInput(admission.key, admission.input)};
   const prior = getRetained(slot);
-  if (prior?.admission && canonicalRouteInput(prior.admission) !== canonicalRouteInput(admission))
+  if (prior?.admission && canonicalRouteInput(prior.admission) !== canonicalRouteInput(retainedAdmission))
     throw Error(`Action '${prior.id}' has an unacknowledged immutable request`);
-  retain(slot, { id: admission.id, admission });
+  // Upload bytes travel in the POST only. Recovery retains the same digest intent, not a PDF in localStorage.
+  retain(slot, { id: admission.id, admission: retainedAdmission });
   const deadline = Date.now() + waitMs;
   inFlight().set(admission.id, base);
   let row: ActionReceipt | undefined;

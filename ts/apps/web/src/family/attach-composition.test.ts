@@ -27,7 +27,7 @@ import { hostResourceObserver } from "../../../host/src/resource-adapters.ts";
 import { detachedBridge, testHostInputs } from "../../../host/tests/effect-test.ts";
 import { bindActionReadings, type Readings } from "../readings";
 import { submitAction, recoverAction } from "../../../../packages/mcps/src/shared/takeoff-action-client.ts";
-import { withInvocationContext } from "@pe/runtime/context";
+import { withInvocationContext, readOutbox } from "@pe/runtime/context";
 
 // Real typed declaration, command client, HTTP handler, journal, Work and receipt projection.
 // No socket listens. Only PDF parsing and the unused native bridge are substitutes.
@@ -53,8 +53,16 @@ test("7 MB upload refusal reaches the typed Family action reason", async () => {
     Layer.provide(testHostInputs), Layer.provideMerge(Layer.mergeAll(Layer.succeed(RevitBridge, bridge), NodeServices.layer, NodeHttpClient.layerUndici)),
   ), { disableLogger: true });
   const caller = { kind: "human" as const, via: "local" as const };
-  const request = (url: any, init?: RequestInit) => withInvocationContext({caller}, () => web.handler(new Request(new URL(String(url), "http://localhost"), init),
+  const request = (url: any, init?: RequestInit) => {
+    if (init?.method === "POST" && new URL(String(url), "http://localhost").pathname === "/actions") {
+      const admission = JSON.parse(String(init.body));
+      const pending = readOutbox(`pe-action::${admission.id}:null`);
+      expect(pending?.admission?.input.source).toMatchObject({fileName: "source.pdf", size: 7 * 1024 * 1024 + 5});
+      expect(JSON.stringify(pending).length).toBeLessThan(1024);
+    }
+    return withInvocationContext({caller}, () => web.handler(new Request(new URL(String(url), "http://localhost"), init),
     Context.make(RequestIdentity, admittedRequestIdentity(caller, {}))));
+  };
   const observe = observeResources(work, undefined, hostResourceObserver(bridge, () => journal));
   const frames: unknown[] = [];
   const readings = { subscribe: (request: any, deliver: any) => observe(request, frame => {
