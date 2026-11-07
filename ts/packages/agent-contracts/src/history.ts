@@ -50,6 +50,12 @@ export const recordedWorkSchema = z.object({
   revision: z.number(),
   doc: z.unknown(),
 });
+/** Replay admission is host-owned, using the same resolver as opening a pane. */
+export const historyListSchema = z.object({
+  points: z.array(historyPointSchema),
+  unavailable: z.array(z.object({ point: z.string(), instance: z.string(), reason: z.string() })),
+  problem: z.string().nullable(),
+});
 export type HistoryPose = z.infer<typeof historyPoseSchema>;
 export type HistoryBinding = z.infer<typeof historyBindingSchema>;
 export type HistoryPoint = z.infer<typeof historyPointSchema>;

@@ -213,7 +213,17 @@ export class History {
       if (point.document === documentId(address) && point.history)
         points.push(historyPointSchema.parse(point));
     }
-    return { points: points.sort((a, b) => b.at - a.at), problem: this.stopped() ?? this.problem };
+    const unavailable: { point: string; instance: string; reason: string }[] = [];
+    for (const point of points) for (const pose of point.history.poses) {
+      try {
+        const bindings = new Map(point.history.publications.filter(b => b.instance === pose.instance).map(b => [canonicalJson([b.read, b.key]), b]));
+        if (!bindings.size) throw fail("This route was never published at this point");
+        for (const binding of bindings.values()) await this.publication(point.id, pose.instance, binding.read, binding.key);
+      } catch (error) {
+        unavailable.push({ point: point.id, instance: pose.instance, reason: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return { points: points.sort((a, b) => b.at - a.at), unavailable, problem: this.stopped() ?? this.problem };
   }
   async get(id: string) {
     await this.pending;
