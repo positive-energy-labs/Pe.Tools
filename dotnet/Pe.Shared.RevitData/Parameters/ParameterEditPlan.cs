@@ -94,8 +94,16 @@ public static class ParameterEditPlan {
     private static Refusal? Judge(Edit edit, Evidence evidence) {
         if (edit.Current == null) return new Refusal(EditRefusalCode.TargetUnresolved, $"Target element {edit.Value.ElementId} did not resolve.");
         if (edit.Value.Expected is not { } expected) return evidence == Evidence.IfGiven ? null : new Refusal(EditRefusalCode.TargetEvidenceMissing, MissingExpected);
-        return expected == edit.Current ? null : new Refusal(EditRefusalCode.TargetEvidenceStale, Stale(expected, edit.Current));
+        // Review labels and formatted units are presentation metadata. Only native mutation evidence
+        // participates in admission, so a renamed label or display-unit change cannot stale a raw target.
+        return SameEvidence(expected, edit.Current) ? null : new Refusal(EditRefusalCode.TargetEvidenceStale, Stale(expected, edit.Current));
     }
+
+    private static bool SameEvidence(ParameterTarget expected, ParameterTarget current) =>
+        expected.ElementId == current.ElementId && expected.ParameterId == current.ParameterId &&
+        expected.ParameterName == current.ParameterName && expected.StorageType == current.StorageType &&
+        expected.IsReadOnly == current.IsReadOnly && expected.HasValue == current.HasValue &&
+        expected.RawValue == current.RawValue;
 
     /// <summary>Stale evidence names its target and each field that moved since review, expected then now.</summary>
     public static string Stale(ParameterTarget expected, ParameterTarget current) {

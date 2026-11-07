@@ -28,7 +28,7 @@ import { contextFetch } from "@pe/runtime/context";
 import { routeInput } from "./host";
 import userEvent from "@testing-library/user-event";
 
-test.each(["insertText", "pointer keyboard", "navigation keyboard", "pointer shifted text", "navigation shifted text", "navigation composition", "navigation paste", "range shifted text"] as const)("JZ Schedules Description Enter stages r3, reviews BEFORE to AFTER, and shows a refused edit at its cell (%s)", async (entryMode) => {
+test.each(["review identity", "insertText", "pointer keyboard", "navigation keyboard", "pointer shifted text", "navigation shifted text", "navigation composition", "navigation paste", "range shifted text"] as const)("JZ Schedules Description Enter stages r3, reviews BEFORE to AFTER, and shows a refused edit at its cell (%s)", async (entryMode) => {
   const user = userEvent.setup();
   const host = await scheduleHost({ cold: true });
   if (entryMode.startsWith("range")) host.setResponse(cellsApplied([[1, 2, true], [2, 2, true]]));
@@ -38,8 +38,12 @@ test.each(["insertText", "pointer keyboard", "navigation keyboard", "pointer shi
   entry.rows[0]!.values = ["SH1", "Duct heater"];
   Object.assign(entry.rows[0]!.bindings[0]!, {
     parameterName: "PE_G___Description", storageType: "String", rawValue: "Duct heater",
-    displayValue: "Duct heater", targetElementIds: [7],
+    displayValue: "Duct heater", targetElementIds: [7], isTypeParameter: false,
     targets: [{ ...entry.rows[0]!.bindings[0]!.targets[0]!, storageType: "String", rawValue: "Duct heater" }],
+  });
+  Object.assign(entry.rows[0]!.bindings[0]!.targets[0]!, {
+    elementLabel: "SH1", uniqueId: "schedule-member-7", parameterName: "PE_G___Description",
+    scope: "instance", displayValue: "Duct heater",
   });
   const second = structuredClone(entry.rows[0]!);
   second.rowNumber = 2;
@@ -47,6 +51,7 @@ test.each(["insertText", "pointer keyboard", "navigation keyboard", "pointer shi
   second.subjectIds = [8];
   second.bindings[0]!.targetElementIds = [8];
   second.bindings[0]!.targets[0]!.elementId = 8;
+  Object.assign(second.bindings[0]!.targets[0]!, { elementLabel: "SH2", uniqueId: "schedule-member-8" });
   entry.rows.push(second);
   host.setDetail(detail);
   const client = createPeClient(host.base, contextFetch);
@@ -193,8 +198,16 @@ test.each(["insertText", "pointer keyboard", "navigation keyboard", "pointer shi
     act(() => mount.refresh());
     await waitFor(() => expect(mount.problem()).toBeNull());
     await screen.findAllByDisplayValue("Duct heater - gate review");
+    if (entryMode === "review identity") expect(screen.queryByText(/Id 7/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /plan Apply cells/i }));
-    await screen.findByText(/SH1.*Description: Duct heater → Duct heater - gate review/);
+    if (entryMode === "review identity") {
+      await screen.findByText(/Panel Schedule.*SH1.*Id 7.*PE_G___Description.*instance.*Duct heater → Duct heater - gate review/);
+      const reading = mount.value().value as { saved: { snapshot: { rows: { bindings: { targets: unknown[] }[] }[] } } };
+      expect(reading.saved.snapshot.rows[0]!.bindings[0]!.targets[0]).toMatchObject({
+        uniqueId: "schedule-member-7", elementLabel: "SH1", scope: "instance",
+        parameterName: "PE_G___Description", displayValue: "Duct heater",
+      });
+    } else await screen.findByText(/SH1.*Description.*Duct heater → Duct heater - gate review/);
     act(() => mount.cancel("push"));
     // Another writer advances Work behind the drawn cell. The host must refuse the
     // stale revision and its real reason must remain beside the user's cell.

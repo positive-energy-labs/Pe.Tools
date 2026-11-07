@@ -100,6 +100,10 @@ export const scheduleCellBindingTargetSchema = z.object({
   isReadOnly: z.boolean(),
   hasValue: z.boolean(),
   rawValue: z.string().nullable(),
+  elementLabel: z.string().nullish(),
+  uniqueId: z.string().nullish(),
+  scope: z.string().nullish(),
+  displayValue: z.string().nullish(),
 });
 export type ScheduleCellBindingTarget = z.infer<typeof scheduleCellBindingTargetSchema>;
 
