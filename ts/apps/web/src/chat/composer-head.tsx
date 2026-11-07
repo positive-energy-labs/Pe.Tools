@@ -24,11 +24,11 @@ import { Ladder } from "#/route/ladder";
 import { useDocumentLadder } from "#/route/situation-ladder";
 import { parseTarget } from "#/route/route-target";
 import type { RouteHandle } from "#/route/handle";
-import { chatData } from "./graph";
-import { chatReading, runChatCommand, type ChatHandle } from "./owner-ports";
+
+import { chatReading, type ChatHandle } from "./owner-ports";
 export type { ChatHandle } from "./owner-ports";
-import { GraphHistory } from "#/shell/mount-timeline";
-import { TimelineHead } from "#/shell/situation-band";
+
+
 import { SituationBand } from "#/shell/situation-band";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 import { RouteHelpButton } from "#/route/help";
@@ -55,22 +55,22 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /**
  * Send, scoped to the composer draft: the one verb, whether pressed in the head or entered in the
- * textarea. The route declares it once (`chat/graph.ts`); this only names its input.
+ * textarea. The host's thread prompt command owns validation and the harness stream owns completion.
  */
-export function useSend(handle: ChatHandle, draft: ChatDraft, onSent?: (sent: ChatDraft) => void) {
+export function useSend(_handle: ChatHandle, draft: ChatDraft, onSent?: (sent: ChatDraft) => void) {
   const input = {
     text: draft.text.trim(),
     attachments: draft.attachments.length ? draft.attachments : undefined,
     mentions: draft.mentions.length ? draft.mentions : undefined,
   };
+  const workbench = useWorkbench();
   return {
-    label: chatData.verbs.send.label,
+    label: "Send",
     says: undefined,
-    refusal: handle.localReadiness("send", input) ?? emptyPrompt(draft),
+    refusal: workbench.sendRefusal ?? emptyPrompt(draft),
     run: async () => {
-      const reason = await runChatCommand(handle, "send", input);
-      if (!reason) onSent?.(draft);
-      return reason ? { code: "not-ready" as const, message: reason } : null;
+      try { await workbench.sendPrompt(input); onSent?.(draft); return null; }
+      catch (error) { return { code: "not-ready" as const, message: String(error) }; }
     },
   };
 }
@@ -121,10 +121,11 @@ const documentAddress = (
  * The thread's head, or the draft's own target before the first send creates a thread. A draft
  * holds one document; more are added once the thread exists.
  */
-function useThreadHead(handle: ChatHandle) {
+function useThreadHead(_handle: ChatHandle) {
   const { currentThreadId, draftTarget, setDraftTarget } = useWorkbench();
-  const scope = useThreadScope(currentThreadId, !handle.fixture, chatReading(handle, "head"));
-  if (currentThreadId || handle.fixture) return scope;
+  const head = useTranscript(state => state.head);
+  const scope = useThreadScope(currentThreadId, true, { state: "ready", observation: head });
+  if (currentThreadId) return scope;
   const set = async (targets: Parameters<typeof scope.set>[0]) => {
     setDraftTarget(targets.at(-1)?.request ?? null);
     return true;
@@ -272,18 +273,9 @@ export function ChatSituationHead({
 }
 
 /** Lamp · gauge · help · theme for Chat — it rides the thread head, not the composer. */
-export function ChatCluster({ handle }: { handle: ChatHandle; situation: ChatSituation }) {
+export function ChatCluster(_props: { handle: ChatHandle; situation: ChatSituation }) {
   return (
     <>
-      <PrimaryRouteControls route="chat" slot="inspector">
-        {/* The one Timeline head, in a popover: an inline disclosure in this header slot spilled its
-            rows over the thread header (Manual D). The thread and target already lead the Situation;
-            the target's own "r0" read as the Work revision, so it is not repeated here. */}
-        <TimelineHead
-          owner={handle}
-          history={<GraphHistory owner={handle} verbs={chatData.verbs} />}
-        />
-      </PrimaryRouteControls>
       <PrimaryRouteControls route="chat">
         <RouteHelpButton
           name="Pea"

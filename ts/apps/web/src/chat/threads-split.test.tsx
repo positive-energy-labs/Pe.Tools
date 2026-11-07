@@ -6,7 +6,7 @@ import { GraphLayoutView } from "../../../../packages/kit/src/components/lang/gr
 import type { GraphLayoutState } from "../../../../packages/kit/src/components/lang/graph-layout";
 import { RouterContextProvider, createRouter, createMemoryHistory } from "@tanstack/react-router";
 import { Route as rootRoute } from "../routes/__root";
-import { chatData } from "./graph";
+import { chatLayout } from "./route";
 vi.mock("../routes/__root", async () => {
   const { createRootRoute } = await import("@tanstack/react-router");
   return { Route: createRootRoute() };
@@ -34,10 +34,10 @@ function Dock() {
   const [panes, onChange] = useState<GraphLayoutState>({});
   return (
     <GraphLayoutView
-      layout={{ ...chatData.layout, minOtherSize: 643 }}
+      layout={{ ...chatLayout, minOtherSize: 643 }}
       panes={{
-        threads: { ...chatData.panes.threads, verbs: [], draws: [] },
-        chat: { ...chatData.panes.chat, verbs: [], draws: [] },
+        threads: { ...{ label: "Threads", purpose: "Choose a conversation" }, verbs: [], draws: [] },
+        chat: { ...{ label: "Chat", purpose: "Read and compose" }, verbs: [], draws: [] },
       }}
       active={() => true}
       state={{ panes, onChange }}

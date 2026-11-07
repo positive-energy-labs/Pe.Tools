@@ -1,15 +1,10 @@
 import { createRoute } from "@tanstack/react-router";
 import { Route as root } from "../routes/__root";
-import { AdmittedRouteView, admittedRouteSearch } from "../shell/admitted-pane";
-import { applicationRouteShell } from "../shell/application-route-shell";
-import { capturesData } from "./kernel";
-import { admitCaptures } from "./admission";
-
+import { TypedShell } from "../shell/typed-shell";
+import { module } from "./route.ts";
+import { builtinRouteStamp } from "../route/builtin-inventory";
+import { workFingerprintSchema } from "@pe/agent-contracts";
 export const capturesRoute = createRoute({
-  getParentRoute: () => root,
-  path: "/captures",
-  validateSearch: admittedRouteSearch(capturesData),
-  component: () => (
-    <AdmittedRouteView shell={applicationRouteShell} load={admitCaptures} />
-  ),
+  getParentRoute: () => root, path: "/captures", validateSearch: (search: Record<string, unknown>) => search,
+  component: () => <TypedShell module={module} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("captures")}`)} />,
 });

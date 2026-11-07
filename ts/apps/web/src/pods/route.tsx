@@ -1,21 +1,10 @@
 import { createRoute } from "@tanstack/react-router";
 import { Route as root } from "../routes/__root";
-import { AdmittedRouteView, admittedRouteSearch } from "../shell/admitted-pane";
-import { applicationRouteShell } from "../shell/application-route-shell";
-import { podsData } from "./neutral";
-import { builtinRouteStamp, loadBuiltinRoute } from "../route/builtin-inventory";
-export async function admitPods() {
-  const result = await loadBuiltinRoute("pods", builtinRouteStamp("pods"));
-  if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
-  return result.route;
-}
+import { TypedShell } from "../shell/typed-shell";
+import { module } from "./route.ts";
+import { builtinRouteStamp } from "../route/builtin-inventory";
+import { workFingerprintSchema } from "@pe/agent-contracts";
 export const podsRoute = createRoute({
-  getParentRoute: () => root,
-  path: "/pods",
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): Partial<
-    Record<"pod" | "path" | "runs" | "threadSearch" | "threadSort" | "fixture", unknown>
-  > => admittedRouteSearch(podsData)(search),
-  component: () => <AdmittedRouteView shell={applicationRouteShell} load={admitPods} />,
+  getParentRoute: () => root, path: "/pods", validateSearch: (search: Record<string, unknown>) => search,
+  component: () => <TypedShell module={module} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("pods")}`)} />,
 });

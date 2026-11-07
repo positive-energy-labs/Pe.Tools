@@ -13,7 +13,7 @@ import {
   type CSSProperties,
 } from "react";
 import { RouteVisibility, useRouteSearchSlice } from "#/route/activity";
-import { KeyScope, ScopeKeys, actionScopeKeys, type ScopeKey } from "@pe/kit/keys";
+import { KeyScope, ScopeKeys, actionScopeKeys } from "@pe/kit/keys";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { NewThreadButton, ThreadsSidebar, ThreadPane } from "#/chat/thread-palette";
 import { useTranscript, useTranscriptAtom, useWorkbench } from "#/workbench/provider";
@@ -39,14 +39,17 @@ import {
   useChatSituation,
 } from "#/chat/composer-head";
 import { GraphLayoutView } from "../../../../packages/kit/src/components/lang/graph-layout";
-import { ChatOwner } from "./owner";
+import { TypedShell } from "../shell/typed-shell";
+import { module, chatLayout, threadIdentity } from "./route";
+import { builtinRouteStamp } from "../route/builtin-inventory";
+import { workFingerprintSchema, identityCodecs } from "@pe/agent-contracts";
 import { appAtomRegistry } from "#/shell/owner";
 import { PagePaletteButton } from "#/route/situation-marks";
 import { PrimaryRouteControls, usePublishPagePalette } from "#/navigation/route-controls";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { Ledger } from "#/navigation/ledger";
 import { LEDGER_PRESENTATIONS } from "#/navigation/ledger-model";
-import { chatData, selectedThreads, threadIdentity, threadName } from "./graph";
+
 import type { ChatHandle } from "./owner-ports";
 import { readThreadTarget } from "#/chat/thread-navigation";
 import "#/workbench/lens.css";
@@ -63,6 +66,7 @@ import { TeachPage, TeachReference } from "@pe/kit/lang/use-teach";
 import { STARTUP_TEACHING } from "#/route/teaching";
 
 type ChatShellProps = { target?: string; docked?: boolean };
+const ChatSurfaceProps = createContext<ChatShellProps>({});
 
 /** Whether ThreadsSplit is drawing the thread sidebar open beside Pea's column right now. */
 const SidebarShown = createContext(false);
@@ -88,12 +92,14 @@ export const ChatShell = memo(function ChatShell(props: ChatShellProps) {
 });
 
 function CurrentThreadChatSurface(props: ChatShellProps) {
+  return <ChatSurfaceProps.Provider value={props}><TypedShell module={module} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("chat")}`)} /></ChatSurfaceProps.Provider>;
+}
+export function ChatDrawing({ ctx }: { ctx: ChatHandle }) {
+  const props = useContext(ChatSurfaceProps);
   const { currentThreadId, turn } = useWorkbench();
   return (
     <CurrentThreadViewOwner threadKey={currentThreadId} registry={appAtomRegistry} turn={turn}>
-      <ChatOwner docked={props.docked ?? false}>
-        {(handle) => <ChatSurface {...props} handle={handle} />}
-      </ChatOwner>
+      <ChatSurface {...props} handle={ctx} />
     </CurrentThreadViewOwner>
   );
 }
@@ -196,13 +202,9 @@ function ChatSurface({ target, docked = false, handle }: ChatShellProps & { hand
       });
     },
   };
-  useEffect(() => {
-    if (threadName(handle.page.read().thread) !== currentThreadId)
-      handle.controls.subject(threadIdentity(currentThreadId));
-  }, [handle, currentThreadId]);
   const mode = handle.page.read().mode as Mode;
   const setMode = (mode: Mode) => {
-    handle.controls.query("mode", mode);
+    handle.page.query({ mode });
   };
   const [layoutSizes, setLayoutSizes] = useState<GraphLayoutState>({});
   const situation = useChatSituation(handle);
@@ -224,7 +226,7 @@ function ChatSurface({ target, docked = false, handle }: ChatShellProps & { hand
     store.actions.revealThreads();
     setSearchSerial((serial) => serial + 1);
   };
-  usePublishPagePalette(chatData.key, false, (open) => open && findThread());
+  usePublishPagePalette("chat", false, (open) => open && findThread());
 
   // N6: a thread switch keeps the last read transcript, inert and dimmed under a progress mark,
   // until the next body reads. The boundary turns over with the body it shows, so an old failure
@@ -275,7 +277,7 @@ function ChatSurface({ target, docked = false, handle }: ChatShellProps & { hand
           id="transcript"
           name
           titleAlign="center"
-          meta={handle.fixture ? "Fixture" : switching ? "reading" : undefined}
+          meta={switching ? "reading" : undefined}
           title={
             chat.title ||
             threads.find((thread) => thread.id === currentThreadId)?.title ||
@@ -333,11 +335,10 @@ function ChatSurface({ target, docked = false, handle }: ChatShellProps & { hand
       {mode === "threads" ? (
         <ThreadsSidebar
           selected={(() => {
-            const value = handle.page.read().selected as "all" | readonly { id: string }[];
-            return selectedThreads(value, threads);
+            return handle.selection.read().map(item => identityCodecs.local.parts(item.id).subject);
           })()}
           onSelection={(selected) =>
-            handle.page.select(selected.map((id) => ({ kind: "thread", id: threadIdentity(id)! })))
+            handle.selection.set(selected.map((id) => ({ kind: "focus", id: threadIdentity(id) })))
           }
           primary
           reading={!rosterRead}
@@ -375,10 +376,10 @@ function ChatSurface({ target, docked = false, handle }: ChatShellProps & { hand
         keys={actionScopeKeys(
           (["threads", "world"] as const).map((id) => ({
             id: `chat.${id}`,
-            label: chatData.verbs[id].label,
-            bindings: [chatData.verbs[id].chord as ScopeKey["hotkey"]],
+            label: id === "threads" ? "Threads mode" : "World mode",
+            bindings: [id === "threads" ? "Mod+1" : "Mod+2"],
             invoke: () => {
-              handle.invoke(id, {});
+              handle.page.query({ mode: id });
             },
           })),
         )}
@@ -401,10 +402,10 @@ function ChatSurface({ target, docked = false, handle }: ChatShellProps & { hand
         )}
         <SidebarShown.Provider value={threadFold !== "start"}>
           <GraphLayoutView
-            layout={{ ...chatData.layout, minOtherSize: peaFloor() }}
+            layout={{ ...chatLayout, minOtherSize: peaFloor() } as Parameters<typeof GraphLayoutView>[0]["layout"]}
             panes={{
-              threads: { ...chatData.panes.threads, draws: [], verbs: [] },
-              chat: { ...chatData.panes.chat, draws: [], verbs: [] },
+              threads: { label: "Threads", purpose: "Choose a conversation", draws: [], verbs: [] },
+              chat: { label: "Chat", purpose: "Read and compose", draws: [], verbs: [] },
             }}
             active={() => true}
             state={{
