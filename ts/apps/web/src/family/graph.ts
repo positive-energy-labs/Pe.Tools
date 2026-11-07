@@ -30,7 +30,15 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph
   address: "family",
   name: "Family",
   work: familyDraftRouteState.schema,
-  subjectField:{kind:"singleton",field:"family",noun:"family",keyKind:"name",roster:"test",detail:"test",pane:"table"},
+  subjectField: {
+    kind: "singleton",
+    field: "family",
+    noun: "family",
+    keyKind: "name",
+    roster: "test",
+    detail: "test",
+    pane: "table",
+  },
   fields: {
     stage: field(familyPageSchema.shape.stage, {}),
     pod: field(familyPageSchema.shape.pod, {}),

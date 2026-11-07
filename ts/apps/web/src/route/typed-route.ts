@@ -189,6 +189,7 @@ export type Specification<
   edits?: {
     work: W | RouteStateSpec<W>;
     key?(page: Page<F>): string | null;
+    seed?(): z.output<W>;
     value?: keyof D & string;
     owners: Owners;
     input: Edit;

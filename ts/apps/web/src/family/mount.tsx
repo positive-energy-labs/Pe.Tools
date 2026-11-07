@@ -51,6 +51,13 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
   return (
     <div className="grid min-h-0 flex-1 grid-cols-1 gap-(--gutter) min-[1100px]:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]">
       <div className="flex min-w-0 flex-col gap-(--gutter)">
+        {!ctx.value.current && (
+          <OutcomeLine
+            kind={ctx.value.status === "pending" ? "busy" : "error"}
+            label="Family reading"
+            says={ctx.value.reason}
+          />
+        )}
         {data?.profileError && (
           <OutcomeLine
             kind="error"
