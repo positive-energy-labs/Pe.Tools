@@ -1,3 +1,4 @@
+import { unavailableFieldOptions } from "./effect-test.ts";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -133,7 +134,7 @@ async function fixture(capture = false) {
               }
               return {
                 value: Schema.decodeUnknownSync(Schema.Json)(
-                  input.key === "ducts.tables"
+                  input.key === "revit.catalog.field-options" ? unavailableFieldOptions : input.key === "ducts.tables"
                     ? {
                         folder: "captured",
                         tables: {},
