@@ -115,7 +115,7 @@ export interface TriageInput {
   doc: DuctsDesign | null;
   nameOf?: (id: number) => string;
   groupLabel?: (id: string) => string;
-  heal?: HealPlan | import("./pricing-view").HealView | null;
+  heal?: HealPlan | import("./pricing-view.ts").HealView | null;
   airflow?: { current: string; options: readonly AirflowOption[] };
   unitAirflow?: { current: string; options: readonly AirflowOption[] };
   roles?: ReadIndex<number, { role: "fan" | "passive"; why: string; reason: string }>;
@@ -931,3 +931,4 @@ export function focusRow(issue: string, rowKeys: ReadonlySet<string>): string | 
   const rest = issue.slice(at + 1);
   return rowKeys.has(rest) ? rest : "write";
 }
+

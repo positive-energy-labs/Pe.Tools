@@ -417,7 +417,7 @@ export function unitOf(snapshot: DuctSnapshot, result: Pick<LossResult,"byGroup"
  * Legacy classification arithmetic, not physical fan certification. Explicit edit fan/passive
  * roles suppress this unit scalar; physical circuit pressure is retained separately.
  */
-export function proposedStatic(snapshot: DuctSnapshot, result: import("./pricing-view").LossView | LossResult, unit: number) {
+export function proposedStatic(snapshot: DuctSnapshot, result: import("./pricing-view.ts").LossView | LossResult, unit: number) {
   const role = result.design.graph.parts.find((part) => part.elementId === unit)?.continuity;
   if (role === "passive" || role === "fan-boundary") return null;
   const byKind = new Map<string, number>();
@@ -638,3 +638,4 @@ export function applyRequest(
 /** Rule instances a edit table cannot price: left out of the write, named in the band. */
 export const unpriced = (priced: Pick<Priced,"next">, key: string) =>
   [...instancesOf(priced.next, key).values()].filter((row) => row.c == null || row.error).length;
+
