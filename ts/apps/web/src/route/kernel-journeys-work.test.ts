@@ -78,6 +78,8 @@ async function journey() {
     );
   };
   const streams = new Set<() => void>();
+  let streamHeld = false;
+  const streamQueue: (() => void)[] = [];
   const source: Readings = {
     subscribe(reading, deliver) {
       let reader: ReadableStreamDefaultReader<Uint8Array> | undefined,
@@ -106,7 +108,10 @@ async function journey() {
             const frame = buffer.slice(0, end);
             buffer = buffer.slice(end + 2);
             for (const line of frame.split("\n"))
-              if (line.startsWith("data: ")) deliver(JSON.parse(line.slice(6)));
+              if (line.startsWith("data: ")) {
+                const frame = JSON.parse(line.slice(6));
+                if (streamHeld) streamQueue.push(() => deliver(frame)); else deliver(frame);
+              }
           }
         }
       })();
@@ -124,9 +129,14 @@ async function journey() {
     return (response.ok ? value : (value.error?.details ?? value)) as RouteStateWriteResult;
   };
   let heldWrite: ReturnType<typeof gate> | undefined;
+  let beforeWrite: ReturnType<typeof gate> | undefined;
+  const writes: WorkWrite[] = [];
   const work = createWorkFeedClient(source, {
     write: async (key, body) => {
       const held = heldWrite; heldWrite = undefined;
+      writes.push(structuredClone(body));
+      const before = beforeWrite; beforeWrite = undefined;
+      if (before) { before.entered.resolve(); await before.release.promise; }
       const result = await write(key, body);
       if (held) { held.entered.resolve(); await held.release.promise; }
       return result;
@@ -207,6 +217,10 @@ async function journey() {
     ready,
     cells,
     key,
+    writes,
+    holdBeforeWrite() { beforeWrite = gate(); return beforeWrite; },
+    holdStream() { streamHeld = true; },
+    flushStream() { streamHeld = false; streamQueue.splice(0).forEach(deliver => deliver()); },
     holdWrite() { heldWrite = gate(); return heldWrite; },
     depart() {
       current = false;
@@ -221,6 +235,9 @@ async function journey() {
       await ready();
     },
     async close() {
+      // Each journey owns a fresh host store at the same recorded address.
+      // Do not carry its refused browser intents into the next independent host.
+      mounts.forEach(m => m.journal().intents.forEach(intent => m.discardIntent(intent.id)));
       mounts.forEach((m) => m.dispose());
       streams.forEach((stop) => stop());
       await Promise.allSettled([...pending]);
@@ -439,5 +456,130 @@ test("JM H30 refuse a stale drawn edit and retain its original intent across ref
     await j.ready();
     expect(j.m.owner()!.doc, "H30: stale intent never recomputes on newer Work").toEqual(before);
     expect(JSON.stringify(j.m.journal()), "H30: rejected input remains inspectable until explicit discard").toContain("Keep my original airflow");
+  } finally { await j.close(); }
+}, 60_000);
+
+test("JZ C121/C090 drawn authority rejects copied, foreign and old bases without recompute or retry", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    const drawn = j.cells(), old = drawn.basis!;
+    expect(j.m.current(old)).toBe(true);
+    expect(j.m.current({ ...old } as typeof old)).toBe(false);
+    const replacement = j.mount();
+    await vi.waitFor(() => expect(replacement.owner()?.ready).toBe(true));
+    expect(replacement.current(old)).toBe(false);
+    expect(await drawn.at(["flows", "4"]).stage({ cfm: 200 })).toBeNull();
+    await j.ready();
+    const before = structuredClone(j.m.owner()!.doc), count = j.writes.length;
+    const edit = { cfm: 731 };
+    expect(await drawn.patch([{ path: ["flows", "4", "edit"], value: { value: edit } }],
+      { label: "Original refused airflow" })).toMatchObject({ code: "refused" });
+    expect(j.m.current(old)).toBe(false);
+    const intent = j.m.journal().intents.find(i => i.label === "Original refused airflow")!;
+    expect(intent.input.expectedRevision).toBe(old.workRevision);
+    expect(intent.input.patches).toEqual([{ path: ["flows", "4", "edit"], value: { value: edit } }]);
+    expect(Object.isFrozen(intent.input.patches)).toBe(true);
+    expect(await drawn.patch(intent.input.patches, { label: "Retry original refused airflow" })).toMatchObject({ code: "refused" });
+    expect(j.writes).toHaveLength(count);
+    expect(j.m.owner()!.doc).toEqual(before);
+    j.m.discardIntent(intent.id);
+    expect(j.m.journal().intents.some(i => i.id === intent.id)).toBe(false);
+    expect(await j.cells().at(["flows", "4"]).stage({ cfm: 201 })).toBeNull();
+  } finally { await j.close(); }
+}, 60_000);
+
+test("JZ C122 delayed mounted submit retains its revision after a newer edit", async () => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    const revision = j.m.owner()!.handle!.revision;
+    held = j.holdBeforeWrite();
+    const pending = j.cells().at(["flows", "4"]).stage({ cfm: 200 });
+    await held.entered.promise;
+    expect(await j.cells().at(["flows", "4"]).stage({ cfm: 500 })).toBeNull();
+    await j.ready();
+    held.release.resolve();
+    expect(await pending).toMatchObject({ code: "refused" });
+    expect(j.writes.slice(-2).map(w => w.expectedRevision)).toEqual([revision, revision]);
+    expect(j.m.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: 500 });
+    expect(j.m.journal().intents.at(-1)!.input.patches).toEqual([
+      { path: ["flows", "4", "edit"], value: { value: { cfm: 200 } } },
+    ]);
+  } finally { held?.release.resolve(); await j.close(); }
+}, 60_000);
+
+test.each(["ack-first", "stream-first"])("JZ C086 %s delivery and pending departure recover durable Work", async order => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    if (order === "ack-first") j.holdStream(); else held = j.holdWrite();
+    const pending = j.cells().at(["flows", "4"]).stage({ cfm: 210 });
+    if (held) {
+      await held.entered.promise;
+      await vi.waitFor(() => expect(j.m.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: 210 }));
+      held.release.resolve();
+    }
+    expect(await pending).toBeNull();
+    expect(j.m.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: 210 });
+    j.flushStream(); await j.ready();
+    held = j.holdBeforeWrite();
+    const departing = j.cells().at(["flows", "4"]).stage({ cfm: 310 });
+    await held.entered.promise;
+    j.m.dispose();
+    const retired = structuredClone(j.m.owner()!.doc);
+    held.release.resolve();
+    expect(await departing).toBeNull();
+    expect(j.m.owner()!.doc).toEqual(retired);
+    const reopened = j.mount();
+    await vi.waitFor(() => expect(reopened.owner()?.doc.flows["4"]?.edit.value).toEqual({ cfm: 310 }));
+  } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
+}, 60_000);
+
+test("JZ C718/C675/C676/C730 atomic press, isolated cell undo, root addressing and locked deletion", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    const original = structuredClone(j.m.owner()!.doc);
+    expect(await j.cells().patch(["4", "999"].map(id => ({ path: ["flows", id, "edit"], value: { value: { cfm: 240 } } })),
+      { label: "Both terminals" })).toBeNull();
+    await j.ready();
+    const step = j.m.journal().undo.at(-1)!;
+    expect(j.m.journal().undo.filter(s => s.press === j.writes.at(-1)!.press), JSON.stringify(j.m.journal())).toHaveLength(1);
+    expect(step.transitions).toHaveLength(1);
+    expect(step.transitions[0]!.forward).toHaveLength(2);
+    expect(step.transitions[0]!.inverse).toHaveLength(2);
+    expect(j.writes.at(-1)!.press).toBe(step.press);
+    expect(await j.m.history.undo(step.press)).toMatchObject({ ok: true });
+    await j.ready(); expect(j.m.owner()!.doc).toEqual(original);
+    expect(await j.cells().patch(["4", "999"].map(id => ({ path: ["flows", id], value: { edit: { value: { cfm: 250 } } } })))).toBeNull();
+    await j.ready();
+    const before = structuredClone(j.m.owner()!.doc), steps = j.m.journal().undo.length;
+    for (const [id, action] of [["4", "clear"], ["999", "clear"], ["4", "delete"]] as const) {
+      expect(await j.cells().at(["flows", id])[action]({ label: `${action} ${id}` })).toBeNull();
+      await j.ready();
+    }
+    expect(j.m.owner()!.doc.flows["4"]).toBeUndefined();
+    expect(j.m.journal().undo).toHaveLength(steps + 3);
+    expect(j.m.journal().undo.slice(-3).map(s => s.transitions.length)).toEqual([1, 1, 1]);
+    for (let i = 0; i < 3; i++) { expect(await j.m.history.undo()).toMatchObject({ ok: true }); await j.ready(); }
+    expect(j.m.owner()!.doc).toEqual(before);
+    expect(await j.cells().at(["designFriction"]).stage(0.1)).toBeNull(); await j.ready();
+    const rootBefore = structuredClone(j.m.owner()!.doc), rootSteps = j.m.journal().undo.length;
+    expect(() => j.cells().at(["foreignRoot"])).toThrow("No owning Work");
+    expect(await j.cells().at(["designFriction"]).clear()).toBeNull(); await j.ready();
+    expect(await j.cells().at(["designFriction"]).delete()).toBeNull(); await j.ready();
+    expect(j.m.owner()!.doc.designFriction).toEqual({});
+    expect(j.m.journal().undo).toHaveLength(rootSteps + 2);
+    for (let i = 0; i < 2; i++) { expect(await j.m.history.undo()).toMatchObject({ ok: true }); await j.ready(); }
+    expect(j.m.owner()!.doc).toEqual(rootBefore);
+    const locked = j.cells().at(["flows", "4"], undefined, { readOnly: true });
+    const writes = j.writes.length;
+    expect(await locked.delete()).toMatchObject({ code: "read-only" });
+    expect(await locked.clear()).toMatchObject({ code: "read-only" });
+    expect(j.writes).toHaveLength(writes);
+    expect(j.m.owner()!.doc).toEqual(rootBefore);
   } finally { await j.close(); }
 }, 60_000);

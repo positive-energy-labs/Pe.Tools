@@ -9,7 +9,7 @@ import { SubjectDoor } from "../shell/subject";
 import fixture from "../ducts/sheet/sheet.fixture.json";
 import { ductsRosterResponseSchema } from "@pe/agent-contracts";
 
-const parameterCell = (stage:OwnedCell["stage"] = vi.fn(async()=>null)):OwnedCell => ({facts:{},freshness:"current",accept:async()=>null,deny:async()=>null,undo:async()=>null,owner:{route:"fans",label:"Work"},value:{},refusal:null,stage,clear:async()=>null,transitions:()=>[]});
+const parameterCell = (stage:OwnedCell["stage"] = vi.fn(async()=>null)):OwnedCell => ({facts:{},freshness:"current",accept:async()=>null,deny:async()=>null,undo:async()=>null,owner:{route:"fans",label:"Work"},value:{},refusal:null,stage,clear:async()=>null,delete:async()=>null,transitions:()=>[]});
 const options = {descriptor:{key:"parameter-identities",mode:"Suggestion",allowsCustomValue:true,dependsOn:[],requiredRuntimeMode:"LiveDocument"},result:{kind:"Success",message:""},items:[{value:"shared:esp|instance",label:"Available ESP · instance",metadata:{name:"Available ESP",kind:"Shared",scope:"instance",storageType:"Double",dataTypeId:"pressure"}}]} as import("@pe/host-contracts/operation-types").OpResponseOf<"revit.catalog.field-options">;
 afterEach(cleanup);
 
