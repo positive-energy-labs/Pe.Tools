@@ -287,7 +287,16 @@ export function createWorkFeedClient(
               (frame) => {
                 if (closed) return;
                 if (frame.kind === "stale" || ("stale" in frame && frame.stale)) {
-                  acquiring = true; emit({ kind: "pending" }); return;
+                  const wasReady = !acquiring;
+                  acquiring = true;
+                  emit({ kind: "pending" });
+                  // The ack stream can invalidate after the snapshot already arrived.
+                  // Pending must own a new snapshot request, not wait for an unrelated edit.
+                  if (wasReady && !closed) {
+                    try { source.dirty(request); }
+                    catch (error) { fail(error instanceof Error ? error.message : String(error)); }
+                  }
+                  return;
                 }
                 if (frame.kind === "failure")
                   return fail(
