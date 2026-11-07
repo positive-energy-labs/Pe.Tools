@@ -79,6 +79,13 @@ const handAxes = {
     cost: "Mutation",
     cardinality: "One",
   },
+  "families.read": {
+    subject: "Elements",
+    touches: ["Metadata"],
+    effect: "SessionWrite",
+    cost: "Mutation",
+    cardinality: "One",
+  },
   "families.cancel-read": {
     subject: "Elements",
     touches: ["Metadata"],
@@ -110,6 +117,13 @@ const handAxes = {
   },
   "families.save-draft": {
     subject: "None",
+    touches: ["Metadata"],
+    effect: "SessionWrite",
+    cost: "Mutation",
+    cardinality: "One",
+  },
+  "schedule.grid.read": {
+    subject: "Elements",
     touches: ["Metadata"],
     effect: "SessionWrite",
     cost: "Mutation",

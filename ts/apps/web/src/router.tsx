@@ -9,12 +9,12 @@ import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
-import { settingsRoute } from "./settings/route";
-import { schedulesRoute } from "./schedules/route";
-import { familiesRoute } from "./families/route";
+import { settingsRoute } from "./settings/route.tsx";
+import { schedulesRoute } from "./schedules/route.tsx";
+import { familiesRoute } from "./families/route.tsx";
 import { takeoffsRoute } from "./takeoff/route";
-import { podsRoute } from "./pods/route";
-import { capturesRoute } from "./captures/route";
+import { podsRoute } from "./pods/route.tsx";
+import { capturesRoute } from "./captures/route.tsx";
 import { Route as rootRoute } from "./routes/__root";
 
 // Use the unannotated root: the generated tree's file-only type map excludes code routes.

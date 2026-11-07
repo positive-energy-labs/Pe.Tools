@@ -250,6 +250,7 @@ export const tools = {
       editable: [["writeIntent", "*"], ["cells", "*"], ["patch"], ["scope"]],
     },
     commands: {
+      "families.read": familyActions["families.read"],
       "families.cancel-read": familyActions["families.cancel-read"],
       ...workIntent("families", "families.capture", familyActions["families.capture"]),
       "families.plan": workCommand("families", familyActions["families.plan"]),
@@ -268,6 +269,7 @@ export const tools = {
       ],
     },
     commands: {
+      "schedule.grid.read": scheduleActions["schedule.grid.read"],
       "schedule.grid.bind": scheduleActions["schedule.grid.bind"],
       ...workWriteCommands(
         "schedules",

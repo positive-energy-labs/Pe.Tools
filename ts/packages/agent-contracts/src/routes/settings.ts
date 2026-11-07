@@ -1,6 +1,6 @@
 // Generated from settings/route.ts by codegen:routes. Do not edit.
 import { z } from "zod";
-import { subjectSchema, focusSelectionSchema } from "../route-kernel-codecs.ts";
+import { focusSelectionSchema } from "../route-kernel-codecs.ts";
 import { jsonCodec } from "../route-field.ts";
 const field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: jsonCodec(schema) });
 export const settingsAddress = { path: "/settings" as const, title: "Settings", fields: {
