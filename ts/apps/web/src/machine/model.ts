@@ -219,7 +219,9 @@ export function revitState(machine: Machine): Said {
       text: machine.legs.sessions?.error ? "census failed" : "census unread",
       tone: "caution",
     };
-  const active = sessions.filter(({ row }) => row.case === "controlled-active" || row.case === "observed-active");
+  const active = sessions.filter(
+    ({ row }) => row.case === "controlled-active" || row.case === "observed-active",
+  );
   const booting = sessions.filter(({ row }) => row.case === "controlled-pending").length;
   const historical = sessions.length - active.length - booting;
   const unsaved = active.filter((session) => unsavedOf(session).length).length;

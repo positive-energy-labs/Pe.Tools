@@ -5,6 +5,13 @@ import { module } from "./route.ts";
 import { builtinRouteStamp } from "../route/builtin-inventory";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 export const podsRoute = createRoute({
-  getParentRoute: () => root, path: "/pods", validateSearch: (search: Record<string, unknown>) => search,
-  component: () => <TypedShell module={module} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("pods")}`)} />,
+  getParentRoute: () => root,
+  path: "/pods",
+  validateSearch: (search: Record<string, unknown>) => search,
+  component: () => (
+    <TypedShell
+      module={module}
+      fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("pods")}`)}
+    />
+  ),
 });

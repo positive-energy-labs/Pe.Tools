@@ -5,6 +5,13 @@ import { module } from "./route.ts";
 import { builtinRouteStamp } from "../route/builtin-inventory";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 export const capturesRoute = createRoute({
-  getParentRoute: () => root, path: "/captures", validateSearch: (search: Record<string, unknown>) => search,
-  component: () => <TypedShell module={module} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("captures")}`)} />,
+  getParentRoute: () => root,
+  path: "/captures",
+  validateSearch: (search: Record<string, unknown>) => search,
+  component: () => (
+    <TypedShell
+      module={module}
+      fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("captures")}`)}
+    />
+  ),
 });

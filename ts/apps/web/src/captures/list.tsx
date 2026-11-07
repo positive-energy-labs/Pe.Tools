@@ -17,11 +17,31 @@ import { runtimeStreamUrl } from "#/host/runtime";
 import { useState } from "react";
 
 /** Image requests cannot carry hostFetch's runtime header; bind their URL to the same owner. */
-function CaptureImage({ receipt, thumbnail = false }: { receipt: Immutable<CaptureReceipt>; thumbnail?: boolean }) {
+function CaptureImage({
+  receipt,
+  thumbnail = false,
+}: {
+  receipt: Immutable<CaptureReceipt>;
+  thumbnail?: boolean;
+}) {
   const [failed, setFailed] = useState(false);
-  return failed ? <span role="status">{thumbnail ? "Image unavailable" : "The retained picture could not be loaded. Open the PNG to inspect the host's refusal, or refresh to retry."}</span>
-    : <img src={runtimeStreamUrl(receipt.url)} alt={thumbnail ? "" : `${receipt.view.name ?? "View"} · ${receipt.document.title ?? "document"}`} loading="lazy"
-        onError={() => setFailed(true)} className={thumbnail ? "h-5 w-8 object-cover" : "h-40 w-auto"} />;
+  return failed ? (
+    <span role="status">
+      {thumbnail
+        ? "Image unavailable"
+        : "The retained picture could not be loaded. Open the PNG to inspect the host's refusal, or refresh to retry."}
+    </span>
+  ) : (
+    <img
+      src={runtimeStreamUrl(receipt.url)}
+      alt={
+        thumbnail ? "" : `${receipt.view.name ?? "View"} · ${receipt.document.title ?? "document"}`
+      }
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className={thumbnail ? "h-5 w-8 object-cover" : "h-40 w-auto"}
+    />
+  );
 }
 
 /** What the request cropped to, in words; `whole view` when it named no focus. */

@@ -82,7 +82,10 @@ export function ThreadComposer({
     currentThreadId,
     threads,
     draft: head,
-    answerQuestion, cancel, forkThread, operationError,
+    answerQuestion,
+    cancel,
+    forkThread,
+    operationError,
   } = useWorkbench();
   const { providerId, isRunning, commands, assets, asking } = useTranscript((state) => ({
     providerId: state.providerId,
@@ -275,7 +278,13 @@ export function ThreadComposer({
             <Button
               label="fork"
               icon={GitFork}
-              refusal={!currentThreadId ? "No thread to fork yet" : isRunning ? "Fork after the running turn ends" : null}
+              refusal={
+                !currentThreadId
+                  ? "No thread to fork yet"
+                  : isRunning
+                    ? "Fork after the running turn ends"
+                    : null
+              }
               onClick={() => void forkThread()}
             />
           }

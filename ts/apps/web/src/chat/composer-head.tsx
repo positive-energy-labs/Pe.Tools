@@ -28,7 +28,6 @@ import type { RouteHandle } from "#/route/handle";
 import { chatReading, type ChatHandle } from "./owner-ports";
 export type { ChatHandle } from "./owner-ports";
 
-
 import { SituationBand } from "#/shell/situation-band";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 import { RouteHelpButton } from "#/route/help";
@@ -69,8 +68,13 @@ export function useSend(_handle: ChatHandle, draft: ChatDraft, onSent?: (sent: C
     says: undefined,
     refusal: workbench.sendRefusal ?? emptyPrompt(draft),
     run: async () => {
-      try { await workbench.sendPrompt(input); onSent?.(draft); return null; }
-      catch (error) { return { code: "not-ready" as const, message: String(error) }; }
+      try {
+        await workbench.sendPrompt(input);
+        onSent?.(draft);
+        return null;
+      } catch (error) {
+        return { code: "not-ready" as const, message: String(error) };
+      }
     },
   };
 }

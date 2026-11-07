@@ -92,7 +92,14 @@ export const ChatShell = memo(function ChatShell(props: ChatShellProps) {
 });
 
 function CurrentThreadChatSurface(props: ChatShellProps) {
-  return <ChatSurfaceProps.Provider value={props}><TypedShell module={module} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("chat")}`)} /></ChatSurfaceProps.Provider>;
+  return (
+    <ChatSurfaceProps.Provider value={props}>
+      <TypedShell
+        module={module}
+        fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("chat")}`)}
+      />
+    </ChatSurfaceProps.Provider>
+  );
 }
 export function ChatDrawing({ ctx }: { ctx: ChatHandle }) {
   const props = useContext(ChatSurfaceProps);
@@ -335,7 +342,9 @@ function ChatSurface({ target, docked = false, handle }: ChatShellProps & { hand
       {mode === "threads" ? (
         <ThreadsSidebar
           selected={(() => {
-            return handle.selection.read().map(item => identityCodecs.local.parts(item.id).subject);
+            return handle.selection
+              .read()
+              .map((item) => identityCodecs.local.parts(item.id).subject);
           })()}
           onSelection={(selected) =>
             handle.selection.set(selected.map((id) => ({ kind: "focus", id: threadIdentity(id) })))
