@@ -150,7 +150,8 @@ export const ductComponentWitnessSchema = z.array(
       z.strictObject({
         index: z.number().int(),
         kind: z.string(),
-        point: z.array(z.number()).length(3),
+        // Native metadata-only roster ports retain [] in the exact-content witness.
+        point: z.union([z.array(z.number()).length(0), z.array(z.number()).length(3)]),
         shape: z.string(),
         diameterIn: z.number().nullable(),
         widthIn: z.number().nullable(),

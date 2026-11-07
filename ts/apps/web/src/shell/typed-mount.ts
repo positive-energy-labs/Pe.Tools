@@ -3,6 +3,19 @@ import { writeReject } from "./admitted-chrome";
 import { harnessClient } from "../workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "../workbench/config";
 import { z } from "zod";
+
+/** Host refusals carry serialized issues; local Value decoding throws the same issues. */
+function valueRefusal(error: unknown, read: string): string {
+  const message = error instanceof Error ? error.message : String(error);
+  let issues: unknown = error instanceof z.ZodError ? error.issues : null;
+  if (!issues) {
+    try { issues = JSON.parse(message); } catch { /* Domain refusals remain readable as supplied. */ }
+  }
+  return Array.isArray(issues) && issues.length > 0 && issues.every(issue =>
+    issue !== null && typeof issue === "object" && "code" in issue && "path" in issue)
+    ? `Value unavailable (${read}): the model reading does not match its contract. Refresh to try again.`
+    : message;
+}
 import { decodeField } from "../route/field-codec";
 import { applyPatches, bindWork, cellPatches, commands, commandTarget, canonicalRouteInput, workKey,
   writePreviewSchema, presentationSchema, workHandleSchema, workFeedFailureMessage, type WorkFeedFailure, type WorkHandle, type WorkWrite, type RouteStatePatch,
@@ -174,9 +187,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             const current = frame.kind === "complete" && frame.fresh !== false && packet.state === "current" &&
               !!packet.value && !packet.value.coverage.unknown.length && !packet.value.coverage.refused.length;
             record.snapshot = current ? { status: "ready", current: true, value: publication!.data, publication, hash: packet.value!.evaluation }
-              : unavailable(frame.reason ?? packet.reason ?? "Incomplete Value", publication?.data??record.snapshot.value, publication??record.snapshot.publication);
-          } catch (error) { record.snapshot = unavailable(String(error), record.snapshot.value, record.snapshot.publication); }
-        } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(String(frame.error),record.snapshot.value,record.snapshot.publication):{...unavailable("Reading...",record.snapshot.value,record.snapshot.publication),status:"pending"};
+              : unavailable(valueRefusal(frame.reason ?? packet.reason ?? "Incomplete Value", read.key), publication?.data??record.snapshot.value, publication??record.snapshot.publication);
+          } catch (error) { record.snapshot = unavailable(valueRefusal(error, read.key), record.snapshot.value, record.snapshot.publication); }
+        } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(valueRefusal(frame.error, read.key),record.snapshot.value,record.snapshot.publication):{...unavailable("Reading...",record.snapshot.value,record.snapshot.publication),status:"pending"};
         notify();
       };
       if (input.fixture !== null) {
