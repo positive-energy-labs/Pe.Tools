@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import type { PodRouteDescriptor } from "@pe/agent-contracts";
-import { loadRouteArtifact, verifyRouteArtifact, type RouteArtifactBytes } from "./route-artifact.ts";
+import { loadRouteArtifact, type RouteArtifactBytes } from "./route-artifact.ts";
 import { podRoutePath } from "./pod-address.ts";
 
 const octets = z.array(z.number().int().min(0).max(255));
@@ -29,7 +29,7 @@ const envelope = z.object({
 
 /** Inventory is authority. The response stamps are consistency metadata only; the
  * existing loader recomputes every contract/member digest before evaluating bytes. */
-function podArtifactInput(row: PodRouteDescriptor, value: unknown): RouteArtifactBytes {
+export function podArtifactInput(row: PodRouteDescriptor, value: unknown): RouteArtifactBytes {
   if (!row.trusted) throw Error("Trust this Pod fingerprint before loading.");
   const wire = envelope.parse(value);
   const identity = z.object({ key: z.string(), address: z.string() }).parse(wire.artifact.artifact.data);
@@ -62,20 +62,6 @@ export async function admitPodArtifact(row: PodRouteDescriptor, value: unknown, 
   if (!result.ok) throw Error(result.diagnostics.map((d) => `${d.path}: ${d.message}`).join("; "));
   return result.route;
 }
-
-/** Authenticated bytes export the same route({...}) module a builtin exports. */
-export async function loadPodRoute(row: PodRouteDescriptor, value: unknown, evaluate = evaluatePodBytes) {
-  const input=podArtifactInput(row,value);
-  const verified=await verifyRouteArtifact(input,[...linkedCatalog().entries.values()],evaluate);
-  const loaded=z.object({spec:z.object({key:z.string(),fields:z.record(z.string(),z.unknown()),panes:z.record(z.string(),z.unknown())}).passthrough(),
-    data:z.unknown(),host:z.object({data:z.unknown()}).passthrough(),entries:z.record(z.string(),z.unknown())}).passthrough().parse(verified.module);
-  if(loaded.spec.key !== row.workRoute) throw Error("Pod module key differs from inventory");
-  const host=captureHostModule(loaded.host as unknown as import("@pe/agent-contracts").HostRouteModule);
-  if(canonicalRouteJson(host.data)!==canonicalRouteJson(verified.artifact.data)) throw Error("Typed host declaration differs from artifact");
-  return {module:loaded as unknown as import("./typed-route.ts").TypedRoute,
-    fingerprint:workFingerprintSchema.parse(row.fingerprint)};
-}
-import { workFingerprintSchema, captureHostModule, canonicalRouteJson } from "@pe/agent-contracts";
 
 export async function evaluatePodBytes(bytes: Uint8Array): Promise<unknown> {
   const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "text/javascript" }));

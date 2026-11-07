@@ -1,3 +1,5 @@
+import { command, sessionCommand } from "../route/typed-actions.ts";
+import { bindings } from "./bindings";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
@@ -10,15 +12,7 @@ import {
 import {
   schedulesViewCapability,
 } from "../../../../packages/agent-contracts/src/schedules-read.ts";
-import {
-  route,
-  field,
-  subjectSchema,
-  namesOf,
-  localId,
-  command,
-  sessionCommand,
-} from "../route/defaults.ts";
+import { route, field, subjectSchema, namesOf, localId } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 export const fields = {
@@ -85,6 +79,7 @@ export const module = route({
     grid: {
       title: "Schedules",
       purpose: "Inspect and edit schedule cells",
+      bindings,
       draw: draw(() => import("./grid.tsx"), "SchedulesGrid"),
     },
   },

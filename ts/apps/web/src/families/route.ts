@@ -1,3 +1,4 @@
+import { command, sessionCommand } from "../route/typed-actions.ts";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
@@ -12,7 +13,7 @@ import {
 import {
   familiesViewCapability,
 } from "../../../../packages/agent-contracts/src/families-read.ts";
-import { route, field, command, sessionCommand } from "../route/defaults.ts";
+import { route, field } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 export const fields = {

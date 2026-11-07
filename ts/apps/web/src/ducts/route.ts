@@ -1,3 +1,5 @@
+import { command } from "../route/typed-actions.ts";
+import { poseFields } from "../route/defaults";
 import { bindings } from "./bindings";
 import { read } from "../route/defaults";
 import { stageField } from "../route/defaults";
@@ -12,16 +14,7 @@ import {
   DUCTS_SYSTEM_MAX,
 } from "@pe/agent-contracts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
-import {
-  route,
-  field,
-  subjectSchema,
-  namesOf,
-  localId,
-  command,
-  split,
-  whenSubject,
-} from "../route/defaults.ts";
+import { route, field, subjectSchema, namesOf, localId, split, whenSubject } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 import { describeInputHistory, editMetaSchema } from "./sheet/input-history.neutral.ts";
@@ -31,6 +24,7 @@ import { presentLosses, presentHeal, presentFan } from "./reviews.ts";
 const shared = ductsPictureFields;
 const system = subjectSchema(DUCTS_SYSTEM_MAX);
 export const fields = {
+  ...poseFields(shared,["contextRadiusFt","contextStyle","encoding","layers","picture","sceneView","viewport"]),
   system: field(system, { kind: "ids", ids: [] }, "subject", "push"),
   stage: stageField(["network"]),
   systemSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
@@ -39,18 +33,6 @@ export const fields = {
   treeSort: field(z.enum(["", "name"]), "", "query"),
   rulingSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
   rulingSort: field(z.enum(["", "name", "status"]), "", "query"),
-  contextRadiusFt: field(shared.contextRadiusFt.schema, 10, "pose"),
-  contextStyle: field(shared.contextStyle.schema, "glass", "pose"),
-  encoding: field(shared.encoding.schema, "health", "pose", "push"),
-  layers: field(
-    shared.layers.schema,
-    ["meshes", "system-colours", "stub-labels", "halo", "no-run", "labels", "findings"],
-    "pose",
-    "push",
-  ),
-  picture: field(shared.picture.schema, "model", "pose", "push"),
-  sceneView: field(shared.sceneView.schema, { preset: "all", section: null }, "pose"),
-  viewport: field(shared.viewport.schema, null, "pose"),
 };
 const args = (page: {
   system:
@@ -140,6 +122,7 @@ export const module = route({
     },
   },
   edits: {
+    seed: () => ductsRouteState.schema.parse({}),
     work: ductsRouteState,
     value: "ductsWork",
     owners: {

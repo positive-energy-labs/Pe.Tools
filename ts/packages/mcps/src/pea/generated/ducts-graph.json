@@ -31,6 +31,80 @@
     "resume": "document"
   },
   "fields": {
+    "contextRadiusFt": {
+      "role": "pose",
+      "schema": "contextRadiusFt",
+      "codec": "contextRadiusFt",
+      "initial": 10,
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "contextStyle": {
+      "role": "pose",
+      "schema": "contextStyle",
+      "codec": "contextStyle",
+      "initial": "glass",
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "encoding": {
+      "role": "pose",
+      "schema": "encoding",
+      "codec": "encoding",
+      "initial": "health",
+      "url": "push",
+      "share": true,
+      "agent": "set"
+    },
+    "layers": {
+      "role": "pose",
+      "schema": "layers",
+      "codec": "layers",
+      "initial": [
+        "meshes",
+        "system-colours",
+        "stub-labels",
+        "halo",
+        "no-run",
+        "labels",
+        "findings"
+      ],
+      "url": "push",
+      "share": true,
+      "agent": "set"
+    },
+    "picture": {
+      "role": "pose",
+      "schema": "picture",
+      "codec": "picture",
+      "initial": "model",
+      "url": "push",
+      "share": true,
+      "agent": "set"
+    },
+    "sceneView": {
+      "role": "pose",
+      "schema": "sceneView",
+      "codec": "sceneView",
+      "initial": {
+        "preset": "all",
+        "section": null
+      },
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "viewport": {
+      "role": "pose",
+      "schema": "viewport",
+      "codec": "viewport",
+      "initial": null,
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
     "system": {
       "role": "subject",
       "schema": "system",
@@ -124,80 +198,6 @@
       "share": true,
       "agent": "set"
     },
-    "contextRadiusFt": {
-      "role": "pose",
-      "schema": "contextRadiusFt",
-      "codec": "contextRadiusFt",
-      "initial": 10,
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "contextStyle": {
-      "role": "pose",
-      "schema": "contextStyle",
-      "codec": "contextStyle",
-      "initial": "glass",
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "encoding": {
-      "role": "pose",
-      "schema": "encoding",
-      "codec": "encoding",
-      "initial": "health",
-      "url": "push",
-      "share": true,
-      "agent": "set"
-    },
-    "layers": {
-      "role": "pose",
-      "schema": "layers",
-      "codec": "layers",
-      "initial": [
-        "meshes",
-        "system-colours",
-        "stub-labels",
-        "halo",
-        "no-run",
-        "labels",
-        "findings"
-      ],
-      "url": "push",
-      "share": true,
-      "agent": "set"
-    },
-    "picture": {
-      "role": "pose",
-      "schema": "picture",
-      "codec": "picture",
-      "initial": "model",
-      "url": "push",
-      "share": true,
-      "agent": "set"
-    },
-    "sceneView": {
-      "role": "pose",
-      "schema": "sceneView",
-      "codec": "sceneView",
-      "initial": {
-        "preset": "all",
-        "section": null
-      },
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "viewport": {
-      "role": "pose",
-      "schema": "viewport",
-      "codec": "viewport",
-      "initial": null,
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
     "selected": {
       "role": "selection",
       "kinds": [
@@ -235,6 +235,13 @@
       "entry": "ducts.pricing.value",
       "deps": {
         "page": [
+          "contextRadiusFt",
+          "contextStyle",
+          "encoding",
+          "layers",
+          "picture",
+          "sceneView",
+          "viewport",
           "system",
           "stage",
           "systemSearch",
@@ -243,13 +250,6 @@
           "treeSort",
           "rulingSearch",
           "rulingSort",
-          "contextRadiusFt",
-          "contextStyle",
-          "encoding",
-          "layers",
-          "picture",
-          "sceneView",
-          "viewport",
           "selected"
         ],
         "work": [],
@@ -267,6 +267,13 @@
       "entry": "ducts.roster.value",
       "deps": {
         "page": [
+          "contextRadiusFt",
+          "contextStyle",
+          "encoding",
+          "layers",
+          "picture",
+          "sceneView",
+          "viewport",
           "system",
           "stage",
           "systemSearch",
@@ -275,13 +282,6 @@
           "treeSort",
           "rulingSearch",
           "rulingSort",
-          "contextRadiusFt",
-          "contextStyle",
-          "encoding",
-          "layers",
-          "picture",
-          "sceneView",
-          "viewport",
           "selected"
         ],
         "work": [],
@@ -299,6 +299,13 @@
       "entry": "ducts.network.value",
       "deps": {
         "page": [
+          "contextRadiusFt",
+          "contextStyle",
+          "encoding",
+          "layers",
+          "picture",
+          "sceneView",
+          "viewport",
           "system",
           "stage",
           "systemSearch",
@@ -307,13 +314,6 @@
           "treeSort",
           "rulingSearch",
           "rulingSort",
-          "contextRadiusFt",
-          "contextStyle",
-          "encoding",
-          "layers",
-          "picture",
-          "sceneView",
-          "viewport",
           "selected"
         ],
         "work": [],
