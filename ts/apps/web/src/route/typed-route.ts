@@ -6,6 +6,7 @@ import {
   routeStatePatchSchema,
   commands,
   commandCatalogAxes,
+  cellPatches,
   type HostRouteModule,
   type Immutable,
   type RouteGraphJson,
@@ -101,13 +102,14 @@ type FieldValues<F extends Fields> = {
 type Page<F extends Fields> = FieldValues<F> & {
   readonly selected: readonly { kind: "focus"; id: IdentityId<"local"> }[];
 };
+type RoleFields<F extends Fields, R extends Field["role"]> = { [K in keyof F]: F[K]["role"] extends R ? K : never }[keyof F];
 type DrawPage<F extends Fields> = Omit<
   PagePort<RouteGraphJson, {}>,
   "read" | "pose" | "query" | "select"
 > & {
   read(): Page<F>;
-  pose(patch: Partial<FieldValues<F>>, intent?: "gesture" | "named"): unknown;
-  query(patch: Partial<FieldValues<F>>): unknown;
+  pose(patch: Partial<Pick<FieldValues<F>, RoleFields<F, "pose">>>, intent?: "gesture" | "named"): unknown;
+  query(patch: Partial<Pick<FieldValues<F>, RoleFields<F, "query">>>): unknown;
   select(value: Page<F>["selected"]): unknown;
 };
 export type EditHistory = { label: string; [key: string]: unknown };
@@ -116,6 +118,7 @@ export interface OwnedCell {
   readonly owner: { route: string; label: string };
   readonly value: unknown;
   stage(value: unknown, history?: EditHistory): Promise<EditFailure>;
+  clear(history?: EditHistory): Promise<EditFailure>;
 }
 export interface EditableCells<W, Edit> {
   readonly doc: Immutable<W> | null;
@@ -123,7 +126,7 @@ export interface EditableCells<W, Edit> {
   readonly ready: boolean;
   readonly history: WorkHistoryPort<any>;
   owner(path: readonly string[]): { route: string; label: string };
-  at(path: readonly string[]): OwnedCell;
+  at(path: readonly [string, ...string[]], owner?: string): OwnedCell;
   label(input: Edit, label: string): string;
   patch(patches: readonly RouteStatePatch[], history?: EditHistory): Promise<EditFailure>;
   edit(input: Edit, history?: EditHistory): Promise<EditFailure>;
@@ -171,12 +174,18 @@ type Graph<F extends Fields> = Omit<RouteGraphJson, "fields" | "work" | "identit
     subject: { kind: "local"; codec: "local" };
     focus: { kind: "local"; codec: "local" };
   };
-  work: { schema: "work"; route: string; version: 1; migrations: {} };
+  work: { schema: "work"; route: string; version: number; migrations: {} };
 };
 type Schemas<F extends Fields, W extends z.ZodObject> = { [K in keyof F]: F[K]["schema"] } & {
   work: W;
 };
-type Specification<D, F extends Fields, W extends z.ZodObject, Edit extends z.ZodType, Reads extends Readonly<Record<string, HostRead>> = Readonly<Record<string, HostRead>>> = {
+type Specification<
+  D,
+  F extends Fields,
+  W extends z.ZodObject,
+  Edit extends z.ZodType,
+  Reads extends Readonly<Record<string, HostRead>> = Readonly<Record<string, HostRead>>,
+> = {
   key: string;
   name: string;
   directory: RouteGraphJson["directory"];
@@ -189,12 +198,12 @@ type Specification<D, F extends Fields, W extends z.ZodObject, Edit extends z.Zo
   core: HostRead & { output: z.ZodType<Publication<D>>; args(page: Page<F>): unknown };
   fields: F;
   panes: {
-      readonly [K in keyof Reads]: {
-        title: string;
-        purpose: string;
-        read: Reads[K];
-        draw(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): unknown;
-      }
+    readonly [K in keyof Reads]: {
+      title: string;
+      purpose: string;
+      read: Reads[K];
+      draw(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): unknown;
+    };
   };
   edits: {
     work: RouteStateSpec<W>;
@@ -220,9 +229,13 @@ type Specification<D, F extends Fields, W extends z.ZodObject, Edit extends z.Zo
   layout: LayoutJson;
 };
 // The projection is executable kernel output. Routes never author slot ids, deps, codecs or gates.
-export function route<D, const F extends Fields, W extends z.ZodObject, Edit extends z.ZodType, const Reads extends Readonly<Record<string, HostRead>>>(
-  spec: Specification<D, F, W, Edit, Reads>,
-) {
+export function route<
+  D,
+  const F extends Fields,
+  W extends z.ZodObject,
+  Edit extends z.ZodType,
+  const Reads extends Readonly<Record<string, HostRead>>,
+>(spec: Specification<D, F, W, Edit, Reads>) {
   const schemas: Record<string, z.ZodType> = {
     none: z.strictObject({}),
     work: spec.edits.work.schema,
@@ -430,7 +443,12 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
       verbs: Object.keys(verbs),
       body: body(id, `panes.${id}.body`, "pane", (ctx) =>
         pane.draw(
-          drawContext(ctx, readId, spec, owners) as DrawContext<ReadData<Reads[string]>, F, z.output<W>, z.output<Edit>>,
+          drawContext(ctx, readId, spec, owners) as DrawContext<
+            ReadData<Reads[string]>,
+            F,
+            z.output<W>,
+            z.output<Edit>
+          >,
         ),
       ),
     };
@@ -529,21 +547,26 @@ function drawContext(
       const work = owner === own ? ctx.work : ctx.readings[`owner:${owner}`]?.value;
       return (
         work &&
-        canonicalEnvironmentInput(work) !==
-          canonicalEnvironmentInput(coreData[config.value])
+        canonicalEnvironmentInput(work) !== canonicalEnvironmentInput(coreData[config.value])
       );
     });
   const publication = packet.value?.value ?? null;
-  const value = changed && read === "value"
-    ? {
-        ...projected,
-        current: false as const,
-        status: "unavailable" as const,
-        reason: "Work changed; awaiting a current Value",
-        publication,
-      }
-    : { ...projected, publication };
-  const ownerOf = (path: readonly string[]) => {
+  const value =
+    changed && read === "value"
+      ? {
+          ...projected,
+          current: false as const,
+          status: "unavailable" as const,
+          reason: "Work changed; awaiting a current Value",
+          publication,
+        }
+      : { ...projected, publication };
+  const ownerOf = (path: readonly string[], preferred?: string) => {
+    if (preferred !== undefined) {
+      if (!owners[preferred] || !Object.hasOwn(owners[preferred].state.schema.shape, path[0]!))
+        throw Error(`No editable ${path.join(".")} on /${preferred}`);
+      return preferred;
+    }
     const owner =
       Object.entries(owners).find(
         ([name, owner]) => name === own && Object.hasOwn(owner.state.schema.shape, path[0]!),
@@ -555,6 +578,7 @@ function drawContext(
   const patch = async (
     patches: readonly RouteStatePatch[],
     history: EditHistory = { label: "Edit" },
+    preferred?: string,
   ): Promise<EditFailure> => {
     if (!patches.length) return null;
     if (!value.current || !core.current || changed || !ctx.workBasis)
@@ -562,7 +586,7 @@ function drawContext(
     try {
       const groups = new Map<string, RouteStatePatch[]>();
       for (const p of patches) {
-        const owner = ownerOf(p.path.map(String));
+        const owner = ownerOf(p.path.map(String), preferred);
         groups.set(owner, [...(groups.get(owner) ?? []), p]);
       }
       // Capture each invocation synchronously before any owner's acknowledgement can invalidate it.
@@ -608,13 +632,29 @@ function drawContext(
         const route = ownerOf(path);
         return { route, label: route === own ? "Work" : `from /${route}` };
       },
-      at(path) {
-        const route = ownerOf(path);
+      at(path, owner) {
+        const address = Object.freeze([...path]);
+        const route = ownerOf(address, owner);
         const doc = route === own ? ctx.work : ctx.readings[`owner:${route}`]?.value;
+        const cell = address.reduce((value, key) => value?.[key], doc) ?? {};
         return {
           owner: { route, label: route === own ? "Work" : `from /${route}` },
-          value: path.reduce((value, key) => value?.[key], doc),
-          stage: (value, history) => patch([{ path: [...path], value }], history),
+          value: cell,
+          stage: (value, history) =>
+            patch(
+              cellPatches(address.slice(0, -1), address.at(-1)!, cell, {
+                kind: "set",
+                rung: { value },
+              }),
+              history,
+              route,
+            ),
+          clear: (history) =>
+            patch(
+              cellPatches(address.slice(0, -1), address.at(-1)!, cell, { kind: "clear" }),
+              history,
+              route,
+            ),
         };
       },
       label(input, label) {

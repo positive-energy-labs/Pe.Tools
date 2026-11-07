@@ -77,10 +77,17 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
       workReads.set(id, record);
       const schema = bindings.schemas[declaration.output];
       if (!schema) throw Error(`Unlinked Work reading output: ${declaration.output}`);
-      entryFor(foreignKey).connect({
-        route: route.data.key, fingerprint: route.workFingerprint,
-        reading: id, key: foreignKey, target: scope.identity.target, subject: null,
-      }, environment().environment.work.read);
+      entryFor(foreignKey).connect(
+        {
+          route: route.data.key,
+          fingerprint: route.workFingerprint,
+          reading: id,
+          key: foreignKey,
+          target: scope.identity.target,
+          subject: null,
+        },
+        environment().environment.work.read,
+      );
       record.stop = environment()
         .environment.work.read.open({
           route: route.data.key,
@@ -98,7 +105,9 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
             if (state.kind === "ready") {
               const decoded = schema.safeParse(state.snapshot.value);
               if (!decoded.success) {
-                record.snapshot = unavailable("Work could not be decoded. Refresh the pane to reconnect.");
+                record.snapshot = unavailable(
+                  "Work could not be decoded. Refresh the pane to reconnect.",
+                );
                 schedule();
                 return;
               }
@@ -226,7 +235,11 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
     const ids = new Set(receipts.map((receipt) => receipt.id));
     // Once the host owns this press, a bounded receipt snapshot cannot resurrect its local start.
     const starts = sourceTimeline.get(entry);
-    if (starts) sourceTimeline.set(entry, starts.filter((start) => !ids.has(start.press ?? "")));
+    if (starts)
+      sourceTimeline.set(
+        entry,
+        starts.filter((start) => !ids.has(start.press ?? "")),
+      );
     for (const id of seenReceipts.keys()) if (!ids.has(id)) seenReceipts.delete(id);
     for (const receipt of receipts) {
       const stamp = canonicalEnvironmentInput([receipt.state, receipt.effects]);
@@ -448,7 +461,11 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
                   if (parsed.success) previous.set(readingId, freezePage(parsed.data));
                   record.snapshot = parsed.success
                     ? freezePage({ ...snapshot, value: parsed.data })
-                    : { status: "failed", current: false, reason: "This reading could not be decoded. Refresh the pane to try again." };
+                    : {
+                        status: "failed",
+                        current: false,
+                        reason: "This reading could not be decoded. Refresh the pane to try again.",
+                      };
                 };
                 accept(record.handle.read());
                 const stopEvidence = watchEvidence(readingId, request, record);

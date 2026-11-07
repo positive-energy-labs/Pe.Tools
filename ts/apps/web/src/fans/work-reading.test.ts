@@ -1,7 +1,5 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import type {
-
-} from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
+import type {} from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
 import type {
   Observation,
   WorkWriteOutcome,
@@ -42,10 +40,18 @@ test("the host refuses cross-route patches and the declared Work reading observe
   );
   expect(badFan.ok).toBe(false);
   const ductKey = f.owner.workBasis()!.token.scope.identity.work!;
-  const admission = { routeKey: "fans", fingerprint: f.admitted.presenter.workFingerprint, reading: "owner:ducts" };
+  const admission = {
+    routeKey: "fans",
+    fingerprint: f.admitted.presenter.workFingerprint,
+    reading: "owner:ducts",
+  };
   expect(await f.ws.admitFeed(ductKey, admission)).toBeNull();
-  expect(await f.ws.admitFeed(ductKey, { ...admission, reading: "not-declared" })).toMatchObject({ code: "WorkRouteMismatch" });
-  expect(await f.ws.admitFeed(ductKey, { ...admission, fingerprint: f.admitted.owner.workFingerprint })).toMatchObject({ kind: "registration-mismatch" });
+  expect(await f.ws.admitFeed(ductKey, { ...admission, reading: "not-declared" })).toMatchObject({
+    code: "WorkRouteMismatch",
+  });
+  expect(
+    await f.ws.admitFeed(ductKey, { ...admission, fingerprint: f.admitted.owner.workFingerprint }),
+  ).toMatchObject({ kind: "registration-mismatch" });
   const badDuct = await f.ws.apply(
     ductKey,
     "ducts",
@@ -72,9 +78,18 @@ test("the host refuses cross-route patches and the declared Work reading observe
   expect(f.fans.work()?.revision).toBe(0);
   // The host provider republishes the sheet; the browser does not reacquire its ingredients.
   expect(fanCalls()).toEqual(calls);
-  await vi.waitFor(() => expect(f.fans.readingStatus("value").snapshot).toMatchObject({
-    current: true, value: { value: { data: { ductsWork: {
-      rules: { elbow: { edit: { value: { table: "CD3-1" } } } },
-    } } } },
-  }));
+  await vi.waitFor(() =>
+    expect(f.fans.readingStatus("value").snapshot).toMatchObject({
+      current: true,
+      value: {
+        value: {
+          data: {
+            ductsWork: {
+              rules: { elbow: { edit: { value: { table: "CD3-1" } } } },
+            },
+          },
+        },
+      },
+    }),
+  );
 });

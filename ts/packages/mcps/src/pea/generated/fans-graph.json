@@ -358,7 +358,6 @@
       "captures": [
         "value"
       ],
-      "ready": "lossesReady",
       "present": "lossesPresent",
       "entry": "ducts.apply-losses",
       "intent": "lossesIntent"

@@ -28,7 +28,9 @@ test("a rendered foreign cell keeps its owner, label and undo, and refuses a con
   const pair: [string, string] = ["10:1", "30:1"];
   const before = f.fans.work()?.revision;
   const [first, late] = await Promise.all([
-    cells.edit({ joins: [{ pair, verdict: "accept" }] }, { label: "Accept join" }),
+    cells
+      .at(["assumptions", JOIN_KEY(pair)], "ducts")
+      .stage({ kind: "verdict", verdict: "connect" }, { label: "Accept join" }),
     cells.edit({ joins: [{ pair, verdict: "accept" }] }, { label: "Accept join" }),
   ]);
   expect(first).toBeNull();

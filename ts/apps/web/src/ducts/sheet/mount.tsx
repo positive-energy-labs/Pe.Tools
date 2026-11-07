@@ -26,7 +26,8 @@ import { useMemo, useRef } from "react";
 import type { FansDrawContext } from "../../fans/route.ts";
 import { projectValue } from "../../route/typed-route.ts";
 import { fansDocumentSchema } from "@pe/agent-contracts";
-const scopeSchema = fansDocumentSchema.shape.writeIntent.unwrap().shape.edit.unwrap().unwrap().shape.value;
+const scopeSchema = fansDocumentSchema.shape.writeIntent.unwrap().shape.edit.unwrap().unwrap()
+  .shape.value;
 import { attentionSubjects } from "../cell-focus";
 import { localId, localSubject, namesOf } from "../neutral.ts";
 import { ductsLink } from "../neutral.ts";
@@ -55,9 +56,7 @@ function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
   const value = reading.value;
   const sheet = value?.open ?? null;
   const fans = readingsOf(ctx).fans;
-  const roster = rosterOrder(
-    value?.rows ?? fans.value?.rows ?? [],
-  );
+  const roster = rosterOrder(value?.rows ?? fans.value?.rows ?? []);
   const nameOf = useMemo(() => subjectNamer(snapshot), [snapshot]);
   const selected = authored.selected.map(({ id }) => localSubject(id)).join(",");
   const changeInputs = async (
@@ -161,7 +160,7 @@ function WriteScope({
         }
         pick={(key) => {
           if (key === "fan" && offered?.success && ctx.cells.basis)
-            void ctx.cells.patch([{ path: ["writeIntent"], value: { edit: { value: offered.data } } }], { label: "Choose write scope" });
+            void ctx.cells.at(["writeIntent"]).stage(offered.data, { label: "Choose write scope" });
           if (key === "none" && intent.edit)
             void write(cellPatches([], "writeIntent", intent, { kind: "clear" }), {
               label: "Clear write scope",
@@ -172,17 +171,11 @@ function WriteScope({
     </span>
   );
 }
-export function RosterBody({
-  ctx,
-}: {
-  ctx: SheetContext;
-}) {
+export function RosterBody({ ctx }: { ctx: SheetContext }) {
   const authored = ctx.page.read();
   const snapshot = sheetSnapshot(readingsOf(ctx).sheetSnapshot);
   const fans = readingsOf(ctx).fans;
-  const roster = rosterOrder(
-    readingsOf(ctx).sheet.value?.rows ?? fans.value?.rows ?? [],
-  );
+  const roster = rosterOrder(readingsOf(ctx).sheet.value?.rows ?? fans.value?.rows ?? []);
   const busy = readingsOf(ctx).sheet.status === "pending";
   const nameOf = useMemo(
     () => ("kind" in snapshot ? (id: number) => String(id) : subjectNamer(snapshot)),
@@ -236,11 +229,7 @@ function SheetEmpty({
     <p>Open a fan from the roster.</p>
   );
 }
-export function InputsBody({
-  ctx,
-}: {
-  ctx: SheetContext;
-}) {
+export function InputsBody({ ctx }: { ctx: SheetContext }) {
   const snapshot = sheetSnapshot(readingsOf(ctx).sheetSnapshot);
   return "kind" in snapshot ? (
     <SheetEmpty readings={readingsOf(ctx)} />
@@ -248,13 +237,7 @@ export function InputsBody({
     <InputsContent ctx={ctx} snapshot={snapshot} />
   );
 }
-function InputsContent({
-  ctx,
-  snapshot,
-}: {
-  ctx: SheetContext;
-  snapshot: DuctSnapshot;
-}) {
+function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSnapshot }) {
   const { sheet, fans, nameOf, selected, changeInputs, busy } = useSheetData(ctx, snapshot);
   const workDoc = sheetWork(ctx);
   const write = async (patches: RouteStatePatch[], history?: EditMeta) => {
@@ -308,13 +291,10 @@ function InputsContent({
               numeric={{ min: 0, digits: 3 }}
               unit={{ label: "in-wg/100 ft" }}
               onCommit={(text: string) =>
-                write(
-                  cellPatches([], "designFriction", friction, {
-                    kind: "set",
-                    rung: { value: Number(text) },
-                  }),
-                  { label: "Design friction" },
-                ).then((result) => result?.message)
+                ctx.cells
+                  .at(["designFriction"])
+                  .stage(Number(text), { label: "Design friction" })
+                  .then((result) => result?.message)
               }
               transitions={reviewTransitions(
                 {
@@ -343,13 +323,19 @@ function InputsContent({
           ] as const
         ).map(([key, label]) => {
           const cell = ctx.cells.doc?.parameters[key] ?? {};
-          const commit = (value: string) => write(
-            cellPatches(["parameters"], key, cell, { kind: "set", rung: { value } }), { label },
-          ).then((result) => result?.message);
-          const transitions = reviewTransitions({
-            segment: "parameters", revision: ctx.cells.basis?.workRevision ?? null,
-            write: (patches) => write(patches, { label }),
-          }, key, cell);
+          const commit = (value: string) =>
+            write(cellPatches(["parameters"], key, cell, { kind: "set", rung: { value } }), {
+              label,
+            }).then((result) => result?.message);
+          const transitions = reviewTransitions(
+            {
+              segment: "parameters",
+              revision: ctx.cells.basis?.workRevision ?? null,
+              write: (patches) => write(patches, { label }),
+            },
+            key,
+            cell,
+          );
           return (
             <label key={key} className="contents">
               <span className="min-w-0 truncate">{label}</span>
@@ -405,7 +391,9 @@ function InputsContent({
                     { key: "fan", label: "Fan" },
                     { key: "passive", label: "Passive" },
                   ]}
-                  refusal={ctx.cells.ready ? null : "Read the current Value and Work before editing"}
+                  refusal={
+                    ctx.cells.ready ? null : "Read the current Value and Work before editing"
+                  }
                   pick={(role) =>
                     void write(
                       cellPatches(["roles"], key, cell, { kind: "set", rung: { value: { role } } }),
@@ -474,11 +462,7 @@ function InputsContent({
     </SheetFrame>
   );
 }
-export function PictureBody({
-  ctx,
-}: {
-  ctx: SheetContext;
-}) {
+export function PictureBody({ ctx }: { ctx: SheetContext }) {
   const snapshot = sheetSnapshot(readingsOf(ctx).sheetSnapshot);
   return "kind" in snapshot ? (
     <SheetEmpty readings={readingsOf(ctx)} />
@@ -486,13 +470,7 @@ export function PictureBody({
     <PictureContent ctx={ctx} snapshot={snapshot} />
   );
 }
-function PictureContent({
-  ctx,
-  snapshot,
-}: {
-  ctx: SheetContext;
-  snapshot: DuctSnapshot;
-}) {
+function PictureContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSnapshot }) {
   const { authored, value, sheet, fans, roster, nameOf, selected } = useSheetData(ctx, snapshot);
   const target = ctx.cells.basis?.token.scope.identity.target;
   const doc = target?.kind === "document" ? target.ref : null;
@@ -551,11 +529,7 @@ function PictureContent({
     </SheetFrame>
   );
 }
-export function LedgerBody({
-  ctx,
-}: {
-  ctx: SheetContext;
-}) {
+export function LedgerBody({ ctx }: { ctx: SheetContext }) {
   const snapshot = sheetSnapshot(readingsOf(ctx).sheetSnapshot);
   return "kind" in snapshot ? (
     <SheetEmpty readings={readingsOf(ctx)} />
@@ -563,13 +537,7 @@ export function LedgerBody({
     <LedgerContent ctx={ctx} snapshot={snapshot} />
   );
 }
-function LedgerContent({
-  ctx,
-  snapshot,
-}: {
-  ctx: SheetContext;
-  snapshot: DuctSnapshot;
-}) {
+function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSnapshot }) {
   const { reading, sheet, fans, roster, nameOf, selected, changeInputs, busy } = useSheetData(
     ctx,
     snapshot,
@@ -611,9 +579,18 @@ function LedgerContent({
     return {
       ...closer,
       verb: labelled(closer.verb, closer.action),
-      secondary: closer.secondary && { ...closer.secondary, verb: labelled(closer.secondary.verb, closer.secondary.action) },
-      crossing: closer.crossing && { ...closer.crossing, verb: labelled(closer.crossing.verb, closer.crossing.action) },
-      choices: closer.choices?.map((choice) => ({ ...choice, verb: labelled(choice.verb, choice.action) })),
+      secondary: closer.secondary && {
+        ...closer.secondary,
+        verb: labelled(closer.secondary.verb, closer.secondary.action),
+      },
+      crossing: closer.crossing && {
+        ...closer.crossing,
+        verb: labelled(closer.crossing.verb, closer.crossing.action),
+      },
+      choices: closer.choices?.map((choice) => ({
+        ...choice,
+        verb: labelled(choice.verb, choice.action),
+      })),
     };
   };
   const editsFor = (closers: readonly Closer[]) =>
@@ -650,17 +627,25 @@ function LedgerContent({
             joins: [...(edits.joins ?? []), { pair: [...action.pair], verdict: "accept" }],
           };
         case "cap":
-          return { ...edits, ends: [...(edits.ends ?? []), { end: action.end, verdict: "capped" }] };
+          return {
+            ...edits,
+            ends: [...(edits.ends ?? []), { end: action.end, verdict: "capped" }],
+          };
         case "price":
           return {
             ...edits,
             assignments: { ...edits.assignments, [action.family]: { rule: action.rule } },
-            ...(action.table ? { tables: { ...edits.tables, [action.rule]: { table: action.table } } } : {}),
+            ...(action.table
+              ? { tables: { ...edits.tables, [action.rule]: { table: action.table } } }
+              : {}),
           };
         case "table":
           return { ...edits, tables: { ...edits.tables, [action.rule]: { table: action.table } } };
         case "pathDrop":
-          return { ...edits, fittingDrops: { ...edits.fittingDrops, [action.key]: { inWg: action.value } } };
+          return {
+            ...edits,
+            fittingDrops: { ...edits.fittingDrops, [action.key]: { inWg: action.value } },
+          };
       }
     }, {});
   const ownPane = (
