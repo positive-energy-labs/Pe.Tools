@@ -95,7 +95,7 @@ export const reads = {
     },
   }),
 };
-// TODO: S's InputPort has no Pod service. These tracked leaves call the canonical in-process owner.
+// TODO: S gap 10 has no Pod ReadingRequest yet; these leaves call the canonical in-process owners.
 export const leaves = {
   "pods.inventory": async () => podRowsSchema.parse((await runPods({}, listPods())).pods),
   "pods.saved": async (raw: unknown) => {
