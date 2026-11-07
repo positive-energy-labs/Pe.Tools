@@ -243,9 +243,9 @@ test("Plan keeps capture and review valid across watched publications and batche
    expect(changes.flatMap(change=>[...change.add,...change.remove.map((key:string)=>JSON.parse(key))]).every(request=>request.kind==="receipts")).toBe(true);
    expect(trace.samples.slice(sampleStart).every(sample=>JSON.parse(sample.work).every((owner:any)=>owner[1]))).toBe(true);
    }
-   fireEvent.click(screen.getByRole("button",{name:/^MUAS-1.*0 staged$/}));
+   fireEvent.click(screen.getByRole("button",{name:/^MUAS-1.*1 staged$/}));
    fireEvent.click(await screen.findByRole("option",{name:/^None/}));
-   await vi.waitFor(()=>expect(trace.mounts.at(-1).owner().handle.revision).toBe(3),{timeout:20000});
+   await vi.waitFor(()=>expect(trace.mounts.at(-1).owner().handle.revision).toBe(4),{timeout:20000});
    await expect(trace.mounts.at(-1).run("losses",true)).rejects.toThrow("Review is stale; prepare it again");
    expect(trace.submit).toHaveBeenCalledTimes(2);
  }finally{
