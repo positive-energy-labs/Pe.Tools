@@ -914,33 +914,33 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                     graph.publication.generation,
                     port,
                     history && writer && historyDocument.success
-                      ? (publication) =>
-                          history.record(async () => {
-                            const row = await scoped(consumption!)(
-                              inventory
-                                .document(historyDocument.data)
-                                .pipe(Effect.provideService(RequestIdentity, identity)),
-                            );
-                            const address = addressSchema.parse(row.address);
-                            await complete(consumption!);
-                            const raw = web.headers.get("x-pe-history-page");
-                            const pose = raw
-                              ? historyPoseSchema.parse(JSON.parse(decodeURIComponent(raw)))
-                              : {
-                                  instance: graph.name,
-                                  route: graph.name.split(".")[0]!,
-                                  page: {},
-                                  href: `/${graph.name.split(".")[0]}`,
-                                };
-                            return [
-                              canonicalJson([identity.caller, graph.publication!.subscription]),
-                              graph.name,
-                              pose,
-                              address,
-                              row,
-                              publication,
-                            ];
-                          })
+                      ? async (publication) => {
+                          // Live inventory and seal stay awaited outside History.record (fail closed); only keep/append may fail open (K4).
+                          const row = await scoped(consumption!)(
+                            inventory
+                              .document(historyDocument.data)
+                              .pipe(Effect.provideService(RequestIdentity, identity)),
+                          );
+                          const address = addressSchema.parse(row.address);
+                          await complete(consumption!);
+                          const raw = web.headers.get("x-pe-history-page");
+                          const pose = raw
+                            ? historyPoseSchema.parse(JSON.parse(decodeURIComponent(raw)))
+                            : {
+                                instance: graph.name,
+                                route: graph.name.split(".")[0]!,
+                                page: {},
+                                href: `/${graph.name.split(".")[0]}`,
+                              };
+                          return history.record(
+                            canonicalJson([identity.caller, graph.publication!.subscription]),
+                            graph.name,
+                            pose,
+                            address,
+                            row,
+                            publication,
+                          );
+                        }
                       : undefined,
                   )
                 : graph.evaluate(port).catch((error: unknown) => {

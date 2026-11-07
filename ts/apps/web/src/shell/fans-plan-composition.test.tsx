@@ -50,10 +50,14 @@ vi.mock("./typed-mount",async actual=>{
 });
 const ambient = <S,I>(tag:Context.Key<S,I>)=>Layer.effect(tag,Effect.serviceOption(tag).pipe(Effect.map(Option.getOrThrow)));
 
-test("batched Plan receipts preserve the review; receipt recovery spares Work and changed Work refuses",async()=>{
+test("Plan keeps capture and review valid across watched publications and batched receipts",async()=>{
+ let mode:"recording"|"batched"="recording";
+ for (const rows of [trace.gates,trace.tokens,trace.samples,trace.stops,trace.mounts,trace.http]) rows.length=0;
+ trace.submit.mockClear(); (trace as any).results=[]; (trace as any).readEvents=[]; (trace as any).republication=null; (trace as any).settlements=[];
  const originalFetch=globalThis.fetch;
  const streams=new Set<any>();
  const requests:any[]=[];
+ const releasePlan=Promise.withResolvers<void>(); let planPending=false;
  let bridge:any;
  const roster=nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
  const walk=nativeResponseSchema("ducts.snapshot.walk").parse(walkCapture);
@@ -64,7 +68,12 @@ test("batched Plan receipts preserve the review; receipt recovery spares Work an
      const request=frame.request;if(!request)return Effect.void;
      requests.push(request.operationKey);
      const value=request.operationKey==="ducts.snapshot.roster"?roster:request.operationKey==="ducts.snapshot.walk"?walk:request.operationKey==="ducts.tables"?tables:request.operationKey==="ducts.apply.plan"?{previewOnly:true,writes:[],counts:{planned:0,written:0,refused:0,unchanged:0},systemsAfter:[],storeRevision:0}:request.operationKey==="revit.catalog.field-options"?{descriptor:{key:JSON.parse(request.payloadJson).key,mode:"Suggestion",allowsCustomValue:true,dependsOn:[],requiredRuntimeMode:"LiveDocument"},items:[],result:{kind:"Success",message:""}}:{};
-     return Queue.offer(bridge.incoming,JSON.stringify({kind:"Response",response:{requestId:request.requestId,openDocumentId:request.openDocumentId,ok:true,statusCode:200,payloadJson:JSON.stringify(value),metrics:{requestBytes:0,responseBytes:0,revitExecutionMs:0,roundTripMs:0,serializationMs:0}}}));
+     const reply=Queue.offer(bridge.incoming,JSON.stringify({kind:"Response",response:{requestId:request.requestId,openDocumentId:request.openDocumentId,ok:true,statusCode:200,payloadJson:JSON.stringify(value),metrics:{requestBytes:0,responseBytes:0,revitExecutionMs:0,roundTripMs:0,serializationMs:0}}}));
+     if(mode==="recording"&&request.operationKey==="ducts.apply.plan"){
+       planPending=true;
+       return Effect.forkScoped(Effect.promise(()=>releasePlan.promise).pipe(Effect.andThen(reply))).pipe(Effect.asVoid);
+     }
+     return reply;
    }))));
    return yield* HostNativeRead;
  })).pipe(Layer.provide(ambient(HostNativeRead)),Layer.provide(ambient(RevitBridge)));
@@ -79,24 +88,26 @@ test("batched Plan receipts preserve the review; receipt recovery spares Work an
  const subscriptionChanges:any[]=[];
  const forward=async(url:any,init:any={})=>{
    const headers=new Headers(init.headers);headers.set("x-pe-context",host.terminal);headers.set(HOST_RUNTIME_SERVICE_HEADER,hostOwnership.serviceName);
-   const target=new URL(typeof url==="string"?url:url.url??url.href,host.base);if(typeof init.body==="string"){const body=JSON.parse(init.body);if(body.add&&body.remove)subscriptionChanges.push(body);}const response=await originalFetch(`${host.base}${target.pathname}${target.search}`,{...init,headers});if(target.pathname.includes("sheet")||target.pathname.includes("actions")||target.pathname.includes("history")||target.pathname.includes("route-view")||target.pathname.includes("work"))trace.http.push({url:target.pathname,method:init.method??"GET",status:response.status,body:await response.clone().json().catch(()=>null)});return response;
+   const target=new URL(typeof url==="string"?url:url.url??url.href,host.base);if(typeof init.body==="string"){const body=JSON.parse(init.body);if(body.add&&body.remove)subscriptionChanges.push(body);}const response=await originalFetch(`${host.base}${target.pathname}${target.search}`,{...init,headers});if(target.pathname.includes("sheet")||target.pathname.includes("actions")||target.pathname.includes("history")||target.pathname.includes("route-view")||target.pathname.includes("work"))trace.http.push({url:target.pathname,method:init.method??"GET",request:typeof init.body==="string"?JSON.parse(init.body):undefined,status:response.status,body:await response.clone().json().catch(()=>null)});return response;
  };
  trace.fetch.mockImplementation(forward);vi.stubGlobal("fetch",forward);
  const heldReceipts:string[]=[];
  const receiptBatch:any[]=[];
  let batchReleased=false;
+ let previousPlan:string|undefined;
  const readyAfterBatch:string[]=[];
  class Stream {
    onopen:any;onmessage:any;onerror:any;controller=new AbortController();
    keys=new Set<string>();
-   constructor(url:string){streams.add(this);void this.start(url);}
+   constructor(readonly url:string){streams.add(this);void this.start(url);}
    deliver(data:string){
      const frame=JSON.parse(data);
+     if(!frame.kind&&typeof frame.generation==="number") (trace as any).readEvents.push({url:this.url,...frame});
      this.keys.add(frame.key);
-     if(!batchReleased&&trace.tokens.length && (frame.value?.kind==="receipt"||frame.value?.kind==="ready"&&frame.value.receipts)){
+     if(mode==="batched"&&!batchReleased&&trace.tokens.length && (frame.value?.kind==="receipt"||frame.value?.kind==="ready"&&frame.value.receipts)){
        heldReceipts.push(data);receiptBatch.push({kind:"held",key:frame.key,cursor:frame.value.cursor??frame.value.receipts.through,state:frame.value.receipt?.state??frame.value.receipts.rows.at(-1)?.state});return;
      }
-     if(Array.isArray(frame.value)&&frame.value.some((row:any)=>row.key==="ducts.plan-losses"&&row.state==="succeeded")){
+     if(Array.isArray(frame.value)&&frame.value.some((row:any)=>row.key==="ducts.plan-losses"&&row.id!==previousPlan&&row.state==="succeeded")){
        batchReleased=true;
        receiptBatch.push({kind:"flush",count:heldReceipts.length});
        for(const held of heldReceipts.splice(0))this.onmessage?.({data:held});
@@ -117,7 +128,7 @@ test("batched Plan receipts preserve the review; receipt recovery spares Work an
  const address={read:()=>new URLSearchParams(search),write:(next:URLSearchParams)=>{search=new URLSearchParams(next);listeners.forEach(f=>f());},subscribe:(f:()=>void)=>{listeners.add(f);return()=>{listeners.delete(f);};}};
  const root=createRootRoute({validateSearch:(s:Record<string,unknown>)=>s,component:()=> <TypedShell module={fans} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtins.fans.closure.fingerprint}`)} address={address}/>});
  const router=createRouter({routeTree:root,history:createMemoryHistory({initialEntries:["/?thread=f05-probe"]})});
- let before:any,after:any;
+ let before:any,after:any,firstSettlement:any;
  const sample=()=>{const {gate,options}=trace.gates.at(-1);const state=gate.read();const mount=trace.mounts.at(-1);return {pageEpoch:state.pageEpoch,pageRevision:state.pageRevision,workRevision:state.work?.revision??null,dependencies:options.dependencies(),workSignature:canonicalRouteInput(Object.keys(mount.spec.edits.owners).map(id=>{const o=mount.owner(id);return[id,o.ready,o.handle];}))};};
  try{
    render(<RouterProvider router={router}/>);
@@ -128,21 +139,56 @@ test("batched Plan receipts preserve the review; receipt recovery spares Work an
    await vi.waitFor(()=>{expect(trace.mounts.at(-1)?.owner()?.handle?.revision).toBe(1);expect(trace.mounts.at(-1)?.writeRefusal()).toBeNull();},{timeout:20000});
    fireEvent.click(await screen.findByRole("button",{name:"Refresh Fans"}));
    await vi.waitFor(()=>expect(trace.mounts.at(-1)?.writeRefusal()).toBeNull(),{timeout:20000});
+   for(mode of ["recording","batched"] as const){
+     if(mode==="batched"){batchReleased=false;receiptBatch.length=0;heldReceipts.length=0;readyAfterBatch.length=0;}
      before=sample();
+     const watched=trace.http.find(row=>row.url==="/pe/fans/sheet"&&row.body?.value?.evaluation===before.dependencies["fans.sheet"]);
+     const watches=(row:any)=>new URL(row.url,host.base).searchParams.get("subscription")===watched.request.subscription;
+     if(mode==="recording") await vi.waitFor(()=>expect((trace as any).readEvents.some(watches)).toBe(true),{timeout:10000});
      fireEvent.click(screen.getByRole("button",{name:"plan Write to Revit"}));
-     await vi.waitFor(()=>expect((trace as any).results?.at(-1)?.state).toBe("succeeded"),{timeout:45000});
+     if(mode==="recording"){
+       await vi.waitFor(()=>expect(planPending).toBe(true),{timeout:45000});
+       const eventStart=(trace as any).readEvents.length;
+       try {
+         // A real watched-slot republication while native Plan is pending; no input changes.
+         const response=await forward("/pe/fans/sheet",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(watched.request)});
+         const publication=await response.json(); (trace as any).republication=publication;
+         expect.soft(publication.state,"Recording must not refuse the watched republication").toBe("current");
+         await vi.waitFor(()=>expect((trace as any).readEvents.slice(eventStart).some(watches)).toBe(true),{timeout:10000});
+         if(publication.state!=="current") await vi.waitFor(()=>expect(trace.mounts.at(-1).value().current).toBe(false),{timeout:5000});
+       } finally {releasePlan.resolve();}
+     }
+     await vi.waitFor(()=>{expect((trace as any).results).toHaveLength(mode==="recording"?1:2);expect((trace as any).results.at(-1).state).toBe("succeeded");},{timeout:45000});
+     expect.soft(trace.stops,"Plan's own Work reads must remain recordable").toEqual([]);
      await screen.findByRole("button",{name:"Write to Revit"},{timeout:5000});
      after=sample();
+     const settlement={mode,inspectable:true,problem:trace.mounts.at(-1)?.reviewProblem("losses"),before,after};
+     firstSettlement??=settlement; (trace as any).settlements.push(settlement);
      expect(after.pageEpoch).toBe(before.pageEpoch);expect(after).toEqual(before);
      const plan=trace.tokens.at(-1);expect(plan.gate.current(plan.token)).toBe(true);
      expect(document.body.textContent).not.toContain("Review is stale");
-   expect(trace.submit).toHaveBeenCalledTimes(1);
+     if(mode==="recording"){
+       previousPlan=(trace as any).results.at(-1).id;
+       await act(async()=>trace.mounts.at(-1).cancel("losses"));
+       await screen.findByRole("button",{name:"plan Write to Revit"});
+     }
+   }
+   const commandReads=[];
+   for(const id of captureStore.readSets.ids()){
+     const record=await Effect.runPromise(captureStore.readSets.get(id));
+     if(record.recipe.key==="command.work.view"&&(record.recipe.input as any).command==="ducts.plan-losses") commandReads.push(record);
+   }
+   expect(new Set(commandReads.map(record=>(record.recipe.input as any).route))).toEqual(new Set(["ducts","fans"]));
+   expect(commandReads.every(record=>record.state==="complete"&&record.inputs.some(input=>input.input.kind==="work"&&input.input.view==="view"))).toBe(true);
+   (trace as any).commandReads=commandReads;
+   expect(trace.submit).toHaveBeenCalledTimes(2);
    expect(dirties).toEqual([]);
    const receiptKey=receiptBatch.find(row=>row.kind==="held").key;
+   expect(receiptBatch.filter(row=>row.kind==="held"&&row.key===receiptKey).length).toBeGreaterThan(1);
    const stream=[...streams].find(stream=>stream.keys.has(receiptKey));
    const skippedCursor=receiptBatch.filter(row=>row.kind==="held"&&row.key===receiptKey).at(-1).cursor+2;
    for(const gap of [{kind:"gap",key:receiptKey,dropped:1},
-     {kind:"event",key:receiptKey,value:{kind:"receipt",cursor:skippedCursor,receipt:actionStatusSchema.parse((trace as any).results[0])}}]){
+     {kind:"event",key:receiptKey,value:{kind:"receipt",cursor:skippedCursor,receipt:actionStatusSchema.parse((trace as any).results.at(-1))}}]){
    const sampleStart=trace.samples.length, updateStart=subscriptionChanges.length, streamCount=streams.size,dirtyStart=dirties.length;
    const readyCount=readyAfterBatch.filter(key=>key===receiptKey).length;
    await act(async()=>stream.onmessage({data:JSON.stringify(gap)}));
@@ -159,9 +205,11 @@ test("batched Plan receipts preserve the review; receipt recovery spares Work an
    fireEvent.click(await screen.findByRole("option",{name:/^None/}));
    await vi.waitFor(()=>expect(trace.mounts.at(-1).owner().handle.revision).toBe(2),{timeout:20000});
    await expect(trace.mounts.at(-1).run("losses",true)).rejects.toThrow("Review is stale; prepare it again");
-   expect(trace.submit).toHaveBeenCalledTimes(1);
+   expect(trace.submit).toHaveBeenCalledTimes(2);
  }finally{
-   if(process.env.PE_F05_EVIDENCE)writeFileSync(process.env.PE_F05_EVIDENCE,JSON.stringify({submits:trace.submit.mock.calls.length,results:(trace as any).results,receiptBatch,dirties,subscriptionChanges,http:trace.http,before,after,samples:trace.samples,stops:trace.stops,plans:trace.tokens.map(({token,gate})=>({id:token.id,current:gate.current(token),samePageEpoch:token.pageEpoch===gate.read()?.pageEpoch})),requests,body:document.body.textContent,problem:trace.mounts.at(-1)?.reviewProblem("losses")},null,2));
+   releasePlan.resolve();
+   firstSettlement??={inspectable:!!screen.queryByRole("button",{name:"Write to Revit"}),problem:trace.mounts.at(-1)?.reviewProblem("losses"),before,after:trace.mounts.length?sample():undefined};
+   if(process.env.PE_F05_EVIDENCE)writeFileSync(process.env.PE_F05_EVIDENCE,JSON.stringify({mode,firstSettlement,settlements:(trace as any).settlements,commandReads:(trace as any).commandReads,readEvents:(trace as any).readEvents,republication:(trace as any).republication,submits:trace.submit.mock.calls.length,results:(trace as any).results,receiptBatch,dirties,subscriptionChanges,http:trace.http,before,after,samples:trace.samples,stops:trace.stops,plans:trace.tokens.map(({token,gate})=>({id:token.id,current:gate.current(token),samePageEpoch:token.pageEpoch===gate.read()?.pageEpoch})),requests,body:document.body.textContent,problem:trace.mounts.at(-1)?.reviewProblem("losses")},null,2));
    cleanup();unbind();peReadings.dirty=originalDirty;peReadings.close();for(const stream of streams)stream.close();vi.unstubAllGlobals();await host.close();await rm(dir,{recursive:true,force:true});
  }
 },150000);

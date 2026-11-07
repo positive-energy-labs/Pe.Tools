@@ -59,11 +59,11 @@ export class History {
     private readonly ledger?: Publications,
   ) {}
 
-  /** Recording is ancillary: losing it must not retire a live Value (K4). */
-  async record(prepare: () => Promise<Parameters<History["keep"]>>): Promise<() => void> {
+  /** Only recording is ancillary (K4); live inventory and read-set preparation must already succeed. */
+  async record(...args: Parameters<History["keep"]>): Promise<() => void> {
     if (!this.writer || this.writer.capture.truncated()) return () => {};
     try {
-      const commit = await this.keep(...await prepare());
+      const commit = await this.keep(...args);
       return this.writer.capture.truncated() ? () => {} : commit;
     } catch (error) {
       const at = this.writer.capture.begin();

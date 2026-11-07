@@ -1,5 +1,5 @@
 import {hostReadSource} from "./host-read-source.ts";
-import { Context, Effect, Layer, Schema, Option } from "effect";
+import { Context, Effect, Fiber, Layer, Schema, Option } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import {
   HostNativeRead,
@@ -12,6 +12,7 @@ import { hostOwnership } from "../../../host/src/host-ownership.ts";
 import { HostDocumentMarks } from "../../../host/src/document-marks.ts";
 import { HostSessionInventory } from "../../../host/src/session-inventory.ts";
 import { DuctFiles } from "../../../host/src/ducts-files.ts";
+import { Publications } from "../../../host/src/reads/evaluator.ts";
 import { RevitBridge } from "../../../host/src/bridge.ts";
 import { SdkSession } from "../../../host/src/sdk-session.ts";
 import { bootHost } from "../../../host/tests/real-server.ts";
@@ -41,6 +42,7 @@ const ambient = <S, I>(tag: Context.Key<S, I>) =>
 
 async function liveHost(record = false, duringNative?: (root: string) => Promise<void>, isolated?: HostInputContext["Service"]) {
   let target!: { session: string; openId: string };
+  let disconnectBridge: () => Promise<void> = async () => { throw Error("Test bridge has not connected"); };
   const inputRoot = dirname(dirname(firmFilePath()));
   const roster = nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
   const inputs = isolated ?? (record
@@ -60,7 +62,9 @@ async function liveHost(record = false, duringNative?: (root: string) => Promise
         native: Layer.effect(
           HostNativeRead,
           Effect.gen(function* () {
-            target = (yield* connectTestBridge(process.pid)).target;
+            const connected = yield* connectTestBridge(process.pid);
+            target = connected.target;
+            disconnectBridge = () => Effect.runPromise(Fiber.interrupt(connected.connection));
             const actualTarget = {
               processIncarnation: { pid: process.pid, startedAt: 1000 },
               openDocumentLifetime: { openId: target.openId },
@@ -99,7 +103,7 @@ async function liveHost(record = false, duringNative?: (root: string) => Promise
     "x-pe-context": host.terminal,
     [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
   };
-  return { ...host, target, headers, inputRoot, inputs };
+  return { ...host, target, headers, inputRoot, inputs, disconnectBridge: () => disconnectBridge() };
 }
 
 test("source startup records a cold Fans publication through real host inputs", async () => {
@@ -301,7 +305,7 @@ test("mounted Fans core and roster cannot supersede one another through their sh
 });
 
 
-test("a stopped recording cannot refuse a current live Fans publication", async () => {
+test("a stopped recording preserves live Fans but cannot hide a late closed target", async () => {
   const dir=await mkdtemp(join(tmpdir(),"pe-capture-stop-"));
   const automatic=await Effect.runPromise(hostInputs(admittedReceiptStamps().host,{kind:"live",capture:"automatic"}));
   if(automatic.lane.kind!=="live" || !automatic.lane.captureStore) throw Error("Expected an automatic recording");
@@ -323,6 +327,19 @@ test("a stopped recording cannot refuse a current live Fans publication", async 
     const history=await fetch(`${host.base}/pe/history?document=${encodeURIComponent("C:/model.rvt")}`,{headers:host.headers});
     const body=await history.json();
     expect(body.points).toHaveLength(1);
-    expect(body.problem).toMatch(/History stopped.*unsupported/);
+    expect(body.problem).toBe(`History stopped at ${new Date(writer!.capture.truncated()!.stoppedAt).toISOString()}: unsupported`);
+    const original = Publications.prototype.publish;
+    const lateClose = vi.spyOn(Publications.prototype, "publish").mockImplementationOnce(function (this: Publications, id, generation, definition, args, port, keep) {
+      return original.bind(this)(id, generation, definition, args, port, keep && (async (publication) => {
+        await host.disconnectBridge(); // After real evaluation, before the real publication callback.
+        return keep(publication);
+      }));
+    });
+    try {
+      const refused = await publish();
+      const value = await refused.json();
+      expect(value.state, JSON.stringify(value)).toBe("refresh-needed");
+      expect(value.reason).toMatch(/no longer open/);
+    } finally { lateClose.mockRestore(); }
   }finally{await host.close();await rm(dir,{recursive:true,force:true});}
 });
