@@ -2,7 +2,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { observeResources } from "@pe/runtime";
 import { workFingerprintSchema, actionReceiptSchema } from "@pe/agent-contracts";
-import { fixture, ref, path, gate, snapshot } from "../../../host/tests/host-read-graph.test-support";
+import { fixture, ref, path, gate, snapshot, roster } from "../../../host/tests/host-read-graph.test-support";
 import { module as fans } from "../fans/route";
 import { localId } from "./typed-route";
 import { mountTypedRoute } from "../shell/typed-mount";
@@ -50,8 +50,10 @@ import { NodeServices, NodeHttpClient } from "../../../host/tests/family-attach-
 
 const trace = z.array(z.object({ name: z.string(), args: z.unknown() }));
 
-test("JZ Plan fingerprint: reconnect and hide preserve sealed inputs; changed Work stales review", async () => {
-  const j = await journey();
+test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work stales review", async () => {
+  let nativeGeneration = "incarnation:24";
+  const systemRoster = { ...roster, systems: roster.systems.slice(0, 1) };
+  const j = await journey({ roster: systemRoster, snapshot: { ...snapshot, systems: systemRoster.systems }, freshness: () => nativeGeneration });
   const streams = new Set<{ close(): void }>();
   let mounted: ReturnType<typeof mountTypedRoute> | undefined;
   let held: ReturnType<typeof gate> | undefined;
@@ -88,6 +90,7 @@ test("JZ Plan fingerprint: reconnect and hide preserve sealed inputs; changed Wo
   vi.stubGlobal("EventSource", Stream);
   try {
     await j.ready();
+    await vi.waitFor(() => expect(j.mount.value(fans.spec.reads!.roster).current).toBe(true), { timeout: 20_000 });
     const source = publicationSource({ read: (ctx, publication, release) => j.host.send(publication.generation,
       (ctx.args as { fan: string[] }).fan, undefined, publication.subscription, release) });
     const row = j.mount.value(fans.spec.reads!.roster).value.rows.find((row: { mark: string }) => row.mark === "MUAS-1")!;
@@ -142,6 +145,33 @@ test("JZ Plan fingerprint: reconnect and hide preserve sealed inputs; changed Wo
     mounted.subscribe(() => {});
     await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
     expect(mounted.review("losses"), "show reacquires identical inputs without retiring the Plan").toMatchObject({ stale: false, preview: expect.anything() });
+    expect(mounted.writeRefusal()).toBeNull();
+    mounted.release();
+    const definitions = { ductsPricing, ductsNetwork, ductsRoster };
+    const unregister = registeredReads.register(Object.fromEntries(Object.entries(definitions).filter(([, read]) => !registeredReads.reads.has(read.name))));
+    const sources = Object.fromEntries(Object.values(definitions).map(definition => [definition.name + ".value", publicationSource({
+      async read(ctx, publication, release) {
+        const response = await j.host.probe({ read: definition.name, ...publication, release, args: { target: ref, ...(ctx.args as object) } });
+        expect(response.ok, await response.clone().text()).toBe(true);
+        return valueReadResponse.parse(await response.json());
+      },
+    })]));
+    const ductMount = mountTypedRoute(ducts, { ...j.input, address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} } },
+      workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(e => e.routeKey === "ducts")!.closure.fingerprint}`), { work, sources });
+    try {
+      ductMount.subscribe(() => {});
+      await vi.waitFor(() => { const value = ductMount.value(); expect(value.current, value.current ? "current" : value.reason).toBe(true); }, { timeout: 20_000 });
+      await vi.waitFor(() => expect(ductMount.value(ducts.spec.reads!.roster).current).toBe(true), { timeout: 20_000 });
+      const system = ductMount.value(ducts.spec.reads!.roster).value.systems[0]!.name;
+      ductMount.page.subject({ kind: "ids", ids: [localId("ducts-system", system)] });
+      await vi.waitFor(() => { const value = ductMount.value(); expect(value.current, value.current ? "current" : value.reason).toBe(true); }, { timeout: 20_000 });
+    } finally { ductMount.dispose(); unregister(); }
+    // The Driver recording has identical native content at admission generations :24 and :31.
+    nativeGeneration = "incarnation:31";
+    mounted.subscribe(() => {});
+    await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    expect(mounted.value().publication!.data).toEqual(sealed.data);
+    expect(mounted.review("losses"), "return from a Ducts read preserves the sealed Plan").toMatchObject({ stale: false, preview: expect.anything() });
     expect(mounted.writeRefusal()).toBeNull();
     const changed = await j.host.workspace.apply(key, "fans", "human", [
       { path: ["equipmentFlows", String(row.unitId), "edit"], value: { value: { cfm: 950, source: "test" } } },

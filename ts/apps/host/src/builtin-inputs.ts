@@ -25,7 +25,7 @@ import {
 } from "./input-occurrence.ts";
 import type { TakingObserver } from "./native-recording.ts";
 import { inputPort, type ReadSources } from "./reads/inputs.ts";
-import { Publications } from "./reads/evaluator.ts";
+import { Publications, fingerprint } from "./reads/evaluator.ts";
 import { History, localHistory } from "./reads/history.ts";
 import { historyRoutes } from "./reads/history-routes.ts";
 import { historyPoseSchema, addressSchema, sameAddress } from "@pe/agent-contracts";
@@ -565,7 +565,9 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                 : {};
             const answer = await invoke(native.read({ key, input, scope }));
             return new Response(JSON.stringify(answer.value), {
-              headers: { [DUCTS_BODY_VERSION_HEADER]: canonicalJson(json(answer.freshness)) },
+              // Admission generations fence native flights; sealed read versions describe content.
+              // Keep freshness evidence in the native taking, outside the Value's content identity.
+              headers: { [DUCTS_BODY_VERSION_HEADER]: fingerprint(answer.value) },
             });
           }
           if (!ref) throw Error("Retained document read requires a document target");
