@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
+import { routeAddress } from "@pe/agent-contracts";
 import type { RouteView } from "@pe/agent-contracts";
 import { RouteViewStore } from "./route-view-store.ts";
 
@@ -22,7 +23,7 @@ const ducts = (instance: string): RouteView => ({
   thread: "t",
   instance,
   surface: "route",
-  page: { system: "", level: "", selected: "" },
+  page: routeAddress("ducts").agent.write(routeAddress("ducts").defaults),
   context: { document: { session: "s", openId: "o" } },
   facts: { systems: [{ name: "Supply 1" }] },
 });
@@ -120,15 +121,17 @@ describe("mounted route view custody", () => {
     store.subscribe((intent) => {
       commandId = intent.commandId;
     });
-    const result = store.set("t", "ducts", id1, lease.revision, { system: "Supply 1" });
-    store.publish({ ...ducts(id1), page: { system: "Supply 1", level: "", selected: "" } });
+    const system = JSON.stringify({kind:"ids",ids:[JSON.stringify(["ducts-system","Supply 1"])]});
+    const page = {...ducts(id1).page,system};
+    const result = store.set("t", "ducts", id1, lease.revision, { system });
+    store.publish({ ...ducts(id1), page });
     expect(
       store.ack({
         outcome: "rendered",
         instance: id1,
         commandId,
         revision: lease.revision,
-        page: { system: "Supply 1", level: "", selected: "" },
+        page,
         facts: lease.facts,
       }).ok,
     ).toBe(true);

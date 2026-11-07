@@ -36,7 +36,7 @@ const fields = {
   system: field(system, { kind: "ids", ids: [] }, "subject", "push"),
   stage: field(z.enum(["network"]), "network", "stage", "push"),
   systemSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
-  systemSort: field(z.enum(["", "name"]), "", "query"),
+  systemSort: field(z.enum(["", "name", "loss"]), "", "query"),
   treeSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
   treeSort: field(z.enum(["", "name"]), "", "query"),
   rulingSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),

@@ -84,7 +84,7 @@ export type Page<F extends Fields> = FieldValues<F> & {
   readonly selected: readonly { kind: "focus"; id: IdentityId<"local"> }[];
 };
 type RoleFields<F extends Fields, R extends Field["role"]> = {
-  [K in keyof F]: F[K]["role"] extends R ? K : never;
+  [K in keyof F]: R extends F[K]["role"] ? K : never;
 }[keyof F];
 export type DrawPage<F extends Fields> = {
   read(): Page<F>;
@@ -143,7 +143,7 @@ export type Specification<
   name: string;
   directory: RouteGraphJson["directory"];
   subject: {
-    field: keyof F & string;
+    field: RoleFields<F,"subject"> & string;
     noun: string;
     pane: string;
     read?: SubjectRead;

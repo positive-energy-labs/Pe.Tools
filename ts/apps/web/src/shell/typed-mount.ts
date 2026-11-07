@@ -182,6 +182,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     input.address.write(search, history);
     return { kind: "accepted", changed: true } as const;
   };
+  const moveRole = (role:"pose"|"query", patch:Record<string,unknown>, history?:"push"|"replace") => {
+    for (const key of Object.keys(patch)) if (spec.fields[key]?.role !== role) throw Error(`${key} is not a ${role} field`);
+    return move(patch,history);
+  };
   const stopAddress = input.address.subscribe(() => {
     const next = decodePage();
     const selected = input.address.read().has("selected") ? next.selected : page.selected;
@@ -310,11 +314,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
       write: (page:object) => Object.fromEntries(Object.keys(spec.fields).map(key=>[key,JSON.stringify((page as Record<string,unknown>)[key])])),
-      read: (patch:Record<string,string>) => Object.fromEntries(Object.entries(patch).map(([key,value])=>[key,spec.fields[key]!.schema.parse(JSON.parse(value))])),
+      read: (patch:Record<string,string>) => Object.fromEntries(Object.entries(patch).map(([key,value])=>[key,(()=>{const field=spec.fields[key];if(!field) throw Error(`${key} is not an attention field`);return field.schema.parse(JSON.parse(value));})()])),
     }, current: (token:InvocationToken) => gate.current(token),
     value: (read: import("../route/host-read").HostRead = spec.core) => reads.get(read)?.snapshot ?? unavailable("Reading..."),
     owner: (id = own) => owners.get(id),
-    page: { read: () => page, pose: (patch: any, intent?: "gesture"|"named") => move(patch,intent === "gesture"?"replace":intent === "named"?"push":undefined), query: (patch: any) => move(patch), select: (selected: any) => move({selected}), subject: (subject: any) => move({ [spec.subject.field]: subject },"push") },
+    page: { read: () => page, pose: (patch: any, intent?: "gesture"|"named") => moveRole("pose",patch,intent === "gesture"?"replace":intent === "named"?"push":undefined), query: (patch: any) => moveRole("query",patch), select: (selected: any) => move({selected}), subject: (subject: any) => move({ [spec.subject.field]: subject },"push") },
     subscribe(listener: () => void) { released = false; listeners.add(listener); syncReads(); return () => { listeners.delete(listener); }; },
     revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
     problem: basisRefusal, writeRefusal: () => input.fixture !== null ? "Fixture has no native writes" : basisRefusal(),
