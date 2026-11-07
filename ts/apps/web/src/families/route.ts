@@ -1,3 +1,4 @@
+import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import {
@@ -35,7 +36,7 @@ export const edit = z.object({
   value: familyCellValueSchema,
   current: z.string(),
 });
-export const view = { ...hostRead(familiesViewCapability), args: () => ({}) };
+export const view = read(hostRead(familiesViewCapability));
 export type { Context as FamiliesDrawContext } from "./context.generated";
 export const module = route({
   key: "families",

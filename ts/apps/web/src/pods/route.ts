@@ -1,3 +1,4 @@
+import { read } from "../route/defaults";
 import { z } from "zod";
 import { memberWork, settingsRouteState } from "@pe/agent-contracts";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
@@ -12,14 +13,8 @@ import {
   podMemberOfPage as member,
 } from "../../../../packages/agent-contracts/src/pods-read.ts";
 export { member };
-export const loaded = {
-  ...hostRead(valueRead("pods.author", podsArgs, podsValue)),
-  args: (page: z.output<typeof podsArgs>) => ({ pod: page.pod, path: page.path, runs: page.runs }),
-};
-export const inventory = {
-  ...hostRead(valueRead("pods.roster", z.object({}), podsRosterValue)),
-  args: () => ({}),
-};
+export const loaded = read(hostRead(valueRead("pods.author", podsArgs, podsValue)), (page: z.output<typeof podsArgs>) => ({ pod: page.pod, path: page.path, runs: page.runs }));
+export const inventory = read(hostRead(valueRead("pods.roster", z.object({}), podsRosterValue)));
 export const fields = {
   pod: field(z.string(), "", "query", "push"),
   path: field(z.string(), "", "query", "push"),

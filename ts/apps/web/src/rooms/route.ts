@@ -1,3 +1,5 @@
+import { bindings } from "./bindings";
+import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import {
@@ -19,10 +21,7 @@ export const fields = {
   viewport: field(address.viewport, null, "pose"),
   picked: field(address.selected, [], "pose"),
 };
-export const loaded = {
-  ...hostRead(valueRead("rooms.workspace", roomsArgs, roomsData)),
-  args: (page: { view: string }) => ({ view: page.view }),
-};
+export const loaded = read(hostRead(valueRead("rooms.workspace", roomsArgs, roomsData)), (page: { view: string }) => ({ view: page.view }));
 export const edits = z.array(routeStatePatchSchema);
 export type { Context as RoomsContext } from "./context.generated";
 export const module = route({
@@ -49,6 +48,7 @@ export const module = route({
     main: {
       title: "Rooms",
       purpose: "Choose a level and inspect its rooms",
+      bindings,
       draw: draw(() => import("./mount"), "RoomsBody"),
     },
   },

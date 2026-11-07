@@ -1,3 +1,4 @@
+import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import {
@@ -38,13 +39,10 @@ const workspace = (page: { workspaceId: Parameters<typeof namesOf>[0] }) => {
   if (ids === "all") throw Error("Choose one schedule");
   return ids[0] ?? null;
 };
-export const view = {
-  ...hostRead(schedulesViewCapability),
-  args: (page: { workspaceId: Parameters<typeof namesOf>[0] }) => ({
+export const view = read(hostRead(schedulesViewCapability), (page: { workspaceId: Parameters<typeof namesOf>[0] }) => ({
     workspaceId: workspace(page),
-  }),
-};
-const roster = { ...hostRead(schedulesViewCapability), args: () => ({ workspaceId: null }) };
+  }));
+const roster = read(hostRead(schedulesViewCapability), () => ({ workspaceId: null }));
 export const edit = z
   .array(routeStatePatchSchema)
   .refine(

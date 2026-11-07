@@ -17,12 +17,12 @@ function PodTool() {
   const [error, setError] = useState<string | null>(null);
   useSyncExternalStore(publicRoutes.subscribe, publicRoutes.revision, publicRoutes.revision);
   const row = inventory?.rows.find((entry) => entry.key === key);
-  const route = row?.trusted ? publicRoutes.get(row.workRoute) : null;
+  const route = row?.trusted ? publicRoutes.typed(row.workRoute) : null;
   const alarm = error || inventory?.errors[key] || inventory?.errors.inventory;
-  if (row && route && "typed" in route && route.typed)
+  if (row && route)
     return (
       <PaneErrorBoundary what="Pod route" key={`${row.key}:${row.fingerprint}`}>
-        <TypedShell module={route.typed} fingerprint={workFingerprintSchema.parse(row.fingerprint)} />
+        <TypedShell module={route} fingerprint={workFingerprintSchema.parse(row.fingerprint)} />
       </PaneErrorBoundary>
     );
   return (

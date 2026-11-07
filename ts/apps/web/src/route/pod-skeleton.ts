@@ -17,6 +17,8 @@ export const module = route({
     exposure:"Preview",icon:"Box",runtimeNeed:"Browser",aliases:[],listed:true,satellites:[],
     surfaces:{web:"full",pwa:"full",tray:false}},
   fields: {note:field(z.string(),"","pose")},
+  edits: {work:z.object({notes:z.record(z.string(),z.string()).default({})}),owners:{},
+    input:z.never(),patches:()=>[],history:z.object({label:z.string()}),describe:detail=>({label:detail.label})},
   panes: {main:{title:"Worksheet",purpose:"Describe what this pane helps decide",draw:ctx=>ctx.page.read().note}},
   layout:paneLayout("main"),
 });

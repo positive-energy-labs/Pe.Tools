@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { listSearchSchema } from "@pe/agent-contracts";
+import { listSearchSchema } from "../../../../packages/agent-contracts/src/list-search.ts";
 import { field, route as declareRoute, type Specification, type DrawContext, type Fields, type ReadData } from "./typed-route";
 import type { HostRead } from "./host-read";
 export * from "./typed-route";
@@ -14,7 +14,7 @@ const sortField = () => field(z.enum(["", "name"]), "", "query");
 export const stageField = <const S extends readonly [string, ...string[]]>(stages: S) =>
   field(z.enum(stages), stages[0], "stage", "push");
 export const paneLayout = (id: string) => ({ kind: "pane" as const, id });
-export const read = <R extends HostRead, P>(handle: R, args: (page: P) => unknown) => ({ ...handle, args });
+export const read = <R extends HostRead, P>(handle: R, args: (page: P) => unknown = () => ({})) => ({ ...handle, args });
 type WorkOf<T> = T extends { schema: infer S extends z.ZodType } ? z.output<S> : T extends z.ZodType ? z.output<T> : never;
 /** Infer from independent declarations: drawing imports cannot form a module inference cycle. */
 export type ContextOf<F extends Fields, R = never, W = never, E = never> = DrawContext<

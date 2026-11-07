@@ -1,3 +1,4 @@
+import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import {
@@ -33,12 +34,9 @@ export const fields = {
   inspector: field(address.inspector, "", "pose"),
   doc: field(address.doc, "text", "pose"),
 };
-export const loaded = {
-  ...hostRead(valueRead("family.workspace", familyArgs, familyData)),
-  args: (page: { pod: string; path: string }) => ({
+export const loaded = read(hostRead(valueRead("family.workspace", familyArgs, familyData)), (page: { pod: string; path: string }) => ({
     member: page.pod && page.path ? { pod: page.pod, path: page.path } : null,
-  }),
-};
+  }));
 export const edits = z.array(routeStatePatchSchema);
 export type { Context as FamilyContext } from "./context.generated";
 export const module = route({

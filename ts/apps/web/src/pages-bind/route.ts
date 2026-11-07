@@ -1,3 +1,4 @@
+import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { valueRead } from "@pe/agent-contracts";
@@ -13,7 +14,7 @@ export const fields = {
   query: field(z.record(z.string(), z.string()), {}, "query"),
   fragment: field(z.string(), "", "pose"),
 };
-export const loaded = { ...hostRead(valueRead("bind.picker", z.object({}), bindData)), args: () => ({}) };
+export const loaded = read(hostRead(valueRead("bind.picker", z.object({}), bindData)));
 export type { Context as BindContext } from "./context.generated";
 export const module = route({
   key: "bind",

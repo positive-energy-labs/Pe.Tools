@@ -1,3 +1,4 @@
+import { read } from "../route/defaults";
 import { z } from "zod";
 import { valueRead, GALVANIZED_STEEL_ROUGHNESS } from "@pe/agent-contracts";
 import { route, field } from "../route/defaults";
@@ -14,11 +15,8 @@ export const fields = {
   density: field(z.number(), 0.075, "query"),
   face: field(z.enum(["commercial", "residential"]), "commercial", "pose", "push"),
 };
-export const loaded = {
-  ...hostRead(valueRead("duct-loss.result", ductLossArgs, ductLossData)),
-  args: (page: { [K in keyof typeof fields]: z.output<(typeof fields)[K]["schema"]> }) =>
-    ductLossArgs.parse(page),
-};
+export const loaded = read(hostRead(valueRead("duct-loss.result", ductLossArgs, ductLossData)), (page: { [K in keyof typeof fields]: z.output<(typeof fields)[K]["schema"]> }) =>
+    ductLossArgs.parse(page));
 export type { Context as DuctLossContext } from "./context.generated";
 export const module = route({
   key: "duct-loss",

@@ -1,3 +1,4 @@
+import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
@@ -9,10 +10,7 @@ import {
   capturesArgs,
   capturesValue,
 } from "../../../../packages/agent-contracts/src/captures-read.ts";
-export const loaded = {
-  ...hostRead(valueRead("captures.browse", capturesArgs, capturesValue)),
-  args: () => ({}),
-};
+export const loaded = read(hostRead(valueRead("captures.browse", capturesArgs, capturesValue)));
 export const fields = {
   focus: field(z.string(), "", "pose"),
   open: field(z.array(z.string()), [], "pose"),

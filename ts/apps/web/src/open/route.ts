@@ -1,3 +1,4 @@
+import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { valueRead } from "@pe/agent-contracts";
@@ -30,10 +31,7 @@ export const fields = {
     "query",
   ),
 };
-export const loaded = {
-  ...hostRead(valueRead("open.documents", z.object({}), openData)),
-  args: () => ({}),
-};
+export const loaded = read(hostRead(valueRead("open.documents", z.object({}), openData)));
 export type { Context as OpenContext } from "./context.generated";
 export const module = route({
   key: "open",

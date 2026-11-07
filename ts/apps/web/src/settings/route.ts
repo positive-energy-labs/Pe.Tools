@@ -1,3 +1,4 @@
+import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { SETTINGS_SECTIONS } from "../../../../packages/agent-contracts/src/settings-sections.ts";
@@ -10,10 +11,7 @@ import {
   settingsArgs,
   settingsValue,
 } from "../../../../packages/agent-contracts/src/settings-read.ts";
-export const loaded = {
-  ...hostRead(valueRead("settings.machine", settingsArgs, settingsValue)),
-  args: () => ({}),
-};
+export const loaded = read(hostRead(valueRead("settings.machine", settingsArgs, settingsValue)));
 export const fields = {
   section: field(z.enum(["none", ...SETTINGS_SECTIONS]).optional(), undefined, "query", "push"),
   session: field(z.string(), "", "pose"),

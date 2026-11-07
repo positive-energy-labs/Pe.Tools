@@ -1,3 +1,5 @@
+import { bindings } from "./bindings";
+import { read } from "../route/defaults";
 import { stageField } from "../route/defaults";
 import { ductsRouteState } from "../../../../packages/agent-contracts/src/ducts.ts";
 import { z } from "zod";
@@ -55,7 +57,7 @@ const args = (page: {
     | z.output<typeof system>
     | import("@pe/agent-contracts").Immutable<z.output<typeof system>>;
 }) => ({ system: namesOf(page.system) });
-export const roster = { ...hostRead(ductsRosterValueCapability), args: () => ({}) };
+export const roster = read(hostRead(ductsRosterValueCapability));
 export const network = { ...hostRead(ductsNetworkCapability), args };
 export const pricing = { ...hostRead(ductsPricingValueCapability), args };
 export type { Context as DuctsDrawContext } from "./context.generated";
@@ -103,31 +105,37 @@ export const module = route({
     "e-systems": {
       title: "Systems",
       purpose: "Choose a system to inspect",
+      bindings,
       draw: draw(() => import("./proto/e/screen.tsx"), "SystemsPane"),
     },
     "e-sidebar": {
       title: "System tree",
       purpose: "Inspect the opened systems and their runs",
+      bindings,
       draw: draw(() => import("./proto/e/screen.tsx"), "TreePane"),
     },
     "e-rules-all": {
       title: "All-systems rules",
       purpose: "Price every read fitting type",
+      bindings,
       draw: draw(() => import("./proto/e/screen.tsx"), "AllRulesBody"),
     },
     "e-rules": {
       title: "This system’s rules",
       purpose: "Review fitting rules for the opened systems",
+      bindings,
       draw: draw(() => import("./proto/e/screen.tsx"), "RulesBody"),
     },
     "e-picture": {
       title: "Picture",
       purpose: "Inspect the model or schematic",
+      bindings,
       draw: draw(() => import("./proto/e/screen.tsx"), "PictureBody"),
     },
     "e-inbox": {
       title: "Rulings",
       purpose: "Review assumptions and planned writes",
+      bindings,
       draw: draw(() => import("./proto/e/screen.tsx"), "InboxBody"),
     },
   },

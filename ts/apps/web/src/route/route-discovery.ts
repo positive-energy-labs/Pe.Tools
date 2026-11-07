@@ -31,7 +31,6 @@ type Legacy = ReturnType<typeof legacyRouteDiscovery.entries>[number];
 export type DiscoveredRoute = Omit<Legacy, "manifest"> & {
   manifest: Pick<Legacy["manifest"], "key" | "name" | "needs">;
   admitted?: AdmittedRoute;
-  typed?: import("./typed-route").TypedRoute;
   work?: DiscoveredWork;
 };
 export const legacyWork = <W>(
@@ -160,6 +159,7 @@ export function createRouteDiscovery(legacy = legacyRouteDiscovery) {
       const entry = registered.get(key);
       return entry?.admitted ? registry.resolve(entry.admitted) : null;
     },
+    typed: (key: string) => { const entry=registered.get(key); return entry && "typed" in entry ? entry.typed : null; },
     /** Catalog metadata for either executable module; this is never mount authority. */
     declaration: (key: string) => {
       const entry = registered.get(key);
