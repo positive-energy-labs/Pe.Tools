@@ -159,6 +159,11 @@ test("Plan keeps capture and review valid across watched publications and batche
    fireEvent.click(await screen.findByRole("button",{name:"None"},{timeout:20000}));
    fireEvent.click(await screen.findByRole("option",{name:/MUAS-1.*0 staged/}));
    await vi.waitFor(()=>{expect(trace.mounts.at(-1)?.owner()?.handle?.revision).toBe(1);expect(trace.mounts.at(-1)?.writeRefusal()).toBeNull();},{timeout:20000});
+   await vi.waitFor(()=>{
+     const settled=mount.journal().moves.findLast((move:any)=>move.label==="Choose write scope");
+     expect(settled).toBeDefined();
+     expect(mount.owner()?.handle?.revision).toBe(settled.revision);
+   },{timeout:20000});
    await act(async()=>{
      const failure=await mount.draw("sheet-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{"14577391":{cfm:925}}},{label:"Stage MUAS-1 airflow"}));
      if(failure) throw Error(failure.message);
