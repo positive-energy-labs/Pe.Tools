@@ -256,7 +256,7 @@ test("the declared host route reads canonical Work and unreadable Work refuses b
     store: {
       getState: async ({ route }) => {
         if (unreadable) throw Error("Unreadable fixture Work");
-        return { version: 1, revision: 7, doc: route === "fans" ? fansDocumentSchema.parse({}) : ductsDocumentSchema.parse({}) };
+        return { version: 1, schemaVersion: (route === "fans" ? fansRouteState : ductsRouteState).schemaVersion, revision: 7, doc: route === "fans" ? fansDocumentSchema.parse({}) : ductsDocumentSchema.parse({}) };
       },
       setState: async () => {
         writes++;

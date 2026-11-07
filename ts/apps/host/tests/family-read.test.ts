@@ -41,6 +41,7 @@ function fixture() {
   let duringRead: (() => Promise<void>) | undefined;
   let stored = {
     version: 1,
+    schemaVersion: 1,
     revision: 1,
     doc: familyDraftRouteState.schema.parse({
       reading: "Before",
