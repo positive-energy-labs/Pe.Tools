@@ -14,7 +14,7 @@ import {createPodRoutes} from "../../../host/src/pod-routes";
 import {fileRouteDocumentStore} from "../../../host/src/route-document-store";
 import {graphRoute,registeredReads} from "../../../host/src/reads/routes";
 import {Publications} from "../../../host/src/reads/evaluator";
-import {loadPodHostEntry} from "../../../host/src/pod-artifact";
+import {loadPodHostEntry,podArtifactSchema} from "../../../host/src/pod-artifact";
 import {createWorkFeedClient} from "../shell/work-feed-client";
 import {mountTypedRoute} from "../shell/typed-mount";
 import type {Readings} from "../readings";
@@ -30,7 +30,7 @@ async function fixture() {
   const manifest=JSON.parse(await readFile(resolve(root,"pod.json"),"utf8"));
   const member=manifest.routes[0];
   const row=podRouteDescriptorSchema.parse({...member,key:`route:@snowdon-circuits/${member.artifact}`,packageId:"snowdon-circuits",workRoute:"pod.snowdon-circuits.voltage-drop",trusted:true});
-  return {row,envelope:{fingerprint:row.fingerprint,artifact:JSON.parse(await readFile(resolve(root,row.artifact),"utf8"))}};
+  return {row,envelope:{fingerprint:row.fingerprint,artifact:podArtifactSchema.parse(JSON.parse(await readFile(resolve(root,row.artifact),"utf8")))}};
 }
 test("published Snowdon browser and host bytes are verified before either registry changes",async()=>{
   const {row,envelope}=await fixture();
@@ -42,7 +42,7 @@ test("published Snowdon browser and host bytes are verified before either regist
   stop();expect(publicRoutes.typed(row.workRoute)).toBeNull();
   for(const client of ["web","host"]) {
     const changed=structuredClone(envelope);
-    changed.artifact.executables.find(entry=>entry.client===client).members[0].bytes[0]^=1;
+    changed.artifact.executables.find(entry=>entry.client===client)!.members[0]!.bytes[0]!^=1;
     const execute=vi.fn(evaluate);
     await expect(loadPodRoute(row,changed,execute)).rejects.toThrow("differ");
     await expect(loadPodHostEntry(changed.artifact,row.fingerprint)).rejects.toThrow("differ");
@@ -52,9 +52,9 @@ test("published Snowdon browser and host bytes are verified before either regist
 });
 test.each(["deactivation","removal","replacement"])("typed Pod %s removes exactly its runtime registration",async change=>{
   const {row,envelope}=await fixture(),replacement=structuredClone(envelope),dispose=vi.fn();
-  const member=replacement.artifact.executables.find(entry=>entry.client==="web").members[0];
+  const member=replacement.artifact.executables.find(entry=>entry.client==="web")!.members[0]!;
   member.bytes.push(...new TextEncoder().encode("\n// replacement"));
-  replacement.artifact.artifact.executables.find(entry=>entry.client==="web").members[0].sha256=createHash("sha256").update(Uint8Array.from(member.bytes)).digest("hex");
+  (replacement.artifact.artifact.executables as {client:string;members:{sha256:string}[]}[]).find(entry=>entry.client==="web")!.members[0]!.sha256=createHash("sha256").update(Uint8Array.from(member.bytes)).digest("hex");
   replacement.artifact.fingerprint=await routeFingerprint(replacement.artifact.artifact);
   replacement.fingerprint=`pod-bytes:${replacement.artifact.fingerprint}`;
   const loader=createPodRouteLoader(async entry=>{
@@ -104,19 +104,19 @@ async function harness() {
 }
 test("Snowdon mounts typed over real host Work and tracked calculation, edits, undoes and redoes",async()=>{
   const h=await harness();
-  function View(){useSyncExternalStore(h.mount.subscribe,h.mount.revision,h.mount.revision);return createElement("div",null,h.mount.draw("calculation") as string);}
+  function View(){useSyncExternalStore(h.mount.subscribe,h.mount.revision,h.mount.revision);return createElement("div",null,String(h.mount.draw("calculation")));}
   const view=render(createElement(View));
   try {
     await vi.waitFor(()=>expect(screen.getByText(/Authored inputs/).textContent).toContain('"length": 175'));
     expect(registeredReads.reads.has(`${h.row.workRoute}.calculation`)).toBe(true);
     let edit!:ReturnType<typeof h.mount.draw>;
     await act(async()=>{edit=h.mount.draw("calculation",ctx=>ctx.cells.edit({...h.inputs,length:300},{label:"Change length"}));await edit;});
-    expect(edit).resolves.toBeNull();
+    await expect(edit).resolves.toBeNull();
     await vi.waitFor(()=>expect(screen.getByText(/Authored inputs/).textContent).toContain('"length": 300'));
     expect(screen.getByText(/Copper voltage-drop worksheet/).textContent).toContain('"drop"');
-    await act(()=>h.mount.history().undo());
+    await act(()=>h.mount.history.undo());
     await vi.waitFor(()=>expect(screen.getByText(/Authored inputs/).textContent).toContain('"length": 175'));
-    await act(()=>h.mount.history().redo());
+    await act(()=>h.mount.history.redo());
     await vi.waitFor(()=>expect(screen.getByText(/Authored inputs/).textContent).toContain('"length": 300'));
     expect((await h.workspace.read(h.key,h.key.route))?.doc).toMatchObject({inputs:{length:300}});
   } finally {view.unmount();await h.close();}

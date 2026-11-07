@@ -41,9 +41,9 @@ test("Snowdon publishes deterministic browser and host bytes; tampering either r
   expect(podRouteDeclarationSchema.parse(first.declaration)).toEqual(first.declaration);
   const {loadPodRoute}=await import("./src/route/pod-module.ts");
   const {podRouteDescriptorSchema}=await import("@pe/agent-contracts");
-  const {loadPodHostEntry}=await import("../host/src/pod-artifact.ts");
+  const {loadPodHostEntry,podArtifactSchema}=await import("../host/src/pod-artifact.ts");
   const row=podRouteDescriptorSchema.parse({...first.declaration,key:"route:@snowdon-circuits/routes/voltage-drop/route.artifact",packageId:"snowdon-circuits",workRoute:data.key,trusted:true});
-  const envelope={fingerprint:row.fingerprint,artifact:JSON.parse(new TextDecoder().decode(first.bytes))};
+  const envelope={fingerprint:row.fingerprint,artifact:podArtifactSchema.parse(JSON.parse(new TextDecoder().decode(first.bytes)))};
   const loaded=await loadPodRoute(row,envelope,evaluate);
   expect(loaded.fingerprint).toBe(first.declaration.fingerprint);
   expect(first.artifact.executables.map(entry=>entry.client).sort()).toEqual(["host","web"]);
