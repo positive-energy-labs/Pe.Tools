@@ -11,7 +11,7 @@ export const reads = {
       return {
         machine: await ctx.read(resources.machine, { kind: "machine" }),
         recents: await ctx.read(resources.recents, { kind: "sdk", read: "recents" }),
-        threads: openData.shape.threads.parse(await ctx.read(resources.threads, { kind: "threads" })),
+        threads: await ctx.read(resources.threads, { kind: "threads" }),
       };
     },
   }),
