@@ -62,7 +62,7 @@ export const scheduleReceipts = leaf(
   actionReceiptListDecoder(),
 );
 const captureList=leaf("resource",z.object({kind:z.literal("captures")}),capturesValue);
-const captureAsset=leaf("file:capture",z.string().regex(/^[0-9a-f]{64}$/),z.string(),false);
+const captureAsset=leaf("file:capture",z.string().regex(/^[0-9a-f]{64}$/),z.string().regex(/^[0-9a-f]{64}$/),false);
 export const captures=read("input.captures",{input:captureList.input,output:capturesValue,async run(ctx,args){
   const value=await ctx.read(captureList,args);
   for(const sha of new Set(value.captures.map(row=>row.sha))) await ctx.read(captureAsset,sha);
