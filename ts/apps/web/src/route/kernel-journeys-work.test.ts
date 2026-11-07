@@ -9,8 +9,6 @@ import {
 import { expect, test, vi } from "vite-plus/test";
 import {
   actionReceiptSchema,
-  ductsRouteState,
-  bindWork,
   workFingerprintSchema,
   type Caller,
   type WorkKey,
@@ -208,20 +206,11 @@ async function journey() {
     },
     async start() {
       await ready();
-      const id = crypto.randomUUID();
-      await request("/actions", {
-        id,
-        key: "work.start",
-        target: { kind: "host" },
-        input: {
-          key: bindWork("ducts", path, undefined, ref),
-          seed: ductsRouteState.schema.parse({}),
-        },
-      });
-      expect(await journal.wait(id)).toMatchObject({ state: "succeeded" });
       await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
+      await vi.waitFor(() => expect(m.owner("ducts")?.absent).toBe(true));
       await m.startAction()!.run();
       await vi.waitFor(() => expect(m.owner()?.ready).toBe(true));
+      await vi.waitFor(() => expect(m.owner("ducts")?.ready).toBe(true));
       await ready();
     },
     async close() {

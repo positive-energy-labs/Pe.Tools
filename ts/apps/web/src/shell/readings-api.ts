@@ -340,12 +340,8 @@ export function publicationSource<T extends { generation: number; version: numbe
       refreshing = true;
       try {
         const result = await options.read(ctx, publication, false);
-        if (closed || ctx.signal.aborted || result.generation !== publication.generation || result.state === "superseded") return;
-        if (!result.value) return deliver({ kind: "failure", error: result.reason ?? "Refresh needed" });
-        deliver({ kind: "complete", value: result, revision: result.version, sourceVersion: result.value.evaluation,
-          fresh: result.state === "current" && !result.value.coverage.refused.length && !result.value.coverage.unknown.length,
-          reason: result.reason ?? [...result.value.coverage.refused.map(part => `${part.keys.join(", ")}: ${part.reason}`),
-            ...(result.value.coverage.unknown.length ? [`Not covered: ${result.value.coverage.unknown.join(", ")}`] : [])].join("; ") });
+        if (closed || ctx.signal.aborted || result.generation !== publication.generation) return;
+        // Observe even a superseded first response; the host retains its Work invalidation.
         if (!events && !ctx.historyPoint) {
           events = openEventSource(`/pe/read-events?subscription=${encodeURIComponent(publication.subscription)}&generation=${publication.generation}`);
           events.onmessage = event => {
@@ -356,6 +352,12 @@ export function publicationSource<T extends { generation: number; version: numbe
           };
           events.onerror = () => { if (!closed) deliver({ kind: "stale" }); };
         }
+        if (result.state === "superseded") return;
+        if (!result.value) return deliver({ kind: "failure", error: result.reason ?? "Refresh needed" });
+        deliver({ kind: "complete", value: result, revision: result.version, sourceVersion: result.value.evaluation,
+          fresh: result.state === "current" && !result.value.coverage.refused.length && !result.value.coverage.unknown.length,
+          reason: result.reason ?? [...result.value.coverage.refused.map(part => `${part.keys.join(", ")}: ${part.reason}`),
+            ...(result.value.coverage.unknown.length ? [`Not covered: ${result.value.coverage.unknown.join(", ")}`] : [])].join("; ") });
       } catch (error) { if (!closed && !ctx.signal.aborted) deliver({ kind: "failure", error }); }
       finally { refreshing = false; if (invalidated) { invalidated = false; void refresh(); } }
     };
