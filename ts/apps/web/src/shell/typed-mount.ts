@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { decodeField } from "../route/field-codec";
 import { applyPatches, bindWork, cellPatches, commands, commandTarget, canonicalRouteInput, workKey,
   writePreviewSchema, presentationSchema, workHandleSchema, workFeedFailureMessage, type WorkFeedFailure, type WorkHandle, type WorkWrite, type RouteStatePatch,
   bare, focusSelectionSchema, type WorkJournalDoor, type WorkScope, type RouteFingerprint, type InvocationToken,
@@ -47,8 +48,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     const memory = z.record(z.string(),z.unknown()).parse(input.memory() ?? {});
     return freezePage({ ...Object.fromEntries(Object.entries(spec.fields).map(([key, field]) => {
       const raw = search.get(key);
-      return [key, field.schema.parse(raw === null ? memory[key] ?? field.initial : JSON.parse(raw))];
-    })), selected: focusSelectionSchema.parse(search.has("selected") ? JSON.parse(search.get("selected")!) : memory.selected ?? []) });
+      return [key, decodeField(field, raw === null ? memory[key] ?? field.initial : raw)];
+    })), selected: decodeField({ schema: focusSelectionSchema, initial: [] }, search.has("selected") ? search.get("selected") : memory.selected ?? []) });
   };
   const owners = new Map<string, {
     scope: WorkScope; config: import("../route/typed-route").Owners[string]; handle: WorkHandle | null;
