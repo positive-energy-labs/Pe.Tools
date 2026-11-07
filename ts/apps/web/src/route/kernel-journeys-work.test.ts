@@ -682,3 +682,22 @@ test("JZ raw Work patch paths and ambiguous operation fields refuse atomically a
     expect(j.m.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: 240 });
   } finally { await j.close(); }
 }, 60_000);
+
+test("JZ a null Place target refuses Work before dispatch but still permits client Page moves", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    const unbound = j.mount(false, { target: null });
+    await vi.waitFor(() => expect(unbound.owner()?.ready).toBe(true));
+    await vi.waitFor(() => expect(unbound.value().current).toBe(true));
+    const before = structuredClone(unbound.owner()!.doc), revision = unbound.owner()!.handle!.revision;
+    const count = j.writes.length;
+    const cells = unbound.draw("sheet-inputs", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"];
+    expect(await cells.at(["flows", "4"]).stage({ cfm: 330 }), "No target means no write authority").toMatchObject({ code: "refused" });
+    expect(j.writes).toHaveLength(count);
+    expect(unbound.owner()!.doc).toEqual(before);
+    expect(unbound.owner()!.handle!.revision).toBe(revision);
+    unbound.page.query({ sheetPath: "inspection-only" });
+    expect(unbound.page.read().sheetPath).toBe("inspection-only");
+  } finally { await j.close(); }
+}, 60_000);

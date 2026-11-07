@@ -73,6 +73,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   const requireWritable = () => {
     requireCurrent();
+    if (input.target === null) throw Error("Place has no write target");
     if (input.readOnly || input.history) throw Error("needs live Revit");
   };
   const decodePage = () => {
