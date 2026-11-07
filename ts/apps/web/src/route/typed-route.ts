@@ -138,6 +138,8 @@ export interface EditableCells<W, Edit> {
   edit(input: Edit, history?: EditHistory): Promise<EditFailure>;
 }
 export interface DrawContext<D, F extends Fields, W, Edit> {
+  readonly target: import("../../../../packages/agent-contracts/src/route-kernel-page.ts").ScopeIdentity["target"];
+  read<R extends HostRead>(read: R): ReadingSnapshot<ReadData<R>>;
   readonly value: ReadingSnapshot<D> & { readonly publication: Immutable<Publication<D>["value"]> };
   readonly page: DrawPage<F>;
   readonly selection: { read(): Page<F>["selected"]; set(value: Page<F>["selected"]): unknown };
@@ -202,6 +204,7 @@ type Specification<
   };
   core: HostRead & { output: z.ZodType<Publication<D>>; args(page: Page<F>): unknown };
   fields: F;
+  reads?: Readonly<Record<string, HostRead & { args(page: Page<F>): unknown }>>;
   panes: {
     readonly [K in keyof Reads]: {
       title: string;
@@ -284,7 +287,7 @@ export function route<
     role: "subject",
     schema: spec.subject.field,
     codec: spec.subject.field,
-    initial: { kind: "ids", ids: [] },
+    initial: spec.fields[spec.subject.field]!.initial,
     url: "push",
     share: true,
     agent: "set",
@@ -305,18 +308,21 @@ export function route<
   const entries: Record<string, EntryContract> = {};
   const readings: MutableTable<RouteGraphJson["readings"]> = {};
   const sources: Record<string, HostRead["source"]> = {};
-  const addRead = (id: string, read: HostRead) => {
+  const readIds = new Map<HostRead, string>();
+  const addRead = (id: string, read: HostRead & { args?(page: Page<F>): unknown }) => {
+    readIds.set(read, id);
     entries[read.key] = read;
     sources[read.key] = read.source;
     readings[id] = {
       ...policy,
       kind: "use",
       entry: read.key,
-      args: body(`${id}Args`, `readings.${id}.args`, "args", (ctx) => spec.core.args(ctx.page)),
+      args: body(`${id}Args`, `readings.${id}.args`, "args", (ctx) => (read.args ?? spec.core.args)(ctx.page)),
       deps: { page: Object.keys(fields), work: [], readings: [] },
     };
   };
   addRead("value", spec.core);
+  for (const [id, read] of Object.entries(spec.reads ?? {})) addRead(id, read);
   body("pickSubject", `fields.${spec.subject.field}.picker.options`, "picker", (reading) =>
     reading.value?.value?.data ? spec.subject.options(reading.value.value.data) : [],
   );
@@ -444,13 +450,13 @@ export function route<
   }
   const panes: MutableTable<RouteGraphJson["panes"]> = {};
   for (const [id, pane] of Object.entries(spec.panes)) {
-    const readId = pane.read === spec.core ? "value" : `pane:${id}`;
-    if (readId !== "value") addRead(readId, pane.read);
+    const readId = readIds.get(pane.read) ?? `pane:${id}`;
+    if (!readIds.has(pane.read)) addRead(readId, pane.read);
     panes[id] = {
       label: pane.title,
       purpose: pane.purpose,
       draws: [
-        ...new Set([readId, "value"]),
+        ...new Set([readId, "value", ...Object.keys(spec.reads ?? {})]),
         ...Object.keys(owners)
           .filter((o) => o !== own)
           .map((o) => `owner:${o}`),
@@ -458,7 +464,7 @@ export function route<
       verbs: Object.keys(verbs),
       body: body(id, `panes.${id}.body`, "pane", (ctx) =>
         pane.draw(
-          drawContext(ctx, readId, spec, owners) as DrawContext<
+          drawContext(ctx, readId, spec, owners, readIds) as DrawContext<
             ReadData<Reads[string]>,
             F,
             z.output<W>,
@@ -553,6 +559,7 @@ function drawContext(
   read: string,
   spec: Specification<any, Fields, z.ZodObject, z.ZodType>,
   owners: Owners,
+  readIds: ReadonlyMap<HostRead, string>,
 ): DrawContext<any, Fields, any, any> {
   const own = spec.edits.work.route;
   const packet = ctx.readings[read];
@@ -630,6 +637,12 @@ function drawContext(
     }
   };
   return {
+    target: ctx.target,
+    read(read) {
+      const id = readIds.get(read);
+      if (!id) throw Error(`Undeclared read: ${read.key}`);
+      return projectValue(ctx.readings[id], (packet: any) => packet.value?.data);
+    },
     value,
     page: ctx.page,
     selection: {
