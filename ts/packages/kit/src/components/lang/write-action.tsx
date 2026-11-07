@@ -244,7 +244,7 @@ export function WriteAction({
                 <span className="t-small text-ink-2">
                   {cell.label} ·<span data-write-author={cell.author}>{AUTHOR[cell.author]}</span>
                 </span>
-                <StateCell value={cell.after} modelValue={cell.before ?? "unknown"} agree="drift" author={cell.author} stage="edit" />
+                <StateCell value={cell.after} modelValue={cell.before ?? "unavailable"} agree="drift" author={cell.author} stage="edit" />
               </div>
             ))}
             {held.rows?.map((row, index) => (

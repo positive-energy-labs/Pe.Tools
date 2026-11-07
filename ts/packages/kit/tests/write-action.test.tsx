@@ -171,6 +171,7 @@ test("before, after and each author are drawn; the open window offers Reject? in
   expect(cell.textContent).toContain("10");
   expect(cell.querySelector("[data-write-author]")!.textContent).toBe("Pea");
   expect(document.querySelector('[data-write-cell="b"] [data-write-author]')!.textContent).toBe("you");
+  expect(document.querySelector('[data-write-cell="b"]')!.textContent).toContain("unavailable");
   expect(screen.queryByRole("button", { name: "apply heal" })).toBeNull();
   await act(async () => fireEvent.click(document.querySelector("[data-write-reject]")!));
   expect(reject).toHaveBeenCalledTimes(1);
