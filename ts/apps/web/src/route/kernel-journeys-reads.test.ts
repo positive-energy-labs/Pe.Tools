@@ -2,7 +2,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { observeResources } from "@pe/runtime";
 import { workFingerprintSchema } from "@pe/agent-contracts";
-import { fixture, ref, path, gate } from "../../../host/tests/host-read-graph.test-support";
+import { fixture, ref, path, gate, snapshot } from "../../../host/tests/host-read-graph.test-support";
 import { module as fans } from "../fans/route";
 import { localId } from "./typed-route";
 import { mountTypedRoute } from "../shell/typed-mount";
@@ -16,14 +16,20 @@ import { registeredReads } from "../../../host/src/reads/routes";
 import { ductsPricing, ductsNetwork, ductsRoster } from "../../../host/src/reads/ducts";
 import { fansSheet } from "../../../host/src/reads/fans";
 import { module as ducts } from "../ducts/route";
+import { module as families } from "../families/route";
+import type { TypedRoute } from "./typed-route";
+import { commandContract } from "./typed-actions";
+import { publicationSource } from "../host/publication-source";
+import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
 import savedNetwork from "../ducts/fixtures/synthetic-snapshot.json";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Context, Layer } from "effect";
+import { Context, Layer, Scope, Exit } from "effect";
+import { admittedBuiltinsLayer } from "../../../host/src/admitted-builtins";
 import { HttpRouter } from "effect/http";
 import { RouteWorkspace } from "@pe/runtime";
-import { bindWork, familiesRouteState } from "@pe/agent-contracts";
+import { bindWork } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import {
   captureStore,
@@ -44,9 +50,92 @@ import { NodeServices, NodeHttpClient } from "../../../host/tests/family-attach-
 
 const trace = z.array(z.object({ name: z.string(), args: z.unknown() }));
 
+test("JM H05/B05 dirty a watched host publication, hide it, then return for a fresh answer", async () => {
+  const j = await journey();
+  const streams = new Set<{ close(): void }>();
+  let mounted: ReturnType<typeof mountTypedRoute> | undefined;
+  let held: ReturnType<typeof gate> | undefined;
+  // EventSource is a browser platform shim over the actual host HTTP/SSE handler.
+  class Stream {
+    onmessage?: (event: { data: string }) => void;
+    onerror?: () => void;
+    private reader?: ReadableStreamDefaultReader<Uint8Array>;
+    private closed = false;
+    constructor(url: string) {
+      streams.add(this);
+      void (async () => {
+        const response = await j.host.request(new Request(url));
+        this.reader = response.body!.getReader();
+        if (this.closed) return void this.reader.cancel();
+        let buffer = "";
+        const decoder = new TextDecoder();
+        while (!this.closed) {
+          const frame = await this.reader.read(); if (frame.done) break;
+          buffer += decoder.decode(frame.value, { stream: true });
+          let end: number;
+          while ((end = buffer.indexOf("\n\n")) >= 0) {
+            const event = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+            for (const line of event.split("\n")) if (line.startsWith("data: ")) this.onmessage?.({ data: line.slice(6) });
+          }
+        }
+      })().catch(() => { if (!this.closed) this.onerror?.(); });
+    }
+    addEventListener() {}
+    removeEventListener() {}
+    close() { this.closed = true; void this.reader?.cancel(); streams.delete(this); }
+  }
+  vi.stubGlobal("window", { location: { href: "http://host/", search: "" } });
+  vi.stubGlobal("EventSource", Stream);
+  try {
+    await j.ready();
+    const source = publicationSource({ read: (ctx, publication, release) => j.host.send(publication.generation,
+      (ctx.args as { fan: string[] }).fan, undefined, publication.subscription, release) });
+    const row = j.mount.value(fans.spec.reads!.roster).value.rows.find((row: { mark: string }) => row.mark === "MUAS-1")!;
+    mounted = mountTypedRoute(fans, { ...j.input, memory: () => ({ fan: { kind: "ids", ids: [localId("ducts-fan", `${row.uniqueId}@${row.portIndex}`)] } }) }, j.fingerprint,
+      { work: j.work, sources: { "fans.sheet": source } });
+    mounted.subscribe(() => {});
+    await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    await vi.waitFor(() => expect(streams.size).toBeGreaterThan(0));
+    const before = mounted.value().value;
+    held = j.host.holdNative();
+    j.host.changed();
+    await held.entered.promise;
+    expect(mounted.value(), "H05: a host dirty event immediately withdraws current authority").toMatchObject({ current: false, value: before });
+    held.release.resolve();
+    await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    mounted.release();
+    await vi.waitFor(() => expect(streams.size).toBe(0));
+    const calls = j.host.nativeCalls;
+    j.host.changed();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(j.host.nativeCalls, "H05: hidden demand does not reacquire").toBe(calls);
+    mounted.subscribe(() => {});
+    await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    expect(j.host.nativeCalls, "B05: return reacquires the dirtied host basis").toBeGreaterThan(calls);
+  } finally { held?.release.resolve(); mounted?.dispose(); streams.forEach(stream => stream.close()); vi.unstubAllGlobals(); await j.close(); }
+}, 60_000);
+
+test("JM H02/B05 select a Fan whose native walk is malformed and inspect the refusal", async () => {
+  const malformed = structuredClone(snapshot);
+  // Recorded malformed native JSON is the trust boundary, never a substituted product decoder.
+  Reflect.set(malformed, "nodes", "not a node collection");
+  const j = await journey({ snapshot: malformed });
+  try {
+    await j.ready();
+    const before = j.mount.value().value;
+    const roster = j.mount.value(fans.spec.reads!.roster).value.rows;
+    const row = roster.find((row: { mark: string }) => row.mark === "MUAS-1")!;
+    j.mount.page.subject({ kind: "ids", ids: [localId("ducts-fan", `${row.uniqueId}@${row.portIndex}`)] });
+    await vi.waitFor(() => expect(j.mount.value(), "H02: malformed native output cannot become current data").toMatchObject({ current: false, status: "unavailable" }));
+    expect(j.mount.value().value, "B05: the last admitted Value survives").toEqual(before);
+    const refused = j.mount.value();
+    expect(!refused.current && refused.reason, "B05: failure gives human recovery words").not.toMatch(/invalid_type|expected.*array|ZodError/);
+  } finally { await j.close(); }
+}, 60_000);
+
 // HTTP publications and file Work are real; only native inputs and the address port are recorded.
-async function journey() {
-  const host = await fixture(true);
+async function journey(recorded: Parameters<typeof fixture>[1] = {}) {
+  const host = await fixture(true, recorded);
   let generation = 0;
   let hold: ReturnType<typeof gate> | undefined;
   const pending = new Set<Promise<void>>();
@@ -477,9 +566,11 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
   const target = { session: "session-a", openId: "open-a" };
   const key = bindWork("families", path, undefined, target);
   const workspace = new RouteWorkspace({
-    registrations: [{ spec: familiesRouteState }],
+    registrations: [],
     store: fileRouteDocumentStore(join(dir, "work")),
   });
+  const admissionScope = Scope.makeUnsafe();
+  await Effect.runPromise(Layer.buildWithScope(admittedBuiltinsLayer(workspace), admissionScope));
   const filter = {
     categoryNames: ["Air Terminals"],
     familyNames: [],
@@ -512,6 +603,7 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
   };
   let hold: ReturnType<typeof gate> | undefined;
   let broken = false;
+  let malformedOutput = false;
   const bridge = detachedBridge({
     list: Effect.sync(() => [
       sessionView({
@@ -608,7 +700,7 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
               paused.entered.resolve();
               await paused.release.promise;
             }
-            value = broken
+            value = malformedOutput ? { families: "malformed native result" } : broken
               ? {
                   ...observed,
                   families: [
@@ -739,10 +831,51 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
       (await captures.latestFamilies(key))?.id,
       "H34: failed verification retains the completed result",
     ).toBe(latest!.id);
+    broken = false;
+    const door = createWorkFeedClient({ subscribe: observeResources(workspace, { observe: () => () => {} }), dirty() {} }, {
+      write: (key, write) => workspace.write(key, key.route, "human", write),
+      submit: async command => {
+        const response = await withInvocationContext({ caller }, () => web.handler(new Request("http://host/actions", {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(command),
+        }), Context.make(RequestIdentity, admittedRequestIdentity(caller, {}))));
+        expect(response.ok, await response.clone().text()).toBe(true);
+        return journal.wait(command.id);
+      },
+    });
+    const module: TypedRoute = { ...families, spec: { ...families.spec, core: undefined, commands: {
+      read: { kind: "catalog" as const, entry: "families.read", contract: commandContract("families.read"),
+        label: "Read Families", input: ({ work }) => ({ work, readId: crypto.randomUUID() }) },
+    } } };
+    const mounted = mountTypedRoute(module, {
+      target: { kind: "document", ref: target }, fixture: null, work: { address: path, open: target },
+      address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+      memory: () => ({}), custody: { current: () => true },
+    }, workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(entry => entry.routeKey === "families")!.closure.fingerprint}`), { work: door });
+    try {
+      mounted.subscribe(() => {});
+      await vi.waitFor(() => expect(mounted.owner()?.ready, mounted.problem() ?? "Families owner pending").toBe(true));
+      hold = paused = gate();
+      const reading = mounted.action("read").run();
+      await Promise.race([paused.entered.promise, reading.then(() => { throw Error("Families read never reached its held native boundary"); })]);
+      const submitted = module.spec.commands.read!;
+      Reflect.set(module.spec.commands, "read", { kind: "catalog", entry: "families.cancel-read",
+        contract: commandContract("families.cancel-read"), label: "Cancel Families read" });
+      paused.release.resolve();
+      const output = await reading;
+      expect(commandContract("families.read").output.safeParse(output).success,
+        "H03: a replacement entry cannot change the submitted result decoder").toBe(true);
+      Reflect.set(module.spec.commands, "read", submitted);
+      const completed = await captures.latestFamilies(key);
+      malformedOutput = true;
+      await expect(mounted.action("read").run(), "H02/H03: malformed native output is a refused action, never a typed success").rejects.toThrow();
+      expect((await captures.latestFamilies(key))?.id, "H03: failed native decoding preserves the completed observation").toBe(completed!.id);
+      expect(mounted.action("read").failure, "H03: the typed action exposes its durable refusal").toBeTruthy();
+    } finally { mounted.dispose(); }
   } finally {
     paused?.release.resolve();
     await journal.close();
     await web.dispose();
+    await Effect.runPromise(Scope.close(admissionScope, Exit.void));
     await rm(dir, { recursive: true, force: true });
   }
 }, 60_000);

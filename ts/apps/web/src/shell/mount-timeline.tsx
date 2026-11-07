@@ -1,5 +1,6 @@
 import { useList } from "@pe/kit/lang/collection";
 import { Button } from "@pe/kit/lang/button";
+import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { ListView } from "@pe/kit/lang/list-view";
 import { teachText } from "@pe/kit/lang/use-teach";
 import { useEffect, useState } from "react";
@@ -65,7 +66,13 @@ export function GraphHistory({
     verbs,
     journal,
   );
-  const rows = [...projected]
+  const rows = [...(journal?.intents ?? []).map(intent => ({
+    key: `intent:${intent.id}`, label: intent.label,
+    sub: `${intent.status} / ${intent.owner.route} / expected r${intent.input.expectedRevision} / ${intent.reason ?? "Awaiting acknowledgement"}`,
+    actions: <><Popover><PopoverTrigger aria-label={`Inspect ${intent.label}`}>Inspect</PopoverTrigger>
+      <SubjectPopoverContent aria-label={`Original input: ${intent.label}`}><pre>{JSON.stringify(intent,null,2)}</pre></SubjectPopoverContent>
+    </Popover>{admitted && owner.discardIntent && <Button label={`Discard ${intent.label}`} refusal={intent.status === "pending" ? "Awaiting acknowledgement" : null} onClick={()=>owner.discardIntent!(intent.id)}>Discard</Button>}</>,
+  })), ...[...projected]
     .reverse()
     .filter((row) => !workOnly || row.kind === "journal")
     .map((row) => ({
@@ -110,7 +117,7 @@ export function GraphHistory({
             )}
         </>
       ),
-    }));
+    }))];
   const list = useList({
     items: rows,
     status: receiptRows?.status,

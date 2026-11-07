@@ -64,17 +64,18 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
   const input = useMemo<PlaceInput>(() => ({ address: place.address, fixture, target: resolved, history, readOnly: !!snapshot, publicationInstance: instance,
     work: { address: history?.point.history.address ?? target.workAddress, open: resolved?.kind === "document" ? resolved.ref : target.workOpen },
     custody: { current: () => place.current() && current.current === signature }, memory: history ? () => pose?.page ?? {} : place.memory }), [place,signature]);
-  const [mount,setMount] = useState<TypedMount | null>(null);
+  const [mounted,setMount] = useState<{mount:TypedMount;input:PlaceInput} | null>(null);
+  const mount = mounted?.input === input ? mounted.mount : null;
   const [problem,setProblem] = useState<string | null>(null);
   useEffect(() => {
     place.setVisible(visible);
-    if (snapshot && !pose || needs !== "browser" && !input.target && !input.work.address && !input.work.open) return;
+    if (snapshot && !pose || needs !== "browser" && !input.target && !input.work.address && !input.work.open) { setMount(null); setProblem(null); return; }
     let state: { mount: TypedMount; input?: PlaceInput; dispose(): void };
     try {
       state = place.state(() => ({ mount: mountTypedRoute(module,input,fingerprint), input, dispose() { this.mount.dispose(); } }));
       if (state.input !== input) { state.mount.dispose(); state.mount=mountTypedRoute(module,input,fingerprint); state.input=input; }
-      setMount(state.mount); setProblem(null);
-    } catch(error) { setProblem(String(error)); return; }
+      setMount({mount:state.mount,input}); setProblem(null);
+    } catch(error) { setMount(null); setProblem(String(error)); return; }
     return () => state.mount.release();
   }, [module,place,input,visible]);
   const lastPose = useRef("");
@@ -98,7 +99,7 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
   if (snapshot && !pose) return <p role="status">This route was never published at this point, or its Page is ambiguous</p>;
   return <><HistoryRail document={snapshot?.point.history.address ?? target.workAddress} route={module.spec.key} address={place.address} snapshot={snapshot} compare={compare} />
     <section className="flex min-h-0 flex-1 flex-col" data-tone={history ? "caution" : undefined} data-wash={history ? "" : undefined} aria-label={history ? "Recorded view, read-only" : undefined}>
-      {problem ? <p role="alert">{problem}</p> : mount ? <TypedChrome mount={mount} document={document} /> : <>{document}<p>Choose a document</p></>}
+      {problem ? <>{document}<p role="alert">{problem}</p></> : mount ? <TypedChrome mount={mount} document={document} /> : <>{document}<p role="status">{target.resolution.kind === "failed" ? target.resolution.message : target.bindingLost?.sentence ?? "Document unavailable; choose an exact document again."}</p></>}
     </section></>;
 
 }

@@ -215,6 +215,8 @@ export async function fixture(
   };
   return {
     dir,
+    request: (request: Request) => withInvocationContext({ caller: who }, () =>
+      web.handler(request, Context.make(RequestIdentity, admittedRequestIdentity(who, scope)))),
     publicationEvent: async (generation: number) => {
       const url = new URL(peRouteUrl("reads.events", {}), "http://host");
       url.searchParams.set("subscription", "sheet");
