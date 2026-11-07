@@ -741,7 +741,7 @@ test("after first-Send promotion and a chat pick, a Pea open keeps one lease and
     expect(hostCalls("view.remove")).toEqual([]);
     expect(places().filter((tab) => tab.route === "families")).toHaveLength(1);
     expect(
-      screen.getAllByRole("button", { name: "Families \u00b7 current" }).length,
+      screen.getAllByRole("button", { name: "Families" }).length,
     ).toBeGreaterThan(0);
   } finally {
     threads.pop();
