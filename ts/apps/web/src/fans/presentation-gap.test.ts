@@ -220,6 +220,7 @@ test.each(["current", "stale-before", "stale-after", "throw", "async"] as const)
         previewOnly: true,
         derivedRequest: { equipmentFlows: [{ id: 100, cfm: 925, source: "Work" }] },
         seal: {
+          caller: { kind: "human", via: "local" },
           requestHash: "sealed",
           work: { handle },
           documentMark: { session: "s", openId: "o", observedSince: null, changedAt: null },

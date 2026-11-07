@@ -90,6 +90,7 @@ const previewResult = (derivedRequest: unknown) => ({
   previewOnly: true,
   derivedRequest,
   seal: {
+    caller: { kind: "human", via: "local" },
     requestHash: "sealed",
     work: { handle: previewInput.work },
     documentMark: { ...previewTarget.ref, observedSince: null, changedAt: null },

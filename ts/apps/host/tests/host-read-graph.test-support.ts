@@ -215,6 +215,27 @@ export async function fixture(
   };
   return {
     dir,
+    publicationEvent: async (generation: number) => {
+      const url = new URL(peRouteUrl("reads.events", {}), "http://host");
+      url.searchParams.set("subscription", "sheet");
+      url.searchParams.set("generation", String(generation));
+      const response = await withInvocationContext({ caller: who }, () =>
+        web.handler(new Request(url), Context.make(RequestIdentity, admittedRequestIdentity(who, scope))),
+      );
+      expect(response.status).toBe(200);
+      const reader = response.body!.getReader();
+      try {
+        let text = "";
+        while (!text.includes("data: ")) {
+          const chunk = await reader.read();
+          if (chunk.done) throw Error("Publication stream closed without a state");
+          text += new TextDecoder().decode(chunk.value);
+        }
+        return JSON.parse(text.split("data: ")[1]!.split("\n")[0]!);
+      } finally {
+        await reader.cancel();
+      }
+    },
     probe: (body: unknown) =>
       withInvocationContext({ caller: who }, () =>
         web.handler(

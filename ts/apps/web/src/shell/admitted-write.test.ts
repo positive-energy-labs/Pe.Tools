@@ -4,6 +4,7 @@ import { writeHeld} from "./admitted-chrome";
 import { writeReject } from "./catalog-work-reviews";
 
 const seal = {
+  caller: { kind: "human", via: "local" },
   requestHash: "h",
   work: { key: "ducts" },
   documentMark: { session: "s", openId: "o", observedSince: 1, changedAt: null },
