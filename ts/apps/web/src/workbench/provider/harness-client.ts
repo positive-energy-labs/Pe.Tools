@@ -151,6 +151,7 @@ export function streamThread(options: {
     const events = open(readingsUrl(origin, { kind: "thread", thread: threadId }, cursor));
     source = events;
     events.onmessage = (message: MessageEvent<string>) => {
+      if (stopped || source !== events) return;
       // Promise/React caller until phase 5: a message that does not decode, whether its frame or
       // its cursor, is a fault then a reread; the resume cursor moves only for an accepted frame.
       const accepted = Schema.decodeUnknownExit(ThreadMessage)({
@@ -163,8 +164,16 @@ export function streamThread(options: {
         onReread();
         return;
       }
+      const frame = accepted.value.data;
+      // A failed tail has no future events. Recover from the retained body, as for a log gap.
+      if (frame.kind === "failure") {
+        stop();
+        onFault?.(new Error(frame.error));
+        onReread();
+        return;
+      }
       if (accepted.value.id !== undefined) cursor = accepted.value.id;
-      const step = followThread(last, accepted.value.data);
+      const step = followThread(last, frame);
       if (step.kind === "apply") {
         last = step.event.seq;
         onEvent(step.event);
