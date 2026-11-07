@@ -1,17 +1,15 @@
 import { placeInput } from "../shell/admitted-place.test-fixture";
 // @vitest-environment jsdom
 import { createElement } from "react";
-import { act, cleanup as cleanupView, render, screen } from "@testing-library/react";
+import { act, cleanup as cleanupView, render } from "@testing-library/react";
 import { z } from "zod";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   fansDocumentSchema,
   bindWork,
   workKey,
-  address,
   fansRouteState,
   salvageWork,
-  type WorkWriteAck,
   documentRequestSchema,
 } from "@pe/agent-contracts";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
@@ -31,9 +29,7 @@ import { module as captures } from "../shell/admitted-module.test.fixture";
 import { createRouteShell } from "../shell/admitted-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import {
-  describeInputHistory,
   inputHistoryMetaSchema,
-  presentInputHistory,
 } from "../ducts/sheet/input-history.neutral";
 import { sourceRouteServices } from "../shell/source-route-services";
 import * as recoveryHost from "../route/host";
@@ -330,8 +326,7 @@ async function witness(
     },
     route: web.route,
     services,
-    address,
-    ws,
+      ws,
     saved,
     states,
     skipAcks(count: number) {
