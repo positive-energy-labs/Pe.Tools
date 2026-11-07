@@ -92,7 +92,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
       "utf8",
     );
 
-    // (2) GET /host/status â†’ 200 (confirms the recorded port is the real bound one).
+    // (2) GET /host/status → 200 (confirms the recorded port is the real bound one).
     const status = await fetch(`${base}/host/status`);
     expect(status.status).toBe(200);
     expect(((await status.json()) as { lane?: string }).lane).toBe("dev");
@@ -124,7 +124,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     expect(misTargetedBody.error.message).toContain("bridgeSessionId");
     expect(misTargetedBody.error.message).toContain(HOST_RPC_BRIDGE_SESSION_HEADER);
 
-    // A clean TS-only envelope still passes the key gate (no Revit session â†’ Disconnected, not 400).
+    // A clean TS-only envelope still passes the key gate (no Revit session → Disconnected, not 400).
     const cleanCall = await fetch(`${base}/call`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-pe-context": terminal },
