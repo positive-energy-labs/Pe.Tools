@@ -407,7 +407,7 @@ export const commands = {
     says:"Start this Work", needs:"nothing", effect:"command", dirties:[],
     input:z.object({key:workKeySchema,seed:z.json()}),
     axes:{subject:"None",touches:["Metadata"],effect:"SessionWrite",cost:"Mutation",cardinality:"One"},
-  },
+  } as const,
   ...catalogWorkCommands,
   ...tools.pods.commands,
   ...tools.family.commands,

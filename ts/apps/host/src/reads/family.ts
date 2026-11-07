@@ -1,3 +1,4 @@
+import { workRead } from "./inputs.ts";
 import { z } from "zod";
 import {
   executionTargetSchema,
@@ -7,7 +8,7 @@ import {
   settingsSnapshotSchema,
   parsedDocViewSchema,
 } from "@pe/agent-contracts";
-import { read, workValue } from "./evaluator.ts";
+import { read } from "./evaluator.ts";
 import { localRead } from "../local-inputs.ts";
 import { familySpec, podProfile } from "../builtin-read-handles.ts";
 import { workBinding } from "./inputs.ts";
@@ -22,7 +23,8 @@ export const reads = {
     async run(ctx, args) {
       const target = args.target;
       const key = await ctx.read(workBinding, { route: "family", target });
-      const saved = workValue.parse(await ctx.work("family", key));
+      if(!key) throw Error("Family Work binding is unavailable");
+      const saved = await ctx.read(workRead("family", familyDraftSchema),key);
       const familyWork = familyDraftSchema.parse(saved?.doc ?? {});
       const loaded = args.member
         ? await ctx.read(podProfile, args.member)
