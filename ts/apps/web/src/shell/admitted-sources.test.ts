@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { module } from "../shell/admitted-module.test-fixture";
+import { module } from "../shell/admitted-module.test.fixture";
 import generated from "../captures/source-closure.generated.json";
 import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import {

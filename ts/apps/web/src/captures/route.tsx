@@ -1,4 +1,4 @@
-import {routeFile} from "../route";
+import {routeFile} from "../shell/route-file";
 import { createRoute } from "@tanstack/react-router";
 import { Route as root } from "../routes/__root";
 import { TypedShell } from "../shell/typed-shell";

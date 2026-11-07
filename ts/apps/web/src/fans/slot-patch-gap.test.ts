@@ -8,7 +8,7 @@ import {
   builtinClosureFingerprint,
   createBuiltinRouteInventory,
 } from "../../../../packages/agent-contracts/src/route-module";
-import { module as captures } from "../shell/admitted-module.test-fixture";
+import { module as captures } from "../shell/admitted-module.test.fixture";
 import { createRouteShell } from "../shell/admitted-mount";
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
 import type {

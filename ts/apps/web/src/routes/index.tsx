@@ -1,4 +1,4 @@
-import {routeFile} from "../route/address-page";
+import {routeFile} from "../shell/route-file";
 import { createFileRoute } from "@tanstack/react-router";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { TypedShell } from "../shell/typed-shell";

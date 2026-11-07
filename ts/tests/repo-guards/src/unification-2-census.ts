@@ -502,7 +502,7 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
     // those composition facades; every other route/body wrapper remains fully traversed.
     return (edges.get(file) ?? []).some(
       (edge) =>
-        (!typeOnly(edge.node) || targets.has(edge.target)) &&
+        !typeOnly(edge.node) &&
         ((!file.startsWith(WEB + "shell/") && !admittedPlaceRoots.has(file)) ||
           ts.isExportDeclaration(edge.node)) &&
         reaches(edge.target, targets, seen),

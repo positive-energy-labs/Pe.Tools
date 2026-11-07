@@ -196,7 +196,7 @@ for (const key of keys) {
       hostReadEntries.push(`m${hostReadEntries.length}`);
     }
     await emit(new URL(`../src/${folder}/host.generated.ts`,import.meta.url),
-      `// Generated from route.ts by codegen:routes. Do not edit.\n${workImport}${runtime?`import * as runtime from ${JSON.stringify(runtime)};\n`:""}${typed.spec.edits?'import {z} from "zod";\n':""}import {RouteGraphJson} from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type {HostRouteModule} from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with {type:"json"};\nconst data=RouteGraphJson.parse(closure.envelope.data);\nexport const host:HostRouteModule={data,bodies:{},${workBody||"schemas:{},"}${runtime?'...(runtime as Pick<HostRouteModule,"reads"|"leaves">),':""}};\n`);
+      `// Generated from route.ts by codegen:routes. Do not edit.\n${workImport}${runtime?`import * as runtime from ${JSON.stringify(runtime)};\n`:""}${typed.spec.edits?'import {z} from "zod";\n':""}import {RouteGraphJson} from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type {HostRouteModule} from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with {type:"json"};\nconst data=RouteGraphJson.parse(closure.envelope.data);\nexport const host:HostRouteModule={data,bodies:{},${workBody||"schemas:{},"}${runtime?'reads:(runtime as Pick<HostRouteModule,"reads"|"leaves">).reads,leaves:(runtime as Pick<HostRouteModule,"reads"|"leaves">).leaves,':""}};\n`);
 
 
   }

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { createLegacyRouteRegistry, legacyRouteDiscovery } from "./shell/legacy-route-door";
-import { ductLossGraph as ductLoss } from "./shell/projection-graph.test-fixture";
+import { ductLossGraph as ductLoss } from "./shell/projection-graph.test.fixture";
 import { indexGraph } from "./index/graph";
 import {
   cellVerbId,

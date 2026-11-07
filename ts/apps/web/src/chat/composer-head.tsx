@@ -22,7 +22,7 @@ import { useCopy } from "@pe/kit/lib/use-copy";
 import { previousOf } from "#/shell/readings-hooks";
 import { Ladder } from "#/route/ladder";
 import { useDocumentLadder } from "#/route/situation-ladder";
-import { parseTarget } from "#/route/route-target";
+import { parseTarget } from "#/route/target-codec";
 import type { RouteHandle } from "#/route/handle";
 
 import { chatReading, type ChatHandle } from "./owner-ports";
