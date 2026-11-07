@@ -1,11 +1,10 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { module as family } from "../family/route";
-import { module as takeoffs } from "../takeoff/route";
+import { builtinRouteKeys, typedBuiltin } from "../route/builtin-inventory";
 import { typedWorkCells } from "../route/route-discovery";
 import { workPathName } from "./work-writes";
 
-const routes = [family, takeoffs];
+const routes = builtinRouteKeys.map(typedBuiltin).filter((route) => route.spec.edits);
 
 test("every Work field a route can write has a declared name for History and Inputs", () => {
   const unnamed: string[] = [];

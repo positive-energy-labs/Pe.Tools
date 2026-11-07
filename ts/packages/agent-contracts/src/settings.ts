@@ -94,7 +94,7 @@ export const settingsBasisSchema = z.object({
 });
 export type SettingsBasis = z.infer<typeof settingsBasisSchema>;
 const settingsRouteDocumentSchema = z.object({
-  basis: settingsBasisSchema.nullable().default(null),
+  basis: settingsBasisSchema.nullable().default(null).meta({ title: "member read", internal: true }),
   fields: z.record(z.string(), settingsFieldStateSchema).default({}),
 });
 export type SettingsRouteDocument = z.infer<typeof settingsRouteDocumentSchema>;

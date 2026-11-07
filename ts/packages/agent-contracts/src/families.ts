@@ -322,15 +322,15 @@ const familiesDocumentSchema = z
         z.string().regex(/\D/, "an exclusion key is a family name, never an element id"),
         z.object({ by: exclusionAuthorSchema }).strict(),
       )
-      .default({}),
+      .default({}).meta({ title: "excluded families" }),
     cells: z.record(familyCellKeySchema, familyCellStateSchema).default({}),
     /** One reviewed native FF patch source, beside per-type cell edits. Only one source may have edits. */
     patch: familiesPatchCellSchema.default({}),
-    executionOptions: familyExecutionOptionsSchema.optional(),
+    executionOptions: familyExecutionOptionsSchema.optional().meta({ title: "execution options" }),
     /** The pod either author plans the draft in and saves it to. */
-    pod: z.string().min(1).optional(),
+    pod: z.string().min(1).optional().meta({ title: "Pod" }),
     /** When the Reading these edits rest on was taken, on the host's clock. The change mark compares against this. */
-    takenAt: z.string().nullable().default(null),
+    takenAt: z.string().nullable().default(null).meta({ title: "capture time", internal: true }),
   })
   .strict();
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;

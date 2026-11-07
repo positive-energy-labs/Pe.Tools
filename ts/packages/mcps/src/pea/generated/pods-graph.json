@@ -308,7 +308,12 @@
   ],
   "predicates": {},
   "cells": {},
-  "workFields": {},
+  "workFields": {
+    "basis": {
+      "label": "member read",
+      "internal": true
+    }
+  },
   "seeds": {},
   "needs": "nothing",
   "resetOnTarget": [],

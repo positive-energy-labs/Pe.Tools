@@ -241,7 +241,12 @@
   ],
   "predicates": {},
   "cells": {},
-  "workFields": {},
+  "workFields": {
+    "notes": {
+      "label": "room notes",
+      "internal": false
+    }
+  },
   "seeds": {},
   "needs": "project",
   "resetOnTarget": [],

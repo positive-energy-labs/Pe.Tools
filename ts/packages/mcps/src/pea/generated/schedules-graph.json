@@ -255,7 +255,16 @@
   ],
   "predicates": {},
   "cells": {},
-  "workFields": {},
+  "workFields": {
+    "basis": {
+      "label": "schedule reading",
+      "internal": true
+    },
+    "takenAt": {
+      "label": "capture time",
+      "internal": true
+    }
+  },
   "seeds": {},
   "needs": "project",
   "resetOnTarget": [],
