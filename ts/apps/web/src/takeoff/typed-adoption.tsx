@@ -14,7 +14,8 @@ import { viewCatalogue, type AdoptionContext } from "./route";
 export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
   const data = ctx.value.value;
   const savedZones = useList({
-    items: data?.saved?.snapshot.world.zones ?? [],
+    value: ctx.value,
+    rowsOf: (value) => value.saved?.snapshot.world.zones ?? [],
     keyOf: (row) => row.zone.guid,
     search: (row) => ({ text: [row.name, row.zone.lane.label, row.zone.declaredSqft, row.stage] }),
     select: "none",
