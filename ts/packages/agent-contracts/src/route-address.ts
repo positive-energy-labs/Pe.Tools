@@ -126,7 +126,7 @@ export interface RouteAddress<R extends RouteKey> {
    * dropped. A key that is not a URL key is a type error, and a thrown one for an untyped caller;
    * nothing is read from the current location, so no draft or shell leaks.
    */
-  link(page?: LinkedPage<R>, carry?: Carry): string;
+  link(page?: LinkPage<R> | LinkedPage<R>, carry?: Carry): string;
   /**
    * A browser Place's link, canonical: `link(page, { target, work })`. The path must be the route's; a
    * draft or the browser `shell` drops; a conversation's `thread`, an unknown key, or a value
