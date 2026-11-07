@@ -6,11 +6,17 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Ladder } from "../route/ladder";
 import { AdoptRegions, type AdoptionStore } from "./adopt-panel";
 import { TakeoffKernel } from "./kernel-context";
-import { loaded, type AdoptionContext } from "./route";
+import { viewCatalogue, type AdoptionContext } from "./route";
 
 export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
   const data = ctx.value.value;
   const page = ctx.page.read();
+  const catalogue = ctx.read(viewCatalogue);
+  const viewNote = catalogue.current ? undefined : catalogue.status === "pending"
+    ? catalogue.value ? "Reading views; showing the last known catalogue" : "Reading views..."
+    : `View catalogue unavailable: ${catalogue.reason}${catalogue.value ? "; showing the last known catalogue" : ""}`;
+  const selectedViews = page.views === "all"
+    ? catalogue.value?.viewOptions.map((row) => row.id) ?? [] : page.views;
   const [pending, setPending] = useState<{ id: "initialize" | "adopt"; request: unknown } | null>(
     null,
   );
@@ -143,16 +149,21 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
         </>
       ) : (
         <Ladder
+          header={viewNote && catalogue.value ? <p role={catalogue.status === "pending" ? "status" : "alert"}>{viewNote}</p> : undefined}
           levels={[
             {
               key: "views",
-              label: data?.views.length ? `${data.views.length} views` : null,
+              label: selectedViews.length ? `${selectedViews.length} views` : null,
               placeholder: "choose views",
-              options: data?.viewOptions ?? [],
+              options: catalogue.value?.viewOptions.map((row) => ({ ...row,
+                ...(!catalogue.current ? { refusal: viewNote } : {}),
+              })) ?? null,
+              note: viewNote,
               multi: true,
-              picked: (id) => data?.views.includes(id) ?? false,
+              picked: (id) => selectedViews.includes(id),
               pick: (id) => {
-                const views = data?.views ?? [];
+                if (!catalogue.current) return;
+                const views = selectedViews;
                 setPending(null);
                 ctx.page.query({
                   views: views.includes(id) ? views.filter((view) => view !== id) : [...views, id],
@@ -174,7 +185,8 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
                 id: row.id,
                 label: row.title || row.id,
                 sub: row.capturedAt,
-              })) ?? [],
+              })) ?? null,
+            note: !ctx.value.current ? ctx.value.status === "pending" ? "Reading saved captures..." : ctx.value.reason : undefined,
             picked: (id) => id === page.work,
             pick: (work) => {
               setPending(null);
@@ -185,7 +197,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
       />
       {!frozen && (
         <>
-          <Button label="refresh" onClick={() => ctx.refresh(loaded)}>
+          <Button label="refresh" onClick={() => ctx.refresh()}>
             refresh
           </Button>
           {(["initialize", "adopt"] as const).map((id) => (

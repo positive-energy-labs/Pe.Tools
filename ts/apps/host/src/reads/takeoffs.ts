@@ -10,7 +10,7 @@ import {
   documentRefSchema,
   nativeOutputSchema,
 } from "@pe/agent-contracts";
-import { adoptionArgs, adoptionData } from "@pe/agent-contracts/takeoff-read";
+import { adoptionArgs, adoptionData, viewCatalogueArgs, viewCatalogueData } from "@pe/agent-contracts/takeoff-read";
 import { adoptDrafts } from "@pe/agent-contracts/takeoff-adoption";
 import { leaf, read } from "./evaluator.ts";
 import { projectTakeoffViews } from "@pe/mcps/takeoff-ops";
@@ -23,7 +23,35 @@ export const takeoffSnapshotInput = z.object({
 });
 const retained = leaf("file:takeoff-capture", takeoffSnapshotInput, takeoffCaptureSchema, false);
 const captures = leaf("resource", readingRequestSchema, z.array(takeoffCaptureSummarySchema));
+const viewCatalogue = read("takeoffs.views", {
+  input: viewCatalogueArgs.extend({ target: executionTargetSchema }),
+  output: viewCatalogueData,
+  async run(ctx, args) {
+    const { target } = args;
+    if (target.kind !== "document") throw Error("Choose an open project document");
+    await ctx.read(documentMark, target.ref);
+    if (args.work) {
+      const saved = await ctx.read(captured, { kind: "takeoff-saved", id: args.work });
+      if (!saved) throw Error("Saved takeoff capture is unavailable");
+      return {
+        viewOptions: saved.snapshot.world.lanes.map((row) => ({ id: row.view, label: row.label })),
+        capturedViews: [],
+      };
+    }
+    const index = (await ctx.read(nativeRead("revit.catalog.project-index"), {
+      target, role: "none", request: {
+        sections: ["Views"], includeUnplacedViews: true, projection: { view: "Handles" },
+      },
+    })).body;
+    if (!index.views) throw Error("View catalogue did not return the Views section");
+    return {
+      viewOptions: index.views.map((row) => ({ id: row.name, label: row.name })),
+      capturedViews: projectTakeoffViews(index),
+    };
+  },
+});
 export const reads = {
+  views: viewCatalogue,
   adoption: read("takeoffs.adoption", {
     input: adoptionArgs.extend({ target: executionTargetSchema }),
     output: adoptionData,
@@ -38,22 +66,8 @@ export const reads = {
       const saved = args.work
         ? await ctx.read(captured, { kind: "takeoff-saved", id: args.work })
         : null;
-      const index = saved
-        ? null
-        : (
-            await ctx.read(nativeRead("revit.catalog.project-index"), {
-              target,
-              role: "none",
-              request: {
-                sections: ["Views"],
-                includeUnplacedViews: true,
-                projection: { view: "Handles" },
-              },
-            })
-          ).body;
-      const viewOptions = saved
-        ? saved.snapshot.world.lanes.map((row) => ({ id: row.view, label: row.label }))
-        : (index?.views ?? []).map((row) => ({ id: row.name, label: row.name }));
+      const catalogue = await ctx.read(viewCatalogue, { target, work: args.work });
+      const { viewOptions } = catalogue;
       const views = args.views === "all" ? viewOptions.map((row) => row.id) : args.views;
       if (args.zones === "all" && !saved)
         throw Error("The native metadata zone roster is unavailable; choose explicit zones");
@@ -63,7 +77,7 @@ export const reads = {
         ? null
         : await ctx.read(retained, {
             target: target.ref,
-            views: projectTakeoffViews(index!),
+            views: catalogue.capturedViews,
             snapshot: (
               await ctx.read(nativeRead("takeoffs.snapshot"), {
                 target,

@@ -13,6 +13,11 @@ export const adoptionArgs = z.object({
   zones: z.union([z.array(z.string()), z.literal("all")]),
   work: z.string(),
 });
+export const viewCatalogueArgs = z.object({ work: z.string() });
+export const viewCatalogueData = z.object({
+  viewOptions: z.array(z.object({ id: z.string(), label: z.string() })),
+  capturedViews: z.array(z.object({ name: z.string(), level: z.string() })),
+});
 export const adoptionData = z.object({
   takeoffWork: takeoffsRouteState.schema,
   handle: workHandleSchema.nullable(),
