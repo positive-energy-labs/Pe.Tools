@@ -186,6 +186,13 @@ function collectionKey(definition: ScopeKey, region: HTMLElement | null): ScopeK
             )
           : null;
       const row = control?.closest(".dl-row");
+      // Space types into a query, including a popup's own search and an external owner.
+      // Navigation and explicit Enter choices still belong to that input's collection.
+      if (
+        event.key === " " &&
+        control?.matches('input,textarea,[contenteditable="true"],[role="textbox"],[role="combobox"]')
+      )
+        return;
       // A list body ignores its search field; the field's own suggestion list (region === control) does not.
       if (control !== region && control?.closest("[data-list-search]") && region?.contains(control))
         return;
