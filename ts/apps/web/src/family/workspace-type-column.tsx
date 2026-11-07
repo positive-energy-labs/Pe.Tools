@@ -19,6 +19,7 @@ import {
 } from "#/family/model";
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
 
+// CHEAT(K gaps 1/4): measured parsing, formula/inheritance and ghost writes still use the domain edit buffer.
 export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
   const {
     world,

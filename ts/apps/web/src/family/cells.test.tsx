@@ -7,7 +7,7 @@ import { familyDraftRouteState, type FamilyDraft, type WorkKey } from "@pe/agent
 import { RouteWorkspace } from "@pe/runtime";
 import { createGraphMount, type MountScope } from "#/shell/mount";
 import { familyGraph } from "./graph";
-import { familySources } from "./sources";
+import { familySources, familyWitnessCells } from "./sources";
 import { familyBinding, familyCell } from "./actions";
 import { FamilyProvider } from "./workspace";
 import { useFamilyWorkspace } from "./workspace-context";
@@ -60,7 +60,7 @@ function Editor({ owner }: { owner: FamilyMount }) {
   useSyncExternalStore(owner.subscribe, owner.version, owner.version);
   return (
     <RegistryContext value={owner.registry}>
-      <FamilyProvider owner={owner}>
+      <FamilyProvider owner={owner} cells={familyWitnessCells(owner)}>
         <Cells />
       </FamilyProvider>
     </RegistryContext>

@@ -11,6 +11,7 @@ type Region = RoomsSnapshot.Res.RoomsRegion;
 type Loop = readonly (readonly number[])[];
 type Point = readonly [number, number];
 type MarkCell = RoomsRouteDocument["marks"][string];
+type FeedbackWork = Pick<RoomsRouteDocument, "marks" | "notes">;
 type MarkState = "accepted" | "pass" | "fail" | "stale" | "gone";
 /** A card's state: a mark's derived glyph, or a note, which has no rungs. */
 export type CardState = MarkState | "note";
@@ -156,7 +157,7 @@ const centroid = (polygon: Loop) => {
 const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /** The Work's marks and notes as markdown: one section per view, deterministic order. */
-export function cardsMarkdown(doc: RoomsRouteDocument, snapshot: Snapshot): string {
+export function cardsMarkdown(doc: FeedbackWork, snapshot: Snapshot): string {
   const regions = new Map(snapshot.regions.map((region) => [region.guid, region]));
   const label = (guid: string) => {
     const region = regions.get(guid);
@@ -226,7 +227,7 @@ export interface Card {
 }
 
 /** The inbox for one view: its marks and notes in `CARD_STATES` order, then by id. */
-export function inboxCards(doc: RoomsRouteDocument, snapshot: Snapshot, view: string): Card[] {
+export function inboxCards(doc: FeedbackWork, snapshot: Snapshot, view: string): Card[] {
   const regions = snapshot.regions.filter((r) => r.view === view && r.role !== "zone");
   const under = ([x = 0, y = 0]: readonly number[]) =>
     regions.filter((r) => inLoop(x, y, r.outer)).map((r) => r.guid);

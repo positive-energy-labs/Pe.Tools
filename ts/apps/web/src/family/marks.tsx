@@ -15,7 +15,12 @@
  * The migration was a deletion, exactly as this file's old note predicted. The cells now build
  * their props through `cellFromDraft`, so no reading of a suggestion is written here twice.
  */
-import { StateCell, type StateCellProps } from "@pe/kit/lang/cell";
+import {
+  StateCell,
+  handleCellProps,
+  type StateCellProps,
+  type HandleCellProps,
+} from "@pe/kit/lang/cell";
 import { useCellNavigation } from "@pe/kit/table/cell-navigation";
 
 /**
@@ -23,7 +28,15 @@ import { useCellNavigation } from "@pe/kit/table/cell-navigation";
  * the provider is present and Enter/Tab/arrows walk the grid; in the inspector there is no
  * provider and the hook returns null, so the cell simply blurs — one component, both homes.
  */
-export function NavStateCell(props: StateCellProps) {
+export function NavStateCell({
+  readOnly,
+  ...props
+}: (StateCellProps | HandleCellProps) & { readOnly?: boolean }) {
   const move = useCellNavigation();
+  // CHEAT: kit owner props have no read-only value that still offers owner clear transitions.
+  if (readOnly && "cell" in props)
+    return (
+      <StateCell {...handleCellProps(props)} onCommit={undefined} onNavigate={move ?? undefined} />
+    );
   return <StateCell scale="row" {...props} onNavigate={move ?? undefined} />;
 }

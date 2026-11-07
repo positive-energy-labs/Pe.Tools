@@ -37,8 +37,8 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * ruling. FOCUS is page vocabulary, not drawing vocabulary: a `--pe-select` fill and
  * an ink stroke, exactly as the table's focused row does.
  */
-import type { CellLike } from "@pe/agent-contracts";
-import { cellFromDraft, StateCell, type CellTransition } from "@pe/kit/lang/cell";
+import type { FamilyContext } from "./route";
+import { NavStateCell } from "./marks";
 
 import type { FamilyModel } from "#/family/family-model";
 import { bindingOf, type Draft, type Focus, type FamilyPageModel } from "#/family/model";
@@ -58,8 +58,9 @@ export function AnatomyDrawing({
   onFocus,
   onInspect,
   inspecting,
-  fields,
-  transitionsAt,
+  refusalAt,
+  cells,
+  value,
 }: {
   world: FamilyPageModel;
   draft: Draft;
@@ -75,9 +76,9 @@ export function AnatomyDrawing({
   /** A constituent is something you can OPEN, not just light. */
   onInspect: (slug: string) => void;
   inspecting: string | null;
-  /** The Work's cells: a constituent only Pea proposes draws its own proposed cell from these. */
-  fields: Record<string, CellLike>;
-  transitionsAt: (key: string) => readonly CellTransition[];
+  refusalAt: (key: string) => string | null;
+  cells: Pick<FamilyContext["cells"], "at">;
+  value?: FamilyContext["value"];
 }) {
   const views =
     model == null ? (
@@ -159,21 +160,25 @@ export function AnatomyDrawing({
               label: <span className="face-mono">{part.slug}</span>,
               meta: part.proposed ? (
                 // The reading has none: Pea's object is a cell of its own, accept and deny on it.
-                <StateCell
-                  {...cellFromDraft(fields[part.proposed] ?? {}, { value: part.text })}
-                  scale="row"
-                  transitions={transitionsAt(part.proposed)}
+                <NavStateCell
+                  cell={cells.at(["cells", part.proposed])}
+                  value={value}
+                  label={`Review ${part.slug}`}
+                  format={() => part.text}
+                  capReason={refusalAt(part.proposed) ?? undefined}
+                  readOnly
                 />
               ) : (part.proposedProps?.length ?? 0) > 0 ? (
                 <>
                   {part.proposedProps!.map((entry) => (
-                    <StateCell
+                    <NavStateCell
                       key={entry.id}
-                      {...cellFromDraft(fields[entry.id] ?? {}, {
-                        value: `${entry.property} ${entry.text}`,
-                      })}
-                      scale="row"
-                      transitions={transitionsAt(entry.id)}
+                      cell={cells.at(["cells", entry.id])}
+                      value={value}
+                      label={`Review ${part.slug} ${entry.property}`}
+                      format={(next) => `${entry.property} ${String(next)}`}
+                      capReason={refusalAt(entry.id) ?? undefined}
+                      readOnly
                     />
                   ))}
                 </>
