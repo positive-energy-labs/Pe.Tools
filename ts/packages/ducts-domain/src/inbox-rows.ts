@@ -1,3 +1,4 @@
+import { readIndex, type ReadIndex } from "./read-index.ts";
 /** Derived inbox in loop order. Off-system findings stay in Diagnostics and never hold the ESP. */
 import type { DuctFinding, DuctsDesign } from "@pe/agent-contracts";
 import { bin } from "@pe/ducts-domain/bins";
@@ -109,15 +110,15 @@ export interface TriageInput {
     Partial<Pick<DuctSnapshot, "systems" | "issues">>;
   scope: SystemScope | null;
   findings: readonly DuctFinding[];
-  flows: ReadonlyMap<number, { cfm: number | null }>;
-  equipmentFlows: ReadonlyMap<number, { cfm: number | null }>;
+  flows: ReadIndex<number, { cfm: number | null }>;
+  equipmentFlows: ReadIndex<number, { cfm: number | null }>;
   doc: DuctsDesign | null;
   nameOf?: (id: number) => string;
   groupLabel?: (id: string) => string;
-  heal?: HealPlan | null;
+  heal?: HealPlan | import("./pricing-view").HealView | null;
   airflow?: { current: string; options: readonly AirflowOption[] };
   unitAirflow?: { current: string; options: readonly AirflowOption[] };
-  roles?: ReadonlyMap<number, { role: "fan" | "passive"; why: string; reason: string }>;
+  roles?: ReadIndex<number, { role: "fan" | "passive"; why: string; reason: string }>;
 }
 
 export function fanVerbs(
@@ -208,7 +209,7 @@ const proximityIds = (key: string) =>
 export function triage(input: TriageInput) {
   const { snapshot, scope, findings, flows, equipmentFlows, doc } = input;
   // The role a unit plays now: the survey's (ruled, edit, else proposed), else Work's edit one.
-  const roleNow = (id: number) => input.roles?.get(id)?.role ?? roleOf(doc, id);
+  const roleNow = (id: number) => readIndex(input.roles,id)?.role ?? roleOf(doc, id);
   const name = (id: number) => subjectName("unnamed element", input.nameOf?.(id));
   const label = input.groupLabel ?? ((id: string) => id);
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
@@ -581,7 +582,7 @@ export function triage(input: TriageInput) {
   const othersFlowless: number[] = [];
   for (const n of snapshot.nodes) {
     if (n.kind !== "terminal" || !n.groupId || (scope && !inGroups.has(n.groupId))) continue;
-    if (fanless.has(n.groupId) || flows.get(n.id)?.cfm != null) continue;
+    if (fanless.has(n.groupId) || readIndex(flows,n.id)?.cfm != null) continue;
     if (scope && !scope.terminals.has(n.id)) {
       othersFlowless.push(n.id);
       continue;
@@ -651,7 +652,7 @@ export function triage(input: TriageInput) {
       if (units.has(id) || nodes.get(id)?.kind !== "equipment" || roleNow(id) === "passive")
         continue;
       units.add(id);
-      if (equipmentFlows.get(id)?.cfm != null) continue;
+      if (readIndex(equipmentFlows,id)?.cfm != null) continue;
       unitFlowless.push(id);
       set.push({
         key: `equipmentFlows:${id}`,

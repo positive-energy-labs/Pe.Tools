@@ -73,7 +73,7 @@ interface DuctsPictureProps {
   captureSource?: { document: { session: string; openId: string }; version: string } | null;
   doc: { session: string; openId: string } | null;
   priced: Priced | null;
-  analysis: ReturnType<typeof import("@pe/ducts-domain/pricing-result").pricingResult>["analysis"] | null;
+  analysis: import("@pe/agent-contracts").DuctsPricingData["analysis"] | null;
   subject: Run | null;
   claims: readonly Claim[];
   onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;

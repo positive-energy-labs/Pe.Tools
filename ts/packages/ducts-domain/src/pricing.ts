@@ -636,5 +636,5 @@ export function applyRequest(
 }
 
 /** Rule instances a edit table cannot price: left out of the write, named in the band. */
-export const unpriced = (priced: Priced, key: string) =>
+export const unpriced = (priced: Pick<Priced,"next">, key: string) =>
   [...instancesOf(priced.next, key).values()].filter((row) => row.c == null || row.error).length;

@@ -230,7 +230,6 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
   };
   const fanReading = fans;
   const friction = ctx.cells.at(["designFriction"]);
-  const parameterTarget = ctx.target;
   const ownPane = (
     <>
       <section
@@ -275,10 +274,8 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
               <span className="block min-w-0 h-(--item-h)">
                 {key === "fanStatic" ? (
                   <EspParameter
-                    target={parameterTarget?.kind === "document" ? parameterTarget.ref : null}
-                    units={snapshot.nodes
-                      .filter((node) => node.kind === "equipment")
-                      .flatMap((node) => (node.uniqueId ? [node.uniqueId] : []))}
+                    options={ctx.value.value?.espOptions??null}
+                    error={ctx.value.value?.espOptionsError??null}
                     cell={handle}
                     value={ctx.value}
                     model={snapshot.slots[key]}
