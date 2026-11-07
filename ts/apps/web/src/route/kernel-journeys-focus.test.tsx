@@ -28,6 +28,73 @@ import { contextFetch } from "@pe/runtime/context";
 import { routeInput } from "./host";
 import userEvent from "@testing-library/user-event";
 
+test("JZ DuctLoss numeric drafts refuse negatives without changing the URL and recover by keyboard", async () => {
+  const { module: ductLoss } = await import("../duct-loss/route");
+  const { InputsBody } = await import("../duct-loss/route.tsx");
+  const { solve } = await import("@pe/ducts-domain/duct-loss-math");
+  let search = new URLSearchParams({ cfm: "0", length: "100" });
+  const mount = mounts.mountTypedRoute(ductLoss, {
+    address: { read: () => new URLSearchParams(search), write: next => { search = new URLSearchParams(next); }, subscribe: () => () => {} },
+    fixture: null, target: { kind: "host" }, work: { address: null, open: null },
+    custody: { current: () => true }, memory: () => ({}),
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), {
+    work: createWorkFeedClient({ subscribe: () => () => {}, dirty() {} }, {
+      write: async () => { throw Error("Calculator must not write Work"); },
+      submit: async () => { throw Error("Calculator must not run native commands"); },
+    }),
+    // Only the host reading is a fixture; the page, address codec and input events are production.
+    sources: { "duct-loss.result": { kind: "use", open(_ctx, deliver) {
+      deliver({ kind: "complete", value: { key: "numeric-entry", generation: 1, version: 1, state: "current", value: { data: { result: solve({ shape: "round", a: 12, b: 8, cfm: 0, length: 100, roughness: 0.0003, density: 0.075 }), error: null }, evaluation: "numeric-entry", inputs: "numeric-entry", coverage: { requested: [], covered: [], unknown: [], refused: [] }, origin: { kind: "fixture" }, trace: [], freshness: "current" } }, revision: 1 }); return () => {};
+    } } },
+  });
+  function Journey() {
+    useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
+    return mount.draw("inputs", ctx => <InputsBody ctx={ctx as never} />) as import("react").ReactNode;
+  }
+  const user = userEvent.setup();
+  try {
+    render(<Journey />);
+    const airflow = screen.getByLabelText(/airflow/) as HTMLInputElement;
+    for (const [input, key, prior] of [[airflow, "cfm", "0"], [screen.getByLabelText(/length/), "length", "100"]] as const) {
+      await user.click(input);
+      await user.keyboard("{Control>}a{/Control}-");
+      expect.soft((input as HTMLInputElement).value).toBe("-");
+      expect.soft(search.get(key)).toBe(prior);
+      await user.keyboard("1{Enter}");
+      expect.soft(search.get(key)).toBe(prior);
+      expect.soft(screen.queryByRole("alert")?.textContent).toContain("at least 0");
+      expect.soft((input as HTMLInputElement).value).toBe("-1");
+      expect.soft(input.getAttribute("aria-invalid")).toBe("true");
+      await user.keyboard("{Control>}a{/Control}-{Backspace}5{Enter}");
+      expect.soft((input as HTMLInputElement).value).toBe("5");
+      expect.soft(search.get(key)).toBe("5");
+    }
+    await user.click(airflow);
+    await user.keyboard("{Control>}a{/Control}01");
+    expect(airflow.value).toBe("01");
+    await user.tab();
+    expect(airflow.value).toBe("1");
+    expect(search.get("cfm")).toBe("1");
+    for (const draft of ["", ".", "1."]) {
+      await user.click(airflow);
+      await user.keyboard("{Control>}a{/Control}{Backspace}");
+      if (draft) await user.keyboard(draft);
+      expect(airflow.value).toBe(draft);
+      expect(search.get("cfm")).toBe("1");
+      await user.keyboard("{Enter}");
+      if (draft !== "1.") expect(screen.getByRole("alert").textContent).toContain("Enter a number");
+    }
+    await user.click(airflow);
+    await user.keyboard("{Control>}a{/Control}0{Enter}");
+    expect(search.get("cfm")).toBe("0");
+    const diameter = screen.getByLabelText(/^diameter/, { selector: "input" }) as HTMLInputElement;
+    await user.click(diameter);
+    await user.keyboard("{Control>}a{/Control}0{Enter}");
+    expect(screen.getByRole("alert").textContent).toContain("greater than 0");
+    expect(mount.page.read().a).toBe(12);
+  } finally { cleanup(); mount.dispose(); }
+});
+
 test.each(["insertText", "pointer keyboard", "navigation keyboard", "pointer shifted text", "navigation shifted text", "navigation composition", "navigation paste", "range shifted text"] as const)("JZ Schedules Description Enter stages r3, reviews BEFORE to AFTER, and shows a refused edit at its cell (%s)", async (entryMode) => {
   const user = userEvent.setup();
   const host = await scheduleHost({ cold: true });

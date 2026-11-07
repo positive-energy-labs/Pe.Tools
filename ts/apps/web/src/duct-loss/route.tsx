@@ -1,5 +1,5 @@
 /** The graph owns state, acquisition, layout and keys; these adapters supply pane content. */
-import { type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import type { DuctLossContext } from "./route";
 import { FactChip } from "@pe/kit/lang/chip";
 import { Input } from "@pe/kit/lang/input";
@@ -22,24 +22,45 @@ function Field({ label, unit, children }: { label: string; unit?: string; childr
   );
 }
 
-function Num({
-  value,
-  onChange,
-  step = 1,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  step?: number;
-}) {
+function Num({ value, onChange, positive = false }: { value: number; onChange: (v: number) => void; positive?: boolean }) {
+  const [draft, setDraft] = useState(String(value));
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const reasonId = useId();
+  useEffect(() => { setDraft(String(value)); setRefusal(null); }, [value]);
+  const commit = () => {
+    const text = draft.trim();
+    const parsed = Number(text);
+    if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(text) || !Number.isFinite(parsed)) {
+      setRefusal("Enter a number; nothing committed");
+      return;
+    }
+    if (parsed < 0 || (positive && parsed === 0)) {
+      setRefusal(`Enter a number ${positive ? "greater than" : "at least"} 0; nothing committed`);
+      return;
+    }
+    setRefusal(null);
+    setDraft(String(parsed));
+    if (parsed !== value) onChange(parsed);
+  };
   return (
-    <Input
-      type="number"
-      face="mono"
-      min={0}
-      step={step}
-      value={value}
-      onChange={(e) => onChange(Number(e.target.value))}
-    />
+    <span className="block min-w-0">
+      <Input
+        // Native number inputs erase drafts such as '-'; text owns the draft until commit.
+        type="text"
+        inputMode="decimal"
+        face="mono"
+        value={draft}
+        aria-invalid={refusal ? true : undefined}
+        aria-describedby={refusal ? reasonId : undefined}
+        onChange={(event) => { setDraft(event.target.value); setRefusal(null); }}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") { event.preventDefault(); commit(); }
+          if (event.key === "Escape") { setDraft(String(value)); setRefusal(null); }
+        }}
+      />
+      {refusal && <span id={reasonId} role="alert" data-tone="caution">{refusal}</span>}
+    </span>
   );
 }
 
@@ -139,15 +160,15 @@ function Inputs(body: Body) {
           />
         </Field>
         <Field label={d.shape === "round" ? "diameter" : "width"} unit="in">
-          <Num value={d.a} onChange={(a) => set({ a })} />
+          <Num positive value={d.a} onChange={(a) => set({ a })} />
         </Field>
         {d.shape === "rect" && (
           <Field label="height" unit="in">
-            <Num value={d.b} onChange={(b) => set({ b })} />
+            <Num positive value={d.b} onChange={(b) => set({ b })} />
           </Field>
         )}
         <Field label="airflow" unit="cfm">
-          <Num value={d.cfm} onChange={(cfm) => set({ cfm })} step={10} />
+          <Num value={d.cfm} onChange={(cfm) => set({ cfm })} />
         </Field>
         <Field label="length" unit="ft">
           <Num value={d.length} onChange={(length) => set({ length })} />
@@ -171,10 +192,10 @@ function Inputs(body: Body) {
           />
         </Field>
         <Field label="roughness ε" unit="ft">
-          <Num value={d.roughness} onChange={(roughness) => set({ roughness })} step={0.0001} />
+          <Num value={d.roughness} onChange={(roughness) => set({ roughness })} />
         </Field>
         <Field label="density ρ" unit="lb/ft³">
-          <Num value={d.density} onChange={(density) => set({ density })} step={0.001} />
+          <Num positive value={d.density} onChange={(density) => set({ density })} />
         </Field>
       </section>
 
