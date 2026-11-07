@@ -8,7 +8,7 @@ import type { createRouteTimeline } from "./timeline";
  * mount-chrome.tsx renders each verb and each context control; this file owns where they sit.
  *
  * The Timeline head's Reject answers the same host consent API as Pea's composer (`thread.permission`).
- * TODO: docs/features/routes/LEDGER.md#s7-a91a2429a1 H2 â€” Reject dispatch and host cancellation are proven separately by fixture tests; press it against a live
+ * TODO: docs/features/routes/LEDGER.md#s7-a91a2429a1 H2 — Reject dispatch and host cancellation are proven separately by fixture tests; press it against a live
  * host consent window (a route command from a Pea thread) to prove the round trip.
  */
 import { useContext, useSyncExternalStore, type ReactNode } from "react";
@@ -122,7 +122,7 @@ export const stepSource = (step: Journal["undo"][number]) => (step.by === "pea" 
 export const stepState = (journal: Journal, step: Journal["undo"][number]) =>
   step.notWritten
     ? step.notWritten.rejected
-      ? "not written â€” rejected"
+      ? "not written — rejected"
       : "not written"
     : step.superseded
       ? `superseded at r${step.superseded.revision}`
@@ -139,7 +139,7 @@ export const lastMove = (journal: Journal) => {
   const { kind, step, by } = journal.last!;
   const who = by === "pea" ? "Pea" : "you";
   return kind === "apply"
-    ? `${stepSource(step)} Â· ${stepState(journal, step)}`
+    ? `${stepSource(step)} · ${stepState(journal, step)}`
     : `${who} ${kind === "undo" ? "undid" : "redid"}`;
 };
 
@@ -248,7 +248,7 @@ export function TimelineHead({
         return (
           <span key={entry.outcome?.receiptId ?? entry.press} data-slot="consent-window">
             <span role="timer" data-tone="caution" aria-label={`${row.verb} applies in`}>
-              {row.verb} Â· {left === null ? "awaiting approval" : `${left}s`}
+              {row.verb} · {left === null ? "awaiting approval" : `${left}s`}
             </span>
             <Button
               label={`Reject ${row.verb}`}
@@ -277,7 +277,7 @@ export function TimelineHead({
         return (
           <span key={ask.requestId} data-slot="consent-window">
             <span role="timer" data-tone="caution" aria-label="Pea's writes apply in">
-              Pea writes Â· {left === null ? "awaiting approval" : `${left}s`}
+              Pea writes · {left === null ? "awaiting approval" : `${left}s`}
             </span>
             <Button
               label="Reject Pea's writes in this thread"
@@ -295,14 +295,14 @@ export function TimelineHead({
             <>
               <span>{step.label}</span>
               <span data-slot="timeline-state">
-                {lastMove(journal!)} Â· r{journal!.revision}
+                {lastMove(journal!)} · r{journal!.revision}
               </span>
             </>
           ) : last ? (
             <>
               <span>{last.verb}</span>
               <span data-slot="timeline-state">
-                {entryCaller(last.entry)} Â· {last.outcome?.state ?? last.kind} Â·{" "}
+                {entryCaller(last.entry)} · {last.outcome?.state ?? last.kind} ·{" "}
                 {activityTime(last.at)}
               </span>
             </>

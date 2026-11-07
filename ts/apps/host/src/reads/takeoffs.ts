@@ -99,7 +99,7 @@ export const reads = {
           ...(grouped.get(row.view) ?? []),
           {
             elementId: row.region.elementId,
-            name: row.name || `${row.view} Â· ${row.region.elementId}`,
+            name: row.name || `${row.view} · ${row.region.elementId}`,
             systemTag: row.systemTag,
           },
         ]);
