@@ -70,7 +70,6 @@ export type ScheduleCatalogEntry = z.infer<typeof scheduleCatalogEntrySchema>;
 export const scheduleCatalogSchema = z.object({
   documentTitle: z.string().nullish(),
   schedules: z.array(scheduleCatalogEntrySchema),
-  takenAt: z.string().nullish(),
 });
 export type ScheduleCatalog = z.infer<typeof scheduleCatalogSchema>;
 
