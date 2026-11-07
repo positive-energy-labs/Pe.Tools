@@ -413,6 +413,9 @@ export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistr
  * association.
  */
 export function routeSearch(search: Record<string, unknown>): {
+  at?: string;
+  atInstance?: string;
+  compare?: "now";
   fixture?: string;
   target?: string;
   work?: string;
@@ -431,6 +434,9 @@ export function routeSearch(search: Record<string, unknown>): {
   const work = typeof search.work === "string" ? search.work.trim() : "";
   const thread = typeof search.thread === "string" ? search.thread.trim() : "";
   return {
+    ...(typeof search.at === "string" ? { at: search.at } : {}),
+    ...(typeof search.atInstance === "string" ? { atInstance: search.atInstance } : {}),
+    ...(search.compare === "now" ? { compare: "now" as const } : {}),
     ...(typeof search.fixture === "string" ? { fixture: search.fixture } : {}),
     ...(target ? { target } : {}),
     ...(work ? { work } : {}),

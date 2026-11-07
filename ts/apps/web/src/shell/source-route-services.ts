@@ -50,6 +50,7 @@ export const sourceReadingEvidence = (services: KernelServices) =>
 export function sourceRouteServices(
   sources: Record<string, ReadingSource>,
   composition: Pick<KernelServices, "target" | "geometry"> = {},
+  history?: { point?: string; pose(): import("@pe/agent-contracts").HistoryPose },
 ): KernelServices {
   const publicationOwner = crypto.randomUUID();
   const publicationGenerations = new Map<string, number>();
@@ -207,7 +208,7 @@ export function sourceRouteServices(
             request.key.freshnessGeneration,
             JSON.parse(request.key.sortedKeyInput),
             state.controller.signal,
-          ), publication: { subscription: `${publicationOwner}:${request.key.op}`, generation } },
+          ), historyPoint: history?.point, historyPose: history?.pose(), publication: { subscription: `${publicationOwner}:${request.key.op}`, generation } },
           (snapshot) => deliver((state.snapshot = snapshot as ReadingSnapshot<T>)),
           { observe: (value) => observers.get(request)?.(value) },
         );
@@ -235,6 +236,7 @@ export function sourceRouteServices(
         );
       },
       observe(request, token, deliver) {
+        if (history?.point) return () => {};
         observers.set(request, (value) => deliver({ kind: "log", value }));
         const abort = new AbortController();
         let timer: ReturnType<typeof setTimeout> | undefined;

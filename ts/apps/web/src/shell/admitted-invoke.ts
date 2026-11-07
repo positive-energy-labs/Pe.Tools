@@ -60,6 +60,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     ports,
   } = context;
   const work = context.work();
+  const historical = !!context.input.history || !!context.input.readOnly;
   // One once-control per canonical Work and verb, retained only for this mount lifetime.
   const adopted = new Set<string>();
   let stopped = false;
@@ -167,6 +168,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
   const editBases = new WeakMap<InvocationToken, NonNullable<ReturnType<typeof owner.read>>>();
   let renderedBasis: InvocationToken | null = null;
   const workBasis = () => {
+    if (historical) return null;
     const snapshot = owner.read();
     if (!snapshot?.work || !work.ready()) return null;
     if (renderedBasis && editBases.get(renderedBasis) === snapshot) return renderedBasis;
@@ -192,6 +194,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     reviewRefusals.delete(id);
     const declaration = route.data.verbs[id];
     if (!declaration) throw Error(`Unknown verb: ${id}`);
+    if (historical && declaration.kind === "work") throw Error("needs live Revit");
     if (declaration.kind === "local") {
       const refusal = localReadiness(id, input);
       if (refusal) {
@@ -697,6 +700,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
         schedule();
       },
       confirm: (id: string) => {
+        if (historical) throw Error("needs live Revit");
         const review = reviews.get(id);
         if (!review) throw reviewRefusals.get(id) ?? Error("No review to confirm");
         const result = review.send();

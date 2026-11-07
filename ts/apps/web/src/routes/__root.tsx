@@ -60,7 +60,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     shell: search.shell === "tray" || search.shell === "card" ? search.shell : undefined,
   }),
   // Resource identity crosses links; shell presentation belongs to the local surface adapter.
-  search: { middlewares: [retainSearchParams(["thread", "target", "work", "fixture"])] },
+  search: { middlewares: [retainSearchParams(["thread", "target", "work", "fixture", "at", "atInstance", "compare"])] },
   head: () => ({
     meta: [
       {

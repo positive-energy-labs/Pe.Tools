@@ -19,6 +19,14 @@ export async function hostFetch(url: string, init?: RequestInit): Promise<Respon
   if (currentFixture() !== null) throw Error("Fixture lane: real host requests are disabled");
   if (!serviceName) throw new Error("This page has no runtime owner.");
   const headers = new Headers(init?.headers);
+  if (typeof window !== "undefined") {
+    const search = new URLSearchParams(window.location.search);
+    const point = search.get("at");
+    if (point) {
+      headers.set("x-pe-history-point", headers.get("x-pe-history-point") ?? point);
+      if (search.get("compare") === "now") headers.set("x-pe-history-compare", "now");
+    }
+  }
   headers.set(HOST_RUNTIME_SERVICE_HEADER, serviceName);
   headers.set("x-pe-web-build", webBuildStamp.build);
   const response = await readFetch(url, { ...init, headers });
