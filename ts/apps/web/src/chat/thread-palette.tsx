@@ -1,3 +1,4 @@
+import { chatPluginTitle } from "../workbench/chat-plugins";
 import { threadSearchDefault } from "@pe/agent-contracts";
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -858,7 +859,7 @@ export function ThreadsSidebar({
     const lead = leadWork(work);
     // The remembered documents lead; the conversation title stands in when there are none.
     // TODO: Manual D drive-7 verdict E (S9): "Thread titles carry ids" including a model GUID and "grille 8747668". Give historical titles readable names.
-    const title = documentsLabel(work) ?? thread.title;
+    const title = [documentsLabel(work) ?? thread.title, work?.place ? chatPluginTitle(work.place) : null].filter(Boolean).join(" \u00b7 ");
     return {
       label: compactRows ? (
         <span className="pe-thread-label">

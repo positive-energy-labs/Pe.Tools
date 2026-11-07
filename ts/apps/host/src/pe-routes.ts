@@ -1,3 +1,4 @@
+import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
 import { InvalidRead } from "./native-reads.ts";
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
@@ -718,9 +719,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
         const thread = url.searchParams.get("thread");
         if (!thread) return json({ error: "thread required" }, 400);
         const result = views.select(thread, route, url.searchParams.get("instance") ?? undefined);
-        return result && !("ok" in result)
-          ? json(result)
-          : json(result ?? { ok: false, error: "view unavailable" }, 409);
+        if (!result || "ok" in result) return json(result ?? { ok: false, error: "view unavailable" }, 409);
+        const mounted = mountedWorkKeySchema.safeParse(result.context.work);
+        const mountedWork = mounted.success && mounted.data.route === route
+          ? await work.view(mounted.data, route, invocation.work) : null;
+        return json({ ...result, ...(mountedWork ? { work: mountedWork } : {}) });
       }
       if (method === "POST" && instance === "set") {
         const parsed = routeViewSetSchema.safeParse(await body());

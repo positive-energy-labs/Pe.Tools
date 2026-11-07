@@ -142,7 +142,6 @@ export function rememberPlace(
   );
   const id = workKey(key);
   const documentId = document?.id ?? null;
-  return context.works.some((held) => workKey(held.key) === id && held.documentId === documentId)
-    ? context
-    : { ...context, works: [...context.works, { key, documentId }] };
+  const previous = context.works.filter((held) => !(workKey(held.key) === id && held.documentId === documentId));
+  return { ...context, works: [...previous, { key, documentId }] };
 }

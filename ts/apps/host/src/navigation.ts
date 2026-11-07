@@ -70,6 +70,7 @@ export async function readThreadWork(
     truncated: Boolean(census?.truncated || (contexts?.length ?? 0) > 200),
     threads: (contexts ?? []).slice(0, 200).map(({ threadId, context }) => ({
       threadId,
+      ...(context?.works.at(-1) ? { place: context.works.at(-1)!.key.route } : {}),
       documents: (context?.documents ?? []).flatMap((doc) =>
         doc.name === null
           ? []
