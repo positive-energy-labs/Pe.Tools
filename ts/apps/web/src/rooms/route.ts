@@ -60,6 +60,7 @@ export const module = route({
   },
   edits: {
     work: roomsRouteState,
+    seed: () => roomsRouteState.schema.parse({}),
     value: "roomsWork",
     owners: {},
     input: edits,
