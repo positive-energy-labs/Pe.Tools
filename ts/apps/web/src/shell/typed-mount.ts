@@ -78,7 +78,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const selectedKey = () => {
     if(!edits) return null;
     if(edits.key) {const member=edits.key(page as never);return member === null ? null : bindWork(own,null,member);}
-    return bindWork(own,input.work.address,input.address.read().get("work") || undefined,input.work.open ?? undefined);
+    return bindWork(own,input.work.address,undefined,input.work.open ?? undefined);
   };
   let key = selectedKey();
   let renderedBasis: InvocationToken | null = null;

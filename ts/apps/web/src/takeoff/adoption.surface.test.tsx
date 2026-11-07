@@ -1,22 +1,22 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { useSyncExternalStore } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, test } from "vite-plus/test";
-import { join } from "node:path";
-import { observeResources } from "@pe/runtime";
+import { peRouteUrl } from "@pe/agent-contracts/pe-api";
+import type { Readings } from "../host/resource-stream";
 import {
   bindWork,
   commands,
-  workKey,
-  takeoffsRouteState,
   workFingerprintSchema,
+  actionReceiptSchema,
 } from "@pe/agent-contracts";
 import type {
   WorkJournalDoor,
   AcceptedResult,
 } from "../../../../packages/agent-contracts/src/work-journal-door";
+import { bindControl } from "../../../host/src/control";
+import { testConsents } from "../../../host/tests/effect-test";
 import { fixture, ref, path, gate } from "../../../host/tests/host-read-graph.test-support";
-import { fileRouteDocumentStore } from "../../../host/src/route-document-store";
 import { adoptionData } from "../../../../packages/agent-contracts/src/takeoff-read";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { completion } from "../shell/work-door-observation";
@@ -34,7 +34,9 @@ async function journey(options: { catalogue?: ReturnType<typeof gate>; snapshot?
   const nativeCalls: { key: string; input: unknown }[] = [];
   const nativeScopes: unknown[] = [];
   const actions: { key: string; input: Record<string, unknown> }[] = [];
-  const host = await fixture(false, {
+  bindControl({runs:testConsents(() => {}), acquired:() => null});
+  const host = await fixture(true, {
+    actions: true,
     inventory: {
       sessions: [
         {
@@ -133,17 +135,6 @@ async function journey(options: { catalogue?: ReturnType<typeof gate>; snapshot?
     },
   });
   const key = bindWork("takeoffs", path, undefined, ref);
-  await fileRouteDocumentStore(join(host.dir, "work")).setState({
-    targetKey: workKey(key),
-    route: "takeoffs",
-    value: {
-      version: 1,
-      schemaVersion: 1,
-      revision: 0,
-      doc: takeoffsRouteState.schema.parse({}),
-      history: [],
-    },
-  });
   let generation = 0;
   const pending = new Set<Promise<unknown>>(),
     listeners = new Set<() => void>();
@@ -196,18 +187,50 @@ async function journey(options: { catalogue?: ReturnType<typeof gate>; snapshot?
     expect(response.status, await response.clone().text()).toBe(200);
   }
   const stopWork = host.workspace.subscribe(() => listeners.forEach((f) => f()));
+  const streams = new Set<() => void>();
+  const readings: Readings = {
+    subscribe(reading, deliver) {
+      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined, closed = false;
+      const stop = () => { closed = true; void reader?.cancel(); streams.delete(stop); };
+      streams.add(stop);
+      void (async () => {
+        const url = new URL(peRouteUrl("resources.stream", {}), "http://host");
+        url.searchParams.set("keys", JSON.stringify([reading]));
+        const response = await host.request(new Request(url));
+        reader = response.body!.getReader();
+        if (closed) return void reader.cancel();
+        let buffer = "";
+        const decoder = new TextDecoder();
+        while (!closed) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          buffer += decoder.decode(chunk.value, { stream: true });
+          let end: number;
+          while ((end = buffer.indexOf("\n\n")) >= 0) {
+            const frame = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+            for (const line of frame.split("\n")) if (line.startsWith("data: ")) { deliver(JSON.parse(line.slice(6))); }
+          }
+        }
+      })();
+      return stop;
+    }, dirty() {},
+  };
   const feed = createWorkFeedClient(
-    { subscribe: observeResources(host.workspace, { observe: () => () => {} }), dirty() {} },
+    readings,
     {
       write: (key, write) => host.workspace.write(key, key.route, "human", write),
-      submit: () => {
-        throw Error("Native commands use the explicit boundary below");
+      submit: async command => {
+        const response = await host.request(new Request("http://host/actions", {method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(command)}));
+        expect([200,202],await response.clone().text()).toContain(response.status);
+        await host.journal.wait(command.id);
+        return actionReceiptSchema.parse((await host.journal.list(undefined,command.id))[0]);
       },
     },
   );
   const work: WorkJournalDoor = {
     ...feed,
     submit(command) {
+      if(command.key === "work.start") return feed.submit(command);
       actions.push({ key: command.key, input: command.input });
       if (command.key === "takeoffs.initialize") carriers = "ready";
       const result =
@@ -259,6 +282,8 @@ async function journey(options: { catalogue?: ReturnType<typeof gate>; snapshot?
     { work, sources: { "takeoffs.adoption": source("takeoffs.adoption"), "takeoffs.views": source("takeoffs.views") } },
   );
   const stop = mount.subscribe(() => {});
+  await waitFor(() => expect(mount.startAction()).not.toBeNull());
+  await mount.startAction()!.run();
   return {
     host,
     mount,
@@ -291,6 +316,7 @@ async function journey(options: { catalogue?: ReturnType<typeof gate>; snapshot?
       mount.dispose();
       stopWork();
       await Promise.allSettled([...pending]);
+      for (const stop of streams) stop();
       await host.close();
     },
   };
@@ -349,6 +375,7 @@ test("choose adoption views, edit the actual Work, initialize and adopt through 
   const j = await journey();
   try {
     await j.ready();
+    expect(j.host.inputs.source).toMatchObject({capturing:true});
     render(<Drawing mount={j.mount} />);
     expect(screen.getByRole("button", { name: "Choose views" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Choose views" }));
@@ -363,6 +390,23 @@ test("choose adoption views, edit the actual Work, initialize and adopt through 
       key: "takeoffs.candidates",
       input: { view: "Zoning plan" },
     });
+    const originalWork = j.mount.owner()!.handle;
+    const captures = adoptionData.parse(j.mount.value().value).captures;
+    const capture = captures[0]!;
+    fireEvent.click(screen.getByRole("button", {name:"Choose capture"}));
+    const captureOption = (await screen.findAllByRole("option")).find(row => row.textContent?.includes(capture.capturedAt));
+    expect(captureOption).toBeTruthy();
+    fireEvent.click(captureOption!);
+    await j.ready();
+    expect(screen.getByText(/Archived takeoff/)).toBeTruthy();
+    expect(j.mount.owner()!.handle).toEqual(originalWork);
+    expect(j.host.inputs.source).toMatchObject({capturing:true});
+    fireEvent.click(screen.getByRole("button", {name:"live"}));
+    await j.ready();
+    await screen.findByRole("checkbox", { name: "Select Office zone in Zoning plan" });
+    expect((screen.getByRole("button", {name:"initialize"}) as HTMLButtonElement).disabled).toBe(false);
+    expect(j.mount.value().value.initialize.refusal).toBeNull();
+    expect(j.host.inputs.source).toMatchObject({capturing:true});
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Office zone in Zoning plan" }));
     await waitFor(() =>
       expect(j.mount.owner()?.doc.adopt["Zoning plan:21"].edit.value.checked).toBe(true),
@@ -413,6 +457,10 @@ test("choose adoption views, edit the actual Work, initialize and adopt through 
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.getByRole("button", { name: "live" })).toBeTruthy();
     expect(j.mount.value(loaded).current).toBe(true);
+    expect(j.host.inputs.source).toMatchObject({capturing:true});
+    fireEvent.click(screen.getByRole("button", {name:"live"}));
+    await j.ready();
+    expect(j.host.inputs.source).toMatchObject({capturing:true});
   } finally {
     await j.close();
   }
