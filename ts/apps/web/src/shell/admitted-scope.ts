@@ -127,7 +127,7 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
   >();
   const entryFor = (key: import("@pe/agent-contracts").WorkKey) => {
     const id = workKey(key);
-    const group = canonicalEnvironmentInput({ ...key, route: "" });
+    const group = workKey({ ...key, route: "" });
     let lease = leases.get(id);
     const current = owner.read()?.scope.identity.work;
     const shown = current && workKey(current) === id;
@@ -138,7 +138,7 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
           held.release();
         }
     }
-    if (!lease || (lease.released && shown && !closed())) {
+    if (!lease || (lease.released && !closed())) {
       lease = { ...registryForWork.acquire(key), group };
       leases.set(id, lease);
       const unsubscribe = lease.entry.subscribe(() => {

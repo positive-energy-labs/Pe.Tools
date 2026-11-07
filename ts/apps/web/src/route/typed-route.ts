@@ -139,6 +139,7 @@ export interface DrawContext<D, F extends Fields, W, Edit> {
 type Owner = { state: RouteStateSpec<z.ZodObject>; value: string };
 type Owners = Readonly<Record<string, Owner>>;
 type HostRead = import("./host-read.ts").HostRead;
+export type ReadData<R extends HostRead> = NonNullable<z.output<R["output"]>["value"]>["data"];
 type MutableTable<T> = Record<string, T extends Readonly<Record<string, infer V>> ? V : never>;
 type ProjectedField<K, R extends Field["role"]> = R extends "subject"
   ? {
@@ -175,7 +176,7 @@ type Graph<F extends Fields> = Omit<RouteGraphJson, "fields" | "work" | "identit
 type Schemas<F extends Fields, W extends z.ZodObject> = { [K in keyof F]: F[K]["schema"] } & {
   work: W;
 };
-type Specification<D, F extends Fields, W extends z.ZodObject, Edit extends z.ZodType> = {
+type Specification<D, F extends Fields, W extends z.ZodObject, Edit extends z.ZodType, Reads extends Readonly<Record<string, HostRead>> = Readonly<Record<string, HostRead>>> = {
   key: string;
   name: string;
   directory: RouteGraphJson["directory"];
@@ -187,17 +188,14 @@ type Specification<D, F extends Fields, W extends z.ZodObject, Edit extends z.Zo
   };
   core: HostRead & { output: z.ZodType<Publication<D>>; args(page: Page<F>): unknown };
   fields: F;
-  panes: Readonly<
-    Record<
-      string,
-      {
+  panes: {
+      readonly [K in keyof Reads]: {
         title: string;
         purpose: string;
-        read: HostRead;
-        draw(ctx: DrawContext<D, F, z.output<W>, z.output<Edit>>): unknown;
+        read: Reads[K];
+        draw(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): unknown;
       }
-    >
-  >;
+  };
   edits: {
     work: RouteStateSpec<W>;
     owners: Owners;
@@ -222,8 +220,8 @@ type Specification<D, F extends Fields, W extends z.ZodObject, Edit extends z.Zo
   layout: LayoutJson;
 };
 // The projection is executable kernel output. Routes never author slot ids, deps, codecs or gates.
-export function route<D, const F extends Fields, W extends z.ZodObject, Edit extends z.ZodType>(
-  spec: Specification<D, F, W, Edit>,
+export function route<D, const F extends Fields, W extends z.ZodObject, Edit extends z.ZodType, const Reads extends Readonly<Record<string, HostRead>>>(
+  spec: Specification<D, F, W, Edit, Reads>,
 ) {
   const schemas: Record<string, z.ZodType> = {
     none: z.strictObject({}),
@@ -424,7 +422,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
       label: pane.title,
       purpose: pane.purpose,
       draws: [
-        readId,
+        ...new Set([readId, "value"]),
         ...Object.keys(owners)
           .filter((o) => o !== own)
           .map((o) => `owner:${o}`),
@@ -432,7 +430,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
       verbs: Object.keys(verbs),
       body: body(id, `panes.${id}.body`, "pane", (ctx) =>
         pane.draw(
-          drawContext(ctx, readId, spec, owners) as DrawContext<D, F, z.output<W>, z.output<Edit>>,
+          drawContext(ctx, readId, spec, owners) as DrawContext<ReadData<Reads[string]>, F, z.output<W>, z.output<Edit>>,
         ),
       ),
     };
@@ -522,19 +520,21 @@ function drawContext(
 ): DrawContext<any, Fields, any, any> {
   const own = spec.edits.work.route;
   const packet = ctx.readings[read];
+  const core = ctx.readings.value;
+  const coreData = core.value?.value?.data;
   const projected = projectValue(packet, (packet: any) => packet.value?.data);
   const changed =
-    projected.value &&
+    coreData &&
     Object.entries(owners).some(([owner, config]) => {
       const work = owner === own ? ctx.work : ctx.readings[`owner:${owner}`]?.value;
       return (
         work &&
         canonicalEnvironmentInput(work) !==
-          canonicalEnvironmentInput((projected.value as any)[config.value])
+          canonicalEnvironmentInput(coreData[config.value])
       );
     });
   const publication = packet.value?.value ?? null;
-  const value = changed
+  const value = changed && read === "value"
     ? {
         ...projected,
         current: false as const,
@@ -557,7 +557,7 @@ function drawContext(
     history: EditHistory = { label: "Edit" },
   ): Promise<EditFailure> => {
     if (!patches.length) return null;
-    if (!value.current || !ctx.workBasis)
+    if (!value.current || !core.current || changed || !ctx.workBasis)
       return { code: "unavailable", message: "Read the current Value and Work before editing" };
     try {
       const groups = new Map<string, RouteStatePatch[]>();
@@ -602,7 +602,7 @@ function drawContext(
     cells: {
       doc: ctx.work,
       basis: ctx.workBasis,
-      ready: !!ctx.workBasis && value.current,
+      ready: !!ctx.workBasis && value.current && core.current && !changed,
       history: ctx.ownerHistory,
       owner(path) {
         const route = ownerOf(path);
@@ -618,10 +618,10 @@ function drawContext(
         };
       },
       label(input, label) {
-        if (!value.value) return label;
+        if (!coreData) return label;
         const foreign = [
           ...new Set(
-            spec.edits.patches(input, value.value).map((patch) => ownerOf(patch.path.map(String))),
+            spec.edits.patches(input, coreData).map((patch) => ownerOf(patch.path.map(String))),
           ),
         ].filter((owner) => owner !== own);
         return foreign.length
@@ -630,13 +630,13 @@ function drawContext(
       },
       patch,
       async edit(input, history) {
-        if (!value.value)
+        if (!coreData)
           return Promise.resolve({
             code: "unavailable",
             message: "Read the current Value before editing",
           });
         try {
-          return patch(spec.edits.patches(spec.edits.input.parse(input), value.value), history);
+          return patch(spec.edits.patches(spec.edits.input.parse(input), coreData), history);
         } catch (error) {
           return { code: "invalid", message: String(error) };
         }

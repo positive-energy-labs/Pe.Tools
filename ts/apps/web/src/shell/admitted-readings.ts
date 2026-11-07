@@ -77,6 +77,10 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
       workReads.set(id, record);
       const schema = bindings.schemas[declaration.output];
       if (!schema) throw Error(`Unlinked Work reading output: ${declaration.output}`);
+      entryFor(foreignKey).connect({
+        route: route.data.key, fingerprint: route.workFingerprint,
+        reading: id, key: foreignKey, target: scope.identity.target, subject: null,
+      }, environment().environment.work.read);
       record.stop = environment()
         .environment.work.read.open({
           route: route.data.key,
