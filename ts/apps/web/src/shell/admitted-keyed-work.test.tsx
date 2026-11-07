@@ -13,7 +13,7 @@ import {
   builtinClosureFingerprint,
   createBuiltinRouteInventory,
 } from "../../../../packages/agent-contracts/src/route-module";
-import { module as base } from "../captures/kernel";
+import { module as base } from "../shell/admitted-module.test-fixture";
 import { createRouteShell } from "./admitted-mount";
 import { createFixtureWorkDoor } from "./fixture-work-door";
 import { sourceRouteServices } from "./source-route-services";

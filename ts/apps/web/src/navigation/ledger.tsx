@@ -14,7 +14,7 @@ import { attention, machineOf } from "#/machine/model";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 import { relativeThreadAge } from "#/chat/thread-navigation";
-import { usePodRoutes } from "#/route/pod-routes";
+import { usePodRoutes } from "#/route/pod-route-context";
 import {
   destinationDetail,
   destinationLabel,

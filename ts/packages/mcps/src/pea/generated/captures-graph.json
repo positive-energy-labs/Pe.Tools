@@ -24,60 +24,51 @@
     "satellites": []
   },
   "fields": {
-    "sha": {
-      "role": "subject",
-      "schema": "subject",
-      "codec": "subject",
-      "initial": null,
-      "url": "push",
+    "focus": {
+      "role": "pose",
+      "schema": "focus",
+      "codec": "focus",
+      "initial": "",
+      "url": "replace",
       "share": true,
-      "agent": "set",
-      "cardinality": "one",
-      "identity": "capture",
-      "picker": {
-        "reading": "captures",
-        "options": "pick"
-      }
-    },
-    "selected": {
-      "role": "selection",
-      "kinds": [
-        "capture"
-      ]
+      "agent": "set"
     },
     "open": {
       "role": "pose",
       "schema": "open",
-      "codec": "json",
-      "initial": {
-        "kind": "ids",
-        "ids": []
-      },
+      "codec": "open",
+      "initial": [],
       "url": "replace",
       "share": true,
       "agent": "set"
+    },
+    "selected": {
+      "role": "selection",
+      "kinds": [
+        "focus"
+      ]
     }
   },
   "identities": {
-    "capture": {
+    "subject": {
+      "kind": "local",
+      "codec": "local"
+    },
+    "focus": {
       "kind": "local",
       "codec": "local"
     }
   },
-  "subject": {
-    "field": "sha",
-    "noun": "capture",
-    "roster": "captures",
-    "detail": "captures",
-    "pane": "captures"
-  },
   "readings": {
-    "captures": {
+    "value": {
       "kind": "use",
-      "entry": "captures.list",
-      "args": "captureArgs",
+      "entry": "captures.browse",
       "deps": {
-        "page": [],
+        "page": [
+          "focus",
+          "open",
+          "selected"
+        ],
         "work": [],
         "readings": []
       },
@@ -86,7 +77,7 @@
         "evidence": "scope",
         "resource": "scope"
       },
-      "refresh": "explicit"
+      "refresh": "dependencies"
     }
   },
   "verbs": {},
@@ -95,10 +86,9 @@
       "label": "Captures",
       "purpose": "Inspect retained pictures",
       "draws": [
-        "captures"
+        "value"
       ],
-      "verbs": [],
-      "body": "main"
+      "verbs": []
     }
   },
   "layout": {
@@ -120,12 +110,7 @@
   "predicates": {},
   "cells": {},
   "workFields": {},
-  "seeds": {
-    "browse": {
-      "title": "Retained view picture",
-      "load": "browse"
-    }
-  },
+  "seeds": {},
   "needs": "nothing",
   "resetOnTarget": [],
   "observe": []

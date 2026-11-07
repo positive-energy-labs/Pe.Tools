@@ -199,7 +199,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
     const row = await journals.get(captures)!.wait(id);
     return row?.state === "succeeded"
       ? Response.json(row.result)
-      : Response.json({ error: row?.error }, { status: 409 });
+      : Response.json({ error: row && "error" in row ? row.error : row?.state ?? "missing receipt" }, { status: 409 });
   };
   const get = (captures: TakeoffCaptures) =>
     call(captures, new Request(`${url}?work=${encodeURIComponent(JSON.stringify(work))}`));

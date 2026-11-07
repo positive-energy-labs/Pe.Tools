@@ -2,9 +2,8 @@ import { createHash } from "node:crypto";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { createLegacyRouteRegistry, legacyRouteDiscovery } from "./shell/legacy-route-door";
-import { ductLossGraph as ductLoss } from "./duct-loss/graph.ts";
+import { ductLossGraph as ductLoss } from "./shell/projection-graph.test-fixture";
 import { indexGraph } from "./index/graph";
-import { roomsGraph, roomsPageSchema } from "./rooms/graph";
 import {
   cellVerbId,
   gate,
@@ -115,20 +114,6 @@ test("field roles supply defaults and every explicit policy wins, including fals
   ).toBe("push");
 });
 
-test("changing the production Rooms view clears stale selection but honors an explicit selection", () => {
-  const current = roomsPageSchema.parse({
-    view: "A",
-    selected: ["42"],
-    viewport: { kind: "plane", scale: 2, tx: 1, ty: 3 },
-  });
-  expect(roomsGraph.transition?.(current, { view: "B" }, "pea")).toEqual({
-    patch: { view: "B", selected: [], viewport: null },
-  });
-  expect(roomsGraph.transition?.(current, { view: "B", selected: ["43"] }, "page")).toEqual({
-    patch: { view: "B", selected: ["43"] },
-  });
-  expect(roomsGraph.transition?.(current, { view: "A" }, "page")).toEqual({ patch: { view: "A" } });
-});
 
 test("singleton catalogue keys cannot become an undeclared subject picker", () => {
   const broken = {

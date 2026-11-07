@@ -10,8 +10,6 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
 import { settingsRoute } from "./settings/route.tsx";
-import { schedulesRoute } from "./schedules/route.tsx";
-import { familiesRoute } from "./families/route.tsx";
 import { takeoffsRoute } from "./takeoff/route";
 import { podsRoute } from "./pods/route.tsx";
 import { capturesRoute } from "./captures/route.tsx";
@@ -24,8 +22,6 @@ const pathOf = (route: AnyRoute) => (route.options as { path?: string }).path;
 const codeRoutes: AnyRoute[] = [
   sessionsRoute,
   settingsRoute,
-  schedulesRoute,
-  familiesRoute,
   takeoffsRoute,
   podsRoute,
   capturesRoute,
@@ -44,8 +40,6 @@ const appRouteTree = rootRoute.addChildren([
   ...codeRoutes,
 ] as unknown as FileChildren & {
   settingsRoute: typeof settingsRoute;
-  schedulesRoute: typeof schedulesRoute;
-  familiesRoute: typeof familiesRoute;
   takeoffsRoute: typeof takeoffsRoute;
   podsRoute: typeof podsRoute;
   capturesRoute: typeof capturesRoute;

@@ -17,7 +17,7 @@ import { RouteHelpButton } from "#/route/help";
 import { usePublishRouteOptions } from "#/settings/options";
 import type { PageOption } from "#/settings/option-state";
 import type { DirectorySearch } from "./directory-search";
-import { usePodRoutes } from "#/route/pod-routes";
+import { usePodRoutes } from "#/route/pod-route-context";
 
 type DirectoryPage = DirectorySearch;
 const directoryOptions: readonly PageOption<DirectoryPage>[] = [
@@ -167,7 +167,7 @@ export function Directory({
       search: { v: 1, keywords: query, pills: [] },
       sort,
       open: tools
-        .filter((tool) => !(folded === "all" || folded.includes(tool.to)))
+        .filter((tool) => !(folded.includes(tool.to)))
         .map((tool) => tool.to),
     },
     onState: (next) => {
@@ -176,7 +176,7 @@ export function Directory({
         query: next.search.keywords,
         sort: next.sort || "workflow",
         folded: [
-          ...(folded === "all" ? tools.map((tool) => tool.to) : folded).filter(
+          ...folded.filter(
             (path) => !tools.some((tool) => tool.to === path),
           ),
           ...tools.filter((tool) => !next.open.includes(tool.to)).map((tool) => tool.to),

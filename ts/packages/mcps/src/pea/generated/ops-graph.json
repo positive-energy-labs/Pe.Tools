@@ -1,331 +1,164 @@
 {
-  "address": "ops",
+  "version": 1,
+  "capabilities": [
+    "native-write"
+  ],
+  "key": "ops",
+  "address": "/ops",
+  "name": "Ops",
   "directory": {
+    "group": "Explore / maintain",
+    "summary": "Inspect catalog operations and original action receipts",
+    "label": "Host API",
+    "icon": "Terminal",
+    "exposure": "Preview",
+    "surfaces": {
+      "web": "full",
+      "pwa": "full",
+      "tray": false
+    },
     "aliases": [
       "host",
       "api",
       "operations",
       "playground"
     ],
-    "blurb": "Inspect operation requests and action receipts, and run host reads.",
-    "category": "Explore / maintain",
-    "exposure": "Preview",
-    "icon": "Terminal",
-    "label": "Host API",
+    "runtimeNeed": "Host; Revit depends on the operation",
     "listed": true,
-    "path": "/ops",
-    "runtimeNeed": "Host operation; Revit depends on the operation",
-    "satellites": [],
-    "surfaces": {
-      "pwa": "full",
-      "tray": false,
-      "web": "full"
-    },
-    "title": "Ops Playground"
+    "satellites": []
   },
   "fields": {
-    "actionId": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "selection",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 200,
-        "type": "string"
-      },
-      "share": true,
-      "url": "replace"
-    },
     "op": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "subject",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 200,
-        "type": "string"
-      },
+      "role": "query",
+      "schema": "op",
+      "codec": "op",
+      "initial": "",
+      "url": "push",
       "share": true,
-      "url": "push"
+      "agent": "set"
     },
-    "result": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "transient",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "anyOf": [
-          {},
-          {
-            "type": "null"
-          }
-        ],
-        "default": null
-      },
-      "share": false,
-      "url": false
+    "actionId": {
+      "role": "query",
+      "schema": "actionId",
+      "codec": "actionId",
+      "initial": "",
+      "url": "push",
+      "share": true,
+      "agent": "set"
     },
-    "values": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "editor": "pane",
-      "role": "draft",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": {},
-        "default": {},
-        "propertyNames": {
-          "type": "string"
-        },
-        "type": "object"
-      },
-      "share": false,
-      "url": false
+    "selected": {
+      "role": "selection",
+      "kinds": [
+        "focus"
+      ]
     }
   },
-  "key": "ops",
-  "layout": {
-    "axis": "v",
-    "children": [
-      {
-        "axis": "h",
-        "children": [
-          {
-            "id": "operation",
-            "kind": "pane"
-          },
-          {
-            "axis": "v",
-            "children": [
-              {
-                "id": "receipts",
-                "kind": "pane"
-              },
-              {
-                "id": "receipt",
-                "kind": "pane"
-              }
-            ],
-            "id": "ops-receipts",
-            "kind": "split",
-            "size": 200,
-            "sized": "start"
-          }
-        ],
-        "id": "ops-detail",
-        "kind": "split",
-        "size": 400,
-        "sized": "end"
-      },
-      {
-        "id": "history",
-        "kind": "pane"
-      }
-    ],
-    "id": "ops-body",
-    "kind": "split",
-    "size": 180,
-    "sized": "end"
-  },
-  "moduleHash": "582dfdc9d0c6cefe3c1769f22c404efd1221c3d925ae5878a51f02299d1768d6",
-  "name": "Ops",
-  "optionalTarget": "session",
-  "panes": {
-    "history": {
-      "draws": [
-        "receipts"
-      ],
-      "history": {
-        "receipts": "receipts"
-      },
-      "label": "History",
-      "purpose": "Inspect operation invocations and receipts",
-      "verbs": []
+  "identities": {
+    "subject": {
+      "kind": "local",
+      "codec": "local"
     },
-    "operation": {
-      "draws": [
-        "catalog"
-      ],
-      "label": "Operation",
-      "purpose": "Choose a catalog operation and inspect its request and result",
-      "verbs": []
-    },
-    "receipt": {
-      "draws": [
-        "receipt"
-      ],
-      "label": "Receipt",
-      "purpose": "Inspect the original journaled action",
-      "verbs": []
-    },
-    "receipts": {
-      "draws": [
-        "receipts"
-      ],
-      "label": "Receipts",
-      "purpose": "Choose a journaled operation receipt",
-      "verbs": []
+    "focus": {
+      "kind": "local",
+      "codec": "local"
     }
   },
   "readings": {
-    "catalog": {
+    "value": {
       "kind": "use",
-      "retire": "target",
-      "source": "ops.catalog"
-    },
-    "operation": {
-      "args": {
-        "runtime": true
+      "entry": "ops.workspace",
+      "deps": {
+        "page": [
+          "op",
+          "actionId",
+          "selected"
+        ],
+        "work": [],
+        "readings": []
       },
-      "deps": [
-        "catalog"
-      ],
-      "kind": "derive",
-      "retire": "page",
-      "source": "ops.operation"
-    },
-    "receipt": {
-      "args": {
-        "runtime": true
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
       },
-      "kind": "use",
-      "retire": "page",
-      "source": "ops.receipt"
-    },
-    "receipts": {
-      "kind": "use",
-      "retire": "never",
-      "source": "ops.receipts"
+      "refresh": "dependencies"
     }
   },
-  "seeds": {
-    "inspect": {
-      "title": "inspect"
+  "verbs": {
+    "run": {
+      "kind": "command",
+      "input": "none",
+      "label": "Run read",
+      "review": "shown",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "ops.read",
+      "intent": "run"
+    },
+    "control": {
+      "kind": "command",
+      "input": "none",
+      "label": "Receipt control",
+      "review": "shown",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "ops.receipt-control",
+      "intent": "control"
+    }
+  },
+  "panes": {
+    "main": {
+      "label": "Ops",
+      "purpose": "Inspect requests, read results and control original receipts",
+      "draws": [
+        "value"
+      ],
+      "verbs": [
+        "run",
+        "control"
+      ]
+    }
+  },
+  "layout": {
+    "kind": "pane",
+    "id": "main"
+  },
+  "stages": {
+    "main": {
+      "word": "Ops",
+      "panes": [
+        "main"
+      ],
+      "verbs": [
+        "run",
+        "control"
+      ]
     }
   },
   "stageOrder": [
-    "inspect"
+    "main"
   ],
-  "stages": {
-    "inspect": {
-      "panes": [
-        "operation",
-        "receipts",
-        "receipt",
-        "history"
-      ],
-      "verbs": [
-        "run"
-      ],
-      "word": "Inspecting"
-    }
-  },
-  "subjectField": {
-    "cardinality": "one",
-    "detail": "operation",
-    "field": "op",
-    "keyKind": "name",
-    "noun": "operation",
-    "pane": "operation",
-    "roster": "catalog",
-    "show": {
-      "runtime": true
-    }
-  },
-  "transition": {
-    "runtime": true
-  },
-  "verbs": {
-    "control": {
-      "caller": "human",
-      "does": "ops.receipt-control",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "id": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "key": {
-            "enum": [
-              "action.read",
-              "action.recover",
-              "action.resume",
-              "action.cancel"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "key",
-          "id"
-        ],
-        "type": "object"
-      },
-      "kind": "command",
-      "label": "Receipt control",
-      "review": "none"
-    },
-    "run": {
-      "caller": "human",
-      "chord": "Mod+Enter",
-      "does": "ops.read",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "op": {},
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
-          "request": {}
-        },
-        "required": [
-          "op",
-          "request"
-        ],
-        "type": "object"
-      },
-      "kind": "command",
-      "label": "Run",
-      "review": "shown"
-    }
-  }
+  "predicates": {},
+  "cells": {},
+  "workFields": {},
+  "seeds": {},
+  "needs": "nothing",
+  "resetOnTarget": [],
+  "observe": []
 }

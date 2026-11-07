@@ -236,7 +236,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   for (const [key,field] of Object.entries(spec.fields)) {
     schemas[key]=field.schema;
     fields[key]={role:field.role === "subject" ? "query" : field.role,schema:key,codec:key,
-      initial:field.initial,url:field.url,share:true,agent:"set"};
+      ...(field.initial === undefined ? {} : {initial:field.initial}),url:field.url,share:true,agent:"set"};
   }
   const readIds = new Map<HostRead,string>();
   if(spec.core) readIds.set(spec.core,"value");

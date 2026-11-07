@@ -1,3 +1,6 @@
+import {installOpenControls} from "../open/context";
+import {OpenControls} from "../open/kernel";
+installOpenControls(OpenControls);
 import { useRestoreTabPage } from "../route/url";
 import { useEffect, useState } from "react";
 import { WorkOwner } from "@pe/kit/lang/work";

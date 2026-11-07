@@ -150,7 +150,7 @@ export function createRouteDiscovery(legacy = legacyRouteDiscovery) {
     /** The route whose authenticated declaration owns this address. */
     byAddress: (address: string) =>
       [...registered.values()].find((entry) =>
-        (entry.admitted?.data.address ?? ("typed" in entry ? `/${entry.typed.spec.key}` : null)) === address),
+        (entry.admitted?.data.address ?? ("typed" in entry ? entry.typed.data.address : null)) === address),
     subscribe(listener: () => void) {
       listeners.add(listener);
       const stop = legacy.subscribe(listener);

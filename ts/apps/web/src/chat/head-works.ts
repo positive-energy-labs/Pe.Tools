@@ -22,7 +22,7 @@ import {
   type ChatPluginRoute,
 } from "#/workbench/chat-plugins";
 
-import { publicRoutes } from "#/route/builtin-routes";
+import { publicRoutes } from "#/route/route-discovery";
 import type { HeadWork } from "./proposal-head";
 
 export interface HeadExits {

@@ -4,8 +4,8 @@ import {
   familyApplyResultSchema,
   writePreviewSchema,
   type ActionReceipt,
-  type Immutable,
 } from "@pe/agent-contracts";
+type OutcomeReceipt={state:ActionReceipt["state"];steps:readonly unknown[];result?:unknown;notDispatched?:boolean;error?:string};
 type Refusal = { code: "not-ready" | "failed" | "partial"; message: string };
 const refuse = (code: Refusal["code"], message: string): Refusal => ({ code, message });
 
@@ -14,13 +14,13 @@ export const applyResults = (result: unknown) => {
   const parsed = familyApplyResultSchema.parse(result);
   return "results" in parsed ? parsed.results : [parsed];
 };
-const receiptsOf = (action: Immutable<ActionReceipt>) =>
+const receiptsOf = (action: OutcomeReceipt) =>
   action.state === "succeeded"
     ? applyResults(action.result).flatMap((result) => result.native.receipts)
     : [];
 
 /** Counts and the common artifact parent, straight from the host result. */
-export function applyTally(action: Immutable<ActionReceipt>) {
+export function applyTally(action: OutcomeReceipt) {
   const receipts = receiptsOf(action);
   const dirs = [
     ...new Set(receipts.flatMap((r) => (r.artifactDirectory ? [r.artifactDirectory] : []))),
@@ -43,7 +43,7 @@ export function applyTally(action: Immutable<ActionReceipt>) {
 }
 
 export function applyOutcome(
-  action: Immutable<ActionReceipt>,
+  action: OutcomeReceipt,
   families: readonly string[],
 ): Refusal | null {
   if (action.state !== "succeeded") {

@@ -14,12 +14,14 @@ import { Route as BindRouteImport } from "./routes/bind";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DuctLossRouteImport } from "./routes/duct-loss";
 import { Route as DuctsRouteImport } from "./routes/ducts";
+import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as FamilyRouteImport } from "./routes/family";
 import { Route as FansRouteImport } from "./routes/fans";
 import { Route as OpenRouteImport } from "./routes/open";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as PeaRouteImport } from "./routes/pea";
 import { Route as RoomsRouteImport } from "./routes/rooms";
+import { Route as SchedulesRouteImport } from "./routes/schedules";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
 import { Route as DesignSystemListRouteImport } from "./routes/design-system_.list";
@@ -56,6 +58,11 @@ const DuctsRoute = DuctsRouteImport.update({
   path: "/ducts",
   getParentRoute: () => rootRouteImport,
 } as any);
+const FamiliesRoute = FamiliesRouteImport.update({
+  id: "/families",
+  path: "/families",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const FamilyRoute = FamilyRouteImport.update({
   id: "/family",
   path: "/family",
@@ -84,6 +91,11 @@ const PeaRoute = PeaRouteImport.update({
 const RoomsRoute = RoomsRouteImport.update({
   id: "/rooms",
   path: "/rooms",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const SchedulesRoute = SchedulesRouteImport.update({
+  id: "/schedules",
+  path: "/schedules",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DesignSystemArmingRoute = DesignSystemArmingRouteImport.update({
@@ -144,12 +156,14 @@ export interface FileRoutesByFullPath {
   "/design-system": typeof DesignSystemRoute;
   "/duct-loss": typeof DuctLossRoute;
   "/ducts": typeof DuctsRoute;
+  "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/fans": typeof FansRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/pea": typeof PeaRoute;
   "/rooms": typeof RoomsRoute;
+  "/schedules": typeof SchedulesRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/list": typeof DesignSystemListRoute;
@@ -167,12 +181,14 @@ export interface FileRoutesByTo {
   "/design-system": typeof DesignSystemRoute;
   "/duct-loss": typeof DuctLossRoute;
   "/ducts": typeof DuctsRoute;
+  "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/fans": typeof FansRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/pea": typeof PeaRoute;
   "/rooms": typeof RoomsRoute;
+  "/schedules": typeof SchedulesRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/list": typeof DesignSystemListRoute;
@@ -191,12 +207,14 @@ export interface FileRoutesById {
   "/design-system": typeof DesignSystemRoute;
   "/duct-loss": typeof DuctLossRoute;
   "/ducts": typeof DuctsRoute;
+  "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/fans": typeof FansRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/pea": typeof PeaRoute;
   "/rooms": typeof RoomsRoute;
+  "/schedules": typeof SchedulesRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/band": typeof DesignSystemBandRoute;
   "/design-system_/list": typeof DesignSystemListRoute;
@@ -216,12 +234,14 @@ export interface FileRouteTypes {
     | "/design-system"
     | "/duct-loss"
     | "/ducts"
+    | "/families"
     | "/family"
     | "/fans"
     | "/open"
     | "/ops"
     | "/pea"
     | "/rooms"
+    | "/schedules"
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/list"
@@ -239,12 +259,14 @@ export interface FileRouteTypes {
     | "/design-system"
     | "/duct-loss"
     | "/ducts"
+    | "/families"
     | "/family"
     | "/fans"
     | "/open"
     | "/ops"
     | "/pea"
     | "/rooms"
+    | "/schedules"
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/list"
@@ -262,12 +284,14 @@ export interface FileRouteTypes {
     | "/design-system"
     | "/duct-loss"
     | "/ducts"
+    | "/families"
     | "/family"
     | "/fans"
     | "/open"
     | "/ops"
     | "/pea"
     | "/rooms"
+    | "/schedules"
     | "/design-system_/arming"
     | "/design-system_/band"
     | "/design-system_/list"
@@ -286,12 +310,14 @@ export interface RootRouteChildren {
   DesignSystemRoute: typeof DesignSystemRoute;
   DuctLossRoute: typeof DuctLossRoute;
   DuctsRoute: typeof DuctsRoute;
+  FamiliesRoute: typeof FamiliesRoute;
   FamilyRoute: typeof FamilyRoute;
   FansRoute: typeof FansRoute;
   OpenRoute: typeof OpenRoute;
   OpsRoute: typeof OpsRoute;
   PeaRoute: typeof PeaRoute;
   RoomsRoute: typeof RoomsRoute;
+  SchedulesRoute: typeof SchedulesRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
   DesignSystemListRoute: typeof DesignSystemListRoute;
@@ -340,6 +366,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DuctsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/families": {
+      id: "/families";
+      path: "/families";
+      fullPath: "/families";
+      preLoaderRoute: typeof FamiliesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/family": {
       id: "/family";
       path: "/family";
@@ -380,6 +413,13 @@ declare module "@tanstack/react-router" {
       path: "/rooms";
       fullPath: "/rooms";
       preLoaderRoute: typeof RoomsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/schedules": {
+      id: "/schedules";
+      path: "/schedules";
+      fullPath: "/schedules";
+      preLoaderRoute: typeof SchedulesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/design-system_/arming": {
@@ -472,12 +512,14 @@ const rootRouteChildren: RootRouteChildren = {
   DesignSystemRoute: DesignSystemRoute,
   DuctLossRoute: DuctLossRoute,
   DuctsRoute: DuctsRoute,
+  FamiliesRoute: FamiliesRoute,
   FamilyRoute: FamilyRoute,
   FansRoute: FansRoute,
   OpenRoute: OpenRoute,
   OpsRoute: OpsRoute,
   PeaRoute: PeaRoute,
   RoomsRoute: RoomsRoute,
+  SchedulesRoute: SchedulesRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemBandRoute: DesignSystemBandRoute,
   DesignSystemListRoute: DesignSystemListRoute,

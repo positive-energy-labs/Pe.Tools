@@ -2,26 +2,23 @@ import {
   createContext,
   useContext,
   useSyncExternalStore,
-  lazy,
-  Suspense,
   type ReactNode,
+  type ComponentType,
 } from "react";
 import type { GraphMount } from "../shell/mount";
 import type { OpenPageState } from "./graph";
 import type { VerbCompletion } from "../shell/verbs";
 export type OpenOwner = GraphMount<OpenPageState, unknown>;
 export const OpenOwnerContext = createContext<OpenOwner | null>(null);
-const Fallback = lazy(() =>
-  import("./kernel").then((module) => ({ default: module.OpenControls })),
-);
-export function OpenControlScope({ children }: { children: ReactNode }) {
-  return useContext(OpenOwnerContext) ? (
-    children
-  ) : (
-    <Suspense fallback="Reading document controls">
-      <Fallback>{children}</Fallback>
-    </Suspense>
-  );
+let controls: ComponentType<{children:ReactNode}> | null = null;
+/** App composition supplies the companion control owner; drawings only consume its context. */
+export function installOpenControls(component:ComponentType<{children:ReactNode}>) { controls=component; }
+export function OpenControlScope({children}:{children:ReactNode}) {
+  const owner=useContext(OpenOwnerContext);
+  if(owner) return children;
+  const Controls=controls;
+  if(!Controls) throw Error("Open controls are not installed");
+  return <Controls>{children}</Controls>;
 }
 export function useOpenOwner() {
   const owner = useContext(OpenOwnerContext);

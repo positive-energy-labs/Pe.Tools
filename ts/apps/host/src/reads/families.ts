@@ -6,6 +6,7 @@ import {
   workKeySchema,
   canonicalRouteInput,
   actionReceiptListDecoder,
+  actionReceiptSchema,
   documentRefSchema,
 } from "@pe/agent-contracts";
 import {
@@ -87,8 +88,8 @@ export const familiesView = read("families.view", {
           outcomes: receipts
             .filter((r) => r.key === "families.apply")
             .map((r) => {
-              const outcome = applyOutcome(r, work.scope.edit?.value.familyNames ?? []);
-              const tally = r.state === "succeeded" ? applyTally(r) : null;
+              const outcome = applyOutcome(actionReceiptSchema.parse(r), work.scope.edit?.value.familyNames ?? []);
+              const tally = r.state === "succeeded" ? applyTally(actionReceiptSchema.parse(r)) : null;
               return {
                 id: r.id,
                 kind: outcome ? ("error" as const) : ("advisory" as const),

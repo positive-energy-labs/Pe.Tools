@@ -26,34 +26,6 @@
     "satellites": []
   },
   "fields": {
-    "threadSearch": {
-      "role": "query",
-      "schema": "threadSearch",
-      "codec": "threadSearch",
-      "initial": {
-        "v": 1,
-        "keywords": "",
-        "pills": [
-          {
-            "field": "scope",
-            "op": "=",
-            "value": "all"
-          }
-        ]
-      },
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "threadSort": {
-      "role": "query",
-      "schema": "threadSort",
-      "codec": "threadSort",
-      "initial": "",
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
     "pod": {
       "role": "query",
       "schema": "pod",
@@ -61,7 +33,7 @@
       "initial": "",
       "url": "push",
       "share": true,
-      "agent": "read"
+      "agent": "set"
     },
     "path": {
       "role": "query",
@@ -70,28 +42,7 @@
       "initial": "",
       "url": "push",
       "share": true,
-      "agent": "read"
-    },
-    "member": {
-      "role": "subject",
-      "schema": "member",
-      "codec": "member",
-      "initial": null,
-      "url": false,
-      "share": false,
-      "agent": "read",
-      "cardinality": "one",
-      "identity": "member",
-      "picker": {
-        "reading": "pods",
-        "options": "membersPick"
-      }
-    },
-    "selected": {
-      "role": "selection",
-      "kinds": [
-        "member"
-      ]
+      "agent": "set"
     },
     "runs": {
       "role": "query",
@@ -103,131 +54,70 @@
       "agent": "set"
     },
     "mode": {
-      "role": "device",
+      "role": "pose",
       "schema": "mode",
       "codec": "mode",
       "initial": "form",
-      "url": false,
-      "share": false,
-      "agent": "none"
+      "url": "replace",
+      "share": true,
+      "agent": "set"
     },
-    "pendingDraft": {
-      "role": "transient",
-      "schema": "pendingDraft",
-      "codec": "pendingDraft",
-      "initial": false,
-      "url": false,
-      "share": false,
-      "agent": "none"
+    "selected": {
+      "role": "selection",
+      "kinds": [
+        "focus"
+      ]
     }
   },
   "identities": {
-    "member": {
+    "subject": {
+      "kind": "local",
+      "codec": "local"
+    },
+    "focus": {
       "kind": "local",
       "codec": "local"
     }
   },
-  "subject": {
-    "field": "member",
-    "noun": "member",
-    "roster": "pods",
-    "detail": "member",
-    "pane": "members",
-    "show": "memberShow"
-  },
+  "historyDetail": "historyDetail",
   "work": {
     "schema": "work",
     "route": "pods",
     "version": 1,
-    "migrations": {},
-    "adopt": "open"
+    "migrations": {}
   },
   "readings": {
-    "pods": {
+    "value": {
       "kind": "use",
-      "entry": "pods.list",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "member": {
-      "kind": "use",
-      "entry": "pods.member",
-      "args": "memberArgs",
-      "deps": {
-        "page": [
-          "pod",
-          "path"
-        ],
-        "work": [
-          "basis"
-        ],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "status": {
-      "kind": "use",
-      "entry": "pods.status",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "composition": {
-      "kind": "use",
-      "entry": "pods.composition",
-      "args": "compositionArgs",
-      "deps": {
-        "page": [
-          "pod",
-          "path"
-        ],
-        "work": [
-          "basis",
-          "fields"
-        ],
-        "readings": [
-          "member",
-          "status"
-        ]
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "runs": {
-      "kind": "use",
-      "entry": "pods.runs",
-      "args": "runsArgs",
+      "entry": "pods.author",
       "deps": {
         "page": [
           "pod",
           "path",
-          "runs"
+          "runs",
+          "mode",
+          "selected"
+        ],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    },
+    "inventory": {
+      "kind": "use",
+      "entry": "pods.roster",
+      "deps": {
+        "page": [
+          "pod",
+          "path",
+          "runs",
+          "mode",
+          "selected"
         ],
         "work": [],
         "readings": []
@@ -241,228 +131,135 @@
     }
   },
   "verbs": {
-    "select": {
-      "kind": "page",
-      "input": "memberRef",
-      "label": "Select member Work",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "captures": [],
-      "patch": "selectMember",
-      "fields": [
-        "pod",
-        "path"
-      ]
-    },
-    "mode": {
-      "kind": "page",
-      "input": "modeInput",
-      "label": "Editor mode",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "captures": [],
-      "patch": "modePatch",
-      "fields": [
-        "mode"
-      ]
-    },
-    "runs": {
-      "kind": "page",
-      "input": "runsInput",
-      "label": "Change run scope",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "captures": [],
-      "patch": "runsPatch",
-      "fields": [
-        "runs"
-      ]
-    },
     "open": {
       "kind": "command",
-      "input": "empty",
-      "label": "open",
-      "review": "none",
+      "input": "none",
+      "label": "Open saved bytes",
+      "review": "shown",
       "deps": {
-        "page": [
-          "pod",
-          "path"
-        ],
+        "page": [],
         "work": [
           "basis",
           "fields"
         ],
         "readings": [
-          "member"
+          "value"
         ]
       },
-      "captures": [],
-      "ready": "openReady",
+      "captures": [
+        "value"
+      ],
       "entry": "settings.observe",
-      "intent": "openIntent",
-      "lands": "openLands"
+      "intent": "open"
     },
     "adopt": {
       "kind": "command",
-      "input": "empty",
-      "label": "adopt disk bytes",
+      "input": "none",
+      "label": "Adopt disk bytes and replace edits",
       "review": "shown",
       "deps": {
-        "page": [
-          "pod",
-          "path"
-        ],
+        "page": [],
         "work": [
           "basis",
           "fields"
         ],
         "readings": [
-          "member"
+          "value"
         ]
       },
-      "captures": [],
-      "ready": "adoptReady",
+      "captures": [
+        "value"
+      ],
       "entry": "settings.observe",
-      "intent": "adoptIntent",
-      "lands": "adoptLands"
+      "intent": "adopt"
     },
     "save": {
       "kind": "command",
-      "input": "empty",
-      "label": "save",
-      "review": "none",
+      "input": "none",
+      "label": "Save staged member",
+      "review": "shown",
       "deps": {
-        "page": [
-          "pod",
-          "path",
-          "pendingDraft"
-        ],
+        "page": [],
         "work": [
           "basis",
           "fields"
         ],
         "readings": [
-          "member",
-          "composition"
+          "value"
         ]
       },
-      "captures": [],
-      "ready": "saveReady",
+      "captures": [
+        "value"
+      ],
       "entry": "settings.write",
-      "intent": "saveIntent"
+      "intent": "save"
     },
-    "save-new": {
+    "saveNew": {
       "kind": "command",
-      "input": "empty",
-      "label": "save as new",
-      "review": "none",
+      "input": "none",
+      "label": "Save as new member",
+      "review": "shown",
       "deps": {
-        "page": [
-          "pod",
-          "path",
-          "pendingDraft"
-        ],
+        "page": [],
         "work": [
           "basis",
           "fields"
         ],
         "readings": [
-          "member",
-          "composition"
+          "value"
         ]
       },
-      "captures": [],
-      "ready": "saveNewReady",
+      "captures": [
+        "value"
+      ],
       "entry": "settings.write",
-      "intent": "saveNewIntent",
-      "lands": "saveNewLands"
-    },
-    "edit": {
-      "kind": "work",
-      "input": "edit",
-      "label": "Edit member",
-      "review": "none",
-      "deps": {
-        "page": [
-          "pod",
-          "path",
-          "pendingDraft"
-        ],
-        "work": [
-          "basis",
-          "fields"
-        ],
-        "readings": [
-          "member",
-          "composition"
-        ]
-      },
-      "captures": [],
-      "ready": "editReady",
-      "patches": "editPatches"
+      "intent": "saveNew"
     }
   },
   "panes": {
     "members": {
-      "label": "members",
+      "label": "Members",
       "purpose": "Browse installed Pod members",
       "draws": [
-        "pods"
+        "inventory"
       ],
       "verbs": [
-        "select"
-      ],
-      "body": "membersBody"
+        "open",
+        "adopt",
+        "save",
+        "saveNew"
+      ]
     },
     "spec": {
-      "label": "spec",
-      "purpose": "Edit raw JSON or the schema form and review field proposals",
+      "label": "Spec",
+      "purpose": "Edit saved member Work",
       "draws": [
-        "pods",
-        "member",
-        "composition"
+        "value"
       ],
       "verbs": [
-        "mode",
-        "edit"
-      ],
-      "body": "specBody"
+        "open",
+        "adopt",
+        "save",
+        "saveNew"
+      ]
     },
     "runs": {
-      "label": "runs",
-      "purpose": "Inspect the member's receipts or every run in its Pod",
+      "label": "Runs",
+      "purpose": "Inspect member or Pod runs",
       "draws": [
-        "runs",
-        "pods"
+        "value"
       ],
       "verbs": [
-        "runs"
-      ],
-      "body": "runsBody"
-    },
-    "history": {
-      "label": "History",
-      "purpose": "Inspect this Work's verb timeline",
-      "draws": [],
-      "verbs": [],
-      "history": {}
+        "open",
+        "adopt",
+        "save",
+        "saveNew"
+      ]
     }
   },
   "layout": {
     "kind": "split",
-    "id": "members",
+    "id": "pods-main",
     "axis": "h",
     "size": 300,
     "children": [
@@ -472,90 +269,48 @@
       },
       {
         "kind": "split",
-        "id": "runs",
-        "axis": "h",
-        "size": 300,
+        "id": "pods-detail",
+        "axis": "v",
+        "size": 240,
         "children": [
           {
             "kind": "pane",
             "id": "spec"
           },
           {
-            "kind": "split",
-            "id": "history",
-            "axis": "v",
-            "size": 180,
-            "children": [
-              {
-                "kind": "pane",
-                "id": "runs"
-              },
-              {
-                "kind": "pane",
-                "id": "history"
-              }
-            ],
-            "sized": "end"
+            "kind": "pane",
+            "id": "runs"
           }
         ],
-        "sized": "end",
-        "minSize": 220,
-        "persist": "pods:runs"
+        "sized": "end"
       }
     ],
-    "sized": "start",
-    "minSize": 220,
-    "persist": "pods:members"
+    "sized": "start"
   },
   "stages": {
-    "browse": {
-      "word": "Browse",
+    "main": {
+      "word": "Pods",
       "panes": [
         "members",
         "spec",
-        "runs",
-        "history"
+        "runs"
       ],
       "verbs": [
         "open",
         "adopt",
         "save",
-        "save-new"
+        "saveNew"
       ]
     }
   },
   "stageOrder": [
-    "browse"
+    "main"
   ],
   "predicates": {},
-  "transition": "memberTransition",
-  "cells": {
-    "fields": {
-      "segment": "fields",
-      "value": "field",
-      "groupOf": "fieldGroup",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    }
-  },
-  "workFields": {
-    "basis": {
-      "label": "read basis",
-      "internal": true
-    }
-  },
-  "seeds": {
-    "browse": {
-      "title": "Pods and family members",
-      "load": "browseSeed"
-    }
-  },
+  "cells": {},
+  "workFields": {},
+  "seeds": {},
   "needs": "nothing",
-  "optionalTarget": "document",
-  "workSubject": "member",
   "resetOnTarget": [],
   "observe": []
 }

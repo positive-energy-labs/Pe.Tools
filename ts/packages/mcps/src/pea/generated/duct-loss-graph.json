@@ -1,355 +1,223 @@
 {
-  "address": "duct-loss",
+  "version": 1,
+  "capabilities": [],
+  "key": "duct-loss",
+  "address": "/duct-loss",
+  "name": "Duct Loss",
   "directory": {
+    "group": "Calculate loads & airflow",
+    "summary": "Calculate duct friction with intermediate terms beside the equation",
+    "label": "Duct friction",
+    "icon": "Wind",
+    "exposure": "Main",
+    "surfaces": {
+      "web": "full",
+      "pwa": "full",
+      "tray": false
+    },
     "aliases": [
       "friction",
       "airflow",
       "pressure",
       "calculator"
     ],
-    "blurb": "The imperial duct friction loss formula, live — type a duct and airflow, read Δp with every intermediate term beside the equation.",
-    "category": "Calculate loads & airflow",
-    "exposure": "Main",
-    "icon": "Wind",
-    "label": "Duct friction",
+    "runtimeNeed": "Host calculation",
     "listed": true,
-    "path": "/duct-loss",
-    "runtimeNeed": "Browser calculation",
-    "satellites": [],
-    "surfaces": {
-      "pwa": "full",
-      "tray": false,
-      "web": "full"
-    },
-    "title": "Duct Loss"
+    "satellites": []
   },
   "fields": {
-    "a": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
+    "shape": {
       "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": 12,
-        "type": "number"
-      },
+      "schema": "shape",
+      "codec": "shape",
+      "initial": "round",
+      "url": "push",
       "share": true,
-      "url": "replace"
+      "agent": "set"
+    },
+    "a": {
+      "role": "query",
+      "schema": "a",
+      "codec": "a",
+      "initial": 12,
+      "url": "replace",
+      "share": true,
+      "agent": "set"
     },
     "b": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
       "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": 8,
-        "type": "number"
-      },
+      "schema": "b",
+      "codec": "b",
+      "initial": 8,
+      "url": "replace",
       "share": true,
-      "url": "replace"
-    },
-    "case": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "subject",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "duct",
-        "enum": [
-          "duct"
-        ],
-        "type": "string"
-      },
-      "share": true,
-      "url": "push"
+      "agent": "set"
     },
     "cfm": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
       "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": 1000,
-        "type": "number"
-      },
+      "schema": "cfm",
+      "codec": "cfm",
+      "initial": 1000,
+      "url": "replace",
       "share": true,
-      "url": "replace"
-    },
-    "density": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": 0.075,
-        "type": "number"
-      },
-      "share": true,
-      "url": "replace"
-    },
-    "face": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "pose",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "commercial",
-        "enum": [
-          "commercial",
-          "residential"
-        ],
-        "type": "string"
-      },
-      "share": true,
-      "url": "push"
+      "agent": "set"
     },
     "length": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
       "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": 100,
-        "type": "number"
-      },
+      "schema": "length",
+      "codec": "length",
+      "initial": 100,
+      "url": "replace",
       "share": true,
-      "url": "replace"
+      "agent": "set"
     },
     "roughness": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
       "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": 0.0003,
-        "type": "number"
-      },
+      "schema": "roughness",
+      "codec": "roughness",
+      "initial": 0.0003,
+      "url": "replace",
       "share": true,
-      "url": "replace"
+      "agent": "set"
+    },
+    "density": {
+      "role": "query",
+      "schema": "density",
+      "codec": "density",
+      "initial": 0.075,
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "face": {
+      "role": "pose",
+      "schema": "face",
+      "codec": "face",
+      "initial": "commercial",
+      "url": "push",
+      "share": true,
+      "agent": "set"
     },
     "selected": {
-      "agent": "set",
-      "cardinality": "many",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "keyKind": "name",
       "role": "selection",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "anyOf": [
-          {
-            "items": {
-              "minLength": 1,
-              "type": "string"
-            },
-            "maxItems": 50000,
-            "type": "array"
-          },
-          {
-            "const": "all",
-            "type": "string"
-          }
-        ],
-        "default": []
-      },
-      "share": true,
-      "url": "replace"
-    },
-    "shape": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "round",
-        "enum": [
-          "round",
-          "rect"
-        ],
-        "type": "string"
-      },
-      "share": true,
-      "url": "push"
+      "kinds": [
+        "focus"
+      ]
     }
   },
-  "key": "duct-loss",
-  "layout": {
-    "axis": "v",
-    "children": [
-      {
-        "axis": "h",
-        "children": [
-          {
-            "id": "wheel",
-            "kind": "pane"
-          },
-          {
-            "id": "inputs",
-            "kind": "pane"
-          }
-        ],
-        "id": "top",
-        "kind": "split",
-        "size": 320,
-        "sized": "end"
-      },
-      {
-        "id": "charts",
-        "kind": "pane"
-      }
-    ],
-    "id": "calc",
-    "kind": "split",
-    "size": 360,
-    "sized": "end"
-  },
-  "moduleHash": "3aeab48f52ee768555e4dfbe23689a73e28bdd97571ca06716d45c82cccd8f32",
-  "name": "Duct Loss",
-  "panes": {
-    "charts": {
-      "draws": [
-        "result"
-      ],
-      "label": "Charts",
-      "purpose": "Four lenses on the same law",
-      "verbs": []
+  "identities": {
+    "subject": {
+      "kind": "local",
+      "codec": "local"
     },
-    "inputs": {
-      "draws": [
-        "result"
-      ],
-      "label": "Inputs",
-      "purpose": "Type the duct and read its loss",
-      "verbs": []
-    },
-    "wheel": {
-      "draws": [
-        "result"
-      ],
-      "label": "Wheel",
-      "purpose": "Drag diameter or airflow",
-      "verbs": []
+    "focus": {
+      "kind": "local",
+      "codec": "local"
     }
   },
   "readings": {
-    "case": {
-      "kind": "derive",
-      "retire": "page",
-      "source": "duct-loss.case"
-    },
-    "result": {
-      "args": {
-        "runtime": true
+    "value": {
+      "kind": "use",
+      "entry": "duct-loss.result",
+      "deps": {
+        "page": [
+          "shape",
+          "a",
+          "b",
+          "cfm",
+          "length",
+          "roughness",
+          "density",
+          "face",
+          "selected"
+        ],
+        "work": [],
+        "readings": []
       },
-      "deps": [
-        "page"
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    }
+  },
+  "verbs": {},
+  "panes": {
+    "wheel": {
+      "label": "Wheel",
+      "purpose": "Drag diameter or airflow",
+      "draws": [
+        "value"
       ],
-      "kind": "derive",
-      "retire": "page",
-      "source": "duct-loss.solve"
+      "verbs": []
+    },
+    "inputs": {
+      "label": "Inputs",
+      "purpose": "Type a duct and read its loss",
+      "draws": [
+        "value"
+      ],
+      "verbs": []
+    },
+    "charts": {
+      "label": "Charts",
+      "purpose": "Inspect the friction law",
+      "draws": [
+        "value"
+      ],
+      "verbs": []
     }
   },
-  "seeds": {
-    "calculate": {
-      "title": "calculate"
-    }
+  "layout": {
+    "kind": "split",
+    "id": "calc",
+    "axis": "v",
+    "size": 360,
+    "children": [
+      {
+        "kind": "split",
+        "id": "top",
+        "axis": "h",
+        "size": 320,
+        "children": [
+          {
+            "kind": "pane",
+            "id": "wheel"
+          },
+          {
+            "kind": "pane",
+            "id": "inputs"
+          }
+        ],
+        "sized": "end"
+      },
+      {
+        "kind": "pane",
+        "id": "charts"
+      }
+    ],
+    "sized": "end"
   },
-  "stageOrder": [
-    "calculate"
-  ],
   "stages": {
-    "calculate": {
+    "main": {
+      "word": "Duct Loss",
       "panes": [
         "wheel",
         "inputs",
         "charts"
       ],
-      "teach": "Calculate duct friction from dimensions and airflow. The wheel, charts and formula use the same inputs. All calculation runs in this browser. The formula is ASHRAE Fundamentals, Duct Design: Darcy friction with the Altshul-Tsal factor (L in ft, D in inches, roughness in ft, density in lb/ft3). The wheel reads the friction-chart power law 0.109136·Q^1.9/D^5.02 for galvanized duct and standard air, as the SMACNA Ductulator does; it runs up to a tenth above the Altshul-Tsal figure.",
-      "verbs": [],
-      "word": "Calculating"
+      "verbs": []
     }
   },
-  "subjectField": {
-    "cardinality": "one",
-    "detail": "result",
-    "field": "case",
-    "keyKind": "name",
-    "kind": "singleton",
-    "noun": "hypothetical duct case",
-    "pane": "inputs",
-    "roster": "case",
-    "show": {
-      "runtime": true
-    }
-  },
-  "verbs": {}
+  "stageOrder": [
+    "main"
+  ],
+  "predicates": {},
+  "cells": {},
+  "workFields": {},
+  "seeds": {},
+  "needs": "nothing",
+  "resetOnTarget": [],
+  "observe": []
 }

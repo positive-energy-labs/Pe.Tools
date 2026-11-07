@@ -22,7 +22,7 @@ import {
   type DocumentRequest,
 } from "@pe/agent-contracts";
 
-import { publicRoutes } from "#/route/builtin-routes";
+import { publicRoutes } from "#/route/route-discovery";
 import { isRecord } from "#/shell/owner";
 
 export type ChatPluginRoute = string;

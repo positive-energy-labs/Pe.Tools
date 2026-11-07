@@ -1,23 +1,7 @@
 {
   "version": 1,
-  "capabilities": [
-    "local"
-  ],
+  "capabilities": [],
   "key": "chat",
-  "local": {
-    "thread.prompt": {
-      "input": "promptCommand",
-      "output": "acknowledged"
-    },
-    "thread.cancel": {
-      "input": "threadCommand",
-      "output": "acknowledged"
-    },
-    "thread.fork": {
-      "input": "threadCommand",
-      "output": "acknowledged"
-    }
-  },
   "address": "/pea",
   "name": "Pea",
   "directory": {
@@ -42,28 +26,6 @@
     "satellites": []
   },
   "fields": {
-    "thread": {
-      "role": "subject",
-      "schema": "thread",
-      "codec": "thread",
-      "initial": null,
-      "url": "push",
-      "share": true,
-      "agent": "set",
-      "cardinality": "one",
-      "identity": "thread",
-      "picker": {
-        "reading": "threads",
-        "options": "threadsPick"
-      }
-    },
-    "selected": {
-      "role": "selection",
-      "kinds": [
-        "thread"
-      ],
-      "allowAll": true
-    },
     "mode": {
       "role": "query",
       "schema": "mode",
@@ -73,128 +35,32 @@
       "share": true,
       "agent": "set"
     },
-    "autoApprove": {
-      "role": "setting",
-      "schema": "autoApprove",
-      "codec": "autoApprove",
-      "initial": true
+    "selected": {
+      "role": "selection",
+      "kinds": [
+        "focus"
+      ]
     }
   },
   "identities": {
-    "thread": {
+    "subject": {
+      "kind": "local",
+      "codec": "local"
+    },
+    "focus": {
       "kind": "local",
       "codec": "local"
     }
   },
-  "subject": {
-    "field": "thread",
-    "noun": "thread",
-    "roster": "threads",
-    "detail": "head",
-    "pane": "threads"
-  },
   "readings": {
-    "threads": {
+    "value": {
       "kind": "use",
-      "entry": "threads",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "threadWork": {
-      "kind": "use",
-      "entry": "threadWork",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "transcript": {
-      "kind": "use",
-      "entry": "transcript",
-      "args": "transcriptArgs",
+      "entry": "chat.context",
       "deps": {
         "page": [
-          "thread"
+          "mode",
+          "selected"
         ],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "head": {
-      "kind": "use",
-      "entry": "head",
-      "args": "headArgs",
-      "deps": {
-        "page": [
-          "thread"
-        ],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "machine": {
-      "kind": "use",
-      "entry": "machine",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "receipts": {
-      "kind": "use",
-      "entry": "receipts",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "capabilities": {
-      "kind": "use",
-      "entry": "capabilities",
-      "deps": {
-        "page": [],
         "work": [],
         "readings": []
       },
@@ -206,218 +72,37 @@
       "refresh": "dependencies"
     }
   },
-  "verbs": {
-    "send": {
-      "kind": "local",
-      "input": "prompt",
-      "label": "send",
-      "review": "none",
-      "deps": {
-        "page": [
-          "thread"
-        ],
-        "work": [],
-        "readings": [
-          "head",
-          "machine"
-        ]
-      },
-      "captures": [],
-      "ready": "sendReady",
-      "entry": "thread.prompt",
-      "intent": "send"
-    },
-    "stop": {
-      "kind": "local",
-      "input": "empty",
-      "label": "stop",
-      "review": "none",
-      "deps": {
-        "page": [
-          "thread"
-        ],
-        "work": [],
-        "readings": []
-      },
-      "captures": [],
-      "ready": "stopReady",
-      "entry": "thread.cancel",
-      "intent": "stop"
-    },
-    "fork": {
-      "kind": "local",
-      "input": "empty",
-      "label": "fork",
-      "review": "none",
-      "deps": {
-        "page": [
-          "thread"
-        ],
-        "work": [],
-        "readings": []
-      },
-      "captures": [],
-      "ready": "forkReady",
-      "entry": "thread.fork",
-      "intent": "fork"
-    },
-    "threads": {
-      "kind": "page",
-      "input": "empty",
-      "label": "Threads mode",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "captures": [],
-      "chord": "Mod+1",
-      "patch": "threadsMode",
-      "fields": [
-        "mode"
-      ]
-    },
-    "world": {
-      "kind": "page",
-      "input": "empty",
-      "label": "World mode",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "captures": [],
-      "chord": "Mod+2",
-      "patch": "worldMode",
-      "fields": [
-        "mode"
-      ]
-    }
-  },
+  "verbs": {},
   "panes": {
-    "threads": {
-      "label": "threads",
-      "purpose": "Choose a conversation",
-      "draws": [
-        "threads",
-        "threadWork"
-      ],
-      "verbs": [
-        "threads",
-        "world"
-      ],
-      "body": "threadsBody",
-      "frame": {
-        "scroll": "clip",
-        "flush": true,
-        "header": false
-      }
-    },
-    "chat": {
-      "label": "chat",
+    "main": {
+      "label": "Pea",
       "purpose": "Read and compose",
       "draws": [
-        "transcript",
-        "head",
-        "machine",
-        "receipts",
-        "capabilities"
+        "value"
       ],
-      "verbs": [
-        "send",
-        "stop",
-        "fork"
-      ],
-      "body": "chatBody",
-      "frame": {
-        "scroll": "clip",
-        "flush": true,
-        "header": false
-      }
+      "verbs": []
     }
   },
   "layout": {
-    "kind": "split",
-    "id": "chat-threads",
-    "axis": "h",
-    "size": 300,
-    "children": [
-      {
-        "kind": "pane",
-        "id": "threads"
-      },
-      {
-        "kind": "pane",
-        "id": "chat"
-      }
-    ],
-    "sized": "start",
-    "minSize": 240,
-    "persist": "pe.sideWidth"
+    "kind": "pane",
+    "id": "main"
   },
   "stages": {
-    "conversation": {
-      "word": "Conversation",
+    "main": {
+      "word": "Pea",
       "panes": [
-        "threads",
-        "chat"
+        "main"
       ],
-      "verbs": [
-        "threads",
-        "world"
-      ]
+      "verbs": []
     }
   },
   "stageOrder": [
-    "conversation"
+    "main"
   ],
   "predicates": {},
   "cells": {},
   "workFields": {},
-  "seeds": {
-    "send": {
-      "title": "an idle thread ready for a prompt",
-      "load": "seed-send"
-    },
-    "new": {
-      "title": "a thread to leave for a fresh one",
-      "load": "seed-new"
-    },
-    "diagram": {
-      "title": "pea drew a duct system, after one rejected diagram call",
-      "load": "seed-diagram"
-    },
-    "attach": {
-      "title": "the user attached a photo, a CSV and a PDF; pea read all three",
-      "load": "seed-attach"
-    },
-    "skill": {
-      "title": "the user ran a slash skill; the harness advertised its commands",
-      "load": "seed-skill"
-    },
-    "mention": {
-      "title": "the user mentioned a document and a skill with @; pea used their ids",
-      "load": "seed-mention"
-    },
-    "closed": {
-      "title": "a thread whose bound session has closed; send refuses until a live document is chosen",
-      "load": "seed-closed"
-    },
-    "granted": {
-      "title": "a human added a second document to the thread; it targets two",
-      "load": "seed-granted"
-    },
-    "ask": {
-      "title": "pea waiting on a question; composer text answers it through Other",
-      "load": "seed-ask"
-    },
-    "stop": {
-      "title": "pea mid-turn, with an approval owed",
-      "load": "seed-stop"
-    }
-  },
+  "seeds": {},
   "needs": "nothing",
   "resetOnTarget": [],
   "observe": []

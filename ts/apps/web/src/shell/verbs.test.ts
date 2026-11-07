@@ -1,7 +1,6 @@
 import { pageBindRpc } from "../../../../packages/mcps/src/shared/rpc-client";
 import {
   scheduleQueries,
-  familiesQueries,
 } from "../../../../packages/mcps/src/shared/query-client";
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
@@ -55,10 +54,6 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
   cancelRunningAdmissions: vi.fn(async () => []),
 }));
 
-vi.mock("../../../../packages/mcps/src/shared/families-client", async (original) => ({
-  ...(await original<typeof import("../../../../packages/mcps/src/shared/families-client")>()),
-  readFamiliesCapture: transport.families,
-}));
 vi.mock("../../../../packages/mcps/src/shared/schedule-client", () => ({
   readScheduleCapture: transport.schedule,
 }));
@@ -524,28 +519,6 @@ test("intent reads the evidence its review ticket froze, so an apply names the a
   expect(transport.run.mock.calls[0]![1]).toEqual({});
 });
 
-test("a families read reaches the families client with the Work key and exact document", async () => {
-  const env = environment("human");
-  const filter = { categoryNames: [], familyNames: [], placementScope: "AllLoaded" as const };
-  const readId = crypto.randomUUID();
-  const verb = queryVerb(
-    familiesQueries["families.read"],
-    { label: "Read families", input: z.strictObject({}).default({}), review: "none" },
-    { intent: () => ({ filter, readId }) },
-  );
-  transport.families.mockResolvedValue({ id: "observation" });
-  expect(await invoke(env.ctx, verb, null, {})).toMatchObject({
-    state: "done",
-    kind: "query",
-    receipt: { key: "families.read", value: { id: "observation" } },
-  });
-  expect(transport.families).toHaveBeenCalledWith(
-    "families.read",
-    { filter, readId },
-    key,
-    env.target.ref,
-  );
-});
 
 test("a query's final result is admitted only into the scope generation it started in", async () => {
   const env = environment("human");

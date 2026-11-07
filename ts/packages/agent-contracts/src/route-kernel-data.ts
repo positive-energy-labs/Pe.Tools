@@ -14,7 +14,7 @@ const ref = z.string().min(1);
 const refs = z.array(ref);
 // Initial bytes are opaque until the referenced field schema decodes them. Do not
 // recursively expand Zod's JSON union through every generic route field during emit.
-const initial: z.ZodType<unknown> = z.json();
+const initial: z.ZodType<unknown> = z.json().optional();
 const policy = {
   url: z.enum(["push", "replace"]).or(z.literal(false)),
   share: z.boolean(),

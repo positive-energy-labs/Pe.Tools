@@ -7,12 +7,11 @@ import {
   type RouteGraph,
   type FamilyDraft,
 } from "@pe/agent-contracts";
-import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { workVerb } from "../shell/verbs";
 import { familyPageSchema, type FamilyPage } from "./page";
 export { familyPageSchema, FAMILY_MODEL_SCHEMA, type FamilyPage } from "./page";
-export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph({
+export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph<FamilyPage, FamilyDraft>({
   directory: {
     path: "/family",
     title: "Family",
@@ -33,7 +32,6 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph
   work: familyDraftRouteState.schema,
   subjectField:{kind:"singleton",field:"family",noun:"family",keyKind:"name",roster:"test",detail:"test",pane:"table"},
   fields: {
-    ...threadListFields,
     stage: field(familyPageSchema.shape.stage, {}),
     pod: field(familyPageSchema.shape.pod, {}),
     path: field(familyPageSchema.shape.path, {}),

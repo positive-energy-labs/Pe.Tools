@@ -1,358 +1,182 @@
 {
-  "address": "bind",
+  "version": 1,
+  "capabilities": [
+    "native-write"
+  ],
+  "key": "bind",
+  "address": "/bind",
+  "name": "Bind",
   "directory": {
+    "group": "Start / open work",
+    "summary": "Bind a Page to a document or thread",
+    "label": "Document",
+    "icon": "Link2",
+    "exposure": "Main",
+    "surfaces": {
+      "web": "full",
+      "pwa": "full",
+      "tray": false
+    },
     "aliases": [
       "document",
       "binding"
     ],
-    "blurb": "Bind a document",
-    "category": "Start / open work",
-    "exposure": "Main",
-    "icon": "Link2",
-    "label": "Document",
-    "listed": false,
-    "path": "/bind",
     "runtimeNeed": "Host document bindings",
-    "satellites": [],
-    "surfaces": {
-      "pwa": "full",
-      "tray": false,
-      "web": "full"
-    },
-    "title": "Bind"
+    "listed": false,
+    "satellites": []
   },
   "fields": {
-    "epoch": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "transient",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": 0,
-        "type": "number"
-      },
-      "share": false,
-      "url": false
-    },
-    "fragment": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "selection",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 200,
-        "type": "string"
-      },
-      "share": true,
-      "url": "push"
-    },
     "page": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "subject",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 200,
-        "type": "string"
-      },
-      "share": true,
-      "url": "push"
-    },
-    "query": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
       "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 200,
-        "type": "string"
-      },
+      "schema": "page",
+      "codec": "page",
+      "initial": "",
+      "url": "push",
       "share": true,
-      "url": "push"
-    },
-    "threadSearch": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": {
-          "keywords": "",
-          "pills": [
-            {
-              "field": "scope",
-              "op": "=",
-              "value": "all"
-            }
-          ],
-          "v": 1
-        },
-        "description": "JSON {v:1,keywords:string,pills:[{field,op:'=',value}]}. Literal keywords and equality pills. Fields: target, provider, state, unread, scope. Scope values: attention, all, archived.",
-        "properties": {
-          "keywords": {
-            "maxLength": 4000,
-            "type": "string"
-          },
-          "pills": {
-            "items": {
-              "properties": {
-                "field": {
-                  "type": "string"
-                },
-                "op": {
-                  "type": "string"
-                },
-                "value": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "field",
-                "op",
-                "value"
-              ],
-              "type": "object"
-            },
-            "maxItems": 32,
-            "type": "array"
-          },
-          "v": {
-            "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "v",
-          "keywords",
-          "pills"
-        ],
-        "type": "object"
-      },
-      "share": true,
-      "url": "replace"
-    },
-    "threadSort": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "enum": [
-          "",
-          "recent",
-          "title"
-        ],
-        "type": "string"
-      },
-      "share": true,
-      "url": "replace"
+      "agent": "set"
     },
     "view": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
       "role": "pose",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": false,
-        "type": "boolean"
-      },
+      "schema": "view",
+      "codec": "view",
+      "initial": false,
+      "url": "replace",
       "share": true,
-      "url": "push"
+      "agent": "set"
+    },
+    "query": {
+      "role": "query",
+      "schema": "query",
+      "codec": "query",
+      "initial": {},
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "fragment": {
+      "role": "pose",
+      "schema": "fragment",
+      "codec": "fragment",
+      "initial": "",
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "selected": {
+      "role": "selection",
+      "kinds": [
+        "focus"
+      ]
     }
   },
-  "key": "bind",
-  "layout": {
-    "id": "page",
-    "kind": "pane"
-  },
-  "moduleHash": "87bc88cc7c48d186077e311088b03803b29c025791a7243020963026c35505af",
-  "name": "Bind",
-  "panes": {
-    "page": {
-      "draws": [
-        "target",
-        "threads",
-        "inventory"
-      ],
-      "label": "Page",
-      "purpose": "View the Page or choose its binding",
-      "verbs": {
-        "ids": [
-          "bind"
-        ],
-        "runtime": true
-      }
+  "identities": {
+    "subject": {
+      "kind": "local",
+      "codec": "local"
+    },
+    "focus": {
+      "kind": "local",
+      "codec": "local"
     }
   },
   "readings": {
-    "inventory": {
-      "args": {
-        "runtime": true
-      },
+    "value": {
       "kind": "use",
-      "retire": "page",
-      "source": "bind.inventory"
-    },
-    "target": {
-      "args": {
-        "runtime": true
+      "entry": "bind.picker",
+      "deps": {
+        "page": [
+          "page",
+          "view",
+          "query",
+          "fragment",
+          "selected"
+        ],
+        "work": [],
+        "readings": []
       },
-      "kind": "use",
-      "retire": "page",
-      "source": "bind.target"
-    },
-    "threads": {
-      "args": {
-        "runtime": true
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
       },
-      "kind": "use",
-      "retire": "page",
-      "source": "bind.threads"
+      "refresh": "dependencies"
     }
   },
-  "seeds": {
+  "verbs": {
     "bind": {
-      "title": "bind"
+      "kind": "command",
+      "input": "none",
+      "label": "Bind",
+      "review": "shown",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "page.bind",
+      "intent": "bind"
+    },
+    "read": {
+      "kind": "command",
+      "input": "none",
+      "label": "Read binding",
+      "review": "shown",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "bind.target",
+      "intent": "read"
+    }
+  },
+  "panes": {
+    "main": {
+      "label": "Bind Page",
+      "purpose": "Choose a Page binding",
+      "draws": [
+        "value"
+      ],
+      "verbs": [
+        "bind",
+        "read"
+      ]
+    }
+  },
+  "layout": {
+    "kind": "pane",
+    "id": "main"
+  },
+  "stages": {
+    "main": {
+      "word": "Bind",
+      "panes": [
+        "main"
+      ],
+      "verbs": [
+        "bind",
+        "read"
+      ]
     }
   },
   "stageOrder": [
     "main"
   ],
-  "stages": {
-    "main": {
-      "panes": [
-        "page"
-      ],
-      "verbs": [],
-      "word": "Page"
-    }
-  },
-  "subjectField": {
-    "cardinality": "one",
-    "detail": "target",
-    "field": "page",
-    "keyKind": "name",
-    "noun": "Page",
-    "pane": "page",
-    "roster": "inventory",
-    "show": {
-      "runtime": true
-    }
-  },
-  "verbs": {
-    "bind": {
-      "caller": "human",
-      "does": "page.bind",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "oneOf": [
-          {
-            "additionalProperties": false,
-            "properties": {
-              "kind": {
-                "const": "thread",
-                "type": "string"
-              },
-              "thread": {
-                "minLength": 1,
-                "type": "string"
-              }
-            },
-            "required": [
-              "kind",
-              "thread"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "address": {
-                "type": "string"
-              },
-              "kind": {
-                "const": "pinned",
-                "type": "string"
-              }
-            },
-            "required": [
-              "kind",
-              "address"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "kind": {
-                "const": "none",
-                "type": "string"
-              }
-            },
-            "required": [
-              "kind"
-            ],
-            "type": "object"
-          }
-        ]
-      },
-      "kind": "command",
-      "label": "Bind",
-      "review": "none"
-    }
-  }
+  "predicates": {},
+  "cells": {},
+  "workFields": {},
+  "seeds": {},
+  "needs": "nothing",
+  "resetOnTarget": [],
+  "observe": []
 }

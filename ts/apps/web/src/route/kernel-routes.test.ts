@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { createMemoryHistory } from "@tanstack/react-router";
 import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
-import { ductLossRoute } from "../duct-loss/route";
+import { Route as ductLossRoute } from "../routes/duct-loss";
 import { Route as ductsRoute } from "../routes/ducts";
 import { getRouter } from "../router";
 

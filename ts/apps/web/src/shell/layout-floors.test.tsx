@@ -16,7 +16,8 @@ const layoutPanes = (panes: Readonly<Record<string, { label: string; purpose: st
       { label, purpose, draws: [], verbs: [] },
     ]),
   );
-import { opsGraph } from "#/ops/graph";
+import {module as opsModule} from "../ops/route";
+const opsGraph=opsModule.data;
 import { PaneSplit } from "../../../../packages/kit/src/components/lang/pane-resize";
 
 beforeEach(() => {

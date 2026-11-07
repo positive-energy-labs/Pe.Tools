@@ -116,7 +116,7 @@ for (const key of keys) {
       const schema = field.role === "subject"
         ? `subjectSchema(${(json.oneOf as {properties?:{ids?:{maxItems?:number}}}[]).find(part=>part.properties?.ids)?.properties!.ids!.maxItems})`
         : `z.fromJSONSchema(${JSON.stringify(json)})`;
-      return `${JSON.stringify(key)}: field(${schema}.default(${JSON.stringify(field.initial)}), ${JSON.stringify(field.url)})`;
+      return `${JSON.stringify(key)}: field(${schema}${field.initial === undefined ? ".optional()" : `.default(${JSON.stringify(field.initial)})`}, ${JSON.stringify(field.url)})`;
     });
     await emit(new URL(`../../../packages/agent-contracts/src/routes/${key}.ts`, import.meta.url),
       `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nimport { z } from "zod";\nimport { ${typed.spec.subject?"subjectSchema, ":""}focusSelectionSchema } from "../route-kernel-codecs.ts";\nimport { jsonCodec } from "../route-field.ts";\nconst field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: jsonCodec(schema) });\nexport const ${identifier}Address = { path: ${JSON.stringify(typed.data.address)} as const, title: ${JSON.stringify(typed.spec.name)}, fields: {\n${fields.join(",\n")},\nselected: {...field(focusSelectionSchema,"replace"),agent:undefined}\n}, agent: { policy: ${JSON.stringify(typed.spec.subject ? `Choose ${typed.spec.subject.noun} through ${typed.spec.subject.field}, using the module's local identities.` : "Use the route fields as declared.")} } };\n`);

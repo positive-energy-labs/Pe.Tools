@@ -1,15 +1,8 @@
 import { sessionsGraph } from "../sessions/graph";
 import { indexGraph } from "../index/graph";
 import type { RouteGraph } from "@pe/agent-contracts";
-import { openGraph } from "../open/graph";
-import { roomsGraph } from "../rooms/graph";
 import { familyGraph } from "../family/graph";
 import { takeoffGraph } from "../takeoff/graph";
-import { settingsGraph } from "../settings/graph";
-import { designSystemGraph } from "../design-system/graph";
-import { ductLossGraph } from "../duct-loss/graph";
-import { opsGraph } from "../ops/graph";
-import { bindGraph } from "../pages-bind/graph";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createFixtureMount } from "./fixture";
 import { legacySubjectState } from "./subject";
@@ -22,10 +15,6 @@ import type { FanPort } from "@pe/ducts-domain/roster";
 import { buildSheet, type SheetSnapshot } from "@pe/ducts-domain/sheet/index";
 import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
 import { admit } from "../fans/admission.fixture.ts";
-import { admitChat } from "../chat/admission";
-import { createChatModule } from "../chat/kernel";
-import { admitPods } from "../pods/route";
-import { module as podsModule } from "../pods/kernel";
 
 /**
  * Manual D re-drive #4, defect 7: internal keys rendered as text. Every fixture route's visible
@@ -36,15 +25,8 @@ afterEach(() => vi.unstubAllGlobals());
 const routes = [
   indexGraph,
   sessionsGraph,
-  designSystemGraph,
-  ductLossGraph,
-  opsGraph,
-  bindGraph,
-  openGraph,
-  roomsGraph,
   familyGraph,
   takeoffGraph,
-  settingsGraph,
 ] as unknown as RouteGraph<any, any>[];
 
 test.each(routes.map((graph) => [graph.address, graph] as const))(
@@ -198,9 +180,7 @@ test("a duplicate fan mark is told apart by level, then system, then order; neve
 
 test("admitted ducts, fans, chat and Pods render declared subject and pane words without internal ids", async () => {
   const { owner, presenter } = await admit();
-  const chat = await admitChat(() => ({ thread: "" }));
-  const pods = await admitPods();
-  for (const route of [owner, presenter, chat, pods]) {
+  for (const route of [owner, presenter]) {
     const words = [
       route.data.name,
       route.data.subject!.noun,
@@ -214,11 +194,10 @@ test("admitted ducts, fans, chat and Pods render declared subject and pane words
   }
 });
 
-test.each(["chat", "pods"])("admitted %s fixture seeds carry no internal identity in display text", (kind) => {
-  const module = kind === "chat" ? createChatModule(() => ({ thread: "" })) : podsModule;
-  for (const [id, body] of Object.entries(module.bodies)) {
-    if (body.kind !== "seed") continue;
-    for (const text of displayStrings(body.run()))
-      expect(leaks(text), `${kind} ${id}: "${text}"`).toEqual([]);
-  }
+test("typed modules publish display words without internal identities",async()=>{
+ const {builtinModules}=await import("../route/builtin-modules.generated");
+ for(const module of Object.values(builtinModules)) {
+   const words=[module.data.name,...Object.values(module.data.panes).flatMap(p=>[p.label,p.purpose]),...Object.values(module.data.verbs).map(v=>v.label)];
+   expect(words.flatMap(word=>leaks(word)),module.data.key).toEqual([]);
+ }
 });
