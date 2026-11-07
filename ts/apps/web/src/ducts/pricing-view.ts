@@ -1,4 +1,4 @@
-﻿import type { DuctsPricingData, Immutable } from "@pe/agent-contracts";
+﻿import type { DuctsPricingData, DuctsRosterData, Immutable } from "@pe/agent-contracts";
 import type { pricingResult } from "@pe/ducts-domain/pricing-result";
 type PricingView = ReturnType<typeof pricingResult>;
 const numeric = <T>(record: Readonly<Record<string, T>>) =>
@@ -29,3 +29,7 @@ export function pricingView(data: Immutable<DuctsPricingData>): PricingView {
     // Circuit evidence and row extension fields are JSON in the public schema. Renderers retain it verbatim.
   } as unknown as PricingView;
 }
+
+/** Row extensions stay JSON on the wire; the drawing uses the domain's complete row shape. */
+export const rosterView = (data: Immutable<DuctsRosterData>) =>
+  data.rows as unknown as ReturnType<typeof import("@pe/ducts-domain/system-list").systemList>;

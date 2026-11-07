@@ -1,3 +1,5 @@
+import { systemList } from "@pe/ducts-domain/system-list";
+import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { pricingResult } from "@pe/ducts-domain/pricing-result";
 import { ductsDesign, ductsDocumentSchema, fansDocumentSchema } from "@pe/agent-contracts";
 import {
@@ -117,7 +119,11 @@ export async function createWitness(
             sourceVersion: "fixture",
             systemReads: { completed: snapshot.systems.map((system) => system.id), missing: [] },
           };
-          const roster = { ...snapshot, sourceVersion: "fixture" };
+          const roster = {
+            ...snapshot,
+            rows: systemList(snapshot, null),
+            sourceVersion: "fixture",
+          };
           const data =
             read === "roster"
               ? roster
@@ -131,6 +137,9 @@ export async function createWitness(
                     ductsWork,
                     fansWork,
                     design: ductsDesign(ductsWork, fansWork),
+                    effectiveDesign:
+                      withStoredRulings(ductsDesign(ductsWork, fansWork), snapshot.store) ??
+                      ductsDesign(ductsWork, fansWork),
                     catalogFindings: [],
                   };
           deliver({ kind: "complete", revision: ++version, value: packet(data, version) });

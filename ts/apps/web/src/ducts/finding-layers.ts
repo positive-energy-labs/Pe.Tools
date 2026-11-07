@@ -90,7 +90,7 @@ export function findingShapes(
   repairs?: readonly Pick<HealItem, "end" | "other" | "how" | "covers">[],
   evidence?: ReturnType<typeof inferJoints>,
 ): FindingShapes {
-  work = withStoredRulings(work, snapshot.store);
+  if (!evidence) work = withStoredRulings(work, snapshot.store);
   let cached = inferences.get(snapshot);
   if (!evidence && (!cached || cached.work !== work)) {
     cached = { work, value: inferJoints(snapshot, 1, work) };

@@ -30,7 +30,6 @@ import { claimsForGroup } from "@pe/ducts-domain/claims";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { neighboursOf, type Neighbour } from "@pe/ducts-domain/neighbours";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
-import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { pendingCount, stagedEsp } from "@pe/ducts-domain/staged";
 import { unitFlowsIn } from "@pe/ducts-domain/survey";
 import { scopeOf, sectionsOf, systemScope } from "@pe/ducts-domain/system-scope";
@@ -57,7 +56,7 @@ import {
 import { z } from "zod";
 import type { DuctsDrawContext } from "../../route.ts";
 import { roster as rosterRead, network as networkSource } from "../../route.ts";
-import { pricingView } from "../../pricing-view.ts";
+import { pricingView, rosterView } from "../../pricing-view.ts";
 import { projectValue } from "../../../route/typed-route.ts";
 import { airflowOptions } from "../../airflow";
 import { attentionSubjects, cellFocusOf, cellFocusSubject, focusedElement } from "../../cell-focus";
@@ -76,7 +75,7 @@ import { DUCTS_MULTI } from "../../selection";
 import type { EditMeta } from "../../sheet/input-history.neutral";
 import { EMPTY_SNAPSHOT } from "../../sheet/scoped-snapshot";
 import { noRunParts, subjectNamer } from "../../subject-text";
-import { systemList } from "../../system-list";
+import type { systemList } from "../../system-list";
 import type { SystemNote } from "../../system-list-search";
 import { systemReadCoverage } from "@pe/ducts-domain/system-reads";
 import { buildTree, type TreeNode } from "../b/model";
@@ -125,10 +124,7 @@ function useNetworkData(ctx: NetworkContext) {
     [pricing.current, pricing.value],
   );
   const edit = useMemo(() => stagedDucts(workDoc ?? null, workDoc ?? neutralFansWork), [workDoc]);
-  const seen = useMemo(
-    () => withStoredRulings(workDoc ?? null, snapshot?.store),
-    [workDoc, snapshot],
-  );
+  const seen = ctx.value.value?.effectiveDesign ?? null;
   const attentionDoc = doc ? `${doc.session}/${doc.openId}` : "ducts:unbound";
   const selection = useMemo(
     () => Atom.make(attentionSubjects(page.selected.map(({ id }) => localSubject(id)))),
@@ -377,13 +373,7 @@ export function SystemsPane({ ctx }: { ctx: DuctsDrawContext }) {
   const { drawn, nameOf } = useTreeProjection(snapshot, priced, work.doc, systems);
   const rosterState = ctx.read(rosterRead);
   const roster = rosterState.value;
-  const systemRows = useMemo(() => {
-    const rows = roster ? systemList(roster as unknown as DuctSnapshot, null) : NO_SYSTEMS;
-    const priced = new Map((analysis?.systems ?? []).map((row) => [row.key, row]));
-    return rows.length
-      ? rows.map((row) => priced.get(row.key) ?? row)
-      : (analysis?.systems ?? NO_SYSTEMS);
-  }, [roster, analysis]);
+  const systemRows = analysis?.systems ?? (roster ? rosterView(roster) : NO_SYSTEMS);
   const notes = analysis?.notes ?? NO_NOTES;
   const { systemSearch, systemSort } = page;
   const system = systems;
