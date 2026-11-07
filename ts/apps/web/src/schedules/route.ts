@@ -99,6 +99,7 @@ export const module = route({
   },
   edits: {
     work: scheduleGridRouteState,
+    seed: () => scheduleGridRouteState.schema.parse({}),
     key: workspace,
     value: "schedulesWork",
     owners: {},
