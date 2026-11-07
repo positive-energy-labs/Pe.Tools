@@ -40,7 +40,7 @@ export async function publishPodRoute(
       : null;
     hostEntry = {
       entry,
-      source: `import {z} from ${specifier(resolve(sdk, "pod-authoring.ts"))};\n${projected?.definition ?? ""}import * as runtime from ${specifier(resolve(dirname(options.entry), module.spec.host))};\nconst data=${JSON.stringify(module.data)};\nexport const module={data,bodies:{},${projected?.properties ?? "schemas:{},"}reads:runtime.reads,leaves:runtime.leaves};\n`,
+      source: `import {z} from ${specifier(resolve(sdk, "pod-authoring.ts"))};\n${projected?.definition ?? ""}import * as runtime from ${specifier(resolve(dirname(options.entry), module.spec.host))};\nconst data=${JSON.stringify(module.data)};\nexport const module={data,${projected?.properties ?? "schemas:{},"}reads:runtime.reads,leaves:runtime.leaves};\n`,
     };
   }
   const built = await buildRouteArtifact({ ...options, hostEntry });
