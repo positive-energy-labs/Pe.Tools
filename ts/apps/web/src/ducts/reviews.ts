@@ -168,9 +168,12 @@ const spoken = (value: string | null | undefined) =>
 export function presentLosses(result: unknown, scope: ReviewEvidence) {
   const response = responseOf<DuctsApply.Res.Response>(result);
   const envelope = result as {
+    seal?: { caller?: { kind?: string } };
     derivedRequest?: import("@pe/agent-contracts").DuctsApplyInput;
     receipt?: { result?: { derivedRequest?: import("@pe/agent-contracts").DuctsApplyInput } };
   };
+  const caller = envelope.seal?.caller?.kind;
+  const author: "human" | "pea" | null = caller === "human" || caller === "pea" ? caller : null;
   const request = envelope.derivedRequest ?? envelope.receipt?.result?.derivedRequest;
   const snapshot =
     snapshotOf(scope) ?? (scope.readings.sheetSnapshot?.value as DuctSnapshot | undefined);
@@ -200,9 +203,13 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
             ? "Specific Loss"
             : write.kind === "terminal"
               ? slots.terminalDrop
-              : proposed && "slot" in proposed
-                ? proposed.slot
-                : (write.key ?? write.kind);
+              : write.kind === "terminal-flow"
+                ? (proposed && "slot" in proposed ? proposed.slot : slots.terminalFlow)
+                : write.kind === "fitting"
+                  ? "Loss Method"
+                  : proposed && "slot" in proposed
+                    ? proposed.slot
+                    : (write.key ?? write.kind);
     const next =
       proposed && "inWg" in proposed
         ? `${proposed.inWg} in-wg`
@@ -235,7 +242,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
           label,
           before,
           after: `${spoken(write.after) ?? "none"} · ${tail}`,
-          author: "unknown" as const,
+          author: author ?? "unknown" as const,
         },
       };
     }
@@ -248,7 +255,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
           label,
           before: write.before === "absent" ? "none yet" : before,
           after: `${write.before === "absent" ? "created" : "updated"} · ${tail}`,
-          author: "unknown" as const,
+          author: author ?? "unknown" as const,
         },
       };
     }
@@ -261,7 +268,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
         label,
         before,
         after: `${after} · ${source} · ${tail}`,
-        author: fanAuthor(scope, write.kind, write.id),
+        author: author ?? fanAuthor(scope, write.kind, write.id),
       },
     };
   });

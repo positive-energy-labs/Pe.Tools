@@ -23,13 +23,14 @@ import { accessoryWrites } from "@pe/ducts-domain/sheet/accessory-writes";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import { workLayer } from "./ducts-inputs.ts";
 import { followAcceptedJoins } from "./ducts-walk.ts";
-import { scopeApplyRequest, appliedCellPaths } from "@pe/ducts-domain/staged";
+import { scopeApplyRequest, appliedCellPaths, pendingCount } from "@pe/ducts-domain/staged";
 import type { DuctsApply, DuctsHeal } from "@pe/host-contracts/generated";
 
 const prepared = z.object({
   process: z.unknown(),
   input: z.record(z.string(), z.unknown()),
   dependencies: z.unknown(),
+  nothingToWrite: z.boolean().optional(),
 });
 const targetOf = (ctx: CommandContext) => {
   if (ctx.admission.target.kind !== "document") throw refused("Exact document target required");
@@ -220,7 +221,7 @@ export function ductsExecutors(
           losses: () => lossSnapshot(intent, read),
           heal: () => healSnapshot(intent?.groups ?? [], read),
         }[kind]();
-        const { input, dependencies } = await {
+        const derived = await {
           losses: async () => {
             const tables = await readNative("ducts.tables", { ids: TABLE_IDS });
             const grids = toGrids(tables);
@@ -279,6 +280,7 @@ export function ductsExecutors(
               );
             return {
               input: scoped as unknown as Record<string, unknown>,
+              nothingToWrite: pendingCount(design, snapshot.store) === 0,
               dependencies: {
                 snapshot: ductWriteEvidence(snapshot),
                 grids,
@@ -306,13 +308,18 @@ export function ductsExecutors(
             return { input: intent.fan, dependencies: ductWriteEvidence(snapshot) };
           },
         }[kind]();
-        return { process, input, dependencies };
+        return { process, ...derived };
       },
     };
   };
   const run = async (ctx: CommandContext, execution: ActionExecution, kind: Kind, phase: Phase) => {
     const p = prepared.parse(execution.prepared),
       target = targetOf(ctx);
+    // Default slot initialization is bookkeeping, never an authored model change.
+    if (p.nothingToWrite) {
+      if (phase === "apply") throw refused("Nothing to write: no staged changes in the selected scope");
+      return { value: { previewOnly: true, writes: [], counts: { planned: 0, written: 0, refused: 0, unchanged: 0 } }, derivedRequest: p.input };
+    }
     const entry = {
       losses: {
         key: "ducts.apply",

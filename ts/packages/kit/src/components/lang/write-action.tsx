@@ -83,6 +83,8 @@ export function PreviewAction({ handle, label, children, says = `Plan ${label} f
   const raw = handle.read();
   const parsed = reviewSchema.safeParse(raw);
   const review = parsed.success ? parsed.data : null;
+  const nativeWrites = z.object({ value: z.object({ writes: z.array(z.object({ outcome: z.string() })) }) }).safeParse(review?.preview);
+  const empty = nativeWrites.success && !nativeWrites.data.value.writes.some(write => write.outcome === "planned");
   const sealed = !!review && !review.stale && writeResponseSchema.safeParse(review.preview).success;
   const run = async (action: () => unknown): WriteRun => {
     try { await action(); return null; }
@@ -99,7 +101,7 @@ export function PreviewAction({ handle, label, children, says = `Plan ${label} f
     } : null}
     stale={review?.stale ? "changed since plan" : null}
     plan={() => run(() => handle.plan())}
-    apply={{ label, says: `${label} what the plan sealed`, refusal: sealed ? null : "Plan the current Work first",
+    apply={{ hidden: empty, label, says: `${label} what the plan sealed`, refusal: sealed ? null : "Plan the current Work first",
       run: () => run(() => handle.apply()), done: `${label} sent` }} />;
 }
 /** The armed word. A plan is a Read: only a successful declared rehearsal says "checked in Revit". */
@@ -122,6 +124,7 @@ export interface WriteActionProps {
   failed?: string | null;
   plan: () => WriteRun;
   apply: {
+    hidden?: boolean;
     label: string;
     says: string;
     /** Why apply is not armed even with a plan held. */
@@ -263,7 +266,7 @@ export function WriteAction({
               >
                 Reject? · {reject.until}
               </Button>
-            ) : (
+            ) : !apply.hidden ? (
               <Button
                 kind="commit"
                 label={apply.label}
@@ -274,7 +277,7 @@ export function WriteAction({
               >
                 {apply.label}
               </Button>
-            )}
+            ) : null}
             <span className="face-mono text-ink-mute t-small">Esc</span>
           </div>
         ) : null}
