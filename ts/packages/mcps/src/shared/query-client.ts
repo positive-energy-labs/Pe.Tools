@@ -2,7 +2,6 @@ import { familyReads, scheduleReads, type ReadEntry } from "@pe/agent-contracts"
 import type { z } from "zod";
 import { readFamilyCapture } from "./takeoff-action-client.ts";
 import { readScheduleCapture } from "./schedule-client.ts";
-import { familiesReads, readFamiliesCapture } from "./families-client.ts";
 
 export function readTable<T extends Record<string, { input: z.ZodType }>>(
   declarations: T,
@@ -35,7 +34,4 @@ export const scheduleQueries = readTable(scheduleReads, (key, input, ctx) =>
 );
 export const familyQueries = readTable(familyReads, (key, input, ctx) =>
   readFamilyCapture(key, input, work(ctx), document(ctx)),
-);
-export const familiesQueries = readTable(familiesReads, (key, input, ctx) =>
-  readFamiliesCapture(key, input, work(ctx), document(ctx)),
 );

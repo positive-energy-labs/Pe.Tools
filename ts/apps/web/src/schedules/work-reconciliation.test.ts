@@ -1,25 +1,12 @@
 import { expect, test, vi } from "vite-plus/test";
-import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
 import { createRouteRegistrations } from "../../../../packages/mcps/src/pea/routes";
-import { createBuiltinRouteInventory } from "../../../../packages/agent-contracts/src/route-module";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
 import { applyPatches, scheduleGridRouteState, type ReadingFrame } from "@pe/agent-contracts";
 
-test("G4: admitted host opens existing schedule Work but preserves domain edit reconciliation", async () => {
-  const entry = builtinEnrollments.find((e) => e.routeKey === "schedules")!;
-  expect(entry).toBeDefined();
-  const completeHostModule = await entry.load();
-  expect(completeHostModule.workState).toBe(scheduleGridRouteState);
-  const inventory = createBuiltinRouteInventory({
-    schedules: { host: true, module: completeHostModule, closure: entry.closure, catalog: [] },
-  });
-  const admitted = (await inventory.prepare("schedules", entry.closure.fingerprint)).admitHost(
-    completeHostModule,
-  );
-  if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
-  // Pea's catalog lists admitted Work once (805b9990); the constructor seat leaves schedules to its
-  // admitted owner, as the host composition root does.
-  const registrations = createRouteRegistrations().filter((r) => r.spec.route !== "schedules");
+test("schedule Work retains persisted cells and domain edit reconciliation", async () => {
+  const registrations = createRouteRegistrations().filter((r) => r.spec.route === "schedules");
+  expect(registrations[0]?.spec.schema).toBe(scheduleGridRouteState.schema);
+  expect(registrations[0]?.spec.reconcileEdit).toBe(scheduleGridRouteState.reconcileEdit);
   const key = {
     binding: "workspace" as const,
     route: "schedules",
@@ -51,14 +38,11 @@ test("G4: admitted host opens existing schedule Work but preserves domain edit r
       },
     },
   });
-  const registration = ws.registerAdmitted(admitted.route);
-  expect(await registration.ready).toBeNull();
   const frames: ReadingFrame[] = [];
   const release = observeResources(ws, { observe: () => () => {} })(
     {
       ...key,
       kind: "work",
-      admission: { routeKey: "schedules", fingerprint: admitted.route.workFingerprint },
     },
     (f) => frames.push(f),
   );
@@ -94,17 +78,9 @@ test("G4: admitted host opens existing schedule Work but preserves domain edit r
     });
     expect(result.ok).toBe(true);
     const after = scheduleGridRouteState.schema.parse((await ws.read(key, "schedules"))!.doc);
-    // G4: the host clears only the reviewed key through the domain reconciliation.
+    // The host clears only the reviewed key through the domain reconciliation.
     expect(after.basis?.stale).toEqual([{ key: "1::2", was: "untouched" }]);
-    const duplicate = new RouteWorkspace({
-      registrations: [{ spec: scheduleGridRouteState }],
-      store: { getState: async () => undefined, setState: async () => {} },
-    });
-    expect(() => duplicate.registerAdmitted(admitted.route)).toThrow(
-      /duplicate|already|registered/i,
-    );
   } finally {
     release();
-    registration.close();
   }
 });

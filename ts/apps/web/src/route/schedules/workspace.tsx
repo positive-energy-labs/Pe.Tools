@@ -4,7 +4,6 @@ import {
   splitScheduleCellKey,
   cellPatches,
   type RouteStatePatch,
-  type ScheduleCatalog,
   type ScheduleGridDocument,
   type MeasuredValue,
   type ScheduleGridSnapshot,
@@ -18,7 +17,7 @@ import { TableFrame } from "#/components/master-table/table-frame";
 import { emptyTableState } from "@pe/kit/table/view";
 import type { TableState } from "@pe/kit/table/model";
 import { useMeasuredParse } from "#/host/measured-parse";
-import type { CellWire } from "#/components/work/band";
+import type { CellHandle } from "@pe/kit/lang/cell";
 import {
   scheduleLock,
   scheduleShownText,
@@ -30,22 +29,14 @@ import { NativeObservationScope, type NativeObservation } from "#/revit/observat
 
 export interface ScheduleGridState {
   slice: ScheduleGridDocument | null;
+  at: (key: string) => CellHandle;
   /** The Work revision the slice was read at; `null` before any Work exists. */
   revision: number | null;
   hydrated: boolean;
   apply: (patches: RouteStatePatch[], expectedRevision?: number) => Promise<Refusal | null>;
-  /** The running verb; capture and apply run from the Situation and lock the grid too. */
-  busy: string | null;
-  /** Why apply is unavailable; retained for route seams that inspect readiness. */
-  blockedBecause?: string | null;
   snapshot: ScheduleGridSnapshot | null;
-  catalog: ScheduleCatalog | null;
-  /** The verbs the panes reach the world through: the grid's hidden read, and apply. */
-  execute: (kind: "read" | "apply", input?: Record<string, unknown>) => Promise<Refusal | null>;
   /** The last push's refused cells, by key; each draws on its own cell. */
   refused: Readonly<Record<string, string>>;
-  /** Each pane's focus edge, as the stage declares it (`stage.ts`). */
-  onFocus: { grid: () => void };
   /**
    * What is known about the drawn read: `changed` = Revit changed this document since it was
    * taken; `disconnected` = no bridge, so nothing is known. Never an age.
@@ -64,7 +55,7 @@ export interface ScheduleGridState {
 }
 
 /**
- * The schedule cell's write doors, shared by the grid and the review list: one wire bound to the
+ * The schedule cell's write doors, shared by the grid and the review list: owned handles bound to the
  * rendered revision, the stage that severs a standing suggestion, and the measured parse.
  */
 const bindingOf = (snapshot: ScheduleGridState["snapshot"], key: string) => {
@@ -74,34 +65,20 @@ const bindingOf = (snapshot: ScheduleGridState["snapshot"], key: string) => {
     ?.bindings.find((binding) => binding.columnNumber === columnNumber);
 };
 
-/** Every schedule cell's accept, deny and unstage write here, bound to the rendered revision. */
-export const scheduleCellWire = ({
-  apply,
-  revision,
-  snapshot,
-}: Pick<ScheduleGridState, "apply" | "revision" | "snapshot">): CellWire => ({
-  segment: "cells",
-  write: apply,
-  revision,
-  lockOf: (key) => scheduleLock(bindingOf(snapshot, key)),
-});
-
 export function useScheduleCellWrites({
   slice,
-  revision,
-  apply,
+  at,
   snapshot,
   refused,
   documentScope,
   nativeObservation,
 }: Pick<
   ScheduleGridState,
-  "slice" | "revision" | "apply" | "snapshot" | "refused" | "documentScope" | "nativeObservation"
+  "slice" | "at" | "snapshot" | "refused" | "documentScope" | "nativeObservation"
 >): ScheduleCellWrites {
   const cells = slice?.cells ?? {};
   const stale = slice?.basis?.stale ?? [];
   const bindingAt = (key: string) => bindingOf(snapshot, key);
-  const wire = scheduleCellWire({ apply, revision, snapshot });
   /** The measured cell's one call, owned by this snapshot: a re-read aborts what is in flight. */
   const parse = useMeasuredParse(snapshot, documentScope);
   const parseMeasured: ScheduleCellWrites["parseMeasured"] = (key, text) => {
@@ -120,26 +97,22 @@ export function useScheduleCellWrites({
 
   /** Typing stages; it also severs a standing suggestion, so the typed value is not contested. */
   const stageEdit = async (key: string, value: string | MeasuredValue): Promise<string | void> => {
-    const cell = cells[key] ?? {};
-    const refusal = await apply(
-      [...cellPatches(["cells"], key, cell, { kind: "set", rung: { value } })],
-      revision ?? undefined,
-    );
+    const refusal = await at(key).stage(value, { label: `Edit schedule cell ${key}` });
     return refusal?.message;
   };
 
-  return { cells, wire, stale, refused, stageEdit, parseMeasured };
+  return { cells, at, stale, refused, stageEdit, parseMeasured };
 }
 
 export function ScheduleGridWorkspace({
   state: {
     slice,
+    at,
     revision,
     hydrated,
     apply,
     snapshot,
     refused,
-    onFocus,
     freshness,
     documentScope,
     nativeObservation,
@@ -178,19 +151,18 @@ export function ScheduleGridWorkspace({
 
   const writes = useScheduleCellWrites({
     slice,
-    revision,
-    apply,
+    at,
     snapshot,
     refused,
     documentScope,
     nativeObservation,
   });
-  const { wire, stageEdit, parseMeasured } = writes;
+  const { stageEdit, parseMeasured } = writes;
 
   const gridColumns = useScheduleGridColumns(
     snapshot,
     cells,
-    wire,
+    at,
     stageEdit,
     parseMeasured,
     stale,
@@ -280,12 +252,7 @@ export function ScheduleGridWorkspace({
   return (
     // Focus arriving from outside the grid's pane is the edge a stage revalidates on.
     <NativeObservationScope value={nativeObservation ?? { scope: null }}>
-      <div
-        className="contents"
-        onFocusCapture={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onFocus.grid();
-        }}
-      >
+      <div className="contents">
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col">
             {snapshot ? (

@@ -3,7 +3,7 @@ import { Popover } from "@base-ui/react/popover";
 import { PopupFrame } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
-import type { PivotRow } from "./kernel-matrix-model";
+import type { PivotRow } from "../../../../packages/agent-contracts/src/families-read";
 import type { OverlayParameter } from "./patch-overlay";
 import { ValueDiff } from "@pe/kit/lang/value-diff";
 

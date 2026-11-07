@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { actionReceiptSchema } from "@pe/agent-contracts";
-import { applyOutcome, applyTally } from "./apply-outcome";
+import { applyOutcome, applyTally } from "../src/reads/families-outcome.ts";
 
 const target = { session: "s", openId: "d" };
 const native = (familyName: string, success: boolean) => ({
@@ -71,8 +71,12 @@ test("an uncertain command never presents its one completed native step as a com
 });
 
 test("a captured preview is review evidence, not a native apply outcome", async () => {
-  const { default: captured } = await import("../../../host/tests/fixtures/families-live-preview-20261102.json");
+  const { default: captured } = await import("./fixtures/families-live-preview-20261102.json");
   expect(applyTally(row(captured.response))).toEqual({
-    families: 0, converged: 0, residue: 0, failed: 0, artifact: null,
+    families: 0,
+    converged: 0,
+    residue: 0,
+    failed: 0,
+    artifact: null,
   });
 });

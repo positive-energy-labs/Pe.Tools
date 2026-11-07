@@ -61,7 +61,14 @@ const matrix = (
   initialCells: Record<string, FamilyCellState> = {},
 ) => {
   function Matrix({ cells }: { cells: Record<string, FamilyCellState> }) {
-    const live = useLiveCells(cells, { segment: "cells", revision: 1, write: async () => null });
+    const live = useLiveCells(cells, () => ({
+      owner: { route: "families", label: "Work" },
+      value: {},
+      refusal: null,
+      transitions: () => [],
+      stage: async () => null,
+      clear: async () => null,
+    }));
     return (
       <Table
         rows={rows}

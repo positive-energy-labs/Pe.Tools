@@ -7,14 +7,13 @@ import {
   type FamilyCellValue,
   type MeasuredDisplayUnit,
 } from "@pe/agent-contracts";
-import { reviewTransitions, type CellWire } from "#/components/work/band";
+import type { CellHandle } from "@pe/kit/lang/cell";
 import { ReadCell } from "@pe/kit/table/cells";
 import { useCellNavigation } from "@pe/kit/table/cell-navigation";
 import { cellFromDraft, StateCell, type CellRefusal, type CellTransition } from "@pe/kit/lang/cell";
 import type { MeasuredAnswer } from "#/host/measured-parse";
 import { CellListSelect } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
-import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
 import type { FamilyCellAddress } from "@pe/agent-contracts";
 import type { Refusal } from "#/route/refusal";
 export type ProposeFamilyCell = (
@@ -24,37 +23,8 @@ export type ProposeFamilyCell = (
 ) => Promise<Refusal | null>;
 import { cn } from "@pe/kit/lib/utils";
 
-export interface TypeRow {
-  key: string;
-  familyId: number;
-  familyName: string;
-  categoryName: string;
-  typeName: string;
-  typeCount: number;
-  values: Record<string, string>;
-  scopes: Record<string, FamilyParameterSnapshot["scope"]>;
-  formulas: Record<string, FamilyParameterSnapshot["formulaState"]>;
-  storageTypes: Record<string, FamilyCellValue["storageType"] | undefined>;
-  displayUnits?: Record<string, MeasuredDisplayUnit | null>;
-  yesNos?: Record<string, boolean>;
-}
-
-export interface ParamColumn {
-  key: string;
-  name: string;
-  kind: FamilyParameterSnapshot["kind"];
-  isInstance: boolean;
-  isBuiltIn: boolean;
-  isProjectOnly: boolean;
-  familyCount: number;
-  /** A Yes/No parameter: a closed choice, never free text. */
-  yesNo?: boolean;
-  /**
-   * That the parameter measures something, and the unit the PROJECT renders it in (the matrix reads
-   * the project, so the project's units are what these cells show and stage).
-   */
-  displayUnit?: MeasuredDisplayUnit | null;
-}
+import type { TypeRow, ParamColumn } from "../../../../packages/agent-contracts/src/families-read";
+export type { TypeRow, ParamColumn } from "../../../../packages/agent-contracts/src/families-read";
 
 /** Revit's Yes/No spec (`autodesk.spec:spec.bool-1.0.0`), read off the definition's data type. */
 export const isYesNo = (dataTypeId: string | null | undefined) =>
@@ -117,7 +87,7 @@ function cellReason(row: TypeRow, key: string, instance: boolean): string {
     ? `the INSTANCE DEFAULT this type hands every instance placed from it`
     : `this type's authored value`;
   const observed = row.values[key] ? ` — ${row.values[key]}` : " — blank";
-  return `Type "${row.typeName}" of ${row.familyName}: ${what}${observed} currently. Type to stage your value; Pea's suggestion waits for stage or deny in Review edits. Plan generates the spec from edit values only.`;
+  return `Type "${row.typeName}" of ${row.familyName}: ${what}${observed} currently. Type to stage your value. Clear restores the model value. Plan generates the spec from staged values only.`;
 }
 
 /**
@@ -125,18 +95,21 @@ function cellReason(row: TypeRow, key: string, instance: boolean): string {
  * rebuilding the type grid's row and column windows.
  */
 export interface LiveCells {
-  cells: Record<string, FamilyCellState>;
-  wire: CellWire;
+  cells: Readonly<Record<string, FamilyCellState>>;
+  at: (key: string) => CellHandle;
   listeners: Set<() => void>;
 }
 
-export function useLiveCells(cells: Record<string, FamilyCellState>, wire: CellWire): LiveCells {
-  const live = useRef<LiveCells>({ cells, wire, listeners: new Set() }).current;
+export function useLiveCells(
+  cells: Readonly<Record<string, FamilyCellState>>,
+  at: LiveCells["at"],
+): LiveCells {
+  const live = useRef<LiveCells>({ cells, at, listeners: new Set() }).current;
   live.cells = cells;
-  live.wire = wire;
+  live.at = at;
   useLayoutEffect(() => {
     for (const notify of live.listeners) notify();
-  }, [live, cells, wire]);
+  }, [live, cells, at]);
   return live;
 }
 
@@ -173,9 +146,12 @@ export function ParamCell({
   const value = row.values[col.key] ?? "";
   const unresolved = !scopeOf || scopeOf === "Unresolved";
   const reason = cellReason(row, col.key, col.isInstance);
-  // Every drawn shared cell cell carries exactly the contract's transitions. A Pea suggestion
-  // on a cell a patch cannot write draws locked, where the contract leaves deny only.
-  const transitions = cell ? reviewTransitions(live.wire, key, cell) : undefined;
+  // The owning handle supplies the clear control for this rendered Work revision.
+  const transitions = cell
+    ? live.at(key).transitions({
+        label: `Clear ${address.familyName} / ${address.typeName} / ${address.parameter}`,
+      })
+    : undefined;
   const yesNo = row.yesNos ? row.yesNos[col.key] : col.yesNo;
   const displayUnit = row.displayUnits ? row.displayUnits[col.key] : col.displayUnit;
   const noUnit = unitLock(displayUnit);
@@ -344,12 +320,7 @@ function YesNoCell({
   );
 }
 
-/**
- * One editable parameter cell in the house suggestion language: the suggestion on the cell is the
- * shared cell's `suggestion` (Pea's or a person's, told apart by `by`) and the person's accept is
- * its `edit`, read through the one reader `cellFromDraft`. At row scale the prior value and
- * the author ride the title; accept and deny sit in Review edits beside the table.
- */
+/** A staged parameter, its model baseline, author and clear control. Measured input keeps its unit. */
 function ProposalCell({
   current,
   reason,
