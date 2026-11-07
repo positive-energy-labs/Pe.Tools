@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { memberWork, settingsRouteState, type SettingsRouteDocument } from "@pe/agent-contracts";
+import { memberWork, settingsRouteState } from "@pe/agent-contracts";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
-import { field, route, sessionCommand, split, type DrawContext } from "../route/typed-route.ts";
+import { field, route, sessionCommand, split } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
@@ -12,32 +12,22 @@ import {
   podMemberOfPage as member,
 } from "../../../../packages/agent-contracts/src/pods-read.ts";
 export { member };
-const loaded = {
+export const loaded = {
   ...hostRead(valueRead("pods.author", podsArgs, podsValue)),
   args: (page: z.output<typeof podsArgs>) => ({ pod: page.pod, path: page.path, runs: page.runs }),
 };
-const inventory = {
+export const inventory = {
   ...hostRead(valueRead("pods.roster", z.object({}), podsRosterValue)),
   args: () => ({}),
 };
-const fields = {
+export const fields = {
   pod: field(z.string(), "", "query", "push"),
   path: field(z.string(), "", "query", "push"),
   runs: field(podsArgs.shape.runs, "member", "query"),
   mode: field(z.enum(["form", "raw"]), "form", "pose"),
 };
-export type PodsContext = DrawContext<
-  z.output<typeof podsValue>,
-  typeof fields,
-  SettingsRouteDocument,
-  never
->;
-export type PodsRosterContext = DrawContext<
-  z.output<typeof podsRosterValue>,
-  typeof fields,
-  SettingsRouteDocument,
-  never
->;
+export type { PodsContext } from "./context.generated";
+export type { PodsRosterContext } from "./context.generated";
 export const module = route({
   key: "pods",
   name: "Pods",
@@ -68,13 +58,11 @@ export const module = route({
     spec: {
       title: "Spec",
       purpose: "Edit saved member Work",
-      read: loaded,
       draw: draw(() => import("./drawing.tsx"), "Spec"),
     },
     runs: {
       title: "Runs",
       purpose: "Inspect member or Pod runs",
-      read: loaded,
       draw: draw(() => import("./drawing.tsx"), "Runs"),
     },
   },

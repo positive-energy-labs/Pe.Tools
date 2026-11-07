@@ -1,4 +1,5 @@
-import { route } from "../route/typed-route";
+import { paneLayout } from "../route/defaults";
+import { route } from "../route/defaults";
 import { draw } from "../route/draw";
 export const module = route({
   key: "design-system",
@@ -27,5 +28,5 @@ export const module = route({
       draw: draw(() => import("./mount"), "DesignSystemBody"),
     },
   },
-  layout: { kind: "pane", id: "main" },
+  layout: paneLayout("main"),
 });

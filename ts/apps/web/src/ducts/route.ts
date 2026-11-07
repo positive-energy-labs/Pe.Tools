@@ -1,3 +1,4 @@
+import { stageField } from "../route/defaults";
 import { ductsRouteState } from "../../../../packages/agent-contracts/src/ducts.ts";
 import { z } from "zod";
 import {
@@ -7,7 +8,6 @@ import {
   ductsSheetEditsSchema,
   ductsNetworkCapability,
   DUCTS_SYSTEM_MAX,
-  type DuctsRouteDocument,
 } from "@pe/agent-contracts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
 import {
@@ -19,19 +19,18 @@ import {
   command,
   split,
   whenSubject,
-  type DrawContext,
-} from "../route/typed-route.ts";
+} from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 import { describeInputHistory, editMetaSchema } from "./sheet/input-history.neutral.ts";
-import { ductsPricingValueCapability, ductsRosterValueCapability, ductsPricingValue } from "@pe/ducts-domain/pricing-value";
+import { ductsPricingValueCapability, ductsRosterValueCapability } from "@pe/ducts-domain/pricing-value";
 import { presentLosses, presentHeal, presentFan } from "./reviews.ts";
 
 const shared = ductsPictureFields;
 const system = subjectSchema(DUCTS_SYSTEM_MAX);
-const fields = {
+export const fields = {
   system: field(system, { kind: "ids", ids: [] }, "subject", "push"),
-  stage: field(z.enum(["network"]), "network", "stage", "push"),
+  stage: stageField(["network"]),
   systemSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
   systemSort: field(z.enum(["", "name", "loss"]), "", "query"),
   treeSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
@@ -58,13 +57,9 @@ const args = (page: {
 }) => ({ system: namesOf(page.system) });
 export const roster = { ...hostRead(ductsRosterValueCapability), args: () => ({}) };
 export const network = { ...hostRead(ductsNetworkCapability), args };
-const pricing = { ...hostRead(ductsPricingValueCapability), args };
-export type DuctsDrawContext = DrawContext<
-  z.output<typeof ductsPricingValue>,
-  typeof fields,
-  DuctsRouteDocument,
-  z.output<typeof ductsSheetEditsSchema>
->;
+export const pricing = { ...hostRead(ductsPricingValueCapability), args };
+export type { DuctsDrawContext } from "./context.generated";
+import type { DuctsDrawContext } from "./context.generated";
 const evidence = (
   data: DuctsDrawContext["value"]["value"],
   work: DuctsDrawContext["cells"]["doc"],
@@ -108,37 +103,31 @@ export const module = route({
     "e-systems": {
       title: "Systems",
       purpose: "Choose a system to inspect",
-      read: pricing,
       draw: draw(() => import("./proto/e/screen.tsx"), "SystemsPane"),
     },
     "e-sidebar": {
       title: "System tree",
       purpose: "Inspect the opened systems and their runs",
-      read: pricing,
       draw: draw(() => import("./proto/e/screen.tsx"), "TreePane"),
     },
     "e-rules-all": {
       title: "All-systems rules",
       purpose: "Price every read fitting type",
-      read: pricing,
       draw: draw(() => import("./proto/e/screen.tsx"), "AllRulesBody"),
     },
     "e-rules": {
       title: "This system’s rules",
       purpose: "Review fitting rules for the opened systems",
-      read: pricing,
       draw: draw(() => import("./proto/e/screen.tsx"), "RulesBody"),
     },
     "e-picture": {
       title: "Picture",
       purpose: "Inspect the model or schematic",
-      read: pricing,
       draw: draw(() => import("./proto/e/screen.tsx"), "PictureBody"),
     },
     "e-inbox": {
       title: "Rulings",
       purpose: "Review assumptions and planned writes",
-      read: pricing,
       draw: draw(() => import("./proto/e/screen.tsx"), "InboxBody"),
     },
   },

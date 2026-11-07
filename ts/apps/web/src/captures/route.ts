@@ -1,6 +1,7 @@
+import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
-import { field, route, type DrawContext } from "../route/typed-route.ts";
+import { field, route } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
@@ -8,20 +9,15 @@ import {
   capturesArgs,
   capturesValue,
 } from "../../../../packages/agent-contracts/src/captures-read.ts";
-const loaded = {
+export const loaded = {
   ...hostRead(valueRead("captures.browse", capturesArgs, capturesValue)),
   args: () => ({}),
 };
-const fields = {
+export const fields = {
   focus: field(z.string(), "", "pose"),
   open: field(z.array(z.string()), [], "pose"),
 };
-export type CapturesContext = DrawContext<
-  z.output<typeof capturesValue>,
-  typeof fields,
-  never,
-  never
->;
+export type { CapturesContext } from "./context.generated";
 export const module = route({
   key: "captures",
   name: "Captures",
@@ -45,9 +41,8 @@ export const module = route({
     captures: {
       title: "Captures",
       purpose: "Inspect retained pictures",
-      read: loaded,
       draw: draw(() => import("./drawing.tsx"), "CapturesDrawing"),
     },
   },
-  layout: { kind: "pane", id: "captures" },
+  layout: paneLayout("captures"),
 });

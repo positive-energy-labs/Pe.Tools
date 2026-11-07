@@ -10,8 +10,6 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
 import { takeoffsRoute } from "./takeoff/route";
-import { podsRoute } from "./pods/route.tsx";
-import { capturesRoute } from "./captures/route.tsx";
 import { Route as rootRoute } from "./routes/__root";
 
 // Use the unannotated root: the generated tree's file-only type map excludes code routes.
@@ -21,8 +19,6 @@ const pathOf = (route: AnyRoute) => (route.options as { path?: string }).path;
 const codeRoutes: AnyRoute[] = [
   sessionsRoute,
   takeoffsRoute,
-  podsRoute,
-  capturesRoute,
 ];
 const codePaths = new Set(codeRoutes.map(pathOf));
 const fileRoutes = (routeTree.children as unknown as AnyRoute[]).filter(
@@ -38,8 +34,6 @@ const appRouteTree = rootRoute.addChildren([
   ...codeRoutes,
 ] as unknown as FileChildren & {
   takeoffsRoute: typeof takeoffsRoute;
-  podsRoute: typeof podsRoute;
-  capturesRoute: typeof capturesRoute;
 });
 function NotFound() {
   return (

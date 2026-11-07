@@ -1,3 +1,4 @@
+import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import {
   familiesRouteState,
@@ -9,12 +10,11 @@ import {
 } from "@pe/agent-contracts";
 import {
   familiesViewCapability,
-  familiesViewData,
 } from "../../../../packages/agent-contracts/src/families-read.ts";
-import { route, field, command, sessionCommand, type DrawContext } from "../route/typed-route.ts";
+import { route, field, command, sessionCommand } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
-const fields = {
+export const fields = {
   readId: field(z.string(), "", "pose"),
   focus: field(
     z.string().refine((key) => {
@@ -30,18 +30,13 @@ const fields = {
     "pose",
   ),
 };
-const edit = z.object({
+export const edit = z.object({
   address: z.object({ familyName: z.string(), typeName: z.string(), parameter: z.string() }),
   value: familyCellValueSchema,
   current: z.string(),
 });
-const view = { ...hostRead(familiesViewCapability), args: () => ({}) };
-export type FamiliesDrawContext = DrawContext<
-  z.output<typeof familiesViewData>,
-  typeof fields,
-  z.output<typeof familiesRouteState.schema>,
-  z.output<typeof edit>
->;
+export const view = { ...hostRead(familiesViewCapability), args: () => ({}) };
+export type { FamiliesDrawContext } from "./context.generated";
 export const module = route({
   key: "families",
   name: "Families",
@@ -66,7 +61,6 @@ export const module = route({
     main: {
       title: "Families",
       purpose: "Audit family values",
-      read: view,
       draw: draw(() => import("./matrix.tsx"), "FamiliesMatrix"),
     },
   },
@@ -126,7 +120,7 @@ export const module = route({
       }),
     },
   },
-  layout: { kind: "pane", id: "main" },
+  layout: paneLayout("main"),
 });
 export const familiesData = module.data;
 export const familiesHostModule = module.host;

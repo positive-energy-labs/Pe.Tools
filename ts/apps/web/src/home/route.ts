@@ -1,8 +1,9 @@
+import { paneLayout } from "../route/defaults";
 import { z } from "zod";
-import { route, field, type DrawContext } from "../route/typed-route";
+import { route, field } from "../route/defaults";
 import { draw } from "../route/draw";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
-const fields = {
+export const fields = {
   threadSearch: field(
     threadListFields.threadSearch.schema,
     threadListFields.threadSearch.schema.parse(undefined),
@@ -18,7 +19,7 @@ const fields = {
   sort: field(z.enum(["workflow", "name"]), "workflow", "query", "push"),
   folded: field(z.array(z.string()), [], "query"),
 };
-export type HomeContext = DrawContext<never, typeof fields, never, never>;
+export type { HomeContext } from "./context.generated";
 export const module = route({
   key: "home",
   name: "Home",
@@ -44,5 +45,5 @@ export const module = route({
       draw: draw(() => import("./mount"), "HomeBody"),
     },
   },
-  layout: { kind: "pane", id: "main" },
+  layout: paneLayout("main"),
 });

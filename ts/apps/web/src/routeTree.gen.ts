@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from "./routes/__root";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as BindRouteImport } from "./routes/bind";
+import { Route as CapturesRouteImport } from "./routes/captures";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DuctLossRouteImport } from "./routes/duct-loss";
 import { Route as DuctsRouteImport } from "./routes/ducts";
@@ -20,6 +21,7 @@ import { Route as FansRouteImport } from "./routes/fans";
 import { Route as OpenRouteImport } from "./routes/open";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as PeaRouteImport } from "./routes/pea";
+import { Route as PodsRouteImport } from "./routes/pods";
 import { Route as RoomsRouteImport } from "./routes/rooms";
 import { Route as SchedulesRouteImport } from "./routes/schedules";
 import { Route as SettingsRouteImport } from "./routes/settings";
@@ -42,6 +44,11 @@ const IndexRoute = IndexRouteImport.update({
 const BindRoute = BindRouteImport.update({
   id: "/bind",
   path: "/bind",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const CapturesRoute = CapturesRouteImport.update({
+  id: "/captures",
+  path: "/captures",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DesignSystemRoute = DesignSystemRouteImport.update({
@@ -87,6 +94,11 @@ const OpsRoute = OpsRouteImport.update({
 const PeaRoute = PeaRouteImport.update({
   id: "/pea",
   path: "/pea",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PodsRoute = PodsRouteImport.update({
+  id: "/pods",
+  path: "/pods",
   getParentRoute: () => rootRouteImport,
 } as any);
 const RoomsRoute = RoomsRouteImport.update({
@@ -159,6 +171,7 @@ const ApiPdfAuditParseParseIdRoute = ApiPdfAuditParseParseIdRouteImport.update({
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/bind": typeof BindRoute;
+  "/captures": typeof CapturesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/duct-loss": typeof DuctLossRoute;
   "/ducts": typeof DuctsRoute;
@@ -168,6 +181,7 @@ export interface FileRoutesByFullPath {
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/pea": typeof PeaRoute;
+  "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
   "/settings": typeof SettingsRoute;
@@ -185,6 +199,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/bind": typeof BindRoute;
+  "/captures": typeof CapturesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/duct-loss": typeof DuctLossRoute;
   "/ducts": typeof DuctsRoute;
@@ -194,6 +209,7 @@ export interface FileRoutesByTo {
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/pea": typeof PeaRoute;
+  "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
   "/settings": typeof SettingsRoute;
@@ -212,6 +228,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/": typeof IndexRoute;
   "/bind": typeof BindRoute;
+  "/captures": typeof CapturesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/duct-loss": typeof DuctLossRoute;
   "/ducts": typeof DuctsRoute;
@@ -221,6 +238,7 @@ export interface FileRoutesById {
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/pea": typeof PeaRoute;
+  "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
   "/settings": typeof SettingsRoute;
@@ -240,6 +258,7 @@ export interface FileRouteTypes {
   fullPaths:
     | "/"
     | "/bind"
+    | "/captures"
     | "/design-system"
     | "/duct-loss"
     | "/ducts"
@@ -249,6 +268,7 @@ export interface FileRouteTypes {
     | "/open"
     | "/ops"
     | "/pea"
+    | "/pods"
     | "/rooms"
     | "/schedules"
     | "/settings"
@@ -266,6 +286,7 @@ export interface FileRouteTypes {
   to:
     | "/"
     | "/bind"
+    | "/captures"
     | "/design-system"
     | "/duct-loss"
     | "/ducts"
@@ -275,6 +296,7 @@ export interface FileRouteTypes {
     | "/open"
     | "/ops"
     | "/pea"
+    | "/pods"
     | "/rooms"
     | "/schedules"
     | "/settings"
@@ -292,6 +314,7 @@ export interface FileRouteTypes {
     | "__root__"
     | "/"
     | "/bind"
+    | "/captures"
     | "/design-system"
     | "/duct-loss"
     | "/ducts"
@@ -301,6 +324,7 @@ export interface FileRouteTypes {
     | "/open"
     | "/ops"
     | "/pea"
+    | "/pods"
     | "/rooms"
     | "/schedules"
     | "/settings"
@@ -319,6 +343,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
   BindRoute: typeof BindRoute;
+  CapturesRoute: typeof CapturesRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
   DuctLossRoute: typeof DuctLossRoute;
   DuctsRoute: typeof DuctsRoute;
@@ -328,6 +353,7 @@ export interface RootRouteChildren {
   OpenRoute: typeof OpenRoute;
   OpsRoute: typeof OpsRoute;
   PeaRoute: typeof PeaRoute;
+  PodsRoute: typeof PodsRoute;
   RoomsRoute: typeof RoomsRoute;
   SchedulesRoute: typeof SchedulesRoute;
   SettingsRoute: typeof SettingsRoute;
@@ -356,6 +382,13 @@ declare module "@tanstack/react-router" {
       path: "/bind";
       fullPath: "/bind";
       preLoaderRoute: typeof BindRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/captures": {
+      id: "/captures";
+      path: "/captures";
+      fullPath: "/captures";
+      preLoaderRoute: typeof CapturesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/design-system": {
@@ -419,6 +452,13 @@ declare module "@tanstack/react-router" {
       path: "/pea";
       fullPath: "/pea";
       preLoaderRoute: typeof PeaRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/pods": {
+      id: "/pods";
+      path: "/pods";
+      fullPath: "/pods";
+      preLoaderRoute: typeof PodsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/rooms": {
@@ -529,6 +569,7 @@ const ApiPdfAuditParseRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BindRoute: BindRoute,
+  CapturesRoute: CapturesRoute,
   DesignSystemRoute: DesignSystemRoute,
   DuctLossRoute: DuctLossRoute,
   DuctsRoute: DuctsRoute,
@@ -538,6 +579,7 @@ const rootRouteChildren: RootRouteChildren = {
   OpenRoute: OpenRoute,
   OpsRoute: OpsRoute,
   PeaRoute: PeaRoute,
+  PodsRoute: PodsRoute,
   RoomsRoute: RoomsRoute,
   SchedulesRoute: SchedulesRoute,
   SettingsRoute: SettingsRoute,
