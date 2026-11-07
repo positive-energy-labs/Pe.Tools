@@ -15,6 +15,7 @@ import {
   type GroupKey,
 } from "./model";
 import { RevitGroup } from "./revit";
+import { OpenControlScope } from "#/open/context";
 import { HostGroup } from "./host";
 import { ProviderSetup } from "./pea";
 import { useProviders } from "#/workbench/provider/providers";
@@ -111,7 +112,7 @@ export function SettingsBody({
           label: "Revit",
           state: revitState(machine).text,
           tone: revitState(machine).tone,
-          body: <RevitGroup machine={machine} refusal={refusal} session={session} />,
+          body: <OpenControlScope><RevitGroup machine={machine} refusal={refusal} session={session} /></OpenControlScope>,
         },
         {
           key: "update",
