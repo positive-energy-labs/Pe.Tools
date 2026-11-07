@@ -469,7 +469,7 @@ export function route<
       deps: {
         page: [spec.subject.field],
         work: workKeys,
-        readings: Object.keys(readings).filter((r) => !r.endsWith("Plan")),
+        readings: ["value", ...Object.keys(owners).filter(owner => owner !== own).map(owner => `owner:${owner}`)],
       },
       captures: ["value"],
       intent: body(`${id}Intent`, `verbs.${id}.intent`, "intent", () => ({})),
