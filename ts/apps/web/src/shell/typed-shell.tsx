@@ -180,7 +180,8 @@ function TypedPane({mount,id,ctx}: {mount:TypedMount;id:string;ctx:DrawContext<a
 function TypedStart({mount}:{mount:TypedMount}) {
   const action=mount.startAction();
   if(!action) return null;
-  return <><Button label="Start" busy={action.pending} onClick={()=>void action.run().catch(()=>{})}>Start</Button>
+  return <><Button label="Start" refusal={action.refusal} busy={action.pending} onClick={()=>void action.run().catch(()=>{})}>Start</Button>
+    {action.refusal?<span role="status">Start unavailable: {action.refusal}</span>:null}
     {action.consent?<Button label="Reject Start" onClick={action.consent.run}>Reject? {action.consent.until}</Button>:null}
     {action.failure?<span role="alert">{action.failure}</span>:null}</>;
 }

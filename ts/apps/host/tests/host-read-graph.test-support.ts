@@ -27,6 +27,7 @@ import { createPeRoutes, peCoreRoutes } from "../src/pe-routes.ts";
 import { historyRoutes } from "../src/reads/history-routes.ts";
 import { fansReadResponse } from "../../../packages/agent-contracts/src/fans-read.ts";
 import { HostInputContext } from "../src/input-context.ts";
+import { hostResourceObserver } from "../src/resource-adapters.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
@@ -104,7 +105,9 @@ export async function fixture(
   let reads!: Effect.Success<ReturnType<typeof makeReadOwner>>;
   const fixtureRoutes = (options: Parameters<typeof makeReadOwner>[1]) => Layer.unwrap(Effect.gen(function* () {
     reads = yield* makeReadOwner(inputs, options);
-    const routes = createPeRoutes({ inputs, workspace: reads.work.workspace, registrations: reads.work.registrations });
+    const captures = yield* CaptureStore;
+    const routes = createPeRoutes({ inputs, workspace: reads.work.workspace, registrations: reads.work.registrations,
+      observeHostResource: hostResourceObserver(undefined, () => journal, () => captures) });
     return Layer.mergeAll(peCoreRoutes(routes, reads.invocation, inputs), historyRoutes(reads.history),
       recorded.actions ? makeCallRoute(journal, undefined, {workspace: reads.work.workspace, workReads: reads.work.reads}).pipe(
         nativeReadRoot(), Layer.provide(RevitBridgeLive),

@@ -2,6 +2,7 @@ import { actionScopeKeys, useScopeKeys } from "@pe/kit/keys";
 import { useEffect, useState } from "react";
 import { routeAddress, canonicalRouteInput } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Ladder } from "../route/ladder";
 import { AdoptRegions, type AdoptionStore } from "./adopt-panel";
@@ -143,6 +144,14 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
             Archived takeoff · {data?.saved?.capturedAt ?? "Reading saved capture…"} ·{" "}
             {data?.saved?.provenance.target.session} / {data?.saved?.provenance.target.openId}
           </p>
+          {data?.saved && <section aria-label="Saved takeoff contents">
+            <p>This capture stores takeoff data, not a view image.</p>
+            {data.saved.snapshot.world.zones.length === 0 ?
+              <EmptyState story="scope" exit="Return to live, choose views and adopt zoning regions">No adopted zones in this saved takeoff</EmptyState> :
+              <ul>{data.saved.snapshot.world.zones.map(row => <li key={row.zone.guid}>
+                {row.name} / {row.zone.lane.label} / {row.zone.declaredSqft} sf / {row.stage}
+              </li>)}</ul>}
+          </section>}
           <Button label="live" onClick={() => ctx.page.query({ work: "" })}>
             live
           </Button>

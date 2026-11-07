@@ -415,12 +415,13 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const absent=[...owners].filter(([,record])=>record.absent);
       if(!absent.length||!edits?.seed||!key||input.readOnly||input.history) return null;
       const selected=key;
+      const refusal = () => mounted.available() ? null : "Reveal this Place before starting Work";
       const run=async()=>{
-        requireWritable();
-        if(canonicalRouteInput(selected)!==canonicalRouteInput(selectedKey())) throw Error("Selected Work changed; Start the current member");
         if(pending.has("work.start")) throw Error("Start already pending");
-        pending.add("work.start");problems.delete("work.start");notify();
         try {
+          requireWritable();
+          if(canonicalRouteInput(selected)!==canonicalRouteInput(selectedKey())) throw Error("Selected Work changed; Start the current member");
+          pending.add("work.start");problems.delete("work.start");notify();
           const requests=absent.map(([id,record])=>commands["work.start"].input.parse({key:record.scope.key,
             seed:id===own?edits.seed!(page as never,input.target):record.config.state.schema.parse({})}));
           for(const request of requests){
@@ -437,7 +438,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         } catch(error){problems.set("work.start",error instanceof Error?error.message:String(error));throw error;}
         finally{pending.delete("work.start");notify();}
       };
-      return {label:"Start",get pending(){return pending.has("work.start");},refusal:null,
+      return {label:"Start",get pending(){return pending.has("work.start");},get refusal(){return refusal();},
         get failure(){return problems.get("work.start")??null;},
         get consent(){return writeReject(mounted.timeline(),["work.start"],(thread,request)=>void harnessClient(resolveWorkbenchConfig().origin).permission(thread,request,"stop_writes"));},
         run,plan:run,apply:run,cancel:()=>{},read:()=>null};

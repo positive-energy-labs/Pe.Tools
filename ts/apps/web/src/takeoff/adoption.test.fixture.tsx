@@ -23,9 +23,11 @@ import type { UseSource } from "../shell/source-contract";
 import { builtinRouteStamp } from "../route/builtin-inventory";
 import { module, viewCatalogue } from "./route";
 import { AdoptionBody } from "./typed-adoption";
+import { module as familiesModule } from "../families/route";
 
 // Real HTTP read graph, disk captures and Work. Only the native boundary and router are recorded.
-export async function journey(options: { catalogue?: ReturnType<typeof gate>; snapshot?: ReturnType<typeof gate> } = {}) {
+export async function journey(options: { catalogue?: ReturnType<typeof gate>; snapshot?: ReturnType<typeof gate>; start?: boolean; route?: "families" } = {}) {
+  const selectedModule = options.route === "families" ? familiesModule : module;
   let carriers = "needs-initialization";
   let catalogueState: "views" | "empty" | "failed" = "views";
   let catalogueHold = options.catalogue;
@@ -50,6 +52,18 @@ export async function journey(options: { catalogue?: ReturnType<typeof gate>; sn
     async read(input) {
       nativeCalls.push({ key: input.key, input: input.input });
       nativeScopes.push(input.scope);
+      if (input.key === "revit.catalog.loaded-families") {
+        if (catalogueHold) {
+          catalogueHold.entered.resolve();
+          await catalogueHold.release.promise;
+          catalogueHold = undefined;
+        }
+        return {
+          summary: { totalFamilies: 1, placedFamilies: 0, unplacedFamilies: 1, totalTypes: 1, totalPlacedInstances: 0, truncated: false },
+          families: [{ familyId: 1, familyUniqueId: "air-tag", familyName: "Air Terminal Tag", categoryName: "Air Terminal Tags", typeCount: 1, placedInstanceCount: 0, types: [{ typeName: "Standard" }] }],
+          issues: [],
+        };
+      }
       if (input.key === "revit.catalog.project-index") {
         const hold = catalogueHold;
         if (hold) {
@@ -132,7 +146,7 @@ export async function journey(options: { catalogue?: ReturnType<typeof gate>; sn
       throw Error(`Unexpected native read ${input.key}`);
     },
   });
-  const key = bindWork("takeoffs", path, undefined, ref);
+  const key = bindWork(selectedModule.spec.key, path, undefined, ref);
   let generation = 0;
   const pending = new Set<Promise<unknown>>(),
     listeners = new Set<() => void>();
@@ -147,7 +161,7 @@ export async function journey(options: { catalogue?: ReturnType<typeof gate>; sn
         const task = host
           .probe({
             read,
-            args: { ...(ctx.args as object), target: { kind: "document", ref } },
+            args: { ...(ctx.args as object), target: options.route === "families" ? ref : { kind: "document", ref } },
             subscription: `takeoffs-${stamp}`,
             generation: stamp,
           })
@@ -172,14 +186,17 @@ export async function journey(options: { catalogue?: ReturnType<typeof gate>; sn
     },
   });
   const first = host.probe({
-    read: "takeoffs.adoption",
-    args: { views: [], zones: [], work: "", target: { kind: "document", ref } },
+    read: options.route === "families" ? "families.view" : "takeoffs.adoption",
+    args: options.route === "families" ? { target: ref } : { views: [], zones: [], work: "", target: { kind: "document", ref } },
     subscription: "setup",
     generation: 0,
   });
   pending.add(first);
   void first.finally(() => pending.delete(first));
-  if (options.catalogue) await options.catalogue.entered.promise;
+  if (options.catalogue) await Promise.race([
+    options.catalogue.entered.promise,
+    first.then(async response => { throw Error(`Read finished before the catalogue hold: ${await response.text()}`); }),
+  ]);
   else {
     const response = await first;
     expect(response.status, await response.clone().text()).toBe(200);
@@ -261,7 +278,7 @@ export async function journey(options: { catalogue?: ReturnType<typeof gate>; sn
   };
   let search = new URLSearchParams();
   const mount = mountTypedRoute(
-    module,
+    selectedModule,
     {
       fixture: null,
       target: { kind: "document", ref },
@@ -276,12 +293,12 @@ export async function journey(options: { catalogue?: ReturnType<typeof gate>; sn
         subscribe: () => () => {},
       },
     },
-    workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("takeoffs")}`),
-    { work, sources: { "takeoffs.adoption": source("takeoffs.adoption"), "takeoffs.views": source("takeoffs.views") } },
+    workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp(options.route ?? "takeoffs")}`),
+    { work, sources: { "takeoffs.adoption": source("takeoffs.adoption"), "takeoffs.views": source("takeoffs.views"), "families.view": source("families.view") } },
   );
   const stop = mount.subscribe(() => {});
   await waitFor(() => expect(mount.startAction()).not.toBeNull());
-  await mount.startAction()!.run();
+  if (options.start !== false) await mount.startAction()!.run();
   return {
     host,
     mount,
@@ -300,7 +317,7 @@ export async function journey(options: { catalogue?: ReturnType<typeof gate>; sn
         () => {
           const value = mount.value();
           expect(value.current, value.current ? "" : value.reason).toBe(true);
-          expect(mount.value(viewCatalogue).current).toBe(true);
+          if (!options.route) expect(mount.value(viewCatalogue).current).toBe(true);
           expect(mount.workBasis()).toBeTruthy();
         },
         { timeout: 20000 },

@@ -847,3 +847,69 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
     conversation.value = null;
   }
 }, 30_000);
+
+
+test.each(["takeoffs", "families"] as const)("JZ kernel Start on %s settles while Reading or after it, and exposes a stale-custody refusal", async (route) => {
+  const { gate } = await import("../../../host/tests/host-read-graph.test-support");
+  for (const phase of ["settled", "reading"] as const) {
+    const catalogue = phase === "reading" ? gate() : undefined;
+    const j = await takeoffJourney({ catalogue, start: false, ...(route === "families" ? { route } : {}) });
+    function Journey() {
+      useSyncExternalStore(j.mount.subscribe, j.mount.revision, j.mount.revision);
+      return <KeyScopeHost id={`start-${route}`}><TypedChrome mount={j.mount} document={<span>Project document</span>} /></KeyScopeHost>;
+    }
+    const root = createRootRoute({ component: Journey });
+    const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: [`/${route}`] }) });
+    render(<RouterProvider router={router} />);
+    try {
+      const start = await screen.findByRole("button", { name: "Start" });
+      if (!catalogue) await waitFor(() => expect(j.mount.value().current).toBe(true), { timeout: 20000 });
+      else expect(j.mount.value()).toMatchObject({ current: false, status: "pending" });
+      // A retained press can race custody loss. At base this rejects before the catch and vanishes.
+      await act(async () => { j.mount.release(); fireEvent.click(start); });
+      expect(screen.getAllByRole("alert").some(row => row.textContent === "Place is not writable")).toBe(true);
+      expect((await j.host.journal.list()).filter(row => row.key === "work.start")).toHaveLength(0);
+      await act(async () => { const reacquire = j.mount.subscribe(() => {}); reacquire(); });
+      await waitFor(() => expect(screen.getByRole("button", { name: "Start" }).getAttribute("aria-disabled")).toBeNull());
+      fireEvent.click(screen.getByRole("button", { name: "Start" }));
+      catalogue?.release.resolve();
+      await waitFor(() => expect(j.mount.owner()?.ready).toBe(true));
+      await j.ready();
+      const receipts = (await j.host.journal.list()).filter(row => row.key === "work.start");
+      expect(receipts).toHaveLength(1);
+      expect(receipts[0]!.state).toBe("succeeded");
+      expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+      if (route === "takeoffs") expect(j.mount.value().value.initialize.refusal).toBeNull();
+      else {
+        const category = await screen.findByRole("button", { name: "Choose Air Terminal Tags" });
+        expect(category.getAttribute("aria-disabled")).toBeNull();
+        fireEvent.click(category);
+        await j.ready();
+        await waitFor(() => expect(j.mount.owner()?.doc.scope.edit?.value.categoryNames).toEqual(["Air Terminal Tags"]));
+      }
+    } finally { await j.close(); }
+  }
+}, 60000);
+
+test("JZ saved Takeoffs capture explains its empty snapshot and returns to live candidates", async () => {
+  const j = await takeoffJourney();
+  try {
+    await j.ready();
+    render(<TakeoffDrawing mount={j.mount} />);
+    const capture = adoptionData.parse(j.mount.value().value).captures[0]!;
+    fireEvent.click(screen.getByRole("button", { name: "Choose capture" }));
+    const option = (await screen.findAllByRole("option")).find(row => row.textContent?.includes(capture.capturedAt));
+    fireEvent.click(option!);
+    await waitFor(() => expect(j.mount.value().current).toBe(true), { timeout: 20000 });
+    expect(screen.getByText(/Archived takeoff/)).toBeTruthy();
+    expect(screen.getByText("No adopted zones in this saved takeoff")).toBeTruthy();
+    expect(screen.getByText(/This capture stores takeoff data, not a view image/)).toBeTruthy();
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.queryByRole("button", { name: "initialize" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "live" }));
+    await j.ready();
+    fireEvent.click(screen.getByRole("button", { name: "Choose views" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Zoning plan" }));
+    await screen.findByRole("checkbox", { name: "Select Office zone in Zoning plan" });
+  } finally { await j.close(); }
+}, 60000);
