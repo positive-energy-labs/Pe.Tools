@@ -45,7 +45,7 @@ export function useMarks({
 }: {
   snapshot: DuctSnapshot;
   priced: Priced | null;
-  heal: HealPlan | null;
+  heal: HealPlan | import("@pe/ducts-domain/heal").HealPlan | null;
   scene: Scene;
   claims: readonly Claim[];
   work: LossesWork;

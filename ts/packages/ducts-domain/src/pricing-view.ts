@@ -1,12 +1,12 @@
-import type { Priced } from "./pricing.ts";
-import type { LossResult } from "./losses.ts";
-import type { HealPlan } from "./heal.ts";
-/** Published results are JSON. Solver collections never cross the read boundary. */
-export type JsonView<T> = T extends ReadonlyMap<infer K,infer V> ? Record<Extract<K,string|number>,JsonView<V>> : T extends ReadonlySet<infer V> ? JsonView<V>[] : T extends readonly unknown[] ? {[K in keyof T]:JsonView<T[K]>} : T extends object ? {[K in keyof T]:JsonView<T[K]>} : T;
-export type PricedView=JsonView<Priced>;
-export type LossView=JsonView<LossResult>;
-export type HealView=JsonView<HealPlan>;
+import type { DuctsPricingData } from "@pe/agent-contracts";
+/** The accepted schema owns JSON projection types; the solver's collections stay private. */
+export type PricedView=DuctsPricingData["priced"];
+export type LossView=PricedView["next"];
+export type HealView=DuctsPricingData["analysis"]["heal"];
 
+export function unitFlowView(surveyed:Pick<PricedView,"equipmentFlows"|"fanFlows">,unit:number,groups:readonly string[]|null) {
+  return unitFlowsView(surveyed,groups)[unit]??{cfm:null,source:null};
+}
 /** Scoped unit-flow projection on the published records; no survey or solve runs here. */
 export function unitFlowsView(surveyed:Pick<PricedView,"equipmentFlows"|"fanFlows">,groups:readonly string[]|null) {
   return Object.fromEntries(Object.entries(surveyed.equipmentFlows).map(([id,flow])=>{

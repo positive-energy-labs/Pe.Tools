@@ -43,7 +43,8 @@ test("typed panes share declared Values; recorded Fans and Ducts use frozen Work
 
 test("optional Work, explicit demand and invocation arguments share one typed scope", async () => {
   const {z}=await import("zod");
-  const {route,field,sessionCommand,queryAction}=await import("../route/typed-route");
+  const {route,field}=await import("../route/typed-route");
+  const {sessionCommand,queryAction}=await import("../route/typed-actions");
   const {module:reference}=await import("./route");
   const {hostRead}=await import("../route/host-read");
   const {valueRead,workFingerprintSchema}=await import("@pe/agent-contracts");

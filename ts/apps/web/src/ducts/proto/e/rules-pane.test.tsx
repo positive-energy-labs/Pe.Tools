@@ -2,7 +2,7 @@
 import { designOf } from "@pe/ducts-domain/test-design";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import type { Priced } from "@pe/ducts-domain/pricing";
+import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { RulesTree } from "./rules-pane";
 
