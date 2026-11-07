@@ -12,7 +12,7 @@ export const workPatchSchema = z
   })
   .readonly();
 type Patch = WorkPatch<typeof workPatchSchema>;
-// Exercise the schema lookup used by verb, cell, salvage and transition bodies too.
+// Exercise the schema lookup used by verb, cell and transition bodies too.
 export const acceptedWorkPatches: WorkPatches<
   import("./route-kernel-data.ts").RouteGraphJson & { work: { schema: "fixture" } },
   { fixture: typeof workPatchSchema }

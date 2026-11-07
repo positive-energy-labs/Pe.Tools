@@ -1,23 +1,22 @@
-import type { ScopeToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import { legacyLiveVerbs, unavailableLegacyVerbs } from "./legacy-environment-bridge";
 import {
   workKey,
   workWriteAckSchema,
   type RouteGraph,
-  type RouteStatePatch,
   type WorkKey,
   type WorkWrite,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
+import type { ScopeToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
+import { legacyLiveVerbs, unavailableLegacyVerbs } from "./legacy-environment-bridge";
 
 import type { WorkJournal } from "./journal";
 import { acquireWorkWriter, writeLabel, type WorkWriter } from "./work-writes";
 
-import { type VerbContext, type PendingWorkHistory } from "./verbs";
 import { type MountAdapters, type MountBinding } from "./mount-contracts";
 import type { MountPage } from "./mount-page-owner";
-import type { MountTarget } from "./mount-target-owner";
 import type { MountReadings } from "./mount-readings-owner";
+import type { MountTarget } from "./mount-target-owner";
+import { type VerbContext, type PendingWorkHistory } from "./verbs";
 /** Owns Work writers, conflicts, rejected edits and revision-bound journal descriptions. */
 export function createMountWork<P, W>(
   graph: RouteGraph<P, W>,
@@ -40,21 +39,6 @@ export function createMountWork<P, W>(
   const writers = new Map<string, WorkWriter>();
   const releaseJournals: (() => void)[] = [];
   const deltas = new Map<string, () => void>();
-  /** The route says what the set-aside Work still adds; a throwing hook offers nothing. */
-  const salvagePatches = (): readonly RouteStatePatch[] | null => {
-    if (!graph.salvage || !("salvaged" in scope)) return null;
-    try {
-      const patches = graph.salvage(scope.salvaged, scope.work?.doc ?? null, {
-        readings: Object.fromEntries(
-          Object.keys(graph.readings).map((id) => [id, readings.get(id)]),
-        ),
-      });
-      return patches.length ? patches : null;
-    } catch (error) {
-      console.warn("ts/apps/web/src/shell/mount-owner.ts: fallback after failure", error);
-      return null;
-    }
-  };
   // Human and Pea reach the same flag: the host's stale refusal sets it, any accepted delta or a
   // newer read of the Work clears it.
   const present = () => {
@@ -262,7 +246,6 @@ export function createMountWork<P, W>(
     writers,
     journalFor,
     write,
-    salvagePatches,
     completeHistory,
     journalRefusal: () => journalRefusal,
     present,

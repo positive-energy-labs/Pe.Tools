@@ -14,8 +14,8 @@ import type {
   SchemaValue,
   WorkOf,
 } from "./route-kernel-page.ts";
-import type { RouteStateSpec } from "./route-state.ts";
 import type { WorkSchema } from "./route-kernel-page.ts";
+import type { RouteStateSpec } from "./route-state.ts";
 import type { ExecutionTarget } from "./target.ts";
 import type { JournalSubmission, Observation, WorkWriteOutcome } from "./work-journal-door.ts";
 
@@ -126,7 +126,7 @@ export interface BodyContext<
   readonly work: Immutable<Pick<WorkOf<G, S>, Extract<DepKeys<D, "work">, keyof WorkOf<G, S>>>>;
   readonly readings: Reads<G, S, E, DepKeys<D, "readings">>;
 }
-/** Predicates/salvage are global observers: invalidate on every Page/Work/reading
+/** Predicates are global observers: invalidate on every Page/Work/reading
  * publication. They are never scheduled under a reading's narrower dependency declaration. */
 export interface GlobalBodyContext<
   G extends RouteGraphJson,
@@ -266,12 +266,10 @@ export interface WorkRecoveryPort {
   state(): Readonly<{
     sentence: string | null;
     startFresh: boolean;
-    carryOver: boolean;
     busy: boolean;
     problem: string | null;
   }>;
   startFresh(): Promise<unknown>;
-  carryOver(): Promise<unknown>;
 }
 export type PaneContext<
   G extends RouteGraphJson,
@@ -603,21 +601,7 @@ export type BodySlots<
         ctx: BodyContext<G, S, E, { deps: At<G, "transitionDeps"> }>,
       ) => DecodeResult<PagePatch<G, S>>
     >
-  | Slot<
-      At<G, "salvagePresent">,
-      "salvagePresent",
-      "present",
-      (
-        result: WorkPatches<G, S>,
-        evidence: Immutable<BodyContext<G, S, E, { deps: At<G, "salvageDeps"> }>>,
-      ) => Presentation
-    >
-  | Slot<
-      At<G, "salvage">,
-      "salvage",
-      "salvage",
-      (old: unknown, ctx: GlobalBodyContext<G, S, E>) => DecodeResult<WorkPatches<G, S>>
-    >;
+;
 export type BodyBindings<
   G extends RouteGraphJson,
   S extends SchemaTable,

@@ -1,14 +1,15 @@
-import { showCellValue } from "./schedule-grid-data.ts";
-import { familiesReadProgressSchema } from "./families-progress.ts";
-export { familiesReadProgressSchema, type FamiliesReadProgress } from "./families-progress.ts";
-import { workKeySchema } from "./route-state.ts";
-import { documentRefSchema } from "./target.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { writeIntentSchema } from "./write-intent.ts";
 import { z } from "zod";
+import { familiesReadProgressSchema } from "./families-progress.ts";
+import { workKeySchema } from "./route-state.ts";
+import { type RouteStateSpec } from "./route-state.ts";
+import { showCellValue } from "./schedule-grid-data.ts";
+import { documentRefSchema } from "./target.ts";
+import { writeIntentSchema } from "./write-intent.ts";
+export { familiesReadProgressSchema,type FamiliesReadProgress } from "./families-progress.ts";
 
-import { isRecord, type RouteStateSpec } from "./route-state.ts";
 import { draftCellSchema } from "./draft.ts";
+
 import { podDraftSourceSchema } from "./settings.ts";
 
 export const diagnosticSchema = z.object({
@@ -368,9 +369,6 @@ export const familiesExcluded = (
     return held ? [{ familyName: entry.familyName, by: held.by }] : [];
   });
 
-/** What start fresh can carry over from unreadable Work, each piece only on the person's press. */
-export type FamiliesSalvage = { familyNames: string[]; familyIds: number[]; scope?: AppliedFilter };
-
 export const familiesRouteState = {
   route: "families",
   title: "Families",
@@ -390,33 +388,6 @@ export const familiesRouteState = {
   description:
     "Shared Family Foundry Work. Set scope.edit to {value:{categoryNames,familyNames,placementScope}}. Set cells.<key>.edit for a canonical [familyName,typeName,parameter] identity from scopeTypes, or patch.edit for exact native patch source bytes. Either author may replace or clear staged edits (last writer wins) and exclusions at the expected Work revision. Apply plans/checks/writes/readbacks the submitted edits; native patch and per-type edits are mutually exclusive.",
   schema: familiesDocumentSchema,
-
-  // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is
-  // a route command, so neither can write into authored Work.
-  // Old Work held exclusions by element id (`excludedIds`, then id-keyed `excluded`), then by name;
-  // the page resolves ids to current names and re-excludes by name. Its scope was a bare filter
-  // (or `plan.scope` before that): offered back, either author may restore it as an edit.
-  salvage: (raw): FamiliesSalvage => {
-    const doc = isRecord(raw) ? raw : {};
-    const keys = isRecord(doc.excluded) ? Object.keys(doc.excluded) : [];
-    const ids = [
-      ...(Array.isArray(doc.excludedIds) ? doc.excludedIds : []),
-      ...keys.filter((key) => /^\d+$/.test(key)).map(Number),
-    ];
-    const scopeCell = isRecord(doc.scope) ? doc.scope : {};
-    const scope = [
-      doc.scope,
-      isRecord(scopeCell.edit) ? scopeCell.edit.value : undefined,
-      isRecord(doc.plan) ? doc.plan.scope : undefined,
-    ]
-      .map((candidate) => appliedScopeSchema.safeParse(candidate))
-      .find((parsed) => parsed.success)?.data;
-    return {
-      familyNames: keys.filter((key) => !/^\d+$/.test(key)),
-      familyIds: ids.filter((id): id is number => Number.isSafeInteger(id)),
-      ...(scope ? { scope } : {}),
-    };
-  },
 } satisfies RouteStateSpec<typeof familiesDocumentSchema>;
 
 export const familiesObservationSchema = z.object({

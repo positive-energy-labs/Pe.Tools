@@ -1,5 +1,8 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
+import { captureHostModule } from "./host-route-admission.ts";
+import type { HostRouteModule } from "./host-route-admission.ts";
+
 import { builtinData } from "./route-kernel.fixtures.ts";
 import {
   builtinClosureFingerprint,
@@ -8,8 +11,7 @@ import {
   createHostAdmittedRouteRegistry,
 } from "./route-module.ts";
 import type { BuiltinClosure } from "./route-module.ts";
-import { captureHostModule } from "./host-route-admission.ts";
-import type { HostRouteModule } from "./host-route-admission.ts";
+
 const base: HostRouteModule = {
   data: {
     ...builtinData,
@@ -95,55 +97,12 @@ test("post-prepare replacement of a host body refuses", async () => {
   ).toBe(false);
 });
 
-test("host recovery requires the declared slot and exact captured extraction", async () => {
-  const recovery: HostRouteModule = {
-    ...neutral,
-    data: { ...neutral.data, salvage: "carry" },
-    bodies: {
-      ...neutral.bodies,
-      carry: {
-        kind: "recovery",
-        slot: "salvage",
-        source: { module: "neutral.ts", export: "recover" },
-        run: (raw) => raw,
-      },
-    },
-  };
-  const complete = {
-    ...recovery,
-    workState: { ...neutral.workState!, salvage: recovery.bodies.carry!.run },
-  };
-  const port = await prepare(complete);
-  expect(port.admitHost(complete).ok).toBe(true);
-  const candidates: HostRouteModule[] = [
-    { ...recovery, bodies: neutral.bodies },
-    {
-      ...recovery,
-      bodies: { ...recovery.bodies, carry: { ...recovery.bodies.carry!, slot: "panes.main.body" } },
-    },
-    {
-      ...recovery,
-      bodies: { ...recovery.bodies, carry: { ...recovery.bodies.carry!, kind: "migration" } },
-    },
-    { ...recovery, data: neutral.data },
-  ];
-  for (const candidate of candidates)
-    expect((await prepare(candidate)).admitHost(candidate).ok).toBe(false);
-  expect(
-    port.admitHost({
-      ...complete,
-      bodies: { ...recovery.bodies, carry: { ...recovery.bodies.carry!, run: () => null } },
-    }).ok,
-  ).toBe(false);
-});
-
 test("complete Work spec is required and every host-run export is captured", async () => {
   const workState = {
     ...neutral.workState!,
     finds: ["search"],
     editable: [["amount"]],
     reconcileEdit: (next: unknown, patches: readonly unknown[]) => ({ next, patches }),
-    salvage: (raw: unknown) => raw,
   };
   const module = { ...neutral, workState };
   const port = await prepare(module);
@@ -154,7 +113,6 @@ test("complete Work spec is required and every host-run export is captured", asy
     { ...module, workState: { ...workState, schemaVersion: 3 } },
     { ...module, workState: { ...workState, schema: z.object({}) } },
     { ...module, workState: { ...workState, reconcileEdit: () => null } },
-    { ...module, workState: { ...workState, salvage: () => null } },
     { ...module, workState: { ...workState, finds: [] } },
     { ...module, workState: { ...workState, editable: [] } },
     { ...module, workState: { ...workState, migrations: { 1: () => null } } },
@@ -166,7 +124,7 @@ test("complete Work spec is required and every host-run export is captured", asy
       workState: undefined,
     }).ok,
   ).toBe(false);
-  for (const key of ["reconcileEdit", "salvage"] as const)
+  for (const key of ["reconcileEdit"] as const)
     expect(() =>
       captureHostModule({ ...module, workState: { ...workState, [key]: "not executable" } }),
     ).toThrow();

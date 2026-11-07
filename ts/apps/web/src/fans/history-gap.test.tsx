@@ -1,23 +1,15 @@
-import { placeInput } from "../shell/typed-place.test-support";
-import { acceptedWork } from "../shell/work-publication.test-support";
 // @vitest-environment jsdom
+import { bindWork } from "@pe/agent-contracts";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { bindWork } from "@pe/agent-contracts";
-import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
+import { routeVerbJsonSchema } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import {
   builtinClosureFingerprint,
   createBuiltinRouteInventory,
 } from "../../../../packages/agent-contracts/src/route-module";
-import { routeVerbJsonSchema } from "../../../../packages/agent-contracts/src/route-kernel-data";
-import type { KernelServices } from "../../../../packages/agent-contracts/src/route-kernel-environment";
-import type {
-  Observation,
-  WorkWriteOutcome,
-} from "../../../../packages/agent-contracts/src/work-journal-door";
+
+import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
 import { module as captures } from "../shell/admitted-module.test.fixture";
-import { createRouteShell } from "../shell/admitted-mount";
-import { createFixtureWorkDoor } from "../shell/fixture-work-door";
 
 // W1b kill-condition witness, not the migrated fan surface or a native ESP fixture.
 const input = z.object({ row: z.string(), value: z.number() });
@@ -81,66 +73,8 @@ async function witness() {
   if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
   return result.route;
 }
-function settle(observation: Observation<WorkWriteOutcome>): Promise<WorkWriteOutcome> {
-  return new Promise((resolve) =>
-    observation.subscribe(
-      (value) => {
-        if (value.kind !== "pending") resolve(value);
-      },
-      () => {},
-    ),
-  );
-}
 
-test("drive-7 S8a labels cannot retain the edited row and value at the admitted mount", async () => {
-  const route = await witness();
-  const door = createFixtureWorkDoor(
-    { route: route.data.key, title: "", description: "", schema: work },
-    { drops: {} },
-  );
-  const services: KernelServices = {
-    reads: {
-      lifetime: "read",
-      acquire: (request) => ({
-        lifetime: "read",
-        key: request.key,
-        read: () => ({ status: "pending", current: false, reason: "unused" }),
-        release() {},
-      }),
-    },
-    readings: { lifetime: "subscription", subscribe: () => () => {} },
-    clock: { lifetime: "read", now: Date.now },
-    availability: {},
-    work: door,
-  };
-  const mount = createRouteShell(services).mount(
-    route,
-    placeInput({
-      read: () => new URLSearchParams(),
-      write() {},
-      subscribe: () => () => {},
-    }),
-  );
-  try {
-    await acceptedWork(mount);
-    expect(
-      await settle(
-        mount.invoke("drop", { row: "DS-1", value: 0.0132 }) as Observation<WorkWriteOutcome>,
-      ),
-    ).toMatchObject({ kind: "accepted" });
-    expect(
-      await settle(
-        mount.invoke("drop", { row: "SH-1", value: 0.18 }) as Observation<WorkWriteOutcome>,
-      ),
-    ).toMatchObject({ kind: "accepted" });
-    expect(mount.work()?.value).toEqual({ drops: { "DS-1": 0.0132, "SH-1": 0.18 } });
-    const labels = mount.journal()!.moves.map((move) => move.label);
-    expect(labels).toEqual(["Part drop", "Part drop"]);
-    expect(labels).not.toEqual(["Part drop DS-1 → 0.0132 in-wg", "Part drop SH-1 → 0.18 in-wg"]);
-  } finally {
-    mount.close();
-  }
-});
+
 
 test("the declaration has no Work history-description body slot", () => {
   const result = routeVerbJsonSchema.safeParse({

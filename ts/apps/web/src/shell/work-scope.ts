@@ -10,6 +10,4 @@ export interface MountScope<W> {
   conflict?: boolean;
   /** The kernel door sets this: the host holds Work it cannot read, so start-fresh is the one way out. */
   unreadable?: WorkKey;
-  /** The kernel door sets this: what the host set aside for this Work, raw; the owner derives the patches with the readings. */
-  salvaged?: unknown;
 }

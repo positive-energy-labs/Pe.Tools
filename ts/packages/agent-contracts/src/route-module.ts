@@ -1,6 +1,8 @@
-import type { WorkOf } from "./route-kernel-page.ts";
-import type { BodyBindings, EntryTable } from "./route-kernel-bodies.ts";
-import type { SchemaTable } from "./route-kernel-page.ts";
+import type { z } from "zod";
+import { z as kernelZ } from "zod";
+import { commandLink, requireLinkedCatalog, type CatalogAxes } from "./catalog.ts";
+import type { CatalogLink } from "./catalog.ts";
+import type { Command } from "./command.ts";
 import {
   captureHostModule,
   type HostRouteModule,
@@ -8,15 +10,24 @@ import {
   type HostRouteAdmissionPort,
   type HostAdmittedRoute,
 } from "./host-route-admission.ts";
-import type { RouteModule as KernelModule, RouteBodyRender } from "./route-kernel-admission.ts";
-import { bare, manyCodec } from "./route-field.ts";
 import { linkedCatalog } from "./pe-api.ts";
-import { commandLink, requireLinkedCatalog, type CatalogAxes } from "./catalog.ts";
-import type { z } from "zod";
-import type { Command } from "./command.ts";
-import type { RouteStateSpec } from "./route-state.ts";
+import { bare, manyCodec } from "./route-field.ts";
 import type { RouteGraph } from "./route-graph.ts";
 import { validateRouteGraph } from "./route-graph.ts";
+import { canonicalRouteJson } from "./route-graph.ts";
+
+import type { RouteModule as KernelModule, RouteBodyRender } from "./route-kernel-admission.ts";
+import type {
+  RouteFingerprint,
+  RouteFingerprintInput,
+  RouteAdmissionPort,
+  RouteAdmission,
+  AdmittedRouteRegistry,
+} from "./route-kernel-admission.ts";
+import type { BodyBindings, EntryTable } from "./route-kernel-bodies.ts";
+import type { WorkOf } from "./route-kernel-page.ts";
+import type { SchemaTable } from "./route-kernel-page.ts";
+import type { RouteStateSpec } from "./route-state.ts";
 
 /** The same admission envelope for shipped and Pod-authored route modules. */
 export interface RouteModule<B = unknown> {
@@ -88,8 +99,7 @@ export const admittedRouteEntries = new Map<
 
 // Kernel admission is prepared independently of the legacy directory above. S2 removes
 // the old executable-graph API when its remaining mount/Pod consumers migrate.
-import { z as kernelZ } from "zod";
-import { canonicalRouteJson } from "./route-graph.ts";
+
 import {
   decodeRouteGraph,
   linkRouteBodies,
@@ -97,19 +107,12 @@ import {
   routeDiagnostic,
   type RouteBindings,
 } from "./route-bodies.ts";
-import type { CatalogLink } from "./catalog.ts";
+
 import type {
   RouteGraphJson as KernelGraph,
   Immutable,
   RouteDiagnostic,
 } from "./route-kernel-data.ts";
-import type {
-  RouteFingerprint,
-  RouteFingerprintInput,
-  RouteAdmissionPort,
-  RouteAdmission,
-  AdmittedRouteRegistry,
-} from "./route-kernel-admission.ts";
 
 const sha = kernelZ.string().regex(/^[a-f0-9]{64}$/);
 const packagePath = kernelZ
@@ -918,22 +921,14 @@ function admitHostProjection(
       for (const [age, id] of Object.entries(work.migrations))
         if (state.migrations?.[Number(age)] !== module.bodies[id]?.run)
           fail(`workState.migrations.${age}`, "Work migration differs from captured body");
-      if (data.salvage && state.salvage !== module.bodies[data.salvage]?.run)
-        fail("workState.salvage", "Work recovery differs from captured body");
     }
   } else if (state) fail("workState", "Only a Work owner declares a Work spec");
-  if (data.salvage && work?.schema) {
-    const body = module.bodies[data.salvage];
-    if (!body || body.kind !== "recovery" || body.slot !== "salvage")
-      fail("salvage", "Missing or misbound host recovery extraction");
-  }
   for (const [id, body] of Object.entries(module.bodies))
     if (
       !work?.schema ||
-      (!(body.kind === "recovery" && id === data.salvage && body.slot === "salvage") &&
-        !Object.entries(work.migrations).some(
-          ([age, ref]) => ref === id && body.slot === `work.migrations.${age}`,
-        ))
+      !Object.entries(work.migrations).some(
+        ([age, ref]) => ref === id && body.slot === `work.migrations.${age}`,
+      )
     )
       fail(`bodies.${id}`, "Undeclared host body");
   if (errors.length) return { ok: false, diagnostics: errors };

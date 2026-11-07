@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { createLegacyRouteRegistry, legacyRouteDiscovery } from "./shell/legacy-route-door";
-import { ductLossGraph as ductLoss } from "./shell/projection-graph.test.fixture";
-import { indexGraph } from "./index/graph";
 import {
   cellVerbId,
   gate,
@@ -11,7 +8,6 @@ import {
   pane,
   projectRouteGraph,
   routeGraphHash,
-  SALVAGE_VERB,
   START_FRESH_VERB,
   validateRouteGraph,
   type CellsDecl,
@@ -19,6 +15,9 @@ import {
   type RouteGraph,
   type VerbDecl,
 } from "../../../packages/agent-contracts/src/route-graph.ts";
+import { indexGraph } from "./index/graph";
+import { createLegacyRouteRegistry, legacyRouteDiscovery } from "./shell/legacy-route-door";
+import { ductLossGraph as ductLoss } from "./shell/projection-graph.test.fixture";
 
 const fields = ductLoss.fields;
 
@@ -113,7 +112,6 @@ test("field roles supply defaults and every explicit policy wins, including fals
     }).fields.face?.url,
   ).toBe("push");
 });
-
 
 test("singleton catalogue keys cannot become an undeclared subject picker", () => {
   const broken = {
@@ -412,33 +410,6 @@ test("every graph with Work projects the kernel's start-fresh recovery; its id a
   const own = { ...withCells(rules), verbs: { mine: { ...verb("Mine"), kind: "recovery" } } };
   expect(validateRouteGraph(own as RouteGraph)).toEqual([
     { code: "reserved-verb", path: "verbs.mine", message: "Recovery verbs are kernel-owned" },
-  ]);
-});
-
-test("a graph's salvage hook projects the carry-over recovery; its id is reserved and it needs Work", () => {
-  const salvaging = { ...withCells(rules), salvage: () => [] } as RouteGraph;
-  expect(validateRouteGraph(salvaging)).toEqual([]);
-  expect(projectRouteGraph(salvaging).verbs[SALVAGE_VERB]).toMatchObject({
-    kind: "recovery",
-    review: "shown",
-  });
-  // Without the hook there is nothing to carry over, so Pea is not offered the verb.
-  expect(projectRouteGraph(withCells(rules)).verbs[SALVAGE_VERB]).toBeUndefined();
-  expect(
-    validateRouteGraph({ ...withCells(rules), verbs: { [SALVAGE_VERB]: verb("Mine") } }),
-  ).toEqual([
-    {
-      code: "reserved-verb",
-      path: `verbs.${SALVAGE_VERB}`,
-      message: `'${SALVAGE_VERB}' is a kernel verb id`,
-    },
-  ]);
-  expect(validateRouteGraph({ ...ductLoss, salvage: () => [] } as unknown as RouteGraph)).toEqual([
-    {
-      code: "invalid-graph",
-      path: "salvage",
-      message: "Only a graph with Work can carry salvage over",
-    },
   ]);
 });
 

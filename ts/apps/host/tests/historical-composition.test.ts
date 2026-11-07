@@ -1,26 +1,26 @@
+import { sourceProvenanceSchema, type Caller, type WorkKey } from "@pe/agent-contracts";
+import { HOST_RUNTIME_SERVICE_HEADER, HOST_RUNTIME_SERVICE_QUERY } from "@pe/host-contracts/contracts";
+import { RouteWorkspace } from "@pe/runtime";
+import { Context, Effect, Layer } from "effect";
+import { HttpRouter } from "effect/http";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
-import { Context, Effect, Layer } from "effect";
-import { HttpRouter } from "effect/http";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { sourceProvenanceSchema, type Caller, type WorkKey } from "@pe/agent-contracts";
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
-import { RouteWorkspace } from "@pe/runtime";
-import { readInputRoutes, hostInputGraph } from "../src/app.ts";
-import { hostInputs, recordingInputSelection } from "../src/host-program.ts";
-import { relaunchOutOfGuard } from "../src/redirection-trust.ts";
-import { admitBuild } from "../src/receipt-export.ts";
-import { nativeCatalogIdentity, nativeInputIdentity, openRecordingWriter } from "../src/native-recording.ts";
-import { admittedRequestIdentity, readSchemas, RequestIdentity } from "../src/request-services.ts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { bootHost } from "./real-server.ts";
-import { HOST_RUNTIME_SERVICE_HEADER, HOST_RUNTIME_SERVICE_QUERY } from "@pe/host-contracts/contracts";
-import { hostOwnership } from "../src/host-ownership.ts";
+import { readInputRoutes, hostInputGraph } from "../src/app.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
+import { hostInputs, recordingInputSelection } from "../src/host-program.ts";
+import { nativeCatalogIdentity, nativeInputIdentity, openRecordingWriter } from "../src/native-recording.ts";
+import { admitBuild } from "../src/receipt-export.ts";
+import { relaunchOutOfGuard } from "../src/redirection-trust.ts";
+import { admittedRequestIdentity, readSchemas, RequestIdentity } from "../src/request-services.ts";
 import { threadPointerPort } from "../src/thread-pointers.ts";
+import { bootHost } from "./real-server.ts";
 
 const dirs: string[] = [];
 afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true }); });
@@ -148,7 +148,6 @@ test("journal, Work and pointer owners refuse before storage or executor access"
     () => workspace.step(work, "/fans", "human", "redo", 0),
     () => workspace.publish(work, "/fans", [], 0),
     () => workspace.startFresh(work, "/fans", "human"),
-    () => workspace.salvage(work, "/fans"),
   ]) await expect(Promise.resolve().then(async () => { await run(); })).rejects.toMatchObject({ problem: "recording.historical" });
   let mutations = 0; const pointers = threadPointerPort(inputs);
   pointers.bind({ read: () => ({ threadId: "t1", pointers: [] }), point: () => { mutations++; return { threadId: "t1", pointers: [] }; }, dismiss: () => { mutations++; return { threadId: "t1", pointers: [] }; } });
@@ -170,7 +169,6 @@ test("historical open creates nothing; identity and point gaps refuse; unrecorde
   let built = 0; hostInputGraph(live, () => { built++; return Layer.empty; }, () => { throw Error("historical graph selected"); });
   expect(built).toBe(1);
 });
-
 
 test("historical entry serves real static files through identity and retains API refusals", async () => {
   const { dir } = await bundle();
@@ -244,7 +242,6 @@ test("historical entry serves real static files through identity and retains API
     } finally { await absent.close(); }
   }
 }, 60000);
-
 
 test("recording process selection is strict and cannot enter the source live fallback", async () => {
   expect(await Effect.runPromise(recordingInputSelection(["--open", "--no-revit", "--take-over-host"]))).toBeUndefined();

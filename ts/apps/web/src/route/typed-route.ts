@@ -1,6 +1,3 @@
-import { identityCodecs, subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
-import { salvageWork } from "@pe/agent-contracts/route-state";
-import { z } from "zod";
 import type {
   HostRouteModule,
   Immutable,
@@ -15,6 +12,9 @@ import type {
   WorkHistoryPort,
   Many,
 } from "@pe/agent-contracts";
+import { identityCodecs, subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
+import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
+import { z } from "zod";
 import type { Publication } from "./host-read.ts";
 
 type Field = {
@@ -123,7 +123,6 @@ export interface ActionHandle extends importPlanHandle {
   readonly consent: { until: string; run(): void } | null;
   run(input?: unknown): Promise<unknown>;
 }
-import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 
 type Owner = { state: RouteStateSpec<z.ZodObject>; value?: string };
 export type Owners = Readonly<Record<string, Owner>>;
@@ -201,8 +200,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   const edits = spec.edits;
   const declared = edits?.work;
   const work = !declared ? undefined : "schema" in declared ? declared : { route: spec.key, title: spec.name,
-    description: declared.description ?? spec.directory.summary, schema: declared, schemaVersion: 1,
-    salvage: (raw:unknown) => salvageWork(declared,raw).doc };
+    description: declared.description ?? spec.directory.summary, schema: declared, schemaVersion: 1, };
   const owners = work && edits ? { ...edits.owners, [work.route]: {state:work,value:edits.value} } : {};
   const normalized = { ...spec, needs: spec.needs ?? "project", commands: spec.commands ?? {},
     edits: work && edits ? {...edits,work,owners} : undefined };

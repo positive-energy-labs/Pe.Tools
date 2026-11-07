@@ -1,15 +1,14 @@
-import ts from "typescript";
 import { readFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
-import type { TypedRoute } from "../src/route/typed-route.ts";
+import ts from "typescript";
 import { z } from "zod";
+import type { TypedRoute } from "../src/route/typed-route.ts";
 /** Preserve imported Work functions and refinements in either builtin or Pod host projection. */
 export async function projectWork(
   entry: string,
   typed: TypedRoute,
   destination: string,
   exportName: string,
-  salvageFrom: string,
   load: (specifier: string) => Promise<Record<string, { schema?: unknown }>>,
 ) {
   const code = ts.createSourceFile(
@@ -78,7 +77,7 @@ export async function projectWork(
   );
   const definition = definitions[binding.imported]!.schema
     ? `import { ${binding.imported} as ${exportName} } from ${schemaImport};\nexport { ${exportName} };\n`
-    : `import { ${binding.imported} as schema } from ${schemaImport};\nimport {salvageWork} from ${JSON.stringify(salvageFrom)};\nexport const ${exportName}={route:${JSON.stringify(typed.data.key)},title:${JSON.stringify(typed.spec.name)},description:schema.description??${JSON.stringify(typed.spec.directory.summary)},schema,schemaVersion:1,salvage:(raw:unknown)=>salvageWork(schema,raw).doc};\n`;
+    : `import { ${binding.imported} as schema } from ${schemaImport};\nexport const ${exportName}={route:${JSON.stringify(typed.data.key)},title:${JSON.stringify(typed.spec.name)},description:schema.description??${JSON.stringify(typed.spec.directory.summary)},schema,schemaVersion:1};\n`;
   const properties = `workState:work,readWorks:${JSON.stringify(typed.host.readWorks)},schemas:{[data.work!.schema!]:work.schema,[data.historyDetail!]:z.fromJSONSchema(${JSON.stringify(z.toJSONSchema(typed.host.schemas.historyDetail!, { io: "input" }))})},`;
   return { definition, properties };
 }

@@ -1,35 +1,30 @@
-import {hostReadSource} from "./host-read-source.ts";
+import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { Context, Effect, Fiber, Layer, Schema, Option } from "effect";
+import { watch } from "node:fs";
+import { mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
+import rosterCapture from "../../../../packages/host-contracts/src/fixtures/k2-roster.json";
 import {
   HostNativeRead,
   canonicalJson,
 } from "../../../../packages/host-internal/src/native-read.ts";
-import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import rosterCapture from "../../../../packages/host-contracts/src/fixtures/k2-roster.json" with { type: "json" };
-import { hostOwnership } from "../../../host/src/host-ownership.ts";
-import { HostDocumentMarks } from "../../../host/src/document-marks.ts";
-import { HostSessionInventory } from "../../../host/src/session-inventory.ts";
-import { DuctFiles } from "../../../host/src/ducts-files.ts";
-import { Publications } from "../../../host/src/reads/evaluator.ts";
 import { RevitBridge } from "../../../host/src/bridge.ts";
-import { SdkSession } from "../../../host/src/sdk-session.ts";
-import { bootHost } from "../../../host/tests/real-server.ts";
-import { connectTestBridge } from "../../../host/tests/bridge-fixture.ts";
+import { HostDocumentMarks } from "../../../host/src/document-marks.ts";
+import { DuctFiles } from "../../../host/src/ducts-files.ts";
+import { firmFilePath, FIRM_SEED } from "../../../host/src/ducts-inputs.ts";
+import { hostOwnership } from "../../../host/src/host-ownership.ts";
 import { hostInputs } from "../../../host/src/host-program.ts";
-import { admittedReceiptStamps } from "../../../host/src/receipt-export.ts";
-import { fansSheetCapability, type ResolvedRead } from "@pe/agent-contracts";
-import { createRouteTokenIssuer } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
-import { sourceRouteServices } from "./source-route-services.ts";
-import { hostRead } from "../route/host-read.ts";
-import { watch } from "node:fs";
-import { mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { HostInputContext } from "../../../host/src/input-context.ts";
 import { openRecordingWriter } from "../../../host/src/native-recording.ts";
-import { dirname, join } from "node:path";
-import { firmFilePath, FIRM_SEED } from "../../../host/src/ducts-inputs.ts";
+import { Publications } from "../../../host/src/reads/evaluator.ts";
+import { admittedReceiptStamps } from "../../../host/src/receipt-export.ts";
+import { SdkSession } from "../../../host/src/sdk-session.ts";
+import { HostSessionInventory } from "../../../host/src/session-inventory.ts";
+import { connectTestBridge } from "../../../host/tests/bridge-fixture.ts";
+import { bootHost } from "../../../host/tests/real-server.ts";
 
 const transport = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock("../host/runtime", () => ({ hostFetch: transport.fetch }));
@@ -217,93 +212,6 @@ test("release fences its own attempt without consuming the next generation's cha
     await host.close();
   }
 });
-
-test("mounted Fans core and roster cannot supersede one another through their shared operation", async () => {
-  const host = await liveHost(true);
-  const replies: unknown[] = [];
-  transport.fetch.mockImplementation(async (path: string, init: RequestInit) => {
-    const response = await fetch(host.base + path, {
-      ...init,
-      headers: { ...init.headers, ...host.headers },
-    });
-    if (!JSON.parse(init.body as string).release) replies.push(await response.clone().json());
-    return response;
-  });
-  const stops: (() => void)[] = [];
-  try {
-    const read = hostRead(fansSheetCapability);
-    const services = sourceRouteServices({ [read.key]: hostReadSource(read) });
-    const issuer = createRouteTokenIssuer();
-    const scope = issuer.scope({ target: { kind: "document", ref: host.target }, work: null });
-    const open = (id: string, generation = 1) => {
-      const token = issuer.attempt(scope, id, generation);
-      if (!token.ok) throw Error(token.reason);
-      const request = {
-        key: {
-          op: read.key,
-          sortedKeyInput: JSON.stringify({ fan: [], sheetPath: "" }),
-          freshnessGeneration: generation,
-        },
-      } as ResolvedRead<unknown>;
-      const handle = services.reads.acquire(request, token.value);
-      stops.push(
-        services.readings.subscribe(request, token.value, () => {}),
-        () => handle.release(),
-      );
-      return handle;
-    };
-    const handles = [open("value"), open("roster")];
-    await expect
-      .poll(() => handles.every((handle) => handle.read().current), { timeout: 10000 })
-      .toBe(true);
-    expect(
-      handles.map((handle) => handle.read().current),
-      JSON.stringify(replies),
-    ).toEqual([true, true]);
-    expect(replies).toHaveLength(1);
-    expect(handles[0]!.read()).toEqual(handles[1]!.read());
-    stops[0]!();
-    stops[1]!(); // One pane leaves; its sibling retains the shared source.
-    expect(handles[1]!.read().current).toBe(true);
-    handles[0] = open("value", 2); // Explicit refresh renews the ONE publication for both readers.
-    expect(handles[1]!.read().current).toBe(false);
-    await expect
-      .poll(() => handles.every((handle) => handle.read().current), { timeout: 10000 })
-      .toBe(true);
-    expect(replies).toHaveLength(2);
-    expect(handles[0]!.read()).toEqual(handles[1]!.read());
-    const capture = await fetch(`${host.base}/pe/history`, {
-      method: "POST",
-      headers: host.headers,
-      body: JSON.stringify({ kind: "captured", document: "C:/model.rvt" }),
-    });
-    const point = await capture.json();
-    expect(capture.status, JSON.stringify(point)).toBe(200);
-    const replay = await fetch(`${host.base}/pe/fans/sheet`, {
-      method: "POST",
-      headers: {
-        ...host.headers,
-        "x-pe-history-point": point.id,
-        "x-pe-history-page": encodeURIComponent(
-          JSON.stringify({ instance: "fans.sheet", route: "fans", page: {}, href: "/fans" }),
-        ),
-      },
-      body: JSON.stringify({
-        subscription: "recorded",
-        generation: 1,
-        args: { target: host.target, fan: [], sheetPath: "" },
-      }),
-    });
-    const recorded = await replay.json();
-    expect(replay.status, JSON.stringify(recorded)).toBe(200);
-    expect(recorded.state, JSON.stringify(recorded)).toBe("current");
-  } finally {
-    for (const stop of stops) stop();
-    await host.close();
-    transport.fetch.mockReset();
-  }
-});
-
 
 test("a stopped recording preserves live Fans but cannot hide a late closed target", async () => {
   const dir=await mkdtemp(join(tmpdir(),"pe-capture-stop-"));

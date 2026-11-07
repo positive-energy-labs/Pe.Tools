@@ -1,5 +1,3 @@
-import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Undo2 } from "lucide-react";
 import {
   clearAll,
   summarize,
@@ -8,17 +6,19 @@ import {
   type RouteStatePatch,
   type CellLike,
 } from "@pe/agent-contracts";
+import { Undo2 } from "lucide-react";
+import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
+import { useScopeKeys } from "@pe/kit/keys";
+import { Button } from "@pe/kit/lang/button";
 import {
   cellFromDraft,
   StateCell,
   type CellTransition,
   type StateCellProps,
 } from "@pe/kit/lang/cell";
-import { Button } from "@pe/kit/lang/button";
-import { Verdict } from "@pe/kit/lang/verdict";
-import { useScopeKeys } from "@pe/kit/keys";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { Verdict } from "@pe/kit/lang/verdict";
 
 interface WorkStandingProps {
   conflict?: boolean;
@@ -26,7 +26,7 @@ interface WorkStandingProps {
   reload?: () => void;
   /** Offered only on unreadable saved Work: set it aside, untouched, and start an empty one. */
   startFresh?: () => void;
-  /** What the confirm shows, read-only, of the Work start fresh sets aside (a route's salvage). */
+  /** Read-only preview of the Work bytes Start fresh sets aside. */
   startFreshAside?: ReactNode;
 }
 

@@ -11,11 +11,11 @@ import type {
   ActionStatus,
 } from "@pe/agent-contracts";
 
+import type { LogEntry, RouteNote } from "#/shell/owner";
+import type { PageMove } from "#/shell/page";
 import type { ActionFacts } from "./facts";
 import type { PresentationFacts } from "./facts";
-import type { PageMove } from "#/shell/page";
 import type { Refusal } from "./refusal";
-import type { LogEntry, RouteNote } from "#/shell/owner";
 import type { BindingLost, TargetProvenance } from "./route-target";
 
 export interface ActionHandle extends ActionFacts {
@@ -73,11 +73,6 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
      * lands on `failure`; success re-reads Work. Null unless the failure is the host's UNREADABLE_WORK.
      */
     readonly startFresh: (() => Promise<Refusal | null>) | null;
-    /**
-     * Human-only, read-only: what the route's declared `salvage` carries over from Work it can no
-     * longer read (the unreadable Work, else the newest aside). Null when there is none.
-     */
-    readonly salvage: (() => Promise<{ from: string; value: unknown } | null>) | null;
     readonly reload: () => void;
   };
   readonly readings: Readonly<Record<R, Reading<unknown>>>;

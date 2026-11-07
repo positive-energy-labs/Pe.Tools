@@ -1,4 +1,3 @@
-import { expect, test, vi } from "vite-plus/test";
 import {
   address,
   familiesRouteState,
@@ -10,6 +9,7 @@ import {
   type RouteStateSpec,
   type WorkKey,
 } from "@pe/agent-contracts";
+import { expect, test, vi } from "vite-plus/test";
 import type { z } from "zod";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 
@@ -136,57 +136,5 @@ test.each(["human", "pea"] as const)(
     expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: true });
     expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
     expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}2`)))).toBe(second);
-  },
-);
-
-test.each(["human", "pea"] as const)(
-  "/families: %s salvages the same old data before and after recovery",
-  async (actor) => {
-    const scope: WorkKey = { binding: "address" as const, route: "families", target };
-    const key = (route: string) => `${workKey(scope)}\0${route}`;
-    const state = new Map<string, unknown>();
-    const module = new RouteWorkspace({
-      registrations: [
-        {
-          spec: { ...familiesRouteState, schemaVersion: 2 } as unknown as RouteStateSpec<z.ZodType>,
-        },
-      ],
-      store: {
-        getState: async ({ targetKey, route }) =>
-          structuredClone(state.get(`${targetKey}\0${route}`)),
-        setState: async ({ targetKey, route, value }) =>
-          void state.set(`${targetKey}\0${route}`, structuredClone(value)),
-      },
-    });
-    expect(await module.salvage(scope, "families")).toBeNull();
-    const bytes = JSON.stringify({
-      ...oldFamilies,
-      schemaVersion: 1,
-      doc: { ...oldFamilies.doc, excludedIds: [3102, 7] },
-    });
-    state.set(key("families"), JSON.parse(bytes));
-    expect(await module.salvage(scope, "families")).toEqual({
-      from: "unreadable",
-      value: { familyNames: [], familyIds: [3102, 7] },
-    });
-    expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: true });
-    expect(await module.salvage(scope, "families")).toEqual({
-      from: "aside:1",
-      value: { familyNames: [], familyIds: [3102, 7] },
-    });
-    // The id-keyed record Mission 11 wrote is old Work too; the newest aside answers.
-    state.set(key("families"), {
-      version: 1,
-      schemaVersion: 1,
-      revision: 2,
-      doc: { excluded: { "41": { by: "person" } } },
-    });
-    expect(await module.startFresh(scope, "families", actor)).toMatchObject({ ok: true });
-    expect(await module.salvage(scope, "families")).toEqual({
-      from: "aside:2",
-      value: { familyNames: [], familyIds: [41] },
-    });
-    // Read-only: nothing moved.
-    expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
   },
 );

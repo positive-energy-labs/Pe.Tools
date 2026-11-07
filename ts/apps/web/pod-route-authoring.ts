@@ -35,7 +35,6 @@ export async function publishPodRoute(
           module,
           entry,
           "work",
-          JSON.parse(specifier(resolve(sdk, "route-state.ts"))),
           (source) => jiti.import<Record<string, { schema?: unknown }>>(source),
         )
       : null;

@@ -1,5 +1,5 @@
-import type { AppExposure, AppRouteMount, AppSurface } from "./route-directory.ts";
 import { z } from "zod";
+import type { AppExposure, AppRouteMount, AppSurface } from "./route-directory.ts";
 import { stableKeyKinds, type History, type RouteField } from "./route-field.ts";
 import type { RouteStatePatch } from "./route-state.ts";
 import type { RouteViewRefusalCode } from "./route-view.ts";
@@ -236,19 +236,6 @@ export const startFreshVerb = {
   input: z.strictObject({}).default({}),
 } as const satisfies VerbDecl;
 
-/**
- * The kernel's carry-over of what the host set aside (or cannot read) into readable Work: one
- * Work write, so one journal step. Declared on every graph whose `salvage` hook is set.
- */
-export const SALVAGE_VERB = "work.salvage";
-export const salvageVerb = {
-  kind: "recovery",
-  label: "Carry over",
-  says: "Carry what the set-aside Work held into this Work, as one undoable edit",
-  review: "shown",
-  input: z.strictObject({}).default({}),
-} as const satisfies VerbDecl;
-
 export interface RouteDirectory {
   path: string;
   title: string;
@@ -321,16 +308,6 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   capture?: keyof P & string;
   /** Page scope owned by a Target; reset to field defaults on a subsequent Target change. */
   resetOnTarget?: readonly (keyof P & string)[];
-  /**
-   * What the host's salvage read (`work.salvage`) carries over, as the patches this Work still
-   * lacks: empty when everything is already here. The kernel applies them as one Work write.
-   */
-  salvage?: (
-    salvaged: unknown,
-    work: W | null,
-    /** The current reading states, so an ID-only carry-over can resolve names from the exact catalog. */
-    scope: { readings: Readonly<Record<string, { readonly current: unknown }>> },
-  ) => readonly RouteStatePatch[];
   /** Authored segments of Work; the kernel owns clear and delete for them. */
   cells?: readonly CellsDecl<W>[];
   /**
@@ -453,7 +430,6 @@ export function projectRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphJson
       ? {
           ...graph.verbs,
           [START_FRESH_VERB]: startFreshVerb,
-          ...(graph.salvage && { [SALVAGE_VERB]: salvageVerb }),
         }
       : graph.verbs,
     fields,
@@ -686,10 +662,6 @@ export function validateRouteGraph<P, W>(
         `verbs.${START_FRESH_VERB}`,
         `'${START_FRESH_VERB}' is a kernel verb id`,
       );
-    if (graph.work && Object.hasOwn(graph.verbs, SALVAGE_VERB))
-      refuse("reserved-verb", `verbs.${SALVAGE_VERB}`, `'${SALVAGE_VERB}' is a kernel verb id`);
-    if (graph.salvage && !graph.work)
-      refuse("invalid-graph", "salvage", "Only a graph with Work can carry salvage over");
     for (const id of graph.observe ?? []) {
       if (!graph.work || !graph.verbs[id] || graph.verbs[id]!.review !== "none")
         refuse(

@@ -1,7 +1,4 @@
 import { defineRouteGraph } from "@pe/agent-contracts";
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-takeoff Declaration 112 > 60 after kernel defaults. Adopt/sync/retry/launch workflows and atlas selection remain distinct.
-import { manyField } from "../../../../packages/agent-contracts/src/route-field";
-import { z } from "zod";
 import {
   gate,
   pane,
@@ -12,6 +9,10 @@ import {
   type RouteGraph,
   type TakeoffsRouteDocument,
 } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-takeoff Declaration 112 > 60 after kernel defaults. Adopt/sync/retry/launch workflows and atlas selection remain distinct.
+
+import { z } from "zod";
+import { manyField } from "../../../../packages/agent-contracts/src/route-field";
 import {
   field,
   text,
@@ -62,32 +63,6 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
   key: "takeoffs",
   address: "takeoffs",
   name: "Takeoffs",
-  seeds: {
-    adopt: {
-      title: "project-a â€” regions drawn, nothing adopted",
-      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["adopt"]!),
-    },
-    partition: {
-      title: "project-a â€” zones adopted, ready to partition",
-      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["partition"]!),
-    },
-    refresh: {
-      title: "project-a â€” a stale model waiting for a re-read",
-      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["refresh"]!),
-    },
-    sync: {
-      title: "project-a â€” partitioned, .r10 bound, sync unreviewed",
-      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["sync"]!),
-    },
-    launch: {
-      title: "project-a â€” synced, RHVAC not open",
-      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["launch"]!),
-    },
-    "retry-r10": {
-      title: "project-a â€” the .r10 read failed",
-      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["retry-r10"]!),
-    },
-  },
   needs: "project",
   work: takeoffsRouteState.schema,
   workRoute: "takeoffs",
@@ -283,18 +258,6 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
 export const takeoffGraph: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = defineRouteGraph({
   ...takeoffBase,
   name: "View adoption",
-  seeds: Object.fromEntries(
-    Object.entries(takeoffBase.seeds!).map(([id, seed]) => [
-      id,
-      {
-        ...seed,
-        load: async () => {
-          const data = await seed.load();
-          return { ...data, page: { ...data.page, stage: "adopt" as const } };
-        },
-      },
-    ]),
-  ),
   directory: {
     ...takeoffBase.directory!,
     title: "View adoption",

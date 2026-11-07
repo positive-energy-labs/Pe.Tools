@@ -1,4 +1,5 @@
 import { applyPatches, type WorkHandle } from "@pe/agent-contracts";
+import { z } from "zod";
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
 import {
   canonicalEnvironmentInput,
@@ -16,7 +17,6 @@ import {
 } from "./admitted-reading-plan.ts";
 import { freezePage } from "./page-port.ts";
 import { contentHash } from "./readings.ts";
-import { z } from "zod";
 const unavailable = (reason: string): Extract<ReadingSnapshot<unknown>, { current: false }> => ({
   status: "unavailable",
   current: false,
@@ -328,7 +328,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
             if (declaration.refresh === "explicit" && declaration.deps.work.length)
               demanded.delete(id);
         explicitWorkRevision = revision;
-        context.history().sync();
         if (evidenceScope !== read().scope) {
           evidenceScope = read().scope;
           for (const [id, reading] of Object.entries(route.data.readings))

@@ -1,8 +1,4 @@
-import { worksharingOf, type VerbPresentation } from "./review-contract";
-import { legacyLiveVerbs, type LegacyVerbEnvironment } from "./legacy-environment-bridge";
-import { createWorkScopeAcceptance, type WorkScopeAcceptance } from "./work-scope-acceptance";
-import { reviewChanges } from "./review-value";
-import { z } from "zod";
+import type { createRouteOwner } from "#/shell/owner";
 import {
   canonicalRouteInput,
   invocationOutcome,
@@ -23,15 +19,19 @@ import {
   type WorkKey,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
+import { z } from "zod";
 import {
   runSemanticAction,
   actionResult,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import type { createRouteOwner } from "#/shell/owner";
 import { refuse, writeRefusal, type Refusal } from "../route/refusal";
 import { DEFAULT_WAIT_S } from "../route/waits";
-import type { ReadingState } from "./source-contract";
 import type { JournalDetail } from "./journal";
+import { legacyLiveVerbs, type LegacyVerbEnvironment } from "./legacy-environment-bridge";
+import { worksharingOf, type VerbPresentation } from "./review-contract";
+import { reviewChanges } from "./review-value";
+import type { ReadingState } from "./source-contract";
+import { createWorkScopeAcceptance, type WorkScopeAcceptance } from "./work-scope-acceptance";
 
 export interface WorkHistory<I> {
   /** Complete the metadata only from fresh Readings of the acknowledged Work revision. */
@@ -70,8 +70,6 @@ export interface VerbSnapshot {
    * result admitted for the first must not land in the third.
    */
   readonly generation?: number;
-  /** Patches the host's set-aside Work would add to this readable Work; only `work.salvage` acts on them. */
-  readonly salvage?: readonly RouteStatePatch[] | null;
 }
 export interface VerbContext<C extends Caller = Caller> {
   readonly acceptance?: WorkScopeAcceptance;
@@ -209,20 +207,11 @@ export interface QueryReceipt {
   readonly value: unknown;
   readonly subject: string | null;
 }
-export type Recovery = "start-fresh" | "salvage";
+export type Recovery = "start-fresh";
 /** Each recovery's own predicate: the stage lists its verb, and the verb refuses, only while it holds. */
 const offeredWhen: Record<Recovery, (snapshot: VerbSnapshot) => string | null> = {
   "start-fresh": (snapshot) =>
     snapshot.unreadable ? null : "This Work is readable; there is nothing to recover",
-  salvage: (snapshot) =>
-    snapshot.failure ??
-    (snapshot.unreadable
-      ? "Start fresh first; the Work cannot take a write yet"
-      : !snapshot.work
-        ? "Work has not been read yet"
-        : snapshot.salvage?.length
-          ? null
-          : "Nothing set aside is missing from this Work"),
 };
 /** Whether a kernel recovery verb belongs on the stage now. */
 export const recoveryOffered = (verb: VerbDecl, snapshot: VerbSnapshot): boolean => {
@@ -495,13 +484,7 @@ export function recoveryVerb<S extends z.ZodType>(
   bindImplementation(verb, {
     recover: recovery,
     ready: (scope) => offeredWhen[recovery](scope.snapshot),
-    prepare: (scope) =>
-      recovery === "salvage"
-        ? {
-            work: workKey(scope.snapshot.work!.handle.key),
-            members: scope.snapshot.salvage!.map((patch) => patch.path),
-          }
-        : { work: workKey(scope.snapshot.unreadable!) },
+    prepare: (scope) => ({ work: workKey(scope.snapshot.unreadable!) }),
   });
   return verb;
 }
@@ -884,20 +867,9 @@ async function invokeCore<C extends Caller>(
                   failure("refused", "This route has no recovery for this Work", press),
                 );
               let result: RouteStateWriteResult;
-              if (binding.recover === "salvage") {
-                // Carrying over is an ordinary Work write: one ack, one journal step, undoable.
-                result = await ctx.write(current.work!.handle.key, {
-                  patches: structuredClone(current.salvage!) as RouteStatePatch[],
-                  expectedRevision: current.work!.handle.revision,
-                  press,
-                });
-              } else {
-                if (!ctx.recover || !current.unreadable)
-                  return finish(
-                    failure("refused", "This route has no recovery for this Work", press),
-                  );
-                result = await ctx.recover(structuredClone(current.unreadable));
-              }
+              if (!ctx.recover || !current.unreadable)
+                return finish(failure("refused", "This route has no recovery for this Work", press));
+              result = await ctx.recover(structuredClone(current.unreadable));
               if (!result.ok) return finish(resultOf(writeRefusal(result)!, press));
               return finish({
                 state: "done",

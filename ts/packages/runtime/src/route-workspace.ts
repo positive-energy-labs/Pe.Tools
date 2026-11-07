@@ -6,12 +6,6 @@ import type {
   HostAdmittedRoute,
   HostWorkRegistration,
 } from "@pe/agent-contracts";
-import type { RouteFingerprint } from "../../agent-contracts/src/route-kernel-admission.ts";
-import type {
-  WorkAdmission,
-  WorkFeedFailure,
-} from "../../agent-contracts/src/work-journal-door.ts";
-import { createWorkJournal } from "./work-journal.ts";
 import {
   bindWork,
   workCounts,
@@ -21,8 +15,6 @@ import {
   type WorkHandle,
   type WorkKey,
 } from "@pe/agent-contracts";
-import { z } from "zod";
-import { OwnerReads, type OwnerValue } from "./owner-read.ts";
 import {
   applyPatches,
   checkRevision,
@@ -46,6 +38,15 @@ import {
   type HistoryMetaRefusalCode,
 } from "@pe/agent-contracts";
 import type { RouteStateSpec } from "@pe/agent-contracts";
+
+import { z } from "zod";
+import type { RouteFingerprint } from "../../agent-contracts/src/route-kernel-admission.ts";
+import type {
+  WorkAdmission,
+  WorkFeedFailure,
+} from "../../agent-contracts/src/work-journal-door.ts";
+import { OwnerReads, type OwnerValue } from "./owner-read.ts";
+import { createWorkJournal } from "./work-journal.ts";
 
 export interface RouteWorkspaceRegistration extends HostWorkRegistration {
   /** Captured neutral schema; presentation decoding belongs at the host write boundary. */
@@ -143,7 +144,7 @@ export interface WorkReadCapture {
 export type RouteWorkspaceOptions = {
   registrations: readonly RouteWorkspaceRegistration[];
   /** Root-fixed source policy, checked before reads or writes at a mutation boundary. */
-  authorizeMutation?: (verb: "edit" | "undo" | "redo" | "start-fresh" | "salvage" | "publish" | "retire") => void;
+  authorizeMutation?: (verb: "edit" | "undo" | "redo" | "start-fresh" | "publish" | "retire") => void;
   workHistoryLimits?: { readonly maxCount: number; readonly maxBytes: number };
 } & (
   | { store: RouteDocumentStore; capture?: WorkReadCapture; recorded?: never }
@@ -263,11 +264,6 @@ export class RouteWorkspace {
             description: route.data.directory.summary,
             schema: bindings.schemas[work.schema]!,
             schemaVersion: work.version,
-            // A web salvage body consumes recovery data and must never read persisted Work here.
-            salvage:
-              route.data.salvage && bindings.bodies[route.data.salvage]?.kind === "recovery"
-                ? bindings.bodies[route.data.salvage]!.run
-                : undefined,
           };
     let remove: () => void;
     try {
@@ -474,9 +470,9 @@ export class RouteWorkspace {
   }
 
   /**
-   * The saved document exactly as stored, not validated against the route's schema: for a reader
-   * that salvages what still parses instead of refusing. Null when no Work exists; `doc` is null
-   * when even the envelope is unreadable.
+   * The saved document exactly as stored, not validated against the route's schema.
+   * Consumers must validate the whole document before using it. Null when no Work exists;
+   * `doc` is null when even the envelope is unreadable. Retained under the C402/K4 fence.
    */
   async readRaw(
     scope: WorkKey,
@@ -914,42 +910,6 @@ export class RouteWorkspace {
       }
       return { ok: true, revision: fresh.revision, handle: workHandle(scope, fresh.revision), write };
     });
-  }
-
-  /**
-   * Read-only: what the route's `salvage` carries over from Work it can no longer
-   * read, the unreadable document before start fresh, else the newest aside. Null when the route
-   * declares no salvage or there is nothing to salvage.
-   */
-  async salvage(
-    scope: WorkKey,
-    route: string,
-  ): Promise<{ from: string; value: unknown } | RouteRefusal | null> {
-    this.#authorize("salvage");
-    const spec = this.#registry.get(route)?.spec;
-    if (!spec?.salvage) return null;
-    const targetKey = workKey(scope);
-    const docOf = (raw: unknown) => (raw as { doc?: unknown } | null)?.doc;
-    const extract = (from: string, raw: unknown) => {
-      try {
-        return { from, value: spec.salvage!(docOf(raw)) };
-      } catch (error) {
-        return refuse(
-          "error",
-          `Work salvage failed: ${String(error)}`,
-          "Saved Work was left untouched.",
-        );
-      }
-    };
-    const raw = await this.#store.getState({ targetKey, route });
-    if (raw != null && !readable(raw, spec)) return extract("unreadable", raw);
-    let newest: { slot: number; raw: unknown } | null = null;
-    for (let slot = 1; ; slot++) {
-      const found = await this.#store.getState({ targetKey, route: aside(route, slot) });
-      if (found == null) break;
-      newest = { slot, raw: found };
-    }
-    return newest && extract(`aside:${newest.slot}`, newest.raw);
   }
 
   observe(
