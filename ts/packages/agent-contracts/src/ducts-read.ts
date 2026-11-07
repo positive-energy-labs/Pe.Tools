@@ -21,7 +21,7 @@ const systemRow = z
     fanless: z.boolean(),
     blocked: z.boolean(),
   })
-  .catchall(z.json().transform((value): unknown => value));
+  .catchall(z.json() as z.ZodType<unknown>);
 export const ductsRosterArgs = z.object({ target: documentRefSchema });
 export const DUCTS_SYSTEM_MAX = 512;
 export const ductsNetworkArgs = ductsRosterArgs.extend({

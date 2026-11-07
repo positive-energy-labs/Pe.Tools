@@ -5,10 +5,7 @@ import {
   listSearchSchema,
   fansRouteState,
   ductsSheetEditsSchema,
-  ductsPricingCapability,
-  ductsRosterCapability,
   ductsNetworkCapability,
-  ductsPricingData,
   DUCTS_SYSTEM_MAX,
   type DuctsRouteDocument,
 } from "@pe/agent-contracts";
@@ -27,7 +24,7 @@ import {
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 import { describeInputHistory, editMetaSchema } from "./sheet/input-history.neutral.ts";
-import { pricingView } from "./pricing-view.ts";
+import { ductsPricingValueCapability, ductsRosterValueCapability, ductsPricingValue } from "@pe/ducts-domain/pricing-value";
 import { presentLosses, presentHeal, presentFan } from "./reviews.ts";
 
 const shared = ductsPictureFields;
@@ -59,11 +56,11 @@ const args = (page: {
     | z.output<typeof system>
     | import("@pe/agent-contracts").Immutable<z.output<typeof system>>;
 }) => ({ system: namesOf(page.system) });
-export const roster = { ...hostRead(ductsRosterCapability), args: () => ({}) };
+export const roster = { ...hostRead(ductsRosterValueCapability), args: () => ({}) };
 export const network = { ...hostRead(ductsNetworkCapability), args };
-const pricing = { ...hostRead(ductsPricingCapability), args };
+const pricing = { ...hostRead(ductsPricingValueCapability), args };
 export type DuctsDrawContext = DrawContext<
-  z.output<typeof ductsPricingData>,
+  z.output<typeof ductsPricingValue>,
   typeof fields,
   DuctsRouteDocument,
   z.output<typeof ductsSheetEditsSchema>
@@ -74,7 +71,7 @@ const evidence = (
 ) => ({
   page: { stage: "network" as const },
   work,
-  heal: data ? pricingView(data).analysis.heal : null,
+  heal: data ? data.analysis.heal as import("@pe/ducts-domain/heal").HealPlan : null,
   readings: { ducts: { value: data?.network }, fansWork: { value: data?.fansWork } },
 });
 export const module = route({

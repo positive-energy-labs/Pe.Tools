@@ -58,6 +58,9 @@ type StateCellProps,
 } from "./cell-state";
 import { ListPopup } from "./list-popup";
 import { TooltipHint } from "./tooltip";
+import { handleCellProps, type HandleCellProps } from "./cell-handle";
+export { handleCellProps, cellSource } from "./cell-handle";
+export type { CellHandle, HandleCellProps } from "./cell-handle";
 
 export {
 CELL_STATE_ORDER,
@@ -126,7 +129,8 @@ const RefusalDetail = ({ detail }: { detail: string }) => (
 
 export const CellHost = createContext<RefObject<HTMLElement | null> | null>(null);
 
-export function StateCell(props: StateCellProps) {
+export function StateCell(input: StateCellProps | HandleCellProps) {
+  const props = "cell" in input ? handleCellProps(input) : input;
   const { value, modelValue, capReason, grounding, confidence, note } = props;
   const read = readCell(props);
   const reviewed = read.unsettled === "drift" && props.reviewed !== undefined && modelValue != null;
@@ -265,7 +269,10 @@ export function StateCell(props: StateCellProps) {
         }
       };
       const send = (refused: ReturnType<CellCommit>) => {
-        if (refused instanceof Promise) void refused.then(settle);
+        if (refused instanceof Promise) startRun(async () => {
+          try { settle(await refused); }
+          catch (error) { settle({ message: error instanceof Error ? error.message : String(error) }); }
+        });
         else settle(refused);
       };
       // The measured kind: a bare number stages with the column's unit and calls nothing; anything
@@ -304,6 +311,8 @@ export function StateCell(props: StateCellProps) {
           tabIndex={props.land !== undefined && !editable ? -1 : ownHost ? 0 : undefined}
           className={slots.base()}
           data-scale="row"
+          data-choice-cell={"cell" in input && input.options ? input.label : undefined}
+          data-cell-owner={"cell" in input ? input.cell.owner.route : undefined}
           data-unit={props.unit != null ? "" : undefined}
           // The whole box is the input's: a press on the unit or padding focuses it, caret last.
           onMouseDown={
@@ -370,7 +379,6 @@ export function StateCell(props: StateCellProps) {
               onPick={(o) => {
                 if (o.disabled) return;
                 if (o.key === props.choice!.current) return;
-                const out = props.choice!.pick(o.key);
                 const settle = (refused: string | CellRefusal | null | void) =>
                   setRefusal(
                     refused == null
@@ -379,13 +387,16 @@ export function StateCell(props: StateCellProps) {
                         ? { message: refused }
                         : refused,
                   );
-                if (out instanceof Promise) void out.then(settle);
-                else settle(out);
+                startRun(async () => {
+                  try { settle(await props.choice!.pick(o.key)); }
+                  catch (error) { settle({ message: error instanceof Error ? error.message : String(error) }); }
+                });
               }}
             />
           ) : editable ? (
             <input
               ref={inputRef}
+              aria-label={"cell" in input ? input.label : undefined}
               key={initial.current}
               defaultValue={initial.current}
               placeholder={
@@ -514,6 +525,7 @@ export function StateCell(props: StateCellProps) {
         ref={rootRef}
         tabIndex={props.land !== undefined && !editable ? -1 : ownHost ? 0 : undefined}
         aria-busy={pending || undefined}
+        data-cell-owner={"cell" in input ? input.cell.owner.route : undefined}
         onClick={locate}
       >
         <span className={slots.line()}>
