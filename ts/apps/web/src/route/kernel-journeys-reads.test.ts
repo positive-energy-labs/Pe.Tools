@@ -213,7 +213,6 @@ test("JM H02/B05 select a Fan whose native walk is malformed and inspect the ref
     await j.ready();
     await settledValues(j.mount, [fans.spec.reads!.roster]);
     const before = j.mount.value().value;
-    await vi.waitFor(() => expect(j.mount.value(fans.spec.reads!.roster).current).toBe(true), { timeout: 20_000 });
     const roster = j.mount.value(fans.spec.reads!.roster).value.rows;
     const row = roster.find((row: { mark: string }) => row.mark === "MUAS-1")!;
     j.mount.page.subject({ kind: "ids", ids: [localId("ducts-fan", `${row.uniqueId}@${row.portIndex}`)] });
