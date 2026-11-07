@@ -1,8 +1,11 @@
-import type { NativeReadOutput } from "@pe/agent-contracts";
+import type { RevitContextViewImage } from "@pe/host-contracts/generated";
 import type { RoomsPlanReading } from "@pe/agent-contracts";
 /** The image and registration are a pair; malformed native frames never draw plausible geometry. */
 export function planOf(
-  response: NativeReadOutput<"revit.context.view-image">,
+  response: Pick<
+    RevitContextViewImage.Res.Response,
+    "registration" | "imageUrl" | "registrationRefusal"
+  >,
 ): Exclude<RoomsPlanReading, null> {
   if (response.registration && response.imageUrl) {
     const corner = (p: number[]): [number, number] => {
@@ -23,9 +26,12 @@ export function planOf(
     };
   }
   if (response.registration || response.imageUrl)
-    throw Error(
-      "view-image carried an image URL and a registration apart; the contract pairs them",
-    );
+    if (!response.registration && response.registrationRefusal)
+      return { refusal: response.registrationRefusal };
+    else
+      throw Error(
+        "view-image carried an image URL and a registration apart; the contract pairs them",
+      );
   if (!response.registrationRefusal)
     throw Error("view-image carried no registration and no refusal naming why");
   return { refusal: response.registrationRefusal };
