@@ -304,7 +304,9 @@ export interface Publication<T> {
   readonly state: "current" | "refresh-needed" | "superseded";
   readonly reason?: string;
 }
-type Slot = { generation: number; key: string; published?: Publication<unknown>; attempt: number };
+type Dependency = Pick<Trace, "name" | "args">;
+type Pending = { inputs: Dependency[]; superseded: boolean };
+type Slot = { generation: number; key: string; published?: Publication<unknown>; attempt: number; pending?: Pending };
 /** One entry per (read,args), one generation per client subscription; no client acknowledgement. */
 export class Publications {
   private readonly slots = new Map<string, Slot>();
@@ -315,6 +317,7 @@ export class Publications {
     { version: number; flights: Map<string, Promise<Publication<unknown>>> }
   >();
   private readonly listeners = new Map<string, Set<() => void>>();
+  private readonly flightInputs = new WeakMap<Promise<Publication<unknown>>, Pending>();
   constructor(
     private readonly capacity = 128,
     private readonly byteLimit = 128 * 1024 * 1024,
@@ -364,14 +367,17 @@ export class Publications {
     );
   }
   publication(id: string) { return this.slots.get(id)?.published; }
-  invalidate(matches: (trace: Trace) => boolean) {
+  invalidate(matches: (trace: Dependency) => boolean) {
     for (const [id, slot] of this.slots) {
       const previous = slot.published;
-      if (previous?.value?.trace.some(matches)) {
+      const pending = slot.pending?.inputs.some((input) => input.name === "work" && matches(input));
+      if (pending || previous?.value?.trace.some(matches)) {
+        // Work creation or editing replaces the pending basis, including the first publication.
+        if (pending && slot.pending) { slot.pending.superseded = true; slot.attempt++; slot.pending = undefined; }
         slot.published = immutable({
-          ...previous,
+          key: previous?.key ?? slot.key, generation: slot.generation, version: previous?.version ?? 0,
           state: "refresh-needed",
-          value: { ...previous.value, freshness: "refresh-needed" },
+          value: previous?.value ? { ...previous.value, freshness: "refresh-needed" } : null,
         });
         this.notify(id);
       }
@@ -388,6 +394,7 @@ export class Publications {
       slot.generation = generation;
       slot.key = "";
       slot.attempt++;
+      slot.pending = undefined;
     }
   }
   async publish<I, O>(
@@ -433,12 +440,22 @@ export class Publications {
       schemaId(definition.output),
     ]);
     let flight = owner.flights.get(flightKey) as Promise<Publication<O>> | undefined;
+    const pending = (flight && this.flightInputs.get(flight)) ?? { inputs: [], superseded: false };
+    slot.pending = pending;
     if (!flight) {
-      flight = evaluate(definition, args, port).then((value) => {
+      flight = evaluate(definition, args, {
+        ...port,
+        take: (name, args, context) => {
+          if (pending.superseded) throw new RefreshNeeded("Work basis superseded");
+          pending.inputs.push({ name, args });
+          return port.take(name, args, context);
+        },
+      }).then((value) => {
         const version = ++owner.version;
         return immutable({ key, generation, version, value, state: "current" as const });
       });
       owner.flights.set(flightKey, flight);
+      this.flightInputs.set(flight, pending);
       void flight
         .finally(() => {
           if (owner.flights.get(flightKey) === flight) owner.flights.delete(flightKey);
@@ -487,6 +504,8 @@ export class Publications {
         if (previous.state === "current") this.notify(id);
       }
       return result;
+    } finally {
+      if (slot.pending === pending) slot.pending = undefined;
     }
   }
 }

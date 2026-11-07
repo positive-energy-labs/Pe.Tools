@@ -35,7 +35,15 @@ import { module as fans } from "../fans/route";
 import { builtins } from "../route/builtins.neutral";
 import { peReadings, bindActionReadings } from "../host/resource-stream";
 
-const trace = vi.hoisted(()=>({gates:[] as any[],tokens:[] as any[],samples:[] as any[],stops:[] as any[],mounts:[] as any[],submit:vi.fn(),http:[] as any[],fetch:vi.fn(),base:"",target:null as any}));
+const trace = vi.hoisted(()=>({gates:[] as any[],tokens:[] as any[],samples:[] as any[],stops:[] as any[],mounts:[] as any[],submit:vi.fn(),http:[] as any[],fetch:vi.fn(),base:"",target:null as any,holdPlan:()=>Promise.resolve()}));
+vi.mock("../../../host/src/bridge",async actual=>{
+ const real=await actual<typeof import("../../../host/src/bridge")>();
+ return {...real,invokeBridge:async(...args:Parameters<typeof real.invokeBridge>)=>{
+   const answer=await real.invokeBridge(...args);
+   if(args[2]==="ducts.apply.plan") await trace.holdPlan();
+   return answer;
+ }};
+});
 vi.mock("../host/runtime",()=>({hostFetch:trace.fetch,runtimeStreamUrl:(url:string)=>new URL(url,trace.base).toString()}));
 vi.mock("../../../host/src/session-route",async actual=>{const real=await actual<any>();const {Effect}=await import("effect");const {sdkSessions}=await import("../../../host/tests/native-receipt-fixture");return {...real,runPeRevitCli:(args:any)=>Effect.promise(()=>sdkSessions(args))};});
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async actual => {const real=await actual<any>(); trace.submit.mockImplementation(async(...args:any[])=>{const row=await real.submitAction(...args);((trace as any).results??=[]).push(row);return row;}); return {...real,submitAction:trace.submit};});
@@ -58,6 +66,8 @@ test("Plan keeps capture and review valid across watched publications and batche
  const streams=new Set<any>();
  const requests:any[]=[];
  const releasePlan=Promise.withResolvers<void>(); let planPending=false;
+ // Pause command delivery after native settlement; the watched read also needs the serialized native queue.
+ trace.holdPlan=()=>{if(mode!=="recording")return Promise.resolve();planPending=true;return releasePlan.promise;};
  let bridge:any;
  const roster=nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
  const walk=nativeResponseSchema("ducts.snapshot.walk").parse(walkCapture);
@@ -69,10 +79,6 @@ test("Plan keeps capture and review valid across watched publications and batche
      requests.push(request.operationKey);
      const value=request.operationKey==="ducts.snapshot.roster"?roster:request.operationKey==="ducts.snapshot.walk"?walk:request.operationKey==="ducts.tables"?tables:request.operationKey==="ducts.apply.plan"?{previewOnly:true,writes:[],counts:{planned:0,written:0,refused:0,unchanged:0},systemsAfter:[],storeRevision:0}:request.operationKey==="revit.catalog.field-options"?{descriptor:{key:JSON.parse(request.payloadJson).key,mode:"Suggestion",allowsCustomValue:true,dependsOn:[],requiredRuntimeMode:"LiveDocument"},items:[],result:{kind:"Success",message:""}}:{};
      const reply=Queue.offer(bridge.incoming,JSON.stringify({kind:"Response",response:{requestId:request.requestId,openDocumentId:request.openDocumentId,ok:true,statusCode:200,payloadJson:JSON.stringify(value),metrics:{requestBytes:0,responseBytes:0,revitExecutionMs:0,roundTripMs:0,serializationMs:0}}}));
-     if(mode==="recording"&&request.operationKey==="ducts.apply.plan"){
-       planPending=true;
-       return Effect.forkScoped(Effect.promise(()=>releasePlan.promise).pipe(Effect.andThen(reply))).pipe(Effect.asVoid);
-     }
      return reply;
    }))));
    return yield* HostNativeRead;
@@ -133,6 +139,7 @@ test("Plan keeps capture and review valid across watched publications and batche
  try{
    render(<RouterProvider router={router}/>);
    await vi.waitFor(()=>expect(trace.mounts.at(-1)?.startAction()).toBeTruthy(),{timeout:20000});
+   await vi.waitFor(()=>expect(trace.mounts.at(-1)?.owner()?.scope.key.binding).toBe("address"),{timeout:20000});
    const mount=trace.mounts.at(-1);
    for(const route of Object.keys(fans.spec.edits!.owners)){
      const owner=mount.owner(route);
@@ -165,7 +172,7 @@ test("Plan keeps capture and review valid across watched publications and batche
        await vi.waitFor(()=>expect(planPending).toBe(true),{timeout:45000});
        const eventStart=(trace as any).readEvents.length;
        try {
-         // A real watched-slot republication while native Plan is pending; no input changes.
+         // A real watched-slot republication while the Plan command is pending; no input changes.
          const response=await forward("/pe/fans/sheet",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(watched.request)});
          const publication=await response.json(); (trace as any).republication=publication;
          expect.soft(publication.state,"Recording must not refuse the watched republication").toBe("current");
@@ -218,7 +225,7 @@ test("Plan keeps capture and review valid across watched publications and batche
    }
    fireEvent.click(screen.getByRole("button",{name:/^MUAS-1.*0 staged$/}));
    fireEvent.click(await screen.findByRole("option",{name:/^None/}));
-   await vi.waitFor(()=>expect(trace.mounts.at(-1).owner().handle.revision).toBe(2),{timeout:20000});
+   await vi.waitFor(()=>expect(trace.mounts.at(-1).owner().handle.revision).toBe(3),{timeout:20000});
    await expect(trace.mounts.at(-1).run("losses",true)).rejects.toThrow("Review is stale; prepare it again");
    expect(trace.submit).toHaveBeenCalledTimes(2);
  }finally{

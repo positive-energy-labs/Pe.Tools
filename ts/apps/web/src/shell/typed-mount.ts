@@ -394,8 +394,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     spec, subjectState, move,
     absentOwners:()=>[...owners].filter(([id,owner])=>id!==own&&owner.absent).map(([route])=>route),
     startAction():import("../route/typed-route").ActionHandle|null {
-      const record=owners.get(own);
-      if(!record?.absent||!edits?.seed||!key||input.readOnly||input.history) return null;
+      if([...owners.values()].some(record=>!record.ready&&!record.absent)) return null;
+      const absent=[...owners].filter(([,record])=>record.absent);
+      if(!absent.length||!edits?.seed||!key||input.readOnly||input.history) return null;
       const selected=key;
       const run=async()=>{
         requireWritable();
@@ -403,10 +404,19 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         if(pending.has("work.start")) throw Error("Start already pending");
         pending.add("work.start");problems.delete("work.start");notify();
         try {
-          const request=commands["work.start"].input.parse({key:selected,seed:edits.seed!(page as never,input.target)});
-          await settleNative(door.submit({id:crypto.randomUUID(),key:"work.start",target:{kind:"host"},input:request}));
+          const requests=absent.map(([id,record])=>commands["work.start"].input.parse({key:record.scope.key,
+            seed:id===own?edits.seed!(page as never,input.target):record.config.state.schema.parse({})}));
+          for(const request of requests){
+            requireWritable();
+            const started=z.object({ok:z.literal(true),handle:workHandleSchema,doc:z.json()}).parse(
+              await settleNative(door.submit({id:crypto.randomUUID(),key:"work.start",target:{kind:"host"},input:request})));
+            requireWritable();
+            const record=owners.get(request.key.route);
+            if(!record) throw Error("Started Work no longer belongs to this route");
+            accept(record,started.handle,started.doc);
+          }
           if(canonicalRouteInput(selected)!==canonicalRouteInput(selectedKey())) return;
-          ownerKey=undefined;syncWork();syncReads(true);
+          syncReads(true);
         } catch(error){problems.set("work.start",error instanceof Error?error.message:String(error));throw error;}
         finally{pending.delete("work.start");notify();}
       };

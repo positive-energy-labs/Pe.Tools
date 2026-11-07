@@ -1032,7 +1032,8 @@ export class RouteWorkspace {
     }
     const key = workKey(scope);
     let disposed = false;
-    void this.#serialized(async () => {
+    let state: "absent" | "hydrating" | "ready" = "absent";
+    const acquire = async () => {
       const spec = this.#registry.get(scope.route)?.spec;
       if (disposed) return;
       if (!spec) {
@@ -1043,12 +1044,10 @@ export class RouteWorkspace {
         } satisfies WorkFeedFailure);
         return;
       }
-      const listeners = this.#acceptedListeners.get(key) ?? new Set();
-      this.#acceptedListeners.set(key, listeners);
-      listeners.add(listener);
       const envelope = await this.#load(scope, spec, false);
       if (disposed) return;
-      if (!envelope) { snapshot(null); return; }
+      if (!envelope) { state = "absent"; snapshot(null); return; }
+      state = "ready";
       const records = this.#retain(this.#inverses.get(key) ?? [], envelope.revision);
       snapshot({
         doc: structuredClone(envelope.doc),
@@ -1059,13 +1058,28 @@ export class RouteWorkspace {
           acks: structuredClone(records.map(({ write }) => write)),
         },
       });
-    }).catch((error) => {
+    };
+    const fail = (error: unknown) => {
       if (!disposed) failed(error);
-    });
+    };
+    const accepted = (ack: WorkWriteAck) => {
+      if (disposed) return;
+      if (state === "ready") { listener(ack); return; }
+      if (state === "hydrating") return; // The queued snapshot includes these accepted writes.
+      state = "hydrating";
+      void this.#serialized(acquire).catch(fail);
+    };
+    void this.#serialized(async () => {
+      if (disposed) return;
+      const listeners = this.#acceptedListeners.get(key) ?? new Set();
+      this.#acceptedListeners.set(key, listeners);
+      listeners.add(accepted);
+      await acquire();
+    }).catch(fail);
     return () => {
       disposed = true;
       const listeners = this.#acceptedListeners.get(key);
-      listeners?.delete(listener);
+      listeners?.delete(accepted);
       if (!listeners?.size) this.#acceptedListeners.delete(key);
     };
   }

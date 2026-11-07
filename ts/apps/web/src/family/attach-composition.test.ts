@@ -31,7 +31,7 @@ import { withInvocationContext, readOutbox } from "@pe/runtime/context";
 
 // Real typed declaration, command client, HTTP handler, journal, Work and receipt projection.
 // No socket listens. Only PDF parsing and the unused native bridge are substitutes.
-test("7 MB upload refusal reaches the typed Family action reason", async () => {
+test("Start publishes Family Work before immediate small attach and 7 MB refusal", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-attach-"));
   const member = { pod: "test", path: "settings/family/HCB.json" };
   const work = new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(join(dir, "work")) });
@@ -40,9 +40,9 @@ test("7 MB upload refusal reaches the typed Family action reason", async () => {
   const fingerprint = Context.get(admitted, AdmittedBuiltins).routes.get("family")!.workFingerprint;
   const journal = new ActionJournal(join(dir, "journal.jsonl"), Date.now);
   const bridge = detachedBridge();
-  const parsePdf = vi.fn(async () => {
-    throw Error("PDF parser refused this source");
-  });
+  const parsed = {jobId: "small", fileName: "small.pdf", pages: [], blocks: [], images: []};
+  const parsePdf = vi.fn(async () => parsed)
+    .mockRejectedValue(Error("PDF parser refused this source")).mockResolvedValueOnce(parsed);
   await mkdir(join(dir, member.pod, "settings/family"), { recursive: true });
   await writeFile(join(dir, member.pod, "pod.json"), JSON.stringify({id: member.pod}));
   await writeFile(join(dir, member.pod, member.path), JSON.stringify({ family: { name: "HCB" } }));
@@ -77,26 +77,37 @@ test("7 MB upload refusal reaches the typed Family action reason", async () => {
   const mount = mountTypedRoute(module, { address: {read: () => search, write() {}, subscribe: () => () => {}},
     target: {kind: "host"}, work: {address: null, open: null}, fixture: null, custody: {current: () => true}, memory: () => ({}) },
     fingerprint, {work: door});
+  let startReturnHandle: unknown = null;
   try {
     await vi.waitFor(() => expect(mount.startAction()).not.toBeNull());
     expect(mount.owner()?.handle).toBeNull();
     await mount.startAction()!.run();
-    await vi.waitFor(() => expect(mount.owner()?.handle).toBeTruthy());
+    startReturnHandle = mount.owner()?.handle ?? null;
+    await expect(mount.run("attach", false, {member, source: {fileName: "small.pdf", base64: Buffer.from("%PDF-1.4\nsmall manufacturer source\n%%EOF").toString("base64")}})).resolves.toMatchObject({member, pages: 0});
+    expect((await journal.list()).find(row=>row.key === "work.start")).toMatchObject({state: "succeeded", result: {revision: 1}});
+    const attached = (await journal.list()).find(row=>row.key === "family.attach-spec")!;
+    expect(attached).toMatchObject({state: "succeeded", input: {work: {revision: 1}}});
+    expect((await work.read(bindWork("family", null), "family"))?.doc).toMatchObject({spec: {member, doc: {jobId: "small"}}});
+    expect(JSON.parse(await readFile(join(dir, member.pod, `${member.path}.spec.json`), "utf8"))).toMatchObject({path: "settings/family/small-small.json"});
+    await vi.waitFor(() => expect(mount.owner()?.handle?.revision).toBe(2));
     const run = mount.run("attach", false, {member, source: {fileName: "source.pdf", base64: (await readFile(pdf)).toString("base64")}});
     await expect(run).rejects.toThrow("PDF parser refused this source");
     expect(mount.reviewProblem("attach")).toContain("PDF parser refused this source");
-    const receipt = (await journal.list()).find(row=>row.key === "family.attach-spec")!;
+    const receipt = (await journal.list()).find(row=>row.key === "family.attach-spec" && row.state === "failed")!;
     await expect(recoverAction(receipt.id, "family.attach-spec", {
       ...receipt.input, source: {...(receipt.input.source as object), fileName: "another.pdf"},
     }, receipt.target)).rejects.toThrow("conflicts with its original intent");
     expect(JSON.stringify(receipt)).not.toMatch(/"(?:base64|bytesBase64)"/);
     expect(JSON.stringify(frames)).not.toMatch(/"(?:base64|bytesBase64)"/);
     expect(await readFile(join(dir, "journal.jsonl"), "utf8")).not.toMatch(/"(?:base64|bytesBase64)"/);
-    expect(outboxes[0]?.admission?.input.source).toMatchObject({fileName: "source.pdf", size: 7 * 1024 * 1024 + 5});
-    expect(JSON.stringify(outboxes[0]).length).toBeLessThan(1024);
-    expect(parsePdf).toHaveBeenCalledOnce();
+    expect(outboxes[1]?.admission?.input.source).toMatchObject({fileName: "source.pdf", size: 7 * 1024 * 1024 + 5});
+    expect(JSON.stringify(outboxes[1]).length).toBeLessThan(1024);
+    expect(parsePdf).toHaveBeenCalledTimes(2);
     expect(frames.length).toBeGreaterThan(0);
-  } finally { mount.dispose(); stop(); vi.unstubAllGlobals(); await journal.close(); await web.dispose(); await Effect.runPromise(Scope.close(scope, Exit.void)); await rm(dir, {recursive: true, force: true}); }
+  } finally {
+    if(process.env.PE_START_ATTACH_EVIDENCE) await writeFile(process.env.PE_START_ATTACH_EVIDENCE, JSON.stringify({startReturnHandle, stored: await work.readRaw(bindWork("family", null), "family"), receipts: await journal.list()}, null, 2));
+    mount.dispose(); stop(); vi.unstubAllGlobals(); await journal.close(); await web.dispose(); await Effect.runPromise(Scope.close(scope, Exit.void)); await rm(dir, {recursive: true, force: true});
+  }
 });
 
 
