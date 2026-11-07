@@ -1,5 +1,5 @@
 import { registerRoute } from "../shell/route-registration";
-import { publicRoutes } from "./route-discovery";
+import { publicRoutes, typedWorkCells } from "./route-discovery";
 import { builtinRouteKeys, builtinRouteStamp, loadBuiltinRoute, typedBuiltin } from "./builtin-inventory";
 import { sessionsGraph } from "#/sessions/graph";
 import { lazy, type ComponentType } from "react";
@@ -20,7 +20,7 @@ export const publicRoutesReady = Promise.all(
     if (typed) {
       const fingerprint = workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp(key)}`);
       publicRoutes.register({ manifest: { key, name: typed.spec.name, needs: typed.data.needs }, typed,
-        ...(typed.spec.edits?{work: { route: key, schema: typed.spec.edits.work.schema, cells: [], workFields: {}, admission: { routeKey: key, fingerprint } }}:{}),
+        ...(typed.spec.edits?{work: { route: key, schema: typed.spec.edits.work.schema, cells: typedWorkCells(typed), workFields: {}, admission: { routeKey: key, fingerprint } }}:{}),
         hosted: props => <HostedTypedRoute module={typed} fingerprint={fingerprint} {...props} /> });
       return;
     }

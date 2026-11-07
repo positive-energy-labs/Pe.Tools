@@ -14,13 +14,13 @@ const ref = z.string().min(1);
 const refs = z.array(ref);
 // Initial bytes are opaque until the referenced field schema decodes them. Do not
 // recursively expand Zod's JSON union through every generic route field during emit.
-const initial: z.ZodType<unknown> = z.json().optional();
+const initial: z.ZodType<unknown> = z.json();
 const policy = {
   url: z.enum(["push", "replace"]).or(z.literal(false)),
   share: z.boolean(),
   agent: z.enum(["read", "set", "none"]),
 };
-const scalar = { schema: ref, codec: ref, initial, ...policy };
+const scalar = { schema: ref, codec: ref, initial: initial.optional(), ...policy };
 export const routeFieldJsonSchema = z.discriminatedUnion("role", [
   z.strictObject({
     role: z.literal("subject"),

@@ -23,7 +23,7 @@ import {
 } from "@pe/agent-contracts";
 
 import { publicRoutes } from "#/route/route-discovery";
-import { isRecord } from "#/shell/owner";
+import { isRecord } from "@pe/agent-contracts";
 
 export type ChatPluginRoute = string;
 const chatPluginRoutes = () => publicRoutes.keys();

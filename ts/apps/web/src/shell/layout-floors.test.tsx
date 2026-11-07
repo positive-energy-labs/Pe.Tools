@@ -76,8 +76,8 @@ for (const width of [720, 1280, 1920]) {
     );
     const { container } = render(
       <GraphLayoutView
-        layout={opsGraph.layout}
-        panes={opsGraph.panes}
+        layout={opsGraph.layout as LayoutNode}
+        panes={layoutPanes(opsGraph.panes)}
         active={() => true}
         bodies={bodies}
       />,

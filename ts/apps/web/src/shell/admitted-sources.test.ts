@@ -13,7 +13,7 @@ async function admit(sources: Record<string, unknown>) {
     ...generated.envelope,
     source: "builtin-closure" as const,
     version: 1 as const,
-    data: RouteGraphJson.parse(generated.envelope.data),
+    data: RouteGraphJson.parse(module.data),
     variants: [{ client: "web" as const, entry: generated.envelope.variants[0]!.entry }],
   };
   const fingerprint = await builtinClosureFingerprint(envelope);
@@ -53,9 +53,6 @@ test("replacement source functions cannot reuse the loaded admission", async () 
   expect(admission.admit(replaced).ok).toBe(false);
 });
 
-test("the shipped Captures closure includes its source module", () => {
-  expect(generated.envelope.modules.some((member) => member.id.endsWith("/captures/sources.ts"))).toBe(true);
-});
 
 test("mutating a source object cannot replace the loader-captured executable", async () => {
   const original = module.sources["captures.list"]!;

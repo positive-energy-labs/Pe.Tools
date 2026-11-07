@@ -234,6 +234,7 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
    */
   z.strictObject({ kind: z.literal("notices"), as: z.literal("tray").optional() }),
   z.strictObject({ kind: z.literal("takeoff-reading"), target: documentRefSchema }),
+  z.strictObject({kind:z.literal("families-reading"),work:workKeySchema}),
   /**
    * The families matrix of one document over one filter, by ENVELOPE only
    * (`familiesMatrixEnvelopeSchema`): the stream says when the last matrix read completed and which

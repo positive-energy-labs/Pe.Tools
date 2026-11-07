@@ -104,3 +104,13 @@ it("removing an earlier registration cannot rename surviving sites", () => {
   expect(before.sites.legacyRegistrations).toHaveLength(2);
   expect(after.sites.legacyRegistrations).toHaveLength(1);
 });
+
+it("type-only route context imports do not import a colocated runtime owner",()=>{
+ const actual=boundaryCensus({
+  "ts/apps/web/src/example/drawing.tsx":`import type {Context} from '#/example/route';`,
+  "ts/apps/web/src/example/route.ts":`import {appAtomRegistry} from '#/shell/owner'; export type Context={};`,
+  "ts/apps/web/src/example/direct.ts":`import type {PrivateOwner} from '#/shell/owner';`,
+ });
+ expect(actual.rawPageImports).toHaveLength(2);
+ expect(actual.rawPageImports!.some(row=>row.includes("drawing.tsx"))).toBe(false);
+});

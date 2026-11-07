@@ -15,6 +15,8 @@ import { opsAddress } from "./ops.ts";
 import { peaAddress } from "./pea.ts";
 import { homeAddress } from "./home.ts";
 import { ductLossAddress } from "./duct-loss.ts";
+import {openAddress} from "./open.ts";
+import {designSystemAddress} from "./design-system.ts";
 import { capturesAddress } from "./captures.ts";
 
 export { DUCTS_LAYERS } from "./picture.ts";
@@ -43,4 +45,6 @@ export const routeAddresses = {
   home: homeAddress,
   "duct-loss": ductLossAddress,
   captures: capturesAddress,
+  open:openAddress,
+  "design-system":designSystemAddress,
 } satisfies Record<string, RouteDeclaration>;

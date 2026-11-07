@@ -1,3 +1,4 @@
+import {routeFile} from "../route";
 import { createRoute } from "@tanstack/react-router";
 import { Route as root } from "../routes/__root";
 import { TypedShell } from "../shell/typed-shell";
@@ -7,7 +8,7 @@ import { workFingerprintSchema } from "@pe/agent-contracts";
 export const settingsRoute = createRoute({
   getParentRoute: () => root,
   path: "/settings",
-  validateSearch: (search: Record<string, unknown>) => search,
+  validateSearch: routeFile("settings").validateSearch,
   component: () => (
     <TypedShell
       module={module}

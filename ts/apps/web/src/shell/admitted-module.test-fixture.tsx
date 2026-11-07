@@ -191,7 +191,7 @@ export const bodies = {
   },
 } satisfies BodyBindings<typeof capturesData, typeof schemas, typeof entries, ReactNode>;
 export const module = {
-  sources: {},
+  sources: {"captures.list": {kind:"use" as const, open:(()=>()=>{}) as import("./readings").UseSource["open"]}},
   data: capturesData,
   schemas,
   entries,

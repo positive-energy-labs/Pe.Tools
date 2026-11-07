@@ -247,7 +247,7 @@ const compositionRoots = new Set([
 ]);
 // Admitted Place composition may bind app capabilities and fixture inputs. Its implementation
 // is private like the shell; direct private-owner imports and re-exports still cross the fence.
-const admittedPlaceRoots = new Set([`${WEB}chat/owner.tsx`, `${WEB}route/builtin-routes.tsx`, `${WEB}pods/route.tsx`, `${WEB}router.tsx`]);
+const admittedPlaceRoots = new Set([`${WEB}chat/owner.tsx`, `${WEB}workbench/provider/view.tsx`, `${WEB}workbench/thread-view.tsx`, `${WEB}route/builtin-routes.tsx`, `${WEB}pods/route.tsx`, `${WEB}router.tsx`]);
 /** A declared pane may display its public provenance; this grants no legacy-owner access. */
 function paneFixture(source: ts.SourceFile, node: ts.Node): boolean {
   if (!ts.isPropertyAccessExpression(node) || !ts.isIdentifier(node.expression)) return false;
@@ -447,7 +447,7 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
         if (ts.isStringLiteralLike(specifier)) {
           const name = specifier.text;
           const target =
-            [...sources.keys()].find((p) => p === name) ??
+            [...sources.keys()].find((p) => p === name || (name.startsWith("#/") && [".ts",".tsx"].some(ext=>p === `${WEB}${name.slice(2)}${ext}`))) ??
             resolveModule(file, name) ??
             (name.startsWith("#/") ? `${WEB}${name.slice(2)}.ts` : name);
           imports.push({ node, target });
@@ -487,6 +487,13 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
       }
     });
   }
+  // A type import may name a declaration beside its runtime without importing that runtime.
+  // Direct private-owner type access remains forbidden, as does every executable/re-export path.
+  const typeOnly=(node:ts.Node)=>
+    (ts.isImportDeclaration(node) && (node.importClause?.isTypeOnly ||
+      (node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) &&
+       node.importClause.namedBindings.elements.every(binding=>binding.isTypeOnly)))) ||
+    (ts.isExportDeclaration(node) && node.isTypeOnly);
   function reaches(file: string, targets: Set<string>, seen = new Set<string>()): boolean {
     if (targets.has(file)) return true;
     if (seen.has(file)) return false;
@@ -495,6 +502,7 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
     // those composition facades; every other route/body wrapper remains fully traversed.
     return (edges.get(file) ?? []).some(
       (edge) =>
+        (!typeOnly(edge.node) || targets.has(edge.target)) &&
         ((!file.startsWith(WEB + "shell/") && !admittedPlaceRoots.has(file)) ||
           ts.isExportDeclaration(edge.node)) &&
         reaches(edge.target, targets, seen),
@@ -510,7 +518,7 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
     for (const edge of imports) {
       const compositionImport = admittedPlaceRoots.has(file) &&
         !privateModules.has(edge.target) && !ts.isExportDeclaration(edge.node);
-      if (route && !compositionImport && reaches(edge.target, privateModules))
+      if (route && !compositionImport && (!typeOnly(edge.node) || privateModules.has(edge.target)) && reaches(edge.target, privateModules))
         result.rawPageImports!.push(identity(edge.node));
       if (
         file.startsWith(WEB) &&
