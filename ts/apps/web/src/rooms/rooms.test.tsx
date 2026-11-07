@@ -68,8 +68,6 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
     <>
       <RoomsTable
         rows={rows}
-        cells={{}}
-        wire={{ segment: "edits", revision: 0, write: vi.fn() } as never}
         onSelect={() => {}}
         empty={{ says: "empty", exit: "none" }}
       />

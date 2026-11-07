@@ -12,8 +12,9 @@ export function FamilyWorkspaceAnatomy() {
     focusedParams,
     inspect,
     setInspect,
-    fields,
-    transitionsAt,
+    wire,
+    cells,
+    value,
   } = useFamilyWorkspace();
   return (
     <AnatomyDrawing
@@ -26,8 +27,9 @@ export function FamilyWorkspaceAnatomy() {
       onFocus={setFocus}
       onInspect={(slug) => setInspect({ kind: "part", slug })}
       inspecting={inspect?.kind === "part" ? inspect.slug : null}
-      fields={fields}
-      transitionsAt={transitionsAt}
+      refusalAt={(key) => wire.lockOf?.(key) ?? null}
+      cells={cells}
+      value={value}
     />
   );
 }

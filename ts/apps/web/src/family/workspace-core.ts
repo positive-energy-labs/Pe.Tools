@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { reviewTransitions } from "#/components/work/band";
 import type { FamilyStore } from "#/family/store";
 import {
   consumersOf,
@@ -17,8 +16,13 @@ import {
 } from "#/family/model";
 import type { ProtoProposal } from "#/family/world";
 import { useMeasuredParse } from "#/host/measured-parse";
+import type { FamilyContext } from "./route";
 
-export function useFamilyWorkspaceCore(store: FamilyStore) {
+export function useFamilyWorkspaceCore(
+  store: FamilyStore,
+  cells: Pick<FamilyContext["cells"], "at">,
+  value?: FamilyContext["value"],
+) {
   const profile = store.profile;
   /** WHICH SOURCE — the one question that separates them, asked once (see `#/family/source`). */
   const lane = store.lane;
@@ -189,7 +193,9 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
    * and deny are the cell's own; nothing on this page assembles them.
    */
   const transitionsAt = (key: string) =>
-    reviewTransitions(store.wire, key, store.fields[key] ?? {});
+    store.wire.lockOf?.(key)
+      ? []
+      : cells.at(["cells", key]).transitions({ label: "Clear family cell" });
 
   /**
    * TYPING BEATS PROPOSING. Committing your own value into a cell CLEARS every suggestion aimed at
@@ -294,36 +300,8 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     )
     .join(" · ");
 
-  /**
-   * SAVE, on whichever lane.
-   *
-   * FIXTURE: the disk moves to where the draft is. Every caution square goes out in the same beat,
-   * and the saved overlay stops differing anywhere — the visible proof that save wrote what the
-   * marks said it would.
-   *
-   * LIVE: the draft is diffed into edit field patches, edit onto `route:settings`, and the
-   * host's own `save` writes them under the version token captured at open. Nothing is folded in
-   * here on success: the snapshot comes back over SSE with a new token, the lane re-projects, and
-   * the store's version-token guard rebuilds the draft from what actually landed. That is the difference
-   * between a surface that shows you the write and one that shows you its own optimism.
-   */
-  // ── THE HOST CROSSINGS (phase D) ──────────────────────────────────────────────────────────────
-  //
-  // Capture and build below cross into Revit. The targeting header also runs native Plan/Apply
-  // through the store, using the saved composed profile and expected plan hash.
-  //
-  //   capture live   READS. `route:family`'s `capture_evidence` wraps `revit.detail.family-model`
-  //                  and stamps the result into the evidence slice. It moves nothing into the
-  //                  profile; that is `capture all`'s job, under the ⇄ live overlay, once there is
-  //                  a reading to move.
-  //   build .rfa     WRITES, outside the page and outside the document: `build_evidence` re-opens
-  //                  the SAVED family.json host-side and hands it to `family.build`,
-  //                  which materializes an .rfa and returns evidence pinned to that revision. It
-  //                  is the whole reason the arming ceremony exists — see `#/family/build`.
-  //
-  // Cell-level apply above simulates only in the explicit fixture lane. Native profile-wins
-  // writes use the header's reviewed familyfoundry plan/apply, not a direct family editor write.
-
+  // Native capture/build/apply use the typed commands and shell-owned Plan/Apply/History.
+  // The domain edit buffer above only stages Work; it never writes directly to Revit.
   const capturing = busy?.key === "capture";
 
   // ── the geometry verbs ────────────────────────────────────────────────────────────────────────
@@ -458,6 +436,8 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   /** The verdict rail: scannable, countable, and carrying no verdict of its own. */
   return {
     store,
+    cells,
+    value,
     parse,
     profile,
     lane,
