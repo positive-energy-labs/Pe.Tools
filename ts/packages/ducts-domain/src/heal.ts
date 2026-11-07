@@ -348,8 +348,9 @@ export const healRequestGroup = (group: HealGroup, only?: ReadonlySet<string>) =
 
 /** Fold one repair's ends and join before either the inbox or picture numbers findings. */
 export function healFindings(findings: readonly DuctFinding[], plan: HealPlan | import("./pricing-view").HealView | null = null) {
+  const hard: [string,{ids:number[];covers:string[];note:string}][]=!plan?[]:plan.hard instanceof Map?[...plan.hard]:Object.entries(plan.hard);
   const repairs = new Map(
-    (plan?.hard instanceof Map ? [...plan.hard] : Object.entries(plan?.hard??{})).flatMap(([id, repair]) =>
+    hard.flatMap(([id, repair]) =>
       repair.covers.map((key) => [key, { id, ...repair }] as const),
     ),
   );

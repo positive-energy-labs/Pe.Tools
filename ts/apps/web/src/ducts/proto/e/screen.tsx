@@ -11,7 +11,6 @@ import { PointerCite } from "#/shell/pointer-list";
 import { pointerRefs } from "../../pointer-refs";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { useRevitSubjectProps } from "#/revit/element-menu";
-import { type NativeObservation } from "#/revit/observation";
 import { LoadingContext } from "#/route/loading-context";
 import { PaneActions } from "#/shell/pane-actions";
 import { useAdmittedSubject } from "#/shell/subject";
@@ -151,16 +150,6 @@ function useNetworkData(ctx: NetworkContext) {
     .find((ids) => ids != null);
   const current = networkRead.current;
   const version = snapshot?.sourceVersion;
-  const observation = useMemo<NativeObservation>(
-    () => ({
-      scope: { document: current ? doc : null, source: "native" },
-      references: [...(snapshot?.nodes ?? []), ...(snapshot?.segments ?? [])].map((element) => ({
-        elementId: element.id,
-        uniqueId: element.uniqueId,
-      })),
-    }),
-    [current, doc?.session, doc?.openId, snapshot],
-  );
   // Domain readonly sweep reached 28 files; coverage still accepts the mutable snapshot alias.
   const coverage = roster
     ? systemReadCoverage(
@@ -234,7 +223,6 @@ function useNetworkData(ctx: NetworkContext) {
       write: (patches: RouteStatePatch[]) => write(patches),
     },
     captureSource: networkRead.current && doc && version ? { document: doc, version } : null,
-    observation,
     scopeCommand,
     fanRoster: ctx.value.value?.fanRows ?? [],
     edit: pendingCount(workDoc ?? null, snapshot?.store),

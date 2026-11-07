@@ -13,10 +13,6 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
   const page = ctx.page.read();
   const refusal = !ctx.cells.ready ? ctx.cells.refusal : data?.editRefusal;
   const snapshot = shown ? scheduleReadingSchema.parse(shown).snapshot : null;
-  const native =
-    ctx.target?.kind === "document" &&
-    shown?.target.session === ctx.target.ref.session &&
-    shown?.target.openId === ctx.target.ref.openId;
   const state: ScheduleGridState = {
     at: (key) => {
       const cell = ctx.cells.at(["cells", key]);
@@ -40,11 +36,6 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
     documentScope: shown
       ? { bridgeSessionId: shown.target.session, openDocumentId: shown.target.openId }
       : undefined,
-    nativeObservation: {
-      scope: shown
-        ? { document: native ? shown.target : null, source: native ? "native" : "saved" }
-        : null,
-    },
     snapshot,
     refused: data?.outcome.refused ?? {},
     freshness: ctx.value.current ? "current" : "changed",
