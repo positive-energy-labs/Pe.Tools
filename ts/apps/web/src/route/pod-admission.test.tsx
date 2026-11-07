@@ -209,7 +209,7 @@ async function harness(stale = false) {
         if (!closed && !ctx.signal.aborted)
           deliver({ kind: "complete", value: packet, revision: generation });
       };
-      const stop = workspace.subscribe(() => {
+      const stop = workspace.subscribeUncaptured(() => {
         revision++;
         void refresh();
       });

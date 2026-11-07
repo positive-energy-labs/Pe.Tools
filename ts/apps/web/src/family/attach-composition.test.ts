@@ -1,11 +1,17 @@
+import { serveRoutes } from "../../../host/tests/real-server.ts";
+import { mintContext } from "../../../host/src/control.ts";
+import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
+import { capturedWorkReads, workReadContext } from "../../../host/src/work-inputs.ts";
+import { HostInputReadSets } from "../../../host/src/input-occurrence.ts";
+import { nativeCatalogIdentity, openRecordingWriter } from "../../../host/src/native-recording.ts";
+import type { CommandResources } from "../../../host/src/command-executor.ts";
 // @vitest-environment node
 import { test, expect, vi } from "vite-plus/test";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
-import { NodeServices, NodeHttpClient } from "../../../host/tests/family-attach-host.fixture.ts";
-import { HttpRouter } from "effect/http";
+import { NodeServices } from "../../../host/tests/family-attach-host.fixture.ts";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
 import { bindWork, canonicalRouteInput, familyDraftRouteState, READING_MAX_FRAME_BYTES } from "@pe/agent-contracts";
 import { module } from "./route";
@@ -19,10 +25,7 @@ import { commandResources } from "../../../host/src/command-reads.ts";
 import { ActionIncomplete } from "../../../host/src/action-journal.ts";
 import { ActionJournal } from "../../../host/src/action-journal.ts";
 import { makeCallRoute } from "../../../host/src/call-route.ts";
-import { nativeReadRoot } from "../../../host/src/app.ts";
-import { RevitBridge } from "../../../host/src/bridge.ts";
 import { SdkDriver } from "../../../host/src/sdk-session.ts";
-import { RequestIdentity, admittedRequestIdentity } from "../../../host/src/request-services.ts";
 import { hostResourceObserver } from "../../../host/src/resource-adapters.ts";
 import { detachedBridge, testHostInputs } from "../../../host/tests/effect-test.ts";
 import { bindActionReadings, type Readings } from "../host/resource-stream";
@@ -30,12 +33,26 @@ import { submitAction, recoverAction } from "../../../../packages/mcps/src/share
 import { withInvocationContext, readOutbox } from "@pe/runtime/context";
 
 // Real typed declaration, command client, HTTP handler, journal, Work and receipt projection.
-// No socket listens. Only PDF parsing and the unused native bridge are substitutes.
+// A real socket drives production action reconciliation. PDF parsing and the unused native bridge are substitutes.
 test("Start publishes Family Work before immediate small attach and 7 MB refusal", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-attach-"));
   const member = { pod: "test", path: "settings/family/HCB.json" };
-  const work = new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(join(dir, "work")) });
   const scope = Scope.makeUnsafe();
+  const writer = await Effect.runPromise(openRecordingWriter(join(dir, "history"), {build: "surface", catalog: nativeCatalogIdentity()}, {maxBytes: 10_000_000, maxTakings: 1000}));
+  const lane = {kind: "live" as const, captureStore: writer};
+  const sets = Context.get(await Effect.runPromise(Layer.buildWithScope(HostInputReadSets.layer(lane), scope)), HostInputReadSets);
+  const work = new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(join(dir, "work")), capture: capturedWorkReads(writer, Effect.runPromise) });
+  const workReads: NonNullable<CommandResources["workReads"]> = admission => {
+    const read = async (method: "read" | "view", key: Parameters<RouteWorkspace["read"]>[0], route: string) => {
+      const current = await Effect.runPromise(sets.open({key: `command.work.${method}`, input: JSON.parse(JSON.stringify({id: admission.id, command: admission.key, key, route})), scope: JSON.stringify(admission.target)}, null));
+      try {
+        const value = await work[method](key, route, workReadContext(current, Effect.runPromise));
+        await Effect.runPromise(current.seal);
+        return value;
+      } finally { await Effect.runPromise(current.close); }
+    };
+    return {read: (key, route) => read("read", key, route), view: (key, route) => read("view", key, route)};
+  };
   const admitted = await Effect.runPromise(Layer.buildWithScope(admittedBuiltinsLayer(work), scope));
   const fingerprint = Context.get(admitted, AdmittedBuiltins).routes.get("family")!.workFingerprint;
   const journal = new ActionJournal(join(dir, "journal.jsonl"), Date.now);
@@ -48,10 +65,11 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
   await writeFile(join(dir, member.pod, member.path), JSON.stringify({ family: { name: "HCB" } }));
   const pdf = join(dir, "source.pdf");
   await writeFile(pdf, "%PDF-" + "x".repeat(7 * 1024 * 1024));
-  const web = HttpRouter.toWebHandler(makeCallRoute(journal, undefined, { workspace: work, podsRoot: dir, parsePdf }).pipe(
-    nativeReadRoot(Layer.succeed(SdkDriver, () => Effect.die("No native access"))),
-    Layer.provide(testHostInputs), Layer.provideMerge(Layer.mergeAll(Layer.succeed(RevitBridge, bridge), NodeServices.layer, NodeHttpClient.layerUndici)),
-  ), { disableLogger: true });
+  const web = await serveRoutes(makeCallRoute(journal, undefined, { workspace: work, workReads, podsRoot: dir, parsePdf }).pipe(
+    Layer.provide(testHostInputs), Layer.provide(NodeServices.layer),
+  ), bridge, Layer.succeed(SdkDriver, () => Effect.die("No native access")));
+  const nativeFetch = globalThis.fetch;
+  const token = mintContext({kind: "human", via: "cli"});
   const caller = { kind: "human" as const, via: "local" as const };
   const outboxes: ReturnType<typeof readOutbox>[] = [];
   const request = (url: any, init?: RequestInit) => {
@@ -59,17 +77,17 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
       const admission = JSON.parse(String(init.body));
       if(admission.key === "family.attach-spec") outboxes.push(readOutbox(`pe-action::${admission.id}:${canonicalRouteInput(null)}`));
     }
-    return withInvocationContext({caller}, () => web.handler(new Request(new URL(String(url), "http://localhost"), init),
-    Context.make(RequestIdentity, admittedRequestIdentity(caller, {}))));
+    return nativeFetch(new URL(String(url), web.base), {...init, headers: {...Object.fromEntries(new Headers(init?.headers)), [HOST_CONTEXT_HEADER]: token}});
   };
-  const observe = observeResources(work, undefined, hostResourceObserver(bridge, () => journal));
+  const feed = await Effect.runPromise(sets.open({key: "surface.work-feed", input: {}, scope: "host"}, null));
+  const observe = observeResources(work, undefined, hostResourceObserver(bridge, () => journal), workReadContext(feed, Effect.runPromise));
   const frames: unknown[] = [];
   const readings = { subscribe: (request: any, deliver: any) => observe(request, frame => {
     frames.push(frame);
     expect(Buffer.byteLength(JSON.stringify(frame))).toBeLessThan(READING_MAX_FRAME_BYTES);
     deliver(frame);
   }), dirty() {} } as unknown as Readings;
-  vi.stubGlobal("window", {location: {origin: "http://localhost"}});
+  vi.stubGlobal("window", {location: {origin: web.base}});
   const stop = bindActionReadings(readings);
   vi.stubGlobal("fetch", request);
   const door = createWorkFeedClient(readings, { submit: command => withInvocationContext({caller}, () => submitAction(command)), write: async () => { throw Error("No cell write"); } });
@@ -87,7 +105,7 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
     expect((await journal.list()).find(row=>row.key === "work.start")).toMatchObject({state: "succeeded", result: {revision: 1}});
     const attached = (await journal.list()).find(row=>row.key === "family.attach-spec")!;
     expect(attached).toMatchObject({state: "succeeded", input: {work: {revision: 1}}});
-    expect((await work.read(bindWork("family", null), "family"))?.doc).toMatchObject({spec: {member, doc: {jobId: "small"}}});
+    expect((await work.read(bindWork("family", null), "family", workReadContext(feed, Effect.runPromise)))?.doc).toMatchObject({spec: {member, doc: {jobId: "small"}}});
     expect(JSON.parse(await readFile(join(dir, member.pod, `${member.path}.spec.json`), "utf8"))).toMatchObject({path: "settings/family/small-small.json"});
     await vi.waitFor(() => expect(mount.owner()?.handle?.revision).toBe(2));
     const run = mount.run("attach", false, {member, source: {fileName: "source.pdf", base64: (await readFile(pdf)).toString("base64")}});
@@ -103,10 +121,12 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
     expect(outboxes[1]?.admission?.input.source).toMatchObject({fileName: "source.pdf", size: 7 * 1024 * 1024 + 5});
     expect(JSON.stringify(outboxes[1]).length).toBeLessThan(1024);
     expect(parsePdf).toHaveBeenCalledTimes(2);
+    expect(writer.capture.truncated(), "History survives Start, attach publication and failed attach").toBeNull();
+    expect(writer.capture.begin()).not.toBeNull();
     expect(frames.length).toBeGreaterThan(0);
   } finally {
-    if(process.env.PE_START_ATTACH_EVIDENCE) await writeFile(process.env.PE_START_ATTACH_EVIDENCE, JSON.stringify({startReturnHandle, stored: await work.readRaw(bindWork("family", null), "family"), receipts: await journal.list()}, null, 2));
-    mount.dispose(); stop(); vi.unstubAllGlobals(); await journal.close(); await web.dispose(); await Effect.runPromise(Scope.close(scope, Exit.void)); await rm(dir, {recursive: true, force: true});
+    if(process.env.PE_START_ATTACH_EVIDENCE) await writeFile(process.env.PE_START_ATTACH_EVIDENCE, JSON.stringify({startReturnHandle, stored: await work.read(bindWork("family", null), "family", workReadContext(feed, Effect.runPromise)), truncated: writer.capture.truncated(), receipts: await journal.list()}, null, 2));
+    mount.dispose(); stop(); await Effect.runPromise(feed.seal); await Effect.runPromise(feed.close); vi.unstubAllGlobals(); await journal.close(); await web.close(); await Effect.runPromise(Scope.close(scope, Exit.void)); await rm(dir, {recursive: true, force: true});
   }
 });
 

@@ -1750,7 +1750,8 @@ export async function readFamily(
   const target = documentRefSchema.parse(raw.target);
   const reader = await projectReader(bridge, target, deps);
   if (!deps.workspace) throw refused("Route Work is unavailable");
-  const view = await deps.workspace.read(scope, "parameter-links");
+  // Legacy inspection is outside graph/command replay; the typed reading owns tracked Work input.
+  const view = await deps.workspace.readUncaptured(scope, "parameter-links");
   if (!view) throw refused("Author this route's Work before reading it");
   const document = parameterLinksRouteState.schema.parse(view.doc);
   const { evaluate } = familyReads["parameter-links.read"].input.parse(input);

@@ -312,7 +312,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
     ? createDuctsAnalysis({
         ...options.ductsAnalysis,
         readWork: async (key) => {
-          const saved = await work.read(key, key.route, context);
+          const saved = await (context ? work.read(key, key.route, context) : work.readUncaptured(key, key.route));
           if (!saved) throw Error(`Work is absent for ${key.route}`);
           return saved;
         },
@@ -328,7 +328,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
       key,
       () => readThreadWork(work, options.navigation),
       (notify) => {
-        const releaseWork = work.subscribe(() => notify());
+        const releaseWork = work.subscribeUncaptured(() => notify());
         const releaseContext = options.navigation?.subscribe?.(notify);
         return () => {
           releaseWork();
@@ -759,7 +759,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
         const scope = await routeWorkKey(url, route, "read", caller, invocation.document);
         if (scope instanceof Response) return scope;
         try {
-          const view = await work.view(scope, route, invocation.work);
+          // Direct inspection compositions have no read graph. HTTP composition supplies invocation.work.
+          const view = await (invocation.work ? work.view(scope, route, invocation.work) : work.viewUncaptured(scope, route));
           return view ? json(view) : json({ error: `unknown route '${route}'` }, 404);
         } catch (error) {
           if (isDoorFailure(error)) throw error;
