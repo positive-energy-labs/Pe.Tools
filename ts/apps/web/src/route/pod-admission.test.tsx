@@ -7,7 +7,13 @@ import { createElement, useSyncExternalStore } from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
-import { bindWork, workKey, podRouteDescriptorSchema, routeFingerprint } from "@pe/agent-contracts";
+import {
+  bindWork,
+  workKey,
+  podRouteDescriptorSchema,
+  routeFingerprint,
+  workFingerprintSchema,
+} from "@pe/agent-contracts";
 import { createPackageLifecycle } from "../../../host/src/package-lifecycle";
 import { listPackages } from "../../../host/src/packages";
 import { createPodRoutes } from "../../../host/src/pod-routes";
@@ -113,9 +119,12 @@ test.each(["deactivation", "removal", "replacement"])(
     expect(publicRoutes.typed(row.workRoute)).toBeNull();
   },
 );
-async function harness() {
+async function harness(stale = false) {
   const dir = await mkdtemp(resolve(tmpdir(), "snowdon-typed-"));
-  await cp(root, resolve(dir, "Pods/snowdon-circuits"), { recursive: true });
+  await cp(root, resolve(dir, "Pods/snowdon-circuits"), {
+    recursive: true,
+    filter: (source) => !source.split(/[\\/]/).includes("node_modules"),
+  });
   const lifecycle = createPackageLifecycle({
     packages: () => listPackages(resolve(dir, "Pods")),
     decisionsPath: resolve(dir, "enabled.json"),
@@ -145,7 +154,18 @@ async function harness() {
   const source: Readings = {
     subscribe(request, deliver) {
       acquired.push(request.kind);
-      const close = observe(request, deliver);
+      const close = observe(
+        stale && (request.kind === "work" || request.kind === "work-acks")
+          ? {
+              ...request,
+              admission: {
+                routeKey: key.route,
+                fingerprint: workFingerprintSchema.parse(`pod-bytes:${"0".repeat(64)}`),
+              },
+            }
+          : request,
+        deliver,
+      );
       return () => {
         close();
         released.push(request.kind);
@@ -282,4 +302,31 @@ test("Snowdon mounts typed over real host Work and tracked calculation, edits, u
     "work",
     "work-acks",
   ]);
+});
+
+test("a stale typed Pod remains read-only after refresh and retained return", async () => {
+  const h = await harness(true);
+  try {
+    await vi.waitFor(() => expect(h.mount.owner(h.key.route)?.problem).toMatch(/older|reload/i));
+    const count = h.acquired.filter((kind) => kind === "work" || kind === "work-acks").length;
+    const edit = () =>
+      h.mount.draw("calculation", (ctx) =>
+        ctx.cells.edit({ ...h.inputs, length: 300 }, { label: "Stale edit" }),
+      );
+    expect(await edit()).toMatchObject({ code: "unavailable" });
+    h.mount.refresh();
+    h.mount.release();
+    const stop = h.mount.subscribe(() => {});
+    try {
+      expect(await edit()).toMatchObject({ code: "unavailable" });
+    } finally {
+      stop();
+    }
+    expect(h.acquired.filter((kind) => kind === "work" || kind === "work-acks")).toHaveLength(
+      count,
+    );
+    expect((await h.workspace.read(h.key, h.key.route))?.doc).toMatchObject({ inputs: h.inputs });
+  } finally {
+    await h.close();
+  }
 });
