@@ -43,7 +43,7 @@ test("recorded host-local inputs and immutable capture files replay without a li
   let live:ReturnType<typeof make>|undefined=make({kind:"live",captureStore:writer}),replay:ReturnType<typeof make>|undefined;
   const request=(web:ReturnType<typeof make>,path:string,body?:unknown)=>withInvocationContext({caller:who},()=>web.handler(new Request(new URL(path,"http://host"),body?{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}:{}),Context.make(RequestIdentity,admittedRequestIdentity(who,{}))));
   const read=async(web:ReturnType<typeof make>,key:string,readSet?:string)=>{
-    const response=await request(web,peRouteUrl("reads.value"),{read:key,args:{},subscription:key,generation:0,...(readSet?{readSet}:{})});
+    const response=await request(web,peRouteUrl("reads.value", {}),{read:key,args:{},subscription:key,generation:0,...(readSet?{readSet}:{})});
     expect(response.status,await response.clone().text()).toBe(200);
     const result=valueReadResponse.parse(await response.json());expect(result.state,result.reason).toBe("current");return result.value!;
   };

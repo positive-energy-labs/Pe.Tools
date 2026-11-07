@@ -1,3 +1,4 @@
+import {hostReadSource} from "./host-read-source.ts";
 import { writeReject } from "./admitted-chrome";
 import { harnessClient } from "../workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "../workbench/config";
@@ -187,7 +188,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           historyPose: input.publicationInstance ? publicationPose(input.publicationInstance,spec.key,page) : undefined,
           work: null, page, args, signal: controller.signal, inputs: {},
           attempt: { target: input.target!, workKey: key, generation: revision }, trigger: { kind: "demand" } };
-        const source = ports.sources?.[read.key] ?? read.source;
+        const source = ports.sources?.[read.key] ?? hostReadSource(read);
         if (source.kind !== "use" && source.kind !== "feed") throw Error("Typed panes require a host Value");
         Promise.resolve(source.open(ctx, deliver)).then(stop => {
           if (controller.signal.aborted) stop?.();
