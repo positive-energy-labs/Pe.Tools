@@ -1,4 +1,4 @@
-import { placeInput } from "../shell/admitted-place.test-fixture";
+import { placeInput } from "../shell/typed-place.test-support";
 // @vitest-environment jsdom
 import { createElement } from "react";
 import { act, cleanup as cleanupView, render } from "@testing-library/react";

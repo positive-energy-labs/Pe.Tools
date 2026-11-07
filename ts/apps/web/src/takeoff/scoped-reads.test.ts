@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { expect, test, vi, afterEach } from "vite-plus/test";
-import { callOp } from "#/shell/readings-api";
+import { callOp } from "../host/catalog-client";
 import { takeoffSources } from "./sources";
-import type { ReadingContext } from "#/shell/readings";
+import type { ReadingContext } from "#/shell/source-contract";
 
 vi.mock("#/shell/readings-api", async (original) => ({
   ...(await original<typeof import("#/shell/readings-api")>()),

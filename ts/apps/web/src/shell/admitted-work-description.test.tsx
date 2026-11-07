@@ -1,4 +1,4 @@
-import { placeInput } from "./admitted-place.test-fixture";
+import { placeInput } from "./typed-place.test-support";
 // @vitest-environment jsdom
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";

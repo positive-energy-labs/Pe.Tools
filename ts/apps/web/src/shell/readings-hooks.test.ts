@@ -10,7 +10,7 @@ vi.mock("./readings", async (importOriginal) => ({
     throw Error("a shell hook subject ran a second reading engine");
   },
 }));
-const { readingAtom, inventoryOf } = await import("./readings-hooks");
+const { readingAtom, inventoryOf } = await import("../host/resource-state");
 
 afterEach(() => vi.useRealTimers());
 

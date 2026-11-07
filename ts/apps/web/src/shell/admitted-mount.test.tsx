@@ -1,4 +1,4 @@
-import { placeInput } from "./admitted-place.test-fixture";
+import { placeInput } from "./typed-place.test-support";
 import { RouteActivity, RouteVisibility } from "../route/activity";
 import { draftCellSchema, actionReceiptSchema, memberWork } from "@pe/agent-contracts";
 // @vitest-environment jsdom
@@ -19,8 +19,8 @@ import { createRouteShell, PlaceWriteRefusal } from "./admitted-mount";
 import { createAdmittedWork } from "./admitted-work";
 import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
 import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
-import type { ReadingContext, ReadingDelivery } from "./readings";
-import { admittedRouterAddress } from "./admitted-pane";
+import type { ReadingContext, ReadingDelivery } from "./source-contract";
+import { admittedRouterAddress } from "./typed-place-boundary";
 import { AdmittedPane } from "./admitted-place.test-fixture";
 const data = {
   version: 1,
@@ -1866,7 +1866,7 @@ test.each([
 ] as const)(
   "%s mount gives reads, Work and submit one captured target (ModelWrite=%s)",
   async (needs, modelWrite) => {
-    const contexts: Parameters<import("./readings").UseSource["open"]>[0][] = [];
+    const contexts: Parameters<import("./source-contract").UseSource["open"]>[0][] = [];
     const services = sourceRouteServices(
       {
         "native.write.preview": {
@@ -1932,14 +1932,14 @@ test.each([
 );
 
 test("application target change remounts once and retires the old ordinary source", async () => {
-  const contexts: Parameters<import("./readings").UseSource["open"]>[0][] = [];
+  const contexts: Parameters<import("./source-contract").UseSource["open"]>[0][] = [];
   const released = vi.fn();
   const sources = {
     "notes.read": {
       kind: "use",
       open(
-        context: Parameters<import("./readings").UseSource["open"]>[0],
-        deliver: Parameters<import("./readings").UseSource["open"]>[1],
+        context: Parameters<import("./source-contract").UseSource["open"]>[0],
+        deliver: Parameters<import("./source-contract").UseSource["open"]>[1],
       ) {
         contexts.push(context);
         deliver({ kind: "complete", value: "note", revision: 0 });

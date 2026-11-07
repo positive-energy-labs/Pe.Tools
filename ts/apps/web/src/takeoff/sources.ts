@@ -12,9 +12,10 @@ import {
   type TakeoffModel,
 } from "@pe/agent-contracts";
 
-import { callOp, composeSource } from "#/shell/readings-api";
+import { composeSource } from "#/shell/readings-api";
+import { callOp} from "../host/catalog-client";
 import { subscriptionSource } from "#/shell/readings-use";
-import type { ReadingContext, ReadingSource } from "#/shell/readings";
+import type { ReadingContext, ReadingSource } from "#/shell/source-contract";
 import type { TakeoffGraphPage } from "./graph";
 import { selectedTakeoffPage, type TakeoffRoster } from "./subject";
 import { snapshotOfObservation } from "./actions";

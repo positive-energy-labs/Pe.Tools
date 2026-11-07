@@ -9,7 +9,7 @@ import { StateCell } from "@pe/kit/lang/cell";
 import { actionStatusSchema, type WorkJournalDoor } from "@pe/agent-contracts";
 import type { ReceiptFeedState, ReceiptCursor } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { TypedWrite } from "../shell/typed-shell";
-import type { ReadingDelivery } from "../shell/readings";
+import type { ReadingDelivery } from "../shell/source-contract";
 const native = vi.hoisted(() => ({ submit: vi.fn(), permission:vi.fn(), retained: [] as unknown[] }));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (actual) => ({
   ...(await actual<object>()),

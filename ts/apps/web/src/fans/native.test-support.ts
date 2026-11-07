@@ -2,7 +2,6 @@ import { createElement } from "react";
 import { RosterBody, InputsBody, PictureBody, LedgerBody } from "../ducts/sheet/mount";
 import * as networkBodies from "../ducts/proto/e/screen";
 import type { TypedMount } from "../shell/typed-mount";
-import type { AdmittedMount } from "../shell/admitted-mount";
 import type { FansRouteDocument } from "@pe/agent-contracts";
 import { completion } from "../shell/work-door-observation";
 import type { WorkJournalDoor, WorkWriteOutcome } from "../../../../packages/agent-contracts/src/work-journal-door";
@@ -28,18 +27,18 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
       return createElement(Component,{ctx:body.props.ctx});
     }, close: mount.dispose,
     controls: { subject: mount.page.subject, query: (key:string,value:unknown)=>mount.page.query({[key]:value}) },
-    page: mount.page,
-    work: () => mount.work() as ReturnType<AdmittedMount["work"]> & { value: FansRouteDocument },
+    page: { ...mount.page, read: (): Record<string,any> => mount.page.read() },
+    work: () => mount.work() as NonNullable<ReturnType<TypedMount["work"]>> & { value: FansRouteDocument },
     subjectState: mount.subjectState,
     workFailure: () => mount.owner()?.failure ?? null,
     history: { get entries() { return mount.owner()?.lease.entry.journal.entries()??[]; },undo:mount.history.undo,redo:mount.history.redo,revert:mount.history.revert },
     reviewRefusal: (id:string)=>mount.reviewProblem(id)?Error(mount.reviewProblem(id)!):null,
     confirm:(id:string)=>{if(mount.review(id)?.stale) throw Error("Review stale");return mount.run(id,true);},
     readingStatus: (id:string)=>({snapshot:snapshot(id)}),
-    picker: () => {const value=mount.value(mount.spec.subject!.read ?? mount.spec.core).value;return value ? mount.spec.subject!.options(value) : [];},
+    picker: (_field?: string) => {const value=mount.value(mount.spec.subject!.read ?? mount.spec.core).value;return value ? mount.spec.subject!.options(value) : [];},
     journal: () => mount.owner()!.lease.entry.journal.read(),
-    setPaneDemand() {},
-    refresh: mount.refresh,
+    setPaneDemand(_pane: string, _next: boolean) {},
+    refresh: (id?: string) => mount.refresh(id ? mount.spec.reads?.[id] ?? mount.spec.core : undefined),
     invoke(id:string,input:any,basis=mount.workBasis()) {
       if (id !== "edit") { void mount.run(id).catch(()=>{}); return {kind:"preview"}; }
       if (!basis) throw Error("Work unavailable");
@@ -51,5 +50,5 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
       });
     },
   };
-  return adapter as unknown as AdmittedMount & { native: TypedMount; work: typeof adapter.work; page: { read(): Record<string,any> } & TypedMount["page"] };
+  return adapter;
 }

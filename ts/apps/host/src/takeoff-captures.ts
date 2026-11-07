@@ -384,7 +384,7 @@ export class TakeoffCaptures {
             throw Error("Snapshot target or generation changed before publication.");
         };
         await assertCurrent();
-        const capture = await this.save(snapshot, { kind: "live", target }, assertCurrent);
+        const capture = await this.retain(snapshot, { kind: "live", target }, assertCurrent);
         this.setState(key, takeoffObservationSchema.parse({ kind: "ready", target, capture }));
         return { result, capture };
       } catch (error) {
@@ -963,7 +963,8 @@ export class TakeoffCaptures {
       (a, b) => b.completedAt.localeCompare(a.completedAt) || b.id.localeCompare(a.id),
     );
   }
-  private async save(
+  /** Retain this exact snapshot; the acquiring read owns its scope and freshness fence. */
+  async retain(
     snapshot: TakeoffSnapshot,
     provenance: TakeoffCapture["provenance"],
     current?: () => Promise<void>,

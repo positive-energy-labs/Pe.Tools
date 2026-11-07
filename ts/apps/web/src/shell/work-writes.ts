@@ -8,7 +8,7 @@ import {
   type WorkWrite,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
-import type { MountScope } from "./mount-owner";
+import type { MountScope } from "./work-scope";
 import { acquireWorkJournal, type JournalDetail } from "./journal";
 
 interface WriteHistory {

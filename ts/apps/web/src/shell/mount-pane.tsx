@@ -6,7 +6,7 @@ import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph
 import { reduceLayout } from "../../../../packages/kit/src/components/lang/layout-graph";
 import { useRouteSearchSlice } from "../route/activity";
 import { legacySubjectState } from "./subject";
-import { PageControl } from "./situation-fields";
+import { PageControl } from "./page-control";
 import { mountRefusals, type GraphMount, type MountAdapters } from "./mount-owner";
 import { PaneHead } from "./mount-reading";
 import { GraphHistory } from "./mount-timeline";

@@ -9,7 +9,7 @@ import { createMountWork, type MountWork } from "./mount-work-owner";
 import { createMountTimeline } from "./mount-timeline-owner";
 import { createMountVerbs, type MountVerbs } from "./mount-verbs-owner";
 export { graphFields, mountRefusals, CONFLICT_REFUSAL } from "./mount-contracts";
-export type { MountAdapters, MountScope, MountBinding, BindingScope } from "./mount-contracts";
+export type {MountAdapters, MountBinding, BindingScope} from "./mount-contracts";
 /** Composes noun owners and connects their subscriptions in publication order. */
 export function createGraphMount<P, W>(
   graph: RouteGraph<P, W>,

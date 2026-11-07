@@ -5,10 +5,18 @@ import {
   type ReactNode,
   type ComponentType,
 } from "react";
-import type { GraphMount } from "../shell/mount";
-import type { OpenPageState } from "./graph";
-import type { VerbCompletion } from "../shell/verbs";
-export type OpenOwner = GraphMount<OpenPageState, unknown>;
+import type { OpenPageState } from "./page";
+import type { ReadingState } from "../shell/source-contract";
+export interface OpenOutcome { state: string; outcome?: { state: string }; receipt?: { key: string }; refusal?: { message: string } }
+export interface OpenOwner {
+  subscribe(listener: () => void): () => void;
+  version(): number;
+  busy(): unknown | null;
+  fixture: { name: string } | null;
+  view: { read(): { page: OpenPageState }; setPage(patch: Partial<OpenPageState>): unknown };
+  readings: { get(id: string): ReadingState; mount(ids: readonly string[]): () => void };
+  control(id: string, input?: unknown): { refusal: string | null; label: string; run(): Promise<OpenOutcome> };
+}
 export const OpenOwnerContext = createContext<OpenOwner | null>(null);
 let controls: ComponentType<{children:ReactNode}> | null = null;
 /** App composition supplies the companion control owner; drawings only consume its context. */
@@ -27,9 +35,9 @@ export function useOpenOwner() {
   return owner;
 }
 export const useOpenKernel = useOpenOwner;
-export function outcomeOf(result: VerbCompletion) {
-  if (result.state === "done" && "receipt" in result)
-    return { kind: "receipt" as const, label: `${result.receipt.key} ${result.outcome.state}` };
-  if ("refusal" in result) return { kind: "refused" as const, label: result.refusal.message };
-  return { kind: "advisory" as const, label: result.outcome.state };
+export function outcomeOf(result: OpenOutcome) {
+  if (result.state === "done" && result.receipt)
+    return { kind: "receipt" as const, label: `${result.receipt.key} ${result.outcome?.state ?? result.state}` };
+  if (result.refusal) return { kind: "refused" as const, label: result.refusal.message };
+  return { kind: "advisory" as const, label: result.outcome?.state ?? result.state };
 }

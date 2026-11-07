@@ -4,16 +4,17 @@ import {
   createReadingGraph,
   openSource,
   ReadingGraphRefusal,
+} from "./readings";
+import {
   type ReadingContext,
   type ReadingDelivery,
   type ReadingLog,
   type ReadingScope,
   type ReadingSource,
-  type UseSource,
-} from "./readings";
+  type UseSource} from "./source-contract";
 import { workerSource, type ReadingWorkerPort, type ReadingWorkerRequest } from "./readings-worker";
 import { demandContext, openSourceReading, subscriptionSource } from "./readings-use";
-import type { Readings } from "../readings";
+import type { Readings } from "../host/resource-stream";
 import { DEFAULT_WAIT_S } from "#/route/waits";
 
 type Page = { filter: string; pose: number };

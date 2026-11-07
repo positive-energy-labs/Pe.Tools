@@ -1,4 +1,4 @@
-import type { ReadingContext, ReadingDelivery, WorkerChannel, WorkerSource } from "./readings";
+import type { ReadingContext, ReadingDelivery, WorkerChannel, WorkerSource } from "./source-contract";
 
 export interface ReadingWorkerRequest<I> {
   id: number;

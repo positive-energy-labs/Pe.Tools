@@ -1,3 +1,4 @@
+import type { MountScope } from "./work-scope";
 import type { MountEnvironment } from "./mount-environment";
 import type { LegacyVerbEnvironment } from "./legacy-environment-bridge";
 import { type SettingsOwner } from "./settings";
@@ -6,20 +7,18 @@ import {
   type ActionReceipt,
   type ActionStatus,
   type DocumentRef,
-  type ExecutionTarget,
   type FieldDecl,
   type FieldRole,
   type RouteGraph,
   type RouteStatePatch,
   type RouteStateWriteResult,
-  type WorkHandle,
   type WorkKey,
   type WorkWrite,
   type VerbReadingEdges,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
 
-import { type ReadingLog, type ReadingSource, type ReadingState } from "./readings";
+import { type ReadingLog, type ReadingSource, type ReadingState } from "./source-contract";
 
 import { type TimelineEntry } from "./timeline";
 import { validateGraphChords } from "./keys";
@@ -28,20 +27,6 @@ import { type WorkHistory, type VerbContext, type VerbSubject } from "./verbs";
 export const graphFields = <P, W>(graph: RouteGraph<P, W>) =>
   Object.entries(graph.fields) as [keyof P & string, FieldDecl & { role: FieldRole }][];
 
-export interface MountScope<W> {
-  /** Resolved before hydration, so first Work delivery does not reacquire document readings. */
-  workKey?: WorkKey;
-  failure?: string | null;
-  closed?: boolean;
-  target: ExecutionTarget;
-  work: { handle: WorkHandle; doc: W } | null;
-  /** The mount sets this: a write was refused as stale and nothing newer has been read or accepted since. */
-  conflict?: boolean;
-  /** The kernel door sets this: the host holds Work it cannot read, so start-fresh is the one way out. */
-  unreadable?: WorkKey;
-  /** The kernel door sets this: what the host set aside for this Work, raw; the owner derives the patches with the readings. */
-  salvaged?: unknown;
-}
 export const CONFLICT_REFUSAL = "Work changed; review and retry";
 export interface MountBinding {
   subject: VerbSubject | null;

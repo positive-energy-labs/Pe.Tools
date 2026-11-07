@@ -1,4 +1,4 @@
-import { targetInventory, retainTargetInventory } from "#/shell/readings-hooks";
+import { targetInventory, retainTargetInventory } from "#/host/resource-state";
 import { expect, test } from "vite-plus/test";
 import { documentRequestSchema, sameAddress } from "@pe/agent-contracts";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";

@@ -1,10 +1,11 @@
 import { expect, test, vi } from "vite-plus/test";
 import {
   createReadingGraph,
+} from "./readings";
+import {
   type ReadingContext,
   type ReadingDelivery,
-  type ReadingScope,
-} from "./readings";
+  type ReadingScope} from "./source-contract";
 
 test("observation, scope changes, invalidation and elapsed deadlines cannot fail an undemanded reading", () => {
   vi.useFakeTimers();

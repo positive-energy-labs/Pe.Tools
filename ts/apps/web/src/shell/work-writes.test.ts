@@ -6,7 +6,7 @@ import {
   type RouteStateWriteResult,
 } from "@pe/agent-contracts";
 import { acquireWorkWriter } from "./work-writes";
-import type { MountScope } from "./mount-owner";
+import type { MountScope } from "./work-scope";
 
 test("a retired handle cannot remove the next owner of the same Work", () => {
   const key = bindWork("writer-lifetime", null, crypto.randomUUID());

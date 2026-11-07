@@ -3,7 +3,7 @@ import { type ReactNode } from "react";
 import { RegistryContext } from "@effect/atom-react";
 import { type TakeoffsRouteDocument, type takeoffCaptureSummarySchema } from "@pe/agent-contracts";
 import type { z } from "zod";
-import { GraphHistory, routeFromGraph, type RouteAdapters, type MountBody } from "#/shell/mount";
+import { GraphHistory, routeFromGraph, type RouteAdapters, type MountBody } from "#/shell/legacy-mount";
 import { NativeObservationScope } from "#/revit/observation";
 import { Ladder } from "#/route/ladder";
 import { Button } from "@pe/kit/lang/button";

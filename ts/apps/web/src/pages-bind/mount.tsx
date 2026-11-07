@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { PageTargetReading, PageChoice } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
-import { inventoryOf } from "../shell/readings-hooks";
+import { inventoryOf } from "../host/resource-state";
 import { BindPicker } from "./bind-picker";
 import type { BindContext } from "./route";
 export function BindBody({ ctx }: { ctx: BindContext }) {

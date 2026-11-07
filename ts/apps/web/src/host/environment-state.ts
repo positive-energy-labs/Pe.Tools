@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Reading, ReadingRequest } from "@pe/agent-contracts";
 import { useRouteSearchSlice } from "../route/activity";
-import { fixtureName } from "./fixture-lane";
-import { useReadingSlice } from "./readings-hooks";
+import { fixtureName } from "../shell/fixture-name";
+import { useReadingSlice } from "./resource-state";
 
 export function useEnvironmentAccess() {
   const name = useRouteSearchSlice(fixtureName);

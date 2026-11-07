@@ -1,24 +1,12 @@
 import { z } from "zod";
 import {
-  commands,
-  commandTool,
-  type Command,
   type CellsDecl,
   type RouteGraph,
+  type RouteFingerprint,
 } from "@pe/agent-contracts";
-import type {
-  AdmittedRoute,
-  RouteFingerprint,
-} from "../../../../packages/agent-contracts/src/route-kernel-admission";
-import {
-  createAdmittedRouteRegistry,
-  resolveRouteBindings,
-} from "../../../../packages/agent-contracts/src/route-module";
-import { legacyRouteDiscovery } from "../shell/legacy-route-door";
-
+import type { TypedRoute } from "./typed-route";
 export type WorkAdmission = { routeKey: string; fingerprint: RouteFingerprint };
-
-/** Read-only projection; the graph or exact admission remains the authority. */
+/** The typed Work declaration is also the chat head's cell contract. */
 export interface DiscoveredWork<W = any> {
   route: string;
   schema: z.ZodType<W>;
@@ -27,171 +15,97 @@ export interface DiscoveredWork<W = any> {
   admission?: WorkAdmission;
   memberKey?: true;
 }
-type Legacy = ReturnType<typeof legacyRouteDiscovery.entries>[number];
-export type DiscoveredRoute = Omit<Legacy, "manifest"> & {
-  manifest: Pick<Legacy["manifest"], "key" | "name" | "needs">;
-  admitted?: AdmittedRoute;
+export interface RegisteredRoute {
+  manifest: TypedRoute["data"];
+  typed: TypedRoute;
   work?: DiscoveredWork;
-};
-export const legacyWork = <W>(
-  graph: RouteGraph<any, W> | undefined,
-): DiscoveredWork<W> | undefined =>
-  graph?.work
-    ? {
-        route: graph.workRoute ?? graph.key,
-        schema: graph.work,
-        cells: graph.cells ?? [],
-        workFields: graph.workFields,
-      }
-    : undefined;
-
+  hosted(props: {
+    thread: string;
+    visible: boolean;
+    target?: string;
+    work?: string;
+  }): import("react").ReactNode;
+}
+export type DiscoveredRoute = RegisteredRoute;
 /** Typed Work describes its cell containers once; the chat head consumes the same schema. */
-export function typedWorkCells(module:import("./typed-route").TypedRoute):readonly CellsDecl<any>[] {
-  const work=module.spec.edits?.work;
-  if(!work) return [];
-  const unwrap=(schema:z.ZodType):z.ZodType=>"unwrap" in schema ? unwrap((schema as z.ZodOptional<z.ZodType>).unwrap()) : schema;
-  const cell=(schema:z.ZodType)=>{const value=unwrap(schema);return value instanceof z.ZodObject && Object.hasOwn(value.shape,"edit");};
-  const focus=module.spec.fields.focus;
-  return Object.entries(work.schema.shape).flatMap(([key,schema]):CellsDecl<any>[]=>{
-    const value=unwrap(schema as z.ZodType);
-    const segment=value instanceof z.ZodRecord && cell(value.valueType as z.ZodType) ? key : null;
-    if(segment === null && !cell(value)) return [];
-    return [{segment,...(segment === null?{key}:{}),groupOf:(id:string)=>[id],noun:key,
-      ...(focus ? {focus:(id:string):Record<string,string>=>focus.schema.safeParse(id).success?{focus:id}:{}} : {})}];
+export function typedWorkCells(
+  module: import("./typed-route").TypedRoute,
+): readonly CellsDecl<any>[] {
+  const work = module.spec.edits?.work;
+  if (!work) return [];
+  const unwrap = (schema: z.ZodType): z.ZodType =>
+    "unwrap" in schema ? unwrap((schema as z.ZodOptional<z.ZodType>).unwrap()) : schema;
+  const cell = (schema: z.ZodType) => {
+    const value = unwrap(schema);
+    return value instanceof z.ZodObject && Object.hasOwn(value.shape, "edit");
+  };
+  const focus = module.spec.fields.focus;
+  return Object.entries(work.schema.shape).flatMap(([key, schema]): CellsDecl<any>[] => {
+    const value = unwrap(schema as z.ZodType);
+    const segment = value instanceof z.ZodRecord && cell(value.valueType as z.ZodType) ? key : null;
+    if (segment === null && !cell(value)) return [];
+    return [
+      {
+        segment,
+        ...(segment === null ? { key } : {}),
+        groupOf: (id: string) => [id],
+        noun: key,
+        ...(focus
+          ? {
+              focus: (id: string): Record<string, string> =>
+                focus.schema.safeParse(id).success ? { focus: id } : {},
+            }
+          : {}),
+      },
+    ];
   });
 }
 
-export function admittedWork(route: AdmittedRoute): DiscoveredWork | undefined {
-  if (!route.resolvedWork) return;
-  const registry = createAdmittedRouteRegistry();
-  const registration = registry.register(route);
-  try {
-    const bindings = resolveRouteBindings(registry, route)!;
-    const cells = Object.values(route.data.cells).map((cell): CellsDecl<any> => {
-      const key = (value: string) => (cell.key ? bindings.schemas[cell.key]!.parse(value) : value);
-      return {
-        segment: cell.segment,
-        ...(cell.segment === null && { key: cell.key }),
-        groupOf: (value) =>
-          z.array(z.string()).parse(bindings.bodies[cell.groupOf]!.run(key(value))),
-        ...(cell.label && {
-          label: (value: string) => z.string().parse(bindings.bodies[cell.label!]!.run(value)),
-        }),
-        ...(cell.show && {
-          show: (value: unknown) =>
-            z
-              .string()
-              .parse(bindings.bodies[cell.show!]!.run(bindings.schemas[cell.value]!.parse(value))),
-        }),
-        ...(cell.focus && {
-          focus: (value: string) =>
-            z.record(z.string(), z.string()).parse(bindings.bodies[cell.focus!]!.run(key(value))),
-        }),
-      };
-    });
-    return {
-      route: route.resolvedWork.spec.route,
-      schema: route.resolvedWork.schema,
-      cells,
-      workFields: Object.fromEntries(
-        Object.entries(route.data.workFields).map(([key, field]) => [
-          key,
-          { label: field.label, ...(field.internal && { internal: true as const }) },
-        ]),
-      ),
-      admission: { routeKey: route.resolvedWork.spec.route, fingerprint: route.workFingerprint },
-    };
-  } finally {
-    registration.deactivate();
-  }
-}
-
-/** An authenticated admitted handle, builtin or trusted Pod: one registration feeds mount and discovery. */
-export type RegisteredRoute = DiscoveredRoute & (
-  { admitted: AdmittedRoute } | { typed: import("./typed-route").TypedRoute }
-);
-
-/**
- * The one route registration projection. Builtins and trusted Pods register the same way; trust stays
- * the admission authority (a Pod handle exists only after artifact admission). Admitted registrations
- * win a cutover; legacy entries remain discoverable until ported.
- */
-export function createRouteDiscovery(legacy = legacyRouteDiscovery) {
+/** Verified typed modules are the only executable discovery registrations. */
+export function createRouteDiscovery() {
+  const registered = new Map<string, RegisteredRoute>();
   const listeners = new Set<() => void>();
   let revision = 0;
   const changed = () => {
     revision++;
-    for (const listener of listeners) listener();
+    listeners.forEach((notify) => notify());
   };
-  const registry = createAdmittedRouteRegistry();
-  const registered = new Map<string, RegisteredRoute>();
-  const entries = (): DiscoveredRoute[] => {
-    const next = new Map(
-      legacy
-        .entries()
-        .map((entry) => [
-          entry.manifest.key,
-          { ...entry, work: legacyWork(entry.graph) } as DiscoveredRoute,
-        ]),
-    );
-    for (const entry of registered.values()) next.set(entry.manifest.key, entry);
-    return [...next.values()];
-  };
+  const entries = () => [...registered.values()];
   return Object.freeze({
-    /** Withdraw returns only this exact handle; a retired handle cannot register again. */
-    register(entry: RegisteredRoute): () => void {
-      const key = entry.manifest.key;
+    register(entry: RegisteredRoute) {
+      const key = entry.typed.spec.key;
+      if (key !== entry.manifest.key)
+        throw Error("Registered declaration differs from its typed module");
       if (registered.has(key)) throw Error(`Route ${key} already registered`);
-      const receipt = entry.admitted ? registry.register(entry.admitted) : null;
       registered.set(key, entry);
       changed();
-      let active = true;
       return () => {
-        if (!active) return;
-        active = false;
-        if (registered.get(key) === entry) registered.delete(key);
-        receipt?.deactivate();
+        if (registered.get(key) !== entry) return;
+        registered.delete(key);
         changed();
       };
     },
-    /** The registered handle, resolved through its live receipt; null once withdrawn. */
-    admitted: (key: string): AdmittedRoute | null => {
-      const entry = registered.get(key);
-      return entry?.admitted ? registry.resolve(entry.admitted) : null;
-    },
-    typed: (key: string) => { const entry=registered.get(key); return entry && "typed" in entry ? entry.typed : null; },
-    /** Catalog metadata for either executable module; this is never mount authority. */
-    declaration: (key: string) => {
-      const entry = registered.get(key);
-      return entry?.admitted?.data ?? (entry && "typed" in entry ? entry.typed.data : null);
-    },
-    /** The route whose authenticated declaration owns this address. */
-    byAddress: (address: string) =>
-      [...registered.values()].find((entry) =>
-        (entry.admitted?.data.address ?? ("typed" in entry ? entry.typed.data.address : null)) === address),
+    typed: (key: string) => registered.get(key)?.typed ?? null,
+    declaration: (key: string) => registered.get(key)?.typed.data ?? null,
+    byAddress: (address: string) => entries().find((entry) => entry.typed.data.address === address),
     subscribe(listener: () => void) {
       listeners.add(listener);
-      const stop = legacy.subscribe(listener);
       return () => {
         listeners.delete(listener);
-        stop();
       };
     },
-    revision: () => revision + legacy.revision(),
+    revision: () => revision,
     entries,
-    keys: () => entries().map(({ manifest }) => manifest.key),
-    get: (key: string) => entries().find(({ manifest }) => manifest.key === key),
+    keys: () => [...registered.keys()],
+    get: (key: string) => registered.get(key),
     actionRoute(key: string) {
-      const command: Command | undefined = commands[key as keyof typeof commands];
-      const owner = command?.work?.route ?? commandTool(key)?.name;
-      // A Work owner need not have a Page (ADR 0030 rule 2); its record keeps the receipt.
-      return owner && entries().some(({ manifest }) => manifest.key === owner) ? owner : null;
+      return entries().find(({ typed }) =>
+        Object.values(typed.spec.commands).some((verb) =>
+          verb.entry === key || ("plan" in verb && verb.plan === key),
+        ),
+      )?.manifest.key ?? null;
     },
   });
 }
-
-/**
- * The app's one registration projection. It lives here, apart from the builtin inventory, so a route
- * graph's import tree (navigation reads it) never pulls in builtin closures.
- */
+/** Navigation and drawings share this one registry, independent of builtin source closures. */
 export const publicRoutes = createRouteDiscovery();

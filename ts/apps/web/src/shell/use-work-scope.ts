@@ -19,8 +19,8 @@ import {
   type WorkWrite,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
-import { dirty, peReadings } from "#/readings";
-import { previousOf, readingAtom, targetInventory } from "#/shell/readings-hooks";
+import { dirty, peReadings } from "#/host/resource-stream";
+import { previousOf, readingAtom, targetInventory } from "#/host/resource-state";
 import { useRouteSearchSlice } from "../route/activity";
 import {
   salvageRouteWork,
@@ -31,7 +31,7 @@ import {
 import { appAtomRegistry, useOwned } from "#/shell/owner";
 import { useRouteTarget, parseTarget } from "../route/route-target";
 import { docAtom } from "./work-document";
-import type { MountScope } from "./mount-owner";
+import type { MountScope } from "./work-scope";
 
 const CLOSED_WORK = "its document is closed; this Work only reads";
 const refused = (error: string, hint: string): RouteStateWriteResult => ({

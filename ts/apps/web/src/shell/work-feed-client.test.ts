@@ -1,6 +1,6 @@
 import { workFingerprintSchema } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import { expect, test, vi } from "vite-plus/test";
-import type { Readings } from "../readings";
+import type { Readings } from "../host/resource-stream";
 import type {
   WorkFeedState,
   WorkScope,

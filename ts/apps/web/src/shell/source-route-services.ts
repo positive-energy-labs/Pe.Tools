@@ -7,12 +7,12 @@ import {
 } from "@pe/agent-contracts";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { callOp } from "./readings-api";
+import { callOp } from "../host/catalog-client";
 import { createGeometryReadDoor } from "./geometry-read-door";
 import type { KernelServices, ResolvedRead } from "@pe/agent-contracts";
 import type { AcceptanceToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import type { ReadingSnapshot } from "@pe/agent-contracts";
-import type { ReadingSource, UseSource } from "./readings";
+import type { ReadingSource, UseSource } from "./source-contract";
 import { demandContext, openSourceReading } from "./readings-use";
 import { contentHash } from "./readings";
 import { z } from "zod";

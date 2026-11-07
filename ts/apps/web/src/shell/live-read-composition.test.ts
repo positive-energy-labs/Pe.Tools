@@ -34,7 +34,7 @@ import { firmFilePath, FIRM_SEED } from "../../../host/src/ducts-inputs.ts";
 const transport = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock("../host/runtime", () => ({ hostFetch: transport.fetch }));
 // This falsifier concerns concurrent Value responses. No EventSource implementation runs in Node.
-vi.mock("../readings", () => ({ openEventSource: () => ({ close() {} }) }));
+vi.mock("../host/resource-stream", () => ({ openEventSource: () => ({ close() {} }) }));
 
 // Forward the services already owned by makeHttpLive; optional lookup keeps these test layers closed.
 const ambient = <S, I>(tag: Context.Key<S, I>) =>

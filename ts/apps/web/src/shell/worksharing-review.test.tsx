@@ -2,7 +2,7 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 import { borrowWords, WorksharingNote } from "./mount-verbs";
-import { worksharingOf } from "./verbs";
+import {worksharingOf} from "./review-contract";
 import { leaks } from "./visible-text";
 
 afterEach(cleanup);

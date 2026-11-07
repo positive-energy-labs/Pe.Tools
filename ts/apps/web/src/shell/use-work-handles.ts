@@ -1,15 +1,15 @@
 import * as Atom from "effect/reactivity/Atom";
 import { useEffect, useMemo, useReducer } from "react";
 import { type RouteStatePatch, type WorkKey } from "@pe/agent-contracts";
-import { dirty } from "#/readings";
-import { previousOf } from "#/shell/readings-hooks";
+import { dirty } from "#/host/resource-stream";
+import { previousOf } from "#/host/resource-state";
 import { subscribeAcceptedDeltas, writeRouteWork } from "../route/host";
 import { refuse, writeRefusal } from "../route/refusal";
 import { appAtomRegistry, useOwned, useRouteOwner } from "./owner";
 import { docAtom } from "./work-document";
 import { acquireWorkWriter } from "./work-writes";
 import type { DiscoveredWork } from "../route/route-discovery";
-import type { MountScope } from "./mount-owner";
+import type { MountScope } from "./work-scope";
 
 /** Cross-Work handles use the route's schema, admission and canonical journal, without mounting its UI. */
 export function useWorkHandles<W>(

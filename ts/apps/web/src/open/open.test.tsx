@@ -25,12 +25,8 @@ import {
   RECENTS,
 } from "../design-system/open-examples";
 
-vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("../../../../packages/mcps/src/shared/takeoff-action-client")
-  >()),
-  readActionStatuses: vi.fn(),
-  runSemanticAction: vi.fn(async (key, input) =>
+vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (importOriginal) => {
+  const run = vi.fn(async (key, input, _target?: unknown, _basis?: unknown) =>
     actionReceiptSchema.parse({
       id: "action-1",
       key,
@@ -46,27 +42,25 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (imp
       effects: [{ kind: "session", session: "fixture" }],
       result: {},
     }),
-  ),
-}));
-// The standalone bay still requires current machine evidence before dispatch.
-vi.mock("./sources", async () => {
-  const { MACHINE_SEEDS, BAY_RECENTS, BAY_THREADS } =
-    await import("../design-system/open-examples");
-  const fixed = (value: unknown) => ({
-    kind: "use",
-    dirties: ["sdk"],
-    open: (_: unknown, deliver: (event: unknown) => void) =>
-      deliver({ kind: "complete", value, revision: 1 }),
-  });
+  );
   return {
-    openSources: () => ({
-      "open.machine": fixed((MACHINE_SEEDS["patch-bay"] as { observation: Machine }).observation),
-      "open.recents": fixed(BAY_RECENTS),
-      "open.threads": fixed(BAY_THREADS),
-      "open.receipts": fixed([]),
-      "open.world": { kind: "feed", open: () => {} },
-    }),
+    ...(await importOriginal<typeof import("../../../../packages/mcps/src/shared/takeoff-action-client")>()),
+    readActionStatuses: vi.fn(), runSemanticAction: run,
+    submitAction: ({ key, input, target }: { key: string; input: unknown; target: unknown }) => run(key, input, target, undefined),
   };
+});
+vi.mock("../shell/host-read-source", async () => {
+  const { MACHINE_SEEDS, BAY_RECENTS, BAY_THREADS } = await import("../design-system/open-examples");
+  return { hostReadSource: () => ({ kind: "use", open: (_: unknown, deliver: (event: unknown) => void) => {
+    deliver({ kind: "complete", revision: 1, value: {
+      key: "open", generation: 0, version: 1, state: "current", value: {
+        data: { machine: (MACHINE_SEEDS["patch-bay"] as { observation: Machine }).observation,
+          recents: BAY_RECENTS, threads: BAY_THREADS },
+        evaluation: "open-test", inputs: "open-test", coverage: { requested: [], covered: [], refused: [], unknown: [] },
+        origin: {}, trace: [], freshness: "current",
+      },
+    } });
+  } }) };
 });
 HTMLElement.prototype.scrollIntoView = vi.fn();
 beforeEach(() => {
@@ -294,7 +288,7 @@ test("patching Clinic into your Revit 2025 by click names the upgrade and sends 
       upgrade: true,
       links: "refuse",
     },
-    { kind: "host" },
+    { kind: "sdk-session", selection: { pid: 18244 } },
     undefined,
   ]);
 });

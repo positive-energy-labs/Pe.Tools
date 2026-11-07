@@ -1,7 +1,10 @@
-import type { ReactNode } from "react";
-import { useGraphRoute, type RouteAdapters } from "#/shell/mount";
-import { openControls as openGraph, type OpenPageState } from "./graph";
-import { openSources } from "./sources";
+import { mountTypedRoute, type TypedMount } from "#/shell/typed-mount";
+import { currentFixture } from "../shell/fixture-name";
+import { builtinRouteStamp } from "#/route/builtin-inventory";
+import { workFingerprintSchema } from "@pe/agent-contracts";
+import { module, type OpenContext } from "./route";
+import { useOpenTypedOwner } from "./typed-owner";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { OpenOwnerContext } from "./context";
 export {
   OpenOwnerContext,
@@ -10,25 +13,29 @@ export {
   useOpenOwner,
   outcomeOf,
 } from "./context";
-export const openControlAdapters: RouteAdapters<OpenPageState, unknown> = {
-  sources: openSources(),
-  bodies: {},
-  binding: (id, row, scope) => {
-    if (id === "refresh") return { subject: null, args: {} };
-    const input = row as { request?: unknown; refusal?: string | null } | undefined;
-    const machine = scope.readings.machine;
-    const refusal =
-      machine?.status !== "absent" && !machine?.current
-        ? "Refresh the machine reading before changing Revit"
-        : (input?.refusal ?? null);
-    return { subject: null, args: { ...input, refusal } };
-  },
-  verbDepends: Object.fromEntries(
-    ["open", "start", "stop", "restart", "close"].map((id) => [id, ["machine"]]),
-  ),
-};
-/** The composer and machine drawer use the same kernel verbs without a standalone route. */
+/** Companion controls use the same typed actions as the Open route, with private Page pose. */
 export function OpenControls({ children }: { children: ReactNode }) {
-  const { owner } = useGraphRoute(openGraph, openControlAdapters, { url: false });
+  const [mount, setMount] = useState<TypedMount | null>(null);
+  useEffect(() => {
+    let active = true;
+    const listeners = new Set<() => void>();
+    let search = new URLSearchParams();
+    const mounted = mountTypedRoute(module, {
+      address: { read: () => new URLSearchParams(search), write: value => { search = new URLSearchParams(value); listeners.forEach(f => f()); },
+        subscribe: listener => { listeners.add(listener); return () => void listeners.delete(listener); } },
+      fixture: currentFixture(), target: { kind: "host" }, work: { address: null, open: null },
+      custody: { current: () => active }, memory: () => ({}),
+    }, workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("open")}`));
+    setMount(mounted);
+    return () => { active = false; mounted.dispose(); };
+  }, []);
+  return mount ? <Controls mount={mount}>{children}</Controls> : null;
+}
+function Controls({ mount, children }: { mount: TypedMount; children: ReactNode }) {
+  useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
+  return mount.draw("documents", ctx => <ControlOwner ctx={ctx}>{children}</ControlOwner>) as ReactNode;
+}
+function ControlOwner({ ctx, children }: { ctx: OpenContext; children: ReactNode }) {
+  const owner = useOpenTypedOwner(ctx);
   return <OpenOwnerContext value={owner}>{children}</OpenOwnerContext>;
 }

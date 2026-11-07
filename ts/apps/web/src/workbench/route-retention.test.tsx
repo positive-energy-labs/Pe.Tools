@@ -6,8 +6,8 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter,
   RouterProvider, RouterContextProvider, useRouterState, useRouter } from "@tanstack/react-router";
 import { useRouteActivity, type RouteActivityScope } from "#/route/activity";
 import { RouteRetention } from "./route-retention";
-import { PlaceBoundary, admittedRouterAddress } from "#/shell/admitted-pane";
-import type { AdmittedPlace } from "#/shell/admitted-place";
+import { PlaceBoundary, admittedRouterAddress } from "#/shell/typed-place-boundary";
+import type { AdmittedPlace } from "#/shell/typed-place";
 afterEach(cleanup);
 
 test.each(["families", "fans", "ducts"])("N-03 %s retains codec bytes before resolving Page or target on return", async (route) => {

@@ -7,7 +7,7 @@ import { module as fans } from "../fans/route";
 import { localId } from "./typed-route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import type { UseSource } from "../shell/readings";
+import type { UseSource } from "../shell/source-contract";
 import { Effect } from "effect";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { ductsPricingData, valueReadResponse } from "@pe/agent-contracts";

@@ -2,7 +2,7 @@
 import { afterEach, expect, test } from "vite-plus/test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createWitness } from "../fans/cutover.test-support.ts";
-import { AdmittedSubjectPicker, subjectOf } from "./admitted-chrome.tsx";
+import { SubjectPicker as AdmittedSubjectPicker, subjectOf } from "./subject-picker";
 
 const closes: (() => void)[] = [];
 afterEach(() => {

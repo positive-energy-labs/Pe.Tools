@@ -1,5 +1,4 @@
 import type { Reading, Machine } from "@pe/agent-contracts";
-import { RegisteredRouteSettings } from "#/shell/settings-registry";
 import { SettingsBody } from "#/machine/body";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import type { SettingsContext } from "./route.ts";
@@ -32,7 +31,6 @@ export function SettingsDrawing({ ctx }: { ctx: SettingsContext }) {
           session={session || undefined}
           onGroup={(next) => ctx.page.query({ section: next ?? "none" })}
         />
-        <RegisteredRouteSettings />
       </div>
     </main>
   );

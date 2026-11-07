@@ -6,7 +6,7 @@ import {
 import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
 import { createRouteTokenIssuer } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import { createPagePolicy, identityCodecs } from "./page-port";
-import { createAdmittedPlace } from "./admitted-place";
+import { createAdmittedPlace } from "./typed-place";
 import type { RouteActivityScope } from "../route/activity";
 
 function fixture() {

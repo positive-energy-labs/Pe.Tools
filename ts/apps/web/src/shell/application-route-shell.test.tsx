@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { DocumentPicker, PlaceRouteShell } from "./application-route-shell";
+import { PlaceRouteShell } from "./application-route-shell";
+import { DocumentPicker} from "./document-picker";
 import * as Atom from "effect/reactivity/Atom";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 import { module as podsModule } from "../pods/route";
 const podsData={...podsModule.data,optionalTarget:"document" as const};
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
-import type { PlaceInput } from "./admitted-place";
+import type { PlaceInput } from "./typed-place";
 import type { PanePlace } from "./admitted-pane";
 const inventory = vi.hoisted(() => ({
   state: "ready",
@@ -41,8 +42,8 @@ vi.mock("./admitted-pane", () => ({
     return <output>{JSON.stringify(input.target)}</output>;
   },
 }));
-vi.mock("./readings-hooks", async (original) => ({
-  ...(await original<typeof import("./readings-hooks")>()),
+vi.mock("../host/resource-state", async (original) => ({
+  ...(await original<typeof import("../host/resource-state")>()),
   useInventory: () => inventory,
   readingAtom: (request: { kind: string }) =>
     Atom.make(

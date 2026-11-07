@@ -40,7 +40,7 @@ import { ElementMenu } from "#/revit/element-menu";
 import { WorkbenchProvider } from "#/workbench/provider";
 import { RouteDock } from "#/workbench/route-panes";
 import { useRouteActivity } from "#/route/activity";
-import { bindActionReadings } from "#/readings";
+import { bindActionReadings } from "#/host/resource-stream";
 
 import { startupWatch } from "#/route/startup-watch";
 

@@ -1,3 +1,4 @@
+import { worksharingOf, type VerbPresentation } from "./review-contract";
 import { legacyLiveVerbs, type LegacyVerbEnvironment } from "./legacy-environment-bridge";
 import { createWorkScopeAcceptance, type WorkScopeAcceptance } from "./work-scope-acceptance";
 import { reviewChanges } from "./review-value";
@@ -29,7 +30,7 @@ import {
 import type { createRouteOwner } from "#/shell/owner";
 import { refuse, writeRefusal, type Refusal } from "../route/refusal";
 import { DEFAULT_WAIT_S } from "../route/waits";
-import type { ReadingState } from "./readings";
+import type { ReadingState } from "./source-contract";
 import type { JournalDetail } from "./journal";
 
 export interface WorkHistory<I> {
@@ -109,40 +110,6 @@ export interface VerbScope {
   readonly subject: VerbSubject | null;
   readonly value: unknown;
   readonly readings: Readonly<Record<string, ReadingState>>;
-}
-/** Host-owned: what a ModelWrite commit borrows on a workshared central (C# WorksharingDisclosure). */
-export const worksharingSchema = z.object({
-  cloud: z.boolean(),
-  elements: z.array(
-    z.object({
-      id: z.number(),
-      name: z.string(),
-      status: z.enum(["borrows", "owned", "blocked"]),
-      owner: z.string().nullish(),
-    }),
-  ),
-  creates: z.array(z.string()),
-});
-export type Worksharing = z.infer<typeof worksharingSchema>;
-/** Any preview envelope (`response`, `value`, or the bare result) may carry `worksharing`. */
-export const worksharingOf = (evidence: unknown): Worksharing | null => {
-  const e = evidence as {
-    response?: { worksharing?: unknown };
-    value?: { worksharing?: unknown };
-    worksharing?: unknown;
-  } | null;
-  const parsed = worksharingSchema.safeParse(
-    e?.response?.worksharing ?? e?.value?.worksharing ?? e?.worksharing,
-  );
-  return parsed.success ? parsed.data : null;
-};
-export interface VerbPresentation {
-  readonly sentence: string;
-  readonly rows: readonly string[];
-  /** Set by the kernel from the preview evidence; a presenter never computes it. */
-  readonly worksharing?: Worksharing | null;
-  /** Admitted Page state for a picture or other route view of the review. */
-  readonly page?: Record<string, unknown>;
 }
 export interface ReviewTicket<I = unknown> {
   readonly presentation: Omit<VerbPresentation, "page">;

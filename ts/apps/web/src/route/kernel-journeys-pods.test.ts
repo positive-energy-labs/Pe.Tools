@@ -17,7 +17,7 @@ import { registerTypedRoute } from "../shell/route-registration";
 import { publicRoutes } from "./route-discovery";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import type { UseSource } from "../shell/readings";
+import type { UseSource } from "../shell/source-contract";
 
 const evaluate = (bytes: Uint8Array) =>
   import(/* @vite-ignore */ `data:text/javascript;base64,${Buffer.from(bytes).toString("base64")}`);

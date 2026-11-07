@@ -61,6 +61,16 @@ export const module = route({
     },
   },
   commands: {
+    stop: {
+      ...sessionCommand("instances.stop"),
+      label: "Stop Revit",
+      input: (_context, supplied) => supplied,
+    },
+    restart: {
+      ...sessionCommand("instances.restart"),
+      label: "Hot reload Revit",
+      input: (_context, supplied) => supplied,
+    },
     start: {
       ...sessionCommand("instances.start"),
       label: "Start Revit and open",

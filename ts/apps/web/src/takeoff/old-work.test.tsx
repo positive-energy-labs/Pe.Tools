@@ -29,7 +29,7 @@ vi.mock("@pe/kit/lib/token", async (importOriginal) => ({
   token: () => "currentColor",
 }));
 
-import { TakeoffsRoute } from "#/takeoff/route";
+import { TakeoffsRoute } from "#/takeoff/route.test.fixture";
 import { takeoffGraph } from "#/takeoff/graph";
 
 const SESSION = "session-takeoffs-old-work";

@@ -2,13 +2,13 @@
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { Machine, ReadingRequest } from "@pe/agent-contracts";
-import { useEnvironmentReading } from "./environment-readings";
+import { useEnvironmentReading } from "../host/environment-state";
 const selection = vi.hoisted(() => ({ name: "missing", calls: [] as (ReadingRequest | null)[] }));
 vi.mock("../route/activity", () => ({
   useRouteSearchSlice: (select: (search: Record<string, unknown>) => unknown) =>
     select({ fixture: selection.name }),
 }));
-vi.mock("./readings-hooks", () => ({
+vi.mock("../host/resource-state", () => ({
   useReadingSlice: (
     request: ReadingRequest | null,
     select: (reading: { state: "absent" }) => unknown,

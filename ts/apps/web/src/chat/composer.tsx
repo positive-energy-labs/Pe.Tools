@@ -29,7 +29,7 @@ import { Composer, ComposerFrame } from "#/components/lang/conversation";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { MentionChip } from "@pe/kit/lang/chip";
-import { previousOf } from "#/shell/readings-hooks";
+import { previousOf } from "#/host/resource-state";
 import { AssetReel, referModel, threadAssets } from "./asset-reel";
 import { AttachmentChip } from "./attachment-chip";
 import { useAttachments } from "./use-attachments";

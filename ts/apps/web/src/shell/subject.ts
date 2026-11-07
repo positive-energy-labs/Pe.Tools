@@ -1,3 +1,4 @@
+import { openSet } from "./open-set.neutral";
 import { createContext, useContext, useSyncExternalStore } from "react";
 import { canonicalRouteInput, decodePageField, type RouteGraph } from "@pe/agent-contracts";
 
@@ -153,3 +154,19 @@ export interface AdmittedSubject {
 }
 export const SubjectDoor = createContext<AdmittedSubject | null>(null);
 export const useAdmittedSubject = () => useContext(SubjectDoor);
+
+/** The typed mount owns every subject move and the current roster. */
+export function typedSubjectDoor(mount: import("./typed-mount").TypedMount) {
+  const { spec } = mount;
+    if(!spec.subject) return null;
+    const subjectSpec=spec.subject;
+    const update=(op:(set:ReturnType<typeof openSet<unknown>>,value:any)=>unknown)=>{
+      const value=mount.value(subjectSpec.read ?? spec.core).value;
+      const set=openSet<unknown>(canonicalRouteInput,value?subjectSpec.options(value).map(o=>o.id):[]);
+      mount.page.subject(op(set,mount.page.read()[subjectSpec.field]));
+    };
+    return { toggle:(id:unknown)=>update((set,value)=>set.toggle(value,id)), add:(ids:readonly unknown[])=>update((set,value)=>set.add(value,ids)),
+      remove:(id:unknown)=>update((set,value)=>set.remove(value,id)),setActive:(id:unknown)=>update((set,value)=>set.setActive(value,id)),
+      all:()=>mount.page.subject({kind:"all"}),clear:()=>mount.page.subject({kind:"ids",ids:[]}) };
+
+}

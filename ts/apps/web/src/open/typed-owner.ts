@@ -1,7 +1,8 @@
 import { useRef, useMemo } from "react";
 import type { OpenContext } from "./route";
 import type { OpenOwner } from "./context";
-export function useOpenTypedOwner(ctx: OpenContext): OpenOwner {
+const openActions = ["start", "open", "close", "stop", "restart"];
+export function useOpenTypedOwner(ctx: OpenContext, actions = openActions): OpenOwner {
   const current = useRef(ctx);
   current.current = ctx;
   return useMemo(
@@ -10,7 +11,7 @@ export function useOpenTypedOwner(ctx: OpenContext): OpenOwner {
         subscribe: () => () => {},
         version: () => 0,
         fixture: null,
-        busy: () => null,
+        busy: () => actions.find(id => current.current.write(id).pending) ?? null,
         view: {
           read: () => ({
             page: {
@@ -54,6 +55,6 @@ export function useOpenTypedOwner(ctx: OpenContext): OpenOwner {
           },
         }),
       }) as unknown as OpenOwner,
-    [],
+    [ctx, actions],
   );
 }

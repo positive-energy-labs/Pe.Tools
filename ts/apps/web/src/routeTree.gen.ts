@@ -24,7 +24,9 @@ import { Route as PeaRouteImport } from "./routes/pea";
 import { Route as PodsRouteImport } from "./routes/pods";
 import { Route as RoomsRouteImport } from "./routes/rooms";
 import { Route as SchedulesRouteImport } from "./routes/schedules";
+import { Route as SessionAdminRouteImport } from "./routes/session-admin";
 import { Route as SettingsRouteImport } from "./routes/settings";
+import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
 import { Route as DesignSystemListRouteImport } from "./routes/design-system_.list";
@@ -111,9 +113,19 @@ const SchedulesRoute = SchedulesRouteImport.update({
   path: "/schedules",
   getParentRoute: () => rootRouteImport,
 } as any);
+const SessionAdminRoute = SessionAdminRouteImport.update({
+  id: "/session-admin",
+  path: "/session-admin",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const SettingsRoute = SettingsRouteImport.update({
   id: "/settings",
   path: "/settings",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const TakeoffsRoute = TakeoffsRouteImport.update({
+  id: "/takeoffs",
+  path: "/takeoffs",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DesignSystemArmingRoute = DesignSystemArmingRouteImport.update({
@@ -184,7 +196,9 @@ export interface FileRoutesByFullPath {
   "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
+  "/session-admin": typeof SessionAdminRoute;
   "/settings": typeof SettingsRoute;
+  "/takeoffs": typeof TakeoffsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/list": typeof DesignSystemListRoute;
@@ -212,7 +226,9 @@ export interface FileRoutesByTo {
   "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
+  "/session-admin": typeof SessionAdminRoute;
   "/settings": typeof SettingsRoute;
+  "/takeoffs": typeof TakeoffsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/list": typeof DesignSystemListRoute;
@@ -241,7 +257,9 @@ export interface FileRoutesById {
   "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
+  "/session-admin": typeof SessionAdminRoute;
   "/settings": typeof SettingsRoute;
+  "/takeoffs": typeof TakeoffsRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/band": typeof DesignSystemBandRoute;
   "/design-system_/list": typeof DesignSystemListRoute;
@@ -271,7 +289,9 @@ export interface FileRouteTypes {
     | "/pods"
     | "/rooms"
     | "/schedules"
+    | "/session-admin"
     | "/settings"
+    | "/takeoffs"
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/list"
@@ -299,7 +319,9 @@ export interface FileRouteTypes {
     | "/pods"
     | "/rooms"
     | "/schedules"
+    | "/session-admin"
     | "/settings"
+    | "/takeoffs"
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/list"
@@ -327,7 +349,9 @@ export interface FileRouteTypes {
     | "/pods"
     | "/rooms"
     | "/schedules"
+    | "/session-admin"
     | "/settings"
+    | "/takeoffs"
     | "/design-system_/arming"
     | "/design-system_/band"
     | "/design-system_/list"
@@ -356,7 +380,9 @@ export interface RootRouteChildren {
   PodsRoute: typeof PodsRoute;
   RoomsRoute: typeof RoomsRoute;
   SchedulesRoute: typeof SchedulesRoute;
+  SessionAdminRoute: typeof SessionAdminRoute;
   SettingsRoute: typeof SettingsRoute;
+  TakeoffsRoute: typeof TakeoffsRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
   DesignSystemListRoute: typeof DesignSystemListRoute;
@@ -475,11 +501,25 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SchedulesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/session-admin": {
+      id: "/session-admin";
+      path: "/session-admin";
+      fullPath: "/session-admin";
+      preLoaderRoute: typeof SessionAdminRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/settings": {
       id: "/settings";
       path: "/settings";
       fullPath: "/settings";
       preLoaderRoute: typeof SettingsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/takeoffs": {
+      id: "/takeoffs";
+      path: "/takeoffs";
+      fullPath: "/takeoffs";
+      preLoaderRoute: typeof TakeoffsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/design-system_/arming": {
@@ -582,7 +622,9 @@ const rootRouteChildren: RootRouteChildren = {
   PodsRoute: PodsRoute,
   RoomsRoute: RoomsRoute,
   SchedulesRoute: SchedulesRoute,
+  SessionAdminRoute: SessionAdminRoute,
   SettingsRoute: SettingsRoute,
+  TakeoffsRoute: TakeoffsRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemBandRoute: DesignSystemBandRoute,
   DesignSystemListRoute: DesignSystemListRoute,

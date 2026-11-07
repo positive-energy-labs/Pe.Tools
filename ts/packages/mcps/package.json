@@ -21,7 +21,8 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
-    "./server": "./src/server.ts"
+    "./server": "./src/server.ts",
+    "./takeoff-ops": "./src/shared/takeoff-ops.ts"
   },
   "publishConfig": {
     "access": "public"

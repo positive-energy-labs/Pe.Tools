@@ -1,4 +1,4 @@
-import { currentFixture } from "#/shell/fixture-lane";
+import { currentFixture } from "../shell/fixture-name";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { message, type PodRouteDescriptor } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";

@@ -18,7 +18,8 @@ import {
 } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
 import { createPagePolicy, createPagePorts, identityCodecs } from "./page-port";
-import { createAdmittedAddress, type AddressHistory } from "./admitted-address";
+import { createAdmittedAddress} from "./admitted-address";
+import { type AddressHistory } from "./typed-address";
 
 const data = {
   ...builtinData,

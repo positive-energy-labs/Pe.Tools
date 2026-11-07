@@ -8,7 +8,7 @@ import {
   HOST_RPC_ORIGIN_HEADER,
   isTsOnlyOperationKey,
 } from "@pe/host-contracts/operation-types";
-import { callOp, callCompose } from "#/shell/readings-api";
+import { callOp, callCompose } from "../host/catalog-client";
 
 import { runOp } from "./run";
 import type { HostOperationCatalogEntry } from "./manifest";

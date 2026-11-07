@@ -2,7 +2,7 @@ import { z } from "zod";
 import { actionStatusSchema, type HarnessThreadSummary, type Machine } from "@pe/agent-contracts";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import { subscriptionSource } from "#/shell/readings-use";
-import type { ReadingSource } from "#/shell/readings";
+import type { ReadingSource } from "#/shell/source-contract";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 export type Recents = { result?: { recents?: RecentDocument[] } };

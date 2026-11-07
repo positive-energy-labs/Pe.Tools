@@ -1,17 +1,21 @@
+import { useOpenTypedOwner } from "../open/typed-owner";
 import { type Machine } from "@pe/agent-contracts";
-import { routeFromGraph, mountRoute, type RouteAdapters, type MountBody } from "#/shell/mount";
+
 import { ListView } from "@pe/kit/lang/list-view";
 import { useList } from "@pe/kit/lang/collection";
 import { Button } from "@pe/kit/lang/button";
-import { OpenOwnerContext, openControlAdapters } from "../open/kernel";
+import { OpenOwnerContext, useOpenOwner } from "../open/context";
 import { keyOf } from "#/machine/session";
 import { lifecycleRequest } from "../open/lifecycle";
-import { readingList } from "#/shell/mount-reading";
-import type { ReadingState } from "#/shell/readings";
-import { sessionsGraph } from "./graph";
-import type { OpenPageState } from "../open/graph";
-type Page = OpenPageState;
-function Sessions({ owner, page, verbs }: MountBody<Page, unknown>) {
+import { readingList } from "#/host/resource-list";
+import type { ReadingState } from "#/shell/source-contract";
+function Sessions({
+  selectedKey,
+  choose,
+}: { selectedKey?: string; choose?(key: string): void } = {}) {
+  const owner = useOpenOwner();
+  const page = owner.view.read().page;
+  const session = selectedKey ?? page.draft.target ?? "";
   const reading = owner.readings.get("machine") as ReadingState<Machine>;
   const machine = reading.value ?? reading.previous;
   const sessions = readingList(reading, (value) => value.revit.sessions ?? []);
@@ -26,16 +30,19 @@ function Sessions({ owner, page, verbs }: MountBody<Page, unknown>) {
   const list = useList({
     ...sessions,
     keyOf,
-    followSelection: { key: page.session || null },
+    followSelection: { key: session || null },
     search: (row) => ({ text: [keyOf(row), String(row.row.year)] }),
     select: "single",
-    onPick: (row) => owner.view.setPage({ session: keyOf(row) }),
+    onPick: (row) =>
+      choose
+        ? choose(keyOf(row))
+        : owner.view.setPage({ draft: { ...page.draft, target: keyOf(row) } }),
   });
-  const selected = rows.find((row) => keyOf(row) === page.session);
+  const selected = rows.find((row) => keyOf(row) === session);
   return (
     <>
       <a
-        href={`/open?draft=${encodeURIComponent(JSON.stringify({ ...page.draft, target: page.session }))}`}
+        href={`/open?draft=${encodeURIComponent(JSON.stringify({ ...page.draft, target: session }))}`}
       >
         Open a document in this session
       </a>
@@ -45,14 +52,14 @@ function Sessions({ owner, page, verbs }: MountBody<Page, unknown>) {
         row={(row) => ({
           label: keyOf(row),
           sub: `Revit ${row.row.year}`,
-          active: keyOf(row) === page.session,
+          active: keyOf(row) === session,
         })}
         empty={{ message: sessions.failure ?? "No running sessions", exit: "Start Revit" }}
       />
       {selected && (
         <section aria-label="Session detail">
           <p>
-            {keyOf(selected)} · Revit {selected.row.year}
+            {keyOf(selected)} Ã‚Â· Revit {selected.row.year}
           </p>
           {["stop", "restart"].map((id) => {
             let request: unknown;
@@ -81,17 +88,34 @@ function Sessions({ owner, page, verbs }: MountBody<Page, unknown>) {
       )}
       {(machine?.revit.years ?? []).map((year) => (
         <div key={year}>
-          {verbs({ request: { year: String(year), owner: "you", addins: "on" }, refusal: null })}
+          <Button
+            label={`Start Revit ${year}`}
+            onClick={() =>
+              void owner
+                .control("start", {
+                  request: { year: String(year), owner: "you", addins: "on" },
+                  refusal: null,
+                })
+                .run()
+            }
+          >
+            Start Revit {year}
+          </Button>
         </div>
       ))}
     </>
   );
 }
-export const sessionsAdapters: RouteAdapters<Page, unknown> = {
-  ...openControlAdapters,
-  verbDepends: { start: ["machine"], stop: ["machine"], restart: ["machine"] },
-  wrap: (owner, children) => <OpenOwnerContext value={owner}>{children}</OpenOwnerContext>,
-  bodies: { sessions: (body) => <Sessions {...body} /> },
-};
-export const sessionsRoute = routeFromGraph(sessionsGraph, sessionsAdapters, "/session-admin");
-export const SessionsRoute = mountRoute(sessionsGraph, sessionsAdapters);
+
+export function SessionsBody({ ctx }: { ctx: import("./route").SessionContext }) {
+  const owner = useOpenTypedOwner(ctx, sessionActions);
+  return (
+    <OpenOwnerContext value={owner}>
+      <Sessions
+        selectedKey={ctx.page.read().session}
+        choose={(session) => ctx.page.pose({ session })}
+      />
+    </OpenOwnerContext>
+  );
+}
+const sessionActions = ["start", "stop", "restart"];

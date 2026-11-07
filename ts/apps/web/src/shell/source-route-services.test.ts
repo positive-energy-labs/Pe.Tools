@@ -6,7 +6,7 @@ import {
 import * as host from "../host/runtime";
 import { sourceRouteServices } from "./source-route-services";
 import { createRouteTokenIssuer } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import type { ReadingDelivery } from "./readings";
+import type { ReadingDelivery } from "./source-contract";
 import type { ResolvedRead } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 
 test("catalog query uses the captured target and admitted arguments without a route adapter", async () => {

@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-router";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { routeAddress } from "@pe/agent-contracts";
-import { useGraphRoute } from "#/shell/mount";
+import { useGraphRoute } from "#/shell/legacy-mount";
 import { LevelPlan } from "./level-plan";
 import { takeoffBase as takeoffGraph } from "./graph";
 import { takeoffAdapters } from "./graph-route";

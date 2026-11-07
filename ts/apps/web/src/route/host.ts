@@ -8,7 +8,7 @@ import {
   type WorkWriteAck,
   type WorkWrite,
 } from "@pe/agent-contracts";
-import { peReadings, type Readings } from "#/readings";
+import { peReadings, type Readings } from "#/host/resource-stream";
 export function routeInput(route: string, key: WorkKey) {
   const query: Record<string, string> = {};
   if (key.work !== undefined) query.work = key.work;

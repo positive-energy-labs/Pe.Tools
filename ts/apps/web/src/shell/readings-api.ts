@@ -1,6 +1,4 @@
-import { openEventSource } from "../readings";
-import { generatedJsonSchema } from "@pe/host-contracts/decoders";
-import { z } from "zod";
+import { callOp, callCompose, opResponseSchema, type ComposeInput, type ComposeOutput } from "../host/catalog-client";
 import {
   DUCTS_BODY_VERSION_HEADER,
   ductsReadingEnvelopeSchema,
@@ -19,102 +17,10 @@ import {
   type OpResponseOf,
 } from "@pe/host-contracts/operation-types";
 import { hostFetch } from "../host/runtime";
-import type { ReadingContext, UseSource } from "./readings";
+import type { ReadingContext, UseSource } from "./source-contract";
 import { subscriptionSource } from "./readings-use";
 
-
-/** A reading's host request; `headers` carry the exact document a route-scoped read needs. */
-interface JsonRequest {
-  path: string;
-  body?: unknown;
-  headers?: Readonly<Record<string, string>>;
-}
-
-async function requestJson<T>(
-  request: JsonRequest,
-  schema: z.ZodType<T>,
-  signal: AbortSignal,
-): Promise<T> {
-  const response = await hostFetch(request.path, {
-    ...(request.body === undefined
-      ? request.headers && { headers: { ...request.headers } }
-      : {
-          method: "POST",
-          headers: { "content-type": "application/json", ...request.headers },
-          body: JSON.stringify(request.body),
-        }),
-    signal,
-  });
-  if (!response.ok) {
-    const failure = await readPeError(response);
-    throw new HostCallError(
-      failure.message,
-      response.status,
-      failure.details && typeof failure.details === "object"
-        ? (failure.details as Record<string, unknown>)
-        : undefined,
-    );
-  }
-  const value = schema.parse(await response.json());
-  return value;
-}
-
-const decoders = new Map<string, Promise<z.ZodType>>();
-/**
- * The catalog entry's own response schema, decoded once per key (ADR 0028: a reading names a
- * catalog key and its schema). ponytail: lazy-loads the whole generated catalog (~1.2 MB) as one
- * chunk and converts draft-04 JSON Schema at runtime; have typegen emit per-op zod if that hurts.
- */
-export function opResponseSchema(key: string): Promise<z.ZodType> {
-  let decoder = decoders.get(key);
-  if (!decoder) {
-    decoder = Promise.all([
-      import("@pe/host-contracts/catalog"),
-      import("@pe/host-contracts/operation-types"),
-      import("@pe/host-contracts/decoders"),
-    ]).then(([{ hostOpCatalog }, { tsOnlyOperationSchemas }, { effectDecoder }]) => {
-      if (Object.hasOwn(tsOnlyOperationSchemas, key))
-        return effectDecoder(
-          tsOnlyOperationSchemas[key as keyof typeof tsOnlyOperationSchemas].response,
-        );
-      const entry = hostOpCatalog.find((candidate) => candidate.key === key);
-      if (!entry) throw Error(`${key} is not in the op catalog`);
-      return generatedJsonSchema(JSON.parse(entry.responseSchemaJson));
-    });
-    decoders.set(key, decoder);
-    decoder.catch(() => decoders.delete(key));
-  }
-  return decoder;
-}
-
-/** One catalog op over `/call`, scoped to the attempt's document, decoded by its catalog schema. */
-export async function callOp<K extends OpKey>(
-  context: {
-    target?: ReadingContext["target"];
-    signal: AbortSignal;
-    headers?: Readonly<Record<string, string>>;
-  },
-  key: K,
-  request: OpRequestOf<K>,
-): Promise<OpResponseOf<K>> {
-  const headers: Record<string, string> | undefined =
-    context.target?.kind === "document"
-      ? {
-          [HOST_RPC_BRIDGE_SESSION_HEADER]: context.target.ref.session,
-          [HOST_RPC_DOCUMENT_HEADER]: context.target.ref.openId,
-          [HOST_RPC_ORIGIN_HEADER]: `web:${typeof window === "undefined" ? "/" : window.location.pathname}`,
-        }
-      : context.target?.kind === "session"
-        ? { [HOST_RPC_BRIDGE_SESSION_HEADER]: context.target.session }
-        : undefined;
-  const value = await requestJson(
-    { path: "/call", body: { key, request }, headers: { ...headers, ...context.headers } },
-    z.unknown(),
-    context.signal,
-  );
-  return (await opResponseSchema(key)).parse(value) as OpResponseOf<K>;
-}
-
+const pe = createPeClient(undefined, (url, init) => hostFetch(url, init));
 /** A reading kind `op`: one catalog key, its request from the attempt, its schema decode. */
 export function opSource<K extends OpKey, T = OpResponseOf<K>>(options: {
   key: K;
@@ -140,21 +46,6 @@ export function opSource<K extends OpKey, T = OpResponseOf<K>>(options: {
     },
   };
 }
-
-const pe = createPeClient(undefined, (url, init) => hostFetch(url, init));
-type ComposeInput<K extends PeRouteId> = Parameters<typeof pe.call<K>>[1];
-type ComposeOutput<K extends PeRouteId> = Awaited<ReturnType<typeof pe.call<K>>>;
-
-/** One host composition, named by its catalog route key and decoded by that route's own schema. */
-export const callCompose = async <K extends PeRouteId>(
-  context: { signal: AbortSignal; headers?: Readonly<Record<string, string>> },
-  key: K,
-  input: ComposeInput<K>,
-  headers?: Readonly<Record<string, string>>,
-): Promise<ComposeOutput<K>> => {
-  const value = await pe.call(key, input, { signal: context.signal, headers: { ...context.headers, ...headers } });
-  return value as ComposeOutput<K>;
-};
 
 /** A reading kind `compose`: a catalog route key (ducts roster, sheet, ...), its input, its schema. */
 export function composeSource<K extends PeRouteId, T = ComposeOutput<K>>(options: {
@@ -327,39 +218,3 @@ export function ductsBodySource<T>(options: {
 }
 
 /** One Value response and an invalidation cursor, fenced by the generic mounted subscription. */
-export function publicationSource<T extends { generation: number; version: number; state: string; reason?: string; value: { evaluation: string; coverage: { refused: readonly { keys: readonly string[]; reason: string }[]; unknown: readonly string[] } } | null }>(options: {
-  read(ctx: ReadingContext, publication: { subscription: string; generation: number }, release: boolean): Promise<T>;
-}): UseSource<T> {
-  return { kind: "use", dirties: ["snapshot"], open(ctx, deliver) {
-    const publication = ctx.publication ?? { subscription: crypto.randomUUID(), generation: 0 };
-    let closed = false, refreshing = false, invalidated = false;
-    let events: EventSource | undefined;
-    const refresh = async () => {
-      if (closed) return;
-      if (refreshing) { invalidated = true; return; }
-      refreshing = true;
-      try {
-        const result = await options.read(ctx, publication, false);
-        if (closed || ctx.signal.aborted || result.generation !== publication.generation || result.state === "superseded") return;
-        if (!result.value) return deliver({ kind: "failure", error: result.reason ?? "Refresh needed" });
-        deliver({ kind: "complete", value: result, revision: result.version, sourceVersion: result.value.evaluation,
-          fresh: result.state === "current" && !result.value.coverage.refused.length && !result.value.coverage.unknown.length,
-          reason: result.reason ?? [...result.value.coverage.refused.map(part => `${part.keys.join(", ")}: ${part.reason}`),
-            ...(result.value.coverage.unknown.length ? [`Not covered: ${result.value.coverage.unknown.join(", ")}`] : [])].join("; ") });
-        if (!events && !ctx.historyPoint) {
-          events = openEventSource(`/pe/read-events?subscription=${encodeURIComponent(publication.subscription)}&generation=${publication.generation}`);
-          events.onmessage = event => {
-            const state = z.object({ generation: z.number(), state: z.string() }).parse(JSON.parse(event.data));
-            if (!closed && state.generation === publication.generation && state.state === "refresh-needed") {
-              deliver({ kind: "stale" }); void refresh();
-            }
-          };
-          events.onerror = () => { if (!closed) deliver({ kind: "stale" }); };
-        }
-      } catch (error) { if (!closed && !ctx.signal.aborted) deliver({ kind: "failure", error }); }
-      finally { refreshing = false; if (invalidated) { invalidated = false; void refresh(); } }
-    };
-    void refresh();
-    return () => { closed = true; events?.close(); if (!ctx.historyPoint) void options.read({ ...ctx, signal: new AbortController().signal }, publication, true).catch(() => {}); };
-  } };
-}

@@ -3,7 +3,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { address } from "@pe/agent-contracts";
 import { historySnapshotSchema } from "../shell/history";
 import { mountTypedRoute } from "../shell/typed-mount";
-import type { ReadingContext } from "../shell/readings";
+import type { ReadingContext } from "../shell/source-contract";
 import { createWitness } from "./cutover.test-support";
 
 test("typed panes share declared Values; recorded Fans and Ducts use frozen Work and refuse writes", async () => {

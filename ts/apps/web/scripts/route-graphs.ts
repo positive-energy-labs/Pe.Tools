@@ -50,6 +50,24 @@ const check = process.argv.includes("--check");
 const closureOnly = process.argv.includes("--builtin-closure-only");
 const runtime = process.argv.includes("--runtime");
 if (check && runtime) throw Error("--check is read-only and cannot use runtime projection flags");
+// JSON Schema is the runtime codec projection; retain its field type in generated addresses too.
+const schemaType = (schema: any): string => {
+  if (schema === true) return "unknown";
+  if (schema === false) return "never";
+  if ("const" in schema) return JSON.stringify(schema.const);
+  if (schema.enum) return schema.enum.map((value: unknown) => JSON.stringify(value)).join(" | ") || "never";
+  if (schema.anyOf || schema.oneOf) return (schema.anyOf ?? schema.oneOf).map(schemaType).join(" | ");
+  if (Array.isArray(schema.type)) return schema.type.map((type: string) => schemaType({ ...schema, type })).join(" | ");
+  switch (schema.type) {
+    case "null": return "null";
+    case "string": return "string";
+    case "number": case "integer": return "number";
+    case "boolean": return "boolean";
+    case "array": return schema.prefixItems ? `[${schema.prefixItems.map(schemaType).join(", ")}]` : `Array<${schema.items ? schemaType(schema.items) : "unknown"}>`;
+    case "object": return `{${Object.entries(schema.properties ?? {}).map(([key, value]) => `${JSON.stringify(key)}${schema.required?.includes(key) ? "" : "?"}: ${schemaType(value)}`).join("; ")}}`;
+    default: throw Error(`Unsupported generated address schema: ${JSON.stringify(schema)}`);
+  }
+};
 const projections: Record<string, string> = {};
 const stale: string[] = [];
 async function emit(destination: URL, text: string) {
@@ -91,6 +109,7 @@ for(const dir of discovered.filter(d=>d.isDirectory())) {
 }
 const keys=[...new Set([...admittedBuiltinKeys,...declarations.keys()])].sort();
 const links:string[]=[],hostImports:string[]=[],hostEntries:string[]=[];
+const hostReadPaths = new Set<string>();
 const browserImports:string[]=[],browserEntries:string[]=[],typedImports:string[]=[],typedEntries:string[]=[],closureImports:string[]=[],closureEntries:string[]=[],hostReadImports:string[]=[],hostReadEntries:string[]=[];
 for (const key of keys) {
   const folder=declarations.get(key)?.folder ?? key;
@@ -164,11 +183,11 @@ for (const key of keys) {
       const json = z.toJSONSchema(field.schema, { io: "input" });
       const schema = field.role === "subject"
         ? `subjectSchema(${(json.oneOf as {properties?:{ids?:{maxItems?:number}}}[]).find(part=>part.properties?.ids)?.properties!.ids!.maxItems})`
-        : `z.fromJSONSchema(${JSON.stringify(json)})`;
+        : `(z.fromJSONSchema(${JSON.stringify(json)}) as z.ZodType<Immutable<${schemaType(json)}>>)`;
       return `${JSON.stringify(key)}: field(${schema}${field.initial === undefined ? ".optional()" : `.default(${JSON.stringify(field.initial)})`}, ${JSON.stringify(field.url)})`;
     });
     await emit(new URL(`../../../packages/agent-contracts/src/routes/${key}.ts`, import.meta.url),
-      `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nimport { z } from "zod";\nimport { ${typed.spec.subject?"subjectSchema, ":""}focusSelectionSchema } from "../route-kernel-codecs.ts";\nimport { jsonCodec } from "../route-field.ts";\nconst field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: jsonCodec(schema) });\nexport const ${identifier}Address = { path: ${JSON.stringify(typed.data.address)} as const, title: ${JSON.stringify(typed.spec.name)}, fields: {\n${fields.length ? fields.join(",\n")+"," : ""}\nselected: {...field(focusSelectionSchema,"replace"),agent:undefined}\n}, agent: { policy: ${JSON.stringify(typed.spec.subject ? `Choose ${typed.spec.subject.noun} through ${typed.spec.subject.field}, using the module's local identities.` : "Use the route fields as declared.")} } };\n`);
+      `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nimport { z } from "zod";\n${fields.some(line=>line.includes("Immutable<")) ? 'import type { Immutable } from "../route-kernel-data.ts";\n' : ""}import { ${typed.spec.subject?"subjectSchema, ":""}focusSelectionSchema } from "../route-kernel-codecs.ts";\nimport { jsonCodec } from "../route-field.ts";\nconst field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: jsonCodec(schema) });\nexport const ${identifier}Address = { path: ${JSON.stringify(typed.data.address)} as const, title: ${JSON.stringify(typed.spec.name)}, fields: {\n${fields.length ? fields.join(",\n")+"," : ""}\nselected: {...field(focusSelectionSchema,"replace"),agent:undefined}\n}, agent: { policy: ${JSON.stringify(typed.spec.subject ? `Choose ${typed.spec.subject.noun} through ${typed.spec.subject.field}, using the module's local identities.` : "Use the route fields as declared.")} } };\n`);
     // Preserve the actual imported Work export, including refinements and reconciliation.
     // JSON Schema cannot carry that authority; a second handwritten host declaration would drift.
     let workImport="",workBody="";
@@ -188,8 +207,11 @@ for (const key of keys) {
       if(inside.startsWith("..") || inside.startsWith("/")) throw Error(`${key}: host read modules must live under apps/host`);
       const directory=fileURLToPath(new URL("../../host/src/reads/",import.meta.url));
       const path=relative(directory,file).replaceAll("\\","/");
+      if (!hostReadPaths.has(path)) {
+      hostReadPaths.add(path);
       hostReadImports.push(`import * as m${hostReadEntries.length} from ${JSON.stringify(path.startsWith(".")?path:`./${path}`)};`);
       hostReadEntries.push(`m${hostReadEntries.length}`);
+      }
     }
     await emit(new URL(`../src/${folder}/neutral.generated.ts`,import.meta.url),
       `// Generated from route.ts by codegen:routes. Neutral projection only.\n${workImport}${typed.spec.edits?'import {z} from "zod";\n':""}import {RouteGraphJson} from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type {HostRouteModule} from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with {type:"json"};\nconst data=RouteGraphJson.parse(closure.envelope.data);\nexport const host:HostRouteModule={data,bodies:{},${workBody||"schemas:{},"}};\n`);
@@ -243,7 +265,7 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
   .sort((a, b) => a.name.localeCompare(b.name))) {
   const files = await readdir(new URL(`../src/${folder.name}/`, import.meta.url));
   if (!files.includes("graph.ts")) continue;
-  if (closures.has(folder.name)) continue;
+  if (closures.has(folder.name) || [...declarations.values()].some(entry => entry.folder === folder.name)) continue;
   if (closureOnly) continue;
   const module = await jiti.import<Record<string, unknown>>(`../src/${folder.name}/graph.ts`);
   const graphs = Object.entries(module).filter(([name]) => name.endsWith("Graph"));

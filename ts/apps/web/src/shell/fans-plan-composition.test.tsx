@@ -33,7 +33,7 @@ import "../ducts/sheet/mount";
 import { TypedShell } from "./typed-shell";
 import { module as fans } from "../fans/route";
 import { builtins } from "../route/builtins.neutral";
-import { peReadings, bindActionReadings } from "../readings";
+import { peReadings, bindActionReadings } from "../host/resource-stream";
 
 const trace = vi.hoisted(()=>({gates:[] as any[],tokens:[] as any[],samples:[] as any[],stops:[] as any[],mounts:[] as any[],submit:vi.fn(),http:[] as any[],fetch:vi.fn(),base:"",target:null as any}));
 vi.mock("../host/runtime",()=>({hostFetch:trace.fetch,runtimeStreamUrl:(url:string)=>new URL(url,trace.base).toString()}));

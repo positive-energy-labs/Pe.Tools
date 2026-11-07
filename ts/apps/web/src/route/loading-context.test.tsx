@@ -4,9 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { RegistryContext } from "@effect/atom-react";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { DocumentPicker } from "#/shell/application-route-shell";
-import type { PanePlace } from "#/shell/admitted-pane";
-import { peReadings } from "#/readings";
+import { DocumentPicker } from "#/shell/document-picker";
+import { peReadings } from "#/host/resource-stream";
 import { TooltipProvider } from "@pe/kit/lang/tooltip";
 import { HelpWorld } from "./help";
 import { STARTUP_TEACHING, referenceTeaching } from "./teaching";
@@ -254,7 +253,7 @@ test("the real inventory hook feeds picker labels without fabricated pid and ret
     return () => { listeners.delete(listener); };
   });
   const write = vi.fn();
-  const place = { address: { read: () => new URLSearchParams(), write } } as unknown as PanePlace;
+  const place = { address: { read: () => new URLSearchParams(), write, subscribe: () => () => {} } };
   const view = render(
     <RegistryContext.Provider value={registry}>
       <DocumentPicker place={place} target={null} needs="project" enabled />

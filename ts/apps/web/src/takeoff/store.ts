@@ -13,7 +13,7 @@ import {
   type TargetResolution,
   type CandidateRegion,
 } from "@pe/agent-contracts";
-import type { GraphMount } from "#/shell/mount";
+import type { GraphMount } from "#/shell/legacy-mount";
 import type { CellWire } from "#/components/work/band";
 import { takeoffGraph, type TakeoffGraphPage } from "./graph";
 import { selectedTakeoffPage, type TakeoffRoster } from "./subject";

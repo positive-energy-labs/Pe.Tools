@@ -15,7 +15,7 @@ import type {
   WorkJournalDoor,
   WorkFeedState,
 } from "../../../../packages/agent-contracts/src/work-journal-door";
-import { peReadings, type Readings } from "../readings";
+import { peReadings, type Readings } from "../host/resource-stream";
 import { writeRouteWork } from "../route/host";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type {

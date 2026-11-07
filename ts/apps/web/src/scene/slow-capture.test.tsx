@@ -14,7 +14,7 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { useEffect, useState } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { readingFrameSchema, readingKey } from "@pe/agent-contracts";
-import { PeReadings } from "#/readings";
+import { PeReadings } from "#/host/resource-stream";
 import { useCapture } from "#/scene/picture/read";
 import { sceneRequest } from "./host";
 

@@ -17,12 +17,13 @@ import { submitAction } from "../../../packages/mcps/src/shared/takeoff-action-c
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { RegistryContext } from "@effect/atom-react";
 
-import { PeReadings, peReadings, useHostEvents, bindActionReadings } from "./readings";
-import { readingAtom, previousOf, useReading, useReadingSlice } from "#/shell/readings-hooks";
+import { PeReadings, peReadings, useHostEvents, bindActionReadings } from "./host/resource-stream";
+import { readingAtom, previousOf, useReading, useReadingSlice } from "#/host/resource-state";
 import { useProviders } from "./workbench/provider/providers";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture";
 import { useThreadStream } from "./workbench/provider/thread-stream";
-import { createReadingGraph, type ReadingContext } from "./shell/readings";
+import { createReadingGraph} from "./shell/readings";
+import { type ReadingContext } from "./shell/source-contract";
 import { subscriptionSource } from "./shell/readings-use";
 
 type Fake = {

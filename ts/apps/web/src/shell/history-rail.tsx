@@ -4,7 +4,7 @@ import { historyPointSchema, type Address } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { historyRequest, historySnapshotSchema, pointHref, type HistorySnapshot } from "./history.ts";
-import type { AdmittedAddressPort } from "./admitted-address.ts";
+import type { AdmittedAddressPort } from "./typed-address.ts";
 
 /** Both shells resolve the recorded point before acquiring any live resources. */
 export function HistoryBoundary({ address, children }: {

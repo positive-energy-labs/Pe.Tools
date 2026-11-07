@@ -10,8 +10,8 @@ import { sheetState } from "../ducts/sheet/state.ts";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
 import sheet from "../ducts/sheet/sheet.fixture.json";
 import { snapshot } from "../ducts/test-fixture";
-import { placeInput } from "../shell/admitted-place.test-fixture";
-import type { ReadingSource } from "../shell/readings";
+import { placeInput } from "../shell/typed-place.test-support";
+import type { ReadingSource } from "../shell/source-contract";
 import { browserWorkPorts, createWorkFeedClient } from "../shell/work-feed-client";
 
 import { mountTypedRoute } from "../shell/typed-mount";
@@ -22,7 +22,7 @@ export async function createWitness(
   closes: (() => void)[],
   saved = new Map<string, unknown>(),
   overrides: Readonly<Record<string, ReadingSource>> = {},
-  work?: import("../shell/admitted-place").PlaceInput["work"],
+  work?: import("../shell/typed-place").PlaceInput["work"],
   receipts?: import("@pe/agent-contracts").WorkJournalDoor["receipts"],
 ) {
   const admitted = await admit();
@@ -260,14 +260,11 @@ export async function createWitness(
       return source.open(ctx,deliver);
     } } : source])) }), feed);
     closes.push(() => mounted.close());
-    return mounted as Omit<import("../shell/admitted-mount").AdmittedMount, "page" | "controls"> & {
-      page: { read(): any; pose(patch: Record<string,unknown>, intent?: string): any; select(value: any): any; set(...args:any[]):any; device(...args:any[]):any; transient(...args:any[]):any };
-      controls: { query(key:string,value:unknown):any; subject(value:any):any; stage(...args:any[]):any; draft(...args:any[]):any; device(...args:any[]):any; transient(...args:any[]):any };
-    };
+    return mounted;
   }
   const fansMount=mount(admitted.presenter);
   return {
-    typed: (fansMount as ReturnType<typeof nativeTestAdapter>).native,
+    typed: fansMount.native,
     admitted,
     calls,
     inputs,

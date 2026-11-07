@@ -2,7 +2,8 @@
 import { Activity, useEffect } from "react";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { contentHash, createReadingGraph, type ReadingDelivery } from "./readings";
+import { contentHash, createReadingGraph} from "./readings";
+import { type ReadingDelivery } from "./source-contract";
 
 afterEach(cleanup);
 

@@ -13,12 +13,12 @@ import { isPodRoutePath, podRoutePath } from "#/route/pod-address";
 // A registered route (builtin or trusted Pod) answers from its authenticated declaration; the generated
 // table covers routes not registered yet. Read at call time, never at import.
 export const routePath = (key: string) =>
-  publicRoutes.admitted(key)?.data.address ?? builtinRoutePath(key);
+  publicRoutes.typed(key)?.data.address ?? builtinRoutePath(key);
 export const routeKey = (path: string) =>
   publicRoutes.byAddress(path)?.manifest.key ?? builtinRouteKey(path);
 /** A Pod row opens its registered declaration's address; an unregistered row opens only its trust page. */
 export const podPath = (row: PodRouteDescriptor) =>
-  (row.trusted && publicRoutes.admitted(row.workRoute)?.data.address) || podRoutePath(row.key);
+  (row.trusted && publicRoutes.typed(row.workRoute)?.data.address) || podRoutePath(row.key);
 export const TASKS = APP_TASKS;
 const CATALOGUE = TOOLS;
 /** Home and the shell's route icons. Without the global field, the pressed icon is the location. */

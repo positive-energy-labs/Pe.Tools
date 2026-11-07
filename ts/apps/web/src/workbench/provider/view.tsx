@@ -7,7 +7,7 @@ import {
   selectRunStatus,
   selectTurnFailure,
 } from "@pe/agent-contracts/chat-state";
-import { previousOf, useHostStatusSlice } from "#/shell/readings-hooks";
+import { previousOf, useHostStatusSlice } from "#/host/resource-state";
 import { appAtomRegistry, useRouteOwner } from "#/shell/owner";
 import { createChatPageStore } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
@@ -20,7 +20,7 @@ import { errorMessage } from "./use-workbench";
 import { EMPTY_HEAD, isReady, useProviders, type HeadDraft } from "./providers";
 import { routeAddress, targetKey, type DocumentRequest } from "@pe/agent-contracts";
 import { demoThreads } from "#/chat/thread-navigation";
-import { useEnvironmentReading } from "#/shell/environment-readings";
+import { useEnvironmentReading } from "#/host/environment-state";
 import type { HarnessThreadBody } from "@pe/agent-contracts";
 import { mergeThreadRoster, mergeThreadSummary } from "./thread-merge";
 import { emptyPrompt } from "../prompt";
