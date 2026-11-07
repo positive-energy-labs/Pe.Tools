@@ -123,7 +123,7 @@ export type PodDependencies = {
 export type FamilyActionDependencies = TakeoffActionDependencies &
   PodDependencies & {
     marks?: DocumentMarks;
-    files?: import("./host-files.ts").HostFiles["Service"];
+    files?: import("./ducts-files.ts").DuctFiles["Service"];
     pictures?: import("./captures-route.ts").PictureCaptureStore["Service"];
     families?: Pick<FamiliesReader["Service"], "cancel">;
     /** The demo owner keeps native reads inside its own root; a build has no output path to place. */

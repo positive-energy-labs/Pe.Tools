@@ -93,3 +93,5 @@ export const familiesPartsSchema = z.object({
 });
 
 export * from "./fans-read.ts";
+
+export * from "./ducts-read.ts";

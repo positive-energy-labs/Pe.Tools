@@ -1,7 +1,7 @@
-import { testHostFiles, settle } from "./effect-test.ts";
+import { testDuctFiles, settle } from "./effect-test.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { nativeReadRoot } from "../src/app.ts";
-import { HostFiles } from "../src/host-files.ts";
+import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 /** Port of main .artifacts/runs/review-20261030-ducts/contracts/contracts-review/
@@ -103,7 +103,7 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
       makeCallRoute(owner, captureStore(join(dir, "captures")), {
         sdk,
         workspace: work,
-      }).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdk(args))))).pipe(Layer.provide(HostFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(marks)))).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+      }).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdk(args))))).pipe(Layer.provide(DuctFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(marks)))).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       { disableLogger: true },
     );
     const post = (body: unknown) =>
@@ -199,7 +199,9 @@ type Harness = {
 };
 
 import { snapshot } from "../../web/src/ducts/test-fixture.ts";
-import { createDuctsSheets } from "../src/ducts-sheet.ts";
+import { evaluate } from "../src/reads/evaluator.ts";
+import { ductSheet } from "../src/reads/fan-sheet.ts";
+import { sheetPort } from "./ducts-read.fixture.ts";
 
 const response = {
   previewOnly: false,
@@ -329,26 +331,10 @@ test("kernel gap: sheet read cannot overwrite Work at the server revision", asyn
     0,
   );
   const before = structuredClone(stored);
-  const sheets = createDuctsSheets(
-    {
-      firm: () => settle(testHostFiles().firm),
-      catalogs: () => settle(testHostFiles().ductCatalogs),
-      call: async () => {
-        throw Error("read unavailable");
-      },
-    } as never,
-    { workspace: work, key: async () => key, author: () => "pea" },
-  );
-  await expect(
-    sheets.sheet({
-      target,
-      mode: "fan",
-      unitId: 100,
-      portIndex: 0,
-      basis: "obsolete-client-basis",
-      edits: { flows: { 101: { cfm: 100 } } },
-    }),
-  ).rejects.toThrow("read unavailable");
+  const port = sheetPort({ firm: () => settle(testDuctFiles().firm), catalogs: () => settle(testDuctFiles().ductCatalogs),
+    workKey: async () => key, call: async () => { throw Error("read unavailable"); } }, work);
+  await expect(evaluate(ductSheet, { target, mode: "fan", unitId: 100, portIndex: 0,
+    basis: "obsolete-client-basis", edits: { flows: { 101: { cfm: 100 } } } }, port)).rejects.toThrow("read unavailable");
   expect(stored, "even a failed read persisted stale edits before acquiring native data").toEqual(
     before,
   );

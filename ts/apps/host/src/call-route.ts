@@ -65,7 +65,7 @@ import {
   registerViewImage,
 } from "./captures-route.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
-import { HostFiles } from "./host-files.ts";
+import { DuctFiles } from "./ducts-files.ts";
 import { randomUUID } from "node:crypto";
 import { recordHostFact } from "./receipt-export.ts";
 import { HttpRouter, type HttpServerRequest, HttpServerResponse as Response } from "effect/http";
@@ -945,7 +945,7 @@ export function makeCallRoute(
           captures ??=
             Option.getOrUndefined(yield* Effect.serviceOption(TakeoffCaptureStore)) ??
             Context.get(yield* Layer.build(TakeoffCaptureStore.layer()), TakeoffCaptureStore);
-          actionDeps = { ...actionDeps, marks: yield* HostDocumentMarks, pictures: yield* PictureCaptureStore, files: yield* HostFiles };
+          actionDeps = { ...actionDeps, marks: yield* HostDocumentMarks, pictures: yield* PictureCaptureStore, files: yield* DuctFiles };
           const freshness = yield* ReadFreshness;
           yield* Effect.acquireRelease(
             // Queue/native-read telemetry must not invalidate an in-flight read's identity.

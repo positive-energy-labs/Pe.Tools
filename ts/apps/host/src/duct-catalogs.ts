@@ -9,7 +9,7 @@ export interface CatalogReading {
   findings: string[];
 }
 
-/** The `HostFiles` layer body. Read-only portable units, no registration and no product-home creation on a missing root. */
+/** The `DuctFiles` layer body. Read-only portable units, no registration and no product-home creation on a missing root. */
 export async function readDuctCatalogs(root = productCatalogsRootPath()): Promise<CatalogReading> {
   const tables: Record<string, CatalogTable> = Object.create(null);
   const findings: string[] = [];

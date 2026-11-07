@@ -7,7 +7,7 @@ import type { DocumentRef } from "@pe/agent-contracts";
 import { createScheduledTasks } from "./scheduled-tasks.ts";
 import { createRouteSettings } from "./route-settings.ts";
 import { productRouteSettingsPath } from "./product-paths.ts";
-import { createDuctsSheets, type DuctsSheetSources } from "./ducts-sheet.ts";
+import { graphRouteIds } from "./reads/routes.ts";
 import { eligibleThreads, threadHistory } from "./thread-history.ts";
 import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
@@ -92,7 +92,7 @@ import { z } from "zod";
 import { RevitBridge } from "./bridge.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
 import { runPods } from "./family-actions.ts";
-import { HostFiles } from "./host-files.ts";
+import { DuctFiles } from "./ducts-files.ts";
 import { PictureCaptureStore } from "./captures-route.ts";
 import { createProviders } from "./harness/providers.ts";
 import { peaMcpServer } from "./harness/adapter.ts";
@@ -197,12 +197,11 @@ export interface PeRoutesOptions {
   /** The log from the composing HostReceipts service. */
   log?: HostLog;
   ductsAnalysis?: Omit<DuctsAnalysisSources, "readWork">;
-  ductsSheets?: DuctsSheetSources;
+  readGraph?: (request: unknown) => Promise<unknown>;
 }
 export interface PeRouteInvocation {
   readonly readEvents?: Response;
   readonly readGraph?: (request: unknown) => Promise<unknown>;
-  readonly sheets?: DuctsSheetSources;
   readonly document?: (ref: DocumentRef) => Promise<DocumentRow>;
   readonly observe?: ResourceObserver;
   readonly closeResources?: () => void;
@@ -223,7 +222,7 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 
 const historicalPeRefusal = (inputs: HostInputContext["Service"] | undefined, method: string, id: string) => {
   if (inputs?.lane.kind !== "recording") return null;
-  if (!["reads.events", "fans.sheet", "ducts.sheet", "ducts.roster", "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get"].includes(id))
+  if (!["reads.events", ...graphRouteIds, "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get"].includes(id))
     return method === "GET" ? new InvalidRead({ message: "Recording does not cover this route owner", status: 409, problem: "recording.coverage" })
       : inputs.check({ kind: "work", verb: "edit" });
   const needs = id.startsWith("work.") ? ["work" as const] : id.startsWith("ducts.") ? ["document" as const, "files" as const, "marks" as const, "work" as const] : [];
@@ -318,22 +317,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
         },
       })
     : null;
-  const sheets = createDuctsSheets(options.ductsSheets, {
-        workspace: work,
-        author: () => (currentCaller().kind === "pea" ? "pea" : "human"),
-        key: async (target) => {
-          const documents = options.navigation
-            ? z
-                .array(documentRefSchema.extend({ address: addressSchema.nullable() }))
-                .parse(await options.navigation.documents())
-            : null;
-          const doc = documents?.find(
-            (d) => d.session === target.session && d.openId === target.openId,
-          );
-          if (documents && !doc) throw new Error("Sheet Work target is no longer open");
-          return bindWork("ducts", doc?.address ?? null, undefined, target);
-        },
-      });
   const views = new RouteViewStore(() => work.admittedRoutes());
   const workReads = new OwnerReads();
   const resources = observeResources(work, options.heads, (request, publish, after) => {
@@ -450,26 +433,10 @@ export function createPeRoutes(options: PeRoutesOptions) {
       }
     }
     if (declared.id === "reads.events") return invocation.readEvents ?? json({ error: "Read publications are unavailable" }, 503);
-    if (declared.id === "fans.sheet") {
-      if (!invocation.readGraph) return json({ error: "Host read graph is unavailable" }, 503);
-      return json(await invocation.readGraph(await request.json()));
-    }
-    if (declared.id === "ducts.sheet" || declared.id === "ducts.roster") {
-      if (!options.ductsSheets && !invocation.sheets) return json({ error: "Duct sheets are unavailable" }, 503);
-      try {
-        return json(
-          declared.id === "ducts.sheet"
-            ? await sheets.sheet(peRoutes["ducts.sheet"].body.parse(await request.json()), invocation.sheets)
-            : await sheets.roster(peRoutes["ducts.roster"].body.parse(await request.json()), invocation.sheets),
-        );
-      } catch (error) {
-        if (isDoorFailure(error)) throw error;
-        const problem = error as { statusCode?: number; message?: unknown };
-        return json(
-          { error: typeof problem?.message === "string" ? problem.message : message(error) },
-          error instanceof z.ZodError ? 400 : (problem?.statusCode ?? 409),
-        );
-      }
+    if (graphRouteIds.includes(declared.id)) {
+      const read = invocation.readGraph ?? options.readGraph;
+      if (!read) return json({ error: "Host read graph is unavailable" }, 503);
+      return json(await read(await request.json()));
     }
     if (declared.id === "ducts.analysis" || declared.id === "ducts.analysis-artifact") {
       if (!analysis) return json({ error: "Ducts analysis is unavailable" }, 503);
@@ -1170,7 +1137,7 @@ function* hostPeRoutes(
   const receipts = yield* HostReceipts;
   const marks = yield* HostDocumentMarks;
   const pictures = yield* PictureCaptureStore;
-  const files = yield* HostFiles;
+  const files = yield* DuctFiles;
   const inputContext = yield* Effect.serviceOption(HostInputContext);
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();

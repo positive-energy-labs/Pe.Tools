@@ -1,6 +1,6 @@
 import { pictureCaptures } from "./effect-test.ts";
 import { acknowledgedReadBridge, detachedBridge, sessionView } from "./effect-test.ts";
-import { HostFiles } from "../src/host-files.ts";
+import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
@@ -74,7 +74,7 @@ test("a full picture service refuses /call without advertising an unkept capture
       Layer.effectDiscard(Effect.map(PictureCaptureStore, (value) => { store = value; })),
     ).pipe(
       nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
-      Layer.provide(Layer.mergeAll(HostFiles.layer(), HostDocumentMarks.layer)),
+      Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
       Layer.provideMerge(PictureCaptureStore.layer(join(dir, "store"), 0)),
       HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
       Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),

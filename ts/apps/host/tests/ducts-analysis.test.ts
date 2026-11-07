@@ -1,4 +1,4 @@
-import { testHostFiles, settle } from "./effect-test.ts";
+import { testDuctFiles, settle } from "./effect-test.ts";
 // U4 wires the real fans Work for callers without one.
 import { neutralFansWork, fansRouteState } from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
@@ -135,7 +135,7 @@ function fixture() {
     resolutions = 0,
     workReads = 0,
     mark: number | null = null;
-  const files = testHostFiles();
+  const files = testDuctFiles();
   const sources: DuctsAnalysisSources = {
     catalogs: () => settle(files.ductCatalogs),
     root,

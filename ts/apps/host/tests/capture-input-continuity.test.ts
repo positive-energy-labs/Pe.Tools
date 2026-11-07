@@ -15,9 +15,9 @@ import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
-import { fansInputRoutes } from "../src/app.ts";
+import { readInputRoutes } from "../src/app.ts";
 import { HostInputContext } from "../src/input-context.ts";
-import { HostFiles } from "../src/host-files.ts";
+import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
 import { DuctsReadings } from "../src/ducts-readings.ts";
@@ -108,7 +108,7 @@ async function setup(mode = "normal") {
   const live = {
     owner: new DuctsReadings(),
     native,
-    files: HostFiles.layer({ firm: join(dir, "firm.json"), catalogs: join(dir, "catalogs") }),
+    files: DuctFiles.layer({ firm: join(dir, "firm.json"), catalogs: join(dir, "catalogs") }),
     marks: Layer.succeed(
       HostDocumentMarks,
       hostMarks({ observedSince: 1, changedAt: () => 2, subscribe: () => () => {} }),
@@ -132,7 +132,7 @@ async function setup(mode = "normal") {
     },
   });
   const web = HttpRouter.toWebHandler(
-    fansInputRoutes(inputs, {
+    readInputRoutes(inputs, {
       live,
       store: fileRouteDocumentStore(join(dir, "work")),
     }).pipe(Layer.provide(admission)),
