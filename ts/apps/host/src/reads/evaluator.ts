@@ -120,6 +120,7 @@ export interface InputPort {
 }
 export class RefreshNeeded extends Error {}
 export class RefusedPartition extends Error {}
+const inputLabel = (name: string, args: unknown) => `${name} ${canonicalJson(args)}`;
 export interface ReadContext {
   read<I, O>(read: Read<I, O> | Leaf<I, O>, args: I): Promise<O>;
   work(owner: string, scope: unknown): Promise<unknown>;
@@ -184,7 +185,7 @@ export async function evaluate<I, O>(
           trace.push({ recipe, name: definition.name, args, outcome: "answered", hash });
           if ("leaf" in definition) {
             if (port.revision(definition.name, args) !== revision)
-              throw new RefreshNeeded(`${definition.name} changed while reading`);
+              throw new RefreshNeeded(`${inputLabel(definition.name, args)} changed while reading`);
             if (definition.validate) checks.set(recipe, { definition, args, hash, revision });
           }
           return data;
@@ -266,11 +267,11 @@ export async function evaluate<I, O>(
       hash: fingerprint(current),
     });
     if (fingerprint(current) !== check.hash)
-      throw new RefreshNeeded(`${check.definition.name} changed during evaluation`);
+      throw new RefreshNeeded(`${inputLabel(check.definition.name, check.args)} changed during evaluation`);
   }
   for (const check of checks.values())
     if (port.revision(check.definition.name, check.args) !== check.revision)
-      throw new RefreshNeeded(`${check.definition.name} invalidated before publication`);
+      throw new RefreshNeeded(`${inputLabel(check.definition.name, check.args)} invalidated before publication`);
   const dependencies = trace.sort(
     (a, b) => a.recipe.localeCompare(b.recipe) || a.outcome.localeCompare(b.outcome),
   );

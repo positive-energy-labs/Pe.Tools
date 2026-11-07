@@ -1,4 +1,7 @@
 import { testDocumentMarks } from "./effect-test.ts";
+import { graphRoute } from "../src/reads/routes.ts";
+import { Publications } from "../src/reads/evaluator.ts";
+import { inputPort } from "../src/reads/inputs.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
@@ -68,7 +71,28 @@ export async function setup() {
   cleanup.push(() => rm(dir, { recursive: true, force: true, maxRetries: 5 }));
   const captures = captureStore(join(dir, "captures"));
   let capabilities: ReturnType<typeof createCapabilityCatalogSource>;
+  const publications = new Publications();
   const app = createPeRoutes({
+    readGraph: async (request) => {
+      const graph = graphRoute("reads.value", request);
+      const publication = graph.publication!;
+      return graph.publish(publications, publication.subscription, publication.generation, inputPort({
+        evaluation: crypto.randomUUID(), origin: () => null, revision: () => 0,
+        workspace: app.workspace, marks: hostMarks(marks), run: Effect.runPromise,
+        source: {
+          workKey: async () => { throw Error("Unexpected Work binding"); },
+          file: async () => { throw Error("Unexpected file input"); },
+          call: async () => { throw Error("Unexpected native input"); },
+          resource: (request) => new Promise((resolve, reject) => {
+            let stop = () => {};
+            stop = observeHost(request as never, (frame) => {
+              if (frame.kind === "snapshot") { stop(); resolve(frame.value); }
+              if (frame.kind === "failure") { stop(); reject(Error(frame.error)); }
+            });
+          }),
+        },
+      }));
+    },
     capabilityCatalog: { read: (scope) => capabilities.read(scope) },
     store: fileRouteDocumentStore(join(dir, "work")),
     heads: { observe: () => () => {} },
@@ -94,6 +118,7 @@ export async function setup() {
   let response: unknown = cellsApplied([[1, 2, true]]);
   let detail = detailResponse();
   let readCount = 0;
+  let onCatalog = () => {};
   // The document's schedules, as Revit lists them; a test's apply may add one.
   const catalog = [
     {
@@ -159,8 +184,10 @@ export async function setup() {
         try: async () => {
           if (id) await markDispatched(id);
           sent.push({ key, input, session: session!, openId: openId!, id });
-          if (key === "revit.catalog.schedules")
+          if (key === "revit.catalog.schedules") {
+            onCatalog();
             return { target: { session: session!, document: null }, value: { entries: structuredClone(catalog) } };
+          }
           if (key === "revit.detail.schedules") {
             readCount++;
             if (readbackFails && sent.some((s) => s.key === "schedule.cells.apply"))
@@ -185,6 +212,8 @@ export async function setup() {
     bridge,
     () => owner,
     () => captures,
+    "http://host",
+    (url, init) => contextFetch(new URL(url.pathname + url.search, server.base), init),
   );
   const sdk = async (args: readonly string[]) => {
     if (args[0] === "session" || args[0] === "doc") return sdkSessions(args);
@@ -349,6 +378,7 @@ export async function setup() {
       detail = value;
     },
     reads: () => readCount,
+    onCatalog: (callback: () => void) => { onCatalog = callback; },
     revitChanged,
     bridgeDetached,
     addSchedule: (scheduleId: number, name: string) =>
