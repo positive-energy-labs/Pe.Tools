@@ -87,7 +87,7 @@ export function artifactRelative(root: string, path: string) {
 export class ContentAddressCorruption extends Error {
   override readonly name = "ContentAddressCorruption";
   constructor(readonly path: string, readonly expected: string, readonly actual: string) {
-    super(`ContentAddressCorruption: ${path} hashes to ${actual}; expected ${expected}`);
+    super(`ContentAddressCorruption: artifact hash collision at ${path}; hashes to ${actual}, expected ${expected}`);
   }
 }
 
@@ -114,12 +114,15 @@ export async function writeArtifact(
   const expected = sha256Hex(bytes);
   const existing = async () => {
     let stored: Buffer;
-    try { stored = await readFile(path); }
+    try {
+      const resolved = await realpath(path);
+      artifactRelative(root, resolved);
+      stored = await readFile(resolved);
+    }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
       throw error;
     }
-    artifactRelative(root, await realpath(path));
     const actual = sha256Hex(stored);
     if (actual !== expected) throw new ContentAddressCorruption(path, expected, actual);
     return true;
