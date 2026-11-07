@@ -65,3 +65,5 @@ export * from "./schedules-read.ts";
 export * from "./settings-read.ts";
 
 export {isRecord} from "./route-state.ts";
+
+export { blobRefSchema, type BlobRef } from "./blob-ref.ts";

@@ -447,7 +447,7 @@ test("Work that cannot be recorded truncates capture; the live Work still answer
     return begun.ok ? begun.carriage : undefined;
   };
   await capture.read(key, "raw", undefined, carriage("raw")); // an undefined root is not a recorded null
-  expect(writer.truncation).toEqual({ at: 2, stoppedAt: expect.any(Number), reason: "encoding" });
+  expect(writer.truncation).toEqual({ at: 2, stoppedAt: expect.any(Number), site: "work", op: "work.raw", reason: "encoding" });
   await capture.read(key, "view", missingTitle, carriage("view"));
   // Capture stopped at the first loss; later live reads answer and keep no taking.
   expect(await live.view(key, "fans", request.context)).toMatchObject({ revision: 0 });
@@ -462,6 +462,8 @@ test("Work that cannot be recorded truncates capture; the live Work still answer
   expect((await reader(dir)).truncation).toEqual({
     at: 2,
     stoppedAt: expect.any(Number),
+    site: "work",
+    op: "work.raw",
     reason: "encoding",
   });
 });

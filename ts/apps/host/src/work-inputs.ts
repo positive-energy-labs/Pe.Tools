@@ -181,10 +181,10 @@ export const capturedWorkReads = (
 ): WorkReadCapture => {
   // The latch is set synchronously; this adapter owns the best-effort marker writes.
   let persisting: Promise<void> = Promise.resolve();
-  const stopNow = (reason: "backlog" | "unsupported") => {
+  const stopNow = (reason: "backlog" | "unsupported", op: string) => {
     const at = writer.capture.begin();
     if (at === null) return persisting;
-    const persisted = latchRun(writer.capture.stop(at, reason)).catch(() => undefined);
+    const persisted = latchRun(writer.capture.stop(at, reason, { site: "work", op })).catch(() => undefined);
     return (persisting = persisting.then(() => persisted));
   };
   const uncaptured: WorkReadBegin = { ok: true, carriage: undefined };
@@ -204,7 +204,8 @@ export const capturedWorkReads = (
       }).pipe(
         Effect.catchTag(["UnknownError", "SchemaError"], () => {
           const at = writer.capture.begin();
-          return at === null ? Effect.void : writer.capture.stop(at, "encoding");
+          return at === null ? Effect.void : writer.capture.stop(at, "encoding",
+            { site: "work", op: request.kind === "read" ? `work.${request.view}` : "work.feed" });
         }),
       ),
     );
@@ -227,7 +228,7 @@ export const capturedWorkReads = (
     begin: (request, context) => {
       const begun = context?.begin(request);
       if (begun?.ok) return begun;
-      void stopNow("unsupported");
+      void stopNow("unsupported", request.kind === "read" ? `work.${request.view}` : "work.feed");
       return uncaptured;
     },
     read: (key, view, value, carriage) => keep(carriage, { kind: "read", key, view }, readCodec(view), value),
@@ -236,6 +237,6 @@ export const capturedWorkReads = (
     readFailed: (key, view, error, carriage) => lose(carriage, { kind: "read", key, view }, readCodec(view), error),
     feedFailed: (key, admission, shape, error, carriage) =>
       lose(carriage, { kind: "feed", key, admission, shape }, workFeedCodecs[shape], error),
-    stop: (reason) => stopNow(reason),
+    stop: (reason) => stopNow(reason, "work.feed"),
   };
 };
