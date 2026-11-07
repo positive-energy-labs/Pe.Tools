@@ -1,19 +1,19 @@
 import { identityCodecs, subjectSchema } from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
 import { salvageWork } from "../../../../packages/agent-contracts/src/route-state.ts";
 import { z } from "zod";
-import {
-  type HostRouteModule,
-  type Immutable,
-  type RouteGraphJson,
-  type RouteStatePatch,
-  type RouteStateSpec,
-  type ReadingSnapshot,
-  type LayoutJson,
-  type InvocationToken,
-  type IdentityId,
-  type EntryContract,
-  type WorkHistoryPort,
-  type Many,
+import type {
+  HostRouteModule,
+  Immutable,
+  RouteGraphJson,
+  RouteStatePatch,
+  RouteStateSpec,
+  ReadingSnapshot,
+  LayoutJson,
+  InvocationToken,
+  IdentityId,
+  EntryContract,
+  WorkHistoryPort,
+  Many,
 } from "@pe/agent-contracts";
 import type { Publication } from "./host-read.ts";
 
