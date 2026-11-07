@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { readingRequestSchema } from "@pe/agent-contracts";
-import { leaf, read } from "./evaluator.ts";
+import { leaf, read } from "@pe/host/read-graph";
 import { settingsArgs, settingsValue } from "@pe/agent-contracts";
 
 const resource = leaf("resource", readingRequestSchema, z.unknown());
