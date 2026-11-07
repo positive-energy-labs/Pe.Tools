@@ -19,12 +19,11 @@ import {
   DUCT_UNIT_KINDS,
   neutralFansWork,
   stagedDucts,
-  cellPatches,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 import { catalogLinkKey } from "@pe/ducts-domain/catalog";
 import { suggestKind } from "@pe/ducts-domain/roster";
-import { ChoiceCell } from "../../sheet/choice-cell.tsx";
+import { StateCell } from "@pe/kit/lang/cell";
 import { kindMeaning, kindDisabledReason } from "../../sheet/kind-meaning.ts";
 import { claimsForGroup } from "@pe/ducts-domain/claims";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
@@ -38,7 +37,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { groupLabels } from "@pe/ducts-domain/words";
 import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import { Button } from "@pe/kit/lang/button";
-import { emptyListState, useList, type ListOptions } from "@pe/kit/lang/collection";
+import { emptyListState, useList, useValue, type ValueHandle, type ListOptions } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { Scroll } from "@pe/kit/lang/scroll";
@@ -56,7 +55,6 @@ import {
 import { z } from "zod";
 import type { DuctsDrawContext } from "../../route.ts";
 import { roster as rosterRead, network as networkSource } from "../../route.ts";
-import { pricingView, rosterView } from "../../pricing-view.ts";
 import { projectValue } from "../../../route/typed-route.ts";
 import { airflowOptions } from "../../airflow";
 import { attentionSubjects, cellFocusOf, cellFocusSubject, focusedElement } from "../../cell-focus";
@@ -93,7 +91,7 @@ function useNetworkData(ctx: NetworkContext) {
   const workDoc = ctx.value.value?.design ?? null;
   const target = ctx.target;
   const page = ctx.page.read();
-  const roster = ctx.read(rosterRead).value;
+  const roster = useValue(ctx.read(rosterRead));
   const system = namesOf(page.system);
   const systems = useMemo(
     () => (system === "all" ? (roster?.systems ?? []).map((row) => row.name) : system),
@@ -107,7 +105,7 @@ function useNetworkData(ctx: NetworkContext) {
   const doc = target?.kind === "document" ? target.ref : null;
   const networkRead = ctx.value.current
     ? projectValue<
-        import("@pe/agent-contracts").DuctsPricingData,
+        NonNullable<DuctsDrawContext["value"]["value"]>,
         import("@pe/agent-contracts").DuctsNetworkData
       >(
         ctx.value,
@@ -119,10 +117,8 @@ function useNetworkData(ctx: NetworkContext) {
     | import("@pe/agent-contracts").DuctsNetworkData
     | null;
   const pricing = ctx.value;
-  const priced = useMemo(
-    () => (pricing.current && pricing.value ? pricingView(pricing.value) : undefined),
-    [pricing.current, pricing.value],
-  );
+  const pricingData = useValue(pricing);
+  const priced = pricing.current ? pricingData : undefined;
   const edit = useMemo(() => stagedDucts(workDoc ?? null, workDoc ?? neutralFansWork), [workDoc]);
   const seen = ctx.value.value?.effectiveDesign ?? null;
   const attentionDoc = doc ? `${doc.session}/${doc.openId}` : "ducts:unbound";
@@ -372,8 +368,8 @@ export function SystemsPane({ ctx }: { ctx: DuctsDrawContext }) {
   const { snapshot, priced, page, systems, active, work, analysis, captureSource, coverage } = data;
   const { drawn, nameOf } = useTreeProjection(snapshot, priced, work.doc, systems);
   const rosterState = ctx.read(rosterRead);
-  const roster = rosterState.value;
-  const systemRows = analysis?.systems ?? (roster ? rosterView(roster) : NO_SYSTEMS);
+  const roster = useValue(rosterState);
+  const systemRows = analysis?.systems ?? (roster?.rows ?? NO_SYSTEMS);
   const notes = analysis?.notes ?? NO_NOTES;
   const { systemSearch, systemSort } = page;
   const system = systems;
@@ -415,6 +411,7 @@ export function SystemsPane({ ctx }: { ctx: DuctsDrawContext }) {
             </div>
           }
           systems={systemRows}
+          value={ctx.value.current ? ctx.value : rosterState}
           fansOf={fansOf}
           nameOf={nameOf}
           notes={notes}
@@ -833,6 +830,7 @@ const SYSTEM_SORTS = {
 const SystemsList = memo(function SystemsList({
   header,
   systems,
+  value,
   fansOf,
   nameOf,
   notes,
@@ -843,6 +841,7 @@ const SystemsList = memo(function SystemsList({
 }: {
   header: ReactNode;
   systems: ReturnType<typeof systemList>;
+  value: ValueHandle<unknown>;
   /** The system's fans: its hover hint and the head of its breakdown popover. */
   fansOf: (system: ReturnType<typeof systemList>[number]) => FanFact[];
   nameOf: (id: number) => string;
@@ -916,7 +915,8 @@ const SystemsList = memo(function SystemsList({
   );
   const systemListView = useList({
     scope: page.version,
-    items: systems,
+    value,
+    rowsOf: () => systems,
     keyOf: systemKey,
     search,
     fields,
@@ -979,7 +979,7 @@ function ReachInbox(props: Omit<ComponentProps<typeof Inbox>, "hoveredIssue">) {
   return <Inbox {...props} hoveredIssue={issue} />;
 }
 export function AllRulesBody({ ctx }: { ctx: DuctsDrawContext }) {
-  const { snapshot, work } = useNetworkData(ctx);
+  const { snapshot } = useNetworkData(ctx);
   const kinds = new Map(
     (snapshot?.nodes ?? [])
       .filter((node) => node.kind === "equipment")
@@ -991,38 +991,32 @@ export function AllRulesBody({ ctx }: { ctx: DuctsDrawContext }) {
       <section aria-label="Unit kinds" className="flex flex-col gap-2 p-2">
         <h3 className="t-head">Unit kinds</h3>
         {[...kinds].map(([key, node]) => {
-          const cell = ctx.cells.doc?.kinds[key] ?? {};
+          const cell = ctx.cells.at(["kinds", key]);
           const label = [node.family, node.type].filter(Boolean).join(" / ");
           return (
             <label key={key} className="flex flex-col gap-1">
               <span>{label}</span>
-              <ChoiceCell
+              <StateCell
                 label={`Unit kind ${label}`}
                 cell={cell}
-                path={["kinds", key]}
-                current={cell.edit?.value.kind ?? suggestKind(node).kind}
-                show={JSON.stringify}
+                value={ctx.value}
+                model={suggestKind(node)}
+                keyOf="kind"
+                format={JSON.stringify}
                 options={DUCT_UNIT_KINDS.map((kind) => ({
                   key: kind,
+                  value: { kind },
                   label: kind,
                   description: kindMeaning(node, kind),
                   disabled: kindDisabledReason(node, kind) ?? undefined,
                 }))}
-                refusal={ctx.cells.refusal}
-                pick={(kind) =>
-                  void work.write(
-                    cellPatches(["kinds"], key, cell, { kind: "set", rung: { value: { kind } } }),
-                  )
-                }
-                act={async (path, cell, kind) =>
-                  (await work.write(cellPatches(path.slice(0, -1), key, cell, { kind }))) ?? null
-                }
+
               />
-              {cell.edit && (
+              {cell.value.edit && (
                 <Button
                   label="Clear unit kind"
                   onClick={() =>
-                    void work.write(cellPatches(["kinds"], key, cell, { kind: "clear" }))
+                    void cell.clear({ label: `Clear unit kind ${label}` })
                   }
                 >
                   Clear unit kind

@@ -4,6 +4,9 @@ import type { Ref } from "./attention";
 import { rowDamage } from "../master-table/model";
 import type { Mark, Span } from "./scroll-project";
 import type { Virtualizer } from "@tanstack/react-virtual";
+import { valueRows, type ValueItems } from "./value";
+export { valueRows, useValue } from "./value";
+export type { ValueHandle } from "./value";
 
 export const VIRTUAL_FROM = 60;
 /** Rows drawn past the viewport, in viewport heights per side, from the measured row height:
@@ -654,7 +657,7 @@ export interface ListPersist<Sort extends string = string> {
 
 /** Keep projection readers stable to reuse the model across cursor moves. Changed readers
  * invalidate it, including closures over document names, field vocabulary or current scope. */
-export interface ListOptions<T, Sort extends string = string> {
+interface ListOptionsBase<T, Sort extends string = string> {
   persist?: ListPersist<Sort>;
   /** External selection opens context once; a manual collapse sticks until the next selection. */
   followSelection?: {
@@ -697,6 +700,9 @@ export interface ListOptions<T, Sort extends string = string> {
   onPick?: (item: T, context: ReadingContext) => void;
   refusalOf?: (item: T) => string | null | undefined;
 }
+
+export type ListOptions<T, Sort extends string = string, Data = readonly T[]> =
+  Omit<ListOptionsBase<T, Sort>, "items"> & ValueItems<T, Data>;
 
 export interface ListItem<T> extends Pick<RowState, "revit" | "damage"> {
   subject?: Ref;
@@ -751,7 +757,7 @@ function searchPasses<T>(
 
 /** Query, sorting, sections and tree order share one data projection, independent of mounted rows. */
 export function listModel<T, Sort extends string>(
-  options: ListOptions<T, Sort>,
+  options: ListOptionsBase<T, Sort>,
   state: ListState<Sort>,
   searchIndex?: ReadonlyMap<T, ListSearchable>,
 ) {
@@ -895,7 +901,12 @@ export function listModel<T, Sort extends string>(
 const listRowKey = (row: { key: string }) => row.key;
 
 /** The long-list API grows the collection key owner; popups and ladders keep their existing API. */
-export function useList<T, Sort extends string = string>(options: ListOptions<T, Sort>) {
+export function useList<T, Sort extends string = string, Data = readonly T[]>(
+  input: ListOptions<T, Sort, Data>,
+) {
+  const options: ListOptionsBase<T, Sort> = input.value
+    ? { ...input, ...valueRows(input.value, input.rowsOf) }
+    : { ...input, items: input.items! };
   const [ownState, setOwnState] = useState<ListState<Sort>>(() => ({
     ...emptyListState<Sort>(),
     closed: options.groups?.defaultClosed ?? [],

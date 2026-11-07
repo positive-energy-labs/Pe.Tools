@@ -2,7 +2,7 @@ import type { Tone } from "../../lib/token";
 /** Table's public product model. TanStack's types stay behind the component boundary. */
 import type { ReactNode } from "react";
 
-import type { StateCellProps } from "../lang/cell";
+import { handleCellProps, type StateCellProps, type HandleCellProps } from "../lang/cell";
 
 /** One damage source for rows, minimaps and pictures, independent of which columns are visible. */
 export function rowDamage<Row>(row: Row, columns: readonly Column<Row>[] = []): string | null {
@@ -15,7 +15,8 @@ export function rowDamage<Row>(row: Row, columns: readonly Column<Row>[] = []): 
   )
     return row.damage;
   for (const column of columns) {
-    const damage = column.state?.(row).damage;
+    const state = column.state?.(row);
+    const damage = state && ("cell" in state ? handleCellProps(state) : state).damage;
     if (damage) return damage;
     const verdict = column.verdict?.(row);
     if (verdict?.tone === "alarm") return verdict.word;
@@ -85,7 +86,7 @@ export interface Verdict {
  * Either can still be supplied to override.
  */
 interface StateColumn<Row> extends ColumnBase<Row> {
-  state: (row: Row) => StateCellProps;
+  state: (row: Row) => StateCellProps | HandleCellProps;
   /**
    * Domain vocabulary override (ruled 2026-08-16, takeoffs finding #1): the word the filter,
    * facet and readout speak for this row, when the grammar's eight universal words (the
