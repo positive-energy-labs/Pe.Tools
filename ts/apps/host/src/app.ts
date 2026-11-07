@@ -1,3 +1,4 @@
+import { FamilyPdfParser } from "./family-spec.ts";
 import {
   builtinFileLayer,
   builtinFileRoutes,
@@ -433,6 +434,18 @@ function liveHttpLive(options: HttpLiveOptions) {
         AppRoutes.pipe(Layer.provide(identity), nativeReadRoot(SdkDriverLive, options.inputs)),
       ).pipe(Layer.provideMerge(ServerLive)),
     ),
+    Layer.provide(Layer.succeed(FamilyPdfParser, {
+      async parse(file) {
+        if (!webUrl) throw Error("The web PDF parser is unavailable in this runtime");
+        const url = await Effect.runPromise(Deferred.await(webUrl));
+        const form = new FormData();
+        form.append("file", file);
+        const response = await fetch(new URL("/api/pdf-audit/parse", url), { method: "POST", body: form });
+        const payload = await response.json();
+        if (!response.ok) throw Error(typeof payload?.error === "string" ? payload.error : `Parse failed (${response.status})`);
+        return payload;
+      },
+    })),
     Layer.provide(NodeHttpClient.layerUndici),
     Layer.provide(FamiliesReader.layer),
     Layer.provide(HostDocumentMarks.layer),

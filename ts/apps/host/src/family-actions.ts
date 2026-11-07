@@ -119,6 +119,7 @@ export const sourceRunOutput = async (pod: string | null | undefined, deps: PodD
 
 /** Pod I/O runs against the product Pods root unless an owner (the demo lane) supplies its own. */
 export type PodDependencies = {
+  parsePdf?: (file: File) => Promise<unknown>;
   podsRoot?: string;
   runPods?: <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) => Promise<A>;
 };
