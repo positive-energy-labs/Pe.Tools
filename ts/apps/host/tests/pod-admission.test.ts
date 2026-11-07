@@ -207,7 +207,7 @@ async function setup(saved: unknown = currentWork, blockRead = false) {
       workspace,
       readStored: () =>
         withInvocationContext({ caller: { kind: "human", via: "local" } }, () =>
-          createPeRoutes({ workspace, registrations: [] })(
+          createPeRoutes({ workspace, registrations: [] }).fetch(
             new Request(`http://host/pe/route-state/${key.route}`),
           ),
         ),
