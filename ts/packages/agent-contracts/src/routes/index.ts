@@ -18,11 +18,11 @@ import { ductLossAddress } from "./duct-loss.ts";
 import { capturesAddress } from "./captures.ts";
 
 export { DUCTS_LAYERS } from "./picture.ts";
-export { ROOMS_LAYERS } from "./rooms.ts";
+export { ROOMS_LAYERS } from "../rooms.ts";
 export { SPACE_LAYERS, spaceElementKey } from "./space.ts";
 export { FAMILIES_DEFAULT_QUERY } from "./families.ts";
-export { SETTINGS_SECTIONS } from "./settings.ts";
-export { GALVANIZED_STEEL_ROUGHNESS } from "./duct-loss.ts";
+export { SETTINGS_SECTIONS } from "../settings-sections.ts";
+export { GALVANIZED_STEEL_ROUGHNESS } from "../duct-loss-read.ts";
 
 /** Every route's address, by route key; each route declares its own in `routes/<route>.ts`. */
 export const routeAddresses = {
