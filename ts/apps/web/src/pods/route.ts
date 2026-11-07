@@ -1,8 +1,9 @@
+import { sessionCommand } from "../route/typed-actions.ts";
 import { read } from "../route/defaults";
 import { z } from "zod";
 import { memberWork, settingsRouteState } from "@pe/agent-contracts";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
-import { field, route, sessionCommand, split } from "../route/defaults.ts";
+import { field, route, split } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 

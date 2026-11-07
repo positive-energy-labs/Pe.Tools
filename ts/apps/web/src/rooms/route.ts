@@ -1,3 +1,4 @@
+import { command } from "../route/typed-actions.ts";
 import { bindings } from "./bindings";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
@@ -8,7 +9,7 @@ import {
   valueRead,
 } from "@pe/agent-contracts";
 import { roomsPageSchema } from "./page";
-import { route, field, command } from "../route/defaults";
+import { route, field } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
 import { roomsArgs, roomsData } from "@pe/agent-contracts";

@@ -1,3 +1,4 @@
+import { command } from "../route/typed-actions.ts";
 import { poseFields } from "../route/defaults";
 import { bindings } from "./bindings";
 import { routeLinks } from "../route/links.generated";
@@ -14,15 +15,7 @@ import {
   type Immutable,
 } from "@pe/agent-contracts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
-import {
-  field,
-  route,
-  subjectSchema,
-  localId,
-  namesOf,
-  command,
-  split,
-} from "../route/defaults.ts";
+import { field, route, subjectSchema, localId, namesOf, split } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 import { fanLabel } from "../ducts/sheet/model.ts";

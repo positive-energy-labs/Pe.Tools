@@ -1,8 +1,9 @@
+import { queryAction } from "../route/typed-actions.ts";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { valueRead } from "@pe/agent-contracts";
-import { route, field, queryAction } from "../route/defaults";
+import { route, field } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
 import { opsArgs, opsData } from "@pe/agent-contracts";

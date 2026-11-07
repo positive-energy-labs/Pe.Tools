@@ -1,3 +1,4 @@
+import { command } from "../route/typed-actions.ts";
 import { poseFields } from "../route/defaults";
 import { bindings } from "./bindings";
 import { read } from "../route/defaults";
@@ -13,16 +14,7 @@ import {
   DUCTS_SYSTEM_MAX,
 } from "@pe/agent-contracts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
-import {
-  route,
-  field,
-  subjectSchema,
-  namesOf,
-  localId,
-  command,
-  split,
-  whenSubject,
-} from "../route/defaults.ts";
+import { route, field, subjectSchema, namesOf, localId, split, whenSubject } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 import { describeInputHistory, editMetaSchema } from "./sheet/input-history.neutral.ts";
