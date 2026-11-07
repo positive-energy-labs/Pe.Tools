@@ -270,7 +270,7 @@ test("trusted Pod transports complete evidence and opens fingerprint-bound curre
   }
 }, 30_000);
 
-test("undecodable Pod Work is deleted and both feeds publish absence", async () => {
+test("undecodable Pod Work refuses both feeds and preserves its stored bytes", async () => {
   const f = await setup({ version: 1, schemaVersion: 1, revision: 7, doc: { oldAmount: 3 }, history: [] });
   try {
     const [row] = await f.routes.list();
@@ -279,11 +279,11 @@ test("undecodable Pod Work is deleted and both feeds publish absence", async () 
       acks = f.feed("work-acks");
     f.unblock();
     await vi.waitFor(() =>
-      expect(snapshot[0]).toMatchObject({ kind: "snapshot", value: null }),
+      expect(snapshot[0]).toMatchObject({ kind: "failure" }),
     );
-    await vi.waitFor(() => expect(acks[0]).toMatchObject({ kind: "snapshot", value: null }));
-    await expect(readFile(f.savedPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
-    expect(await f.workspace.read(f.key, f.key.route)).toBeNull();
+    await vi.waitFor(() => expect(acks[0]).toMatchObject({ kind: "failure" }));
+    expect(await readFile(f.savedPath, "utf8")).toBe(f.original);
+    await expect(f.workspace.read(f.key, f.key.route)).rejects.toMatchObject({code:"WorkUnreadable",key:f.key});
   } finally {
     await f.close();
   }
@@ -470,12 +470,15 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
   }
 }, 60_000);
 
-test("undecodable Pod Work is absent on direct reads and removed from disk", async () => {
+test("corrupt stored Work refuses direct reads and the file remains byte-for-byte inspectable", async () => {
   const f = await setup({ version: 1, schemaVersion: 1, revision: 7, doc: { oldAmount: 3 }, history: [] });
   try {
     const [row] = await f.routes.list();
     await f.routes.trust(row!.key, f.artifact.fingerprint, true);
-    expect(await f.workspace.read(f.key, f.key.route)).toBeNull();
-    await expect(readFile(f.savedPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(f.workspace.read(f.key, f.key.route)).rejects.toMatchObject({code:"WorkUnreadable",key:f.key});
+    expect(await readFile(f.savedPath, "utf8")).toBe(f.original);
+    const corrupt="{not JSON";await writeFile(f.savedPath,corrupt);
+    await expect(f.workspace.read(f.key, f.key.route)).rejects.toMatchObject({code:"WorkUnreadable",key:workKey(f.key)});
+    expect(await readFile(f.savedPath, "utf8")).toBe(corrupt);
   } finally { await f.close(); }
 }, 30_000);

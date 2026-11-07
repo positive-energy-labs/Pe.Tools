@@ -84,7 +84,16 @@ async function fixture(capture = false) {
     },
   });
   const inputs = await settle(
-    HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live", captureStore: capture ? await settle(openRecordingWriter(join(dir, "recording"), identity, bounds)) : undefined }))),
+    HostInputContext.pipe(
+      Effect.provide(
+        HostInputContext.layer({
+          kind: "live",
+          captureStore: capture
+            ? await settle(openRecordingWriter(join(dir, "recording"), identity, bounds))
+            : undefined,
+        }),
+      ),
+    ),
   );
   const web = HttpRouter.toWebHandler(
     readInputRoutes(inputs, {
@@ -121,7 +130,10 @@ async function fixture(capture = false) {
           resolve: (input) =>
             Effect.succeed({
               ...target,
-              openDocumentLifetime: input.key === "ducts.tables" ? { kind: "session-only" as const } : target.openDocumentLifetime,
+              openDocumentLifetime:
+                input.key === "ducts.tables"
+                  ? { kind: "session-only" as const }
+                  : target.openDocumentLifetime,
               operationKey: input.key,
               normalizedInput: canonicalJson(JSON.parse(JSON.stringify(input.input))),
               freshnessGeneration: "g1",
@@ -138,19 +150,24 @@ async function fixture(capture = false) {
               }
               return {
                 value: Schema.decodeUnknownSync(Schema.Json)(
-                  input.key === "revit.catalog.field-options" ? unavailableFieldOptions : input.key === "ducts.tables"
-                    ? {
-                        folder: "captured",
-                        tables: {},
-                        missing: (input.input as { ids: string[] }).ids,
-                        unsupported: {},
-                      }
-                    : input.key === "ducts.snapshot.roster"
-                      ? roster
-                      : snapshot,
+                  input.key === "revit.catalog.field-options"
+                    ? unavailableFieldOptions
+                    : input.key === "ducts.tables"
+                      ? {
+                          folder: "captured",
+                          tables: {},
+                          missing: (input.input as { ids: string[] }).ids,
+                          unsupported: {},
+                        }
+                      : input.key === "ducts.snapshot.roster"
+                        ? roster
+                        : snapshot,
                 ),
                 nativeRequestId: `native-${nativeCalls}`,
-                actualTarget: input.key === "ducts.tables" ? { ...target, openDocumentLifetime: { kind: "session-only" as const } } : target,
+                actualTarget:
+                  input.key === "ducts.tables"
+                    ? { ...target, openDocumentLifetime: { kind: "session-only" as const } }
+                    : target,
                 freshness: { freshnessGeneration: "g1" },
                 cost: {},
                 outcome: "committed" as const,
@@ -175,7 +192,19 @@ async function fixture(capture = false) {
       web.handler(
         new Request("http://host/pe/fans/sheet", {
           method: "POST",
-          headers: at ? { "x-pe-history-point": at, "x-pe-history-page": encodeURIComponent(JSON.stringify({ instance: "fans.sheet", route: "fans", page: {}, href: "/fans" })) } : {},
+          headers: at
+            ? {
+                "x-pe-history-point": at,
+                "x-pe-history-page": encodeURIComponent(
+                  JSON.stringify({
+                    instance: "fans.sheet",
+                    route: "fans",
+                    page: {},
+                    href: "/fans",
+                  }),
+                ),
+              }
+            : {},
           body: JSON.stringify({
             subscription,
             generation,
@@ -191,18 +220,40 @@ async function fixture(capture = false) {
   };
   return {
     dir,
-    probe: (body:unknown) => withInvocationContext({caller:who},()=>web.handler(new Request(new URL(peRouteUrl("reads.value",{}),"http://host"),{
-      method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body),
-    }),Context.make(RequestIdentity,admittedRequestIdentity(who,scope)))),
+    probe: (body: unknown) =>
+      withInvocationContext({ caller: who }, () =>
+        web.handler(
+          new Request(new URL(peRouteUrl("reads.value", {}), "http://host"), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+          Context.make(RequestIdentity, admittedRequestIdentity(who, scope)),
+        ),
+      ),
     send,
     history: async (query = "", body?: unknown) => {
-      const response = await withInvocationContext({ caller: who }, () => web.handler(new Request(`http://host/pe/history${query}`, body === undefined ? {} : {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
-      }), Context.make(RequestIdentity, admittedRequestIdentity(who, scope))));
+      const response = await withInvocationContext({ caller: who }, () =>
+        web.handler(
+          new Request(
+            `http://host/pe/history${query}`,
+            body === undefined
+              ? {}
+              : {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify(body),
+                },
+          ),
+          Context.make(RequestIdentity, admittedRequestIdentity(who, scope)),
+        ),
+      );
       expect(response.status, await response.clone().text()).toBe(200);
       return response.json();
     },
-    get nativeCalls() { return nativeCalls; },
+    get nativeCalls() {
+      return nativeCalls;
+    },
     get workspace() {
       return workspace;
     },
@@ -225,27 +276,57 @@ async function fixture(capture = false) {
   };
 }
 
-test("HTTP document targets normalize once before generated native handles and preserve the mark fence",async()=>{
-  const tables=nativeRead("ducts.tables");
-  const definition=read("test.document-target",{input:familiesViewArgs,output:tables.output,
-    run:(ctx,args)=>ctx.read(tables,{target:{kind:"document" as const,ref:args.target},request:{ids:[]}})});
-  registeredReads.reads.set(definition.name,definition);
-  const f=await fixture();
+test("HTTP document targets normalize once before generated native handles and preserve the mark fence", async () => {
+  const tables = nativeRead("ducts.tables");
+  const definition = read("test.document-target", {
+    input: familiesViewArgs,
+    output: tables.output,
+    run: (ctx, args) =>
+      ctx.read(tables, {
+        target: { kind: "document" as const, ref: args.target },
+        request: { ids: [] },
+      }),
+  });
+  const unregister = registeredReads.register({ document: definition });
+  const f = await fixture();
   try {
-    for(const target of [ref,{kind:"document",ref}]) {
-      const response=await f.probe({read:definition.name,subscription:"document-handle",generation:1,args:{target}});
-      const body=await response.json() as {state:string;value:{trace:{name:string;args:unknown}[]}};
-      expect(response.status).toBe(200);expect(body.state).toBe("current");
-      expect(body.value.trace).toEqual(expect.arrayContaining([
-        expect.objectContaining({name:"native",args:expect.objectContaining({target:{kind:"document",ref}})}),
-        expect.objectContaining({name:"document-mark",args:ref}),
-      ]));
+    for (const target of [ref, { kind: "document", ref }]) {
+      const response = await f.probe({
+        read: definition.name,
+        subscription: "document-handle",
+        generation: 1,
+        args: { target },
+      });
+      const body = (await response.json()) as {
+        state: string;
+        value: { trace: { name: string; args: unknown }[] };
+      };
+      expect(response.status).toBe(200);
+      expect(body.state).toBe("current");
+      expect(body.value.trace).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: "native",
+            args: expect.objectContaining({ target: { kind: "document", ref } }),
+          }),
+          expect.objectContaining({ name: "document-mark", args: ref }),
+        ]),
+      );
     }
-    const calls=f.nativeCalls;
-    const denied=await f.probe({read:definition.name,subscription:"wrong-target",generation:1,args:{target:{kind:"host"}}});
-    expect(denied.status).not.toBe(200);expect(f.nativeCalls).toBe(calls);
-    expect(()=>nativeRead("ducts.apply")).toThrow("Read/Read");
-  } finally {registeredReads.reads.delete(definition.name);await f.close();}
+    const calls = f.nativeCalls;
+    const denied = await f.probe({
+      read: definition.name,
+      subscription: "wrong-target",
+      generation: 1,
+      args: { target: { kind: "host" } },
+    });
+    expect(denied.status).not.toBe(200);
+    expect(f.nativeCalls).toBe(calls);
+    expect(() => nativeRead("ducts.apply")).toThrow("Read/Read");
+  } finally {
+    unregister();
+    await f.close();
+  }
 });
 
 test("History reopens the host's exact publication after newer Values, with no live fill", async () => {
@@ -255,8 +336,12 @@ test("History reopens the host's exact publication after newer Values, with no l
     expect(first.state, first.reason).toBe("current");
     const listed = await f.history(`?document=${encodeURIComponent(path)}`);
     expect(listed.points, listed.problem).toHaveLength(1);
-    expect((await f.history(`?document=${encodeURIComponent(path.toUpperCase())}`)).points).toHaveLength(1);
-    const point = historyPointSchema.parse(await f.history("", { kind: "captured", document: path }));
+    expect(
+      (await f.history(`?document=${encodeURIComponent(path.toUpperCase())}`)).points,
+    ).toHaveLength(1);
+    const point = historyPointSchema.parse(
+      await f.history("", { kind: "captured", document: path }),
+    );
     const fan = first.value!.data.fans.rows.find((row) => row.mark === "MUAS-1")!;
     const next = await f.send(1, [`${fan.uniqueId}@${fan.portIndex}`]);
     expect(next.state, next.reason).toBe("current");
@@ -270,26 +355,50 @@ test("History reopens the host's exact publication after newer Values, with no l
     const reader = await settle(openRecordingReader(join(f.dir, "recording"), identity, bounds));
     const cold = new History(reader, settle);
     expect(await cold.publication(point.id, "fans.sheet", "fans.sheet")).toEqual(first);
-    await expect(cold.publication(point.id, "never-published", "fans.sheet")).rejects.toThrow("never published");
-    await expect(cold.publication(point.id, "fans.sheet", "fans.sheet", next.key)).rejects.toThrow("never published");
+    await expect(cold.publication(point.id, "never-published", "fans.sheet")).rejects.toThrow(
+      "never published",
+    );
+    await expect(cold.publication(point.id, "fans.sheet", "fans.sheet", next.key)).rejects.toThrow(
+      "never published",
+    );
     expect(() => cold.capture(path)).toThrow();
     f.changed();
-    const stale = historyPointSchema.parse(await f.history("", { kind: "captured", document: path }));
+    const stale = historyPointSchema.parse(
+      await f.history("", { kind: "captured", document: path }),
+    );
     expect(stale.history.publications[0]!.state).toBe("refresh-needed");
     expect((await cold.publication(point.id, "fans.sheet", "fans.sheet")) as object).toEqual(first);
     const publications = new Publications();
-    let revision = 0, committed = false;
+    let revision = 0,
+      committed = false;
     const input = leaf("input", z.null(), z.number());
-    const definition = read("persist-fence", { input: z.null(), output: z.number(), run: (ctx) => ctx.read(input, null) });
-    const port = { evaluation: "inputs", origin: {}, take: async () => 1, revision: () => revision };
+    const definition = read("persist-fence", {
+      input: z.null(),
+      output: z.number(),
+      run: (ctx) => ctx.read(input, null),
+    });
+    const port = {
+      evaluation: "inputs",
+      origin: {},
+      take: async () => 1,
+      revision: () => revision,
+    };
     const initial = await publications.publish("slot", 0, definition, null, port);
     const invalidated = await publications.publish("slot", 1, definition, null, port, async () => {
       revision++;
-      return () => { committed = true; };
+      return () => {
+        committed = true;
+      };
     });
-    expect(invalidated).toMatchObject({ state: "refresh-needed", version: initial.version, value: { evaluation: initial.value!.evaluation } });
+    expect(invalidated).toMatchObject({
+      state: "refresh-needed",
+      version: initial.version,
+      value: { evaluation: initial.value!.evaluation },
+    });
     expect(committed).toBe(false);
-  } finally { await f.close(); }
+  } finally {
+    await f.close();
+  }
 }, 60_000);
 
 test("F1 MUAS-1 -> FC-23 -> MUAS-1 never publishes an old generation, including equal args", async () => {
@@ -386,7 +495,7 @@ test("F2 Work, same-version firm criteria and document mark changes during a mul
       await f.close();
     }
   }
-});
+}, 60_000);
 
 test("F3 three native batches retain the middle refusal on offline replay; no live bridge is constructed", async () => {
   const dir = await mkdtemp(join(tmpdir(), "host-read-refused-"));
@@ -555,5 +664,3 @@ test("F3 three native batches retain the middle refusal on offline replay; no li
     await rm(dir, { recursive: true, force: true });
   }
 });
-
-

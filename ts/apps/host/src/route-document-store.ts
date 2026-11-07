@@ -1,12 +1,5 @@
 import { createHash } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
@@ -23,24 +16,31 @@ const filename = (targetKey: string, route: string) =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** Indexed Work carries its identity; obsolete record formats are discarded on read. */
+/** Indexed Work carries its identity; unreadable records remain available for inspection. */
 export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
   mkdirSync(dir, { recursive: true });
   return {
     getState: async ({ targetKey, route }) => {
       const path = join(dir, filename(targetKey, route));
       if (!existsSync(path)) return null;
+      const unreadable = (reason: string) =>
+        Object.assign(Error(`Stored Work '${targetKey}' (${route}) cannot be read: ${reason}`), {
+          code: "WorkUnreadable",
+          key: targetKey,
+          reason,
+        });
       let raw: unknown;
-      try { raw = JSON.parse(readFileSync(path, "utf8")); }
-      catch (error) {
-        if (error instanceof SyntaxError) { rmSync(path, { force: true }); return null; }
+      try {
+        raw = JSON.parse(readFileSync(path, "utf8"));
+      } catch (error) {
+        if (error instanceof SyntaxError) throw unreadable(error.message);
         throw error;
       }
       const parsed = recordSchema.safeParse(raw);
-      if (!parsed.success) { rmSync(path, { force: true }); return null; }
+      if (!parsed.success) throw unreadable(parsed.error.message);
       const record = parsed.data;
       if (record.targetKey !== targetKey || record.route !== route)
-        throw new Error("Stored Work identity does not match its address");
+        throw unreadable("Stored Work identity does not match its address");
       return record.value;
     },
     setState: async ({ targetKey, route, value }) => {

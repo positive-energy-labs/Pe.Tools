@@ -1,5 +1,10 @@
 import { workRead } from "./inputs.ts";
-import { scheduleCatalog, scheduleRetained, scheduleSaved, scheduleReceipts } from "../builtin-read-handles.ts";
+import {
+  scheduleCatalog,
+  scheduleRetained,
+  scheduleSaved,
+  scheduleReceipts,
+} from "../builtin-read-handles.ts";
 
 import { scheduleGridRouteState, canonicalRouteInput } from "@pe/agent-contracts";
 import {
@@ -24,7 +29,9 @@ export const schedulesView = read("schedules.view", {
     const scope = args.workspaceId
       ? { binding: "workspace" as const, route: "schedules", target: null, work: args.workspaceId }
       : null;
-    const view = scope ? await ctx.read(workRead("schedules", scheduleGridRouteState.schema),scope) : null;
+    const view = scope
+      ? await ctx.read(workRead("schedules", scheduleGridRouteState.schema), scope)
+      : null;
     const work = scheduleGridRouteState.schema.parse(view?.doc ?? {});
     const retained = args.workspaceId
       ? await ctx.read(scheduleRetained, {

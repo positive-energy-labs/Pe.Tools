@@ -14,24 +14,33 @@ export const reads = {
       if (target.kind !== "document") throw Error("Choose a project document");
       await ctx.read(documentMark, target.ref);
       const key = { ...(await ctx.read(workScope, target.ref)), route: "rooms" };
-      const work = await ctx.read(workRead("rooms", roomsRouteState.schema),key);
-      const snapshot = (await ctx.read(nativeRead(view ? "rooms.snapshot" : "rooms.roster"), {
-        request: view ? {view} : {}, target,
-      })).body;
+      const work = await ctx.read(workRead("rooms", roomsRouteState.schema), key);
+      const snapshot = (
+        await ctx.read(nativeRead(view ? "rooms.snapshot" : "rooms.roster"), {
+          request: view ? { view } : {},
+          target,
+        })
+      ).body;
       let trace = null,
         traceError = null,
         plan = null,
         planError = null;
       if (view) {
         try {
-          trace = (await ctx.read(nativeRead("rooms.trace"), {request:{view},target:target})).body;
+          trace = (await ctx.read(nativeRead("rooms.trace"), { request: { view }, target: target }))
+            .body;
         } catch (error) {
           traceError = String(error);
         }
         try {
-          plan = planOf((await ctx.read(nativeRead("revit.context.view-image"), {
-            request:{target:{name:view},pixelSize:8000},target,
-          })).body);
+          plan = planOf(
+            (
+              await ctx.read(nativeRead("revit.context.view-image"), {
+                request: { target: { name: view }, pixelSize: 8000 },
+                target,
+              })
+            ).body,
+          );
         } catch (error) {
           planError = String(error);
         }

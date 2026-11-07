@@ -15,8 +15,8 @@ export const designLayers = read("ducts.design-layers", {
   }),
   async run(ctx, target) {
     const scope = await ctx.read(workScope, target);
-    const ducts = await ctx.read(workRead("ducts",ductsDocumentSchema),scope);
-    const fans = await ctx.read(workRead("fans",fansDocumentSchema),{...scope,route:"fans"});
+    const ducts = await ctx.read(workRead("ducts", ductsDocumentSchema), scope);
+    const fans = await ctx.read(workRead("fans", fansDocumentSchema), { ...scope, route: "fans" });
     return {
       ducts: ductsDocumentSchema.parse(ducts?.doc ?? {}),
       fans: fansDocumentSchema.parse(fans?.doc ?? {}),

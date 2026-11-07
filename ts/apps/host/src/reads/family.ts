@@ -14,8 +14,8 @@ export const reads = {
     async run(ctx, args) {
       const target = args.target;
       const key = await ctx.read(workBinding, { route: "family", target });
-      if(!key) throw Error("Family Work binding is unavailable");
-      const saved = await ctx.read(workRead("family", familyDraftSchema),key);
+      if (!key) throw Error("Family Work binding is unavailable");
+      const saved = await ctx.read(workRead("family", familyDraftSchema), key);
       const familyWork = familyDraftSchema.parse(saved?.doc ?? {});
       const loaded = args.member
         ? await ctx.read(podProfile, args.member)
@@ -27,7 +27,9 @@ export const reads = {
           ? familyWork.spec
           : null;
       const document =
-        args.member && !attached ? await ctx.read(familySpec, args.member) : { doc: null, error: null };
+        args.member && !attached
+          ? await ctx.read(familySpec, args.member)
+          : { doc: null, error: null };
       return {
         familyWork,
         handle: saved ? { key, revision: saved.revision } : null,
@@ -37,7 +39,7 @@ export const reads = {
           attached ??
           (args.member && document.doc ? { member: args.member, doc: document.doc } : null),
         specError: document.error,
-        pods: (await ctx.read(localRead("pod.list"),{})).pods,
+        pods: (await ctx.read(localRead("pod.list"), {})).pods,
       };
     },
   }),
