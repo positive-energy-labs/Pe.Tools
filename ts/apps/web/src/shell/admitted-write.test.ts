@@ -22,6 +22,7 @@ test("a sealed plan arms; an unsealed one never arms apply; a stale one disarms 
     held: null,
     stale: "changed since plan",
     sealed: false,
+    refusal: null,
   });
   expect(writeHeld("Heal", null).held).toBeNull();
 });

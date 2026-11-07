@@ -159,6 +159,10 @@ test("Plan keeps capture and review valid across watched publications and batche
    fireEvent.click(await screen.findByRole("button",{name:"None"},{timeout:20000}));
    fireEvent.click(await screen.findByRole("option",{name:/MUAS-1.*0 staged/}));
    await vi.waitFor(()=>{expect(trace.mounts.at(-1)?.owner()?.handle?.revision).toBe(1);expect(trace.mounts.at(-1)?.writeRefusal()).toBeNull();},{timeout:20000});
+   await act(async()=>{
+     const failure=await mount.draw("sheet-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{"14577391":{cfm:925}}},{label:"Stage MUAS-1 airflow"}));
+     if(failure) throw Error(failure.message);
+   });
    fireEvent.click(await screen.findByRole("button",{name:"Refresh Fans"}));
    await vi.waitFor(()=>expect(trace.mounts.at(-1)?.writeRefusal()).toBeNull(),{timeout:20000});
    for(mode of ["recording","batched"] as const){
