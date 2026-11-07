@@ -420,7 +420,7 @@ test.each(["admitted loader", "direct mount"])(
     const f = await fixture();
     f.mount.close();
     let held: import("../shell/admitted-mount").AdmittedMount | undefined;
-    let target: import("../shell/admitted-place").PlaceInput["target"];
+    let target: import("../shell/admitted-place").PlaceInput["target"] = null;
     // Cached production admission has the same async await boundary as admitFamilies.
     const load = async () => {
       const result = await loadBuiltinRoute("families", builtinRouteStamp("families"));
@@ -513,7 +513,7 @@ test.each(["admitted loader", "direct mount"])(
       expect(original.page.select([{ kind: "scope", id: '["families","draft"]' }] as never).kind).toBe(
         "accepted",
       );
-      original.page.pose({ readId: "00000000-0000-4000-8000-000000000001", focus: cell }, "named");
+      original.page.pose({ readId: "00000000-0000-4000-8000-000000000001", focus: cell } as never, "named");
       original.invoke("read", { filter, readId: "00000000-0000-4000-8000-000000000001" });
       f.publish({ kind: "complete", revision: 1, value: f.observation });
       await settled(original.invoke("edit", edit, original.workBasis()!));
