@@ -33,6 +33,7 @@ export interface ScheduleGridState {
   /** The Work revision the slice was read at; `null` before any Work exists. */
   revision: number | null;
   hydrated: boolean;
+  readPrompt?: string;
   apply: (patches: RouteStatePatch[], expectedRevision?: number) => Promise<Refusal | null>;
   snapshot: ScheduleGridSnapshot | null;
   /** The last push's refused cells, by key; each draws on its own cell. */
@@ -110,6 +111,7 @@ export function ScheduleGridWorkspace({
     at,
     revision,
     hydrated,
+    readPrompt,
     apply,
     snapshot,
     refused,
@@ -323,9 +325,9 @@ export function ScheduleGridWorkspace({
                 {hydrated ? (
                   <EmptyState
                     story="scope"
-                    exit="Choose schedule in the header, then Read schedule"
+                    exit={readPrompt ?? "Choose schedule in the header, then Read schedule"}
                   >
-                    no schedule open
+                    schedule not read
                   </EmptyState>
                 ) : (
                   <OutcomeLine kind="busy" label="connecting to the workbench" />

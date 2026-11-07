@@ -292,10 +292,10 @@ export async function setup() {
     work: reading.workspaceId,
   };
   const client = () => createPeClient(server.base, contextFetch);
-  const view = () =>
+  const view = (workId = scope.work) =>
     client().call("work.get", {
       params: { route: "schedules" },
-      query: { work: scope.work },
+      query: { work: workId },
     }) as Promise<{
       revision: number;
       doc: { basis?: { captureId: string }; cells: Record<string, any> };
