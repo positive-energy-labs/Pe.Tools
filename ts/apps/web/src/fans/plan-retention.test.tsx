@@ -76,8 +76,8 @@ test.each([false, true])("P1: rendered Fans plan keeps bounded dependencies (ove
     f.fans.work()!.revision,
   );
   await vi.waitFor(() => expect(f.fans.work()!.value.writeIntent).toBeTruthy());
-  f.fans.refresh("sheetSnapshot");
-  for (const id of ["sheet", "sheetSnapshot", "ductsWork"])
+  f.fans.refresh("value");
+  for (const id of ["value", "owner:ducts"])
     await vi.waitFor(() => {
       const snapshot = f.fans.readingStatus(id).snapshot;
       if (snapshot.status === "failed") throw Error(`${id}: ${snapshot.reason}`);
@@ -158,7 +158,7 @@ test.each([false, true])("P1: rendered Fans plan keeps bounded dependencies (ove
   const moved = structuredClone(capture);
   moved.document.title = "changed model evidence";
   act(() => {
-    f.fans.refresh("sheetSnapshot");
+    f.fans.refresh("value");
     snapshot({ kind: "complete", value: moved, revision: 2 });
   });
   expect(f.fans.review("losses")).toMatchObject({ stale: true, rows: [], cells: [] });

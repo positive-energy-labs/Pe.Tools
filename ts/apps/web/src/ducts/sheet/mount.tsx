@@ -153,7 +153,7 @@ function WriteScope({
         path={null}
         show={label}
         refusal={
-          !ctx.cells.basis
+          !ctx.cells.ready
             ? "Read Work before editing"
             : !offered?.success
               ? "Open a fan first"
@@ -301,7 +301,7 @@ function InputsContent({
             <StateCell
               {...cellFromDraft(friction, {
                 value: String(friction.edit?.value ?? DEFAULT_DESIGN_FRICTION_RATE),
-                cap: ctx.cells.basis ? "editable" : "locked",
+                cap: ctx.cells.ready ? "editable" : "locked",
                 capReason: "Read Work before editing",
               })}
               scale="row"
@@ -405,7 +405,7 @@ function InputsContent({
                     { key: "fan", label: "Fan" },
                     { key: "passive", label: "Passive" },
                   ]}
-                  refusal={ctx.cells.basis ? null : "Read Work before editing"}
+                  refusal={ctx.cells.ready ? null : "Read the current Value and Work before editing"}
                   pick={(role) =>
                     void write(
                       cellPatches(["roles"], key, cell, { kind: "set", rung: { value: { role } } }),
@@ -498,7 +498,7 @@ function PictureContent({
   const doc = target?.kind === "document" ? target.ref : null;
   const workDoc = sheetWork(ctx);
   const select = (selected: string) =>
-    ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
+    ctx.selection.set(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
   const setPage = picturePageMove<PicturePage<string, "schematic">>(
     (patch, intent) => ctx.page.pose(patch, intent),
     select,
@@ -575,7 +575,7 @@ function LedgerContent({
     snapshot,
   );
   const select = (selected: string) =>
-    ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
+    ctx.selection.set(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
   const state = readingsOf(ctx).sheetView.value ?? EMPTY_SHEET_STATE;
   const closerOf = (blocker: import("./tiers").SheetBlocker, typed: number | null): Closer => {
     const closer = describeCloser(blocker, typed, {
@@ -607,8 +607,7 @@ function LedgerContent({
       tableTitles: sheet?.inputs?.tableTitles ?? {},
     });
     const labelled = (verb: string, action: Closer["action"]) =>
-      action && !["drop", "cfm", "unitCfm"].includes(action.kind)
-        ? `${verb} · from /ducts` : verb;
+      action ? ctx.cells.label(editsFor([{ ...closer, action }]), verb) : verb;
     return {
       ...closer,
       verb: labelled(closer.verb, closer.action),
@@ -723,7 +722,7 @@ function SheetFrame({
   const go = (id: number) =>
     jump?.current
       ? jump.current(elementKey(id))
-      : ctx.page.select([{ kind: "focus", id: localId("ducts-focus", String(id)) }]);
+      : ctx.selection.set([{ kind: "focus", id: localId("ducts-focus", String(id)) }]);
   return (
     <AttentionRoot doc={attentionDoc}>
       {"kind" in snapshot ? null : (

@@ -82,3 +82,11 @@ export const fansReadResponse = z.object({
     })
     .nullable(),
 });
+
+/** Both clients reference this host read's contract; no browser composition adapter owns it. */
+export const fansSheetCapability = {
+  key: "fans.sheet" as const,
+  input: fansReadArgs.omit({ target: true }),
+  output: fansReadResponse,
+  axes: { subject: "Document", touches: ["Metadata"], effect: "Read", cost: "Cheap", cardinality: "One" } as const,
+};

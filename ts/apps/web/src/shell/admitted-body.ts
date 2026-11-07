@@ -26,6 +26,18 @@ export function createAdmittedBody<W extends Record<string, unknown>>(context: M
         workBasis: basis,
         history,
         ownerHistory: historyOwner.public.ownerHistory,
+        writeControls: Object.fromEntries(
+          Object.entries(route.data.verbs)
+            .filter(([, verb]) => verb.kind === "command")
+            .map(([id]) => [
+              id,
+              {
+                apply: () => invocation.public.confirm(id),
+                cancel: () => invocation.public.cancelReview(id),
+                read: () => invocation.public.review(id),
+              },
+            ]),
+        ),
         cells: {
           clear: (id: string, key: unknown) => transitionCell.public.clearCell(id, key),
         },
@@ -49,7 +61,10 @@ export function createAdmittedBody<W extends Record<string, unknown>>(context: M
                 const verb = route.data.verbs[id];
                 if (verb?.kind === "work" && verb.target === undefined && !editBasis)
                   throw Error("Work edit requires its rendered accepted basis");
-                const target = verb?.kind === "work" && verb.target ? route.data.readings[verb.target] : undefined;
+                const target =
+                  verb?.kind === "work" && verb.target
+                    ? route.data.readings[verb.target]
+                    : undefined;
                 const handle = target?.kind === "work" ? ownerHandles[target.route] : undefined;
                 if (target && !handle) throw Error("Read the owning Work before editing");
                 return invoke(id, input, editBasis, handle);

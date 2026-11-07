@@ -187,7 +187,9 @@ export function createAdmittedWork(
     foreign?: { handle: import("@pe/agent-contracts").WorkHandle; reading: string },
   ): Promise<import("@pe/agent-contracts").RouteStateWriteResult> => {
     if (!scope || !door || !ready || !owner.current(invocation)) throw Error("Work unavailable");
-    const original = foreign ? { ...scope, key: foreign.handle.key, reading: foreign.reading, subject: null } : scope;
+    const original = foreign
+      ? { ...scope, key: foreign.handle.key, reading: foreign.reading, subject: null }
+      : scope;
     return new Promise((resolve) => {
       submitWork(original, request, invocation).subscribe(
         (outcome) => {

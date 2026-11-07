@@ -6,7 +6,7 @@ import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-k
 import type { BuiltinClosure } from "../../../../packages/agent-contracts/src/route-module.ts";
 import type { HostRouteModule } from "../../../../packages/agent-contracts/src/host-route-admission.ts";
 import { ductsHostModule } from "../ducts/neutral.ts";
-import { fansHostModule } from "../fans/route.ts";
+import { host as fansHostModule } from "../fans/host.generated.ts";
 import { familiesHostModule } from "../families/neutral.ts";
 import { podsHostModule } from "../pods/neutral.ts";
 import podsGenerated from "../pods/source-closure.generated.json" with { type: "json" };

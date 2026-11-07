@@ -1,4 +1,5 @@
 import { registerHooks } from "node:module";
+import ts from "typescript";
 // Receipts describe production resolution even when a dev/test launcher verifies them.
 process.env.NODE_ENV = "production";
 // Styles have no bearing on a metadata projection. No component is rendered.
@@ -76,9 +77,79 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const builtinOptions = [];
 for (const key of admittedBuiltinKeys) {
   const files = await readdir(new URL(`../src/${key}/`, import.meta.url));
-  const kernel = files.includes("route.ts") ? "route.ts" : files.includes("kernel.ts") ? "kernel.ts" : "kernel.tsx";
+  const kernel = files.includes("route.ts")
+    ? "route.ts"
+    : files.includes("kernel.ts")
+      ? "kernel.ts"
+      : "kernel.tsx";
   const entry = fileURLToPath(new URL(`../src/${key}/${kernel}`, import.meta.url));
   const { module } = await jiti.import<{ module: { data: unknown } }>(entry);
+  if (kernel === "route.ts") {
+    // Preserve the actual imported Work export, including refinements and reconciliation.
+    // JSON Schema cannot carry that authority; a second handwritten host declaration would drift.
+    const code = ts.createSourceFile(
+      entry,
+      await readFile(entry, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    let workName: string | undefined;
+    const visit = (node: ts.Node) => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "route"
+      ) {
+        const spec = node.arguments[0];
+        const edits =
+          spec &&
+          ts.isObjectLiteralExpression(spec) &&
+          spec.properties.find(
+            (property) =>
+              ts.isPropertyAssignment(property) && property.name.getText(code) === "edits",
+          );
+        const work =
+          edits &&
+          ts.isPropertyAssignment(edits) &&
+          ts.isObjectLiteralExpression(edits.initializer) &&
+          edits.initializer.properties.find(
+            (property) =>
+              ts.isPropertyAssignment(property) && property.name.getText(code) === "work",
+          );
+        if (work && ts.isPropertyAssignment(work) && ts.isIdentifier(work.initializer))
+          workName = work.initializer.text;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(code);
+    const imports = code.statements.filter(ts.isImportDeclaration).flatMap((declaration) => {
+      const names = declaration.importClause?.namedBindings;
+      return names && ts.isNamedImports(names)
+        ? names.elements.map((name) => ({
+            local: name.name.text,
+            imported: name.propertyName?.text ?? name.name.text,
+            from: declaration.moduleSpecifier.getText(code),
+          }))
+        : [];
+    });
+    const binding = imports.find((binding) => binding.local === workName);
+    if (!binding)
+      throw Error(`${entry}: typed route Work must reference an imported Work definition`);
+    const host = (
+      module as unknown as {
+        host: {
+          data: import("@pe/agent-contracts").RouteGraphJson;
+          schemas: Record<string, import("zod").z.ZodType>;
+        };
+      }
+    ).host;
+    const history = host.data.historyDetail && host.schemas[host.data.historyDetail];
+    const { z } = await import("zod");
+    await emit(
+      new URL(`../src/${key}/host.generated.ts`, import.meta.url),
+      `// Generated from route.ts by codegen:routes. Do not edit.\nimport { ${binding.imported} as work } from ${binding.from};\nimport { z } from "zod";\nimport { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type { HostRouteModule } from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with { type: "json" };\nconst data = RouteGraphJson.parse(closure.envelope.data);\nexport const host: HostRouteModule = { data, workState: work, schemas: { [data.work!.schema!]: work.schema, ${history ? `[data.historyDetail!]: z.fromJSONSchema(${JSON.stringify(z.toJSONSchema(history, { io: "input" }))})` : ""} }, bodies: {} };\n`,
+    );
+  }
   builtinOptions.push({
     root,
     identityRoot: fileURLToPath(new URL("../../../../", import.meta.url)),

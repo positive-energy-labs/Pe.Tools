@@ -125,6 +125,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
               value = result.envelope.doc;
               handle = { key: ack.key, revision: ack.revision };
               entryFor(handle.key).journal.accept(ack);
+              entryFor(handle.key).journal.observe({ revision: handle.revision, doc: value });
             } else {
               record.snapshot = unavailable(
                 state.kind === "failed" ? "Work feed failed" : "Work pending",

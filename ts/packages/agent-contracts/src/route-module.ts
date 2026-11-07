@@ -752,6 +752,7 @@ function sameLoadedBindings(actual: RouteBindings, loaded: RouteBindings): boole
         source.key === expected.key &&
         source.effects === expected.effects &&
         source.recovers === expected.recovers &&
+        source.provide === expected.provide &&
         canonicalRouteJson(source.dirties ?? []) === canonicalRouteJson(expected.dirties ?? [])
       );
     }) &&

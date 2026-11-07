@@ -6,7 +6,12 @@ import type { FansDrawContext } from "../fans/route.ts";
 import { createWitness } from "../fans/cutover.test-support.ts";
 
 const closes: (() => void)[] = [];
-afterEach(() => closes.splice(0).reverse().forEach((close) => close()));
+afterEach(() =>
+  closes
+    .splice(0)
+    .reverse()
+    .forEach((close) => close()),
+);
 
 // The owner revision and inverse belong to the mount, independent of the pane or client.
 test("a rendered foreign cell keeps its owner, label and undo, and refuses a concurrent edit", async () => {
@@ -28,12 +33,30 @@ test("a rendered foreign cell keeps its owner, label and undo, and refuses a con
   ]);
   expect(first).toBeNull();
   expect(late).toMatchObject({ code: "refused" });
-  await vi.waitFor(() => expect(f.owner.work()?.value).toHaveProperty(["assumptions", JOIN_KEY(pair), "edit", "value", "verdict"], "connect"));
+  await vi.waitFor(() =>
+    expect(f.owner.work()?.value).toHaveProperty(
+      ["assumptions", JOIN_KEY(pair), "edit", "value", "verdict"],
+      "connect",
+    ),
+  );
   expect(f.fans.work()?.revision).toBe(before);
-  await vi.waitFor(() => expect(draw().cells.history.entries).toEqual(expect.arrayContaining([expect.objectContaining({ label: "Accept join · from /ducts" })])));
+  await vi.waitFor(() =>
+    expect(draw().cells.history.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Accept join \u00b7 from /ducts" }),
+      ]),
+    ),
+  );
   expect(await draw().cells.history.undo()).toMatchObject({ ok: true });
   await vi.waitFor(() => expect(f.owner.work()?.value).toHaveProperty("assumptions", {}));
   expect(await draw().cells.history.redo()).toMatchObject({ ok: true });
-  await vi.waitFor(() => expect(f.owner.work()?.value).toHaveProperty(["assumptions", JOIN_KEY(pair), "edit", "value", "verdict"], "connect"));
-  expect(await cells.edit({ joins: [{ pair, verdict: "accept" }] })).toMatchObject({ code: "refused" });
+  await vi.waitFor(() =>
+    expect(f.owner.work()?.value).toHaveProperty(
+      ["assumptions", JOIN_KEY(pair), "edit", "value", "verdict"],
+      "connect",
+    ),
+  );
+  expect(await cells.edit({ joins: [{ pair, verdict: "accept" }] })).toMatchObject({
+    code: "refused",
+  });
 });

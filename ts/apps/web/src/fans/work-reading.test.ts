@@ -70,7 +70,11 @@ test("the host refuses cross-route patches and the declared Work reading observe
   const after = f.fans.readingStatus("owner:ducts").snapshot;
   expect(after.current && before.current && after.hash !== before.hash).toBe(true);
   expect(f.fans.work()?.revision).toBe(0);
-  // Only readings declaring ductsWork (sheet, and sheetSnapshot through it) re-read; nothing else.
-  const reread = new Set(["fans:fans.sheet"]);
-  expect(fanCalls()).toEqual(calls.map(([key, n]) => [key, reread.has(key) ? n + 1 : n]));
+  // The host provider republishes the sheet; the browser does not reacquire its ingredients.
+  expect(fanCalls()).toEqual(calls);
+  await vi.waitFor(() => expect(f.fans.readingStatus("value").snapshot).toMatchObject({
+    current: true, value: { value: { data: { ductsWork: {
+      rules: { elbow: { edit: { value: { table: "CD3-1" } } } },
+    } } } },
+  }));
 });

@@ -28,9 +28,14 @@ export function createFixtureWorkDoor(
   const initialize = (key: WorkKey) => {
     const id = workKey(key);
     if (stored.has(id)) return;
-    const provided = works && (Object.hasOwn(works, key.route) ? works[key.route] : key.binding === "workspace" ? works[key.work] : undefined);
-    if (works && provided === undefined)
-      throw Error(`Missing fixture Work: ${id}`);
+    const provided =
+      works &&
+      (Object.hasOwn(works, key.route)
+        ? works[key.route]
+        : key.binding === "workspace"
+          ? works[key.work]
+          : undefined);
+    if (works && provided === undefined) throw Error(`Missing fixture Work: ${id}`);
     stored.set(
       id,
       structuredClone({
@@ -42,7 +47,14 @@ export function createFixtureWorkDoor(
     );
   };
   const workspace = new RouteWorkspace({
-    registrations: [{ spec }, ...Object.entries(owners).filter(([, route]) => route !== spec.route).map(([reading, route]) => ({ spec: { route, title: route, description: "Fixture Work", schema: readings[reading]! } }))],
+    registrations: [
+      { spec },
+      ...Object.entries(owners)
+        .filter(([, route]) => route !== spec.route)
+        .map(([reading, route]) => ({
+          spec: { route, title: route, description: "Fixture Work", schema: readings[reading]! },
+        })),
+    ],
     store: {
       getState: async ({ targetKey }) => structuredClone(stored.get(targetKey)),
       setState: async ({ targetKey, value }) => {

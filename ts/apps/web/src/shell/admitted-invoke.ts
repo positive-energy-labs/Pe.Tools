@@ -265,7 +265,10 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
       const target = declaration.target;
       const reading = target === undefined ? undefined : route.data.readings[target];
       const handle = target === undefined ? undefined : Object.values(workHandles([target]))[0];
-      if (renderedOwner && canonicalEnvironmentInput(handle) !== canonicalEnvironmentInput(renderedOwner))
+      if (
+        renderedOwner &&
+        canonicalEnvironmentInput(handle) !== canonicalEnvironmentInput(renderedOwner)
+      )
         throw Error("Owning Work changed since this cell was drawn; read it again");
       if (target !== undefined && (reading?.kind !== "work" || !handle))
         throw Error("Owner Work unavailable");
@@ -580,7 +583,12 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     notify();
   };
   return {
-    invoke: (id: string, input: unknown, basis?: InvocationToken, renderedOwner?: import("@pe/agent-contracts").WorkHandle) => invoke(id, input, basis, undefined, renderedOwner),
+    invoke: (
+      id: string,
+      input: unknown,
+      basis?: InvocationToken,
+      renderedOwner?: import("@pe/agent-contracts").WorkHandle,
+    ) => invoke(id, input, basis, undefined, renderedOwner),
     place,
     workBasis,
     present,
