@@ -138,10 +138,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         if (frame.kind === "complete" || frame.kind === "part") {
           try {
             const packet = read.output.parse(frame.value);
+            const publication = freezePage(packet.value);
             const current = frame.kind === "complete" && frame.fresh !== false && packet.state === "current" &&
               !!packet.value && !packet.value.coverage.unknown.length && !packet.value.coverage.refused.length;
-            record.snapshot = current ? { status: "ready", current: true, value: freezePage(packet.value!.data), publication: freezePage(packet.value), hash: packet.value!.evaluation }
-              : unavailable(frame.reason ?? packet.reason ?? "Incomplete Value", packet.value?.data, freezePage(packet.value));
+            record.snapshot = current ? { status: "ready", current: true, value: publication!.data, publication, hash: packet.value!.evaluation }
+              : unavailable(frame.reason ?? packet.reason ?? "Incomplete Value", publication?.data, publication);
           } catch (error) { record.snapshot = unavailable(String(error), record.snapshot.value, record.snapshot.publication); }
         } else if (frame.kind !== "log") record.snapshot = unavailable(frame.kind === "failure" ? String(frame.error) : "Reading...", record.snapshot.value, record.snapshot.publication);
         notify();
