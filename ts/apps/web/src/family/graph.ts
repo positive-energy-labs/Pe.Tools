@@ -4,14 +4,18 @@ import {
   defineRouteGraph,
   familyDraftRouteState,
   routeStatePatchSchema,
+  focusSelectionSchema,
   type RouteGraph,
   type FamilyDraft,
 } from "@pe/agent-contracts";
-import { field } from "../../../../packages/agent-contracts/src/route-field";
+import { field, jsonCodec } from "../../../../packages/agent-contracts/src/route-field";
 import { workVerb } from "../shell/verbs";
 import { familyPageSchema, type FamilyPage } from "./page";
 export { familyPageSchema, FAMILY_MODEL_SCHEMA, type FamilyPage } from "./page";
-export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph<FamilyPage, FamilyDraft>({
+export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph<
+  FamilyPage,
+  FamilyDraft
+>({
   directory: {
     path: "/family",
     title: "Family",
@@ -45,16 +49,28 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph
     path: field(familyPageSchema.shape.path, {}),
     pane: field(familyPageSchema.shape.pane, {}),
     query: field(familyPageSchema.shape.query, {}),
-    sort: field(familyPageSchema.shape.sort, {}),
-    hidden: field(familyPageSchema.shape.hidden, {}),
+    sort: field(familyPageSchema.shape.sort, {}, jsonCodec(familyPageSchema.shape.sort)),
+    hidden: field(familyPageSchema.shape.hidden, {}, jsonCodec(familyPageSchema.shape.hidden)),
     overlay: field(familyPageSchema.shape.overlay, {}),
     drill: field(familyPageSchema.shape.drill, {}),
     inspector: field(familyPageSchema.shape.inspector, {}),
     doc: field(familyPageSchema.shape.doc, {}),
-    family: field(familyPageSchema.shape.family, {}),
+    family: field(z.enum(["current"]).default("current"), {}),
+    selected: {
+      schema: focusSelectionSchema,
+      codec: jsonCodec(focusSelectionSchema),
+      role: "selection",
+    },
   },
   cells: [{ segment: "cells", groupOf: (key) => [key], nouns: ["parameter"] }],
-  readings: {},
+  readings: {
+    profile: {},
+    spec: {},
+    pods: {},
+    receipts: {},
+    captureReceipt: {},
+    buildReceipt: {},
+  },
   verbs: {
     edit: workVerb(
       {
