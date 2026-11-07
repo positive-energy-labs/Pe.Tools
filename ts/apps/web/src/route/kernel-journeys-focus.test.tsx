@@ -119,7 +119,7 @@ import { writeHeld } from "../shell/admitted-chrome";
 import { PreviewAction, WriteAction } from "@pe/kit/lang/write-action";
 
 // Rule: refused human intent cannot authorize ancillary writes; review must name
-// each element and its numeric current evidence, and disclose computed write-back.
+// each element and its native stored setting, and disclose computed write-back.
 test("JZ Fans Plan integrity: inspect refused flow and computed losses without authorizing Apply", () => {
   const fanId = 8775469;
   const slots = {
@@ -141,7 +141,7 @@ test("JZ Fans Plan integrity: inspect refused flow and computed losses without a
     ], segments: [],
   };
   const writes: DuctsApply.Res.Response["writes"] = [
-    { id: 2, kind: "component", outcome: "planned", before: "ashrae-table", after: "specific-loss 0.0398 in-wg" },
+    { id: 2, kind: "component", outcome: "planned", before: "unset", after: "0.0398 in-wg", parameter: "Specific Loss" },
     { id: fanId, kind: "equipment-flow", outcome: "refused", before: null,
       reason: "neither the instance nor its type has 'PE_M_Fan_AirFlowDesign'" },
     ...Object.entries(slots).map(([key, after]) => ({ kind: "slot", key, before: null, after, outcome: "planned" })),
@@ -173,10 +173,10 @@ test("JZ Fans Plan integrity: inspect refused flow and computed losses without a
   expect.soft(document.body.textContent, "refusal names the human edit and its remedy").toMatch(/MUAS-1.*PE_M_Fan_AirFlowDesign[\s\S]*add the missing parameter/);
   expect.soft(screen.queryByText("Computed losses written back"), "derived losses have their own heading").not.toBeNull();
   expect.soft(screen.queryByText("Pe loss record"), "bookkeeping has its own heading").not.toBeNull();
-  expect.soft(document.body.textContent, "before carries a numeric value and table source").toContain("0.19 (ASHRAE CD9-1)");
+  expect.soft(document.body.textContent, "before is the native stored setting, not the snapshot coefficient").toContain("unset");
   const labels = review.cells.filter(cell => cell.key.startsWith("component:")).map(cell => cell.label);
   expect.soft(labels[0], "a size-only type names the damper and its level").toMatch(/damper.*Level 1/i);
-  expect.soft(document.body.textContent, "display text contains no raw element identity").not.toContain(String(fanId));
+  expect.soft(document.body.textContent, "write review exposes a searchable element identity").toContain(String(fanId));
   cleanup();
 
   // The shared review entry point must refuse too, even for older results with no planRefusal field.
@@ -221,6 +221,94 @@ afterEach(() => {
     .splice(0)
     .reverse()
     .forEach((close) => close());
+});
+
+// CB4-F01: replay the recorded MUAS walk through Work, Plan and the shared review DOM.
+// Native responses use the new DTO; they certify presentation, not a Revit read.
+test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unreadable holds Apply", async () => {
+  for (const unreadable of [false, true]) {
+    const capture = structuredClone(realMuas);
+    native.submit.mockImplementation(async () => {
+      const input = f.inputs.get("fans:ducts.plan-losses") as { work: unknown };
+      return ({
+      id: "native-before-plan", state: "succeeded",
+      result: {
+        previewOnly: true,
+        derivedRequest: {
+          components: [{ id: 14607308, inWg: 0.03980584344921083, source: "damper CD9-1" }],
+          equipmentFlows: [{ id: 14577391, cfm: 1000, source: "Work" }],
+        },
+        takenAt: "2026-11-07T19:06:18.171Z",
+        seal: {
+          caller: { kind: "human", via: "local" }, requestHash: "sealed", work: { handle: input.work },
+          documentMark: { session: "fixture", openId: "fans", observedSince: null, changedAt: null },
+          incarnation: {}, dependencies: "exact",
+        },
+        value: {
+          previewOnly: true,
+          writes: [{
+            id: 14607308, kind: "component", outcome: unreadable ? "refused" : "planned",
+            elementLabel: 'Mechanical Damper 10"', uniqueId: "cd545b04-afd3-4993-836f-9b3d8116003a-00dee3cc",
+            parameter: "Specific Loss", scope: "instance",
+            before: unreadable ? null : "unset", after: unreadable ? null : "0.0398 in-wg",
+            reason: unreadable ? "Revit refused the read: element is inaccessible" : null,
+            changes: unreadable ? null : [
+              { parameter: "Loss Method", before: "ashrae-table", after: "specific-loss" },
+              { parameter: "Specific Loss", before: "unset", after: "0.0398 in-wg" },
+            ],
+            reportedPressureDropInWg: unreadable ? null : 0.025,
+          }, {
+            id: 14577391, kind: "equipment-flow", outcome: "planned",
+            elementLabel: "MUAS-1", uniqueId: "78fb66ed-41aa-47c4-907e-6ccf601ad7b3-00de62f1",
+            parameter: "PE_M_Fan_AirFlowDesign", scope: "instance",
+            before: "880 cfm", after: "1000 cfm",
+          }],
+          counts: { planned: unreadable ? 1 : 2, refused: unreadable ? 1 : 0, written: 0, unchanged: 0 },
+          storeRevision: 0, systemsAfter: null,
+        },
+      },
+    }); });
+    const f = await createWitness(closes, new Map(), {
+      "ducts.sheet-snapshot": { kind: "use", open(_ctx, deliver) {
+        deliver({ kind: "complete", value: capture, revision: 1 });
+      } },
+    });
+    await vi.waitFor(() => expect(f.fans.work()).not.toBeNull());
+    await f.ws.apply(f.fans.workBasis()!.token.scope.identity.work!, "fans", "human", [
+      { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
+      { path: ["equipmentFlows", "14577391", "edit"], value: { value: { cfm: 1000, source: "Work" } } },
+    ], f.fans.work()!.revision);
+    await vi.waitFor(() => expect(f.fans.work()!.value.equipmentFlows["14577391"]?.edit?.value.cfm).toBe(1000));
+    f.fans.refresh("value");
+    for (const id of ["value", "owner:ducts"])
+      await vi.waitFor(() => expect(f.fans.readingStatus(id).snapshot).toMatchObject({ current: true }));
+    function WriteReview() {
+      const [, changed] = useReducer(n => n + 1, 0);
+      useEffect(() => f.fans.subscribe(changed), []);
+      return <TypedWrite mount={f.typed} id="losses" />;
+    }
+    render(<WriteReview />);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "plan Write to Revit" })));
+    await waitFor(() => expect(f.fans.review("losses")?.cells?.length).toBeGreaterThan(0));
+    const reviewTrigger = screen.getByRole("button", { name: /Write to Revit.*planned/ });
+    if (reviewTrigger.getAttribute("aria-expanded") !== "true")
+      await act(async () => fireEvent.click(reviewTrigger));
+    const rows = [...document.querySelectorAll("[data-write-cell]")].map(row => row.textContent!);
+    if (unreadable) {
+      expect.soft(rows.some(row => row.includes('Mechanical Damper 10"') && row.includes("14607308") && row.includes("Specific Loss") && row.includes("element is inaccessible"))).toBe(true);
+      expect.soft(screen.queryByRole("button", { name: "Write to Revit" }), "unreadable native target holds the entire intent").toBeNull();
+    } else {
+      for (const words of [
+        ['Mechanical Damper 10"', "14607308", "Loss Method", "ASHRAE table", "Specific Loss"],
+        ['Mechanical Damper 10"', "14607308", "Specific Loss", "unset", "0.0398 in-wg", "reported effective pressure", "0.025 in-wg"],
+        ["MUAS-1", "14577391", "PE_M_Fan_AirFlowDesign", "instance", "880 cfm", "1000 cfm"],
+      ]) expect.soft(rows.some(row => words.every(word => row.includes(word))), words.join(" / ")).toBe(true);
+      expect.soft(rows).toHaveLength(3);
+      expect.soft(screen.getByRole("button", { name: "Write to Revit" }).hasAttribute("disabled")).toBe(false);
+    }
+    cleanup();
+    closes.splice(0).reverse().forEach(close => close());
+  }
 });
 
 test.each([false, true])(
