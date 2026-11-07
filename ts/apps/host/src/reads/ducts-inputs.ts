@@ -18,7 +18,7 @@ import type { WorkReadContext } from "@pe/runtime";
 import { catalogReading, firmReading } from "../ducts-files.ts";
 import type { InputConsumption } from "../input-occurrence.ts";
 import type { WorkInputRunner } from "../work-inputs.ts";
-import { leaf, read, RefusedPartition, type InputPort } from "./evaluator.ts";
+import { leaf, read, RefusedPartition, type InputPort, workScope, workValue } from "./evaluator.ts";
 
 export const documentMark = {
   ...leaf(
@@ -70,10 +70,6 @@ export const native = read("ducts.native", {
     return ctx.read(nativeInput, { ...args, role: args.role ?? "acquire" });
   },
 });
-export const workValue = z
-  .object({ doc: z.unknown(), revision: z.number() })
-  .passthrough()
-  .nullable();
 
 export interface DuctsReadSources {
   inputs?: { consumption: InputConsumption; run: WorkInputRunner; work: WorkReadContext };
@@ -89,7 +85,7 @@ export interface DuctsReadSources {
     role?: "acquire" | "validate" | "join" | "beyond",
   ) => Promise<Response>;
 }
-export const workScope = leaf("work-scope", documentRefSchema, workKeySchema, false);
+
 export const designLayers = read("ducts.design-layers", {
   input: documentRefSchema,
   output: z.object({

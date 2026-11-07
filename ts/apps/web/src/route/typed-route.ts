@@ -57,9 +57,10 @@ export { subjectSchema } from "@pe/agent-contracts";
 type ResultCommand = {
   [K in keyof typeof commands]: (typeof commands)[K] extends { result: z.ZodType } ? K : never;
 }[keyof typeof commands];
-export const commandContract = <K extends ResultCommand & keyof typeof commandCatalogAxes>(
-  key: K,
-) => ({ input: commands[key].input, output: commands[key].result, axes: commandCatalogAxes[key] });
+export const commandContract = <K extends keyof typeof commands & keyof typeof commandCatalogAxes>(key:K) => {
+  const declaration=commands[key];
+  return {input:declaration.input,output:"result" in declaration?declaration.result:z.unknown(),axes:commandCatalogAxes[key]};
+};
 type WriteCommand = {
   [K in keyof typeof commands]: (typeof commands)[K] extends { writeBoundary: { phase: "apply" } }
     ? K
@@ -78,9 +79,16 @@ export const command = <K extends WriteCommand & keyof typeof commandCatalogAxes
 };
 type SessionCommandKey = { [K in keyof typeof commandCatalogAxes]:
   (typeof commandCatalogAxes)[K]["effect"] extends "SessionWrite" ? K : never }[keyof typeof commandCatalogAxes];
-export const sessionCommand = <K extends SessionCommandKey & ResultCommand>(key: K) => {
+export const sessionCommand = <K extends SessionCommandKey & keyof typeof commands>(key: K) => {
   if(commandCatalogAxes[key].effect !== "SessionWrite") throw Error("Session commands require a SessionWrite contract");
   return {kind:"session" as const,entry:key,contract:commandContract(key)};
+};
+type DirectCommandKey = { [K in keyof typeof commandCatalogAxes]:
+  (typeof commandCatalogAxes)[K]["effect"] extends "Read"|"SessionWrite" ? K : never }[keyof typeof commandCatalogAxes];
+export const catalogAction = <K extends DirectCommandKey & keyof typeof commands>(key:K) => {
+  if(!["Read","SessionWrite"].includes(commandCatalogAxes[key].effect) || "writeBoundary" in commands[key])
+    throw Error("Direct catalog actions cannot cross a model write boundary");
+  return {kind:"catalog" as const,entry:key,contract:commandContract(key)};
 };
 const directAction = <R extends z.ZodType>(kind:"query"|"rpc",entry:import("@pe/agent-contracts").ReadEntry<R>) => ({
   kind,entry:entry.key,contract:{input:entry.input,output:z.unknown(),axes:{subject:"Document",touches:["Metadata"],
@@ -200,7 +208,7 @@ export type Specification<
         input?(context:{page:Page<F>;target:import("@pe/agent-contracts").ExecutionTarget|null;
           work:import("@pe/agent-contracts").WorkHandle|null;value:Immutable<D>|undefined},supplied?:any):unknown;
         present(result: unknown, data: Immutable<D>, work: Immutable<z.output<W>>): unknown;
-      } | { kind: "session" | "query" | "rpc"; entry: string; contract: EntryContract; label: string;
+      } | { kind: "session" | "catalog" | "query" | "rpc"; entry: string; contract: EntryContract; label: string;
         invoke?: import("@pe/agent-contracts").ReadEntry["run"];
         input?(context: { page: Page<F>; target: import("@pe/agent-contracts").ExecutionTarget | null;
           work: import("@pe/agent-contracts").WorkHandle | null; value: Immutable<D> | undefined },supplied?:any): unknown }

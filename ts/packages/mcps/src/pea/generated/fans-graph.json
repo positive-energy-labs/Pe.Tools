@@ -2,7 +2,8 @@
   "version": 1,
   "capabilities": [
     "work",
-    "native-write"
+    "native-write",
+    "geometry"
   ],
   "key": "fans",
   "address": "/fans",

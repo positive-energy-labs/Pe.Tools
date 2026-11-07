@@ -51,9 +51,9 @@ export function readRegistry(modules:readonly HostRouteModule[]) {
 }
 export const registeredReads=readRegistry(Object.values(builtins).map(b=>b.host));
 /** HTTP adapters select a read; composition and freshness belong to the evaluator. */
-export function graphRoute(id: string, raw: unknown) {
+export function graphRoute(id: string, raw: unknown, registry=registeredReads) {
   if(id === "reads.value") {
-    const request=valueReadRequest.parse(raw),definition=registeredReads.reads.get(request.read);
+    const request=valueReadRequest.parse(raw),definition=registry.reads.get(request.read);
     if(!definition) throw Error(`Host read is not registered: ${request.read}`);
     return bind(definition,definition.input.parse(request.args),request);
   }

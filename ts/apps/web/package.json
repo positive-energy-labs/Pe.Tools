@@ -63,7 +63,8 @@
     "@vitejs/plugin-react": "^6.0.1",
     "jsdom": "^28.1.0",
     "typescript": "^6.0.3",
-    "vite-plus": "catalog:"
+    "vite-plus": "catalog:",
+    "@pe/host": "workspace:*"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
