@@ -106,7 +106,11 @@ function NavigationStatus() {
     </div>
   );
 }
-export function Directory({ page: address }: { page: readonly [DirectorySearch, (patch: Partial<DirectorySearch>) => void] }) {
+export function Directory({
+  page: address,
+}: {
+  page: readonly [DirectorySearch, (patch: Partial<DirectorySearch>) => void];
+}) {
   const pods = usePodRoutes();
   const [page, setPage] = address;
   const { query, exposure, sort, folded } = page;
@@ -162,7 +166,9 @@ export function Directory({ page: address }: { page: readonly [DirectorySearch, 
       ...local,
       search: { v: 1, keywords: query, pills: [] },
       sort,
-      open: tools.filter((tool) => !(folded === "all" || folded.includes(tool.to))).map((tool) => tool.to),
+      open: tools
+        .filter((tool) => !(folded === "all" || folded.includes(tool.to)))
+        .map((tool) => tool.to),
     },
     onState: (next) => {
       setLocal(next);
@@ -170,7 +176,9 @@ export function Directory({ page: address }: { page: readonly [DirectorySearch, 
         query: next.search.keywords,
         sort: next.sort || "workflow",
         folded: [
-          ...(folded === "all" ? tools.map(tool => tool.to) : folded).filter((path) => !tools.some((tool) => tool.to === path)),
+          ...(folded === "all" ? tools.map((tool) => tool.to) : folded).filter(
+            (path) => !tools.some((tool) => tool.to === path),
+          ),
           ...tools.filter((tool) => !next.open.includes(tool.to)).map((tool) => tool.to),
         ],
       });

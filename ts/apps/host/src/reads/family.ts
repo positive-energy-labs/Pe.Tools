@@ -1,17 +1,18 @@
 import { z } from "zod";
 import {
   executionTargetSchema,
+  workKeySchema,
   familyDraftSchema,
   podMemberSchema,
   settingsSnapshotSchema,
   parsedDocViewSchema,
 } from "@pe/agent-contracts";
-import { leaf, read } from "./evaluator.ts";
-import { workScope, workValue } from "./ducts-inputs.ts";
+import { leaf, read, workValue } from "./evaluator.ts";
 import { runPods } from "../family-actions.ts";
 import { readMember, composedSpec, listPods } from "../settings.ts";
 import { familySpecAsset } from "../family-spec.ts";
 import { familyArgs, familyData } from "@pe/agent-contracts";
+const scope=leaf("work-scope",z.object({route:z.literal("family"),target:executionTargetSchema}),workKeySchema,false);
 const inventory = leaf("family.pods", z.null(), familyData.shape.pods);
 const profile = leaf(
   "family.profile",
@@ -30,11 +31,8 @@ export const reads = {
     output: familyData,
     async run(ctx, args) {
       const target = args.target;
-      const key =
-        target.kind === "document"
-          ? { ...(await ctx.read(workScope, target.ref)), route: "family" }
-          : null;
-      const saved = key ? workValue.parse(await ctx.work("family", key)) : null;
+      const key=await ctx.read(scope,{route:"family",target});
+      const saved=workValue.parse(await ctx.work("family",key));
       const familyWork = familyDraftSchema.parse(saved?.doc ?? {});
       const loaded = args.member
         ? await ctx.read(profile, args.member)

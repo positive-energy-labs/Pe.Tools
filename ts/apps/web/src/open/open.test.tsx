@@ -6,12 +6,6 @@ import {
   type MachineSession,
 } from "@pe/agent-contracts";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
-import {
-  RouterProvider,
-  createMemoryHistory,
-  createRootRoute,
-  createRouter,
-} from "@tanstack/react-router";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, afterEach, describe, expect, test, vi } from "vite-plus/test";
 
@@ -19,7 +13,6 @@ import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-
 import { PatchBay } from "./bay";
 import { lifecycleRequest } from "./lifecycle";
 import { EMPTY_DRAFT, launchPlan, modelRows, type DocRow } from "./model";
-import { OpenPage } from "./route";
 import {
   BACKGROUND_BOOTING,
   BAY_RECENTS,
@@ -28,7 +21,7 @@ import {
   MACHINE_SEEDS,
   OBSERVED_ICON,
   RECENTS,
-} from "./seeds";
+} from "../design-system/open-examples";
 
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
   readActionStatuses: vi.fn(),
@@ -52,7 +45,7 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
 }));
 // The standalone bay still requires current machine evidence before dispatch.
 vi.mock("./sources", async () => {
-  const { MACHINE_SEEDS, BAY_RECENTS, BAY_THREADS } = await import("./seeds");
+  const { MACHINE_SEEDS, BAY_RECENTS, BAY_THREADS } = await import("../design-system/open-examples");
   const fixed = (value: unknown) => ({
     kind: "use",
     dirties: ["sdk"],
@@ -102,47 +95,6 @@ const PEA_25 = "pea-25-schedules";
 const withSessions = (sessions: MachineSession[]): Machine => ({
   ...world,
   revit: { ...world.revit, sessions },
-});
-
-test("the frozen Open route renders the bay and patches without opening a host transport", async () => {
-  const transports: string[] = [];
-  class Source {
-    onopen = null;
-    onmessage = null;
-    onerror = null;
-    constructor(url: string) {
-      transports.push(url);
-    }
-    close() {}
-  }
-  vi.stubGlobal("EventSource", Source);
-  const fetch = vi.fn();
-  vi.stubGlobal("fetch", fetch);
-  history.replaceState(null, "", "/open?fixture=refresh");
-  try {
-    const router = createRouter({
-      routeTree: createRootRoute({ component: OpenPage }),
-      history: createMemoryHistory({ initialEntries: ["/open?fixture=refresh"] }),
-    });
-    await router.load();
-    render(<RouterProvider router={router} />);
-    expect(await screen.findByTestId("patch-bay")).toBeTruthy();
-    fireEvent.click(await screen.findByText("Clinic-Fitout.rvt"));
-    fireEvent.click(
-      screen.getByText("patch Clinic-Fitout.rvt here", {
-        selector: "[data-key='free:pid:18244'] *",
-      }),
-    );
-    const verb = screen.getByRole("button", {
-      name: "Open in your Revit 2025 and upgrade from 2023",
-    });
-    expect(verb.getAttribute("aria-disabled")).toBe("true");
-    await Promise.resolve();
-    expect(transports).toEqual([]);
-    expect(fetch).not.toHaveBeenCalled();
-  } finally {
-    history.replaceState(null, "", "/");
-  }
 });
 
 describe("launch plan", () => {

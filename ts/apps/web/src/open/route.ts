@@ -63,8 +63,9 @@ export const module = route({
   },
   commands: {
     start: {
-      ...sessionCommand("instances.start"), label: "Start Revit and open",
-      input: (_context,supplied)=>supplied,
+      ...sessionCommand("instances.start"),
+      label: "Start Revit and open",
+      input: (_context, supplied) => supplied,
     },
     open: {
       ...sessionCommand("instances.open"),

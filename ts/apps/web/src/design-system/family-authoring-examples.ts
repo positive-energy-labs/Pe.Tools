@@ -1,7 +1,7 @@
 import { settingsFieldPointer, type SettingsFieldState } from "@pe/agent-contracts";
 import type { PodList } from "@pe/host-contracts/operation-types";
-import { FAMILY_MODEL_SCHEMA } from "./page";
-import type { AuthoredFamilyName } from "./authored-families";
+import { FAMILY_MODEL_SCHEMA } from "../family/page";
+import type { AuthoredFamilyName } from "../family/authored-families";
 
 export function familyDemoFields(raw: string): Record<string, SettingsFieldState> {
   const parameters = (JSON.parse(raw) as { parameters?: Record<string, { dataType?: string }> })

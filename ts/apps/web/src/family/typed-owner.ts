@@ -1,5 +1,5 @@
 import { useMemo, useRef, useContext } from "react";
-import {RegistryContext} from "@effect/atom-react";
+import { RegistryContext } from "@effect/atom-react";
 import { familyPageSchema } from "./page";
 import type { FamilyContext } from "./route";
 import type { FamilyMount } from "./store";
@@ -13,7 +13,7 @@ export function useFamilyOwner(ctx: FamilyContext): FamilyMount {
     const page = () => familyPageSchema.parse(current.current.page.read());
     const snapshot = () => {
       const ctx = current.current,
-        data = ctx.value.value;
+        data = ctx.value.current ? ctx.value.value : undefined;
       return {
         target: ctx.target ?? { kind: "host" as const },
         work: data?.handle ? { handle: data.handle, doc: data.familyWork } : null,
@@ -43,7 +43,7 @@ export function useFamilyOwner(ctx: FamilyContext): FamilyMount {
         get: (id: string) => {
           const ctx = current.current,
             value = ctx.value,
-            data = value.value;
+            data = value.current ? value.value : undefined;
           const error =
             id === "profile" ? data?.profileError : id === "spec" ? data?.specError : null;
           const body =
@@ -55,9 +55,15 @@ export function useFamilyOwner(ctx: FamilyContext): FamilyMount {
                   ? data?.pods
                   : [];
           return {
-            status: error ? "failed" : value.current ? "complete" : "pending",
+            status: error
+              ? "failed"
+              : value.current
+                ? "complete"
+                : value.status === "pending"
+                  ? "pending"
+                  : "failed",
             current: value.current,
-            error,
+            error: error ?? (!value.current ? value.reason : null),
             value: body,
           };
         },

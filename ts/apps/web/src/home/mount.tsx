@@ -1,4 +1,3 @@
-import { routeAddress } from "@pe/agent-contracts";
 import { Directory } from "../navigation/directory";
 import { Ledger } from "../navigation/ledger";
 import { LEDGER_PRESENTATIONS } from "../navigation/ledger-model";
@@ -6,7 +5,7 @@ import { LEDGER_PRESENTATIONS } from "../navigation/ledger-model";
 import type { HomeContext } from "./route";
 export function HomeBody({ ctx }: { ctx: HomeContext }) {
   const page: Parameters<typeof Directory>[0]["page"] = [
-    routeAddress("home").schema.parse(ctx.page.read()),
+    ctx.page.read(),
     (patch) => ctx.page.query(patch),
   ];
   return (

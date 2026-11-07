@@ -5,7 +5,7 @@ import {
   valueRead,
   type FamilyDraft,
 } from "@pe/agent-contracts";
-import {familyPageSchema} from "./page";
+import { familyPageSchema } from "./page";
 import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
 import {
   route,
@@ -109,7 +109,6 @@ export const module = route({
     capture: {
       ...sessionCommand("family.capture"),
       label: "Save family to pod",
-
     },
     build: {
       ...command("family.build"),

@@ -25,4 +25,4 @@ export const ductLossData = z.object({
 });
 
 /** Galvanized steel absolute roughness in feet. */
-export const GALVANIZED_STEEL_ROUGHNESS=0.0003;
+export const GALVANIZED_STEEL_ROUGHNESS = 0.0003;

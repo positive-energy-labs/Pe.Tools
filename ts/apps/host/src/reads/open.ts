@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { executionTargetSchema } from "@pe/agent-contracts";
-import { read, leaf, type InputPort } from "./evaluator.ts";
+import { read, leaf } from "./evaluator.ts";
 import { openData } from "@pe/agent-contracts";
-const resource = leaf("open.resource", z.record(z.string(), z.unknown()), z.unknown(), false);
+const resource = leaf("resource", z.record(z.string(), z.unknown()), z.unknown(), false);
 export const reads = {
   documents: read("open.documents", {
     input: z.object({ target: executionTargetSchema }),
@@ -15,7 +15,4 @@ export const reads = {
       };
     },
   }),
-};
-export const leaves = {
-  "open.resource": (request: unknown, services: InputPort) => services.take("resource", request),
 };

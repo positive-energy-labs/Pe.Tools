@@ -30,7 +30,11 @@ export function useOpenTypedOwner(ctx: OpenContext): OpenOwner {
           get: (id: string) => {
             const ctx = current.current;
             return {
-              status: ctx.value.current ? "complete" : "pending",
+              status: ctx.value.current
+                ? "complete"
+                : ctx.value.status === "pending"
+                  ? "pending"
+                  : "failed",
               current: ctx.value.current,
               value: ctx.value.value?.[id as "machine" | "recents" | "threads"],
               error: ctx.value.current ? null : ctx.value.reason,

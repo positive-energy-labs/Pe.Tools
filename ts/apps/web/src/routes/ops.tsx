@@ -5,5 +5,10 @@ import { builtinRouteStamp } from "../route/builtin-inventory";
 import { module } from "../ops/route";
 export const Route = createFileRoute("/ops")({
   validateSearch: (search: Record<string, unknown>) => search,
-  component: () => <TypedShell module={module} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("ops")}`)} />,
+  component: () => (
+    <TypedShell
+      module={module}
+      fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("ops")}`)}
+    />
+  ),
 });

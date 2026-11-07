@@ -62,7 +62,7 @@ import {
   type LaunchDraft,
   type LaunchPlan,
 } from "./model";
-import { BAY_THREADS } from "./seeds";
+import { BAY_THREADS } from "../design-system/open-examples";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 

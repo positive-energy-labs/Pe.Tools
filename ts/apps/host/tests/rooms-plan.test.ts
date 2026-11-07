@@ -1,6 +1,6 @@
-import {expect,test} from "vite-plus/test";
-import type {RevitContextViewImage} from "@pe/host-contracts/generated";
-import {planOf} from "../src/reads/rooms-plan";
+import { expect, test } from "vite-plus/test";
+import type { RevitContextViewImage } from "@pe/host-contracts/generated";
+import { planOf } from "../src/reads/rooms-plan.ts";
 test("a plan draws only a paired URL and finite two-dimensional native registration", () => {
   const response: RevitContextViewImage.Res.Response = {
     view: { kind: "View", documentKey: "rooms", label: "Fixture level plan" },
@@ -9,7 +9,8 @@ test("a plan draws only a paired URL and finite two-dimensional native registrat
     width: 800,
     height: 480,
     registration: {
-      width:800,height:480,
+      width: 800,
+      height: 480,
       imageSha256: "fixture-image",
       topLeft: [0, 24],
       topRight: [40, 24],
@@ -33,4 +34,3 @@ test("a plan draws only a paired URL and finite two-dimensional native registrat
     planOf({ ...response, registration: { ...response.registration!, topLeft: [NaN, 0] } }),
   ).toThrow("model XY");
 });
-

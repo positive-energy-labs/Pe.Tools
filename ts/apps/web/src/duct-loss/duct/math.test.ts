@@ -16,6 +16,13 @@ test("invalid duct inputs refuse calculation while zero flow stays finite", () =
   const duct = { shape: "round" as const, a: 12, b: 8, cfm: 0, ...std };
   expect(Object.values(solve(duct)).every(Number.isFinite)).toBe(true);
   expect(solve(duct).loss).toBe(0);
-  for (const patch of [{ cfm: -100 }, { a: 0 }, { density: -1 }, { length: -1 }, { roughness: -1 }, { cfm: Infinity }])
+  for (const patch of [
+    { cfm: -100 },
+    { a: 0 },
+    { density: -1 },
+    { length: -1 },
+    { roughness: -1 },
+    { cfm: Infinity },
+  ])
     expect(() => solve({ ...duct, ...patch })).toThrow();
 });
