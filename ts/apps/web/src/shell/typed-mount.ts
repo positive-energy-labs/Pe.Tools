@@ -498,13 +498,14 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const token = basis();
       const handles = new Map([...owners].map(([id,o]) => [id,o.handle]));
       const ready = !!token && (!pane.read || value.current);
+      const refusal = ready ? null : basisRefusal() ?? (!value.current ? value.reason : "Read the current Value before editing");
       const ownerOf = (path: readonly string[], preferred?: string) => {
         const id = preferred ?? (Object.hasOwn(edits!.work.schema.shape,path[0]!) ? own : [...owners].find(([,o]) => Object.hasOwn(o.config.state.schema.shape,path[0]!))?.[0]);
         if (!id || !owners.has(id) || !Object.hasOwn(owners.get(id)!.config.state.schema.shape,path[0]!)) throw Error(`No owning Work for ${path.join(".")}`);
         return id;
       };
       const patch = async (request: readonly RouteStatePatch[] | (()=>readonly RouteStatePatch[]), detail: EditHistory = {label:"Edit"}, preferred?: string): Promise<EditFailure> => {
-        if (!ready || !token) return {code:"unavailable",message:basisRefusal() ?? (!value.current ? value.reason : "Read the current Value before editing")};
+        if (!ready || !token) return {code:"unavailable",message:refusal ?? "Read the current Value before editing"};
         try {
           requireWritable();
           if (!basis() || !gate.current(token)) throw Error("Stale accepted Work basis");
@@ -526,7 +527,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         } catch(error) { return {code:"refused",message:error instanceof Error?error.message:String(error)}; }
       };
       const cells: DrawContext<any, any, any, any>["cells"] = {
-        doc: owners.get(own)?.doc ?? null, basis: token, ready, refusal: basisRefusal(), history,
+        doc: owners.get(own)?.doc ?? null, basis: token, ready, refusal, history,
         owner(path) { const route=ownerOf(path); return {route,label:route===own?"Work":`from /${route}`}; },
         at(path,preferred,facts={}) {
           const route=ownerOf(path,preferred), address=[...path];
@@ -548,7 +549,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             return result.ok?null:{code:"undo-refused",message:"message" in result?String(result.message):"Cell undo refused"};
           };
           return {owner:{route,label:route===own?"Work":`from /${route}`},value, facts:{...facts,baseline:facts.baseline??value.base?.value},
-            freshness:ready?"current":owners.get(route)!.doc===null&&core.value===undefined?"never":"stale", refusal: basisRefusal(), clear, accept,deny:clear,undo,
+            freshness:ready?"current":owners.get(route)!.doc===null&&core.value===undefined?"never":"stale", refusal: facts.readOnly ? "This cell is read-only" : refusal, clear, accept,deny:clear,undo,
             stage:(value2,detail)=> facts.readOnly ? Promise.resolve({code:"read-only",message:"This cell is read-only"}) :
               patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,
                 Object.hasOwn(facts,"baseline")&&canonicalRouteInput(value2)===canonicalRouteInput(facts.baseline)?{kind:"clear"}:{kind:"set",rung:{value:value2}}),detail,route),

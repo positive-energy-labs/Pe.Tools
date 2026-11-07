@@ -8,7 +8,7 @@ import { route } from "./typed-route";
 import { module as fans } from "../fans/route";
 import { TypedChrome, TypedShell } from "../shell/typed-shell";
 import * as mounts from "../shell/typed-mount";
-import { workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
+import { familiesRouteState, address, workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
 import { ReviewSurface } from "../shell/review-surface";
 import { RouteVisibility } from "./activity";
 import { setup as scheduleHost } from "../../../host/tests/schedule-test-fixture";
@@ -17,6 +17,8 @@ import { namesOf } from "./typed-route";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
 import { KeyScopeHost } from "@pe/kit/keys";
+import { module as families } from "../families/route";
+import { createFixtureWorkDoor } from "../shell/fixture-work-door";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -79,7 +81,8 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
   expect(undo.map(spy => spy.mock.calls.length), "B02: hidden B cannot steal undo").toEqual([2, 1]);
 });
 
-test("JZ B03 people choose named subjects: cold Schedules picker, refused Read, then published Read", async () => {
+test("JZ B03 people choose named subjects: pending Families scope, cold Schedules picker and honest Read", async () => {
+  await pendingFamiliesChoice();
   const host = await scheduleHost();
   host.addSchedule(43, "ElectricDuctHeater");
   const pending = new Set<Promise<void>>();
@@ -169,3 +172,71 @@ test("JZ B03 people choose named subjects: cold Schedules picker, refused Read, 
     view.unmount(); mount.dispose(); await Promise.all(pending);
   }
 }, 30_000);
+
+
+/** Retained Families publication + ready Work reproduce the Driver's post-Start refresh. */
+async function pendingFamiliesChoice() {
+  const doc = familiesRouteState.schema.parse({});
+  const catalogue = {
+    summary: { totalFamilies: 1, placedFamilies: 0, unplacedFamilies: 1, totalTypes: 1, totalPlacedInstances: 0, truncated: false },
+    families: [{ familyId: 1, familyUniqueId: "air-tag", familyName: "Air Terminal Tag", categoryName: "Air Terminal Tags", typeCount: 1, placedInstanceCount: 0, types: [{ typeName: "Standard" }] }],
+    issues: [],
+  };
+  // Only this retained publication boundary is replayed. Schedules below retains its real host HTTP reads/actions.
+  const packet = families.spec.core!.output.parse({
+    key: "b03-families", generation: 1, version: 1, state: "current", value: {
+      data: { familiesWork: doc, catalog: catalogue, categories: ["Air Terminal Tags"], observation: null,
+        rows: [], params: [], pivotRows: [], pivotFamilies: [], outcomes: [], activeReadId: null, editRefusal: "Read these families before editing" },
+      evaluation: "b03-families", inputs: "b03-families", coverage: { requested: [], covered: [], unknown: [], refused: [] },
+      origin: { kind: "fixture", name: "post-start-families" }, trace: [], freshness: "current",
+    },
+  });
+  const release = Promise.withResolvers<void>();
+  let hold = false;
+  const tasks = new Set<Promise<void>>();
+  const source: UseSource = { kind: "use", open(ctx, deliver) {
+    const task = (hold ? release.promise : Promise.resolve()).then(() => {
+      if (!ctx.signal.aborted) deliver({ kind: "complete", value: packet, revision: 1 });
+    });
+    tasks.add(task); void task.finally(() => tasks.delete(task));
+    return () => {};
+  } };
+  let search = new URLSearchParams();
+  const mount = mounts.mountTypedRoute(families, {
+    address: { read: () => new URLSearchParams(search), write: next => { search = new URLSearchParams(next); }, subscribe: () => () => {} },
+    fixture: null, target: { kind: "document", ref: { session: "b03-families", openId: "project" } },
+    work: { address: address("C:/Models/B03-Families.rvt"), open: null }, custody: { current: () => true }, memory: () => ({}),
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), {
+    work: createFixtureWorkDoor(familiesRouteState, doc), sources: { "families.view": source },
+  });
+  function Journey() {
+    useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
+    return <KeyScopeHost id="b03-families"><TypedChrome mount={mount} document={<span>Families after Start</span>} /></KeyScopeHost>;
+  }
+  const root = createRootRoute({ component: Journey });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/families"] }) });
+  const view = render(<RouterProvider router={router} />);
+  try {
+    await screen.findByRole("button", { name: "Choose Air Terminal Tags" });
+    await waitFor(() => expect(mount.work()).not.toBeNull());
+    await waitFor(() => expect(mount.value().current).toBe(true));
+    hold = true;
+    await act(async () => mount.refresh());
+    expect(mount.value(), "B03 Families: pending refresh retains named choices").toMatchObject({ status: "pending", current: false });
+    const before = { work: mount.work(), page: mount.page.read(), url: search.toString() };
+    const category = screen.getByRole("button", { name: "Choose Air Terminal Tags" });
+    const member = screen.getByRole("button", { name: "Choose Air Terminal Tag" });
+    expect.soft(category.getAttribute("aria-disabled"), "B03 Families: pending category is visibly disabled, not a swallowed choice").toBe("true");
+    expect.soft(member.getAttribute("aria-disabled"), "B03 Families: the same refusal governs family choices").toBe("true");
+    expect.soft(screen.queryByText("Family scope unavailable"), "B03 Families: scope refusal is visible before interaction").not.toBeNull();
+    const group = screen.getByRole("group", { name: "Family scope" });
+    expect.soft(group.textContent, "B03 Families: scope refusal names the pending Reading").toContain("Reading...");
+    await act(async () => { fireEvent.click(category); fireEvent.click(member); });
+    expect({ work: mount.work(), page: mount.page.read(), url: search.toString() }, "B03 Families: a refused choice commits nothing").toEqual(before);
+    expect(familiesRouteState.schema.parse(mount.work()?.value).scope.edit, "B03 Families: no category was queued secretly").toBeUndefined();
+    await act(async () => { release.resolve(); });
+    await waitFor(() => expect(mount.value().current).toBe(true));
+    expect(screen.getByRole("button", { name: "Choose Air Terminal Tags" }).getAttribute("aria-disabled"), "B03 Families: current basis re-enables scope choices").not.toBe("true");
+    expect(familiesRouteState.schema.parse(mount.work()?.value).scope.edit).toBeUndefined();
+  } finally { release.resolve(); view.unmount(); mount.dispose(); await Promise.all(tasks); }
+}

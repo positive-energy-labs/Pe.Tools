@@ -35,6 +35,7 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
     familyNames: [],
     placementScope: "AllLoaded" as const,
   };
+  const scopeCell = ctx.cells.at(["scope"]);
   const catalog = data?.catalog.families ?? [];
   const categories = data?.categories ?? [];
   const live = useCellCollection(work?.cells ?? {}, (key) => ctx.cells.at(["cells", key]));
@@ -53,17 +54,17 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
   return (
     <>
       <div role="group" aria-label="Family scope">
+        {scopeCell.refusal && <OutcomeLine kind="refused" label="Family scope unavailable" says={scopeCell.refusal} />}
         {categories.map((category) => (
           <Button
             key={category}
             label={`Choose ${category}`}
-            onClick={() =>
-              ctx.cells
-                .at(["scope"])
-                .stage(
-                  { ...filter, categoryNames: [category], familyNames: [] },
-                  { label: "Choose families" },
-                )
+            refusal={scopeCell.refusal}
+            onPress={() =>
+              scopeCell.stage(
+                { ...filter, categoryNames: [category], familyNames: [] },
+                { label: "Choose families" },
+              )
             }
           >
             {category}
@@ -73,8 +74,9 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
           <Button
             key={family.familyId}
             label={`Choose ${family.familyName}`}
-            onClick={() =>
-              ctx.cells.at(["scope"]).stage(
+            refusal={scopeCell.refusal}
+            onPress={() =>
+              scopeCell.stage(
                 {
                   ...filter,
                   categoryNames: [...filter.categoryNames],
