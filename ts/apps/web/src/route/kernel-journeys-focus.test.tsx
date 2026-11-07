@@ -1,16 +1,22 @@
 // @vitest-environment jsdom
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { route } from "./typed-route";
 import { module as fans } from "../fans/route";
-import { TypedShell } from "../shell/typed-shell";
+import { TypedChrome, TypedShell } from "../shell/typed-shell";
 import * as mounts from "../shell/typed-mount";
-import { workFingerprintSchema } from "@pe/agent-contracts";
+import { workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
 import { ReviewSurface } from "../shell/review-surface";
 import { RouteVisibility } from "./activity";
+import { setup as scheduleHost } from "../../../host/tests/schedule-test-fixture";
+import { module as schedules } from "../schedules/route";
+import { namesOf } from "./typed-route";
+import { createWorkFeedClient } from "../shell/work-feed-client";
+import type { UseSource } from "../shell/source-contract";
+import { KeyScopeHost } from "@pe/kit/keys";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -72,3 +78,94 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
   press(screen.getByRole("button", { name: "jz-a focus" }));
   expect(undo.map(spy => spy.mock.calls.length), "B02: hidden B cannot steal undo").toEqual([2, 1]);
 });
+
+test("JZ B03 people choose named subjects: cold Schedules picker, refused Read, then published Read", async () => {
+  const host = await scheduleHost();
+  host.addSchedule(43, "ElectricDuctHeater");
+  const pending = new Set<Promise<void>>();
+  const source: UseSource = {
+    kind: "use",
+    open(ctx, deliver) {
+      const task = host.post("/pe/reads/value", {
+        read: "schedules.view", subscription: crypto.randomUUID(), generation: 1,
+        args: { target: host.b, ...(ctx.args as Record<string, unknown>) },
+      }).then(response => {
+        expect(response.status).toBe(200);
+        if (!ctx.signal.aborted) deliver({ kind: "complete", value: response.value, revision: 1 });
+      }).catch(error => { if (!ctx.signal.aborted) deliver({ kind: "failure", error }); });
+      pending.add(task);
+      void task.finally(() => pending.delete(task));
+      return () => {};
+    },
+  };
+  // Receipt SSE is outside B03; commands still settle against the real host ActionJournal.
+  const native = createWorkFeedClient({ subscribe: () => () => {}, dirty() {} }, {
+    write: async () => { throw Error("B03 does not edit Work"); },
+    submit: async command => {
+      const response = await host.post("/actions", command);
+      if (response.status >= 400) throw Error(JSON.stringify(response.value));
+      return host.owner().wait(command.id);
+    },
+  });
+  // This fixture serves persisted Work over HTTP, without a browser admission registry.
+  // Replay that transport boundary; never substitute a seed or revision for the host's answer.
+  const work: WorkJournalDoor = {
+    ...native,
+    open: scope => ({ subscribe(deliver, end) {
+      let closed = false;
+      const task = host.view().then(state => {
+        if (!closed) deliver({ kind: "ready", history: { from: 0, acks: [] }, snapshot: {
+          handle: { key: scope.key, revision: state.revision }, revision: state.revision, value: state.doc,
+        } });
+      }).catch(error => {
+        if (!closed) { deliver({ kind: "failed", failure: { kind: "failed", code: "WorkReadFailed", message: String(error) } }); end(); }
+      });
+      pending.add(task); void task.finally(() => pending.delete(task));
+      return () => { closed = true; };
+    } }),
+  };
+  let search = new URLSearchParams();
+  const fingerprint = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
+  const mount = mounts.mountTypedRoute(schedules, {
+    address: { read: () => new URLSearchParams(search), write: next => { search = new URLSearchParams(next); }, subscribe: () => () => {} },
+    fixture: null, target: { kind: "document", ref: host.b }, work: { address: null, open: host.b },
+    custody: { current: () => true }, memory: () => ({}),
+  }, fingerprint, { work, sources: { "schedules.view": source } });
+  function Journey() {
+    useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
+    return <KeyScopeHost id="b03-schedules"><TypedChrome mount={mount} document={<span>Project schedules</span>} /></KeyScopeHost>;
+  }
+  const root = createRootRoute({ component: Journey });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/schedules"] }) });
+  const view = render(<RouterProvider router={router} />);
+  try {
+    await waitFor(() => expect(mount.value().current).toBe(true));
+    expect(mount.work(), "B03: catalogue discovery does not require selected Work").toBeNull();
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Read schedule" })).toHaveLength(2));
+    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" })[1]!); });
+    expect(screen.getAllByText("Choose a schedule before reading").length, "B03: refused Read is visible").toBeGreaterThan(0);
+    expect.soft(screen.queryAllByText(/.+ complete$/i), "B03: a refused verb must never produce any completion receipt").toEqual([]);
+    const chooser = screen.queryByRole("button", { name: "Choose schedule" });
+    expect.soft(chooser, "B03: cold open exposes the declared named-subject picker").not.toBeNull();
+    if (!chooser) return; // Both base defects above remain assertion failures, not a missing-control exception.
+    fireEvent.click(chooser);
+    expect(await screen.findByRole("option", { name: "ElectricDuctHeater" }), "B03: choices come from the host catalogue").toBeTruthy();
+    fireEvent.click(screen.getByRole("option", { name: "Panel" }));
+    await waitFor(() => expect(mount.work()?.handle.key).toEqual(host.scope));
+    expect(namesOf(mount.page.read().workspaceId), "B03: chosen name reaches its canonical member").toEqual([host.scope.work]);
+    await waitFor(() => expect(mount.value().current).toBe(true));
+    const before = host.reads();
+    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" })[1]!); });
+    await waitFor(() => expect(host.reads(), "B03: Read reaches native schedule detail").toBeGreaterThan(before));
+    await waitFor(() => expect(mount.result("read")).toBeDefined());
+    await waitFor(() => {
+      expect(mount.value().current, "B03: Read publishes a current Value").toBe(true);
+      expect(mount.value().value?.reading, "B03: publication contains the completed Read, not the old capture").toEqual(mount.result("read"));
+    });
+    expect(mount.action("read").failure).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Choose schedule" }), "B03: one declared subject control").toHaveLength(1);
+    expect(view.container.textContent, "B03: people see names, not internal Work identities").not.toContain(host.scope.work);
+  } finally {
+    view.unmount(); mount.dispose(); await Promise.all(pending);
+  }
+}, 30_000);
