@@ -28,6 +28,7 @@ export interface HostRead {
   input: z.ZodType;
   output: z.ZodType<Publication>;
   axes: EntryContract["axes"];
+  demand?: "mount" | "explicit";
   fixtures?: Readonly<Record<string, (args: any) => FixtureValue<z.ZodType<Publication>>>>;
   source: UseSource & { provide?(name: string, args: unknown): Publication };
 }
@@ -45,6 +46,7 @@ export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
     input: I;
     output: O;
     axes: EntryContract["axes"];
+    demand?: "mount" | "explicit";
   },
   fixtures?: Readonly<Record<string, (args: z.output<I>) => FixtureValue<O>>>,
 ) {
@@ -60,7 +62,6 @@ export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
         if (ctx.signal.aborted) return;
         return publicationSource({
           async read(context, publication, release) {
-            if (context.target.kind !== "document") throw Error("Choose a document");
             return contract.output.parse(
               await callCompose(context, contract.endpoint ?? (key as PeRouteId), {
                 body: {
@@ -71,7 +72,7 @@ export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
                   ),
                   args: {
                     ...z.record(z.string(), z.unknown()).parse(contract.input.parse(context.args)),
-                    target: context.target.ref,
+                    target: contract.endpoint !== "reads.value" && context.target?.kind === "document" ? context.target.ref : context.target ?? {kind:"host"},
                   },
                 },
               } as never, {

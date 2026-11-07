@@ -160,12 +160,12 @@ test("one element label: mark, else type/family/category, else size and kind; ne
         connectors: [],
       },
     ],
-    segments: [{ id: 3, kind: "duct", size: '10"ø', connectors: [] }],
+    segments: [{ id: 3, kind: "duct", size: '10"Ã¸', connectors: [] }],
   } as never);
   expect([label(8775469), label(2), label(3), label(13771267)]).toEqual([
     "MUAS 10",
     "MUAS-1",
-    "10″ duct",
+    "10â€³ duct",
     "an element outside this read",
   ]);
 });
@@ -185,9 +185,9 @@ test("a duplicate fan mark is told apart by level, then system, then order; neve
     level: "Level 3",
     system: "SA 1",
   };
-  expect(fanLabel(a, [a, b])).toBe("FC-23 · Level 2 / port 0");
+  expect(fanLabel(a, [a, b])).toBe("FC-23 Â· Level 2 / port 0");
   const c = { ...b, level: "Level 2", system: "SA 2" };
-  expect(fanLabel(c, [a, c])).toBe("FC-23 · SA 2 / port 0");
+  expect(fanLabel(c, [a, c])).toBe("FC-23 Â· SA 2 / port 0");
   const d = { ...c, system: "SA 1" };
   expect([fanLabel(a, [a, d]), fanLabel(d, [a, d])]).toEqual([
     "FC-23 (1 of 2) / port 0",
@@ -203,7 +203,7 @@ test("admitted ducts, fans, chat and Pods render declared subject and pane words
   for (const route of [owner, presenter, chat, pods]) {
     const words = [
       route.data.name,
-      route.data.subject.noun,
+      route.data.subject!.noun,
       ...Object.values(route.data.panes).flatMap((pane) => [pane.label, pane.purpose]),
       ...Object.values(route.data.verbs).map((verb) => verb.label),
     ];

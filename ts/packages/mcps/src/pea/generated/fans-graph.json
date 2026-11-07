@@ -205,7 +205,7 @@
     "field": "fan",
     "noun": "fan",
     "roster": "roster",
-    "detail": "value",
+    "detail": "roster",
     "pane": "sheet-roster"
   },
   "historyDetail": "historyDetail",

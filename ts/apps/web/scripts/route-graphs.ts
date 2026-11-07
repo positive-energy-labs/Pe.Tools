@@ -76,18 +76,41 @@ const { admittedBuiltinKeys } = await jiti.import<
 >("../../../packages/agent-contracts/src/admitted-builtin-keys.ts");
 const root = fileURLToPath(new URL("../", import.meta.url));
 const builtinOptions = [];
-for (const key of admittedBuiltinKeys) {
-  const files = await readdir(new URL(`../src/${key}/`, import.meta.url));
-  const kernel = files.includes("route.ts")
+const discovered = await readdir(new URL("../src/",import.meta.url),{withFileTypes:true});
+const declarations=new Map<string,{folder:string;file:string;module:{data:{key:string}}}>();
+for(const dir of discovered.filter(d=>d.isDirectory())) {
+  for(const file of ["route.ts","route.tsx","kernel.ts","kernel.tsx"]) {
+    const text=await readFile(new URL(`../src/${dir.name}/${file}`,import.meta.url),"utf8").catch(()=>"");
+    if(/export\s+(?:const|let)\s+module\b/.test(text)) {
+      const {module}=await jiti.import<{module:{data:{key:string}}}>(fileURLToPath(new URL(`../src/${dir.name}/${file}`,import.meta.url)));
+      if(declarations.has(module.data.key)) throw Error(`Duplicate route module ${module.data.key}`);
+      declarations.set(module.data.key,{folder:dir.name,file,module});break;
+    }
+  }
+}
+const keys=[...new Set([...admittedBuiltinKeys,...declarations.keys()])].sort();
+const browserImports:string[]=[],browserEntries:string[]=[],typedImports:string[]=[],typedEntries:string[]=[],closureImports:string[]=[],closureEntries:string[]=[];
+for (const key of keys) {
+  const folder=declarations.get(key)?.folder ?? key;
+  const files = await readdir(new URL(`../src/${folder}/`, import.meta.url));
+  const kernel = declarations.get(key)?.file ?? (files.includes("route.ts")
     ? "route.ts"
     : files.includes("kernel.ts")
       ? "kernel.ts"
-      : "kernel.tsx";
-  const entry = fileURLToPath(new URL(`../src/${key}/${kernel}`, import.meta.url));
+      : "kernel.tsx");
+  const entry = fileURLToPath(new URL(`../src/${folder}/${kernel}`, import.meta.url));
   const { module } = await jiti.import<{ module: { data: unknown } }>(entry);
-  if (kernel === "route.ts") {
+  closureImports.push(`import c${closureEntries.length} from "../${folder}/source-closure.generated.json" with {type:"json"};`);
+  closureEntries.push(`${JSON.stringify(key)}:c${closureEntries.length}`);
+  browserImports.push(`import {module as m${browserEntries.length}} from "../${folder}/${kernel}";`);
+  browserEntries.push(`${JSON.stringify(key)}:m${browserEntries.length}`);
+  if ("spec" in module) {
+    const index=typedEntries.length;
+    typedImports.push(`import {host as h${index}} from "../${folder}/host.generated.ts";`, `import c${index} from "../${folder}/source-closure.generated.json" with {type:"json"};`);
+    typedEntries.push(`${JSON.stringify(key)}:{host:h${index},closure:c${index}}`);
     const typed = module as unknown as import("../src/route/typed-route.ts").TypedRoute;
     const { z } = await import("zod");
+    const identifier=key.replace(/[^a-zA-Z0-9_$]+([a-zA-Z0-9_$])/g,(_all,part:string)=>part.toUpperCase());
     const fields = Object.entries(typed.spec.fields).map(([key, field]) => {
       const json = z.toJSONSchema(field.schema, { io: "input" });
       const schema = field.role === "subject"
@@ -96,9 +119,11 @@ for (const key of admittedBuiltinKeys) {
       return `${JSON.stringify(key)}: field(${schema}.default(${JSON.stringify(field.initial)}), ${JSON.stringify(field.url)})`;
     });
     await emit(new URL(`../../../packages/agent-contracts/src/routes/${key}.ts`, import.meta.url),
-      `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nimport { z } from "zod";\nimport { subjectSchema, focusSelectionSchema } from "../route-kernel-codecs.ts";\nimport { jsonCodec } from "../route-field.ts";\nconst field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: jsonCodec(schema) });\nexport const ${key}Address = { path: ${JSON.stringify(typed.data.address)} as const, title: ${JSON.stringify(typed.spec.name)}, fields: {\n${fields.join(",\n")},\nselected: {...field(focusSelectionSchema,"replace"),agent:undefined}\n}, agent: { policy: ${JSON.stringify(`Choose ${typed.spec.subject.noun} through ${typed.spec.subject.field}, using the module's local identities.`)} } };\n`);
+      `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nimport { z } from "zod";\nimport { subjectSchema, focusSelectionSchema } from "../route-kernel-codecs.ts";\nimport { jsonCodec } from "../route-field.ts";\nconst field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: jsonCodec(schema) });\nexport const ${identifier}Address = { path: ${JSON.stringify(typed.data.address)} as const, title: ${JSON.stringify(typed.spec.name)}, fields: {\n${fields.join(",\n")},\nselected: {...field(focusSelectionSchema,"replace"),agent:undefined}\n}, agent: { policy: ${JSON.stringify(typed.spec.subject ? `Choose ${typed.spec.subject.noun} through ${typed.spec.subject.field}, using the module's local identities.` : "Use the route fields as declared.")} } };\n`);
     // Preserve the actual imported Work export, including refinements and reconciliation.
     // JSON Schema cannot carry that authority; a second handwritten host declaration would drift.
+    let workImport="",workBody="";
+    if(typed.spec.edits) {
     const code = ts.createSourceFile(
       entry,
       await readFile(entry, "utf8"),
@@ -154,11 +179,15 @@ for (const key of admittedBuiltinKeys) {
       : binding.from;
     const definitions = await jiti.import<Record<string, {schema?: unknown}>>(binding.specifier.startsWith(".") ? resolve(dirname(entry),binding.specifier) : binding.specifier);
     await emit(workDestination, definitions[binding.imported]!.schema
-      ? `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nexport { ${binding.imported} as ${key}RouteState } from ${schemaImport};\n`
-      : `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nimport { ${binding.imported} as schema } from ${schemaImport};\nimport { salvageWork } from "../route-state.ts";\nexport const ${key}RouteState = { route: ${JSON.stringify(key)}, title: ${JSON.stringify(typed.spec.name)}, description: schema.description ?? ${JSON.stringify(typed.spec.directory.summary)}, schema, schemaVersion: 1, salvage: (raw:unknown)=>salvageWork(schema,raw).doc };\n`);
-    const history = typed.host.schemas.historyDetail!;
-    await emit(new URL(`../src/${key}/host.generated.ts`, import.meta.url),
-      `// Generated from route.ts by codegen:routes. Do not edit.\nimport { ${key}RouteState as work } from "../../../../packages/agent-contracts/src/generated/${key}-work.ts";\nimport { z } from "zod";\nimport { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type { HostRouteModule } from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with { type: "json" };\nconst data = RouteGraphJson.parse(closure.envelope.data);\nexport const host: HostRouteModule = { data, workState: work, readWorks: ${JSON.stringify(typed.host.readWorks)}, schemas: { [data.work!.schema!]: work.schema, [data.historyDetail!]: z.fromJSONSchema(${JSON.stringify(z.toJSONSchema(history,{io:"input"}))}) }, bodies: {} };\n`);
+      ? `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nexport { ${binding.imported} as ${identifier}RouteState } from ${schemaImport};\n`
+      : `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nimport { ${binding.imported} as schema } from ${schemaImport};\nimport { salvageWork } from "../route-state.ts";\nexport const ${identifier}RouteState = { route: ${JSON.stringify(key)}, title: ${JSON.stringify(typed.spec.name)}, description: schema.description ?? ${JSON.stringify(typed.spec.directory.summary)}, schema, schemaVersion: 1, salvage: (raw:unknown)=>salvageWork(schema,raw).doc };\n`);
+    workImport=`import { ${identifier}RouteState as work } from "../../../../packages/agent-contracts/src/generated/${key}-work.ts";\n`;
+    workBody=`workState:work,readWorks:${JSON.stringify(typed.host.readWorks)},schemas:{[data.work!.schema!]:work.schema,[data.historyDetail!]:z.fromJSONSchema(${JSON.stringify(z.toJSONSchema(typed.host.schemas.historyDetail!,{io:"input"}))})},`;
+    }
+    const runtime=typed.spec.host;
+    await emit(new URL(`../src/${folder}/host.generated.ts`,import.meta.url),
+      `// Generated from route.ts by codegen:routes. Do not edit.\n${workImport}${runtime?`import * as runtime from ${JSON.stringify(runtime)};\n`:""}import {z} from "zod";\nimport {RouteGraphJson} from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type {HostRouteModule} from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with {type:"json"};\nconst data=RouteGraphJson.parse(closure.envelope.data);\nexport const host:HostRouteModule={data,bodies:{},${workBody||"schemas:{},"}${runtime?'...(runtime as Pick<HostRouteModule,"reads"|"leaves">),':""}};\n`);
+
 
   }
   builtinOptions.push({
@@ -178,11 +207,15 @@ for (const key of admittedBuiltinKeys) {
     },
   });
 }
+await emit(new URL("../src/route/builtin-closures.generated.ts",import.meta.url),`// Generated by codegen:routes. Do not edit.\n${closureImports.join("\n")}\nexport const builtinClosures={${closureEntries.join(",")}};\n`);
+await emit(new URL("../src/route/builtin-modules.generated.ts",import.meta.url),`// Generated by codegen:routes. Do not edit.\n${browserImports.join("\n")}\nexport const builtinModules={${browserEntries.join(",")}};\n`);
+await emit(new URL("../src/route/builtin-typed.generated.ts",import.meta.url),`// Generated by codegen:routes. Do not edit.\n${typedImports.join("\n")}\nexport const typedBuiltins={${typedEntries.join(",")}};\n`);
+await emit(new URL("../../../packages/agent-contracts/src/admitted-builtin-keys.ts",import.meta.url),`// Generated by codegen:routes. Do not edit.\nexport const admittedBuiltinKeys=${JSON.stringify(keys)} as readonly string[];\n`);
 const closures = await buildBuiltinClosures(builtinOptions);
 const directory = [];
 for (const [key, closure] of closures) {
   await emit(
-    new URL(`../src/${key}/source-closure.generated.json`, import.meta.url),
+    new URL(`../src/${declarations.get(key)?.folder ?? key}/source-closure.generated.json`, import.meta.url),
     canonicalRouteJson(closure) + "\n",
   );
   if (closureOnly) continue;

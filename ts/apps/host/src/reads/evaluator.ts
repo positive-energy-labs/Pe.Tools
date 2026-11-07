@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { canonicalRouteInput as canonicalJson } from "@pe/agent-contracts";
+import { documentRefSchema, workKeySchema, canonicalRouteInput as canonicalJson } from "@pe/agent-contracts";
 
 export const fingerprint = (data: unknown) =>
   createHash("sha256")
@@ -85,6 +85,9 @@ export const leaf = <I, O>(
   output: z.ZodType<O>,
   validate = true,
 ): Leaf<I, O> => Object.freeze({ name, input, output, leaf: true, validate });
+/** Standard tracked Work inputs, shared by every host route. */
+export const workScope=leaf("work-scope",documentRefSchema,workKeySchema,false);
+export const workValue=z.object({doc:z.unknown(),revision:z.number()}).passthrough().nullable();
 export interface Trace {
   readonly recipe: string;
   readonly name: string;
@@ -111,7 +114,7 @@ export interface Value<T> {
 export interface InputPort {
   readonly evaluation: string;
   readonly origin: unknown;
-  readonly take: (name: string, args: unknown) => Promise<unknown>;
+  readonly take: (name: string, args: unknown, context?:ReadContext) => Promise<unknown>;
   /** Synchronous event revision: also fences a change while final validation is awaiting I/O. */
   readonly revision: (name: string, args: unknown) => number;
 }
@@ -174,7 +177,7 @@ export async function evaluate<I, O>(
         try {
           const raw =
             "leaf" in definition
-              ? await port.take(definition.name, args)
+              ? await port.take(definition.name, args,ctx)
               : await definition.run(ctx, args);
           const data = immutable(wireValue(definition.output.parse(raw)));
           const hash = fingerprint(data);

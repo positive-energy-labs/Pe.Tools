@@ -311,6 +311,9 @@ importers:
       '@pe/browser':
         specifier: workspace:*
         version: link:../../packages/browser
+      '@pe/host':
+        specifier: workspace:*
+        version: link:../host
       '@tailwindcss/typography':
         specifier: ^0.5.16
         version: 0.5.20(tailwindcss@4.3.1)
