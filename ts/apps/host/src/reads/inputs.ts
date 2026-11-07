@@ -71,7 +71,11 @@ export function nativeRead<K extends HostOperationKey>(
   const input = nativeArgs.omit({ key: true }).extend({ request: nativeRequestSchema(key) });
   const output = z.object({ body: nativeOutputSchema(key), version: z.string().nullable() });
   const operation = hostOpCatalog.find((op) => op.key === key);
-  if (!operation || operation.intent !== "Read" || operation.effect !== "Read")
+  if (
+    !operation ||
+    operation.intent !== "Read" ||
+    !(operation.effect === "Read" || (operation.effect === "TransactRead" && operation.rollsBack))
+  )
     throw Error(`Input is not a catalog Read/Read: ${key}`);
   const handle = read(`input.native.${key}`, {
     input,

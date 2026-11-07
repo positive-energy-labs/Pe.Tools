@@ -54,7 +54,9 @@ function bind<I, O>(
 /** Trusted host modules extend the graph without an endpoint or port branch. */
 export function readRegistry(modules: readonly Pick<HostRouteModule, "reads" | "leaves">[]) {
   const reads = new Map<string, Read<any, any>>();
-  const leaves: Record<string, NonNullable<HostRouteModule["leaves"]>[string]> = {};
+  const leaves: Record<string, NonNullable<HostRouteModule["leaves"]>[string]> =
+    Object.create(null);
+  const serviceInputs = new Set(["native", "resource", "work", "work-scope", "document-mark"]);
   const register = (
     definitions: HostRouteModule["reads"] = {},
     inputs: HostRouteModule["leaves"] = {},
@@ -67,7 +69,13 @@ export function readRegistry(modules: readonly Pick<HostRouteModule, "reads" | "
       names.add(definition.name);
     }
     for (const name of Object.keys(inputs))
-      if (leaves[name]) throw Error(`Duplicate host leaf ${name}`);
+      if (
+        Object.hasOwn(leaves, name) ||
+        serviceInputs.has(name) ||
+        name.startsWith("file:") ||
+        name.startsWith("local:")
+      )
+        throw Error(`Duplicate host leaf ${name}`);
     for (const definition of incoming) reads.set(definition.name, definition);
     Object.assign(leaves, inputs);
     let active = true;
