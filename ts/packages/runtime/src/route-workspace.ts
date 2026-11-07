@@ -807,7 +807,7 @@ export class RouteWorkspace {
         return refuse("refused","Work already exists","Open the existing Work.");
       const write:WorkWriteAck={key:workHandle(scope,1).key,kind:"publish",by,press:null,
         base:0,revision:1,patches:[],inverse:[],undoable:false,at:Date.now(),...(receiptId?{receiptId}:{})};
-      await this.#persist(scope,scope.route,{doc,schemaVersion:spec.schemaVersion ?? 1,revision:1},[{write,after:doc}]);
+      await this.#persist(scope,scope.route,{version:1,doc,schemaVersion:spec.schemaVersion ?? 1,revision:1},[{write,after:doc}]);
       this.#inverses.set(workKey(scope),[{write,after:doc}]);
       try {this.#accept(write);} finally {
         await this.#publish({type:"route_workspace",scope,route:scope.route,...write,action:"publish",ok:true});

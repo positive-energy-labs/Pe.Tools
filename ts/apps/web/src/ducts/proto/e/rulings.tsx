@@ -1,7 +1,8 @@
+import type { HealView as HealPlan } from "@pe/ducts-domain/pricing-view";
 /** Picture findings share domain identity and numbering with the inbox. */
 import { useMemo } from "react";
 
-import { healFindings, type HealPlan } from "@pe/ducts-domain/heal";
+import { healFindings } from "@pe/ducts-domain/heal";
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";

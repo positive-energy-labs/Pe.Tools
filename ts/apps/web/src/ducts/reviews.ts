@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/generated";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { HealPlan } from "@pe/ducts-domain/heal";
+import type { HealView as HealPlan } from "@pe/ducts-domain/pricing-view";
 import { healSystems, healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
 import { ductsHealInputSchema } from "@pe/agent-contracts";
 type ReviewEvidence = {

@@ -1,4 +1,4 @@
-import { commands } from "@pe/agent-contracts";
+import { commands, refusalText } from "@pe/agent-contracts";
 import { z } from "zod";
 import { command, refused } from "./command-executor.ts";
 import type { RouteWorkspace } from "@pe/runtime";
@@ -16,7 +16,7 @@ export const workStartExecutor=(workspace:RouteWorkspace|undefined)=>command(com
     const {key,seed}=execution.prepared;
     return execution.step("publication","work.start",{key},async()=>{
       const result=await workspace.start(key,seed,caller.kind === "pea"?"pea":"human",admission.id);
-      if(!result.ok) throw refused(result.error);
+      if(!result.ok) throw refused(refusalText(result));
       return result;
     });
   },

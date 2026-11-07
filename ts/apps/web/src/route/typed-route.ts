@@ -1,13 +1,13 @@
+import { identityCodecs, subjectSchema } from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
+import { salvageWork } from "../../../../packages/agent-contracts/src/route-state.ts";
+import { commands } from "../../../../packages/agent-contracts/src/semantic-actions.ts";
+import { commandCatalogAxes } from "../../../../packages/agent-contracts/src/command-axes.ts";
 import { z } from "zod";
 import {
-  identityCodecs,
-  commands,
-  commandCatalogAxes,
   type HostRouteModule,
   type Immutable,
   type RouteGraphJson,
   type RouteStatePatch,
-  salvageWork,
   type RouteStateSpec,
   type ReadingSnapshot,
   type LayoutJson,
@@ -53,7 +53,7 @@ export const localId = (namespace: string, subject: string) => {
 };
 export const namesOf = (value: Many<IdentityId<"local">>): string[] | "all" =>
   value.kind === "all" ? "all" : value.ids.map((id) => identityCodecs.local.parts(id).subject);
-export { subjectSchema } from "@pe/agent-contracts";
+export { subjectSchema };
 type ResultCommand = {
   [K in keyof typeof commands]: (typeof commands)[K] extends { result: z.ZodType } ? K : never;
 }[keyof typeof commands];

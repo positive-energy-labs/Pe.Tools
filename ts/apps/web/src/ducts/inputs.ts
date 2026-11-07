@@ -42,7 +42,7 @@ export function terminalInputs(
   id: number,
   from: string | null = null,
 ): TerminalInputs {
-  const flow = priced.flows.get(id);
+  const flow = priced.flows[id];
   const edit = priced.edit.terminalDrops[String(id)];
   const row = priced.next.paths[id]?.rows.find((r) => r.id === id && r.kind === "terminal");
   return {
@@ -74,7 +74,7 @@ function unitRoleInput(
   id: number,
   edit: { role: "fan" | "passive" } | undefined,
 ): Resolved<"fan" | "passive"> & { reason?: string } {
-  const r = priced.roles.get(id);
+  const r = priced.roles[id];
   if (!r) return edit ? { value: edit.role, word: "override" } : { value: "fan", word: "default" };
   const word = r.why === "edit" ? "override" : r.why;
   return { value: r.role, word, reason: r.reason };

@@ -30,7 +30,7 @@ import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length
 import { neighboursOf, type Neighbour } from "@pe/ducts-domain/neighbours";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { pendingCount, stagedEsp } from "@pe/ducts-domain/staged";
-import { unitFlowsIn } from "@pe/ducts-domain/survey";
+import { unitFlowsView as unitFlowsIn } from "@pe/ducts-domain/pricing-view";
 import { scopeOf, sectionsOf, systemScope } from "@pe/ducts-domain/system-scope";
 import { systemSearch } from "@pe/ducts-domain/system-search";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -324,7 +324,7 @@ const NO_GROUPS: readonly string[] = [];
 const NO_NEIGHBOURS: readonly Neighbour[] = [];
 /** The open list as one string: what a hold, a side and a list scope key on. */
 const openKey = (open: readonly string[]) => open.join(", ");
-const NO_NOTES: ReadonlyMap<string, SystemNote> = new Map();
+const NO_NOTES: Readonly<Record<string,SystemNote>> = {};
 const NO_SYSTEMS: ReturnType<typeof systemList> = [];
 /** "n of m systems read", or null when the snapshot holds every system. */
 const partialWord = (coverage: Coverage) =>
@@ -646,7 +646,7 @@ export function PictureBody({ ctx }: { ctx: DuctsDrawContext }) {
     systems: systemRows.length,
     priced: systemRows.filter((row) => row.total != null).length,
     fix: systemRows.filter((row) =>
-      systemNoteCount(row, notes.get(row.key)).issues.some((issue) => issue.tone === "alarm"),
+      systemNoteCount(row, notes[row.key]).issues.some((issue) => issue.tone === "alarm"),
     ).length,
     partial: partialWord(coverage),
   };
@@ -685,7 +685,7 @@ export function PictureBody({ ctx }: { ctx: DuctsDrawContext }) {
             neighbours={neighbours}
             lead={lead}
             identity={{
-              system: chosen ? { ...chosen, note: notes.get(chosen.key) } : null,
+              system: chosen ? { ...chosen, note: notes[chosen.key] } : null,
               census,
               refreshing: !data.snapshotRead.current,
               open: () => {},
@@ -836,7 +836,7 @@ const SystemsList = memo(function SystemsList({
   /** The system's fans: its hover hint and the head of its breakdown popover. */
   fansOf: (system: ReturnType<typeof systemList>[number]) => FanFact[];
   nameOf: (id: number) => string;
-  notes: ReadonlyMap<string, SystemNote>;
+  notes: Readonly<Record<string,SystemNote>>;
   drawn: DuctSnapshot | null;
   page: {
     system: readonly string[];
@@ -894,7 +894,7 @@ const SystemsList = memo(function SystemsList({
       needsFix: {
         label: "Needs a fix",
         kind: "text",
-        read: (system) => ((notes.get(system.key)?.fix ?? 0) > 0 ? "yes" : "no"),
+        read: (system) => ((notes[system.key]?.fix ?? 0) > 0 ? "yes" : "no"),
         values: ["yes", "no"],
         labels: new Map([
           ["yes", "Yes"],
@@ -954,12 +954,12 @@ const SystemsList = memo(function SystemsList({
         return systemRowParts(
           system,
           () => door?.toggle(systemId(system.key)),
-          notes.get(system.key),
+          notes[system.key],
           fans.map((f) => `${nameOf(f.unit)} ${f.role}: ${f.says}`),
           () => <FanFacts facts={fans} nameOf={nameOf} />,
         );
       }}
-      projection={(system) => ({ weight: systemNoteCount(system, notes.get(system.key)).total })}
+      projection={(system) => ({ weight: systemNoteCount(system, notes[system.key]).total })}
       empty={systemsEmpty(coverage)}
     />
   );
