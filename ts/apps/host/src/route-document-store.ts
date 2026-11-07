@@ -25,7 +25,7 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
       if (!existsSync(path)) return null;
       const discard = (reason: string) => {
         rmSync(path);
-        console.warn(`Discarded stored Work '${path}': ${reason}`);
+        console.warn(`Discarded stored Work '${path}': ${reason.replace(/\s+/g, " ")}`);
         return null;
       };
       let raw: unknown;
@@ -46,7 +46,7 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
       const path = join(dir, filename(targetKey, route));
       if (value == null) {
         rmSync(path, { force: true });
-        if (reason) console.warn(`Discarded stored Work '${path}': ${reason}`);
+        if (reason) console.warn(`Discarded stored Work '${path}': ${reason.replace(/\s+/g, " ")}`);
         return;
       }
       writeFileSync(

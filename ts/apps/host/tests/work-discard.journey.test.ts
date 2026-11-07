@@ -50,6 +50,7 @@ test("D rule 5 opens discarded disk Work empty and saves the first edit without 
     for (const [line] of log.mock.calls) {
       expect(line).toContain(path);
       expect(line).toMatch(/Discarded stored Work .*: .+/);
+      expect(line).not.toMatch(/[\r\n]/);
     }
     // A failed disk access has a different boundary: it must not become empty Work.
     const io = createPeRoutes({ registrations: [{ spec }], store: { ...store,
