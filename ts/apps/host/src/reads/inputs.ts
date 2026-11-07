@@ -181,7 +181,10 @@ export function inputPort(options: {
       }
       if (name === "work") {
         const { owner, scope } = z.object({ owner: z.string(), scope: workKeySchema }).parse(raw);
-        return options.workspace.view(scope, owner, source.inputs?.work);
+        // Pure evaluator compositions inspect Work without a recording owner.
+        return source.inputs
+          ? options.workspace.view(scope, owner, source.inputs.work)
+          : options.workspace.viewUncaptured(scope, owner);
       }
       if (name === "native") {
         const args = nativeArgs.parse(raw);

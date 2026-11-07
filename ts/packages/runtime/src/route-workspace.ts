@@ -493,6 +493,18 @@ export class RouteWorkspace {
     })).value;
   }
 
+  /** Internal inspection/reconciliation only: never begins a capture or serves a recording. */
+  async viewUncaptured(scope: WorkKey, route: string) {
+    if (this.options.recorded) throw Error("Uncaptured Work inspection cannot serve a recording");
+    return this.#read(scope, route, true);
+  }
+
+  /** Legacy inspection only. Semantic command and graph inputs use read with their context. */
+  async readUncaptured(scope: WorkKey, route: string) {
+    if (this.options.recorded) throw Error("Uncaptured Work inspection cannot serve a recording");
+    return this.#read(scope, route, false);
+  }
+
   /**
    * A reader's view of the route: absent Work uses schema defaults at r0 when available.
    * Without defaults it stays absent; no required authored value is invented.
@@ -773,7 +785,7 @@ export class RouteWorkspace {
     expectedRevision: number,
   ): Promise<RouteStateWriteResult> {
     this.#authorize(direction);
-    const snapshot = await this.view(scope, route);
+    const snapshot = await this.viewUncaptured(scope, route);
     if (!snapshot || snapshot.revision !== expectedRevision)
       return refuse("refused", "Work changed before restoring", "Re-read Work.", "stale_revision");
     const journal = createWorkJournal(scope);
@@ -961,7 +973,7 @@ export class RouteWorkspace {
   ): () => void {
     const key = `${workKey(scope)}\0${route}\0${orEmpty}\0${withHistory}`;
     const read = () => this.#read(scope, route, orEmpty, withHistory, context);
-    const subscribe = (notify: () => void) => this.subscribe((event) => {
+    const subscribe = (notify: () => void) => this.subscribeUncaptured((event) => {
       if (event.route === route && workKey(event.scope) === workKey(scope)) notify();
     });
     if (!context || withHistory) return this.#reads.observe(key, read, subscribe, listener);
@@ -971,7 +983,8 @@ export class RouteWorkspace {
       (result) => "error" in result ? listener(result) : listener({ value: result.value.value }, result.value.carriage));
   }
 
-  subscribe(listener: (event: RouteWorkspaceEvent) => void): () => void {
+  /** Invalidation events only: no Work body is acquired and no capture begins. */
+  subscribeUncaptured(listener: (event: RouteWorkspaceEvent) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
   }

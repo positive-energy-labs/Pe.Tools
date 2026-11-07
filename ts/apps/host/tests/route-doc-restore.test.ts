@@ -65,7 +65,7 @@ async function fixture() {
     heads: { observe: () => () => {} },
   });
   const events: RouteWorkspaceEvent[] = [];
-  app.workspace.subscribe((event) => {
+  app.workspace.subscribeUncaptured((event) => {
     if (event.ok) events.push(event);
   });
   const post = async (body: unknown, caller: Caller = human, operation = "apply") => {

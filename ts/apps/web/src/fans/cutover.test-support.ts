@@ -146,7 +146,7 @@ export async function createWitness(
           deliver({ kind: "complete", revision: ++version, value: packet(data, version) });
         };
         send();
-        return ws.subscribe(() => {
+        return ws.subscribeUncaptured(() => {
           deliver({ kind: "stale" });
           queueMicrotask(send);
         });
@@ -215,7 +215,7 @@ export async function createWitness(
               }
             })
           : (send(captured), undefined);
-      const stopWork = ws.subscribe(() => {
+      const stopWork = ws.subscribeUncaptured(() => {
         deliver({ kind: "stale" });
         queueMicrotask(() => send(captured));
       });

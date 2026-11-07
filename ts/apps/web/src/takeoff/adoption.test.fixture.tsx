@@ -184,7 +184,7 @@ export async function journey(options: { catalogue?: ReturnType<typeof gate>; sn
     const response = await first;
     expect(response.status, await response.clone().text()).toBe(200);
   }
-  const stopWork = host.workspace.subscribe(() => listeners.forEach((f) => f()));
+  const stopWork = host.workspace.subscribeUncaptured(() => listeners.forEach((f) => f()));
   const streams = new Set<() => void>();
   const readings: Readings = {
     subscribe(reading, deliver) {

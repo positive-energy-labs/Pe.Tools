@@ -881,7 +881,11 @@ export class ActionJournal implements ReceiptReader {
     return visible;
   }
   private workReads(admission: ActionAdmission) {
-    return this.environment?.workReads?.(admission) ?? this.environment?.work;
+    const owner = this.environment?.work;
+    // Standalone inspection compositions use uncaptured reads. Production supplies workReads.
+    return this.environment?.workReads?.(admission) ?? (owner && {
+      read: owner.readUncaptured.bind(owner), view: owner.viewUncaptured.bind(owner),
+    });
   }
   private context(
     admission: ActionAdmission,
@@ -1376,7 +1380,7 @@ export class ActionJournal implements ReceiptReader {
         publishWork: (key, route, patches) =>
           execution.step("publication", "work.publish", { work: key, route, patches }, async () => {
             const work = this.environment?.work;
-            const current = await work?.view(key, route);
+            const current = await this.workReads(row)?.view(key, route);
             if (!work || !current) throw Error("Work publication is unavailable");
             const result = await work.publish(key, route, [...patches], current.revision);
             if (!result.ok) throw new ActionIncomplete("Work publication did not land", result);
@@ -1436,7 +1440,7 @@ export class ActionJournal implements ReceiptReader {
                     "refused",
                   );
                 const work = this.environment?.work;
-                const current = await work?.view(key, route);
+                const current = await this.workReads(row)?.view(key, route);
                 const original = row.consumes.find(
                   (dependency) =>
                     dependency.kind === "work" &&

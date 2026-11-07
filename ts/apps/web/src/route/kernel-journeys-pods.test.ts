@@ -72,7 +72,7 @@ async function podJourney() {
       return () => { closed = true; listeners.delete(refresh); };
     },
   };
-  const stopWork = host.workspace.subscribe(() => listeners.forEach((notify) => notify()));
+  const stopWork = host.workspace.subscribeUncaptured(() => listeners.forEach((notify) => notify()));
   const work = createWorkFeedClient({
     subscribe: observeResources(host.workspace, { observe: () => () => {} }), dirty() {},
   }, {

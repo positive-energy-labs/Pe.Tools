@@ -64,12 +64,17 @@ interface WorkSelection<W> {
   /** Non-cell facts used by this command. The first segment belongs to this Work schema. */
   facts?: readonly (readonly [keyof W & string, ...(string | number)[]])[];
 }
+/** Action-owned acquisition: the adapter carries the context. */
+export interface CommandWorkReads {
+  read(key: Parameters<RouteWorkspace["read"]>[0], route: string): ReturnType<RouteWorkspace["read"]>;
+  view(key: Parameters<RouteWorkspace["view"]>[0], route: string): ReturnType<RouteWorkspace["view"]>;
+}
 export interface CommandContext {
   admission: ActionAdmission;
   caller: Caller;
   basis: Basis | null;
   /** The same owner the journal gates and publishes. Throws only when a workless fixture uses it. */
-  readonly work: Pick<RouteWorkspace, "read" | "view" | "publish">;
+  readonly work: CommandWorkReads & Pick<RouteWorkspace, "publish">;
   consumed: Consumed[];
   selectWork<S extends z.ZodType>(
     spec: WorkSpec<S>,
@@ -121,7 +126,7 @@ export type CommandRegistry = (key: string) => CommandExecutor;
 /** Resource I/O only. Control hooks belong to the stable registry entries. */
 export interface CommandResources {
   work?: RouteWorkspace;
-  workReads?: (admission: ActionAdmission) => Pick<RouteWorkspace, "read" | "view">;
+  workReads?: (admission: ActionAdmission) => CommandWorkReads;
   probe(dependency: Exclude<Consumed, { kind: "work" }>): Promise<unknown>;
   target?(target: ExecutionTarget, needs: ActionNeed): Promise<void>;
   effectPath?(effect: Extract<Effect, { kind: "member" }>): Promise<string | undefined>;

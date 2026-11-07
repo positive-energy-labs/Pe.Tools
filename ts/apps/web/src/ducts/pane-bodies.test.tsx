@@ -209,7 +209,7 @@ test("/fans edits Ducts criteria and a criterion choice in place through the duc
   await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.current).toBe(true));
   await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
   const acks: { route: string; label?: string }[] = [];
-  closes.push(f.ws.subscribe((event) => {
+  closes.push(f.ws.subscribeUncaptured((event) => {
     if (event.ok) acks.push({ route: event.route, label: event.label });
   }));
   const ducts0 = f.owner.work()?.revision ?? 0;

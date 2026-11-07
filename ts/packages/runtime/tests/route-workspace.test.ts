@@ -80,10 +80,10 @@ test("throwing accepted and publish listeners cannot fail a committed write or s
       false,
     ),
     module.observeAccepted(documentA, accepted, undefined, false),
-    module.subscribe(() => {
+    module.subscribeUncaptured(() => {
       throw Error("publish listener failed");
     }),
-    module.subscribe(published),
+    module.subscribeUncaptured(published),
   ];
   try {
     const result = await bind(module).apply("human", [{ path: ["count"], value: 1 }], 0);
@@ -127,7 +127,7 @@ test("start-fresh commits and publishes despite a throwing accepted listener", a
       false,
     ),
     module.observeAccepted(documentA, accepted, undefined, false),
-    module.subscribe(published),
+    module.subscribeUncaptured(published),
   ];
   try {
     expect(await module.startFresh(documentA, documentA.route, "human")).toMatchObject({
@@ -434,7 +434,7 @@ test("Save As carries the addressless Work to the Address once and silently", as
   await bind(module, unsaved).apply("human", [{ path: ["values", "a"], value: "A" }], 0);
 
   const events: RouteWorkspaceEvent[] = [];
-  module.subscribe((event) => events.push(event));
+  module.subscribeUncaptured((event) => events.push(event));
   expect((await bind(module, savedAs).read())?.doc).toMatchObject({ values: { a: "A" } });
   // The migration is a move, not a copy, and says nothing on the event stream.
   expect(events).toEqual([]);

@@ -1,3 +1,4 @@
+import ts from "typescript";
 import { readFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -26,3 +27,32 @@ test("Pea has one capability admission door", () => {
     );
   expect(owners).toEqual(["shared/admission.ts"]);
 });
+
+test("production workspace acquisitions carry context", () => {
+  const root = resolve(import.meta.dirname, "../../..");
+  const paths = execFileSync("git", ["ls-files", "-co", "--exclude-standard", "--", "apps", "packages"], { cwd: root, encoding: "utf8" }).trim().split(/\r?\n/)
+    .filter(path => /\.tsx?$/.test(path) && !/\.test[.-]|\/tests\//.test(path) && path !== "packages/runtime/src/route-workspace.ts");
+  const candidates = paths.filter(path => /\.\s*(?:view|read|subscribe)\s*\(/.test(readFileSync(resolve(root, path), "utf8")));
+  const program = ts.createProgram(candidates.map(path => resolve(root, path)), {
+    target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    allowImportingTsExtensions: true, skipLibCheck: true, noEmit: true, strict: true, jsx: ts.JsxEmit.ReactJSX,
+  });
+  const checker = program.getTypeChecker(), offenders: string[] = [];
+  for (const path of candidates) {
+    const source = program.getSourceFile(resolve(root, path))!;
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+        const method = node.expression.name.text;
+        const type = checker.getNonNullableType(checker.getTypeAtLocation(node.expression.expression));
+        if (type.getSymbol()?.name === "RouteWorkspace" && ["view", "read", "subscribe"].includes(method)) {
+          const required = method === "subscribe" ? 2 : 3;
+          if (node.arguments.length < required || node.arguments[required - 1]?.getText(source) === "undefined")
+            offenders.push(`${path}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1} ${method}`);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  expect(offenders).toEqual([]);
+}, 30_000);
