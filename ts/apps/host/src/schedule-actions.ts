@@ -32,7 +32,7 @@ import {
   type ScheduleCellsApply,
 } from "@pe/host-contracts/generated";
 import { invokeBridge as invoke, type RevitBridge } from "./bridge.ts";
-import { ActionIncomplete } from "./action-journal.ts";
+import { ActionIncomplete, type ActionExecution } from "./action-journal.ts";
 import { z } from "zod";
 import { command, refused, type CommandContext } from "./command-executor.ts";
 import type { TakeoffActionDependencies } from "./takeoff-actions.ts";
@@ -339,10 +339,7 @@ export function scheduleExecutors(
   bridge: RevitBridge["Service"],
   deps: FamilyActionDependencies = {},
 ) {
-  const bindReading = command(commands["schedule.grid.bind"], z.null(), {
-    bind: async () => ({ effects: [] }),
-    run: async (ctx, execution) => {
-      const input = scheduleActions["schedule.grid.bind"].input.parse(ctx.admission.input);
+  const bind = async (ctx:CommandContext, execution:ActionExecution, input:z.output<typeof scheduleActions["schedule.grid.bind"]["input"]>) => {
       const reading = input.reading ?? (await captures.schedule(input.readingId));
       if (reading.id !== input.readingId)
         throw refused("Reading identity differs from the requested evidence");
@@ -390,8 +387,29 @@ export function scheduleExecutors(
         if (!result.ok) throw refused(refusalText(result));
       }
       return { envelope: await work.read(scope, "schedules") };
+
+  };
+  const bindReading = command(commands["schedule.grid.bind"], z.null(), {
+    bind:async()=>({effects:[]}),
+    run:async(ctx,execution)=>bind(ctx,execution,scheduleActions["schedule.grid.bind"].input.parse(ctx.admission.input)),
+  });
+  const readGrid = command(scheduleActions["schedule.grid.read"], scheduleActions["schedule.grid.read"].input, {
+    bind: async(ctx)=> {
+      const input = ctx.admission.input;
+      if(input.work.key.binding !== "workspace" || input.work.key.route !== "schedules") throw refused("Select one schedule's Work before reading");
+      const view = await ctx.work.view(input.work.key,"schedules");
+      if(!view || view.revision !== input.work.revision) throw refused("Schedule Work changed; read its current revision");
+      return {effects:[],prepare:async()=>input};
+    },
+    run:async(ctx,execution)=>{
+      const input = execution.prepared;
+      const reading = scheduleReadingSchema.parse(await readSchedule({key:"schedule.grid.snapshot",input:{scheduleId:input.scheduleId,maxRows:input.maxRows},target:ctx.admission.target.kind === "document" ? ctx.admission.target.ref : null},captures,bridge,deps));
+      if(input.work.key.binding !== "workspace" || input.work.key.work !== reading.workspaceId) throw refused("The schedule read belongs to another Work");
+      await bind(ctx,execution,{readingId:reading.id,reading,expectedRevision:input.work.revision});
+      return reading;
     },
   });
+
   const gridPush = command(commands["schedule.grid.push"], preparedSchedulePushSchema, {
     seal: (p) => ({
       request: {
@@ -697,6 +715,7 @@ export function scheduleExecutors(
     },
   });
   return {
+    "schedule.grid.read": readGrid,
     "schedule.grid.bind": bindReading,
     "schedule.grid.push": gridPush,
     "schedule.capture": capture,
