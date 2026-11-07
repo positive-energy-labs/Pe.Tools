@@ -1,4 +1,4 @@
-import { discoveryMachine, type DiscoveryMachine } from "./discovery-machine.ts";
+import { discoveryMachine, discoveryMachineSchema } from "./discovery-machine.ts";
 /**
  * Capability — the ONE row type every pea door reads. Ops, route documents, route commands,
  * pod buttons, and skills project into this shape; `pe_find` ranks it, `pe_read` runs the
@@ -14,7 +14,7 @@ import {
   isCanonicalSlug,
   parseContributionKey,
 } from "./contribution.ts";
-import type { Machine } from "./machine.ts";
+import { machineSchema } from "./machine.ts";
 import { principalSchema, type Principal } from "./principal.ts";
 import type { HostOperationActor } from "@pe/host-contracts/contracts";
 
@@ -135,14 +135,7 @@ export const capabilityCatalogSchema = z.object({
   /** The bridge session the op rows were read from, when one answered. */
   bridgeSessionId: z.string().optional(),
   machine: z
-    .custom<Machine | DiscoveryMachine>(
-      (value) =>
-        !!value &&
-        typeof value === "object" &&
-        "revit" in value &&
-        "legs" in value &&
-        "observedAtUtc" in value,
-    )
+    .lazy(() => z.union([discoveryMachineSchema, machineSchema]))
     .transform(discoveryMachine),
   /** Revit's recent documents (no Revit needed); absent when the catalog was built without them. */
   recents: z.array(capabilityRecentSchema).optional(),

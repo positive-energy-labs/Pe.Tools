@@ -1,158 +1,172 @@
-import type { DiscoveryMachine } from "./discovery-machine.ts";
-import type {
-  DocumentInfo,
-  DocumentHoldings,
-  ProcessIdentity,
-  SessionDocument,
-  SessionObservation,
-  UpdatePlan,
-  UpdateReceipt,
-} from "@pe/host-contracts/pe-revit-contract";
-import type { DocumentIdentityAuthority } from "@pe/host-contracts/contracts";
+import { z } from "zod";
+import { sdkSchema } from "@pe/host-contracts/decoders";
+import { DOCUMENT_IDENTITY_AUTHORITY } from "@pe/host-contracts/contracts";
 import type { NativeNotice } from "@pe/host-contracts/native-adapter";
-import type { Provider } from "./harness-thread.ts";
-import { addressSchema, type DocumentRef, type TargetInventory } from "./target.ts";
+import type { DiscoveryMachine } from "./discovery-machine.ts";
+import { providerSchema } from "./provider.ts";
+import { addressSchema, documentRefSchema, type TargetInventory } from "./target.ts";
 
 /** Last confirmed data lives in the field; a failed attempt changes only this evidence. */
-export interface MachineLeg {
-  readonly observedAtUtc: string | null;
-  readonly attemptedAtUtc: string | null;
-  readonly error: string | null;
-}
+export const machineLegSchema = z
+  .object({
+    observedAtUtc: z.string().nullable(),
+    attemptedAtUtc: z.string().nullable(),
+    error: z.string().nullable(),
+  })
+  .readonly();
+const processSchema = sdkSchema("ProcessIdentity").pick({ pid: true, processStartUtc: true });
+export const machinePeerSchema = z
+  .object({
+    serviceName: z.string(),
+    instanceId: z.string(),
+    version: z.string(),
+    sourceRoot: z.string().nullable(),
+    process: processSchema,
+    url: z.string(),
+    reachable: z.boolean(),
+  })
+  .readonly();
+export const machineHostSchema = z
+  .object({
+    /** Host/Revit ownership only; never a code-freshness claim. */
+    runtimeMatch: z.enum(["verified", "disconnected", "unknown", "refused"]).optional(),
+    runtimeRefusal: z.string().nullable().optional(),
+    installedRoot: z.string().nullable().optional(),
+    serviceName: z.string(),
+    instanceId: z.string(),
+    version: z.string(),
+    payload: z.enum(["installed", "checkout"]),
+    process: processSchema,
+    port: z.number(),
+    /** The service record cannot distinguish login, icon and command launches. */
+    startedBy: z.enum(["login", "icon", "command"]).nullable(),
+    autostart: z.enum(["on", "off", "disabled-in-windows"]).nullable(),
+    /** Enforced Windows RedirectionGuard also prevents harness children traversing user junctions. */
+    redirectionTrust: z.enum(["enforced", "audit", "off"]).nullable(),
+    sourceRoot: z.string().nullable(),
+    uptimeSeconds: z.number(),
+    canonicalUrl: z.string(),
+    peers: z.array(machinePeerSchema).readonly(),
+  })
+  .readonly();
 
-export interface Machine {
-  readonly observedAtUtc: string;
-  readonly host: MachineHost | null;
-  readonly revit: {
-    readonly years: readonly number[] | null;
-    readonly sessions: readonly MachineSession[] | null;
-    readonly unclassifiedAttachments: readonly MachineAttachment[];
-  };
-  readonly update: MachineUpdate;
-  readonly share: MachineShare | null;
-  readonly providers: readonly MachineProvider[] | null;
-  readonly legs: Readonly<Record<string, MachineLeg>>;
-}
-
-export interface MachineHost {
-  /** Host/Revit ownership only; never a code-freshness claim. */
-  readonly runtimeMatch?: "verified" | "disconnected" | "unknown" | "refused";
-  readonly runtimeRefusal?: string | null;
-  readonly installedRoot?: string | null;
-  readonly serviceName: string;
-  readonly instanceId: string;
-  readonly version: string;
-  readonly payload: "installed" | "checkout";
-  readonly process: Pick<ProcessIdentity, "pid" | "processStartUtc">;
-  readonly port: number;
-  /** The service record cannot distinguish login, icon and command launches. */
-  readonly startedBy: "login" | "icon" | "command" | null;
-  /** Null when the Windows registry cannot be read. */
-  readonly autostart: "on" | "off" | "disabled-in-windows" | null;
-  /**
-   * Windows RedirectionGuard on this host process, inherited from whatever started it (msiexec).
-   * `enforced` means this host and every harness CLI it spawns cannot traverse user junctions.
-   */
-  readonly redirectionTrust: "enforced" | "audit" | "off" | null;
-  readonly sourceRoot: string | null;
-  readonly uptimeSeconds: number;
-  readonly canonicalUrl: string;
-  readonly peers: readonly MachinePeer[];
-}
-
-export interface MachinePeer {
-  readonly serviceName: string;
-  readonly instanceId: string;
-  readonly version: string;
-  readonly sourceRoot: string | null;
-  readonly process: Pick<ProcessIdentity, "pid" | "processStartUtc">;
-  readonly url: string;
-  readonly reachable: boolean;
-}
-
-/**
- * Whose a document is to Pea, projected on the host (ADR 0017/0021). `pea` is a document Pea's own
- * acquisition created (its id is what cleanup and handover name); `target` is a user document a
- * human added to a thread's targets. Writes to any of them still cross run consent (ADR 0027 rule
- * 11). The browser draws access from this and nothing else.
- */
-export type MachineAccess =
-  | { readonly kind: "pea"; readonly acquisition: string }
-  | { readonly kind: "read" }
-  | { readonly kind: "target"; readonly thread: string; readonly label: string };
-
-/** A document as the product socket names it, with what it grants. */
-export interface MachineAttachmentDocument extends DocumentRef {
-  readonly title: string;
-  readonly address: string | null;
-  readonly isFamilyDocument: boolean;
-  readonly isActive: boolean;
-  readonly access: MachineAccess;
-}
-
+/** Host-owned access evidence (ADR 0017/0021), never a substitute for run consent. */
+export const machineAccessSchema = z
+  .discriminatedUnion("kind", [
+    z.object({ kind: z.literal("pea"), acquisition: z.string() }),
+    z.object({ kind: z.literal("read") }),
+    z.object({ kind: z.literal("target"), thread: z.string(), label: z.string() }),
+  ])
+  .readonly();
+/** Defer the shared ref schema while target discovery loads the Machine contract. */
+export const machineAttachmentDocumentSchema = z
+  .intersection(
+    z.lazy(() => documentRefSchema),
+    z.object({
+      title: z.string(),
+      address: z.string().nullable(),
+      isFamilyDocument: z.boolean(),
+      isActive: z.boolean(),
+      access: machineAccessSchema,
+    }),
+  )
+  .readonly();
 /** Product socket evidence, not SDK custody. */
-export interface MachineAttachment {
-  readonly session: string;
-  readonly pid: number;
-  readonly processStartUtcUnixMs: number | null;
-  /** Set when the payload attested its openIds are the SDK's; null means no SDK join, so no write. */
-  readonly documentIdentity: DocumentIdentityAuthority | null;
-  readonly documents: readonly MachineAttachmentDocument[] | null;
-}
+export const machineAttachmentSchema = z
+  .object({
+    session: z.string(),
+    pid: z.number(),
+    processStartUtcUnixMs: z.number().nullable(),
+    /** Null means the payload has not attested SDK openId identity, so it cannot write. */
+    documentIdentity: z.literal(DOCUMENT_IDENTITY_AUTHORITY).nullable(),
+    documents: z.array(machineAttachmentDocumentSchema).readonly().nullable(),
+  })
+  .readonly();
+export const machineSessionSchema = z
+  .object({
+    /** Acquisition provenance, never write authority. */
+    whose: z.enum(["you", "pea"]),
+    row: sdkSchema("SessionObservation"),
+    attachment: machineAttachmentSchema.nullable(),
+    /** Observed SDK documents have no persistence metadata. */
+    documents: z
+      .array(
+        z.union([
+          sdkSchema("DocumentInfo"),
+          sdkSchema("SessionDocument").extend({ persistence: z.null() }),
+        ]),
+      )
+      .readonly()
+      .nullable(),
+    documentsLeg: machineLegSchema,
+    /** Null is unread, never an empty holdings census. */
+    holdings: z.array(sdkSchema("DocumentHoldings")).readonly().nullable(),
+    holdingsLeg: machineLegSchema,
+  })
+  .readonly();
+export const machineUpdateSchema = z
+  .object({
+    plan: sdkSchema("UpdatePlan").nullable(),
+    receipt: sdkSchema("UpdateReceipt").nullable(),
+    requestId: z.string().nullable(),
+    admittedPlanId: z.string().nullable(),
+    planLeg: machineLegSchema,
+    receiptLeg: machineLegSchema,
+    automatic: z.boolean(),
+  })
+  .readonly();
+/** Desired sharing intent never proves an active mapping. */
+export const machineShareSchema = z
+  .object({
+    allowRemoteAdministration: z.boolean(),
+    desired: z.enum(["off", "on"]),
+    state: z.enum(["off", "on", "refused", "unknown", "needs-tailscale"]),
+    url: z.string().nullable(),
+    refusal: z.object({ code: z.string(), detail: z.string() }).readonly().nullable(),
+    callers: z
+      .array(
+        z
+          .object({ login: z.string(), lastAtUtc: z.string(), door: z.enum(["web", "pe", "mcp"]) })
+          .readonly(),
+      )
+      .readonly(),
+    refused: z
+      .array(z.object({ atUtc: z.string(), code: z.string(), from: z.string() }).readonly())
+      .readonly(),
+  })
+  .readonly();
+export const machineProviderSchema = providerSchema;
+export const machineSchema = z
+  .object({
+    observedAtUtc: z.string(),
+    host: machineHostSchema.nullable(),
+    revit: z
+      .object({
+        years: z.array(z.number()).readonly().nullable(),
+        sessions: z.array(machineSessionSchema).readonly().nullable(),
+        unclassifiedAttachments: z.array(machineAttachmentSchema).readonly(),
+      })
+      .readonly(),
+    update: machineUpdateSchema,
+    share: machineShareSchema.nullable(),
+    providers: z.array(machineProviderSchema).readonly().nullable(),
+    legs: z.record(z.string(), machineLegSchema).readonly(),
+  })
+  .readonly();
 
-export interface MachineSession {
-  /** Provenance label: an acquisition started this Revit. Never write authority (access is). */
-  readonly whose: "you" | "pea";
-  readonly row: SessionObservation;
-  readonly attachment: MachineAttachment | null;
-  /** Observed documents have no persistence metadata on beta.186's doc-list wire. */
-  readonly documents:
-    | readonly (DocumentInfo | (SessionDocument & { readonly persistence: null }))[]
-    | null;
-  readonly documentsLeg: MachineLeg;
-  /** SDK openId namespace. Null is unread, never an empty holdings census. */
-  readonly holdings: readonly DocumentHoldings[] | null;
-  readonly holdingsLeg: MachineLeg;
-}
-
-export interface MachineUpdate {
-  readonly plan: UpdatePlan | null;
-  readonly receipt: UpdateReceipt | null;
-  readonly requestId: string | null;
-  readonly admittedPlanId: string | null;
-  readonly planLeg: MachineLeg;
-  readonly receiptLeg: MachineLeg;
-  /** Install eligible updates without asking; on unless the person turned it off. */
-  readonly automatic: boolean;
-}
-
-/**
- * One tray card item: a projection of one receipt revision on the `notices` Reading, never a source of
- * truth. `id` + `revision` are the receipt's own, so a later revision replaces its earlier item. `href` opens in the app window; absent opens the panel.
- */
+export type MachineLeg = z.infer<typeof machineLegSchema>;
+export type MachinePeer = z.infer<typeof machinePeerSchema>;
+export type MachineHost = z.infer<typeof machineHostSchema>;
+export type MachineAccess = z.infer<typeof machineAccessSchema>;
+export type MachineAttachmentDocument = z.infer<typeof machineAttachmentDocumentSchema>;
+export type MachineAttachment = z.infer<typeof machineAttachmentSchema>;
+export type MachineSession = z.infer<typeof machineSessionSchema>;
+export type MachineUpdate = z.infer<typeof machineUpdateSchema>;
+export type MachineShare = z.infer<typeof machineShareSchema>;
+export type MachineProvider = z.infer<typeof machineProviderSchema>;
+export type Machine = z.infer<typeof machineSchema>;
+/** A tray projection of one receipt revision; the native adapter owns its wire contract. */
 export type MachineNotice = NativeNotice;
-
-/** Wave 4 implements the Serve adapter; desired intent never proves an active mapping. */
-export interface MachineShare {
-  readonly allowRemoteAdministration: boolean;
-  readonly desired: "off" | "on";
-  /** `needs-tailscale` is a state, not a refusal: the `tailscale` CLI is not installed on this machine. */
-  readonly state: "off" | "on" | "refused" | "unknown" | "needs-tailscale";
-  readonly url: string | null;
-  readonly refusal: { readonly code: string; readonly detail: string } | null;
-  readonly callers: readonly {
-    readonly login: string;
-    readonly lastAtUtc: string;
-    readonly door: "web" | "pe" | "mcp";
-  }[];
-  readonly refused: readonly {
-    readonly atUtc: string;
-    readonly code: string;
-    readonly from: string;
-  }[];
-}
-
-export type MachineProvider = Provider;
 
 /** Resolver view of the host's evidence; an unread or failed leg never proves absence. */
 export function machineInventory(machine: Machine | DiscoveryMachine | undefined): TargetInventory {
