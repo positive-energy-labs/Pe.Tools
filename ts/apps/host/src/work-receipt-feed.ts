@@ -78,7 +78,8 @@ export function observeWorkReceipts(
       removeRow(id);
       from = Math.max(from, row.cursor + 1);
     }
-    if (!acquiring) publish({ kind: "receipt", cursor: through as ReceiptCursor, receipt });
+    // Resource snapshots may coalesce: every publication must cover the whole retained range.
+    if (!acquiring) publish(ready());
   };
   const stop = journal.subscribe({ kinds: ["action"] }, (row) => {
     if (closed) return;

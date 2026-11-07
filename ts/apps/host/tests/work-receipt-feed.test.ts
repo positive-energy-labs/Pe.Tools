@@ -58,10 +58,11 @@ test("subscribe before snapshot, bound terminals by count/bytes, retain every no
   expect(snapshot.receipts.rows.map((row) => row.id)).toEqual(["waiting", "running", "unknown"]);
   deliver(row("running", "succeeded", 2));
   expect(values.at(-1)).toMatchObject({
-    kind: "receipt",
-    cursor: 5,
-    receipt: { id: "running", state: "succeeded" },
+    kind: "ready", receipts: { through: 5 },
   });
+  const next = values.at(-1);
+  if (next?.kind !== "ready") throw Error("missing retained range");
+  expect(next.receipts.rows.map(row => row.id)).toEqual(["waiting", "unknown"]);
   const count = values.length;
   deliver(row("running", "succeeded", 2));
   expect(values).toHaveLength(count);
@@ -280,8 +281,11 @@ test("T1: completed over-budget Plan and Apply stay in a recreated ready as boun
   // A live terminal emission is the same bounded projection as ready.
   deliver(heavy("plan", 330_000, 2));
   const live = first.values.at(-1);
-  expect(live).toMatchObject({ kind: "receipt", receipt: { id: "plan", state: "succeeded" } });
-  expect(live).not.toHaveProperty("receipt.prepared");
+  expect(live).toMatchObject({ kind: "ready", receipts: {
+    rows: expect.arrayContaining([expect.objectContaining({ id: "plan", state: "succeeded" })]),
+  } });
+  if (live?.kind !== "ready") throw Error("missing retained range");
+  expect(live.receipts.rows.find(row => row.id === "plan")).not.toHaveProperty("prepared");
   first.release();
   // Full reload: the browser owner is recreated and the host rebuilds ready from durable rows.
   const second = open();

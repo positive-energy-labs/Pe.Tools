@@ -57,6 +57,7 @@ export class PeReadings {
   private connection = "";
   private sent = new Map<string, ReadingRequest>();
   private updating = false;
+  private readonly renew = new Set<string>();
   /** A replacement cannot retire the active stream until it has opened. */
   private opening?: Source;
   private generation = 0;
@@ -122,6 +123,7 @@ export class PeReadings {
     this.opening?.close();
     this.opening = undefined;
     this.entries.clear();
+    this.renew.clear();
     this.retained.clear();
     this.resyncs.clear();
     this.unwatchWake?.();
@@ -226,12 +228,17 @@ export class PeReadings {
     };
   }
 
-  /**
-   * An Action succeeded, so this subject's retained observation is no longer evidence. Reconnect
-   * reacquires every open subject's snapshot; a gap frame diagnoses loss, it never replaces one.
-   */
-  dirty(request: ReadingRequest) {
-    if (this.entries.has(readingKey(request))) this.schedule();
+  /** Writes fence the connection. Receipt-window loss renews only that subject: it is not
+   * evidence that Work changed. A gap diagnoses loss; the replacement snapshot restores it. */
+  dirty(request: ReadingRequest, scope: "connection" | "subject" = "connection") {
+    const key = readingKey(request), entry = this.entries.get(key);
+    if (!entry) return;
+    if (scope === "connection") return this.schedule();
+    this.pending.delete(key);
+    this.renew.add(key);
+    entry.stale = true;
+    for (const accept of entry.listeners) accept({ kind: "stale", key });
+    this.schedule(false);
   }
 
   /** Invalidation revokes evidence, not the live command channel. Only the replacement may
@@ -309,12 +316,13 @@ export class PeReadings {
     try {
       while (!this.closed && this.connection === connection && this.generation === generation) {
         const remove = [...this.sent.keys()]
-          .filter((key) => !this.entries.has(key))
+          .filter((key) => !this.entries.has(key) || this.renew.has(key))
           .slice(0, READING_MAX_KEYS);
         const add = [...this.entries]
           .filter(([key]) => !this.sent.has(key))
           .slice(0, READING_MAX_KEYS);
         if (remove.length || add.length) {
+          for (const [key] of add) this.renew.delete(key);
           // Subscription admission remains authoritative: failure still fences the live wire.
           await this.update(connection, add.map(([, entry]) => entry.request), remove);
           if (this.closed || this.connection !== connection || this.generation !== generation) break;
@@ -400,6 +408,7 @@ export class PeReadings {
           return;
         const entry = this.entries.get(frame.key);
         if (!entry) return;
+        if (this.renew.has(frame.key)) return;
         const frames = this.pending.get(frame.key) ?? [];
         // Keep log/gap order; consecutive state snapshots need only publish their final value.
         if (frame.kind === "snapshot" && frames.at(-1)?.kind === "snapshot")

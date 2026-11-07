@@ -82,6 +82,12 @@ export function createWorkFeedClient(
           let stop = () => {};
           stop = source.subscribe(request, (frame) => {
             if (closed || ("stale" in frame && frame.stale)) return;
+            if (frame.kind === "gap") {
+              cursor = null;
+              deliver({ kind: "pending" });
+              source.dirty(request, "subject");
+              return;
+            }
             if (frame.kind === "failure") {
               deliver({
                 kind: "failed",
@@ -127,7 +133,7 @@ export function createWorkFeedClient(
                 });
                 deliver({ kind: "pending" });
                 cursor = null;
-                source.dirty(request);
+                source.dirty(request, "subject");
                 return;
               }
               cursor = state.cursor;
