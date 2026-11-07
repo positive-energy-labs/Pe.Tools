@@ -1,5 +1,5 @@
 import type { EntryContract } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
-import type { ReadingContext, UseSource } from "../shell/readings.ts";
+import type { UseSource } from "../shell/readings.ts";
 import { z } from "zod";
 import type { PeRouteId } from "@pe/agent-contracts/pe-api";
 export interface Publication<D = unknown> {
@@ -30,7 +30,9 @@ export interface HostRead {
   axes: EntryContract["axes"];
   demand?: "mount" | "explicit";
   fixtures?: Readonly<Record<string, (args: any) => FixtureValue<z.ZodType<Publication>>>>;
-  source: UseSource & { provide?(name: string, args: unknown): Publication };
+  endpoint?: PeRouteId;
+  request?(args: any): object;
+  source: Omit<UseSource,"open"> & { provide?(name: string, args: unknown): Publication };
 }
 type FixtureValue<O extends z.ZodType<Publication>> = Pick<
   NonNullable<z.output<O>["value"]>,
@@ -57,32 +59,6 @@ export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
     source: {
       kind: "use" as const,
       dirties: ["snapshot"],
-      async open(ctx: ReadingContext, deliver: Parameters<UseSource["open"]>[1]) {
-        const { callCompose, publicationSource } = await import("../shell/readings-api.ts");
-        if (ctx.signal.aborted) return;
-        return publicationSource({
-          async read(context, publication, release) {
-            return contract.output.parse(
-              await callCompose(context, contract.endpoint ?? (key as PeRouteId), {
-                body: {
-                  ...publication,
-                  release,
-                  ...(contract.request ?? ((args) => ({ args })))(
-                    contract.input.parse(context.args),
-                  ),
-                  args: {
-                    ...z.record(z.string(), z.unknown()).parse(contract.input.parse(context.args)),
-                    target: contract.endpoint !== "reads.value" && context.target?.kind === "document" ? context.target.ref : context.target ?? {kind:"host"},
-                  },
-                },
-              } as never, {
-                ...(context.historyPoint ? { "x-pe-history-point": context.historyPoint } : {}),
-                ...(context.historyPose ? { "x-pe-history-page": encodeURIComponent(JSON.stringify(context.historyPose)) } : {}),
-              }),
-            );
-          },
-        }).open(ctx, deliver);
-      },
       ...(fixtures
         ? {
             provide(name: string, args: unknown) {
