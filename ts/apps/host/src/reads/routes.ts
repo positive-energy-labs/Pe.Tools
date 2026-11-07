@@ -36,18 +36,12 @@ function bind<I, O>(
 }
 /** Trusted host modules extend the graph without an endpoint or port branch. */
 export function readRegistry(modules:readonly Pick<HostRouteModule,"reads"|"leaves">[]) {
-  const reads=new Map<string,Read<any,any>>(),leaves:Record<string,NonNullable<HostRouteModule["leaves"]>[string]>={};
-  for(const module of modules) {
-    for(const read of Object.values(module.reads ?? {})) {
-      if(reads.has(read.name)&&reads.get(read.name)!==read) throw Error(`Duplicate host read ${read.name}`);
-      reads.set(read.name,read);
-    }
-    for(const [name,take] of Object.entries(module.leaves ?? {})) {
-      if(leaves[name]&&leaves[name]!==take) throw Error(`Duplicate host leaf ${name}`);
-      leaves[name]=take;
-    }
+  const reads=new Map<string,Read<any,any>>();
+  for(const module of modules) for(const read of Object.values(module.reads ?? {})) {
+    if(reads.has(read.name)&&reads.get(read.name)!==read) throw Error(`Duplicate host read ${read.name}`);
+    reads.set(read.name,read);
   }
-  return {reads,leaves};
+  return {reads};
 }
 export const registeredReads=readRegistry(hostReadModules);
 /** HTTP adapters select a read; composition and freshness belong to the evaluator. */

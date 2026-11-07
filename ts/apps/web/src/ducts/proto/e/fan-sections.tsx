@@ -14,7 +14,7 @@ import { useNativeObservation } from "#/revit/observation";
  * carries them as cards (kaitpw 2026-10-23: "only takes up space"): they read in the system row's
  * breakdown popover and on each unit's Inputs row.
  */
-import type { Priced } from "@pe/ducts-domain/pricing";
+import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 import { worstRun, type FanResult } from "@pe/ducts-domain/losses";
 
 import { fmtFt } from "./bar";

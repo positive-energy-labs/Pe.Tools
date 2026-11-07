@@ -1,6 +1,7 @@
 import type { ActionJournal } from "./action-journal.ts";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { commandResources } from "./command-reads.ts";
+import { workStartExecutor } from "./work-start.ts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { workIntentBoundary, workWriteBoundary } from "./work-write-boundary.ts";
 import { catalogCommandContext } from "./catalog-command-context.ts";
@@ -34,6 +35,7 @@ export function commandRegistry(
   origin?: () => string,
 ): CommandRegistry {
   const implementations: Record<string, CommandExecutor> = {
+    "work.start": workStartExecutor(deps.workspace),
     "machine.bootstrap": bootstrapExecutor(deps.sdk),
     "page.publish": pagePublicationExecutor(
       productPagesRootPath(),

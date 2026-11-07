@@ -100,12 +100,13 @@ const sha256Name = Schema.String.check(
 const FORMAT = 3;
 /** What one taking recorded: a native read, or one input owner's exact read shape. */
 const recordedInput = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("resource"), key: Schema.String, args: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("publication"), key: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("native"), key: Schema.String, args: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("document"), scope: Schema.String }),
   Schema.Struct({
     kind: Schema.Literal("files"),
-    file: Schema.Literals(["firm", "duct-catalogs"]),
+    file: Schema.String,
   }),
   Schema.Struct({
     kind: Schema.Literal("marks"),

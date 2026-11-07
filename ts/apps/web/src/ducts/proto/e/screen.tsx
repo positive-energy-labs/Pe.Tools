@@ -6,12 +6,12 @@ import {
 } from "@pe/kit/lang/popover";
 import { useRouteSearchSlice } from "#/route/activity";
 import { fansLink } from "../../../fans/route.ts";
-import { AttentionRoot, useHoveredIssue } from "#/attention";
+import { useHoveredIssue } from "#/attention";
 import { PointerCite } from "#/shell/pointer-list";
 import { pointerRefs } from "../../pointer-refs";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { useRevitSubjectProps } from "#/revit/element-menu";
-import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
+import { type NativeObservation } from "#/revit/observation";
 import { LoadingContext } from "#/route/loading-context";
 import { PaneActions } from "#/shell/pane-actions";
 import { useAdmittedSubject } from "#/shell/subject";
@@ -55,7 +55,6 @@ import {
 import { z } from "zod";
 import type { DuctsDrawContext } from "../../route.ts";
 import { roster as rosterRead, network as networkSource } from "../../route.ts";
-import { projectValue } from "../../../route/typed-route.ts";
 import { airflowOptions } from "../../airflow";
 import { attentionSubjects, cellFocusOf, cellFocusSubject, focusedElement } from "../../cell-focus";
 import { verdictPatches } from "../../claims";
@@ -103,15 +102,7 @@ function useNetworkData(ctx: NetworkContext) {
   );
   const selected = page.selected.map((item) => localSubject(item.id)).join(",");
   const doc = target?.kind === "document" ? target.ref : null;
-  const networkRead = ctx.value.current
-    ? projectValue<
-        NonNullable<DuctsDrawContext["value"]["value"]>,
-        import("@pe/agent-contracts").DuctsNetworkData
-      >(
-        ctx.value,
-        (value) => value.network as unknown as import("@pe/agent-contracts").DuctsNetworkData,
-      )
-    : ctx.read(networkSource);
+  const networkRead=ctx.read(networkSource);
   // The existing drawing views accept mutable arrays; decoded Values stay immutable.
   const snapshot = (networkRead.value ?? null) as
     | import("@pe/agent-contracts").DuctsNetworkData

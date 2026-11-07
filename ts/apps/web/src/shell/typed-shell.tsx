@@ -123,7 +123,7 @@ function TypedChrome({ mount, document }: { mount: TypedMount; document: ReactNo
   } });
   const head=<SituationBand name={spec.name} context={<>{document}{spec.edits?<span>{mount.work()?.revision === undefined ? "Reading Work..." : `r${mount.work()!.revision}`}</span>:null}</>}
     alerts={<>{mount.problem() ? <span role="alert">{mount.problem()}</span> : null}<CatalogWorkReviews mount={mount} /></>}
-    verbs={Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />)}
+    verbs={[<TypedStart key="start" mount={mount}/>,...Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />)]}
     timeline={<TimelineHead owner={mount} history={<GraphHistory owner={mount} />} />} />;
   return <SubjectDoor.Provider value={subject}><KeyScope id={`route:${spec.key}`}><div className="flex min-h-0 flex-1 flex-col">
     <ScopeKeys keys={actionScopeKeys((["undo","redo"] as const).map(direction=>({id:`work.${direction}`,label:direction,bindings:direction==="undo"?["Mod+Z"]:["Mod+Shift+Z","Mod+Y"],
@@ -161,4 +161,12 @@ function TypedPane({mount,id,ctx}: {mount:TypedMount;id:string;ctx:DrawContext<a
       {mount.spec.panes[id]!.draw(ctx) as ReactNode}
     </NativeObservationScope>
   </AttentionScope></ValueScope>;
+}
+
+function TypedStart({mount}:{mount:TypedMount}) {
+  const action=mount.startAction();
+  if(!action) return null;
+  return <><Button label="Start" busy={action.pending} onClick={()=>void action.run().catch(()=>{})}>Start</Button>
+    {action.consent?<Button label="Reject Start" onClick={action.consent.run}>Reject? {action.consent.until}</Button>:null}
+    {action.failure?<span role="alert">{action.failure}</span>:null}</>;
 }

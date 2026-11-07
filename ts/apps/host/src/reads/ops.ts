@@ -1,8 +1,8 @@
+import { resources } from "../builtin-read-handles.ts";
 import { z } from "zod";
 import { executionTargetSchema } from "@pe/agent-contracts";
-import { read, leaf } from "./evaluator.ts";
+import { read } from "./evaluator.ts";
 import { opsArgs, opsData } from "@pe/agent-contracts";
-const resource = leaf("resource", z.record(z.string(), z.unknown()), z.unknown());
 export const reads = {
   workspace: read("ops.workspace", {
     input: opsArgs.extend({ target: executionTargetSchema }),
@@ -15,11 +15,11 @@ export const reads = {
             ? target.session
             : undefined;
       const catalog = opsData.shape.catalog.parse(
-        await ctx.read(resource, { kind: "ops-catalog", ...(session ? { session } : {}) }),
+        await ctx.read(resources.catalog, { kind: "ops-catalog", ...(session ? { session } : {}) }),
       );
-      const receipts = opsData.shape.receipts.parse(await ctx.read(resource, { kind: "receipts" }));
+      const receipts = opsData.shape.receipts.parse(await ctx.read(resources.statuses, { kind: "receipts" }));
       const receipt = actionId
-        ? opsData.shape.receipt.parse(await ctx.read(resource, { kind: "receipts", id: actionId }))
+        ? opsData.shape.receipt.parse(await ctx.read(resources.receipt, { kind: "receipts", id: actionId }))
         : [];
       return { catalog, receipts, receipt };
     },

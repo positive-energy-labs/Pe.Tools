@@ -25,7 +25,7 @@ import {
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 import { describeInputHistory, editMetaSchema } from "./sheet/input-history.neutral.ts";
-import { ductsPricingValueCapability, ductsRosterValueCapability } from "@pe/ducts-domain/pricing-value";
+import { ductsPricingCapability, ductsRosterCapability } from "@pe/agent-contracts";
 import { presentLosses, presentHeal, presentFan } from "./reviews.ts";
 
 const shared = ductsPictureFields;
@@ -57,9 +57,9 @@ const args = (page: {
     | z.output<typeof system>
     | import("@pe/agent-contracts").Immutable<z.output<typeof system>>;
 }) => ({ system: namesOf(page.system) });
-export const roster = read(hostRead(ductsRosterValueCapability));
-export const network = { ...hostRead(ductsNetworkCapability), args };
-export const pricing = { ...hostRead(ductsPricingValueCapability), args };
+export const roster = read(hostRead(ductsRosterCapability));
+export const network = read(hostRead(ductsNetworkCapability), args);
+export const pricing = read(hostRead(ductsPricingCapability), args);
 export type { Context as DuctsDrawContext } from "./context.generated";
 import type { Context as DuctsDrawContext } from "./context.generated";
 const evidence = (

@@ -25,6 +25,7 @@ import { Code, stringify } from "@pe/kit/lang/code";
 
 export function FamilyWorkspaceDocPane() {
   const {
+    cells,
     world,
     parse,
     lane,
@@ -393,6 +394,7 @@ export function FamilyWorkspaceDocPane() {
               <ProposalCard
                 key={suggestion.id}
                 suggestion={suggestion}
+                owned={cells.at(["cells",suggestion.id])}
                 wire={wire}
                 cell={fields[suggestion.id] ?? {}}
                 // A card lights either because it is the one you located, or because its whole ROW

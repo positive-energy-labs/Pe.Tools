@@ -33,7 +33,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { useAdmittedSubject } from "#/shell/subject";
 import type { OrbitViewport, PicturePage } from "@pe/agent-contracts";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import type { Priced } from "@pe/ducts-domain/pricing";
+import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 import type * as Atom from "effect/reactivity/Atom";
 import type { DuctsDrawContext } from "../../route.ts";
 import { network } from "../../route.ts";

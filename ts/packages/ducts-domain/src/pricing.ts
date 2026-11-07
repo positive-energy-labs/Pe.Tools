@@ -378,7 +378,7 @@ export function partOf(row: Row, node: Node | undefined): Part {
  * The one priced row per fitting a rule covers, over every path: a tap's branch leg, since Revit
  * holds one coefficient per tap and charges it on the branch flow.
  */
-export function instancesOf(result: LossResult, key: string): Map<number, Row> {
+export function instancesOf(result: Pick<LossResult,"paths">, key: string): Map<number, Row> {
   const out = new Map<number, Row>();
   for (const path of Object.values(result.paths))
     for (const row of path.rows)
@@ -401,7 +401,7 @@ const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
  * The air mover a group's fan static is written to: its one root, else its largest fan when the
  * solve split it per fan, else its critical system's base.
  */
-export function unitOf(snapshot: DuctSnapshot, result: LossResult, group: Group): number | null {
+export function unitOf(snapshot: DuctSnapshot, result: Pick<LossResult,"byGroup">, group: Group): number | null {
   const critical = result.byGroup[group.id]?.critical;
   const lead = result.byGroup[group.id]?.fans[0]?.unit;
   return group.rootIds.length === 1
@@ -417,7 +417,7 @@ export function unitOf(snapshot: DuctSnapshot, result: LossResult, group: Group)
  * Legacy classification arithmetic, not physical fan certification. Explicit edit fan/passive
  * roles suppress this unit scalar; physical circuit pressure is retained separately.
  */
-export function proposedStatic(snapshot: DuctSnapshot, result: LossResult, unit: number) {
+export function proposedStatic(snapshot: DuctSnapshot, result: import("./pricing-view").LossView | LossResult, unit: number) {
   const role = result.design.graph.parts.find((part) => part.elementId === unit)?.continuity;
   if (role === "passive" || role === "fan-boundary") return null;
   const byKind = new Map<string, number>();

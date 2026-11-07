@@ -791,6 +791,31 @@ export class RouteWorkspace {
   }
 
   /** Observations and conditional retirement are host facts, never raw client edits. */
+  validateSeed(scope: WorkKey, seed: unknown): unknown {
+    const registration=this.#registry.get(scope.route);
+    if(!registration) throw Error(`Unknown Work route ${scope.route}`);
+    return registration.spec.schema.parse(seed);
+  }
+
+  /** The journal calls this only after consent. The write tail makes absence a compare-and-set. */
+  async start(scope:WorkKey,seed:unknown,by:WorkAuthor,receiptId?:string):Promise<RouteStateWriteResult> {
+    this.#authorize("publish");
+    const doc=this.validateSeed(scope,seed);
+    const spec=this.#registry.get(scope.route)!.spec;
+    return this.#serialized(async()=>{
+      if(await this.#store.getState({targetKey:workKey(scope),route:scope.route}) != null)
+        return refuse("refused","Work already exists","Open the existing Work.");
+      const write:WorkWriteAck={key:workHandle(scope,1).key,kind:"publish",by,press:null,
+        base:0,revision:1,patches:[],inverse:[],undoable:false,at:Date.now(),...(receiptId?{receiptId}:{})};
+      await this.#persist(scope,scope.route,{doc,schemaVersion:spec.schemaVersion ?? 1,revision:1},[{write,after:doc}]);
+      this.#inverses.set(workKey(scope),[{write,after:doc}]);
+      try {this.#accept(write);} finally {
+        await this.#publish({type:"route_workspace",scope,route:scope.route,...write,action:"publish",ok:true});
+      }
+      return {ok:true,revision:1,handle:workHandle(scope,1),doc:structuredClone(doc),write};
+    });
+  }
+
   publish(
     scope: WorkKey,
     route: string,
@@ -1021,7 +1046,7 @@ export class RouteWorkspace {
       const listeners = this.#acceptedListeners.get(key) ?? new Set();
       this.#acceptedListeners.set(key, listeners);
       listeners.add(listener);
-      const envelope = await this.#load(scope, spec, true);
+      const envelope = await this.#load(scope, spec, false);
       if (disposed) return;
       if (!envelope) { snapshot(null); return; }
       const records = this.#retain(this.#inverses.get(key) ?? [], envelope.revision);
@@ -1067,7 +1092,7 @@ export class RouteWorkspace {
     const request = { kind: "feed", key: scope, admission, shape } as const;
     if (!recorded && !capture)
       return shape === "work"
-        ? this.observe(scope, scope.route, deliver, true, true)
+        ? this.observe(scope, scope.route, deliver, false, true)
         : this.observeFeed(scope, (value) => deliver({ value }), ack, failed);
     let closed = false;
     let stop = () => {};
@@ -1155,7 +1180,7 @@ export class RouteWorkspace {
             if (got && !closed) deliver(got, carriage);
           }).catch(end);
         },
-        true,
+        false,
         true,
       );
     } else {

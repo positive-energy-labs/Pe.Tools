@@ -55,7 +55,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   const owners = new Map<string, {
     scope: WorkScope; config: import("../route/typed-route").Owners[string]; handle: WorkHandle | null;
-    doc: any; ready: boolean; problem: string | null; failure: WorkFeedFailure | null;
+    doc: any; ready: boolean; absent:boolean; problem: string | null; failure: WorkFeedFailure | null;
     lease: ReturnType<typeof registry.acquire>;
   }>();
   let page: Record<string, any> = decodePage();
@@ -94,7 +94,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     const parsed = record.config.state.schema.parse(doc);
     if (record.handle?.revision === handle.revision && canonicalRouteInput(record.doc) !== canonicalRouteInput(parsed))
       throw Error("Contradictory Work revision; refresh this route");
-    record.handle = freezePage(handle); record.doc = freezePage(parsed); record.ready = true; record.problem = null; record.failure = null;
+    record.absent=false; record.handle = freezePage(handle); record.doc = freezePage(parsed); record.ready = true; record.problem = null; record.failure = null;
     record.lease.entry.journal.observe({ revision: handle.revision, doc: parsed });
     if (handle.key.route === own) gate.acceptWork(workAttempt,
       { kind: "snapshot", handle, value: parsed, hash: canonicalRouteInput(parsed) });
@@ -113,7 +113,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       target: input.target, subject: null };
     const lease = registry.acquire(scope.key);
     const record = { scope, config, handle: null as WorkHandle | null, doc: null as any,
-      ready: false, problem: null as string | null, failure: null as WorkFeedFailure | null, lease };
+      ready: false, absent:false, problem: null as string | null, failure: null as WorkFeedFailure | null, lease };
     owners.set(id, record);
     ownerStops.push(() => lease.release());
     lease.entry.connect(scope, door);
@@ -136,8 +136,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           lease.entry.journal.accept(ack);
         } else if (state.kind !== "ack") {
           record.ready = false;
+          record.absent=state.kind === "absent";
+          if(record.absent){record.doc=null;record.handle=null;}
           record.failure=state.kind === "failed"?state.failure:null;
-          record.problem = record.failure ? workFeedFailureMessage(record.failure) : "Reading Work...";
+          record.problem = record.failure ? workFeedFailureMessage(record.failure) : record.absent ? "Start this Work to edit" : "Reading Work...";
         }
       } catch (error) { record.ready = false; record.problem = String(error); }
       notify();
@@ -270,6 +272,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         patches:step.transitions.slice(0,step.cursor).reverse().flatMap(t=>t.inverse)},token);
     } };
   const reviews = new Map<string, { preview: z.output<typeof writePreviewSchema>; input: Record<string, unknown>; token: InvocationToken; signature: string; presentation: any }>();
+  const consentReviews = new Map<string, ReturnType<typeof reviews.get>>();
   const problems = new Map<string,string>();
   const plans = new Map<string,InvocationToken>();
   const workSignature = () => canonicalRouteInput([...owners].map(([id,o]) => [id,o.ready,o.handle]));
@@ -337,9 +340,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (apply) {
       const held = reviews.get(id);
       if (!held || held.signature !== workSignature() || !gate.current(held.token)) throw Error("Review is stale; prepare it again");
-      reviews.delete(id); notify();
-      const result = await settleNative(door.submit({ id: crypto.randomUUID(), key: cmd.entry, target: input.target!, input: held.input }));
-      syncReads(true); return result;
+      consentReviews.set(id,held); reviews.delete(id); notify();
+      try {
+        const result = await settleNative(door.submit({ id: crypto.randomUUID(), key: cmd.entry, target: input.target!, input: held.input }));
+        syncReads(true); return result;
+      } finally {consentReviews.delete(id);notify();}
     }
     let token: InvocationToken | undefined;
     try {
@@ -371,6 +376,27 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   syncReads();
   const mounted = {
     spec, subjectState, move,
+    startAction():import("../route/typed-route").ActionHandle|null {
+      const record=owners.get(own);
+      if(!record?.absent||!edits?.seed||!key||input.readOnly||input.history) return null;
+      const selected=key;
+      const run=async()=>{
+        requireWritable();
+        if(pending.has("work.start")) throw Error("Start already pending");
+        pending.add("work.start");problems.delete("work.start");notify();
+        try {
+          const request=commands["work.start"].input.parse({key:selected,seed:edits.seed!(page as never,input.target)});
+          await settleNative(door.submit({id:crypto.randomUUID(),key:"work.start",target:{kind:"host"},input:request}));
+          if(canonicalRouteInput(selected)!==canonicalRouteInput(selectedKey())) return;
+          ownerKey=undefined;syncWork();syncReads(true);
+        } catch(error){problems.set("work.start",error instanceof Error?error.message:String(error));throw error;}
+        finally{pending.delete("work.start");notify();}
+      };
+      return {label:"Start",get pending(){return pending.has("work.start");},refusal:null,
+        get failure(){return problems.get("work.start")??null;},
+        get consent(){return writeReject(mounted.timeline(),["work.start"],(thread,request)=>void harnessClient(resolveWorkbenchConfig().origin).permission(thread,request,"stop_writes"));},
+        run,plan:run,apply:run,cancel:()=>{},read:()=>null};
+    },
     action(id: string): import("../route/typed-route").ActionHandle {
       const command=spec.commands[id];
       if(!command) throw Error(`Unknown command ${id}`);
@@ -408,9 +434,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     refresh: (read?:import("../route/host-read").HostRead) => {
       requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true);
     }, run, result:(id:string)=>results.get(id),
-    review: (id: string) => { const r=reviews.get(id); if(!r) return null;
+    review: (id: string) => { const r=reviews.get(id)??consentReviews.get(id); if(!r) return null;
       const stale = r.signature !== workSignature() || !gate.current(r.token);
-      return { preview: stale ? undefined : r.preview, sentence: stale ? null : r.presentation.sentence,
+      return { preview: stale || !reviews.has(id) ? undefined : r.preview, sentence: stale ? null : r.presentation.sentence,
         rows: stale ? [] : r.presentation.rows, cells: stale ? [] : r.presentation.cells, stale }; },
     reviewProblem: (id: string) => problems.get(id) ?? null,
     cancel: (id: string) => { const token=plans.get(id);if(token) gate.retire(token.token);plans.delete(id);reviews.delete(id);notify(); },
