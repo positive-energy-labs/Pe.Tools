@@ -67,7 +67,7 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
       if (lane.kind !== "live") return Effect.fail(error);
       const at = lane.captureStore!.capture.begin();
       return at === null ? Effect.void : lane.captureStore!.capture.stop(at,
-        error.problem === "recording.full" ? "full" : error.problem === "recording.io" ? "io" : "observer");
+        error.problem === "recording.full" ? "full" : error.problem === "recording.io" ? "io" : "observer", { site: "builtin", op: input.key });
     };
     const scope = canonicalJson(JSON.parse(JSON.stringify(input.scope)));
     const selector = canonicalJson(["ducts-body-basis", JSON.parse(JSON.stringify(subject))]);
@@ -120,7 +120,7 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
       recorded,
       // A refused lookup has no body or native acquisition to link. Capture must preserve its failure (K4).
       refuse: (error: DoorFailure) => lane.kind === "live"
-        ? under(captureInput(lane.captureStore!, basisInput, scope, codec, Effect.fail(error), observed)).pipe(
+        ? under(captureInput(lane.captureStore!, basisInput, scope, codec, Effect.fail(error), observed, input.key)).pipe(
             Effect.andThen(Effect.fail(error)), Effect.catch(() => Effect.fail(error)))
         : Effect.fail(error),
       link: (answer: Answer) => Effect.gen(function* () {
@@ -150,7 +150,7 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
         if (!validate(basis) || (recorded && !sameTarget(recorded, basis)))
           return yield* refused("Retained owner evidence disagrees with the original basis");
         if (lane.kind !== "live") return;
-        yield* under(captureInput(lane.captureStore!, basisInput, scope, codec, Effect.succeed(basis), observed));
+        yield* under(captureInput(lane.captureStore!, basisInput, scope, codec, Effect.succeed(basis), observed, input.key));
         // Hits included: the ORIGINAL durable native acquisition; a hit adds no native taking.
         if (consumption._tag === "Some" && !lane.captureStore!.capture.truncated())
           yield* consumption.value.linkTaking("native", taking.id);

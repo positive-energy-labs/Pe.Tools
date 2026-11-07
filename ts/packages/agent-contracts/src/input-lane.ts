@@ -30,6 +30,9 @@ export type InputKind = (typeof inputKinds)[number];
 export const truncationSchema = z.strictObject({
   at: z.number().int().positive(),
   stoppedAt: z.number().finite(),
+  site: z.enum(["occurrence", "failure", "json", "work", "builtin"]),
+  /** Bounded operation identifier only; never arguments, paths or failure text. */
+  op: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/),
   reason: z.enum(["full", "io", "encoding", "unsupported", "setup", "observer", "backlog"]),
 });
 export type Truncation = z.infer<typeof truncationSchema>;

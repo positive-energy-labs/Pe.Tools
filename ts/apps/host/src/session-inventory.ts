@@ -116,6 +116,7 @@ export class HostSessionInventory extends Context.Service<HostSessionInventory, 
               codec,
               Effect.provide(read, context),
               observed,
+              `inventory.${name}`,
             );
           });
         return {

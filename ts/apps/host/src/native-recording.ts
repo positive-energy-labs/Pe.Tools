@@ -259,7 +259,7 @@ export interface CaptureLatch {
   readonly begin: () => number | null;
   readonly truncated: () => Truncation | null;
   /** The first stop wins; its marker is persisted best-effort and never fails a read. */
-  readonly stop: (at: number, reason: Truncation["reason"]) => Effect.Effect<void>;
+  readonly stop: (at: number, reason: Truncation["reason"], source: Pick<Truncation, "site" | "op">) => Effect.Effect<void>;
 }
 /** The one capture writer of a bundle in this process (no cross-process lock is claimed). */
 export interface RecordingWriter extends RecordingReader {
@@ -571,10 +571,12 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
     capture: {
       begin: () => (truncated ? null : ++attempts),
       truncated: () => truncated,
-      stop: (at, reason) =>
+      stop: (at, reason, source) =>
         Effect.suspend(() => {
           if (truncated) return Effect.void;
-          truncated = { at, stoppedAt: clock.currentTimeMillisUnsafe(), reason };
+          const op = truncationSchema.shape.op.safeParse(source.op);
+          truncated = { at, stoppedAt: clock.currentTimeMillisUnsafe(), reason,
+            site: source.site, op: op.success ? op.data : "unknown" };
           // ponytail: best-effort marker; on an already failed disk only this process knows.
           return io(() => writeFile(join(dir, TRUNCATION), JSON.stringify(truncated))).pipe(
             Effect.orElseSucceed(() => undefined),
@@ -768,6 +770,7 @@ const reasonOf = (cause: Cause.Cause<InvalidRead>): Truncation["reason"] => {
 type Occurrence = { readonly input: RecordedInput; readonly scope: string };
 const captured = <A, E, R>(
   writer: RecordingWriter,
+  op: string,
   live: Effect.Effect<A, E, R>,
   record: (
     exit: Exit.Exit<A, E>,
@@ -787,7 +790,7 @@ const captured = <A, E, R>(
     if (at === null) return yield* exit;
     // A consumer whose occurrence cannot be reserved loses capture, not its live answer (K4).
     if (attempt && Result.isFailure(attempt)) {
-      yield* writer.capture.stop(at, "unsupported");
+      yield* writer.capture.stop(at, "unsupported", { site: "occurrence", op });
       return yield* exit;
     }
     const bind: TakingObserver = attempt
@@ -804,7 +807,8 @@ const captured = <A, E, R>(
             ),
       ),
     );
-    if (Exit.isFailure(kept)) yield* writer.capture.stop(at, reasonOf(kept.cause));
+    if (Exit.isFailure(kept)) yield* writer.capture.stop(at, reasonOf(kept.cause),
+      { site: Exit.isFailure(exit) ? "failure" : "json", op });
     return yield* exit;
   });
 /** A live failure as its recorded outcome, or null for an interrupted read, which is no taking. */
@@ -823,7 +827,7 @@ const capturing = (store: RecordingWriter, observed: TakingObserver) =>
       return {
         resolve: live.resolve,
         read: (request) =>
-          captured(store, live.read(request), (exit) =>
+          captured(store, request.key, live.read(request), (exit) =>
             Effect.gen(function* () {
               const outcome: Outcome | null = Exit.isSuccess(exit)
                 ? {
@@ -977,8 +981,11 @@ export const captureInput = <A, I>(
   codec: Schema.Codec<A, I>,
   live: Effect.Effect<A, DoorFailure>,
   observed: TakingObserver = unobserved,
+  op = input.kind === "native" || input.kind === "publication" ? input.key : input.kind === "work" ? `work.${input.view}`
+    : input.kind === "files" ? `files.${input.file}` : input.kind === "marks"
+      ? `marks.${input.frame === null ? "snapshot" : "frame"}` : input.kind,
 ): Effect.Effect<A, DoorFailure> =>
-  captured(writer, live, (exit) =>
+  captured(writer, op, live, (exit) =>
     Effect.gen(function* () {
       const outcome: Outcome | null = Exit.isSuccess(exit)
         ? { kind: "observed", value: yield* encoded(codec, exit.value) }

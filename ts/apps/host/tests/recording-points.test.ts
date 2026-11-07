@@ -275,7 +275,7 @@ effectTest(
 effectTest("K4 keeps valid durable point bindings readable after truncation", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    yield* f.writer.capture.stop(f.writer.capture.begin()!, "full");
+    yield* f.writer.capture.stop(f.writer.capture.begin()!, "full", { site: "builtin", op: "test.capture" });
     expect(f.writer.points.ids()).toHaveLength(1);
     const reader = yield* openRecordingReader(f.dir, identity, bounds),
       points = recordingPoints(

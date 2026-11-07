@@ -234,7 +234,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             ).pipe(
               Effect.catch(() => {
                 const at = writer.capture.begin();
-                return at === null ? Effect.void : writer.capture.stop(at, "observer");
+                return at === null ? Effect.void : writer.capture.stop(at, "observer", { site: "builtin", op: current.recipe.key });
               }),
             );
         }),
@@ -681,7 +681,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                         Effect.provideService(RequestIdentity, identity),
                         Effect.catch(() => {
                           const at = writer.capture.begin();
-                          return at === null ? Effect.void : writer.capture.stop(at, "unsupported");
+                          return at === null ? Effect.void : writer.capture.stop(at, "unsupported", { site: "builtin", op: "inventory.document" });
                         }),
                       ),
                     );
@@ -839,7 +839,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           }
         } catch {
           const at = writer?.capture.begin();
-          if (at != null) await invoke(writer!.capture.stop(at, "io"));
+          if (at != null) await invoke(writer!.capture.stop(at, "io", { site: "builtin", op: consumption?.recipe.key ?? "read.finish" }));
         } finally {
           if (consumption) await invoke(consumption.close);
         }
@@ -894,7 +894,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           yield* inventory.document({ session: session.sessionId, openId: openDocumentId }).pipe(
             Effect.catch(() => {
               const at = writer.capture.begin();
-              return at === null ? Effect.void : writer.capture.stop(at, "unsupported");
+              return at === null ? Effect.void : writer.capture.stop(at, "unsupported", { site: "builtin", op: "inventory.document" });
             }),
           );
         return response;
@@ -945,13 +945,15 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       if (writer && "openId" in answer.actualTarget.openDocumentLifetime) {
         const inventory = Context.get(services, HostSessionInventory);
         const openId = answer.actualTarget.openDocumentLifetime.openId;
+        let op = "inventory.session";
         yield* Effect.gen(function* () {
           const session = yield* inventory.session(raw.scope);
+          op = "inventory.document";
           yield* inventory.document({ session: session.sessionId, openId });
         }).pipe(
           Effect.catch(() => {
             const at = writer.capture.begin();
-            return at === null ? Effect.void : writer.capture.stop(at, "unsupported");
+            return at === null ? Effect.void : writer.capture.stop(at, "unsupported", { site: "builtin", op });
           }),
         );
       }

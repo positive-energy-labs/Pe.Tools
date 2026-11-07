@@ -262,7 +262,7 @@ function liveContext(
       if (!writer || writer.capture.truncated()) return Effect.void;
       if (budget.lost) {
         const at = writer.capture.begin();
-        return at === null ? Effect.void : writer.capture.stop(at, "full");
+        return at === null ? Effect.void : writer.capture.stop(at, "full", { site: "occurrence", op: recipe.key });
       }
       const records: InputReadSetRecord[] = [];
       const walk = (node: LiveNode) => {
@@ -277,7 +277,7 @@ function liveContext(
       );
       if (bytes > limits.metadataBytesPerRoot) {
         const at = writer.capture.begin();
-        return at === null ? Effect.void : writer.capture.stop(at, "full");
+        return at === null ? Effect.void : writer.capture.stop(at, "full", { site: "occurrence", op: recipe.key });
       }
       // Children before parents, so every durable link resolves.
       return Effect.forEach(records.reverse(), (value) => writer.readSets.keep(value), {
@@ -285,7 +285,7 @@ function liveContext(
       }).pipe(
         Effect.catch(() => {
           const at = writer.capture.begin();
-          return at === null ? Effect.void : writer.capture.stop(at, "io");
+          return at === null ? Effect.void : writer.capture.stop(at, "io", { site: "occurrence", op: recipe.key });
         }),
       );
     }),
@@ -498,7 +498,7 @@ export class HostInputReadSets extends Context.Service<
           // Past the cap, a live read still computes, in a detached context, while capture stops (K4).
           if (open + 1 > limits.openRoots) {
             const at = lane.captureStore?.capture.begin() ?? null;
-            const stopped = at === null ? Effect.void : lane.captureStore!.capture.stop(at, "full");
+            const stopped = at === null ? Effect.void : lane.captureStore!.capture.stop(at, "full", { site: "occurrence", op: recipe.key });
             return Effect.as(
               stopped,
               detachedContext(recipe, () => true),

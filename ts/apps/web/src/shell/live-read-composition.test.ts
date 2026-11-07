@@ -316,7 +316,7 @@ test("a stopped recording cannot refuse a current live Fans publication", async 
     expect((await historyBefore.json()).points).toHaveLength(1);
     const writer=host.inputs?.lane.kind === "live" ? host.inputs.lane.captureStore : undefined;
     expect(writer).toBeTruthy();
-    await Effect.runPromise(writer!.capture.stop(writer!.capture.begin()!,"unsupported"));
+    await Effect.runPromise(writer!.capture.stop(writer!.capture.begin()!,"unsupported", { site: "builtin", op: "test.capture" }));
     const response=await publish();
     expect(response.status,await response.clone().text()).toBe(200);
     expect((await response.json()).state).toBe("current");
