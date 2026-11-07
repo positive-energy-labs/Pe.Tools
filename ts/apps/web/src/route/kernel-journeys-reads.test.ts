@@ -103,15 +103,25 @@ test("JM H05/B05 dirty a watched host publication, hide it, then return for a fr
     expect(mounted.value(), "H05: a host dirty event immediately withdraws current authority").toMatchObject({ current: false, value: before });
     held.release.resolve();
     await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    const retainedStreams = [...streams];
     mounted.release();
-    await vi.waitFor(() => expect(streams.size).toBe(0));
+    // Pane retention keeps publication identity for sealed Plans; only disposal closes inputs.
+    expect([...streams], "H05: hiding retains the original watched publications").toEqual(retainedStreams);
     const calls = j.host.nativeCalls;
+    held = j.host.holdNative();
     j.host.changed();
-    await new Promise(resolve => setTimeout(resolve, 20));
-    expect(j.host.nativeCalls, "H05: hidden demand does not reacquire").toBe(calls);
+    await held.entered.promise;
+    expect(mounted.value(), "H05: hidden host invalidation still withdraws current authority").toMatchObject({ current: false });
+    held.release.resolve();
+    await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    expect(j.host.nativeCalls, "B05: retained hidden inputs refresh the dirtied host basis").toBeGreaterThan(calls);
+    const refreshedCalls = j.host.nativeCalls;
     mounted.subscribe(() => {});
     await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
-    expect(j.host.nativeCalls, "B05: return reacquires the dirtied host basis").toBeGreaterThan(calls);
+    expect(j.host.nativeCalls, "B05: return keeps the refreshed publication without reacquisition").toBe(refreshedCalls);
+    expect([...streams], "B05: return preserves publication subscriptions").toEqual(retainedStreams);
+    mounted.dispose();
+    await vi.waitFor(() => expect(streams.size, "H05: disposal closes watched inputs").toBe(0));
   } finally { held?.release.resolve(); mounted?.dispose(); streams.forEach(stream => stream.close()); vi.unstubAllGlobals(); await j.close(); }
 }, 60_000);
 
