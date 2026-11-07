@@ -148,7 +148,6 @@ function useNetworkData(ctx: NetworkContext) {
   const subjectIds = scope?.groups
     .map((group) => edit.subject[group] ?? workDoc?.subject[group]?.edit?.value)
     .find((ids) => ids != null);
-  const current = networkRead.current;
   const version = snapshot?.sourceVersion;
   // Domain readonly sweep reached 28 files; coverage still accepts the mutable snapshot alias.
   const coverage = roster

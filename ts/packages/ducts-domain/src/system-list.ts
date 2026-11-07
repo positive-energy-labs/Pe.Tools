@@ -11,7 +11,7 @@ import { markOf } from "@pe/ducts-domain/terminal-flows";
  * cheap), keyed by its name. Its total is the largest fan over the groups it is in; `fanless` when
  * none of them has an air mover.
  */
-export function systemList(snapshot: DuctSnapshot, priced: Pick<Priced,"next"|"snapshot"> | import("./pricing-view").PricedView | null) {
+export function systemList(snapshot: DuctSnapshot, priced: Pick<Priced,"next"|"snapshot"> | import("./pricing-view").PricedView | null): import("@pe/agent-contracts").DuctsPricingData["analysis"]["systems"] {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
   const equipment = new Set(snapshot.nodes.filter((n) => n.kind === "equipment").map((n) => n.id));
   const systems = systemsOf(snapshot);
