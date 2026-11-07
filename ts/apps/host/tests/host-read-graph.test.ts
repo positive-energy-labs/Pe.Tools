@@ -1,5 +1,4 @@
-import { unavailableFieldOptions } from "./effect-test.ts";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
@@ -7,28 +6,16 @@ import { HttpRouter, HttpServerResponse } from "effect/http";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
-import { address, bindWork, historyPointSchema } from "@pe/agent-contracts";
+import { historyPointSchema } from "@pe/agent-contracts";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { History } from "../src/reads/history.ts";
 import { nativeRead } from "../src/reads/inputs.ts";
 import { registeredReads } from "../src/reads/routes.ts";
 import { familiesViewArgs } from "@pe/agent-contracts";
-import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { withInvocationContext } from "@pe/runtime/context";
-import type { RouteWorkspace } from "@pe/runtime";
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import rosterCapture from "../../../packages/host-contracts/src/fixtures/k2-roster.json" with { type: "json" };
-import fanCapture from "../../../packages/host-contracts/src/fixtures/k2-four-fan-walk.json" with { type: "json" };
-import { readInputRoutes } from "../src/app.ts";
 import { Publications, read, leaf, RefusedPartition } from "../src/reads/evaluator.ts";
-import { fansReadResponse } from "../../../packages/agent-contracts/src/fans-read.ts";
-import { HostInputContext } from "../src/input-context.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
-import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
-import { HostSessionInventory } from "../src/session-inventory.ts";
 import { FIRM_SEED } from "../src/ducts-inputs.ts";
 import { BridgeError } from "@pe/host-internal/dispatch";
-import { DuctsReadings } from "../src/ducts-readings.ts";
-import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import {
   CurrentInputConsumption,
@@ -37,244 +24,24 @@ import {
 } from "../src/input-occurrence.ts";
 import {
   hostNativeReadFor,
-  nativeCatalogIdentity,
   openRecordingWriter,
   openRecordingReader,
   type HostInputLane,
 } from "../src/native-recording.ts";
 import { settle } from "./effect-test.ts";
-const ref = { session: "spike", openId: "model" };
-const target = {
-  processIncarnation: { pid: 42, startedAt: 1 },
-  openDocumentLifetime: { openId: ref.openId },
-};
-const who = { kind: "human" as const, via: "local" as const };
-const scope = { bridgeSessionId: ref.session, openDocumentId: ref.openId };
-const path = address("C:/Models/Chadds.rvt");
-const key = (route: string) => bindWork(route, path, undefined, ref);
-const gate = () => ({
-  entered: Promise.withResolvers<void>(),
-  release: Promise.withResolvers<void>(),
-});
-const identity = { build: "host-read-spike", catalog: nativeCatalogIdentity() };
-const bounds = { maxBytes: 256 * 1024 * 1024, maxTakings: 2000 };
-const roster = nativeResponseSchema("ducts.snapshot.walk").parse(rosterCapture);
-const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(fanCapture);
-async function fixture(capture = false) {
-  const dir = await mkdtemp(join(tmpdir(), "host-read-spike-"));
-  await mkdir(join(dir, "catalogs"));
-  await writeFile(join(dir, "firm.json"), JSON.stringify(FIRM_SEED));
-  let workspace!: RouteWorkspace;
-  let mark = 10,
-    generation = 0,
-    nativeCalls = 0;
-  const markListeners = new Set<() => void>();
-  const holds = new Map<string, ReturnType<typeof gate>>();
-  let nativeHold: ReturnType<typeof gate> | undefined;
-  const owner = new DuctsReadings();
-  const marks = hostMarks({
-    observedSince: 1,
-    changedAt: () => mark,
-    generation: () => generation,
-    subscribe: (listener) => {
-      markListeners.add(listener);
-      return () => {
-        markListeners.delete(listener);
-      };
-    },
-  });
-  const inputs = await settle(
-    HostInputContext.pipe(
-      Effect.provide(
-        HostInputContext.layer({
-          kind: "live",
-          captureStore: capture
-            ? await settle(openRecordingWriter(join(dir, "recording"), identity, bounds))
-            : undefined,
-        }),
-      ),
-    ),
-  );
-  const web = HttpRouter.toWebHandler(
-    readInputRoutes(inputs, {
-      store: fileRouteDocumentStore(join(dir, "work")),
-      initialize: async (current) => {
-        workspace = current;
-      },
-      live: {
-        owner,
-        files: DuctFiles.layer({ firm: join(dir, "firm.json"), catalogs: join(dir, "catalogs") }),
-        marks: Layer.succeed(HostDocumentMarks, {
-          ...marks,
-          snapshot: (doc) =>
-            Effect.gen(function* () {
-              const request = yield* Effect.serviceOption(RequestIdentity);
-              const requestId = request._tag === "Some" ? request.value.requestId : "";
-              const hold = holds.get(requestId);
-              if (hold) {
-                holds.delete(requestId);
-                hold.entered.resolve();
-                yield* Effect.promise(() => hold.release.promise);
-              }
-              return yield* marks.snapshot(doc);
-            }),
-        }),
-        inventory: Layer.succeed(HostSessionInventory, {
-          document: () => Effect.succeed({ ...ref, address: path }),
-          session: () => Effect.succeed({ sessionId: ref.session }),
-          attachment: () => Effect.succeed({ sessionId: ref.session }),
-          list: () => Effect.die("No inventory list requested"),
-          subscribe: () => () => {},
-        }),
-        native: Layer.succeed(HostNativeRead, {
-          resolve: (input) =>
-            Effect.succeed({
-              ...target,
-              openDocumentLifetime:
-                input.key === "ducts.tables"
-                  ? { kind: "session-only" as const }
-                  : target.openDocumentLifetime,
-              operationKey: input.key,
-              normalizedInput: canonicalJson(JSON.parse(JSON.stringify(input.input))),
-              freshnessGeneration: "g1",
-              representation: "overview",
-            }),
-          read: (input) =>
-            Effect.gen(function* () {
-              nativeCalls++;
-              const hold = nativeHold;
-              if (hold && input.key === "ducts.snapshot.walk") {
-                nativeHold = undefined;
-                hold.entered.resolve();
-                yield* Effect.promise(() => hold.release.promise);
-              }
-              return {
-                value: Schema.decodeUnknownSync(Schema.Json)(
-                  input.key === "revit.catalog.field-options"
-                    ? unavailableFieldOptions
-                    : input.key === "ducts.tables"
-                      ? {
-                          folder: "captured",
-                          tables: {},
-                          missing: (input.input as { ids: string[] }).ids,
-                          unsupported: {},
-                        }
-                      : input.key === "ducts.snapshot.roster"
-                        ? roster
-                        : snapshot,
-                ),
-                nativeRequestId: `native-${nativeCalls}`,
-                actualTarget:
-                  input.key === "ducts.tables"
-                    ? { ...target, openDocumentLifetime: { kind: "session-only" as const } }
-                    : target,
-                freshness: { freshnessGeneration: "g1" },
-                cost: {},
-                outcome: "committed" as const,
-              };
-            }),
-        }),
-      },
-    }),
-    { disableLogger: true },
-  );
-  const send = async (
-    generation: number,
-    fan: string[],
-    hold?: ReturnType<typeof gate>,
-    subscription = "sheet",
-    release = false,
-    at?: string,
-  ) => {
-    const admitted = admittedRequestIdentity(who, scope);
-    if (hold) holds.set(admitted.requestId, hold);
-    const response = await withInvocationContext({ caller: who }, () =>
-      web.handler(
-        new Request("http://host/pe/fans/sheet", {
-          method: "POST",
-          headers: at
-            ? {
-                "x-pe-history-point": at,
-                "x-pe-history-page": encodeURIComponent(
-                  JSON.stringify({
-                    instance: "fans.sheet",
-                    route: "fans",
-                    page: {},
-                    href: "/fans",
-                  }),
-                ),
-              }
-            : {},
-          body: JSON.stringify({
-            subscription,
-            generation,
-            release,
-            args: { target: ref, fan, sheetPath: "" },
-          }),
-        }),
-        Context.make(RequestIdentity, admitted),
-      ),
-    );
-    expect(response.status, await response.clone().text()).toBe(200);
-    return fansReadResponse.parse(await response.json());
-  };
-  return {
-    dir,
-    probe: (body: unknown) =>
-      withInvocationContext({ caller: who }, () =>
-        web.handler(
-          new Request(new URL(peRouteUrl("reads.value", {}), "http://host"), {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          }),
-          Context.make(RequestIdentity, admittedRequestIdentity(who, scope)),
-        ),
-      ),
-    send,
-    history: async (query = "", body?: unknown) => {
-      const response = await withInvocationContext({ caller: who }, () =>
-        web.handler(
-          new Request(
-            `http://host/pe/history${query}`,
-            body === undefined
-              ? {}
-              : {
-                  method: "POST",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify(body),
-                },
-          ),
-          Context.make(RequestIdentity, admittedRequestIdentity(who, scope)),
-        ),
-      );
-      expect(response.status, await response.clone().text()).toBe(200);
-      return response.json();
-    },
-    get nativeCalls() {
-      return nativeCalls;
-    },
-    get workspace() {
-      return workspace;
-    },
-    changed(sameMillisecond = false) {
-      if (!sameMillisecond) mark++;
-      generation++;
-      for (const notify of markListeners) notify();
-    },
-    holdNative() {
-      owner.refresh(ref);
-      nativeHold = gate();
-      return nativeHold;
-    },
-    async close() {
-      nativeHold?.release.resolve();
-      for (const hold of holds.values()) hold.release.resolve();
-      await web.dispose();
-      await rm(dir, { recursive: true, force: true });
-    },
-  };
-}
+import {
+  fixture,
+  ref,
+  target,
+  who,
+  scope,
+  path,
+  key,
+  gate,
+  identity,
+  bounds,
+  snapshot,
+} from "./host-read-graph.test-support.ts";
 
 test("HTTP document targets normalize once before generated native handles and preserve the mark fence", async () => {
   const tables = nativeRead("ducts.tables");
