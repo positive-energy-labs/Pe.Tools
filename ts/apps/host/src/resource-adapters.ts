@@ -118,6 +118,8 @@ export const markReadings =
   (marks: DocumentMarks, readFrame: (ref: DocumentRef | null, key: string, at?: number, carriage?: WorkCarriage, update?: boolean) => Promise<import('./document-marks.ts').MarkFrame | null>) =>
   (observe: ResourceObserver): ResourceObserver =>
   (request, publish, after) => {
+    // Thread logs have no document frame to capture; their bounded SSE lane owns cursor recovery.
+    if (request.kind === "thread") return observe(request, publish, after);
     let bound = documentOf(request as never);
     let latest: (ReadingFrame & { kind: 'snapshot' }) | null = null;
     let servedAt: number | undefined;
