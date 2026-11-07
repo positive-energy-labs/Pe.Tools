@@ -3,7 +3,7 @@
 export const sizes = [
   ["14", 4110], ["12", 6530], ["10", 10380], ["8", 16510], ["6", 26240],
   ["4", 41740], ["3", 52620], ["2", 66360], ["1", 83690], ["1/0", 105600],
-].map(([size, area]) => ({ size, area }));
+].map(([size, area]) => ({ size: String(size), area: Number(area) }));
 
 export function calculate({ size, length, amps, voltage, phase }) {
   const conductor = sizes.find((row) => row.size === size);

@@ -12,7 +12,10 @@ export const fields = {
   op: field(z.string(), "", "query", "push"),
   actionId: field(z.string(), "", "query", "push"),
 };
-export const loaded = read(hostRead(valueRead("ops.workspace", opsArgs, opsData)), (page: { actionId: string }) => ({ actionId: page.actionId }));
+export const loaded = read(
+  hostRead(valueRead("ops.workspace", opsArgs, opsData)),
+  (page: { actionId: string }) => ({ actionId: page.actionId }),
+);
 export type { Context as OpsContext } from "./context.generated";
 export const module = route({
   key: "ops",

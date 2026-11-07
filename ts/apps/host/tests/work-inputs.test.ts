@@ -466,6 +466,7 @@ test("Work that cannot be recorded truncates capture; the live Work still answer
     op: "work.raw",
     reason: "encoding",
   });
+
 });
 
 test("a failing taking observer truncates capture without failing the live read", async () => {

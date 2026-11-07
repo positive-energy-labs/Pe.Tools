@@ -2,11 +2,7 @@ import { command, sessionCommand, queryAction, catalogAction } from "../route/ty
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
-import {
-  familyDraftRouteState,
-  routeStatePatchSchema,
-  valueRead,
-} from "@pe/agent-contracts";
+import { familyDraftRouteState, routeStatePatchSchema, valueRead } from "@pe/agent-contracts";
 import { familyPageSchema } from "./page";
 import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
 import { route, field } from "../route/defaults";
@@ -28,9 +24,12 @@ export const fields = {
   inspector: field(address.inspector, "", "pose"),
   doc: field(address.doc, "text", "pose"),
 };
-export const loaded = read(hostRead(valueRead("family.workspace", familyArgs, familyData)), (page: { pod: string; path: string }) => ({
+export const loaded = read(
+  hostRead(valueRead("family.workspace", familyArgs, familyData)),
+  (page: { pod: string; path: string }) => ({
     member: page.pod && page.path ? { pod: page.pod, path: page.path } : null,
-  }));
+  }),
+);
 export const edits = z.array(routeStatePatchSchema);
 export type { Context as FamilyContext } from "./context.generated";
 export const module = route({

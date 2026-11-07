@@ -44,7 +44,9 @@ test("after a reopen the human plan sends both owner feeds' handles, which the h
   const before = await createWitness(first, saved, {}, { address, open: { session: "s", openId: "first" } });
   await vi.waitFor(() => expect(before.fans.workBasis()).toBeTruthy());
   before.fans.invoke("edit", { patches: [{ path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } } }] }, before.fans.workBasis()!);
-  await vi.waitFor(() => expect(saved.get("fans")).toBeTruthy());
+  await vi.waitFor(() => expect(saved.get("fans")).toMatchObject({
+    doc: { writeIntent: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } } },
+  }));
   first.reverse().forEach((close) => close());
   const f = await createWitness(closes, saved, {}, { address, open: { session: "s", openId: "reopened" } });
   await vi.waitFor(() => expect(f.fans.readingStatus("owner:ducts").snapshot.current).toBe(true));

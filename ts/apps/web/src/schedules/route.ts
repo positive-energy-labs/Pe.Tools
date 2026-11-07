@@ -9,9 +9,7 @@ import {
   splitScheduleCellKey,
   showCellValue,
 } from "@pe/agent-contracts";
-import {
-  schedulesViewCapability,
-} from "../../../../packages/agent-contracts/src/schedules-read.ts";
+import { schedulesViewCapability } from "../../../../packages/agent-contracts/src/schedules-read.ts";
 import { route, field, subjectSchema, namesOf, localId } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
@@ -33,9 +31,12 @@ const workspace = (page: { workspaceId: Parameters<typeof namesOf>[0] }) => {
   if (ids === "all") throw Error("Choose one schedule");
   return ids[0] ?? null;
 };
-export const view = read(hostRead(schedulesViewCapability), (page: { workspaceId: Parameters<typeof namesOf>[0] }) => ({
+export const view = read(
+  hostRead(schedulesViewCapability),
+  (page: { workspaceId: Parameters<typeof namesOf>[0] }) => ({
     workspaceId: workspace(page),
-  }));
+  }),
+);
 const roster = read(hostRead(schedulesViewCapability), () => ({ workspaceId: null }));
 export const edit = z
   .array(routeStatePatchSchema)
