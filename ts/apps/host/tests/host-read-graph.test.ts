@@ -524,3 +524,35 @@ test("F3 three native batches retain the middle refusal on offline replay; no li
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+
+test("a registered route read and leaf inherit generic endpoint decoding and native fencing", async () => {
+  const {readRegistry,graphRoute}=await import("../src/reads/routes.ts");
+  const {ductsInputPort}=await import("../src/reads/ducts-inputs.ts");
+  const {host:fansHost}=await import("../../web/src/fans/host.generated.ts");
+  let generation=0,calls=0,flip=false;
+  const input=leaf("example.source",z.object({target:z.object({session:z.string(),openId:z.string()})}),z.number(),false);
+  const definition=read("example.dynamic",{input:input.input,output:z.number(),run:(ctx,args)=>ctx.read(input,args)});
+  const registry=readRegistry([{...fansHost,reads:{definition},leaves:{"example.source":async(args,services)=>{
+    const target=input.input.parse(args).target;
+    const answer=await services.take("native",{key:"rooms.snapshot",request:{},target}) as {body:{answer:number}};
+    return answer.body.answer;
+  }}}]);
+  const marks=hostMarks({observedSince:1,changedAt:()=>0,generation:()=>generation,subscribe:()=>()=>{}});
+  const port=ductsInputPort({leaves:registry.leaves,evaluation:"dynamic",origin:()=>({kind:"fixture"}),revision:()=>0,
+    marks,workspace:{} as RouteWorkspace,run:effect=>Effect.runPromise(effect as Effect.Effect<any>),
+    source:{workKey:async()=>key("example"),firm:async()=>({firm:FIRM_SEED,path:"",present:false}),catalogs:async()=>({tables:{},findings:[]}),
+      call:async()=>{calls++;if(flip) generation++;return Response.json({answer:42});}},
+  });
+  const selected=graphRoute("reads.value",{read:definition.name,args:{target:ref},subscription:"probe",generation:0},registry);
+  const owner=new Publications();
+  try {
+    const first=await selected.publish(owner,"probe",0,port);
+    expect(first).toMatchObject({state:"current",value:{data:42}});expect(calls).toBe(1);
+    expect(first.value?.trace.map(row=>row.name)).toEqual(expect.arrayContaining(["native","document-mark","example.source"]));
+    flip=true;
+    const second=await selected.publish(owner,"probe",1,port);
+    expect(second.state).toBe("refresh-needed");
+    expect(second.reason).toContain("changed");
+  } finally {owner.release("probe",1);}
+});

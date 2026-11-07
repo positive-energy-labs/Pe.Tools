@@ -1,9 +1,6 @@
 /// <reference path="./source-closure.d.ts" />
 /** Builtin closures and DOM-free host modules share one manifest. Closures are untracked output of
  * scripts/route-graphs.ts: bundles get them from routeModuleHash, jiti host dev from dev-watch. */
-import { z } from "zod";
-import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
-import type { BuiltinClosure } from "../../../../packages/agent-contracts/src/route-module.ts";
 import type { HostRouteModule } from "../../../../packages/agent-contracts/src/host-route-admission.ts";
 import { familiesHostModule } from "../families/neutral.ts";
 import { podsHostModule } from "../pods/neutral.ts";
@@ -15,24 +12,11 @@ import familiesGenerated from "../families/source-closure.generated.json" with {
 import chatGenerated from "../chat/source-closure.generated.json" with { type: "json" };
 import { module as chat } from "../chat/kernel.ts";
 
-const member = z.strictObject({ id: z.string(), sha256: z.string() });
-const closureSchema: z.ZodType<{ fingerprint: string; envelope: BuiltinClosure }> = z.strictObject({
-  fingerprint: z.string(),
-  envelope: z.strictObject({
-    source: z.literal("builtin-closure"),
-    version: z.literal(1),
-    data: RouteGraphJson,
-    variants: z.array(z.strictObject({ client: z.enum(["web", "pea"]), entry: z.string() })),
-    modules: z.array(member),
-    inputs: z.array(member),
-    externals: z.array(member),
-  }),
-});
-
+import {closureSchema} from "./builtin-closure.ts";
 import {typedBuiltins} from "./builtin-typed.generated.ts";
 const captures = closureSchema.parse(capturesGenerated);
 interface Builtin {
-  closure: z.output<typeof closureSchema>;
+  closure: ReturnType<typeof closureSchema.parse>;
   host: HostRouteModule;
 }
 export const builtins = {

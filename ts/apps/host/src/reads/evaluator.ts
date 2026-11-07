@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { canonicalRouteInput as canonicalJson } from "@pe/agent-contracts";
+import { documentRefSchema, workKeySchema, canonicalRouteInput as canonicalJson } from "@pe/agent-contracts";
 
 export const fingerprint = (data: unknown) =>
   createHash("sha256")
@@ -85,6 +85,9 @@ export const leaf = <I, O>(
   output: z.ZodType<O>,
   validate = true,
 ): Leaf<I, O> => Object.freeze({ name, input, output, leaf: true, validate });
+/** Standard tracked Work inputs, shared by every host route. */
+export const workScope=leaf("work-scope",documentRefSchema,workKeySchema,false);
+export const workValue=z.object({doc:z.unknown(),revision:z.number()}).passthrough().nullable();
 export interface Trace {
   readonly recipe: string;
   readonly name: string;
