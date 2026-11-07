@@ -21,6 +21,10 @@ import { fansSheetCapability, type ResolvedRead } from "@pe/agent-contracts";
 import { createRouteTokenIssuer } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
 import { sourceRouteServices } from "./source-route-services.ts";
 import { hostRead } from "../route/host-read.ts";
+import { watch } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { firmFilePath, FIRM_SEED } from "../../../host/src/ducts-inputs.ts";
 
 const transport = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock("../host/runtime", () => ({ hostFetch: transport.fetch }));
@@ -31,8 +35,9 @@ vi.mock("../readings", () => ({ openEventSource: () => ({ close() {} }) }));
 const ambient = <S, I>(tag: Context.Key<S, I>) =>
   Layer.effect(tag, Effect.serviceOption(tag).pipe(Effect.map(Option.getOrThrow)));
 
-async function liveHost(record = false) {
+async function liveHost(record = false, duringNative?: (root: string) => Promise<void>) {
   let target!: { session: string; openId: string };
+  const inputRoot = dirname(dirname(firmFilePath()));
   const roster = nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
   const inputs = record
     ? await Effect.runPromise(
@@ -68,13 +73,16 @@ async function liveHost(record = false) {
                   representation: "overview",
                 }),
               read: (input) =>
-                Effect.succeed({
-                  value: Schema.decodeUnknownSync(Schema.Json)(roster),
-                  nativeRequestId: input.key,
-                  actualTarget,
-                  freshness: { freshnessGeneration: "g1" },
-                  cost: {},
-                  outcome: "committed" as const,
+                Effect.promise(async () => {
+                  await duringNative?.(inputRoot);
+                  return {
+                    value: Schema.decodeUnknownSync(Schema.Json)(roster),
+                    nativeRequestId: input.key,
+                    actualTarget,
+                    freshness: { freshnessGeneration: "g1" },
+                    cost: {},
+                    outcome: "committed" as const,
+                  };
                 }),
             };
           }),
@@ -87,7 +95,7 @@ async function liveHost(record = false) {
     "x-pe-context": host.terminal,
     [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
   };
-  return { ...host, target, headers };
+  return { ...host, target, headers, inputRoot };
 }
 
 test("source startup records a cold Fans publication through real host inputs", async () => {
@@ -113,6 +121,90 @@ test("source startup records a cold Fans publication through real host inputs", 
     );
     expect(history.status, await history.clone().text()).toBe(200);
     expect((await history.json()).points).toHaveLength(1);
+  } finally {
+    await host.close();
+  }
+});
+
+test("an empty ancestor directory cannot invalidate the missing firm input mid-read", async () => {
+  const host = await liveHost(true, async (root) => {
+    const observed = Promise.withResolvers<void>();
+    const watcher = watch(root, { recursive: true }, () => observed.resolve());
+    const timeout = setTimeout(
+      () => observed.reject(Error("No real filesystem metadata event")),
+      5000,
+    );
+    try {
+      await mkdir(join(root, "Firm"));
+      await observed.promise;
+      await new Promise((resolve) => setImmediate(resolve));
+    } finally {
+      watcher.close();
+      clearTimeout(timeout);
+    }
+  });
+  try {
+    const response = await fetch(`${host.base}/pe/fans/sheet`, {
+      method: "POST",
+      headers: host.headers,
+      body: JSON.stringify({
+        subscription: "metadata",
+        generation: 1,
+        args: { target: host.target, fan: [], sheetPath: "" },
+      }),
+    });
+    const result = await response.json();
+    expect(result.state, JSON.stringify(result)).toBe("current");
+    const events = await fetch(`${host.base}/pe/read-events?subscription=metadata&generation=1`, {
+      headers: host.headers,
+      signal: AbortSignal.timeout(10000),
+    });
+    const reader = events.body!.getReader();
+    let received = "";
+    const until = async (state: string) => {
+      while (!received.includes(`"state":"${state}"`)) {
+        const chunk = await reader.read();
+        if (chunk.done) throw Error(`SSE closed before ${state}`);
+        received += new TextDecoder().decode(chunk.value);
+      }
+    };
+    try {
+      await until("current");
+      await writeFile(
+        join(host.inputRoot, "Firm", "ducts.json"),
+        JSON.stringify({ ...FIRM_SEED, version: "changed" }),
+      );
+      await until("refresh-needed");
+    } finally {
+      await reader.cancel();
+    }
+  } finally {
+    await host.close();
+  }
+});
+
+test("release fences its own attempt without consuming the next generation's changed args", async () => {
+  const host = await liveHost();
+  const send = async (generation: number, sheetPath: string, release = false) => {
+    const response = await fetch(`${host.base}/pe/fans/sheet`, {
+      method: "POST",
+      headers: host.headers,
+      body: JSON.stringify({
+        subscription: "changing-args",
+        generation,
+        release,
+        args: { target: host.target, fan: [], sheetPath },
+      }),
+    });
+    expect(response.status).toBe(200);
+    return response.json();
+  };
+  try {
+    expect((await send(1, "")).state).toBe("current");
+    await send(1, "", true);
+    expect((await send(1, "")).state).toBe("superseded");
+    const next = await send(2, "new path");
+    expect(next.state, JSON.stringify(next)).toBe("current");
   } finally {
     await host.close();
   }

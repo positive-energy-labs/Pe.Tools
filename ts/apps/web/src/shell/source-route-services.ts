@@ -278,10 +278,10 @@ export function sourceRouteServices(
             shared.controller?.abort();
             shared.close?.();
             subjects.delete(key);
-            // Release fences generation + 1. Reuse the slot beyond that fence, even for new args.
+            // Reuse the released slot with a newer attempt, even when its args changed.
             idlePublications.push({
               subscription: shared.subscription,
-              generation: shared.generation + 1,
+              generation: shared.generation,
             });
           }
         };
