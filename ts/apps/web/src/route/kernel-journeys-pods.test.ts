@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { cp, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
@@ -198,3 +199,245 @@ test("JP2 reject tampered deliveries and replaced Pod bytes until their new publ
     expect(String(replaced.draw("calculation")), "H16: explicit trust admits the replacement publication").toContain("Copper voltage-drop worksheet");
   } finally { await j.close(); }
 }, 60_000);
+
+// Recorded harness events enter the same consumers as the conversation and its context ledger.
+import { createElement, Fragment } from "react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { RegistryContext } from "@effect/atom-react";
+import * as Atom from "effect/reactivity/Atom";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { emptyChatState, selectBreakdown, type ChatMessage } from "@pe/agent-contracts/chat-state";
+import { harnessEventSchema, type RouteGraph, type SettingField } from "@pe/agent-contracts";
+import { CurrentThreadViewOwner } from "../workbench/thread-view";
+import { TranscriptContext } from "../workbench/provider/thread-summary";
+import { useTranscript } from "../workbench/provider/use-workbench";
+import { SessionStrip } from "../workbench/world/lane";
+import { useCacheView } from "../workbench/world/cap";
+import { AssetReel, threadAssets } from "../chat/asset-reel";
+import { TooltipProvider } from "@pe/kit/lang/tooltip";
+import { z } from "zod";
+import { field } from "../../../../packages/agent-contracts/src/route-field";
+import { createSettingsOwner } from "../shell/settings";
+import { GraphSettingsFields } from "../shell/settings-fields";
+import { createRouteSettings } from "../../../host/src/route-settings";
+import { createPeRoutes } from "../../../host/src/pe-routes";
+import { SettingsBody } from "../machine/body";
+import { MACHINE_SEEDS } from "../design-system/open-examples";
+import { reportFault, DIAGNOSTICS_MAX_PENDING } from "../host/diagnostics";
+import { Pane, PaneFaultProvider } from "@pe/kit/lang/pane";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+
+function UsageLedger() {
+  const { breakdown, turns } = useTranscript((state) => ({
+    breakdown: selectBreakdown(state), turns: state.events.filter((event) => event.kind === "prompt").length,
+  }));
+  return createElement(SessionStrip, { breakdown, cache: useCacheView(breakdown, turns), sendNumber: turns });
+}
+
+test("JP3 reopen a thread's ordered assets and read corrected usage without inventing a send", async () => {
+  await openRecordedGuidanceAfterRefusal();
+  await sendFeedbackWhileDeliveryWaits();
+  const registry = AtomRegistry.make();
+  const source = Atom.make(emptyChatState());
+  const at = "2026-11-07T00:00:00Z";
+  const prompt = harnessEventSchema.parse({ kind: "prompt", seq: 1, turnId: "one", at, text: "Size the feeder" });
+  const usage = (seq: number, used: number) => harnessEventSchema.parse({
+    kind: "update", seq, turnId: "one", at,
+    update: { sessionUpdate: "usage_update", used, size: 200000 },
+  });
+  const messages: ChatMessage[] = [
+    { id: "u1", role: "user", running: false, parts: [
+      { type: "image", image: "data:image/png;base64,AA==", name: "panel.png" },
+      { type: "file", name: "feeder.txt", mimeType: "text/plain", size: 9 },
+    ] },
+    { id: "a1", role: "assistant", running: false, parts: [{ type: "tool-call", call: {
+      id: "capture", title: "capture_view", status: "completed", args: {}, target: "Views/Panel",
+      images: ["data:image/png;base64,AA==", "data:image/png;base64,AQ=="],
+    } }] },
+  ];
+  const show = () => render(createElement(RegistryContext.Provider, { value: registry },
+    createElement(TooltipProvider, null,
+      createElement(TranscriptContext.Provider, { value: source },
+        createElement(CurrentThreadViewOwner, { registry, threadKey: "jp-thread", children:
+          createElement(Fragment, null, createElement(UsageLedger),
+            createElement(AssetReel, { assets: threadAssets(messages), onMention() {} })) })))));
+  let view = show();
+  try {
+    expect(screen.getByText(/nothing sent to the model yet/), "H22: an empty thread invents no usage").toBeTruthy();
+    await act(async () => registry.set(source, { ...emptyChatState(), providerId: "codex", events: [prompt, usage(2, 9400)] }));
+    expect(screen.getByText("9.4k loaded"), "H22: the visible context ledger follows the turn event").toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Inspect" }));
+    expect(screen.getByText("send #1")).toBeTruthy();
+    await act(async () => registry.set(source, { ...emptyChatState(), providerId: "codex", events: [prompt, usage(2, 9400), usage(3, 10000)] }));
+    expect(screen.getByText("10.0k loaded"), "H22: corrected usage replaces the prior total").toBeTruthy();
+    expect(screen.getByText("send #1"), "H22: correction is not another send").toBeTruthy();
+    const names = () => within(screen.getByRole("group", { name: "Assets in this thread" }))
+      .getAllByRole("button").map((button) => button.getAttribute("aria-label")).filter((name) => name && !name.startsWith("Copy "));
+    expect(names(), "H21: attachments and captures keep their transcript order").toEqual([
+      "2 captures", "2 files", "0 model", "panel.png", "feeder.txt", "Panel 1", "Panel 2",
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "2 captures" }));
+    expect(screen.queryByRole("button", { name: "feeder.txt" })).toBeNull();
+    view.unmount(); view = show();
+    expect(names(), "H21: reopening the reel retains every ordered asset").toContain("feeder.txt");
+    expect(screen.getByText("10.0k loaded"), "H22: reopening retains the corrected usage").toBeTruthy();
+  } finally { view.unmount(); registry.dispose(); cleanup(); }
+});
+
+test("JP4 save rendered settings through delayed HTTP and inspect a pane fault during an outage", async () => {
+  const dir = await mkdtemp(resolve(tmpdir(), "jp-settings-"));
+  const fields = { word: { ...field(z.string().trim().min(1).default("acknowledged"), {}), role: "setting", label: "Parameter name" } } satisfies Record<string, SettingField>;
+  const settings = createRouteSettings(dir, { "jp-settings": fields });
+  const routes = createPeRoutes({ registrations: [], heads: { observe: () => () => {} },
+    store: { getState: async () => null, setState: async () => {} }, routeSettings: settings });
+  const url = "http://host/pe/route-settings/jp-settings";
+  let readHold: ReturnType<typeof Promise.withResolvers<void>> | undefined;
+  let readEntered: ReturnType<typeof Promise.withResolvers<void>> | undefined;
+  let writeHold: ReturnType<typeof Promise.withResolvers<void>> | undefined;
+  let failSave = false;
+  const owner = createSettingsOwner(fields, {
+    async read() { const response = await routes.fetch(new Request(url)); const saved = await response.json(); readEntered?.resolve(); await readHold?.promise; return saved; },
+    async write(patch, expectedRevision) {
+      if (failSave) throw Error("host unavailable");
+      const response = await routes.fetch(new Request(url, { method: "POST", body: JSON.stringify({ patch, expectedRevision }) }));
+      const saved = await response.json(); await writeHold?.promise; return saved;
+    },
+    subscribe: (notify) => settings.subscribe(notify),
+  });
+  const graph = { key: "jp-settings", name: "Worksheet", fields } as unknown as RouteGraph<any, any>;
+  const drawSettings = () => render(createElement(GraphSettingsFields, { graph, owner }));
+  let view = drawSettings();
+  try {
+    await vi.waitFor(() => expect((screen.getByRole("textbox", { name: "Parameter name" }) as HTMLInputElement).disabled).toBe(false));
+    const edit = (text: string) => { const input = screen.getByRole("textbox", { name: "Parameter name" }); fireEvent.change(input, { target: { value: text } }); fireEvent.blur(input); };
+    edit("");
+    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Read settings again" })).toBeTruthy());
+    expect(settings.read("jp-settings").revision, "H28: invalid input does not reach saved settings").toBe(0);
+    readHold = Promise.withResolvers<void>();
+    readEntered = Promise.withResolvers<void>();
+    const hydrate = owner.refresh();
+    await readEntered.promise;
+    writeHold = Promise.withResolvers<void>();
+    edit("newer name");
+    await vi.waitFor(() => expect(settings.read("jp-settings").revision).toBe(1));
+    readHold.resolve(); await hydrate; readHold = undefined;
+    expect((screen.getByRole("textbox", { name: "Parameter name" }) as HTMLInputElement).disabled,
+      "H28: late hydration cannot unlock a pending save").toBe(true);
+    writeHold.resolve(); writeHold = undefined;
+    await vi.waitFor(() => expect((screen.getByRole("textbox", { name: "Parameter name" }) as HTMLInputElement).value).toBe("newer name"));
+    await vi.waitFor(() => expect(owner.read().values.word, "H28: late hydration cannot replace acknowledged newer settings").toBe("newer name"));
+    await owner.refresh();
+    readHold = Promise.withResolvers<void>(); readEntered = Promise.withResolvers<void>();
+    const late = owner.refresh(); await readEntered.promise;
+    edit("newest name");
+    await vi.waitFor(() => expect(owner.read().values.word).toBe("newest name"));
+    readHold.resolve(); await late; readHold = undefined;
+    expect(owner.read().values.word, "H28: a late older HTTP body cannot overwrite a newer acknowledged save").toBe("newest name");
+    await owner.refresh(); // Settle the store notification read before testing the next independent outage.
+    failSave = true; edit("lost save");
+    await vi.waitFor(() => expect(screen.getByText("host unavailable")).toBeTruthy());
+    view.unmount(); view = drawSettings();
+    expect((screen.getByRole("textbox", { name: "Parameter name" }) as HTMLInputElement).value,
+      "H28: reopen after failure retains the last acknowledged value").toBe("newest name");
+    view.unmount();
+    vi.useFakeTimers();
+    let down = true;
+    const batches: unknown[] = [];
+    vi.stubGlobal("fetch", async (_url: unknown, init?: RequestInit) => {
+      batches.push(JSON.parse(String(init?.body)));
+      if (down) throw TypeError("Failed to fetch");
+      return Response.json({ ok: true });
+    });
+    function BrokenPane(): never { throw Error("C:/Users/private/secret.rvt"); }
+    view = render(createElement(Fragment, null,
+      createElement(PaneFaultProvider, { onFault: (error) => reportFault({ code: "pane.failed" }, error), children:
+        createElement(Pane, { children: createElement(BrokenPane) }) }),
+      createElement(SettingsBody, { reading: MACHINE_SEEDS.disconnected, fixture: true, shell: "web" })));
+    // Add enough recorded stream faults to exercise the same visible overflow state.
+    await act(async () => {
+      for (let i = 0; i < DIAGNOSTICS_MAX_PENDING + 2; i++) reportFault({ code: "stream.failed", readingKind: "private text with spaces" });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByText(/diagnostics unreachable/).textContent, "H24: Settings discloses bounded-buffer loss while offline").toMatch(/64 waiting.*dropped/);
+    expect(JSON.stringify(batches), "H24: approved diagnostic facts exclude local exception text and unapproved labels").not.toMatch(/secret|private text/);
+    down = false;
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); await vi.advanceTimersByTimeAsync(10); });
+    expect(screen.getByText(/diagnostics delivered/), "H24: recovered delivery is visible").toBeTruthy();
+    expect(JSON.stringify(batches), "H24: recovery reports the outage and dropped facts").toContain("host.unreachable");
+  } finally {
+    readHold?.resolve(); writeHold?.resolve(); view.unmount(); cleanup();
+    vi.useRealTimers(); vi.unstubAllGlobals(); await rm(dir, { recursive: true, force: true });
+  }
+});
+
+import { createRequire } from "node:module";
+import { ActionJournal } from "../../../host/src/action-journal";
+import { createReceiptExport } from "../../../host/src/receipt-export";
+import { receiptGoldenEnvelope } from "../../../../packages/agent-contracts/tests/receipt-fixture";
+import { withInvocationContext } from "@pe/runtime/context";
+
+async function sendFeedbackWhileDeliveryWaits() {
+  const dir = await mkdtemp(resolve(tmpdir(), "jp-feedback-"));
+  const stamp = receiptGoldenEnvelope.stamp!;
+  const journal = new ActionJournal(resolve(dir, "journal.json"), Date.now, () => stamp);
+  const request = Promise.withResolvers<Response>();
+  let sends = 0;
+  // Load the host's actual SDK dependency; the only recorded boundary is its network transport.
+  const { PostHog } = createRequire(resolve(process.cwd(), "../host/package.json"))("posthog-node");
+  const client = new PostHog("explicit-test-key", {
+    disableCompression: true, disableGeoip: true, flushInterval: 0, fetchRetryCount: 0,
+    enableExceptionAutocapture: false, requestTimeout: 60000,
+    fetch: () => { sends++; return request.promise; },
+  });
+  const telemetry = createReceiptExport({ journal, root: dir, client, deadlineMs: 50,
+    stamps: { host: { ...stamp, component: "host" }, web: { ...stamp, component: "web" } } });
+  const routes = createPeRoutes({ registrations: [], store: { getState: async () => null, setState: async () => {} }, heads: { observe: () => () => {} }, telemetry });
+  const post = (path: string, body?: unknown) => withInvocationContext({ caller: { kind: "human", via: "local" } }, () => routes.fetch(new Request(`http://host${path}`, {
+    method: "POST", headers: { "content-type": "application/json", "x-pe-web-build": stamp.build },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })));
+  const note = { comment: "keep the complete ordered note", url: "https://private/model", selector: "#feeder", component: "Worksheet", components: ["Worksheet", "Pane"], html: "<p>private feedback</p>",
+    rect: { x: 1, y: 2, width: 3, height: 4 }, viewport: { width: 800, height: 600, dpr: 1 }, picture: "data:image/png;base64,AA==", picture_error: null };
+  try {
+    const response = await post("/pe/feedback", note);
+    expect(response.status, "H21: human feedback crosses the real HTTP door").toBe(200);
+    const receipt = await response.json() as { feedbackId: string; delivery: string };
+    expect(receipt.delivery, "H21: kept feedback is uncertain while its delivery remains on the wire").toBe("uncertain");
+    const [saved] = await journal.read({ kinds: ["feedback"] });
+    if (saved?.body.kind !== "feedback") throw Error("Feedback was not kept");
+    expect(JSON.parse(await readFile(saved.body.localRef.path, "utf8")).feedback,
+      "H21: feedback retains every explicit field before delivery").toEqual(note);
+    expect((await (await post(`/pe/feedback/${receipt.feedbackId}/deliver`)).json()).delivery,
+      "H21: retrying status cannot invent failure while the first send waits").toBe("uncertain");
+    expect(sends, "H21: polling delivery never duplicates content").toBe(1);
+    request.resolve(Response.json({}));
+    await vi.waitFor(async () => expect((await (await post(`/pe/feedback/${receipt.feedbackId}/deliver`)).json()).delivery,
+      "H21: the same receipt settles delivered").toBe("accepted"));
+    expect(await journal.read({ kinds: ["feedback"] }), "H21: one feedback keeps one receipt").toHaveLength(1);
+  } finally { request.resolve(Response.json({})); await telemetry.close(); await rm(dir, { recursive: true, force: true }); }
+}
+
+import { RemoteDeviceGate, RecordedSourceChip, useLocalDevice } from "../machine/devices";
+async function openRecordedGuidanceAfterRefusal() {
+  let attempt = 0;
+  vi.stubGlobal("fetch", async () => Response.json({ version: "jp", features: { peApi: 1, nativeAdapter: 2 } }, {
+    headers: { "x-pe-source": ++attempt === 1 ? "not json" : JSON.stringify({
+      kind: "recording", at: null, build: "recorded", catalog: "recorded", coverage: ["native"],
+      truncated: { at: 3, stoppedAt: 1, site: "occurrence", op: "ducts.snapshot.walk", reason: "full" },
+    }) },
+  }));
+  function Access() {
+    return createElement(Fragment, null, createElement("output", null, `Local authority: ${useLocalDevice()}`), createElement(RecordedSourceChip));
+  }
+  const view = render(createElement(RemoteDeviceGate, { name: "Pea", guidance: createElement("p", null, "Public guide"), children: createElement(Access) }));
+  try {
+    await screen.findByRole("alert");
+    expect(screen.getByText("Public guide"), "B08: guidance survives refused host provenance").toBeTruthy();
+    expect(screen.queryByText(/Local authority/), "B08: refused provenance cannot reveal protected content").toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry host connection" }));
+    await screen.findByText("Local authority: false");
+    expect(screen.getByText(/Recorded.*read only.*partial/), "B08: canonical recording admission is explicit and read only").toBeTruthy();
+    expect(attempt, "B08: recording admission never asks a live device door").toBe(2);
+  } finally { view.unmount(); vi.unstubAllGlobals(); }
+}
