@@ -1,6 +1,15 @@
 import { deepEqual } from "@tanstack/react-router";
 import { EndpointError } from "./endpoint-error";
-import { Component, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Component,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useAtomValue } from "@effect/atom-react";
 import {
   DIAGRAM_TOOL_ID,
@@ -444,7 +453,8 @@ function ToolRunFold({
   onToggle: (open: boolean) => void;
   children: ReactNode;
 }) {
-  const failed = calls.filter((call) => call.status === "failed").length;
+  const failures = calls.filter((call) => call.status === "failed");
+  const failed = failures.length;
   const working = calls.some((call) => call.status === "in_progress");
   const latest = calls.at(-1)!;
   const latestId = useRef(latest.id);
@@ -480,7 +490,12 @@ function ToolRunFold({
         <TooltipHint content={summary}>
           <span className="dl-tool-run-latest">{summary}</span>
         </TooltipHint>
-        {failed > 0 ? <span data-tone="alarm">{failed} failed</span> : null}
+        {failed > 0 ? (
+          <span data-tone="alarm">
+            {failed} failed:{" "}
+            {failures.map((call) => toolDetail(call)?.text ?? toolTitle(call.title)).join(", ")}
+          </span>
+        ) : null}
         {working ? <span className="sr-only">Running</span> : null}
       </summary>
       {children}

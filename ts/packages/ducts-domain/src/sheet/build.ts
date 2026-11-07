@@ -1509,6 +1509,18 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     bRule && aRule.score !== bRule.score
       ? `ends: discharge ${swap ? bRule.source : aRule.source}; paired side is inlet`
       : "port metadata tie-break: ends do not distinguish the paired sides";
+  const metadata = unit.connectors.filter((c) => c.index === discharge || c.index === inlet);
+  const overridesDirection =
+    bRule &&
+    aRule.score !== bRule.score &&
+    metadata.some(
+      (c) =>
+        (c.index === discharge && c.direction === "in") ||
+        (c.index === inlet && c.direction === "out"),
+    );
+  const directionOverride = overridesDirection
+    ? `connector metadata says ${metadata.map((c) => `c${c.index} ${c.direction}`).join(" / ")}; the network disagrees: inlet c${inlet}, discharge c${discharge}. Evidence: c${input.fan.portIndex} ${aRule.source} (score ${aRule.score}); c${pairedInlet} ${bRule?.source} (score ${bRule?.score})`
+    : null;
   // The unit's own flow: typed is the side-stream exception's asserted flow, a Revit or stored value
   // its design parameter; absent both, an ordinary fan's flow is the sum of its ends (never an input).
   const unitCfm = input.inputs.units[String(unit.id)]?.cfm;
@@ -1550,7 +1562,8 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     // as a typed one does (ducts LEDGER 2026-10-29). A typed 0 is a share; an untyped 0 is unset.
     unitCfm: (unitId) => {
       const u = input.inputs.units[String(unitId)]?.cfm;
-      return u?.value != null && (u.source === "Work" || u.source === "run" || u.source === "model-store" || u.value > 0)
+      return u?.value != null &&
+        (u.source === "Work" || u.source === "run" || u.source === "model-store" || u.value > 0)
         ? { cfm: u.value, source: provenance(u) }
         : null;
     },
@@ -1675,7 +1688,10 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   });
   const tagOf = (unitId: number) => input.roster.find((p) => p.unitId === unitId)?.tag;
   const notes: SheetNote[] = [
-    note("direction", `inlet ${inlet ?? "none"}, discharge ${discharge}: ${directionSource}`),
+    note(
+      "direction",
+      `inlet ${inlet ?? "none"}, discharge ${discharge}: ${directionOverride ? `${directionOverride}; ` : ""}${directionSource}`,
+    ),
     // Compare the shared resolver's authored/model value with the independently walked sum.
     // Open ends make the sum partial; never allocate their unknown flow to erase a conflict.
     ...(unitCfm?.value != null && walkedFlow != null && Math.abs(unitCfm.value - walkedFlow) > 0.5
@@ -1701,9 +1717,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       ...(returnFlows ? returnFlows.inflows.map((x) => [ret!.w, x] as const) : []),
     ].map(([w, x]) => {
       const e = w.ends[x.end]!.end;
-      const from = x.fan
-        ? tagOf(x.fan.unitId) || g.name(x.fan.unitId)
-        : "unnamed stream";
+      const from = x.fan ? tagOf(x.fan.unitId) || g.name(x.fan.unitId) : "unnamed stream";
       return note(
         "inflow",
         `inflow from ${from} at ${g.name(e.elementId)}${assumeHeals ? " (assumed)" : ""}: ${x.source}`,
@@ -1805,6 +1819,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       ratedEspInWg: ratedEsp,
       inletPortIndex: inlet,
       dischargePortIndex: discharge,
+      directionOverride,
       flowCfm,
     },
     legs: pricer.legs,
