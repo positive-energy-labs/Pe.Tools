@@ -459,7 +459,13 @@ test("Work that cannot be recorded truncates capture; the live Work still answer
       request.consumption.id,
     ),
   ).rejects.toMatchObject({ problem: "recording.context" });
-  expect((await reader(dir)).truncation).toEqual({ at: 2, stoppedAt: expect.any(Number), site: "work", op: "work.raw", reason: "encoding" });
+  expect((await reader(dir)).truncation).toEqual({
+    at: 2,
+    stoppedAt: expect.any(Number),
+    site: "work",
+    op: "work.raw",
+    reason: "encoding",
+  });
 });
 
 test("a failing taking observer truncates capture without failing the live read", async () => {

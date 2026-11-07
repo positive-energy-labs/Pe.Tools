@@ -507,6 +507,10 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     const acquiredWalk = storedOverview.children.filter((entry) => entry.recipe.key === "ducts.retained" &&
       Schema.is(Schema.Struct({ key: Schema.Literal("ducts.snapshot.walk"), role: Schema.Literal("acquire") }))(entry.recipe.input));
     expect(acquiredWalk).toHaveLength(1);
+    const acquiredSet = await run(writer.readSets.get(acquiredWalk[0]!.readSetId));
+    const acquiredTaking = writer.taking(acquiredSet.takingLinks.native!);
+    expect(acquiredTaking?.input).toMatchObject({kind: "native", key: "ducts.snapshot.walk"});
+    expect(acquiredTaking?.outputVersion).toBe(snapshotContract.version);
     const acquisition = Schema.decodeUnknownSync(Schema.Struct({ request: Schema.Json }))(acquiredWalk[0]!.recipe.input);
     const beforeHit = nativeCalls;
     await capture("/call", { key: "ducts.snapshot.walk", request: acquisition.request });

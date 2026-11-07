@@ -24,14 +24,16 @@ export const reads = {
     output: podsValue,
     async run(ctx, args) {
       const ref = member(args);
-      const selected = ref?.path.endsWith(".json") ? {member:ref,...await ctx.read(localRead("pod.member.read"), ref)} : null;
+      const selected = ref?.path.endsWith(".json")
+        ? { member: ref, ...(await ctx.read(localRead("pod.member.read"), ref)) }
+        : null;
       const stored = ref
         ? await ctx.read(workRead("pods", settingsRouteState.schema), {
-              route: "pods",
-              binding: "workspace",
-              target: null,
-              work: memberWork(ref),
-            })
+            route: "pods",
+            binding: "workspace",
+            target: null,
+            work: memberWork(ref),
+          })
         : null;
       const work = stored?.doc ?? null;
       const same = work?.basis?.member.pod === ref?.pod && work?.basis?.member.path === ref?.path;
@@ -56,7 +58,11 @@ export const reads = {
         /* Invalid saved text stays inspectable in the raw editor. */
       }
       if (ref && selected && json)
-        composition = {member:ref,draft,result:await ctx.read(localRead("pod.member.compose"),{...ref,content:draft})};
+        composition = {
+          member: ref,
+          draft,
+          result: await ctx.read(localRead("pod.member.compose"), { ...ref, content: draft }),
+        };
       return {
         scope: args,
         member: selected,
@@ -65,10 +71,12 @@ export const reads = {
         composition,
         schemaRef,
         runs: args.pod
-          ? (await ctx.read(localRead("pod.runs"), {
-              pod: args.pod,
-              ...(args.runs === "member" && ref ? { path: ref.path } : {}),
-            })).runs
+          ? (
+              await ctx.read(localRead("pod.runs"), {
+                pod: args.pod,
+                ...(args.runs === "member" && ref ? { path: ref.path } : {}),
+              })
+            ).runs
           : [],
       };
     },

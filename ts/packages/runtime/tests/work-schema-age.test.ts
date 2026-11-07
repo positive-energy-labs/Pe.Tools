@@ -27,11 +27,11 @@ function fixture(saved: unknown) {
 }
 
 test.each([undefined, 3, "1", 0])(
-  "undecodable schema %s is deleted; stale writers cannot recreate it",
+  "undecodable schema %s refuses without rewriting; stale writers cannot change it",
   async (schemaVersion) => {
     const saved = { version: 1, revision: 4, schemaVersion, doc: { future: "keep me" } };
     const { workspace, setState, rows } = fixture(saved);
-    expect(await workspace.read(key, "age")).toBeNull();
+    await expect(workspace.read(key, "age")).rejects.toMatchObject({ code: "WorkUnreadable", key });
     for (const by of ["human", "pea"] as const) {
       expect(await workspace.startFresh(key, "age", by)).toMatchObject({ ok: false });
       expect(
@@ -41,8 +41,8 @@ test.each([undefined, 3, "1", 0])(
         await workspace.publish(key, "age", [{ path: ["note"], value: "lost" }], 4),
       ).toMatchObject({ ok: false });
     }
-    expect(setState).toHaveBeenCalledExactlyOnceWith({ targetKey: workKey(key), route: "age", value: null });
-    expect(rows.get("age")).toBeNull();
+    expect(setState).not.toHaveBeenCalled();
+    expect(rows.get("age")).toEqual(saved);
   },
 );
 

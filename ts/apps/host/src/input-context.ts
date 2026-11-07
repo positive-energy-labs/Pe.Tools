@@ -43,9 +43,10 @@ function check(lane: HostInputLane, use: InputUse): InvalidRead | null {
     case "native": {
       const operation = hostOpCatalog.find((entry) => entry.key === use.key);
       if (!operation) return refused("read.contract", `${use.key} has no generated contract`);
-      // No replay-safe metadata distinguishes transaction-backed inspection from rehearsal yet.
-      // Historical invocation therefore admits only ordinary Read/Read.
-      return operation.intent === "Read" && operation.effect === "Read"
+      // Catalog-declared rollback inspections replay their kept output and never open a transaction.
+      return operation.intent === "Read" &&
+        (operation.effect === "Read" ||
+          (operation.effect === "TransactRead" && operation.rollsBack))
         ? uncovered(NATIVE_BUNDLE, ["native"], use.key)
         : historical(`${use.key} (${operation.effect})`);
     }

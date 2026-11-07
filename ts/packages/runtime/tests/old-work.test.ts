@@ -73,21 +73,27 @@ const oldTakeoffs = {
 };
 
 for (const [spec, saved] of [
-  [familiesRouteState, oldFamilies], [familyDraftRouteState, oldFamily],
-  [parameterLinksRouteState, oldParameterLinks], [takeoffsRouteState, oldTakeoffs],
+  [familiesRouteState, oldFamilies],
+  [familyDraftRouteState, oldFamily],
+  [parameterLinksRouteState, oldParameterLinks],
+  [takeoffsRouteState, oldTakeoffs],
 ] as const) {
-  test(`/${spec.route}: undecodable stored Work is deleted and treated as absent`, async () => {
+  test(`/${spec.route}: undecodable stored Work refuses without rewriting`, async () => {
     const scope: WorkKey = { binding: "address", route: spec.route, target };
     let stored: unknown = structuredClone(saved);
-    const setState = vi.fn(async ({ value }: { value: unknown }) => { stored = value; });
+    const setState = vi.fn(async ({ value }: { value: unknown }) => {
+      stored = value;
+    });
     const module = new RouteWorkspace({
       registrations: [{ spec: spec as unknown as RouteStateSpec<z.ZodType> }],
       store: { getState: async () => structuredClone(stored), setState },
     });
-    expect(await module.read(scope, spec.route)).toBeNull();
-    expect(stored).toBeNull();
-    expect(await module.read(scope, spec.route)).toBeNull();
-    expect(setState).toHaveBeenCalledExactlyOnceWith({ targetKey: workKey(scope), route: spec.route, value: null });
+    await expect(module.read(scope, spec.route)).rejects.toMatchObject({
+      code: "WorkUnreadable",
+      key: scope,
+    });
+    expect(stored).toEqual(saved);
+    expect(setState).not.toHaveBeenCalled();
   });
 }
 

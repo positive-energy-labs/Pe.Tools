@@ -19,11 +19,12 @@ export const familiesView = read("families.view", {
   async run(ctx, args) {
     await ctx.read(documentMark, args.target);
     const scope = { ...(await ctx.read(workScope, args.target)), route: "families" };
-    const view = await ctx.read(workRead("families", familiesRouteState.schema),scope);
+    const view = await ctx.read(workRead("families", familiesRouteState.schema), scope);
     const work = familiesRouteState.schema.parse(view?.doc ?? {});
     const { body: catalog } = await ctx.read(nativeRead("revit.catalog.loaded-families"), {
+      role: "none",
       request: { filter: {}, budget: { maxEntries: 5000 } },
-      target:{kind:"document",ref:args.target},
+      target: { kind: "document", ref: args.target },
     });
     const observed = await ctx.read(familyObservation, { kind: "families-reading", work: scope });
     const filter = work.scope.edit?.value;
@@ -58,8 +59,12 @@ export const familiesView = read("families.view", {
           outcomes: receipts
             .filter((r) => r.key === "families.apply")
             .map((r) => {
-              const outcome = applyOutcome(actionReceiptSchema.parse(r), work.scope.edit?.value.familyNames ?? []);
-              const tally = r.state === "succeeded" ? applyTally(actionReceiptSchema.parse(r)) : null;
+              const outcome = applyOutcome(
+                actionReceiptSchema.parse(r),
+                work.scope.edit?.value.familyNames ?? [],
+              );
+              const tally =
+                r.state === "succeeded" ? applyTally(actionReceiptSchema.parse(r)) : null;
               return {
                 id: r.id,
                 kind: outcome ? ("error" as const) : ("advisory" as const),

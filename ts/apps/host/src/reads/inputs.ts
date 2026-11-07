@@ -38,7 +38,7 @@ const nativeArgs = z.object({
   request: z.unknown(),
   target: executionTargetSchema,
   version: z.string().optional(),
-  role: z.enum(["acquire", "validate", "join", "beyond"]).optional(),
+  role: z.enum(["acquire", "validate", "join", "beyond", "none"]),
 });
 const nativeLeaf = leaf(
   "native",
@@ -52,7 +52,7 @@ type NativeArgs<K extends HostOperationKey> = {
   request: OpRequestOf<K>;
   target: z.output<typeof executionTargetSchema>;
   version?: string;
-  role?: "acquire" | "validate" | "join" | "beyond";
+  role: "acquire" | "validate" | "join" | "beyond" | "none";
 };
 type NativeValue<K extends HostOperationKey> = {
   body: NativeReadOutput<K>;
@@ -122,8 +122,8 @@ export interface ReadSources {
     key: string,
     request: unknown,
     target: z.output<typeof executionTargetSchema>,
-    version?: string,
-    role?: "acquire" | "validate" | "join" | "beyond",
+    version: string | undefined,
+    role: "acquire" | "validate" | "join" | "beyond" | "none",
   ) => Promise<Response>;
 }
 export function inputPort(options: {

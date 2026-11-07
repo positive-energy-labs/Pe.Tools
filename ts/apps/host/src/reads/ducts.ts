@@ -29,7 +29,8 @@ export const ductsRoster = read("ducts.roster", {
       design = ductsDesign(saved.ducts, saved.fans);
     const staged = stagedDucts(design, design);
     const response = await ctx.read(nativeRead("ducts.snapshot.roster"), {
-      target:{kind:"document",ref:target},
+      role: "acquire",
+      target: { kind: "document", ref: target },
       request: {
         slots: staged.parameters,
         labelParameter: staged.labelParameter ?? undefined,
@@ -49,7 +50,8 @@ const systems = read("ducts.systems", {
       design = ductsDesign(saved.ducts, saved.fans);
     const staged = stagedDucts(design, design);
     const response = await ctx.read(nativeRead("ducts.snapshot.walk"), {
-      target:{kind:"document",ref:target},
+      role: "acquire",
+      target: { kind: "document", ref: target },
       request: {
         slots: staged.parameters,
         labelParameter: staged.labelParameter ?? undefined,
@@ -126,7 +128,8 @@ export const ductsPricing = read("ducts.pricing", {
     const layers = await ctx.read(designLayers, args.target),
       catalog = await ctx.read(catalogs, null);
     const tables = await ctx.read(nativeRead("ducts.tables"), {
-      target:{kind:"document",ref:args.target},
+      role: "acquire",
+      target: { kind: "document", ref: args.target },
       request: { ids: [...TABLE_IDS] },
     });
     // Pricing requires the entire requested network; a refused batch remains visible on network Values.
@@ -140,7 +143,10 @@ export const ductsPricing = read("ducts.pricing", {
     )
       throw Error("Pricing requires every requested system batch; read the network coverage");
     const fans = await ctx.read(fanRoster, { target: args.target });
-    const options=await ctx.read(espOptions,{target:args.target,units:fans.rows.flatMap(row=>row.uniqueId?[row.uniqueId]:[])});
+    const options = await ctx.read(espOptions, {
+      target: args.target,
+      units: fans.rows.flatMap((row) => (row.uniqueId ? [row.uniqueId] : [])),
+    });
     return ctx.compute(
       ductsPricingData,
       { roster, fans, network, layers, catalog, tables },
@@ -148,8 +154,8 @@ export const ductsPricing = read("ducts.pricing", {
         const { sourceVersion: _version, systemReads: _coverage, ...snapshot } = network;
         const result = ductsPricingData
           .omit({
-            espOptions:true,
-            espOptionsError:true,
+            espOptions: true,
+            espOptionsError: true,
             fanRows: true,
             design: true,
             effectiveDesign: true,

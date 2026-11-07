@@ -49,8 +49,13 @@ test("recorded host-local inputs and immutable capture files replay without a li
     input: z.object({ target: executionTargetSchema }),
     output: nativeOutputSchema("revit.context.view-image"),
     run: async (ctx, args) =>
-      (await ctx.read(nativeRead("revit.context.view-image"), { target: args.target, request: {} }))
-        .body,
+      (
+        await ctx.read(nativeRead("revit.context.view-image"), {
+          role: "none",
+          target: args.target,
+          request: {},
+        })
+      ).body,
   });
   const unregister = registeredReads.register({ image: imageRead });
   const writer = await settle(openRecordingWriter(join(dir, "bundle"), identity, bounds));
@@ -108,7 +113,12 @@ test("recorded host-local inputs and immutable capture files replay without a li
                 }),
                 marks: Layer.succeed(
                   HostDocumentMarks,
-                  hostMarks({ observedSince: 0, changedAt: () => null, subscribe: () => () => {} }),
+                  hostMarks({
+                    observedSince: 0,
+                    changedAt: () => null,
+                    generation: () => 0,
+                    subscribe: () => () => {},
+                  }),
                 ),
                 inventory: Layer.succeed(HostSessionInventory, {
                   list: () => Effect.die("No inventory"),
@@ -162,6 +172,7 @@ test("recorded host-local inputs and immutable capture files replay without a li
     const captures = await read(live, "captures.browse"),
       pods = await read(live, "pods.roster");
     const native = await read(live, imageRead.name);
+    expect(writer.truncation).toBeNull();
     expect(native.data).toMatchObject({ imageUrl: receipt.url, capture: { sha: receipt.sha } });
     expect(native.data).not.toHaveProperty("filePath");
     expect(await pictures.list()).toHaveLength(2);
