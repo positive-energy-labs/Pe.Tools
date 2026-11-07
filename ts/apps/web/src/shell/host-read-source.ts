@@ -2,6 +2,13 @@ import { z } from "zod";
 import type {HostRead} from "../route/host-read.ts";
 import type {ReadingContext,UseSource} from "./readings.ts";
 import type {PeRouteId} from "@pe/agent-contracts/pe-api";
+// Transport inspects the frame only; the mount is the sole decoder of Value data.
+const publicationFrame=z.looseObject({
+  generation:z.number(),version:z.number(),state:z.string(),reason:z.string().optional(),
+  value:z.looseObject({evaluation:z.string(),coverage:z.looseObject({
+    refused:z.array(z.object({keys:z.array(z.string()),reason:z.string()})),unknown:z.array(z.string()),
+  })}).nullable(),
+});
 /** Browser transport is installed by the shell; declarations carry only the contract and fixtures. */
 export function hostReadSource(read:HostRead):UseSource {
   const contract=read,key=read.key;
@@ -11,7 +18,7 @@ export function hostReadSource(read:HostRead):UseSource {
         if (ctx.signal.aborted) return;
         return publicationSource({
           async read(context, publication, release) {
-            return callCompose(context, contract.endpoint ?? (key as PeRouteId), {
+            return publicationFrame.parse(await callCompose(context, contract.endpoint ?? (key as PeRouteId), {
                 body: {
                   ...publication,
                   release,
@@ -26,7 +33,7 @@ export function hostReadSource(read:HostRead):UseSource {
               } as never, {
                 ...(context.historyPoint ? { "x-pe-history-point": context.historyPoint } : {}),
                 ...(context.historyPose ? { "x-pe-history-page": encodeURIComponent(JSON.stringify(context.historyPose)) } : {}),
-              });
+              }));
           },
         }).open(ctx, deliver);
       },
