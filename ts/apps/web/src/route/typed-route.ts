@@ -78,7 +78,7 @@ export const command = <K extends WriteCommand & keyof typeof commandCatalogAxes
   };
 };
 type SessionCommandKey = { [K in keyof typeof commandCatalogAxes]:
-  (typeof commandCatalogAxes)[K]["effect"] extends "SessionWrite" ? K : never }[keyof typeof commandCatalogAxes];
+  "SessionWrite" extends (typeof commandCatalogAxes)[K]["effect"] ? K : never }[keyof typeof commandCatalogAxes];
 export const sessionCommand = <K extends SessionCommandKey & keyof typeof commands>(key: K) => {
   if(commandCatalogAxes[key].effect !== "SessionWrite") throw Error("Session commands require a SessionWrite contract");
   return {kind:"session" as const,entry:key,contract:commandContract(key)};
