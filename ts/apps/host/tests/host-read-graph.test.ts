@@ -529,11 +529,10 @@ test("F3 three native batches retain the middle refusal on offline replay; no li
 test("a registered route read and leaf inherit generic endpoint decoding and native fencing", async () => {
   const {readRegistry,graphRoute}=await import("../src/reads/routes.ts");
   const {ductsInputPort}=await import("../src/reads/ducts-inputs.ts");
-  const {host:fansHost}=await import("../../web/src/fans/host.generated.ts");
   let generation=0,calls=0,flip=false;
   const input=leaf("example.source",z.object({target:z.object({session:z.string(),openId:z.string()})}),z.number(),false);
   const definition=read("example.dynamic",{input:input.input,output:z.number(),run:(ctx,args)=>ctx.read(input,args)});
-  const registry=readRegistry([{...fansHost,reads:{definition},leaves:{"example.source":async(args,services)=>{
+  const registry=readRegistry([{reads:{definition},leaves:{"example.source":async(args,services)=>{
     const target=input.input.parse(args).target;
     const answer=await services.take("native",{key:"rooms.snapshot",request:{},target}) as {body:{answer:number}};
     return answer.body.answer;
