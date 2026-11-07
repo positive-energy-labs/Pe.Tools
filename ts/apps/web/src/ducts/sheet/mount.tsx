@@ -81,7 +81,7 @@ function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
 }
 const FAN_CELLS = ["terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows"] as const;
 /**
- * The person's explicit fan write scope (lossReady needs `writeIntent.walk`). Offered from the HOST
+ * The person's explicit fan write scope, required by the host losses command. Offered from the host
  * sheet's open fan and the cells staged on elements of that sheet's snapshot; staged only on a pick,
  * never from the Page or a plan. Another fan's standing scope is shown, not replaced on navigation.
  */
