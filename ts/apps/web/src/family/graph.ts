@@ -72,6 +72,9 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph
     buildReceipt: {},
   },
   verbs: {
+    // The frozen drawing witness still names these dependency slots. It cannot dispatch native actions.
+    apply: workVerb({label:"Apply",input:z.never()},{ready:()=>"Native actions are outside this drawing witness",patches:()=>[]}),
+    build: workVerb({label:"Build",input:z.never()},{ready:()=>"Native actions are outside this drawing witness",patches:()=>[]}),
     edit: workVerb(
       {
         label: "Edit family cells",
