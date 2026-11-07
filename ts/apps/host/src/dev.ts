@@ -1,5 +1,4 @@
 import "./ensure-source-lane.ts";
-import { isSea } from "node:sea";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
@@ -14,8 +13,6 @@ import { prepareSourceClosures } from "./source-closures.ts";
 // The host graph imports closures from disk: prepare them, then link it (see source-closures.ts).
 await prepareSourceClosures();
 const { hostProgram } = await import("./host-program.ts");
-
-declare const __PE_HOST_RECEIPT_BUILD__: unknown;
 
 if (process.argv.includes("--share"))
   throw new Error("--share was removed. Use the Share switch on the installed host (/pe/share).");
@@ -125,10 +122,6 @@ const program = hostProgram(
     if (process.connected) process.send?.("retired");
     else console.log("Dev session retiring after host shutdown.");
   },
-  // Explicit unrecorded source exception; baked identity still goes through root admission.
-  !isSea() && typeof __PE_HOST_RECEIPT_BUILD__ === "undefined"
-    ? { kind: "live", capture: "off" }
-    : undefined,
 );
 
 // effect-edge: process-main
