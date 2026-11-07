@@ -6,6 +6,7 @@ import { fixture, ref, path, gate, snapshot, roster } from "../../../host/tests/
 import { module as fans } from "../fans/route";
 import { localId } from "./typed-route";
 import { mountTypedRoute } from "../shell/typed-mount";
+import type { HostRead } from "./host-read";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
 import { Effect } from "effect";
@@ -49,6 +50,24 @@ import { RequestIdentity, admittedRequestIdentity } from "../../../host/src/requ
 import { NodeServices, NodeHttpClient } from "../../../host/tests/family-attach-host.fixture";
 
 const trace = z.array(z.object({ name: z.string(), args: z.unknown() }));
+
+async function settledValues(mount: ReturnType<typeof mountTypedRoute>, reads: readonly HostRead[], move = () => {}) {
+  const completion = Promise.withResolvers<void>();
+  let armed = false;
+  const inspect = () => {
+    if (!armed) return;
+    const values = reads.map(read => mount.value(read));
+    const refusal = values.find(value => !value.current && value.status === "unavailable");
+    if (refusal && !refusal.current) completion.reject(Error(refusal.reason));
+    else if (values.every(value => value.current)) completion.resolve();
+  };
+  const stop = mount.subscribe(inspect);
+  try {
+    // File validation can outlast a polling budget. Observe delivery, including synchronous completion.
+    move(); armed = true; inspect();
+    await completion.promise;
+  } finally { stop(); }
+}
 
 test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work stales review", async () => {
   let nativeGeneration = "incarnation:24";
@@ -158,13 +177,12 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     })]));
     const ductMount = mountTypedRoute(ducts, { ...j.input, address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} } },
       workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(e => e.routeKey === "ducts")!.closure.fingerprint}`), { work, sources });
+    const ductReads = [ducts.spec.core!, ducts.spec.reads!.roster];
     try {
-      ductMount.subscribe(() => {});
-      await vi.waitFor(() => { const value = ductMount.value(); expect(value.current, value.current ? "current" : value.reason).toBe(true); }, { timeout: 20_000 });
-      await vi.waitFor(() => expect(ductMount.value(ducts.spec.reads!.roster).current).toBe(true), { timeout: 20_000 });
+      await settledValues(ductMount, ductReads);
       const system = ductMount.value(ducts.spec.reads!.roster).value.systems[0]!.name;
-      ductMount.page.subject({ kind: "ids", ids: [localId("ducts-system", system)] });
-      await vi.waitFor(() => { const value = ductMount.value(); expect(value.current, value.current ? "current" : value.reason).toBe(true); }, { timeout: 20_000 });
+      await settledValues(ductMount, ductReads, () => { ductMount.page.subject({ kind: "ids", ids: [localId("ducts-system", system)] }); });
+      expect(ductMount.value().value.network.systemReads.completed).toEqual([systemRoster.systems[0]!.id]);
     } finally { ductMount.dispose(); unregister(); }
     // The Driver recording has identical native content at admission generations :24 and :31.
     nativeGeneration = "incarnation:31";
@@ -193,6 +211,7 @@ test("JM H02/B05 select a Fan whose native walk is malformed and inspect the ref
   const j = await journey({ snapshot: malformed });
   try {
     await j.ready();
+    await settledValues(j.mount, [fans.spec.reads!.roster]);
     const before = j.mount.value().value;
     const roster = j.mount.value(fans.spec.reads!.roster).value.rows;
     const row = roster.find((row: { mark: string }) => row.mark === "MUAS-1")!;
