@@ -88,6 +88,12 @@ export const executionTargetSchema = z.discriminatedUnion("kind", [
 ]);
 export type ExecutionTarget = z.infer<typeof executionTargetSchema>;
 
+/** Document reads accept either wire address and execute against one canonical DocumentRef. */
+export const documentReadTargetSchema = z.union([
+  documentRefSchema,
+  executionTargetSchema.options[3].transform((target) => target.ref),
+]);
+
 export type TargetResolution =
   | {
       kind: "resolved";

@@ -1,4 +1,5 @@
 import { routeModuleHash } from "./route-module-hash.ts";
+import { isBuiltin } from "node:module";
 import path, { dirname, resolve } from "node:path";
 import { checkoutRoot, familyFixturesDir } from "./checkout-paths.ts";
 import { devIcons } from "./dev-icons.ts";
@@ -62,6 +63,15 @@ const config = defineConfig(({ mode, command }) => {
       ),
     },
     plugins: [
+      {
+        name: "pe:browser-node-boundary",
+        apply: "build",
+        enforce: "pre",
+        resolveId(id, importer) {
+          if (this.environment.config.consumer === "client" && isBuiltin(id))
+            this.error(`Browser import reaches Node builtin ${id} from ${importer}`);
+        },
+      },
       routeModuleHash(),
       devIcons(),
       // proto: with a saved ducts fixture and no host, answer the shell's one
