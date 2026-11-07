@@ -158,10 +158,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const project = "args" in read && typeof read.args === "function" ? read.args : spec.core?.args ?? (()=>({}));
       const args = read.input.parse(project(page as never)), signature = canonicalRouteInput(args);
       if (!force && signature === reads.get(read)?.args) continue;
-      const previous = reads.get(read)?.snapshot.value;
+      const previous = reads.get(read)?.snapshot;
+      const retained=previous?.publication?freezePage({...previous.publication,freshness:"refresh-needed" as const}):null;
       reads.get(read)?.stop();
       const controller = new AbortController();
-      const record: {snapshot:Value;args:string;stop():void} = { args: signature, snapshot: { ...unavailable("Reading...", previous),status:"pending" }, stop: () => controller.abort() };
+      const record: {snapshot:Value;args:string;stop():void} = { args: signature, snapshot: { ...unavailable("Reading...", previous?.value,retained),status:"pending" }, stop: () => controller.abort() };
       reads.set(read, record);
       const deliver = (frame: Parameters<Extract<ReadingSource, { kind: "use" | "feed" }>["open"]>[1] extends (arg: infer P) => any ? P : never) => {
         if (controller.signal.aborted || disposed || reads.get(read) !== record) return;
@@ -172,9 +173,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             const current = frame.kind === "complete" && frame.fresh !== false && packet.state === "current" &&
               !!packet.value && !packet.value.coverage.unknown.length && !packet.value.coverage.refused.length;
             record.snapshot = current ? { status: "ready", current: true, value: publication!.data, publication, hash: packet.value!.evaluation }
-              : unavailable(frame.reason ?? packet.reason ?? "Incomplete Value", publication?.data, publication);
+              : unavailable(frame.reason ?? packet.reason ?? "Incomplete Value", publication?.data??record.snapshot.value, publication??record.snapshot.publication);
           } catch (error) { record.snapshot = unavailable(String(error), record.snapshot.value, record.snapshot.publication); }
-        } else if (frame.kind !== "log") record.snapshot = unavailable(frame.kind === "failure" ? String(frame.error) : "Reading...", record.snapshot.value, record.snapshot.publication);
+        } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(String(frame.error),record.snapshot.value,record.snapshot.publication):{...unavailable("Reading...",record.snapshot.value,record.snapshot.publication),status:"pending"};
         notify();
       };
       if (input.fixture !== null) {
