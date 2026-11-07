@@ -36,6 +36,19 @@ import { nativeRead } from "./inputs.ts";
 import { catalogs } from "../builtin-read-handles.ts";
 import { fingerprint, read } from "./evaluator.ts";
 const snapshotSchema = nativeResponseSchema("ducts.snapshot.walk");
+export const espOptions=read("fans.esp-options",{
+  input:z.object({target:ductsRosterRequestSchema.shape.target,units:z.array(z.string())}),
+  output:z.object({espOptions:nativeResponseSchema("revit.catalog.field-options").nullable(),espOptionsError:z.string().nullable()}),
+  async run(ctx,{target,units}) {
+    if(!units.length) return {espOptions:null,espOptionsError:"No unit identities in this fan scope"};
+    try {
+      const response=await ctx.read(nativeRead("revit.catalog.field-options"),{target:{kind:"document",ref:target},request:{key:"parameter-identities",context:{
+        ElementUniqueIds:[...new Set(units)].sort().join(","),ParameterScope:"instanceThenType",StorageType:"Double",
+      }}});
+      return {espOptions:response.body,espOptionsError:null};
+    } catch(error) {return {espOptions:null,espOptionsError:error instanceof Error?error.message:String(error)};}
+  },
+});
 const details = ductsSheetResponseSchema.options;
 const enginePath = z.object({
   side: z.enum(["supply", "return"]),
@@ -151,11 +164,11 @@ const sheetModel = read("fans.calculation", {
     };
     const response = await ctx.read(nativeRead("ducts.snapshot.walk"), {
       request: acquisition,
-      target: request.target,
+      target:{kind:"document",ref:request.target},
     });
     const tables = await ctx.read(nativeRead("ducts.tables"), {
       request: tableRequest,
-      target: request.target,
+      target:{kind:"document",ref:request.target},
     });
     if (!response.version || !tables.version)
       throw Error("Ducts read did not return an observation version");
@@ -177,7 +190,7 @@ const sheetModel = read("fans.calculation", {
           read: walk,
           batch: 1,
           args: ([id]) => ({
-                        target: request.target,
+                        target: {kind:"document" as const,ref:request.target},
             role: "join" as const,
             request: {
               ...(Object.keys(slots).length ? { slots } : {}),
@@ -224,7 +237,7 @@ const sheetModel = read("fans.calculation", {
         read: walk,
         batch: 1,
         args: ([unitId]) => ({
-                    target: request.target,
+                    target: {kind:"document" as const,ref:request.target},
           role: "beyond" as const,
           request: {
             ...(Object.keys(slots).length ? { slots } : {}),
@@ -474,7 +487,7 @@ export const fanRoster = read("fans.roster", {
       design = ductsDesign(saved.ducts, saved.fans);
     const slots = stagedDucts(design, design).parameters;
     const response = await ctx.read(nativeRead("ducts.snapshot.roster"), {
-      target,
+      target:{kind:"document",ref:target},
       request: { ...(Object.keys(slots).length ? { slots } : {}), selector: { kind: "roster" } },
     });
     const snapshot = response.body;

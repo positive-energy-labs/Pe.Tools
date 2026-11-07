@@ -1,10 +1,6 @@
+import { workRead } from "./inputs.ts";
 import { z } from "zod";
-import {
-  podMemberSchema,
-  memberWork,
-  settingsRouteState,
-  settingsCandidate,
-} from "@pe/agent-contracts";
+import { memberWork, settingsRouteState, settingsCandidate } from "@pe/agent-contracts";
 import { read } from "@pe/host/read-graph";
 import { localRead } from "../local-inputs.ts";
 import {
@@ -13,14 +9,8 @@ import {
   podsRosterValue,
   podMemberOfPage as member,
 } from "@pe/agent-contracts";
-import {
-  podRowsSchema,
-  podRunsSchema,
-  memberReadSchema,
-  compositionReadSchema,
-} from "@pe/agent-contracts";
+import { compositionReadSchema } from "@pe/agent-contracts";
 
-const workValue = z.object({ doc: settingsRouteState.schema }).nullable();
 export const reads = {
   roster: read("pods.roster", {
     input: z.object({}),
@@ -36,14 +26,12 @@ export const reads = {
       const ref = member(args);
       const selected = ref?.path.endsWith(".json") ? {member:ref,...await ctx.read(localRead("pod.member.read"), ref)} : null;
       const stored = ref
-        ? workValue.parse(
-            await ctx.work("pods", {
+        ? await ctx.read(workRead("pods", settingsRouteState.schema), {
               route: "pods",
               binding: "workspace",
               target: null,
               work: memberWork(ref),
-            }),
-          )
+            })
         : null;
       const work = stored?.doc ?? null;
       const same = work?.basis?.member.pod === ref?.pod && work?.basis?.member.path === ref?.path;
