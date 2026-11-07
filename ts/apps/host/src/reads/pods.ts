@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { contextFetch, invocationContext } from "@pe/runtime/context";
 import {
   podMemberSchema,
   memberWork,
@@ -7,6 +6,8 @@ import {
   settingsCandidate,
 } from "@pe/agent-contracts";
 import { leaf, read } from "./evaluator.ts";
+import { composeMember, listPods, listRuns, readMember } from "../settings.ts";
+import { runPods } from "../family-actions.ts";
 import {
   podsArgs,
   podsValue,
@@ -94,36 +95,26 @@ export const reads = {
     },
   }),
 };
-// TODO: replace this route-owned self-read adapter with a catalog input handle when S exposes it.
-async function call(key: string, request: unknown) {
-  const origin = invocationContext()?.hostBaseUrl;
-  if (!origin) throw Error("Pod read has no bound host");
-  const response = await contextFetch(new URL("/call", origin), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ key, request }),
-  });
-  if (!response.ok)
-    throw Error(`Pod read ${key} failed (${response.status}): ${await response.text()}`);
-  return response.json();
-}
+// TODO: S's InputPort has no Pod service. These tracked leaves call the canonical in-process owner.
 export const leaves = {
-  "pods.inventory": async () =>
-    z.object({ pods: podRowsSchema }).parse(await call("pod.list", {})).pods,
+  "pods.inventory": async () => podRowsSchema.parse((await runPods({}, listPods())).pods),
   "pods.saved": async (raw: unknown) => {
     const ref = podMemberSchema.parse(raw);
     return {
       ...ref,
       member: ref,
-      ...z
-        .object({ content: z.string(), sha256: z.string(), schemaJson: z.string().optional() })
-        .parse(await call("pod.member.read", ref)),
+      ...(await runPods({}, readMember(ref))),
     };
   },
   "pods.compose": async (raw: unknown) => {
     const { content, ...ref } = compose.input.parse(raw);
-    return { member: ref, draft: content, result: await call("pod.member.compose", raw) };
+    // Host-only composition reports unavailable Revit directives instead of choosing a session.
+    return {
+      member: ref,
+      draft: content,
+      result: await runPods({}, composeMember({ ...ref, content })),
+    };
   },
   "pods.runs": async (raw: unknown) =>
-    z.object({ runs: podRunsSchema }).parse(await call("pod.runs", raw)).runs,
+    podRunsSchema.parse((await runPods({}, listRuns(runs.input.parse(raw)))).runs),
 };
