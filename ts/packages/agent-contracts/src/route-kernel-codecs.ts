@@ -110,3 +110,16 @@ export const identityCodecs: IdentityCodecs = Object.freeze({
     ([namespace, subject]) => ({ namespace, subject }),
   ),
 });
+
+export const subjectSchema = (max: number) => {
+  const id = z.string().transform((value, ctx) => {
+    const decoded = identityCodecs.local.decode(value);
+    if (decoded.ok) return decoded.value;
+    ctx.addIssue({ code: "custom", message: decoded.reason });
+    return z.NEVER;
+  });
+  return z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("ids"), ids: z.array(id).max(max), active: id.optional() }),
+    z.strictObject({ kind: z.literal("all") }),
+  ]);
+};

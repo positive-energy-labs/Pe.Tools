@@ -128,7 +128,6 @@ export function createAdmittedReadingPlan(options: {
   };
   return {
     route: options.route,
-    fixtureProvider: (op: string) => bindings().sources[op]?.provide,
     workOwners: () => Object.fromEntries(Object.entries(options.route.data.readings).flatMap(([id, reading]) => reading.kind === "work" ? [[id, reading.route]] : [])),
     workSchemas: () =>
       Object.fromEntries(

@@ -1,28 +1,20 @@
-import { ductsAddress } from "./ducts.ts";
-import { field, manyCodec } from "../route-field.ts";
-import { INVALID } from "../page-keys.ts";
+// Generated from fans/route.ts by codegen:routes. Do not edit.
 import { z } from "zod";
-export const fansAddress = {
-  ...ductsAddress,
-  path: "/fans" as const,
-  title: "Fans",
-  fields: {
-    ...ductsAddress.fields,
-    fan: {
-      ...ductsAddress.fields.fan,
-      schema: z.union([z.array(z.string().min(1)).max(32), z.literal("all")]).default([]),
-      codec: {
-        encode: manyCodec.encode,
-        decode: (text: string) => {
-          const value = manyCodec.decode(text);
-          return Array.isArray(value) && value.length > 32 ? INVALID : value;
-        },
-      },
-    },
-    stage: field(z.enum(["sheet"]).default("sheet"), { url: "push", agent: "set" }),
-  },
-  agent: {
-    policy:
-      "Pick stable UniqueId@port keys from the fan roster through fan, a list or all. Each fan retains its own total.",
-  },
-};
+import { subjectSchema } from "../route-kernel-codecs.ts";
+const field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: { encode: (value:z.output<S>) => JSON.stringify(value), decode: (text:string) => schema.parse(JSON.parse(text)) } });
+export const fansAddress = { path: "/fans" as const, title: "Fans", fields: {
+"fan": field(subjectSchema(32).default({"kind":"ids","ids":[]}), "push"),
+"stage": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","enum":["sheet"]}).default("sheet"), "push"),
+"inputSort": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string","enum":["","name"]}).default(""), "replace"),
+"inputSearch": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":{"v":1,"keywords":"","pills":[]},"description":"JSON {v:1,keywords:string,pills:[{field,op:'=',value}]}. Literal AND keywords and equality pills: kind. Element IDs match exactly.","type":"object","properties":{"v":{"type":"integer","minimum":-9007199254740991,"maximum":9007199254740991},"keywords":{"type":"string","maxLength":4000},"pills":{"maxItems":32,"type":"array","items":{"type":"object","properties":{"field":{"type":"string"},"op":{"type":"string"},"value":{"type":"string"}},"required":["field","op","value"]}}},"required":["v","keywords","pills"]}).default({"keywords":"","pills":[],"v":1}), "replace"),
+"contextRadiusFt": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":10,"type":"number","minimum":0,"maximum":64}).default(10), "replace"),
+"contextStyle": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"glass","type":"string","enum":["lines","glass"]}).default("glass"), "replace"),
+"encoding": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"health","type":"string","maxLength":200}).default("health"), "push"),
+"layers": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":["meshes","system-colours","stub-labels","halo","no-run","labels","findings"],"anyOf":[{"maxItems":50000,"type":"array","items":{"type":"string","minLength":1}},{"type":"string","const":"all"}]}).default(["meshes","system-colours","stub-labels","halo","no-run","labels","findings"]), "push"),
+"picture": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"model","type":"string","enum":["model","schematic"]}).default("model"), "push"),
+"rosterSearch": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"v":{"type":"integer","minimum":-9007199254740991,"maximum":9007199254740991},"keywords":{"type":"string","maxLength":4000},"pills":{"maxItems":32,"type":"array","items":{"type":"object","properties":{"field":{"type":"string"},"op":{"type":"string"},"value":{"type":"string"}},"required":["field","op","value"]}}},"required":["v","keywords","pills"]}).default({"keywords":"","pills":[],"v":1}), "replace"),
+"rosterSort": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","enum":["","name"]}).default(""), "replace"),
+"sceneView": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":{"preset":"all","section":null},"type":"object","properties":{"preset":{"default":"all","type":"string","enum":["all","walls","structural","no-lighting","nearby-structure","subject"]},"section":{"default":null,"anyOf":[{"oneOf":[{"type":"object","properties":{"kind":{"type":"string","const":"box"},"bounds":{"type":"object","properties":{"minX":{"type":"number"},"minY":{"type":"number"},"minZ":{"type":"number"},"maxX":{"type":"number"},"maxY":{"type":"number"},"maxZ":{"type":"number"}},"required":["minX","minY","minZ","maxX","maxY","maxZ"]}},"required":["kind","bounds"]},{"type":"object","properties":{"kind":{"type":"string","const":"plane"},"axis":{"type":"string","enum":["x","y","z"]},"offset":{"type":"number"},"keep":{"type":"string","enum":["below","above"]}},"required":["kind","axis","offset","keep"]}]},{"type":"null"}]}}}).default({"preset":"all","section":null}), "replace"),
+"sheetPath": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}).default(""), "replace"),
+"viewport": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":null,"anyOf":[{"oneOf":[{"type":"object","properties":{"kind":{"type":"string","const":"scroll"},"top":{"type":"number"},"left":{"type":"number"}},"required":["kind","top","left"]},{"type":"object","properties":{"kind":{"type":"string","const":"plane"},"scale":{"type":"number"},"tx":{"type":"number"},"ty":{"type":"number"}},"required":["kind","scale","tx","ty"]},{"type":"object","properties":{"kind":{"type":"string","const":"orbit"},"projection":{"type":"string","enum":["perspective","parallel"]},"yaw":{"type":"number"},"elev":{"type":"number"},"zoom":{"type":"number"},"pivot":{"type":"array","prefixItems":[{"type":"number"},{"type":"number"},{"type":"number"}]}},"required":["kind","yaw","elev","zoom","pivot"]}]},{"type":"null"}]}).default(null), "replace")
+}, agent: { policy: "Choose fan through fan, using the module's local identities." } };

@@ -27,6 +27,7 @@ export * from "./families.ts";
 export * from "./takeoffs.ts";
 export * from "./ducts.ts";
 export * from "./fans.ts";
+export { fansRouteState } from "./generated/fans-work.ts";
 export * from "./rooms.ts";
 export * from "./parameter-links.ts";
 export * from "./settings.ts";

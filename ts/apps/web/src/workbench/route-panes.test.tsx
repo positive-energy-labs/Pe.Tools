@@ -1,3 +1,4 @@
+import { TypedShell } from "../shell/typed-shell";
 // @vitest-environment jsdom
 import { createContext, StrictMode, useMemo, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -170,17 +171,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-let fansRoute: AdmittedRoute | null = null;
+let fansRoute: Awaited<ReturnType<typeof import("../fans/admission.fixture")["admit"]>>["presenter"] | null = null;
 function FansProbe() {
-  const router = useRouter();
   const route = fansRoute;
   if (!route) throw Error("Fans must be admitted before the router mounts");
-  const address = useMemo(() => admittedRouterAddress(router.history), [router]);
-  const shell = useMemo(
-    () => createRouteShell(sourceRouteServices(admittedSources(route))),
-    [route],
-  );
-  return <AdmittedPane route={route} shell={shell} address={address} />;
+  return <TypedShell module={route.typed} fingerprint={route.workFingerprint} />;
 }
 let podRoute: AdmittedRoute | null = null;
 /** The normal `/tool/<key>` mount: the registered Pod's own owner and codecs, as `tool.$key` mounts it. */

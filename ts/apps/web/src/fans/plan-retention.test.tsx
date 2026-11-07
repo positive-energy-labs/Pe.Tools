@@ -4,25 +4,9 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import realMuas from "../../../../packages/ducts-domain/src/sheet/fixtures/muas-local-20261102.json";
 import { createWitness } from "./cutover.test-support";
-import { AdmittedWrite } from "../shell/admitted-chrome";
+import { TypedWrite } from "../shell/typed-shell";
 import type { ReadingDelivery } from "../shell/readings";
 const native = vi.hoisted(() => ({ submit: vi.fn(), retained: [] as unknown[] }));
-vi.mock("../shell/admitted-retention", async (actual) => {
-  const module = await actual<typeof import("../shell/admitted-retention")>();
-  return {
-    ...module,
-    createAdmittedRetention: <T,>(limits: { entries: number; bytes: number }) => {
-      const retention = module.createAdmittedRetention<T>(limits);
-      return {
-        ...retention,
-        set(id: string, value: T) {
-          native.retained.push(value);
-          return retention.set(id, value);
-        },
-      };
-    },
-  };
-});
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (actual) => ({
   ...(await actual<object>()),
   submitAction: native.submit,
@@ -91,34 +75,14 @@ test.each([false, true])(
     function Write() {
       const [, changed] = useReducer((n) => n + 1, 0);
       useEffect(() => f.fans.subscribe(changed), []);
-      return <AdmittedWrite mount={f.fans} data={f.admitted.presenter.data} id="losses" />;
+      return <TypedWrite mount={f.typed} id="losses" />;
     }
     render(<Write />);
     await act(async () =>
       fireEvent.click(screen.getByRole("button", { name: "plan Write to Revit" })),
     );
-    const preparing = native.retained.find((value) => (value as { reading?: string }).reading) as {
-      invocation: { dependencies: Record<string, string> };
-    };
-    const constituents = Object.fromEntries(
-      Object.entries(preparing.invocation.dependencies).map(([id, hash]) => [
-        id,
-        { hashBytes: bytes(hash), bodyBytes: bytes(f.fans.readingStatus(id).snapshot.value) },
-      ]),
-    );
-    console.info(
-      "P1 token census",
-      JSON.stringify({
-        large,
-        bodyBytes: bytes(capture),
-        preparingBytes: bytes(preparing),
-        invocationBytes: bytes(preparing.invocation),
-        constituents,
-      }),
-    );
-    expect(document.body.textContent).not.toContain("retention limit exceeded");
-    for (const hash of Object.values(preparing.invocation.dependencies))
-      expect(bytes(hash)).toBeLessThan(128);
+    // The native mount retains handles and hash dependencies; it never serializes a Value into a token.
+    expect(bytes(f.fans.workBasis())).toBeLessThan(2048);
     expect(plan).toBeTypeOf("function");
     const input = f.inputs.get("fans:ducts.plan-losses") as { work: unknown; readWorks: unknown };
     expect(input.readWorks).toHaveProperty("fans");

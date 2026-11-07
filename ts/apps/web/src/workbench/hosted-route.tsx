@@ -17,12 +17,12 @@ export interface HostedRouteProps {
 }
 /** A hosted Place never reads or writes the outside router address. */
 export function hostedRouteAddress(
-  route: AdmittedRoute,
+  route: AdmittedRoute | import("../route/typed-route").TypedRoute,
   { thread, target, work }: HostedRouteProps,
 ): AdmittedAddressPort {
   let search = new URLSearchParams({ thread, target: target ?? "", work: work ?? "" });
   const listeners = new Set<() => void>();
-  if (work !== undefined && route.data.workSubject) {
+  if (work !== undefined && !("spec" in route) && route.data.workSubject) {
     const registry = createAdmittedRouteRegistry();
     const registration = registry.register(route);
     try {

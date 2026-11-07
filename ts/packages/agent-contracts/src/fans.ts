@@ -17,7 +17,6 @@ import { z } from "zod";
 import type { Immutable } from "./route-kernel-data.ts";
 import { DUCT_PARAMETER_KEYS, ductCalculationSchema } from "./ducts.ts";
 import { draftCellSchema } from "./draft.ts";
-import { salvageWork, type RouteStateSpec } from "./route-state.ts";
 
 const dropSchema = z.strictObject({
   inWg: z.number().nonnegative(),
@@ -76,20 +75,10 @@ export const fansDocumentSchema = z.strictObject({
    * the fallback a part with no duct on its path is read at. A firm-authored Manual D rate; Revit never receives it.
    */
   designFriction: draftCellSchema(z.number().positive()).default({}),
-});
+}).describe("/fans owns calculation, flows, terminalDrops, componentDrops, esp, equipmentFlows, roles, parameters and designFriction. /ducts owns rules, kinds, criteria and network rulings; read their cells in Values and edit through the owning /ducts Work. Fan-side Work, one shared cell per key; human and Pea edit it at an expected revision. terminalDrops and componentDrops: an element id holds { inWg, source }. esp: an air mover's element id holds { inWg }, the external static written to it (FanStatic slot). equipmentFlows: an air mover's element id holds { cfm, source }, the unit's design flow written to its FanFlow slot; it beats Revit's fanFlow fact. roles: an air mover's element id holds { role: fan | passive }; a passive part adds a loss and moves no air, a fan is what a group needs to price. Unruled, a unit is proposed fan when it is base equipment of a Revit system its groups carry, else when it has airflow in the FanFlow slot; passive only when every duct port carries one classification and another unit moves air in its network; else fan. A unit role is a ruling the model keeps in its _PE_DuctLosses store once written: Work holds only the pending change. A fan with no stated flow reads the sum of the terminal flows it serves (derived, never written). flows: a terminal id holds { cfm, source }, a design flow that beats every other source (precedence: edited flow, then the rooms split when the rooms route supplies one, then Revit's own flow); apply writes the resolved terminal flow to the terminal's TerminalFlow slot. parameters: fanStatic, fanFlow, componentDrop, terminalDrop, fittingCoefficient, terminalFlow name the Revit parameter of each slot (authored); terminalFlow and fanFlow are walk steps over ducts.snapshot airflowCandidates and fanFlowCandidates. designFriction is one cell: the design friction rate in in-wg per 100 ft (default 0.08), never written to Revit. calculation: edit-only physical port witnesses and design scenarios; evidence is calculation-only, never native apply. writeIntent holds the fan walk { unitId, portIndex } from route:ducts.roster and cells naming exactly the fan cells to write.");
 export type FansRouteDocument = z.infer<typeof fansDocumentSchema>;
 /** Fan cells read by domain pricing; each route retains its own writeIntent. */
 export type FansDocument = Immutable<Omit<FansRouteDocument, "writeIntent">>;
 
 /** The fans Work no person has written: what a reader with no fans Work yet prices with. */
 export const neutralFansWork: FansRouteDocument = fansDocumentSchema.parse({});
-
-export const fansRouteState = {
-  schemaVersion: 1,
-  route: "fans",
-  title: "Fans",
-  description:
-    "/fans owns calculation, flows, terminalDrops, componentDrops, esp, equipmentFlows, roles, parameters and designFriction. /ducts owns rules, kinds, criteria and network rulings; read their cells in Values and edit through the owning /ducts Work. Fan-side Work, one shared cell per key; human and Pea edit it at an expected revision. terminalDrops and componentDrops: an element id holds { inWg, source }. esp: an air mover's element id holds { inWg }, the external static written to it (FanStatic slot). equipmentFlows: an air mover's element id holds { cfm, source }, the unit's design flow written to its FanFlow slot; it beats Revit's fanFlow fact. roles: an air mover's element id holds { role: fan | passive }; a passive part adds a loss and moves no air, a fan is what a group needs to price. Unruled, a unit is proposed fan when it is base equipment of a Revit system its groups carry, else when it has airflow in the FanFlow slot; passive only when every duct port carries one classification and another unit moves air in its network; else fan. A unit role is a ruling the model keeps in its _PE_DuctLosses store once written: Work holds only the pending change. A fan with no stated flow reads the sum of the terminal flows it serves (derived, never written). flows: a terminal id holds { cfm, source }, a design flow that beats every other source (precedence: edited flow, then the rooms split when the rooms route supplies one, then Revit's own flow); apply writes the resolved terminal flow to the terminal's TerminalFlow slot. parameters: fanStatic, fanFlow, componentDrop, terminalDrop, fittingCoefficient, terminalFlow name the Revit parameter of each slot (authored); terminalFlow and fanFlow are walk steps over ducts.snapshot airflowCandidates and fanFlowCandidates. designFriction is one cell: the design friction rate in in-wg per 100 ft (default 0.08), never written to Revit. calculation: edit-only physical port witnesses and design scenarios; evidence is calculation-only, never native apply. writeIntent holds the fan walk { unitId, portIndex } from route:ducts.roster and cells naming exactly the fan cells to write.",
-  schema: fansDocumentSchema,
-  salvage: (raw: unknown) => salvageWork(fansDocumentSchema, raw).doc,
-} satisfies RouteStateSpec<typeof fansDocumentSchema>;

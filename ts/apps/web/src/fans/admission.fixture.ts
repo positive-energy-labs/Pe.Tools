@@ -46,12 +46,9 @@ export async function admit(hostVersion = "fans-fixture") {
   const fingerprint = await builtinClosureFingerprint(envelope);
   const fanCatalog = Object.entries(fans.entries).map(([key, entry]) => ({ key, ...entry.axes, uses: [] }));
   const inventory = createBuiltinRouteInventory({
-    web: { module: fans, closure: { envelope, fingerprint }, catalog: fanCatalog },
     host: { module: fansHostModule, host: true, closure: { envelope, fingerprint }, catalog: fanCatalog },
   });
-  const presenter = (await inventory.prepare("web", fingerprint)).admit(fans);
   const hostPresenter = (await inventory.prepare("host", fingerprint)).admitHost(fansHostModule);
-  if (!presenter.ok) throw Error(JSON.stringify(presenter.diagnostics));
   if (!hostPresenter.ok) throw Error(JSON.stringify(hostPresenter.diagnostics));
-  return { owner: owner.route, presenter: presenter.route, hostOwner: hostOwner.route, hostPresenter: hostPresenter.route };
+  return { owner: owner.route, presenter: { typed: fans, data: fans.data, workFingerprint: hostPresenter.route.workFingerprint }, hostOwner: hostOwner.route, hostPresenter: hostPresenter.route };
 }

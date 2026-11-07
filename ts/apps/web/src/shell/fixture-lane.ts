@@ -67,24 +67,6 @@ export function createFixtureRouteEnvironment(
   const snapshot = <T>(request: Pick<ResolvedRead<T>, "output" | "key">): ReadingSnapshot<T> => {
     const seed = capturedSeed;
     const id = options.plan.readingId(request);
-    const provider = options.plan.fixtureProvider(request.key.op);
-    if (provider) {
-      try {
-        const packet = request.output.parse(
-          provider(options.name, JSON.parse(request.key.sortedKeyInput)),
-        ) as any;
-        freezeValue(packet);
-        const reason = [
-          ...(packet.value?.coverage.unknown ?? []),
-          ...(packet.value?.coverage.refused ?? []).map((part: any) => part.reason),
-        ].join("; ");
-        return reason
-          ? { status: "unavailable", current: false, value: packet, reason }
-          : { status: "ready", current: true, value: packet, hash: JSON.stringify(packet) };
-      } catch (error) {
-        return { status: "failed", current: false, reason: String(error) };
-      }
-    }
     if (!seed || !id || !Object.hasOwn(seed.readings, id))
       return {
         status: "unavailable",

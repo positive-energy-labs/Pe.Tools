@@ -94,7 +94,8 @@ export const entryCaller = (entry: TimelineEntry) =>
     : "you";
 
 /** The Work journal behind the owner's current scope: the one history of authored edits. */
-type HistoryOwner<P, W> = GraphMount<P, W> | AdmittedMount;
+export type JournalOwner = Pick<AdmittedMount, "subscribe" | "revision" | "journal" | "timeline" | "restoreWork" | "journalRefusal" | "stopCommand">;
+type HistoryOwner<P, W> = GraphMount<P, W> | JournalOwner;
 export function useWorkJournal<P, W>(owner: HistoryOwner<P, W>) {
   const version = "restoreWork" in owner ? owner.revision : owner.version;
   useSyncExternalStore(owner.subscribe, version, version);

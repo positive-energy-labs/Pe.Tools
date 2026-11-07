@@ -124,7 +124,7 @@ export function DocumentPicker({
   needs,
   enabled,
 }: {
-  place: PanePlace;
+  place: Pick<PanePlace, "address">;
   target: PlaceInput["target"];
   needs: string;
   enabled: boolean;

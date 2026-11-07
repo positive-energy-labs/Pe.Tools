@@ -19,6 +19,7 @@ import {
 } from "../route-source-hash.ts";
 import { readdir, mkdir, writeFile, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { dirname, relative, resolve } from "node:path";
 import { familyFixturesDir } from "../checkout-paths.ts";
 const jiti = createJiti(import.meta.url, {
   fsCache: false,
@@ -85,6 +86,17 @@ for (const key of admittedBuiltinKeys) {
   const entry = fileURLToPath(new URL(`../src/${key}/${kernel}`, import.meta.url));
   const { module } = await jiti.import<{ module: { data: unknown } }>(entry);
   if (kernel === "route.ts") {
+    const typed = module as unknown as import("../src/route/typed-route.ts").TypedRoute;
+    const { z } = await import("zod");
+    const fields = Object.entries(typed.spec.fields).map(([key, field]) => {
+      const json = z.toJSONSchema(field.schema, { io: "input" });
+      const schema = field.role === "subject"
+        ? `subjectSchema(${(json.oneOf as {properties?:{ids?:{maxItems?:number}}}[]).find(part=>part.properties?.ids)?.properties!.ids!.maxItems})`
+        : `z.fromJSONSchema(${JSON.stringify(json)})`;
+      return `${JSON.stringify(key)}: field(${schema}.default(${JSON.stringify(field.initial)}), ${JSON.stringify(field.url)})`;
+    });
+    await emit(new URL(`../../../packages/agent-contracts/src/routes/${key}.ts`, import.meta.url),
+      `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nimport { z } from "zod";\nimport { subjectSchema } from "../route-kernel-codecs.ts";\nconst field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: { encode: (value:z.output<S>) => JSON.stringify(value), decode: (text:string) => schema.parse(JSON.parse(text)) } });\nexport const ${key}Address = { path: ${JSON.stringify(typed.data.address)} as const, title: ${JSON.stringify(typed.spec.name)}, fields: {\n${fields.join(",\n")}\n}, agent: { policy: ${JSON.stringify(`Choose ${typed.spec.subject.noun} through ${typed.spec.subject.field}, using the module's local identities.`)} } };\n`);
     // Preserve the actual imported Work export, including refinements and reconciliation.
     // JSON Schema cannot carry that authority; a second handwritten host declaration would drift.
     const code = ts.createSourceFile(
@@ -129,26 +141,23 @@ for (const key of admittedBuiltinKeys) {
             local: name.name.text,
             imported: name.propertyName?.text ?? name.name.text,
             from: declaration.moduleSpecifier.getText(code),
+            specifier: (declaration.moduleSpecifier as ts.StringLiteral).text,
           }))
         : [];
     });
     const binding = imports.find((binding) => binding.local === workName);
     if (!binding)
       throw Error(`${entry}: typed route Work must reference an imported Work definition`);
-    const host = (
-      module as unknown as {
-        host: {
-          data: import("@pe/agent-contracts").RouteGraphJson;
-          schemas: Record<string, import("zod").z.ZodType>;
-        };
-      }
-    ).host;
-    const history = host.data.historyDetail && host.schemas[host.data.historyDetail];
-    const { z } = await import("zod");
-    await emit(
-      new URL(`../src/${key}/host.generated.ts`, import.meta.url),
-      `// Generated from route.ts by codegen:routes. Do not edit.\nimport { ${binding.imported} as work } from ${binding.from};\nimport { z } from "zod";\nimport { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type { HostRouteModule } from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with { type: "json" };\nconst data = RouteGraphJson.parse(closure.envelope.data);\nexport const host: HostRouteModule = { data, workState: work, schemas: { [data.work!.schema!]: work.schema, ${history ? `[data.historyDetail!]: z.fromJSONSchema(${JSON.stringify(z.toJSONSchema(history, { io: "input" }))})` : ""} }, bodies: {} };\n`,
-    );
+    const workDestination = new URL(`../../../packages/agent-contracts/src/generated/${key}-work.ts`, import.meta.url);
+    const schemaImport = binding.specifier.startsWith(".")
+      ? JSON.stringify(relative(dirname(fileURLToPath(workDestination)), resolve(dirname(entry),binding.specifier)).replaceAll("\\","/"))
+      : binding.from;
+    await emit(workDestination,
+      `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nimport { ${binding.imported} as schema } from ${schemaImport};\nimport { salvageWork } from "../route-state.ts";\nexport const ${key}RouteState = { route: ${JSON.stringify(key)}, title: ${JSON.stringify(typed.spec.name)}, description: schema.description ?? ${JSON.stringify(typed.spec.directory.summary)}, schema, schemaVersion: 1, salvage: (raw:unknown)=>salvageWork(schema,raw).doc };\n`);
+    const history = typed.host.schemas.historyDetail!;
+    await emit(new URL(`../src/${key}/host.generated.ts`, import.meta.url),
+      `// Generated from route.ts by codegen:routes. Do not edit.\nimport { ${key}RouteState as work } from "../../../../packages/agent-contracts/src/generated/${key}-work.ts";\nimport { z } from "zod";\nimport { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type { HostRouteModule } from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with { type: "json" };\nconst data = RouteGraphJson.parse(closure.envelope.data);\nexport const host: HostRouteModule = { data, workState: work, schemas: { [data.work!.schema!]: work.schema, [data.historyDetail!]: z.fromJSONSchema(${JSON.stringify(z.toJSONSchema(history,{io:"input"}))}) }, bodies: {} };\n`);
+
   }
   builtinOptions.push({
     root,

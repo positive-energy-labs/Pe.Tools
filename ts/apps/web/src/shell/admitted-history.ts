@@ -272,58 +272,6 @@ export function createAdmittedHistory<W extends Record<string, unknown>>(context
         ? (journalProblem?.message ?? null)
         : null;
   const { entryFor, sourceTimeline, now } = context;
-  const ownerJournals = () => {
-    const key = read().scope.identity.work;
-    const own = key && { journal: mountJournal(key), reading: null, handle: null };
-    return [
-      ...(own ? [own] : []),
-      ...Object.entries(route.data.readings).flatMap(([id, reading]) => {
-        if (reading.kind !== "work") return [];
-        const handle = Object.values(context.readings().workHandles([id]))[0];
-        return handle ? [{ journal: mountJournal(handle.key), reading: id, handle }] : [];
-      }),
-    ];
-  };
-  const ownerEntries = () =>
-    ownerJournals()
-      .flatMap(({ journal }) => journal.entries())
-      .sort((a, b) => a.at - b.at);
-  const restoreOwner = async (direction: "undo" | "redo", press?: string) => {
-    action();
-    resolve();
-    const entry = press
-      ? ownerEntries().find((e) => e.press === press)
-      : ownerEntries()
-          .filter((e) => e.state === (direction === "undo" ? "applied" : "undone"))
-          .at(-1);
-    if (!entry) return { ok: false, message: "No Work history to restore" };
-    const selected = ownerJournals().find(({ journal }) =>
-      journal.entries().some((e) => e.press === entry.press),
-    );
-    if (!selected) throw Error("Owning Work unavailable");
-    if (!selected.handle) return restore(direction, entry.press);
-    const issued = owner.invocation(owner.capture(`history:${direction}`), {});
-    if (!issued.ok) throw Error(issued.reason);
-    const result = await selected.journal[direction](
-      (request) =>
-        work.submit(request, issued.value, {
-          handle: selected.handle!,
-          reading: selected.reading!,
-        }),
-      entry.press,
-    );
-    historyProblem(selected.journal, result.ok ? null : result.message);
-    notify();
-    return result;
-  };
-  const ownerHistory = {
-    get entries() {
-      return freezePage(ownerEntries());
-    },
-    undo: (press?: string) => restoreOwner("undo", press),
-    redo: (press?: string) => restoreOwner("redo", press),
-    revert,
-  };
   return {
     sync: syncRecovery,
     logEvidence: (readingId: string, value: unknown) => {
@@ -344,7 +292,6 @@ export function createAdmittedHistory<W extends Record<string, unknown>>(context
     },
     public: {
       history,
-      ownerHistory,
       salvage,
       recovery,
       startFresh,

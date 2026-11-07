@@ -71,7 +71,7 @@ const catalogClient: CatalogWorkClient = {
   },
 };
 
-function CatalogWorkReviews({ mount }: { mount: AdmittedMount }) {
+export function CatalogWorkReviews({ mount }: { mount: Pick<AdmittedMount,"work"|"workBasis"|"timeline"> & {page:{read():Readonly<Record<string,unknown>>}} }) {
   const visible = useContext(RouteVisibility);
   const key = mount.work()?.handle.key;
   const target = mount.workBasis()?.token.scope.identity.target;

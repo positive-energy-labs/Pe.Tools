@@ -3,7 +3,7 @@ import { placeInput, AdmittedPane } from "./admitted-place.test-fixture";
 import { createElement } from "react";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { agentFields, fansDocumentSchema } from "@pe/agent-contracts";
+import { agentFields, ductsDocumentSchema } from "@pe/agent-contracts";
 import { builtinRouteStamp, loadBuiltinRoute } from "../route/builtin-inventory";
 import { createRouteShell } from "./admitted-mount";
 import { createFixtureWorkDoor } from "./fixture-work-door";
@@ -25,13 +25,13 @@ afterEach(() => {
 });
 
 const port = (): AdmittedAddressPort => ({ read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} });
-async function fans() {
-  const loaded = await loadBuiltinRoute("fans", builtinRouteStamp("fans"));
+async function ducts() {
+  const loaded = await loadBuiltinRoute("ducts", builtinRouteStamp("ducts"));
   if (!loaded.ok) throw Error(JSON.stringify(loaded));
   const shell = createRouteShell({
     work: createFixtureWorkDoor(
-      { route: "fans", title: "", description: "", schema: fansDocumentSchema },
-      fansDocumentSchema.parse({}),
+      { route: "ducts", title: "", description: "", schema: ductsDocumentSchema },
+      ductsDocumentSchema.parse({}),
     ),
     reads: {
       lifetime: "read",
@@ -49,8 +49,8 @@ async function fans() {
   return { route: loaded.route, shell };
 }
 
-test("admitted /fans attention writes and reads with the admission's own codecs", async () => {
-  const { route, shell } = await fans();
+test("admitted /ducts attention writes and reads with the admission's own codecs", async () => {
+  const { route, shell } = await ducts();
   const mount = shell.mount(route, placeInput(port()));
   try {
     const attention = mount.attention!;
@@ -58,25 +58,25 @@ test("admitted /fans attention writes and reads with the admission's own codecs"
     const written = attention.write(page);
     expect(Object.keys(written).sort()).toEqual(agentFields(route.data.fields).map(([k]) => k).sort());
     // The object-valued fan field crosses as admitted codec text, the X04 attempt's legacy TypeError.
-    expect(attention.read({ fan: written.fan! })).toEqual({ fan: page.fan });
+    expect(attention.read({ system: written.system! })).toEqual({ system: page.system });
     expect(() => attention.read({ notAField: "x" })).toThrow("not an attention field");
     // Pea's move is a pea-origin owner move; the owner settles it.
-    expect(mount.peaMove({ stage: "sheet" })).toMatchObject({ kind: "accepted" });
+    expect(mount.peaMove({ stage: "network" })).toMatchObject({ kind: "accepted" });
   } finally {
     mount.close();
   }
 });
 
-test("admitted /fans publishes attention; a route without an agent field publishes none", async () => {
-  window.history.replaceState(null, "", "/fans?thread=T");
-  const { route, shell } = await fans();
+test("admitted /ducts publishes attention; a route without an agent field publishes none", async () => {
+  window.history.replaceState(null, "", "/ducts?thread=T");
+  const { route, shell } = await ducts();
   render(createElement(AdmittedPane, { shell, route, address: port() }));
   await waitFor(() =>
     expect(call).toHaveBeenCalledWith(
       "view.publish",
       expect.objectContaining({
-        params: { route: "fans" },
-        body: expect.objectContaining({ route: "fans", thread: "T", page: expect.any(Object) }),
+        params: { route: "ducts" },
+        body: expect.objectContaining({ route: "ducts", thread: "T", page: expect.any(Object) }),
       }),
     ),
   );
@@ -87,8 +87,8 @@ test("admitted /fans publishes attention; a route without an agent field publish
 });
 
 test("an admitted attention intent reaches its owner and acknowledges the rendered move", async () => {
-  window.history.replaceState(null, "", "/fans?thread=T");
-  const { route, shell } = await fans();
+  window.history.replaceState(null, "", "/ducts?thread=T");
+  const { route, shell } = await ducts();
   const address = port();
   const writes = vi.spyOn(address, "write");
   render(createElement(AdmittedPane, { shell, route, address }));
@@ -96,13 +96,13 @@ test("an admitted attention intent reaches its owner and acknowledges the render
   const published = call.mock.calls.find(([door]) => door === "view.publish")![1] as {
     body: { instance: string; page: Record<string, string> };
   };
-  const fan = JSON.stringify({ kind: "all" });
+  const system = JSON.stringify({ kind: "all" });
   await act(async () => events.receive({
-    type: "route-view-intent", route: "fans", thread: "T", instance: published.body.instance,
-    revision: 1, commandId: crypto.randomUUID(), patch: { fan },
+    type: "route-view-intent", route: "ducts", thread: "T", instance: published.body.instance,
+    revision: 1, commandId: crypto.randomUUID(), patch: { system },
   }));
   await waitFor(() => expect(call).toHaveBeenCalledWith("view.ack", expect.objectContaining({
-    body: expect.objectContaining({ outcome: "rendered", page: expect.objectContaining({ fan }) }),
+    body: expect.objectContaining({ outcome: "rendered", page: expect.objectContaining({ system }) }),
   })));
   expect(writes.mock.calls.some(([, mode]) => mode === "push")).toBe(true);
 });

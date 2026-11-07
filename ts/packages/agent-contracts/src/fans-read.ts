@@ -1,3 +1,4 @@
+import { publicationRequest, publicationSchema } from "./value.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { ductsDocumentSchema } from "./ducts.ts";
 import { fansDocumentSchema } from "./fans.ts";
@@ -32,13 +33,7 @@ export const fansReadArgs = z.object({
   fan: z.union([z.literal("all"), z.array(z.string()).max(FAN_READ_MAX)]),
   sheetPath: z.string().default(""),
 });
-export const fansReadRequest = z.object({
-  subscription: z.string().min(1).max(128),
-  generation: z.number().int().nonnegative(),
-  args: fansReadArgs,
-  release: z.boolean().optional(),
-  readSet: z.string().optional(),
-});
+export const fansReadRequest = publicationRequest(fansReadArgs);
 
 export const fansSheetData = fanSheetSchema.extend({
   sheetView: z.object({
@@ -59,29 +54,7 @@ export const fansSheetData = fanSheetSchema.extend({
     z.object({ kind: z.literal("absent") }),
   ]),
 });
-export const fansReadResponse = z.object({
-  key: z.string(),
-  generation: z.number(),
-  version: z.number(),
-  state: z.enum(["current", "refresh-needed", "superseded"]),
-  reason: z.string().optional(),
-  value: z
-    .object({
-      data: fansSheetData,
-      evaluation: z.string(),
-      inputs: z.string(),
-      trace: z.array(z.unknown()),
-      coverage: z.object({
-        requested: z.array(z.string()),
-        unknown: z.array(z.string()),
-        covered: z.array(z.string()),
-        refused: z.array(z.object({ keys: z.array(z.string()), reason: z.string() })),
-      }),
-      origin: z.unknown(),
-      freshness: z.enum(["current", "refresh-needed"]),
-    })
-    .nullable(),
-});
+export const fansReadResponse = publicationSchema(fansSheetData);
 
 /** Both clients reference this host read's contract; no browser composition adapter owns it. */
 export const fansSheetCapability = {

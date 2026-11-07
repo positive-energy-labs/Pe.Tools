@@ -57,5 +57,5 @@ test("admitted ducts and fans publish distinct subject nouns and Work bindings",
   expect(owner.data.subject).toMatchObject({ field: "system", noun: "system" });
   expect(presenter.data.subject).toMatchObject({ field: "fan", noun: "fan" });
   expect(owner.resolvedWork?.spec.route).toBe("ducts");
-  expect(presenter.resolvedWork?.spec.route).toBe("fans");
+  expect(presenter.typed.spec.edits.work.route).toBe("fans");
 });

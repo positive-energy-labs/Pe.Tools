@@ -10,10 +10,13 @@ import { roomsGraph } from "#/rooms/graph";
 import { familyGraph } from "#/family/graph";
 import { settingsGraph } from "#/settings/graph";
 import { mountRoute, type MountRouteProps } from "#/shell/mount";
+import { module as fans } from "../fans/route";
+import { workFingerprintSchema } from "@pe/agent-contracts";
 
 /** A route body stays out of the shell chunk until a pane mounts it. */
 const named = <K extends string, P>(load: () => Promise<Record<K, ComponentType<P>>>, name: K) =>
   lazy(() => load().then((module) => ({ default: module[name] })));
+const HostedTypedRoute = named(() => import("../shell/typed-shell"), "HostedTypedRoute");
 const ChatRoute = named(() => import("#/chat/chat-shell"), "ChatShell");
 const TakeoffsPane = named(() => import("#/takeoff/pane"), "TakeoffsPane");
 const OpenPage = lazy(async () => ({
@@ -30,6 +33,13 @@ const SettingsRoute = lazy(async () => ({
 export { publicRoutes };
 export const publicRoutesReady = Promise.all(
   builtinRouteKeys.map(async (key) => {
+    if (key === "fans") {
+      const fingerprint = workFingerprintSchema.parse(builtinRouteStamp(key));
+      publicRoutes.register({ manifest: { key, name: fans.spec.name, needs: "project" }, typed: fans,
+        work: { route: key, schema: fans.spec.edits.work.schema, cells: [], workFields: {}, admission: { routeKey: key, fingerprint } },
+        hosted: props => <HostedTypedRoute module={fans} fingerprint={fingerprint} {...props} /> });
+      return;
+    }
     const result = await loadBuiltinRoute(key, builtinRouteStamp(key));
     if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
     if (key === "chat")

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { actionStatusSchema, receiptsForWork, routeAddress } from "@pe/agent-contracts";
 import { readingList } from "./mount-reading";
 import type { GraphMount } from "./mount-owner";
-import type { AdmittedMount } from "./admitted-mount";
+import type { JournalOwner } from "./situation-band";
 import { entryCaller, stepState, useWorkJournal } from "./situation-band";
 import { activityTime, projectTimeline, type TimelineVerbs } from "./timeline";
 
@@ -18,7 +18,7 @@ export function GraphHistory<P, W>({
   label = "History",
   verbs: declaredVerbs,
 }: {
-  owner: GraphMount<P, W> | AdmittedMount;
+  owner: GraphMount<P, W> | JournalOwner;
   verbs?: TimelineVerbs;
   receipts?: string;
   workOnly?: boolean;

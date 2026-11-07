@@ -2,9 +2,6 @@ import { ductsDesign, ductsDocumentSchema, fansDocumentSchema } from "@pe/agent-
 import { fansSheetData, openFanSheetSchema } from "../../../../packages/agent-contracts/src/fans-read.ts";
 import { sheetState } from "../ducts/sheet/state.ts";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
-import type { EntryTable } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
-import type { SchemaTable } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-module";
 import sheet from "../ducts/sheet/sheet.fixture.json";
 import { snapshot } from "../ducts/test-fixture";
@@ -12,8 +9,10 @@ import { createRouteShell } from "../shell/admitted-mount";
 import { placeInput } from "../shell/admitted-place.test-fixture";
 import type { ReadingSource } from "../shell/readings";
 import { sourceRouteServices } from "../shell/source-route-services";
-import { createWorkFeedClient } from "../shell/work-feed-client";
+import { browserWorkPorts, createWorkFeedClient } from "../shell/work-feed-client";
 
+import { mountTypedRoute } from "../shell/typed-mount";
+import { nativeTestAdapter } from "./native.test-support";
 import { admit } from "./admission.fixture";
 
 export async function createWitness(
@@ -39,13 +38,13 @@ export async function createWitness(
     closes.push(() => registration.close());
   }
   const observe = observeResources(ws, { observe: () => () => {} });
+  const calls = new Map<string, number>();
+  const inputs = new Map<string, unknown>();
   const connected = createWorkFeedClient(
     { subscribe: observe, dirty() {} },
     {
       write: (key, write) => ws.write(key, key.route, "human", write),
-      submit: async () => {
-        throw Error("Native writes require the sealed-review fixture");
-      },
+      submit: async command => { const call = `fans:${command.key}`; inputs.set(call,command.input); calls.set(call,(calls.get(call)??0)+1); return browserWorkPorts.submit(command); },
     },
   );
   const feed = {
@@ -64,8 +63,6 @@ export async function createWitness(
         }, end),
     }),
   };
-  const calls = new Map<string, number>();
-  const inputs = new Map<string, unknown>();
   const native: Record<string, ReadingSource> = {};
   for (const [entry, value] of Object.entries({
     "ducts.roster": snapshot,
@@ -108,9 +105,12 @@ export async function createWitness(
           coverage: { requested: [], covered: [], unknown: [], refused: [] }, freshness: "current" } } });
     };
     const capture = overrides["ducts.sheet-snapshot"];
-    if (capture?.kind === "use" || capture?.kind === "feed") return capture.open(ctx, frame => { if (frame.kind === "complete" || frame.kind === "part") send(frame.value); });
-    send(snapshot);
-    return ws.subscribe(() => { deliver({ kind: "stale" }); queueMicrotask(() => send(snapshot)); });
+    let current: unknown = snapshot;
+    const stop = capture?.kind === "use" || capture?.kind === "feed" ? capture.open(ctx, frame => {
+      if (frame.kind === "complete" || frame.kind === "part") { current=frame.value; send(current); }
+    }) : (send(current), undefined);
+    const unsubscribe=ws.subscribe(() => { deliver({ kind: "stale" }); queueMicrotask(() => send(current)); });
+    return () => { unsubscribe(); void Promise.resolve(stop).then(close=>close?.()); };
   } };
   const baseServices = sourceRouteServices({ ...native, ...overrides });
   const services: typeof baseServices = { ...baseServices, work: feed, reads: {
@@ -123,8 +123,8 @@ export async function createWitness(
     },
   } };
   const places = new Map<string, ReturnType<typeof placeInput>>();
-  function mount<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, R>(
-    route: AdmittedRoute<G, S, E, R>,
+  function mount(
+    route: AdmittedRoute | Awaited<ReturnType<typeof admit>>["presenter"],
     initial = new URLSearchParams(),
     place: string = route.data.key,
   ) {
@@ -152,11 +152,19 @@ export async function createWitness(
       });
       places.set(place, input);
     }
-    const mounted = createRouteShell(services).mount(route, input);
-    closes.push(mounted.close);
-    return mounted;
+    const mounted = "typed" in route ? nativeTestAdapter(mountTypedRoute(route.typed, input, route.workFingerprint, {work: feed, sources: Object.fromEntries(Object.entries({...native,...overrides}).map(([entry,source])=>[entry, source.kind === "use" ? { ...source, open(ctx,deliver) {
+      const call = `fans:${entry}`; calls.set(call,(calls.get(call)??0)+1); inputs.set(call,ctx.args);
+      return source.open(ctx,deliver);
+    } } : source])) }), feed) : createRouteShell(services).mount(route, input);
+    closes.push(() => mounted.close());
+    return mounted as Omit<import("../shell/admitted-mount").AdmittedMount, "page" | "controls"> & {
+      page: { read(): any; pose(patch: Record<string,unknown>, intent?: string): any; select(value: any): any; set(...args:any[]):any; device(...args:any[]):any; transient(...args:any[]):any };
+      controls: { query(key:string,value:unknown):any; subject(value:any):any; stage(...args:any[]):any; draft(...args:any[]):any; device(...args:any[]):any; transient(...args:any[]):any };
+    };
   }
+  const fansMount=mount(admitted.presenter);
   return {
+    typed: (fansMount as ReturnType<typeof nativeTestAdapter>).native,
     admitted,
     calls,
     inputs,
@@ -165,6 +173,6 @@ export async function createWitness(
     mount,
     places,
     owner: mount(admitted.owner),
-    fans: mount(admitted.presenter),
+    fans: fansMount,
   };
 }

@@ -7,13 +7,12 @@ import { module as captures } from "../captures/kernel";
 import { module as schedules } from "../schedules/kernel";
 import { module as families } from "../families/kernel";
 import { module as ducts } from "../ducts/kernel";
-import { module as fans } from "../fans/route";
 import { module as pods } from "../pods/kernel";
 import { module as chat } from "../chat/kernel";
 import { builtins, type BuiltinKey } from "./builtins.neutral";
 
-const modules = { captures, schedules, families, ducts, fans, chat, pods } satisfies Record<
-  BuiltinKey,
+const modules = { captures, schedules, families, ducts, chat, pods } satisfies Record<
+  Exclude<BuiltinKey, "fans">,
   unknown
 >;
 type Admitted =
@@ -31,6 +30,7 @@ export function loadBuiltinRoute(key: BuiltinKey, expectedFingerprint: string) {
 }
 async function admit(key: BuiltinKey, expectedFingerprint: string): Promise<Admitted> {
   const { closure } = builtins[key];
+  if (key === "fans") throw Error("Typed routes mount directly");
   const module = modules[key];
   const inventory = createBuiltinRouteInventory({
     [key]: {

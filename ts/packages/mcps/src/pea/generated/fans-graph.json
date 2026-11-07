@@ -45,7 +45,7 @@
       "identity": "subject",
       "picker": {
         "reading": "value",
-        "options": "pickSubject"
+        "options": "subject"
       }
     },
     "stage": {
@@ -219,7 +219,6 @@
     "value": {
       "kind": "use",
       "entry": "fans.sheet",
-      "args": "valueArgs",
       "deps": {
         "page": [
           "fan",
@@ -251,7 +250,7 @@
     "owner:ducts": {
       "kind": "work",
       "route": "ducts",
-      "output": "owner:ducts",
+      "output": "ducts",
       "deps": {
         "page": [],
         "work": [],
@@ -263,72 +262,9 @@
         "resource": "scope"
       },
       "refresh": "dependencies"
-    },
-    "lossesPlan": {
-      "kind": "use",
-      "entry": "ducts.plan-losses",
-      "args": "lossesPlanArgs",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "explicit",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "explicit"
     }
   },
   "verbs": {
-    "edit": {
-      "kind": "work",
-      "input": "patch",
-      "label": "Edit",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [
-          "writeIntent",
-          "calculation",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "flows",
-          "parameters",
-          "designFriction"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [],
-      "ready": "editReady",
-      "patches": "editPatches",
-      "describe": "editDescribe"
-    },
-    "edit:ducts": {
-      "kind": "work",
-      "input": "patch",
-      "label": "Edit",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "value",
-          "owner:ducts"
-        ]
-      },
-      "captures": [],
-      "ready": "edit:ductsReady",
-      "patches": "edit:ductsPatches",
-      "describe": "edit:ductsDescribe",
-      "target": "owner:ducts"
-    },
     "losses": {
       "kind": "command",
       "input": "none",
@@ -351,16 +287,14 @@
           "designFriction"
         ],
         "readings": [
-          "value",
-          "owner:ducts"
+          "value"
         ]
       },
       "captures": [
         "value"
       ],
-      "present": "lossesPresent",
       "entry": "ducts.apply-losses",
-      "intent": "lossesIntent"
+      "intent": "losses"
     }
   },
   "panes": {
@@ -368,57 +302,41 @@
       "label": "Fans",
       "purpose": "Open fan ports",
       "draws": [
-        "value",
-        "owner:ducts"
+        "value"
       ],
       "verbs": [
-        "edit",
-        "edit:ducts",
         "losses"
-      ],
-      "body": "sheet-roster"
+      ]
     },
     "sheet-inputs": {
       "label": "Inputs",
       "purpose": "Edit fan inputs",
       "draws": [
-        "value",
-        "owner:ducts"
+        "value"
       ],
       "verbs": [
-        "edit",
-        "edit:ducts",
         "losses"
-      ],
-      "body": "sheet-inputs"
+      ]
     },
     "sheet-picture": {
       "label": "Picture",
       "purpose": "Inspect fan paths",
       "draws": [
-        "value",
-        "owner:ducts"
+        "value"
       ],
       "verbs": [
-        "edit",
-        "edit:ducts",
         "losses"
-      ],
-      "body": "sheet-picture"
+      ]
     },
     "sheet-ledger": {
       "label": "Ledger",
       "purpose": "Inspect ESP and provenance",
       "draws": [
-        "value",
-        "owner:ducts"
+        "value"
       ],
       "verbs": [
-        "edit",
-        "edit:ducts",
         "losses"
-      ],
-      "body": "sheet-ledger"
+      ]
     }
   },
   "layout": {
@@ -489,127 +407,9 @@
     "sheet"
   ],
   "predicates": {},
-  "cells": {
-    "writeIntent": {
-      "segment": null,
-      "value": "writeIntentCell",
-      "groupOf": "groupwriteIntent",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "calculation": {
-      "segment": "calculation",
-      "value": "calculationCell",
-      "groupOf": "groupcalculation",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "terminalDrops": {
-      "segment": "terminalDrops",
-      "value": "terminalDropsCell",
-      "groupOf": "groupterminalDrops",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "componentDrops": {
-      "segment": "componentDrops",
-      "value": "componentDropsCell",
-      "groupOf": "groupcomponentDrops",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "esp": {
-      "segment": "esp",
-      "value": "espCell",
-      "groupOf": "groupesp",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "equipmentFlows": {
-      "segment": "equipmentFlows",
-      "value": "equipmentFlowsCell",
-      "groupOf": "groupequipmentFlows",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "roles": {
-      "segment": "roles",
-      "value": "rolesCell",
-      "groupOf": "grouproles",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "flows": {
-      "segment": "flows",
-      "value": "flowsCell",
-      "groupOf": "groupflows",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "parameters": {
-      "segment": "parameters",
-      "value": "parametersCell",
-      "groupOf": "groupparameters",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "designFriction": {
-      "segment": null,
-      "value": "designFrictionCell",
-      "groupOf": "groupdesignFriction",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    }
-  },
+  "cells": {},
   "workFields": {},
-  "seeds": {
-    "scene": {
-      "title": "scene",
-      "load": "fixture:scene"
-    },
-    "layout": {
-      "title": "layout",
-      "load": "fixture:layout"
-    },
-    "colours": {
-      "title": "colours",
-      "load": "fixture:colours"
-    },
-    "navigation": {
-      "title": "navigation",
-      "load": "fixture:navigation"
-    }
-  },
+  "seeds": {},
   "needs": "project",
   "resetOnTarget": [],
   "observe": []

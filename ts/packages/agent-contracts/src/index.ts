@@ -33,3 +33,14 @@ export type { KernelServices, ResolvedRead } from "./route-kernel-environment.ts
 export { commandCatalogAxes } from "./command-axes.ts";
 export { ductsAddress } from "./routes/ducts.ts";
 export { threadListFields } from "./routes/shared.ts";
+
+export type { InvocationToken, IdentityId, Many } from "./route-kernel-page.ts";
+export type { LayoutJson } from "./route-kernel-data.ts";
+export type { EntryContract, WorkHistoryPort } from "./route-kernel-bodies.ts";
+export type { WorkJournalDoor, WorkScope } from "./work-journal-door.ts";
+export { workFingerprintSchema, type RouteFingerprint } from "./route-kernel-admission.ts";
+export { bare } from "./route-field.ts";
+export { subjectSchema } from "./route-kernel-codecs.ts";
+export { workFeedFailureMessage } from "./work-journal-door.ts";
+export type { WorkFeedFailure } from "./work-journal-door.ts";
+export { presentationSchema } from "./route-kernel-bodies.ts";

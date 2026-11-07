@@ -90,7 +90,9 @@ export function admittedWork(route: AdmittedRoute): DiscoveredWork | undefined {
 }
 
 /** An authenticated admitted handle, builtin or trusted Pod: one registration feeds mount and discovery. */
-export type RegisteredRoute = DiscoveredRoute & { admitted: AdmittedRoute };
+export type RegisteredRoute = DiscoveredRoute & (
+  { admitted: AdmittedRoute } | { typed: import("./typed-route").TypedRoute }
+);
 
 /**
  * The one route registration projection. Builtins and trusted Pods register the same way; trust stays
@@ -123,7 +125,7 @@ export function createRouteDiscovery(legacy = legacyRouteDiscovery) {
     register(entry: RegisteredRoute): () => void {
       const key = entry.manifest.key;
       if (registered.has(key)) throw Error(`Route ${key} already registered`);
-      const receipt = registry.register(entry.admitted);
+      const receipt = entry.admitted ? registry.register(entry.admitted) : null;
       registered.set(key, entry);
       changed();
       let active = true;
@@ -131,18 +133,19 @@ export function createRouteDiscovery(legacy = legacyRouteDiscovery) {
         if (!active) return;
         active = false;
         if (registered.get(key) === entry) registered.delete(key);
-        receipt.deactivate();
+        receipt?.deactivate();
         changed();
       };
     },
     /** The registered handle, resolved through its live receipt; null once withdrawn. */
     admitted: (key: string): AdmittedRoute | null => {
       const entry = registered.get(key);
-      return entry ? registry.resolve(entry.admitted) : null;
+      return entry?.admitted ? registry.resolve(entry.admitted) : null;
     },
     /** The route whose authenticated declaration owns this address. */
     byAddress: (address: string) =>
-      [...registered.values()].find((entry) => entry.admitted.data.address === address),
+      [...registered.values()].find((entry) =>
+        (entry.admitted?.data.address ?? ("typed" in entry ? `/${entry.typed.spec.key}` : null)) === address),
     subscribe(listener: () => void) {
       listeners.add(listener);
       const stop = legacy.subscribe(listener);

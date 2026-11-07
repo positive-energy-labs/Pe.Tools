@@ -1,49 +1,16 @@
 // @vitest-environment jsdom
-// Step 5 R on the real /fans mount: its native route readings and a shell hook subject both open
-// through the one source-attempt lifecycle, release once on close, and no second engine is built.
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { expect, test, vi } from "vite-plus/test";
 import { createWitness } from "./cutover.test-support";
 
-const attempts = vi.hoisted(() => ({ opened: 0, closed: 0 }));
-vi.mock("../shell/readings-use", async (importOriginal) => {
-  const real = await importOriginal<typeof import("../shell/readings-use")>();
-  return {
-    ...real,
-    openSourceReading: ((...args: Parameters<typeof real.openSourceReading>) => {
-      attempts.opened++;
-      const close = real.openSourceReading(...args);
-      let once = false;
-      return () => {
-        if (!once) attempts.closed++;
-        once = true;
-        close();
-      };
-    }) as typeof real.openSourceReading,
-  };
-});
-vi.mock("../shell/readings", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../shell/readings")>()),
-  createReadingGraph: () => {
-    throw Error("/fans ran a second reading engine");
-  },
-}));
-const { readingAtom } = await import("../shell/readings-hooks");
-
-test("/fans route readings and a shell hook share one acquisition and release lifecycle", async () => {
+test("four Fans panes share one Value subscription, which closes with the typed mount", async () => {
   const closes: (() => void)[] = [];
-  const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.fans.readingStatus("value").snapshot.current).toBe(true));
-  const routeAttempts = attempts.opened;
-  expect(routeAttempts).toBeGreaterThan(0);
-  const registry = AtomRegistry.make();
-  const stop = registry.subscribe(
-    readingAtom({ kind: "world" }, { subscribe: () => () => {} } as never),
-    () => {},
-    { immediate: true },
-  );
-  expect(attempts.opened).toBe(routeAttempts + 1);
-  stop();
-  closes.reverse().forEach((close) => close());
-  await vi.waitFor(() => expect(attempts.closed).toBe(attempts.opened));
+  const stop = vi.fn();
+  const open = vi.fn(() => stop);
+  const f = await createWitness(closes, new Map(), { "fans.sheet": { kind: "use", open } });
+  try {
+    for (const pane of Object.keys(f.typed.spec.panes)) f.typed.draw(pane);
+    expect(open).toHaveBeenCalledOnce();
+    expect(stop).not.toHaveBeenCalled();
+  } finally { closes.reverse().forEach(close => close()); }
+  await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
 });

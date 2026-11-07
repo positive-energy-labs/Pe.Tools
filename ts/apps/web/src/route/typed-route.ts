@@ -1,35 +1,27 @@
 import { z } from "zod";
 import {
-  applyPatches,
   identityCodecs,
-  jsonCodec,
-  routeStatePatchSchema,
   commands,
   commandCatalogAxes,
-  cellPatches,
   type HostRouteModule,
   type Immutable,
   type RouteGraphJson,
   type RouteStatePatch,
+  salvageWork,
   type RouteStateSpec,
   type ReadingSnapshot,
 } from "@pe/agent-contracts";
-import { canonicalEnvironmentInput } from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
-import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
-import type { LayoutJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
+import type { LayoutJson } from "@pe/agent-contracts";
 import type {
-  PagePort,
   InvocationToken,
   IdentityId,
-} from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
+} from "@pe/agent-contracts";
 import type {
   EntryContract,
   WorkHistoryPort,
-} from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
-import type { Many } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
+} from "@pe/agent-contracts";
+import type { Many } from "@pe/agent-contracts";
 import type { Publication } from "./host-read.ts";
-import { settleWork } from "../shell/work-door-observation.ts";
-import { bare } from "../../../../packages/agent-contracts/src/route-field.ts";
 
 type Field = {
   schema: z.ZodType;
@@ -62,18 +54,7 @@ export const localId = (namespace: string, subject: string) => {
 };
 export const namesOf = (value: Many<IdentityId<"local">>): string[] | "all" =>
   value.kind === "all" ? "all" : value.ids.map((id) => identityCodecs.local.parts(id).subject);
-export const subjectSchema = (max: number) => {
-  const id = z.string().transform((value, ctx) => {
-    const decoded = identityCodecs.local.decode(value);
-    if (decoded.ok) return decoded.value;
-    ctx.addIssue({ code: "custom", message: decoded.reason });
-    return z.NEVER;
-  });
-  return z.discriminatedUnion("kind", [
-    z.strictObject({ kind: z.literal("ids"), ids: z.array(id).max(max), active: id.optional() }),
-    z.strictObject({ kind: z.literal("all") }),
-  ]);
-};
+export { subjectSchema } from "@pe/agent-contracts";
 type ResultCommand = {
   [K in keyof typeof commands]: (typeof commands)[K] extends { result: z.ZodType } ? K : never;
 }[keyof typeof commands];
@@ -96,20 +77,17 @@ export const command = <K extends WriteCommand & keyof typeof commandCatalogAxes
     planContract: commandContract(plan as ResultCommand & keyof typeof commandCatalogAxes),
   };
 };
-type Fields = Readonly<Record<string, Field>>;
+export type Fields = Readonly<Record<string, Field>>;
 type FieldValues<F extends Fields> = {
   readonly [K in keyof F]: Immutable<z.output<F[K]["schema"]>>;
 };
-type Page<F extends Fields> = FieldValues<F> & {
+export type Page<F extends Fields> = FieldValues<F> & {
   readonly selected: readonly { kind: "focus"; id: IdentityId<"local"> }[];
 };
 type RoleFields<F extends Fields, R extends Field["role"]> = {
   [K in keyof F]: F[K]["role"] extends R ? K : never;
 }[keyof F];
-type DrawPage<F extends Fields> = Omit<
-  PagePort<RouteGraphJson, {}>,
-  "read" | "pose" | "query" | "select"
-> & {
+export type DrawPage<F extends Fields> = {
   read(): Page<F>;
   pose(
     patch: Partial<Pick<FieldValues<F>, RoleFields<F, "pose">>>,
@@ -122,7 +100,8 @@ export type EditHistory = { label: string; [key: string]: unknown };
 export type EditFailure = { code: string; message: string } | null;
 export interface OwnedCell {
   readonly owner: { route: string; label: string };
-  readonly value: unknown;
+  readonly value: import("@pe/agent-contracts").CellLike;
+  transitions(history?: EditHistory): import("@pe/kit/lang/cell").CellTransition[];
   stage(value: unknown, history?: EditHistory): Promise<EditFailure>;
   clear(history?: EditHistory): Promise<EditFailure>;
 }
@@ -134,7 +113,6 @@ export interface EditableCells<W, Edit> {
   owner(path: readonly string[]): { route: string; label: string };
   at(path: readonly [string, ...string[]], owner?: string): OwnedCell;
   label(input: Edit, label: string): string;
-  patch(patches: readonly RouteStatePatch[], history?: EditHistory): Promise<EditFailure>;
   edit(input: Edit, history?: EditHistory): Promise<EditFailure>;
 }
 export interface DrawContext<D, F extends Fields, W, Edit> {
@@ -145,46 +123,10 @@ export interface DrawContext<D, F extends Fields, W, Edit> {
   write(command: string): { plan(): unknown; apply(): unknown; cancel(): unknown; read(): unknown };
 }
 type Owner = { state: RouteStateSpec<z.ZodObject>; value: string };
-type Owners = Readonly<Record<string, Owner>>;
+export type Owners = Readonly<Record<string, Owner>>;
 type HostRead = import("./host-read.ts").HostRead;
 export type ReadData<R extends HostRead> = NonNullable<z.output<R["output"]>["value"]>["data"];
-type MutableTable<T> = Record<string, T extends Readonly<Record<string, infer V>> ? V : never>;
-type ProjectedField<K, R extends Field["role"]> = R extends "subject"
-  ? {
-      role: "subject";
-      schema: K;
-      codec: K;
-      initial: unknown;
-      url: "push" | "replace";
-      share: true;
-      agent: "set";
-      cardinality: "many";
-      identity: "subject";
-      picker: { reading: "value"; options: "pickSubject" };
-    }
-  : {
-      role: R;
-      schema: K;
-      codec: K;
-      initial: unknown;
-      url: "push" | "replace";
-      share: true;
-      agent: "set";
-    };
-type Graph<F extends Fields> = Omit<RouteGraphJson, "fields" | "work" | "identities"> & {
-  fields: { [K in keyof F & string]: ProjectedField<K, F[K]["role"]> } & {
-    selected: { role: "selection"; kinds: readonly ["focus"] };
-  };
-  identities: {
-    subject: { kind: "local"; codec: "local" };
-    focus: { kind: "local"; codec: "local" };
-  };
-  work: { schema: "work"; route: string; version: number; migrations: {} };
-};
-type Schemas<F extends Fields, W extends z.ZodObject> = { [K in keyof F]: F[K]["schema"] } & {
-  work: W;
-};
-type Specification<
+export type Specification<
   D,
   F extends Fields,
   W extends z.ZodObject,
@@ -211,7 +153,8 @@ type Specification<
     };
   };
   edits: {
-    work: RouteStateSpec<W>;
+    work: W;
+    value: keyof D & string;
     owners: Owners;
     input: Edit;
     patches(input: z.output<Edit>, data: Immutable<D>): readonly RouteStatePatch[];
@@ -233,482 +176,53 @@ type Specification<
   >;
   layout: LayoutJson;
 };
-// The projection is executable kernel output. Routes never author slot ids, deps, codecs or gates.
-export function route<
-  D,
-  const F extends Fields,
-  W extends z.ZodObject,
-  Edit extends z.ZodType,
-  const Reads extends Readonly<Record<string, HostRead>>,
->(spec: Specification<D, F, W, Edit, Reads>) {
-  const schemas: Record<string, z.ZodType> = {
-    none: z.strictObject({}),
-    work: spec.edits.work.schema,
-    historyDetail:
-      spec.edits.history instanceof z.ZodObject
-        ? spec.edits.history.omit({ label: true })
-        : spec.edits.history,
-  };
-  const bodies: Record<
-    string,
-    {
-      slot: string;
-      kind: string;
-      source: { module: string; export: string };
-      run: (...args: any[]) => any;
-    }
-  > = {};
-  const source = { module: "route/typed-route.ts", export: "route" };
-  const body = (id: string, slot: string, kind: string, run: (...args: any[]) => any) => {
-    bodies[id] = { slot, kind, source, run };
-    return id;
-  };
-  const fields: MutableTable<RouteGraphJson["fields"]> = {};
-  const codecs: Record<string, ReturnType<typeof jsonCodec>> = {};
-  for (const [key, value] of Object.entries(spec.fields)) {
-    schemas[key] = value.schema;
-    codecs[key] = jsonCodec(value.schema);
-    fields[key] = {
-      role: value.role === "subject" ? "query" : value.role,
-      schema: key,
-      codec: key,
-      initial: value.initial,
-      url: value.url,
-      share: true,
-      agent: "set",
-    };
+/** The shell executes this typed module. Data is a one-way discovery/host admission projection. */
+export function route<D, const F extends Fields, W extends z.ZodObject, Edit extends z.ZodType,
+  const Reads extends Readonly<Record<string, HostRead>>>(spec: Specification<D, F, W, Edit, Reads>) {
+  const work = { route: spec.key, title: spec.name, description: spec.edits.work.description ?? spec.directory.summary,
+    schema: spec.edits.work, schemaVersion: 1, salvage: (raw:unknown) => salvageWork(spec.edits.work,raw).doc };
+  const schemas: Record<string, z.ZodType> = { work: work.schema,
+    historyDetail: spec.edits.history instanceof z.ZodObject ? spec.edits.history.omit({ label: true }) : spec.edits.history };
+  const fields: Record<string, RouteGraphJson["fields"][string]> = {};
+  for (const [key, field] of Object.entries(spec.fields)) {
+    schemas[key] = field.schema;
+    fields[key] = { role: field.role === "subject" ? "query" : field.role, schema: key, codec: key,
+      initial: field.initial, url: field.url, share: true, agent: "set" };
   }
-  schemas[spec.subject.field] = spec.fields[spec.subject.field]!.schema;
-  codecs[spec.subject.field] = jsonCodec(spec.fields[spec.subject.field]!.schema);
-  fields[spec.subject.field] = {
-    role: "subject",
-    schema: spec.subject.field,
-    codec: spec.subject.field,
-    initial: { kind: "ids", ids: [] },
-    url: "push",
-    share: true,
-    agent: "set",
-    cardinality: "many",
-    identity: "subject",
-    picker: { reading: "value", options: "pickSubject" },
-  };
+  fields[spec.subject.field] = { ...fields[spec.subject.field], role: "subject", schema: spec.subject.field,
+    codec: spec.subject.field, initial: spec.fields[spec.subject.field]!.initial, url: "push", share: true,
+    agent: "set", cardinality: "many", identity: "subject", picker: { reading: "value", options: "subject" } };
   fields.selected = { role: "selection", kinds: ["focus"] };
-  const mode = String(
-    Object.values(spec.fields).find((field) => field.role === "stage")?.initial ?? "main",
-  );
-  const empty = { page: [], work: [], readings: [] };
-  const policy = {
-    demand: "visible",
-    retain: { evidence: "scope", resource: "scope" },
-    refresh: "dependencies",
-  } as const;
-  const entries: Record<string, EntryContract> = {};
-  const readings: MutableTable<RouteGraphJson["readings"]> = {};
-  const sources: Record<string, HostRead["source"]> = {};
-  const addRead = (id: string, read: HostRead) => {
-    entries[read.key] = read;
-    sources[read.key] = read.source;
-    readings[id] = {
-      ...policy,
-      kind: "use",
-      entry: read.key,
-      args: body(`${id}Args`, `readings.${id}.args`, "args", (ctx) => spec.core.args(ctx.page)),
-      deps: { page: Object.keys(fields), work: [], readings: [] },
-    };
+  const owners = { ...spec.edits.owners,
+    [work.route]: { state: work, value: spec.edits.value } };
+  const policy = { demand: "visible", retain: { evidence: "scope", resource: "scope" }, refresh: "dependencies" } as const;
+  const readings: Record<string, RouteGraphJson["readings"][string]> = {
+    value: { ...policy, kind: "use", entry: spec.core.key, deps: { page: Object.keys(fields), work: [], readings: [] } },
   };
-  addRead("value", spec.core);
-  body("pickSubject", `fields.${spec.subject.field}.picker.options`, "picker", (reading) =>
-    reading.value?.value?.data ? spec.subject.options(reading.value.value.data) : [],
-  );
-  const own = spec.edits.work.route;
-  const owners: Owners = {
-    ...spec.edits.owners,
-    [own]: { state: spec.edits.work, value: spec.edits.owners[own]?.value ?? "work" },
-  };
-  const workKeys = Object.keys(spec.edits.work.schema.shape);
-  const verbs: MutableTable<RouteGraphJson["verbs"]> = {};
-  schemas.patch = z.object({
-    patches: z.array(routeStatePatchSchema),
-    history: spec.edits.history.optional(),
-  });
-  const cells: MutableTable<RouteGraphJson["cells"]> = {},
-    workFields: MutableTable<NonNullable<RouteGraphJson["workFields"]>> = {};
-  // Cell metadata derives from the same Work schema; record cells and scalar cells have one path.
-  for (const key of workKeys) {
-    let schema: any = spec.edits.work.schema.shape[key];
-    while (schema.unwrap) schema = schema.unwrap();
-    if (schema instanceof z.ZodRecord || schema?.shape?.edit) {
-      schemas[`${key}Cell`] = schema instanceof z.ZodRecord ? schema.valueType : schema;
-      cells[key] = {
-        segment: schema instanceof z.ZodRecord ? key : null,
-        value: `${key}Cell`,
-        groupOf: body(`group${key}`, `cells.${key}.groupOf`, "group", (key) => [key]),
-        deps: empty,
-      };
-    } else workFields[key] = { label: key, internal: true };
+  // Host Work admission projects ownership edges. The browser subscribes to owners, never readings.
+  for (const [owner, config] of Object.entries(owners)) if (owner !== work.route) {
+    schemas[owner] = config.state.schema;
+    readings[`owner:${owner}`] = { ...policy, kind: "work", route: owner, output: owner,
+      deps: { page: [], work: [], readings: [] } };
   }
-  for (const [owner, config] of Object.entries(owners)) {
-    const reading = `owner:${owner}`;
-    if (owner !== own) {
-      schemas[reading] = config.state.schema;
-      readings[reading] = { ...policy, kind: "work", route: owner, output: reading, deps: empty };
-    }
-    const id = owner === own ? "edit" : `edit:${owner}`;
-    verbs[id] = {
-      kind: "work",
-      input: "patch",
-      label: "Edit",
-      review: "none",
-      captures: [],
-      deps: {
-        page: [],
-        work: owner === own ? workKeys : [],
-        readings: ["value", ...(owner === own ? [] : [reading])],
-      },
-      ...(owner === own ? {} : { target: reading }),
-      patches: body(`${id}Patches`, `verbs.${id}.patches`, "work", (ctx, input) => {
-        const doc = owner === own ? ctx.work : ctx.readings[reading].value;
-        const applied = applyPatches(
-          config.state,
-          { version: 1, revision: 0, doc },
-          "human",
-          input.patches,
-          0,
-          false,
-          true,
-        );
-        if (!applied.ok) throw Error(applied.error);
-        return [
-          ...new Set<string>(input.patches.map((p: RouteStatePatch) => String(p.path[0]))),
-        ].flatMap((key) =>
-          bare(config.state.schema.shape[key]!) instanceof z.ZodRecord
-            ? input.patches
-                .filter((p: RouteStatePatch) => String(p.path[0]) === key)
-                .map((p: RouteStatePatch) => ({
-                  ...p,
-                  path: p.path.map(String),
-                  ...(!Object.hasOwn(p, "value") ? { op: "delete" } : {}),
-                }))
-            : [{ path: [key], value: (applied.envelope.doc as any)[key] }],
-        );
-      }),
-      describe: body(`${id}Describe`, `verbs.${id}.describe`, "describe", (input) => {
-        const history = input.history ?? { label: "Edit" };
-        const label =
-          owner === own || history.label.endsWith(`from /${owner}`)
-            ? history.label
-            : `${history.label} · from /${owner}`;
-        return spec.edits.describe({ ...history, label });
-      }),
-      ready: body(`${id}Ready`, `verbs.${id}.ready`, "ready", (ctx) => {
-        const value = ctx.readings.value;
-        const work = owner === own ? ctx.work : ctx.readings[reading].value;
-        return value.current &&
-          (owner === own || ctx.readings[reading].current) &&
-          canonicalEnvironmentInput(work) ===
-            canonicalEnvironmentInput(value.value?.value?.data[config.value])
-          ? true
-          : "Read the current Value and owning Work before editing";
-      }),
-    };
-  }
-  for (const [id, command] of Object.entries(spec.commands)) {
-    entries[command.entry] = command.contract;
-    entries[command.plan] = command.planContract;
-    readings[`${id}Plan`] = {
-      kind: "use",
-      entry: command.plan,
-      args: body(`${id}PlanArgs`, `readings.${id}Plan.args`, "args", () => null),
-      deps: empty,
-      demand: "explicit",
-      retain: policy.retain,
-      refresh: "explicit",
-    };
-    verbs[id] = {
-      kind: "command",
-      entry: command.entry,
-      input: "none",
-      label: command.label,
-      review: "shown",
-      deps: {
-        page: [spec.subject.field],
-        work: workKeys,
-        readings: Object.keys(readings).filter((r) => !r.endsWith("Plan")),
-      },
-      captures: ["value"],
-      intent: body(`${id}Intent`, `verbs.${id}.intent`, "intent", () => ({})),
-      present: body(`${id}Present`, `verbs.${id}.present`, "present", (result, ctx) =>
-        command.present(result, ctx.readings.value.value.value.data, ctx.work),
-      ),
-    };
-  }
-  const panes: MutableTable<RouteGraphJson["panes"]> = {};
-  for (const [id, pane] of Object.entries(spec.panes)) {
-    const readId = pane.read === spec.core ? "value" : `pane:${id}`;
-    if (readId !== "value") addRead(readId, pane.read);
-    panes[id] = {
-      label: pane.title,
-      purpose: pane.purpose,
-      draws: [
-        ...new Set([readId, "value"]),
-        ...Object.keys(owners)
-          .filter((o) => o !== own)
-          .map((o) => `owner:${o}`),
-      ],
-      verbs: Object.keys(verbs),
-      body: body(id, `panes.${id}.body`, "pane", (ctx) =>
-        pane.draw(
-          drawContext(ctx, readId, spec, owners) as DrawContext<
-            ReadData<Reads[string]>,
-            F,
-            z.output<W>,
-            z.output<Edit>
-          >,
-        ),
-      ),
-    };
-  }
-  const seeds: MutableTable<RouteGraphJson["seeds"]> = {};
-  for (const name of Object.keys(spec.core.fixtures ?? {})) {
-    seeds[name] = {
-      title: name,
-      load: body(`fixture:${name}`, `seeds.${name}.load`, "seed", () => {
-        const page = {
-          ...Object.fromEntries(
-            Object.entries(spec.fields).map(([key, field]) => [key, field.initial]),
-          ),
-          [spec.subject.field]: { kind: "ids", ids: [] },
-        } as Page<F>;
-        const packet: any = spec.core.source.provide!(
-          name,
-          spec.core.input.parse(spec.core.args(page)),
-        );
-        return {
-          readings: {},
-          work: packet.value?.data[owners[own]!.value],
-          works: Object.fromEntries(
-            Object.entries(owners).map(([key, owner]) => [key, packet.value?.data[owner.value]]),
-          ),
-        };
-      }),
-    };
-  }
-  const data: RouteGraphJson = {
-    version: 1,
-    key: spec.key,
-    address: `/${spec.key}`,
-    name: spec.name,
-    directory: spec.directory,
-    capabilities: ["work", "native-write", "geometry"],
-    fields,
-    identities: {
-      subject: { kind: "local", codec: "local" },
-      focus: { kind: "local", codec: "local" },
-    },
-    subject: {
-      field: spec.subject.field,
-      noun: spec.subject.noun,
-      roster: "value",
-      detail: "value",
-      pane: spec.subject.pane,
-    },
-    historyDetail: "historyDetail",
-    work: {
-      schema: "work",
-      route: own,
-      version: spec.edits.work.schemaVersion ?? 1,
-      migrations: {},
-    },
-    workFields,
-    cells,
-    panes,
-    readings,
-    verbs,
-    seeds,
-    layout: spec.layout,
-    needs: "project",
-    predicates: {},
-    observe: [],
-    resetOnTarget: [],
-    stageOrder: [mode],
-    stages: {
-      [mode]: { panes: Object.keys(panes), verbs: Object.keys(spec.commands), word: spec.name },
-    },
-  };
-  const host: HostRouteModule = { data, schemas, bodies: {}, workState: spec.edits.work };
-  return {
-    data: data as Graph<F>,
-    schemas: schemas as Schemas<F, W> & Record<string, z.ZodType>,
-    codecs: codecs as { [K in keyof F]: ReturnType<typeof jsonCodec<F[K]["schema"]>> },
-    identities: { local: identityCodecs.local },
-    entries,
-    bodies: bodies as unknown as BodyBindings<Graph<F>, Schemas<F, W>, typeof entries>,
-    sources,
-    host,
-  };
+  const verbs: RouteGraphJson["verbs"] = Object.fromEntries(Object.entries(spec.commands).map(([id, cmd]) => [id, {
+    kind: "command", entry: cmd.entry, input: "none", label: cmd.label, review: "shown",
+    deps: { page: [spec.subject.field], work: Object.keys(work.schema.shape), readings: ["value"] },
+    captures: ["value"], intent: id,
+  }]));
+  const stage = String(Object.values(spec.fields).find(f => f.role === "stage")?.initial ?? "main");
+  const data: RouteGraphJson = { version: 1, key: spec.key, address: `/${spec.key}`, name: spec.name,
+    directory: spec.directory, capabilities: ["work", "native-write", "geometry"], fields,
+    identities: { subject: { kind: "local", codec: "local" }, focus: { kind: "local", codec: "local" } },
+    subject: { field: spec.subject.field, noun: spec.subject.noun, pane: spec.subject.pane, roster: "value", detail: "value" }, historyDetail: "historyDetail",
+    work: { schema: "work", route: work.route, version: work.schemaVersion ?? 1, migrations: {} },
+    workFields: {}, cells: {}, panes: Object.fromEntries(Object.entries(spec.panes).map(([id,p]) => [id,
+      { label: p.title, purpose: p.purpose, draws: ["value"], verbs: Object.keys(verbs) }])),
+    readings, verbs, seeds: {}, layout: spec.layout, needs: "project", predicates: {}, observe: [],
+    resetOnTarget: [], stageOrder: [stage], stages: { [stage]: { panes: Object.keys(spec.panes), verbs: Object.keys(verbs), word: spec.name } } };
+  schemas.none = z.strictObject({});
+  const host: HostRouteModule = { data, schemas, bodies: {}, workState: work };
+  const entries: Record<string, EntryContract> = Object.fromEntries([[spec.core.key, spec.core], ...Object.values(spec.commands).flatMap(c => [[c.entry,c.contract],[c.plan,c.planContract]])]);
+  return { spec: { ...spec, edits: { ...spec.edits, work, owners } }, data, host, entries };
 }
-
-function drawContext(
-  ctx: any,
-  read: string,
-  spec: Specification<any, Fields, z.ZodObject, z.ZodType>,
-  owners: Owners,
-): DrawContext<any, Fields, any, any> {
-  const own = spec.edits.work.route;
-  const packet = ctx.readings[read];
-  const core = ctx.readings.value;
-  const coreData = core.value?.value?.data;
-  const projected = projectValue(packet, (packet: any) => packet.value?.data);
-  const changed =
-    coreData &&
-    Object.entries(owners).some(([owner, config]) => {
-      const work = owner === own ? ctx.work : ctx.readings[`owner:${owner}`]?.value;
-      return (
-        work &&
-        canonicalEnvironmentInput(work) !== canonicalEnvironmentInput(coreData[config.value])
-      );
-    });
-  const publication = packet.value?.value ?? null;
-  const value =
-    changed && read === "value"
-      ? {
-          ...projected,
-          current: false as const,
-          status: "unavailable" as const,
-          reason: "Work changed; awaiting a current Value",
-          publication,
-        }
-      : { ...projected, publication };
-  const ownerOf = (path: readonly string[], preferred?: string) => {
-    if (preferred !== undefined) {
-      if (!owners[preferred] || !Object.hasOwn(owners[preferred].state.schema.shape, path[0]!))
-        throw Error(`No editable ${path.join(".")} on /${preferred}`);
-      return preferred;
-    }
-    const owner =
-      Object.entries(owners).find(
-        ([name, owner]) => name === own && Object.hasOwn(owner.state.schema.shape, path[0]!),
-      ) ??
-      Object.entries(owners).find(([, owner]) => Object.hasOwn(owner.state.schema.shape, path[0]!));
-    if (!owner) throw Error(`No owning Work for ${path.join(".")}`);
-    return owner[0];
-  };
-  const patch = async (
-    patches: readonly RouteStatePatch[],
-    history: EditHistory = { label: "Edit" },
-    preferred?: string,
-  ): Promise<EditFailure> => {
-    if (!patches.length) return null;
-    if (!value.current || !core.current || changed || !ctx.workBasis)
-      return { code: "unavailable", message: "Read the current Value and Work before editing" };
-    try {
-      const groups = new Map<string, RouteStatePatch[]>();
-      for (const p of patches) {
-        const owner = ownerOf(p.path.map(String), preferred);
-        groups.set(owner, [...(groups.get(owner) ?? []), p]);
-      }
-      // Capture each invocation synchronously before any owner's acknowledgement can invalidate it.
-      const writes = [...groups].map(([owner, patches]) => {
-        try {
-          return settleWork(
-            ctx.verbs[owner === own ? "edit" : `edit:${owner}`](
-              { patches, history },
-              ...(owner === own ? [ctx.workBasis] : []),
-            ),
-          );
-        } catch (error) {
-          return Promise.resolve({ kind: "refused" as const, refusal: { error: String(error) } });
-        }
-      });
-      const outcomes = await Promise.all(writes);
-      const refused = outcomes.filter((o) => o.kind === "refused");
-      return refused.length
-        ? { code: "refused", message: refused.map((o) => o.refusal.error).join("; ") }
-        : null;
-    } catch (error) {
-      return { code: "refused", message: error instanceof Error ? error.message : String(error) };
-    }
-  };
-  return {
-    value,
-    page: ctx.page,
-    selection: {
-      read: () => ctx.page.read().selected,
-      set: (selected) => ctx.page.select(selected),
-    },
-    write(command) {
-      if (!Object.hasOwn(spec.commands, command)) throw Error(`Unknown command: ${command}`);
-      return { plan: () => ctx.verbs[command]({}), ...ctx.writeControls[command] };
-    },
-    cells: {
-      doc: ctx.work,
-      basis: ctx.workBasis,
-      ready: !!ctx.workBasis && value.current && core.current && !changed,
-      history: ctx.ownerHistory,
-      owner(path) {
-        const route = ownerOf(path);
-        return { route, label: route === own ? "Work" : `from /${route}` };
-      },
-      at(path, owner) {
-        const address = Object.freeze([...path]);
-        const route = ownerOf(address, owner);
-        const doc = route === own ? ctx.work : ctx.readings[`owner:${route}`]?.value;
-        const cell = address.reduce((value, key) => value?.[key], doc) ?? {};
-        return {
-          owner: { route, label: route === own ? "Work" : `from /${route}` },
-          value: cell,
-          stage: (value, history) =>
-            patch(
-              cellPatches(address.slice(0, -1), address.at(-1)!, cell, {
-                kind: "set",
-                rung: { value },
-              }),
-              history,
-              route,
-            ),
-          clear: (history) =>
-            patch(
-              cellPatches(address.slice(0, -1), address.at(-1)!, cell, { kind: "clear" }),
-              history,
-              route,
-            ),
-        };
-      },
-      label(input, label) {
-        if (!coreData) return label;
-        const foreign = [
-          ...new Set(
-            spec.edits.patches(input, coreData).map((patch) => ownerOf(patch.path.map(String))),
-          ),
-        ].filter((owner) => owner !== own);
-        return foreign.length
-          ? `${label} · ${foreign.map((owner) => `from /${owner}`).join(", ")}`
-          : label;
-      },
-      patch,
-      async edit(input, history) {
-        if (!coreData)
-          return Promise.resolve({
-            code: "unavailable",
-            message: "Read the current Value before editing",
-          });
-        try {
-          return patch(spec.edits.patches(spec.edits.input.parse(input), coreData), history);
-        } catch (error) {
-          return { code: "invalid", message: String(error) };
-        }
-      },
-    },
-  };
-}
-
-/** Selecting data preserves the publication's status; it never composes domain values. */
-export function projectValue<A, B>(
-  reading: ReadingSnapshot<A>,
-  select: (value: Immutable<A>) => B,
-): ReadingSnapshot<B> {
-  return {
-    ...reading,
-    ...(reading.value === undefined ? {} : { value: select(reading.value) }),
-  } as ReadingSnapshot<B>;
-}
+export type TypedRoute = ReturnType<typeof route<any, Fields, z.ZodObject, z.ZodType, Record<string, HostRead>>>;

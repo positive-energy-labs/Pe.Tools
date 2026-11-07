@@ -1,5 +1,5 @@
 // Generated from route.ts by codegen:routes. Do not edit.
-import { fansRouteState as work } from "@pe/agent-contracts";
+import { fansRouteState as work } from "../../../../packages/agent-contracts/src/generated/fans-work.ts";
 import { z } from "zod";
 import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
 import type { HostRouteModule } from "@pe/agent-contracts";

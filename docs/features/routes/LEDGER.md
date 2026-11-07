@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-06, wave 3 S: `shell/typed-mount.ts` and `shell/typed-shell.tsx` are kernel composition roots. They own the fixture/live boundary for typed modules; route bodies still cannot select fixture transport. This extends the existing composition-root guard, not its offender baseline.
+
 - 2026-11-06, Driver and Governor: accepted main `aca90ffc` preserves driven `012df511` product inputs, plus four sealed test cuts. One UI Write/native readback, consumed refusal, same-page post-write and K5 recovery, and the representative pair passed on controlled ke277. Initial retained Refresh auto-navigated; it is not the same-page proof. Step 7 public recording, epochs and History remain incomplete; settings ADR 0032 is still unapproved.
 
 - 2026-11-05, kaitpw (intent for Step 8 Pods, not current scope): HTML pages open from the index at `/pages/<name>/`; targeting stays, and only `/bind` as a route retires. Page writes stay quick and dirty, with no plan or seal: a click in that page is the human's write and runs immediately; a write no click in that page caused gets the normal Reject countdown, including code that writes on load and events Pea appends through `page.append`. Promotion to a route is optional. This needs an ADR 0030 amendment scoped to HTML pages; the Pods muse writes it before any page-write code (Governor ruling; kaitpw may veto). Governor's counsel, **unruled**: keep the binding as a visible target chip, use one transaction per write, and show a Timeline row with the page as author.

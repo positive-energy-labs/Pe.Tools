@@ -235,6 +235,9 @@ const privateModules = new Set([
   `${WEB}route/view-owner.ts`,
 ]);
 const compositionRoots = new Set([
+  // Native typed mounts own the same fixture/live boundary as the admitted composition.
+  `${WEB}shell/typed-mount.ts`,
+  `${WEB}shell/typed-shell.tsx`,
   `${WEB}shell/mount-work.tsx`,
   `${WEB}shell/fixture-lane.ts`,
   `${WEB}chat/owner.tsx`,

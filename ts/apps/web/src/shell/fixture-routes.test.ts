@@ -152,7 +152,25 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
       }
       return;
     }
-    if (key === "ducts" || key === "fans") {
+    if (key === "fans") {
+      const { module } = await import("../fans/route");
+      const { admit } = await import("../fans/admission.fixture");
+      const { mountTypedRoute } = await import("./typed-mount");
+      const { hostPresenter } = await admit();
+      const fetch = vi.fn(() => { throw Error("Real host called"); });
+      vi.stubGlobal("fetch",fetch);
+      for(const name of Object.keys(module.spec.core.fixtures??{})) {
+        const mount=mountTypedRoute(module,placeInput({read:()=>new URLSearchParams({fixture:name}),write(){},subscribe:()=>()=>{}}),hostPresenter.workFingerprint);
+        try {
+          await expect.poll(()=>mount.workBasis()).not.toBeNull();
+          mount.page.subject({kind:"all"});
+          for(const id of Object.keys(module.spec.panes)) expect(isValidElement(mount.draw(id))).toBe(true);
+          mount.refresh(); expect(fetch).not.toHaveBeenCalled();
+        } finally {mount.dispose();}
+      }
+      return;
+    }
+    if (key === "ducts") {
       const { loadBuiltinRoute, builtinRouteStamp } = await import("../route/builtin-inventory");
       const admitted = await loadBuiltinRoute(key, builtinRouteStamp(key));
       if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));

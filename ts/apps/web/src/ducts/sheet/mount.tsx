@@ -2,7 +2,6 @@ import { renderPicturePane } from "#/scene/picture/picture";
 import { EspParameter } from "./esp-parameter";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { StateCell, cellFromDraft } from "@pe/kit/lang/cell";
-import { reviewTransitions } from "#/components/work/band";
 import { ChoiceCell } from "./choice-cell.tsx";
 import { Button } from "@pe/kit/lang/button";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
@@ -15,8 +14,7 @@ import { useRouteSearchSlice } from "#/route/activity";
 import { picturePageMove } from "#/shell/picture-page";
 import { useAdmittedSubject } from "#/shell/subject";
 
-import type { DuctsSheetEdits, PicturePage, RouteStatePatch } from "@pe/agent-contracts";
-import { cellPatches } from "@pe/agent-contracts";
+import type { DuctsSheetEdits, PicturePage } from "@pe/agent-contracts";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
@@ -24,7 +22,6 @@ import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import * as Atom from "effect/reactivity/Atom";
 import { useMemo, useRef } from "react";
 import type { FansDrawContext } from "../../fans/route.ts";
-import { projectValue } from "../../route/typed-route.ts";
 import { fansDocumentSchema } from "@pe/agent-contracts";
 const scopeSchema = fansDocumentSchema.shape.writeIntent.unwrap().shape.edit.unwrap().unwrap()
   .shape.value;
@@ -42,21 +39,13 @@ import { sheetSystems } from "./scoped-snapshot.ts";
 import { EMPTY_SHEET_STATE } from "./state";
 import { Ledger, Roster } from "./view";
 type SheetContext = FansDrawContext;
-function readingsOf(ctx: SheetContext) {
-  return {
-    sheet: ctx.value,
-    fans: projectValue(ctx.value, (value) => value.fans),
-    sheetSnapshot: projectValue(ctx.value, (value) => value.sheetSnapshot),
-    sheetView: projectValue(ctx.value, (value) => value.sheetView),
-  };
-}
 function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
   const authored = ctx.page.read();
-  const reading = readingsOf(ctx).sheet;
+  const reading = ctx.value;
   const value = reading.value;
   const sheet = value?.open ?? null;
-  const fans = readingsOf(ctx).fans;
-  const roster = rosterOrder(value?.rows ?? fans.value?.rows ?? []);
+  const fans = ctx.value.value?.fans;
+  const roster = rosterOrder(value?.rows ?? fans?.rows ?? []);
   const nameOf = useMemo(() => subjectNamer(snapshot), [snapshot]);
   const selected = authored.selected.map(({ id }) => localSubject(id)).join(",");
   const changeInputs = async (
@@ -89,15 +78,10 @@ function WriteScope({
   ctx,
   snapshot,
   fan,
-  write,
 }: {
   ctx: SheetContext;
   snapshot: DuctSnapshot;
   fan: { unitId: number; portIndex: number; mark: string } | null;
-  write: (
-    patches: RouteStatePatch[],
-    history?: EditMeta,
-  ) => Promise<{ code: string; message: string } | null>;
 }) {
   const intent = ctx.cells.doc?.writeIntent ?? {};
   const standing = intent.edit?.value;
@@ -162,9 +146,7 @@ function WriteScope({
           if (key === "fan" && offered?.success && ctx.cells.basis)
             void ctx.cells.at(["writeIntent"]).stage(offered.data, { label: "Choose write scope" });
           if (key === "none" && intent.edit)
-            void write(cellPatches([], "writeIntent", intent, { kind: "clear" }), {
-              label: "Clear write scope",
-            });
+            void ctx.cells.at(["writeIntent"]).clear({ label: "Clear write scope" });
         }}
       />
       <span />
@@ -173,10 +155,10 @@ function WriteScope({
 }
 export function RosterBody({ ctx }: { ctx: SheetContext }) {
   const authored = ctx.page.read();
-  const snapshot = sheetSnapshot(readingsOf(ctx).sheetSnapshot);
-  const fans = readingsOf(ctx).fans;
-  const roster = rosterOrder(readingsOf(ctx).sheet.value?.rows ?? fans.value?.rows ?? []);
-  const busy = readingsOf(ctx).sheet.status === "pending";
+  const snapshot = sheetSnapshot(ctx.value.value?.sheetSnapshot);
+  const fans = ctx.value.value?.fans;
+  const roster = rosterOrder(ctx.value.value?.rows ?? fans?.rows ?? []);
+  const busy = ctx.value.status === "pending";
   const nameOf = useMemo(
     () => ("kind" in snapshot ? (id: number) => String(id) : subjectNamer(snapshot)),
     [snapshot],
@@ -200,7 +182,7 @@ export function RosterBody({ ctx }: { ctx: SheetContext }) {
           picked: pickedFans === "all" ? roster.map(stableFanKey) : pickedFans,
           open: open,
           busy: busy,
-          loading: fans.status === "pending",
+          loading: ctx.value.status === "pending",
         }}
       />
       {("kind" in snapshot ? [] : sheetSystems(snapshot)).map((name) => (
@@ -216,34 +198,22 @@ export function RosterBody({ ctx }: { ctx: SheetContext }) {
     </SheetFrame>
   );
 }
-function SheetEmpty({
-  readings,
-}: {
-  readings: Pick<ReturnType<typeof readingsOf>, "sheetSnapshot" | "sheet">;
-}) {
-  if (readings.sheetSnapshot.status === "failed")
-    return <p role="alert">{readings.sheetSnapshot.reason}</p>;
-  return readings.sheetSnapshot.status === "pending" || readings.sheet.status === "pending" ? (
-    <p role="status">computing</p>
-  ) : (
-    <p>Open a fan from the roster.</p>
-  );
+function SheetEmpty({ value }: { value: SheetContext["value"] }) {
+  return value.status === "failed" ? <p role="alert">{value.reason}</p> : value.status === "pending"
+    ? <p role="status">computing</p> : <p>Open a fan from the roster.</p>;
 }
 export function InputsBody({ ctx }: { ctx: SheetContext }) {
-  const snapshot = sheetSnapshot(readingsOf(ctx).sheetSnapshot);
+  const snapshot = sheetSnapshot(ctx.value.value?.sheetSnapshot);
   return "kind" in snapshot ? (
-    <SheetEmpty readings={readingsOf(ctx)} />
+    <SheetEmpty value={ctx.value} />
   ) : (
     <InputsContent ctx={ctx} snapshot={snapshot} />
   );
 }
 function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSnapshot }) {
   const { sheet, fans, nameOf, selected, changeInputs, busy } = useSheetData(ctx, snapshot);
-  const workDoc = sheetWork(ctx);
-  const write = async (patches: RouteStatePatch[], history?: EditMeta) => {
-    return ctx.cells.patch(patches, history);
-  };
-  const state = readingsOf(ctx).sheetView.value ?? EMPTY_SHEET_STATE;
+  const workDoc = ctx.value.value?.design ?? null;
+  const state = ctx.value.value?.sheetView ?? EMPTY_SHEET_STATE;
   const selectedNumber = Number(selected.replaceAll('"', ""));
   const focused = state.blockers.find((blocker) => blocker.id === selected);
   const elementId =
@@ -268,7 +238,7 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
       void ctx.cells.history?.undo(press);
     },
   };
-  const fanReading = fans.value;
+  const fanReading = fans;
   const friction = ctx.cells.doc?.designFriction ?? {};
   const parameterTarget = ctx.cells.basis?.token.scope.identity.target;
   const ownPane = (
@@ -277,7 +247,7 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
         aria-label="Fan settings"
         className="grid grid-cols-[minmax(0,1fr)_minmax(0,10rem)_auto] items-center gap-x-2 gap-y-1 p-1"
       >
-        <WriteScope ctx={ctx} snapshot={snapshot} fan={sheet?.overview.fan ?? null} write={write} />
+        <WriteScope ctx={ctx} snapshot={snapshot} fan={sheet?.overview.fan ?? null} />
         <span data-sheet-cell="Design friction" aria-label="Design friction" className="contents">
           <span>Design friction</span>
           <span className="block min-w-0 h-(--item-h)">
@@ -296,15 +266,7 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
                   .stage(Number(text), { label: "Design friction" })
                   .then((result) => result?.message)
               }
-              transitions={reviewTransitions(
-                {
-                  segment: null,
-                  revision: ctx.cells.basis?.workRevision ?? null,
-                  write: (patches) => write(patches, { label: "Design friction" }),
-                },
-                "designFriction",
-                friction,
-              )}
+              transitions={ctx.cells.at(["designFriction"]).transitions({ label: "Design friction" })}
             />
           </span>
           <span
@@ -323,19 +285,9 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
           ] as const
         ).map(([key, label]) => {
           const cell = ctx.cells.doc?.parameters[key] ?? {};
-          const commit = (value: string) =>
-            write(cellPatches(["parameters"], key, cell, { kind: "set", rung: { value } }), {
-              label,
-            }).then((result) => result?.message);
-          const transitions = reviewTransitions(
-            {
-              segment: "parameters",
-              revision: ctx.cells.basis?.workRevision ?? null,
-              write: (patches) => write(patches, { label }),
-            },
-            key,
-            cell,
-          );
+          const handle = ctx.cells.at(["parameters", key]);
+          const commit = (value: string) => handle.stage(value, { label }).then(result => result?.message);
+          const transitions = handle.transitions({ label });
           return (
             <label key={key} className="contents">
               <span className="min-w-0 truncate">{label}</span>
@@ -394,21 +346,14 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
                   refusal={
                     ctx.cells.ready ? null : "Read the current Value and Work before editing"
                   }
-                  pick={(role) =>
-                    void write(
-                      cellPatches(["roles"], key, cell, { kind: "set", rung: { value: { role } } }),
-                      { label },
-                    )
-                  }
-                  act={async (_path, cell, kind) =>
-                    write(cellPatches(["roles"], key, cell, { kind }), { label })
-                  }
+                  pick={(role) => void ctx.cells.at(["roles", key]).stage({ role }, { label })}
+                  act={() => ctx.cells.at(["roles", key]).clear({ label })}
                 />
                 {cell.edit ? (
                   <Button
                     label="Clear unit role"
                     onClick={() =>
-                      void write(cellPatches(["roles"], key, cell, { kind: "clear" }), { label })
+                      void ctx.cells.at(["roles", key]).clear({ label })
                     }
                   >
                     Clear
@@ -436,23 +381,11 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
         }}
         busy={busy}
         elementName={element ? nameOf(element.id) : null}
-        onSlot={(key, slot) => {
-          void write(
-            cellPatches(["parameters"], key, workDoc?.parameters[key] ?? {}, {
-              kind: "set",
-              rung: { value: slot },
-            }),
-            { label: `${key} → ${slot}` },
-          );
-        }}
+        onSlot={(key, slot) => { void ctx.cells.at(["parameters", key]).stage(slot, { label: `${key} ? ${slot}` }); }}
         apply={changeInputs}
         history={history}
         nameOf={nameOf}
-        act={async (path, cell, kind, label) => {
-          return write(cellPatches(path.slice(0, -1), path.at(-1)!, cell, { kind }), {
-            label: `${kind} Pea's ${label}`,
-          });
-        }}
+        act={(path, _cell, kind, label) => ctx.cells.at(path).clear({ label: `${kind} Pea's ${label}` })}
       />
     </>
   );
@@ -463,18 +396,18 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
   );
 }
 export function PictureBody({ ctx }: { ctx: SheetContext }) {
-  const snapshot = sheetSnapshot(readingsOf(ctx).sheetSnapshot);
+  const snapshot = sheetSnapshot(ctx.value.value?.sheetSnapshot);
   return "kind" in snapshot ? (
-    <SheetEmpty readings={readingsOf(ctx)} />
+    <SheetEmpty value={ctx.value} />
   ) : (
     <PictureContent ctx={ctx} snapshot={snapshot} />
   );
 }
 function PictureContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSnapshot }) {
-  const { authored, value, sheet, fans, roster, nameOf, selected } = useSheetData(ctx, snapshot);
+  const { authored, value, sheet, roster, nameOf, selected } = useSheetData(ctx, snapshot);
   const target = ctx.cells.basis?.token.scope.identity.target;
   const doc = target?.kind === "document" ? target.ref : null;
-  const workDoc = sheetWork(ctx);
+  const workDoc = ctx.value.value?.design ?? null;
   const select = (selected: string) =>
     ctx.selection.set(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
   const setPage = picturePageMove<PicturePage<string, "schematic">>(
@@ -486,16 +419,16 @@ function PictureContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSn
     [authored.selected],
   );
   const pickedFans = namesOf(authored.fan);
-  const nativeSnapshot = readingsOf(ctx).sheetSnapshot.value;
+  const nativeSnapshot = ctx.value.value?.sheetSnapshot;
   const captureSource =
-    readingsOf(ctx).fans.current &&
+    ctx.value.current &&
     doc &&
     nativeSnapshot &&
     !("kind" in nativeSnapshot) &&
     nativeSnapshot.sourceVersion
       ? { document: doc, version: nativeSnapshot.sourceVersion }
       : null;
-  const state = readingsOf(ctx).sheetView.value ?? EMPTY_SHEET_STATE;
+  const state = ctx.value.value?.sheetView ?? EMPTY_SHEET_STATE;
   const jump = useRef<((key: SubjectKey) => void) | null>(null);
   const fanId = (row: FanPort) => localId("ducts-fan", stableFanKey(row));
   const ownPane = ((renderPane: TeachingPaneRender) => (
@@ -507,7 +440,7 @@ function PictureContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSn
         selection,
         captureSource,
         doc,
-        refreshing: !fans.current,
+        refreshing: !ctx.value.current,
       }}
       snapshot={snapshot}
       sheet={sheet}
@@ -530,21 +463,21 @@ function PictureContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSn
   );
 }
 export function LedgerBody({ ctx }: { ctx: SheetContext }) {
-  const snapshot = sheetSnapshot(readingsOf(ctx).sheetSnapshot);
+  const snapshot = sheetSnapshot(ctx.value.value?.sheetSnapshot);
   return "kind" in snapshot ? (
-    <SheetEmpty readings={readingsOf(ctx)} />
+    <SheetEmpty value={ctx.value} />
   ) : (
     <LedgerContent ctx={ctx} snapshot={snapshot} />
   );
 }
 function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSnapshot }) {
-  const { reading, sheet, fans, roster, nameOf, selected, changeInputs, busy } = useSheetData(
+  const { reading, sheet, roster, nameOf, selected, changeInputs, busy } = useSheetData(
     ctx,
     snapshot,
   );
   const select = (selected: string) =>
     ctx.selection.set(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
-  const state = readingsOf(ctx).sheetView.value ?? EMPTY_SHEET_STATE;
+  const state = ctx.value.value?.sheetView ?? EMPTY_SHEET_STATE;
   const closerOf = (blocker: import("./tiers").SheetBlocker, typed: number | null): Closer => {
     const closer = describeCloser(blocker, typed, {
       terminalDrop: state.inputs?.criteria.terminalDropInWg ?? null,
@@ -656,10 +589,10 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
         taken: state.taken,
         inputs: state.inputs,
         busy: busy,
-        loading: fans.status === "pending",
+        loading: ctx.value.status === "pending",
         error:
           (reading.status === "failed" ? reading.reason : null) ??
-          (fans.status === "failed" ? fans.reason : null),
+          (ctx.value.status === "failed" ? ctx.value.reason : null),
         changeInputs: changeInputs,
         closerOf: closerOf,
         close: (closer: Closer) => changeInputs(editsFor([closer]), { label: closer.verb }),
@@ -678,14 +611,8 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
   );
 }
 /** Drawing consumers own a mutable clone; the kernel retains immutable evidence. */
-export function sheetSnapshot(
-  reading: ReturnType<typeof readingsOf>["sheetSnapshot"],
-): (DuctSnapshot & { sourceVersion?: string }) | { kind: "absent" };
-export function sheetSnapshot(reading: { value?: unknown }): unknown {
-  return structuredClone(reading.value ?? { kind: "absent" });
-}
-function sheetWork(ctx: SheetContext) {
-  return ctx.value.value?.design ?? null;
+export function sheetSnapshot(value: import("@pe/agent-contracts").Immutable<DuctSnapshot | { kind: "absent" }> | undefined): (DuctSnapshot & { sourceVersion?: string }) | { kind: "absent" } {
+  return structuredClone(value ?? { kind: "absent" }) as (DuctSnapshot & { sourceVersion?: string }) | { kind: "absent" };
 }
 function SheetFrame({
   ctx,
@@ -720,7 +647,7 @@ function SheetFrame({
         <NativeObservationScope
           value={{
             scope: {
-              document: readingsOf(ctx).sheetSnapshot.current ? document : null,
+              document: ctx.value.current ? document : null,
               source: "native",
             },
             references: ("kind" in snapshot ? [] : [...snapshot.nodes, ...snapshot.segments]).map(

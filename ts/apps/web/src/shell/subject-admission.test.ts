@@ -8,11 +8,11 @@ import { localId } from "../ducts/neutral";
 import { subjectState } from "./subject";
 import { tabTitle } from "../workbench/route-tabs";
 import { admit } from "../fans/admission.fixture";
-import { createRouteShell } from "./admitted-mount";
+import { mountTypedRoute } from "../shell/typed-mount";
+import { nativeTestAdapter } from "../fans/native.test-support";
+import { createWorkFeedClient } from "./work-feed-client";
 import { admittedRouterAddress } from "./admitted-pane";
 import { placeInput } from "./admitted-place.test-fixture";
-import { admittedSources } from "./admitted-sources";
-import { sourceRouteServices } from "./source-route-services";
 const mounts: { dispose(): void }[] = [];
 afterEach(() => mounts.splice(0).forEach((mount) => mount.dispose()));
 
@@ -20,10 +20,7 @@ test("admitted Fans uses its actual picker labels and decoded subject; foreign a
   const { presenter } = await admit();
   const history = createMemoryHistory({ initialEntries: ["/fans?fixture=layout"] });
   const input = placeInput(admittedRouterAddress(history));
-  const mount = createRouteShell(sourceRouteServices(admittedSources(presenter))).mount(
-    presenter,
-    input,
-  );
+  const mount = nativeTestAdapter(mountTypedRoute(presenter.typed,input,presenter.workFingerprint),createWorkFeedClient());
   mounts.push(mount);
   await waitFor(() => expect(mount.readingStatus("fans").snapshot.current).toBe(true));
   const options = z

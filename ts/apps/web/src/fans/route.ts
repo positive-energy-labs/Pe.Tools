@@ -1,3 +1,4 @@
+import { fansDocumentSchema } from "../../../../packages/agent-contracts/src/fans.ts";
 import { z } from "zod";
 import {
   ductsRouteState,
@@ -5,7 +6,6 @@ import {
   fansSheetCapability,
   ductsAddress,
   fansSheetData,
-  fansRouteState,
   listSearchSchema,
   type Immutable,
   type FansRouteDocument,
@@ -120,9 +120,9 @@ export const module = route({
     },
   },
   edits: {
-    work: fansRouteState,
+    work: fansDocumentSchema,
+    value: "fansWork",
     owners: {
-      fans: { state: fansRouteState, value: "fansWork" },
       ducts: { state: ductsRouteState, value: "ductsWork" },
     },
     input: ductsSheetEditsSchema,

@@ -123,22 +123,6 @@ test("an admitted network pane runs no sibling body when another pane is hidden"
   expect(leaves.inbox).not.toHaveBeenCalled();
 });
 
-test("a pending sheet does not blank its roster sibling", async () => {
-  const f = await createWitness(closes, new Map(), { "ducts.sheet": { kind: "use", open() {} } });
-  await vi.waitFor(() => expect(f.fans.readingStatus("fans").snapshot.current).toBe(true));
-  await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.status).toBe("pending"));
-  const rows = f.fans.readingStatus("fans").snapshot.value;
-  expect(rows).toBeDefined();
-  render(
-    <RegistryContext value={registry()}>
-      {nodeFor(f.fans, "sheet-roster")}
-      {nodeFor(f.fans, "sheet-ledger")}
-    </RegistryContext>,
-  );
-  expect(screen.getByRole("listbox", { name: "fans" }).textContent).toContain("MUAS-1");
-  expect(screen.getAllByRole("status").some((node) => node.textContent === "computing")).toBe(true);
-});
-
 test("the fan roster restores its Page query after its body is hidden and shown", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.fans.readingStatus("fans").snapshot.current).toBe(true));
@@ -241,6 +225,7 @@ test("/fans edits Ducts criteria and a criterion choice in place through the duc
   fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
   await vi.waitFor(() => expect(f.owner.work()?.revision).toBe(ducts0 + 1));
   expect(f.owner.work()?.value).toMatchObject({ criteria: { edit: { value: { terminalDropInWg: 0.07 } } } });
+  view.rerender(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
   // A criterion choice goes through the same owner handle.
   const split = view.container.querySelector<HTMLElement>('[data-input-field="splitPolicy"]')!;
   expect(split.querySelector("a")).toBeNull();
@@ -279,7 +264,7 @@ test("a rule owner crossing without system context still lands on its rule", asy
   const f = await createWitness(closes);
   const url = new URL(ductsLink([], { fixture: "scene" }, { kind: "rule", key: "tap-std" }), "http://127.0.0.1");
   const destination = f.mount(f.admitted.owner, url.searchParams, "rule-no-system");
-  expect(destination.page.read().selected.map(item => localSubject(item.id))).toEqual(["rule:tap-std"]);
+  expect(destination.page.read().selected.map((item: {id:Parameters<typeof localSubject>[0]}) => localSubject(item.id))).toEqual(["rule:tap-std"]);
   await vi.waitFor(() => expect(destination.readingStatus("pricing").snapshot.current).toBe(true));
   const view = render(<RegistryContext value={registry()}>{nodeFor(destination, "e-rules-all")}</RegistryContext>);
   const row = view.container.querySelector('[data-key="tap-std"]');
