@@ -5,7 +5,6 @@ import { type Mark, type RoomsNote } from "@pe/agent-contracts";
 import { Ladder } from "#/route/ladder";
 import type { RoomsContext } from "./route";
 import { Button } from "@pe/kit/lang/button";
-import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { cardsMarkdown, coverage, newestRun, type Card } from "./cards";
 import { cardLine, FeedbackCard, RoomsInbox } from "./inbox";
@@ -185,8 +184,8 @@ function PlanBody({ ctx, page, verbs, renderPane }: Body & { renderPane: PaneApi
         });
       }}
       trace={trace}
-      page={{ ...page, view }}
-      setPage={setPage}
+      page={ctx.page}
+      value={ctx.value}
       overlay={
         page.stage === "review"
           ? (geo) => (
@@ -294,13 +293,6 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
     });
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-(--gutter)">
-      {!ctx.value.current && (
-        <OutcomeLine
-          kind={ctx.value.status === "pending" ? "busy" : "error"}
-          label="Room reading"
-          says={ctx.value.reason}
-        />
-      )}
       <div className="shrink-0 p-(--gutter)">
         <ScopeBody {...body} />
         <Switcher

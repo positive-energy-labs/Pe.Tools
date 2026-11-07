@@ -11,7 +11,8 @@ import { GoToPopup } from "@pe/kit/lang/go-to";
 import { SvgTip } from "@pe/kit/lang/tooltip";
 import { useContext, type CSSProperties, type ReactNode, useMemo } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
-import { PictureStage, stageViewport } from "#/scene/stage-controller";
+import { PictureStage } from "#/scene/stage-controller";
+import type { ValueHandle } from "@pe/kit/lang/collection";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
@@ -20,15 +21,14 @@ import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
-import type { RoomsPage } from "./page";
 
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { boundsOf, contentViewport, fitFrame, type Bounds2, type Point2 } from "#/lib/affine-frame";
 import { token } from "@pe/kit/lib/token";
-import { PlanImageLayer, planCorners, type TakeoffPlanImage } from "#/scene/plan-image";
-import { pathD } from "#/takeoff/model";
-import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan";
+import { PlanImageLayer, planCorners } from "#/scene/plan-image";
+import { pathD, PLAN_REFUSAL } from "./plan-drawing";
+import type { PlanImage, PlanRefusal } from "./plan-reading";
 import { ROOMS_LAYERS, toggleLayer } from "@pe/agent-contracts";
 import { LAYER_SAYS, TraceFaces, TraceLayers, type Layer, type TraceRead } from "./layers";
 import { CALLOUT_FONT_PX, holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
@@ -129,6 +129,18 @@ const ZOOM_PAD_PX = 48;
 const FILL_PCT = 27;
 const FILL_HOT_PCT = 40;
 
+type PlanPage = {
+  read(): {
+    readonly view: string;
+    readonly layers: readonly string[] | "all";
+    readonly viewport: PlaneViewport | null;
+  };
+  pose(
+    patch: { layers?: readonly string[] | "all"; viewport?: PlaneViewport | null },
+    intent?: "gesture" | "named",
+  ): unknown;
+};
+
 export function RoomsPlan({
   renderPane,
   fixture = false,
@@ -139,8 +151,8 @@ export function RoomsPlan({
   empty,
   onSelect,
   trace,
-  page,
-  setPage,
+  page: place,
+  value,
   overlay,
 }: {
   renderPane: PaneApi;
@@ -150,7 +162,7 @@ export function RoomsPlan({
   overlay?: (geo: PlanGeo) => ReactNode;
   /** The regions on the drawn view, labelled as the table labels them. */
   rows: readonly RoomRow[];
-  plan: TakeoffPlanImage | null;
+  plan: PlanImage | null;
   planRefusal: PlanRefusal | null;
   planError: string | null;
   /** Why nothing can be drawn yet (no document, no view, snapshot failed); null = draw. */
@@ -159,9 +171,10 @@ export function RoomsPlan({
   onSelect: (guid: string | null, add: boolean) => void;
   /** `rooms.trace` for the drawn view; `none` names why there is nothing to draw. */
   trace: TraceRead;
-  page: RoomsPage;
-  setPage: (next: Partial<RoomsPage>, move?: { history: "push" | "replace" }) => void;
+  page: PlanPage;
+  value?: ValueHandle<unknown>;
 }) {
+  const page = place.read();
   const doc = useContext(AttentionDocument) ?? "";
   const registry = useContext(RegistryContext);
   const attention = useAttention(doc);
@@ -257,7 +270,7 @@ export function RoomsPlan({
   const viewport = usePlaneViewport(
     page.viewport,
     world?.fit ?? null,
-    stageViewport<PlaneViewport>(setPage),
+    (viewport, how) => place.pose({ viewport }, how === "gesture" ? "gesture" : "named"),
     readout,
   );
   const {
@@ -292,7 +305,7 @@ export function RoomsPlan({
       value: layers,
       options: ROOMS_LAYERS.map((key) => ({ key, label: key, says: LAYER_SAYS[key] })),
       onToggle: (key: string) =>
-        setPage(
+        place.pose(
           {
             layers: toggleLayer(
               ROOMS_LAYERS,
@@ -300,7 +313,7 @@ export function RoomsPlan({
               key as Layer,
             ),
           },
-          { history: "push" },
+          "named",
         ),
     },
   };
@@ -373,6 +386,13 @@ export function RoomsPlan({
 
   const notice = (
     <>
+      {value && !value.current ? (
+        <OutcomeLine
+          kind={value.status === "pending" ? "busy" : "error"}
+          label="Plan reading"
+          says={value.reason}
+        />
+      ) : null}
       {!trace.data && trace.none ? (
         <OutcomeLine
           kind="advisory"
