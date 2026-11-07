@@ -4,6 +4,7 @@ import type { HarnessThreadSummary, Machine } from "@pe/agent-contracts";
 import type { OpenContext } from "./route";
 import { useOpenTypedOwner } from "./typed-owner";
 import { Scroll } from "@pe/kit/lang/scroll";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { PatchBay, type BayLayout } from "./bay";
 
 import { OpenOwnerContext } from "./context";
@@ -41,6 +42,13 @@ export function OpenBody({ ctx }: { ctx: OpenContext }) {
       data-testid="open-route"
       aria-busy={!reading.current && reading.status !== "failed"}
     >
+      {!ctx.value.current && (
+        <OutcomeLine
+          kind={ctx.value.status === "pending" ? "busy" : "error"}
+          label="Document discovery"
+          says={ctx.value.reason}
+        />
+      )}
       <a
         href={`/session-admin?session=${encodeURIComponent(owner.view.read().page.draft.target ?? "")}`}
       >
