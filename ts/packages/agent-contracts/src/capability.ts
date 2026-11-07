@@ -1,3 +1,4 @@
+import { capabilityNeedsSchema, type CapabilityNeeds } from "./capability-needs.ts";
 import { discoveryMachine, discoveryMachineSchema } from "./discovery-machine.ts";
 /**
  * Capability — the ONE row type every pea door reads. Ops, route documents, route commands,
@@ -44,14 +45,7 @@ export const capabilityKindSchema = z.enum([
 ]);
 export type CapabilityKind = z.infer<typeof capabilityKindSchema>;
 
-export const capabilityNeedsSchema = z.enum([
-  "nothing",
-  "document",
-  "project-document",
-  "family-document",
-  "session",
-]);
-export type CapabilityNeeds = z.infer<typeof capabilityNeedsSchema>;
+export { capabilityNeedsSchema, type CapabilityNeeds } from "./capability-needs.ts";
 
 export const capabilitySchema = z
   .object({
