@@ -245,9 +245,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const problems = new Map<string,string>();
   const plans = new Map<string,InvocationToken>();
   const workSignature = () => canonicalRouteInput([...owners].map(([id,o]) => [id,o.ready,o.handle]));
-  const scopeKey = subjectScopeKey(Object.fromEntries(input.address.read()));
   const subjectState = (search: Record<string,unknown>): SubjectState | null => {
-    if (subjectScopeKey(search) !== scopeKey) return null;
+    // URL pinning can leave the resolved target unchanged; custody owns the current Place.
+    if (subjectScopeKey(search) !== subjectScopeKey(Object.fromEntries(input.address.read()))) return null;
     const refused = (refusal:string): SubjectState => ({ready:false,refusal,label:""});
     if (disposed || released || !input.custody.current()) return refused("Place is inactive or retired");
     try {

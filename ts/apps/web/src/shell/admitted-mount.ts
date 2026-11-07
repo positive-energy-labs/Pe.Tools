@@ -90,7 +90,6 @@ export function createRouteShell(
       const liveDoor = input.history ? recordedWorkDoor(input.history) : (services.work ?? createWorkFeedClient());
       const routeSettings = fixture === null && !input.history ? settings : undefined;
       const route = admitted;
-      const subjectScope = subjectScopeKey(Object.fromEntries(address.read()));
       const scope = createAdmittedScope({
         admission: mountAdmittedRoute(route, route.fingerprint),
         route,
@@ -362,17 +361,16 @@ export function createRouteShell(
         place,
         picker: readings.picker,
         subjectState(search: Record<string, unknown>): SubjectState | null {
-          if (subjectScopeKey(search) !== subjectScope) return null;
+          // A pin can change without changing the resolved document. Compare the Place's
+          // current address; a mount-time URL stamp would strand its retained href before the pin.
+          if (subjectScopeKey(search) !== subjectScopeKey(Object.fromEntries(address.read()))) return null;
           const refuse = (refusal: string | null): SubjectState => ({
             ready: false,
             refusal,
             label: "",
             link: null,
           });
-          if (
-            !context.available() ||
-            subjectScopeKey(Object.fromEntries(address.read())) !== subjectScope
-          )
+          if (!context.available())
             return refuse("Place is inactive or retired");
           // Resolve again: equal revision numbers never authorize a foreign/retired admission.
           if (!resolveRouteBindings(registry, route)) return refuse("Route admission is retired");

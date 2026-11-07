@@ -960,3 +960,30 @@ test("fan selection with picture pose preserves Pea open state and width", async
   expect(screen.queryByRole("button", { name: "Expand pea" })).toBeNull();
   expect(dock().style.getPropertyValue("--pane-size")).toBe(size);
 });
+
+test("N-03 typed Fans retains a newly explicit pin when its resolved target is unchanged", async () => {
+  sessionStorage.clear();
+  const router = await mount("/fans?fixture=layout");
+  await waitFor(() => expect(places().some((tab) => tab.route === "fans")).toBe(true));
+  const pin = JSON.stringify({ kind: "open", ref: { session: "same", openId: "same" } });
+  await act(async () => {
+    const port = admittedRouterAddress(router.history),
+      query = port.read();
+    query.set("target", pin);
+    port.write(query, "push");
+  });
+  await settle();
+  expect(
+    new URL(
+      places().find((tab) => tab.route === "fans")!.link,
+      "http://place.invalid",
+    ).searchParams.get("target"),
+  ).toBe(pin);
+  await act(() => router.navigate({ to: "/pea" }));
+  fireEvent.click(screen.getByRole("button", { name: "Expand tools" }));
+  fireEvent.click(screen.getByRole("button", { name: "Fans" }));
+  await waitFor(() => expect(router.state.location.pathname).toBe("/fans"));
+  expect(
+    new URL(router.history.location.href, "http://place.invalid").searchParams.get("target"),
+  ).toBe(pin);
+});

@@ -11,7 +11,7 @@ import {
   RouterProvider,
   useRouter,
 } from "@tanstack/react-router";
-import { AdmittedRouteView, admittedRouterAddress } from "../shell/admitted-pane";
+import { admittedRouterAddress } from "../shell/admitted-pane";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
 import { actionReceiptSchema, familiesRouteState, familyCellKey } from "@pe/agent-contracts";
 import { createBuiltinRouteInventory } from "../../../../packages/agent-contracts/src/route-module";
@@ -408,143 +408,150 @@ test("matrix Stop names the read before any progressive frame arrives", async ()
   );
 });
 
-// N-03 is intentionally red for the retiring admitted loader; the direct control isolates it.
-test.each(["admitted loader", "direct mount"])(
-  "N-03 retained Home return through %s preserves Page, Work and journal",
-  async (mode) => {
-    const scrollTo = HTMLElement.prototype.scrollTo;
-    HTMLElement.prototype.scrollTo = () => {};
-    close.push(() => {
-      HTMLElement.prototype.scrollTo = scrollTo;
-    });
-    const f = await fixture();
-    f.mount.close();
-    let held: import("../shell/admitted-mount").AdmittedMount | undefined;
-    let target: import("../shell/admitted-place").PlaceInput["target"] = null;
-    // Cached production admission has the same async await boundary as admitFamilies.
-    const load = async () => {
-      const result = await loadBuiltinRoute("families", builtinRouteStamp("families"));
-      if (!result.ok) throw Error("admission failed");
-      return result.route;
-    };
-    const { applicationRouteShell } = await import("../shell/application-route-shell");
-    const readings = await import("../shell/readings-hooks");
-    const Atom = await import("effect/reactivity/Atom");
-    const inventory = {
-      state: "ready",
-      observation: {
-        sessions: [
-          {
-            sessionId: document.session,
-            connected: true,
-            openDocuments: [
-              {
-                openId: document.openId,
-                title: "N03",
-                address: "C:/Models/N03.rvt",
-                isFamilyDocument: false,
-              },
-            ],
-          },
-        ],
-      },
-    };
-    vi.spyOn(readings, "readingAtom").mockImplementation(
-      (request) =>
-        Atom.make<any>((get) => {
-          const timer = setTimeout(
-            () => get.setSelf(request.kind === "inventory" ? inventory : { state: "absent" }),
-            20,
-          );
-          get.addFinalizer(() => clearTimeout(timer));
-          return { state: "absent" };
-        }).pipe(Atom.setIdleTTL(0)) as ReturnType<typeof readings.readingAtom>,
+test("N-03 retained Home return preserves a newly explicit pin, Page, Work and journal", async () => {
+  const scrollTo = HTMLElement.prototype.scrollTo;
+  HTMLElement.prototype.scrollTo = () => {};
+  close.push(() => {
+    HTMLElement.prototype.scrollTo = scrollTo;
+  });
+  const f = await fixture();
+  f.mount.close();
+  let held: import("../shell/admitted-mount").AdmittedMount | undefined;
+  let target: import("../shell/admitted-place").PlaceInput["target"] = null;
+  const { applicationRouteShell } = await import("../shell/application-route-shell");
+  const readings = await import("../shell/readings-hooks");
+  const Atom = await import("effect/reactivity/Atom");
+  const inventory = {
+    state: "ready",
+    observation: {
+      sessions: [
+        {
+          sessionId: document.session,
+          connected: true,
+          openDocuments: [
+            {
+              openId: document.openId,
+              title: "N03",
+              address: "C:/Models/N03.rvt",
+              isFamilyDocument: false,
+            },
+          ],
+        },
+      ],
+    },
+  };
+  vi.spyOn(readings, "readingAtom").mockImplementation(
+    (request) =>
+      Atom.make<any>((get) => {
+        const timer = setTimeout(
+          () => get.setSelf(request.kind === "inventory" ? inventory : { state: "absent" }),
+          20,
+        );
+        get.addFinalizer(() => clearTimeout(timer));
+        return { state: "absent" };
+      }).pipe(Atom.setIdleTTL(0)) as ReturnType<typeof readings.readingAtom>,
+  );
+  vi.spyOn(readings, "useInventory").mockReturnValue(
+    inventory as ReturnType<typeof readings.useInventory>,
+  );
+  const sourceServices = await import("../shell/source-route-services");
+  vi.spyOn(sourceServices, "sourceRouteServices").mockReturnValue(f.services);
+  const mounts = await import("../shell/admitted-mount");
+  const makeShell = mounts.createRouteShell;
+  vi.spyOn(mounts, "createRouteShell").mockImplementation((...args) => {
+    const shell = makeShell(...args);
+    const mount = shell.mount.bind(shell);
+    shell.mount = ((...args: Parameters<typeof mount>) => {
+      target = args[1].target;
+      held = mount(...args);
+      return held;
+    }) as typeof shell.mount;
+    return shell;
+  });
+  const ApplicationShell = applicationRouteShell;
+  function Tool() {
+    const router = useRouter();
+    const port = useMemo(() => admittedRouterAddress(router.history), [router]);
+    return <ApplicationShell route={f.route} address={port} />;
+  }
+  const tab = {
+    id: "11111111-1111-4111-8111-111111111111",
+    route: "families",
+    link: "/families",
+    at: takenAt,
+  };
+  sessionStorage.clear();
+  function Root() {
+    return <RouteDock renderRoute={(body) => body}>{null}</RouteDock>;
+  }
+  const root = createRootRoute({ component: Root });
+  const router = createRouter({
+    routeTree: root.addChildren([
+      createRoute({ getParentRoute: () => root, path: "/families", component: Tool }),
+      createRoute({ getParentRoute: () => root, path: "/", component: () => null }),
+    ]),
+    history: createMemoryHistory({ initialEntries: [tab.link] }),
+  });
+  await router.load();
+  render(<RouterProvider router={router} />);
+  await vi.waitFor(() => expect(held?.workBasis()).toBeTruthy());
+  // Pin the exact document that sole-document fallback already resolved. Resolution is unchanged.
+  const pin = JSON.stringify({ kind: "open", ref: document });
+  await act(async () => {
+    const port = admittedRouterAddress(router.history),
+      query = port.read();
+    query.set("target", pin);
+    port.write(query, "push");
+  });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(
+    new URL(
+      JSON.parse(sessionStorage.getItem("pe.places")!)[0].link,
+      "http://place.invalid",
+    ).searchParams.get("target"),
+  ).toBe(pin);
+  const original = held!;
+  await act(async () => {
+    expect(
+      original.page.select([{ kind: "scope", id: '["families","draft"]' }] as never).kind,
+    ).toBe("accepted");
+    original.page.pose(
+      { readId: "00000000-0000-4000-8000-000000000001", focus: cell } as never,
+      "named",
     );
-    vi.spyOn(readings, "useInventory").mockReturnValue(
-      inventory as ReturnType<typeof readings.useInventory>,
-    );
-    const sourceServices = await import("../shell/source-route-services");
-    vi.spyOn(sourceServices, "sourceRouteServices").mockReturnValue(f.services);
-    const mounts = await import("../shell/admitted-mount");
-    const makeShell = mounts.createRouteShell;
-    vi.spyOn(mounts, "createRouteShell").mockImplementation((...args) => {
-      const shell = makeShell(...args);
-      const mount = shell.mount.bind(shell);
-      shell.mount = ((...args: Parameters<typeof mount>) => {
-        target = args[1].target;
-        held = mount(...args);
-        return held;
-      }) as typeof shell.mount;
-      return shell;
-    });
-    const ApplicationShell = applicationRouteShell;
-    function Tool() {
-      const router = useRouter();
-      const port = useMemo(() => admittedRouterAddress(router.history), [router]);
-      return mode === "admitted loader" ? (
-        <AdmittedRouteView load={load} shell={ApplicationShell} />
-      ) : (
-        <ApplicationShell route={f.route} address={port} />
-      );
-    }
-    const tab = {
-      id: "11111111-1111-4111-8111-111111111111",
-      route: "families",
-      link: "/families",
-      at: takenAt,
-    };
-    sessionStorage.clear();
-    function Root() {
-      return <RouteDock renderRoute={(body) => body}>{null}</RouteDock>;
-    }
-    const root = createRootRoute({ component: Root });
-    const router = createRouter({
-      routeTree: root.addChildren([
-        createRoute({ getParentRoute: () => root, path: "/families", component: Tool }),
-        createRoute({ getParentRoute: () => root, path: "/", component: () => null }),
-      ]),
-      history: createMemoryHistory({ initialEntries: [tab.link] }),
-    });
-    await router.load();
-    render(<RouterProvider router={router} />);
-    await vi.waitFor(() => expect(held?.workBasis()).toBeTruthy());
-    const original = held!;
-    await act(async () => {
-      expect(original.page.select([{ kind: "scope", id: '["families","draft"]' }] as never).kind).toBe(
-        "accepted",
-      );
-      original.page.pose({ readId: "00000000-0000-4000-8000-000000000001", focus: cell } as never, "named");
-      original.invoke("read", { filter, readId: "00000000-0000-4000-8000-000000000001" });
-      f.publish({ kind: "complete", revision: 1, value: f.observation });
-      await settled(original.invoke("edit", edit, original.workBasis()!));
-    });
-    await act(async () => {
-      expect(await original.history!.undo()).toMatchObject({ ok: true });
-      expect(await original.history!.redo()).toMatchObject({ ok: true });
-    });
-    const before = {
-      target,
-      page: original.page.read(),
-      work: original.work(),
-      journal: original.journal(),
-    };
-    await act(() => router.navigate({ to: "/" }));
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    screen.getByRole("button", { name: /^Families/ }).click();
-    await vi.waitFor(() => expect(router.state.location.pathname).toBe("/families"));
-    await vi.waitFor(() =>
-      expect(
-        held?.subjectState(Object.fromEntries(new URLSearchParams(router.history.location.search)))
-          ?.ready,
-      ).toBe(true),
-    );
-    await vi.waitFor(() => expect(held?.workBasis()).toBeTruthy());
-    expect({
-      target,
-      page: held!.page.read(),
-      work: held!.work(),
-      journal: held!.journal(),
-    }).toEqual(before);
-    expect(held).toBe(original);
-  },
-);
+    original.invoke("read", { filter, readId: "00000000-0000-4000-8000-000000000001" });
+    f.publish({ kind: "complete", revision: 1, value: f.observation });
+    await settled(original.invoke("edit", edit, original.workBasis()!));
+  });
+  await act(async () => {
+    expect(await original.history!.undo()).toMatchObject({ ok: true });
+    expect(await original.history!.redo()).toMatchObject({ ok: true });
+  });
+  const before = {
+    target,
+    page: original.page.read(),
+    work: original.work(),
+    journal: original.journal(),
+  };
+  await act(() => router.navigate({ to: "/" }));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  screen.getByRole("button", { name: /^Families/ }).click();
+  await vi.waitFor(() => expect(router.state.location.pathname).toBe("/families"));
+  await vi.waitFor(() =>
+    expect(
+      held?.subjectState(Object.fromEntries(new URLSearchParams(router.history.location.search)))
+        ?.ready,
+    ).toBe(true),
+  );
+  await vi.waitFor(() => expect(held?.workBasis()).toBeTruthy());
+  expect({
+    target,
+    page: held!.page.read(),
+    work: held!.work(),
+    journal: held!.journal(),
+  }).toEqual(before);
+  expect(held).toBe(original);
+  expect(
+    new URL(router.history.location.href, "http://place.invalid").searchParams.get("target"),
+  ).toBe(pin);
+});
