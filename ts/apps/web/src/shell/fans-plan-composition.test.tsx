@@ -163,6 +163,8 @@ test("Plan keeps capture and review valid across watched publications and batche
      const settled=mount.journal().moves.findLast((move:any)=>move.label==="Choose write scope");
      expect(settled).toBeDefined();
      expect(mount.owner()?.handle?.revision).toBe(settled.revision);
+     expect(mount.value().current).toBe(true);
+     expect(mount.writeRefusal()).toBeNull();
    },{timeout:20000});
    await act(async()=>{
      const failure=await mount.draw("sheet-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{"14577391":{cfm:925}}},{label:"Stage MUAS-1 airflow"}));
