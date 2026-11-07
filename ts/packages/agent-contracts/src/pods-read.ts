@@ -44,6 +44,7 @@ export const podsValue = z.object({
   work: settingsRouteState.schema.nullable(),
   composition: compositionReadSchema.nullable(),
   draft: z.string(),
+  schemaRef: z.string().nullable(),
   runs: podRunsSchema,
 });
 export const podMemberOfPage = (page: { pod: string; path: string }) =>

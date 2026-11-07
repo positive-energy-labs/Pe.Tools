@@ -29,7 +29,7 @@ function CaptureImage({
     <span role="status">
       {thumbnail
         ? "Image unavailable"
-        : "The retained picture could not be loaded. Open the PNG to inspect the host's refusal, or refresh to retry."}
+        : "The retained picture could not be loaded. Open the PNG to inspect the host's refusal, or reload this page to retry."}
     </span>
   ) : (
     <img

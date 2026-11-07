@@ -61,9 +61,17 @@ export const reads = {
           : (selected?.content ?? "");
       let composition: z.output<typeof compositionReadSchema> | null = null;
       let json = false;
+      let schemaRef: string | null = null;
       try {
-        JSON.parse(draft);
+        const parsed: unknown = JSON.parse(draft);
         json = true;
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          "$schema" in parsed &&
+          typeof parsed.$schema === "string"
+        )
+          schemaRef = parsed.$schema;
       } catch {
         /* Invalid saved text stays inspectable in the raw editor. */
       }
@@ -75,6 +83,7 @@ export const reads = {
         work,
         draft,
         composition,
+        schemaRef,
         runs: args.pod
           ? await ctx.read(runs, {
               pod: args.pod,

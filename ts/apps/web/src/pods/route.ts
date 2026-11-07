@@ -1,7 +1,13 @@
 import { z } from "zod";
-import { memberWork, settingsRouteState, type SettingsRouteDocument } from "@pe/agent-contracts";
+import {
+  memberWork,
+  settingsRouteState,
+  commands,
+  commandCatalogAxes,
+  type SettingsRouteDocument,
+} from "@pe/agent-contracts";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
-import { field, route, sessionCommand, split, type DrawContext } from "../route/typed-route.ts";
+import { field, route, split, type DrawContext } from "../route/typed-route.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
@@ -12,6 +18,12 @@ import {
   podMemberOfPage as member,
 } from "../../../../packages/agent-contracts/src/pods-read.ts";
 export { member };
+// TODO: S's sessionCommand excludes catalog commands without result schemas. Delete this route workaround when it admits them.
+const podCommand = (key: "settings.observe" | "settings.write") => ({
+  kind: "session" as const,
+  entry: key,
+  contract: { input: commands[key].input, output: z.unknown(), axes: commandCatalogAxes[key] },
+});
 const loaded = {
   ...hostRead(valueRead("pods.author", podsArgs, podsValue)),
   args: (page: z.output<typeof podsArgs>) => ({ pod: page.pod, path: page.path, runs: page.runs }),
@@ -93,7 +105,7 @@ export const module = route({
   },
   commands: {
     open: {
-      ...sessionCommand("settings.observe"),
+      ...podCommand("settings.observe"),
       label: "Open saved bytes",
       input: ({ page, value }) => ({
         member: member(page),
@@ -102,7 +114,7 @@ export const module = route({
       }),
     },
     adopt: {
-      ...sessionCommand("settings.observe"),
+      ...podCommand("settings.observe"),
       label: "Adopt disk bytes and replace edits",
       input: ({ page, value }) => ({
         member: member(page),
@@ -110,9 +122,9 @@ export const module = route({
         replaceEdits: true,
       }),
     },
-    save: { ...sessionCommand("settings.write"), label: "Save staged member", input: () => ({}) },
+    save: { ...podCommand("settings.write"), label: "Save staged member", input: () => ({}) },
     saveNew: {
-      ...sessionCommand("settings.write"),
+      ...podCommand("settings.write"),
       label: "Save as new member",
       input: ({ page }) => ({
         destination: {

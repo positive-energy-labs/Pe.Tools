@@ -66,7 +66,7 @@ export function Spec({ ctx }: { ctx: PodsContext }) {
       <span className="face-mono">
         {ref.pod} · {ref.path}
       </span>
-      {isSpecOf(schema, "/schemas/settings/FamilyFoundry/models.json") && (
+      {isSpecOf(data?.schemaRef, "/schemas/settings/FamilyFoundry/models.json") && (
         <a
           href={routeAddress("family").link({
             stage: "apply",
