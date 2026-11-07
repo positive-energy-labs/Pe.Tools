@@ -595,7 +595,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     expect(reader.truncation).toBeNull();
     const inventory = await Promise.all(reader.readSets.ids().map((id) => run(reader.readSets.get(id))));
     const groups = Map.groupBy(inventory, (entry) => canonicalJson(entry.recipe));
-    await writeFile(join(import.meta.dirname, "../../../../.artifacts/runs/kernel-crusade-20261104/step-7/fill1b-census.json"), JSON.stringify({ snapshot: { path: source, sha256: createHash("sha256").update(readFileSync(source)).digest("hex"), schema: "readSchemas(ducts.snapshot.walk).response", version: snapshotContract.version }, records: inventory.length, incomplete: inventory.filter((entry) => entry.state !== "complete").length,
+    await writeProof("fill1b-census.json", JSON.stringify({ snapshot: { path: source, sha256: createHash("sha256").update(readFileSync(source)).digest("hex"), schema: "readSchemas(ducts.snapshot.walk).response", version: snapshotContract.version }, records: inventory.length, incomplete: inventory.filter((entry) => entry.state !== "complete").length,
       recipes: [...groups.values()].map((entries) => ({ key: entries[0]!.recipe.key, input: entries[0]!.recipe.input, scope: entries[0]!.recipe.scope, count: entries.length,
         incomplete: entries.filter((entry) => entry.state !== "complete").length })) }, null, 2));
     const publications = cases.filter((entry) => entry.stream && entry.value.value?.state);
@@ -687,7 +687,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
         { add: [sibling], remove: [readingKey(absent), readingKey(resource)] });
       expect(changed.status).toBe(200);
       expect(await frames.next()).toEqual(feeds[1]!.value);
-      await writeFile(join(import.meta.dirname, "../../../../.artifacts/runs/kernel-crusade-20261104/step-7/reconciliation-case.json"),
+      await writeProof("reconciliation-case.json",
         JSON.stringify({ emptyGet: 200, opening: ": open\n\n", prePostConsumerReads: 0, bootstrapPost: bootstrap.status,
           batch, replacementPost: changed.status, liveFactories: { sdk: liveFactories.sdk, bridge: liveFactories.bridge, work: liveFactories.work }, poisoned }, null, 2));
     } finally { await frames.close(); }
