@@ -48,7 +48,7 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
     icon: "Map",
     category: "Calculate loads & airflow",
     blurb:
-      "The takeoff atlas â€” zones on the plan, rooms in the table, Manual J data through to a synced RHVAC .r10.",
+      "The takeoff atlas — zones on the plan, rooms in the table, Manual J data through to a synced RHVAC .r10.",
     aliases: ["manual", "j", "loads", "rhvac", "zones"],
     listed: true,
     satellites: [],
@@ -64,27 +64,27 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
   name: "Takeoffs",
   seeds: {
     adopt: {
-      title: "project-a â€” regions drawn, nothing adopted",
+      title: "project-a — regions drawn, nothing adopted",
       load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["adopt"]!),
     },
     partition: {
-      title: "project-a â€” zones adopted, ready to partition",
+      title: "project-a — zones adopted, ready to partition",
       load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["partition"]!),
     },
     refresh: {
-      title: "project-a â€” a stale model waiting for a re-read",
+      title: "project-a — a stale model waiting for a re-read",
       load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["refresh"]!),
     },
     sync: {
-      title: "project-a â€” partitioned, .r10 bound, sync unreviewed",
+      title: "project-a — partitioned, .r10 bound, sync unreviewed",
       load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["sync"]!),
     },
     launch: {
-      title: "project-a â€” synced, RHVAC not open",
+      title: "project-a — synced, RHVAC not open",
       load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["launch"]!),
     },
     "retry-r10": {
-      title: "project-a â€” the .r10 read failed",
+      title: "project-a — the .r10 read failed",
       load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["retry-r10"]!),
     },
   },

@@ -33,6 +33,7 @@ import { TakeoffsRoute } from "#/takeoff/route";
 import { takeoffGraph } from "#/takeoff/graph";
 
 const SESSION = "session-takeoffs-old-work";
+const TARGET = JSON.stringify({ kind: "open", ref: { session: SESSION, openId: "open-1" } });
 let failure = OLDER_WORK;
 
 /** Flipped by the host's start-fresh answer; the next Work read is then an empty Work. */
@@ -119,8 +120,8 @@ test.each([OLDER_WORK, UNREADABLE_WORK])(
       return Response.json(null);
     });
     const router = createRouter({
-      routeTree: createRootRoute({ component: () => <TakeoffsRoute target={SESSION} /> }),
-      history: createMemoryHistory({ initialEntries: [`/takeoffs?target=${SESSION}`] }),
+      routeTree: createRootRoute({ component: () => <TakeoffsRoute target={TARGET} /> }),
+      history: createMemoryHistory({ initialEntries: [`/takeoffs?target=${encodeURIComponent(TARGET)}`] }),
     });
     await router.load();
     render(<RouterProvider router={router} />);
@@ -132,7 +133,7 @@ test.each([OLDER_WORK, UNREADABLE_WORK])(
     }
     if (!screen.queryByRole("button", { name: "Start fresh" }))
       fireEvent.click(screen.getByRole("button", { name: /more .*verbs/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Start fresh" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Start fresh" }));
     const review = await screen.findByRole("dialog", { name: "Start fresh review" });
     expect(screen.getByText(message)).toBeTruthy();
     fireEvent.click(within(review).getByRole("button", { name: "Commit Start fresh" }));
