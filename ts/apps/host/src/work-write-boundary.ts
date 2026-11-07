@@ -32,6 +32,7 @@ export const sealedDocumentMark = (marks: DocumentMarks, ref: DocumentRef): Writ
   changedAt: marks.changedAt(ref),
 });
 export interface WriteSealInput {
+  caller: WriteSeal["caller"];
   request: unknown;
   input: unknown;
   work: WorkHandle;
@@ -41,7 +42,7 @@ export interface WriteSealInput {
   consumed: readonly Exclude<Consumed, { kind: "document-mark" }>[];
   evidence: unknown;
 }
-export function writeSeal({ request, input, work, incarnation, documentMark, consumed, evidence }: WriteSealInput): WriteSeal {
+export function writeSeal({ caller, request, input, work, incarnation, documentMark, consumed, evidence }: WriteSealInput): WriteSeal {
   const dependencies = canonicalSet(
     consumed
       .map((item) =>
@@ -58,6 +59,7 @@ export function writeSeal({ request, input, work, incarnation, documentMark, con
       ),
   );
   return {
+    caller,
     requestHash: hash(request),
     work: { handle: work, consumed: dependencies.filter((item) => item.kind === "work") },
     documentMark,
@@ -192,15 +194,19 @@ export function workWriteBoundary(
         bridge,
         deps,
       );
-      const preview = ctx.read
+      const previews = ctx.read
         .receipts()
         .filter(
           (row) =>
             row.key === hooks.previewKey &&
             row.state === "succeeded" &&
             canonicalRouteInput(row.target) === canonicalRouteInput(ctx.admission.target),
-        )
-        .at(-1);
+        );
+      const preview = previews.filter(row => row.state === "succeeded" &&
+        canonicalRouteInput((row.result as { seal?: WriteSeal }).seal?.caller) === canonicalRouteInput(ctx.caller),
+      ).at(-1);
+      if (!previewOnly && !preview && previews.length)
+        throw refused("Plan belongs to another caller; plan the current Work first", "preview.caller");
       const derivedContext = withInput(ctx, input);
       // Reproduce generated paths and plan references from this exact preview, never a new caller payload.
       derivedContext.admission.id = !previewOnly && preview ? preview.id : ctx.admission.id;
@@ -217,6 +223,7 @@ export function workWriteBoundary(
         const projection = project(value);
         await marks.settled?.();
         const seal = writeSeal({
+          caller: ctx.caller,
           request: projection.request,
           input,
           work,

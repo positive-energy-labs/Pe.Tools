@@ -809,6 +809,8 @@ export function familyExecutors(
       throw refused(`Apply must name a succeeded ${key} action`);
     if (canonicalRouteInput(plan.target) !== canonicalRouteInput(ctx.admission.target))
       throw refused("The plan was made for a different document");
+    if (canonicalRouteInput(plan.caller) !== canonicalRouteInput(ctx.caller))
+      throw refused("Plan belongs to another caller", "preview.caller");
     return plan;
   };
   const planFacts = (ctx: CommandContext, plan: ActionReceipt): Dependency[] => {
