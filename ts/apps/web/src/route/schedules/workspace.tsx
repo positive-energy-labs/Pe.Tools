@@ -311,7 +311,7 @@ export function ScheduleGridWorkspace({
                   empty={
                     <EmptyState
                       story="scope"
-                      exit="press r to read it again, or Ctrl K for another"
+                      exit="Read it again, or Choose schedule for another"
                     >
                       this schedule has no rows
                     </EmptyState>
@@ -323,7 +323,7 @@ export function ScheduleGridWorkspace({
                 {hydrated ? (
                   <EmptyState
                     story="scope"
-                    exit="press Ctrl K to choose one (type to filter, ↑/↓ then Enter), or ask pea to open one"
+                    exit="Choose schedule in the header, then Read schedule"
                   >
                     no schedule open
                   </EmptyState>
