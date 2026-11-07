@@ -293,12 +293,14 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const problems = new Map<string,string>();
   const plans = new Map<string,InvocationToken>();
   const workSignature = () => canonicalRouteInput([...owners].map(([id,o]) => [id,o.ready,o.handle]));
+  // Plans seal Work, target and native reads, not the browser-owned Page pose (ADR 0033).
+  const reviewCurrent = (id: string, token: InvocationToken, signature: string) =>
+    !disposed && plans.get(id) === token && gate.read()?.scope === token.token.scope &&
+    signature === workSignature() && Object.entries(token.dependencies).every(([key, hash]) => dependencies()[key] === hash);
   const staleReview = (token: InvocationToken, signature: string) => {
     const state = gate.read(), current = dependencies();
     const changed = [
       signature !== workSignature() && `Work readiness/handles ${signature} -> ${workSignature()}`,
-      token.pageEpoch !== state?.pageEpoch && "Page epoch",
-      token.pageRevision !== state?.pageRevision && `Page revision ${token.pageRevision} -> ${state?.pageRevision}`,
       token.workRevision !== (state?.work?.revision ?? null) && `Work revision ${token.workRevision} -> ${state?.work?.revision ?? null}`,
       ...Object.entries(token.dependencies).flatMap(([key, hash]) => current[key] === hash ? [] : [`Value ${key} ${hash} -> ${current[key] ?? "unavailable"}`]),
     ].filter(Boolean);
@@ -356,7 +358,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     }
     if (apply) {
       const held = reviews.get(id);
-      if (!held || held.signature !== workSignature() || !gate.current(held.token)) throw Error("Review is stale; prepare it again");
+      if (!held || !reviewCurrent(id, held.token, held.signature)) throw Error("Review is stale; prepare it again");
       consentReviews.set(id,held); reviews.delete(id); notify();
       try {
         const result = await settleNative(door.submit({ id: crypto.randomUUID(), key: cmd.entry, target: input.target!, input: held.input }));
@@ -382,7 +384,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const preview = writePreviewSchema.parse(cmd.planContract.output.parse(result));
       const handle = z.object({ handle: workHandleSchema }).parse(preview.seal.work).handle;
       if (canonicalRouteInput(handle) !== canonicalRouteInput(primary)) throw Error("Preview sealed a different Work");
-      if (signature !== workSignature() || !gate.current(token)) throw staleReview(token, signature);
+      if (!reviewCurrent(id, token, signature)) throw staleReview(token, signature);
       const presented=presentationSchema.parse(cmd.present(preview,data,doc));
       reviews.set(id, { preview, input: request as Record<string,unknown>, token, signature,
         presentation: typeof presented === "string" ? {sentence:presented,rows:[]} : presented });
@@ -485,7 +487,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true);
     }, run, result:(id:string)=>results.get(id),
     review: (id: string) => { const r=reviews.get(id)??consentReviews.get(id); if(!r) return null;
-      const stale = r.signature !== workSignature() || !gate.current(r.token);
+      const stale = !reviewCurrent(id, r.token, r.signature);
       return { preview: stale || !reviews.has(id) ? undefined : r.preview, sentence: stale ? null : r.presentation.sentence,
         rows: stale ? [] : r.presentation.rows, cells: stale ? [] : r.presentation.cells, stale }; },
     reviewProblem: (id: string) => problems.get(id) ?? null,
@@ -561,7 +563,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       return (render ?? pane.draw)({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
         write:mounted.action } as any);
     },
-    release() { released = true; for (const r of reads.values()) {r.args="";r.stop();} },
+    // Visibility suspends gestures, not the retained Place's input subscriptions or Plan review.
+    // dispose owns cancellation; real Work/native invalidations must still reach a hidden Place.
+    release() { released = true; },
     dispose() { if (disposed) return; disposed=true; cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },
   };
   const stopSubject=observeSubject(spec.key,{current:()=>!disposed&&!released&&input.custody.current(),read:subjectState,subscribe:mounted.subscribe});

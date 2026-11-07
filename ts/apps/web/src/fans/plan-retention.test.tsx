@@ -106,6 +106,18 @@ test.each([false, true])(
     await act(async () => fireEvent.click(trigger));
     expect(f.fans.reviewRefusal("losses")).toBeNull();
     expect(document.body.textContent).not.toContain(refusedText);
+    const stagedRevision = f.fans.work()!.revision;
+    const beforeSwitch = f.typed.value().publication!.evaluation;
+    const beforeReads = f.calls.get("fans:fans.sheet");
+    // The shell releases the retained typed mount while another pane is expanded.
+    await act(async () => {
+      f.typed.release();
+      f.typed.subscribe(() => {})();
+      f.typed.page.pose({ layers: [] });
+    });
+    expect(f.fans.work()!.revision).toBe(stagedRevision);
+    expect(f.calls.get("fans:fans.sheet")).toBe(beforeReads);
+    expect(f.typed.value().publication!.evaluation).toBe(beforeSwitch);
     await act(async () =>
       plan({
         id: "plan-retention",
@@ -147,6 +159,13 @@ test.each([false, true])(
       cells: [{ before: "880 cfm", author: "human" }],
     });
     expect(f.fans.review("losses")!.rows[0]).toContain("MUAS-1");
+    expect(f.typed.action("losses").read()?.preview).toBeTruthy();
+    const reviewTrigger = screen.getByRole("button", { name: /Write to Revit.*planned/ });
+    if (reviewTrigger.getAttribute("aria-expanded") !== "true")
+      await act(async () => fireEvent.click(reviewTrigger));
+    expect((await screen.findByRole("button", { name: "Write to Revit" })).hasAttribute("disabled")).toBe(false);
+    expect(document.querySelector("[data-write-cell]")?.textContent).toContain("925 cfm");
+    expect(f.fans.work()!.revision).toBe(stagedRevision);
     // Broad route-surface witness: the real typed action consumes its receipt feed, and the
     // consent review contains the exact owned Work cell rather than a parallel fake handle.
     const receipt=actionStatusSchema.parse({id:"consent-review",key:"ducts.apply-losses",state:"waiting",
