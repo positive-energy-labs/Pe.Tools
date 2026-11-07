@@ -16,8 +16,8 @@ import type { TableState } from "@pe/kit/table/model";
 import type { CellWire } from "#/components/work/band";
 import type { GraphMount } from "#/shell/mount";
 import { useWork } from "@pe/kit/lang/work";
-import { familyGraph, type FamilyPage } from "./graph";
-import { readingValue, type FamilySpecReading } from "./sources";
+import type { FamilyPage } from "./page";
+import { readingValue, type FamilySpecReading } from "./value";
 import { familySource } from "./source";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "./model";
 import { draftToPatches, FAMILY_CELLS } from "./project";
@@ -26,7 +26,7 @@ import { displaySpec } from "./spec";
 import { projectBuildReceipt } from "./build";
 import type { FamilySnapshot } from "./types";
 
-export type FamilyMount = GraphMount<FamilyPage, FamilyDraft>;
+export type FamilyMount = Pick<GraphMount<FamilyPage, FamilyDraft>, "snapshot" | "view" | "readings" | "control" | "busy" | "registry" | "subscribe" | "version">;
 export type Inspect = { kind: "part"; slug: string } | { kind: "param"; name: string } | null;
 export type Binding = { slug: string; property: string } | null;
 export type PickerState = { open: string | null; level: string | null; query: string };
@@ -49,7 +49,7 @@ export function useFamilyStore(owner: FamilyMount) {
     ...owner.snapshot(),
     page: owner.view.read().page,
     readings: Object.fromEntries(
-      Object.keys(familyGraph.readings).map((id) => [id, owner.readings.get(id)]),
+      ["profile", "spec", "pods", "receipts", "captureReceipt", "buildReceipt"].map((id) => [id, owner.readings.get(id)]),
     ),
   };
   const { page, work, target } = scope;

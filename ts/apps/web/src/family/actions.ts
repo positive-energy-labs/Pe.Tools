@@ -1,8 +1,8 @@
 import { settingsCandidate, type FamilyDraft, type SettingsSnapshot } from "@pe/agent-contracts";
 import type { BindingScope } from "#/shell/mount-owner";
 import { familyLockOf } from "./store";
-import type { FamilyPage } from "./graph";
-import { readingValue } from "./sources";
+import type { FamilyPage } from "./page";
+import { readingValue } from "./value";
 
 export type FamilyScope = BindingScope<FamilyPage, FamilyDraft>;
 export const familyWorkRefusal = (scope: FamilyScope) =>

@@ -4,7 +4,7 @@ import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 import { stagedRoomWrites, type RoomsRouteDocument } from "@pe/agent-contracts";
 import type { BindingScope, MountBinding } from "#/shell/mount-owner";
 import type { ReadingState } from "#/shell/readings";
-import type { RoomsPage } from "./graph";
+import type { RoomsPage } from "./page";
 
 export type RoomsScope = BindingScope<RoomsPage, RoomsRouteDocument>;
 export const readingValue = <T>(reading: ReadingState): T | null =>

@@ -10,17 +10,17 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
 import { settingsRoute } from "./settings/route";
-import { ductLossRoute } from "./duct-loss/route";
+import { ductLossRoute } from "./duct-loss/route.tsx";
 import { schedulesRoute } from "./schedules/route";
 import { familiesRoute } from "./families/route";
-import { familyRoute } from "./family/route";
-import { roomsRoute } from "./rooms/route";
+import { familyRoute } from "./family/route.tsx";
+import { roomsRoute } from "./rooms/route.tsx";
 import { takeoffsRoute } from "./takeoff/route";
 import { podsRoute } from "./pods/route";
-import { bindRoute } from "./pages-bind/route";
+import { bindRoute } from "./pages-bind/route.tsx";
 import { capturesRoute } from "./captures/route";
-import { opsRoute } from "./ops/route";
-import { openRoute } from "./open/route";
+import { opsRoute } from "./ops/route.tsx";
+import { openRoute } from "./open/route.tsx";
 import { Route as rootRoute } from "./routes/__root";
 
 // Use the unannotated root: the generated tree's file-only type map excludes code routes.

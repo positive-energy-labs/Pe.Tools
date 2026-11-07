@@ -10,10 +10,10 @@ import { NativeObservationScope, type NativeObservation } from "#/revit/observat
 import type { GraphMount } from "#/shell/mount";
 import { readingValue } from "./actions";
 import { inboxCards } from "./cards";
-import type { RoomsPage } from "./graph";
+import type { RoomsPage } from "./page";
 import { railsOf, type TraceRead } from "./layers";
 import { roomRows } from "./table";
-import type { PlanReading } from "./sources";
+import type { PlanReading } from "./plan-reading";
 
 export type RoomsOwner = GraphMount<RoomsPage, RoomsRouteDocument>;
 const Workspace = createContext<ReturnType<typeof useWorkspace> | null>(null);
@@ -96,14 +96,14 @@ export function RoomsProvider({ owner, children }: { owner: RoomsOwner; children
   const selection = useMemo(
     () =>
       Atom.make(
-        (get): ReadonlySet<SubjectKey> =>
+        (): ReadonlySet<SubjectKey> =>
           new Set<SubjectKey>(
-            roomSelection(get(owner.view.state).page.selected, value.cards, value.regions.map(region => region.guid)).guids.map(
+            roomSelection(value.page.selected, value.cards, value.regions.map(region => region.guid)).guids.map(
               (guid): SubjectKey => `room:${guid}`,
             ),
           ),
       ),
-    [owner, value.cards],
+    [owner, value.cards, value.page.selected, value.regions],
   );
   const members = useMemo(
     () =>

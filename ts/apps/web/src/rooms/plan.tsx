@@ -20,7 +20,7 @@ import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
-import type { RoomsPage } from "./graph";
+import type { RoomsPage } from "./page";
 
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
