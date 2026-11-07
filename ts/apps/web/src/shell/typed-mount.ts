@@ -386,6 +386,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const selected=key;
       const run=async()=>{
         requireWritable();
+        if(canonicalRouteInput(selected)!==canonicalRouteInput(selectedKey())) throw Error("Selected Work changed; Start the current member");
         if(pending.has("work.start")) throw Error("Start already pending");
         pending.add("work.start");problems.delete("work.start");notify();
         try {
