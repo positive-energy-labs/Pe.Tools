@@ -59,6 +59,10 @@ const sheet = {
     sheetPath: page.sheetPath,
   }),
 };
+const roster = {
+  ...hostRead(fansSheetCapability, sheetValueFixtures),
+  args: () => ({ fan: [], sheetPath: "" }),
+};
 export type FansDrawContext = DrawContext<
   z.output<typeof fansSheetData>,
   typeof fields,
@@ -83,7 +87,7 @@ export const module = route({
   },
   subject: {
     field: "fan",
-    read: sheet,
+    read: roster,
     noun: "fan",
     pane: "sheet-roster",
     options: (data: FansDrawContext["value"]["value"]) =>
@@ -93,6 +97,7 @@ export const module = route({
       })),
   },
   core: sheet,
+  reads: { roster },
   fields,
   panes: {
     "sheet-roster": {
