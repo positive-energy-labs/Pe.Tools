@@ -175,7 +175,9 @@ export function useWorkScope<P, W>(
   const reading = useOwned(appAtomRegistry, atom);
   // Only the host's own unreadable-Work failure offers recovery; a host that is down does not.
   const failure = reading?.state === "failed" ? reading.message : null;
-  const unreadable = !closed && failure === OLDER_WORK;
+  // Start fresh changes host-owned Work, not native state; a closed document does not
+  // revoke a proven older-schema recovery. Saved captures remain read-only.
+  const unreadable = !capture && failure === OLDER_WORK;
   // What the host set aside (or cannot read) for this Work; read again whenever its revision moves,
   // because start fresh and a carry-over both advance it.
   const [salvaged, setSalvaged] = useState<{ key: string; value: unknown } | null>(null);
@@ -244,7 +246,6 @@ export function useWorkScope<P, W>(
       startFresh: spec
         ? async (key: WorkKey) => {
             if (
-              store.closed ||
               !store.snapshot.unreadable ||
               workKey(key) !== workKey(store.snapshot.unreadable)
             )

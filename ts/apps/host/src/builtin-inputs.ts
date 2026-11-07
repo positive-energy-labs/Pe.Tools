@@ -230,7 +230,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
   const json = (value: unknown) =>
     Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value)));
   const assetInput = (sha: string) => ({ kind: "files" as const, file: `capture:${sha}` });
-  const asset = (sha: string) => {
+  const asset = (sha: string, owned = false) => {
     if (!/^[0-9a-f]{64}$/.test(sha)) throw Error("Invalid capture hash");
     const input = assetInput(sha);
     const read: Effect.Effect<string, import("@pe/host-internal/request-contracts").DoorFailure> =
@@ -240,7 +240,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             input,
             "{}",
             Schema.String,
-            lane.recordingStore.candidates(canonicalJson(input)).find((t) => t.scope === "{}")?.id,
+            owned ? undefined : lane.recordingStore.candidates(canonicalJson(input)).find((t) => t.scope === "{}")?.id,
           )
         : (() => {
             const value = Effect.tryPromise({
@@ -503,7 +503,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             : name === "catalogs"
               ? invoke(files.ductCatalogs)
               : name === "capture"
-                ? scoped(current)(asset(String(args))).then(() => String(args))
+                ? scoped(current)(asset(String(args), true)).then(() => String(args))
                 : takeFile(name, args, current),
         workKey: async (ref) => bindWork("ducts", (await document(ref)).address, undefined, ref),
         inputs: {
@@ -516,6 +516,11 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             current,
             { kind: "resource", key: "snapshot", args: canonicalJson(json(request)) },
             () => {
+              if ((request as { kind: string }).kind === "captures")
+                return (async () => {
+                  const captures = await pictures!.list();
+                  return { captures };
+                })();
               const resource = readingRequestSchema.parse(request);
               if (resource.kind === "takeoff-saved") return (async () => {
                 if (Option.isNone(takeoffs)) throw Error("Takeoff capture store is unavailable");
@@ -523,11 +528,6 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                 return (await takeoffs.value.list(resource.document ? addressSchema.parse(resource.document) : undefined))
                   .map(({ snapshot, ...capture }) => ({ ...capture, document: snapshot.reading.at, title: snapshot.world.docName }));
               })();
-              if ((request as { kind: string }).kind === "captures")
-                return (async () => {
-                  const captures = await pictures!.list();
-                  return { captures };
-                })();
               return new Promise((resolve, reject) => {
                 let settled = false,
                   stop = () => {};

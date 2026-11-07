@@ -903,6 +903,7 @@ export function createContributionContent(options: {
   packages?: typeof listPackages;
   pages?: (packages: readonly AdmittedPackage[]) => Promise<readonly PageDescriptor[]>;
   bootstrap?: () => Promise<unknown>;
+  bootstrapInBackground?: boolean;
   decisionsPath?: string;
   changed?: () => void;
 }) {
@@ -911,12 +912,13 @@ export function createContributionContent(options: {
   let snapshot: Promise<CapabilityContent> | undefined;
   let observedAt = 0;
   let pending = false;
-  let initialized: Promise<unknown> | undefined;
+  let bootstrapProblem: string | undefined;
   let admitted: readonly AdmittedPackage[] = [];
+  const importing = Promise.resolve().then(() => options.bootstrap?.());
   const lifecycle = createPackageLifecycle({
     decisionsPath: options.decisionsPath,
     packages: async () => {
-      await (initialized ??= options.bootstrap?.() ?? Promise.resolve());
+      if (!options.bootstrapInBackground) await importing;
       return (options.packages ?? listPackages)();
     },
     changed: () => {
@@ -924,6 +926,18 @@ export function createContributionContent(options: {
       latest.clear();
       options.changed?.();
     },
+  });
+  // Shipped examples are optional content, not a prerequisite for the host door. Reconcile
+  // after import and invalidate the catalog so Home discovers them without restarting.
+  const bootstrap = importing.then(async () => {
+    if (!options.bootstrap || !options.bootstrapInBackground) return;
+    await lifecycle.refresh();
+    snapshot = undefined;
+    options.changed?.();
+  }).catch(error => {
+    bootstrapProblem = `Shipped Pods unavailable: ${String(error)}`;
+    snapshot = undefined;
+    options.changed?.();
   });
   const remember = (key: string, value: { sha256: string } & Record<string, unknown>) => {
     let versions = revisions.get(key);
@@ -963,7 +977,6 @@ export function createContributionContent(options: {
       });
   }
   async function build(): Promise<CapabilityContent> {
-    await (initialized ??= options.bootstrap?.() ?? Promise.resolve());
     await lifecycle.ready;
     const listing = lifecycle.listing();
     admitted = lifecycle.packages();
@@ -1084,6 +1097,7 @@ export function createContributionContent(options: {
       pages,
       diagnostics,
       sourceDiagnostics: [
+        ...(bootstrapProblem ? [bootstrapProblem] : []),
         ...publication.notices,
         ...listing.unreadable.map((d) => `${d.folder}: ${d.message}`),
         ...listing.packages.flatMap((p) =>
@@ -1098,6 +1112,7 @@ export function createContributionContent(options: {
   }
   return {
     lifecycle,
+    close: async () => { await bootstrap; await lifecycle.close(); },
     read: () => {
       if (!snapshot || (!pending && Date.now() - observedAt >= 30_000)) {
         pending = true;
@@ -1149,6 +1164,7 @@ function* hostPeRoutes(
   let invalidateCatalog = () => {};
   const content = createContributionContent({
     worldRoot,
+    bootstrapInBackground: true,
     changed: () => invalidateCatalog(),
     bootstrap: async () => {
       const imported = await importShippedPods({ captures: pictures });
@@ -1424,7 +1440,7 @@ function* hostPeRoutes(
       podRoutes.close();
       stopOperationHooks();
       stopWorkContext?.();
-      await content.lifecycle.close();
+      await content.close();
       bindPackageLifecycle(undefined);
     },
     fetch: createPluginsHandler(content, podRoutes),
