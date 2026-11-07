@@ -8,7 +8,7 @@ import { draw } from "../route/draw.tsx";
 import { settingsArgs, settingsValue } from "../../../../packages/agent-contracts/src/settings-read.ts";
 const loaded = { ...hostRead(valueRead("settings.machine", settingsArgs, settingsValue)), args: () => ({}) };
 const fields = {
-  section: field(z.enum(["none", ...SETTINGS_SECTIONS]), "none", "query"),
+  section: field(z.enum(["none", ...SETTINGS_SECTIONS]).optional(), undefined, "query", "push"),
   session: field(z.string(), "", "pose"),
 };
 export type SettingsContext = DrawContext<z.output<typeof settingsValue>, typeof fields, never, never>;

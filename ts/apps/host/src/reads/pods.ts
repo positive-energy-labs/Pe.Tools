@@ -2,7 +2,7 @@ import { z } from "zod";
 import { contextFetch, invocationContext } from "@pe/runtime/context";
 import { podMemberSchema, memberWork, settingsRouteState, settingsCandidate } from "@pe/agent-contracts";
 import { leaf, read } from "./evaluator.ts";
-import { podsArgs, podsValue, podMemberOfPage as member } from "../../../../packages/agent-contracts/src/pods-read.ts";
+import { podsArgs, podsValue, podsRosterValue, podMemberOfPage as member } from "../../../../packages/agent-contracts/src/pods-read.ts";
 import { podRowsSchema, podRunsSchema, memberReadSchema, compositionReadSchema } from "../../../../packages/agent-contracts/src/pods-read.ts";
 
 const inventory = leaf("pods.inventory", z.object({}), podRowsSchema);
@@ -10,21 +10,22 @@ const saved = leaf("pods.saved", podMemberSchema, memberReadSchema);
 const compose = leaf("pods.compose", podMemberSchema.extend({ content: z.string() }), compositionReadSchema);
 const runs = leaf("pods.runs", podMemberSchema.partial({ path: true }), podRunsSchema);
 const workValue = z.object({ doc: settingsRouteState.schema }).nullable();
-export const reads = { author: read("pods.author", {
+export const reads = {
+  roster: read("pods.roster", { input: z.object({}), output: podsRosterValue, async run(ctx) { return { pods: await ctx.read(inventory, {}) }; } }),
+  author: read("pods.author", {
   input: podsArgs, output: podsValue,
   async run(ctx, args) {
-    const pods = await ctx.read(inventory, {}), ref = member(args);
+    const ref = member(args);
     const selected = ref?.path.endsWith(".json") ? await ctx.read(saved, ref) : null;
     const stored = ref ? workValue.parse(await ctx.work("pods", { route: "pods", binding: "workspace", target: null, work: memberWork(ref) })) : null;
     const work = stored?.doc ?? null;
     const same = work?.basis?.member.pod === ref?.pod && work?.basis?.member.path === ref?.path;
     const draft = same && work?.basis ? settingsCandidate(work.basis.rawContent, work.fields) : selected?.content ?? "";
     let composition: z.output<typeof compositionReadSchema> | null = null;
-    if (ref && selected) {
-      try { JSON.parse(draft); } catch { return { pods, member: selected, work, draft, composition, runs: args.pod ? await ctx.read(runs, { pod: args.pod, ...(args.runs === "member" && ref ? { path: ref.path } : {}) }) : [] }; }
-      composition = await ctx.read(compose, { ...ref, content: draft });
-    }
-    return { pods, member: selected, work, draft, composition, runs: args.pod ? await ctx.read(runs, { pod: args.pod, ...(args.runs === "member" && ref ? { path: ref.path } : {}) }) : [] };
+    let json = false;
+    try { JSON.parse(draft); json = true; } catch { /* Invalid saved text stays inspectable in the raw editor. */ }
+    if (ref && selected && json) composition = await ctx.read(compose, { ...ref, content: draft });
+    return { scope: args, member: selected, work, draft, composition, runs: args.pod ? await ctx.read(runs, { pod: args.pod, ...(args.runs === "member" && ref ? { path: ref.path } : {}) }) : [] };
   },
 }) };
 // TODO: replace this route-owned self-read adapter with a catalog input handle when S exposes it.

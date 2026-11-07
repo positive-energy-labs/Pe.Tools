@@ -5,14 +5,16 @@ import { field, route, sessionCommand, split, type DrawContext } from "../route/
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
-import { podsArgs, podsValue, podMemberOfPage as member } from "../../../../packages/agent-contracts/src/pods-read.ts";
+import { podsArgs, podsValue, podsRosterValue, podMemberOfPage as member } from "../../../../packages/agent-contracts/src/pods-read.ts";
 export { member };
 const loaded = { ...hostRead(valueRead("pods.author", podsArgs, podsValue)), args: (page: z.output<typeof podsArgs>) => ({ pod: page.pod, path: page.path, runs: page.runs }) };
+const inventory = { ...hostRead(valueRead("pods.roster", z.object({}), podsRosterValue)), args: () => ({}) };
 const fields = {
   pod: field(z.string(), "", "query", "push"), path: field(z.string(), "", "query", "push"),
   runs: field(podsArgs.shape.runs, "member", "query"), mode: field(z.enum(["form", "raw"]), "form", "pose"),
 };
 export type PodsContext = DrawContext<z.output<typeof podsValue>, typeof fields, SettingsRouteDocument, never>;
+export type PodsRosterContext = DrawContext<z.output<typeof podsRosterValue>, typeof fields, SettingsRouteDocument, never>;
 export const module = route({
   key: "pods", name: "Pods", needs: "host", host: "../../../host/src/reads/pods.ts",
   directory: {
@@ -20,9 +22,9 @@ export const module = route({
     runtimeNeed: "Host catalogue; Revit depends on the pod", icon: "Settings2", aliases: ["Pods"],
     listed: true, satellites: [], surfaces: { web: "full", pwa: "full", tray: false },
   },
-  fields, core: loaded,
+  fields, core: loaded, reads: { inventory },
   panes: {
-    members: { title: "Members", purpose: "Browse installed Pod members", read: loaded, draw: draw(() => import("./drawing.tsx"), "Members") },
+    members: { title: "Members", purpose: "Browse installed Pod members", read: inventory, draw: draw(() => import("./drawing.tsx"), "Members") },
     spec: { title: "Spec", purpose: "Edit saved member Work", read: loaded, draw: draw(() => import("./drawing.tsx"), "Spec") },
     runs: { title: "Runs", purpose: "Inspect member or Pod runs", read: loaded, draw: draw(() => import("./drawing.tsx"), "Runs") },
   },

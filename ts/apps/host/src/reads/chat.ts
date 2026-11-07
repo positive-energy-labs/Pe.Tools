@@ -6,5 +6,5 @@ import { chatArgs, chatValue } from "../../../../packages/agent-contracts/src/ch
 const resource = leaf("resource", readingRequestSchema, z.unknown());
 export const reads = { context: read("chat.context", {
   input: chatArgs, output: chatValue,
-  async run(ctx) { return { machine: await ctx.read(resource, { kind: "machine" }) as z.output<typeof chatValue>["machine"], capabilities: await ctx.read(resource, { kind: "capabilities" }) }; },
+  async run(ctx) { return chatValue.parse({ machine: await ctx.read(resource, { kind: "machine" }), capabilities: await ctx.read(resource, { kind: "capabilities" }) }); },
 }) };

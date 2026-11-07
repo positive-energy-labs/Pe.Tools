@@ -33,6 +33,7 @@ export const compositionReadSchema = z.object({
 });
 
 export const podsArgs = z.object({ pod: z.string(), path: z.string(), runs: z.enum(["member", "pod"]) });
-export const podsValue = z.object({ pods: podRowsSchema, member: memberReadSchema.nullable(), work: settingsRouteState.schema.nullable(),
+export const podsRosterValue = z.object({ pods: podRowsSchema });
+export const podsValue = z.object({ scope: podsArgs, member: memberReadSchema.nullable(), work: settingsRouteState.schema.nullable(),
   composition: compositionReadSchema.nullable(), draft: z.string(), runs: podRunsSchema });
 export const podMemberOfPage = (page: { pod: string; path: string }) => podMemberSchema.safeParse({ pod: page.pod, path: page.path }).data ?? null;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { routeAddress } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
@@ -9,9 +9,9 @@ import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { schemaFormModel } from "#/settings/schema-form";
 import { RunsList } from "#/route/runs-list";
 import { isSpecOf } from "#/route/workflow";
-import { member, type PodsContext } from "./route.ts";
+import { member, type PodsContext, type PodsRosterContext } from "./route.ts";
 
-export function Members({ ctx }: { ctx: PodsContext }) {
+export function Members({ ctx }: { ctx: PodsRosterContext }) {
   const page = ctx.page.read(), value = ctx.value;
   return <><a href="/pod-admin">Manage Pod installation and trust</a>
     {value.value?.pods.flatMap(pod => pod.diagnostics.map((diagnostic, i) => <p key={`${pod.id}:${i}`} role="alert">{pod.name}: {diagnostic.message}</p>))}
@@ -27,6 +27,7 @@ export function Spec({ ctx }: { ctx: PodsContext }) {
   const router = useRouter();
   if (!ref) return <p>Pick a JSON member to inspect or edit it.</p>;
   if (!ref.path.endsWith(".json")) return <p>{ref.path} is source, not a JSON spec.</p>;
+  if (data?.scope.pod !== ref.pod || data?.scope.path !== ref.path) return <p role="status">Reading {ref.pod} · {ref.path}. {ctx.value.current ? "" : ctx.value.reason}</p>;
   const schema = data?.composition?.result.schemaJson ?? data?.member?.schemaJson ?? null;
   const thread = router.state.location.search.thread;
   return <>
@@ -41,6 +42,8 @@ export function Spec({ ctx }: { ctx: PodsContext }) {
 function Editor({ ctx, schema }: { ctx: PodsContext; schema: string | null }) {
   const data = ctx.value.value!, draft = data.draft, cell = ctx.cells.at(["fields", ""]);
   const [typed, setTyped] = useState<string | null>(null), [problem, setProblem] = useState<string | null>(null);
+  const draftCell = useRef<typeof cell | null>(null);
+  const change = (text: string) => { if (typed === null) draftCell.current = cell; setTyped(text); };
   const value = typed ?? draft, form = schemaFormModel(value, schema), baseline = schemaFormModel(ctx.cells.doc?.basis?.rawContent ?? data.member!.content, schema);
   const raw = !form || ctx.page.read().mode === "raw";
   const commit = async () => {
@@ -48,27 +51,31 @@ function Editor({ ctx, schema }: { ctx: PodsContext; schema: string | null }) {
     const text = typed;
     try { const parsed: unknown = JSON.parse(text); if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw Error("A spec is a JSON object"); }
     catch (error) { setProblem(String(error)); return; }
-    const result = text === ctx.cells.doc?.basis?.rawContent ? await cell.clear({ label: "Restore saved member" }) : await cell.stage(text, { label: "Edit member" });
+    const bound = draftCell.current ?? cell;
+    const result = text === ctx.cells.doc?.basis?.rawContent ? await bound.clear({ label: "Restore saved member" }) : await bound.stage(text, { label: "Edit member" });
     setProblem(result?.message ?? null);
-    if (!result) setTyped(current => current === text ? null : current);
+    if (!result) { draftCell.current = null; setTyped(current => current === text ? null : current); }
   };
   return <>
     <Switcher ariaLabel="editor mode" value={raw ? "raw" : "form"} onChange={mode => ctx.page.pose({ mode })}
       options={[{ value: "form", label: "form", title: "Edit through the schema form", disabled: !form }, { value: "raw", label: "raw", title: "Edit the saved JSON text" }]} />
-    {raw ? <JsonEditor aria-label="spec JSON" value={value} onChange={setTyped} readOnly={!!cell.refusal} /> : form && baseline &&
+    {raw ? <JsonEditor aria-label="spec JSON" value={value} onChange={change} readOnly={!!cell.refusal} /> : form && baseline &&
       <fieldset disabled={!!cell.refusal}><SchemaToFieldRender schema={form.schema} values={form.parsedRaw} baselineValues={baseline.baseline}
         issues={[...(data.composition?.result.diagnostics ?? [])]} optionsFrom={null} onChange={(path, nextValue) => {
           const next = structuredClone(form.parsedRaw), keys = path.split("."); let node = next;
           for (const key of keys.slice(0, -1)) { if (!node[key] || typeof node[key] !== "object") node[key] = {}; node = node[key] as Record<string, unknown>; }
-          node[keys.at(-1)!] = nextValue; setTyped(JSON.stringify(next, null, 2));
+          node[keys.at(-1)!] = nextValue; change(JSON.stringify(next, null, 2));
         }} /></fieldset>}
     <Button label="Edit member" refusal={cell.refusal ?? (typed === null || typed === draft ? "No draft changes" : null)} onClick={commit}>Stage edit</Button>
+    {typed !== null && <Button label="Discard local draft" onClick={() => { draftCell.current = null; setTyped(null); setProblem(null); }}>Discard local draft</Button>}
     {problem && <p role="alert">{problem}</p>}
   </>;
 }
 export function Runs({ ctx }: { ctx: PodsContext }) {
   const page = ctx.page.read();
+  const current = ctx.value.value?.scope;
+  const runs = current?.pod === page.pod && current.path === page.path && current.runs === page.runs ? ctx.value.value!.runs : [];
   return <><Button label="Change run scope" onClick={() => ctx.page.query({ runs: page.runs === "pod" ? "member" : "pod" })}>{page.runs === "pod" ? "whole pod" : "this member"}</Button>
-    <RunsList runs={ctx.value.value?.runs ?? []} scope={page.runs} memberSha256={ctx.value.value?.member?.sha256} failure={!ctx.value.current ? ctx.value.reason : undefined} />
+    <RunsList runs={runs} scope={page.runs} memberSha256={ctx.value.value?.member?.sha256} failure={!ctx.value.current ? ctx.value.reason : undefined} />
   </>;
 }
