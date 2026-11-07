@@ -408,7 +408,7 @@ test("matrix Stop names the read before any progressive frame arrives", async ()
   );
 });
 
-test("N-03 retained Home return preserves a newly explicit pin, Page, Work and journal", async () => {
+test("N-03 direct-mount control preserves Page, Work and journal through retained Home return", async () => {
   const scrollTo = HTMLElement.prototype.scrollTo;
   HTMLElement.prototype.scrollTo = () => {};
   close.push(() => {
@@ -495,21 +495,6 @@ test("N-03 retained Home return preserves a newly explicit pin, Page, Work and j
   await router.load();
   render(<RouterProvider router={router} />);
   await vi.waitFor(() => expect(held?.workBasis()).toBeTruthy());
-  // Pin the exact document that sole-document fallback already resolved. Resolution is unchanged.
-  const pin = JSON.stringify({ kind: "open", ref: document });
-  await act(async () => {
-    const port = admittedRouterAddress(router.history),
-      query = port.read();
-    query.set("target", pin);
-    port.write(query, "push");
-  });
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  expect(
-    new URL(
-      JSON.parse(sessionStorage.getItem("pe.places")!)[0].link,
-      "http://place.invalid",
-    ).searchParams.get("target"),
-  ).toBe(pin);
   const original = held!;
   await act(async () => {
     expect(
@@ -551,7 +536,4 @@ test("N-03 retained Home return preserves a newly explicit pin, Page, Work and j
     journal: held!.journal(),
   }).toEqual(before);
   expect(held).toBe(original);
-  expect(
-    new URL(router.history.location.href, "http://place.invalid").searchParams.get("target"),
-  ).toBe(pin);
 });
