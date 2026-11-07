@@ -58,8 +58,8 @@ const args = (page: {
     | import("@pe/agent-contracts").Immutable<z.output<typeof system>>;
 }) => ({ system: namesOf(page.system) });
 export const roster = read(hostRead(ductsRosterCapability));
-export const network = { ...hostRead(ductsNetworkCapability), args };
-export const pricing = { ...hostRead(ductsPricingCapability), args };
+export const network = read(hostRead(ductsNetworkCapability), args);
+export const pricing = read(hostRead(ductsPricingCapability), args);
 export type { Context as DuctsDrawContext } from "./context.generated";
 import type { Context as DuctsDrawContext } from "./context.generated";
 const evidence = (

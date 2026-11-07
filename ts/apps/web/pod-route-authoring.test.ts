@@ -96,6 +96,17 @@ test("typed Pod bytes register through the builtin door; changed bytes never acq
     const stop=registerTypedRoute(web.module,web.fingerprint);
     try {
       expect(publicRoutes.typed(row.workRoute)).toBe(web.module);
+      const {mountTypedRoute}=await import("./src/shell/typed-mount.ts");
+      let search=new URLSearchParams({note:JSON.stringify("mounted")});
+      const mount=mountTypedRoute(web.module,{fixture:"typed-proof",target:null,work:{address:null,open:null},
+        address:{read:()=>search,write:next=>{search=new URLSearchParams(next);},subscribe:()=>()=>{}},
+        memory:()=>({}),custody:{current:()=>true}},web.fingerprint);
+      try {
+        expect(mount.draw("main")).toBe("mounted");
+        mount.page.pose({note:"same typed shell"});
+        expect(mount.draw("main")).toBe("same typed shell");
+      } finally {mount.dispose();}
+
       expect(publicRoutes.get(row.workRoute)?.work?.admission?.fingerprint).toBe(host.workFingerprint);
       expect(publicRoutes.typed(publicRoutes.byAddress(web.module.data.address)!.manifest.key)).toBe(web.module);
     } finally {stop();}
