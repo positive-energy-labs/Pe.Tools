@@ -1,7 +1,6 @@
-import { chatSeedChoices } from "./seed-choices.ts";
+import { chatSeedChoices } from "./chat-example-choices.ts";
 /**
- * Chat seed data — plain values, no provider, no behaviour. `?fixture=<action>` mounts one of these
- * through the kernel's fixture owner; nothing here renders or holds state. Each seed is a thread body
+ * Chat specimen data — plain values, no provider, no behaviour. Only design specimens and deterministic drawing tests import these examples. Each seed is a thread body
  * whose `events` are the harness log the host would have written.
  */
 import {
@@ -21,7 +20,7 @@ import {
 } from "@pe/agent-contracts";
 import { CHECKOUT_HOT, MACHINE_SEEDS } from "../open/seeds.ts";
 
-import type { ChatReading } from "./graph.ts";
+type ChatReading = "head" | "machine" | "receipts" | "capabilities";
 import { emptyChatState, type ChatState } from "@pe/agent-contracts/chat-state";
 
 const at = (minute: number) => new Date(Date.UTC(2026, 7, 30, 19, minute));

@@ -13,6 +13,36 @@ import { Button } from "@pe/kit/lang/button";
 import { emptyListState, useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { useCopy } from "@pe/kit/lib/use-copy";
+import { runtimeStreamUrl } from "#/host/runtime";
+import { useState } from "react";
+
+/** Image requests cannot carry hostFetch's runtime header; bind their URL to the same owner. */
+function CaptureImage({
+  receipt,
+  thumbnail = false,
+}: {
+  receipt: Immutable<CaptureReceipt>;
+  thumbnail?: boolean;
+}) {
+  const [failed, setFailed] = useState(false);
+  return failed ? (
+    <span role="status">
+      {thumbnail
+        ? "Image unavailable"
+        : "The retained picture could not be loaded. Open the PNG to inspect the host's refusal, or reload this page to retry."}
+    </span>
+  ) : (
+    <img
+      src={runtimeStreamUrl(receipt.url)}
+      alt={
+        thumbnail ? "" : `${receipt.view.name ?? "View"} · ${receipt.document.title ?? "document"}`
+      }
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className={thumbnail ? "h-5 w-8 object-cover" : "h-40 w-auto"}
+    />
+  );
+}
 
 /** What the request cropped to, in words; `whole view` when it named no focus. */
 const focusWords = (focus: Immutable<CaptureReceipt>["focus"]): string =>
@@ -42,7 +72,7 @@ const search = (receipt: Immutable<CaptureReceipt>) => ({
 
 function CaptureDetail({ receipt }: { receipt: Immutable<CaptureReceipt> }) {
   const { copied, copy } = useCopy();
-  const absolute = new URL(receipt.url, window.location.origin).href;
+  const absolute = runtimeStreamUrl(receipt.url);
   return (
     <div className="flex flex-col gap-2 p-(--gutter)">
       <span className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -58,7 +88,7 @@ function CaptureDetail({ receipt }: { receipt: Immutable<CaptureReceipt> }) {
             unregistered
           </FactChip>
         )}
-        <a href={receipt.url} target="_blank" rel="noreferrer">
+        <a href={absolute} target="_blank" rel="noreferrer">
           open png
         </a>
         <Button
@@ -71,8 +101,8 @@ function CaptureDetail({ receipt }: { receipt: Immutable<CaptureReceipt> }) {
           {copied ? "copied" : "copy url"}
         </Button>
       </span>
-      <a href={receipt.url} target="_blank" rel="noreferrer" className="self-start">
-        <img src={receipt.url} alt="" loading="lazy" className="h-40 w-auto" />
+      <a href={absolute} target="_blank" rel="noreferrer" className="self-start">
+        <CaptureImage key={absolute} receipt={receipt} />
       </a>
       <details>
         <summary className="t-small cursor-pointer text-ink-2">receipt</summary>
@@ -125,7 +155,7 @@ export function CapturesList({
         exit: "take one: capture_view, or revit.context.view-image in /ops",
       }}
       row={(receipt) => ({
-        lead: <img src={receipt.url} alt="" loading="lazy" className="h-5 w-8 object-cover" />,
+        lead: <CaptureImage key={receipt.url} receipt={receipt} thumbnail />,
         label: receipt.view.name ?? "view",
         aside: receipt.document.title ?? "untitled document",
         // L3: one short meta (when); who took it is in the detail and the search.

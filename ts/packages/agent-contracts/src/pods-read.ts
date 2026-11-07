@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Schema } from "effect";
-import { podMemberSchema } from "@pe/agent-contracts";
+import { podMemberSchema, settingsRouteState } from "./settings.ts";
 import {
   podListResponseSchema,
   podRunsResponseSchema,
@@ -31,3 +31,21 @@ export const compositionReadSchema = z.object({
   draft: z.string(),
   result: decoded(Schema.decodeUnknownSync(podMemberComposeResponseSchema)),
 });
+
+export const podsArgs = z.object({
+  pod: z.string(),
+  path: z.string(),
+  runs: z.enum(["member", "pod"]),
+});
+export const podsRosterValue = z.object({ pods: podRowsSchema });
+export const podsValue = z.object({
+  scope: podsArgs,
+  member: memberReadSchema.nullable(),
+  work: settingsRouteState.schema.nullable(),
+  composition: compositionReadSchema.nullable(),
+  draft: z.string(),
+  schemaRef: z.string().nullable(),
+  runs: podRunsSchema,
+});
+export const podMemberOfPage = (page: { pod: string; path: string }) =>
+  podMemberSchema.safeParse({ pod: page.pod, path: page.path }).data ?? null;

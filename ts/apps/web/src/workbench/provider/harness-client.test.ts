@@ -67,6 +67,20 @@ describe("harnessClient", () => {
 });
 
 describe("streamThread", () => {
+  it("a refused log tail rereads retained completion instead of leaving the turn running", () => {
+    const source = new FakeSource("http://host");
+    const reread = vi.fn();
+    const fault = vi.fn();
+    const event = vi.fn();
+    const stop = streamThread({ origin: "http://host", threadId: "th 1", cursor: 40, lastSeq: 4,
+      open: () => source as unknown as ReturnType<OpenEvents>, onEvent: event, onReread: reread, onFault: fault });
+    source.onmessage?.({ data: JSON.stringify({ kind: "failure", key: "k", error: "Mark-frame capture backlog exceeded its bound" }), lastEventId: "" } as MessageEvent<string>);
+    expect(reread).toHaveBeenCalledOnce();
+    expect(fault).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining("backlog") }));
+    expect(source.closed).toBe(true);
+    expect(event).not.toHaveBeenCalled();
+    stop();
+  });
   const cursorOf = (url: string) => {
     const parsed = new URL(url);
     expect(parsed.pathname).toBe("/pe/resources");
