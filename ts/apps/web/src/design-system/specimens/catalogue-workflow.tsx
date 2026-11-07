@@ -4,7 +4,10 @@ import { Save } from "lucide-react";
 import { ArmingStrip } from "@pe/kit/lang/arming-strip";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { Code, JsonEditor } from "@pe/kit/lang/code";
-import { StateCell } from "@pe/kit/lang/cell";
+import { StateCell, type CellHandle } from "@pe/kit/lang/cell";
+import { PreviewAction } from "@pe/kit/lang/write-action";
+import { Table } from "@pe/kit/table/table";
+import type { CellLike } from "@pe/agent-contracts";
 import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
@@ -16,6 +19,7 @@ const noop = () => {};
 export function CatalogueWorkflow() {
   return (
     <>
+      <HandleCells />
       <Demo
         label="ArtifactFrame"
         consumers="Table, suggestion cards, and ArmingStrip"
@@ -69,6 +73,37 @@ export function CatalogueWorkflow() {
       <ArmingCatalogue />
     </>
   );
+}
+
+function HandleCells() {
+  const [draft, setDraft] = useState<CellLike>({ edit: { value: 900, by: "pea" } });
+  const [stale, setStale] = useState(false);
+  const [planned, setPlanned] = useState(false);
+  const clear = async () => { setDraft({}); setPlanned(false); return null; };
+  const cell: CellHandle = {
+    owner: { route: "fans", label: "from /fans" }, value: draft, refusal: null,
+    stage: async value => { setDraft({ edit: { value, by: "human" } }); setPlanned(false); return null; },
+    clear, transitions: () => draft.edit ? [{ kind: "clear", run: clear }] : [],
+  };
+  const value = { value: [{ key: "flow" }], current: !stale, status: stale ? "unavailable" : "ready",
+    reason: stale ? "Fixture Value changed; refresh before editing" : undefined };
+  const drawing = { cell, value, label: "Fan flow", model: 800, source: "fixture", numeric: { min: 0 }, unit: { label: "cfm" } };
+  return <Demo label="Value and owner handles · fixture" consumers="Fans and Ducts"
+    spec="One owner handle supplies attribution, staging, refusal and clear to a cell and a table. A retained stale Value locks both. The fixture plan is deliberately unsealed; it cannot write to Revit.">
+    <div className="flex items-center gap-2">
+      <StateCell {...drawing} />
+      <Button label="Toggle fixture freshness" onClick={() => setStale(value => !value)}>Toggle freshness</Button>
+      <PreviewAction label="Write fixture" handle={{
+        plan: async () => setPlanned(true), apply: () => { throw Error("Fixture has no native writes"); },
+        cancel: () => setPlanned(false), read: () => planned ? { sentence: "Fixture · no native seal",
+          rows: ["This plan is inspectable but cannot be applied"], stale } : null,
+      }} />
+    </div>
+    <div className="h-40">
+      <Table label="Owner handle fixture" value={value} rowsOf={data => data} rowKey={row => row.key}
+        columns={[{ key: "flow", label: "Fan flow", state: () => drawing }]} />
+    </div>
+  </Demo>;
 }
 
 const FAILED_OUT = `{

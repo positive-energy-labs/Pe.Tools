@@ -1,8 +1,7 @@
 import { renderPicturePane } from "#/scene/picture/picture";
 import { EspParameter } from "./esp-parameter";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import { StateCell, cellFromDraft } from "@pe/kit/lang/cell";
-import { ChoiceCell } from "./choice-cell.tsx";
+import { StateCell, cellSource } from "@pe/kit/lang/cell";
 import { Button } from "@pe/kit/lang/button";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
 import { AttentionRoot } from "#/attention";
@@ -83,8 +82,8 @@ function WriteScope({
   snapshot: DuctSnapshot;
   fan: { unitId: number; portIndex: number; mark: string } | null;
 }) {
-  const intent = ctx.cells.doc?.writeIntent ?? {};
-  const standing = intent.edit?.value;
+  const handle = ctx.cells.at(["writeIntent"]);
+  const standing = scopeSchema.optional().parse(handle.value.edit?.value);
   const here = new Set([...snapshot.nodes, ...snapshot.segments].map((e) => String(e.id)));
   const cells = FAN_CELLS.flatMap((segment) =>
     Object.entries(ctx.cells.doc?.[segment] ?? {})
@@ -108,13 +107,19 @@ function WriteScope({
   return (
     <span data-sheet-cell="Write scope" className="contents">
       <span>Write scope</span>
-      <ChoiceCell
+      <StateCell
+        cell={handle}
+        value={ctx.value}
         label="Write scope"
+        model={null}
+        format={label}
         options={[
           ...(offered?.success
             ? [
                 {
                   key: "fan",
+                  value: offered.data,
+                  history: { label: "Choose write scope" },
                   label: label(offered.data),
                   description: "Write this fan's walk and its staged cells",
                 },
@@ -124,30 +129,16 @@ function WriteScope({
             ? [
                 {
                   key: "other",
+                  value: standing,
                   label: label(standing),
                   description: "Another fan's scope, still standing",
                 },
               ]
             : []),
-          { key: "none", label: "None", description: "Clear the write scope" },
+          { key: "none", label: "None", description: "Clear the write scope", clear: true, history: { label: "Clear write scope" } },
         ]}
         current={current}
-        cell={intent}
-        path={null}
-        show={label}
-        refusal={
-          !ctx.cells.ready
-            ? ctx.cells.refusal
-            : !offered?.success
-              ? "Open a fan first"
-              : null
-        }
-        pick={(key) => {
-          if (key === "fan" && offered?.success && ctx.cells.basis)
-            void ctx.cells.at(["writeIntent"]).stage(offered.data, { label: "Choose write scope" });
-          if (key === "none" && intent.edit)
-            void ctx.cells.at(["writeIntent"]).clear({ label: "Clear write scope" });
-        }}
+        capReason={!offered?.success ? "Open a fan first" : undefined}
       />
       <span />
     </span>
@@ -178,6 +169,7 @@ export function RosterBody({ ctx }: { ctx: SheetContext }) {
             onChange: (rosterSearch, rosterSort) => ctx.page.query({ rosterSearch, rosterSort }),
           },
           nameOf,
+          value: ctx.value,
           roster: roster,
           picked: pickedFans === "all" ? roster.map(stableFanKey) : pickedFans,
           open: open,
@@ -239,7 +231,7 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
     },
   };
   const fanReading = fans;
-  const friction = ctx.cells.doc?.designFriction ?? {};
+  const friction = ctx.cells.at(["designFriction"]);
   const parameterTarget = ctx.target;
   const ownPane = (
     <>
@@ -252,28 +244,22 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
           <span>Design friction</span>
           <span className="block min-w-0 h-(--item-h)">
             <StateCell
-              {...cellFromDraft(friction, {
-                value: String(friction.edit?.value ?? DEFAULT_DESIGN_FRICTION_RATE),
-                cap: ctx.cells.ready ? "editable" : "locked",
-                capReason: ctx.cells.refusal ?? undefined,
-              })}
+              cell={friction}
+              value={ctx.value}
+              label="Design friction"
+              model={DEFAULT_DESIGN_FRICTION_RATE}
+              source="default"
               scale="row"
               numeric={{ min: 0, digits: 3 }}
               unit={{ label: "in-wg/100 ft" }}
-              onCommit={(text: string) =>
-                ctx.cells
-                  .at(["designFriction"])
-                  .stage(Number(text), { label: "Design friction" })
-                  .then((result) => result?.message)
-              }
-              transitions={ctx.cells.at(["designFriction"]).transitions({ label: "Design friction" })}
+
             />
           </span>
           <span
             className="t-small text-ink-2"
-            data-input-source={friction.edit ? "Work" : "default"}
+            data-input-source={cellSource(friction, "default")}
           >
-            {friction.edit ? "Work" : "default"}
+            {cellSource(friction, "default")}
           </span>
         </span>
         {(
@@ -284,10 +270,7 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
             ["fittingCoefficient", "Fitting coefficient"],
           ] as const
         ).map(([key, label]) => {
-          const cell = ctx.cells.doc?.parameters[key] ?? {};
           const handle = ctx.cells.at(["parameters", key]);
-          const commit = (value: string) => handle.stage(value, { label }).then(result => result?.message);
-          const transitions = handle.transitions({ label });
           return (
             <label key={key} className="contents">
               <span className="min-w-0 truncate">{label}</span>
@@ -299,18 +282,16 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
                       .filter((node) => node.kind === "equipment")
                       .flatMap((node) => (node.uniqueId ? [node.uniqueId] : []))}
                     cell={handle}
+                    value={ctx.value}
                     model={snapshot.slots[key]}
                   />
                 ) : (
                   <StateCell
-                    {...cellFromDraft(cell, {
-                      value: cell.edit ? String(cell.edit.value) : snapshot.slots[key],
-                      modelValue: snapshot.slots[key],
-                      cap: "editable",
-                    })}
+                    cell={handle}
+                    value={ctx.value}
+                    label={label}
+                    model={snapshot.slots[key]}
                     scale="row"
-                    onCommit={commit}
-                    transitions={transitions}
                   />
                 )}
               </span>
@@ -327,25 +308,21 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
             return (
               <label key={key} className="contents">
                 <span className="min-w-0 truncate">{label}</span>
-                <ChoiceCell
+                <StateCell
                   label={label}
-                  cell={cell}
-                  path={["roles", key]}
-                  show={(value) => String((value as { role: string }).role)}
-                  current={
-                    cell.edit?.value.role ??
+                  cell={ctx.cells.at(["roles", key])}
+                  value={ctx.value}
+                  keyOf="role"
+                  format={JSON.stringify}
+                  model={{ role:
                     sheet?.inputs?.inputs.units[key]?.role.value ??
                     suggestRole(node, suggestKind(node).kind)
-                  }
+                  }}
                   options={[
-                    { key: "fan", label: "Fan" },
-                    { key: "passive", label: "Passive" },
+                    { key: "fan", label: "Fan", value: { role: "fan" } },
+                    { key: "passive", label: "Passive", value: { role: "passive" } },
                   ]}
-                  refusal={
-                    ctx.cells.refusal
-                  }
-                  pick={(role) => void ctx.cells.at(["roles", key]).stage({ role }, { label })}
-                  act={() => ctx.cells.at(["roles", key]).clear({ label })}
+
                 />
                 {cell.edit ? (
                   <Button

@@ -9,7 +9,9 @@
  * "checked in Revit" is the caller's, derived from the plan entry's catalog effect (a TransactRead
  * rehearsal) and never from a response flag.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, useReducer } from "react";
+import { z } from "zod";
+import { writeResponseSchema } from "@pe/agent-contracts";
 import { Popover } from "@base-ui/react/popover";
 import type { LucideIcon } from "lucide-react";
 
@@ -41,6 +43,51 @@ export interface WriteHeld {
 }
 
 const AUTHOR = { pea: "Pea", human: "you", unknown: "unknown author" } as const;
+
+/** Structural plan handle supplied by the shell; kit owns no Work, consent or transport. */
+export interface PlanHandle {
+  plan(): unknown;
+  apply(): unknown;
+  cancel(): unknown;
+  read(): unknown;
+}
+const reviewSchema = z.object({
+  preview: z.unknown().optional(),
+  sentence: z.string().nullable(),
+  rows: z.array(z.string()),
+  cells: z.array(z.object({ key: z.string(), label: z.string(), before: z.string().nullable(),
+    after: z.string(), author: z.enum(["pea", "human", "unknown"]) })).optional(),
+  stale: z.boolean(),
+});
+
+/** The handle stays authoritative across remounts; local state only redraws after a gesture. */
+export function PreviewAction({ handle, label, says = `Plan ${label} from current Work`, ...props }: {
+  handle: PlanHandle;
+  label: string;
+  says?: string;
+} & Pick<WriteActionProps, "refusal" | "busy" | "failed" | "reject" | "icon">) {
+  const [, redraw] = useReducer(value => value + 1, 0);
+  const raw = handle.read();
+  const parsed = reviewSchema.safeParse(raw);
+  const review = parsed.success ? parsed.data : null;
+  const sealed = !!review && !review.stale && writeResponseSchema.safeParse(review.preview).success;
+  const run = async (action: () => unknown): WriteRun => {
+    try { await action(); return null; }
+    catch (error) { return { message: error instanceof Error ? error.message : String(error) }; }
+    finally { redraw(); }
+  };
+  return <WriteAction {...props} label={`plan ${label}`} says={says}
+    failed={raw != null && !parsed.success ? "Plan review unavailable" : props.failed}
+    held={review && !review.stale ? {
+      word: writeWord(label, review.cells?.length || review.rows.length, false),
+      summary: review.sentence ?? "",
+      ...(review.cells?.length ? { cells: review.cells } : { rows: review.rows }),
+    } : null}
+    stale={review?.stale ? "changed since plan" : null}
+    plan={() => run(() => handle.plan())}
+    apply={{ label, says: `${label} what the plan sealed`, refusal: sealed ? null : "Plan the current Work first",
+      run: () => run(() => handle.apply()), done: `${label} sent` }} />;
+}
 /** The armed word. A plan is a Read: only a successful declared rehearsal says "checked in Revit". */
 export const writeWord = (verb: string, count: number, rehearsed: boolean) =>
   `${verb} · ${rehearsed ? "checked in Revit" : "planned"} ${count}`;

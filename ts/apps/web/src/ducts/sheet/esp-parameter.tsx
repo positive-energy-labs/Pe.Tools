@@ -1,5 +1,5 @@
-import type { OwnedCell } from "../../route/typed-route";
-import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
+import { StateCell, type CellHandle } from "@pe/kit/lang/cell";
+import type { ValueHandle } from "@pe/kit/lang/collection";
 import { previousOf, useFieldOptionsReading } from "#/shell/readings-hooks";
 
 /** The slot contract consumes a parameter name, not the catalog's identity/scope key. */
@@ -7,11 +7,13 @@ export function EspParameter({
   target,
   units,
   cell,
+  value,
   model,
 }: {
   target: { session: string; openId: string } | null;
   units: readonly string[];
-  cell: OwnedCell;
+  cell: CellHandle;
+  value?: ValueHandle<unknown>;
   model: string;
 }) {
   const reading = useFieldOptionsReading(
@@ -34,7 +36,7 @@ export function EspParameter({
             description: [item.metadata.kind, item.metadata.storageType, item.metadata.dataTypeId]
               .filter(Boolean)
               .join(" · "),
-            name: item.metadata.name,
+            value: item.metadata.name,
           },
         ]
       : [],
@@ -54,24 +56,15 @@ export function EspParameter({
               : null);
   return (
     <StateCell
-      {...cellFromDraft(cell.value, {
-        value: current,
-        modelValue: model,
-        ...(!reason && !options.some((option) => option.name === current)
-          ? { damage: "Parameter not offered by these units" }
-          : {}),
-        ...(reason ? { cap: "locked", capReason: reason } : {}),
-      })}
-      scale="row"
-      choice={{
-        options,
-        current: options.find((option) => option.name === current)?.key ?? null,
-        pick: (key) => {
-          const option = options.find((option) => option.key === key);
-          return option ? cell.stage(option.name,{label:"Unit ESP"}).then(result=>result?.message) : undefined;
-        },
-      }}
-      transitions={cell.transitions({label:"Unit ESP"})}
+      cell={cell}
+      value={value}
+      label="Unit ESP"
+      model={model}
+      current={options.find((option) => option.value === current)?.key ?? null}
+      damage={!reason && !options.some((option) => option.value === current)
+        ? "Parameter not offered by these units" : undefined}
+      capReason={reason ?? undefined}
+      options={options}
     />
   );
 }

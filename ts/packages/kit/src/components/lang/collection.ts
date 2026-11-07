@@ -4,6 +4,9 @@ import type { Ref } from "./attention";
 import { rowDamage } from "../master-table/model";
 import type { Mark, Span } from "./scroll-project";
 import type { Virtualizer } from "@tanstack/react-virtual";
+import { valueRows, type ValueItems } from "./value";
+export { valueRows, useValue } from "./value";
+export type { ValueHandle } from "./value";
 
 export const VIRTUAL_FROM = 60;
 /** Rows drawn past the viewport, in viewport heights per side, from the measured row height:
@@ -895,7 +898,12 @@ export function listModel<T, Sort extends string>(
 const listRowKey = (row: { key: string }) => row.key;
 
 /** The long-list API grows the collection key owner; popups and ladders keep their existing API. */
-export function useList<T, Sort extends string = string>(options: ListOptions<T, Sort>) {
+export function useList<T, Sort extends string = string, Data = readonly T[]>(
+  input: Omit<ListOptions<T, Sort>, "items"> & ValueItems<T, Data>,
+) {
+  const options: ListOptions<T, Sort> = input.value
+    ? { ...input, ...valueRows(input.value, input.rowsOf) }
+    : { ...input, items: input.items! };
   const [ownState, setOwnState] = useState<ListState<Sort>>(() => ({
     ...emptyListState<Sort>(),
     closed: options.groups?.defaultClosed ?? [],
