@@ -8,7 +8,7 @@ import { bindWork, workKey } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 
-test("unreadable Work keeps its bytes; obsolete decoded Work is removed without conversion", async () => {
+test("unreadable Work keeps its bytes until explicit recovery without conversion", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-discard-"));
   const scope = bindWork("test", null);
   const key = { targetKey: workKey(scope), route: scope.route };
@@ -26,7 +26,10 @@ test("unreadable Work keeps its bytes; obsolete decoded Work is removed without 
       route: scope.route, title: "Test", description: "Test", schema: z.object({ count: z.number().default(0) }),
       schemaVersion: 2, migrations: { 1: () => { throw Error("Conversion must never run"); } },
     } }] });
-    expect(await workspace.read(scope, scope.route)).toBeNull();
+    const bytes = await readFile(path, "utf8");
+    await expect(workspace.read(scope, scope.route)).rejects.toMatchObject({ code: "WorkUnreadable", key: scope });
+    expect(await readFile(path, "utf8")).toBe(bytes);
+    await store.setState({ ...key, value: null });
     expect(await readdir(dir)).toEqual([]);
     expect(await workspace.apply(scope, scope.route, "human", [{ path: ["count"], value: 3 }], 4)).toMatchObject({ ok: false, code: "stale_revision" });
     expect(await workspace.apply(scope, scope.route, "human", [{ path: ["count"], value: 3 }], 0)).toMatchObject({ ok: true, revision: 1 });

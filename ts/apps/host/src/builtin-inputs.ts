@@ -1,3 +1,4 @@
+import { admitNativeCaller } from "./native-read-policy.ts";
 import { captureInput, replayInput, type RecordedInput } from "./native-recording.ts";
 import { readLocal } from "./local-inputs.ts";
 import { readFamilySpec } from "./family-file-input.ts";
@@ -1100,6 +1101,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       RequestIdentityKey | HostNativeRead
     >,
   ) {
+    yield* admitNativeCaller(raw.key);
     const root = yield* readSets.open(
       { key: "native.call", input: json(raw), scope: canonicalJson(raw.scope) },
       null,
