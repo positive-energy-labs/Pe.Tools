@@ -1,3 +1,4 @@
+import {projectWork} from "./host-projection.ts";
 import { registerHooks } from "node:module";
 import ts from "typescript";
 // Receipts describe production resolution even when a dev/test launcher verifies them.
@@ -172,65 +173,12 @@ for (const key of keys) {
     // JSON Schema cannot carry that authority; a second handwritten host declaration would drift.
     let workImport="",workBody="";
     if(typed.spec.edits) {
-    const code = ts.createSourceFile(
-      entry,
-      await readFile(entry, "utf8"),
-      ts.ScriptTarget.Latest,
-      true,
-    );
-    let workName: string | undefined;
-    const visit = (node: ts.Node) => {
-      if (
-        ts.isCallExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        node.expression.text === "route"
-      ) {
-        const spec = node.arguments[0];
-        const edits =
-          spec &&
-          ts.isObjectLiteralExpression(spec) &&
-          spec.properties.find(
-            (property) =>
-              ts.isPropertyAssignment(property) && property.name.getText(code) === "edits",
-          );
-        const work =
-          edits &&
-          ts.isPropertyAssignment(edits) &&
-          ts.isObjectLiteralExpression(edits.initializer) &&
-          edits.initializer.properties.find(
-            (property) =>
-              ts.isPropertyAssignment(property) && property.name.getText(code) === "work",
-          );
-        if (work && ts.isPropertyAssignment(work) && ts.isIdentifier(work.initializer))
-          workName = work.initializer.text;
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(code);
-    const imports = code.statements.filter(ts.isImportDeclaration).flatMap((declaration) => {
-      const names = declaration.importClause?.namedBindings;
-      return names && ts.isNamedImports(names)
-        ? names.elements.map((name) => ({
-            local: name.name.text,
-            imported: name.propertyName?.text ?? name.name.text,
-            from: declaration.moduleSpecifier.getText(code),
-            specifier: (declaration.moduleSpecifier as ts.StringLiteral).text,
-          }))
-        : [];
-    });
-    const binding = imports.find((binding) => binding.local === workName);
-    if (!binding)
-      throw Error(`${entry}: typed route Work must reference an imported Work definition`);
     const workDestination = new URL(`../../../packages/agent-contracts/src/generated/${key}-work.ts`, import.meta.url);
-    const schemaImport = binding.specifier.startsWith(".")
-      ? JSON.stringify(relative(dirname(fileURLToPath(workDestination)), resolve(dirname(entry),binding.specifier)).replaceAll("\\","/"))
-      : binding.from;
-    const definitions = await jiti.import<Record<string, {schema?: unknown}>>(binding.specifier.startsWith(".") ? resolve(dirname(entry),binding.specifier) : binding.specifier);
-    await emit(workDestination, definitions[binding.imported]!.schema
-      ? `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nexport { ${binding.imported} as ${identifier}RouteState } from ${schemaImport};\n`
-      : `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nimport { ${binding.imported} as schema } from ${schemaImport};\nimport { salvageWork } from "../route-state.ts";\nexport const ${identifier}RouteState = { route: ${JSON.stringify(key)}, title: ${JSON.stringify(typed.spec.name)}, description: schema.description ?? ${JSON.stringify(typed.spec.directory.summary)}, schema, schemaVersion: 1, salvage: (raw:unknown)=>salvageWork(schema,raw).doc };\n`);
+    const projected=await projectWork(entry,typed,fileURLToPath(workDestination),`${identifier}RouteState`,"../route-state.ts",
+      specifier=>jiti.import<Record<string,{schema?:unknown}>>(specifier));
+    await emit(workDestination,`// Generated from ${key}/route.ts by codegen:routes. Do not edit.\n${projected.definition}`);
     workImport=`import { ${identifier}RouteState as work } from "../../../../packages/agent-contracts/src/generated/${key}-work.ts";\n`;
-    workBody=`workState:work,readWorks:${JSON.stringify(typed.host.readWorks)},schemas:{[data.work!.schema!]:work.schema,[data.historyDetail!]:z.fromJSONSchema(${JSON.stringify(z.toJSONSchema(typed.host.schemas.historyDetail!,{io:"input"}))})},`;
+    workBody=projected.properties;
     }
     const runtime=typed.spec.host;
     if(runtime) {
