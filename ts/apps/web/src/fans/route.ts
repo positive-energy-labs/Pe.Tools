@@ -83,6 +83,7 @@ export const module = route({
   },
   subject: {
     field: "fan",
+    read: sheet,
     noun: "fan",
     pane: "sheet-roster",
     options: (data: FansDrawContext["value"]["value"]) =>

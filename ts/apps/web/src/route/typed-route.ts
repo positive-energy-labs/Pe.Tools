@@ -192,6 +192,7 @@ type Specification<
   W extends z.ZodObject,
   Edit extends z.ZodType,
   Reads extends Readonly<Record<string, HostRead>> = Readonly<Record<string, HostRead>>,
+  SubjectRead extends HostRead = HostRead,
 > = {
   key: string;
   name: string;
@@ -200,7 +201,8 @@ type Specification<
     field: keyof F & string;
     noun: string;
     pane: string;
-    options(data: Immutable<D>): readonly { id: IdentityId<"local">; label: string }[];
+    read?: SubjectRead;
+    options(data: Immutable<ReadData<SubjectRead>>): readonly { id: IdentityId<"local">; label: string }[];
   };
   core: HostRead & { output: z.ZodType<Publication<D>>; args(page: Page<F>): unknown };
   fields: F;
@@ -243,7 +245,8 @@ export function route<
   W extends z.ZodObject,
   Edit extends z.ZodType,
   const Reads extends Readonly<Record<string, HostRead>>,
->(spec: Specification<D, F, W, Edit, Reads>) {
+  SubjectRead extends HostRead,
+>(spec: Specification<D, F, W, Edit, Reads, SubjectRead>) {
   const schemas: Record<string, z.ZodType> = {
     none: z.strictObject({}),
     work: spec.edits.work.schema,
@@ -323,6 +326,9 @@ export function route<
   };
   addRead("value", spec.core);
   for (const [id, read] of Object.entries(spec.reads ?? {})) addRead(id, read);
+  const subjectRead = spec.subject.read ? readIds.get(spec.subject.read) : "value";
+  if (!subjectRead) throw Error("Subject read must be declared by the route");
+  fields[spec.subject.field] = { ...fields[spec.subject.field]!, picker: { reading: subjectRead, options: "pickSubject" } } as typeof fields[string];
   body("pickSubject", `fields.${spec.subject.field}.picker.options`, "picker", (reading) =>
     reading.value?.value?.data ? spec.subject.options(reading.value.value.data) : [],
   );
@@ -514,7 +520,7 @@ export function route<
     subject: {
       field: spec.subject.field,
       noun: spec.subject.noun,
-      roster: "value",
+      roster: subjectRead,
       detail: "value",
       pane: spec.subject.pane,
     },
