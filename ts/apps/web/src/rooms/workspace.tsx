@@ -1,35 +1,38 @@
-import type { RoomsContext } from "./route";
-import { useValue } from "@pe/kit/lang/collection";
 import { roomSelection } from "./selection";
 import * as Atom from "effect/reactivity/Atom";
-import { RegistryContext } from "@effect/atom-react";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
-import type { RoomsRouteDocument } from "@pe/agent-contracts";
-import type { RoomsSnapshot } from "@pe/host-contracts/generated";
+import { useValue } from "@pe/kit/lang/collection";
 import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import { AttentionScope } from "#/attention";
 import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
-import type { GraphMount } from "#/shell/mount";
-import { readingValue } from "./value";
 import { inboxCards } from "./cards";
-import type { RoomsPage } from "./page";
+import { roomsPageSchema, type RoomsPage } from "./page";
+import type { RoomsContext } from "./route";
 import { railsOf, type TraceRead } from "./layers";
 import { roomRows } from "./table";
-import type { PlanReading } from "./plan-reading";
 
 const Workspace = createContext<ReturnType<typeof useWorkspace> | null>(null);
 export const useRoomsWorkspace = () => useContext(Workspace)!;
 
 function useWorkspace(ctx: RoomsContext) {
-  const page = {...ctx.page.read(),selected:ctx.page.read().picked,epoch:0};
-  const fixture = false;
-  const data=useValue(ctx.value);
+  const value = ctx.value;
+  const data = useValue(value);
+  const raw = ctx.page.read();
+  const page = roomsPageSchema.parse({ ...raw, selected: raw.picked });
+  // CHEAT: room selection still uses semantic guid/card keys; typed Page owns focus identities.
+  const setPage = (patch: Partial<RoomsPage>) => {
+    const { view, show, selected, epoch: _epoch, ...pose } = patch;
+    if (view !== undefined) ctx.page.query({ view });
+    if (show !== undefined) ctx.page.query({ show });
+    ctx.page.pose({ ...pose, ...(selected !== undefined ? { picked: selected } : {}) });
+  };
   const view = page.view;
-  const snapshot=data?.snapshot;
-  const error=ctx.value.current?null:ctx.value.reason;
-  const pending=ctx.value.status === "pending";
-  const document=ctx.target?.kind === "document"?ctx.target.ref:null;
-  const work=ctx.cells.doc?{doc:ctx.cells.doc}:null;
+  const snapshot = data?.snapshot ?? null;
+  const error =
+    !value.current && value.status !== "pending" ? (value.reason ?? "Read failed") : null;
+  const pending = value.status === "pending";
+  const document = ctx.target?.kind === "document" ? ctx.target.ref : null;
+  const work = data?.handle ? { doc: data.roomsWork, handle: data.handle } : null;
   const levelNames = useMemo(
     () =>
       [...(snapshot?.levels ?? [])]
@@ -48,24 +51,23 @@ function useWorkspace(ctx: RoomsContext) {
     [work, snapshot, view],
   );
   const labels = useMemo(() => new Map(rows.map((row) => [row.region.guid, row.label])), [rows]);
-  const trace={data:data?.trace??null,none:data?.traceError??null};
-  const plan=data?.plan;
-  const empty = fixture
-    ? null
-    : !document
-      ? { says: "no document bound", exit: "choose a document in the sentence" }
-      : error
-        ? { says: `rooms.snapshot failed: ${error}`, exit: "refresh once the host answers" }
-        : !snapshot
-          ? { says: "reading rooms…", exit: "wait for the snapshot" }
-          : !view
-            ? { says: "no plan view chosen", exit: "choose a level and a view" }
-            : null;
+  const trace: TraceRead = { data: data?.trace ?? null, none: data?.traceError ?? error };
+  const plan = data?.plan ?? null;
+  const empty = !document
+    ? { says: "no document bound", exit: "choose a document in the sentence" }
+    : error
+      ? { says: `rooms.snapshot failed: ${error}`, exit: "refresh once the host answers" }
+      : !snapshot
+        ? { says: "reading rooms…", exit: "wait for the snapshot" }
+        : !view
+          ? { says: "no plan view chosen", exit: "choose a level and a view" }
+          : null;
   return {
     ctx,
+    value,
     page,
+    setPage,
     view,
-    fixture,
     snapshot,
     error,
     pending,
@@ -78,13 +80,62 @@ function useWorkspace(ctx: RoomsContext) {
     labels,
     trace,
     plan,
-    planError:data?.planError??null,
+    planError: data?.planError ?? error,
     empty,
   };
 }
 
-/** Domain projection only; the shell installs attention and native observation. */
-export function RoomsProvider({ctx,children}:{ctx:RoomsContext;children:ReactNode}) {
-  const value=useWorkspace(ctx);
-  return <Workspace value={value}>{children}</Workspace>;
+/** CHEAT(K gap 4): app-owned selection/attention/native providers are not supplied by kit handles.
+ * Domain projections use the accepted Value directly; no graph-shaped reading owner. */
+export function RoomsProvider({ ctx, children }: { ctx: RoomsContext; children: ReactNode }) {
+  const value = useWorkspace(ctx);
+  const selection = useMemo(
+    () =>
+      Atom.make(
+        (): ReadonlySet<SubjectKey> =>
+          new Set<SubjectKey>(
+            roomSelection(
+              value.page.selected,
+              value.cards,
+              value.regions.map((region) => region.guid),
+            ).guids.map((guid): SubjectKey => `room:${guid}`),
+          ),
+      ),
+    [value.cards, value.page.selected, value.regions],
+  );
+  const members = useMemo(
+    () =>
+      new Map(
+        value.snapshot?.regions.map((region): [SubjectKey, SubjectKey[]] => [
+          `room:${region.guid}`,
+          [elementKey(region.elementId)],
+        ]) ?? [],
+      ),
+    [value.snapshot],
+  );
+  const observation = useMemo<NativeObservation>(
+    () => ({
+      scope: {
+        document: !ctx.value.current || !value.snapshot ? null : value.document,
+        source: "native",
+      },
+      references: [
+        ...(value.snapshot?.regions ?? []).map((region) => ({ elementId: region.elementId })),
+        ...(value.trace.data
+          ? railsOf(value.trace.data).map((rail) => ({ elementId: rail.elementId }))
+          : []),
+      ],
+    }),
+    [ctx.value.current, value.document, value.snapshot, value.trace.data],
+  );
+  const attentionDoc = value.document
+    ? `${value.document.session}/${value.document.openId}`
+    : "fixture:rooms:plan";
+  return (
+    <Workspace value={value}>
+      <AttentionScope doc={attentionDoc} selected={selection} members={members}>
+        <NativeObservationScope value={observation}>{children}</NativeObservationScope>
+      </AttentionScope>
+    </Workspace>
+  );
 }

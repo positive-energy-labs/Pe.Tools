@@ -2,14 +2,12 @@ import type { Column, TableState } from "@pe/kit/table/model";
 import { token } from "@pe/kit/lib/token";
 import { PressContent } from "@pe/kit/anatomy/press-content";
 import { Button } from "@pe/kit/lang/button";
-import { cellFromDraft } from "@pe/kit/lang/cell";
 import { NavStateCell } from "#/family/marks";
 import {
   authoredText,
   bindingOf,
   isFormula,
   pinnedSort,
-  proposalCell,
   sortDirOf,
   type PRow,
 } from "#/family/model";
@@ -26,7 +24,9 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
     proposalsOn,
     locate,
     consumers,
-    transitionsAt,
+    wire,
+    cells,
+    value,
   } = core;
   /**
    * THE VERDICT RAIL — a COUNT, not a control (ruled 2026-08-31, per-cell grounding). It used to
@@ -130,12 +130,14 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
       const propertyCell = (entry: (typeof properties)[number]) => (
         <span key={entry.id} className="ml-1 inline-block w-44 align-middle">
           <NavStateCell
-            {...cellFromDraft(proposalCell([entry], null), {
-              value: `${entry.property} ${entry.proposed}`,
-              modelValue: entry.current ?? "(not set)",
-            })}
+            cell={cells.at(["cells", entry.id])}
+            value={value}
+            label={`Review ${row.name} ${entry.property}`}
+            model={entry.current}
+            format={(next) => `${entry.property} ${String(next)}`}
+            capReason={wire.lockOf?.(entry.id) ?? undefined}
+            readOnly
             onLocate={() => locate(entry)}
-            transitions={transitionsAt(entry.id)}
           />
         </span>
       );
@@ -233,12 +235,13 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
             // with the same accept and deny every other suggestion has.
             <span className="w-44 shrink-0">
               <NavStateCell
-                {...cellFromDraft(proposalCell(family, null), {
-                  value: "",
-                  modelValue: "(not in the reading)",
-                })}
+                cell={cells.at(["cells", family[0].id])}
+                value={value}
+                label={`Review ${row.name} declaration`}
+                format={() => family[0]!.proposed}
+                capReason={wire.lockOf?.(family[0].id) ?? undefined}
+                readOnly
                 onLocate={() => locate(family[0]!)}
-                transitions={transitionsAt(family[0].id)}
               />
             </span>
           ) : null}
