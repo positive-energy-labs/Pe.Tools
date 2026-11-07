@@ -23,7 +23,7 @@ export const podArtifactSchema = z.strictObject({
   contracts: z.array(z.strictObject({ id: z.string(), bytes })),
   executables: z.array(
     z.strictObject({
-      client: z.enum(["web", "pea", "shared"]),
+      client: z.enum(["web", "pea", "shared", "host"]),
       entry: z.string(),
       resolved: z.boolean(),
       members: z.array(z.strictObject({ path: z.string(), bytes })),
@@ -62,8 +62,29 @@ export async function verifyPodArtifact(value: unknown, expected: string) {
   return { wire, artifact, contracts, executables };
 }
 
+/** Verify all package bytes before evaluating only its neutral host entry. No registration occurs here. */
+export async function loadPodHostEntry(value:unknown,expected:string) {
+  const evidence=await verifyPodArtifact(value,expected);
+  const entries=evidence.executables.filter(entry=>entry.client === "host");
+  if(entries.length!==1 || entries[0]!.entry!=="host.js" || entries[0]!.members.length!==1 || entries[0]!.members[0]!.path!=="host.js")
+    throw Error("Expected one closed host.js artifact");
+  const loaded=await import(`data:text/javascript;base64,${Buffer.from(entries[0]!.members[0]!.bytes).toString("base64")}`);
+  const {captureHostModule}=await import("@pe/agent-contracts");
+  const host=captureHostModule(z.object({module:z.unknown()}).parse(loaded).module as import("@pe/agent-contracts").HostRouteModule);
+  if(canonicalRouteJson(host.data)!==canonicalRouteJson(evidence.artifact.data)) throw Error("Host declaration differs from artifact");
+  return host;
+}
+
 export async function admitPodArtifact(value: unknown, expected: string): Promise<AdmittedRoute | HostAdmittedRoute> {
   const evidence = await verifyPodArtifact(value, expected);
+  if(evidence.executables.some(entry=>entry.client === "host")) {
+    const host=await loadPodHostEntry(value,expected);
+    const port=await createRouteAdmission({...evidence,host:true,loadedBindings:host,
+      expectedFingerprint:evidence.wire.fingerprint,catalog:[...linkedCatalog().entries.values()]});
+    const result=port.admitHost(host);
+    if(!result.ok) throw Error(JSON.stringify(result.diagnostics));
+    return result.route;
+  }
   const web = evidence.executables.filter((item) => item.client === "web");
   if (
     web.length !== 1 ||
@@ -90,18 +111,7 @@ export async function admitPodArtifact(value: unknown, expected: string): Promis
     Object.entries(module.entries).map(([key, entry]) =>
       commandLink(key, entry as unknown as Command, entry.axes as CatalogAxes, "")),
   ));
-  if ("spec" in module) {
-    const typed=z.object({host:z.unknown()}).parse(module);
-    const {captureHostModule}=await import("@pe/agent-contracts");
-    const host=captureHostModule(typed.host as import("@pe/agent-contracts").HostRouteModule);
-    if (canonicalRouteJson(host.data) !== canonicalRouteJson(evidence.artifact.data))
-      throw Error("Typed host declaration differs from artifact");
-    const port=await createRouteAdmission({...evidence,host:true,loadedBindings:host,
-      expectedFingerprint:evidence.wire.fingerprint,catalog:[...catalog.entries.values()]});
-    const result=port.admitHost(host);
-    if(!result.ok) throw Error(JSON.stringify(result.diagnostics));
-    return result.route;
-  }
+  if ("spec" in module) throw Error("Typed Pods require a separate host entry");
   const port = await createRouteAdmission({
     ...evidence,
     loadedBindings: module,
