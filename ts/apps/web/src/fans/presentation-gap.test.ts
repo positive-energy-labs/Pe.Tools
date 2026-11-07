@@ -296,9 +296,9 @@ test.each(["current", "stale-before", "stale-after", "throw", "async"] as const)
           ]);
           expect(mount.review("apply")!.cells[0]!.after).toContain("925 cfm");
           for (const row of mount.review("apply")!.rows) {
-            expect(row).not.toMatch(
-              /\b100\b|\b900\b|\belement\s+\d+|\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/i,
-            );
+            // Write review audits the target by searchable id; unrelated identities still stay out.
+            expect(row).toMatch(/FC-1.*\b100\b/);
+            expect(row).not.toMatch(/\b900\b|\belement\s+\d+|\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/i);
           }
           mount.read("names");
           expect(present).toHaveBeenCalledOnce();

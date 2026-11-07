@@ -71,9 +71,16 @@ public sealed record DuctApplyResult(
 ///     One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store, and the
 ///     store entries a write changes: slot (Key names the slot), verdict (Key is the issue or finding id, Id its first
 ///     element) and role (Id is the unit). Outcome: planned (preview), written, refused (Reason says why), unchanged
-///     (already holds the value). Before and After are display text; "none" is no entry.
+///     (already holds the value). Before and After are display text; "none" is no entry. ElementLabel and UniqueId identify an extant target;
+///     Parameter and Scope name its native setting and owner. Changes expands a target into parameter review rows without
+///     multiplying execution targets or counts. ReportedPressureDropInWg is effective pressure, not a stored setting.
 /// </summary>
-public sealed record DuctWrite(long? Id, string Kind, string Outcome, string? Reason, string? Before, string? After, string? Key = null);
+public sealed record DuctWrite(long? Id, string Kind, string Outcome, string? Reason, string? Before, string? After, string? Key = null,
+    string? ElementLabel = null, string? UniqueId = null, string? Parameter = null, string? Scope = null,
+    IReadOnlyList<DuctParameterChange>? Changes = null, double? ReportedPressureDropInWg = null);
+
+/// <summary>One parameter's native setting before and intended setting after. Unset is not zero. Method states have no units.</summary>
+public sealed record DuctParameterChange(string Parameter, string? Before, string? After);
 
 public sealed record DuctApplyCounts(int Planned, int Written, int Refused, int Unchanged);
 

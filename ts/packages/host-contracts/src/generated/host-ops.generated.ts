@@ -364,7 +364,9 @@ export namespace DuctsApply {
      * One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store, and the
      * store entries a write changes: slot (Key names the slot), verdict (Key is the issue or finding id, Id its first
      * element) and role (Id is the unit). Outcome: planned (preview), written, refused (Reason says why), unchanged
-     * (already holds the value). Before and After are display text; "none" is no entry.
+     * (already holds the value). Before and After are display text; "none" is no entry. ElementLabel and UniqueId identify an extant target;
+     * Parameter and Scope name its native setting and owner. Changes expands a target into parameter review rows without
+     * multiplying execution targets or counts. ReportedPressureDropInWg is effective pressure, not a stored setting.
      *
      */
     export interface DuctWrite {
@@ -375,6 +377,20 @@ export namespace DuctsApply {
       before?: null | string;
       after?: null | string;
       key?: null | string;
+      elementLabel?: null | string;
+      uniqueId?: null | string;
+      parameter?: null | string;
+      scope?: null | string;
+      changes?: DuctParameterChange[] | null;
+      reportedPressureDropInWg?: null | number;
+    }
+    /**
+     * One parameter's native setting before and intended setting after. Unset is not zero. Method states have no units.
+     */
+    export interface DuctParameterChange {
+      parameter: string;
+      before?: null | string;
+      after?: null | string;
     }
     export interface DuctApplyCounts {
       planned: number;
@@ -431,7 +447,7 @@ export namespace DuctsApply {
   }
 }
 
-/** Plan every duct loss write and refusal ducts.apply would make, without opening a transaction. Same request and result as ducts.apply; nothing is committed. */
+/** Plan every duct loss write and refusal ducts.apply would make, without opening a transaction. Same request and result as ducts.apply; nothing is committed. Element targets publish label, stable identity, native parameter and owner scope, and before/after settings with units. Loss method transitions are separate from stored pressure settings; unset is explicit and reported effective pressure is distinct. Unreadable targets are refused. */
 export namespace DuctsApplyPlan {
   export namespace Req {
     /**
@@ -622,7 +638,9 @@ export namespace DuctsApplyPlan {
      * One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store, and the
      * store entries a write changes: slot (Key names the slot), verdict (Key is the issue or finding id, Id its first
      * element) and role (Id is the unit). Outcome: planned (preview), written, refused (Reason says why), unchanged
-     * (already holds the value). Before and After are display text; "none" is no entry.
+     * (already holds the value). Before and After are display text; "none" is no entry. ElementLabel and UniqueId identify an extant target;
+     * Parameter and Scope name its native setting and owner. Changes expands a target into parameter review rows without
+     * multiplying execution targets or counts. ReportedPressureDropInWg is effective pressure, not a stored setting.
      *
      */
     export interface DuctWrite {
@@ -633,6 +651,20 @@ export namespace DuctsApplyPlan {
       before?: null | string;
       after?: null | string;
       key?: null | string;
+      elementLabel?: null | string;
+      uniqueId?: null | string;
+      parameter?: null | string;
+      scope?: null | string;
+      changes?: DuctParameterChange[] | null;
+      reportedPressureDropInWg?: null | number;
+    }
+    /**
+     * One parameter's native setting before and intended setting after. Unset is not zero. Method states have no units.
+     */
+    export interface DuctParameterChange {
+      parameter: string;
+      before?: null | string;
+      after?: null | string;
     }
     export interface DuctApplyCounts {
       planned: number;

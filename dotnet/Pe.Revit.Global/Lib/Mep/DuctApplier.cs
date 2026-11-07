@@ -52,6 +52,12 @@ public static class DuctApplier {
     private sealed record Item(long? Id, string Kind, string? Before) {
         /// <summary>A store entry's key: the slot name, or the verdict's issue or finding id.</summary>
         public string? Key { get; init; }
+        public string? ElementLabel { get; init; }
+        public string? UniqueId { get; init; }
+        public string? Parameter { get; init; }
+        public string? Scope { get; init; }
+        public IReadOnlyList<DuctParameterChange>? Changes { get; init; }
+        public double? ReportedPressureDropInWg { get; init; }
         public string Outcome { get; set; } = "planned";
         public string? Reason { get; set; }
         public string? After { get; set; }
@@ -92,7 +98,12 @@ public static class DuctApplier {
         // A Revit refusal while reading one target is that target's refusal, never the whole call's.
         Item Plan(string kind, long id, Func<Item> plan) {
             try {
-                return plan();
+                var item = plan();
+                var element = item.Element ?? doc.GetElement(id.ToElementId());
+                return element is null ? item : item with {
+                    ElementLabel = ReviewLabel(element), UniqueId = element.UniqueId,
+                    Parameter = item.Parameter ?? kind, Scope = item.Scope ?? "instance"
+                };
             } catch (Exception ex) when (DuctSnapshots.IsRevitFailure(ex) || ex is ArgumentException) {
                 return new Item(id, kind, null).Refuse($"Revit refused the read: {ex.Message}");
             }
@@ -164,7 +175,8 @@ public static class DuctApplier {
         }
 
         foreach (var i in items.Where(i => i.Outcome == "written" && i.Element is { IsValidObject: true } && i.Loss is not null))
-            i.After += $"; Revit drop {Pressure(i.Element!.get_Parameter(BuiltInParameter.RBS_DUCT_PRESSURE_DROP)):0.#####} in-wg";
+            if (Pressure(i.Element!.get_Parameter(BuiltInParameter.RBS_DUCT_PRESSURE_DROP)) is { } effective)
+                i.After += $"; reported effective pressure {effective:0.#####} in-wg";
         var systems = items.Where(i => i.Outcome == "written" && i.Element is { IsValidObject: true })
             .SelectMany(i => DuctSnapshots.HvacConnectors(i.Element!))
             .Select(c => Try(() => c.MEPSystem as MechanicalSystem))
@@ -336,6 +348,17 @@ public static class DuctApplier {
         }
     }
 
+    private static string ReviewLabel(Element e) {
+        string? Text(Parameter? p) => p is { HasValue: true, StorageType: StorageType.String } ? p.AsString() : null;
+        var mark = Text(e.LookupParameter("PE_G___TagInstance"));
+        if (string.IsNullOrWhiteSpace(mark)) mark = Text(e.get_Parameter(BuiltInParameter.ALL_MODEL_MARK));
+        if (string.IsNullOrWhiteSpace(mark) && e is FamilyInstance fi)
+            mark = Text(fi.Symbol.get_Parameter(BuiltInParameter.ALL_MODEL_TYPE_MARK));
+        return !string.IsNullOrWhiteSpace(mark) ? mark! : e is FamilyInstance family
+            ? $"{family.Symbol.FamilyName} {family.Symbol.Name}"
+            : $"{e.Category?.Name ?? "Element"} {e.Name}";
+    }
+
     private static Item Lossy(Document doc, long id, string kind, BuiltInCategory category, Guid server,
         Dictionary<Guid, Schema?> schemas, IReadOnlyList<(string Field, string Value)> fields, double number, string after) {
         var e = doc.GetElement(id.ToElementId());
@@ -347,10 +370,32 @@ public static class DuctApplier {
                        && e.GetEntity(s) is { } en && en.IsValid()
             ? s.ListFields().Where(f => f.ValueType == typeof(string)).Select(f => en.Get<string>(f) ?? "").Where(v => v.Length > 0).ToList()
             : null;
-        var shown = g == SpecificLoss && existing is [var one] && double.TryParse(one, NumberStyles.Float, CultureInfo.InvariantCulture, out var raw)
-            ? $"{UnitUtils.ConvertFromInternalUnits(raw, InWg):0.####} in-wg"
-            : existing is null ? null : string.Join(" ", existing);
-        var item = new Item(id, kind, $"{Name(current)}{(shown is { Length: > 0 } ? " " + shown : "")}") { Element = e };
+        string? shown = existing is null ? null : string.Join(" ", existing);
+        if (g == SpecificLoss && schemas[SpecificLoss] is { } lossSchema
+            && e.GetEntity(lossSchema) is { } lossEntity && lossEntity.IsValid()) {
+            var field = lossSchema.GetField(PressureLossField);
+            if (field is null) return new Item(id, kind, null) { Element = e, Parameter = "Specific Loss" }
+                .Refuse("the native Specific Loss schema has no readable PressureLoss field");
+            var text = lossEntity.Get<string>(field);
+            if (string.IsNullOrEmpty(text)) shown = null;
+            else if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var raw) && Finite(raw))
+                shown = $"{UnitUtils.ConvertFromInternalUnits(raw, InWg):0.####} in-wg";
+            else return new Item(id, kind, null) { Element = e, Parameter = "Specific Loss" }
+                .Refuse("the native Specific Loss PressureLoss setting cannot be read as a finite pressure");
+        }
+        if (method is null) return new Item(id, kind, null) { Element = e, Parameter = "Loss Method" }
+            .Refuse("the element has no readable loss method server parameter");
+        var parameter = server == SpecificLoss ? "Specific Loss" : server == SpecificCoefficient ? "Loss Coefficient" : "Pe loss server results";
+        // Stored setting and effective pressure are different facts. An inactive or absent setting is unset, never zero.
+        var before = g == server ? shown ?? "unset" : "unset";
+        var settingAfter = server == SpecificLoss ? $"{number:0.####} in-wg"
+            : server == SpecificCoefficient ? $"{number:0.####}" : after;
+        var reported = e.get_Parameter(BuiltInParameter.RBS_DUCT_PRESSURE_DROP);
+        var item = new Item(id, kind, before) {
+            Element = e, Parameter = parameter, Scope = "instance",
+            ReportedPressureDropInWg = Pressure(reported),
+            Changes = [new("Loss Method", Name(current), Name(server.ToString())), new(parameter, before, settingAfter)]
+        };
         if (e.Category.ToBuiltInCategory() != category)
             return item.Refuse($"not a {(category == BuiltInCategory.OST_DuctFitting ? "duct fitting" : "duct accessory")} ({e.Category?.Name ?? "no category"})");
         if (method is null || method.IsReadOnly) return item.Refuse("the element has no writable loss method server parameter");
@@ -365,8 +410,8 @@ public static class DuctApplier {
                 double.TryParse(pair.First, NumberStyles.Float, CultureInfo.InvariantCulture, out var had) && double.TryParse(pair.Second, NumberStyles.Float, CultureInfo.InvariantCulture, out var w)
                     ? Math.Abs(had - w) <= 1e-9 * Math.Max(1, Math.Abs(had))
                     : string.Equals(pair.First, pair.Second, StringComparison.Ordinal)))
-            return item.Unchanged(after);
-        return item with { Loss = (server, schema, fields), After = after };
+            return item.Unchanged(settingAfter);
+        return item with { Loss = (server, schema, fields), After = settingAfter };
     }
 
     /// <summary>
@@ -385,7 +430,7 @@ public static class DuctApplier {
             ? (double?)UnitUtils.ConvertFromInternalUnits(live.AssignedPressureDrop, InWg)
             : null);
         var had = Read();
-        var item = new Item(w.Id, "terminal", c is null ? null : $"{method} {had:0.#####} in-wg") { Element = e };
+        var item = new Item(w.Id, "terminal", c is null ? null : $"{method} {had:0.#####} in-wg") { Element = e, Parameter = slots.TerminalDrop ?? "Connector pressure drop", Scope = "instance" };
         if (e.Category.ToBuiltInCategory() != BuiltInCategory.OST_DuctTerminal) return item.Refuse($"not an air terminal ({e.Category?.Name ?? "no category"})");
         if (c is null) return item.Refuse("the terminal has no HVAC connector");
         if (method != DuctLossMethodType.SpecificLoss)
@@ -476,7 +521,7 @@ public static class DuctApplier {
         var p = e.LookupParameter(name) ?? (e as FamilyInstance)?.Symbol?.LookupParameter(name);
         // The owner is the parameter's element, never the wrapper it was looked up through.
         var where = p is null || p.Element.Id == e.Id ? "instance" : "type";
-        var item = new Item(id, kind, p is { HasValue: true, StorageType: StorageType.Double } ? $"{where} {Shown(p, unit):0.####} {unitText}" : null) { Element = e, Owner = p?.Element.Id };
+        var item = new Item(id, kind, p is { HasValue: true, StorageType: StorageType.Double } ? $"{Shown(p, unit):0.####} {unitText}" : p is null ? null : "unset") { Element = e, Owner = p?.Element.Id, Parameter = p?.Definition.Name ?? name, Scope = where };
         if (e.Category.ToBuiltInCategory() != BuiltInCategory.OST_MechanicalEquipment) return item.Refuse($"not mechanical equipment ({e.Category?.Name ?? "no category"})");
         if (p is null) return item.Refuse($"neither the instance nor its type has '{name}'");
         if (p.StorageType != StorageType.Double || p.Definition.GetDataType() != spec)
@@ -510,7 +555,7 @@ public static class DuctApplier {
         // A family parameter can share the built-in `Flow`'s name: write the writable air flow one.
         var named = Parameters(e);
         var p = named.FirstOrDefault(x => !x.IsReadOnly && IsAirFlow(x)) ?? named.FirstOrDefault();
-        var item = new Item(w.Id, kind, p is { HasValue: true, StorageType: StorageType.Double } ? $"{Shown(p, Cfm):0.####} cfm" : null) { Element = e };
+        var item = new Item(w.Id, kind, p is { HasValue: true, StorageType: StorageType.Double } ? $"{Shown(p, Cfm):0.####} cfm" : p is null ? null : "unset") { Element = e, Parameter = p?.Definition.Name ?? slot, Scope = "instance" };
         if (e.Category.ToBuiltInCategory() != BuiltInCategory.OST_DuctTerminal) return item.Refuse($"not an air terminal ({e.Category?.Name ?? "no category"})");
         if (p is null) return item.Refuse($"the instance has no '{slot}' (the TerminalFlow slot)");
         if (p.StorageType != StorageType.Double || p.Definition.GetDataType() != SpecTypeId.AirFlow)
@@ -590,7 +635,8 @@ public static class DuctApplier {
 
     private static DuctApplyResult Result(bool preview, List<Item> items, IReadOnlyList<DuctSystem>? systems, int revision) => new(
         preview,
-        items.Select(i => new DuctWrite(i.Id, i.Kind, i.Outcome, i.Reason, i.Before, i.Outcome == "refused" ? null : i.After, i.Key)).ToList(),
+        items.Select(i => new DuctWrite(i.Id, i.Kind, i.Outcome, i.Reason, i.Before, i.Outcome == "refused" ? null : i.After, i.Key,
+            i.ElementLabel, i.UniqueId, i.Parameter, i.Scope, i.Changes, i.ReportedPressureDropInWg)).ToList(),
         new DuctApplyCounts(
             items.Count(i => i.Outcome == "planned"),
             items.Count(i => i.Outcome == "written"),
@@ -615,7 +661,7 @@ public static class DuctApplier {
     private static double Shown(Parameter p, ForgeTypeId unit) => Math.Round(UnitUtils.ConvertFromInternalUnits(p.AsDouble(), unit), 6) + 0.0;
 
     // + 0.0 turns -0 into 0 for display.
-    private static double Pressure(Parameter? p) => p is { StorageType: StorageType.Double } ? Math.Round(UnitUtils.ConvertFromInternalUnits(p.AsDouble(), InWg), 6) + 0.0 : 0;
+    private static double? Pressure(Parameter? p) => p is { HasValue: true, StorageType: StorageType.Double } ? Shown(p, InWg) : null;
     private static bool Finite(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
 
     private static T? Try<T>(Func<T?> read) {

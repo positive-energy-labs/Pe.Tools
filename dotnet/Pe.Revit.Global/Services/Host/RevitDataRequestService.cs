@@ -118,7 +118,7 @@ internal sealed class RevitDataRequestService {
 
     // A plan, not a rehearsal (ADR 0030 rule 4): it opens no transaction, so it is a Read with an empty
     // footprint. The host binds this key to the Work seal step; ducts.apply rechecks the seal.
-    [Op("ducts.apply.plan", OpSubject.Elements, OpTouches.Geometry, OpEffect.Read, Does = "Plan every duct loss write and refusal ducts.apply would make, without opening a transaction. Same request and result as ducts.apply; nothing is committed.", Title = "Plan Duct Losses", Finds = ["ducts", "plan", "preview", "pressure", "loss"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("ducts.apply.plan", OpSubject.Elements, OpTouches.Geometry, OpEffect.Read, Does = "Plan every duct loss write and refusal ducts.apply would make, without opening a transaction. Same request and result as ducts.apply; nothing is committed. Element targets publish label, stable identity, native parameter and owner scope, and before/after settings with units. Loss method transitions are separate from stored pressure settings; unset is explicit and reported effective pressure is distinct. Unreadable targets are refused.", Title = "Plan Duct Losses", Finds = ["ducts", "plan", "preview", "pressure", "loss"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static DuctApplyResult PreviewDuctsCore(DuctApplyRequest request, ProjectDocument activeDocument) =>
         ApplyDucts(request, activeDocument, true);
 

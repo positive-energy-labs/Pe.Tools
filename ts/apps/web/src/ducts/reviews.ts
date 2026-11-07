@@ -179,7 +179,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
     snapshotOf(scope) ?? (scope.readings.sheetSnapshot?.value as DuctSnapshot | undefined);
   const slots = { ...snapshot?.slots, ...request?.slots };
   const name = snapshot ? subjectNamer(snapshot, { unique: true }) : () => null;
-  const lines = response.writes.map((write) => {
+  const lines = response.writes.flatMap((write) => {
     const proposed =
       write.kind === "component"
         ? request?.components?.find((r) => r.id === write.id)
@@ -228,16 +228,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
             ? "Work"
             : "derived Work";
     const tail = `${write.outcome}${write.reason ? ` · ${write.reason}` : ""}`;
-    const loss = snapshot?.nodes.find((n) => n.id === write.id)?.loss;
-    const before = loss && (write.kind === "component" || write.kind === "fitting")
-        ? loss.specificLossInWg != null
-          ? `${loss.specificLossInWg} in-wg (Revit Specific Loss)`
-          : loss.coefficient != null
-            ? `${loss.coefficient} (${loss.method === "ashrae-table" ? "ASHRAE " + (loss.table ?? "table") : "Revit coefficient"})`
-            : loss.revitPressureDropInWg != null
-              ? `${loss.revitPressureDropInWg} in-wg (Revit reported)`
-              : (spoken(write.before) ?? null)
-        : (spoken(write.before) ?? null);
+    const before = spoken(write.before) ?? null;
     const key = `${write.kind}:${write.id ?? write.key ?? ""}`;
     // The store row is Pe's provenance record in Project Information; its "absent"/"revision n" are machine words.
     // A slot entry names the slot the value resolver now reads (after), not only the record's old name.
@@ -248,6 +239,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
         cell: {
           key,
           label,
+          group: "Pe loss record",
           before,
           after: `${spoken(write.after) ?? "none"} · ${tail}`,
           author: author ?? ("unknown" as const),
@@ -261,36 +253,46 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
         cell: {
           key,
           label,
+          group: "Pe loss record",
           before: write.before === "absent" ? "none yet" : before,
           after: `${write.before === "absent" ? "created" : "updated"} · ${tail}`,
           author: author ?? ("unknown" as const),
         },
       };
     }
-    const label = `${name(write.id) ?? "element"} · ${slot ?? write.kind}`;
-    const after = spoken(write.after) ?? next ?? "derived from Work";
-    return {
-      row: `${label}: ${before ?? "not available"} → ${after} · source: ${source} · ${tail}`,
-      cell: {
-        key,
-        label,
-        group:
-          write.kind === "component" &&
-          !scope.readings.fansWork?.value?.componentDrops?.[String(write.id)]?.edit
-            ? "Computed losses written back"
-            : "Your edits",
-        before,
-        after: `${after} · ${source} · ${tail}${write.outcome === "refused" ? "; add the missing parameter to the family or map to an existing writable parameter" : ""}`,
-        author: author ?? fanAuthor(scope, write.kind, write.id),
-      },
-    };
+    // Write review is an audit: show a searchable id here. element-label.ts stays id-free elsewhere.
+    const element = `${write.elementLabel ?? name(write.id) ?? "element"} · ${write.id}`;
+    const group = write.kind === "component" &&
+      !scope.readings.fansWork?.value?.componentDrops?.[String(write.id)]?.edit
+        ? "Computed losses written back" : "Your edits";
+    const changes = write.changes?.length ? write.changes : [{
+      parameter: write.parameter ?? slot ?? write.kind, before: write.before, after: write.after ?? next,
+    }];
+    return changes.map((change, index) => {
+      const label = `${element} · ${change.parameter}${write.scope ? ` (${write.scope})` : ""}`;
+      const reported = change.parameter === "Specific Loss" && write.reportedPressureDropInWg != null
+        ? ` (reported effective pressure: ${write.reportedPressureDropInWg} in-wg)` : "";
+      const before = `${spoken(change.before) ?? "unavailable"}${reported}`;
+      const after = write.outcome === "refused" ? "not written" : spoken(change.after) ?? "unavailable";
+      const remedy = write.outcome === "refused" && /neither|missing|no .*parameter/i.test(write.reason ?? "")
+        ? "; add the missing parameter to the family or map to an existing writable parameter" : "";
+      return {
+        row: `${label}: ${before} → ${after} · source: ${source} · ${tail}${remedy}`,
+        cell: {
+          key: changes.length === 1 ? key : `${key}:${index}`,
+          label, group, before,
+          after: `${after} · ${source} · ${tail}${remedy}`,
+          author: author ?? fanAuthor(scope, write.kind, write.id!),
+        },
+      };
+    });
   });
   return {
     sentence: response.writes.length
       ? `${response.writes.length} Revit target${response.writes.length === 1 ? "" : "s"}: ${outcomeWords(response)}`
       : "Nothing to write: no native targets were derived from this Work in the selected scope.",
     rows: lines.map((line) => line.row),
-    cells: lines.map((line) => ({ ...line.cell, group: line.cell.group ?? "Pe loss record" }))
+    cells: lines.map((line) => line.cell)
       .sort(
         (a, b) =>
           ["Your edits", "Computed losses written back", "Pe loss record"].indexOf(a.group) -
