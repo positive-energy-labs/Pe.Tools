@@ -86,7 +86,7 @@ test("typed Pod bytes register through the builtin door; changed bytes never acq
     const entry=resolve(dir,"module.ts");
     await writeFile(entry,podRouteSkeleton("typed-proof","worksheet"));
     const loaded=await createJiti(import.meta.url).import<{module:import("./src/route/typed-route.ts").TypedRoute}>(entry);
-    const built=await publishPodRoute({entry,root:dir,data:loaded.module.data,slug:"worksheet",name:"Worksheet",description:"Typed proof",contracts:[]});
+    const built=await publishPodRoute({entry,root:dir,data:loaded.module.data,slug:"worksheet",name:"Worksheet",description:"Typed proof",contracts:[{id:"kernel-data",bytes:new Uint8Array(readFileSync(new URL("../../packages/agent-contracts/src/route-kernel-data.ts",import.meta.url)))}]});
     const artifact=JSON.parse(new TextDecoder().decode(built.bytes));
     const row=podRouteDescriptorSchema.parse({...built.declaration,key:"route:@typed-proof/routes/worksheet/route.artifact",packageId:"typed-proof",workRoute:"pod.typed-proof.worksheet",trusted:true});
     const host=await hostAdmit(artifact,row.fingerprint);
