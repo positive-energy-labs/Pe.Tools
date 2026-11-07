@@ -45,7 +45,8 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
 }));
 // The standalone bay still requires current machine evidence before dispatch.
 vi.mock("./sources", async () => {
-  const { MACHINE_SEEDS, BAY_RECENTS, BAY_THREADS } = await import("../design-system/open-examples");
+  const { MACHINE_SEEDS, BAY_RECENTS, BAY_THREADS } =
+    await import("../design-system/open-examples");
   const fixed = (value: unknown) => ({
     kind: "use",
     dirties: ["sdk"],
@@ -269,7 +270,7 @@ const chip = (label: string) => screen.getByText(label, { selector: "[data-slot=
 
 test("patching Clinic into your Revit 2025 by click names the upgrade and sends the consent", async () => {
   render(<Bay />);
-  fireEvent.click(screen.getByText("Clinic-Fitout.rvt"));
+  fireEvent.click(await screen.findByText("Clinic-Fitout.rvt"));
   fireEvent.click(within(yoursCard()).getByText("patch Clinic-Fitout.rvt here"));
   const verb = within(yoursCard()).getByRole("button", {
     name: "Open in your Revit 2025 and upgrade from 2023",
@@ -294,6 +295,7 @@ test("patching Clinic into your Revit 2025 by click names the upgrade and sends 
 
 test("the command line typed one character at a time equals the click path", async () => {
   render(<Bay />);
+  await screen.findByRole("combobox", { name: "table query" });
   box().focus();
   typeInto("clinic → new 2024 ");
   const verb = screen.getByRole("button", {
@@ -314,7 +316,7 @@ test("the command line typed one character at a time equals the click path", asy
 
 test("Stop keeps work by default; discard is offered only for a checkout session", async () => {
   render(<Bay machine={withSessions([OBSERVED_ICON])} />);
-  fireEvent.click(screen.getByRole("button", { name: "stop" }));
+  fireEvent.click(await screen.findByRole("button", { name: "stop" }));
   expect(screen.queryByRole("button", { name: "stop, discard edits" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "stop, keep work" }));
   await waitFor(() => expect(runSemanticAction).toHaveBeenCalled());
@@ -327,12 +329,13 @@ test("Stop keeps work by default; discard is offered only for a checkout session
   });
   cleanup();
   render(<Bay machine={withSessions([CHECKOUT_HOT])} />);
-  fireEvent.click(screen.getByRole("button", { name: "stop" }));
+  fireEvent.click(await screen.findByRole("button", { name: "stop" }));
   expect(screen.queryByRole("button", { name: "stop, discard edits" })).not.toBeNull();
 });
 
 test("a held document offers close with work kept, and discard beside it", async () => {
   render(<Bay />);
+  await screen.findByRole("group", { name: "Revit 2025 started from the Revit icon" });
   fireEvent.click(within(yoursCard()).getAllByRole("button", { name: "Open details" })[0]!);
   fireEvent.click(within(yoursCard()).getAllByRole("button", { name: "close" })[0]!);
   fireEvent.click(screen.getByRole("button", { name: "close, keep work" }));
