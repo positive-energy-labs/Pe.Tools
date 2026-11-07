@@ -18,7 +18,7 @@ import {
   type ParamColumn,
   type TypeRow,
 } from "#/families/matrix-columns";
-import type { PivotFamily, PivotRow } from "./kernel-matrix-model";
+import type { PivotFamily, PivotRow } from "../../../../packages/agent-contracts/src/families-read";
 import type { ProposeFamilyCell } from "./matrix-columns";
 import type { MeasuredAnswer } from "#/host/measured-parse";
 import { familyCellKey, type MeasuredDisplayUnit } from "@pe/agent-contracts";

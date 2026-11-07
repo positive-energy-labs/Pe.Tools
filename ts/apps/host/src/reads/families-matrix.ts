@@ -1,11 +1,19 @@
 import { familyCellValueSchema } from "@pe/agent-contracts";
-import type { TypeRow, ParamColumn, PivotRow, PivotFamily } from "../../../../packages/agent-contracts/src/families-read.ts";
+import type {
+  TypeRow,
+  ParamColumn,
+  PivotRow,
+  PivotFamily,
+} from "../../../../packages/agent-contracts/src/families-read.ts";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 type FamilySnapshotRecord = RevitMatrixLoadedFamilies.Res.FamilySnapshotRecord;
-const visibleParameters = (family: FamilySnapshotRecord) => family.parameters.filter(p=>p.excludedReason == null);
-const cellText = (value:string|null|undefined) => value ?? "";
-const typeRowKey = (family:{familyName:string}, typeName:string) => JSON.stringify([family.familyName,typeName]);
-const isYesNo = (id:string|null|undefined) => id?.startsWith("autodesk.spec:spec.bool") === true;
+const visibleParameters = (family: FamilySnapshotRecord) =>
+  family.parameters.filter((p) => p.excludedReason == null);
+const cellText = (value: string | null | undefined) => value ?? "";
+const typeRowKey = (family: { familyName: string }, typeName: string) =>
+  JSON.stringify([family.familyName, typeName]);
+const isYesNo = (id: string | null | undefined) =>
+  id?.startsWith("autodesk.spec:spec.bool") === true;
 export function matrixModel(families: readonly FamilySnapshotRecord[]) {
   const params = new Map<string, ParamColumn & { seen: Set<string> }>();
   const rows: TypeRow[] = [];
@@ -87,7 +95,6 @@ export function buildPivot(
   }
   const pivotRows: PivotRow[] = params.map((param) => {
     const filledByFamily: Record<string, number> = {};
-    const typesByFamily: Record<string, TypeRow[]> = {};
     let filled = 0;
     let present = 0;
     for (const family of families) {
@@ -95,7 +102,6 @@ export function buildPivot(
         (row) => row.scopes[param.key] && row.scopes[param.key] !== "Unresolved",
       );
       if (!carrying.length) continue;
-      typesByFamily[family.familyName] = carrying;
       const values = carrying.map((row) => row.values[param.key] ?? "");
       present += values.length;
       const nonBlank = values.filter(filledValue).length;
@@ -110,7 +116,6 @@ export function buildPivot(
       filled,
       present,
       filledByFamily,
-      typesByFamily,
     };
   });
   const pivotFamilies: PivotFamily[] = families.map((family) => ({
@@ -120,7 +125,7 @@ export function buildPivot(
     category: family.categoryName ?? "",
     types: family.typeNames.length,
     placed: family.placedInstanceCount ?? 0,
-    params: pivotRows.filter((row) => row.typesByFamily[family.familyName]?.length).length,
+    params: pivotRows.filter((row) => Object.hasOwn(row.filledByFamily, family.familyName)).length,
   }));
   return { pivotRows, pivotFamilies };
 }

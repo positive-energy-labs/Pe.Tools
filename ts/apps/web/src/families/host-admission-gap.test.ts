@@ -6,7 +6,7 @@ import {
   createBuiltinRouteInventory,
 } from "../../../../packages/agent-contracts/src/route-module";
 import { createRouteRegistrations } from "../../../../packages/mcps/src/pea/routes";
-import { familiesHostModule } from "./neutral";
+import { familiesHostModule } from "./route";
 import { composeHostRouteRegistration } from "../../../host/src/host-route-registration";
 
 const filter = {
@@ -32,8 +32,8 @@ test.each(
     version: 1 as const,
     data: module.data,
     hostVersion: "w2f-gap",
-    variants: [{ client: "web" as const, entry: "families/kernel.ts" }],
-    modules: [{ id: "families/kernel.ts", sha256: "a".repeat(64) }],
+    variants: [{ client: "web" as const, entry: "families/route.ts" }],
+    modules: [{ id: "families/route.ts", sha256: "a".repeat(64) }],
     inputs: [],
     externals: [],
   };

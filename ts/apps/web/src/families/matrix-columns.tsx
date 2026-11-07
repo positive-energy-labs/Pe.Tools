@@ -14,7 +14,6 @@ import { cellFromDraft, StateCell, type CellRefusal, type CellTransition } from 
 import type { MeasuredAnswer } from "#/host/measured-parse";
 import { CellListSelect } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
-import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
 import type { FamilyCellAddress } from "@pe/agent-contracts";
 import type { Refusal } from "#/route/refusal";
 export type ProposeFamilyCell = (
@@ -24,37 +23,8 @@ export type ProposeFamilyCell = (
 ) => Promise<Refusal | null>;
 import { cn } from "@pe/kit/lib/utils";
 
-export interface TypeRow {
-  key: string;
-  familyId: number;
-  familyName: string;
-  categoryName: string;
-  typeName: string;
-  typeCount: number;
-  values: Record<string, string>;
-  scopes: Record<string, FamilyParameterSnapshot["scope"]>;
-  formulas: Record<string, FamilyParameterSnapshot["formulaState"]>;
-  storageTypes: Record<string, FamilyCellValue["storageType"] | undefined>;
-  displayUnits?: Record<string, MeasuredDisplayUnit | null>;
-  yesNos?: Record<string, boolean>;
-}
-
-export interface ParamColumn {
-  key: string;
-  name: string;
-  kind: FamilyParameterSnapshot["kind"];
-  isInstance: boolean;
-  isBuiltIn: boolean;
-  isProjectOnly: boolean;
-  familyCount: number;
-  /** A Yes/No parameter: a closed choice, never free text. */
-  yesNo?: boolean;
-  /**
-   * That the parameter measures something, and the unit the PROJECT renders it in (the matrix reads
-   * the project, so the project's units are what these cells show and stage).
-   */
-  displayUnit?: MeasuredDisplayUnit | null;
-}
+import type { TypeRow, ParamColumn } from "../../../../packages/agent-contracts/src/families-read";
+export type { TypeRow, ParamColumn } from "../../../../packages/agent-contracts/src/families-read";
 
 /** Revit's Yes/No spec (`autodesk.spec:spec.bool-1.0.0`), read off the definition's data type. */
 export const isYesNo = (dataTypeId: string | null | undefined) =>

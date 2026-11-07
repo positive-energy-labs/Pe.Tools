@@ -3,7 +3,8 @@ import { z } from "zod";
 import { specDocSchema } from "./family.ts";
 import { documentRefSchema } from "./target.ts";
 import { nativeProcessSchema } from "./native-process.ts";
-import { workKeySchema, workHandleSchema } from "./route-state.ts";
+import { workKeySchema } from "./route-state.ts";
+import { workHandleSchema } from "./command.ts";
 import { podDraftSourceSchema, podMemberSchema, podMemberSourceSchema } from "./settings.ts";
 import {
   familiesObservationSchema,

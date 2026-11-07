@@ -1,20 +1,26 @@
 /** Presentation of the single semantic Families Apply result. */
 // TODO: F3a live write proof remains owed: Broan reload refused system compatibility (7524f854-2853-4b41-9929-d551a7d8319e); see .artifacts/accept/u2-f3a/RESULTS.md.
-import { familyApplyResultSchema, writePreviewSchema, type ActionReceipt } from "@pe/agent-contracts";
-import { refuse, type Refusal } from "#/route/refusal";
+import {
+  familyApplyResultSchema,
+  writePreviewSchema,
+  type ActionReceipt,
+  type Immutable,
+} from "@pe/agent-contracts";
+type Refusal = { code: "not-ready" | "failed" | "partial"; message: string };
+const refuse = (code: Refusal["code"], message: string): Refusal => ({ code, message });
 
 export const applyResults = (result: unknown) => {
   if (writePreviewSchema.safeParse(result).success) return [];
   const parsed = familyApplyResultSchema.parse(result);
   return "results" in parsed ? parsed.results : [parsed];
 };
-const receiptsOf = (action: ActionReceipt) =>
+const receiptsOf = (action: Immutable<ActionReceipt>) =>
   action.state === "succeeded"
     ? applyResults(action.result).flatMap((result) => result.native.receipts)
     : [];
 
 /** Counts and the common artifact parent, straight from the host result. */
-export function applyTally(action: ActionReceipt) {
+export function applyTally(action: Immutable<ActionReceipt>) {
   const receipts = receiptsOf(action);
   const dirs = [
     ...new Set(receipts.flatMap((r) => (r.artifactDirectory ? [r.artifactDirectory] : []))),
@@ -36,7 +42,10 @@ export function applyTally(action: ActionReceipt) {
   };
 }
 
-export function applyOutcome(action: ActionReceipt, families: readonly string[]): Refusal | null {
+export function applyOutcome(
+  action: Immutable<ActionReceipt>,
+  families: readonly string[],
+): Refusal | null {
   if (action.state !== "succeeded") {
     const noDispatch = action.state === "failed" && action.notDispatched === true;
     const reason = "error" in action ? action.error : `families.apply ${action.state}`;

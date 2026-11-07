@@ -1550,7 +1550,7 @@ export function familyExecutors(
           const { session } = await lifetime(bridge, target, "project", deps);
           const document = session.state?.openDocuments.find(d => d.openId === target.openId);
           const handle = ctx.admission.input.work;
-          const expected = bindWork("families", document?.address ? addressSchema.parse(document.address) : undefined, undefined, target);
+          const expected = bindWork("families", document?.address ? addressSchema.parse(document.address) : null, undefined, target);
           if (workKey(handle.key) !== workKey(expected)) throw refused("Families Work belongs to another document");
           const work = await ctx.selectWork(tools.families.work, handle, () => ({facts:[["scope"]]}));
           const filter = stagedFilter(work);

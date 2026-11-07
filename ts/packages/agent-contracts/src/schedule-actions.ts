@@ -8,7 +8,8 @@ import {
   type ScheduleGridDocument,
 } from "./schedule-grid-data.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
-import { workHandleSchema, type RouteStatePatch } from "./route-state.ts";
+import type { RouteStatePatch } from "./route-state.ts";
+import { workHandleSchema } from "./command.ts";
 import { podMemberSourceSchema } from "./settings.ts";
 
 export const scheduleReadingSchema = z.object({

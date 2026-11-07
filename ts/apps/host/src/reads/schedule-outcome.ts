@@ -62,4 +62,3 @@ export function scheduleOutcome(
     receiptId: receipt.id,
   };
 }
-

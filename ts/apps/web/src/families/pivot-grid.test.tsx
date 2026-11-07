@@ -3,7 +3,7 @@ import { act, fireEvent, render } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
 
 import type { ParamColumn, TypeRow } from "#/families/matrix-columns";
-import { type PivotRow } from "./kernel-matrix-model";
+import { type PivotRow } from "../../../../packages/agent-contracts/src/families-read";
 import { TypeGrid, identityWidth } from "#/families/pivot-grid";
 
 const param = (key: string): ParamColumn => ({
@@ -48,7 +48,6 @@ test("511 type columns mount a bounded window and expose direct editable cells",
     filled: 511,
     present: 511,
     filledByFamily: {},
-    typesByFamily: {},
   }));
   const scroller = { current: null };
   const propose = vi.fn(async () => null);
@@ -169,7 +168,6 @@ test("archived type cells render the saved value without edit controls", () => {
     filled: 1,
     present: 1,
     filledByFamily: { A: 1 },
-    typesByFamily: {},
   };
   const view = render(
     <TypeGrid
