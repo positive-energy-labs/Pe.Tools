@@ -37,6 +37,7 @@ import { parseTarget } from "#/route/route-target";
  */
 const PLACES = "pe.places";
 const FOCUS = "pe.place.focus";
+const PLACE_LIMIT = `This window keeps ${THREAD_TABS_MAX} Places; close one first.`;
 const read = (): ThreadTab[] => {
   try {
     return (
@@ -208,6 +209,8 @@ export function useRouteTabs() {
   const commit = (next: ThreadTab[]) => {
     save(next);
     setTabs(next);
+    if (next.length < THREAD_TABS_MAX)
+      setFailure(prior => prior === PLACE_LIMIT ? null : prior);
     return next;
   };
   const put = (id: string, tabRoute: string, tabLink: string) => {
@@ -216,7 +219,7 @@ export function useRouteTabs() {
     const prior = read();
     const existing = prior.some((tab) => tab.id === id);
     if (!existing && prior.length >= THREAD_TABS_MAX)
-      throw Error(`This window keeps ${THREAD_TABS_MAX} Places; close one first.`);
+      throw Error(PLACE_LIMIT);
     const next = { id, route: tabRoute, link: tabLink, at: new Date().toISOString() };
     return commit(existing ? prior.map((tab) => (tab.id === id ? next : tab)) : [...prior, next]);
   };

@@ -661,6 +661,7 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
     for (let i = 0; i < 40 && !screen.queryByRole("button", { name: "Expand tools" }); i++)
       fireEvent.keyDown(seam, { key: "ArrowRight" });
     expect(screen.getByRole("button", { name: "Expand tools" }), "B05: the actual tools Activity is folded").toBeTruthy();
+    expect(screen.getByLabelText("Pea context").textContent, "E8-11: folded tools still name Pea's bound Place").toContain("Family");
     await (await import("@testing-library/react")).act(() => store.actions.promoteThread(threads[0]!.id));
     expect(router.state.location.search.thread, "B05: first Send supplies the thread after the drawing folded").toBe(threads[0]!.id);
     await waitFor(async () => expect((await read(threads[0]!.id)).status,
@@ -694,3 +695,80 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
     conversation.value = null;
   }
 }, 30_000);
+
+test("JZ E8-12 close Home clears a capacity refusal and permits another Place", async () => {
+  const [{ createRoute }, { RegistryContext }, { appAtomRegistry }, { RouteDock },
+    { createChatPageStore }] = await Promise.all([
+    import("@tanstack/react-router"), import("@effect/atom-react"), import("../shell/owner"),
+    import("../workbench/route-panes"), import("../workbench/store"),
+  ]);
+  await import("../routes/__root");
+  vi.spyOn(await import("../navigation/surface-host"), "useSurfaceHost").mockReturnValue({ surface: "web" } as never);
+  vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
+  sessionStorage.setItem("pe.places", JSON.stringify(Array.from({ length: 12 }, (_, i) => ({
+    id: `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, "0")}`, route: "home", link: "/", at: new Date().toISOString(),
+  }))));
+  const store = createChatPageStore({ registry: appAtomRegistry, search: { mode: "threads", patch: async () => {} } });
+  conversation.value = { store, threads: [] };
+  const module = route({ ...family.spec, key: "home", address: "/", name: "Home", needs: "browser", core: undefined,
+    subject: undefined, reads: {}, edits: undefined, commands: {}, fields: {},
+    panes: { main: { title: "Home", purpose: "Place capacity", draw: () => <p>Home body</p> } }, layout: { kind: "pane", id: "main" } });
+  const root = createRootRoute({ component: () => <RegistryContext.Provider value={appAtomRegistry}>
+    <RouteDock renderRoute={body => body}>{null}</RouteDock>
+  </RegistryContext.Provider> });
+  const router = createRouter({ routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: "/",
+    component: () => <TypedShell module={module} fingerprint={workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`)} /> })]),
+    history: createMemoryHistory({ initialEntries: ["/"] }) });
+  try {
+    await router.load();
+    render(<RouterProvider router={router} />);
+    await screen.findByText("Home body");
+    fireEvent.click(screen.getByRole("button", { name: "Open another Place on this route" }));
+    await screen.findByText("This window keeps 12 Places; close one first.");
+    fireEvent.click(screen.getAllByRole("button", { name: "Close Home" })[11]!);
+    await waitFor(() => expect(JSON.parse(sessionStorage.getItem("pe.places")!)).toHaveLength(11));
+    expect(screen.queryByText("This window keeps 12 Places; close one first.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open another Place on this route" }));
+    await waitFor(() => expect(JSON.parse(sessionStorage.getItem("pe.places")!)).toHaveLength(12));
+  } finally { cleanup(); sessionStorage.clear(); vi.unstubAllGlobals(); conversation.value = null; }
+});
+
+test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the action area", async () => {
+  const capture = structuredClone(realMuas);
+  const f = await createWitness(closes, new Map(), { "ducts.sheet-snapshot": {
+    kind: "use", open(_ctx, deliver) { deliver({ kind: "complete", value: capture, revision: 1 }); },
+  } });
+  await vi.waitFor(() => expect(f.fans.work()).not.toBeNull());
+  const key = f.fans.workBasis()!.token.scope.identity.work!;
+  await f.ws.apply(key, "fans", "human", [
+    { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
+    { path: ["equipmentFlows", "14577391", "edit"], value: { value: { cfm: 925, source: "test" } } },
+  ], f.fans.work()!.revision);
+  f.fans.refresh("value");
+  await vi.waitFor(() => expect(f.typed.value().current).toBe(true));
+  const reason = "MUAS-1: missing PE_M_Fan_AirFlowDesign; add the missing parameter";
+  native.submit.mockImplementation(async () => ({ id: "atomic-hold", state: "succeeded", result: {
+    previewOnly: true, planRefusal: reason,
+    seal: { caller: { kind: "human", via: "local" }, requestHash: "atomic-hold", work: { handle: (f.inputs.get("fans:ducts.plan-losses") as { work: unknown }).work },
+      documentMark: { session: "fixture", openId: "fans", observedSince: null, changedAt: null },
+      incarnation: null, dependencies: "exact" },
+    value: { writes: [
+      { id: 14577391, kind: "equipment-flow", outcome: "refused", before: null, reason },
+      { kind: "store", outcome: "planned", before: "absent", after: "revision 1" },
+    ], counts: { refused: 1, planned: 1, written: 0, unchanged: 0 } },
+  } }));
+  function Write() {
+    const [, changed] = useReducer(n => n + 1, 0);
+    useEffect(() => f.fans.subscribe(changed), []);
+    return <TypedWrite mount={f.typed} id="losses" />;
+  }
+  render(<Write />);
+  fireEvent.click(screen.getByRole("button", { name: "plan Write to Revit" }));
+  await screen.findByRole("button", { name: /Write to Revit.*planned/ });
+  const trigger = screen.getByRole("button", { name: /Write to Revit.*planned/ });
+  if (trigger.getAttribute("aria-expanded") !== "true") fireEvent.click(trigger);
+  expect(screen.queryByRole("button", { name: "Write to Revit" })).toBeNull();
+  const explanation = screen.getByRole("status");
+  expect(explanation.textContent).toBe(`Apply is held: ${reason}`);
+  expect(explanation.parentElement?.textContent).toContain("Esc");
+});

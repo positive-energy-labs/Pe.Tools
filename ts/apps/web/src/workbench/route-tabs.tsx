@@ -7,7 +7,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 import "./route-tabs.css";
 import { publicRoutes } from "#/route/route-discovery";
 
-export function tabTitle(tab: ThreadTab) {
+export function tabTitle(tab: Pick<ThreadTab, "route" | "link"> & Partial<ThreadTab>) {
   const subject = subjectState(
     tab.route,
     Object.fromEntries(new URL(tab.link, "http://tab.invalid").searchParams),
