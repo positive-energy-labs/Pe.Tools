@@ -84,6 +84,9 @@ StateCellProps
 /** Each kind's glyph, key and plain sentence. The caller's `reason` overrides the sentence. */
 const TRANSITION: Record<CellTransitionKind, { key: string; says: string }> = {
   clear: { key: "u", says: "Clear the edit value" },
+  take: { key: "a", says: "Keep the staged value and its sources" },
+  unsuggest: { key: "d", says: "Deny the staged proposal" },
+  undo: { key: "z", says: "Undo this cell edit" },
 };
 
 /**

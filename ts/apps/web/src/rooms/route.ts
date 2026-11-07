@@ -1,17 +1,19 @@
+import { bindings } from "./bindings";
+import { read } from "../route/defaults";
+import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import {
   roomsRouteState,
   routeStatePatchSchema,
   valueRead,
-  type RoomsRouteDocument,
 } from "@pe/agent-contracts";
 import { roomsPageSchema } from "./page";
-import { route, field, command, type DrawContext } from "../route/typed-route";
+import { route, field, command } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
 import { roomsArgs, roomsData } from "@pe/agent-contracts";
 const address = roomsPageSchema.shape;
-const fields = {
+export const fields = {
   stage: field(address.stage, "partition", "pose", "push"),
   view: field(address.view, "", "query", "push"),
   layers: field(address.layers, [], "pose"),
@@ -19,17 +21,9 @@ const fields = {
   viewport: field(address.viewport, null, "pose"),
   picked: field(address.selected, [], "pose"),
 };
-const loaded = {
-  ...hostRead(valueRead("rooms.workspace", roomsArgs, roomsData)),
-  args: (page: { view: string }) => ({ view: page.view }),
-};
-const edits = z.array(routeStatePatchSchema);
-export type RoomsContext = DrawContext<
-  z.output<typeof roomsData>,
-  typeof fields,
-  RoomsRouteDocument,
-  z.output<typeof edits>
->;
+export const loaded = read(hostRead(valueRead("rooms.workspace", roomsArgs, roomsData)), (page: { view: string }) => ({ view: page.view }));
+export const edits = z.array(routeStatePatchSchema);
+export type { Context as RoomsContext } from "./context.generated";
 export const module = route({
   key: "rooms",
   name: "Rooms",
@@ -54,7 +48,7 @@ export const module = route({
     main: {
       title: "Rooms",
       purpose: "Choose a level and inspect its rooms",
-      read: loaded,
+      bindings,
       draw: draw(() => import("./mount"), "RoomsBody"),
     },
   },
@@ -85,5 +79,5 @@ export const module = route({
       present: () => ({ sentence: "Merge the staged room selection", rows: [] }),
     },
   },
-  layout: { kind: "pane", id: "main" },
+  layout: paneLayout("main"),
 });

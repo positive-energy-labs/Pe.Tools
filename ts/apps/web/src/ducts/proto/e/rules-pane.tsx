@@ -1,3 +1,4 @@
+import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 import { AttentionDocument, elementKey, useMembers, type SubjectKey } from "@pe/kit/lang/attention";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList } from "@pe/kit/lang/list-view";
@@ -14,7 +15,7 @@ import { useCallback, useContext } from "react";
  */
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import type { LossResult } from "@pe/ducts-domain/losses";
-import { unpriced, type Priced } from "@pe/ducts-domain/pricing";
+import { unpriced } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { memo, useMemo } from "react";
 

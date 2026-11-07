@@ -1,11 +1,11 @@
 import { z } from "zod";
 import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/generated";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { HealPlan } from "@pe/ducts-domain/heal";
+import type { HealView as HealPlan } from "@pe/ducts-domain/pricing-view";
 import { healSystems, healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
 import { ductsHealInputSchema } from "@pe/agent-contracts";
 type ReviewEvidence = {
-  readonly heal?: HealPlan | null;
+  readonly heal?: import("@pe/agent-contracts").Immutable<Pick<HealPlan,"groups">> | null;
   readonly page?: { readonly stage?: "network" | "sheet" };
   readonly work?:
     | import("@pe/agent-contracts").Immutable<import("@pe/agent-contracts").DuctsRouteDocument>

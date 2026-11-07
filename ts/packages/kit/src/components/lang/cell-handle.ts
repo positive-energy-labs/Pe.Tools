@@ -9,6 +9,8 @@ import type { ValueHandle } from "./value";
 
 /** Structural draw handle; kit neither acquires Work nor sends writes. */
 export interface CellHandle {
+  readonly facts?: Pick<HandleCellProps, "model" | "source" | "options" | "parse" | "format"> & { baseline?: unknown; readOnly?: boolean };
+  readonly freshness?: "current" | "stale" | "never";
   readonly owner: { route: string; label: string };
   readonly value: CellLike;
   readonly refusal: string | null;
@@ -55,6 +57,11 @@ export function handleCellProps({
   current,
   ...facts
 }: HandleCellProps): StateCellProps {
+  model ??= cell.facts?.model;
+  options ??= cell.facts?.options;
+  parse ??= cell.facts?.parse;
+  format = cell.facts?.format ?? format;
+  source = cell.facts?.source ?? source;
   const value = cell.value.edit ? cell.value.edit.value : model;
   const readKey =
     typeof keyOf === "string"
@@ -81,7 +88,7 @@ export function handleCellProps({
     .join(" · ");
   const drawn = cellFromDraft(cell.value, {
     ...facts,
-    fresh:
+    fresh: cell.freshness && cell.freshness !== "current" ? cell.freshness :
       reading && !reading.current ? (reading.value === undefined ? "never" : "stale") : facts.fresh,
     value: options
       ? (option?.label ?? (value == null ? "—" : format(value)))
@@ -118,7 +125,7 @@ export function handleCellProps({
         ...drawn,
         scale: facts.scale ?? "row",
         transitions,
-        onCommit: async (text) =>
+        onCommit: cell.facts?.readOnly ? undefined : async (text) =>
           cell.stage(parse ? parse(text) : facts.numeric ? Number(text) : text, history),
       };
 }

@@ -12,4 +12,4 @@ import * as m8 from "./pods.ts";
 import * as m9 from "./rooms.ts";
 import * as m10 from "./schedules.ts";
 import * as m11 from "./settings.ts";
-export const hostReadModules:readonly Pick<HostRouteModule,"reads"|"leaves">[]=[m0,m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11];
+export const hostReadModules:readonly Pick<HostRouteModule,"reads">[]=[m0,m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11];

@@ -1,3 +1,4 @@
+import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 /**
  * What the tree rows and the rules pane read, derived and never stored: the resolved value of each
  * input either author can edit (terminal flow and drop, a unit's flow, ESP and role) with its source,
@@ -5,7 +6,7 @@
  */
 import type { FlowSource } from "@pe/ducts-domain/terminal-flows";
 import { slotWord } from "./airflow";
-import { proposedStatic, type Priced } from "@pe/ducts-domain/pricing";
+import { proposedStatic } from "@pe/ducts-domain/pricing";
 import { unitFlowIn } from "@pe/ducts-domain/survey";
 import { groupTree, type GroupTree } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -41,7 +42,7 @@ export function terminalInputs(
   id: number,
   from: string | null = null,
 ): TerminalInputs {
-  const flow = priced.flows.get(id);
+  const flow = priced.flows[id];
   const edit = priced.edit.terminalDrops[String(id)];
   const row = priced.next.paths[id]?.rows.find((r) => r.id === id && r.kind === "terminal");
   return {
@@ -73,7 +74,7 @@ function unitRoleInput(
   id: number,
   edit: { role: "fan" | "passive" } | undefined,
 ): Resolved<"fan" | "passive"> & { reason?: string } {
-  const r = priced.roles.get(id);
+  const r = priced.roles[id];
   if (!r) return edit ? { value: edit.role, word: "override" } : { value: "fan", word: "default" };
   const word = r.why === "edit" ? "override" : r.why;
   return { value: r.role, word, reason: r.reason };

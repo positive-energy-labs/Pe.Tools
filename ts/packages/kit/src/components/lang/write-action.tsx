@@ -9,7 +9,7 @@
  * "checked in Revit" is the caller's, derived from the plan entry's catalog effect (a TransactRead
  * rehearsal) and never from a response flag.
  */
-import { useEffect, useState, useReducer } from "react";
+import { useEffect, useState, useReducer, type ReactNode } from "react";
 import { z } from "zod";
 import { writeResponseSchema } from "@pe/agent-contracts";
 import { Popover } from "@base-ui/react/popover";
@@ -44,12 +44,24 @@ export interface WriteHeld {
 
 const AUTHOR = { pea: "Pea", human: "you", unknown: "unknown author" } as const;
 
+export interface PlanReview {
+  preview?: unknown;
+  sentence: string | null;
+  rows: readonly string[];
+  cells?: readonly WriteCell[];
+  stale: boolean;
+}
+
 /** Structural plan handle supplied by the shell; kit owns no Work, consent or transport. */
 export interface PlanHandle {
+  readonly pending?: boolean;
+  readonly refusal?: string | null;
+  readonly failure?: string | null;
+  readonly consent?: { until: string; run(): void } | null;
   plan(): unknown;
   apply(): unknown;
   cancel(): unknown;
-  read(): unknown;
+  read(): PlanReview | null;
 }
 const reviewSchema = z.object({
   preview: z.unknown().optional(),
@@ -61,8 +73,9 @@ const reviewSchema = z.object({
 });
 
 /** The handle stays authoritative across remounts; local state only redraws after a gesture. */
-export function PreviewAction({ handle, label, says = `Plan ${label} from current Work`, ...props }: {
+export function PreviewAction({ handle, label, children, says = `Plan ${label} from current Work`, ...props }: {
   handle: PlanHandle;
+  children?:ReactNode;
   label: string;
   says?: string;
 } & Pick<WriteActionProps, "refusal" | "busy" | "failed" | "reject" | "icon">) {
@@ -76,8 +89,9 @@ export function PreviewAction({ handle, label, says = `Plan ${label} from curren
     catch (error) { return { message: error instanceof Error ? error.message : String(error) }; }
     finally { redraw(); }
   };
-  return <WriteAction {...props} label={`plan ${label}`} says={says}
-    failed={raw != null && !parsed.success ? "Plan review unavailable" : props.failed}
+  const consent=handle.consent??props.reject;
+  return <WriteAction {...props} busy={handle.pending ?? props.busy} refusal={handle.refusal ?? props.refusal} reject={consent?{...consent,content:children??("content" in consent?consent.content:null)}:null} label={`plan ${label}`} says={says}
+    failed={raw != null && !parsed.success ? "Plan review unavailable" : handle.failure ?? props.failed}
     held={review && !review.stale ? {
       word: writeWord(label, review.cells?.length || review.rows.length, false),
       summary: review.sentence ?? "",
@@ -120,7 +134,7 @@ export interface WriteActionProps {
    * The open Reject? window (ADR 0027): apply lands at `until` unless rejected. Present only while a
    * receipt's consent window is open; the popover keeps the before and after visible meanwhile.
    */
-  reject?: { until: string; run: () => void } | null;
+  reject?: { until: string; run: () => void; content?: ReactNode } | null;
   /** Draw the button as one glyph (a dense row); `label` is its name and tooltip. */
   icon?: LucideIcon;
 }
@@ -236,7 +250,8 @@ export function WriteAction({
             {outcome.text}
           </p>
         ) : null}
-        {armed && outcome?.kind !== "done" ? (
+        {reject?.content}
+        {(armed || reject) && outcome?.kind !== "done" ? (
           <div className="mt-2 flex items-center justify-between gap-2">
             {reject ? (
               <Button

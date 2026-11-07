@@ -122,18 +122,11 @@ export function RoomsTable({
     ): StateCellProps | HandleCellProps => {
       const held = shown(row.region[field]);
       if (!cells) return { value: held, cap: "locked", capReason: "No writable owner" };
-      const owned = cells.at(["edits", roomEditKey(row.region.guid, field)]);
-      const baseline =
-        field === "role" && row.region.designation !== "person" ? undefined : row.region[field];
+      const baseline=field === "role" && row.region.designation !== "person"?undefined:row.region[field];
+      const owned=cells.at(["edits",roomEditKey(row.region.guid,field)],undefined,{
+        model:row.region[field],...(baseline == null || baseline === "" ? {}:{baseline})});
       return {
-        // CHEAT: owner handles lack baseline-equal clearing and inferred-role confirmation.
-        cell: {
-          ...owned,
-          stage: (next, history) =>
-            baseline !== null && baseline !== undefined && baseline !== "" && next === baseline
-              ? owned.clear(history)
-              : owned.stage(next, history),
-        },
+        cell:owned,
         value,
         label: `Edit ${row.label} ${field}`,
         model: row.region[field],

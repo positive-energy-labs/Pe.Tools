@@ -1,19 +1,18 @@
+import { read } from "../route/defaults";
+import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { valueRead } from "@pe/agent-contracts";
-import { route, field, queryAction, type DrawContext } from "../route/typed-route";
+import { route, field, queryAction } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
 import { opsArgs, opsData } from "@pe/agent-contracts";
 import { opRead, receiptControlRpc } from "./actions";
-const fields = {
+export const fields = {
   op: field(z.string(), "", "query", "push"),
   actionId: field(z.string(), "", "query", "push"),
 };
-const loaded = {
-  ...hostRead(valueRead("ops.workspace", opsArgs, opsData)),
-  args: (page: { actionId: string }) => ({ actionId: page.actionId }),
-};
-export type OpsContext = DrawContext<z.output<typeof opsData>, typeof fields, never, never>;
+export const loaded = read(hostRead(valueRead("ops.workspace", opsArgs, opsData)), (page: { actionId: string }) => ({ actionId: page.actionId }));
+export type { Context as OpsContext } from "./context.generated";
 export const module = route({
   key: "ops",
   name: "Ops",
@@ -38,7 +37,6 @@ export const module = route({
     main: {
       title: "Ops",
       purpose: "Inspect requests, read results and control original receipts",
-      read: loaded,
       draw: draw(() => import("./mount"), "OpsBody"),
     },
   },
@@ -50,5 +48,5 @@ export const module = route({
       input: (_context, supplied) => supplied,
     },
   },
-  layout: { kind: "pane", id: "main" },
+  layout: paneLayout("main"),
 });

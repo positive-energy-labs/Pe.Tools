@@ -1,3 +1,4 @@
+import { PreviewAction } from "@pe/kit/lang/write-action";
 import { refuse } from "#/route/refusal";
 import { useRef, useState } from "react";
 import { familyCellAddress } from "@pe/agent-contracts";
@@ -99,9 +100,7 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
         <Button label="Stop family read" onClick={() => run("stop")}>
           Stop
         </Button>
-        <Button label="Apply families" onClick={() => ctx.write("apply").plan()}>
-          Apply families
-        </Button>
+        <PreviewAction handle={ctx.write("apply")} label="Apply families" />
       </div>
       {!ctx.value.current && (
         <OutcomeLine kind="advisory" label="Family read" says={ctx.value.reason} />

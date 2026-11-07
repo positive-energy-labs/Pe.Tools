@@ -30,7 +30,7 @@ import {
   type ReactNode,
 } from "react";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { Priced } from "@pe/ducts-domain/pricing";
+import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 import { tableOf } from "@pe/ducts-domain/pricing";
 import { Button } from "@pe/kit/lang/button";
 import type { LossesWork } from "../../work";

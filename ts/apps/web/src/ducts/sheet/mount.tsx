@@ -4,11 +4,9 @@ import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length
 import { StateCell, cellSource } from "@pe/kit/lang/cell";
 import { Button } from "@pe/kit/lang/button";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
-import { AttentionRoot } from "#/attention";
 import { PointerCite } from "#/shell/pointer-list";
 import { pointerRefs } from "../pointer-refs";
 import { useRevitSubjectProps } from "#/revit/element-menu";
-import { NativeObservationScope } from "#/revit/observation";
 import { useRouteSearchSlice } from "#/route/activity";
 import { picturePageMove } from "#/shell/picture-page";
 import { useAdmittedSubject } from "#/shell/subject";
@@ -232,7 +230,6 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
   };
   const fanReading = fans;
   const friction = ctx.cells.at(["designFriction"]);
-  const parameterTarget = ctx.target;
   const ownPane = (
     <>
       <section
@@ -277,10 +274,8 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
               <span className="block min-w-0 h-(--item-h)">
                 {key === "fanStatic" ? (
                   <EspParameter
-                    target={parameterTarget?.kind === "document" ? parameterTarget.ref : null}
-                    units={snapshot.nodes
-                      .filter((node) => node.kind === "equipment")
-                      .flatMap((node) => (node.uniqueId ? [node.uniqueId] : []))}
+                    options={ctx.value.value?.espOptions??null}
+                    error={ctx.value.value?.espOptionsError??null}
                     cell={handle}
                     value={ctx.value}
                     model={snapshot.slots[key]}
@@ -611,7 +606,7 @@ function SheetFrame({
       ? jump.current(elementKey(id))
       : ctx.selection.set([{ kind: "focus", id: localId("ducts-focus", String(id)) }]);
   return (
-    <AttentionRoot doc={attentionDoc}>
+    <>
       {"kind" in snapshot ? null : (
         <PointerCite
           route="fans"
@@ -619,23 +614,9 @@ function SheetFrame({
         />
       )}
       <SubjectTextContext.Provider value={{ doc: attentionDoc, nameOf, go, refProps }}>
-        <NativeObservationScope
-          value={{
-            scope: {
-              document: ctx.value.current ? document : null,
-              source: "native",
-            },
-            references: ("kind" in snapshot ? [] : [...snapshot.nodes, ...snapshot.segments]).map(
-              ({ id, uniqueId }) => ({
-                elementId: id,
-                uniqueId,
-              }),
-            ),
-          }}
-        >
           {children}
-        </NativeObservationScope>
+
       </SubjectTextContext.Provider>
-    </AttentionRoot>
+    </>
   );
 }

@@ -8,7 +8,7 @@
  * number is null (never a stand-in figure).
  */
 import type { DuctsDesign } from "@pe/agent-contracts";
-import type { Priced } from "@pe/ducts-domain/pricing";
+import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 import { worstRun, type FanResult, type Provisional, type Row } from "@pe/ducts-domain/losses";
 import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";

@@ -1,9 +1,10 @@
+import { read } from "../route/defaults";
+import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import {
   familyDraftRouteState,
   routeStatePatchSchema,
   valueRead,
-  type FamilyDraft,
 } from "@pe/agent-contracts";
 import { familyPageSchema } from "./page";
 import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
@@ -14,14 +15,13 @@ import {
   sessionCommand,
   queryAction,
   catalogAction,
-  type DrawContext,
-} from "../route/typed-route";
+} from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
 import { familyArgs, familyData } from "@pe/agent-contracts";
 import { presentFamilyPlan } from "./review";
 const address = familyPageSchema.shape;
-const fields = {
+export const fields = {
   stage: field(address.stage, "audit", "pose", "push"),
   pod: field(address.pod, "", "query", "push"),
   path: field(address.path, "", "query", "push"),
@@ -34,19 +34,11 @@ const fields = {
   inspector: field(address.inspector, "", "pose"),
   doc: field(address.doc, "text", "pose"),
 };
-const loaded = {
-  ...hostRead(valueRead("family.workspace", familyArgs, familyData)),
-  args: (page: { pod: string; path: string }) => ({
+export const loaded = read(hostRead(valueRead("family.workspace", familyArgs, familyData)), (page: { pod: string; path: string }) => ({
     member: page.pod && page.path ? { pod: page.pod, path: page.path } : null,
-  }),
-};
-const edits = z.array(routeStatePatchSchema);
-export type FamilyContext = DrawContext<
-  z.output<typeof familyData>,
-  typeof fields,
-  FamilyDraft,
-  z.output<typeof edits>
->;
+  }));
+export const edits = z.array(routeStatePatchSchema);
+export type { Context as FamilyContext } from "./context.generated";
 export const module = route({
   key: "family",
   name: "Family",
@@ -72,7 +64,6 @@ export const module = route({
     workspace: {
       title: "Family",
       purpose: "Review the family and its cut-sheet evidence",
-      read: loaded,
       draw: draw(() => import("./mount"), "FamilyBody"),
     },
   },
@@ -122,5 +113,5 @@ export const module = route({
       present: (result) => presentFamilyPlan(result),
     },
   },
-  layout: { kind: "pane", id: "workspace" },
+  layout: paneLayout("workspace"),
 });
