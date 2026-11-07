@@ -412,7 +412,7 @@ const handAxes = {
     cardinality: "One",
   },
 } satisfies Record<Exclude<HostActionKey, PreviewKey | OwnAxesKey>, CatalogAxes>;
-const declaredAxes: Record<Exclude<HostActionKey, PreviewKey>, CatalogAxes> = { ...handAxes, ...ownAxes };
+const declaredAxes = { ...handAxes, ...ownAxes } satisfies Record<Exclude<HostActionKey, PreviewKey>, CatalogAxes>;
 
 /**
  * A preview has the write's subject, Touches and cost by construction. Its Effect is its native leaf's
@@ -437,10 +437,8 @@ const previewAxes = Object.fromEntries(
       : [],
   ),
 ) as unknown as Record<PreviewKey, CatalogAxes>;
-export const commandCatalogAxes: Record<HostActionKey, CatalogAxes> = {
-  ...declaredAxes,
-  ...previewAxes,
-};
+const allAxes = { ...declaredAxes, ...previewAxes } satisfies Record<HostActionKey,CatalogAxes>;
+export const commandCatalogAxes: {[K in keyof typeof allAxes]:CatalogAxes & Pick<(typeof allAxes)[K],"effect">} = allAxes;
 
 // The seal follows the axis: a Work write is sealed exactly when its Effect is ModelWrite. A
 // SessionWrite capture uses `workIntent` and carries no boundary; the linker refuses the converse.

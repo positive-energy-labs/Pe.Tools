@@ -19,7 +19,7 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
   async (_, key) => {
     if (key === "ducts") {
       const {module} = await import("../ducts/route");
-      expect(module.spec.core.fixtures).toBeUndefined();
+      expect(module.spec.core!.fixtures).toBeUndefined();
       return;
     }
     if (key === "pods") {
@@ -164,7 +164,7 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
       const { hostPresenter } = await admit();
       const fetch = vi.fn(() => { throw Error("Real host called"); });
       vi.stubGlobal("fetch",fetch);
-      for(const name of Object.keys(module.spec.core.fixtures??{})) {
+      for(const name of Object.keys(module.spec.core!.fixtures??{})) {
         const mount=mountTypedRoute(module,placeInput({read:()=>new URLSearchParams({fixture:name}),write(){},subscribe:()=>()=>{}}),hostPresenter.workFingerprint);
         try {
           await expect.poll(()=>mount.workBasis()).not.toBeNull();
@@ -206,7 +206,7 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
           await expect
             .poll(() => mount.workBasis(), { message: `${key}/${name} Work` })
             .not.toBeNull();
-          mount.read(route.data.subject.pane);
+          mount.read(route.data.subject!.pane);
           // Every fixture supports the All subject, including fixtures with no matching fan rows.
           expect(mount.controls.subject({ kind: "all" }).kind).toBe("accepted");
           for (const [id, pane] of Object.entries(route.data.panes)) {

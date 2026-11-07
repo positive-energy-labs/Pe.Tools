@@ -111,7 +111,7 @@ export interface Value<T> {
 export interface InputPort {
   readonly evaluation: string;
   readonly origin: unknown;
-  readonly take: (name: string, args: unknown) => Promise<unknown>;
+  readonly take: (name: string, args: unknown, context?:ReadContext) => Promise<unknown>;
   /** Synchronous event revision: also fences a change while final validation is awaiting I/O. */
   readonly revision: (name: string, args: unknown) => number;
 }
@@ -174,7 +174,7 @@ export async function evaluate<I, O>(
         try {
           const raw =
             "leaf" in definition
-              ? await port.take(definition.name, args)
+              ? await port.take(definition.name, args,ctx)
               : await definition.run(ctx, args);
           const data = immutable(wireValue(definition.output.parse(raw)));
           const hash = fingerprint(data);

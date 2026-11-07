@@ -260,8 +260,8 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
       if (
         field.role === "subject" &&
         input.custody.current() &&
-        paneDemand.get(route.data.subject.pane) !== false &&
-        observers.visible(route.data.subject.pane)
+        paneDemand.get(route.data.subject!.pane) !== false &&
+        observers.visible(route.data.subject!.pane)
       )
         roots.add(field.picker.reading);
     for (const id of queryInputs.keys()) roots.add(id);
@@ -303,7 +303,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
   // Invocation arguments belong to the attempt, never to Page or selection.
   const queryInputs = new Map<string, ReadingQuery>();
   const queryLandings = new Map<string, CommandResultDecode>();
-  const subjectField = route.data.subject.field;
+  const subjectField = route.data.subject!.field;
   let evidenceScope = read().scope;
   let explicitWorkRevision: number | undefined;
   let scheduling = false;

@@ -3,17 +3,13 @@ import {
   type AdmittedRoute,
 } from "../../../../packages/agent-contracts/src/route-module";
 import type { RouteDiagnostic } from "../../../../packages/agent-contracts/src/route-kernel-data";
-import { module as captures } from "../captures/kernel";
-import { module as schedules } from "../schedules/kernel";
-import { module as families } from "../families/kernel";
-import { module as pods } from "../pods/kernel";
-import { module as chat } from "../chat/kernel";
 import { builtins, type BuiltinKey } from "./builtins.neutral";
+import {builtinModules} from "./builtin-modules.generated";
+import type {TypedRoute} from "./typed-route";
+export const typedBuiltin = (key:BuiltinKey):TypedRoute | null => {
+  const module=builtinModules[key]; return "spec" in module ? module as TypedRoute : null;
+};
 
-const modules = { captures, schedules, families, chat, pods } satisfies Record<
-  Exclude<BuiltinKey, "fans" | "ducts">,
-  unknown
->;
 type Admitted =
   | { readonly ok: true; readonly route: AdmittedRoute }
   | { readonly ok: false; readonly diagnostics: readonly RouteDiagnostic[] };
@@ -29,8 +25,8 @@ export function loadBuiltinRoute(key: BuiltinKey, expectedFingerprint: string) {
 }
 async function admit(key: BuiltinKey, expectedFingerprint: string): Promise<Admitted> {
   const { closure } = builtins[key];
-  if (key === "fans" || key === "ducts") throw Error("Typed routes mount directly");
-  const module = modules[key];
+  if (typedBuiltin(key)) throw Error("Typed routes mount directly");
+  const module = builtinModules[key];
   const inventory = createBuiltinRouteInventory({
     [key]: {
       module,

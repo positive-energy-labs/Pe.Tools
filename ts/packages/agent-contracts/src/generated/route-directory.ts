@@ -26,53 +26,29 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
-    "key": "schedules",
+    "key": "chat",
     "directory": {
-      "label": "Revit data",
-      "icon": "LayoutGrid",
-      "exposure": "Preview",
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      },
-      "aliases": [
-        "Revit",
-        "data"
-      ],
-      "runtimeNeed": "Open project document",
-      "listed": true,
-      "satellites": [],
-      "resume": "document",
-      "path": "/schedules",
-      "title": "Schedules",
-      "category": "Coordinate model data",
-      "blurb": "Inspect document schedules"
-    }
-  },
-  {
-    "key": "families",
-    "directory": {
-      "label": "Family Foundry",
-      "icon": "Table2",
+      "label": "Workbench",
+      "icon": "MessageSquare",
       "exposure": "Main",
       "surfaces": {
         "web": "full",
         "pwa": "full",
-        "tray": false
+        "tray": "compact"
       },
       "aliases": [
-        "audit",
-        "parameters"
+        "chat",
+        "agent",
+        "assistant",
+        "threads"
       ],
-      "runtimeNeed": "Revit for model actions",
+      "runtimeNeed": "Host for conversation; Revit depends on the requested capability",
       "listed": true,
       "satellites": [],
-      "resume": "document",
-      "path": "/families",
-      "title": "Families",
-      "category": "Build / audit families",
-      "blurb": "Audit and reconcile loaded family parameters"
+      "path": "/pea",
+      "title": "Pea",
+      "category": "Ask / automate",
+      "blurb": "The Pea agent workbench and context world inspector."
     }
   },
   {
@@ -103,6 +79,31 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
+    "key": "families",
+    "directory": {
+      "label": "Family Foundry",
+      "icon": "Table2",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "audit",
+        "parameters"
+      ],
+      "runtimeNeed": "Revit for model actions",
+      "listed": true,
+      "satellites": [],
+      "resume": "document",
+      "path": "/families",
+      "title": "Families",
+      "category": "Build / audit families",
+      "blurb": "Audit and reconcile loaded family parameters"
+    }
+  },
+  {
     "key": "fans",
     "directory": {
       "label": "Fan ESP",
@@ -129,32 +130,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
-    "key": "chat",
-    "directory": {
-      "label": "Workbench",
-      "icon": "MessageSquare",
-      "exposure": "Main",
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": "compact"
-      },
-      "aliases": [
-        "chat",
-        "agent",
-        "assistant",
-        "threads"
-      ],
-      "runtimeNeed": "Host for conversation; Revit depends on the requested capability",
-      "listed": true,
-      "satellites": [],
-      "path": "/pea",
-      "title": "Pea",
-      "category": "Ask / automate",
-      "blurb": "The Pea agent workbench and context world inspector."
-    }
-  },
-  {
     "key": "pods",
     "directory": {
       "label": "Pods",
@@ -175,6 +150,31 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
       "title": "Pods",
       "category": "Ask / automate",
       "blurb": "Author a Pod member and inspect its runs."
+    }
+  },
+  {
+    "key": "schedules",
+    "directory": {
+      "label": "Revit data",
+      "icon": "LayoutGrid",
+      "exposure": "Preview",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "Revit",
+        "data"
+      ],
+      "runtimeNeed": "Open project document",
+      "listed": true,
+      "satellites": [],
+      "resume": "document",
+      "path": "/schedules",
+      "title": "Schedules",
+      "category": "Coordinate model data",
+      "blurb": "Inspect document schedules"
     }
   },
   {

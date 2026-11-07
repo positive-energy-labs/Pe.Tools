@@ -1,6 +1,6 @@
 import { registerRoute } from "../shell/route-registration";
 import { publicRoutes } from "./route-discovery";
-import { builtinRouteKeys, builtinRouteStamp, loadBuiltinRoute } from "./builtin-inventory";
+import { builtinRouteKeys, builtinRouteStamp, loadBuiltinRoute, typedBuiltin } from "./builtin-inventory";
 import { sessionsGraph } from "#/sessions/graph";
 import { lazy, type ComponentType } from "react";
 import { registerLegacyGraph } from "#/shell/legacy-route-door";
@@ -10,8 +10,6 @@ import { roomsGraph } from "#/rooms/graph";
 import { familyGraph } from "#/family/graph";
 import { settingsGraph } from "#/settings/graph";
 import { mountRoute, type MountRouteProps } from "#/shell/mount";
-import { module as ducts } from "../ducts/route";
-import { module as fans } from "../fans/route";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 
 /** A route body stays out of the shell chunk until a pane mounts it. */
@@ -34,11 +32,11 @@ const SettingsRoute = lazy(async () => ({
 export { publicRoutes };
 export const publicRoutesReady = Promise.all(
   builtinRouteKeys.map(async (key) => {
-    if (key === "fans" || key === "ducts") {
-      const typed = key === "fans" ? fans : ducts;
+    const typed=typedBuiltin(key);
+    if (typed) {
       const fingerprint = workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp(key)}`);
-      publicRoutes.register({ manifest: { key, name: typed.spec.name, needs: "project" }, typed,
-        work: { route: key, schema: typed.spec.edits.work.schema, cells: [], workFields: {}, admission: { routeKey: key, fingerprint } },
+      publicRoutes.register({ manifest: { key, name: typed.spec.name, needs: typed.data.needs }, typed,
+        ...(typed.spec.edits?{work: { route: key, schema: typed.spec.edits.work.schema, cells: [], workFields: {}, admission: { routeKey: key, fingerprint } }}:{}),
         hosted: props => <HostedTypedRoute module={typed} fingerprint={fingerprint} {...props} /> });
       return;
     }

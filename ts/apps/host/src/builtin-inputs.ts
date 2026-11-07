@@ -1,3 +1,6 @@
+import {hostOpSafety} from "@pe/host-contracts/generated";
+import {z} from "zod";
+import {executionTargetSchema,documentRefSchema,DUCTS_BODY_VERSION_HEADER} from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
 import {
   CurrentInputConsumption,
@@ -15,7 +18,7 @@ import { historyPoseSchema, addressSchema } from "@pe/agent-contracts";
 import { HostReceipts } from "./gateway-owner.ts";
 import { readEvents } from "./reads/events.ts";
 import { readInvalidations } from "./reads/invalidations.ts";
-import { graphRoute, graphRouteIds } from "./reads/routes.ts";
+import { graphRoute, graphRouteIds, registeredReads } from "./reads/routes.ts";
 import { ResourceConnectionOwner } from "./request-services.ts";
 import {
   capturedWorkReads,
@@ -350,7 +353,27 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           run: scoped(current),
           work: workReadContext(current, scoped(current)),
         },
-        call: async (key, input, ref, version, role) => {
+        resource: request => new Promise((resolve,reject)=> {
+          let settled=false,stop=()=>{};
+          stop=observe(request as Parameters<ResourceObserver>[0],frame=> {
+            if(frame.kind === "snapshot") {settled=true;resolve(frame.value);stop();}
+            else if(frame.kind === "failure") {settled=true;reject(Error(frame.error));stop();}
+          },0);
+          if(settled) stop();
+        }),
+        call: async (key, input, target, version, role) => {
+          const requestTarget=executionTargetSchema.safeParse(target);
+          const chosen=requestTarget.success?requestTarget.data:{kind:"document" as const,ref:documentRefSchema.parse(target)};
+          const safety=hostOpSafety[key as keyof typeof hostOpSafety];
+          if(!safety || safety.intent !== "Read") throw Error(`Native leaf is not a catalog Read: ${key}`);
+          const ref=chosen.kind === "document"?chosen.ref:null;
+          if(!["ducts.snapshot.roster","ducts.snapshot.walk","ducts.tables"].includes(key)) {
+            const native=Context.get(services,HostNativeRead);
+            const scope=ref?{bridgeSessionId:ref.session,openDocumentId:ref.openId}:chosen.kind === "session"?{bridgeSessionId:chosen.session}:{};
+            const answer=await invoke(native.read({key,input,scope}));
+            return new Response(JSON.stringify(answer.value),{headers:{[DUCTS_BODY_VERSION_HEADER]:canonicalJson(json(answer.freshness))}});
+          }
+          if(!ref) throw Error("Retained document read requires a document target");
           const scope = {
             bridgeSessionId: ref.session,
             ...(key === "ducts.tables" ? {} : { openDocumentId: ref.openId }),
@@ -707,6 +730,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             readGraph: async () => {
               const port = ductsInputPort({
                 source,
+                leaves:registeredReads.leaves,
                 workspace,
                 marks,
                 run: scoped(consumption!),
@@ -720,7 +744,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                     canonicalJson([identity.caller, graph.publication.subscription]),
                     graph.publication.generation,
                     port,
-                    history && writer ? async (publication) => {
+                    history && writer && documentRefSchema.safeParse((graph.args as {target?:unknown}).target).success ? async (publication) => {
                       const row = await scoped(consumption!)(inventory.document((graph.args as { target: import("@pe/agent-contracts").DocumentRef }).target).pipe(Effect.provideService(RequestIdentity, identity)));
                       const address = addressSchema.parse(row.address);
                       await complete(consumption!);
