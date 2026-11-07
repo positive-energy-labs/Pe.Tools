@@ -1,5 +1,5 @@
 import { resources } from "../builtin-read-handles.ts";
-import { z } from "zod";
+
 import { executionTargetSchema } from "@pe/agent-contracts";
 import { read } from "./evaluator.ts";
 import { opsArgs, opsData } from "@pe/agent-contracts";

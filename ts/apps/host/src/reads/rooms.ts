@@ -1,7 +1,7 @@
 import { workRead } from "./inputs.ts";
 import { nativeRead } from "./inputs.ts";
-import { z } from "zod";
-import { documentRefSchema, executionTargetSchema, roomsRouteState } from "@pe/agent-contracts";
+
+import { executionTargetSchema, roomsRouteState } from "@pe/agent-contracts";
 import { read, workScope } from "./evaluator.ts";
 import { documentMark } from "./inputs.ts";
 import { roomsArgs, roomsData } from "@pe/agent-contracts";
@@ -48,4 +48,3 @@ export const reads = {
     },
   }),
 };
-

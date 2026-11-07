@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { Effect, Schema } from "effect";
-import { tsOnlyOperationSchemas, type TsOnlyOperationKey, type OpRequestOf, type OpResponseOf } from "@pe/host-contracts/operation-types";
+import { Schema } from "effect";
+import { tsOnlyOperationSchemas, type OpRequestOf, type OpResponseOf } from "@pe/host-contracts/operation-types";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/pe-api";
 import { effectDecoder } from "@pe/host-contracts/decoders";
 import { leaf } from "./reads/evaluator.ts";

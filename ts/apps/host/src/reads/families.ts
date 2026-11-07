@@ -2,15 +2,7 @@ import { workRead } from "./inputs.ts";
 import { nativeRead } from "./inputs.ts";
 import { familyObservation, familyReceipts } from "../builtin-read-handles.ts";
 import { z } from "zod";
-import {
-  familiesRouteState,
-  familiesObservationSchema,
-  workKeySchema,
-  canonicalRouteInput,
-  actionReceiptListDecoder,
-  actionReceiptSchema,
-  documentRefSchema,
-} from "@pe/agent-contracts";
+import { familiesRouteState, canonicalRouteInput, actionReceiptSchema } from "@pe/agent-contracts";
 import {
   familiesViewArgs,
   familiesViewData,
@@ -19,9 +11,6 @@ import { read, workScope } from "@pe/host/read-graph";
 import { documentMark } from "./inputs.ts";
 import { applyOutcome, applyTally } from "./families-outcome.ts";
 import { matrixModel, buildPivot } from "./families-matrix.ts";
-
-
-
 
 /** Immutable native evidence, Work and matrix calculation meet only on the host. */
 export const familiesView = read("families.view", {

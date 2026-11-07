@@ -1,11 +1,6 @@
 import { workRead } from "./inputs.ts";
 import { z } from "zod";
-import {
-  podMemberSchema,
-  memberWork,
-  settingsRouteState,
-  settingsCandidate,
-} from "@pe/agent-contracts";
+import { memberWork, settingsRouteState, settingsCandidate } from "@pe/agent-contracts";
 import { read } from "@pe/host/read-graph";
 import { localRead } from "../local-inputs.ts";
 import {
@@ -14,12 +9,7 @@ import {
   podsRosterValue,
   podMemberOfPage as member,
 } from "@pe/agent-contracts";
-import {
-  podRowsSchema,
-  podRunsSchema,
-  memberReadSchema,
-  compositionReadSchema,
-} from "@pe/agent-contracts";
+import { compositionReadSchema } from "@pe/agent-contracts";
 
 export const reads = {
   roster: read("pods.roster", {

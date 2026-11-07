@@ -26,4 +26,3 @@ export const designLayers = read("ducts.design-layers", {
     };
   },
 });
-

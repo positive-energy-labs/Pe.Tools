@@ -22,7 +22,7 @@ import { historyPoseSchema, addressSchema } from "@pe/agent-contracts";
 import { HostReceipts } from "./gateway-owner.ts";
 import { readEvents } from "./reads/events.ts";
 import { readInvalidations } from "./reads/invalidations.ts";
-import { graphRoute, graphRouteIds, registeredReads } from "./reads/routes.ts";
+import { graphRoute, graphRouteIds } from "./reads/routes.ts";
 import { ResourceConnectionOwner } from "./request-services.ts";
 import {
   capturedWorkReads,

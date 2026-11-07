@@ -3,7 +3,7 @@ import { localRead } from "./local-inputs.ts";
 import { familiesObservationSchema, workKeySchema, actionReceiptListDecoder, scheduleReadingSchema, scheduleCatalogSchema, documentRefSchema } from "@pe/agent-contracts";
 import { z } from "zod";
 import { leaf, read } from "./reads/evaluator.ts";
-import { readingRequestSchema, chatValue, openData, opsData, bindData, captureReceiptSchema } from "@pe/agent-contracts";
+import { readingRequestSchema, chatValue, openData, opsData, bindData } from "@pe/agent-contracts";
 import { firmReading, catalogReading } from "./ducts-files.ts";
 const resource = <I extends z.ZodType,O extends z.ZodType>(input:I,output:O) => leaf("resource", input,output);
 export const firm=leaf("file:firm",z.null(),firmReading);

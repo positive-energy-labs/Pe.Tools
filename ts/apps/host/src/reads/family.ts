@@ -1,21 +1,12 @@
 import { workRead } from "./inputs.ts";
-import { z } from "zod";
-import {
-  executionTargetSchema,
-  workKeySchema,
-  familyDraftSchema,
-  podMemberSchema,
-  settingsSnapshotSchema,
-  parsedDocViewSchema,
-} from "@pe/agent-contracts";
+
+import { executionTargetSchema, familyDraftSchema } from "@pe/agent-contracts";
 import { read } from "./evaluator.ts";
 import { localRead } from "../local-inputs.ts";
 import { familySpec, podProfile } from "../builtin-read-handles.ts";
 import { workBinding } from "./inputs.ts";
-import { readMember, composedSpec, listPods } from "../settings.ts";
-import { familySpecAsset } from "../family-spec.ts";
+
 import { familyArgs, familyData } from "@pe/agent-contracts";
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 export const reads = {
   workspace: read("family.workspace", {
     input: familyArgs.extend({ target: executionTargetSchema }),
