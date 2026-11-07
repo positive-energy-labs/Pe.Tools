@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AdmittedRouteView, admittedRouteSearch } from "../shell/admitted-pane";
 import { applicationRouteShell } from "../shell/application-route-shell";
-import { ductsData } from "../ducts/neutral";
+import { ductsData } from "../ducts/route";
 import { builtinRouteStamp, loadBuiltinRoute } from "../route/builtin-inventory";
 export const admitDucts = async () => {
   const admitted = await loadBuiltinRoute("ducts", builtinRouteStamp("ducts"));

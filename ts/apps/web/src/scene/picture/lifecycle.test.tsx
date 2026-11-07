@@ -9,7 +9,7 @@ import { makeAtomRegistry } from "#/shell/owner";
 import { SceneMeshes } from "../types";
 import { Picture, renderPicturePane, type PictureContent } from "./picture";
 import type { Scene3DProps } from "../scene3d";
-import { ductsData as ductsGraph } from "#/ducts/neutral";
+import { ductsData as ductsGraph } from "#/ducts/route";
 import { reduceLayout } from "../../../../../packages/kit/src/components/lang/layout-graph";
 import type { LayoutNode } from "@pe/agent-contracts";
 
@@ -201,7 +201,7 @@ it("clears capture words when capture settles, then refresh words when the readi
 });
 
 it("reserves the network picture's width at 1600px even with expanded side panes", () => {
-  const layout = reduceLayout(ductsGraph.layout, (when) => when !== "sheet")!;
+  const layout = reduceLayout(ductsGraph.layout as LayoutNode, (when) => when !== "sheet")!;
   const find = (
     node: LayoutNode,
     id: string,

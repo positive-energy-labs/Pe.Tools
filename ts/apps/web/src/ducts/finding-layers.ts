@@ -88,14 +88,15 @@ export function findingShapes(
   /** The raw system's mesh-capture scope, not its priced tree's shared equipment and other ports. */
   members?: ReadonlySet<number>,
   repairs?: readonly Pick<HealItem, "end" | "other" | "how" | "covers">[],
+  evidence?: ReturnType<typeof inferJoints>,
 ): FindingShapes {
   work = withStoredRulings(work, snapshot.store);
   let cached = inferences.get(snapshot);
-  if (!cached || cached.work !== work) {
+  if (!evidence && (!cached || cached.work !== work)) {
     cached = { work, value: inferJoints(snapshot, 1, work) };
     inferences.set(snapshot, cached);
   }
-  const inference = cached.value;
+  const inference = evidence ?? cached!.value;
   const shown = new Set(
     members
       ? inference.findings

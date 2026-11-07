@@ -1,5 +1,9 @@
 import { Settings } from "lucide-react";
-import { Popover, PopoverTrigger, SubjectPopoverContent as PopoverContent } from "@pe/kit/lang/popover";
+import {
+  Popover,
+  PopoverTrigger,
+  SubjectPopoverContent as PopoverContent,
+} from "@pe/kit/lang/popover";
 import { useRouteSearchSlice } from "#/route/activity";
 import { fansLink } from "../../../fans/route.ts";
 import { AttentionRoot, useHoveredIssue } from "#/attention";
@@ -11,10 +15,8 @@ import { NativeObservationScope, type NativeObservation } from "#/revit/observat
 import { LoadingContext } from "#/route/loading-context";
 import { PaneActions } from "#/shell/pane-actions";
 import { useAdmittedSubject } from "#/shell/subject";
-import { settleWork } from "#/shell/work-door-observation";
 import {
   DUCT_UNIT_KINDS,
-  ductsDesign,
   neutralFansWork,
   stagedDucts,
   cellPatches,
@@ -24,15 +26,13 @@ import { catalogLinkKey } from "@pe/ducts-domain/catalog";
 import { suggestKind } from "@pe/ducts-domain/roster";
 import { ChoiceCell } from "../../sheet/choice-cell.tsx";
 import { kindMeaning, kindDisabledReason } from "../../sheet/kind-meaning.ts";
-import { healTarget, offeredFan } from "@pe/ducts-domain/action-targets";
 import { claimsForGroup } from "@pe/ducts-domain/claims";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import { healPlan } from "@pe/ducts-domain/heal";
 import { neighboursOf, type Neighbour } from "@pe/ducts-domain/neighbours";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { pendingCount, stagedEsp } from "@pe/ducts-domain/staged";
-import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
+import { unitFlowsIn } from "@pe/ducts-domain/survey";
 import { scopeOf, sectionsOf, systemScope } from "@pe/ducts-domain/system-scope";
 import { systemSearch } from "@pe/ducts-domain/system-search";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -55,10 +55,13 @@ import {
   type ComponentProps,
 } from "react";
 import { z } from "zod";
-import type { PaneContext } from "../../../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type { DuctsDrawContext } from "../../route.ts";
+import { roster as rosterRead, network as networkSource } from "../../route.ts";
+import { pricingView } from "../../pricing-view.ts";
+import { projectValue } from "../../../route/typed-route.ts";
 import { airflowOptions } from "../../airflow";
 import { attentionSubjects, cellFocusOf, cellFocusSubject, focusedElement } from "../../cell-focus";
-import { elementNamer, verdictPatches } from "../../claims";
+import { verdictPatches } from "../../claims";
 import {
   annotatedFindings,
   focusRow,
@@ -67,24 +70,15 @@ import {
   type InboxItem,
 } from "../../inbox-rows";
 import { claimsOf, type Claim } from "../../legs";
-import {
-  activeName,
-  ductsData,
-  entries,
-  localId,
-  localSubject,
-  namesOf,
-  schemas,
-} from "../../neutral";
+import { activeName, localId, localSubject, namesOf } from "../../identity.ts";
 import { DuctsOwner, commands } from "../../pane-context";
-import { type PricingResult } from "../../pricing-job";
 import { DUCTS_MULTI } from "../../selection";
 import type { EditMeta } from "../../sheet/input-history.neutral";
 import { EMPTY_SNAPSHOT } from "../../sheet/scoped-snapshot";
 import { noRunParts, subjectNamer } from "../../subject-text";
 import { systemList } from "../../system-list";
 import type { SystemNote } from "../../system-list-search";
-import { systemReadCoverage } from "../../system-reads";
+import { systemReadCoverage } from "@pe/ducts-domain/system-reads";
 import { buildTree, type TreeNode } from "../b/model";
 import { useGroupEncoding } from "../encoding/use-encoding";
 import { BarRules, systemNoteCount, systemRowParts } from "./bar";
@@ -95,20 +89,12 @@ import { DuctsPicture } from "./picture";
 import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemColours } from "./settings";
 import { SystemTree } from "./tree-sidebar";
-type NetworkContext = PaneContext<
-  typeof ductsData,
-  typeof schemas,
-  typeof entries,
-  keyof typeof ductsData.panes
->;
+type NetworkContext = DuctsDrawContext;
 function useNetworkData(ctx: NetworkContext) {
-  const workDoc = useMemo(
-    () => ductsDesign(ctx.work, ctx.readings.fansWork.value ?? neutralFansWork),
-    [ctx.work, ctx.readings.fansWork.value],
-  );
-  const target = ctx.workBasis?.token.scope.identity.target ?? { kind: "host" as const };
+  const workDoc = ctx.value.value?.design ?? null;
+  const target = ctx.target;
   const page = ctx.page.read();
-  const roster = ctx.readings.roster.value;
+  const roster = ctx.read(rosterRead).value;
   const system = namesOf(page.system);
   const systems = useMemo(
     () => (system === "all" ? (roster?.systems ?? []).map((row) => row.name) : system),
@@ -119,15 +105,25 @@ function useNetworkData(ctx: NetworkContext) {
     (roster?.systems ?? []).map((row) => row.name),
   );
   const selected = page.selected.map((item) => localSubject(item.id)).join(",");
-  const doc = target.kind === "document" ? target.ref : null;
-  const networkRead = ctx.readings.ducts;
-  // Domain readonly sweep reached 28 files; snapshot consumers still require mutable arrays.
-  const snapshot = (networkRead.value ?? null) as import("../../neutral").SnapshotReading | null;
-  const pricing = ctx.readings.pricing;
-  // Domain readonly owner: PricingResult/ducts-domain still exposes mutable arrays.
-  // Counsel permits this one cast rather than widening beyond the bounded U4 input scope.
-  const priced =
-    pricing.status !== "failed" ? (pricing.value as PricingResult | undefined) : undefined;
+  const doc = target?.kind === "document" ? target.ref : null;
+  const networkRead = ctx.value.current
+    ? projectValue<
+        import("@pe/agent-contracts").DuctsPricingData,
+        import("@pe/agent-contracts").DuctsNetworkData
+      >(
+        ctx.value,
+        (value) => value.network as unknown as import("@pe/agent-contracts").DuctsNetworkData,
+      )
+    : ctx.read(networkSource);
+  // The existing drawing views accept mutable arrays; decoded Values stay immutable.
+  const snapshot = (networkRead.value ?? null) as
+    | import("@pe/agent-contracts").DuctsNetworkData
+    | null;
+  const pricing = ctx.value;
+  const priced = useMemo(
+    () => (pricing.current && pricing.value ? pricingView(pricing.value) : undefined),
+    [pricing.current, pricing.value],
+  );
   const edit = useMemo(() => stagedDucts(workDoc ?? null, workDoc ?? neutralFansWork), [workDoc]);
   const seen = useMemo(
     () => withStoredRulings(workDoc ?? null, snapshot?.store),
@@ -142,10 +138,7 @@ function useNetworkData(ctx: NetworkContext) {
     ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
   const write = useCallback(
     async (patches: RouteStatePatch[], history?: EditMeta) => {
-      if (!ctx.workBasis)
-        return { code: "unavailable", message: "Read this document's Work before editing" };
-      const result = await settleWork(ctx.verbs.edit({ patches, history }, ctx.workBasis));
-      return result.kind === "refused" ? { code: "refused", message: result.refusal.error } : null;
+      return ctx.cells.patch(patches, history);
     },
     [ctx],
   );
@@ -187,7 +180,10 @@ function useNetworkData(ctx: NetworkContext) {
   );
   // Domain readonly sweep reached 28 files; coverage still accepts the mutable snapshot alias.
   const coverage = roster
-    ? systemReadCoverage(snapshot, roster as import("@pe/ducts-domain/types").DuctSnapshot)
+    ? systemReadCoverage(
+        snapshot,
+        roster as unknown as import("@pe/ducts-domain/types").DuctSnapshot,
+      )
     : null;
   const stageScope = async (row: {
     kind?: string;
@@ -195,47 +191,37 @@ function useNetworkData(ctx: NetworkContext) {
     unitId?: number;
     systemId?: number;
   }) => {
-    if (!ctx.workBasis || !snapshot) return;
-    switch (row.kind) {
-      case "price": {
-        const groups = active ? systemScope(snapshot, active).groups : [];
-        if (groups.length) return ctx.verbs.scope({ groups: [...groups] }, ctx.workBasis);
-        return;
-      }
-      case "heal": {
-        const group = row.group ?? healTarget(snapshot, workDoc, active, selected, null);
-        if (active && systemScope(snapshot, active).groups.includes(group))
-          return ctx.verbs.scope({ groups: [group] }, ctx.workBasis);
-        return;
-      }
-      case "assign-fan": {
-        const fan =
-          row.unitId != null && row.systemId != null
-            ? { unitId: row.unitId, systemId: row.systemId }
-            : offeredFan(
-                snapshot,
-                workDoc,
-                ctx.readings.tables.value ?? {},
-                ctx.readings.catalogs.value?.tables ?? {},
-                active,
-                selected,
-                null,
-                elementNamer(snapshot, null),
-              );
-        if (snapshot.systems.find((system) => system.id === fan.systemId)?.name === active)
-          return ctx.verbs.scope({ fan }, ctx.workBasis);
-        return;
-      }
+    if (!snapshot) return;
+    let intent: { groups: string[] } | { fan: { unitId: number; systemId: number } } | null = null;
+    if (row.kind === "price") {
+      const groups = active ? systemScope(snapshot, active).groups : [];
+      if (groups.length) intent = { groups: [...groups] };
+    } else if (
+      row.kind === "heal" &&
+      row.group &&
+      active &&
+      systemScope(snapshot, active).groups.includes(row.group)
+    ) {
+      intent = { groups: [row.group] };
+    } else if (
+      row.kind === "assign-fan" &&
+      row.unitId != null &&
+      row.systemId != null &&
+      snapshot.systems.find((system) => system.id === row.systemId)?.name === active
+    ) {
+      intent = { fan: { unitId: row.unitId, systemId: row.systemId } };
     }
+    return intent
+      ? ctx.cells.at(["writeIntent"]).stage(intent, { label: "Choose write scope" })
+      : { code: "scope", message: "Choose a write target in the active system" };
   };
   const scopeCommand = (row?: unknown) => {
     const choice = scopeChoice.safeParse(row);
     return choice.success ? (
       <Button
         label="Choose write scope"
-        onClick={() => {
-          void stageScope(choice.data);
-        }}
+        refusal={ctx.cells.ready ? null : "Read the current Value and Work before editing"}
+        onPress={async () => (await stageScope(choice.data)) ?? null}
       >
         Choose write scope
       </Button>
@@ -261,13 +247,13 @@ function useNetworkData(ctx: NetworkContext) {
     subject: subjectIds ? { ids: subjectIds, claims, work: workDoc, onVerdict } : null,
     work: {
       doc: seen,
-      revision: ctx.workBasis?.workRevision ?? null,
+      revision: ctx.cells.basis?.workRevision ?? null,
       write: (patches: RouteStatePatch[]) => write(patches),
     },
     captureSource: networkRead.current && doc && version ? { document: doc, version } : null,
     observation,
     scopeCommand,
-    fanRoster: ctx.readings.fans.value?.rows ?? [],
+    fanRoster: ctx.value.value?.fanRows ?? [],
     edit: pendingCount(workDoc ?? null, snapshot?.store),
     coverage: coverage
       ? { ...coverage, reading: networkRead.status === "pending" ? systems : [] }
@@ -288,12 +274,7 @@ type Coverage =
     })
   | null
   | undefined;
-type OwnContext<P extends keyof typeof ductsData.panes> = PaneContext<
-  typeof ductsData,
-  typeof schemas,
-  typeof entries,
-  P
->;
+
 function NetworkFrame({
   ctx,
   data,
@@ -321,7 +302,9 @@ function NetworkFrame({
         <AttentionRoot doc={data.attentionDoc}>
           <PointerCite
             route="ducts"
-            refs={(place) => pointerRefs(place, data.snapshot, data.attentionDoc, (id) => nameOf(id))}
+            refs={(place) =>
+              pointerRefs(place, data.snapshot, data.attentionDoc, (id) => nameOf(id))
+            }
           />
           <SubjectTextContext.Provider
             value={{
@@ -341,6 +324,11 @@ function NetworkFrame({
               >
                 {null}
               </LoadingContext>
+            )}
+            {!ctx.value.current && "reason" in ctx.value && ctx.value.reason && (
+              <p role="status" className="p-2 text-ink-2">
+                {ctx.value.reason}
+              </p>
             )}
             {children}
           </SubjectTextContext.Provider>
@@ -382,16 +370,19 @@ function ReadCoverage({ coverage }: { coverage: Coverage }) {
     </p>
   );
 }
-export function SystemsPane({ ctx }: { ctx: OwnContext<"e-systems"> }) {
+export function SystemsPane({ ctx }: { ctx: DuctsDrawContext }) {
   const search = useRouteSearchSlice((search) => search);
   const data = useNetworkData(ctx);
   const { snapshot, priced, page, systems, active, work, analysis, captureSource, coverage } = data;
   const { drawn, nameOf } = useTreeProjection(snapshot, priced, work.doc, systems);
-  const roster = ctx.readings.roster.value;
+  const rosterState = ctx.read(rosterRead);
+  const roster = rosterState.value;
   const systemRows = useMemo(() => {
-    const rows = roster ? systemList(roster as DuctSnapshot, null) : NO_SYSTEMS;
+    const rows = roster ? systemList(roster as unknown as DuctSnapshot, null) : NO_SYSTEMS;
     const priced = new Map((analysis?.systems ?? []).map((row) => [row.key, row]));
-    return rows.length ? rows.map((row) => priced.get(row.key) ?? row) : analysis?.systems ?? NO_SYSTEMS;
+    return rows.length
+      ? rows.map((row) => priced.get(row.key) ?? row)
+      : (analysis?.systems ?? NO_SYSTEMS);
   }, [roster, analysis]);
   const notes = analysis?.notes ?? NO_NOTES;
   const { systemSearch, systemSort } = page;
@@ -412,9 +403,9 @@ export function SystemsPane({ ctx }: { ctx: OwnContext<"e-systems"> }) {
     <>
       <ReadCoverage coverage={coverage} />
 
-      {(ctx.readings.roster.status === "failed" ? ctx.readings.roster.reason : null) ? (
+      {(rosterState.status === "failed" ? rosterState.reason : null) ? (
         <p role="alert" data-tone="alarm">
-          {ctx.readings.roster.status === "failed" ? ctx.readings.roster.reason : null}
+          {rosterState.status === "failed" ? rosterState.reason : null}
         </p>
       ) : null}
       <Scroll className="min-h-0 flex-1">
@@ -439,7 +430,7 @@ export function SystemsPane({ ctx }: { ctx: OwnContext<"e-systems"> }) {
           notes={notes}
           drawn={drawn}
           page={systemKeys}
-          onQuery={(systemSearch, systemSort) => ctx.verbs.browse({ systemSearch, systemSort })}
+          onQuery={(systemSearch, systemSort) => ctx.page.query({ systemSearch, systemSort })}
           coverage={coverage}
         />
       </Scroll>
@@ -453,7 +444,7 @@ export function SystemsPane({ ctx }: { ctx: OwnContext<"e-systems"> }) {
     </NetworkFrame>
   );
 }
-export function TreePane({ ctx }: { ctx: OwnContext<"e-sidebar"> }) {
+export function TreePane({ ctx }: { ctx: DuctsDrawContext }) {
   const data = useNetworkData(ctx);
   const { snapshot, priced, page, systems, work, captureSource, selectElement, select } = data;
   const selectedElement = focusedElement(data.selected);
@@ -501,7 +492,7 @@ export function TreePane({ ctx }: { ctx: OwnContext<"e-sidebar"> }) {
               scope: `${openKey(systems)}:${captureSource?.version ?? ""}`,
               search: page.treeSearch,
               sort: page.treeSort,
-              onChange: (treeSearch, treeSort) => ctx.verbs.browse({ treeSearch, treeSort }),
+              onChange: (treeSearch, treeSort) => ctx.page.query({ treeSearch, treeSort }),
             }}
             ctx={{
               trees: tree,
@@ -536,7 +527,7 @@ export function TreePane({ ctx }: { ctx: OwnContext<"e-sidebar"> }) {
     </NetworkFrame>
   );
 }
-export function InboxBody({ ctx }: { ctx: OwnContext<"e-inbox"> }) {
+export function InboxBody({ ctx }: { ctx: DuctsDrawContext }) {
   const data = useNetworkData(ctx);
   const {
     snapshot,
@@ -553,7 +544,15 @@ export function InboxBody({ ctx }: { ctx: OwnContext<"e-inbox"> }) {
     selectElement,
   } = data;
   const projection = useTreeProjection(snapshot, priced, work.doc, systems);
-  const { inbox } = useInboxProjection(snapshot, priced, work.doc, projection, claims, edit);
+  const { inbox } = useInboxProjection(
+    snapshot,
+    priced,
+    work.doc,
+    projection,
+    claims,
+    edit,
+    data.analysis,
+  );
   const inboxWork = useMemo(
     () => ({ ...work, store: snapshot.store ?? null }),
     [work.doc, work.revision, work.write, snapshot],
@@ -588,19 +587,27 @@ export function InboxBody({ ctx }: { ctx: OwnContext<"e-inbox"> }) {
             scope: `${openKey(systems)}:${captureSource?.version ?? ""}`,
             search: page.rulingSearch,
             sort: page.rulingSort,
-            onChange: (rulingSearch, rulingSort) => ctx.verbs.browse({ rulingSearch, rulingSort }),
+            onChange: (rulingSearch, rulingSort) => ctx.page.query({ rulingSearch, rulingSort }),
           }}
         />
       )}
     </NetworkFrame>
   );
 }
-export function PictureBody({ ctx }: { ctx: OwnContext<"e-picture"> }) {
+export function PictureBody({ ctx }: { ctx: DuctsDrawContext }) {
   const data = useNetworkData(ctx);
   const { snapshot, priced, page, systems, active, work, claims, edit, analysis, coverage } = data;
   const projection = useTreeProjection(snapshot, priced, work.doc, systems);
   const { drawn, scope, groups, trees, nameOf } = projection;
-  const { heal, inbox } = useInboxProjection(snapshot, priced, work.doc, projection, claims, edit);
+  const { heal, inbox } = useInboxProjection(
+    snapshot,
+    priced,
+    work.doc,
+    projection,
+    claims,
+    edit,
+    data.analysis,
+  );
   const drawGroups = drawGroupsOf(snapshot, scope, systems);
   const { displayMembers, neighbours } = useNeighbours(snapshot, scope, systems);
   const activeScope = active ? systemScope(drawn, active) : null;
@@ -674,6 +681,7 @@ export function PictureBody({ ctx }: { ctx: OwnContext<"e-picture"> }) {
             ctx={ctx}
             snapshot={data.snapshotRead.value ? snapshot : null}
             priced={priced}
+            analysis={analysis}
             captureSource={data.captureSource}
             doc={data.document}
             subject={data.subject}
@@ -735,11 +743,13 @@ function useInboxProjection(
   projection: ReturnType<typeof useTreeProjection>,
   claims: NetworkData["claims"],
   edit: number,
+  analysis: NetworkData["analysis"],
 ) {
   return useMemo(() => {
     const { scope, nameOf, groupLabel } = projection;
-    const surveyed = priced ?? survey(snapshot, doc);
-    const heal = healPlan(snapshot, doc);
+    if (!priced || !analysis) return { heal: null, inbox: null };
+    const surveyed = priced;
+    const heal = analysis.heal;
     const noRuns: InboxItem[] =
       priced && scope
         ? [
@@ -787,9 +797,9 @@ function useInboxProjection(
       write: { edit, esp: stagedEsp(doc) },
     });
     return { heal, inbox: { ...base, diagnostics: [...base.diagnostics, ...noRuns] } };
-  }, [snapshot, priced, doc, projection, claims, edit]);
+  }, [snapshot, priced, doc, projection, claims, edit, analysis]);
 }
-export function RulesBody({ ctx, wide = false }: { ctx: OwnContext<"e-rules">; wide?: boolean }) {
+export function RulesBody({ ctx, wide = false }: { ctx: DuctsDrawContext; wide?: boolean }) {
   const data = useNetworkData(ctx);
   const { snapshot, priced, systems, selected, work, select } = data;
   const { drawn, groups, nameOf } = useTreeProjection(snapshot, priced, work.doc, systems);
@@ -978,7 +988,7 @@ function ReachInbox(props: Omit<ComponentProps<typeof Inbox>, "hoveredIssue">) {
   const issue = useHoveredIssue();
   return <Inbox {...props} hoveredIssue={issue} />;
 }
-export function AllRulesBody({ ctx }: { ctx: OwnContext<"e-rules-all"> }) {
+export function AllRulesBody({ ctx }: { ctx: DuctsDrawContext }) {
   const { snapshot, work } = useNetworkData(ctx);
   const kinds = new Map(
     (snapshot?.nodes ?? [])
@@ -991,7 +1001,7 @@ export function AllRulesBody({ ctx }: { ctx: OwnContext<"e-rules-all"> }) {
       <section aria-label="Unit kinds" className="flex flex-col gap-2 p-2">
         <h3 className="t-head">Unit kinds</h3>
         {[...kinds].map(([key, node]) => {
-          const cell = ctx.work?.kinds[key] ?? {};
+          const cell = ctx.cells.doc?.kinds[key] ?? {};
           const label = [node.family, node.type].filter(Boolean).join(" / ");
           return (
             <label key={key} className="flex flex-col gap-1">
@@ -1008,7 +1018,7 @@ export function AllRulesBody({ ctx }: { ctx: OwnContext<"e-rules-all"> }) {
                   description: kindMeaning(node, kind),
                   disabled: kindDisabledReason(node, kind) ?? undefined,
                 }))}
-                refusal={ctx.workBasis ? null : "Read Work before editing"}
+                refusal={ctx.cells.basis ? null : "Read Work before editing"}
                 pick={(kind) =>
                   void work.write(
                     cellPatches(["kinds"], key, cell, { kind: "set", rung: { value: { kind } } }),

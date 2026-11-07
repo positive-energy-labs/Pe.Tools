@@ -1,6 +1,9 @@
 import type { DuctsSheetEdits } from "@pe/agent-contracts";
 import type { ListPersist } from "@pe/kit/lang/collection";
-import type { OpenSheet } from "../neutral";
+import { openFanSheetSchema } from "@pe/agent-contracts";
+import type { Immutable } from "@pe/agent-contracts";
+import type { z } from "zod";
+export type OpenSheet = Immutable<z.output<typeof openFanSheetSchema>>;
 import type { Closer } from "./closer";
 import type { FanPort, SheetInputs } from "./model";
 import type { SheetBlocker } from "./tiers";

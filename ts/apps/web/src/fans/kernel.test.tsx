@@ -5,7 +5,7 @@ import { z } from "zod";
 import { builtinClosureFingerprint, createBuiltinRouteInventory } from "../../../../packages/agent-contracts/src/route-module.ts";
 import { module as fans } from "./route.ts";
 import { fansLink } from "./route.ts";
-import { localSubject } from "../ducts/neutral.ts";
+import { localSubject } from "../ducts/identity.ts";
 import { selectedFans, stableFanKey } from "../ducts/sheet/model.ts";
 import sheet from "../ducts/sheet/sheet.fixture.json";
 

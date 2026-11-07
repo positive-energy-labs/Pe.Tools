@@ -44,7 +44,7 @@
       "cardinality": "many",
       "identity": "subject",
       "picker": {
-        "reading": "value",
+        "reading": "roster",
         "options": "pickSubject"
       }
     },
@@ -204,7 +204,7 @@
   "subject": {
     "field": "fan",
     "noun": "fan",
-    "roster": "value",
+    "roster": "roster",
     "detail": "value",
     "pane": "sheet-roster"
   },
@@ -220,6 +220,38 @@
       "kind": "use",
       "entry": "fans.sheet",
       "args": "valueArgs",
+      "deps": {
+        "page": [
+          "fan",
+          "stage",
+          "inputSort",
+          "inputSearch",
+          "contextRadiusFt",
+          "contextStyle",
+          "encoding",
+          "layers",
+          "picture",
+          "rosterSearch",
+          "rosterSort",
+          "sceneView",
+          "sheetPath",
+          "viewport",
+          "selected"
+        ],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    },
+    "roster": {
+      "kind": "use",
+      "entry": "fans.sheet",
+      "args": "rosterArgs",
       "deps": {
         "page": [
           "fan",
@@ -282,6 +314,26 @@
     }
   },
   "verbs": {
+    "page:query": {
+      "kind": "page",
+      "input": "pageQuery",
+      "label": "Browse",
+      "review": "none",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "captures": [],
+      "patch": "pageQuery",
+      "fields": [
+        "inputSort",
+        "inputSearch",
+        "rosterSearch",
+        "rosterSort",
+        "sheetPath"
+      ]
+    },
     "edit": {
       "kind": "work",
       "input": "patch",
@@ -369,9 +421,11 @@
       "purpose": "Open fan ports",
       "draws": [
         "value",
+        "roster",
         "owner:ducts"
       ],
       "verbs": [
+        "page:query",
         "edit",
         "edit:ducts",
         "losses"
@@ -383,9 +437,11 @@
       "purpose": "Edit fan inputs",
       "draws": [
         "value",
+        "roster",
         "owner:ducts"
       ],
       "verbs": [
+        "page:query",
         "edit",
         "edit:ducts",
         "losses"
@@ -397,9 +453,11 @@
       "purpose": "Inspect fan paths",
       "draws": [
         "value",
+        "roster",
         "owner:ducts"
       ],
       "verbs": [
+        "page:query",
         "edit",
         "edit:ducts",
         "losses"
@@ -411,9 +469,11 @@
       "purpose": "Inspect ESP and provenance",
       "draws": [
         "value",
+        "roster",
         "owner:ducts"
       ],
       "verbs": [
+        "page:query",
         "edit",
         "edit:ducts",
         "losses"
@@ -488,7 +548,9 @@
   "stageOrder": [
     "sheet"
   ],
-  "predicates": {},
+  "predicates": {
+    "subject": "hasSubject"
+  },
   "cells": {
     "writeIntent": {
       "segment": null,

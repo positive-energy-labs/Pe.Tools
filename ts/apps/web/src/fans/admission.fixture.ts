@@ -2,9 +2,9 @@ import {
   builtinClosureFingerprint,
   createBuiltinRouteInventory,
 } from "../../../../packages/agent-contracts/src/route-module";
-import { module as ducts } from "../ducts/kernel";
+import { module as ducts } from "../ducts/route";
 import { module as fans } from "./route";
-import { ductsHostModule } from "../ducts/neutral";
+import { ductsHostModule } from "../ducts/route";
 import { fansHostModule } from "./route";
 const catalog = Object.entries(ducts.entries).map(([key, entry]) => ({
   key,

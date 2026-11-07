@@ -2,9 +2,9 @@
 import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-router";
 import { expect, test } from "vite-plus/test";
 import { module as fans } from "../fans/route.ts";
-import { module as ducts } from "../ducts/kernel.tsx";
+import { module as ducts } from "../ducts/route.ts";
 import { fansLink } from "../fans/route.ts";
-import { ductsLink, localId } from "../ducts/neutral.ts";
+import { ductsLink, localId } from "../ducts/identity.ts";
 import { admittedRouteSearch } from "./admitted-pane.tsx";
 
 test("fan and system links survive router parsing, validation and URL canonicalization", () => {

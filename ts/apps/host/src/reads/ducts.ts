@@ -16,6 +16,7 @@ import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { pricingResult } from "@pe/ducts-domain/pricing-result";
 import { native, designLayers, catalogs } from "./ducts-inputs.ts";
 import { read } from "./evaluator.ts";
+import { fanRoster } from "./fan-sheet.ts";
 
 export const ductsRoster = read("ducts.roster", {
   input: ductsRosterArgs,
@@ -140,14 +141,22 @@ export const ductsPricing = read("ducts.pricing", {
       network.systemReads.missing.length
     )
       throw Error("Pricing requires every requested system batch; read the network coverage");
+    const fans = await ctx.read(fanRoster, { target: args.target });
     return ctx.compute(
       ductsPricingData,
-      { network, layers, catalog, tables },
-      ({ network, layers, catalog, tables }) => {
+      { fans, network, layers, catalog, tables },
+      ({ fans, network, layers, catalog, tables }) => {
         const { sourceVersion: _version, systemReads: _coverage, ...snapshot } = network;
         return {
           ...ductsPricingData
-            .omit({ network: true, ductsWork: true, fansWork: true, catalogFindings: true })
+            .omit({
+              fanRows: true,
+              design: true,
+              network: true,
+              ductsWork: true,
+              fansWork: true,
+              catalogFindings: true,
+            })
             .parse(
               wire(
                 pricingResult(
@@ -158,6 +167,8 @@ export const ductsPricing = read("ducts.pricing", {
                 ),
               ),
             ),
+          fanRows: fans.rows,
+          design: ductsDesign(layers.ducts, layers.fans),
           network,
           ductsWork: layers.ducts,
           fansWork: layers.fans,

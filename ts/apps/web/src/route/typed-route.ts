@@ -38,7 +38,9 @@ type Field = {
   url: "push" | "replace";
 };
 export const whenSubject = (child: string | LayoutJson): LayoutJson => ({
-  kind: "gate", when: "subject", child: typeof child === "string" ? { kind: "pane", id: child } : child,
+  kind: "gate",
+  when: "subject",
+  child: typeof child === "string" ? { kind: "pane", id: child } : child,
 });
 export const split = (
   axis: "h" | "v",
@@ -469,7 +471,12 @@ export function route<
       deps: {
         page: [spec.subject.field],
         work: workKeys,
-        readings: ["value", ...Object.keys(owners).filter(owner => owner !== own).map(owner => `owner:${owner}`)],
+        readings: [
+          "value",
+          ...Object.keys(owners)
+            .filter((owner) => owner !== own)
+            .map((owner) => `owner:${owner}`),
+        ],
       },
       captures: ["value"],
       intent: body(`${id}Intent`, `verbs.${id}.intent`, "intent", () => ({})),

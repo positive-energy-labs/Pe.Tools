@@ -38,7 +38,14 @@ type FixtureValue<O extends z.ZodType<Publication>> = Pick<
 
 /** A host publication handle. Importing a route on the host never loads browser transport. */
 export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
-  contract: { key: string; endpoint?: PeRouteId; request?(args: z.output<I>): object; input: I; output: O; axes: EntryContract["axes"] },
+  contract: {
+    key: string;
+    endpoint?: PeRouteId;
+    request?(args: z.output<I>): object;
+    input: I;
+    output: O;
+    axes: EntryContract["axes"];
+  },
   fixtures?: Readonly<Record<string, (args: z.output<I>) => FixtureValue<O>>>,
 ) {
   const { key } = contract;
@@ -55,11 +62,13 @@ export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
           async read(context, publication, release) {
             if (context.target.kind !== "document") throw Error("Choose a document");
             return contract.output.parse(
-              await callCompose(context, contract.endpoint ?? key as PeRouteId, {
+              await callCompose(context, contract.endpoint ?? (key as PeRouteId), {
                 body: {
                   ...publication,
                   release,
-                  ...(contract.request ?? ((args) => ({ args })))(contract.input.parse(context.args)),
+                  ...(contract.request ?? ((args) => ({ args })))(
+                    contract.input.parse(context.args),
+                  ),
                   args: {
                     ...z.record(z.string(), z.unknown()).parse(contract.input.parse(context.args)),
                     target: context.target.ref,

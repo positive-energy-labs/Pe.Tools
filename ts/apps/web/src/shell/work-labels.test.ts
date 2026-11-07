@@ -24,10 +24,10 @@ test("every Work field a route can write has a declared name for History and Inp
 });
 
 test("admitted ducts and fans name every Work field for history", async () => {
-  const ducts = await import("../ducts/neutral.ts");
+  const ducts = await import("../ducts/route.ts");
   const fans = await import("../fans/route.ts");
   for (const { data, schemas } of [
-    { data: ducts.ductsData, schemas: ducts.schemas },
+    { data: ducts.ductsData, schemas: ducts.module.schemas },
     { data: fans.fansData, schemas: fans.module.schemas },
   ]) {
     const declared = new Set([...Object.keys(data.cells), ...Object.keys(data.workFields)]);
