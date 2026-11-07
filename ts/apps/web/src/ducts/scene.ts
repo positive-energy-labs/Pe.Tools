@@ -6,7 +6,7 @@
 import type { DuctNode, EncodingFacts, Issue, Segment, SegmentFacts } from "./encoding";
 import type { Claim, Leg, Place, SubjectCut } from "./legs";
 import type { LossResult } from "@pe/ducts-domain/losses";
-import type { Priced } from "@pe/ducts-domain/pricing";
+import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { drawnGraph, type DuctGraph } from "@pe/ducts-domain/drawn-graph";

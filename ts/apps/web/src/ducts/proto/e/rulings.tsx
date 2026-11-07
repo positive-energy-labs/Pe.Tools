@@ -6,7 +6,7 @@ import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 
-import type { Priced } from "@pe/ducts-domain/pricing";
+import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 import type { Label, Ruling } from "../../annotations";
 import { VERDICTS } from "../../claims";

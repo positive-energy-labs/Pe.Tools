@@ -55,7 +55,6 @@ import {
 import { z } from "zod";
 import type { DuctsDrawContext } from "../../route.ts";
 import { roster as rosterRead, network as networkSource } from "../../route.ts";
-import { projectValue } from "../../../route/typed-route.ts";
 import { airflowOptions } from "../../airflow";
 import { attentionSubjects, cellFocusOf, cellFocusSubject, focusedElement } from "../../cell-focus";
 import { verdictPatches } from "../../claims";
@@ -103,15 +102,7 @@ function useNetworkData(ctx: NetworkContext) {
   );
   const selected = page.selected.map((item) => localSubject(item.id)).join(",");
   const doc = target?.kind === "document" ? target.ref : null;
-  const networkRead = ctx.value.current
-    ? projectValue<
-        NonNullable<DuctsDrawContext["value"]["value"]>,
-        import("@pe/agent-contracts").DuctsNetworkData
-      >(
-        ctx.value,
-        (value) => value.network as unknown as import("@pe/agent-contracts").DuctsNetworkData,
-      )
-    : ctx.read(networkSource);
+  const networkRead=ctx.read(networkSource);
   // The existing drawing views accept mutable arrays; decoded Values stay immutable.
   const snapshot = (networkRead.value ?? null) as
     | import("@pe/agent-contracts").DuctsNetworkData
