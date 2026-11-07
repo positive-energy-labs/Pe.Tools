@@ -51,12 +51,7 @@
     "path": "/takeoffs",
     "resume": "document",
     "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-    "satellites": [
-      {
-        "label": "Zone audit",
-        "to": "/zone-audit"
-      }
-    ],
+    "satellites": [],
     "surfaces": {
       "pwa": "full",
       "tray": false,
@@ -438,7 +433,7 @@
     "size": 100,
     "sized": "start"
   },
-  "moduleHash": "5cd9a5bfadd69c6e2d9c192946222e48dc441cd91df2be4559e82c5fb4734010",
+  "moduleHash": "9ac4eb2ecf8d7e20761e7ce2cd0513e75273c2a0c33e7b215e0023d4393f5f21",
   "name": "View adoption",
   "needs": "project",
   "panes": {
