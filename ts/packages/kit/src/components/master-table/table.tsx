@@ -58,8 +58,7 @@ function useTableSelection(selection: TableSelection | undefined, shown: readonl
   return { toggle: (key: string, range: boolean) => collection.pick(key, range) };
 }
 
-export interface TableProps<Row extends RowData> {
-  rows: readonly Row[];
+interface TablePresentation<Row extends RowData> {
   status?: ListReading;
   failure?: string;
   columns: readonly Column<Row>[];
@@ -99,6 +98,11 @@ export interface TableProps<Row extends RowData> {
   };
 }
 
+export type TableProps<Row extends RowData, Data = readonly Row[]> = TablePresentation<Row> & (
+  { rows: readonly Row[]; value?: never; rowsOf?: never } |
+  { value: ValueHandle<Data>; rowsOf: (data: Data) => readonly Row[]; rows?: never }
+);
+
 /** Why a named target is not drawn: the query filtered its row out, or its column is hidden. */
 export const ACTIVE_ROW_HIDDEN = "its row is hidden by the query";
 export const ACTIVE_COLUMN_HIDDEN = "its column is hidden";
@@ -130,10 +134,7 @@ export function Table<Row extends RowData, Data = readonly Row[]>({
   maxHeight,
   caption,
   cellEdit,
-}: Omit<TableProps<Row>, "rows"> & (
-  { rows: readonly Row[]; value?: never; rowsOf?: never } |
-  { value: ValueHandle<Data>; rowsOf: (data: Data) => readonly Row[]; rows?: never }
-)) {
+}: TableProps<Row, Data>) {
   const projection = value ? valueRows(value, rowsOf) : null;
   const rows = projection?.items ?? suppliedRows!;
   const status = projection?.status ?? suppliedStatus;
