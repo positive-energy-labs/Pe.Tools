@@ -240,7 +240,7 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
   };
   const fanReading = fans;
   const friction = ctx.cells.doc?.designFriction ?? {};
-  const parameterTarget = ctx.cells.basis?.token.scope.identity.target;
+  const parameterTarget = ctx.target;
   const ownPane = (
     <>
       <section
@@ -405,7 +405,7 @@ export function PictureBody({ ctx }: { ctx: SheetContext }) {
 }
 function PictureContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSnapshot }) {
   const { authored, value, sheet, roster, nameOf, selected } = useSheetData(ctx, snapshot);
-  const target = ctx.cells.basis?.token.scope.identity.target;
+  const target = ctx.target;
   const doc = target?.kind === "document" ? target.ref : null;
   const workDoc = ctx.value.value?.design ?? null;
   const select = (selected: string) =>
@@ -627,7 +627,7 @@ function SheetFrame({
   jump?: import("react").RefObject<((key: SubjectKey) => void) | null>;
   children: import("react").ReactNode;
 }) {
-  const target = ctx.cells.basis?.token.scope.identity.target;
+  const target = ctx.target;
   const document = target?.kind === "document" ? target.ref : null;
   const attentionDoc = document ? `${document.session}/${document.openId}` : "fans:unbound";
   const refProps = useRevitSubjectProps();

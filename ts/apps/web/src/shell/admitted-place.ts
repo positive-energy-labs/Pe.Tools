@@ -13,6 +13,7 @@ export type PlaceInput = Readonly<{
   memory(this: void): unknown;
   history?: import("./history.ts").HistorySnapshot;
   readOnly?: boolean;
+  publicationInstance?: string;
 }>;
 
 type Disposable = { dispose(): void };

@@ -97,13 +97,13 @@ export function RouteRetention({
   for (const entry of retained.current) entry.visible = false;
   retained.current = retained.current.filter(
     (entry) =>
-      (routeOf(entry.route) || publicRoutes.admitted(entry.route)) &&
+      (routeOf(entry.route) || publicRoutes.declaration(entry.route)) &&
       (entry.id
         ? !ready || entry.id === selectedId || tabs.some((tab) => tab.id === entry.id)
         : entry.route === route),
   );
   if (route) {
-    const pathname = publicRoutes.admitted(route)?.data.address ?? routeAddress(routeOf(route)!).path;
+    const pathname = publicRoutes.declaration(route)?.address ?? routeAddress(routeOf(route)!).path;
     const search = location.search as Record<string, unknown>;
     const source = JSON.stringify(search.fixture ?? null);
     let entry = retained.current.find(

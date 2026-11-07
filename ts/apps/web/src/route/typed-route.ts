@@ -10,17 +10,13 @@ import {
   salvageWork,
   type RouteStateSpec,
   type ReadingSnapshot,
+  type LayoutJson,
+  type InvocationToken,
+  type IdentityId,
+  type EntryContract,
+  type WorkHistoryPort,
+  type Many,
 } from "@pe/agent-contracts";
-import type { LayoutJson } from "@pe/agent-contracts";
-import type {
-  InvocationToken,
-  IdentityId,
-} from "@pe/agent-contracts";
-import type {
-  EntryContract,
-  WorkHistoryPort,
-} from "@pe/agent-contracts";
-import type { Many } from "@pe/agent-contracts";
 import type { Publication } from "./host-read.ts";
 
 type Field = {
@@ -116,6 +112,7 @@ export interface EditableCells<W, Edit> {
   edit(input: Edit, history?: EditHistory): Promise<EditFailure>;
 }
 export interface DrawContext<D, F extends Fields, W, Edit> {
+  readonly target: import("@pe/agent-contracts").ExecutionTarget | null;
   readonly value: ReadingSnapshot<D> & { readonly publication: Immutable<Publication<D>["value"]> };
   readonly page: DrawPage<F>;
   readonly selection: { read(): Page<F>["selected"]; set(value: Page<F>["selected"]): unknown };

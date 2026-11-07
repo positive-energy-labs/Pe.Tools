@@ -1,7 +1,8 @@
 // Generated from fans/route.ts by codegen:routes. Do not edit.
 import { z } from "zod";
 import { subjectSchema } from "../route-kernel-codecs.ts";
-const field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: { encode: (value:z.output<S>) => JSON.stringify(value), decode: (text:string) => schema.parse(JSON.parse(text)) } });
+import { jsonCodec } from "../route-field.ts";
+const field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: jsonCodec(schema) });
 export const fansAddress = { path: "/fans" as const, title: "Fans", fields: {
 "fan": field(subjectSchema(32).default({"kind":"ids","ids":[]}), "push"),
 "stage": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","enum":["sheet"]}).default("sheet"), "push"),

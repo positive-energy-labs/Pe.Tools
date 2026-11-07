@@ -1,10 +1,32 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { z } from "zod";
 import { historyPointSchema, type Address } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { ListPopup } from "@pe/kit/lang/list-popup";
-import { historyRequest, pointHref, type HistorySnapshot } from "./history.ts";
+import { historyRequest, historySnapshotSchema, pointHref, type HistorySnapshot } from "./history.ts";
 import type { AdmittedAddressPort } from "./admitted-address.ts";
+
+/** Both shells resolve the recorded point before acquiring any live resources. */
+export function HistoryBoundary({ address, children }: {
+  address: AdmittedAddressPort;
+  children(snapshot?: HistorySnapshot): ReactNode;
+}) {
+  const search = useSyncExternalStore(address.subscribe, () => address.read().toString(), () => "");
+  const at = new URLSearchParams(search).get("at");
+  const [loaded, setLoaded] = useState<{ id: string; snapshot?: HistorySnapshot; error?: string } | null>(null);
+  useEffect(() => {
+    if (!at) return;
+    let closed = false;
+    void historyRequest(`?at=${encodeURIComponent(at)}`).then(raw => {
+      if (!closed) setLoaded({ id: at, snapshot: historySnapshotSchema.parse(raw) });
+    }).catch(error => { if (!closed) setLoaded({ id: at, error: String(error) }); });
+    return () => { closed = true; };
+  }, [at]);
+  if (at && (loaded?.id !== at || !loaded.snapshot)) return <div role="status" data-tone="caution">
+    {loaded?.id === at ? loaded.error : "Opening recorded point?"}
+  </div>;
+  return children(at ? loaded!.snapshot : undefined);
+}
 
 /** Timeline's write receipts name the afterWrite rows; all point bindings remain host-owned. */
 export function HistoryRail({

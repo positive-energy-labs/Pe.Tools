@@ -1,6 +1,6 @@
-import { createElement, useEffect, useState, useMemo, useRef, useSyncExternalStore, Fragment } from "react";
-import { historyRequest, historySnapshotSchema, publicationPose, type HistorySnapshot } from "./history.ts";
-import { HistoryRail } from "./history-rail.tsx";
+import { createElement, useState, useMemo, useRef, useSyncExternalStore, Fragment } from "react";
+import { historyRequest, publicationPose, type HistorySnapshot } from "./history.ts";
+import { HistoryBoundary, HistoryRail } from "./history-rail.tsx";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { RouteDocument } from "./admitted-chrome";
 import { inventoryOf, previousOf, useInventory, targetInventory } from "./readings-hooks";
@@ -23,25 +23,8 @@ function ApplicationRouteShell(props: Omit<AdmittedPaneProps, "shell">) {
   return createElement(AdmittedPlaceBoundary, {
     route: props.route,
     address: props.address,
-    children: (place) => createElement(HistoryPlace, { route: props.route, place }),
+    children: (place) => createElement(HistoryBoundary, { address: place.address, children: (snapshot) => createElement(PlaceRouteShell, { route: props.route, place, snapshot }) }),
   });
-}
-
-function HistoryPlace({ route, place }: Pick<AdmittedPaneProps, "route"> & { place: PanePlace }) {
-  const search = useSyncExternalStore((notify) => place.address.subscribe(notify), () => place.address.read().toString(), () => "");
-  const at = new URLSearchParams(search).get("at");
-  const [loaded, setLoaded] = useState<{ id: string; snapshot?: HistorySnapshot; error?: string } | null>(null);
-  useEffect(() => {
-    if (!at) return;
-    let closed = false;
-    void historyRequest(`?at=${encodeURIComponent(at)}`).then((raw) => {
-      if (!closed) setLoaded({ id: at, snapshot: historySnapshotSchema.parse(raw) });
-    }).catch((error) => { if (!closed) setLoaded({ id: at, error: String(error) }); });
-    return () => { closed = true; };
-  }, [at]);
-  if (at && (loaded?.id !== at || !loaded.snapshot)) return createElement("div", { role: "status", "data-tone": "caution" },
-    loaded?.id === at ? loaded.error : "Opening recorded point…");
-  return createElement(PlaceRouteShell, { route, place, snapshot: at ? loaded!.snapshot : undefined });
 }
 
 export function PlaceRouteShell({

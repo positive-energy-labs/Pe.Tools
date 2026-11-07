@@ -9,6 +9,8 @@ import { useRouteTarget } from "../route/route-target";
 import { appAtomRegistry } from "./owner";
 import { admittedRouterAddress } from "./admitted-pane";
 import { createAdmittedPlace, type PlaceInput } from "./admitted-place";
+import { HistoryBoundary, HistoryRail } from "./history-rail";
+import { historyRequest, publicationPose, type HistorySnapshot } from "./history";
 import { DocumentPicker } from "./application-route-shell";
 import { RouteVisibility, useRouteActivity } from "../route/activity";
 import { SituationBand, TimelineHead } from "./situation-band";
@@ -48,24 +50,29 @@ export function TypedRouteView({ module, fingerprint, address: supplied }: { mod
     return () => { p.setVisible(false); if(!activity) {p.dispose();held.current=null;} };
   }, [module, address, activity]);
   useEffect(() => { place?.setVisible(visible); }, [place,visible]);
-  return place ? <TypedPlace module={module} place={place} fingerprint={fingerprint} /> : null;
+  return place ? <HistoryBoundary address={place.address}>{snapshot => <TypedPlace module={module} place={place} fingerprint={fingerprint} snapshot={snapshot} />}</HistoryBoundary> : null;
 }
-function TypedPlace({ module, place, fingerprint }: { module: TypedRoute; place: ReturnType<typeof createAdmittedPlace<{ mount: TypedMount; dispose(): void }>>; fingerprint: RouteFingerprint }) {
+function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: HistorySnapshot; module: TypedRoute; place: ReturnType<typeof createAdmittedPlace<{ mount: TypedMount; dispose(): void }>>; fingerprint: RouteFingerprint }) {
   const search = useSyncExternalStore(place.address.subscribe, () => place.address.read().toString());
   const fixture = place.fixture, visible = useContext(RouteVisibility);
-  const seed = useMemo(() => fixture === null ? undefined : {}, [fixture]);
-  const target = useRouteTarget({ needs: "project" }, appAtomRegistry, seed, new URLSearchParams(search).get("target"));
+  const params = new URLSearchParams(search), compare = !!snapshot && params.get("compare") === "now";
+  const history = compare ? undefined : snapshot;
+  const [liveInstance] = useState(() => `${module.spec.key}:${crypto.randomUUID()}`);
+  const poses = snapshot?.point.history.poses.filter(p => p.route === module.spec.key && (!params.get("atInstance") || p.instance === params.get("atInstance"))) ?? [];
+  const pose = poses.length === 1 ? poses[0] : undefined, instance = pose?.instance ?? liveInstance;
+  const seed = useMemo(() => history ? { target: { kind: "document" as const, ref: history.point.history.target } } : fixture === null ? undefined : {}, [history,fixture]);
+  const target = useRouteTarget({ needs: "project" }, appAtomRegistry, seed, compare ? snapshot.point.history.address : params.get("target"));
   const resolved = target.resolution.kind === "resolved" ? target.resolution.target : null;
-  const signature = canonicalRouteInput([resolved, target.workAddress, target.workOpen]);
+  const signature = canonicalRouteInput([resolved, target.workAddress, target.workOpen, history?.point.id, !!snapshot, instance]);
   const current = useRef(signature); current.current = signature;
-  const input = useMemo<PlaceInput>(() => ({ address: place.address, fixture, target: resolved,
-    work: { address: target.workAddress, open: resolved?.kind === "document" ? resolved.ref : target.workOpen },
-    custody: { current: () => place.current() && current.current === signature }, memory: place.memory }), [place,signature]);
+  const input = useMemo<PlaceInput>(() => ({ address: place.address, fixture, target: resolved, history, readOnly: !!snapshot, publicationInstance: instance,
+    work: { address: history?.point.history.address ?? target.workAddress, open: resolved?.kind === "document" ? resolved.ref : target.workOpen },
+    custody: { current: () => place.current() && current.current === signature }, memory: history ? () => pose?.page ?? {} : place.memory }), [place,signature]);
   const [mount,setMount] = useState<TypedMount | null>(null);
   const [problem,setProblem] = useState<string | null>(null);
   useEffect(() => {
     place.setVisible(visible);
-    if (!input.target && !input.work.address && !input.work.open) return;
+    if (snapshot && !pose || !input.target && !input.work.address && !input.work.open) return;
     let state: { mount: TypedMount; input?: PlaceInput; dispose(): void };
     try {
       state = place.state(() => ({ mount: mountTypedRoute(module,input,fingerprint), input, dispose() { this.mount.dispose(); } }));
@@ -74,8 +81,30 @@ function TypedPlace({ module, place, fingerprint }: { module: TypedRoute; place:
     } catch(error) { setProblem(String(error)); return; }
     return () => state.mount.release();
   }, [module,place,input,visible]);
-  const document = <DocumentPicker place={place} target={resolved} needs="project" enabled={fixture === null} />;
-  return problem ? <p role="alert">{problem}</p> : mount ? <TypedChrome mount={mount} document={document} /> : <>{document}<p>Choose a document</p></>;
+  const lastPose = useRef("");
+  useEffect(() => {
+    if (!mount) return;
+    const remember = () => {
+      const page = mount.page.read();
+      if (!history) place.remember(page);
+      if (snapshot || !target.workAddress || fixture !== null) return;
+      const pose = publicationPose(instance,module.spec.key,page);
+      const signature = canonicalRouteInput([target.workAddress,pose]);
+      window.dispatchEvent(new Event("pe:history-change"));
+      if (lastPose.current === signature) return;
+      lastPose.current = signature;
+      void historyRequest("",{kind:"page",document:target.workAddress,pose}).then(() => window.dispatchEvent(new Event("pe:history-change"))).catch(() => {});
+    };
+    remember();
+    return mount.subscribe(remember);
+  }, [mount,place,history,snapshot,target.workAddress,instance,fixture,module]);
+  const document = <DocumentPicker place={place} target={resolved} needs="project" enabled={fixture === null && !snapshot} />;
+  if (snapshot && !pose) return <p role="status">This route was never published at this point, or its Page is ambiguous</p>;
+  return <><HistoryRail document={snapshot?.point.history.address ?? target.workAddress} route={module.spec.key} address={place.address} snapshot={snapshot} compare={compare} />
+    <section className="flex min-h-0 flex-1 flex-col" data-tone={history ? "caution" : undefined} data-wash={history ? "" : undefined} aria-label={history ? "Recorded view, read-only" : undefined}>
+      {problem ? <p role="alert">{problem}</p> : mount ? <TypedChrome mount={mount} document={document} /> : <>{document}<p>Choose a document</p></>}
+    </section></>;
+
 }
 function TypedChrome({ mount, document }: { mount: TypedMount; document: ReactNode }) {
   useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);

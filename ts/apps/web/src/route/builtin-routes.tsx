@@ -34,7 +34,7 @@ export { publicRoutes };
 export const publicRoutesReady = Promise.all(
   builtinRouteKeys.map(async (key) => {
     if (key === "fans") {
-      const fingerprint = workFingerprintSchema.parse(builtinRouteStamp(key));
+      const fingerprint = workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp(key)}`);
       publicRoutes.register({ manifest: { key, name: fans.spec.name, needs: "project" }, typed: fans,
         work: { route: key, schema: fans.spec.edits.work.schema, cells: [], workFields: {}, admission: { routeKey: key, fingerprint } },
         hosted: props => <HostedTypedRoute module={fans} fingerprint={fingerprint} {...props} /> });

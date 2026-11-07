@@ -1,17 +1,15 @@
 import { z } from "zod";
 import { applyPatches, bindWork, cellPatches, commands, canonicalRouteInput, workKey,
   writePreviewSchema, presentationSchema, workHandleSchema, workFeedFailureMessage, type WorkFeedFailure, type WorkHandle, type WorkWrite, type RouteStatePatch,
+  bare, type WorkJournalDoor, type WorkScope, type RouteFingerprint, type InvocationToken,
   type RouteStateWriteResult } from "@pe/agent-contracts";
 import { createRouteScopeGate } from "@pe/runtime/route-scope-gate";
 import { applicationWorkRegistry, createApplicationWorkRegistry } from "./application-work-registry";
 import { createWorkFeedClient } from "./work-feed-client";
 import { createFixtureWorkDoor } from "./fixture-work-door";
+import { publicationPose, recordedWorkDoor } from "./history";
 import { settleWork } from "./work-door-observation";
 import { freezePage } from "./page-port";
-import { bare } from "@pe/agent-contracts";
-import type { WorkJournalDoor, WorkScope } from "@pe/agent-contracts";
-import type { RouteFingerprint } from "@pe/agent-contracts";
-import type { InvocationToken } from "@pe/agent-contracts";
 import type { PlaceInput } from "./admitted-place";
 import type { ReadingContext, ReadingSource } from "./readings";
 import type { DrawContext, EditFailure, EditHistory, TypedRoute } from "../route/typed-route";
@@ -25,26 +23,33 @@ const unavailable = (reason: string, value?: any, publication: Value["publicatio
 /** Typed routes execute declarations directly. No graph admission, body slots or reading scheduler. */
 export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerprint: RouteFingerprint,
   ports: { work?: WorkJournalDoor; sources?: Record<string, ReadingSource> } = {}) {
+  const cleanups: (() => void)[] = [];
+  try {
   const { spec } = module;
   const own = spec.edits.work.route;
-  const registry = input.fixture === null ? applicationWorkRegistry : createApplicationWorkRegistry();
+  const registry = input.fixture === null && !input.history ? applicationWorkRegistry : createApplicationWorkRegistry();
   const listeners = new Set<() => void>();
   let revision = 0, disposed = false, released = false;
   const notify = () => { if (!disposed) { revision++; listeners.forEach(f => f()); } };
   const requireCurrent = () => {
     if (disposed || released || !input.custody.current() || !input.target) throw Error("Place is not writable");
   };
+  const requireWritable = () => {
+    requireCurrent();
+    if (input.readOnly || input.history) throw Error("needs live Revit");
+  };
   const decodePage = () => {
     const search = input.address.read();
+    const memory = z.record(z.string(),z.unknown()).parse(input.memory() ?? {});
     return freezePage({ ...Object.fromEntries(Object.entries(spec.fields).map(([key, field]) => {
       const raw = search.get(key);
-      return [key, field.schema.parse(raw === null ? field.initial : JSON.parse(raw))];
-    })), selected: [] });
+      return [key, field.schema.parse(raw === null ? memory[key] ?? field.initial : JSON.parse(raw))];
+    })), selected: memory.selected ?? [] });
   };
   const owners = new Map<string, {
     scope: WorkScope; config: typeof spec.edits.owners[string]; handle: WorkHandle | null;
     doc: any; ready: boolean; problem: string | null; failure: WorkFeedFailure | null;
-    lease: ReturnType<typeof registry.acquire>; stop(): void;
+    lease: ReturnType<typeof registry.acquire>;
   }>();
   let page: Record<string, any> = decodePage();
   const key = bindWork(own, input.work.address, input.address.read().get("work") || undefined, input.work.open ?? undefined);
@@ -56,10 +61,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     dependencies,
     preparePage: (_page, patch) => ({ ok: true, value: { page: patch, changed: true, membership: "unresolved" } }),
   });
+  cleanups.push(() => { for (const r of reads.values()) r.stop(); gate.close(); });
   gate.enter({ target: input.target, work: key }, page);
   let workAttempt = gate.capture("work");
-  let door = ports.work ?? createWorkFeedClient();
-  if (input.fixture !== null) {
+  let door = input.history ? recordedWorkDoor(input.history) : ports.work ?? createWorkFeedClient();
+  if (!input.history && input.fixture !== null) {
     const packet = spec.core.source.provide?.(input.fixture, spec.core.args(page as never));
     if (!packet?.value) throw Error(`Missing fixture ${input.fixture}`);
     const data = packet.value.data as Record<string,unknown>;
@@ -84,10 +90,12 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       target: input.target, subject: null, ...(id === own ? {} : { reading: `owner:${id}` }) };
     const lease = registry.acquire(scope.key);
     const record = { scope, config, handle: null as WorkHandle | null, doc: null as any,
-      ready: false, problem: null as string | null, failure: null as WorkFeedFailure | null, lease, stop: () => {} };
+      ready: false, problem: null as string | null, failure: null as WorkFeedFailure | null, lease };
     owners.set(id, record);
+    cleanups.push(() => lease.release());
     lease.entry.connect(scope, door);
     const stopJournal = lease.entry.subscribe(notify);
+    cleanups.push(stopJournal);
     const stopFeed = door.open(scope).subscribe(state => {
       if (disposed) return;
       try {
@@ -111,7 +119,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       } catch (error) { record.ready = false; record.problem = String(error); }
       notify();
     }, notify);
-    record.stop = () => { stopFeed(); stopJournal(); lease.release(); };
+    cleanups.push(stopFeed);
   }
   const readArgs = () => spec.core.input.parse(spec.core.args(page as never));
   let argsKey = "";
@@ -144,6 +152,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         catch (error) { deliver({ kind: "failure", error }); }
       } else {
         const ctx: ReadingContext = { target: input.target!, workKey: key, workRevision: null,
+          historyPoint: input.history?.point.id,
+          historyPose: input.publicationInstance ? publicationPose(input.publicationInstance,spec.key,page) : undefined,
           work: null, page, args, signal: controller.signal, inputs: {},
           attempt: { target: input.target!, workKey: key, generation: revision }, trigger: { kind: "demand" } };
         const source = ports.sources?.[read.key] ?? read.source;
@@ -178,16 +188,17 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     page = freezePage({ ...next, selected: page.selected });
     gate.movePage(page, { kind: "human", source: "query", history: "replace" }); syncReads(); notify();
   });
+  cleanups.push(stopAddress);
   let renderedBasis: InvocationToken | null = null;
   const basis = () => {
-    if (!owners.get(own)?.ready) return null;
+    if (input.readOnly || input.history || !owners.get(own)?.ready) return null;
     if(renderedBasis && gate.current(renderedBasis)) return renderedBasis;
     const issued = gate.invocation(gate.capture("draw"), dependencies());
     return renderedBasis = issued.ok ? issued.value : null;
   };
   const entries = () => [...owners.values()].flatMap(o => o.lease.entry.journal.entries()).sort((a,b) => a.at-b.at);
   const submit = async (record: typeof owners extends Map<string, infer R> ? R : never, request: WorkWrite, token: InvocationToken) => {
-    requireCurrent();
+    requireWritable();
     const result = await settleWork(door.submitWork(record.scope, request, token));
     if (result.kind !== "accepted") throw Error(result.kind === "refused" ? result.refusal.error : "Work write did not settle");
     const ack = result.ack;
@@ -233,11 +244,14 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const options=spec.subject.options(core.value), ids=subject.kind==="all"?options.map(o=>o.id):subject.ids??[];
       if (ids.some(id=>!options.some(o=>o.id===id))) return refused(`A ${spec.subject.noun} in this link is not in this model; choose it again from the roster`);
       if (canonicalRouteInput(subject)!==canonicalRouteInput(page[field])) return null;
-      return {ready:true,refusal:null,label:ids.length===1?options.find(o=>o.id===ids[0])!.label:ids.length?`${ids.length} ${spec.subject.noun}s`:"",link:`/${spec.key}?${input.address.read()}`};
+      const link = input.address.read();
+      link.delete("thread"); link.delete("shell");
+      if (!link.has(field)) link.set(field,JSON.stringify(page[field]));
+      return {ready:true,refusal:null,label:ids.length===1?options.find(o=>o.id===ids[0])!.label:ids.length?`${ids.length} ${spec.subject.noun}s`:"",link:`/${spec.key}?${link}`};
     } catch { return refused(`${spec.subject.noun} is malformed`); }
   };
   const run = async (id: string, apply = false) => {
-    requireCurrent();
+    requireWritable();
     if (input.fixture !== null) throw Error("Fixture has no native writes");
     const cmd = spec.commands[id];
     if(!cmd) throw Error(`Unknown command ${id}`);
@@ -281,8 +295,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       return {...base, undo:journals.flatMap(j=>j.undo).sort((a,b)=>a.at-b.at), redo:journals.flatMap(j=>j.redo).sort((a,b)=>a.at-b.at),
         moves:journals.flatMap(j=>j.moves).sort((a,b)=>a.at-b.at), last:journals.flatMap(j=>j.last?[j.last]:[]).sort((a,b)=>a.step.at-b.step.at).at(-1)??null};
     },
-    restoreWork: restore, journalRefusal: () => [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
-    stopCommand: (id:string) => {requireCurrent();return cancelAction(id);},
+    restoreWork: restore, journalRefusal: () => input.readOnly || input.history ? "needs live Revit" : [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
+    stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
       write: (page:object) => Object.fromEntries(Object.keys(spec.fields).map(key=>[key,JSON.stringify((page as Record<string,unknown>)[key])])),
       read: (patch:Record<string,string>) => Object.fromEntries(Object.entries(patch).map(([key,value])=>[key,spec.fields[key]!.schema.parse(JSON.parse(value))])),
@@ -316,7 +330,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const patch = async (patches: readonly RouteStatePatch[], detail: EditHistory = {label:"Edit"}, preferred?: string): Promise<EditFailure> => {
         if (!ready || !token) return {code:"unavailable",message:"Read the current Value and Work before editing"};
         try {
-          requireCurrent();
+          requireWritable();
           if (!gate.current(token)) throw Error("Stale accepted Work basis");
           const groups = new Map<string,RouteStatePatch[]>();
           for (const p of patches) { const id=ownerOf(p.path.map(String),preferred); groups.set(id,[...(groups.get(id)??[]),p]); }
@@ -348,14 +362,16 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         label(input,label) { const foreign=[...new Set(spec.edits.patches(input,core.value).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} · ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
         edit: (edit,detail)=>patch(spec.edits.patches(spec.edits.input.parse(edit),core.value),detail),
       };
-      return pane.draw({ value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
+      return pane.draw({ target: input.target, value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
         write:(id:string)=>({plan:()=>run(id),apply:()=>run(id,true),cancel:()=>mounted.cancel(id),read:()=>mounted.review(id)}) } as any);
     },
     release() { released = true; argsKey=""; for (const r of reads.values()) r.stop(); },
-    dispose() { if (disposed) return; disposed=true; stopSubject(); stopAddress(); for(const r of reads.values()) r.stop(); for(const o of owners.values()) o.stop(); gate.close(); listeners.clear(); },
+    dispose() { if (disposed) return; disposed=true; cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },
   };
   const stopSubject=observeSubject(spec.key,{current:()=>!disposed&&!released&&input.custody.current(),read:subjectState,subscribe:mounted.subscribe});
+  cleanups.push(stopSubject);
   return mounted;
+  } catch (error) { cleanups.reverse().forEach(stop => stop()); throw error; }
 }
 export type TypedMount = ReturnType<typeof mountTypedRoute>;
 async function settleNative(submission: ReturnType<WorkJournalDoor["submit"]>) {

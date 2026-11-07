@@ -1,6 +1,6 @@
 import { TypedShell } from "../shell/typed-shell";
 // @vitest-environment jsdom
-import { createContext, StrictMode, useMemo, useState } from "react";
+import { StrictMode, useMemo, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import {
@@ -76,7 +76,7 @@ const hostEvents = vi.hoisted(() => {
   return { listeners, emit: (event: unknown) => [...listeners].forEach((each) => each(event)) };
 });
 vi.mock("#/chat/chat-shell", () => ({ ChatShell: () => <div data-chat-probe="" /> }));
-vi.mock("#/route/situation-ladder", () => ({ ChatPlanIntent: createContext(null) }));
+vi.mock("#/route/situation-ladder", async () => ({ ChatPlanIntent: (await import("react")).createContext(null) }));
 vi.mock("#/readings", async (actual) => {
   const { useEffect } = await import("react");
   const real = await actual<typeof import("#/readings")>();
@@ -406,7 +406,8 @@ test("an admitted Place keeps its codec bytes through open, switch, bare URL res
   // Object, list, numeric, numeric-looking string, empty string, plain string and literal-percent
   // values: each one the legacy codec or TanStack's parse/stringify re-encoded (`%257B`, `"{..}"`)
   // or unquoted (`"glass"` -> `glass`) before the admitted owner could read it.
-  const fan = JSON.stringify({ kind: "ids", ids: ["MUAS-1 50%@2", "8081605"] });
+  const { localId } = await import("../route/typed-route");
+  const fan = JSON.stringify({ kind: "ids", ids: [localId("ducts-fan","MUAS-1 50%@2"), localId("ducts-fan","8081605")] });
   const rosterSearch = JSON.stringify({ keywords: "100%25 off", pills: [], v: 1 });
   const page = {
     fixture: "layout",
@@ -955,7 +956,7 @@ test("fan selection with picture pose preserves Pea open state and width", async
   const size = dock().style.getPropertyValue("--pane-size");
   await act(() => router.navigate({
     to: "/fans",
-    search: { fixture: "layout", fan: JSON.stringify(["fan-1"]), picture: "model" },
+    search: { fixture: "layout", fan: JSON.stringify({kind:"all"}), picture: JSON.stringify("model") },
   } as never));
   await settle();
   expect(screen.queryByRole("button", { name: "Expand pea" })).toBeNull();

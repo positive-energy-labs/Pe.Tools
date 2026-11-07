@@ -90,15 +90,15 @@ const params = (link: string) =>
 
 // Registration is read live; retired Places remain evidence but cannot be selected.
 const canonical = (route: string, link: string) =>
-  canonicalPlace(route, link, publicRoutes.admitted(route)?.data.address);
-const admitted = (route: string) => publicRoutes.admitted(route) !== null;
+  canonicalPlace(route, link, publicRoutes.declaration(route)?.address);
+const admitted = (route: string) => publicRoutes.declaration(route) !== null;
 function unowned(route: string, raw: string, search: Record<string, unknown>, local: boolean) {
   const builtin = routeOf(route);
   if (builtin && !admitted(route)) return place(builtin, search, local);
   const query = new URLSearchParams(raw);
   query.delete("thread");
   query.delete("shell");
-  const path = publicRoutes.admitted(route)?.data.address;
+  const path = publicRoutes.declaration(route)?.address;
   return path ? `${path}${query.size ? `?${query}` : ""}` : null;
 }
 
@@ -158,6 +158,7 @@ function holdsWork(tab: ThreadTab, route: string, resumed: Resumed): boolean {
 
 /** The route a tab holds at `pathname`: any but Pea's own page. */
 const tabRouteAt = (pathname: string) => {
+  if (pathname === routeAddress("pea").path) return null;
   const route = publicRoutes.byAddress(pathname)?.manifest.key ?? routeAt(pathname);
   return route === "pea" ? null : route;
 };
@@ -440,7 +441,7 @@ export function useRouteTabs() {
             const destination = saved
               ? rebased(saved, resumed?.url ?? null)
               : (resumed?.url ??
-                publicRoutes.admitted(workRoute)?.data.address ??
+                publicRoutes.declaration(workRoute)?.address ??
                 (routeOf(workRoute) ? routeAddress(routeOf(workRoute)!).link() : ""));
             const id = saved?.id ?? crypto.randomUUID();
             const checked = canonical(workRoute, destination);

@@ -142,6 +142,11 @@ export function createRouteDiscovery(legacy = legacyRouteDiscovery) {
       const entry = registered.get(key);
       return entry?.admitted ? registry.resolve(entry.admitted) : null;
     },
+    /** Catalog metadata for either executable module; this is never mount authority. */
+    declaration: (key: string) => {
+      const entry = registered.get(key);
+      return entry?.admitted?.data ?? (entry && "typed" in entry ? entry.typed.data : null);
+    },
     /** The route whose authenticated declaration owns this address. */
     byAddress: (address: string) =>
       [...registered.values()].find((entry) =>

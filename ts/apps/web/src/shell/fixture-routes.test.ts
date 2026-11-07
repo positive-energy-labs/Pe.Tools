@@ -9,7 +9,7 @@ import { isValidElement, type ReactNode } from "react";
 import { createFixtureMount } from "./fixture";
 import { legacyGraphs as routes } from "../legacy-test-inventory.test-support";
 import { builtinAdmission, legacyBuiltinKeys } from "./legacy-route-door";
-import { publicRoutes } from "../route/builtin-routes";
+import { publicRoutes, publicRoutesReady } from "../route/builtin-routes";
 import { ductLossGraph } from "../duct-loss/graph";
 import { admitChat, createChatFixture } from "../chat/admission";
 
@@ -292,14 +292,16 @@ test("companion chat stays idle and mounts its own seed beside another route", a
 });
 
 // Registration executes the normal builtin composition; fixture owners exercise every legacy graph.
-test("every registered builtin admits without a graph hash, and the legacy door refuses unknown keys", () => {
+test("every registered builtin admits without a graph hash, and the legacy door refuses unknown keys", async () => {
+  await publicRoutesReady;
   expect(
     publicRoutes
       .entries()
       .filter(({ graph }) => graph)
       .map(({ manifest }) => manifest.key)
       .sort(),
-  ).toEqual([...legacyBuiltinKeys].sort());
+  ).toEqual(legacyBuiltinKeys.filter(key => key !== "pods").sort());
+  expect(publicRoutes.admitted("pods")).not.toBeNull();
   for (const {
     manifest: { key },
     graph,

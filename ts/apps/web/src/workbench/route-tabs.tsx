@@ -12,7 +12,7 @@ export function tabTitle(tab: ThreadTab) {
     tab.route,
     Object.fromEntries(new URL(tab.link, "http://tab.invalid").searchParams),
   ).label;
-  return `${publicRoutes.admitted(tab.route)?.data.name ?? appRouteByKey(tab.route)?.title ?? tab.route}${typeof subject === "string" && subject ? ` · ${subject}` : ""}`;
+  return `${publicRoutes.declaration(tab.route)?.name ?? appRouteByKey(tab.route)?.title ?? tab.route}${typeof subject === "string" && subject ? ` · ${subject}` : ""}`;
 }
 
 const TAB_CH = 24;
