@@ -2,7 +2,7 @@
 
 Branch: `fix/pea-family-context`. Base: `cb4f12f95addc45b427722e91e41146b9d639baf`.
 Implementation: `184fed12b95a8df2d8c50f9f34352ab0ad9580a0` (includes `08af032e` and `73eabbe3`). No merge or push.
-Source delta: +91/-19 across 10 TypeScript files. No new tests, dependencies, or generated source changes.
+Source delta: +91/-19 across 10 TypeScript files. No new dependencies or generated source changes. The later standing merge rule adds one committed kernel journey, recorded below.
 
 ## Cause and route binding trace
 
@@ -60,7 +60,7 @@ UNPROVEN[live rendered binding for every other typed route; only Family was surf
 
 ## Validation
 
-No new unit tests and no full product suites ran. Existing affected suites only, plus the requested guards/build checks:
+The initial implementation used existing affected suites under the original no-new-unit-tests ruling. The later standing merge rule adds the committed kernel journey below. No full product suites ran. Initial validation:
 
 | Check | Result / evidence |
 | --- | --- |
@@ -87,3 +87,18 @@ PROVEN[artifact, .artifacts/pea-context/payload-stable.log and ts/apps/host/dist
 All Driver inputs were read-only. Only a disposable copy of product state was used for the surface drive. All preview tabs were closed. Own source Host PID 44984 and earlier own Host PIDs were stopped; their frontend children exited. PID and listener checks found none of the run's Host/frontend processes and no listeners on 52145 or 5174. No Revit or model turn was started, no tree kill or stash was used, and nothing was merged or pushed.
 
 The live green proves retained Family context, authoritative Work/spec access, thread rebinding and the row's explicit Family label. It does not certify native Family execution, PDF support for any parameter, or the two non-Work alias gaps.
+
+
+## Committed merge witness (2026-11-07 standing rule)
+
+The user's later ruling requires a committed journey for every production fix. `JZ B05 retain Family Work and its spec across folding, first-thread promotion and thread switches` is now committed in `ts/apps/web/src/route/kernel-journeys-focus.test.tsx:83`, witness commit `12df48ff2787df4a596e2f75615b1d062f626ffa`. Its rule and the standing merge gate live in `purge/step-D/JOURNEYS-JZ.md`.
+
+The identical canonical source was copied into a detached exact base `cb4f12f95addc45b427722e91e41146b9d639baf`, without production edits. It failed at line 153, `B05: folding before promotion must not lose the selected Place`: HTTP 409 instead of 200. The branch was restored clean. Git's CRLF/LF conversion is recorded and verified in `journey-base-red.json`; the canonical blob hash is identical.
+
+Rerunning the committed journey at `12df48ff` passed. The complete existing focus-journey file passed all 3 tests, and web typechecking passed. This revision changed no production code and started no model turn, Revit, browser, or persistent server.
+
+Evidence: `.artifacts/pea-context/journey-base-red.log`, `journey-base-red.json`, `journey-committed-green.log`, `journey-file-green.log`, `journey-tsc.log`.
+
+FALSIFIED[deterministic, cb4f12f9 committed JZ B05 witness: folded first-thread promotion returns HTTP 409 instead of 200]
+
+PROVEN[deterministic, kernel-journeys-focus.test.tsx JZ B05 and journey-committed-green.log, 12df48ff2787df4a596e2f75615b1d062f626ffa, 2026-11-07]
