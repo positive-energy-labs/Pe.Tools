@@ -197,7 +197,7 @@ export interface PeRoutesOptions {
   /** The log from the composing HostReceipts service. */
   log?: HostLog;
   ductsAnalysis?: Omit<DuctsAnalysisSources, "readWork">;
-  sheetRead?: (request: unknown) => Promise<unknown>;
+  readGraph?: (request: unknown) => Promise<unknown>;
 }
 export interface PeRouteInvocation {
   readonly readEvents?: Response;
@@ -434,7 +434,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
     }
     if (declared.id === "reads.events") return invocation.readEvents ?? json({ error: "Read publications are unavailable" }, 503);
     if (graphRouteIds.includes(declared.id)) {
-      const read = invocation.readGraph ?? options.sheetRead;
+      const read = invocation.readGraph ?? options.readGraph;
       if (!read) return json({ error: "Host read graph is unavailable" }, 503);
       return json(await read(await request.json()));
     }

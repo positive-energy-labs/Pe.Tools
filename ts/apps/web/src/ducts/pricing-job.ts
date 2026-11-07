@@ -1,16 +1,15 @@
 import { pricingResult } from "@pe/ducts-domain/pricing-result";
-import { neutralFansWork } from "@pe/agent-contracts";
 import type { DuctsDesign } from "@pe/agent-contracts";
 import type { Catalogs } from "@pe/ducts-domain/catalog";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
-import { price, type Priced } from "@pe/ducts-domain/pricing";
+import type { Priced } from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { PricingDelta } from "./pricing-delta.ts";
 import { healPlan, rememberHealPlan } from "@pe/ducts-domain/heal";
 import { inferJoints, rememberInference } from "@pe/ducts-domain/proximity";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
-import { systemNotes, type SystemNote } from "./system-list-search.ts";
+import type { SystemNote } from "./system-list-search.ts";
 import { systemList } from "./system-list.ts";
 
 interface PricingBase {
@@ -50,7 +49,10 @@ export function pricingJob() {
     try {
       if (request.base) base = request.base;
       if (!base) throw Error("Pricing has no snapshot or tables");
-      return { id: request.id, result: pricingResult(base.snapshot, base.grids, base.catalogs, request.doc) };
+      return {
+        id: request.id,
+        result: pricingResult(base.snapshot, base.grids, base.catalogs, request.doc),
+      };
     } catch (error) {
       // The reply carries the message only; the stack stays in the worker console for diagnosis.
       console.error(error);

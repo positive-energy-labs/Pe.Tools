@@ -8,7 +8,7 @@ import { Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { z } from "zod";
 import { existsSync, watch } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import { catalogTableSchema, ductsFirmSchema } from "@pe/agent-contracts";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { readDuctCatalogs, productCatalogsRootPath, type CatalogReading } from "./duct-catalogs.ts";
@@ -60,21 +60,28 @@ export class DuctFiles extends Context.Service<
       firm: Effect.promise(() => readFirm(roots.firm)),
       ductCatalogs: Effect.promise(() => readDuctCatalogs(roots.catalogs)),
       subscribe: (changed) => {
-        const stops = Object.entries({ firm: roots.firm, catalogs: roots.catalogs }).map(([name, path]) => {
-          // Watch an existing ancestor: absence, directory creation and atomic replacement still notify.
-          let base = dirname(resolve(path));
-          while (!existsSync(base) && dirname(base) !== base) base = dirname(base);
-          const watcher = watch(base, { recursive: true, persistent: false }, (_event, file) => {
-            const changedPath = file === null ? null : resolve(base, file.toString());
-            const child = changedPath === null ? "" : relative(resolve(path), changedPath);
-            const ancestor = changedPath === null ? "" : relative(changedPath, resolve(path));
-            if (changedPath === null || child === "" || (!child.startsWith(`..${sep}`) && child !== "..") ||
-                (!ancestor.startsWith(`..${sep}`) && ancestor !== "..")) changed(name);
-          });
-          watcher.on("error", () => changed(name));
-          return () => watcher.close();
-        });
-        return () => stops.forEach(stop => stop());
+        const stops = Object.entries({ firm: roots.firm, catalogs: roots.catalogs }).map(
+          ([name, path]) => {
+            // Watch an existing ancestor: absence, directory creation and atomic replacement still notify.
+            let base = dirname(resolve(path));
+            while (!existsSync(base) && dirname(base) !== base) base = dirname(base);
+            const watcher = watch(base, { recursive: true, persistent: false }, (_event, file) => {
+              const changedPath = file === null ? null : resolve(base, file.toString());
+              const child = changedPath === null ? "" : relative(resolve(path), changedPath);
+              const ancestor = changedPath === null ? "" : relative(changedPath, resolve(path));
+              if (
+                changedPath === null ||
+                child === "" ||
+                (!child.startsWith(`..${sep}`) && child !== "..") ||
+                (!ancestor.startsWith(`..${sep}`) && ancestor !== "..")
+              )
+                changed(name);
+            });
+            watcher.on("error", () => changed(name));
+            return () => watcher.close();
+          },
+        );
+        return () => stops.forEach((stop) => stop());
       },
     });
   /** The live files, each read kept as a taking: absence, fallback and findings included. */

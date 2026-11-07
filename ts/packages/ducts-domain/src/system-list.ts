@@ -11,10 +11,7 @@ import { markOf } from "@pe/ducts-domain/terminal-flows";
  * cheap), keyed by its name. Its total is the largest fan over the groups it is in; `fanless` when
  * none of them has an air mover.
  */
-export function systemList(
-  snapshot: DuctSnapshot,
-  priced: Priced | null,
-) {
+export function systemList(snapshot: DuctSnapshot, priced: Priced | null) {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
   const equipment = new Set(snapshot.nodes.filter((n) => n.kind === "equipment").map((n) => n.id));
   const systems = systemsOf(snapshot);
@@ -23,9 +20,14 @@ export function systemList(
     if (systems.some((row) => row.name === system.name)) continue;
     const unit = system.baseEquipmentId == null ? null : nodes.get(system.baseEquipmentId);
     const name = markOf(unit) ?? unit?.family;
-    systems.push({ name: system.name, classification: system.classification, groups: [],
+    systems.push({
+      name: system.name,
+      classification: system.classification,
+      groups: [],
       units: name ? [name] : [],
-      terminals: snapshot.nodes.filter((node) => node.kind === "terminal" && node.systemName === system.name).length,
+      terminals: snapshot.nodes.filter(
+        (node) => node.kind === "terminal" && node.systemName === system.name,
+      ).length,
     });
   }
   return systems.map((system) => {

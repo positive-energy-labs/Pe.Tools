@@ -49,7 +49,6 @@ export function readInvalidations(
     }
   };
   const readRevision = (name: string, args: unknown) => {
-    
     if (name === "work" && !watchingWork) {
       watchingWork = true;
       stopWork = workspace.subscribe((event) =>
@@ -73,7 +72,9 @@ export function readInvalidations(
     }
     return revision(name, args);
   };
-  const stopFiles = recorded ? undefined : subscribeFiles?.(name => changed(input => input === name));
+  const stopFiles = recorded
+    ? undefined
+    : subscribeFiles?.((name) => changed((input) => input === name));
   return {
     revision: readRevision,
     close: () => {

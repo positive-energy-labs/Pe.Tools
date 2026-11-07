@@ -172,7 +172,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
   const markListeners = new Set<() => void>();
   const livePorts = {
     native, files: DuctFiles.layer({ firm: join(dir, "firm.json"), catalogs: join(dir, "catalogs") }),
-    marks: Layer.succeed(HostDocumentMarks, hostMarks({ observedSince: 100, changedAt: () => changedAt, subscribe: (notify) => { markListeners.add(notify); return () => { markListeners.delete(notify); }; } })),
+    marks: Layer.succeed(HostDocumentMarks, hostMarks({ observedSince: 100, generation: () => changedAt, changedAt: () => changedAt, subscribe: (notify) => { markListeners.add(notify); return () => { markListeners.delete(notify); }; } })),
     inventory: Layer.succeed(HostSessionInventory, { list: () => Effect.die("inventory not requested"), subscribe: () => () => {}, document: () => Effect.succeed(row),
       session: () => Effect.succeed({ sessionId: ref.session }), attachment: () => Effect.succeed({ sessionId: ref.session }) }),
   };
@@ -615,8 +615,12 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     const overviewCase = cases.filter((entry) => entry.value.kind === "overview");
     expect(overviewCase).toHaveLength(1);
     const overviewSet = await run(reader.readSets.get(overviewCase[0]!.readSet));
-    for (const detail of cases.filter((entry) => ["inputs", "worksheet"].includes(entry.value.kind)))
-      expect((await run(reader.readSets.get(detail.readSet))).dependencies.overview).toBe(overviewCase[0]!.readSet);
+    for (const detail of cases.filter((entry) => ["inputs", "worksheet"].includes(entry.value.kind))) {
+      const record = await run(reader.readSets.get(detail.readSet));
+      expect(record.dependencies.overview).toBeUndefined();
+      expect(record.inputs.some(input => input.input.kind === "marks")).toBe(true);
+      expect(record.children.some(child => child.recipe.key === "ducts.retained")).toBe(true);
+    }
     for (const feed of cases.filter((entry) => entry.stream && entry.value.value?.handle)) {
       const record = await run(reader.readSets.get(feed.readSet));
       expect(record.inputs.some((entry) => entry.input.kind === "work" && entry.input.view === "feed")).toBe(true);
@@ -629,14 +633,13 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     const children = overviewSet.children.map((entry) => ({ ...entry, input: Schema.decodeUnknownSync(nativeRecipe)(entry.recipe.input) }));
     expect(children.every((entry) => ["acquire", "validate", "join", "beyond"].includes(entry.input.role))).toBe(true);
     const acquire = children.filter((entry) => entry.input.key === "ducts.snapshot.walk" && entry.input.role === "acquire");
-    const validate = children.filter((entry) => entry.input.key === "ducts.snapshot.walk" && entry.input.role === "validate");
-    expect(acquire).toHaveLength(1); expect(validate).toHaveLength(1);
+    expect(acquire).toHaveLength(1);
+    expect(children.some(entry => entry.input.role === "validate")).toBe(false);
     const original = await run(reader.readSets.get(acquire[0]!.readSetId));
-    const current = await run(reader.readSets.get(validate[0]!.readSetId));
-    expect(original.takingLinks.native).toBeTruthy(); expect(current.takingLinks.native).toBe(original.takingLinks.native);
-    const basis = (record: typeof original) => record.inputs.filter((entry) => entry.input.kind === "document" && entry.input.scope.includes("ducts-body-basis"));
-    expect(basis(original)).toHaveLength(1); expect(basis(current)).toHaveLength(1);
-    expect(basis(original)[0]!.takingId).not.toBe(basis(current)[0]!.takingId);
+    expect(original.takingLinks.native).toBeTruthy();
+    const marks = overviewSet.inputs.filter(entry => entry.input.kind === "marks");
+    expect(marks.length).toBeGreaterThanOrEqual(2);
+    for (const mark of marks) expect(await run(reader.observation(reader.taking(mark.takingId)!))).toMatchObject({ generation: 300 });
     const calls = nativeCalls;
     const consumerReads = vi.spyOn(reader.readSets, "get");
     const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null }))));
@@ -788,7 +791,7 @@ test.each(["on", "off", "full", "io"] as const)("inventory consumers %s", async 
     expect(poison).toBe(0);
     expect(liveFactories).toMatchObject({ sdk: 0, bridge: 0, work: 0 });
     custody.mockRestore();
-    await writeFile(join(import.meta.dirname, `../../../../.artifacts/runs/kernel-crusade-20261104/step-7/inventory-${mode}-receipt.json`),
+    await writeProof(`inventory-${mode}-receipt.json`,
       JSON.stringify({ mode, producer: "listBridgeSessions", schema: "bridgeSessionsListSchema", initial: initialValue,
         coalescedBursts: 5, notificationsPerBurst: 3, consumers: 2, capturedInventoryFrames: mode === "on" ? 13 : null,
         limits: { childrenPerRoot: 3, openRoots: 4 }, truncation: writer.capture.truncated(), activeTaps: listeners.size,

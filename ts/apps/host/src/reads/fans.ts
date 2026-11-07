@@ -1,17 +1,30 @@
-import { z } from "zod";
-import { fansReadArgs, fansSheetData, openFanSheetSchema, FAN_READ_MAX, ductsDesign, stagedDucts } from "@pe/agent-contracts";
-import { sheetState } from "@pe/ducts-domain/sheet/state";
+import {
+  FAN_READ_MAX,
+  ductsDesign,
+  fansReadArgs,
+  fansSheetData,
+  openFanSheetSchema,
+  stagedDucts,
+} from "@pe/agent-contracts";
 import { sheetSnapshot } from "@pe/ducts-domain/sheet/scoped-snapshot";
+import { sheetState } from "@pe/ducts-domain/sheet/state";
+import { z } from "zod";
+import { designLayers, native } from "./ducts-inputs.ts";
 import { read } from "./evaluator.ts";
-import { native, designLayers } from "./ducts-inputs.ts";
-import { fanRoster, fanOverview, fanInputs, fanElements, fanWorksheet, fanLegs } from "./fan-sheet.ts";
+import {
+  fanElements,
+  fanInputs,
+  fanLegs,
+  fanOverview,
+  fanRoster,
+  fanWorksheet,
+} from "./fan-sheet.ts";
 const openFan = read("fans.open", {
   input: fansReadArgs
     .pick({ target: true, sheetPath: true })
     .extend({ unitId: z.number(), portIndex: z.number() }),
   output: openFanSheetSchema,
   async run(ctx, args) {
-    
     const request = {
       target: args.target,
       mode: "fan" as const,
@@ -28,7 +41,16 @@ const openFan = read("fans.open", {
     const inputs = await ctx.read(fanInputs, { ...request, basis: overview.basis }),
       elements = await ctx.read(fanElements, { ...request, basis: overview.basis }),
       worksheet = await ctx.read(fanWorksheet, { ...request, basis: overview.basis });
-    const legs = await ctx.collect(paths, { read: fanLegs, batch: 1, args: ([pathId]) => ({ ...request, basis: overview.basis, detail: { kind: "legs" as const, pathId: pathId! } }), covered: value => [value.pathId] });
+    const legs = await ctx.collect(paths, {
+      read: fanLegs,
+      batch: 1,
+      args: ([pathId]) => ({
+        ...request,
+        basis: overview.basis,
+        detail: { kind: "legs" as const, pathId: pathId! },
+      }),
+      covered: (value) => [value.pathId],
+    });
     return {
       overview,
       inputs,
@@ -118,27 +140,22 @@ export const fansSheet = read("fans.sheet", {
           target: args.target,
         })
       : null;
-    return ctx.compute(
-      fansSheetData,
-      { opened, rows, fans, geometry },
-      (data) => ({
-        open: data.opened[0] ?? null,
-        opened: [...data.opened],
-        rows: data.rows,
-        progress: null,
-        sheetView: fansSheetData.shape.sheetView.parse(sheetState(data.opened[0] ?? null)),
-        design: fansSheetData.shape.design.parse(design),
-        fans: { ...data.fans, rows: data.rows },
-        ductsWork: ductsDoc,
-        fansWork: fansDoc,
-        sheetSnapshot: data.geometry
-          ? {
-              ...sheetSnapshot(data.geometry.body as Parameters<typeof sheetSnapshot>[0]),
-              sourceVersion: data.geometry.version ?? undefined,
-            }
-          : { kind: "absent" },
-      }),
-    );
+    return ctx.compute(fansSheetData, { opened, rows, fans, geometry }, (data) => ({
+      open: data.opened[0] ?? null,
+      opened: [...data.opened],
+      rows: data.rows,
+      progress: null,
+      sheetView: fansSheetData.shape.sheetView.parse(sheetState(data.opened[0] ?? null)),
+      design: fansSheetData.shape.design.parse(design),
+      fans: { ...data.fans, rows: data.rows },
+      ductsWork: ductsDoc,
+      fansWork: fansDoc,
+      sheetSnapshot: data.geometry
+        ? {
+            ...sheetSnapshot(data.geometry.body as Parameters<typeof sheetSnapshot>[0]),
+            sourceVersion: data.geometry.version ?? undefined,
+          }
+        : { kind: "absent" },
+    }));
   },
 });
-

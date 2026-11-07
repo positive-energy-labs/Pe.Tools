@@ -352,7 +352,7 @@ export async function nativeFixture(
         threads: async () => [],
         documents: async () => [{ ...target.ref, address }],
       },
-      sheetRead: async raw => {
+      readGraph: async raw => {
         const port = sheetPort({ firm: () => settle(testDuctFiles().firm), catalogs: () => settle(testDuctFiles().ductCatalogs), call: readDucts,
           workKey: async ref => bindWork("ducts", address, undefined, ref) }, saved);
         return "mode" in (raw as object)

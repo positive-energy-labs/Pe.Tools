@@ -1,4 +1,5 @@
 import { FAN_READ_MAX } from "./fans-read.ts";
+import { DUCTS_SYSTEM_MAX } from "./ducts-read.ts";
 import type { CatalogAxes, CatalogLink } from "./catalog.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
@@ -211,8 +212,22 @@ export function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId,
     "work.fresh": axes("Document", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "work.history": axes("Document", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "reads.events": axes("None", "Many", ["Metadata"], "Read", "Cheap", []),
-    "fans.sheet": { ...axes("Document", "Many", ["Metadata", "Topology", "Geometry"], "Read", "Bounded", ["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"]), cap: FAN_READ_MAX },
-    "ducts.read": axes("Document", "Many", ["Metadata", "Topology"], "Read", "Bounded", ["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"]),
+    "fans.sheet": {
+      ...axes("Document", "Many", ["Metadata", "Topology", "Geometry"], "Read", "Bounded", [
+        "ducts.snapshot.roster",
+        "ducts.snapshot.walk",
+        "ducts.tables",
+      ]),
+      cap: FAN_READ_MAX,
+    },
+    "ducts.read": {
+      ...axes("Document", "Many", ["Metadata", "Topology"], "Read", "Bounded", [
+        "ducts.snapshot.roster",
+        "ducts.snapshot.walk",
+        "ducts.tables",
+      ]),
+      cap: DUCTS_SYSTEM_MAX,
+    },
     "ducts.sheet": axes(
       "Elements",
       "One",
