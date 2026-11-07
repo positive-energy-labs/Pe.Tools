@@ -1,17 +1,21 @@
+import { useOpenTypedOwner } from "../open/typed-owner";
 import { type Machine } from "@pe/agent-contracts";
 
 import { ListView } from "@pe/kit/lang/list-view";
 import { useList } from "@pe/kit/lang/collection";
 import { Button } from "@pe/kit/lang/button";
-import { OpenControls, useOpenOwner } from "../open/kernel";
+import { OpenOwnerContext, useOpenOwner } from "../open/context";
 import { keyOf } from "#/machine/session";
 import { lifecycleRequest } from "../open/lifecycle";
-import { readingList } from "#/shell/mount-reading";
+import { readingList } from "#/host/resource-list";
 import type { ReadingState } from "#/shell/source-contract";
-function Sessions() {
+function Sessions({
+  selectedKey,
+  choose,
+}: { selectedKey?: string; choose?(key: string): void } = {}) {
   const owner = useOpenOwner();
   const page = owner.view.read().page;
-  const session = page.draft.target ?? "";
+  const session = selectedKey ?? page.draft.target ?? "";
   const reading = owner.readings.get("machine") as ReadingState<Machine>;
   const machine = reading.value ?? reading.previous;
   const sessions = readingList(reading, (value) => value.revit.sessions ?? []);
@@ -29,7 +33,10 @@ function Sessions() {
     followSelection: { key: session || null },
     search: (row) => ({ text: [keyOf(row), String(row.row.year)] }),
     select: "single",
-    onPick: (row) => owner.view.setPage({ draft: { ...page.draft, target: keyOf(row) } }),
+    onPick: (row) =>
+      choose
+        ? choose(keyOf(row))
+        : owner.view.setPage({ draft: { ...page.draft, target: keyOf(row) } }),
   });
   const selected = rows.find((row) => keyOf(row) === session);
   return (
@@ -52,7 +59,7 @@ function Sessions() {
       {selected && (
         <section aria-label="Session detail">
           <p>
-            {keyOf(selected)} · Revit {selected.row.year}
+            {keyOf(selected)} Ã‚Â· Revit {selected.row.year}
           </p>
           {["stop", "restart"].map((id) => {
             let request: unknown;
@@ -81,12 +88,34 @@ function Sessions() {
       )}
       {(machine?.revit.years ?? []).map((year) => (
         <div key={year}>
-          <Button label={`Start Revit ${year}`} onClick={() => void owner.control("start", { request: { year: String(year), owner: "you", addins: "on" }, refusal: null }).run()}>Start Revit {year}</Button>
+          <Button
+            label={`Start Revit ${year}`}
+            onClick={() =>
+              void owner
+                .control("start", {
+                  request: { year: String(year), owner: "you", addins: "on" },
+                  refusal: null,
+                })
+                .run()
+            }
+          >
+            Start Revit {year}
+          </Button>
         </div>
       ))}
     </>
   );
 }
-export function SessionsRoute() {
-  return <OpenControls><Sessions /></OpenControls>;
+
+export function SessionsBody({ ctx }: { ctx: import("./route").SessionContext }) {
+  const owner = useOpenTypedOwner(ctx, sessionActions);
+  return (
+    <OpenOwnerContext value={owner}>
+      <Sessions
+        selectedKey={ctx.page.read().session}
+        choose={(session) => ctx.page.pose({ session })}
+      />
+    </OpenOwnerContext>
+  );
 }
+const sessionActions = ["start", "stop", "restart"];

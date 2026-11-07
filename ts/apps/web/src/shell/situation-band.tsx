@@ -1,11 +1,14 @@
-import type { AdmittedMount } from "./admitted-mount";
+import type { TypedMount } from "./typed-mount";
+import type { WorkKey } from "@pe/agent-contracts";
+import type { WorkJournal } from "./journal";
+import type { createRouteTimeline } from "./timeline";
 /**
  * ADR 0027 rule 3: the Situation is one line. The route's name and context lead, one primary verb
  * stands framed, the rest wait in an overflow, and the Timeline head closes the line. Layout only:
  * mount-chrome.tsx renders each verb and each context control; this file owns where they sit.
  *
  * The Timeline head's Reject answers the same host consent API as Pea's composer (`thread.permission`).
- * TODO: docs/features/routes/LEDGER.md#s7-a91a2429a1 H2 — Reject dispatch and host cancellation are proven separately by fixture tests; press it against a live
+ * TODO: docs/features/routes/LEDGER.md#s7-a91a2429a1 H2 â€” Reject dispatch and host cancellation are proven separately by fixture tests; press it against a live
  * host consent window (a route command from a Pea thread) to prove the round trip.
  */
 import { useContext, useSyncExternalStore, type ReactNode } from "react";
@@ -16,7 +19,6 @@ import { harnessClient } from "#/workbench/provider/harness-client";
 import { WorkbenchContext } from "#/workbench/provider/thread-summary";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
-import type { GraphMount } from "./mount-owner";
 import { activityTime, projectTimeline, type TimelineVerbs, type TimelineEntry } from "./timeline";
 import { secondsLeft, useSecondTick } from "./countdown";
 import "./situation-band.css";
@@ -94,9 +96,20 @@ export const entryCaller = (entry: TimelineEntry) =>
     : "you";
 
 /** The Work journal behind the owner's current scope: the one history of authored edits. */
-export type JournalOwner = Pick<AdmittedMount, "subscribe" | "revision" | "journal" | "timeline" | "restoreWork" | "journalRefusal" | "stopCommand">;
-type HistoryOwner<P, W> = GraphMount<P, W> | JournalOwner;
-export function useWorkJournal<P, W>(owner: HistoryOwner<P, W>) {
+export type JournalOwner = Pick<TypedMount, "subscribe" | "revision" | "restoreWork" | "stopCommand"> & { journalRefusal(): string | null; journal(): ReturnType<WorkJournal["read"]> | null; timeline(): readonly TimelineEntry[] };
+export interface LegacyJournalOwner {
+  subscribe(notify: () => void): () => void;
+  version(): number;
+  snapshot(): { work: { handle: { key: WorkKey } } | null; workKey?: WorkKey; unreadable?: WorkKey };
+  journals: ReadonlyMap<string, WorkJournal>;
+  restore(direction: "undo" | "redo"): Promise<unknown>;
+  journalRefusal(): string | null;
+  commandRefusal: string | null;
+  timeline: ReturnType<typeof createRouteTimeline>;
+  verbs: TimelineVerbs;
+}
+type HistoryOwner = LegacyJournalOwner | JournalOwner;
+export function useWorkJournal(owner: HistoryOwner) {
   const version = "restoreWork" in owner ? owner.revision : owner.version;
   useSyncExternalStore(owner.subscribe, version, version);
   if ("restoreWork" in owner) return owner.journal();
@@ -109,7 +122,7 @@ export const stepSource = (step: Journal["undo"][number]) => (step.by === "pea" 
 export const stepState = (journal: Journal, step: Journal["undo"][number]) =>
   step.notWritten
     ? step.notWritten.rejected
-      ? "not written — rejected"
+      ? "not written â€” rejected"
       : "not written"
     : step.superseded
       ? `superseded at r${step.superseded.revision}`
@@ -126,7 +139,7 @@ export const lastMove = (journal: Journal) => {
   const { kind, step, by } = journal.last!;
   const who = by === "pea" ? "Pea" : "you";
   return kind === "apply"
-    ? `${stepSource(step)} · ${stepState(journal, step)}`
+    ? `${stepSource(step)} Â· ${stepState(journal, step)}`
     : `${who} ${kind === "undo" ? "undid" : "redid"}`;
 };
 
@@ -135,11 +148,11 @@ export const lastMove = (journal: Journal) => {
  * restore Mod+Z runs, refused with the journal's own reason. `words` draws the labels beside the
  * glyphs (the History); the head draws glyphs alone, their names as tooltips.
  */
-export function JournalButtons<P, W>({
+export function JournalButtons({
   owner,
   words = false,
 }: {
-  owner: HistoryOwner<P, W>;
+  owner: HistoryOwner;
   words?: boolean;
 }) {
   const journal = useWorkJournal(owner);
@@ -183,13 +196,13 @@ export function JournalButtons<P, W>({
  * command ran after it; else the latest entry, in one line and every open consent window as its
  * "Reject?" countdown. The full history opens beneath it; it never takes a row of its own.
  */
-export function TimelineHead<P, W>({
+export function TimelineHead({
   owner,
   history,
   thread,
   verbs: declaredVerbs,
 }: {
-  owner: HistoryOwner<P, W>;
+  owner: HistoryOwner;
   verbs?: TimelineVerbs;
   history: ReactNode;
   thread?: string;
@@ -235,7 +248,7 @@ export function TimelineHead<P, W>({
         return (
           <span key={entry.outcome?.receiptId ?? entry.press} data-slot="consent-window">
             <span role="timer" data-tone="caution" aria-label={`${row.verb} applies in`}>
-              {row.verb} · {left === null ? "awaiting approval" : `${left}s`}
+              {row.verb} Â· {left === null ? "awaiting approval" : `${left}s`}
             </span>
             <Button
               label={`Reject ${row.verb}`}
@@ -264,7 +277,7 @@ export function TimelineHead<P, W>({
         return (
           <span key={ask.requestId} data-slot="consent-window">
             <span role="timer" data-tone="caution" aria-label="Pea's writes apply in">
-              Pea writes · {left === null ? "awaiting approval" : `${left}s`}
+              Pea writes Â· {left === null ? "awaiting approval" : `${left}s`}
             </span>
             <Button
               label="Reject Pea's writes in this thread"
@@ -282,14 +295,14 @@ export function TimelineHead<P, W>({
             <>
               <span>{step.label}</span>
               <span data-slot="timeline-state">
-                {lastMove(journal!)} · r{journal!.revision}
+                {lastMove(journal!)} Â· r{journal!.revision}
               </span>
             </>
           ) : last ? (
             <>
               <span>{last.verb}</span>
               <span data-slot="timeline-state">
-                {entryCaller(last.entry)} · {last.outcome?.state ?? last.kind} ·{" "}
+                {entryCaller(last.entry)} Â· {last.outcome?.state ?? last.kind} Â·{" "}
                 {activityTime(last.at)}
               </span>
             </>

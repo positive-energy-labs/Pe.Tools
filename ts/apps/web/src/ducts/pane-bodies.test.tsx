@@ -5,8 +5,7 @@ import { cleanup,fireEvent,render,screen } from "@testing-library/react";
 import { isValidElement } from "react";
 import { afterEach,expect,test,vi } from "vite-plus/test";
 import { createWitness } from "../fans/cutover.test-support";
-import type { AdmittedMount } from "../shell/admitted-mount";
-import { admittedSubjectDoor } from "../shell/admitted-chrome";
+import { typedSubjectDoor } from "../shell/subject";
 import { SubjectDoor } from "../shell/subject";
 import { makeAtomRegistry } from "../shell/owner";
 import { cellFocusOf,cellFocusSubject } from "./cell-focus";
@@ -40,7 +39,7 @@ afterEach(() => {
   for (const close of closes.splice(0).reverse()) close();
   vi.clearAllMocks();
 });
-function nodeFor(mount: Pick<AdmittedMount, "read">, pane: string) {
+function nodeFor(mount: { read(pane: string): unknown }, pane: string) {
   const node = mount.read(pane);
   if (!isValidElement(node)) throw Error(`Pane ${pane} did not return a React element`);
   return node;
@@ -56,7 +55,7 @@ test("F16 the sidebar navigates the document roster before pricing and keeps ato
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
   expect(f.owner.readingStatus("value").snapshot.value).toBeFalsy();
   render(<RegistryContext value={registry()}>
-    <SubjectDoor value={admittedSubjectDoor(f.owner, f.admitted.owner.data)}>
+    <SubjectDoor value={typedSubjectDoor(f.owner.native)}>
       {nodeFor(f.owner, "e-systems")}
     </SubjectDoor>
   </RegistryContext>);
@@ -150,7 +149,7 @@ test("a restored semantic cell selection lands on that fitting cell through the 
   f.owner.controls.subject({ kind: "ids", ids: [localId("ducts-system", "SA")] });
   await vi.waitFor(() => {
     const state = f.owner.readingStatus("value").snapshot;
-    if (state.status === "failed") throw Error(state.reason);
+    if (state.status === "failed") throw Error(state.reason ?? "Read failed");
     expect(state.current).toBe(true);
   });
   const subject = cellFocusSubject(snapshot, ["SA"], { segment: "componentDrops", id: fitting.id });

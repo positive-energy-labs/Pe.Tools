@@ -1,4 +1,4 @@
-import { placeInput } from "./admitted-place.test-fixture";
+import { placeInput } from "./typed-place.test-support";
 import { RouteActivity, RouteVisibility } from "../route/activity";
 import { draftCellSchema, actionReceiptSchema, memberWork } from "@pe/agent-contracts";
 // @vitest-environment jsdom

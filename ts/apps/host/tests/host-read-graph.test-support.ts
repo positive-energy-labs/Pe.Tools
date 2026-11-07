@@ -1,3 +1,6 @@
+import { CaptureStore } from "../src/takeoff-captures.ts";
+import type { NativeReadInput } from "@pe/host-internal/native-read";
+import type { BridgeSessionsListData } from "@pe/host-contracts/operation-types";
 import { unavailableFieldOptions } from "./effect-test.ts";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -42,7 +45,7 @@ export const identity = { build: "host-read-spike", catalog: nativeCatalogIdenti
 export const bounds = { maxBytes: 256 * 1024 * 1024, maxTakings: 2000 };
 export const roster = nativeResponseSchema("ducts.snapshot.walk").parse(rosterCapture);
 export const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(fanCapture);
-export async function fixture(capture = false) {
+export async function fixture(capture = false, native?: { read(input: NativeReadInput): unknown; inventory: BridgeSessionsListData }) {
   const dir = await mkdtemp(join(tmpdir(), "host-read-spike-"));
   await mkdir(join(dir, "catalogs"));
   await writeFile(join(dir, "firm.json"), JSON.stringify(FIRM_SEED));
@@ -105,7 +108,7 @@ export async function fixture(capture = false) {
           document: () => Effect.succeed({ ...ref, address: path }),
           session: () => Effect.succeed({ sessionId: ref.session }),
           attachment: () => Effect.succeed({ sessionId: ref.session }),
-          list: () => Effect.die("No inventory list requested"),
+          list: () => native ? Effect.succeed(native.inventory) : Effect.die("No inventory list requested"),
           subscribe: () => () => {},
         }),
         native: Layer.succeed(HostNativeRead, {
@@ -132,7 +135,7 @@ export async function fixture(capture = false) {
               }
               return {
                 value: Schema.decodeUnknownSync(Schema.Json)(
-                  input.key === "revit.catalog.field-options"
+                  native ? native.read(input) : input.key === "revit.catalog.field-options"
                     ? unavailableFieldOptions
                     : input.key === "ducts.tables"
                       ? {
@@ -157,7 +160,7 @@ export async function fixture(capture = false) {
             }),
         }),
       },
-    }),
+    }).pipe(Layer.provide(CaptureStore.layer(join(dir, "captures")))),
     { disableLogger: true },
   );
   const send = async (

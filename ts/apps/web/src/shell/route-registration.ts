@@ -1,18 +1,5 @@
 import { createElement, lazy } from "react";
-import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
-import { admittedWork, publicRoutes, typedWorkCells } from "../route/route-discovery";
-
-const HostedAdmittedRoute = lazy(() =>
-  import("../workbench/hosted-route").then((module) => ({ default: module.HostedAdmittedRoute })),
-);
-/** Register one authenticated handle without loading the builtin closure inventory. */
-export const registerRoute = (route: AdmittedRoute) =>
-  publicRoutes.register({
-    manifest: route.data,
-    admitted: route,
-    work: admittedWork(route),
-    hosted: (props) => createElement(HostedAdmittedRoute, { route, ...props }),
-  });
+import { publicRoutes, typedWorkCells } from "../route/route-discovery";
 
 const HostedTypedRoute = lazy(() => import("./typed-shell").then(m => ({default:m.HostedTypedRoute})));
 /** Same mount/discovery registration for builtin declarations and verified Pod declarations. */

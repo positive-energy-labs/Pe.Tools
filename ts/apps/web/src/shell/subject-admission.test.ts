@@ -12,7 +12,7 @@ import { mountTypedRoute } from "../shell/typed-mount";
 import { nativeTestAdapter } from "../fans/native.test-support";
 import { createWorkFeedClient } from "./work-feed-client";
 import { admittedRouterAddress } from "./typed-place-boundary";
-import { placeInput } from "./admitted-place.test-fixture";
+import { placeInput } from "./typed-place.test-support";
 const mounts: { dispose(): void }[] = [];
 afterEach(() => mounts.splice(0).forEach((mount) => mount.dispose()));
 

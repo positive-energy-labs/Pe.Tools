@@ -5,7 +5,8 @@ import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { ReviewSurface } from "./review-surface";
 import type { GraphMount } from "./mount-owner";
-import { completeVerb, type Worksharing } from "./verbs";
+import {completeVerb} from "./verbs";
+import {type Worksharing} from "./review-contract";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 /** The commit's borrow count; null when the document is not workshared or nothing new is borrowed. */

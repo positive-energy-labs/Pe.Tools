@@ -9,7 +9,8 @@ import {
   type RouteGraph,
   type GraphSeedData,
 } from "@pe/agent-contracts";
-import { createGraphMount, type MountAdapters, type MountScope } from "./mount-owner";
+import {createGraphMount, type MountAdapters} from "./mount-owner";
+import type { MountScope } from "./work-scope";
 import type { ReadingSource } from "./source-contract";
 import { createSettingsOwner, settingFields } from "./settings";
 import type { WorkScopePorts } from "./use-work-scope";

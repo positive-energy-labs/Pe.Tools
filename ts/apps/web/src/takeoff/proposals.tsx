@@ -5,10 +5,10 @@ import { ReviewRow, reviewTransitions, type CellWire } from "#/components/work/b
 import { cellFromDraft, fmtNum, StateCell } from "@pe/kit/lang/cell";
 import { useCellNavigation } from "@pe/kit/table/cell-navigation";
 import { useTakeoffKernel } from "./kernel-context";
-import type { TakeoffMount } from "./store";
+import type { TakeoffCellControls } from "./kernel-context";
 import type { CellTransition } from "@pe/kit/lang/cell";
 
-const transitions = (owner: TakeoffMount, segment: string | null, key: string): CellTransition[] =>
+const transitions = (owner: TakeoffCellControls, segment: string | null, key: string): CellTransition[] =>
   ([["clear", "clear"]] as const).map(([kind, verb]) => {
     const control = owner.control(`cell:${segment}.${verb}`, { segment, key });
     return {
@@ -16,7 +16,7 @@ const transitions = (owner: TakeoffMount, segment: string | null, key: string): 
       reason: control.refusal ?? control.label,
       run: async () => {
         const result = await control.run();
-        return "refusal" in result ? result.refusal : null;
+        return result.refusal ?? null;
       },
     };
   });

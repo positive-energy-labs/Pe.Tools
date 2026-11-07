@@ -9,7 +9,7 @@ import { PatchBay, type BayLayout } from "./bay";
 
 import { OpenOwnerContext } from "./context";
 import { modelRows } from "./model";
-import type { Recents } from "./sources";
+import type { Recents } from "./model";
 export function OpenBody({ ctx }: { ctx: OpenContext }) {
   const owner = useOpenTypedOwner(ctx);
   const container = useRef<HTMLDivElement>(null);

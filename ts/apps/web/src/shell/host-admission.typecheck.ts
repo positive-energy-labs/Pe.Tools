@@ -1,4 +1,4 @@
-import { placeInput } from "./admitted-place.test-fixture";
+import { placeInput } from "./typed-place.test-support";
 import type { HostAdmittedRoute } from "../../../../packages/agent-contracts/src/host-route-admission";
 import { createRouteShell } from "./admitted-mount";
 

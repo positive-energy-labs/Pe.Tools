@@ -1,3 +1,6 @@
+import { CaptureStore } from "./takeoff-captures.ts";
+import { takeoffSnapshotInput } from "./reads/takeoffs.ts";
+import { projectTakeoffSnapshot } from "@pe/mcps/takeoff-ops";
 import { captureInput, replayInput, type RecordedInput } from "./native-recording.ts";
 import { readLocal } from "./local-inputs.ts";
 import { readFamilySpec } from "./family-file-input.ts";
@@ -9,6 +12,7 @@ import {
   executionTargetSchema,
   documentRefSchema,
   DUCTS_BODY_VERSION_HEADER,
+  readingRequestSchema,
 } from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
 import {
@@ -23,7 +27,7 @@ import { inputPort, type ReadSources } from "./reads/inputs.ts";
 import { Publications } from "./reads/evaluator.ts";
 import { History, localHistory } from "./reads/history.ts";
 import { historyRoutes } from "./reads/history-routes.ts";
-import { historyPoseSchema, addressSchema } from "@pe/agent-contracts";
+import { historyPoseSchema, addressSchema, sameAddress } from "@pe/agent-contracts";
 import { HostReceipts } from "./gateway-owner.ts";
 import { readEvents } from "./reads/events.ts";
 import { readInvalidations } from "./reads/invalidations.ts";
@@ -122,6 +126,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
   if (!recorded && (!live || !options.store))
     return yield* Effect.die(Error("Live input graph needs its real live inputs and Work store"));
   const writer = lane.kind === "live" ? lane.captureStore : undefined;
+  const takeoffs = yield* Effect.serviceOption(CaptureStore);
   const pictureService = yield* Effect.serviceOption(PictureCaptureStore);
   const pictures = recorded
     ? undefined
@@ -454,7 +459,20 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     };
     const takeFile = (name: string, args: unknown, current: InputConsumption) =>
       takeOwner(current, { kind: "files", file: canonicalJson([name, json(args)]) }, () =>
-        name.startsWith("local:")
+        name === "takeoff-capture"
+          ? (async () => {
+              if (Option.isNone(takeoffs)) throw Error("Takeoff capture store is unavailable");
+              const { target, snapshot: body, views } = takeoffSnapshotInput.parse(args);
+              const row = await invoke(inventory.document(target));
+              if (!row.address || !sameAddress(row.address, addressSchema.parse(body.reading.at))) throw Error("Snapshot returned a different document");
+              const sessions = await invoke(inventory.list());
+              const title = sessions.sessions.find(session => session.sessionId === target.session)?.openDocuments?.find(doc => doc.openId === target.openId)?.title;
+              if (!title) throw Error("Snapshot document is no longer open");
+              return takeoffs.value.retain(projectTakeoffSnapshot(body, title, views), { kind: "live", target },
+                async () => { const current = await invoke(inventory.document(target));
+                  if (!current.address || !sameAddress(current.address, row.address!)) throw Error("Snapshot target changed before retention"); });
+            })()
+          : name.startsWith("local:")
           ? readLocal(name.slice(6), args)
           : name === "family-spec"
             ? readFamilySpec(args)
@@ -497,6 +515,13 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             current,
             { kind: "resource", key: "snapshot", args: canonicalJson(json(request)) },
             () => {
+              const resource = readingRequestSchema.parse(request);
+              if (resource.kind === "takeoff-saved") return (async () => {
+                if (Option.isNone(takeoffs)) throw Error("Takeoff capture store is unavailable");
+                if (resource.id) return resource.text ? takeoffs.value.savedText(resource.id) : takeoffs.value.saved(resource.id);
+                return (await takeoffs.value.list(resource.document ? addressSchema.parse(resource.document) : undefined))
+                  .map(({ snapshot, ...capture }) => ({ ...capture, document: snapshot.reading.at, title: snapshot.world.docName }));
+              })();
               if ((request as { kind: string }).kind === "captures")
                 return (async () => {
                   const captures = await pictures!.list();

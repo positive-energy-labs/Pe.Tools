@@ -1,5 +1,5 @@
-import { placeInput } from "./admitted-place.test-fixture";
-import { acceptedWork } from "./admitted-work.test-support";
+import { placeInput } from "./typed-place.test-support";
+import { acceptedWork } from "./work-publication.test-support";
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";

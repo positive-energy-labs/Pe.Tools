@@ -1,4 +1,4 @@
-import { mountRoute, type MountRouteProps } from "#/shell/mount";
+import { mountRoute, type MountRouteProps } from "#/shell/legacy-mount";
 import { takeoffGraph } from "./graph";
 import { takeoffAdaptersFor } from "./graph-route";
 

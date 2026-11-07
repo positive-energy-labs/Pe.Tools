@@ -9,7 +9,7 @@ import { appAtomRegistry, useOwned, useRouteOwner } from "./owner";
 import { docAtom } from "./work-document";
 import { acquireWorkWriter } from "./work-writes";
 import type { DiscoveredWork } from "../route/route-discovery";
-import type { MountScope } from "./mount-owner";
+import type { MountScope } from "./work-scope";
 
 /** Cross-Work handles use the route's schema, admission and canonical journal, without mounting its UI. */
 export function useWorkHandles<W>(

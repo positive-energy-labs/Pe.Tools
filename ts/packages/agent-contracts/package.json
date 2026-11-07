@@ -50,7 +50,9 @@
       "types": "./src/ducts-guide.ts",
       "import": "./src/ducts-guide.ts"
     },
-    "./value": "./src/value.ts"
+    "./value": "./src/value.ts",
+    "./takeoff-adoption": "./src/takeoff-adoption.ts",
+    "./takeoff-read": "./src/takeoff-read.ts"
   },
   "publishConfig": {
     "access": "public"

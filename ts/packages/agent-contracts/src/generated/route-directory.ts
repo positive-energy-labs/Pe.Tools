@@ -404,6 +404,30 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
+    "key": "session-admin",
+    "directory": {
+      "label": "Sessions",
+      "icon": "Server",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": "compact"
+      },
+      "aliases": [
+        "session",
+        "administration"
+      ],
+      "runtimeNeed": "Host document discovery and Revit lifecycle",
+      "listed": true,
+      "satellites": [],
+      "path": "/session-admin",
+      "title": "Sessions",
+      "category": "Start / open work",
+      "blurb": "Start, stop or restart one Revit session."
+    }
+  },
+  {
     "key": "settings",
     "directory": {
       "label": "Settings",
@@ -435,6 +459,34 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
+    "key": "takeoffs",
+    "directory": {
+      "label": "Manual J",
+      "icon": "Map",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "manual",
+        "j",
+        "loads",
+        "rhvac",
+        "zones"
+      ],
+      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+      "listed": true,
+      "satellites": [],
+      "resume": "document",
+      "path": "/takeoffs",
+      "title": "View adoption",
+      "category": "Calculate loads & airflow",
+      "blurb": "Adopt zoning regions from chosen views."
+    }
+  },
+  {
     "key": "index",
     "directory": {
       "path": "/",
@@ -457,58 +509,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
         "pwa": "full",
         "tray": false
       }
-    }
-  },
-  {
-    "key": "session-admin",
-    "directory": {
-      "path": "/session-admin",
-      "title": "Sessions",
-      "label": "Revit",
-      "exposure": "Main",
-      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-      "icon": "Server",
-      "category": "Start / open work",
-      "blurb": "Start, stop or restart one Revit session.",
-      "aliases": [
-        "session",
-        "administration"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": "compact"
-      }
-    }
-  },
-  {
-    "key": "takeoffs",
-    "directory": {
-      "path": "/takeoffs",
-      "title": "View adoption",
-      "label": "Manual J",
-      "exposure": "Main",
-      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-      "icon": "Map",
-      "category": "Calculate loads & airflow",
-      "blurb": "Adopt zoning regions from chosen views.",
-      "aliases": [
-        "manual",
-        "j",
-        "loads",
-        "rhvac",
-        "zones"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      },
-      "resume": "document"
     }
   }
 ];

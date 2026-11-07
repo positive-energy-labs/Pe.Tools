@@ -1,9 +1,9 @@
 import type { FamilyDraft } from "@pe/agent-contracts";
-import type { BindingScope } from "#/shell/mount-owner";
+import type { WorkHandle } from "@pe/agent-contracts";
 import { familyLockOf } from "./store";
 import type { FamilyPage } from "./page";
 
-export type FamilyScope = BindingScope<FamilyPage, FamilyDraft>;
+export type FamilyScope = { page: FamilyPage; work: { handle: WorkHandle; doc: FamilyDraft } | null };
 export const familyWorkRefusal = (scope: FamilyScope) =>
   scope.page.stage === "history"
     ? "History is inspection only"

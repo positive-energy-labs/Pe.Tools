@@ -1,5 +1,5 @@
-import { placeInput } from "../shell/admitted-place.test-fixture";
-import { acceptedWork } from "../shell/admitted-work.test-support";
+import { placeInput } from "../shell/typed-place.test-support";
+import { acceptedWork } from "../shell/work-publication.test-support";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { fansDocumentSchema } from "@pe/agent-contracts";

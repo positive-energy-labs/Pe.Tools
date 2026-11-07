@@ -130,6 +130,7 @@ async function mounted(cells: FamilyDraft["cells"], reading = raw) {
   owner.connect();
   releases.push(() => owner.dispose());
   render(<Editor owner={owner} />);
+  await waitFor(() => expect(familyWitnessContext(owner).value.current).toBe(true));
   return {
     owner,
     host,

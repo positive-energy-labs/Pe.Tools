@@ -4,21 +4,23 @@ import { ListView } from "@pe/kit/lang/list-view";
 import { teachText } from "@pe/kit/lang/use-teach";
 import { useEffect, useState } from "react";
 import { actionStatusSchema, receiptsForWork, routeAddress } from "@pe/agent-contracts";
-import { readingList } from "./mount-reading";
-import type { GraphMount } from "./mount-owner";
+import { readingList } from "../host/resource-list";
+import type { LegacyJournalOwner } from "./situation-band";
+import type { ReadingState } from "./source-contract";
+type HistoryReadOwner = LegacyJournalOwner & { readings: { get(id: string): ReadingState } };
 import type { JournalOwner } from "./situation-band";
 import { entryCaller, stepState, useWorkJournal } from "./situation-band";
 import { activityTime, projectTimeline, type TimelineVerbs } from "./timeline";
 
 /** One History presentation for graph panes: accepted calls and exact Work receipts. */
-export function GraphHistory<P, W>({
+export function GraphHistory({
   owner,
   receipts,
   workOnly = false,
   label = "History",
   verbs: declaredVerbs,
 }: {
-  owner: GraphMount<P, W> | JournalOwner;
+  owner: HistoryReadOwner | JournalOwner;
   verbs?: TimelineVerbs;
   receipts?: string;
   workOnly?: boolean;

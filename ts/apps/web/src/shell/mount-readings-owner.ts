@@ -11,7 +11,8 @@ import { workKey, type RouteGraph } from "@pe/agent-contracts";
 import { createReadingGraph } from "./readings";
 
 import { createRouteTimeline } from "./timeline";
-import { type MountAdapters, type MountScope } from "./mount-contracts";
+import {type MountAdapters} from "./mount-contracts";
+import type { MountScope } from "./work-scope";
 import type { MountPage } from "./mount-page-owner";
 /** Owns graph reading acquisition, dependency bases and reading-scope refresh. */
 export function createMountReadings<P, W>(

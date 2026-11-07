@@ -6,9 +6,8 @@ import {
   admittedSubjectDoor,
   routeHasSubjectList,
   PaneStatus,
-  AdmittedSubjectPicker,
-  subjectOf,
 } from "./admitted-chrome";
+import { SubjectPicker as AdmittedSubjectPicker, subjectOf } from "./subject-picker";
 import { ReviewSurface } from "./review-surface";
 import { routeOwnsKey } from "./mount-work";
 import type { AdmittedMount } from "./admitted-mount";

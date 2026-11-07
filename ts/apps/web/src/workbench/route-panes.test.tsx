@@ -6,7 +6,7 @@ import type {TypedRoute} from "../route/typed-route";
 import type {RouteFingerprint} from "@pe/agent-contracts";
 import { TypedShell } from "../shell/typed-shell";
 // @vitest-environment jsdom
-import { StrictMode, useMemo, useState } from "react";
+import { StrictMode, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import {
@@ -16,7 +16,6 @@ import {
   createRouter,
   RouterProvider,
   useRouterState,
-  useRouter,
 } from "@tanstack/react-router";
 import { address, routeAddress, type ThreadTab, type WorkKey } from "@pe/agent-contracts";
 import { RegistryContext } from "@effect/atom-react";
@@ -24,12 +23,7 @@ import { appAtomRegistry } from "#/shell/owner";
 import { createChatPageStore } from "./store";
 import { RouteDock } from "./route-panes";
 import { useRouteCurrent } from "#/route/activity";
-import { AdmittedPane } from "#/shell/admitted-place.test-fixture";
 import { admittedRouterAddress } from "#/shell/typed-place-boundary";
-import { createRouteShell } from "#/shell/admitted-mount";
-import { sourceRouteServices } from "#/shell/source-route-services";
-import { admittedSources } from "#/shell/admitted-sources";
-import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import { useRestoreTabPage } from "#/route/url";
 
 const store = createChatPageStore({
@@ -149,17 +143,10 @@ function FansProbe() {
   if (!route) throw Error("Fans must be admitted before the router mounts");
   return <TypedShell module={route.typed} fingerprint={route.workFingerprint} />;
 }
-let podRoute: AdmittedRoute | null = null;
+let podRoute: { module: TypedRoute; fingerprint: RouteFingerprint } | null = null;
 /** The normal `/tool/<key>` mount: the registered Pod's own owner and codecs, as `tool.$key` mounts it. */
 function PodProbe() {
-  const router = useRouter();
-  const route = podRoute!;
-  const address = useMemo(() => admittedRouterAddress(router.history), [router]);
-  const shell = useMemo(
-    () => createRouteShell(sourceRouteServices(admittedSources(route))),
-    [route],
-  );
-  return <AdmittedPane route={route} shell={shell} address={address} />;
+  return <TypedShell module={podRoute!.module} fingerprint={podRoute!.fingerprint} />;
 }
 function Restore() {
   useRestoreTabPage();
@@ -782,8 +769,8 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
   const { readFile } = await import("node:fs/promises");
   const { resolve } = await import("node:path");
   const { podRouteDescriptorSchema } = await import("@pe/agent-contracts");
-  const { admitPodArtifact } = await import("#/route/pod-artifact");
-  const { registerRoute } = await import("#/shell/route-registration");
+  const { loadPodRoute } = await import("#/route/pod-module");
+  const { registerTypedRoute } = await import("#/shell/route-registration");
   const pods = resolve(process.cwd(), "../../../examples/pods/snowdon-circuits");
   const member = JSON.parse(await readFile(resolve(pods, "pod.json"), "utf8")).routes[0];
   const row = podRouteDescriptorSchema.parse({
@@ -794,7 +781,7 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
     trusted: true,
   });
   const artifact = JSON.parse(await readFile(resolve(pods, row.artifact), "utf8"));
-  podRoute = await admitPodArtifact(
+  podRoute = await loadPodRoute(
     row,
     { fingerprint: row.fingerprint, artifact },
     (bytes) =>
@@ -802,21 +789,19 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
         /* @vite-ignore */ `data:text/javascript;base64,${Buffer.from(bytes).toString("base64")}`
       ),
   );
-  const withdraw = registerRoute(podRoute);
+  const withdraw = registerTypedRoute(podRoute.module, podRoute.fingerprint);
   try {
-    expect(podRoute.data.address.startsWith("/tool/")).toBe(true);
+    expect(podRoute.module.data.address.startsWith("/tool/")).toBe(true);
     const router = await mount("/fans?thread=T&fixture=layout");
     await settle();
     const commandId = "22222222-2222-4222-8222-222222222222";
-    const worksheet = JSON.stringify(["snowdon-circuits", "voltage-drop"]);
     const query = new URLSearchParams({
-      worksheet,
       selected: "[]",
       target: 'C:/Jobs/100%25 "glass".rvt',
       work: "worksheet%25",
     });
-    const link = `${podRoute.data.address}?${query}`;
-    const deliver = (route = podRoute!.data.key, url = link) =>
+    const link = `${podRoute.module.data.address}?${query}`;
+    const deliver = (route = podRoute!.module.data.key, url = link) =>
       act(() =>
         hostEvents.emit({
           type: "route-view-open",
@@ -829,21 +814,21 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
     deliver("unknown.pod", "/tool/unknown");
     expect(router.state.location.pathname).toBe("/fans");
     deliver();
-    await waitFor(() => expect(router.state.location.pathname).toBe(podRoute!.data.address));
+    await waitFor(() => expect(router.state.location.pathname).toBe(podRoute!.module.data.address));
     expect(
       (router.state.location.state as { __peViewOpenCommandId?: string }).__peViewOpenCommandId,
     ).toBe(commandId);
     expect(hostCalls("thread.place")).toHaveLength(1);
-    expect(hostCalls("thread.place")[0]![1]).toMatchObject({ body: { route: podRoute.data.key } });
+    expect(hostCalls("thread.place")[0]![1]).toMatchObject({ body: { route: podRoute.module.data.key } });
     await waitFor(() =>
       expect(hostCalls("view.publish")).toContainEqual([
         "view.publish",
         expect.objectContaining({
-          body: expect.objectContaining({ openCommandId: commandId, page: { worksheet } }),
+          body: expect.objectContaining({ openCommandId: commandId, page: {} }),
         }),
       ]),
     );
-    const saved = places().find((tab) => tab.route === podRoute!.data.key)!;
+    const saved = places().find((tab) => tab.route === podRoute!.module.data.key)!;
     expect(saved.link).toBe(link);
     expect(screen.getByRole("button", { name: /^Circuit voltage drop/ })).toBeTruthy();
     expect(
@@ -851,12 +836,12 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
     ).toBe(query.get("target"));
     const priorHref = router.history.location.href;
     const published = hostCalls("view.publish").filter(([, input]) =>
-      (input as { body: { route: string } }).body.route === podRoute!.data.key,
+      (input as { body: { route: string } }).body.route === podRoute!.module.data.key,
     ).at(-1)![1] as { body: { instance: string } };
     act(() =>
       hostEvents.emit({
         type: "route-view-intent",
-        route: podRoute!.data.key,
+        route: podRoute!.module.data.key,
         thread: "T",
         instance: published.body.instance,
         revision: 1,
@@ -868,16 +853,12 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
       expect(hostCalls("view.ack")).toContainEqual([
         "view.ack",
         expect.objectContaining({
-          body: expect.objectContaining({ outcome: "rendered", page: { worksheet: "" } }),
+          body: expect.objectContaining({ outcome: "refused", page: {} }),
         }),
       ]),
     );
-    await act(() => router.history.back());
-    await waitFor(() =>
-      expect(
-        new URL(router.history.location.href, "http://place.invalid").searchParams.get("worksheet"),
-      ).toBe(worksheet),
-    );
+    // This artifact declares no worksheet Page field; refusal leaves the leased entry untouched.
+    expect(new URL(router.history.location.href, "http://place.invalid").searchParams.get("worksheet")).toBeNull();
     expect(router.history.location.href).toBe(priorHref);
     await act(() => router.navigate({ to: "/fans", search: { thread: "T", fixture: "layout" } } as never));
     const priorFans = router.history.location.href;
@@ -885,17 +866,17 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
     await settle();
     expect(
       places()
-        .filter((tab) => tab.route === podRoute!.data.key)
+        .filter((tab) => tab.route === podRoute!.module.data.key)
         .map((tab) => tab.id),
     ).toEqual([saved.id]);
     await act(() => router.history.back());
     await waitFor(() => expect(router.history.location.href).toBe(priorFans));
     await settle();
     deliver();
-    await waitFor(() => expect(router.state.location.pathname).toBe(podRoute!.data.address));
+    await waitFor(() => expect(router.state.location.pathname).toBe(podRoute!.module.data.address));
     fireEvent.click(await screen.findByRole("button", { name: "Open another Place on this route" }));
-    await waitFor(() => expect(places().filter((tab) => tab.route === podRoute!.data.key)).toHaveLength(2));
-    expect(places().filter((tab) => tab.route === podRoute!.data.key).map((tab) => tab.link)).toEqual([link, link]);
+    await waitFor(() => expect(places().filter((tab) => tab.route === podRoute!.module.data.key)).toHaveLength(2));
+    expect(places().filter((tab) => tab.route === podRoute!.module.data.key).map((tab) => tab.link)).toEqual([link, link]);
     await act(() => router.history.back());
     await settle();
     const before = places();

@@ -34,7 +34,7 @@ const syncReviewSchema = z.object({
  * short-lived review state and every scope transition invalidates them. Standalone room navigation
  * lives in its URL, embedded navigation in its controller, and authored decisions in Work.
  */
-export const takeoffPageSchema = routeAddress("takeoffs").schema.extend({
+export const takeoffPageSchema = routeAddress("takeoffs").schema.omit({ selected: true }).extend({
   work: z.string().optional(),
   views: manyField("name", {}).schema,
   zones: manyField("UniqueId", {}).schema,

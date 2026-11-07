@@ -4,34 +4,9 @@ import { z } from "zod";
 import { instancesActions, pane, split, type RouteGraph } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { commandVerb, pageVerb } from "#/shell/verbs";
-import { EMPTY_DRAFT } from "./model";
 
-const draft = z
-  .object({
-    doc: z.string().nullable(),
-    target: z.string().nullable(),
-    year: z.number().int().nullable(),
-    owner: z.enum(["you", "pea"]),
-    addins: z.enum(["on", "off"]),
-    detach: z.boolean(),
-    links: z.enum(["refuse", "allow"]),
-  })
-  .default(() => ({ ...EMPTY_DRAFT }));
-const table = z
-  .object({
-    query: z.string(),
-    sorts: z.array(z.object({ key: z.string(), dir: z.enum(["asc", "desc"]) })),
-    hiddenColumns: z.array(z.string()).optional(),
-  })
-  .default(() => ({ query: "", sorts: [] }));
-export const openPageSchema = z.object({
-  epoch: z.number().default(0),
-  session: z.string().default(""),
-  document: z.string().default(""),
-  draft,
-  table,
-});
-export type OpenPageState = z.output<typeof openPageSchema>;
+import { draft, table, openPageSchema, type OpenPageState } from "./page";
+export { openPageSchema, type OpenPageState } from "./page";
 const guarded = <S extends z.ZodType>(schema: S) =>
   z.object({ request: schema, refusal: z.string().nullable().default(null) });
 const rowVerbs = Object.assign(
