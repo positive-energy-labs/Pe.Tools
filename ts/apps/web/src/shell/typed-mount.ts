@@ -498,7 +498,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             return result.ok?null:{code:"undo-refused",message:"message" in result?String(result.message):"Cell undo refused"};
           };
           return {owner:{route,label:route===own?"Work":`from /${route}`},value, facts:{...facts,baseline:facts.baseline??value.base?.value},
-            freshness:value === undefined?"never":ready?"current":"stale", refusal: basisRefusal(), clear, accept,deny:clear,undo,
+            freshness:core.value === undefined?"never":ready?"current":"stale", refusal: basisRefusal(), clear, accept,deny:clear,undo,
             stage:(value2,detail)=> facts.readOnly ? Promise.resolve({code:"read-only",message:"This cell is read-only"}) :
               patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,
                 Object.hasOwn(facts,"baseline")&&canonicalRouteInput(value2)===canonicalRouteInput(facts.baseline)?{kind:"clear"}:{kind:"set",rung:{value:value2}}),detail,route),

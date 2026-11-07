@@ -5,7 +5,7 @@ import type { HealView as HealPlan } from "@pe/ducts-domain/pricing-view";
 import { healSystems, healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
 import { ductsHealInputSchema } from "@pe/agent-contracts";
 type ReviewEvidence = {
-  readonly heal?: HealPlan | null;
+  readonly heal?: Pick<HealPlan,"groups"> | null;
   readonly page?: { readonly stage?: "network" | "sheet" };
   readonly work?:
     | import("@pe/agent-contracts").Immutable<import("@pe/agent-contracts").DuctsRouteDocument>

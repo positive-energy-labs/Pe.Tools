@@ -73,8 +73,9 @@ const reviewSchema = z.object({
 });
 
 /** The handle stays authoritative across remounts; local state only redraws after a gesture. */
-export function PreviewAction({ handle, label, says = `Plan ${label} from current Work`, ...props }: {
+export function PreviewAction({ handle, label, children, says = `Plan ${label} from current Work`, ...props }: {
   handle: PlanHandle;
+  children?:ReactNode;
   label: string;
   says?: string;
 } & Pick<WriteActionProps, "refusal" | "busy" | "failed" | "reject" | "icon">) {
@@ -88,7 +89,8 @@ export function PreviewAction({ handle, label, says = `Plan ${label} from curren
     catch (error) { return { message: error instanceof Error ? error.message : String(error) }; }
     finally { redraw(); }
   };
-  return <WriteAction {...props} busy={handle.pending ?? props.busy} refusal={handle.refusal ?? props.refusal} reject={handle.consent ?? props.reject} label={`plan ${label}`} says={says}
+  const consent=handle.consent??props.reject;
+  return <WriteAction {...props} busy={handle.pending ?? props.busy} refusal={handle.refusal ?? props.refusal} reject={consent?{...consent,content:children??("content" in consent?consent.content:null)}:null} label={`plan ${label}`} says={says}
     failed={raw != null && !parsed.success ? "Plan review unavailable" : handle.failure ?? props.failed}
     held={review && !review.stale ? {
       word: writeWord(label, review.cells?.length || review.rows.length, false),

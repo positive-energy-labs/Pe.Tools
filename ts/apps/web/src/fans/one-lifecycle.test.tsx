@@ -91,3 +91,31 @@ test("optional Work, explicit demand and invocation arguments share one typed sc
     mounted.page.query({member:""});expect(mounted.owner()).toBeUndefined();expect(mounted.workBasis()).toBeNull();stop();
   } finally {mounted.dispose();}
 });
+
+
+test("cell undo targets the exact owner press and leaves the other owner staged",async()=>{
+  const {z}=await import("zod");
+  const {draftCellSchema,workFingerprintSchema}=await import("@pe/agent-contracts");
+  const {route}=await import("../route/typed-route");
+  const {module:reference}=await import("./route");
+  const {createFixtureWorkDoor}=await import("../shell/fixture-work-door");
+  const schema=z.object({cells:z.record(z.string(),draftCellSchema(z.number())).default({})});
+  const primary={route:"undo-a",title:"A",description:"Undo witness",schema};
+  const secondary={...primary,route:"undo-b",title:"B"};
+  const module=route({key:primary.route,name:"Undo",needs:"host",directory:reference.data.directory,fields:{},
+    edits:{work:primary,owners:{"undo-b":{state:secondary}},input:z.never(),patches:()=>[],history:z.object({label:z.string()}),describe:(detail:{label:string})=>detail},
+    panes:{main:{title:"Cells",purpose:"Undo falsifier",draw:(ctx:unknown)=>ctx}},layout:{kind:"pane",id:"main"}});
+  const door=createFixtureWorkDoor(primary,schema.parse({}),{"undo-b":schema},{"undo-a":schema.parse({}),"undo-b":schema.parse({})},{"undo-b":"undo-b"});
+  const mount=mountTypedRoute(module,{address:{read:()=>new URLSearchParams(),write:()=>{},subscribe:()=>()=>{}},fixture:null,
+    target:{kind:"host"},work:{address:null,open:{session:"undo",openId:"cells"}},custody:{current:()=>true},memory:()=>({})},
+    workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),{work:door});
+  const ctx=()=>mount.draw("main") as import("../route/typed-route").DrawContext<unknown,{},import("zod").z.output<typeof schema>,never>;
+  try {
+    await vi.waitFor(()=>expect(ctx().cells.ready).toBe(true));
+    expect(await ctx().cells.at(["cells","one"],"undo-a").stage(1,{label:"First owner"})).toBeNull();
+    expect(await ctx().cells.at(["cells","two"],"undo-b").stage(2,{label:"Second owner"})).toBeNull();
+    expect(await ctx().cells.at(["cells","one"],"undo-a").undo()).toBeNull();
+    expect(mount.owner("undo-a")?.doc.cells.one?.edit).toBeFalsy();
+    expect(mount.owner("undo-b")?.doc.cells.two.edit.value).toBe(2);
+  } finally {mount.dispose();}
+});
