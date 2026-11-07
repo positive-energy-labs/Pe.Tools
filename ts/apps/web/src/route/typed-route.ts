@@ -37,6 +37,9 @@ type Field = {
   role: "pose" | "query" | "subject" | "stage";
   url: "push" | "replace";
 };
+export const whenSubject = (child: string | LayoutJson): LayoutJson => ({
+  kind: "gate", when: "subject", child: typeof child === "string" ? { kind: "pane", id: child } : child,
+});
 export const split = (
   axis: "h" | "v",
   children: readonly (string | LayoutJson)[],
@@ -202,7 +205,9 @@ type Specification<
     noun: string;
     pane: string;
     read?: SubjectRead;
-    options(data: Immutable<ReadData<SubjectRead>>): readonly { id: IdentityId<"local">; label: string }[];
+    options(
+      data: Immutable<ReadData<SubjectRead>>,
+    ): readonly { id: IdentityId<"local">; label: string }[];
   };
   core: HostRead & { output: z.ZodType<Publication<D>>; args(page: Page<F>): unknown };
   fields: F;
@@ -320,7 +325,9 @@ export function route<
       ...policy,
       kind: "use",
       entry: read.key,
-      args: body(`${id}Args`, `readings.${id}.args`, "args", (ctx) => (read.args ?? spec.core.args)(ctx.page)),
+      args: body(`${id}Args`, `readings.${id}.args`, "args", (ctx) =>
+        (read.args ?? spec.core.args)(ctx.page),
+      ),
       deps: { page: Object.keys(fields), work: [], readings: [] },
     };
   };
@@ -328,7 +335,10 @@ export function route<
   for (const [id, read] of Object.entries(spec.reads ?? {})) addRead(id, read);
   const subjectRead = spec.subject.read ? readIds.get(spec.subject.read) : "value";
   if (!subjectRead) throw Error("Subject read must be declared by the route");
-  fields[spec.subject.field] = { ...fields[spec.subject.field]!, picker: { reading: subjectRead, options: "pickSubject" } } as typeof fields[string];
+  fields[spec.subject.field] = {
+    ...fields[spec.subject.field]!,
+    picker: { reading: subjectRead, options: "pickSubject" },
+  } as (typeof fields)[string];
   body("pickSubject", `fields.${spec.subject.field}.picker.options`, "picker", (reading) =>
     reading.value?.value?.data ? spec.subject.options(reading.value.value.data) : [],
   );
@@ -339,11 +349,18 @@ export function route<
   };
   const workKeys = Object.keys(spec.edits.work.schema.shape);
   const verbs: MutableTable<RouteGraphJson["verbs"]> = {};
-  const queryFields = Object.keys(spec.fields).filter(key => spec.fields[key]!.role === "query");
-  schemas.pageQuery = z.strictObject(Object.fromEntries(queryFields.map(key => [key, spec.fields[key]!.schema]))).partial();
+  const queryFields = Object.keys(spec.fields).filter((key) => spec.fields[key]!.role === "query");
+  schemas.pageQuery = z
+    .strictObject(Object.fromEntries(queryFields.map((key) => [key, spec.fields[key]!.schema])))
+    .partial();
   verbs["page:query"] = {
-    kind: "page", input: "pageQuery", label: "Browse", review: "none",
-    captures: [], deps: empty, fields: queryFields,
+    kind: "page",
+    input: "pageQuery",
+    label: "Browse",
+    review: "none",
+    captures: [],
+    deps: empty,
+    fields: queryFields,
     patch: body("pageQuery", "verbs.page:query.patch", "page", (_ctx, input) => input),
   };
   schemas.patch = z.object({
@@ -546,7 +563,12 @@ export function route<
     seeds,
     layout: spec.layout,
     needs: "project",
-    predicates: {},
+    predicates: {
+      subject: body("hasSubject", "predicates.subject", "predicate", (ctx) => {
+        const subject = ctx.page[spec.subject.field];
+        return subject.kind === "all" || subject.ids.length > 0;
+      }),
+    },
     observe: [],
     resetOnTarget: [],
     stageOrder: [mode],
