@@ -25,7 +25,7 @@ import { accessoryWrites } from "@pe/ducts-domain/sheet/accessory-writes";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import { workLayer } from "./ducts-inputs.ts";
 import { followAcceptedJoins } from "./ducts-walk.ts";
-import { scopeApplyRequest, appliedCellPaths, pendingCount } from "@pe/ducts-domain/staged";
+import { scopeApplyRequest, appliedCellPaths, pendingCount, fanWriteCells } from "@pe/ducts-domain/staged";
 import type { DuctsApply, DuctsHeal } from "@pe/host-contracts/generated";
 
 const prepared = z.object({
@@ -194,11 +194,7 @@ export function ductsExecutors(
       prepare: async () => {
         const ductsScope = doc.writeIntent.edit?.value;
         const fanScope = fans.writeIntent.edit?.value;
-        const cells =
-          ductsScope?.cells || fanScope?.cells
-            ? [...(ductsScope?.cells ?? []), ...(fanScope?.cells ?? [])]
-            : undefined;
-        const intent = { ...ductsScope, walk: fanScope?.walk, cells };
+        const intent = { ...ductsScope, walk: fanScope?.walk };
         const { firm } = await runPods(deps, deps.files!.firm);
         const criteria = resolveCriteria(workLayer(design), null, firm);
         const nativeRead = deps.nativeRead;
@@ -284,8 +280,11 @@ export function ductsExecutors(
                 ).values(),
               ];
             }
-            const scoped = scopeApplyRequest(request, snapshot.store, intent?.cells);
-            const unwritten = unwrittenCells(scoped, intent?.cells ?? []);
+            const cells = fanScope?.walk
+              ? [...(ductsScope?.cells ?? []), ...fanWriteCells(fans, snapshot)]
+              : ductsScope?.cells;
+            const scoped = scopeApplyRequest(request, snapshot.store, cells);
+            const unwritten = unwrittenCells(scoped, cells ?? []);
             if (unwritten.length)
               throw refused(
                 `These requested cells derive no write in this scope: ${unwritten
