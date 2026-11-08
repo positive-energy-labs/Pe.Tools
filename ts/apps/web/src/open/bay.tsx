@@ -575,7 +575,7 @@ function PatchBayBody({
       {table}
       {layout === "row" ? <span aria-hidden /> : null}
       {sockets}
-      {!sessions.length && !loading ? (
+      {machine?.revit.sessions?.length === 0 && !loading && !shellRefusal ? (
         <div className="absolute inset-x-0 bottom-0">
           <EmptyState story="scope" exit="patch a document into the free socket to start one">
             no Revit is running

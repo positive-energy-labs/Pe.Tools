@@ -57,6 +57,7 @@ export const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(fanCap
 export async function fixture(
   capture = false,
   recorded: {
+    resourceObserver?: import("@pe/runtime").ResourceObserver;
     actions?: boolean;
     snapshot?: typeof snapshot;
     roster?: typeof roster;
@@ -107,7 +108,7 @@ export async function fixture(
     reads = yield* makeReadOwner(inputs, options);
     const captures = yield* CaptureStore;
     const routes = createPeRoutes({ inputs, workspace: reads.work.workspace, registrations: reads.work.registrations,
-      observeHostResource: hostResourceObserver(undefined, () => journal, () => captures) });
+      observeHostResource: recorded.resourceObserver ?? hostResourceObserver(undefined, () => journal, () => captures) });
     return Layer.mergeAll(peCoreRoutes(routes, reads.invocation, inputs), historyRoutes(reads.history),
       recorded.actions ? makeCallRoute(journal, undefined, {workspace: reads.work.workspace, workReads: reads.work.reads}).pipe(
         nativeReadRoot(), Layer.provide(RevitBridgeLive),

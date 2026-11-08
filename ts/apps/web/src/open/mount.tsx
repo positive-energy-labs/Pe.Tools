@@ -60,7 +60,7 @@ export function OpenBody({ ctx }: { ctx: OpenContext }) {
           : "Documents on the left, Revits on the right."}{" "}
         Pick a document, patch it into a Revit, and press the one verb that names what happens.
       </p>
-      <OpenOwnerContext value={owner}>
+      {machine && <OpenOwnerContext value={owner}>
         <PatchBay
           administration={false}
           machine={machine}
@@ -71,7 +71,7 @@ export function OpenBody({ ctx }: { ctx: OpenContext }) {
           fixture={false}
           layout={layout}
         />
-      </OpenOwnerContext>
+      </OpenOwnerContext>}
     </Scroll>
   );
 }
