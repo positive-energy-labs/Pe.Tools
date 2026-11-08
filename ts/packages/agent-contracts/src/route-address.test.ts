@@ -191,9 +191,9 @@ describe("the thin routes adopt the contract", () => {
   });
   test("every navigable key round-trips through its link", () => {
     const captures = routeAddress("captures");
-    expect(captures.link({ sha: "ab", open: ["ab", "cd"] })).toBe("/captures?sha=ab&open=ab%2Ccd");
-    expect(captures.read({ open: "ab,cd" }).page).toEqual({
-      sha: undefined,
+    expect(captures.link({ focus: "ab", open: ["ab", "cd"] })).toBe(`/captures?${new URLSearchParams({ focus: JSON.stringify("ab"), open: JSON.stringify(["ab", "cd"]) })}`);
+    expect(captures.read({ open: JSON.stringify(["ab", "cd"]) }).page).toEqual({
+      ...captures.defaults,
       open: ["ab", "cd"],
       threadSearch: threadSearchDefault(),
       threadSort: "",

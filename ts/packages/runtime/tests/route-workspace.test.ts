@@ -1,7 +1,7 @@
 import { observeResources, resourceResponse, updateResourceSubscriptions } from "../src/resource-stream.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { address, routeBindingsSchema, workKey } from "@pe/agent-contracts";
+import { address, routeBindingsSchema } from "@pe/agent-contracts";
 import type { WorkAuthor, RouteStatePatch, RouteStateSpec, WorkKey } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 import type {

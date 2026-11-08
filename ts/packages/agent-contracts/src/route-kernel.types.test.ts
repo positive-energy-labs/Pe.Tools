@@ -700,6 +700,7 @@ export function consumeWorkWrite(outcome: WorkWriteOutcome) {
 /** Compile-only consumer: every acquisition and feed state must be handled. */
 export function consumeWorkFeed(state: WorkFeedState) {
   switch (state.kind) {
+    case "absent":
     case "pending":
     case "failed":
     case "ready":
