@@ -117,7 +117,7 @@ async function pageIsReady(page: BrowserPage): Promise<"ready" | "denied" | "loa
 
 /** Opens an AU page, passes the bot gate, and runs `use` against it. Always closes the browser. */
 async function withAuPage<T>(use: (page: BrowserPage) => Promise<T>): Promise<T> {
-  // Headless first; a page that still says "Access Denied" retries once in a visible window.
+  // Headless first; a page still denied or loading retries once in a visible window.
   for (const mode of ["headless", "visible"] as const) {
     const browser = await openBrowser({ mode });
     try {
@@ -135,9 +135,10 @@ async function withAuPage<T>(use: (page: BrowserPage) => Promise<T>): Promise<T>
       await page.send("Page.navigate", {
         url: `${auOrigin}/autodesk-university/search?query=revit`,
       });
-      // Poll in short evaluates: one running past ~15 s kills the page's JavaScript.
+      // Poll in short evaluates: one running past ~15 s kills the page's JavaScript. 30 s per mode:
+      // a 20 s budget timed out in both modes once in the field (2026-11-04), then passed in 26 s.
       let state: Awaited<ReturnType<typeof pageIsReady>> = "loading";
-      for (let attempt = 0; attempt < 40 && state === "loading"; attempt++) {
+      for (let attempt = 0; attempt < 60 && state === "loading"; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, 500));
         state = await pageIsReady(page).catch(() => "loading" as const);
       }

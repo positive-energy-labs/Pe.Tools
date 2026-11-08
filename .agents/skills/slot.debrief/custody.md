@@ -56,4 +56,6 @@ magick montage pages/handout-*.png -tile 8x -geometry +4+4 sheets/handout.png
 pdfimages -list handout.pdf | tail -n +3 | wc -l   # embedded screenshots: a high count means the text extraction misses most of the page
 ```
 
-Re-render a gem page at `-r 150` and crop it for the deliverable.
+Re-render a gem page at `-r 150` and crop it to the gem's region: the node group, table or dialog the gem is about. A whole page is a contact-sheet tile, not a gem picture.
+
+**A dead recording ends the video lane.** All three 2018–2020 classes in the 2026-11-04 trial returned Brightcove `VIDEO_NOT_FOUND` or 404, and their AU page data held only the video id and duration, with no captions or transcript. Try `yt-dlp` once and read the page's video record once. If both are dead, the verdict says "recording gone" and gives page ranges instead of times. A search result that calls a transcript "indexed" is rumor until a file is on disk.

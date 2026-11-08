@@ -79,8 +79,11 @@ Close with the landing in the next section.
    - **IDEA**: a speculative use, labeled as such.
    *Done when* every page and every minute of the window has been looked at, and each item carries an exhibit.
 4. **Judge against our code**, always: this mode exists to find the gap. Read HEAD, never the working tree. Sample files and scripts from the talk are read, never run.
+   - **Check the user's premise first.** The talk's words can name a different thing than ours ("Systems Analysis" in a 2020 class meant EnergyPlus loads, not duct pressure), and the user's recollection of a ruling can be older than the ledger. Say which, in the verdict's first lines.
+   - **Read the speaker's published source** when the talk links a repo. Pin the tree and cite lines against ours. In a 2026-11-04 trial this produced the run's best finding: a spatial index built once, set against our per-open-end collectors.
    - For each NEW or CONTRADICTS-US item, run `revit_docs_search` (`help` for the newest year, plus `blog` and `tbc`) to see whether the platform documents it, and link the hit.
    - Search `au` for neighbouring classes the user didn't name, and list the best ones as "also worth a look".
+   - Without the Pea tool (a Codex or plain shell thread), call `revitDocsSearch.execute` from a `.mts` script in `.artifacts/tmp`, as in `ts/packages/mcps/tests/autodesk-docs.live.test.ts`. A `.ts` script fails on `@pe/browser`'s ESM export.
 5. **Deliverable.** Write `watch-or-skip.md` ([shape](artifacts.md#watch-or-skipmd)), led by the verdict and the gems, each gem with its picture.
 
 Worked example (2026-11-04, three Autodesk University classes): the agent listed the 2024 handout's sizing dialog (pp. 8–9), System Inspector and balancing (pp. 14–20), and conditional-format schedules with Highlight in Model (pp. 25–30). It then closed each with "deferred", "already owed" or "outside scope", and showed none of their 183 screenshots. Those pages were the gems the user wanted.

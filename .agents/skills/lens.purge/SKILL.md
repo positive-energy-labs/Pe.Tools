@@ -26,4 +26,6 @@ Mode: the diff must delete at least as much as it adds. If it cannot, say why be
 - Purge docs and comments on the same rule: keep the why and the trap, delete the what.
 - Make a census before any deletion that touches 3+ files or more than one call site: what exists, who calls it, what dies. The census is a deliverable even if nothing else lands.
 - A deletion rides the change that makes the code dead. "Net LOC down" as the only edge invites behavior changes wearing a deletion's label: a graceful return becomes a throw, a guard is dropped, an expression is rewritten.
+- Census every door before deleting a command: route, Pea, Work tool and catalog. Deleting the last door to a write deletes the write (2026-11-04: an archive pass deleted the only callers of two internal write ops while their Work tools still staged edits nothing could apply).
+- A test that builds a production type by cast or partial literal is a second engine. Replace the family with one production-owned constructor and delete the casts (2026-11-04: 40 `as unknown as` bridge casts hid a required member; one constructor took the host suite from 42 failures to 0).
 - Stop at the honesty bar. Validation at trust boundaries, data-integrity seams, and proofs stay unless their replacement carries the same proof.
