@@ -200,9 +200,9 @@ describe("the thin routes adopt the contract", () => {
     });
     const home = routeAddress("home");
     expect(home.link({ query: "duct", folded: ["/ducts"], sort: "name" })).toBe(
-      "/?query=duct&folded=%252Fducts&sort=name",
+      "/?query=%22duct%22&folded=%5B%22%2Fducts%22%5D&sort=%22name%22",
     );
-    expect(routeAddress("settings").link({ section: "none" })).toBe("/settings?section=none");
+    expect(routeAddress("settings").link({ section: "none" })).toBe("/settings?section=%22none%22");
   });
 
   test("history: a pick pushes, a typed or receipt move replaces", () => {
