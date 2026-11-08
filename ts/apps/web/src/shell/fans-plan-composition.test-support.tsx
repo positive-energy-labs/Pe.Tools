@@ -6,7 +6,6 @@ import { expect, vi } from "vite-plus/test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createRootRoute, createRouter, createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openRecordingWriter, nativeCatalogIdentity } from "../../../host/src/native-recording";
 import { HostInputContext } from "../../../host/src/input-context";
@@ -38,6 +37,10 @@ import { builtins } from "../route/builtins.neutral";
 import { peReadings, bindActionReadings } from "../host/resource-stream";
 
 const trace = vi.hoisted(()=>({gates:[] as any[],tokens:[] as any[],samples:[] as any[],stops:[] as any[],mounts:[] as any[],submit:vi.fn(),http:[] as any[],fetch:vi.fn(),base:"",target:null as any,holdPlan:()=>Promise.resolve()}));
+// These Work journeys do not import Pods; bootstrap otherwise outlives the isolated host's home.
+vi.mock("../../../host/src/installed-pods",async actual=>({
+ ...await actual<typeof import("../../../host/src/installed-pods")>(),importShippedPods:async()=>({shippedRoot:null,outcomes:[]}),
+}));
 vi.mock("../../../host/src/bridge",async actual=>{
  const real=await actual<typeof import("../../../host/src/bridge")>();
  return {...real,invokeBridge:async(...args:Parameters<typeof real.invokeBridge>)=>{
@@ -67,6 +70,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  const originalFetch=globalThis.fetch;
  const streams=new Set<any>();
  const requests:any[]=[];
+ const workFrames:any[]=[];
  const releasePlan=Promise.withResolvers<void>(); let planPending=false;
  // Pause command delivery after native settlement; the watched read also needs the serialized native queue.
  trace.holdPlan=()=>{if(mode!=="recording")return Promise.resolve();planPending=true;return releasePlan.promise;};
@@ -94,7 +98,9 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    }))));
    return yield* HostNativeRead;
  })).pipe(Layer.provide(ambient(HostNativeRead)),Layer.provide(ambient(RevitBridge)));
- const dir=await mkdtemp(join(tmpdir(),"pe-f05-bisect-"));
+ const testRoot=process.env.PE_TEST_HOME_ROOT;
+ if(!testRoot) throw Error("Fans journeys require the isolated test home");
+ const dir=await mkdtemp(join(testRoot,"pe-f05-bisect-"));
  const stamp=admittedReceiptStamps().host!;
  const captureStore=await Effect.runPromise(openRecordingWriter(dir,{build:JSON.stringify({version:stamp.version,build:stamp.build,commit:stamp.commit}),catalog:nativeCatalogIdentity()},{maxBytes:256*1024*1024,maxTakings:10000}));
  const inputs=await Effect.runPromise(HostInputContext.pipe(Effect.provide(HostInputContext.layer({kind:"live",captureStore}))));
@@ -105,7 +111,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  const subscriptionChanges:any[]=[];
  const forward=async(url:any,init:any={})=>{
    const headers=new Headers(init.headers);headers.set("x-pe-context",host.terminal);headers.set(HOST_RUNTIME_SERVICE_HEADER,hostOwnership.serviceName);
-   const target=new URL(typeof url==="string"?url:url.url??url.href,host.base);if(typeof init.body==="string"){const body=JSON.parse(init.body);if(body.add&&body.remove)subscriptionChanges.push(body);}const response=await originalFetch(`${host.base}${target.pathname}${target.search}`,{...init,headers});if(target.pathname==="/pe/reads/value"||target.pathname.includes("sheet")||target.pathname.includes("actions")||target.pathname.includes("history")||target.pathname.includes("route-view")||target.pathname.includes("work"))trace.http.push({url:target.pathname,method:init.method??"GET",request:typeof init.body==="string"?JSON.parse(init.body):undefined,status:response.status,body:await response.clone().json().catch(()=>null)});return response;
+   const target=new URL(typeof url==="string"?url:url.url??url.href,host.base);if(typeof init.body==="string"){const body=JSON.parse(init.body);if(body.add&&body.remove)subscriptionChanges.push(body);}const response=await originalFetch(`${host.base}${target.pathname}${target.search}`,{...init,headers});if(target.pathname==="/pe/reads/value"||target.pathname.includes("sheet")||target.pathname.includes("actions")||target.pathname.includes("history")||target.pathname.includes("route-view")||target.pathname.includes("route-state")||target.pathname.includes("work"))trace.http.push({url:target.pathname,method:init.method??"GET",request:typeof init.body==="string"?JSON.parse(init.body):undefined,status:response.status,body:await response.clone().json().catch(()=>null)});return response;
  };
  trace.fetch.mockImplementation(forward);vi.stubGlobal("fetch",forward);
  const heldReceipts:string[]=[];
@@ -119,6 +125,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    constructor(readonly url:string){streams.add(this);void this.start(url);}
    deliver(data:string){
      const frame=JSON.parse(data);
+     if(frame.value?.handle?.key?.route === "ducts") workFrames.push(frame);
      if(!frame.kind&&typeof frame.generation==="number") (trace as any).readEvents.push({url:this.url,...frame});
      this.keys.add(frame.key);
      if(mode==="batched"&&!batchReleased&&trace.tokens.length && (frame.value?.kind==="receipt"||frame.value?.kind==="ready"&&frame.value.receipts)){
@@ -171,11 +178,37 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("Work is absent");
      expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("ducts");
      expect(screen.queryByRole("button",{name:"Start"})).toBeNull();
+     expect(workFrames.some(frame=>frame.value.revision===0 && frame.value.history.from===1 && !frame.value.history.acks.length)).toBe(true);
+     const beforeEdit=await (await forward("/pe/navigation")).json();
+     expect(beforeEdit.works.some((row:any)=>row.route==="ducts")).toBe(false);
+     const criterion=screen.getByLabelText("Velocity limit supply fpm").querySelector("input")!;
+     expect(criterion).not.toBeNull();
+     fireEvent.change(criterion,{target:{value:"850"}});
+     fireEvent.keyDown(criterion,{key:"Enter"});
+     await vi.waitFor(()=>expect(trace.http.find(row=>row.url==="/pe/route-state/ducts/apply" && row.method==="POST")?.body)
+       .toMatchObject({ok:true,revision:1,handle:{key:{route:"ducts"},revision:1}}),{timeout:10000});
+     const cellWrite=trace.http.find(row=>row.url==="/pe/route-state/ducts/apply" && row.method==="POST");
+     expect(cellWrite.request.expectedRevision).toBe(0);
+     expect(cellWrite.body.doc.criteria.edit.value.velocityLimitFpm.supply).toBe(850);
+     const persisted=await (await forward(peRouteUrl("work.get",{params:{route:"ducts"},query:{open:`${trace.target.session}/${trace.target.openId}`}},host.base))).json();
+     expect(persisted).toMatchObject({revision:1,handle:{key:{route:"ducts"},revision:1},doc:{criteria:{edit:{value:{velocityLimitFpm:{supply:850}}}}}});
+     const afterEdit=await (await forward("/pe/navigation")).json();
+     expect(afterEdit.works.find((row:any)=>row.route==="ducts")).toMatchObject({revision:1,state:"ready"});
+     await trace.mounts.at(-1).whenWritable();
+     expect(screen.getByLabelText("Velocity limit supply fpm").querySelector("input")?.value).toBe("850");
+     expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("Work is absent");
      fireEvent.click(screen.getByRole("button",{name:"plan Write to Revit"}));
      await vi.waitFor(()=>expect(planPending).toBe(true),{timeout:45000});
      releasePlan.resolve();
      await vi.waitFor(()=>expect((trace as any).results.at(-1)).toMatchObject({key:"ducts.plan-losses",state:"succeeded"}),{timeout:45000});
      await screen.findByRole("button",{name:"Write to Revit"});
+     expect((trace as any).results.at(-1).consumes.some((row:any)=>row.kind==="work" && row.probe.handle.key.route==="ducts" && row.probe.handle.revision===1)).toBe(true);
+     fireEvent.click(screen.getByRole("button",{name:"Capture point"}));
+     await vi.waitFor(()=>expect(trace.http.find(row=>row.url==="/pe/history" && row.request?.kind==="captured")?.status).toBe(200),{timeout:10000});
+     const point=trace.http.find(row=>row.url==="/pe/history" && row.request?.kind==="captured").body;
+     const history=await (await forward(`/pe/history?at=${point.id}`)).json();
+     expect(history.work.find((row:any)=>row.handle.key.route==="ducts"))
+       .toMatchObject({revision:1,doc:{criteria:{edit:{value:{velocityLimitFpm:{supply:850}}}}}});
      expect(document.body.textContent).not.toContain("Work is absent");
      return;
    }
@@ -277,7 +310,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  }finally{
    releasePlan.resolve();
    firstSettlement??={inspectable:!!screen.queryByRole("button",{name:"Write to Revit"}),problem:trace.mounts.at(-1)?.reviewProblem("losses"),before,after:trace.mounts.length?sample():undefined};
-   if(process.env.PE_F05_EVIDENCE)writeFileSync(process.env.PE_F05_EVIDENCE,JSON.stringify({mode,firstSettlement,settlements:(trace as any).settlements,commandReads:(trace as any).commandReads,readEvents:(trace as any).readEvents,republication:(trace as any).republication,submits:trace.submit.mock.calls.length,results:(trace as any).results,receiptBatch,dirties,subscriptionChanges,http:trace.http,before,after,samples:trace.samples,stops:trace.stops,plans:trace.tokens.map(({token,gate})=>({id:token.id,current:gate.current(token),samePageEpoch:token.pageEpoch===gate.read()?.pageEpoch})),requests,body:document.body.textContent,problem:trace.mounts.at(-1)?.reviewProblem("losses")},null,2));
+   if(process.env.PE_F05_EVIDENCE)writeFileSync(process.env.PE_F05_EVIDENCE,JSON.stringify({mode,workFrames,firstSettlement,settlements:(trace as any).settlements,commandReads:(trace as any).commandReads,readEvents:(trace as any).readEvents,republication:(trace as any).republication,submits:trace.submit.mock.calls.length,results:(trace as any).results,receiptBatch,dirties,subscriptionChanges,http:trace.http,before,after,samples:trace.samples,stops:trace.stops,plans:trace.tokens.map(({token,gate})=>({id:token.id,current:gate.current(token),samePageEpoch:token.pageEpoch===gate.read()?.pageEpoch})),requests,body:document.body.textContent,problem:trace.mounts.at(-1)?.reviewProblem("losses")},null,2));
    cleanup();unbind();peReadings.dirty=originalDirty;peReadings.close();for(const stream of streams)stream.close();vi.unstubAllGlobals();await host.close();await rm(dir,{recursive:true,force:true});
  }
 }
