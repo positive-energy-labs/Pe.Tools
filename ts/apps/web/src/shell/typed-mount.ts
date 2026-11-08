@@ -69,7 +69,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   let revision = 0, disposed = false, released = false;
   const notify = () => { if (!disposed) { revision++; listeners.forEach(f => f()); } };
   const requireCurrent = () => {
-    if (disposed || released || !input.custody.current()) throw Error("Place is not writable");
+    if (disposed || !input.custody.current()) throw Error("Place is not writable");
   };
   const requireWritable = () => {
     requireCurrent();
@@ -475,7 +475,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     owner: (id = own) => owners.get(id),
     page: { read: () => page, pose: (patch: any, intent?: "gesture"|"named") => moveRole("pose",patch,intent === "gesture"?"replace":intent === "named"?"push":undefined), query: (patch: any) => moveRole("query",patch), select: (selected: any) => move({selected}), subject: (subject: any) => {if(!spec.subject) throw Error("No subject declared");return move({ [spec.subject.field]: subject },"push");} },
     subscribe(listener: () => void) { released = false; listeners.add(listener); syncReads(); return () => { listeners.delete(listener); }; },
-    available: () => !disposed && !released && input.custody.current(), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
+    available: () => !disposed && input.custody.current(), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
     commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions" : "kind" in spec.commands[id]! ? null : basisRefusal(),
     problem: () => edits?basisRefusal():null, writeRefusal: () => input.fixture !== null ? "Fixture has no native writes" : basisRefusal(),
     refresh: (read?:import("../route/host-read").HostRead) => {
@@ -572,6 +572,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     },
     // Retaining hidden read connections was a Plan-identity workaround; content fingerprints
     // now survive reconnect. Keep Work journals/receipts connected so pending edits settle.
+    // Read release preserves write authority; disposal and Place custody fence writes.
     release() { released = true; for (const r of reads.values()) { r.args=""; r.stop(); } },
     dispose() { if (disposed) return; disposed=true; cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },
   };
