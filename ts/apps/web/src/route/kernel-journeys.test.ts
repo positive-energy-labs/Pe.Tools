@@ -293,7 +293,7 @@ test("J4 refresh Fans while the document changes and inspect the retained answer
 }, 60_000);
 
 test("J5 open a document read then attempt host and malformed targets without widening access", async () => {
-  const unregister = registeredReads.register({ sheet: fansSheet });
+  const unregister = registeredReads.reads.has(fansSheet.name) ? () => {} : registeredReads.register({ sheet: fansSheet });
   const j = await journey();
   try {
     await j.ready();
