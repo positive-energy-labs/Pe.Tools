@@ -207,6 +207,7 @@ test("R5 a real native rehearsal receipt cannot substitute for the declared Plan
       const receipt = await f.journal.wait(id);
       if (id === "rehearsal") {
         expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded", result: { value: { previewOnly: true } } });
+        if (receipt.state !== "succeeded") throw Error(JSON.stringify(receipt));
         expect(receipt.result).not.toHaveProperty("seal");
       } else expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "failed", notDispatched: true, refusal: { code: "preview.stale" } });
     }
