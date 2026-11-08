@@ -28,6 +28,66 @@ import { contextFetch } from "@pe/runtime/context";
 import { routeInput } from "./host";
 import userEvent from "@testing-library/user-event";
 
+test("JZ numeric cells refuse bounds and fractional integers without changing Work, then commit exactly", async () => {
+  const { InputsBody } = await import("../ducts/sheet/mount");
+  const { TakeoffEditCell } = await import("../takeoff/proposals");
+  const { NumberCell } = await import("@pe/kit/table/cells");
+  const f = await createWitness(closes);
+  await waitFor(() => expect(f.typed.value().current).toBe(true));
+  await waitFor(() => expect(f.typed.work()).not.toBeNull());
+  function Journey() {
+    useSyncExternalStore(f.typed.subscribe, f.typed.revision, f.typed.revision);
+    const [people, setPeople] = useState(3);
+    const [bounded, setBounded] = useState(1);
+    return <>
+      {f.typed.draw("sheet-inputs", ctx => <InputsBody ctx={ctx as never} />) as import("react").ReactNode}
+      <section aria-label="Takeoff occupants">
+        <TakeoffEditCell roomId="numeric-entry-room" field="people" value={people} digits={0} integer
+          cell={undefined} wire={{ segment: "edits", revision: null, write: async () => { throw Error("No transition requested"); } }}
+          onPatch={setPeople} />
+        <output aria-label="Committed occupants">{people}</output>
+      </section>
+      <section aria-label="Bounded number">
+        <NumberCell value={bounded} max={10} onCommit={setBounded} />
+        <output aria-label="Committed bounded value">{bounded}</output>
+      </section>
+    </>;
+  }
+  const router = createRouter({ routeTree: createRootRoute({ component: Journey }), history: createMemoryHistory({ initialEntries: ["/fans"] }) });
+  const user = userEvent.setup();
+  render(<RouterProvider router={router} />);
+  const friction = await screen.findByRole("textbox", { name: "Design friction" });
+  const before = structuredClone(f.saved.get("fans"));
+  const revision = f.typed.work()!.revision;
+  await user.click(friction);
+  await user.keyboard("{Control>}a{/Control}-0.1{Enter}");
+  await waitFor(() => expect(friction.closest(".dl-cell")?.getAttribute("aria-busy")).not.toBe("true"));
+  expect.soft(f.saved.get("fans")).toEqual(before);
+  expect.soft(f.typed.work()!.revision).toBe(revision);
+  expect.soft(friction.closest("[data-sheet-cell]")?.textContent).toContain("at least 0");
+  await user.click(screen.getByRole("textbox", { name: "Design friction" }));
+  await user.keyboard("{Control>}a{/Control}0.123456789{Enter}");
+  await waitFor(() => expect(f.typed.owner()?.doc.designFriction?.edit).toBeDefined());
+  expect.soft(f.typed.owner()?.doc.designFriction?.edit?.value).toBe(0.123456789);
+  expect.soft((f.saved.get("fans") as { doc: { designFriction?: { edit?: { value: number } } } }).doc.designFriction?.edit?.value).toBe(0.123456789);
+  const occupants = within(screen.getByRole("region", { name: "Takeoff occupants" }));
+  await user.click(occupants.getByRole("textbox"));
+  await user.keyboard("{Control>}a{/Control}2.7{Enter}");
+  expect.soft(occupants.getByLabelText("Committed occupants").textContent).toBe("3");
+  expect.soft(occupants.queryByText(/whole number/)).not.toBeNull();
+  await user.click(occupants.getByRole("textbox"));
+  await user.keyboard("{Control>}a{/Control}7{Enter}");
+  expect.soft(occupants.getByLabelText("Committed occupants").textContent).toBe("7");
+  const bounded = within(screen.getByRole("region", { name: "Bounded number" }));
+  await user.click(bounded.getByRole("textbox"));
+  await user.keyboard("{Control>}a{/Control}11{Enter}");
+  expect.soft(bounded.getByLabelText("Committed bounded value").textContent).toBe("1");
+  expect.soft(bounded.queryByText(/at most 10/)).not.toBeNull();
+  await user.click(bounded.getByRole("textbox"));
+  await user.keyboard("{Control>}a{/Control}0.987654321{Enter}");
+  expect.soft(bounded.getByLabelText("Committed bounded value").textContent).toBe("0.987654321");
+});
+
 test("JZ DuctLoss numeric drafts refuse negatives without changing the URL and recover by keyboard", async () => {
   const { module: ductLoss } = await import("../duct-loss/route");
   const { InputsBody } = await import("../duct-loss/route.tsx");
