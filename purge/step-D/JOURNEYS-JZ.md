@@ -22,7 +22,7 @@ vp test run tests/host-read-graph.test.ts --maxWorkers=1
 
 FALSIFIED[deterministic HTTP surface, base fb2ee710 rejects ordinary released-key churn with Read key capacity reached, 2026-11-07]. Base reproducer: one failed journey, six skipped; execution 608 ms. Only the witness was added to base before this run.
 
-PROVEN[deterministic HTTP surface, host-read-graph.test.ts all seven tests pass on the committed branch source, fix/read-capacity-lifetime, 2026-11-07]. Final run: seven passed, test execution 11.77 s, total 19.22 s. The host config's existing 15 s per-test timeout was unchanged.
+The first landing, `58a8e387`, passed seven tests (11.77 s execution, 19.22 s total), but partner review found that its global eviction floor could supersede an unrelated opening pane. That landing is superseded by the exact admission fix below.
 
 Focused guards, from `ts/tests/repo-guards`:
 
@@ -32,6 +32,27 @@ vp test run --maxWorkers=1 src/host-door.guard.test.ts src/package-direction.gua
 
 Result: four files, 12 tests passed. Logs live under `.artifacts/runs/read-capacity-20261107/` in the implementation checkout; the takeover report contains the exact head SHA and copied logs.
 
-The release map holds at most 128 IDs. Admission captures its release sequence before awaiting read-set open. Eviction advances a scalar floor, so an admission older than a discarded release fence fails closed. Evaluations already running require the original slot object and cannot publish into a replacement slot. An unrelated admission delayed across enough releases can also be superseded conservatively. New requests reusing an ID after its tombstone was evicted are new lifetimes; permanent replay rejection for arbitrary retired IDs is not provided by this bounded history. The journey proves a running flight across eviction, not a read-set-open stall across eviction.
+## Exact admission witness
 
-UNPROVEN[native or installed behavior, arbitrary retired-ID replay protection, byte-limit stress and a controlled read-set-open stall; outside this journey's evidence].
+Witness: `ts/apps/host/tests/host-read-graph.test.ts`, test `JZ input-open admissions survive unrelated release churn`.
+
+The journey still drives only the public read/release HTTP handler. It gates the real input service's `HostInputReadSets.open` with `vi.spyOn`, then delegates to the original implementation. It does not call Publications or admission methods.
+
+1. Hold two subscriptions before their read sets open. Release only one.
+2. Release 160 other IDs. Let both opens finish. The live subscription must publish `current`; the released subscription must return `superseded`.
+3. Hold a recipe flight, release its last slot, then start another subscription for the same key. Let both independent input sets finish. The first is superseded and the late joiner is current at version 2. This proves the running key owner survived release; equal-input flight dedupe is not separately forced by this live-input journey.
+
+```powershell
+vp test run tests/host-read-graph.test.ts -t 'JZ input-open' --maxWorkers=1
+vp test run tests/host-read-graph.test.ts --maxWorkers=1
+```
+
+FALSIFIED[deterministic HTTP surface, 58a8e387 returns superseded for the live opening subscription after unrelated release churn, 2026-11-07]. One failed, seven skipped; 241 ms test execution, 7.66 s total. Only the witness was added before this run.
+
+The corrected source passes all eight tests: 10.64 s execution, 17.64 s total. The host config's existing 15 s per-test timeout remains unchanged. Exact head and stamps are in the takeover report. Logs: `exact-red.log`, `exact-green.log` under the implementation checkout's `.artifacts/runs/read-capacity-20261107/`.
+
+The release map keeps every ID with an outstanding admission plus at most 128 recent unpinned IDs. Admissions are counted per ID before awaiting read-set open. Closing a ticket decrements only its own ID and prunes unpinned tombstones. Publication, factory failure and request finish all close tickets idempotently. There is no global eviction floor. Running evaluations also require their original slot object. Key owners remain while any flight is running and are pruned when flights settle.
+
+New requests reusing an ID after its unpinned tombstone was evicted remain new lifetimes. Permanent replay rejection for arbitrary retired IDs is outside the accepted bounded-history contract.
+
+UNPROVEN[native or installed behavior, arbitrary retired-ID replay protection and process heap reclamation under byte-limit stress; outside these journeys' evidence].

@@ -407,6 +407,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     const admission = graphRequest ? publications.admission(
       canonicalJson([identity.caller, graphRequest.subscription]), graphRequest.generation,
     ) : undefined;
+    try {
     const recipe: ConsumerRecipe = {
       key: declared.id,
       input: json(graph ? { body: { read: graph.name, args: graph.args } } : input),
@@ -1018,10 +1019,15 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           const at = writer?.capture.begin();
           if (at != null) await invoke(writer!.capture.stop(at, "io", { site: "builtin", op: consumption?.recipe.key ?? "read.finish" }));
         } finally {
+          admission?.close();
           if (consumption) await invoke(consumption.close);
         }
       },
     };
+    } catch (error) {
+      admission?.close();
+      throw error;
+    }
   };
   const retainedCall = (
     raw: NativeReadInput,

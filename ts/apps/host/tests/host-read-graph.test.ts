@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { takeoffSnapshotInput } from "../src/reads/takeoffs.ts";
 import { takeoffCaptureSchema } from "@pe/agent-contracts";
@@ -112,6 +112,75 @@ test("JZ read subscriptions reclaim capacity through release and reject released
     await pending;
     unregister();
     await f.close();
+  }
+});
+
+test("JZ input-open admissions survive unrelated release churn", async () => {
+  const liveOpen = gate(), releasedOpen = gate(), flight = gate();
+  const lateFlight = Promise.withResolvers<void>();
+  let starts = 0;
+  const definition = read("test.exact-admission", {
+    input: z.number(), output: z.number(),
+    async run(_ctx, value) {
+      if (value === -1) {
+        flight.entered.resolve();
+        if (++starts === 2) lateFlight.resolve();
+        await flight.release.promise;
+      }
+      return value;
+    },
+  });
+  const unregister = registeredReads.register({ exact: definition });
+  const f = await fixture();
+  const send = async (subscription: string, args = 0, release = false) => {
+    const response = await f.probe({ read: definition.name, subscription, generation: 0, args, release });
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    return body;
+  };
+  const pending: Promise<any>[] = [];
+  let restore = () => {};
+  try {
+    await send("initialize");
+    const sets = Context.get(f.reads.services, HostInputReadSets);
+    const open = sets.open;
+    const spy = vi.spyOn(sets, "open");
+    restore = () => spy.mockRestore();
+    const holdOpen = (hold: ReturnType<typeof gate>) => spy.mockImplementationOnce((...args) =>
+      Effect.gen(function* () {
+        hold.entered.resolve();
+        yield* Effect.promise(() => hold.release.promise);
+        return yield* open(...args);
+      }));
+    holdOpen(liveOpen);
+    pending.push(send("live-opening"));
+    await liveOpen.entered.promise;
+    holdOpen(releasedOpen);
+    pending.push(send("released-opening"));
+    await releasedOpen.entered.promise;
+    await send("released-opening", 0, true);
+    // Neither request has acquired a publication slot yet.
+    for (let i = 0; i < 160; i++) await send(`other-release-${i}`, 0, true);
+    liveOpen.release.resolve();
+    releasedOpen.release.resolve();
+    const [live, released] = await Promise.all(pending);
+    expect(live.state, JSON.stringify(live)).toBe("current");
+    expect(released.state).toBe("superseded");
+    // Releasing the last slot must not discard its still-running key owner.
+    pending.push(send("flight-left", -1));
+    await flight.entered.promise;
+    await send("flight-left", -1, true);
+    pending.push(send("flight-right", -1));
+    // Both input sets are independent, but their key's version lineage is shared.
+    await lateFlight.promise;
+    flight.release.resolve();
+    expect((await pending[2]).state).toBe("superseded");
+    expect((await pending[3]).state).toBe("current");
+    expect((await pending[3]).version).toBe(2);
+  } finally {
+    liveOpen.release.resolve(); releasedOpen.release.resolve(); flight.release.resolve();
+    await Promise.allSettled(pending);
+    restore(); unregister(); await f.close();
   }
 });
 
