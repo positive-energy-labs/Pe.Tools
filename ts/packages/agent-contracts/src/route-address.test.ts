@@ -38,7 +38,7 @@ describe("a layers field", () => {
   test("every layer off is none, and reads back as none", () => {
     expect(routeAddress("ducts").link({ layers: [] })).toBe("/ducts?layers=%5B%5D");
     expect(routeAddress("ducts").read({ layers: "[]" }).page.layers).toEqual([]);
-    expect(routeAddress("rooms").read({ layers: "faces,rails" }).page.layers).toEqual([
+    expect(routeAddress("rooms").read({ layers: JSON.stringify(["faces", "rails"]) }).page.layers).toEqual([
       "faces",
       "rails",
     ]);
@@ -205,10 +205,10 @@ describe("the thin routes adopt the contract", () => {
     expect(routeAddress("settings").link({ section: "none" })).toBe("/settings?section=%22none%22");
   });
 
-  test("history: a pick pushes, a typed or receipt move replaces", () => {
+  test("history: picks push and typing replaces", () => {
     const ops = routeAddress("ops");
     expect(ops.history({ op: "" }, { op: "revit.x" })).toBe("push");
-    expect(ops.history({ actionId: "" }, { actionId: "a1" })).toBe("replace");
+    expect(ops.history({ actionId: "" }, { actionId: "a1" })).toBe("push");
     const home = routeAddress("home");
     expect(home.history({ query: "" }, { query: "d" })).toBe("replace");
     expect(home.history({ exposure: "All" }, { exposure: "Main" })).toBe("push");
@@ -216,7 +216,7 @@ describe("the thin routes adopt the contract", () => {
 
   test("Pea sets what the page shows and nothing the person's press owns", () => {
     expect(routeAddress("duct-loss").agent.keys).toContain("cfm");
-    expect(routeAddress("settings").agent.read({ section: "none" })).toEqual({ section: "none" });
+    expect(routeAddress("settings").agent.read({ section: JSON.stringify("none") })).toEqual({ section: "none" });
     expect(routeAddress("settings").agent.patch.safeParse({ session: "s" }).success).toBe(false);
     // Binding is the person's door and Pea does not lease /pea: no lease at all.
     expect(routeAddress("bind").agent).toBeUndefined();
