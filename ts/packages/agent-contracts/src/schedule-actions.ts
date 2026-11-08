@@ -71,6 +71,7 @@ export function unstale(
 }
 export const scheduleActions = {
   "schedule.grid.read": {
+    native: ["revit.detail.schedules"],
     says: "Read the selected schedule and bind its immutable capture to that schedule's reviewed Work without dropping authored cells.",
     needs: "project-document",
     effect: "command",
@@ -95,7 +96,7 @@ export const scheduleActions = {
   },
 
   "schedule.grid.push": {
-    native: ["schedule.cells.apply"],
+    native: ["schedule.cells.apply", "revit.detail.schedules"],
     says: "Push reviewed staged schedule cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback. Files a run receipt (values before and after) in the bound pod, or in the action receipt when no pod is bound.",
     needs: "project-document",
     effect: "command",

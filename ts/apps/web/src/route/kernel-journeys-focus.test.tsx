@@ -13,7 +13,7 @@ import * as mounts from "../shell/typed-mount";
 import { familiesRouteState, address, workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
 import { ReviewSurface } from "../shell/review-surface";
 import { RouteVisibility } from "./activity";
-import { setup as scheduleHost, cellsApplied } from "../../../host/tests/schedule-test-fixture";
+import { setup as scheduleHost } from "../../../host/tests/schedule-test-fixture";
 import { module as schedules } from "../schedules/route";
 import { namesOf } from "./typed-route";
 import { createWorkFeedClient } from "../shell/work-feed-client";
@@ -22,33 +22,14 @@ import { KeyScopeHost } from "@pe/kit/keys";
 import { module as families } from "../families/route";
 import { familyDraftRouteState } from "@pe/agent-contracts";
 import { module as family } from "../family/route";
-import { detailResponse } from "../../../host/tests/schedule-fixture";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { contextFetch } from "@pe/runtime/context";
 import { routeInput } from "./host";
 import userEvent from "@testing-library/user-event";
 
-test.each(["insertText", "pointer keyboard", "navigation keyboard", "pointer shifted text", "navigation shifted text", "navigation composition", "navigation paste", "range shifted text"] as const)("JZ Schedules Description Enter stages r3, reviews BEFORE to AFTER, and shows a refused edit at its cell (%s)", async (entryMode) => {
+test.each(["insertText", "pointer keyboard", "navigation keyboard", "pointer shifted text", "navigation shifted text", "navigation composition", "navigation paste", "range shifted text"] as const)("JZ Schedules recorded Type Comments Enter stages r3, reviews BEFORE to AFTER, and shows a refused edit at its cell (%s)", async (entryMode) => {
   const user = userEvent.setup();
   const host = await scheduleHost({ cold: true });
-  if (entryMode.startsWith("range")) host.setResponse(cellsApplied([[1, 2, true], [2, 2, true]]));
-  const detail = detailResponse();
-  const entry = detail.entries[0]!;
-  entry.columns[1]!.headerText = "Description";
-  entry.rows[0]!.values = ["SH1", "Duct heater"];
-  Object.assign(entry.rows[0]!.bindings[0]!, {
-    parameterName: "PE_G___Description", storageType: "String", rawValue: "Duct heater",
-    displayValue: "Duct heater", targetElementIds: [7],
-    targets: [{ ...entry.rows[0]!.bindings[0]!.targets[0]!, storageType: "String", rawValue: "Duct heater" }],
-  });
-  const second = structuredClone(entry.rows[0]!);
-  second.rowNumber = 2;
-  second.values[0] = "SH2";
-  second.subjectIds = [8];
-  second.bindings[0]!.targetElementIds = [8];
-  second.bindings[0]!.targets[0]!.elementId = 8;
-  entry.rows.push(second);
-  host.setDetail(detail);
   const client = createPeClient(host.base, contextFetch);
   const pending = new Set<Promise<void>>();
   const listeners = new Set<(state: any) => void>();
@@ -104,16 +85,16 @@ test.each(["insertText", "pointer keyboard", "navigation keyboard", "pointer shi
   const view = render(<RouterProvider router={router} />);
   try {
     fireEvent.click(await screen.findByRole("button", { name: "Choose schedule" }));
-    fireEvent.click(await screen.findByRole("option", { name: "Panel" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Reviewed Apply Proof" }));
     fireEvent.click(await screen.findByRole("button", { name: "Start" }));
     await waitFor(() => expect(mount.work()?.handle.revision).toBe(1));
     await waitFor(() => expect(mount.value().current).toBe(true));
     fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" })[1]!);
     await waitFor(() => expect(mount.work()?.handle.revision).toBe(2));
     await waitFor(() => expect(mount.problem()).toBeNull());
-    await screen.findByText("SH1");
-    await screen.findByText("SH2");
-    const input = (await screen.findAllByDisplayValue("Duct heater"))[0] as HTMLInputElement;
+    await screen.findByDisplayValue("PE-A");
+    await screen.findByDisplayValue("PE-B");
+    const input = (await screen.findAllByDisplayValue("TC-1"))[0] as HTMLInputElement;
     const cell = input.closest("td")!;
     const text = "Duct heater - gate review";
     if (entryMode === "insertText") {
@@ -129,7 +110,7 @@ test.each(["insertText", "pointer keyboard", "navigation keyboard", "pointer shi
       fireEvent.keyDown(active, { key: "Enter", code: "Enter" });
     } else {
       if (entryMode.startsWith("range")) {
-        const last = screen.getAllByDisplayValue("Duct heater")[1]!.closest("td")!;
+        const last = screen.getAllByDisplayValue("TC-1")[1]!.closest("td")!;
         await user.pointer([
           { keys: "[MouseLeft>]", target: cell },
           { target: last },
@@ -142,7 +123,7 @@ test.each(["insertText", "pointer keyboard", "navigation keyboard", "pointer shi
         await user.keyboard("{Control>}a{/Control}");
       } else {
         // Enter the preceding cell as a keyboard user, then navigate; no mouse gesture.
-        const previous = cell.parentElement!.querySelector<HTMLElement>('[data-column-key="c1"]')!;
+        const previous = cell.parentElement!.querySelector<HTMLElement>('[data-column-key="c0"]')!;
         act(() => previous.focus());
         await user.keyboard("{ArrowRight}");
         expect(document.activeElement).toBe(cell);
@@ -187,18 +168,18 @@ test.each(["insertText", "pointer keyboard", "navigation keyboard", "pointer shi
         await user.keyboard("{Enter}");
       }
     }
-    await waitFor(async () => expect(await host.view()).toMatchObject({ revision: 3, doc: { cells: { "1::2": { edit: { value: "Duct heater - gate review" } } } } }));
-    if (entryMode.startsWith("range")) expect(await host.view()).toMatchObject({ revision: 3, doc: { cells: { "2::2": { edit: { value: text } } } } });
+    await waitFor(async () => expect(await host.view()).toMatchObject({ revision: 3, doc: { cells: { "2::1": { edit: { value: "Duct heater - gate review" } } } } }));
+    if (entryMode.startsWith("range")) expect(await host.view()).toMatchObject({ revision: 3, doc: { cells: { "3::1": { edit: { value: text } } } } });
     // This recorded HTTP read adapter has no invalidation socket; Refresh re-reads host Value.
     act(() => mount.refresh());
     await waitFor(() => expect(mount.problem()).toBeNull());
     await screen.findAllByDisplayValue("Duct heater - gate review");
     fireEvent.click(screen.getByRole("button", { name: /plan Apply cells/i }));
-    await screen.findByText(/SH1.*Description: Duct heater → Duct heater - gate review/);
+    await screen.findByText(/PE-A.*Type Comments: TC-1 → Duct heater - gate review/);
     act(() => mount.cancel("push"));
     // Another writer advances Work behind the drawn cell. The host must refuse the
     // stale revision and its real reason must remain beside the user's cell.
-    await host.patch([{ path: ["cells", "1::2"], value: { edit: { value: "Other writer" } } }]);
+    await host.patch([{ path: ["cells", "2::1"], value: { edit: { value: "Other writer" } } }]);
     const current = screen.getAllByDisplayValue("Duct heater - gate review")[0]!;
     if (entryMode === "insertText") {
       fireEvent.mouseDown(current);
@@ -212,7 +193,7 @@ test.each(["insertText", "pointer keyboard", "navigation keyboard", "pointer shi
       await user.keyboard("{Control>}a{/Control}Must visibly refuse{Enter}");
     }
     await waitFor(() => expect(within(current.closest("td")!).getByText(/document moved|revision|changed/i)).toBeTruthy());
-    expect(await host.view()).toMatchObject({ revision: 4, doc: { cells: { "1::2": { edit: { value: "Other writer" } } } } });
+    expect(await host.view()).toMatchObject({ revision: 4, doc: { cells: { "2::1": { edit: { value: "Other writer" } } } } });
   } finally { view.unmount(); mount.dispose(); await Promise.all(pending); }
 }, 30_000);
 
@@ -860,15 +841,7 @@ test.each([false, true])(
 );
 test("JZ B03 people choose named subjects: pending Families scope, cold Schedules picker and honest Read", async () => {
   await pendingFamiliesChoice();
-  const host = await scheduleHost();
-  host.addSchedule(43, "ElectricDuctHeater");
-  // Replay the native boundary for the unstarted member, not the fixture's seeded Panel Work.
-  const { detailResponse } = await import("../../../host/tests/schedule-fixture");
-  const heater = detailResponse();
-  Object.assign(heater.entries[0]!, { scheduleId: 43, scheduleUniqueId: "uid-43", scheduleName: "ElectricDuctHeater" });
-  heater.entries[0]!.rows[0]!.values[0] = "SH1";
-  heater.entries[0]!.rows.push({ ...structuredClone(heater.entries[0]!.rows[0]!), rowNumber: 2, values: ["SH2", "100 VA"] });
-  host.setDetail(heater);
+  const host = await scheduleHost({ cold: true });
   const pending = new Set<Promise<void>>();
   const source: UseSource = {
     kind: "use",
@@ -938,10 +911,10 @@ test("JZ B03 people choose named subjects: pending Families scope, cold Schedule
     expect.soft(chooser, "B03: cold open exposes the declared named-subject picker").not.toBeNull();
     if (!chooser) return; // Both base defects above remain assertion failures, not a missing-control exception.
     fireEvent.click(chooser);
-    expect(await screen.findByRole("option", { name: "ElectricDuctHeater" }), "B03: choices come from the host catalogue").toBeTruthy();
-    fireEvent.click(screen.getByRole("option", { name: "ElectricDuctHeater" }));
+    expect(await screen.findByRole("option", { name: "Reviewed Apply Proof" }), "B03: choices come from the host catalogue").toBeTruthy();
+    fireEvent.click(screen.getByRole("option", { name: "Reviewed Apply Proof" }));
     const chosen = namesOf(mount.page.read().workspaceId);
-    expect(chosen).not.toEqual([host.scope.work]);
+    expect(chosen).toEqual([host.scope.work]);
     expect(search.has("workspaceId"), "B03: picker creates the Page address without a URL seed").toBe(true);
     await screen.findByRole("button", { name: "Start" });
     await waitFor(() => expect(mount.value().current).toBe(true));
@@ -965,13 +938,13 @@ test("JZ B03 people choose named subjects: pending Families scope, cold Schedule
       expect(mount.value().value?.reading, "B03: publication contains the completed Read, not the old capture").toEqual(mount.result("read"));
     });
     expect(mount.action("read").failure).toBeNull();
-    expect(mount.value().value?.reading?.snapshot.scheduleId).toBe(43);
-    expect(mount.value().value?.reading?.snapshot.scheduleName).toBe("ElectricDuctHeater");
+    expect(mount.value().value?.reading?.snapshot.scheduleId).toBe(host.request.scheduleId);
+    expect(mount.value().value?.reading?.snapshot.scheduleName).toBe("Reviewed Apply Proof");
     expect(host.sent.filter(row => row.key === "revit.detail.schedules").at(-1)?.input)
-      .toMatchObject({ query: { kind: "ScheduleReferences", scheduleIds: [43] } });
+      .toMatchObject({ query: { kind: "ScheduleReferences", scheduleIds: [host.request.scheduleId] } });
     // TypedChrome mounts the shipped pane: members must reach the grid.
-    await screen.findByText("SH1");
-    await screen.findByText("SH2");
+    await screen.findByText("PE-A");
+    await screen.findByText("PE-B");
     expect(screen.getAllByRole("button", { name: "Choose schedule" }), "B03: one declared subject control").toHaveLength(1);
     expect(view.container.textContent, "B03: people see names, not internal Work identities").not.toContain(host.scope.work);
   } finally {

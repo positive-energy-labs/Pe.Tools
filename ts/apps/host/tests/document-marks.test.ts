@@ -173,12 +173,12 @@ test.each(["changed", "disconnected"])(
   "a push after %s is refused undispatched over HTTP",
   async (event) => {
     const f = await setup();
-    if (event === "changed") f.revitChanged(f.b);
-    else f.bridgeDetached(f.b.session);
+    if (event === "changed") await f.revitChanged();
+    else await f.bridgeDetached();
     await settle();
-    expect(await f.submit()).toMatchObject({ error: STALE_READ });
+    expect(await f.submit()).toMatchObject({ error: event === "changed" ? STALE_READ : expect.stringContaining("No attached Revit session") });
     expect(f.sent.filter((call) => call.key === "schedule.cells.apply")).toEqual([]);
-    expect((await f.view()).doc.cells["1::2"].edit.value).toBe("150 VA");
+    expect((await f.view()).doc.cells["2::1"].edit.value).toBe("TC-SHARED");
   },
 );
 
