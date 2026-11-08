@@ -23,6 +23,7 @@ Write boundary rulings: every Work command derives its input from Work (`workInt
 Engine: `ducts-domain` runs on the host as a composition entry; a browser worker runs the same entry only where marked local-ok. C# pricing is deleted. Pea's catalog is the generated catalog plus a live availability overlay and one named provider for packages, skills, pages, route docs and route views. `electrical-circuits` and `ducts.snapshot` split into roster and walk entries.
 
 Route splits (ADR 0027 rule 1): `/ducts` and `/fans`; `/open` and session administration; takeoff into view adoption, zone audit and RHVAC file sync; Pods member authoring and Pod administration; schedules inspection and definition authoring. `/space` takes a region as its subject.
+takeoff split: agent application, not kaitpw's design; provisional until route rework; the one-job-per-route rule itself stands.
 
 ## Consequences
 
