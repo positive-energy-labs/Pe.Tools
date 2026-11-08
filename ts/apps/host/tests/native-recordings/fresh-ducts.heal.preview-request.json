@@ -1,0 +1,21 @@
+{
+  "groups": [
+    {
+      "group": "g8718801",
+      "items": [
+        {
+          "key": "cap:12956155:1",
+          "kind": "cap",
+          "end": "12956155:1",
+          "other": null
+        },
+        {
+          "key": "cap:14022878:1",
+          "kind": "cap",
+          "end": "14022878:1",
+          "other": null
+        }
+      ]
+    }
+  ]
+}

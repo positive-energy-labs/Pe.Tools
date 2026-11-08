@@ -664,5 +664,39 @@
     "modelCopySha256": "7aa8f68267e7ddcc21ab3734d89d539d128d7592a2572e0afdd9eef6e8fdd98a",
     "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-07.json",
     "canonicalResponseSha256": "8291c4fed1030863711bcf488e91ca7a8c95885de01effea6efa4ab66c0bb042"
+  },
+  "fresh-ducts.heal.preview": {
+    "operation": "ducts.heal.preview",
+    "source": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/tmp/leaf-native-08/ducts.heal.preview.json",
+    "sourceSha256": "6149ec07bd1258d5a61bd57ab85b68cb8c647f27d1f19dd04d8c53d59715c9d0",
+    "responseSha256": "c5adcbb9003e461f7932985603dd7e4559f48d4247dce352fa5422767d0a1a09",
+    "pointer": "response",
+    "requestFile": "fresh-ducts.heal.preview-request.json",
+    "commit": "cffa742f59ae9f81ca064d88943df1d2387f0a9d",
+    "recorderSha256": "92462d96f41dd168d190deb1426e59b1d3a86de9118f8c6f59fda64f3ead6fe4",
+    "lane": "fresh",
+    "date": "2026-11-08T05:25:33.1607225Z",
+    "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-08\\heal-fixture-model.rvt",
+    "modelCopySha256": "4b33e6a44b334b43fc9ff5fbca120542c24983cf8e7b69ec01aa7f94b51ba595",
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-08.json",
+    "claim": "Real native missing-element refusal on owned model copy; wiring only, no successful geometry repair claim",
+    "canonicalResponseSha256": "1d55a47d012d9895a47858fe8c25cf0f6b396002bd463347bcabc51a395757e4"
+  },
+  "fresh-ducts.heal": {
+    "operation": "ducts.heal",
+    "source": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/tmp/leaf-native-08/ducts.heal.json",
+    "sourceSha256": "0f76f9fb618875df22a452396c2a90641b16a8426392c6a654ea0a9e2ce03401",
+    "responseSha256": "ab0f289cd5dc1c782ce7b3a3e1f45faba5725eed0a18442ebe55a119c2a46dbe",
+    "pointer": "response",
+    "requestFile": "fresh-ducts.heal-request.json",
+    "commit": "cffa742f59ae9f81ca064d88943df1d2387f0a9d",
+    "recorderSha256": "92462d96f41dd168d190deb1426e59b1d3a86de9118f8c6f59fda64f3ead6fe4",
+    "lane": "fresh",
+    "date": "2026-11-08T05:25:33.1911839Z",
+    "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-08\\heal-fixture-model.rvt",
+    "modelCopySha256": "4b33e6a44b334b43fc9ff5fbca120542c24983cf8e7b69ec01aa7f94b51ba595",
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-08.json",
+    "claim": "Real native missing-element refusal on owned model copy; wiring only, no successful geometry repair claim",
+    "canonicalResponseSha256": "950f4dbccff2ae7765fe1d4d0c86fcf1d15a162e7c9de9945ad06fde677e8433"
   }
 }

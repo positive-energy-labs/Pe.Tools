@@ -9,6 +9,7 @@ import { nativeRecordings } from "./native-recordings.ts";
 import { testConsents } from "./effect-test.ts";
 import { bindControl } from "../src/control.ts";
 import type { ConsentEvent } from "../src/run-consent.ts";
+import { nativeFixture } from "./fans-native.fixture.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 
 async function fixture() {
@@ -141,5 +142,27 @@ test("R3 a new host observation epoch cannot redeem a persisted plan", async () 
     await f.restart();
     expect(await f.apply("apply", human)).toMatchObject({ state: "failed", notDispatched: true });
     expect(f.native.calls.some(c => c.key === "revit.apply.parameter-links")).toBe(false);
+  } finally { await f.close(); }
+});
+
+test("R5 a real native rehearsal receipt cannot substitute for the declared Plan", async () => {
+  const f = await nativeFixture("test");
+  try {
+    f.select("fresh-ducts.heal.preview", "fresh-ducts.heal");
+    expect(await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [{ path: ["flows", "8718801", "edit"], value: { value: { cfm: 250 } } }], 0)).toMatchObject({ ok: true });
+    const staged = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g8718801"] } } }], 0);
+    if (!staged.ok) throw Error(JSON.stringify(staged));
+    const input = { work: { key: f.key, revision: staged.revision } };
+    for (const [id, key] of [["rehearsal", "ducts.rehearse-heal"], ["apply", "ducts.apply-heal"]]) {
+      const response = await f.post("/actions", { id, key, target: f.target, input });
+      expect(response.status, await response.clone().text()).toBeLessThan(400);
+      const receipt = await f.journal.wait(id);
+      if (id === "rehearsal") {
+        expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded", result: { value: { previewOnly: true } } });
+        expect(receipt.result).not.toHaveProperty("seal");
+      } else expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "failed", notDispatched: true, refusal: { code: "preview.stale" } });
+    }
+    expect(f.dispatched.filter(call => call.key === "ducts.heal.preview")).toHaveLength(1);
+    expect(f.dispatched.filter(call => call.key === "ducts.heal")).toEqual([]);
   } finally { await f.close(); }
 });
