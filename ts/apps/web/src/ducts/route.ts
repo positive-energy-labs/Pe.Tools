@@ -102,6 +102,7 @@ export const module = route({
   reads: { roster, network },
   panes: {
     "e-systems": {
+      subjectList: true,
       title: "Systems",
       purpose: "Choose a system to inspect",
       bindings,

@@ -6,8 +6,9 @@ import { createPortal } from "react-dom";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
-import { route } from "./typed-route";
+import { route, type TypedRoute } from "./typed-route";
 import { module as fans } from "../fans/route";
+import { module as ducts } from "../ducts/route";
 import { TypedChrome, TypedShell } from "../shell/typed-shell";
 import * as mounts from "../shell/typed-mount";
 import { familiesRouteState, address, workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
@@ -575,7 +576,7 @@ test.each(["review identity", "insertText", "pointer keyboard", "navigation keyb
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-test("JZ Ducts chooser query keys preserve open systems until an explicit choice", async () => {
+test("JZ header chooser query keys preserve open systems until an explicit choice", async () => {
   const [{ default: userEvent }, { fixture, ref, path }, { registeredReads }, reads,
     { module: ducts }, { TypedSubject }, { observeResources }, { valueReadResponse }, { localId }] = await Promise.all([
     import("@testing-library/user-event"), import("../../../host/tests/host-read-graph.test-support"),
@@ -612,7 +613,12 @@ test("JZ Ducts chooser query keys preserve open systems until an explicit choice
     write: (key, write) => host.workspace.write(key, key.route, "human", write),
     submit: () => { throw Error("Chooser journey cannot write native data"); },
   });
-  const mount = mounts.mountTypedRoute(ducts, {
+  // C042: the shared header chooser belongs to a route with no subject-list pane.
+  // Real Ducts owns its roster choice there; this journey retains the chooser's query safety.
+  const chooserOnly = route({ ...ducts.spec, subject: { ...ducts.spec.subject!, pane: "value" },
+    panes: { value: { title: "System value", purpose: "Inspect chosen systems", draw: () => null } },
+    layout: { kind: "pane", id: "value" } });
+  const mount = mounts.mountTypedRoute(chooserOnly, {
     target: { kind: "document", ref }, fixture: null, work: { address: path, open: ref },
     custody: { current: () => true }, memory: () => ({}),
     address: { read: () => new URLSearchParams(search), write(next) { search = next; listeners.forEach(f => f()); },
@@ -791,6 +797,10 @@ test("JZ B04 read a long review, dismiss with Escape and return to its opener", 
   fireEvent.click(opener);
   const commit = await screen.findByRole("button", { name: "Commit Update airflows" });
   expect(view.container.contains(commit), "B04: review is portalled").toBe(false);
+  const footer = commit.closest(".shrink-0");
+  expect(footer, "Commit stays outside the scrollable change list").not.toBeNull();
+  expect(footer!.previousElementSibling?.className).toContain("overflow-y-auto");
+  expect(commit.textContent).toContain("Commit Update airflows");
   expect(screen.getByText("Change 199"), "B04: final change is present").toBeTruthy();
   commit.focus();
   expect(document.activeElement).toBe(commit);
@@ -838,99 +848,12 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
 });
 
 
-// Chadds continuation at 2026-11-07T15:30:23Z: one human fan-flow edit, a refused
-// missing parameter and ancillary loss/store writes. This is a reconstructed Plan,
-// not a recovered native receipt. Keep this surface journey independent of run files.
-import type { DuctsApply } from "@pe/host-contracts/generated";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
-import { lossPlanRefusal } from "../../../host/src/ducts-actions";
-import { snapshot as ductsSeed } from "../ducts/test-fixture";
-import { presentLosses } from "../ducts/reviews";
 import { inputRows } from "../ducts/sheet/input-rows";
 import { SheetCell } from "../ducts/sheet/sheet-cell";
-import { writeHeld } from "../shell/admitted-chrome";
-import { PreviewAction, WriteAction } from "@pe/kit/lang/write-action";
+import { PreviewAction } from "@pe/kit/lang/write-action";
 
-// Rule: refused human intent cannot authorize ancillary writes; review must name
-// each element and its native stored setting, and disclose computed write-back.
-test("JZ Fans Plan integrity: inspect refused flow and computed losses without authorizing Apply", () => {
-  const fanId = 8775469;
-  const slots = {
-    fanStatic: "PE_M_Fan_ExternalStaticPressure", fanFlow: "PE_M_Fan_AirFlowDesign",
-    componentDrop: "Pressure Drop", terminalDrop: "PE_M_Grd_ExternalStaticPressure",
-    fittingCoefficient: "Pe_C", terminalFlow: "PE_M_Grd_AirFlow",
-  };
-  const snapshot: DuctSnapshot = {
-    ...ductsSeed, slots,
-    levels: [{ id: 1, name: "Level 1", elevationFt: 0 }, { id: 2, name: "Level 2", elevationFt: 10 }],
-    nodes: [
-      { id: fanId, kind: "equipment", category: "Mechanical Equipment", label: "MUAS-1",
-        type: "MUAS 10", family: "Fantech", flowParameter: null, connectors: [], facts: [] },
-      { id: 2, kind: "accessory", type: '10"', category: "Duct Accessories", partType: "Damper",
-        levelId: 1, connectors: [], facts: [],
-        loss: { method: "ashrae-table", coefficient: 0.19, table: "CD9-1", fields: {} } },
-      { id: 3, kind: "accessory", type: '10"', category: "Duct Accessories", partType: "Damper",
-        levelId: 2, connectors: [], facts: [] },
-    ], segments: [],
-  };
-  const writes: DuctsApply.Res.Response["writes"] = [
-    { id: 2, kind: "component", outcome: "planned", before: "unset", after: "0.0398 in-wg", parameter: "Specific Loss" },
-    { id: fanId, kind: "equipment-flow", outcome: "refused", before: null,
-      reason: "neither the instance nor its type has 'PE_M_Fan_AirFlowDesign'" },
-    ...Object.entries(slots).map(([key, after]) => ({ kind: "slot", key, before: null, after, outcome: "planned" })),
-    { kind: "store", before: "absent", after: "revision 1", outcome: "planned" },
-    { kind: "store", key: "instances", before: null, after: "updated", outcome: "planned" },
-  ];
-  const refusal = lossPlanRefusal(writes);
-  const preview = {
-    previewOnly: true,
-    seal: { caller: { kind: "human", via: "local" }, requestHash: "fans-plan-integrity",
-      work: {}, documentMark: { session: "recorded-chadds", openId: "chadds", observedSince: 1, changedAt: 1 },
-      incarnation: null, dependencies: "recorded-chadds" },
-    ...(refusal ? { planRefusal: `MUAS-1: ${refusal}; add the parameter to the family or map flow to an existing parameter` } : {}),
-    value: { writes, counts: { planned: 9, refused: 1, unchanged: 0, written: 0 } },
-    derivedRequest: { slots, equipmentFlows: [{ id: fanId, cfm: 1000 }],
-      components: [{ id: 2, inWg: 0.0398, source: "damper CD9-1 C=0.19" }] },
-  };
-  const review = presentLosses(preview, { readings: { sheetSnapshot: { value: snapshot } } });
-  const held = writeHeld("Write to Revit", { ...review, preview, stale: false });
-  const apply = vi.fn(async () => null);
-  render(<WriteAction label="Plan fan writes" says="Plan current Work" held={held.held}
-    plan={async () => null} apply={{ label: "Write to Revit", says: "Apply the Plan",
-      refusal: held.sealed ? null : "MUAS-1 has no writable PE_M_Fan_AirFlowDesign parameter", run: apply, done: "Written" }} />);
-  fireEvent.click(screen.getByRole("button", { name: /planned/ }));
-  const commit = screen.getByRole("button", { name: "Write to Revit" });
-  fireEvent.click(commit);
-  expect.soft(apply, "atomic intent: the admitted chrome cannot apply the refused Plan").not.toHaveBeenCalled();
-  expect.soft(held.sealed, "atomic intent: bookkeeping cannot arm Apply").toBe(false);
-  expect.soft(document.body.textContent, "refusal names the human edit and its remedy").toMatch(/MUAS-1.*PE_M_Fan_AirFlowDesign[\s\S]*add the missing parameter/);
-  expect.soft(screen.queryByText("Computed losses written back"), "derived losses have their own heading").not.toBeNull();
-  expect.soft(screen.queryByText("Pe loss record"), "bookkeeping has its own heading").not.toBeNull();
-  expect.soft(document.body.textContent, "before is the native stored setting, not the snapshot coefficient").toContain("unset");
-  const labels = review.cells.filter(cell => cell.key.startsWith("component:")).map(cell => cell.label);
-  expect.soft(labels[0], "a size-only type names the damper and its level").toMatch(/damper.*Level 1/i);
-  expect.soft(document.body.textContent, "write review exposes a searchable element identity").toContain(String(fanId));
-  cleanup();
-
-  // The shared review entry point must refuse too, even for older results with no planRefusal field.
-  const { planRefusal: _reason, ...legacyPreview } = { planRefusal: undefined, ...preview };
-  render(<PreviewAction label="Write to Revit" handle={{ read: () => ({ ...review, preview: legacyPreview, stale: false }),
-    plan() {}, apply, cancel() {} }} />);
-  fireEvent.click(screen.getByRole("button", { name: /planned/ }));
-  expect.soft(screen.queryByRole("button", { name: "Write to Revit" }), "a mixed native result exposes no Apply").toBeNull();
-  cleanup();
-
-  const rows = inputRows({ snapshot, doc: null, fanUnitId: fanId, inputs: inputsFor(snapshot) });
-  const control = rows.find(row => row.key === `unit:${fanId}:cfm`)!.control;
-  if (control.kind !== "number") throw Error("Unit airflow is not a number cell");
-  // Base has no refusal member: the cast lets the same journey reach its DOM falsifier there.
-  const editRefusal = (control as typeof control & { refusal?: string }).refusal ?? null;
-  render(<SheetCell label="MUAS-1 flow" value={control.value} unit={{ label: "cfm" }} digits={0}
-    source="none" refusal={editRefusal} onValue={apply} />);
-  expect.soft(document.querySelector('[data-body="locked"]'), "missing parameter locks the edit before Plan").not.toBeNull();
-  expect.soft(document.body.innerHTML, "the edit-time explanation identifies the missing slot").toContain("PE_M_Fan_AirFlowDesign");
-});
 // Plan reviews seal model inputs, never browser pane visibility or Page pose.
 import { useEffect, useReducer } from "react";
 import realMuas from "../../../../packages/ducts-domain/src/sheet/fixtures/muas-local-20261102.json";
@@ -1653,7 +1576,13 @@ test("JZ E8-12 close Home clears a capacity refusal and permits another Place", 
 });
 
 test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the action area", async () => {
-  const capture = structuredClone(realMuas);
+  const capture = structuredClone(realMuas) as unknown as DuctSnapshot;
+  Object.assign(capture.nodes.find(node => node.id === 14577391)!, { flowParameter: null });
+  capture.slots = { ...capture.slots!, fanFlow: "PE_M_Fan_AirFlowDesign" };
+  // Controlled native-input twins exercise label disambiguation; this is not a native-model claim.
+  const damper = capture.nodes.find(node => node.id === 14607308)!;
+  Object.assign(damper, { partType: "Damper" });
+  capture.nodes.push({ ...structuredClone(damper), id: 99999991, uniqueId: "fixture-other-damper", levelId: 30, connectors: [] });
   const f = await createWitness(closes, new Map(), { "ducts.sheet-snapshot": {
     kind: "use", open(_ctx, deliver) { deliver({ kind: "complete", value: capture, revision: 1 }); },
   } });
@@ -1673,8 +1602,9 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
       incarnation: null, dependencies: "exact" },
     value: { writes: [
       { id: 14577391, kind: "equipment-flow", outcome: "refused", before: null, reason },
+      { id: 14607308, kind: "component", outcome: "planned", parameter: "Specific Loss", before: "unset", after: "0.0398 in-wg" },
       { kind: "store", outcome: "planned", before: "absent", after: "revision 1" },
-    ], counts: { refused: 1, planned: 1, written: 0, unchanged: 0 } },
+    ], counts: { refused: 1, planned: 2, written: 0, unchanged: 0 } },
   } }));
   function Write() {
     const [, changed] = useReducer(n => n + 1, 0);
@@ -1690,4 +1620,252 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
   const explanation = screen.getByRole("status");
   expect(explanation.textContent).toBe(`Apply is held: ${reason}`);
   expect(explanation.parentElement?.textContent).toContain("Esc");
+  expect(screen.getByText("Computed losses written back")).toBeTruthy();
+  expect(screen.getByText("Pe loss record")).toBeTruthy();
+  expect(document.body.textContent).toContain("unset");
+  expect(document.body.textContent).toContain("14607308");
+  expect(document.body.textContent).toMatch(/damper/i);
+  expect(document.body.textContent).toContain("Level 2/Upper Level");
+  cleanup();
+  // The recorded adapter has no unit rows; prepare the native input model before rendering.
+  const nativeInputs = inputsFor(capture);
+  const attempted = vi.fn();
+  function MissingFlow({ ctx }: { ctx: any }) {
+    const data = ctx.value.value;
+    if (!data.open) throw Error("The native Fan must be open");
+    const rows = inputRows({ snapshot: data.sheetSnapshot, doc: null, fanUnitId: 14577391, inputs: nativeInputs });
+    const control = rows.find(row => row.key === "unit:14577391:cfm")!.control;
+    if (control.kind !== "number") throw Error("Fan airflow must have a number control");
+    return <SheetCell label="MUAS-1 airflow" value={control.value} unit={{ label: "cfm" }} digits={0} source="none"
+      refusal={control.refusal ?? null} onValue={value => { attempted(value); return ctx.cells.at(["equipmentFlows", "14577391"]).stage({ cfm: value, source: "Work" }, { label: "MUAS airflow" }); }} />;
+  }
+  render(f.typed.draw("sheet-inputs", ctx => <MissingFlow ctx={ctx} />) as React.ReactElement);
+  expect(document.querySelector('[data-body="locked"]'), "The missing native parameter locks the actual typed cell before Plan").not.toBeNull();
+  expect(document.body.innerHTML).toContain("PE_M_Fan_AirFlowDesign");
+  expect(attempted).not.toHaveBeenCalled();
+
+});
+
+// The declared roster is the route's sole subject-choice surface, even on another pane.
+test.each(["Fans", "Ducts"] as const)("JZ C042 %s subject-list declaration suppresses the header chooser across panes", async name => {
+  const { useAdmittedSubject } = await import("../shell/subject");
+  const read = fans.spec.core!;
+  const declared = name === "Fans" ? fans.spec.panes["sheet-roster"] : ducts.spec.panes["e-systems"];
+  function Roster({ ctx }: { ctx: any }) {
+    const subject = useAdmittedSubject()!;
+    const first = fans.spec.subject!.options(ctx.value.value)[0]!;
+    return <section aria-label="Fan subject list"><button onClick={() => subject.add([first.id])}>{first.label}</button></section>;
+  }
+  for (const pane of ["detail", "roster"] as const) {
+    const module = route({ ...fans.spec, needs: "browser", edits: undefined, commands: {}, reads: {},
+      subject: { ...fans.spec.subject!, pane: "roster", read },
+      panes: {
+        roster: { subjectList: declared.subjectList, title: "Fan list", purpose: "Choose the subject", read: { ...read }, draw: ctx => <Roster ctx={ctx} /> },
+        detail: { title: "Detail", purpose: "Inspect the subject", read: { ...read }, draw: () => <p>Subject detail</p> },
+      }, layout: { kind: "pane", id: pane } });
+    const mount = mounts.mountTypedRoute(module, {
+      target: { kind: "host" }, fixture: "layout", work: { address: null, open: null },
+      address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+      custody: { current: () => true }, memory: () => ({}),
+    }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`));
+    const router = createRouter({ routeTree: createRootRoute({ component: () => <TypedChrome mount={mount} document={<span>Recorded Fans</span>} /> }),
+      history: createMemoryHistory({ initialEntries: ["/"] }) });
+    const view = render(<RouterProvider router={router} />);
+    try {
+      if (pane === "detail") await screen.findByText("Subject detail");
+      else await screen.findByRole("region", { name: "Fan subject list" });
+      expect(screen.queryByRole("button", { name: "Choose fan" }), "One subject capability has one choice path").toBeNull();
+      if (pane === "roster") {
+        const first = fans.spec.subject!.options(mount.value().value)[0]!;
+        fireEvent.click(screen.getByRole("button", { name: first.label }));
+        expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [first.id] });
+      }
+    } finally { view.unmount(); mount.dispose(); cleanup(); }
+  }
+});
+
+test("JZ audit named subject choices preserve all none add and toggle without raw ids", async () => {
+  const { fixture, ref, path: documentPath } = await import("../../../host/tests/host-read-graph.test-support");
+  const { localId } = await import("./typed-route");
+  const { typedSubjectDoor } = await import("../shell/subject");
+  const host = await fixture(true), tasks = new Set<Promise<unknown>>();
+  const roster = fans.spec.subject!.read!;
+  const module = route({ ...fans.spec, core: roster, edits: undefined, commands: {},
+    subject: { ...fans.spec.subject!, pane: "detail" },
+    panes: { detail: { title: "Subject choices", purpose: "Choose named subjects", draw: () => <p>Subject choice surface</p> } },
+    layout: { kind: "pane", id: "detail" } });
+  let seq = 0, search = new URLSearchParams(), moves = 0;
+  const unknown = localId("ducts-fan", "unknown-roster-audit@0");
+  const source: UseSource = { kind: "use", open(ctx, deliver) {
+    const generation = ++seq;
+    const task = host.send(generation, [], undefined, `subject-${generation}`).then(value => {
+      if (!ctx.signal.aborted) deliver({ kind: "complete", value, revision: generation });
+    });
+    tasks.add(task); void task.finally(() => tasks.delete(task)); return () => {};
+  } };
+  const mount = mounts.mountTypedRoute(module, {
+    target: { kind: "document", ref }, fixture: null, work: { address: documentPath, open: ref },
+    memory: () => ({ fan: { kind: "ids", ids: [unknown] } }), custody: { current: () => true },
+    address: { read: () => new URLSearchParams(search), write(next) { search = next; moves++; }, subscribe: () => () => {} },
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { sources: { "fans.sheet": source } });
+  const router = createRouter({ routeTree: createRootRoute({ component: () => <TypedChrome mount={mount} document={<span>Recorded subjects</span>} /> }), history: createMemoryHistory({ initialEntries: ["/"] }) });
+  let view: ReturnType<typeof render> | undefined;
+  try {
+    await Promise.allSettled([...tasks]);
+    view = render(<RouterProvider router={router} />);
+    await screen.findByRole("button", { name: "Choose fan" });
+    expect(document.body.textContent).not.toContain(unknown);
+    expect(screen.getByText(/outside the current roster/)).toBeTruthy();
+    const options = module.spec.subject!.options(mount.value(roster).value);
+    expect(options.length).toBeGreaterThan(1);
+    fireEvent.click(screen.getByRole("button", { name: "No fan" }));
+    expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [] }); expect(moves).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: "All fan" }));
+    expect(mount.page.read().fan).toEqual({ kind: "all" }); expect(moves).toBe(2);
+    const door = typedSubjectDoor(mount)!;
+    act(() => door.add([options[0]!.id]));
+    expect(mount.page.read().fan).toEqual({ kind: "all" }); expect(moves).toBe(2);
+    act(() => door.clear()); expect(moves).toBe(3);
+    act(() => door.add([options[0]!.id]));
+    act(() => door.add([options[0]!.id, options[1]!.id]));
+    expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [options[0]!.id, options[1]!.id] });
+    act(() => door.toggle(options[0]!.id));
+    expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [options[1]!.id] });
+    expect(document.body.textContent).toContain(options[1]!.label);
+    expect(document.body.textContent).not.toContain(String(options[1]!.id));
+    expect(seq, "Subject selection does not enumerate subjects into extra roster reads").toBe(1);
+  } finally { view?.unmount(); mount.dispose(); await Promise.allSettled(tasks); await host.close(); cleanup(); }
+}, 60_000);
+
+test("JZ audit optional document pins retain exact source authority and retire replaced custody", async () => {
+  const resources = await import("../host/resource-state");
+  const Atom = await import("effect/reactivity/Atom");
+  const { machineFixture } = await import("../../../../packages/agent-contracts/tests/machine-fixture");
+  const observed = { state: "ready", observation: { sessions: [{ connected: true, sessionId: "bridge-one", processId: 1,
+    sdkSessionId: "audit", openDocumentCount: 2, openDocuments: [
+      { openId: "project-one", title: "Project A", isFamilyDocument: false },
+      { openId: "family-one", title: "Family A", isFamilyDocument: true },
+    ] }] } };
+  const inventory = Atom.make(observed), machine = Atom.make({ state: "ready", observation: machineFixture() });
+  const atoms = vi.spyOn(resources, "readingAtom").mockImplementation(((request: { kind: string }) => request.kind === "inventory" ? inventory : machine) as typeof resources.readingAtom);
+  const created: mounts.TypedMount[] = [];
+  const original = mounts.mountTypedRoute;
+  const factory = vi.spyOn(mounts, "mountTypedRoute").mockImplementation((...args) => { const m = original(...args); created.push(m); return m; });
+  const module = route({ ...family.spec, needs: "host", optionalTarget: "document", edits: undefined, core: undefined, reads: {}, commands: {}, fields: {},
+    panes: { main: { title: "Optional document", purpose: "Inspect exact document authority", draw: ctx => <p>{ctx.target?.kind === "document" ? `Pinned ${ctx.target.ref.session}/${ctx.target.ref.openId}` : ctx.target?.kind === "host" ? "Host browsing" : "No authority"}</p> } }, layout: { kind: "pane", id: "main" } });
+  let search = new URLSearchParams();
+  const listeners = new Set<() => void>();
+  const address = { read: () => new URLSearchParams(search), write(next: URLSearchParams) { search = next; listeners.forEach(f => f()); }, subscribe(f: () => void) { listeners.add(f); return () => { listeners.delete(f); }; } };
+  const router = createRouter({ routeTree: createRootRoute({ component: () => <TypedShell module={module} fingerprint={workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`)} address={address} /> }), history: createMemoryHistory({ initialEntries: ["/"] }) });
+  const view = render(<RouterProvider router={router} />);
+  const pin = (ref: { session: string; openId: string }) => new URLSearchParams({ target: JSON.stringify({ kind: "open", ref }) });
+  try {
+    await screen.findByText("Host browsing");
+    await act(async () => address.write(pin({ session: "bridge-one", openId: "project-one" })));
+    await screen.findByText("Pinned bridge-one/project-one");
+    const first = created.at(-1)!;
+    expect(first.target()).toEqual({ kind: "document", ref: { session: "bridge-one", openId: "project-one" } });
+    await act(async () => address.write(pin({ session: "bridge-one", openId: "family-one" })));
+    await screen.findByText("Pinned bridge-one/family-one");
+    expect(first.available(), "Old exact source custody is retired").toBe(false);
+    expect(first.target()).toEqual({ kind: "document", ref: { session: "bridge-one", openId: "project-one" } });
+    for (const params of [pin({ session: "bridge-one", openId: "closed" }), pin({ session: "foreign", openId: "project-one" }), new URLSearchParams({ target: "{invalid" })]) {
+      await act(async () => address.write(params));
+      expect(screen.queryByText("Host browsing"), "An invalid pin never becomes host authority").toBeNull();
+      expect(screen.queryByText("Pinned bridge-one/family-one")).toBeNull();
+    }
+    await act(async () => address.write(new URLSearchParams()));
+    await screen.findByText("Host browsing");
+  } finally { view.unmount(); created.forEach(m => m.dispose()); factory.mockRestore(); atoms.mockRestore(); cleanup(); }
+});
+
+test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow inverse restoration", async () => {
+  const host = await scheduleHost();
+  const detail = detailResponse(), first = detail.entries[0]!.rows[0]!;
+  const second = structuredClone(first); second.rowNumber = 2; second.subjectIds = [8];
+  second.bindings[0]!.targetElementIds = [8]; second.bindings[0]!.targets[0]!.elementId = 8;
+  detail.entries[0]!.rows.push(second); host.setDetail(detail);
+  await host.bind(await host.read());
+  expect(await host.patch([1, 2].map(row => ({ path: ["cells", `${row}::2`, "edit"], value: { value: `${row * 150} VA` } })))).toMatchObject({ ok: true });
+  const changed = structuredClone(detail);
+  for (const row of changed.entries[0]!.rows) { row.values[1] = "999 VA"; row.bindings[0]!.rawValue = "999"; row.bindings[0]!.displayValue = "999 VA"; row.bindings[0]!.targets[0]!.rawValue = "999"; }
+  host.setDetail(changed); await host.bind(await host.read());
+  const client = createPeClient(host.base, contextFetch);
+  let last: any;
+  const native = createWorkFeedClient({ subscribe: () => () => {}, dirty() {} }, {
+    write: async (key, body) => { const response = await client.response("work.apply", { ...routeInput(key.route, key), body }); const wire = await response.json(); last = response.ok ? wire : wire.error.details; return last; },
+    submit: async () => { throw Error("This Work journey does not submit native commands"); },
+  });
+  const work: WorkJournalDoor = { ...native, open: () => ({ subscribe(deliver) {
+    let closed = false;
+    void host.view().then(state => { if (!closed) deliver({ kind: "ready", history: { from: 0, acks: [] }, snapshot: { handle: { key: host.scope, revision: state.revision }, revision: state.revision, value: state.doc } }); });
+    return () => { closed = true; };
+  } }) };
+  // Keep the real schemas while bounding TypeScript's recursive JSON-schema expansion.
+  const spec = (schedules as TypedRoute).spec;
+  const module = route({ key: "schedules", name: "Schedule cells", directory: spec.directory, fields: {},
+    edits: { ...spec.edits!, value: undefined, seed: undefined, key: () => host.scope.work },
+    panes: { main: { title: "Schedule cells", purpose: "Review stale cells", draw: () => null } }, layout: { kind: "pane", id: "main" } });
+  const mount = mounts.mountTypedRoute(module, { target: { kind: "document", ref: host.b }, fixture: null,
+    work: { address: null, open: host.b }, address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+    custody: { current: () => true }, memory: () => ({}),
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work });
+  const cells = () => mount.draw("main", ctx => ctx.cells) as any;
+  try {
+    await vi.waitFor(() => expect(mount.owner()?.ready).toBe(true));
+    expect(mount.owner()!.doc.basis.stale.map((row: { key: string }) => row.key).sort()).toEqual(["1::2", "2::2"]);
+    const revision = mount.owner()!.handle!.revision;
+    expect(await cells().at(["cells", "1::2"]).stage("175 VA", { label: "Review first stale cell" })).toBeNull();
+    expect(mount.owner()!.handle!.revision).toBe(revision + 1);
+    expect(mount.owner()!.doc.basis.stale.map((row: { key: string }) => row.key)).toEqual(["2::2"]);
+    const reviewed = structuredClone(mount.owner()!.doc);
+    const stale = await client.call("work.apply", { ...routeInput("schedules", host.scope), body: { kind: "apply", expectedRevision: revision, press: crypto.randomUUID(), patches: [{ path: ["cells", "2::2", "edit"], value: { value: "old" } }] } });
+    expect(stale).toMatchObject({ ok: false, code: "stale_revision" });
+    expect(await cells().at(["cells", "1::2"]).delete({ label: "Delete first cell" })).toBeNull();
+    expect(last.write.inverse.filter((p: { path: string[] }) => p.path[0] === "cells").map((p: { path: string[] }) => p.path)).toEqual([["cells", "1::2"]]);
+    expect(await mount.history.undo()).toMatchObject({ ok: true });
+    expect(mount.owner()!.doc).toEqual(reviewed);
+    expect(await cells().patch([{ path: ["cells"], value: reviewed.cells }], { label: "Replace collection deliberately" })).toBeNull();
+    expect(mount.owner()!.doc.basis.stale ?? []).toEqual([]);
+  } finally { mount.journal().intents.forEach(intent => mount.discardIntent(intent.id)); mount.dispose(); }
+}, 60_000);
+
+
+test("JZ Plan refusal marker holds a valid sealed ancillary-only review at the typed action", async () => {
+  const f = await createWitness(closes, new Map(), { "ducts.sheet-snapshot": {
+    kind: "use", open(_ctx, deliver) { deliver({ kind: "complete", value: structuredClone(realMuas), revision: 1 }); },
+  } });
+  await vi.waitFor(() => expect(f.fans.work()).not.toBeNull());
+  await f.ws.apply(f.fans.workBasis()!.token.scope.identity.work!, "fans", "human", [
+    { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
+    { path: ["equipmentFlows", "14577391", "edit"], value: { value: { cfm: 925, source: "test" } } },
+  ], f.fans.work()!.revision);
+  f.fans.refresh("value"); await vi.waitFor(() => expect(f.typed.value().current).toBe(true));
+  const reason = "MUAS-1: required airflow parameter is missing; add the missing parameter";
+  native.submit.mockClear();
+  native.submit.mockImplementation(async () => ({ id: "marker-only-plan", state: "succeeded", result: {
+    previewOnly: true, planRefusal: reason,
+    seal: { caller: { kind: "human", via: "local" }, requestHash: "marker-only-plan",
+      work: { handle: (f.inputs.get("fans:ducts.plan-losses") as { work: unknown }).work },
+      documentMark: { session: "fixture", openId: "fans", observedSince: null, changedAt: null }, incarnation: null, dependencies: "exact" },
+    // No refused native row can accidentally supply the shell's refusal. Only the Plan marker holds Apply.
+    value: { writes: [{ kind: "store", outcome: "planned", before: "absent", after: "revision 1" }],
+      counts: { refused: 0, planned: 1, written: 0, unchanged: 0 } },
+  } }));
+  function Write() {
+    const [, changed] = useReducer(n => n + 1, 0);
+    useEffect(() => f.fans.subscribe(changed), []);
+    return <TypedWrite mount={f.typed} id="losses" />;
+  }
+  render(<Write />);
+  fireEvent.click(screen.getByRole("button", { name: "plan Write to Revit" }));
+  const trigger = await screen.findByRole("button", { name: /Write to Revit.*planned/ });
+  if (trigger.getAttribute("aria-expanded") !== "true") fireEvent.click(trigger);
+  const apply = screen.getByRole("button", { name: "Write to Revit" });
+  expect.soft(screen.queryByRole("status")?.textContent).toBe(`Apply is held: ${reason}`);
+  expect.soft(apply.getAttribute("aria-disabled")).toBe("true");
+  expect(document.body.textContent).toContain("Pe loss record");
+  expect(native.submit).toHaveBeenCalledTimes(1);
+  await act(async () => { fireEvent.click(apply); });
+  expect(native.submit, "A valid seal and ancillary planned write cannot authorize a refused Plan").toHaveBeenCalledTimes(1);
 });

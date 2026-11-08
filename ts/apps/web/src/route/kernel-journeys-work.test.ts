@@ -33,16 +33,17 @@ import { testConsents } from "../../../host/tests/effect-test";
 import type { ConsentEvent } from "../../../host/src/run-consent";
 import { module as fans } from "../fans/route";
 import { mountTypedRoute } from "../shell/typed-mount";
+import type { PlaceInput } from "../shell/typed-place";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { routeInput } from "./host";
 import { localId } from "./typed-route";
 import type { Readings } from "../host/resource-stream";
 import type { UseSource } from "../shell/source-contract";
-import type { DrawContext } from "./typed-route";
+import type { DrawContext, TypedRoute } from "./typed-route";
 
 // Only recorded native inputs and the address bar are adapters. Work, HTTP, SSE,
 // the action registry, consent, journal and typed mount all run their production code.
-async function journey() {
+async function journey(module: TypedRoute = fans) {
   const host = await fixture(true);
   const roster = await host.send(0, []);
   const fan = roster.value!.data.fans.rows.find((row) => row.mark === "MUAS-1")!;
@@ -78,6 +79,8 @@ async function journey() {
     );
   };
   const streams = new Set<() => void>();
+  let streamHeld = false;
+  const streamQueue: (() => void)[] = [];
   const source: Readings = {
     subscribe(reading, deliver) {
       let reader: ReadableStreamDefaultReader<Uint8Array> | undefined,
@@ -106,7 +109,10 @@ async function journey() {
             const frame = buffer.slice(0, end);
             buffer = buffer.slice(end + 2);
             for (const line of frame.split("\n"))
-              if (line.startsWith("data: ")) deliver(JSON.parse(line.slice(6)));
+              if (line.startsWith("data: ")) {
+                const frame = JSON.parse(line.slice(6));
+                if (streamHeld) streamQueue.push(() => deliver(frame)); else deliver(frame);
+              }
           }
         }
       })();
@@ -124,9 +130,14 @@ async function journey() {
     return (response.ok ? value : (value.error?.details ?? value)) as RouteStateWriteResult;
   };
   let heldWrite: ReturnType<typeof gate> | undefined;
+  let beforeWrite: ReturnType<typeof gate> | undefined;
+  const writes: WorkWrite[] = [];
   const work = createWorkFeedClient(source, {
     write: async (key, body) => {
       const held = heldWrite; heldWrite = undefined;
+      writes.push(structuredClone(body));
+      const before = beforeWrite; beforeWrite = undefined;
+      if (before) { before.entered.resolve(); await before.release.promise; }
       const result = await write(key, body);
       if (held) { held.entered.resolve(); await held.release.promise; }
       return result;
@@ -159,7 +170,7 @@ async function journey() {
   const fingerprint = workFingerprintSchema.parse(
     `builtin-closure:${builtinEnrollments.find((e) => e.routeKey === "fans")!.closure.fingerprint}`,
   );
-  const input = {
+  const input: PlaceInput = {
     target: { kind: "document" as const, ref },
     fixture: null,
     work: { address: path, open: ref },
@@ -170,10 +181,10 @@ async function journey() {
     }),
   };
   const mounts: ReturnType<typeof mountTypedRoute>[] = [];
-  const mount = (readOnly = false, place: Partial<typeof input> = {}) => {
-    const m = mountTypedRoute(fans, { ...input, ...place, readOnly }, fingerprint, {
+  const mount = (readOnly = false, place: Partial<PlaceInput> = {}, ports: Parameters<typeof mountTypedRoute>[3] = {}, candidate: TypedRoute = module) => {
+    const m = mountTypedRoute(candidate, { ...input, ...place, readOnly }, fingerprint, {
       work,
-      sources: { "fans.sheet": read },
+      sources: { "fans.sheet": read }, ...ports,
     });
     mounts.push(m);
     m.subscribe(() => {});
@@ -207,6 +218,11 @@ async function journey() {
     ready,
     cells,
     key,
+    writes,
+    settle: () => Promise.allSettled([...pending]),
+    holdBeforeWrite() { beforeWrite = gate(); return beforeWrite; },
+    holdStream() { streamHeld = true; },
+    flushStream() { streamHeld = false; streamQueue.splice(0).forEach(deliver => deliver()); },
     holdWrite() { heldWrite = gate(); return heldWrite; },
     depart() {
       current = false;
@@ -474,4 +490,454 @@ test("JM H30 refuse a stale drawn edit and retain its original intent across ref
     expect(j.m.owner()!.doc, "H30: stale intent never recomputes on newer Work").toEqual(before);
     expect(JSON.stringify(j.m.journal()), "H30: rejected input remains inspectable until explicit discard").toContain("Keep my original airflow");
   } finally { await j.close(); }
+}, 60_000);
+
+test("JZ C121/C090 drawn authority rejects copied, foreign and old bases without recompute or retry", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    const drawn = j.cells(), old = drawn.basis!;
+    expect(j.m.current(old)).toBe(true);
+    expect(j.m.current({ ...old } as typeof old)).toBe(false);
+    const replacement = j.mount();
+    await vi.waitFor(() => expect(replacement.owner()?.ready).toBe(true));
+    expect(replacement.current(old)).toBe(false);
+    expect(await drawn.at(["flows", "4"]).stage({ cfm: 200 })).toBeNull();
+    await j.ready();
+    const before = structuredClone(j.m.owner()!.doc), count = j.writes.length;
+    const edit = { cfm: 731 };
+    expect(await drawn.patch([{ path: ["flows", "4", "edit"], value: { value: edit } }],
+      { label: "Original refused airflow" })).toMatchObject({ code: "refused" });
+    expect(j.m.current(old)).toBe(false);
+    const intent = j.m.journal().intents.find(i => i.label === "Original refused airflow")!;
+    expect(intent.input.expectedRevision).toBe(old.workRevision);
+    expect(intent.input.patches).toEqual([{ path: ["flows", "4", "edit"], value: { value: edit } }]);
+    expect(Object.isFrozen(intent.input.patches)).toBe(true);
+    expect(await drawn.patch(intent.input.patches, { label: "Retry original refused airflow" })).toMatchObject({ code: "refused" });
+    expect(j.writes).toHaveLength(count);
+    expect(j.m.owner()!.doc).toEqual(before);
+    j.m.discardIntent(intent.id);
+    expect(j.m.journal().intents.some(i => i.id === intent.id)).toBe(false);
+    expect(await j.cells().at(["flows", "4"]).stage({ cfm: 201 })).toBeNull();
+  } finally { await j.close(); }
+}, 60_000);
+
+test("JZ C122 delayed mounted submit retains its revision after a newer edit", async () => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    const revision = j.m.owner()!.handle!.revision;
+    held = j.holdBeforeWrite();
+    const pending = j.cells().at(["flows", "4"]).stage({ cfm: 200 });
+    await held.entered.promise;
+    expect(await j.cells().at(["flows", "4"]).stage({ cfm: 500 })).toBeNull();
+    await j.ready();
+    held.release.resolve();
+    expect(await pending).toMatchObject({ code: "refused" });
+    expect(j.writes.slice(-2).map(w => w.expectedRevision)).toEqual([revision, revision]);
+    expect(j.m.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: 500 });
+    expect(j.m.journal().intents.at(-1)!.input.patches).toEqual([
+      { path: ["flows", "4", "edit"], value: { value: { cfm: 200 } } },
+    ]);
+  } finally { held?.release.resolve(); await j.close(); }
+}, 60_000);
+
+test.each(["ack-first", "stream-first"])("JZ C086 %s delivery and pending departure recover durable Work", async order => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    if (order === "ack-first") j.holdStream(); else held = j.holdWrite();
+    const pending = j.cells().at(["flows", "4"]).stage({ cfm: 210 });
+    if (held) {
+      await held.entered.promise;
+      await vi.waitFor(() => expect(j.m.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: 210 }));
+      held.release.resolve();
+    }
+    expect(await pending).toBeNull();
+    expect(j.m.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: 210 });
+    j.flushStream(); await j.ready();
+    held = j.holdBeforeWrite();
+    const departing = j.cells().at(["flows", "4"]).stage({ cfm: 310 });
+    await held.entered.promise;
+    j.m.dispose();
+    const retired = structuredClone(j.m.owner()!.doc);
+    held.release.resolve();
+    expect(await departing).toBeNull();
+    expect(j.m.owner()!.doc).toEqual(retired);
+    const reopened = j.mount();
+    await vi.waitFor(() => expect(reopened.owner()?.doc.flows["4"]?.edit.value).toEqual({ cfm: 310 }));
+  } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
+}, 60_000);
+
+test("JZ C718/C675/C676/C730 atomic press, isolated cell undo, root addressing and locked deletion", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    const original = structuredClone(j.m.owner()!.doc);
+    expect(await j.cells().patch(["4", "999"].map(id => ({ path: ["flows", id, "edit"], value: { value: { cfm: 240 } } })),
+      { label: "Both terminals" })).toBeNull();
+    await j.ready();
+    const step = j.m.journal().undo.at(-1)!;
+    expect(j.m.journal().undo.filter(s => s.press === j.writes.at(-1)!.press), JSON.stringify(j.m.journal())).toHaveLength(1);
+    expect(step.transitions).toHaveLength(1);
+    expect(step.transitions[0]!.forward).toHaveLength(2);
+    expect(step.transitions[0]!.inverse).toHaveLength(2);
+    expect(j.writes.at(-1)!.press).toBe(step.press);
+    expect(await j.m.history.undo(step.press)).toMatchObject({ ok: true });
+    await j.ready(); expect(j.m.owner()!.doc).toEqual(original);
+    expect(await j.cells().patch(["4", "999"].map(id => ({ path: ["flows", id], value: { edit: { value: { cfm: 250 } } } })))).toBeNull();
+    await j.ready();
+    const before = structuredClone(j.m.owner()!.doc), steps = j.m.journal().undo.length;
+    for (const [id, action] of [["4", "clear"], ["999", "clear"], ["4", "delete"]] as const) {
+      expect(await j.cells().at(["flows", id])[action]({ label: `${action} ${id}` })).toBeNull();
+      await j.ready();
+    }
+    expect(j.m.owner()!.doc.flows["4"]).toBeUndefined();
+    expect(j.m.journal().undo).toHaveLength(steps + 3);
+    expect(j.m.journal().undo.slice(-3).map(s => s.transitions.length)).toEqual([1, 1, 1]);
+    for (let i = 0; i < 3; i++) { expect(await j.m.history.undo()).toMatchObject({ ok: true }); await j.ready(); }
+    expect(j.m.owner()!.doc).toEqual(before);
+    expect(await j.cells().at(["designFriction"]).stage(0.1)).toBeNull(); await j.ready();
+    const rootBefore = structuredClone(j.m.owner()!.doc), rootSteps = j.m.journal().undo.length;
+    expect(() => j.cells().at(["foreignRoot"])).toThrow("No owning Work");
+    expect(await j.cells().at(["designFriction"]).clear()).toBeNull(); await j.ready();
+    expect(await j.cells().at(["designFriction"]).delete()).toBeNull(); await j.ready();
+    expect(j.m.owner()!.doc.designFriction).toEqual({});
+    expect(j.m.journal().undo).toHaveLength(rootSteps + 2);
+    for (let i = 0; i < 2; i++) { expect(await j.m.history.undo()).toMatchObject({ ok: true }); await j.ready(); }
+    expect(j.m.owner()!.doc).toEqual(rootBefore);
+    const locked = j.cells().at(["flows", "4"], undefined, { readOnly: true });
+    const writes = j.writes.length;
+    expect(await locked.delete()).toMatchObject({ code: "read-only" });
+    expect(await locked.clear()).toMatchObject({ code: "read-only" });
+    expect(j.writes).toHaveLength(writes);
+    expect(j.m.owner()!.doc).toEqual(rootBefore);
+  } finally { await j.close(); }
+}, 60_000);
+
+// A command read cannot publish into a Page generation that did not invoke it.
+test("JZ direct query drops a retired Page reply after A-B-A and discloses the refusal", async () => {
+  const { z } = await import("zod");
+  const { queryAction } = await import("./typed-actions");
+  const held = gate();
+  let j: Awaited<ReturnType<typeof journey>>;
+  const module = { ...fans, spec: { ...fans.spec, commands: { ...fans.spec.commands,
+    audit: { ...queryAction({ key: "fans.audit-generation", input: z.strictObject({}),
+      run: async () => {
+        held.entered.resolve();
+        await held.release.promise;
+        return j.host.send(901, []);
+      } }), label: "Read fan" },
+  } } };
+  j = await journey(module);
+  try {
+    await j.start();
+    const pageA = j.m.page.read().fan, tokenA = j.m.workBasis()!;
+    const pending = j.m.action("audit").run({}).then(value => ({ value }), error => ({ error }));
+    await held.entered.promise;
+    j.m.page.subject({ kind: "ids", ids: [] });
+    j.m.page.subject(pageA);
+    expect(j.m.current(tokenA), "A-B-A retires the original generation").toBe(false);
+    held.release.resolve();
+    const outcome = await pending;
+    expect(outcome).toHaveProperty("error", expect.any(Error));
+    expect(j.m.result("audit"), "Retired query output never enters the current result slot").toBeUndefined();
+    expect(j.m.action("audit").failure, "The waiting user sees why their read did not land").toMatch(/earlier Page/);
+    expect(j.writes).toHaveLength(0);
+    const current = await j.m.action("audit").run({});
+    expect(j.m.result("audit"), "A fresh invocation can publish normally").toEqual(current);
+    expect(j.m.action("audit").failure).toBeNull();
+  } finally { held.release.resolve(); await j.close(); }
+}, 60_000);
+
+test("JZ raw Work patch paths and ambiguous operation fields refuse atomically at HTTP", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    const before = structuredClone(j.m.owner()!.doc), revision = j.m.owner()!.handle!.revision;
+    const patches = [
+      { path: ["flows", "4"], op: "delete", value: { edit: { value: { cfm: 220 } } } },
+      { path: ["missing"], value: {} },
+      { path: ["flows", "4", "missing"], value: 2 },
+      { path: ["flows", "__proto__"] },
+      { path: ["flows", "constructor"] },
+      { path: ["flows"], value: 2 },
+      { path: ["flows", "4", "edit"], value: { value: { cfm: "wrong" } } },
+      { path: ["designFriction", "edit"], value: { value: "wrong" } },
+    ];
+    const outcomes: Array<{ patch: unknown; accepted: boolean }> = [];
+    for (const patch of patches) {
+      const response = await j.request(peRouteUrl("work.apply", routeInput(j.key().route, j.key())), {
+        kind: "apply", expectedRevision: j.m.owner()!.handle!.revision, press: crypto.randomUUID(), patches: [patch],
+      });
+      const outcome = await response.json();
+      outcomes.push({ patch, accepted: response.ok && outcome.ok === true });
+    }
+    expect(outcomes.filter(row => row.accepted), "No ambiguous, unsafe or ill-typed path is admitted").toEqual([]);
+    await j.ready();
+    expect(j.m.owner()!.doc).toEqual(before);
+    expect(j.m.owner()!.handle!.revision).toBe(revision);
+    expect(await j.cells().at(["flows", "4"]).stage({ cfm: 240 })).toBeNull();
+    await j.ready();
+    expect(j.m.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: 240 });
+  } finally { await j.close(); }
+}, 60_000);
+
+test("JZ a null Place target refuses Work before dispatch but still permits client Page moves", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    const unbound = j.mount(false, { target: null });
+    await vi.waitFor(() => expect(unbound.owner()?.ready).toBe(true));
+    await vi.waitFor(() => expect(unbound.value().current).toBe(true));
+    const before = structuredClone(unbound.owner()!.doc), revision = unbound.owner()!.handle!.revision;
+    const count = j.writes.length;
+    const cells = unbound.draw("sheet-inputs", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"];
+    expect(await cells.at(["flows", "4"]).stage({ cfm: 330 }), "No target means no write authority").toMatchObject({ code: "refused" });
+    expect(j.writes).toHaveLength(count);
+    expect(unbound.owner()!.doc).toEqual(before);
+    expect(unbound.owner()!.handle!.revision).toBe(revision);
+    unbound.page.query({ sheetPath: "inspection-only" });
+    expect(unbound.page.read().sheetPath).toBe("inspection-only");
+  } finally { await j.close(); }
+}, 60_000);
+
+test("JZ released reads resume once after custody returns through an unchanged address", async () => {
+  const j = await journey();
+  const tasks = new Set<Promise<unknown>>(), listeners = new Set<() => void>();
+  let current = true, reads = 0;
+  const source: UseSource = { kind: "use", open(ctx, deliver) {
+    const generation = ++reads;
+    const task = j.host.send(generation, (ctx.args as { fan: string[] }).fan, undefined, `lease-${generation}`)
+      .then(value => { if (!ctx.signal.aborted) deliver({ kind: "complete", value, revision: generation }); });
+    tasks.add(task); void task.finally(() => tasks.delete(task));
+    return () => {};
+  } };
+  try {
+    await j.start();
+    const m = j.mount(false, { custody: { current: () => current }, address: {
+      read: () => new URLSearchParams(), write() {}, subscribe(notify) { listeners.add(notify); return () => { listeners.delete(notify); }; },
+    } }, { sources: { "fans.sheet": source } });
+    await Promise.allSettled([...tasks]);
+    expect(m.value().current).toBe(true);
+    const initial = reads, retained = m.value().value;
+    expect(initial).toBeGreaterThan(0);
+    m.release(); current = false;
+    const stop = m.subscribe(() => {});
+    expect(reads, "A hidden Place cannot acquire another native read").toBe(initial);
+    expect(m.value().value).toEqual(retained);
+    current = true; listeners.forEach(notify => notify());
+    await vi.waitFor(() => expect(reads, "Address notification resumes each declared read once").toBe(initial * 2));
+    await Promise.allSettled([...tasks]);
+    expect(m.value().current).toBe(true);
+    listeners.forEach(notify => notify());
+    expect(reads, "An equal current address cannot duplicate the subscription").toBe(initial * 2);
+    stop();
+  } finally { await Promise.allSettled(tasks); await j.close(); }
+}, 60_000);
+
+test.each(["accepted", "refused"] as const)("JZ audit member switch keeps a late %s Work outcome out of the replacement", async outcome => {
+  const { z } = await import("zod");
+  const { route, field } = await import("./typed-route");
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    const module = route({ key: "fans", name: "Member Work", directory: fans.spec.directory,
+      fields: { member: field(z.string(), "a", "query", "push") },
+      edits: { ...fans.spec.edits!, owners: {}, value: undefined, seed: () => fans.spec.edits!.work.schema.parse({}), key: page => page.member },
+      panes: { main: { title: "Member", purpose: "Edit one member Work", draw: () => null } },
+      layout: { kind: "pane", id: "main" } });
+    const m = j.mount(false, {}, {}, module);
+    await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
+    await m.startAction()!.run();
+    await vi.waitFor(() => expect(m.owner()?.ready).toBe(true));
+    const keyA = m.owner()!.handle!.key, revisionA = m.owner()!.handle!.revision;
+    const inspectorA = j.mount(true, {}, {}, module);
+    await vi.waitFor(() => expect(inspectorA.owner()?.ready).toBe(true));
+    const cells = () => m.draw("main", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"];
+    held = j.holdBeforeWrite();
+    const pending = cells().at(["flows", "4"]).stage({ cfm: 210 }, { label: "Member A delayed edit" });
+    await held.entered.promise;
+    m.page.query({ member: "b" });
+    await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
+    await m.startAction()!.run();
+    await vi.waitFor(() => expect(m.owner()?.ready).toBe(true));
+    expect(await cells().at(["flows", "4"]).stage({ cfm: 520 }, { label: "Member B edit" })).toBeNull();
+    const before = structuredClone(m.owner()!.doc), handle = m.owner()!.handle!;
+    if (outcome === "refused") expect(await j.write(keyA, { kind: "apply", expectedRevision: revisionA,
+      press: crypto.randomUUID(), patches: [{ path: ["flows", "4", "edit"], value: { value: { cfm: 700 } } }] })).toMatchObject({ ok: true });
+    held.release.resolve();
+    const result = await pending;
+    if (outcome === "accepted") expect(result).toBeNull(); else expect(result).toMatchObject({ code: "refused" });
+    expect(m.owner()!.doc, "The replacement never receives the old member's delta").toEqual(before);
+    expect(m.owner()!.handle).toEqual(handle);
+    expect(m.problem()).toBeNull();
+    expect(m.journal().intents.some(intent => intent.label === "Member A delayed edit")).toBe(false);
+    await vi.waitFor(() => expect(inspectorA.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: outcome === "accepted" ? 210 : 700 }));
+  } finally { held?.release.resolve(); await j.close(); }
+}, 60_000);
+
+test("JZ audit explicit demand refuses malformed HTTP Value data and recovers without exposing it", async () => {
+  const { route } = await import("./typed-route");
+  const j = await journey(), tasks = new Set<Promise<unknown>>();
+  let opened = 0, corrupt = true;
+  const read = { ...fans.spec.core!, demand: "explicit" as const };
+  const module = route({ ...fans.spec, edits: undefined, commands: {}, subject: undefined, reads: {}, core: read,
+    panes: { main: { title: "Explicit Fan read", purpose: "Inspect a demanded Value", read, draw: () => null } },
+    layout: { kind: "pane", id: "main" } });
+  const source: UseSource = { kind: "use", open(ctx, deliver) {
+    const id = ++opened;
+    const task = j.host.send(id, (ctx.args as { fan: string[] }).fan, undefined, `explicit-${id}`).then(packet => {
+      const wire = structuredClone(packet);
+      if (corrupt) (wire.value as { data: unknown }).data = 12;
+      if (!ctx.signal.aborted) deliver({ kind: "complete", value: wire, revision: id });
+    });
+    tasks.add(task); void task.finally(() => tasks.delete(task)); return () => {};
+  } };
+  try {
+    const m = j.mount(false, {}, { sources: { "fans.sheet": source } }, module);
+    expect(opened, "Explicit reads are idle until demand").toBe(0);
+    expect(m.value().value).toBeUndefined();
+    m.refresh(read); await Promise.allSettled([...tasks]);
+    expect(opened).toBe(1);
+    expect(m.value().current).toBe(false);
+    expect(m.value().value, "Malformed wire data is never drawn").toBeUndefined();
+    const failed = m.value();
+    if (failed.current) throw Error("Malformed Value became current");
+    expect(failed.reason).toMatch(/reading|contract|unavailable/i);
+    expect(failed.reason).not.toMatch(/ZodError|invalid_type|expected.*object/i);
+    corrupt = false; m.refresh(read); await Promise.allSettled([...tasks]);
+    expect(m.value().current).toBe(true);
+    const before = m.value().value;
+    corrupt = true; m.refresh(read); await Promise.allSettled([...tasks]);
+    expect(m.value().current).toBe(false);
+    expect(m.value().value, "A malformed replacement retains the last decoded Value").toEqual(before);
+    corrupt = false; m.refresh(read); await Promise.allSettled([...tasks]);
+    expect(m.value().current).toBe(true);
+  } finally { await Promise.allSettled(tasks); await j.close(); }
+}, 60_000);
+
+test("JZ audit validation readiness and per-action busy admission prevent dispatch", async () => {
+  const { z } = await import("zod");
+  const { queryAction } = await import("./typed-actions");
+  const held = gate();
+  let calls = 0, j: Awaited<ReturnType<typeof journey>>;
+  const module = { ...fans, spec: { ...fans.spec, commands: { ...fans.spec.commands,
+    audit: { ...queryAction({ key: "fans.audit-admission", input: z.strictObject({ n: z.number() }),
+      run: async input => { calls++; if (typeof input.n === "number") { held.entered.resolve(); await held.release.promise; }
+        return j.host.send(910 + calls, []); } }), label: "Read fan" },
+  } } };
+  j = await journey(module);
+  try {
+    await j.ready();
+    expect(await j.cells().at(["flows", "4"]).stage({ cfm: 220 })).toMatchObject({ code: "unavailable" });
+    expect(j.writes).toHaveLength(0);
+    await j.start();
+    await expect(j.m.action("audit").run({ n: "bad" })).rejects.toThrow();
+    expect(calls).toBe(0);
+    const first = j.m.action("audit").run({ n: 1 });
+    await held.entered.promise;
+    const duplicate = j.m.action("audit").run({ n: 2 }).then(value => ({ value }), error => ({ error }));
+    held.release.resolve();
+    await first;
+    expect(await duplicate).toHaveProperty("error", expect.objectContaining({ message: "Action already pending" }));
+    expect(calls).toBe(1);
+    expect(j.m.action("audit").pending).toBe(false);
+    await j.m.action("audit").run({ n: 3 });
+    expect(calls).toBe(2);
+    expect(j.writes).toHaveLength(0);
+  } finally { held.release.resolve(); await j.close(); }
+}, 60_000);
+
+test("JZ audit page Bind validates its live HTTP contract before dispatch and persists the valid binding", async () => {
+  const { mkdtemp, mkdir, writeFile, readFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { createPagesHandler } = await import("../../../host/src/pages-route");
+  const { pageBindRpc } = await import("../../../../packages/mcps/src/shared/rpc-client");
+  const dir = await mkdtemp(join(tmpdir(), "jz-pagebind-"));
+  expect(dir.startsWith(join(tmpdir(), "jz-pagebind-"))).toBe(true);
+  const pages = join(dir, "Pages"), pods = join(dir, "Pods");
+  await mkdir(join(pages, "todo"), { recursive: true }); await mkdir(pods);
+  await writeFile(join(pages, "todo", "index.html"), "<title>Audit Page</title><p>Bind this page</p>", "utf8");
+  const handle = createPagesHandler(pages, pods);
+  let dispatches = 0;
+  vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+    dispatches++; return withInvocationContext({ caller: who }, () => handle(new Request(new URL(url, "http://host"), init)));
+  });
+  try {
+    await expect(pageBindRpc.run({ slug: "todo", binding: { kind: "wrong" } })).rejects.toThrow();
+    expect(dispatches, "Malformed input fails before the HTTP door").toBe(0);
+    await pageBindRpc.run({ slug: "todo", binding: { kind: "none" } });
+    expect(dispatches).toBe(1);
+    expect(JSON.parse(await readFile(join(pages, "todo", ".state", "binding.json"), "utf8"))).toMatchObject({
+      slots: { default: { kind: "none" } }, boundBy: { default: "human" },
+    });
+  } finally { vi.unstubAllGlobals(); await rm(dir, { recursive: true, force: true }); }
+});
+
+
+test("JZ cut foreign owner cell keeps its label revision and inverse through concurrent editing", async () => {
+  const { JOIN_KEY } = await import("@pe/ducts-domain/sheet/inputs");
+  const j = await journey();
+  try {
+    await j.start();
+    const cells = j.cells(), key = JOIN_KEY(["10:1", "30:1"]);
+    expect(cells.owner(["assumptions"])).toEqual({ route: "ducts", label: "from /ducts" });
+    const local = j.m.owner()!.handle, foreign = j.m.owner("ducts")!.handle!;
+    const cell = cells.at(["assumptions", key], "ducts");
+    const outcomes = await Promise.all([1, 2].map(() => cell.stage({ kind: "verdict", verdict: "connect" }, { label: "Accept join" })));
+    expect(outcomes.filter(result => result === null)).toHaveLength(1);
+    expect(outcomes.filter(result => result?.code === "refused")).toHaveLength(1);
+    await j.settle(); await j.ready();
+    expect(j.m.owner()!.handle).toEqual(local);
+    expect(j.m.owner("ducts")!.handle!.revision).toBe(foreign.revision + 1);
+    expect(j.m.owner("ducts")!.doc.assumptions[key].edit.value.verdict).toBe("connect");
+    const step = j.m.journal().undo.at(-1)!;
+    expect(step.label).toContain("from /ducts");
+    expect(step.transitions[0]!.forward.map(patch => patch.path)).toEqual([["assumptions", key]]);
+    expect(await j.m.history.undo()).toMatchObject({ ok: true });
+    await j.ready(); expect(j.m.owner("ducts")!.doc.assumptions).toEqual({});
+    expect(await j.m.history.redo()).toMatchObject({ ok: true });
+    await j.ready(); expect(j.m.owner("ducts")!.doc.assumptions[key].edit.value.verdict).toBe("connect");
+    expect(await cell.stage({ kind: "verdict", verdict: "connect" })).toMatchObject({ code: "refused" });
+  } finally { await j.close(); }
+}, 60_000);
+
+test("JZ cut two Places retain independent Page pose selection Value and inactive URL custody", async () => {
+  const { createAdmittedPlace } = await import("../shell/typed-place");
+  const j = await journey(), places: ReturnType<typeof createAdmittedPlace>[] = [];
+  let active = "a", search = new URLSearchParams("target=one"), writes = 0;
+  const listeners = new Set<() => void>();
+  const address = { read: () => new URLSearchParams(search), write(next: URLSearchParams) { search = new URLSearchParams(next); writes++; listeners.forEach(f => f()); },
+    subscribe(f: () => void) { listeners.add(f); return () => { listeners.delete(f); }; } };
+  function place(id: string) {
+    const scope = { pathname: "/fans", search: {}, current: () => active === id, retain() {}, retire(owner: { dispose(): void }) { owner.dispose(); } };
+    const p = createAdmittedPlace<ReturnType<typeof j.mount>>({ scope, address, search: address.read(), visible: true });
+    places.push(p);
+    return { p, m: p.state(() => j.mount(false, { address: p.address, custody: { current: p.current }, memory: p.memory, fixture: p.fixture })) };
+  }
+  try {
+    const a = place("a"); await j.settle();
+    a.m.page.pose({ contextRadiusFt: 11 }); a.m.page.select([{ kind: "focus", id: localId("audit", "a") }]);
+    await j.settle(); const beforeA = a.m.page.read(), valueA = a.m.value().value, urlA = address.read();
+    expect(valueA).toBeDefined(); a.p.remember(beforeA); a.p.setVisible(false); a.m.release();
+    active = "b"; address.write(new URLSearchParams("target=two"));
+    const b = place("b"); await j.settle();
+    b.m.page.pose({ contextRadiusFt: 22 }); b.m.page.select([{ kind: "focus", id: localId("audit", "b") }]);
+    await j.settle(); const beforeB = b.m.page.read(), count = writes;
+    a.p.address.write(new URLSearchParams("target=wrong&fixture=changed"), "replace");
+    expect(writes, "Inactive callback cannot overwrite the active Place address").toBe(count);
+    expect(a.p.address.read().get("target")).toBe("one"); expect(b.p.address.read().get("target")).toBe("two");
+    expect(a.p.fixture).toBeNull();
+    expect(() => a.m.page.pose({ contextRadiusFt: 99 })).toThrow();
+    expect(a.m.page.read()).toEqual(beforeA); expect(b.m.page.read()).toEqual(beforeB);
+    expect(a.m.value().value).toEqual(valueA); expect(a.p.memory()).toEqual(beforeA);
+    active = "none"; address.write(urlA); active = "a"; a.p.setVisible(true);
+    const resumed = a.m.subscribe(() => {}); await j.settle();
+    expect(a.p.state(() => { throw Error("Reveal must retain its typed mount"); })).toBe(a.m);
+    expect(a.m.page.read()).toEqual(beforeA); expect(b.m.page.read()).toEqual(beforeB); expect(a.m.value().current).toBe(true);
+    resumed();
+  } finally { places.forEach(p => p.dispose()); await j.close(); }
 }, 60_000);

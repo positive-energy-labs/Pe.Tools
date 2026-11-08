@@ -16,8 +16,6 @@ export function createGraphMount<P, W>(
   adapters: MountAdapters<P, W>,
   initial: Partial<P> = {},
 ) {
-  if (adapters.environment && adapters.environment.route.data.key !== graph.key)
-    throw Error("Environment admission does not belong to this route");
   const refusals = mountRefusals(graph, adapters);
   if (refusals.length) throw new Error(refusals.map((r) => `${r.path}: ${r.message}`).join("\n"));
   let readings: MountReadings<P, W> | undefined;
@@ -44,7 +42,6 @@ export function createGraphMount<P, W>(
   } catch (cause) {
     target.close();
     page.dispose();
-    adapters.environment?.close();
     throw cause;
   }
   const readingOwner: MountReadings<P, W> = readings;
@@ -63,11 +60,7 @@ export function createGraphMount<P, W>(
   return {
     ...verbs,
     ...legacyMountMetadata(adapters.legacyEnvironment),
-    commandRefusal: adapters.environment
-      ? adapters.environment.environment.nativeWrite
-        ? null
-        : "Native writes unavailable"
-      : (adapters.legacyEnvironment?.commands.refusal ?? null),
+    commandRefusal: adapters.legacyEnvironment?.commands.refusal ?? null,
     page: page.ports.page,
     controls: page.ports.controls,
     registry: page.registry,
@@ -147,7 +140,6 @@ export function createGraphMount<P, W>(
       unTimeline();
       work.dispose();
       readingOwner.dispose();
-      adapters.environment?.close();
       page.dispose();
       target.dispose();
     },

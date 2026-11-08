@@ -73,6 +73,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   const requireWritable = () => {
     requireCurrent();
+    if (input.target === null) throw Error("Place has no write target");
     if (input.readOnly || input.history) throw Error("needs live Revit");
   };
   const decodePage = () => {
@@ -119,6 +120,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       Object.fromEntries(Object.keys(edits!.owners).map(id => [id,id])));
   }
   const accept = (record: typeof owners extends Map<string, infer R> ? R : never, handle: WorkHandle, doc: unknown) => {
+    if (disposed || owners.get(record.scope.key.route) !== record) return;
     if (record.handle && handle.revision < record.handle.revision) return;
     if(workKey(handle.key)!==workKey(record.scope.key)) throw Error("Work snapshot belongs to another Work");
     const parsed = record.config.state.schema.parse(doc);
@@ -181,7 +183,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const allReads = new Set([spec.core,...Object.values(spec.reads ?? {}),...Object.values(spec.panes).map(p=>p.read)].filter((read):read is import("../route/host-read").HostRead=>!!read));
   const demanded = new Set<import("../route/host-read").HostRead>();
   const syncReads = (force = false) => {
-    if (disposed || released) return;
+    if (disposed || released || !input.custody.current()) return;
     for (const read of allReads) {
       if(read.demand === "explicit" && !demanded.has(read)) continue;
       const project = "args" in read && typeof read.args === "function" ? read.args : spec.core?.args ?? (()=>({}));
@@ -250,7 +252,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const stopAddress = input.address.subscribe(() => {
     const next = decodePage();
     const selected = input.address.read().has("selected") ? next.selected : page.selected;
-    if (canonicalRouteInput({ ...next, selected }) === canonicalRouteInput(page)) return;
+    // An unchanged address can be the custody-return notification for released read resources.
+    if (canonicalRouteInput({ ...next, selected }) === canonicalRouteInput(page)) { syncReads(); return; }
     page = freezePage({ ...next, selected });
     gate.movePage(page, { kind: "human", source: "query", history: "replace" }); syncWork(); syncReads(); notify();
   });
@@ -351,6 +354,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if(!cmd) throw Error(`Unknown command ${id}`);
     problems.delete(id); notify();
     if("kind" in cmd) {
+      const queryPage = cmd.kind === "query" ? gate.read()?.pageEpoch : null;
       const handle=owners.get(own)?.handle ?? null;
       const context={page:page as never,target:input.target,work:handle,value:spec.core?reads.get(spec.core)?.snapshot.value:undefined};
       try {
@@ -366,6 +370,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           const receipt=z.object({receiptId:z.string(),result:z.unknown().optional()}).parse(completion);
           result=catalog && "result" in catalog ? cmd.contract.output.parse(receipt.result) : {kind:"void",receiptId:receipt.receiptId};
         } else result=await cmd.invoke!(request,{target:input.target ?? {kind:"host"},work:handle});
+        if (queryPage && (disposed || !input.custody.current() || gate.read()?.pageEpoch !== queryPage))
+          throw Error("This read finished for an earlier Page; run it again");
         results.set(id,result); syncReads(true); return result;
       } catch(error) {problems.set(id,error instanceof Error?error.message:String(error));throw error;}
       finally {notify();}
@@ -461,8 +467,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     },
     journal: () => {
       const journals=[...owners.values()].map(o=>o.lease.entry.journal.read()),base=owners.get(own)?.lease.entry.journal.read() ?? {revision:null,from:0,busy:false,receipts:[],undo:[],redo:[],moves:[],last:null};
-      return {...base, undo:journals.flatMap(j=>j.undo).sort((a,b)=>a.at-b.at), redo:journals.flatMap(j=>j.redo).sort((a,b)=>a.at-b.at),
-        intents:journals.flatMap(j=>j.intents), moves:journals.flatMap(j=>j.moves).sort((a,b)=>a.at-b.at), last:journals.flatMap(j=>j.last?[j.last]:[]).sort((a,b)=>a.step.at-b.step.at).at(-1)??null};
+      return freezePage({...base, undo:journals.flatMap(j=>j.undo).sort((a,b)=>a.at-b.at), redo:journals.flatMap(j=>j.redo).sort((a,b)=>a.at-b.at),
+        intents:journals.flatMap(j=>j.intents), moves:journals.flatMap(j=>j.moves).sort((a,b)=>a.at-b.at), last:journals.flatMap(j=>j.last?[j.last]:[]).sort((a,b)=>a.step.at-b.step.at).at(-1)??null});
     },
     discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.journal.discardIntent(id); notify(); },
     restoreWork: restore, journalRefusal: () => input.readOnly || input.history ? "needs live Revit" : [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
@@ -540,13 +546,15 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         at(path,preferred,facts={}) {
           const route=ownerOf(path,preferred), address=[...path];
           const value=address.reduce((doc,key)=>doc?.[key],owners.get(route)!.doc)??{};
-          const clear=(detail?:EditHistory)=>patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,{kind:"clear"}),detail,route);
+          const cellPatch=(patches: readonly RouteStatePatch[],detail?:EditHistory) => facts.readOnly
+            ? Promise.resolve({code:"read-only",message:"This cell is read-only"}) : patch(patches,detail,route);
+          const clear=(detail?:EditHistory)=>cellPatch(cellPatches(address.slice(0,-1),address.at(-1)!,value,{kind:"clear"}),detail);
           const record=owners.get(route)!;
           const accepted = value.edit;
           const accept=(detail?:EditHistory) => {
             if(!accepted) return Promise.resolve({code:"not-staged",message:"This cell is no longer staged"});
             const {by:_by,at:_at,base:_base,...rung}=accepted;
-            return patch([{path:[...address,"edit"],value:rung}],detail,route);
+            return cellPatch([{path:[...address,"edit"],value:rung}],detail);
           };
           // A cell may undo only a press whose entire footprint is this address.
           const step=record.lease.entry.journal.read().undo.findLast(step=>!step.barrier&&!step.superseded&&step.transitions.every(t=>t.paths.every(p=>address.every((key,i)=>String(p[i])===key))));
@@ -558,6 +566,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           };
           return {owner:{route,label:route===own?"Work":`from /${route}`},value, facts:{...facts,baseline:facts.baseline??value.base?.value},
             freshness:ready?"current":owners.get(route)!.doc===null&&core.value===undefined?"never":"stale", refusal: facts.readOnly ? "This cell is read-only" : refusal, clear, accept,deny:clear,undo,
+            delete:(detail)=>cellPatch([{path:address}],detail),
             stage:(value2,detail)=> facts.readOnly ? Promise.resolve({code:"read-only",message:"This cell is read-only"}) :
               patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,
                 Object.hasOwn(facts,"baseline")&&canonicalRouteInput(value2)===canonicalRouteInput(facts.baseline)?{kind:"clear"}:{kind:"set",rung:{value:value2}}),detail,route),

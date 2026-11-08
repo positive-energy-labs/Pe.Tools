@@ -86,6 +86,7 @@ export interface OwnedCell {
   transitions(history?: EditHistory): import("@pe/kit/lang/cell").CellTransition[];
   stage(value: unknown, history?: EditHistory): Promise<EditFailure>;
   clear(history?: EditHistory): Promise<EditFailure>;
+  delete(history?: EditHistory): Promise<EditFailure>;
 }
 export interface EditableCells<W, Edit> {
   readonly doc: Immutable<W> | null;
@@ -159,6 +160,7 @@ export type Specification<
     readonly [K in keyof Reads]: {
       title: string;
       purpose: string;
+      subjectList?: true;
       read?: Reads[K];
       bindings?(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): PaneBindings;
       draw(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): unknown;

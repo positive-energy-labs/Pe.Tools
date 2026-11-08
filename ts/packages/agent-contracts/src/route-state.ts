@@ -124,7 +124,7 @@ export type RouteDocOf<TSpec> =
   TSpec extends RouteStateSpec<infer TSchema> ? z.infer<TSchema> : never;
 
 /** A segment-array patch. Omit `value` to delete. Host-issued restore may replace the root at []. */
-export const routeStatePatchSchema = z.object({
+export const routeStatePatchSchema = z.strictObject({
   path: z.array(z.union([z.string(), z.number()]), {
     error: 'must be a segment array, e.g. ["scope","edit"]',
   }),
