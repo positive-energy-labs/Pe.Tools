@@ -1,5 +1,4 @@
 import type { MountScope } from "./work-scope";
-import type { MountEnvironment } from "./mount-environment";
 import type { LegacyVerbEnvironment } from "./legacy-environment-bridge";
 import { type SettingsOwner } from "./settings";
 import {
@@ -39,7 +38,6 @@ export type BindingScope<P, W> = MountScope<W> & {
 };
 
 export interface MountAdapters<P, W> extends VerbReadingEdges {
-  environment?: MountEnvironment;
   legacyEnvironment?: LegacyVerbEnvironment;
   selectPage?(page: P): void;
   readingSources?: Readonly<Record<string, ReadingSource>>;

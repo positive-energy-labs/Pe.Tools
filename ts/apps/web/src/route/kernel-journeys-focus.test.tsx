@@ -491,99 +491,12 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
 });
 
 
-// Chadds continuation at 2026-11-07T15:30:23Z: one human fan-flow edit, a refused
-// missing parameter and ancillary loss/store writes. This is a reconstructed Plan,
-// not a recovered native receipt. Keep this surface journey independent of run files.
-import type { DuctsApply } from "@pe/host-contracts/generated";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
-import { lossPlanRefusal } from "../../../host/src/ducts-actions";
-import { snapshot as ductsSeed } from "../ducts/test-fixture";
-import { presentLosses } from "../ducts/reviews";
 import { inputRows } from "../ducts/sheet/input-rows";
 import { SheetCell } from "../ducts/sheet/sheet-cell";
-import { writeHeld } from "../shell/admitted-chrome";
-import { PreviewAction, WriteAction } from "@pe/kit/lang/write-action";
+import { PreviewAction } from "@pe/kit/lang/write-action";
 
-// Rule: refused human intent cannot authorize ancillary writes; review must name
-// each element and its native stored setting, and disclose computed write-back.
-test("JZ Fans Plan integrity: inspect refused flow and computed losses without authorizing Apply", () => {
-  const fanId = 8775469;
-  const slots = {
-    fanStatic: "PE_M_Fan_ExternalStaticPressure", fanFlow: "PE_M_Fan_AirFlowDesign",
-    componentDrop: "Pressure Drop", terminalDrop: "PE_M_Grd_ExternalStaticPressure",
-    fittingCoefficient: "Pe_C", terminalFlow: "PE_M_Grd_AirFlow",
-  };
-  const snapshot: DuctSnapshot = {
-    ...ductsSeed, slots,
-    levels: [{ id: 1, name: "Level 1", elevationFt: 0 }, { id: 2, name: "Level 2", elevationFt: 10 }],
-    nodes: [
-      { id: fanId, kind: "equipment", category: "Mechanical Equipment", label: "MUAS-1",
-        type: "MUAS 10", family: "Fantech", flowParameter: null, connectors: [], facts: [] },
-      { id: 2, kind: "accessory", type: '10"', category: "Duct Accessories", partType: "Damper",
-        levelId: 1, connectors: [], facts: [],
-        loss: { method: "ashrae-table", coefficient: 0.19, table: "CD9-1", fields: {} } },
-      { id: 3, kind: "accessory", type: '10"', category: "Duct Accessories", partType: "Damper",
-        levelId: 2, connectors: [], facts: [] },
-    ], segments: [],
-  };
-  const writes: DuctsApply.Res.Response["writes"] = [
-    { id: 2, kind: "component", outcome: "planned", before: "unset", after: "0.0398 in-wg", parameter: "Specific Loss" },
-    { id: fanId, kind: "equipment-flow", outcome: "refused", before: null,
-      reason: "neither the instance nor its type has 'PE_M_Fan_AirFlowDesign'" },
-    ...Object.entries(slots).map(([key, after]) => ({ kind: "slot", key, before: null, after, outcome: "planned" })),
-    { kind: "store", before: "absent", after: "revision 1", outcome: "planned" },
-    { kind: "store", key: "instances", before: null, after: "updated", outcome: "planned" },
-  ];
-  const refusal = lossPlanRefusal(writes);
-  const preview = {
-    previewOnly: true,
-    seal: { caller: { kind: "human", via: "local" }, requestHash: "fans-plan-integrity",
-      work: {}, documentMark: { session: "recorded-chadds", openId: "chadds", observedSince: 1, changedAt: 1 },
-      incarnation: null, dependencies: "recorded-chadds" },
-    ...(refusal ? { planRefusal: `MUAS-1: ${refusal}; add the parameter to the family or map flow to an existing parameter` } : {}),
-    value: { writes, counts: { planned: 9, refused: 1, unchanged: 0, written: 0 } },
-    derivedRequest: { slots, equipmentFlows: [{ id: fanId, cfm: 1000 }],
-      components: [{ id: 2, inWg: 0.0398, source: "damper CD9-1 C=0.19" }] },
-  };
-  const review = presentLosses(preview, { readings: { sheetSnapshot: { value: snapshot } } });
-  const held = writeHeld("Write to Revit", { ...review, preview, stale: false });
-  const apply = vi.fn(async () => null);
-  render(<WriteAction label="Plan fan writes" says="Plan current Work" held={held.held}
-    plan={async () => null} apply={{ label: "Write to Revit", says: "Apply the Plan",
-      refusal: held.sealed ? null : "MUAS-1 has no writable PE_M_Fan_AirFlowDesign parameter", run: apply, done: "Written" }} />);
-  fireEvent.click(screen.getByRole("button", { name: /planned/ }));
-  const commit = screen.getByRole("button", { name: "Write to Revit" });
-  fireEvent.click(commit);
-  expect.soft(apply, "atomic intent: the admitted chrome cannot apply the refused Plan").not.toHaveBeenCalled();
-  expect.soft(held.sealed, "atomic intent: bookkeeping cannot arm Apply").toBe(false);
-  expect.soft(document.body.textContent, "refusal names the human edit and its remedy").toMatch(/MUAS-1.*PE_M_Fan_AirFlowDesign[\s\S]*add the missing parameter/);
-  expect.soft(screen.queryByText("Computed losses written back"), "derived losses have their own heading").not.toBeNull();
-  expect.soft(screen.queryByText("Pe loss record"), "bookkeeping has its own heading").not.toBeNull();
-  expect.soft(document.body.textContent, "before is the native stored setting, not the snapshot coefficient").toContain("unset");
-  const labels = review.cells.filter(cell => cell.key.startsWith("component:")).map(cell => cell.label);
-  expect.soft(labels[0], "a size-only type names the damper and its level").toMatch(/damper.*Level 1/i);
-  expect.soft(document.body.textContent, "write review exposes a searchable element identity").toContain(String(fanId));
-  cleanup();
-
-  // The shared review entry point must refuse too, even for older results with no planRefusal field.
-  const { planRefusal: _reason, ...legacyPreview } = { planRefusal: undefined, ...preview };
-  render(<PreviewAction label="Write to Revit" handle={{ read: () => ({ ...review, preview: legacyPreview, stale: false }),
-    plan() {}, apply, cancel() {} }} />);
-  fireEvent.click(screen.getByRole("button", { name: /planned/ }));
-  expect.soft(screen.queryByRole("button", { name: "Write to Revit" }), "a mixed native result exposes no Apply").toBeNull();
-  cleanup();
-
-  const rows = inputRows({ snapshot, doc: null, fanUnitId: fanId, inputs: inputsFor(snapshot) });
-  const control = rows.find(row => row.key === `unit:${fanId}:cfm`)!.control;
-  if (control.kind !== "number") throw Error("Unit airflow is not a number cell");
-  // Base has no refusal member: the cast lets the same journey reach its DOM falsifier there.
-  const editRefusal = (control as typeof control & { refusal?: string }).refusal ?? null;
-  render(<SheetCell label="MUAS-1 flow" value={control.value} unit={{ label: "cfm" }} digits={0}
-    source="none" refusal={editRefusal} onValue={apply} />);
-  expect.soft(document.querySelector('[data-body="locked"]'), "missing parameter locks the edit before Plan").not.toBeNull();
-  expect.soft(document.body.innerHTML, "the edit-time explanation identifies the missing slot").toContain("PE_M_Fan_AirFlowDesign");
-});
 // Plan reviews seal model inputs, never browser pane visibility or Page pose.
 import { useEffect, useReducer } from "react";
 import realMuas from "../../../../packages/ducts-domain/src/sheet/fixtures/muas-local-20261102.json";
@@ -1559,6 +1472,7 @@ test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow in
     expect(mount.owner()!.doc.basis.stale ?? []).toEqual([]);
   } finally { mount.journal().intents.forEach(intent => mount.discardIntent(intent.id)); mount.dispose(); }
 }, 60_000);
+
 
 test("JZ Plan refusal marker holds a valid sealed ancillary-only review at the typed action", async () => {
   const f = await createWitness(closes, new Map(), { "ducts.sheet-snapshot": {

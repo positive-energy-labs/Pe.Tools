@@ -7,7 +7,7 @@ import {
   type WorkWriteAck,
 } from "@pe/agent-contracts";
 import type { ScopeToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import { legacyLiveVerbs, unavailableLegacyVerbs } from "./legacy-environment-bridge";
+import { legacyLiveVerbs } from "./legacy-environment-bridge";
 
 import type { WorkJournal } from "./journal";
 import { acquireWorkWriter, writeLabel, type WorkWriter } from "./work-writes";
@@ -226,10 +226,7 @@ export function createMountWork<P, W>(
     return result;
   };
   return {
-    legacyCommands: (adapters.environment
-      ? unavailableLegacyVerbs
-      : (adapters.legacyEnvironment ?? legacyLiveVerbs)
-    ).commands,
+    legacyCommands: (adapters.legacyEnvironment ?? legacyLiveVerbs).commands,
     get scope() {
       return scope;
     },

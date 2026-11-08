@@ -235,7 +235,7 @@ const privateModules = new Set([
   `${WEB}route/view-owner.ts`,
 ]);
 const compositionRoots = new Set([
-  // Native typed mounts own the same fixture/live boundary as the admitted composition.
+  // Typed mounts own the fixture/live composition boundary.
   `${WEB}shell/typed-mount.ts`,
   `${WEB}shell/typed-shell.tsx`,
   `${WEB}shell/mount-work.tsx`,
@@ -243,9 +243,6 @@ const compositionRoots = new Set([
   // The shared selector was extracted without the retired fixture engine.
   `${WEB}shell/fixture-name.ts`,
   `${WEB}chat/owner.tsx`,
-  `${WEB}shell/admitted-scope.ts`,
-  `${WEB}shell/admitted-body.ts`,
-  `${WEB}shell/admitted-readings.ts`,
 ]);
 // Admitted Place composition may bind app capabilities and fixture inputs. Its implementation
 // is private like the shell; direct private-owner imports and re-exports still cross the fence.
