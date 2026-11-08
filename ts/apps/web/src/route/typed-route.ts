@@ -140,6 +140,8 @@ export type Specification<
   key: string;
   address?: string;
   name: string;
+  /** Person-only surfaces opt out of both builtin and admitted Page leases. */
+  agent?: false;
   directory: RouteGraphJson["directory"];
   needs?: "project" | "family" | "document" | "host" | "browser";
   optionalTarget?: "document" | "project" | "family" | "session";
@@ -220,7 +222,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     fieldSchemas[key]=schema;
     schemas[schema]=field.schema;
     fields[key]={role:field.role === "subject" ? "query" : field.role,schema,codec:key,
-      ...(field.initial === undefined ? {} : {initial:field.initial}),url:field.url,share:true,agent:"set"};
+      ...(field.initial === undefined ? {} : {initial:field.initial}),url:field.url,share:true,agent:spec.agent === false ? "none" : "set"};
   }
   const readIds = new Map<HostRead,string>();
   if(spec.core) readIds.set(spec.core,"value");
@@ -229,7 +231,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   const subjectRead=spec.subject ? readIds.get(spec.subject.read ?? spec.core!) : undefined;
   if(spec.subject && !subjectRead) throw Error("Subject read must be declared by the route");
   if(spec.subject) fields[spec.subject.field]={...fields[spec.subject.field],role:"subject",schema:fieldSchemas[spec.subject.field]!,
-    codec:spec.subject.field,initial:spec.fields[spec.subject.field]!.initial,url:"push",share:true,agent:"set",
+    codec:spec.subject.field,initial:spec.fields[spec.subject.field]!.initial,url:"push",share:true,agent:spec.agent === false ? "none" : "set",
     cardinality:"many",identity:"subject",picker:{reading:subjectRead!,options:"subject"}};
   fields.selected={role:"selection",kinds:["focus"]};
   const readings: Record<string,RouteGraphJson["readings"][string]>={};

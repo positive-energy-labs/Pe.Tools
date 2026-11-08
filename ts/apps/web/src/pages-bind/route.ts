@@ -20,6 +20,8 @@ export type { Context as BindContext } from "./context.generated";
 export const module = route({
   key: "bind",
   name: "Bind",
+  // Binding a Page is the person's press; Pea has no Page lease here.
+  agent: false,
   needs: "host",
   host: "../../../host/src/reads/bind.ts",
   directory: {
