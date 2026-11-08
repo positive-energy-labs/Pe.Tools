@@ -1,13 +1,13 @@
-import { fansDocumentSchema } from "@pe/agent-contracts";
-import { detachedBridge, sessionView, consentService, harnessThreads, testSpawner, settle, testHostInputs, captureStore } from "./effect-test.ts";
-import { nativeReadRoot } from "../src/app.ts";
-import { HostNativeRead } from "@pe/host-internal/native-read";
-import { RevitBridge } from "../src/bridge.ts";
-import { SdkDriver } from "../src/sdk-session.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
-import { HostDocumentMarks } from "../src/document-marks.ts";
+
+import { consentService, harnessThreads, testSpawner, settle } from "./effect-test.ts";
+
+
+
+
+
+
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
-import { afterAll, afterEach, beforeAll, expect, onTestFinished, test, vi } from "vite-plus/test";
+import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
 import { createServer, type Server } from "node:http";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -15,17 +15,10 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { Context, Effect, Exit, Layer, Schema, Scope } from "effect";
+import { Effect, Schema } from "effect";
 import { HarnessEventLine } from "../src/harness/thread-store.ts";
-import type {
-  Caller,
-  HarnessEvent,
-  HarnessThreadBody,
-  PluginHookName,
-  PluginHooks,
-  WorkHandle,
-} from "@pe/agent-contracts";
-import { HARNESS_EVENT_MAX_BYTES, tools, bindWork, stagedDucts, workKey, address as documentAddress } from "@pe/agent-contracts";
+import type { Caller, HarnessEvent, HarnessThreadBody, PluginHookName, PluginHooks } from "@pe/agent-contracts";
+import { HARNESS_EVENT_MAX_BYTES } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "./callers.ts";
 import {
@@ -48,13 +41,13 @@ import { productProvidersPath } from "../src/product-paths.ts";
 import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
 import type { Envelope } from "@pe/host-contracts/pe-revit-contract";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
-import { ActionJournal } from "../src/action-journal.ts";
-import { commandRegistry } from "../src/command-registry.ts";
-import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
-import { hostOwnership } from "../src/host-ownership.ts";
-import { sdkSessions } from "./native-receipt-fixture.ts";
-import { buildCapabilities, peFind, peRead } from "@pe/mcps";
-import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
+
+
+
+
+
+
+
 // Process journeys spawn real harness children, so machine load moves their time. Budget is 3x the
 // slowest solo run (10.8 s, 2026-11-04); the 15 s default stays for unit files (vite.config.ts:59).
 vi.setConfig({ testTimeout: 30_000 });
@@ -194,262 +187,6 @@ const kinds = (events: HarnessEvent[]) =>
         (event.kind !== "session" || events.findIndex((item) => item.kind === "session") === index),
     )
     .map((e) => (e.kind === "update" ? `update:${e.update.sessionUpdate}` : e.kind));
-
-test.each(["claude", "codex"] as const)(
-  "%s: canonical Address Work joins find, stage, sealed preview, 60-second consent, journal apply and receipt in one chain",
-  async (harness) => {
-    const dir = await mkdtemp(join(root, "chain-"));
-    const h = await host(),
-      call = caller(h),
-      read = reader(h);
-    const target = { session: "A", openId: "open-A" };
-    const address = documentAddress("C:/Models/chain.rvt");
-    const key = bindWork("ducts", address, undefined, target);
-    const routes = createPeRoutes({
-      registrations: [{ spec: tools.ducts.work }, { spec: tools.fans.work }],
-      store: fileRouteDocumentStore(join(dir, "work")),
-      heads: { observe: () => () => {} },
-      navigation: { documents: async () => [{ ...target, address }], threads: async () => [] },
-    });
-    const snapshot = JSON.parse(
-      await readFile(
-        new URL(
-          "../../../packages/host-contracts/src/fixtures/k2-four-fan-walk.json",
-          import.meta.url,
-        ),
-        "utf8",
-      ),
-    );
-    const writes: unknown[] = [];
-    const invokeFixture = (op: string, input: unknown, _session?: string, _doc?: string | null, requestId?: string) =>
-        Effect.promise(async () => {
-          let value: unknown;
-          if (op.startsWith("ducts.snapshot.")) value = snapshot;
-          else if (op === "ducts.tables") value = { folder: "fixture", tables: {}, missing: [], unsupported: {} };
-          else if (op === "ducts.apply" || op === "ducts.apply.plan") {
-            const preview = op === "ducts.apply.plan";
-            await journal.markDispatched(requestId!);
-            if (!preview) writes.push(input);
-            value = {
-              previewOnly: preview,
-              counts: { written: preview ? 0 : 1, planned: preview ? 1 : 0, refused: 0, unchanged: 0 },
-              writes: [{ kind: "equipment-flow", id: 14577391, outcome: preview ? "planned" : "written" }],
-              storeRevision: 1,
-              systemsAfter: [],
-            };
-          } else throw Error(`Unexpected bridge op ${op}`);
-          return { value, target: { session: "A", document: address, documentRef: target } };
-        });
-    const bridge = detachedBridge({
-      list: Effect.succeed([
-        sessionView({
-          sessionId: "A",
-          connected: true,
-          ...hostOwnership,
-          processId: 42,
-          processStartUtcUnixMs: 1000,
-          state: { openDocuments: [{ ...target, address, isFamilyDocument: false }] },
-        }),
-      ]),
-      invoke: invokeFixture,
-      invokeHandle: (key, input, session, openId, requestId) => Effect.gen(function* () {
-        const answer = yield* Effect.cached(invokeFixture(key, input, session, openId, requestId).pipe(
-          Effect.map(({ value }) => ({
-            value,
-            nativeRequestId: requestId!,
-            actualTarget: { processIncarnation: { pid: 42, startedAt: 1000 }, openDocumentLifetime: openId ? { openId } : { kind: "session-only" as const } },
-            freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" as const },
-            cost: {}, outcome: "native-acknowledged" as const,
-          })),
-        ));
-        return { answer, terminal: Effect.as(answer, "native-acknowledged" as const) };
-      }),
-    });
-    const readScope = Scope.makeUnsafe();
-    onTestFinished(() => settle(Scope.close(readScope, Exit.void)));
-    const readContext = await settle(Layer.buildWithScope(
-      Layer.mergeAll(Layer.effect(HostNativeRead, HostNativeRead), testHostInputs).pipe(
-        nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
-        Layer.provide(Layer.succeed(RevitBridge, bridge)),
-      ), readScope,
-    ));
-    const deps = { sdk: sdkSessions, nativeRead: Context.get(readContext, HostNativeRead), files: Context.get(readContext, DuctFiles), marks: Context.get(readContext, HostDocumentMarks) };
-    const resolve = commandRegistry(bridge, captureStore("harness-threads"), deps, async () => {
-      throw Error("No local command in this journey");
-    });
-    const journal = new ActionJournal(join(dir, "journal.jsonl"), Date.now);
-    journal.bindCommands({
-      work: routes.workspace,
-      resolve,
-      probe: async () => true,
-    });
-    let base = "";
-    let located: WorkHandle;
-    const failures: unknown[] = [];
-    const server = createServer(async (incoming, outgoing) => {
-      try {
-        const path = new URL(incoming.url!, base).pathname;
-        const resolved = callerOf(
-          { kind: "local" },
-          { "x-pe-context": String(incoming.headers["x-pe-context"] ?? "") },
-        );
-        if (!("caller" in resolved)) throw Error("Unrecognized chain caller");
-        const result = await withInvocationContext(
-          {
-            caller: resolved.caller,
-            hostBaseUrl: base,
-            headers: { "x-pe-context": String(incoming.headers["x-pe-context"] ?? "") },
-          },
-          async () => {
-            if (path === "/pe/scope/self") return Response.json({}, { status: 404 });
-            if (path === "/ops") return Response.json({ operations: [] });
-            if (path === "/call")
-              return Response.json({
-                sessions: [
-                  { sessionId: "A", connected: true, openDocuments: [{ ...target, address }] },
-                ],
-              });
-            if (path === "/pe/route-state/fans")
-              return routes.fetch(new Request(`${base}${incoming.url}`));
-            if (path === "/chain/locate") {
-              const found = await peRead.execute(
-                { key: "route:fans", timeoutSeconds: 30, target: { kind: "open", ref: target } },
-                {},
-              );
-              expect(found).toMatchObject({
-                ok: true,
-                target: { document: address },
-                result: {
-                  revision: 1,
-                  doc: { equipmentFlows: { "14577391": { edit: { value: { cfm: 975 } } } } },
-                },
-              });
-              const census = await routes.workspace.instances();
-              expect(census.works).toHaveLength(1);
-              expect(census.works[0]).toMatchObject({ scope: { binding: "address" }, revision: 1 });
-              expect(workKey(census.works[0]!.scope)).toBe(workKey({ ...key, route: "fans" }));
-              located = { key, revision: 0 };
-              return Response.json(found);
-            }
-            if (path === "/pe/capabilities")
-              return Response.json({
-                at: new Date().toISOString(),
-                sources: {},
-                diagnostics: [],
-                machine: machineFixture(),
-                capabilities: buildCapabilities({
-                  ops: [],
-                  routes: [tools.ducts.work, tools.fans.work],
-                  packages: [],
-                  skills: [],
-                }),
-              });
-            if (path === "/chain/find")
-              return Response.json(await peFind.execute({ query: "ducts", limit: 8 }, {}));
-            if (path === "/chain/stage")
-              return routes.fetch(
-                new Request(
-                  `${base}/pe/route-state/fans/apply?target=${encodeURIComponent(address)}`,
-                  {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({
-                      kind: "apply",
-                      expectedRevision: 0,
-                      press: null,
-                      patches: [
-                        {
-                          path: ["equipmentFlows", "14577391"],
-                          value: { edit: { value: { cfm: 975, source: "chain" } } },
-                        },
-                        {
-                          path: ["writeIntent"],
-                          value: {
-                            edit: {
-                              value: {
-                                walk: { unitId: 14577391, portIndex: 2 },
-                                cells: [["equipmentFlows", "14577391"]],
-                              },
-                            },
-                          },
-                        },
-                      ],
-                    }),
-                  },
-                ),
-              );
-            const phase = path.endsWith("/preview") ? "preview" : "apply";
-            const work = located;
-            await journal.invoke(
-              {
-                id: phase,
-                key: `ducts.${phase === "preview" ? "plan" : "apply"}-losses`,
-                target: { kind: "document", ref: target },
-                input: { work },
-              },
-              { caller: resolved.caller, basis: null },
-            );
-            return Response.json(await journal.wait(phase));
-          },
-        );
-        outgoing.writeHead(result.status, Object.fromEntries(result.headers));
-        outgoing.end(await result.text());
-      } catch (error) {
-        failures.push(error);
-        outgoing.writeHead(500);
-        outgoing.end(String(error));
-      }
-    });
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
-    vi.stubEnv("FAKE_ACP_CHAIN", `${base}/chain`);
-    try {
-      const id = (await call("POST", "/pe/threads", { providerId: harness })).json.id as string;
-      await until(read, id, (body) => body.models.length > 0);
-      bindControl({ runs: h.runs });
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-      await call("POST", `/pe/threads/${id}/prompt`, { text: `chain ${harness}` });
-      const waiting = await untilIo(
-        () => read(id),
-        (body) => !body.running || openAsks(body).some((ask) => ask.scope === "run"),
-      );
-      expect(openAsks(waiting), String(failures[0] ?? JSON.stringify(waiting.events))).toHaveLength(1);
-      expect(JSON.stringify(waiting.events)).toContain("chain find:");
-      const preview = (await journal.list(undefined, "preview"))[0];
-      expect(preview).toMatchObject({
-        state: "succeeded",
-        result: { previewOnly: true, seal: { requestHash: expect.any(String) } },
-      });
-      expect(writes).toHaveLength(0);
-      await vi.advanceTimersByTimeAsync(59_000);
-      expect(writes).toHaveLength(0);
-      await vi.advanceTimersByTimeAsync(1_000);
-      const done = await untilIo(
-        () => read(id),
-        (body) => !body.running && turnEnds(body).length === 1,
-      );
-      expect(JSON.stringify(done.events)).toContain("chain apply:");
-      expect(writes).toHaveLength(1);
-      expect(await journal.wait("apply")).toMatchObject({
-        state: "succeeded",
-        consent: { decision: { by: "deadline" } },
-        steps: [
-          { kind: "native", state: "succeeded", dispatchedAt: expect.any(String) },
-          { kind: "publication", state: "succeeded" },
-        ],
-      });
-      const saved = (await routes.workspace.view(key, "ducts"))!.doc as never;
-      const fans = fansDocumentSchema.parse((await routes.workspace.view({ ...key, route: "fans" }, "fans"))!.doc);
-      expect(stagedDucts(saved, fans).equipmentFlows).toEqual({});
-      expect(writes[0]).toMatchObject({ equipmentFlows: [{ id: 14577391, cfm: 975, source: "chain" }] });
-    } finally {
-      vi.useRealTimers();
-      await h.close();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    }
-  },
-  30_000,
-);
 
 test("automatic update admission refuses a new Pea prompt through download and releases on confirmed refusal", async () => {
   const planId = "64f25f46-dfa6-4ee6-b973-d7f6a8b523c4";

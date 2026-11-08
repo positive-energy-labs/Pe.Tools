@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { fixtureNative } from "./fixture-native.ts";
+import { nativeRecordings } from "./native-recordings.ts";
 import { z } from "zod";
 import { bindWork, type Caller } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
@@ -7,7 +10,7 @@ import { testConsents } from "./effect-test.ts";
 import type { ConsentEvent } from "../src/run-consent.ts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { pictureCaptures } from "./effect-test.ts";
-import { acknowledgedReadBridge, detachedBridge, sessionView } from "./effect-test.ts";
+import { detachedBridge } from "./effect-test.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { nativeReadRoot } from "../src/app.ts";
@@ -17,7 +20,7 @@ import { RevitBridge } from "../src/bridge.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
-import { hostOwnership } from "../src/host-ownership.ts";
+
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -58,47 +61,14 @@ test("/captures serves the store only: a navigation is the SPA, a caller path ne
   }
 });
 
-test("a full picture service refuses /call without advertising an unkept capture", async () => {
+// This replay also needs the immutable captured PNG at its recorded path. No path/body synthesis.
+test.skipIf(!existsSync((nativeRecordings("retained-view-image").responses["revit.context.view-image"] as { filePath: string }).filePath))(
+  "a full picture service refuses recorded /call output without advertising an unkept capture (UNPROVEN if retained asset unavailable)", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-capture-full-"));
-  const path = join(dir, "image.png");
-  await writeFile(path, "png");
-  const scope = { bridgeSessionId: "bridge-a", openDocumentId: "open-a" };
-  const bridge = acknowledgedReadBridge(
-    detachedBridge({
-      list: Effect.succeed([
-        sessionView({
-          sessionId: scope.bridgeSessionId,
-          connected: true,
-          ...hostOwnership,
-          processId: 42,
-          processStartUtcUnixMs: 1000,
-          state: {
-            openDocuments: [
-              {
-                openId: scope.openDocumentId,
-                title: "HVAC",
-                address: "C:/HVAC.rvt",
-                isFamilyDocument: false,
-              },
-            ],
-          },
-        }),
-      ]),
-      invoke: () =>
-        Effect.succeed({
-          value: {
-            view: { kind: "View", documentKey: "fixture", elementId: 7, label: "L1" },
-            filePath: path,
-            byteSize: 3,
-            width: 1500,
-            height: 1500,
-            registrationRefusal: "NoCrop",
-          },
-          target: { session: scope.bridgeSessionId, document: "C:/HVAC.rvt" },
-        }),
-    }),
-  );
-  const journal = new ActionJournal(join(dir, "journal.jsonl"), Date.now);
+  const native = await fixtureNative(join(dir, "native"), "retained-view-image");
+  const socket = await native.connect();
+  const scope = { bridgeSessionId: socket.target.session, openDocumentId: socket.target.openId };
+  const { bridge, journal } = native;
   let store!: PictureCaptureStore["Service"];
   const web = HttpRouter.toWebHandler(
     Layer.mergeAll(
@@ -142,6 +112,7 @@ test("a full picture service refuses /call without advertising an unkept capture
   } finally {
     await journal.close();
     await web.dispose();
+    await native.close();
     await rm(dir, { recursive: true, force: true });
   }
 });

@@ -1,13 +1,13 @@
-import { nativeReadRoot } from "../src/app.ts";
+import { fixtureNative } from "./fixture-native.ts";
 import { testHostInputs } from "./effect-test.ts";
 import { pictureCaptures } from "./effect-test.ts";
 /**
  * Host-local pod reads and archive transport over the production `/call` route. No Revit: the
- * bridge is a stub that fails the test if anything reaches it.
+ * production bridge has no connected native session.
  */
-import { detachedBridge, captureStore } from "./effect-test.ts";
+import { captureStore } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
-import { Effect, Layer } from "effect";
+import { Layer } from "effect";
 import { mkdir, mkdtemp, open, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -17,7 +17,6 @@ import { mintContext } from "../src/control.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 
 const homeVariable = productPathNames.productHomeVariable;
-import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import type { PictureCaptures } from "../src/captures-route.ts";
 import { listPackages } from "../src/packages.ts";
@@ -28,26 +27,22 @@ let root: string;
 let pods: string;
 let web: Awaited<ReturnType<typeof serveRoutes>>;
 let headers: Record<string, string>;
-const nativeCalls: string[] = [];
+let native: Awaited<ReturnType<typeof fixtureNative>>;
 const previousHome = process.env[homeVariable];
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "pe-pod-transfer-"));
   process.env[homeVariable] = join(root, "Documents", "Pe.Tools");
   pods = join(root, "Documents", "Pe.Tools", "Pods");
-  const bridge = detachedBridge({
-    invoke: (key: string) => {
-      nativeCalls.push(key);
-      return Effect.die(`native call ${key}`);
-    },
-  });
+  native = await fixtureNative(join(root, "native"));
+  const bridge = native.bridge;
   headers = {
     "content-type": "application/json",
     "x-pe-context": mintContext({ kind: "human", via: "cli" }),
   };
   web = await serveRoutes(
     makeCallRoute(
-      new ActionJournal(join(root, "journal.json"), Date.now),
+      native.journal,
       captureStore(join(root, "captures")),
     ).pipe(Layer.provide(testHostInputs)),
     bridge,
@@ -58,7 +53,7 @@ afterEach(async () => {
   await rm(productPluginDecisionsPath(), { force: true });
   if (previousHome === undefined) delete process.env[homeVariable];
   else process.env[homeVariable] = previousHome;
-  nativeCalls.length = 0;
+  await native.close();
   await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
@@ -161,7 +156,7 @@ test("identity refuses selected invalid members, links and unsafe output folders
   expect(
     (await call("pod.list", { projection: "identity", folder: "default/nested" })).status,
   ).toBe(400);
-  expect(nativeCalls).toEqual([]);
+  expect((await native.journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
 });
 
 /* ── Archive transport: host-only, zero native calls ──────────────────────────────────────── */
@@ -281,7 +276,7 @@ test("export vendors, ports the project, closes captures; import into a renamed 
   await expect(
     importPod({ archivePath, folder: "Twice" }, { podsRoot: otherPods, captures: otherStore }),
   ).rejects.toThrow(/already installed in folder 'Other Name'/);
-  expect(nativeCalls).toEqual([]);
+  expect((await native.journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
 });
 
 test("a capture this host does not hold refuses export and writes nothing", async () => {
@@ -314,7 +309,7 @@ test("pod.export and pod.import cross /actions with no session and no native cal
   expect(missing).toMatchObject({ error: expect.stringContaining("relative.zip") });
   expect(missing).toMatchObject({ state: "failed", notDispatched: true, steps: [] });
   expect((await listPackages(pods)).packages.map((pod) => pod.id)).toEqual(["ducts"]);
-  expect(nativeCalls).toEqual([]);
+  expect((await native.journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
 });
 
 const zip = (files: Record<string, string | Buffer>) =>
@@ -387,5 +382,5 @@ test("pod.promote wraps a scratch Page byte for byte, unbound, without touching 
   expect(missing).toMatchObject({ error: expect.stringContaining(join(pages, "missing")) });
   expect(missing).toMatchObject({ state: "failed", notDispatched: true, steps: [] });
   await expect(readFile(join(pods, "other", "pod.json"))).rejects.toThrow();
-  expect(nativeCalls).toEqual([]);
+  expect((await native.journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
 });
