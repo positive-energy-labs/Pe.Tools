@@ -699,7 +699,7 @@ test("JZ readiness waiters reject when a held Family Place is hidden or retired"
     expect(await Promise.all(hiding)).toEqual(["Place is inactive or retired", "Place is inactive or retired"]);
     const beforeLateWaiters = opens;
     expect(await Promise.all(capture(hidden)), "Waiting must not reacquire a hidden Place").toEqual(["Place is inactive or retired", "Place is inactive or retired"]);
-    expect(opens, "Late waiters do not open new reading connections").toBe(beforeLateWaiters);
+    expect.soft(opens, "Late waiters do not open new reading connections").toBe(beforeLateWaiters);
     fireEvent.click(screen.getByRole("button", { name: "Rebind Family" }));
     expect((await surfaceReadiness("pending")).getAttribute("data-readiness")).toBe("pending");
     const retired = owners.at(-1)!;
