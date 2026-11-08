@@ -11,7 +11,7 @@
  */
 import { useEffect, useState, useReducer, type ReactNode } from "react";
 import { z } from "zod";
-import { writeResponseSchema } from "@pe/agent-contracts";
+import { writePreviewSchema, writeResponseSchema } from "@pe/agent-contracts";
 import { Popover } from "@base-ui/react/popover";
 import type { LucideIcon } from "lucide-react";
 
@@ -88,11 +88,11 @@ export function PreviewAction({ handle, label, children, says = `Plan ${label} f
   const review = parsed.success ? parsed.data : null;
   const nativeWrites = z.object({ value: z.object({ writes: z.array(z.object({ outcome: z.string(), reason: z.string().optional() })) }) }).safeParse(review?.preview);
   const refused = nativeWrites.success ? nativeWrites.data.value.writes.filter(write => write.outcome === "refused") : [];
-  // fix/kernel-route-names owns the typed refusal field; use the loose preview marker until it lands.
-  const planRefusal = z.object({ planRefusal: z.string() }).safeParse(review?.preview);
-  const refusal = planRefusal.success ? planRefusal.data.planRefusal : refused.length
+  const preview = writePreviewSchema.safeParse(review?.preview);
+  const planRefusal = preview.success ? preview.data.planRefusal ?? preview.data.planRefusalCode : null;
+  const refusal = planRefusal ?? (refused.length
     ? [...new Set(refused.map(write => write.reason).filter(Boolean))].join("; ") || `${refused.length} planned writes were refused.`
-    : null;
+    : null);
   const empty = nativeWrites.success && (!nativeWrites.data.value.writes.some((write) => write.outcome === "planned") ||
       nativeWrites.data.value.writes.some((write) => write.outcome === "refused"));
   const sealed = !!review && !review.stale && writeResponseSchema.safeParse(review.preview).success;
