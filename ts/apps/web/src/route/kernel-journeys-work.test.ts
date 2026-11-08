@@ -23,7 +23,7 @@ import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
 import { ActionJournal } from "../../../host/src/action-journal";
 import { makeCallRoute } from "../../../host/src/call-route";
 import { nativeReadRoot } from "../../../host/src/app";
-import { RevitBridgeLive, RevitBridge } from "../../../host/src/bridge";
+import { RevitBridgeLive } from "../../../host/src/bridge";
 import { DuctFiles } from "../../../host/src/ducts-files";
 import { HostDocumentMarks } from "../../../host/src/document-marks";
 import { PictureCaptureStore } from "../../../host/src/captures-route";
