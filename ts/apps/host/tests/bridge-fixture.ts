@@ -1,9 +1,9 @@
 import { Effect, Queue } from "effect";
 import { type HttpServerRequest } from "effect/http";
-import { BRIDGE_CONTRACT_VERSION, type BridgeFrame } from "@pe/host-contracts/contracts";
+import { BRIDGE_CONTRACT_VERSION, type BridgeFrame, type BridgeStateSnapshot } from "@pe/host-contracts/contracts";
 import { RevitBridge } from "../src/bridge.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-export const connectTestBridge = (processId = 42, ownership: Record<string, unknown> = {}) =>
+export const connectTestBridge = (processId = 42, ownership: Record<string, unknown> = {}, state: Partial<BridgeStateSnapshot> = {}) =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
     // A string is one frame; an array is one socket batch, decoded frame by frame in one pull.
@@ -63,6 +63,7 @@ export const connectTestBridge = (processId = 42, ownership: Record<string, unkn
             revitVersion: "test",
             runtimeAssemblies: [],
             runtimeFramework: "test",
+            ...state,
           },
         },
       }),

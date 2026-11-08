@@ -1,0 +1,13 @@
+{
+  "writes": [
+    {
+      "elementId": 1235417,
+      "link": {
+        "identifier": 101,
+        "fileIdentity": "native-fixture.r10#recorded",
+        "syncedAt": "2026-11-08T01:47:36.3035379Z",
+        "lastSyncedSqft": 100.0
+      }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "categoryNames": [],
+  "scheduleNames": [],
+  "scheduleNameContains": null,
+  "scheduleNamePrefix": null,
+  "placementScope": "All",
+  "sheetNumberContains": null,
+  "sheetNameContains": null,
+  "isEmpty": null,
+  "customParameterFilters": [],
+  "browserFilter": null,
+  "includeTemplates": false,
+  "projection": null,
+  "budget": null
+}

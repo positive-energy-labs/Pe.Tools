@@ -1,0 +1,76 @@
+{
+  "scheduleId": 1236186,
+  "scheduleUniqueId": "9ded3681-9ebb-4d0e-9f55-75919a3971a1-0012dcda",
+  "edits": [
+    {
+      "rowNumber": 2,
+      "columnNumber": 1,
+      "expectedBinding": {
+        "columnNumber": 1,
+        "targetElementIds": [
+          1236169
+        ],
+        "parameterName": "Type Comments",
+        "parameterId": -1010105,
+        "storageType": "String",
+        "rawValue": "TC-SHARED",
+        "displayValue": "TC-SHARED",
+        "isTypeParameter": true,
+        "isEditable": true,
+        "targets": [
+          {
+            "elementId": 1236169,
+            "parameterId": -1010105,
+            "parameterName": "Type Comments",
+            "storageType": "String",
+            "isReadOnly": false,
+            "hasValue": true,
+            "rawValue": "TC-SHARED"
+          }
+        ],
+        "blocker": "None",
+        "hasMixedValues": false,
+        "displayUnit": null
+      },
+      "value": "TC-A",
+      "unit": null,
+      "rawInternal": false
+    },
+    {
+      "rowNumber": 3,
+      "columnNumber": 1,
+      "expectedBinding": {
+        "columnNumber": 1,
+        "targetElementIds": [
+          1236169
+        ],
+        "parameterName": "Type Comments",
+        "parameterId": -1010105,
+        "storageType": "String",
+        "rawValue": "TC-SHARED",
+        "displayValue": "TC-SHARED",
+        "isTypeParameter": true,
+        "isEditable": true,
+        "targets": [
+          {
+            "elementId": 1236169,
+            "parameterId": -1010105,
+            "parameterName": "Type Comments",
+            "storageType": "String",
+            "isReadOnly": false,
+            "hasValue": true,
+            "rawValue": "TC-SHARED"
+          }
+        ],
+        "blocker": "None",
+        "hasMixedValues": false,
+        "displayUnit": null
+      },
+      "value": "TC-B",
+      "unit": null,
+      "rawInternal": false
+    }
+  ],
+  "dryRun": false,
+  "transactionName": null
+}

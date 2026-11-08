@@ -1,0 +1,10 @@
+{
+  "view": "Native fixture plan",
+  "items": [
+    {
+      "elementId": 1235404,
+      "name": "Fixture zone",
+      "systemTag": "FIXTURE-1"
+    }
+  ]
+}
