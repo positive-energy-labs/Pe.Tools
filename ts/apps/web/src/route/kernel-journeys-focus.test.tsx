@@ -577,84 +577,79 @@ test.each(["review identity", "insertText", "pointer keyboard", "navigation keyb
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-test("JZ header chooser query keys preserve open systems until an explicit choice", async () => {
-  const [{ default: userEvent }, { fixture, ref, path }, { registeredReads }, reads,
-    { module: ducts }, { TypedSubject }, { observeResources }, { valueReadResponse }, { localId }] = await Promise.all([
-    import("@testing-library/user-event"), import("../../../host/tests/host-read-graph.test-support"),
-    import("../../../host/src/reads/routes"), import("../../../host/src/reads/ducts"),
-    import("../ducts/route"), import("../shell/typed-shell"), import("@pe/runtime"),
-    import("@pe/agent-contracts"), import("./typed-route"),
-  ]);
-  const { default: saved } = await import("../ducts/fixtures/synthetic-snapshot.json");
-  const { nativeResponseSchema } = await import("@pe/host-contracts/decoders");
-  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(saved);
-  snapshot.systems = [snapshot.systems[0]!, { ...snapshot.systems[0]!, id: 501, name: "SA 16" }];
-  for (const element of [...snapshot.nodes, ...snapshot.segments]) element.uniqueId ||= `chooser-${element.id}`;
-  const host = await fixture(false, { snapshot, roster: { ...snapshot, groups: [], segments: [], flows: [] } });
-  const definitions = [reads.ductsPricing, reads.ductsNetwork, reads.ductsRoster];
-  const unregister = registeredReads.register(Object.fromEntries(definitions
-    .filter(d => !registeredReads.reads.has(d.name)).map(d => [d.name, d])));
-  let generation = 0;
+test("JZ header chooser query keys preserve the current schedule until an explicit choice", async () => {
+  const { TypedSubject } = await import("../shell/typed-shell");
+  const { localId } = await import("./typed-route");
+  const host = await scheduleHost();
+  host.addSchedule(43, "Panel 16");
+  const pendingReads = new Set<Promise<void>>();
   const requests: unknown[] = [];
-  const sources = Object.fromEntries(definitions.map(d => [`${d.name}.value`, {
-    kind: "use" as const,
-    open(ctx, deliver) {
-      requests.push(ctx.args);
-      return host.probe({ read: d.name, subscription: `chooser-${++generation}`, generation,
-        args: { target: ref, ...(ctx.args as object) } }).then(async response => {
-        if (!response.ok) throw Error(await response.text());
-        const packet = valueReadResponse.parse(await response.json());
-        deliver({ kind: "complete", value: packet, revision: packet.version });
-      }).catch(error => deliver({ kind: "failure", error }));
-    },
-  } satisfies UseSource]));
-  let search = new URLSearchParams({ system: JSON.stringify({ kind: "ids", ids: [localId("ducts-system", "SA 1")] }) });
-  const listeners = new Set<() => void>();
-  const work = createWorkFeedClient({ subscribe: observeResources(host.workspace, { observe: () => () => {} }), dirty() {} }, {
-    write: (key, write) => host.workspace.write(key, key.route, "human", write),
-    submit: () => { throw Error("Chooser journey cannot write native data"); },
+  const source: UseSource = { kind: "use", open(ctx, deliver) {
+    requests.push(ctx.args);
+    const task = host.post("/pe/reads/value", {
+      read: "schedules.view", subscription: crypto.randomUUID(), generation: 1,
+      args: { target: host.b, ...(ctx.args as object) },
+    }).then(response => {
+      expect(response.status).toBe(200);
+      if (!ctx.signal.aborted) deliver({ kind: "complete", value: response.value, revision: response.value.version });
+    }).catch(error => { if (!ctx.signal.aborted) deliver({ kind: "failure", error }); });
+    pendingReads.add(task); void task.finally(() => pendingReads.delete(task));
+    return () => {};
+  } };
+  const native = createWorkFeedClient({ subscribe: () => () => {}, dirty() {} }, {
+    write: async () => { throw Error("Chooser journey cannot edit Work"); },
+    submit: async () => { throw Error("Chooser journey cannot write native data"); },
   });
-  // C042: the shared header chooser belongs to a route with no subject-list pane.
-  // Real Ducts owns its roster choice there; this journey retains the chooser's query safety.
-  const chooserOnly = route({ ...ducts.spec, subject: { ...ducts.spec.subject!, pane: "value" },
-    panes: { value: { title: "System value", purpose: "Inspect chosen systems", draw: () => null } },
-    layout: { kind: "pane", id: "value" } });
-  const mount = mounts.mountTypedRoute(chooserOnly, {
-    target: { kind: "document", ref }, fixture: null, work: { address: path, open: ref },
+  const work: WorkJournalDoor = { ...native, open: scope => ({ subscribe(deliver) {
+    let closed = false;
+    const task = host.view(scope.key.work).then(state => {
+      if (closed) return;
+      if (state.revision === 0) { deliver({ kind: "absent" }); return; }
+      deliver({ kind: "ready", history: { from: 0, acks: [] }, snapshot: {
+        handle: { key: scope.key, revision: state.revision }, revision: state.revision, value: state.doc,
+      } });
+    });
+    pendingReads.add(task); void task.finally(() => pendingReads.delete(task));
+    return () => { closed = true; };
+  } }) };
+  let search = new URLSearchParams({ workspaceId: JSON.stringify({ kind: "ids", ids: [localId("schedules", host.scope.work)] }) });
+  const listeners = new Set<() => void>();
+  // Schedules is the real route whose subject choice still belongs to the typed header.
+  const mount = mounts.mountTypedRoute(schedules, {
+    target: { kind: "document", ref: host.b }, fixture: null, work: { address: null, open: host.b },
     custody: { current: () => true }, memory: () => ({}),
     address: { read: () => new URLSearchParams(search), write(next) { search = next; listeners.forEach(f => f()); },
       subscribe(f) { listeners.add(f); return () => { listeners.delete(f); }; } },
-  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work, sources });
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work, sources: { "schedules.view": source } });
   let view: ReturnType<typeof render> | undefined;
   try {
     await waitFor(() => expect(mount.value().current).toBe(true), { timeout: 20_000 });
+    const chosen = mount.value().value.catalog.schedules.find((row: any) => row.name === "Panel 16").workspaceId;
     const pending: string[] = [];
     const unsubscribe = mount.subscribe(() => { if (mount.value().status === "pending") pending.push(mount.value().status); });
     const root = createRootRoute({ component: () => <KeyScopeHost id="chooser-journey"><TypedSubject mount={mount} /></KeyScopeHost> });
-    const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/ducts"] }) });
+    const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/schedules"] }) });
     view = render(<RouterProvider router={router} />);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Choose system" }));
-    await user.click(await screen.findByRole("combobox", { name: "system search" }));
+    await user.click(await screen.findByRole("button", { name: "Choose schedule" }));
+    await user.click(await screen.findByRole("combobox", { name: "schedule search" }));
     const before = search.toString(), count = requests.length;
-    for (const key of "SA 16") {
+    for (const key of "Panel 16") {
       await user.keyboard(key);
       expect.soft(search.toString(), `query key ${JSON.stringify(key)} never changes URL selection`).toBe(before);
     }
-    expect((screen.getByRole("combobox", { name: "system search" }) as HTMLInputElement).value).toBe("SA 16");
-    expect(screen.queryByRole("option", { name: "SA 1" }), "filtered-out selected item stays open").toBeNull();
-    expect.soft(mount.page.read().system).toEqual({ kind: "ids", ids: [localId("ducts-system", "SA 1")] });
+    expect((screen.getByRole("combobox", { name: "schedule search" }) as HTMLInputElement).value).toBe("Panel 16");
+    expect(screen.queryByRole("option", { name: "Panel" }), "filtered-out selected item stays open").toBeNull();
+    expect.soft(mount.page.read().workspaceId).toEqual({ kind: "ids", ids: [localId("schedules", host.scope.work)] });
     expect.soft(pending, "query never starts Reading").toEqual([]);
     expect.soft(requests.length, "query never dispatches a host read").toBe(count);
     unsubscribe();
-    await user.click(screen.getByRole("option", { name: "SA 16" }));
-    // The ordinary Ducts chooser opens multiple systems. A choice adds SA 16; SA 1 stays open.
-    await waitFor(() => expect(mount.page.read().system.ids).toEqual([
-      localId("ducts-system", "SA 1"), localId("ducts-system", "SA 16"),
-    ]));
+    await user.click(screen.getByRole("option", { name: "Panel 16" }));
+    // The real Schedules chooser chooses one member; only the explicit choice replaces Panel.
+    await waitFor(() => expect(mount.page.read().workspaceId.ids).toEqual([localId("schedules", chosen)]));
     await waitFor(() => expect(mount.value().current).toBe(true), { timeout: 20_000 });
     expect(requests.length).toBeGreaterThan(count);
-  } finally { view?.unmount(); mount.dispose(); unregister(); await host.close(); }
+  } finally { view?.unmount(); mount.dispose(); await Promise.all(pendingReads); }
 });
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
 import { evaluate } from "../../../host/src/reads/evaluator";
