@@ -36,7 +36,7 @@ const routeCatalog: Record<
   },
   "ducts.analysis": {
     description:
-      "Inspect duct networks. For pressure drop read route:ducts.roster then route:ducts.sheet.",
+      "Inspect duct networks. For pressure drop read route:reads.value (read fans.roster) then route:reads.value (read ducts.sheet).",
   },
 };
 import {

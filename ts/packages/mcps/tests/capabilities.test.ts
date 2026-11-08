@@ -583,7 +583,7 @@ test("a linked catalog route dispatches through its declared transport whatever 
   const listed = catalog();
   // Presentation kind is display only: a catalog route labelled as an op still runs as its route (before S1, kind "op" threw in dispatch).
   listed.capabilities = listed.capabilities.map((row) =>
-    row.key === "route:ducts.roster" ? { ...row, kind: "op" } : row,
+    row.key === "route:reads.value" ? { ...row, kind: "op" } : row,
   );
   const called: string[] = [];
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
@@ -592,13 +592,13 @@ test("a linked catalog route dispatches through its declared transport whatever 
     called.push(`${init?.method ?? "GET"} ${url.pathname}`);
     return Response.json({ rows: [] });
   });
-  const done = (await run(peDo, { key: "route:ducts.roster", input: { target: { session: "b1", openId: "A" } }, timeoutSeconds: 30 })) as {
+  const done = (await run(peDo, { key: "route:reads.value", input: { read: "fans.roster", args: { target: { session: "b1", openId: "A" } }, subscription: "presentation-kind", generation: 0 }, timeoutSeconds: 30 })) as {
     ok: boolean;
     result: unknown;
   };
   expect(done).toMatchObject({ ok: true, result: { rows: [] } });
   expect(called).toHaveLength(1);
-  expect(called[0]).toMatch(/ducts/);
+  expect(called[0]).toMatch(/reads\/value/);
 });
 
 test("ADR 0021: a thread with several targets refuses a call with no override; an override names one", async () => {
@@ -871,43 +871,44 @@ test("the live head names an open lifetime; reopen needs an explicit override an
   }
 });
 
-test("Pea dispatches roster and sheet through their declared routes without an analysis read", async () => {
+test("Pea dispatches roster and sheet through the registered read door without an analysis read", async () => {
   fakeRuntimeHost("http://127.0.0.1:9");
   const target = { session: "s1", openId: "open-1" };
   let fail = false;
   vi.stubGlobal("fetch", async (url: string | URL | Request, init?: RequestInit) => {
     const path = new URL(url instanceof Request ? url.url : String(url)).pathname;
     if (path === "/pe/capabilities") return Response.json(catalog());
-    if (path === "/pe/ducts/roster") {
-      expect(JSON.parse(init?.body as string)).toEqual({ target });
+    const request = JSON.parse(init?.body as string);
+    if (path === "/pe/reads/value" && request.read === "fans.roster") {
+      expect(request).toEqual({ read: "fans.roster", args: { target }, subscription: "pea-roster", generation: 0 });
       return Response.json({ target, rows: [] });
     }
-    if (path === "/pe/ducts/sheet") {
-      expect(JSON.parse(init?.body as string)).toMatchObject({
+    if (path === "/pe/reads/value" && request.read === "ducts.sheet") {
+      expect(request).toMatchObject({ read: "ducts.sheet", subscription: "pea-sheet", generation: 0, args: {
         target,
         mode: "fan",
         unitId: 14577391,
         portIndex: 2,
-      });
+      } });
       if (fail) return Response.json({ error: "Stale sheet basis" }, { status: 409 });
       return Response.json({ target, kind: "overview", mode: "fan", basis: "observation" });
     }
     throw Error(`Unexpected guide request ${path}`);
   });
   expect(
-    await run(peRead, { key: "route:ducts.roster", input: { target }, timeoutSeconds: 30 }),
+    await run(peRead, { key: "route:reads.value", input: { read: "fans.roster", args: { target }, subscription: "pea-roster", generation: 0 }, timeoutSeconds: 30 }),
   ).toMatchObject({
     ok: true,
     target: { session: "s1", document: "open-1" },
     result: { rows: [] },
   });
-  const input = { target, mode: "fan", unitId: 14577391, portIndex: 2 };
-  expect(await run(peRead, { key: "route:ducts.sheet", input, timeoutSeconds: 30 })).toMatchObject({
+  const input = { read: "ducts.sheet", args: { target, mode: "fan", unitId: 14577391, portIndex: 2 }, subscription: "pea-sheet", generation: 0 };
+  expect(await run(peRead, { key: "route:reads.value", input, timeoutSeconds: 30 })).toMatchObject({
     ok: true,
     result: { kind: "overview", basis: "observation" },
   });
   fail = true;
-  expect(await run(peRead, { key: "route:ducts.sheet", input, timeoutSeconds: 30 })).toMatchObject({
+  expect(await run(peRead, { key: "route:reads.value", input, timeoutSeconds: 30 })).toMatchObject({
     ok: false,
   });
 });

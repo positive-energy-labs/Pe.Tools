@@ -103,7 +103,7 @@ test("Plan keeps capture and review valid across watched publications and batche
  const subscriptionChanges:any[]=[];
  const forward=async(url:any,init:any={})=>{
    const headers=new Headers(init.headers);headers.set("x-pe-context",host.terminal);headers.set(HOST_RUNTIME_SERVICE_HEADER,hostOwnership.serviceName);
-   const target=new URL(typeof url==="string"?url:url.url??url.href,host.base);if(typeof init.body==="string"){const body=JSON.parse(init.body);if(body.add&&body.remove)subscriptionChanges.push(body);}const response=await originalFetch(`${host.base}${target.pathname}${target.search}`,{...init,headers});if(target.pathname.includes("sheet")||target.pathname.includes("actions")||target.pathname.includes("history")||target.pathname.includes("route-view")||target.pathname.includes("work"))trace.http.push({url:target.pathname,method:init.method??"GET",request:typeof init.body==="string"?JSON.parse(init.body):undefined,status:response.status,body:await response.clone().json().catch(()=>null)});return response;
+   const target=new URL(typeof url==="string"?url:url.url??url.href,host.base);if(typeof init.body==="string"){const body=JSON.parse(init.body);if(body.add&&body.remove)subscriptionChanges.push(body);}const response=await originalFetch(`${host.base}${target.pathname}${target.search}`,{...init,headers});if(target.pathname==="/pe/reads/value"||target.pathname.includes("sheet")||target.pathname.includes("actions")||target.pathname.includes("history")||target.pathname.includes("route-view")||target.pathname.includes("work"))trace.http.push({url:target.pathname,method:init.method??"GET",request:typeof init.body==="string"?JSON.parse(init.body):undefined,status:response.status,body:await response.clone().json().catch(()=>null)});return response;
  };
  trace.fetch.mockImplementation(forward);vi.stubGlobal("fetch",forward);
  const heldReceipts:string[]=[];
@@ -184,7 +184,7 @@ test("Plan keeps capture and review valid across watched publications and batche
    for(mode of ["recording","batched"] as const){
      if(mode==="batched"){batchReleased=false;receiptBatch.length=0;heldReceipts.length=0;readyAfterBatch.length=0;}
      before=sample();
-     const watched=trace.http.find(row=>row.url==="/pe/fans/sheet"&&row.body?.value?.evaluation===before.dependencies["fans.sheet"]);
+     const watched=trace.http.find(row=>row.url==="/pe/reads/value"&&row.request?.read==="fans.sheet"&&row.body?.value?.evaluation===before.dependencies["fans.sheet"]);
      const watches=(row:any)=>new URL(row.url,host.base).searchParams.get("subscription")===watched.request.subscription;
      if(mode==="recording") await vi.waitFor(()=>expect((trace as any).readEvents.some(watches)).toBe(true),{timeout:10000});
      fireEvent.click(screen.getByRole("button",{name:"plan Write to Revit"}));
@@ -193,7 +193,7 @@ test("Plan keeps capture and review valid across watched publications and batche
        const eventStart=(trace as any).readEvents.length;
        try {
          // A real watched-slot republication while the Plan command is pending; no input changes.
-         const response=await forward("/pe/fans/sheet",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(watched.request)});
+         const response=await forward("/pe/reads/value",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(watched.request)});
          const publication=await response.json(); (trace as any).republication=publication;
          expect.soft(publication.state,"Recording must not refuse the watched republication").toBe("current");
          await vi.waitFor(()=>expect((trace as any).readEvents.slice(eventStart).some(watches)).toBe(true),{timeout:10000});

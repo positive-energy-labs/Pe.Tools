@@ -1,0 +1,4 @@
+{
+  "paths": ["/pe/ducts/roster", "/pe/ducts/sheet", "/pe/fans/sheet"],
+  "capabilities": ["route:ducts.roster", "route:ducts.sheet"]
+}

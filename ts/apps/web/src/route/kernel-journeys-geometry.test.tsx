@@ -241,12 +241,12 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
  const {fansReadResponse,address:workAddress}=await import("@pe/agent-contracts");
  const source: import("../shell/source-contract").UseSource={kind:"use",open(ctx,deliver){
    const subscription=crypto.randomUUID(),current=++generation;
-   const body={subscription,generation:current,args:{target:trace.target,...ctx.args as object}};
-   void forward("/pe/fans/sheet",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}).then(async response=>{
+   const body={read:"fans.sheet",subscription,generation:current,args:{target:trace.target,...ctx.args as object}};
+   void forward("/pe/reads/value",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}).then(async response=>{
      const wire=await response.json();if(!response.ok)throw Error(JSON.stringify(wire));const value=fansReadResponse.parse(wire);
      if(!ctx.signal.aborted)deliver({kind:"complete",value,revision:value.version});
    }).catch(error=>{if(!ctx.signal.aborted)deliver({kind:"failure",error});});
-   return ()=>{void forward("/pe/fans/sheet",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...body,generation:++generation,release:true})});};
+   return ()=>{void forward("/pe/reads/value",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...body,generation:++generation,release:true})});};
  }};
  const selected=localId("ducts-fan",`${walk.nodes.find(n=>n.id===14577391)!.uniqueId}@2`);
  let search=new URLSearchParams({fan:JSON.stringify({kind:"ids",ids:[selected]})});

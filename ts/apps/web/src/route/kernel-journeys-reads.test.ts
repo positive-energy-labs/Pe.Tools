@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vite-plus/test";
 import { fileURLToPath } from "node:url";
+import retiredReads from "../../../../tests/repo-guards/src/retired-read-aliases.forbidden.json";
 
 test("JZ Ducts chooser search box does not move across recorded Reading settlement", async () => {
   const [{ createServer }, { default: tailwind }, { openBrowser }] = await Promise.all([
@@ -1093,7 +1094,7 @@ test("JZ registry publishes fan roster and sheet through the shared read door on
     expect(sheet.value.data).toHaveProperty("basis");
     const fans = await read("fans.sheet", { target: ref, fan: [], sheetPath: "" });
     expect(fans.value.data.rows.length).toBeGreaterThan(0);
-    for (const path of ["/pe/ducts/roster", "/pe/ducts/sheet", "/pe/fans/sheet"]) {
+    for (const path of retiredReads.paths) {
       const response = await f.request(new Request(`http://host${path}`, { method: "POST", body: "{}" }));
       expect(response.status, path).toBe(404);
     }
