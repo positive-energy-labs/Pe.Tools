@@ -198,9 +198,12 @@ export type SdkSession = Effect.Success<ReturnType<typeof resolveSdkCore>>;
 export const sdkSession = resolveSdk;
 
 /** Transitional: phase 5 I deletes resolveSdkSession with its remaining consumers. Do not add imports. */
-export const resolveSdkSession = (...args: Parameters<typeof resolveSdk>) =>
+// Existing command consumers share one SDK-owned Promise boundary while the fiber cutover continues.
+const sessionPromise = <A, E>(lookup: Effect.Effect<A, E>) =>
   // effect-edge: island, phase 5
-  Effect.runPromise(resolveSdk(...args));
+  Effect.runPromise(lookup);
+export const resolveSdkSession = (...args: Parameters<typeof resolveSdk>) => sessionPromise(resolveSdk(...args));
+export const attachedSession = (...args: Parameters<typeof resolveAttachment>) => sessionPromise(resolveAttachment(...args));
 
 /** Which attachment a caller means: its bridge id, its SDK session id, or either. */
 export type AttachmentTarget = { session: string } | { sdkSession: string } | { id: string };

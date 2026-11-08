@@ -75,25 +75,9 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
       const memberBytes = await readFile(safePath(root, member.path));
       const family = JSON.parse(memberBytes.toString("utf8"));
       if (!family.family?.name) throw Error("The member is not a family capture");
-      let file: File;
-      if ("url" in source) {
-        const response = await fetch(source.url);
-        if (!response.ok) throw Error(`PDF download failed (${response.status})`);
-        file = new File(
-          [await response.arrayBuffer()],
-          basename(new URL(source.url).pathname) || "document.pdf",
-          { type: "application/pdf" },
-        );
-      } else if ("path" in source) {
-        file = new File([await readFile(source.path)], basename(source.path), {
-          type: "application/pdf",
-        });
-      } else {
-        if (!("digest" in source)) throw refused("Upload bytes were not retained", "blob.unretained");
-        file = new File([new Uint8Array(await get(source))], basename(source.fileName), {
-          type: "application/pdf",
-        });
-      }
+      const file = new File([new Uint8Array(await get(source))], basename(source.fileName), {
+        type: "application/pdf",
+      });
       const bytes = await file.arrayBuffer();
       if (Buffer.from(bytes).subarray(0, 5).toString() !== "%PDF-")
         throw Error("Source is not a PDF");
@@ -104,28 +88,7 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
             probe: member,
             expected: createHash("sha256").update(memberBytes).digest("hex"),
           },
-          ...("path" in source
-            ? [
-                {
-                  kind: "file" as const,
-                  probe: { path: source.path },
-                  expected: createHash("sha256").update(Buffer.from(bytes)).digest("hex"),
-                  blob: await put(Buffer.from(bytes), file.name),
-                },
-              ]
-            : "url" in source
-              ? [
-                  {
-                    kind: "capture" as const,
-                    expected: createHash("sha256").update(Buffer.from(bytes)).digest("hex"),
-                    probe: {
-                      blob: await put(Buffer.from(bytes), file.name),
-                      origin: { kind: "url" as const, url: source.url },
-                      capturedAt: new Date().toISOString(),
-                    },
-                  },
-                ]
-              : []),
+
         ],
         effects: [{ kind: "directory", path: dirname(safePath(root, member.path)) }],
         prepare: async () => {

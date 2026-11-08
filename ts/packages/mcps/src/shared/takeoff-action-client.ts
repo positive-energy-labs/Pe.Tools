@@ -26,9 +26,6 @@ import {
   type DocumentRef,
   type ActionReceipt,
   type SemanticActionKey,
-  familyCaptureSchema,
-  familyReads,
-  type FamilyReadKey,
   type WorkKey,
 } from "@pe/agent-contracts";
 
@@ -67,22 +64,16 @@ function retain(slot: string, value?: InvocationRecord) {
   else records.delete(slot);
 }
 const terminal = (row: ActionReceipt) => ["succeeded", "failed", "cancelled"].includes(row.state);
-async function normalizedInput(key: string, input: Record<string, unknown>) {
-  const parsed = Object.hasOwn(commands, key) ? commands[key as SemanticActionKey].input.parse(input) : input;
-  if (key !== "family.attach-spec") return parsed;
-  const source = (parsed as Record<string, unknown>).source;
-  if (!source || typeof source !== "object" || !("base64" in source)) return parsed;
-  const upload = source as {base64: string; fileName: string};
-  const bytes = Uint8Array.from(atob(upload.base64), char => char.charCodeAt(0));
-  const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map(b => b.toString(16).padStart(2, "0")).join("");
-  return {...parsed, source: {digest, size: bytes.length, fileName: upload.fileName}};
+function commandInput(key: string, input: Record<string, unknown>) {
+  return Object.hasOwn(commands, key) ? commands[key as SemanticActionKey].input.parse(input) : input;
 }
+
 async function assertIdentity(admission: ActionAdmission, row: ActionReceipt) {
   if (
     row.id !== admission.id || row.key !== admission.key ||
     canonicalRouteInput(row.target) !== canonicalRouteInput(admission.target) ||
-    canonicalRouteInput(await normalizedInput(row.key, row.input)) !==
-      canonicalRouteInput(await normalizedInput(admission.key, admission.input))
+    canonicalRouteInput(await commandInput(row.key, row.input)) !==
+      canonicalRouteInput(await commandInput(admission.key, admission.input))
   ) throw Error(`Action '${admission.id}' returned a receipt for different intent or target`);
 }
 function transportLost(error: unknown) {
@@ -181,8 +172,8 @@ export async function recoverAction(
   if (script) ({ key, input } = script);
   if (
     original.key !== key ||
-    canonicalRouteInput(await normalizedInput(key, input)) !==
-      canonicalRouteInput(await normalizedInput(key, original.input))
+    canonicalRouteInput(await commandInput(key, input)) !==
+      canonicalRouteInput(await commandInput(key, original.input))
   )
     throw Error(`Action '${id}' conflicts with its original intent`);
   if (target && canonicalRouteInput(target) !== canonicalRouteInput(original.target))
@@ -271,7 +262,7 @@ export async function submitAction(
   slot = retentionKey(base, admission.id, null),
 ): Promise<ActionReceipt | DetachedAction> {
   admission = structuredClone(actionAdmissionSchema.parse(admission));
-  const retainedAdmission = {...admission, input: await normalizedInput(admission.key, admission.input)};
+  const retainedAdmission = {...admission, input: await commandInput(admission.key, admission.input)};
   const prior = getRetained(slot);
   if (prior?.admission && canonicalRouteInput(prior.admission) !== canonicalRouteInput(retainedAdmission))
     throw Error(`Action '${prior.id}' has an unacknowledged immutable request`);
@@ -448,28 +439,6 @@ export async function controlAction(
   );
   if (!response.ok) throw Error(await response.text());
   return actionReceiptSchema.parse(await response.json());
-}
-export async function readFamilyCapture(
-  key: FamilyReadKey,
-  input: unknown,
-  scope: WorkKey,
-  target?: DocumentRef,
-  base = "",
-) {
-  const response = await fetch(`${base}/family/readings`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ key, input, scope, target }),
-  });
-  const value = await response.json();
-  if (!response.ok)
-    throw Object.assign(
-      Error((value as { error?: string }).error ?? `Family read failed (${response.status})`),
-      { status: response.status },
-    );
-  if (key === "family.read") return familyReads[key].result.parse(value);
-  if (key === "family.cancel-read") return familyReads[key].result.parse(value);
-  return familyCaptureSchema.parse(value);
 }
 
 export async function readActionStatuses(

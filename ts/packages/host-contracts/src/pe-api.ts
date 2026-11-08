@@ -179,6 +179,8 @@ export type PeApiSchemas = Record<
   | "diagnosticBodySchema"
   | "actionAdmissionSchema"
   | "actionReceiptSchema"
+  | "blobRefSchema"
+  | "blobUploadSchema"
   | "actionStatusSchema"
   | "actionControlInputSchema"
   | "familiesObservationSchema"
@@ -345,6 +347,7 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "gateway",
       "operation",
     ),
+    "blobs.put": route("POST", "/actions/blobs", schemas.blobUploadSchema as S["blobUploadSchema"], schemas.blobRefSchema as S["blobRefSchema"], "human-or-pea", "gateway", "human-or-pea"),
     "actions.admit": route(
       "POST",
       "/actions",

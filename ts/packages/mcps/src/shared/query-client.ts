@@ -1,6 +1,6 @@
 import { familyReads, scheduleReads, type ReadEntry } from "@pe/agent-contracts";
 import type { z } from "zod";
-import { readFamilyCapture } from "./takeoff-action-client.ts";
+import { readFamilyCapture } from "./family-read-client.ts";
 import { readScheduleCapture } from "./schedule-client.ts";
 
 export function readTable<T extends Record<string, { input: z.ZodType }>>(

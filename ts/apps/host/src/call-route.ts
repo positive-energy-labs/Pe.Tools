@@ -1,3 +1,5 @@
+import { blobUploadSchema } from "@pe/agent-contracts";
+import { put as putBlob } from "./action-blobs.ts";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { captureReceiptSchema } from "@pe/agent-contracts";
 import { canonicalRouteInput, nativePrincipals } from "@pe/agent-contracts";
@@ -612,6 +614,18 @@ export function makeCallRoute(
       ),
     ),
   );
+  const uploads = HttpRouter.add(peRoutes["blobs.put"].method, peRoutes["blobs.put"].path, (req) =>
+    Effect.gen(function* () {
+      const caller = currentCaller();
+      if (caller.kind !== "human" && caller.kind !== "pea")
+        return Response.jsonUnsafe({ error: "Upload requires a human or Pea caller" }, { status: 403 });
+      if (req.headers["x-pe-history-point"])
+        return Response.jsonUnsafe({ error: "History is read-only" }, { status: 409 });
+      const body = yield* req.json;
+      const input = yield* Effect.try({ try: () => blobUploadSchema.parse(body), catch: error => error });
+      return Response.jsonUnsafe(yield* Effect.promise(() => putBlob(Buffer.from(input.base64, "base64"), input.fileName)));
+    }).pipe(Effect.catch((error) => Effect.succeed(Response.jsonUnsafe({ error: String(error) }, { status: 400 })))),
+  );
   const admitDoor = peRoutes["actions.admit"];
   const actions = HttpRouter.add(admitDoor.method, admitDoor.path, (req) =>
     Effect.gen(function* () {
@@ -866,6 +880,7 @@ export function makeCallRoute(
     nativeReadResolveRoute.pipe(Layer.provide(httpProblems)),
     familiesReadings,
     captured,
+    uploads,
     actions,
     actionReads,
     familyReadings,

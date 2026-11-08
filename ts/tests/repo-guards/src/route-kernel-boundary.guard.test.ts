@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs";
+import ts from "typescript";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { routeDirectory } from "../../../packages/agent-contracts/src/generated/route-directory.ts";
 import { expect, it } from "vite-plus/test";
-import { additions, boundaryCensus, legacyInventory, root } from "./unification-2-census.ts";
+import { additions, boundaryCensus, legacyInventory, root, syntax, walk } from "./unification-2-census.ts";
 
 it("scans source despite mocked imports, aliases, exports and malformed fixture code", () => {
   const actual = boundaryCensus({
@@ -127,13 +128,26 @@ it("ADR 0033 rule 7 keeps the Work write kernel free of route names, request typ
   const files = [
     "ts/apps/host/src/work-write-boundary.ts",
     "ts/apps/host/src/reads/routes.ts",
+    "ts/apps/host/src/action-journal.ts",
+    "ts/apps/host/src/journal-snapshot.ts",
+    "ts/packages/mcps/src/shared/takeoff-action-client.ts",
     "ts/apps/host/src/document-lifetime.ts",
     "ts/packages/agent-contracts/src/write-intent.ts",
   ];
-  const hits = files.flatMap(file => readFileSync(resolve(root, file), "utf8").split("\n")
-    .flatMap((line, index) => {
+  const hits = files.filter(file => existsSync(resolve(root, file))).flatMap(file => {
+    let text = readFileSync(resolve(root, file), "utf8");
+    const source = syntax(text, file), tags: [number, number][] = [];
+    walk(source, node => {
+      // Work's binding enum shares a word with the navigation route; it is not a route reference.
+      if (ts.isStringLiteral(node) && node.text === "open" && ts.isBinaryExpression(node.parent) &&
+        ts.isPropertyAccessExpression(node.parent.left) && node.parent.left.name.text === "binding")
+        tags.push([node.getStart(source), node.end]);
+    });
+    for (const [start, end] of tags.reverse()) text = text.slice(0, start) + "_".repeat(end - start) + text.slice(end);
+    return text.split("\n").flatMap((line, index) => {
       routeName.lastIndex = 0;
       return routeName.test(line) ? [`${file}:${index + 1}: ${line.trim()}`] : [];
-    }));
+    });
+  });
   expect(hits).toEqual([]);
 });

@@ -139,12 +139,7 @@ export const familyActions = {
     dirties: ["pods"],
     input: z.object({
       member: podMemberSchema,
-      source: z.union([
-        z.strictObject({ path: z.string().min(1) }),
-        z.strictObject({ url: z.url() }),
-        z.strictObject({ fileName: z.string().min(1), base64: z.string().min(1) }),
-        blobRefSchema,
-      ]),
+      source: blobRefSchema,
     }),
     result: z.object({
       member: podMemberSchema,

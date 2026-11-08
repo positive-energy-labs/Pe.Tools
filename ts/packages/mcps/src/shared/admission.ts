@@ -1,3 +1,4 @@
+import { readFamilyCapture } from "./family-read-client.ts";
 import { z } from "zod";
 /** Catalog selection is an adapter; immutable request retention and execution belong to shared owners. */
 import {
@@ -31,7 +32,6 @@ import {
   submitAction,
   controlAction,
   recoverAction,
-  readFamilyCapture,
 } from "./takeoff-action-client.ts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { contextFetch as fetch } from "@pe/runtime/context";
@@ -208,7 +208,7 @@ export async function runCapability(
     if (fansHandle && !same(fans.handle, fansHandle)) throw Error("Fans Work changed; read its current revision before preview");
     const walk = fansDocumentSchema.parse(fans.doc).writeIntent.edit?.value?.walk;
     if (!walk && !ductsDocumentSchema.parse(ducts.doc).writeIntent.edit?.value?.groups?.length)
-      throw Error('Preview needs a fan walk. Read route:ducts.roster, then stage writeIntent.edit = {"value":{"walk":{"unitId":<id>,"portIndex":<n>}}} in route:fans Work. Retry with the accepted Work revision. No preview was submitted.');
+      throw Error('Preview needs a fan walk. Read route:reads.value (read fans.roster), then stage writeIntent.edit = {"value":{"walk":{"unitId":<id>,"portIndex":<n>}}} in route:fans Work. Retry with the accepted Work revision. No preview was submitted.');
   }
   const id = context.actionId ?? crypto.randomUUID();
   await context.beforeAdmission?.(id);
