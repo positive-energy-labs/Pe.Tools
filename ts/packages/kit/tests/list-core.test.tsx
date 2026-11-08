@@ -254,7 +254,8 @@ const items: Item[] = Array.from({ length: 355 }, (_, i) => ({
   stage: i % 13 ? "clean" : "edit",
   children: [],
 }));
-const options: ListOptions<Item, "loss" | "name"> = {
+type ItemListOptions = Extract<ListOptions<Item, "loss" | "name">, { items: readonly Item[] }>;
+const options: ItemListOptions = {
   items,
   keyOf: (item) => item.id,
   search: (item) => ({ text: [item.name], ids: [Number(item.id)] }),
@@ -279,7 +280,7 @@ function TestList({
   ...props
 }: Pick<ListViewProps<Item>, "maxHeight" | "sectionProps" | "search" | "header"> & {
   name: string;
-  config?: Partial<ListOptions<Item, "loss" | "name">>;
+  config?: Partial<ItemListOptions>;
   plain?: boolean;
   reveal?: string;
   row?: ListViewProps<Item, "loss" | "name">["row"];
