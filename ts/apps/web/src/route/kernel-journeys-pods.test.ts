@@ -697,3 +697,34 @@ test("JZ Open machine census: sampling drift lists documents; content conflict n
     expect(await read("retry")).toMatchObject({ state: "current" });
   } finally { openNavigation.bypass = false; mounts.forEach(mount => mount.dispose()); cleanup(); await host.close(); }
 }, 60_000);
+
+
+test("JZ route-neutral Plan refusal preserves the reason and holds Apply through HTTP", async () => {
+  const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
+  const f = await nativeFixture();
+  try {
+    const reason = "Shared type cannot scope this authored flow";
+    f.planRefusal.reason = reason;
+    const fans = await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [
+      { path: ["flows", "4", "edit"], value: { value: { cfm: 321 } } },
+      { path: ["parameters", "terminalFlow", "edit"], value: { value: "PE_M_Grd_AirFlow" } },
+    ], 0);
+    if (!fans.ok) throw Error(JSON.stringify(fans));
+    const staged = await f.saved.apply(f.key, "ducts", "human", [
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+    ], 0);
+    if (!staged.ok) throw Error(JSON.stringify(staged));
+    const input = { work: { key: f.key, revision: staged.revision } };
+    expect((await f.post("/actions", { id: "jz-refusal-plan", key: "ducts.plan-losses", target: f.target, input })).ok).toBe(true);
+    const plan = await f.journal.wait("jz-refusal-plan");
+    expect(plan.state, JSON.stringify(plan)).toBe("succeeded");
+    if (plan.state !== "succeeded") throw Error(JSON.stringify(plan));
+    expect(plan.result).toMatchObject({ planRefusal: expect.stringContaining(reason), planRefusalCode: "ducts.plan-refused" });
+    expect((await f.post("/actions", { id: "jz-refusal-apply", key: "ducts.apply-losses", target: f.target, input })).ok).toBe(true);
+    const apply = await f.journal.wait("jz-refusal-apply");
+    expect(apply.state, JSON.stringify(apply)).toBe("failed");
+    expect(JSON.stringify(apply)).toContain(reason);
+    expect(JSON.stringify(apply)).toContain("ducts.plan-refused");
+    expect(f.dispatched.filter(row => row.key === "ducts.apply")).toEqual([]);
+  } finally { await f.close(); }
+}, 60_000);

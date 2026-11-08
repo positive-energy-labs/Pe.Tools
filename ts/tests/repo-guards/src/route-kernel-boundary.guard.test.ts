@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { routeDirectory } from "../../../packages/agent-contracts/src/generated/route-directory.ts";
 import { expect, it } from "vite-plus/test";
-import { additions, boundaryCensus, legacyInventory } from "./unification-2-census.ts";
+import { additions, boundaryCensus, legacyInventory, root } from "./unification-2-census.ts";
 
 it("scans source despite mocked imports, aliases, exports and malformed fixture code", () => {
   const actual = boundaryCensus({
@@ -113,4 +116,23 @@ it("type-only route context imports do not import a colocated runtime owner",()=
  });
  expect(actual.rawPageImports).toHaveLength(2);
  expect(actual.rawPageImports!.some(row=>row.includes("drawing.tsx"))).toBe(false);
+});
+
+
+it("ADR 0033 rule 7 keeps the Work write kernel free of route names, request types and files", () => {
+  const names = routeDirectory.map(({ key }) => key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  // Lowercase identifiers such as openId and bindIntent are kernel vocabulary, not route types.
+  const types = names.map(name => name.replace(/(^|-)([a-z])/g, (_, _dash, letter) => letter.toUpperCase()));
+  const routeName = new RegExp(`(?:["'/](?:${names.join("|")})(?=[./"'-])|\\b(?:${types.join("|")})(?=[A-Z]|\\b))`, "g");
+  const files = [
+    "ts/apps/host/src/work-write-boundary.ts",
+    "ts/apps/host/src/document-lifetime.ts",
+    "ts/packages/agent-contracts/src/write-intent.ts",
+  ];
+  const hits = files.flatMap(file => readFileSync(resolve(root, file), "utf8").split("\n")
+    .flatMap((line, index) => {
+      routeName.lastIndex = 0;
+      return routeName.test(line) ? [`${file}:${index + 1}: ${line.trim()}`] : [];
+    }));
+  expect(hits).toEqual([]);
 });

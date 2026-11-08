@@ -1,4 +1,4 @@
-import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
+import { currentDocument as current, lifetime } from "./document-lifetime.ts";
 import { createHash } from "node:crypto";
 import { join, resolve, win32 } from "node:path";
 import { Effect, FileSystem } from "effect";
@@ -84,7 +84,7 @@ import {
 import { z } from "zod";
 import type { Consumed as Dependency, WorkHandle } from "@pe/agent-contracts";
 import { type TakeoffActionDependencies } from "./takeoff-actions.ts";
-import { readOriginalProcess, readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
+import { readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
 import {
   composedSpec,
   podFolder,
@@ -270,51 +270,6 @@ export const writeCaptureRun = (
   );
 };
 
-async function current(
-  bridge: RevitBridge["Service"],
-  target: DocumentRef,
-  family: boolean | "project",
-  process?: NativeProcess,
-) {
-  // effect-edge: island, phase 5
-  const session = await Effect.runPromise(
-    SdkSession.resolve(bridge, { session: target.session }).pipe(
-      Effect.mapError((error) => refused(error.message)),
-    ),
-  );
-  const doc = session.state?.openDocuments.find((d) => d.openId === target.openId);
-  if (
-    !doc ||
-    (family === true && !doc.isFamilyDocument) ||
-    (family === "project" && doc.isFamilyDocument) ||
-    (process &&
-      (session.processId !== process.pid ||
-        session.processStartUtcUnixMs !== Date.parse(process.processStartUtc)))
-  )
-    throw refused("The exact admitted document lifetime/process is no longer available");
-  return session;
-}
-export async function lifetime(
-  bridge: RevitBridge["Service"],
-  target: DocumentRef,
-  family: boolean | "project",
-  deps: TakeoffActionDependencies,
-) {
-  const session = await resolveSdkSession(
-    bridge,
-    { bridgeSessionId: target.session, openDocumentId: target.openId },
-    deps.sdk,
-  );
-  await current(bridge, target, family);
-  if (!session.processId || session.processStartUtcUnixMs == null)
-    throw refused("Original process identity unavailable");
-  const process = await readOriginalProcess(
-    session.processId,
-    session.processStartUtcUnixMs,
-    deps.sdk,
-  );
-  return { session: await current(bridge, target, family, process), process };
-}
 
 const retirementSchema = z.strictObject({
   key: workKeySchema,

@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { type DocumentMarks, type DocumentRef } from "./document-marks.ts";
-import { lifetime } from "./family-actions.ts";
+import { lifetime } from "./document-lifetime.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { z } from "zod";
 import {
   canonicalRouteInput,
   writeResponseSchema,
+  writePreviewSchema,
   workHandleSchema,
   workBinding,
   tools,
@@ -208,9 +209,10 @@ export function workWriteBoundary(
       const latest = previews.at(-1);
       const planRefusal =
         latest?.state === "succeeded"
-          ? (latest.result as { planRefusal?: string }).planRefusal
+          ? writePreviewSchema.parse(latest.result)
           : null;
-      if (!previewOnly && planRefusal) throw refused(planRefusal, "ducts.plan-refused");
+      if (!previewOnly && planRefusal?.planRefusal)
+        throw refused(planRefusal.planRefusal, planRefusal.planRefusalCode ?? "preview.refused");
       const preview = previews.filter((row ) => row.state === "succeeded" &&
         canonicalRouteInput((row.result as { seal?: WriteSeal }).seal?.caller) === canonicalRouteInput(ctx.caller),
       ).at(-1);
@@ -225,7 +227,7 @@ export function workWriteBoundary(
         const value = executor.prepared.parse(await bound.prepare?.());
         if (!previewOnly && !preview)
           throw refused("Plan the current Work first", "preview.stale");
-        // The seal names the document mark itself; mark probes (the plan's sealed mark below, a family
+        // The seal names the document mark itself; mark probes (the plan's sealed mark below, a document
         // read's takenAt) are the journal's dispatch guard and stay out of the hash.
         const dependencies = [...ctx.consumed, ...(bound.consumes ?? [])].filter(
           (item): item is Exclude<Consumed, { kind: "document-mark" }> => item.kind !== "document-mark",

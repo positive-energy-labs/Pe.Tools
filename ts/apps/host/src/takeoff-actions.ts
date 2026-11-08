@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { lifetime } from "./family-actions.ts";
+import { lifetime } from "./document-lifetime.ts";
 import { command, refused, type CommandContext } from "./command-executor.ts";
 import { preparedTakeoffSchema } from "@pe/agent-contracts";
 import type { NativeProcess, SdkReceiptReader } from "./native-receipts.ts";

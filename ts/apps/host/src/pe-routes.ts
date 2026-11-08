@@ -227,7 +227,7 @@ const historicalPeRefusal = (inputs: HostInputContext["Service"] | undefined, me
   if (!["reads.events", ...graphRouteIds, "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get"].includes(id))
     return method === "GET" ? new InvalidRead({ message: "Recording does not cover this route owner", status: 409, problem: "recording.coverage" })
       : inputs.check({ kind: "work", verb: "edit" });
-  const needs = id.startsWith("work.") ? ["work" as const] : id.startsWith("ducts.") ? ["document" as const, "files" as const, "marks" as const, "work" as const] : [];
+  const needs = id.startsWith("work.") ? ["work" as const] : [];
   for (const input of needs) { const refusal = inputs.check({ kind: "input", input }); if (refusal) return refusal; }
   return null;
 };
