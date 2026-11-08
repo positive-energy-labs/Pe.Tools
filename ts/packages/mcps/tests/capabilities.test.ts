@@ -960,7 +960,8 @@ test("route:ducts.set-view with no mounted view opens only through an explicit c
   expect(opens).toMatchObject([{ thread: "t1" }]);
   expect(opens[0]).not.toHaveProperty("link");
   expect(reads).toBeGreaterThanOrEqual(2);
-  // The typed view owns decoding; MCP preserves caller casing and uses the acquired lease revision.
+  // Transport-only fixture: MCP preserves casing and uses the acquired lease revision.
+  // pea-casing.test.tsx drives name resolution through the actual mounted typed owner and its ack.
   expect(sets).toMatchObject([
     {
       thread: "t1",
