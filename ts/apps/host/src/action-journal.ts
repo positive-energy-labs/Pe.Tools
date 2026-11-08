@@ -66,6 +66,7 @@ import {
   commandConsentWindow,
   validateFootprintCaller,
   Refused,
+  retainActionCaller,
 } from "./control.ts";
 
 /** Who crossed and why it was admitted: host-minted, stamped on the receipt beside the admission. */
@@ -1165,6 +1166,9 @@ export class ActionJournal implements ReceiptReader {
       retirementOnly && (postcondition || (moment !== "step" && moment !== "dispatch"))
         ? Promise.resolve()
         : this.gate(current, moment, postcondition);
+    // Keep only this action's in-memory authority across the HTTP request's retirement.
+    // Receipt callers remain portable data; every continuation still checks live trust.
+    crossing = { ...crossing, caller: retainActionCaller(crossing.caller) };
     const context = this.context(admission, crossing, prior?.consumes ?? []);
     let executor!: CommandExecutor;
     let definition!: Command;
