@@ -697,6 +697,9 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 
 ## Owed
 
+- Keep Pea and Tools co-visible at 987 px; ordinary expansion currently excludes the other pane. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/drive/gate-10da8792/DEFECTS.md:15`.
+- Correct inverted separator ARIA ranges in narrow and wide layouts; outer min 420/max 100 at 987 px and min 648/max 100 at 1920 px. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/drive/gate-10da8792/DEFECTS.md:16`.
+
 - RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'reading-list-adapter' ('N6')` remains Owed. Use the shared Reading/List projection in apps/web/src/ops/route.tsx and apps/web/src/sessions/route.tsx; prove row behavior. Keep the law; do not raise its allowance.
 
 - RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'nav-list-kit' ('N3')` remains Owed. Replace local navigation lists in ducts/sheet/view.tsx and shell chrome/timeline/verbs/review with the kit owner; remove the stale ducts/proto/e/preview-lines.tsx allowance. Keep the law; do not raise its allowance.

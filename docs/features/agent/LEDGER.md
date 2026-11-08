@@ -186,6 +186,12 @@ restated here.
 
 ## Owed
 
+- Replace Chat send, cancel and fork SHIM callbacks at `composer.tsx:86` with typed host commands. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:371`.
+- Acquire the Chat head through its host Value instead of the separate acquisition at `composer-head.tsx:131`. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:372`.
+- Give Pea a review link that avoids the person-only Bind admin route and its Host does not own inventory error while preserving the rendered review. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/drive/gate-6c026b64/DEFECTS.md:20`.
+- Expose Apply binding through normal discovery so Pea does not need source/contract searches and failing shell/glob calls. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/drive/gate-4b6bfec7/DEFECTS.md:11`.
+- Distinguish the entity Specific Loss setting from effective pressure in Pea reports; the final gate prose claimed 0.01 in-wg while the independent native effective field was 0. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/drive/gate-4b6bfec7/DEFECTS.md:12`.
+
 - Before the kernel crusade launches: pins and root-main fast-forwards belong to one named integrator only; audit how the wave-3 UI worker committed bb62d577 on root main despite an isolated-checkout binding (2026-11-04, `.artifacts/runs/retro-20261104-testing-pilot/REPORT.md`).
 - Make `pnpm verify` green at its owning seams (336 formatting findings, 12 repo-guard failures at 8c3d6158) before the kernel crusade, so green means green; not by bulk-formatting (2026-11-04).
 - Remove the unregistered INT scratch directory `C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-12242741/.artifacts/tmp/int/kdedupe-baseline-4f23`. Its detached 4f23c1e2 baseline proof is complete and its worktree registration is removed; files remain after git removal reported Directory not empty. Automatic approval review blocked the verified-path native PowerShell cleanup (blocked by policy); no alternate deletion was attempted. Evidence: `.artifacts/tmp/int/kdedupe/scratch-cleanup.log` and `KDEDUPE-INTEGRATION.md`. (INT, 2026-11-03)

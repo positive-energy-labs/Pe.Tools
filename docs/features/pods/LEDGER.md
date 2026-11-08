@@ -75,6 +75,9 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 - 2026-09-16: Whole-pod snapshot hash as receipt attribution; an edit to an unrelated member changes every future receipt's source. Attribution uses member path plus member SHA-256.
 
 ## Owed
+
+- Decode all executable contract members at the loader and remove the double casts at `pod-module.ts:35/:40`. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:374`.
+- kaitpw: rule on removing Pod upgrade/replacement back-compat, including E8-09/E8-10 and the stale Snowdon import. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:617`.
 - Shared Documents\Pe.Tools (prefs, settings, Pods) stays shared between dev and installed. Bar: an installed build must recover, not brick, when it meets files written by a newer or dev build or carried over a 0.7.30 upgrade (this morning's writeIntent failure class). Owed: census installed readers of shared home files for strict schemas that refuse to load. (kaitpw, 2026-11-03)
 - Document profiler proof gap: immediate-cold Level1 parent1444683 remains unmeasured after the user stopped the trial. The basement's long-idle visible observation is contaminated by high pre-trigger load and reported CU throttling; it is not a normal-use baseline. No further Computer Use; this offline wave launches no runtime follow-up. See `.artifacts/accept/document-profiler-gui-levels-20261024-resume-ahk-off/REPORT.md`.
 - Document profiler: integrate scene census/cold activation/deferred-read orchestration; retain the current-live versus recovered-source mismatch. Coordination scene12478682 refused hide and direct deletion on the copy; a fresh rendering-style arm and scene cost attribution remain unproven.
