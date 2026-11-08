@@ -17,6 +17,17 @@ export const workHandleSchema = z.strictObject({
   revision: z.number().int().nonnegative(),
 });
 export type WorkHandle = z.infer<typeof workHandleSchema>;
+/** A command's primary Work owner is part of its wire contract, for every binding. */
+export function workHandleForRoute(route: string) {
+  const keys = workKeySchema.options.map((key) =>
+    key.extend({ route: z.literal(route, { error: `Expected the route:${route} Work handle` }) }),
+  );
+  return workHandleSchema
+    .extend({
+      key: z.discriminatedUnion("binding", [keys[0]!, ...keys.slice(1)]),
+    })
+    .describe(`The route:${route} Work handle { key, revision }.`);
+}
 /**
  * The one handle every stored Work read and write returns (ADR 0030 rule 9): the canonical key and
  * revision. Call it after the Save As carry-over ran, since the handle no longer carries `from`.

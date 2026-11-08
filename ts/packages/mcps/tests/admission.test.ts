@@ -414,6 +414,6 @@ test("loss preview refuses a non-ducts Work handle before any read or submission
   });
   const work = { key: {route: "fans", binding: "host", target: null}, revision: 1 };
   await expect(runCapability("ducts.plan-losses", {work}, {hostBaseUrl: "http://preflight.test", receipt: true}, {door: "command", mutates: false, needs: "project-document"}))
-    .rejects.toThrow("Preview needs the route:ducts Work handle");
+    .rejects.toThrow("Expected the route:ducts Work handle");
   expect(seen).toEqual([]);
 });
