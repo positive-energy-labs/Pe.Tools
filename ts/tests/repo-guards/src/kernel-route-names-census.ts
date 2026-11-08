@@ -92,7 +92,9 @@ export function kernelRouteInventory(requiredPaths: readonly string[] = []) {
   const paths = [...new Set([...discovered, ...tracked.filter(selected), ...requiredPaths])].sort();
   const names = routeDirectory.map(({ key }) => key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const types = names.map(name => name.replace(/(^|-)([a-z])/g, (_, _dash, letter) => letter.toUpperCase()));
-  const routeName = new RegExp(`(?:["'/](?:${names.join("|")})(?=[./"'-])|\\b(?:${types.join("|")})(?=[A-Z]|\\b))`);
+  const constants = routeDirectory.map(({ key }) => key.replaceAll("-", "_").toUpperCase());
+  const upperSnake = new RegExp(`\\b(?:${constants.join("|")})(?:_[A-Z0-9_]+)?\\b`);
+  const routeName = new RegExp(`(?:["'/](?:${names.join("|")})(?=[./"'-])|\\b(?:${types.join("|")})(?=[A-Z]|\\b)|${upperSnake.source})`);
   const literalName = new RegExp(`(?:["'/](?:${names.join("|")})(?=[./"'?#]|$))`);
   const importName = new RegExp(`(?:["'/](?:${names.join("|")})(?=[./"'-]|$))`);
   const requestType = new RegExp(`\\b(?:${types.join("|")})(?=[A-Z]|\\b)`);
@@ -103,8 +105,17 @@ export function kernelRouteInventory(requiredPaths: readonly string[] = []) {
   const details: Site[] = [], falsePositives: (Site & { reason: string })[] = [];
   for (const file of paths) {
     const text = readFileSync(resolve(root, file), "utf8"); // Every listed/scanned path must exist.
-    const source = syntax(text, file), comments = new Set<number>(), queryKeys = new Set<string>();
+    const source = syntax(text, file), comments = new Set<number>(), queryKeys = new Set<string>(), workRegisters = new Set<string>();
     walk(source, node => {
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && ts.isObjectLiteralExpression(node.initializer)) {
+        const fields = new Map(node.initializer.properties.flatMap(property =>
+          ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && ts.isStringLiteral(property.initializer)
+            ? [[property.name.text, property.initializer.text] as const] : []));
+        // The symbol names the generic open-Work register protocol, not the Open UI route.
+        if (fields.get("targetKey") === "open-work" && fields.get("route") === "register" &&
+          node.name.text === `${fields.get("targetKey")!.split("-")[0]!.toUpperCase()}_${fields.get("route")!.toUpperCase()}`)
+          workRegisters.add(node.name.text);
+      }
       if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer &&
         ts.isArrowFunction(node.initializer) && node.initializer.parameters.length === 1) {
         const parameter = node.initializer.parameters[0]!.name;
@@ -136,7 +147,7 @@ export function kernelRouteInventory(requiredPaths: readonly string[] = []) {
         const token = JSON.stringify(node.text);
         // Prose is not a type name. Web entry filenames are not navigation route ids.
         const value = JSON.stringify(node.text.replace(/[^/]+\.(?:html|css|js|mjs|png|jpe?g|svg)(?=[?#]|$)/, "__asset__"));
-        let real = (module ? importName : literalName).test(module ? token : value) || !module && proseRoute.test(node.text);
+        let real = (module ? importName : literalName).test(module ? token : value) || !module && (proseRoute.test(node.text) || upperSnake.test(node.text));
         let reason = "Prose/asset filename is not a route identifier or request type";
         let role = node as ts.Node;
         while (ts.isAsExpression(role.parent) || ts.isSatisfiesExpression(role.parent) || ts.isParenthesizedExpression(role.parent)) role = role.parent;
@@ -168,14 +179,15 @@ export function kernelRouteInventory(requiredPaths: readonly string[] = []) {
         }
         take(node, token, node.getStart(source), ts.SyntaxKind[node.kind], real, reason);
       } else if (ts.isIdentifier(node)) {
-        take(node, node.text, node.getStart(source), "Identifier", requestType.test(node.text), "Identifier is not a route request type");
+        take(node, node.text, node.getStart(source), "Identifier", (requestType.test(node.text) || upperSnake.test(node.text)) && !workRegisters.has(node.text),
+          workRegisters.has(node.text) ? "Generic open-Work register protocol symbol" : "Identifier is not a route request type");
       }
       for (const comment of [...(ts.getLeadingCommentRanges(text, node.getFullStart()) ?? []),
         ...(ts.getTrailingCommentRanges(text, node.getEnd()) ?? [])]) {
         if (comments.has(comment.pos)) continue;
         comments.add(comment.pos);
         const prose = text.slice(comment.pos, comment.end).replace(/\s+/g, " ");
-        take(node, prose, comment.pos, "Comment", proseRoute.test(prose),
+        take(node, prose, comment.pos, "Comment", proseRoute.test(prose) || upperSnake.test(prose),
           "Generic prose word does not identify a UI route or request type");
       }
     });

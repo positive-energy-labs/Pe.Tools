@@ -10,7 +10,7 @@ import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
-import { bindWork, address, DUCTS_BODY_VERSION_HEADER, readingKey, readingRequestsSchema, type Caller, type ReadingRequest } from "@pe/agent-contracts";
+import { bindWork, address, NATIVE_BODY_VERSION_HEADER, readingKey, readingRequestsSchema, type Caller, type ReadingRequest } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
 import { readInputRoutes } from "../src/app.ts";
@@ -99,7 +99,7 @@ const caller = { kind: "human" as const, via: "local" as const };
 const key = (route: string) => bindWork(route, path, undefined, ref);
 const nativeValue = async (response: Response) => ({
   sha256: createHash("sha256").update(canonicalJson(await response.json())).digest("hex"),
-  nativeRequestId: response.headers.get("x-pe-native-request-id"), version: response.headers.get(DUCTS_BODY_VERSION_HEADER),
+  nativeRequestId: response.headers.get("x-pe-native-request-id"), version: response.headers.get(NATIVE_BODY_VERSION_HEADER),
 });
 
 function resourceFrames(response: Response) {
@@ -278,7 +278,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       }
       await next("loading"); const fresh = await next("ready");
       expect(fresh.value.version).not.toBe(original.value.version);
-      if (roster) expect(fresh.value.version).toBe(roster.headers.get(DUCTS_BODY_VERSION_HEADER));
+      if (roster) expect(fresh.value.version).toBe(roster.headers.get(NATIVE_BODY_VERSION_HEADER));
       const refresh = ductsExecutors(liveFactories.service!)["ducts.refresh"]!;
       await refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution);
       await next("stale");
@@ -287,7 +287,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       expect(refreshed.status, await refreshed.clone().text()).toBe(200);
       await next("loading");
       const refreshedFrame = await next("ready");
-      if (!recovery) expect(refreshedFrame.value.version).toBe(refreshed.headers.get(DUCTS_BODY_VERSION_HEADER));
+      if (!recovery) expect(refreshedFrame.value.version).toBe(refreshed.headers.get(NATIVE_BODY_VERSION_HEADER));
       if (mode === "endurance") for (let i = 0; i < 140; i++) {
         changedAt = i % 2 ? 300 : 0; for (const notify of markListeners) notify();
         await next("ready");
@@ -309,7 +309,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
         expect(writer.capture.truncated()).toBeNull();
         const beforeRefusal = nativeCalls;
         const refused = await live.handler(new Request(`${liveHost.base}/call`, { method: "POST", headers: {
-          "content-type": "application/json", [DUCTS_BODY_VERSION_HEADER]: retiredWalk.value.version,
+          "content-type": "application/json", [NATIVE_BODY_VERSION_HEADER]: retiredWalk.value.version,
         }, body: JSON.stringify(retiredWalk.body) }), Context.make(RequestIdentity, admitted()));
         expect(refused.status, await refused.clone().text()).toBe(409);
         expect(await refused.json()).toMatchObject({ error: { details: { problem: "read.retained" } } });

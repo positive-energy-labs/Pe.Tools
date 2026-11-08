@@ -4,7 +4,7 @@ import {
   executionTargetSchema,
   workKeySchema,
   bindWork,
-  DUCTS_BODY_VERSION_HEADER,
+  NATIVE_BODY_VERSION_HEADER,
   nativeOutputSchema,
   nativeOutputAssets,
   type NativeReadOutput,
@@ -208,7 +208,7 @@ export function inputPort(options: {
         if (!response.ok) throw Error(await response.text());
         return {
           body: await response.json(),
-          version: response.headers.get(DUCTS_BODY_VERSION_HEADER),
+          version: response.headers.get(NATIVE_BODY_VERSION_HEADER),
         };
       }
       throw Error(`Unknown input leaf '${name}'`);

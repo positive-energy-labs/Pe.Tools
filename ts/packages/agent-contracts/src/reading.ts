@@ -77,7 +77,7 @@ export const ductsReadingEnvelopeSchema = z.strictObject({
   error: z.string().optional(),
 });
 export type DuctsReadingEnvelope = z.infer<typeof ductsReadingEnvelopeSchema>;
-export const DUCTS_BODY_VERSION_HEADER = "x-pe-ducts-version";
+export const NATIVE_BODY_VERSION_HEADER = "x-pe-native-body-version";
 export const DUCTS_REFRESH_HEADER = "x-pe-ducts-refresh";
 
 export { address, addressSchema, sameAddress, type Address } from "./target.ts";

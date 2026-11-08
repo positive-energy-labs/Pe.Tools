@@ -11,7 +11,7 @@ import { NodeCrypto, NodeServices, NodeHttpClient } from "@effect/platform-node"
 import { Context, Effect, Exit, Layer, Queue, Scope } from "effect";
 import { HttpRouter } from "effect/http";
 import { TestClock } from "effect/testing";
-import { bindWork, DUCTS_BODY_VERSION_HEADER, type Address, type Caller } from "@pe/agent-contracts";
+import { bindWork, NATIVE_BODY_VERSION_HEADER, type Address, type Caller } from "@pe/agent-contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
@@ -340,7 +340,7 @@ export async function nativeFixture(
             "content-type": "application/json",
             [HOST_RPC_BRIDGE_SESSION_HEADER]: ref.session,
             [HOST_RPC_DOCUMENT_HEADER]: ref.openId,
-            ...(version && { [DUCTS_BODY_VERSION_HEADER]: version }),
+            ...(version && { [NATIVE_BODY_VERSION_HEADER]: version }),
           },
           body: JSON.stringify({ key: op, request: input }),
         }),

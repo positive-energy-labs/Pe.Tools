@@ -4,7 +4,7 @@ import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { captureReceiptSchema } from "@pe/agent-contracts";
 import { canonicalRouteInput, nativePrincipals } from "@pe/agent-contracts";
 import {
-  DUCTS_BODY_VERSION_HEADER,
+  NATIVE_BODY_VERSION_HEADER,
   DUCTS_REFRESH_HEADER,
 } from "@pe/agent-contracts";
 import { actionControls, commandTool, receiptsForWork } from "@pe/agent-contracts";
@@ -276,7 +276,7 @@ export function makeCallRoute(
 
       if (entry.reading && composition?.retainedRead) {
         const response = yield* composition.retainedRead({ key, input: request ?? {}, scope },
-          { version: req.headers[DUCTS_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] });
+          { version: req.headers[NATIVE_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] });
         recordOperation({ key, tsOnly: false, startedAt: Date.now(), origin, originClass, requestId }, { ok: true });
         return response;
       }
@@ -375,7 +375,7 @@ export function makeCallRoute(
       if (entry.reading) {
         const response = yield* retainedDuctsRead(ductsReadings(bridge), {
           key, input: request ?? {}, scope: { ...scope, bridgeSessionId: bridgeSessionId!, openDocumentId: openDocumentId ?? undefined },
-        }, { version: req.headers[DUCTS_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] }, {
+        }, { version: req.headers[NATIVE_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] }, {
           basis: composition?.retainedBasis,
           document: (ref) => Effect.suspend(() => {
             const document = resolvedSession?.state?.openDocuments.find((doc) => doc.openId === ref.openId);
@@ -1416,7 +1416,7 @@ export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
   yield* Effect.try({ try: () => owner.assertCurrent(subject, shared.version), catch: retainedReadFailure });
   return Response.text(shared.json, { headers: { "content-type": "application/json",
     ...resolvedTargetHeaders(shared.target), "x-pe-native-request-id": shared.nativeRequestId,
-    [DUCTS_BODY_VERSION_HEADER]: shared.version, "x-pe-ducts-reused": String(!acquired) } });
+    [NATIVE_BODY_VERSION_HEADER]: shared.version, "x-pe-ducts-reused": String(!acquired) } });
 });
 
 // The legacy retained owner uses statusCode; the typed HTTP mapper consumes status.
@@ -1437,7 +1437,7 @@ export const nativeCallRouteFor = (retained?: (input: NativeReadInput, options: 
     // Retained Ducts HTTP bodies also need source metadata and version ownership, not just a native taking.
     if (linkedCatalog().entries.get(body.key)?.call?.reading) {
       if (retained) return yield* retained({ key: body.key, input: body.request ?? {}, scope: identity.scope },
-        { version: req.headers[DUCTS_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] });
+        { version: req.headers[NATIVE_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] });
       const missing = inputs.check({ kind: "input", input: "document" });
       if (missing) return yield* missing;
     }
