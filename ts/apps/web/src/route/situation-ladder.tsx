@@ -8,7 +8,7 @@ import {
 } from "@pe/agent-contracts";
 import { useMachineSlice } from "#/machine/use-machine";
 import { pidOf } from "#/machine/session";
-import { previousOf } from "#/shell/readings-hooks";
+import { previousOf } from "#/host/resource-state";
 import { Ladder } from "./ladder";
 import { useChooseTarget } from "#/shell/binding";
 import type { RouteHandle } from "./handle";

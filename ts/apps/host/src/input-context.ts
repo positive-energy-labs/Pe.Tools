@@ -1,9 +1,9 @@
-import { Context, Layer } from "effect";
-import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { inputKinds, type InputKind, type SourceProvenance } from "@pe/agent-contracts";
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
-import type { HostInputLane } from "./native-recording.ts";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { Context, Layer } from "effect";
 import { InvalidRead } from "./native-reads.ts";
+import type { HostInputLane } from "./native-recording.ts";
 
 /** One thing a request is about to use; policy derives its safety from catalogs, never the client. */
 export type InputUse =
@@ -12,7 +12,7 @@ export type InputUse =
   | { readonly kind: "command"; readonly key: string }
   | {
       readonly kind: "work";
-      readonly verb: "edit" | "undo" | "redo" | "start-fresh" | "salvage" | "publish" | "retire";
+      readonly verb: "edit" | "undo" | "redo" | "publish" | "retire";
     }
   | { readonly kind: "recording"; readonly verb: "bind-point" | "write-metadata" | "append" };
 
@@ -43,9 +43,10 @@ function check(lane: HostInputLane, use: InputUse): InvalidRead | null {
     case "native": {
       const operation = hostOpCatalog.find((entry) => entry.key === use.key);
       if (!operation) return refused("read.contract", `${use.key} has no generated contract`);
-      // No replay-safe metadata distinguishes transaction-backed inspection from rehearsal yet.
-      // Historical invocation therefore admits only ordinary Read/Read.
-      return operation.intent === "Read" && operation.effect === "Read"
+      // Catalog-declared rollback inspections replay their kept output and never open a transaction.
+      return operation.intent === "Read" &&
+        (operation.effect === "Read" ||
+          (operation.effect === "TransactRead" && operation.rollsBack))
         ? uncovered(NATIVE_BUNDLE, ["native"], use.key)
         : historical(`${use.key} (${operation.effect})`);
     }

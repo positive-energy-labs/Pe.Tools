@@ -1,3 +1,7 @@
+import "../route/builtin-routes";
+import {installOpenControls} from "../open/context";
+import {OpenControls} from "../open/kernel";
+installOpenControls(OpenControls);
 import { useRestoreTabPage } from "../route/url";
 import { useEffect, useState } from "react";
 import { WorkOwner } from "@pe/kit/lang/work";
@@ -37,7 +41,7 @@ import { ElementMenu } from "#/revit/element-menu";
 import { WorkbenchProvider } from "#/workbench/provider";
 import { RouteDock } from "#/workbench/route-panes";
 import { useRouteActivity } from "#/route/activity";
-import { bindActionReadings } from "#/readings";
+import { bindActionReadings } from "#/host/resource-stream";
 
 import { startupWatch } from "#/route/startup-watch";
 
@@ -60,7 +64,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     shell: search.shell === "tray" || search.shell === "card" ? search.shell : undefined,
   }),
   // Resource identity crosses links; shell presentation belongs to the local surface adapter.
-  search: { middlewares: [retainSearchParams(["thread", "target", "work", "fixture"])] },
+  search: { middlewares: [retainSearchParams(["thread", "target", "work", "fixture", "at", "atInstance", "compare"])] },
   head: () => ({
     meta: [
       {

@@ -1,3 +1,4 @@
+import type { LayoutNode } from "@pe/agent-contracts";
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
@@ -5,8 +6,8 @@ import {
   GraphLayoutView,
   type PaneApi,
 } from "../../../../packages/kit/src/components/lang/graph-layout";
-import { ductsData } from "#/ducts/neutral";
-import { fansData } from "#/fans/neutral";
+import { ductsData } from "#/ducts/route";
+import { fansData } from "#/fans/route";
 const ductsGraph = ductsData;
 const layoutPanes = (panes: Readonly<Record<string, { label: string; purpose: string }>>) =>
   Object.fromEntries(
@@ -15,7 +16,8 @@ const layoutPanes = (panes: Readonly<Record<string, { label: string; purpose: st
       { label, purpose, draws: [], verbs: [] },
     ]),
   );
-import { opsGraph } from "#/ops/graph";
+import {module as opsModule} from "../ops/route";
+const opsGraph=opsModule.data;
 import { PaneSplit } from "../../../../packages/kit/src/components/lang/pane-resize";
 
 beforeEach(() => {
@@ -48,7 +50,7 @@ for (const width of [720, 1280, 1920]) {
       );
       const { container } = render(
         <GraphLayoutView
-          layout={ductsGraph.layout}
+          layout={ductsGraph.layout as LayoutNode}
           panes={layoutPanes(ductsGraph.panes)}
           active={(key) => key === stage || key === "system"}
           bodies={bodies}
@@ -74,14 +76,13 @@ for (const width of [720, 1280, 1920]) {
     );
     const { container } = render(
       <GraphLayoutView
-        layout={opsGraph.layout}
-        panes={opsGraph.panes}
+        layout={opsGraph.layout as LayoutNode}
+        panes={layoutPanes(opsGraph.panes)}
         active={() => true}
         bodies={bodies}
       />,
     );
-    expect(container.querySelector('[data-pane-id="operation"]')).toBeTruthy();
-    expect(container.querySelector('[data-pane-id="receipts"]')).toBeTruthy();
+    for(const id of Object.keys(opsGraph.panes)) expect(container.querySelector(`[data-pane-id="${id}"]`)).toBeTruthy();
   });
 }
 
@@ -95,7 +96,7 @@ test("persisted widths fit around the network drawing floors", () => {
   );
   const { container } = render(
     <GraphLayoutView
-      layout={ductsGraph.layout}
+      layout={ductsGraph.layout as LayoutNode}
       panes={layoutPanes(ductsGraph.panes)}
       active={(key) => key === "network" || key === "system"}
       bodies={bodies}
@@ -119,7 +120,7 @@ test("folding a leaf does not fold its containing support branch", () => {
   );
   const { container } = render(
     <GraphLayoutView
-      layout={ductsGraph.layout}
+      layout={ductsGraph.layout as LayoutNode}
       panes={layoutPanes(ductsGraph.panes)}
       active={(key) => key === "network" || key === "system"}
       bodies={Object.fromEntries(

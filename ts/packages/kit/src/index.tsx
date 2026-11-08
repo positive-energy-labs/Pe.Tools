@@ -12,7 +12,7 @@ export {
   type GraphPaneState,
   type PaneApi,
 } from "./components/lang/graph-layout";
-export { reduceLayout, sidebars, withDoc } from "./components/lang/layout-graph";
+export { reduceLayout } from "./components/lang/layout-graph";
 export { Switcher } from "./components/lang/switcher";
 export { Code } from "./components/lang/code";
 export { Button } from "./components/lang/button";

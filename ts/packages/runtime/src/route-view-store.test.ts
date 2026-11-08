@@ -1,14 +1,16 @@
 import { describe, expect, it, vi } from "vite-plus/test";
+import { routeAddress } from "@pe/agent-contracts";
 import type { RouteView } from "@pe/agent-contracts";
 import { RouteViewStore } from "./route-view-store.ts";
 
+const wire = (value: string) => JSON.stringify(value);
 const counts = { families: 2, types: 3, parameters: 4 };
 const view = (instance: string, thread = "t"): RouteView => ({
   route: "families",
   thread,
   instance,
   surface: "chat",
-  page: { query: "" },
+  page: { readId: wire("") },
   context: {
     stage: "history",
     readingId: "read-1",
@@ -22,7 +24,7 @@ const ducts = (instance: string): RouteView => ({
   thread: "t",
   instance,
   surface: "route",
-  page: { system: "", level: "", selected: "" },
+  page: routeAddress("ducts").agent.write(routeAddress("ducts").defaults),
   context: { document: { session: "s", openId: "o" } },
   facts: { systems: [{ name: "Supply 1" }] },
 });
@@ -88,20 +90,20 @@ describe("mounted route view custody", () => {
     store.subscribe((value) => {
       intent = value;
     });
-    const result = store.set("t", "families", id1, first.revision, { query: "blank" });
-    const ack = (query: string) =>
+    const result = store.set("t", "families", id1, first.revision, { readId: wire("blank") });
+    const ack = (readId: string) =>
       store.ack({
         outcome: "rendered",
         instance: id1,
         commandId: intent!.commandId,
         revision: first.revision,
-        page: { query },
+        page: { readId: wire(readId) },
         facts: first.facts,
       }).ok;
     expect(ack("wrong")).toBe(false);
-    store.publish({ ...view(id1), page: { query: "blank" } });
+    store.publish({ ...view(id1), page: { readId: wire("blank") } });
     expect(ack("blank")).toBe(true);
-    await expect(result).resolves.toMatchObject({ ok: true, page: { query: "blank" } });
+    await expect(result).resolves.toMatchObject({ ok: true, page: { readId: wire("blank") } });
     const next = store.select("t", "families", id1)!;
     expect("revision" in next && next.revision).toBeGreaterThan(first.revision);
   });
@@ -120,15 +122,17 @@ describe("mounted route view custody", () => {
     store.subscribe((intent) => {
       commandId = intent.commandId;
     });
-    const result = store.set("t", "ducts", id1, lease.revision, { system: "Supply 1" });
-    store.publish({ ...ducts(id1), page: { system: "Supply 1", level: "", selected: "" } });
+    const system = JSON.stringify({kind:"ids",ids:[JSON.stringify(["ducts-system","Supply 1"])]});
+    const page = {...ducts(id1).page,system};
+    const result = store.set("t", "ducts", id1, lease.revision, { system });
+    store.publish({ ...ducts(id1), page });
     expect(
       store.ack({
         outcome: "rendered",
         instance: id1,
         commandId,
         revision: lease.revision,
-        page: { system: "Supply 1", level: "", selected: "" },
+        page,
         facts: lease.facts,
       }).ok,
     ).toBe(true);
@@ -144,11 +148,11 @@ describe("mounted route view custody", () => {
       store.subscribe((intent) => {
         commandId = intent.commandId;
       });
-      const result = store.set("t", "families", id1, first.revision, { query: "filled" });
+      const result = store.set("t", "families", id1, first.revision, { readId: wire("filled") });
       store.publish({
         ...view(id1),
         context: { ...view(id1).context, readingId: "read-2" },
-        page: { query: "filled" },
+        page: { readId: wire("filled") },
       });
       expect(
         store.ack({
@@ -156,7 +160,7 @@ describe("mounted route view custody", () => {
           instance: id1,
           commandId,
           revision: first.revision,
-          page: { query: "filled" },
+          page: { readId: wire("filled") },
           facts: first.facts,
         }).ok,
       ).toBe(false);
@@ -178,8 +182,8 @@ describe("mounted route view custody", () => {
       store.subscribe((intent) => {
         commandId = intent.commandId;
       });
-      const result = store.set("old-thread", "families", id1, first.revision, { query: "blank" });
-      store.publish({ ...view(id1, "new-thread"), page: { query: "blank" } });
+      const result = store.set("old-thread", "families", id1, first.revision, { readId: wire("blank") });
+      store.publish({ ...view(id1, "new-thread"), page: { readId: wire("blank") } });
       expect(store.select("old-thread", "families", id1)).toBeNull();
       expect(
         store.ack({
@@ -187,7 +191,7 @@ describe("mounted route view custody", () => {
           instance: id1,
           commandId,
           revision: first.revision,
-          page: { query: "blank" },
+          page: { readId: wire("blank") },
           facts: first.facts,
         }).ok,
       ).toBe(false);

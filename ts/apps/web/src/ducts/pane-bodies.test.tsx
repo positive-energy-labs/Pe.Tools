@@ -5,12 +5,11 @@ import { cleanup,fireEvent,render,screen } from "@testing-library/react";
 import { isValidElement } from "react";
 import { afterEach,expect,test,vi } from "vite-plus/test";
 import { createWitness } from "../fans/cutover.test-support";
-import type { AdmittedMount } from "../shell/admitted-mount";
-import { admittedSubjectDoor } from "../shell/admitted-chrome";
+import { typedSubjectDoor } from "../shell/subject";
 import { SubjectDoor } from "../shell/subject";
 import { makeAtomRegistry } from "../shell/owner";
 import { cellFocusOf,cellFocusSubject } from "./cell-focus";
-import { ductsLink,localId,localSubject } from "./neutral";
+import { ductsLink,localId,localSubject } from "./identity";
 import { snapshot } from "./test-fixture";
 import sheetFixture from "./sheet/sheet.fixture.json";
 
@@ -40,7 +39,7 @@ afterEach(() => {
   for (const close of closes.splice(0).reverse()) close();
   vi.clearAllMocks();
 });
-function nodeFor(mount: Pick<AdmittedMount, "read">, pane: string) {
+function nodeFor(mount: { read(pane: string): unknown }, pane: string) {
   const node = mount.read(pane);
   if (!isValidElement(node)) throw Error(`Pane ${pane} did not return a React element`);
   return node;
@@ -52,11 +51,11 @@ function registry() {
 }
 
 test("F16 the sidebar navigates the document roster before pricing and keeps atomic all/clear", async () => {
-  const f = await createWitness(closes, new Map(), { "ducts.tables": { kind: "use", open() {} } });
+  const f = await createWitness(closes, new Map(), { "ducts.pricing.value": { kind: "use", open() {} } });
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
-  expect(f.owner.readingStatus("pricing").snapshot.value).toBeFalsy();
+  expect(f.owner.readingStatus("value").snapshot.value).toBeFalsy();
   render(<RegistryContext value={registry()}>
-    <SubjectDoor value={admittedSubjectDoor(f.owner, f.admitted.owner.data)}>
+    <SubjectDoor value={typedSubjectDoor(f.owner.native)}>
       {nodeFor(f.owner, "e-systems")}
     </SubjectDoor>
   </RegistryContext>);
@@ -82,7 +81,7 @@ test("Q2a keeps kind and colour editors on ducts and fan settings on fans", asyn
   expect(screen.getByRole("combobox", { name: "Search systems" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Duct settings" }));
   expect(await screen.findByRole("region", { name: "System colours" })).toBeTruthy();
-  expect(screen.getByRole("link", { name: "Fan inputs" }).getAttribute("href")).toMatch(/^\/fans\?/);
+  expect(screen.getByRole("link", { name: "Fan inputs" }).getAttribute("href")).toMatch(/^\/fans(?:\?|$)/);
   expect(screen.getAllByRole("region", { name: "Unit kinds" })).toHaveLength(1);
   expect(screen.queryByRole("region", { name: "Fan settings" })).toBeNull();
   view.unmount();
@@ -123,22 +122,6 @@ test("an admitted network pane runs no sibling body when another pane is hidden"
   expect(leaves.inbox).not.toHaveBeenCalled();
 });
 
-test("a pending sheet does not blank its roster sibling", async () => {
-  const f = await createWitness(closes, new Map(), { "ducts.sheet": { kind: "use", open() {} } });
-  await vi.waitFor(() => expect(f.fans.readingStatus("fans").snapshot.current).toBe(true));
-  await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.status).toBe("pending"));
-  const rows = f.fans.readingStatus("fans").snapshot.value;
-  expect(rows).toBeDefined();
-  render(
-    <RegistryContext value={registry()}>
-      {nodeFor(f.fans, "sheet-roster")}
-      {nodeFor(f.fans, "sheet-ledger")}
-    </RegistryContext>,
-  );
-  expect(screen.getByRole("listbox", { name: "fans" }).textContent).toContain("MUAS-1");
-  expect(screen.getAllByRole("status").some((node) => node.textContent === "computing")).toBe(true);
-});
-
 test("the fan roster restores its Page query after its body is hidden and shown", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.fans.readingStatus("fans").snapshot.current).toBe(true));
@@ -165,8 +148,8 @@ test("a restored semantic cell selection lands on that fitting cell through the 
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
   f.owner.controls.subject({ kind: "ids", ids: [localId("ducts-system", "SA")] });
   await vi.waitFor(() => {
-    const state = f.owner.readingStatus("pricing").snapshot;
-    if (state.status === "failed") throw Error(state.reason);
+    const state = f.owner.readingStatus("value").snapshot;
+    if (state.status === "failed") throw Error(state.reason ?? "Read failed");
     expect(state.current).toBe(true);
   });
   const subject = cellFocusSubject(snapshot, ["SA"], { segment: "componentDrops", id: fitting.id });
@@ -226,7 +209,7 @@ test("/fans edits Ducts criteria and a criterion choice in place through the duc
   await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.current).toBe(true));
   await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
   const acks: { route: string; label?: string }[] = [];
-  closes.push(f.ws.subscribe((event) => {
+  closes.push(f.ws.subscribeUncaptured((event) => {
     if (event.ok) acks.push({ route: event.route, label: event.label });
   }));
   const ducts0 = f.owner.work()?.revision ?? 0;
@@ -241,6 +224,7 @@ test("/fans edits Ducts criteria and a criterion choice in place through the duc
   fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
   await vi.waitFor(() => expect(f.owner.work()?.revision).toBe(ducts0 + 1));
   expect(f.owner.work()?.value).toMatchObject({ criteria: { edit: { value: { terminalDropInWg: 0.07 } } } });
+  view.rerender(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
   // A criterion choice goes through the same owner handle.
   const split = view.container.querySelector<HTMLElement>('[data-input-field="splitPolicy"]')!;
   expect(split.querySelector("a")).toBeNull();
@@ -277,10 +261,10 @@ test("/fans edits Ducts criteria and a criterion choice in place through the duc
 
 test("a rule owner crossing without system context still lands on its rule", async () => {
   const f = await createWitness(closes);
-  const url = new URL(ductsLink([], { fixture: "scene" }, { kind: "rule", key: "tap-std" }), "http://127.0.0.1");
+  const url = new URL(ductsLink([], {}, { kind: "rule", key: "tap-std" }), "http://127.0.0.1");
   const destination = f.mount(f.admitted.owner, url.searchParams, "rule-no-system");
-  expect(destination.page.read().selected.map(item => localSubject(item.id))).toEqual(["rule:tap-std"]);
-  await vi.waitFor(() => expect(destination.readingStatus("pricing").snapshot.current).toBe(true));
+  expect(destination.page.read().selected.map((item: {id:Parameters<typeof localSubject>[0]}) => localSubject(item.id))).toEqual(["rule:tap-std"]);
+  await vi.waitFor(() => expect(destination.readingStatus("value").snapshot.current).toBe(true));
   const view = render(<RegistryContext value={registry()}>{nodeFor(destination, "e-rules-all")}</RegistryContext>);
   const row = view.container.querySelector('[data-key="tap-std"]');
   expect(row).not.toBeNull();

@@ -1,3 +1,4 @@
+import { get } from "./action-blobs.ts";
 import { SdkSession } from "./sdk-session.ts";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
@@ -24,6 +25,7 @@ export function commandResources(
 ): CommandResources {
   return {
     work: deps.workspace,
+    workReads: deps.workReads,
     async effectPath(effect) {
       const listing = await listPackages(deps.podsRoot);
       if (listing.unreadable.length)
@@ -55,7 +57,7 @@ export function commandResources(
         }
         case "capture":
           return createHash("sha256")
-            .update(Buffer.from(dependency.probe.bytesBase64, "base64"))
+            .update(await get(dependency.probe.blob))
             .digest("hex");
         case "file":
           return readFile(dependency.probe.path).then(

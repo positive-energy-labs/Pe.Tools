@@ -1,4 +1,4 @@
-import { peReadings, type Liveness } from "#/readings";
+import { peReadings, type Liveness } from "#/host/resource-stream";
 import type { HarnessEvent } from "@pe/agent-contracts";
 import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/reactivity/AsyncResult";

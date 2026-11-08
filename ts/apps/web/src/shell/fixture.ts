@@ -9,12 +9,13 @@ import {
   type RouteGraph,
   type GraphSeedData,
 } from "@pe/agent-contracts";
-import { createGraphMount, type MountAdapters, type MountScope } from "./mount-owner";
-import type { ReadingSource } from "./readings";
+import {createGraphMount, type MountAdapters} from "./mount-owner";
+import type { MountScope } from "./work-scope";
+import type { ReadingSource } from "./source-contract";
 import { createSettingsOwner, settingFields } from "./settings";
 import type { WorkScopePorts } from "./use-work-scope";
 
-export { fixtureName, currentFixture } from "./fixture-lane";
+export { fixtureName, currentFixture } from "./fixture-name";
 
 interface FixtureMountEnvironment<P, W> {
   graph: RouteGraph<P, W>;
@@ -149,7 +150,6 @@ export function pendingFixtureEnvironment<P, W>(
         return refuse(snapshot.failure ?? "Fixture Work is unavailable");
       return workspace!.write(requestKey, key.route, "human", request);
     },
-    startFresh: async () => refuse("Fixture Work is already in memory"),
     reread() {},
     subscribeAcceptedDeltas(key, notify) {
       return workspace?.observeAccepted(key, notify) ?? (() => {});
@@ -159,7 +159,6 @@ export function pendingFixtureEnvironment<P, W>(
       bindingLost: null,
       targetProvenance: { source: "seed" },
       closed: false,
-      unreadable: false,
       failure,
     },
   };

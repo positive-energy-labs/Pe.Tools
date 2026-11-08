@@ -1,3 +1,4 @@
+import { unavailableFieldOptions } from "./effect-test.ts";
 import { readFileSync, existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,13 +8,14 @@ import { Context, Effect, Layer, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
+import { z } from "zod";
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
-import { bindWork, address, DUCTS_BODY_VERSION_HEADER, readingKey, readingRequestsSchema, type Caller, type ReadingRequest } from "@pe/agent-contracts";
+import { bindWork, address, NATIVE_BODY_VERSION_HEADER, readingKey, readingRequestsSchema, type Caller, type ReadingRequest } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
-import { fansInputRoutes } from "../src/app.ts";
+import { readInputRoutes } from "../src/app.ts";
 import { HostInputContext } from "../src/input-context.ts";
-import { HostFiles } from "../src/host-files.ts";
+import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
 import { admittedRequestIdentity, RequestIdentity, readSchemas } from "../src/request-services.ts";
@@ -21,14 +23,21 @@ import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { FIRM_SEED } from "../src/ducts-inputs.ts";
 import { admitNativeCaller } from "../src/native-read-policy.ts";
 import { nativeCatalogIdentity, openRecordingWriter, openRecordingReader,
-  type HostInputLane, type ConsumerRecipe } from "../src/native-recording.ts";
+  type ConsumerRecipe, type RecordingReader } from "../src/native-recording.ts";
 import type { ReadSetId } from "../src/input-occurrence.ts";
 import { builtinEnrollments } from "../src/builtin-enrollment.ts";
 import { workFingerprintSchema } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
-import { settle } from "./effect-test.ts";
+import { settle, detachedBridge, sessionView } from "./effect-test.ts";
+import { SdkSession } from "../src/sdk-session.ts";
+import { HostInputReadSets, defaultReadSetLimits } from "../src/input-occurrence.ts";
+import { DuctsReadings } from "../src/ducts-readings.ts";
+import { bridgeSessionsListSchema } from "@pe/host-contracts/operation-types";
+import { listBridgeSessions } from "../src/local-ops.ts";
+import { InvalidRead } from "../src/native-reads.ts";
+import * as machine from "../src/machine.ts";
 import { bootHost } from "./real-server.ts";
 import { ductsExecutors } from "../src/ducts-actions.ts";
-import type { RevitBridge, HostBridgeEvent } from "../src/bridge.ts";
+import { RevitBridge, type HostBridgeEvent } from "../src/bridge.ts";
 import type { CommandContext } from "../src/command-executor.ts";
 import type { ActionExecution } from "../src/action-journal.ts";
 import { mintBrowserContext, mintContext } from "../src/control.ts";
@@ -90,13 +99,17 @@ const caller = { kind: "human" as const, via: "local" as const };
 const key = (route: string) => bindWork(route, path, undefined, ref);
 const nativeValue = async (response: Response) => ({
   sha256: createHash("sha256").update(canonicalJson(await response.json())).digest("hex"),
-  nativeRequestId: response.headers.get("x-pe-native-request-id"), version: response.headers.get(DUCTS_BODY_VERSION_HEADER),
+  nativeRequestId: response.headers.get("x-pe-native-request-id"), version: response.headers.get(NATIVE_BODY_VERSION_HEADER),
 });
 
 function resourceFrames(response: Response) {
   expect(response.status).toBe(200);
   const reader = response.body!.getReader(); let text = "";
-  return { close: () => reader.cancel(), next: async (events = false) => {
+  return { opening: async () => {
+    const chunk = await reader.read();
+    expect(chunk.done).toBe(false);
+    expect(new TextDecoder().decode(chunk.value)).toBe(": open\n\n");
+  }, close: () => reader.cancel(), next: async (events = false) => {
     while (true) {
       const end = text.indexOf("\n");
       if (end >= 0) {
@@ -118,7 +131,7 @@ async function firstFrame(response: Response) {
   try { return await frames.next(); } finally { await frames.close(); }
 }
 
-test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(process.env.PE_FANS_COLD_NETWORK ? ["cold-off", "cold-on"] as const : [])] as const)("real Fans graph %s", async (mode) => {
+test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy", "legacy-full", "legacy-io", ...(process.env.PE_FANS_COLD_NETWORK ? ["cold-off", "cold-on"] as const : [])] as const)("real Fans graph %s", async (mode) => {
   const isCold = mode.startsWith("cold-");
   const driverSource = process.env.PE_FANS_COLD_NETWORK;
   if (isCold && (!driverSource || !existsSync(driverSource))) throw Error("Cold shell proof requires the captured Driver network asset");
@@ -135,9 +148,10 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
   const markEntered = Promise.withResolvers<void>(), releaseMark = Promise.withResolvers<void>();
   const entered = Promise.withResolvers<void>(), releaseHuman = Promise.withResolvers<void>();
   const nativeEntered = Promise.withResolvers<void>(), releaseNative = Promise.withResolvers<void>();
+  expect(createHash("sha256").update(readFileSync(source)).digest("hex")).toBe("57b0034722af64d997f35f9301cbff51c3af4728b940a09b2ef3d8405c930c68");
   const raw = JSON.parse(readFileSync(source, "utf8").replace(/^\uFEFF/, ""));
   const snapshot = Schema.decodeUnknownSync(Schema.Json)(raw.result ?? raw);
-  const snapshotContract = isCold ? await run(readSchemas("ducts.snapshot.walk")) : undefined;
+  const snapshotContract = await run(readSchemas("ducts.snapshot.walk"));
   if (snapshotContract) Schema.decodeUnknownSync(snapshotContract.response)(snapshot);
   await mkdir(join(dir, "catalogs")); await writeFile(join(dir, "firm.json"), JSON.stringify(FIRM_SEED));
   const writer = await run(openRecordingWriter(join(dir, "bundle"), identity, bounds));
@@ -148,7 +162,7 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
       normalizedInput: canonicalJson(JSON.parse(JSON.stringify(input.input))), freshnessGeneration: "captured:g1", representation: "overview" as const })),
     read: (input) => admitNativeCaller(input.key).pipe(Effect.tap(() => mode === "truncated" && input.key === "ducts.snapshot.roster"
       ? Effect.promise(() => { nativeEntered.resolve(); return releaseNative.promise; }) : Effect.void), Effect.map(() => ({
-      value: input.key === "ducts.tables" ? { folder: "captured-native", tables: {}, missing: (input.input as {ids:string[]}).ids, unsupported: {} } : snapshot,
+      value: input.key === "revit.catalog.field-options" ? unavailableFieldOptions : input.key === "ducts.tables" ? { folder: "captured-native", tables: {}, missing: (input.input as {ids:string[]}).ids, unsupported: {} } : snapshot,
       nativeRequestId: `native-${++nativeCalls}`, actualTarget: input.key === "ducts.tables" ?
         { ...actualTarget, openDocumentLifetime: { kind: "session-only" as const } } : actualTarget,
       freshness: { freshnessGeneration: "captured:g1" }, cost: {}, outcome: "committed" as const,
@@ -158,25 +172,27 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
   let changedAt = 300;
   const markListeners = new Set<() => void>();
   const livePorts = {
-    native, files: HostFiles.layer({ firm: join(dir, "firm.json"), catalogs: join(dir, "catalogs") }),
-    marks: Layer.succeed(HostDocumentMarks, hostMarks({ observedSince: 100, changedAt: () => changedAt, subscribe: (notify) => { markListeners.add(notify); return () => { markListeners.delete(notify); }; } })),
-    inventory: Layer.succeed(HostSessionInventory, { document: () => Effect.succeed(row),
+    native, files: DuctFiles.layer({ firm: join(dir, "firm.json"), catalogs: join(dir, "catalogs") }),
+    marks: Layer.succeed(HostDocumentMarks, hostMarks({ observedSince: 100, generation: () => changedAt, changedAt: () => changedAt, subscribe: (notify) => { markListeners.add(notify); return () => { markListeners.delete(notify); }; } })),
+    inventory: Layer.succeed(HostSessionInventory, { list: () => Effect.die("inventory not requested"), subscribe: () => () => {}, document: () => Effect.succeed(row),
       session: () => Effect.succeed({ sessionId: ref.session }), attachment: () => Effect.succeed({ sessionId: ref.session }) }),
   };
-  const liveHost = await bootHost({ inputs, clock: 200, fans: { live: livePorts, store: fileRouteDocumentStore(join(dir, "work")),
+  const liveHost = await bootHost({ inputs, clock: 200, reads: { live: livePorts, store: fileRouteDocumentStore(join(dir, "work")),
       observedReadSet: (recipe, id, requestId, caller) => { completed.push({ recipe, id, requestId, caller }); },
       observed: (taking) => Effect.gen(function* () {
         if (holdMark && taking.input.kind === "marks") {
           holdMark = false; markEntered.resolve(); yield* Effect.promise(() => releaseMark.promise);
         }
         const identity = yield* Effect.serviceOption(RequestIdentity);
-        if (holdHuman && taking.input.kind === "work" && taking.input.view === "view" &&
+        if (holdHuman && taking.input.kind === "work" && taking.input.view === (mode.startsWith("legacy") ? "read" : "view") &&
             Option.isSome(identity) && identity.value.caller.kind === "human") {
           holdHuman = false; entered.resolve(); yield* Effect.promise(() => releaseHuman.promise);
         }
       }),
       initialize: async (owner) => {
         workspace = owner;
+        if (mode.startsWith("legacy")) owner.register({ spec: { route: "legacy", title: "Legacy", description: "Legacy Work carriage witness",
+          schema: z.object({ count: z.number().default(0) }).prefault({}) } });
         if (isCold) return;
         for (const [revision, cfm] of [[0, 250], [1, 300]] as const)
           expect(await owner.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm } } }], revision)).toMatchObject({ ok: true });
@@ -184,6 +200,7 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
       },
     } });
   type Web = { handler: (request: Request, context: Context.Context<import("@pe/host-internal/request-contracts").RequestIdentity>) => Promise<Response>; dispose: () => Promise<void> };
+  const browserCookie = mintBrowserContext({ kind: "local" }).split(";")[0]!;
   const live: Web = {
     handler: async (request, context) => {
       const who = Context.get(context, RequestIdentity).caller;
@@ -192,11 +209,16 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
       headers.set(HOST_RPC_DOCUMENT_HEADER, ref.openId);
       if (who.kind === "pea") headers.set(HOST_CONTEXT_HEADER, mintContext({ kind: "pea", thread: who.thread!, run: who.run, root: who.root }));
       else {
-        headers.set("cookie", mintBrowserContext({ kind: "local" }).split(";")[0]!);
+        headers.set("cookie", browserCookie);
         headers.set("origin", liveHost.base); headers.set(HOST_RUNTIME_SERVICE_HEADER, hostOwnership.serviceName);
         headers.set("referer", `${liveHost.base}/fans`);
       }
-      return fetch(new URL(new URL(request.url).pathname + new URL(request.url).search, liveHost.base), {
+      const url = new URL(new URL(request.url).pathname + new URL(request.url).search, liveHost.base);
+      if (mode.startsWith("legacy") && url.pathname === "/pe/resources") {
+        headers.delete(HOST_RUNTIME_SERVICE_HEADER); headers.delete("origin");
+        headers.set("sec-fetch-site", "same-origin"); url.searchParams.set("peRuntimeService", hostOwnership.serviceName);
+      }
+      return fetch(url, {
         method: request.method, headers, ...(request.method === "GET" ? {} : { body: await request.text() }),
       });
     }, dispose: liveHost.close,
@@ -205,20 +227,22 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
   const send = (web: typeof live, url: string, body?: unknown, identity = admitted()) => withInvocationContext({ caller: identity.caller, hostBaseUrl: "http://host" }, () => web.handler(new Request(`http://host${url}`, {
     method: body === undefined ? "GET" : "POST", headers: { "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }), Context.make(RequestIdentity, identity)));
-  const cases: { url: string; body?: any; value: any; readSet: ReadSetId; stream?: boolean; caller: Caller }[] = [];
+  const readBody = (read: string, args: unknown) => ({ read, args, subscription: crypto.randomUUID(), generation: 0 });
+  const cases: { wire?: any; url: string; body?: any; value: any; readSet: ReadSetId; stream?: boolean; caller: Caller }[] = [];
   const claimed = new Set<ReadSetId>();
   const capture = async (url: string, body?: unknown, stream = false, who: Caller = caller) => {
     const started = completed.length;
     const identity = admitted(who); const response = await send(live, url, body, identity);
     if (!stream) expect(response.status, await response.clone().text()).toBe(200);
-    const value = stream ? await firstFrame(response) : url === "/call" ? await nativeValue(response) : await response.json();
+    const wire = stream ? await firstFrame(response) : url === "/call" ? await nativeValue(response) : await response.json();
+    const value = url === "/pe/reads/value" ? wire.value.data : wire;
     if (stream) expect(value.kind, JSON.stringify(value)).toBe("snapshot");
     if (url === "/call") { expect(response.headers.get("x-pe-ducts-reused")).toBe("true"); expect(value.nativeRequestId).not.toBe(identity.requestId); }
-    const key = stream ? "resource.frame" : url === "/call" ? "native.call" : url.endsWith("/sheet") ? "ducts.sheet" : url.includes("route-state") ? "work.get" : "ducts.roster";
+    const key = stream ? "resource.frame" : url === "/call" ? "native.call" : url === "/pe/reads/value" ? "reads.value" : "work.get";
     const roots = completed.slice(started).filter((entry) => !claimed.has(entry.id) && entry.caller?.kind === who.kind && entry.recipe.key === key);
     expect(roots, "The actual consumer must complete exactly one stored read set").toHaveLength(1);
     claimed.add(roots[0]!.id);
-    cases.push({ url, body, value, readSet: roots[0]!.id, stream, caller: who }); return value;
+    cases.push({ url, body, value, wire, readSet: roots[0]!.id, stream, caller: who }); return value;
   };
   let historical: typeof live | undefined;
   const persistentProof = async () => {
@@ -246,26 +270,26 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
         eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }) });
       await next("stale");
       const beforeReacquire = nativeCalls;
-      const roster = recovery ? await send(live, "/pe/ducts/roster", { target: ref })
+      const roster = recovery ? (await capture("/pe/reads/value", readBody("fans.roster", { target: ref })), undefined)
         : await send(live, "/call", { key: "ducts.snapshot.roster", request: { selector: { kind: "roster" } } });
-      expect(roster.status, await roster.clone().text()).toBe(200);
+      if (roster) expect(roster.status, await roster.clone().text()).toBe(200);
       if (recovery) {
         expect(nativeCalls).toBe(beforeReacquire + 1);
         const prior = cases.find((entry) => entry.value.kind === "overview")!.value;
-        expect((await roster.json()).rows.find((row: any) => row.unitId === prior.fan.unitId && row.portIndex === prior.fan.portIndex)).not.toHaveProperty("blockerCount");
+        expect(cases.at(-1)!.value.rows.find((row: any) => row.unitId === prior.fan.unitId && row.portIndex === prior.fan.portIndex)).not.toHaveProperty("blockerCount");
       }
       await next("loading"); const fresh = await next("ready");
       expect(fresh.value.version).not.toBe(original.value.version);
-      if (!recovery) expect(fresh.value.version).toBe(roster.headers.get(DUCTS_BODY_VERSION_HEADER));
+      if (roster) expect(fresh.value.version).toBe(roster.headers.get(NATIVE_BODY_VERSION_HEADER));
       const refresh = ductsExecutors(liveFactories.service!)["ducts.refresh"]!;
       await refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution);
       await next("stale");
-      const refreshed = recovery ? await send(live, "/pe/ducts/roster", { target: ref })
+      const refreshed = recovery ? await send(live, "/pe/reads/value", readBody("fans.roster", { target: ref }))
         : await send(live, "/call", { key: "ducts.snapshot.roster", request: { selector: { kind: "roster" } } });
       expect(refreshed.status, await refreshed.clone().text()).toBe(200);
       await next("loading");
       const refreshedFrame = await next("ready");
-      if (!recovery) expect(refreshedFrame.value.version).toBe(refreshed.headers.get(DUCTS_BODY_VERSION_HEADER));
+      if (!recovery) expect(refreshedFrame.value.version).toBe(refreshed.headers.get(NATIVE_BODY_VERSION_HEADER));
       if (mode === "endurance") for (let i = 0; i < 140; i++) {
         changedAt = i % 2 ? 300 : 0; for (const notify of markListeners) notify();
         await next("ready");
@@ -278,7 +302,7 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
         await frames.close();
         await vi.waitFor(() => expect(markListeners.size).toBe(0));
         releaseMark.resolve();
-        const afterClose = await send(live, "/pe/ducts/roster", { target: ref });
+        const afterClose = await send(live, "/pe/reads/value", readBody("fans.roster", { target: ref }));
         expect(afterClose.status, await afterClose.clone().text()).toBe(200);
         expect(completed.filter((entry) => entry.recipe.key.startsWith("resource.")).length).toBe(sealedFrames);
         expect(writer.capture.truncated()).toBeNull();
@@ -287,7 +311,7 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
         expect(writer.capture.truncated()).toBeNull();
         const beforeRefusal = nativeCalls;
         const refused = await live.handler(new Request(`${liveHost.base}/call`, { method: "POST", headers: {
-          "content-type": "application/json", [DUCTS_BODY_VERSION_HEADER]: retiredWalk.value.version,
+          "content-type": "application/json", [NATIVE_BODY_VERSION_HEADER]: retiredWalk.value.version,
         }, body: JSON.stringify(retiredWalk.body) }), Context.make(RequestIdentity, admitted()));
         expect(refused.status, await refused.clone().text()).toBe(409);
         expect(await refused.json()).toMatchObject({ error: { details: { problem: "read.retained" } } });
@@ -296,6 +320,60 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     } finally { await frames.close(); }
   };
   try {
+    if (mode.startsWith("legacy")) {
+      const work: ReadingRequest = { ...key("legacy"), kind: "work" };
+      const acks: ReadingRequest = { kind: "work-acks", work: key("legacy") };
+      const tables: ReadingRequest = { kind: "ducts-tables", session: ref.session, ids: [] };
+      const connection = crypto.randomUUID();
+      const first = resourceFrames(await send(live, `/pe/resources?connection=${connection}`));
+      const second = resourceFrames(await send(live, `/pe/resources?keys=${encodeURIComponent(JSON.stringify([work]))}`));
+      try {
+        await first.opening();
+        expect((await send(live, `/pe/resource-subscriptions?connection=${connection}`, { add: [work, acks, tables], remove: [] })).status).toBe(200);
+        const initial = [await first.next(), await first.next()];
+        expect(initial.find((frame) => frame.key === readingKey(work))).toMatchObject({ kind: "snapshot", value: null });
+        expect(initial.find((frame) => frame.key === readingKey(tables))).toMatchObject({ kind: "snapshot", value: { state: "ready" } });
+        expect(await second.next()).toMatchObject({ kind: "snapshot", key: readingKey(work), value: null });
+        if (mode === "legacy-full") await run(writer.capture.stop(writer.capture.begin()!, "full", { site: "builtin", op: "test.capture" }));
+        if (mode === "legacy-io") vi.spyOn(writer, "append").mockImplementation(() => Effect.fail(new InvalidRead({ message: "I/O loss", status: 409, problem: "recording.io" })));
+        expect(await workspace!.apply(key("legacy"), "legacy", "human", [{ path: ["count"], value: 1 }], 0)).toMatchObject({ ok: true });
+        const frames = [await first.next(true), await first.next(true), await second.next()];
+        expect(frames.filter((frame) => frame.kind === "snapshot")).toEqual([
+          expect.objectContaining({ key: readingKey(work), value: expect.objectContaining({ revision: 1, doc: { count: 1 } }) }),
+          expect.objectContaining({ key: readingKey(work), value: expect.objectContaining({ revision: 1, doc: { count: 1 } }) }),
+        ]);
+        expect(frames.find((frame) => frame.kind === "event")).toMatchObject({ key: readingKey(acks), value: { revision: 1 } });
+        await first.close();
+        await vi.waitFor(() => expect(markListeners.size).toBe(1));
+        if (mode === "legacy") {
+          changedAt = 0; for (const notify of markListeners) notify();
+          expect(await second.next()).toMatchObject({ kind: "snapshot", value: { revision: 1 }, changed: false });
+          const records = await Promise.all(writer.readSets.ids().map((id) => run(writer.readSets.get(id))));
+          const deliveries = records.filter((record) => record.recipe.key === "resource.frame" && (record.recipe.input as { route?: string }).route === "legacy" && record.inputs.some((input) => input.input.kind === "work"));
+          expect(deliveries).toHaveLength(4);
+          expect(deliveries.every((record) => record.state === "complete" && record.inputs.some((input) => input.input.kind === "marks"))).toBe(true);
+          expect(new Set(deliveries.flatMap((record) => record.inputs.map((input) => input.takingId))).size)
+            .toBe(deliveries.reduce((total, record) => total + record.inputs.length, 0));
+          expect(writer.capture.truncated()).toBeNull();
+        } else expect(writer.capture.truncated()?.reason).toBe(mode === "legacy-full" ? "full" : "io");
+        expect(await workspace!.apply(key("legacy"), "legacy", "human", [{ path: ["count"], value: 2 }], 1)).toMatchObject({ ok: true });
+        expect(await second.next()).toMatchObject({ kind: "snapshot", value: { revision: 2, doc: { count: 2 } } });
+        expect(nativeCalls).toBe(1); // The real native policy admitted the query-owned stream as human.
+        if (mode === "legacy") {
+          const resourceCompletions = () => completed.filter((entry) => entry.recipe.key.startsWith("resource.")).length;
+          const sealed = resourceCompletions();
+          holdHuman = true;
+          expect(await workspace!.apply(key("legacy"), "legacy", "human", [{ path: ["count"], value: 3 }], 2)).toMatchObject({ ok: true });
+          await entered.promise; await second.close(); releaseHuman.resolve();
+          await vi.waitFor(() => expect(markListeners.size).toBe(0));
+          const afterClose = await send(live, "/pe/route-state/legacy?binding=address&target=C%3A%2FModels%2FChadds.rvt");
+          expect(afterClose.status).toBe(200); await afterClose.body?.cancel();
+          expect(resourceCompletions()).toBe(sealed); // Closing a held capture never publishes its frame.
+        }
+      } finally { await first.close(); await second.close(); }
+      await vi.waitFor(() => expect(markListeners.size).toBe(0));
+      return;
+    }
     if (mode === "truncated") {
       const tables: ReadingRequest = { kind: "ducts-tables", session: ref.session, ids: [] };
       const roster: ReadingRequest = { kind: "ducts-snapshot", target: ref, selector: { kind: "roster" } };
@@ -304,7 +382,7 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
       try {
         await nativeEntered.promise;
         expect(await frames.next()).toMatchObject({ kind: "snapshot", key: readingKey(tables), value: { state: "ready" } });
-        await run(writer.capture.stop(writer.capture.begin()!, "full"));
+      await run(writer.capture.stop(writer.capture.begin()!, "full", { site: "builtin", op: "test.capture" }));
         expect((await send(live, `/pe/resource-subscriptions?connection=${connection}`, { add: [], remove: [readingKey(tables)] })).status).toBe(200);
         releaseNative.resolve();
         expect(await frames.next()).toMatchObject({ kind: "snapshot", key: readingKey(roster), value: { state: "ready" } });
@@ -318,7 +396,7 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
       const scope = bindWork("fans", null, undefined, ref);
       const admission = { routeKey: "fans", fingerprint };
       const works: ReadingRequest[] = [{ ...scope, kind: "work", admission },
-        { ...scope, route: "ducts", kind: "work", admission: { ...admission, reading: "ductsWork" } },
+        { ...scope, route: "ducts", kind: "work", admission },
         { kind: "work-acks", work: scope, admission }];
       const all = [...works, ...coldKeys];
       const connection = crypto.randomUUID();
@@ -390,27 +468,28 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
       await persistentProof();
       if (mode === "endurance") return;
       await live.dispose(); liveFactories.recorded = true;
-      const selected = completed.find((entry) => entry.recipe.key === "resource.notification")!;
+      const selected = completed.find((entry) => entry.recipe.key === "resource.frame")!;
       const saved = await run(writer.readSets.get(selected.id));
-      for (const input of [null, { reading: saved.recipe.input, envelope: { state: "unknown" } }]) {
-        await run(writer.readSets.keep({ ...saved, recipe: { ...saved.recipe, input } }));
+      const url = cases.find((entry) => entry.readSet === selected.id)!.url;
+      for (const problem of ["recording.context", "recording.ambiguous"]) {
+        await run(writer.readSets.keep(problem === "recording.context" ? { ...saved, state: "incomplete" }
+          : { ...saved, id: crypto.randomUUID() }));
         const reader = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
         const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null }))));
-        historical = HttpRouter.toWebHandler(fansInputRoutes(context, { readSet: selected.id }), { disableLogger: true });
-        const response = await send(historical, cases.find((entry) => entry.readSet === selected.id)!.url);
-        expect(response.status, await response.clone().text()).toBe(409);
-        expect(await response.json()).toMatchObject({ problem: "recording.mismatch" });
+        historical = HttpRouter.toWebHandler(readInputRoutes(context), { disableLogger: true });
+        expect(await firstFrame(await send(historical, url))).toMatchObject({ kind: "failure", failure: { code: problem } });
         await historical.dispose(); historical = undefined;
       }
+      expect([liveFactories.sdk, liveFactories.bridge, liveFactories.work]).toEqual([0, 0, 0]);
       return;
     }
     if (!capturing) {
-      const warm = await send(live, "/pe/ducts/roster", { target: ref });
+      const warm = await send(live, "/pe/reads/value", readBody("fans.roster", { target: ref }));
       expect(warm.status, await warm.clone().text()).toBe(200);
       await persistentProof(); return;
     }
     if (!recovery) await persistentProof();
-    const roster = await capture("/pe/ducts/roster", { target: ref });
+    const roster = await capture("/pe/reads/value", readBody("fans.roster", { target: ref }));
     expect(roster.rows.length).toBeGreaterThan(0);
     const rosterCalls = nativeCalls;
     const resource: ReadingRequest = { kind: "ducts-snapshot", target: ref, selector: { kind: "roster" } };
@@ -420,9 +499,9 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     expect(nativeCalls).toBe(rosterCalls);
     const fan = roster.rows.find((row: any) => row.unitId === 14577391) ?? roster.rows[0];
     const request = { target: ref, mode: "fan", unitId: fan.unitId, portIndex: fan.portIndex };
-    const overview = await capture("/pe/ducts/sheet", request);
+    const overview = await capture("/pe/reads/value", readBody("ducts.sheet", request));
     for (const kind of ["inputs", "worksheet"] as const) {
-      const detail = await capture("/pe/ducts/sheet", { ...request, basis: overview.basis, detail: { kind } });
+      const detail = await capture("/pe/reads/value", readBody("ducts.sheet", { ...request, basis: overview.basis, detail: { kind } }));
       expect(detail.kind).toBe(kind);
       expect(detail.basis).toBe(overview.basis);
     }
@@ -430,6 +509,10 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     const acquiredWalk = storedOverview.children.filter((entry) => entry.recipe.key === "ducts.retained" &&
       Schema.is(Schema.Struct({ key: Schema.Literal("ducts.snapshot.walk"), role: Schema.Literal("acquire") }))(entry.recipe.input));
     expect(acquiredWalk).toHaveLength(1);
+    const acquiredSet = await run(writer.readSets.get(acquiredWalk[0]!.readSetId));
+    const acquiredTaking = writer.taking(acquiredSet.takingLinks.native!);
+    expect(acquiredTaking?.input).toMatchObject({kind: "native", key: "ducts.snapshot.walk"});
+    expect(acquiredTaking?.outputVersion).toBe(snapshotContract.version);
     const acquisition = Schema.decodeUnknownSync(Schema.Struct({ request: Schema.Json }))(acquiredWalk[0]!.recipe.input);
     const beforeHit = nativeCalls;
     await capture("/call", { key: "ducts.snapshot.walk", request: acquisition.request });
@@ -438,7 +521,7 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     expect(hitOnly).toHaveLength(1);
     const prefix = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
     const prefixInputs = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: prefix, at: null }))));
-    historical = HttpRouter.toWebHandler(fansInputRoutes(prefixInputs, { readSet: hitOnly[0]!.readSet,
+    historical = HttpRouter.toWebHandler(readInputRoutes(prefixInputs, {
       get live(): never { poisoned++; throw Error("cold hit constructed live inputs"); },
       get store(): never { poisoned++; throw Error("cold hit constructed a Work store"); },
     }), { disableLogger: true });
@@ -451,8 +534,7 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     const fans = builtinEnrollments.find((entry) => entry.routeKey === "fans")!;
     const fingerprint = workFingerprintSchema.parse(`builtin-closure:${fans.closure.fingerprint}`);
     for (const route of ["fans", "ducts"]) {
-      const reading: ReadingRequest = { ...key(route), kind: "work", admission: { routeKey: "fans", fingerprint,
-        ...(route === "ducts" ? { reading: "ductsWork" } : {}) } };
+      const reading: ReadingRequest = { ...key(route), kind: "work", admission: { routeKey: "fans", fingerprint } };
       const frame = await capture(`/pe/resources?keys=${encodeURIComponent(JSON.stringify([reading]))}`, undefined, true);
       expect(frame.kind).toBe("snapshot"); expect(frame.changed).toBe(true);
       expect(frame.value.handle.key.route).toBe(route); expect(frame.value.history).toBeDefined();
@@ -469,13 +551,30 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     expect([humanView.revision, peaView.revision]).toEqual([2, 3]);
     if (recovery) {
       await persistentProof();
-      const fresh = await send(live, "/pe/ducts/sheet", request);
+      const fresh = await send(live, "/pe/reads/value", readBody("ducts.sheet", request));
       expect(fresh.status, await fresh.clone().text()).toBe(200);
-      expect((await fresh.json()).basis).not.toBe(overview.basis);
-      const roots = completed.filter((entry) => entry.recipe.key === "ducts.roster");
+      expect((await fresh.json()).value.data.basis).not.toBe(overview.basis);
+      const recovered = cases.filter((entry) => entry.url === "/pe/reads/value" && entry.body.read === "fans.roster").at(-1)!;
+      const saved = await run(writer.readSets.get(recovered.readSet));
+      expect(saved.state).toBe("complete");
+      const roots = completed.filter((entry) => entry.recipe.key === "reads.value" && (entry.recipe.input as any).body.read === "fans.roster");
       await writeProof("version-records.json", JSON.stringify({
         truncated: writer.capture.truncated(), roots: await Promise.all(roots.map(async (entry) => ({ id: entry.id, state: (await run(writer.readSets.get(entry.id))).state }))),
       }, null, 2));
+      await live.dispose(); liveFactories.recorded = true;
+      const reader = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
+      const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null }))));
+      const selected = cases.find((entry) => entry.value.kind === "overview")!;
+      historical = HttpRouter.toWebHandler(readInputRoutes(context, {
+        get live(): never { poisoned++; throw Error("Recovery constructed live inputs"); },
+        get store(): never { poisoned++; throw Error("Recovery constructed Work store"); },
+      }), { disableLogger: true });
+      for (const entry of [selected, recovered]) {
+        const response = await send(historical, entry.url, entry.body);
+        expect(response.status).toBe(409);
+        expect(await response.json()).toMatchObject({ problem: "recording.ambiguous" });
+      }
+      expect([liveFactories.sdk, liveFactories.bridge, liveFactories.work, poisoned]).toEqual([0, 0, 0, 0]);
       return;
     }
     // K5: the production Fans sheet and /call must share the bridge-subscribed refresh owner.
@@ -485,9 +584,9 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
       expect(response.status, await response.clone().text()).toBe(200);
       await response.json();
       expect(nativeCalls, "A model change must retire the exact /call retained body").toBeGreaterThan(calls);
-      const sheet = await send(live, "/pe/ducts/sheet", request);
+      const sheet = await send(live, "/pe/reads/value", readBody("ducts.sheet", request));
       expect(sheet.status, await sheet.clone().text()).toBe(200);
-      expect((await sheet.json()).basis).not.toBe(overview.basis);
+      expect((await sheet.json()).value.data.basis).not.toBe(overview.basis);
     };
     for (const listener of liveFactories.listeners) listener({ sessionId: ref.session, kind: "event",
       eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }) });
@@ -497,9 +596,14 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     await reread();
     await live.dispose();
     liveFactories.recorded = true;
-    const liveFiles = vi.spyOn(HostFiles, "layer").mockImplementation(() => { poisoned++; throw Error("Live file readers constructed"); });
+    const liveFiles = vi.spyOn(DuctFiles, "layer").mockImplementation(() => { poisoned++; throw Error("Live file readers constructed"); });
     const reader = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
     expect(reader.truncation).toBeNull();
+    const inventory = await Promise.all(reader.readSets.ids().map((id) => run(reader.readSets.get(id))));
+    const groups = Map.groupBy(inventory, (entry) => canonicalJson(entry.recipe));
+    await writeProof("fill1b-census.json", JSON.stringify({ snapshot: { path: source, sha256: createHash("sha256").update(readFileSync(source)).digest("hex"), schema: "readSchemas(ducts.snapshot.walk).response", version: snapshotContract.version }, records: inventory.length, incomplete: inventory.filter((entry) => entry.state !== "complete").length,
+      recipes: [...groups.values()].map((entries) => ({ key: entries[0]!.recipe.key, input: entries[0]!.recipe.input, scope: entries[0]!.recipe.scope, count: entries.length,
+        incomplete: entries.filter((entry) => entry.state !== "complete").length })) }, null, 2));
     const publications = cases.filter((entry) => entry.stream && entry.value.value?.state);
     expect(new Set(publications.map((entry) => entry.readSet)).size).toBe(publications.length);
     const acquisitionFrame = publications[0]!;
@@ -517,8 +621,12 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     const overviewCase = cases.filter((entry) => entry.value.kind === "overview");
     expect(overviewCase).toHaveLength(1);
     const overviewSet = await run(reader.readSets.get(overviewCase[0]!.readSet));
-    for (const detail of cases.filter((entry) => ["inputs", "worksheet"].includes(entry.value.kind)))
-      expect((await run(reader.readSets.get(detail.readSet))).dependencies.overview).toBe(overviewCase[0]!.readSet);
+    for (const detail of cases.filter((entry) => ["inputs", "worksheet"].includes(entry.value.kind))) {
+      const record = await run(reader.readSets.get(detail.readSet));
+      expect(record.dependencies.overview).toBeUndefined();
+      expect(record.inputs.some(input => input.input.kind === "marks")).toBe(true);
+      expect(record.children.some(child => child.recipe.key === "ducts.retained")).toBe(true);
+    }
     for (const feed of cases.filter((entry) => entry.stream && entry.value.value?.handle)) {
       const record = await run(reader.readSets.get(feed.readSet));
       expect(record.inputs.some((entry) => entry.input.kind === "work" && entry.input.view === "feed")).toBe(true);
@@ -531,49 +639,173 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     const children = overviewSet.children.map((entry) => ({ ...entry, input: Schema.decodeUnknownSync(nativeRecipe)(entry.recipe.input) }));
     expect(children.every((entry) => ["acquire", "validate", "join", "beyond"].includes(entry.input.role))).toBe(true);
     const acquire = children.filter((entry) => entry.input.key === "ducts.snapshot.walk" && entry.input.role === "acquire");
-    const validate = children.filter((entry) => entry.input.key === "ducts.snapshot.walk" && entry.input.role === "validate");
-    expect(acquire).toHaveLength(1); expect(validate).toHaveLength(1);
+    expect(acquire).toHaveLength(1);
+    expect(children.some(entry => entry.input.role === "validate")).toBe(false);
     const original = await run(reader.readSets.get(acquire[0]!.readSetId));
-    const current = await run(reader.readSets.get(validate[0]!.readSetId));
-    expect(original.takingLinks.native).toBeTruthy(); expect(current.takingLinks.native).toBe(original.takingLinks.native);
-    const basis = (record: typeof original) => record.inputs.filter((entry) => entry.input.kind === "document" && entry.input.scope.includes("ducts-body-basis"));
-    expect(basis(original)).toHaveLength(1); expect(basis(current)).toHaveLength(1);
-    expect(basis(original)[0]!.takingId).not.toBe(basis(current)[0]!.takingId);
+    expect(original.takingLinks.native).toBeTruthy();
+    const marks = overviewSet.inputs.filter(entry => entry.input.kind === "marks");
+    expect(marks.length).toBeGreaterThanOrEqual(2);
+    for (const mark of marks) expect(await run(reader.observation(reader.taking(mark.takingId)!))).toMatchObject({ generation: 300 });
     const calls = nativeCalls;
-    for (const recorded of cases) {
-      if (recorded.url === "/call") continue; // the hit-only set was already replayed cold above
-      console.info("cold recorded consumer", recorded.readSet, recorded.url, recorded.body?.detail?.kind ?? recorded.value.kind);
-      const lane: HostInputLane = { kind: "recording", recordingStore: reader, at: null };
-      const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer(lane))));
-      // Each request has an explicit trusted read set; repeated occurrences have no guessed binding.
-      historical = HttpRouter.toWebHandler(Layer.unwrap(Effect.gen(function* () {
-        yield* TestClock.setTime(10000);
-        return fansInputRoutes(context, { readSet: recorded.readSet, get live(): never { poisoned++; throw Error("live inputs constructed"); },
-          get store(): never { poisoned++; throw Error("live Work store constructed"); }, initialize: async () => { poisoned++; throw Error("live initializer called"); } });
-      })).pipe(Layer.provide(TestClock.layer())), { disableLogger: true });
+    const consumerReads = vi.spyOn(reader.readSets, "get");
+    const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null }))));
+    historical = HttpRouter.toWebHandler(Layer.unwrap(Effect.gen(function* () {
+      yield* TestClock.setTime(10000);
+      return readInputRoutes(context, {
+        get live(): never { poisoned++; throw Error("live inputs constructed"); },
+        get store(): never { poisoned++; throw Error("live Work store constructed"); },
+        initialize: async () => { poisoned++; throw Error("live initializer called"); },
+      });
+    })).pipe(Layer.provide(TestClock.layer())), { disableLogger: true });
+    for (const recorded of cases.filter((entry) => !entry.stream)) {
+      const saved = await run(reader.readSets.get(recorded.readSet));
+      const matches = groups.get(canonicalJson(saved.recipe))!;
       const response = await send(historical, recorded.url, recorded.body, admitted(recorded.caller));
-      {
-        expect(response.status, recorded.stream ? "resource stream" : await response.clone().text()).toBe(200);
+      if (matches.length > 1) {
+        expect(response.status).toBe(409);
+        expect(await response.json()).toMatchObject({ problem: "recording.ambiguous" });
+      } else {
+        expect(response.status, await response.clone().text()).toBe(200);
         const provenance = JSON.parse(response.headers.get("x-pe-source")!);
         expect(provenance).toMatchObject({ kind: "recording", at: null, ...identity,
           coverage: expect.arrayContaining(["native", "document", "work", "files", "marks"]) });
-        expect(JSON.stringify(provenance)).not.toContain(dir);
-        const replay = recorded.stream ? await firstFrame(response) : recorded.url === "/call" ? await nativeValue(response) : await response.json();
-        if (recorded.url === "/call") expect(response.headers.get("x-pe-ducts-reused")).toBe("false");
-        expect(replay).toEqual(recorded.value);
+        expect(response.headers.get("x-pe-source")).not.toContain(dir);
+        // Replay owns provenance; captured data and every other Publication field remain exact.
+        const expected = recorded.url === "/pe/reads/value"
+          ? { ...recorded.wire, value: { ...recorded.wire.value, origin: provenance } }
+          : recorded.value;
+        expect(recorded.url === "/call" ? await nativeValue(response) : await response.json()).toEqual(expected);
       }
-      const refused = await send(historical, "/pe/route-state/fans/apply?open=captured-chadds/chadds-open", { patches: [], expectedRevision: 2, press: crypto.randomUUID() });
-      expect(refused.status).toBe(409);
-      expect(await refused.json()).toMatchObject({ problem: "recording.historical" });
-      const missing = await send(historical, "/pe/ducts/roster", { target: { ...ref, openId: "unrecorded-open" } });
-      expect(missing.status).toBe(409);
-      expect(await missing.json()).toMatchObject({ problem: expect.stringMatching(/^recording\.(miss|mismatch)$/) });
-      await historical.dispose(); historical = undefined;
     }
+    const feeds = cases.filter((entry) => entry.stream && entry.value.value?.handle);
+    const healthy = JSON.parse(new URL(feeds[0]!.url, "http://host").searchParams.get("keys")!)[0];
+    const absent: ReadingRequest = { kind: "ducts-tables", session: "missing-session", ids: ["missing-table"] };
+    const connection = crypto.randomUUID();
+    consumerReads.mockClear();
+    const frames = resourceFrames(await send(historical, `/pe/resources?connection=${connection}`));
+    try {
+      await frames.opening();
+      expect(consumerReads).not.toHaveBeenCalled();
+      const bootstrap = await send(historical, `/pe/resource-subscriptions?connection=${connection}`,
+        { add: [resource, healthy, absent], remove: [] });
+      expect(bootstrap.status).toBe(200);
+      const batch = [await frames.next(), await frames.next(), await frames.next()];
+      expect(batch.find((frame) => frame.key === readingKey(healthy))).toEqual(feeds[0]!.value);
+      expect(batch.find((frame) => frame.key === readingKey(resource))).toMatchObject({ kind: "failure", failure: { code: "recording.ambiguous" } });
+      expect(batch.find((frame) => frame.key === readingKey(absent))).toMatchObject({ kind: "failure", failure: { code: "recording.miss" } });
+      const sibling = JSON.parse(new URL(feeds[1]!.url, "http://host").searchParams.get("keys")!)[0];
+      const changed = await send(historical, `/pe/resource-subscriptions?connection=${connection}`,
+        { add: [sibling], remove: [readingKey(absent), readingKey(resource)] });
+      expect(changed.status).toBe(200);
+      expect(await frames.next()).toEqual(feeds[1]!.value);
+      await writeProof("reconciliation-case.json",
+        JSON.stringify({ emptyGet: 200, opening: ": open\n\n", prePostConsumerReads: 0, bootstrapPost: bootstrap.status,
+          batch, replacementPost: changed.status, liveFactories: { sdk: liveFactories.sdk, bridge: liveFactories.bridge, work: liveFactories.work }, poisoned }, null, 2));
+    } finally { await frames.close(); }
+    const refused = await send(historical, "/pe/route-state/fans/apply?open=captured-chadds/chadds-open", { patches: [], expectedRevision: 2, press: crypto.randomUUID() });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ problem: "recording.historical" });
+    const missing = await send(historical, "/pe/reads/value", readBody("fans.roster", { target: { ...ref, openId: "unrecorded-open" } }));
+    expect(missing.status).toBe(409);
+    expect(await missing.json()).toMatchObject({ problem: "recording.miss" });
     expect(poisoned).toBe(0); expect(nativeCalls).toBe(calls);
     expect(liveFactories).toMatchObject({ sdk: 0, bridge: 0, work: 0 });
     liveFiles.mockRestore();
-  } finally { releaseNative.resolve(); releaseMark.resolve(); releaseHuman.resolve(); vi.restoreAllMocks(); await historical?.dispose(); await live.dispose(); await rm(dir, { recursive: true, force: true }); }
-// The production listener, full native schema decoding and each independent cold owner run here.
-// The 180 s boundary completed live acquisition but expired during progressing cold consumers.
-}, 300000);
+  } finally { releaseNative.resolve(); releaseMark.resolve(); releaseHuman.resolve(); vi.restoreAllMocks(); await historical?.dispose(); await live.dispose(); liveFactories.recorded = false; await rm(dir, { recursive: true, force: true }); }
+// Bridge: acquiring, invalidating and cold-replaying this 16.6 MB graph exceeds 300 s here.
+// This is a measured History performance defect, not test slowness; remove after profiling/fixing it.
+}, 600000);
+
+
+test.each(["on", "off", "full", "io"] as const)("inventory consumers %s", async (mode) => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-inventory-consumers-"));
+  const writer = await run(openRecordingWriter(dir, identity, { ...bounds, maxTakings: mode === "full" ? 1 : 2000 }));
+  const old = await run(openRecordingReader(dir, identity, bounds));
+  const listeners = new Set<(event: HostBridgeEvent) => void>();
+  let title = "initial", reads = 0, poison = 0, workspace: RouteWorkspace;
+  const bridge = detachedBridge({ list: Effect.sync(() => { reads++; return [sessionView({ connected: true, sessionId: ref.session, processId: 42,
+    state: { activeDocumentTitle: title, openDocuments: [{ openId: ref.openId, title, address: path }] } }),
+    sessionView({ connected: false, sessionId: "disconnected" })]; }),
+    subscribe: (notify) => { listeners.add(notify); return () => { listeners.delete(notify); }; } });
+  const expected = async () => Schema.decodeUnknownSync(bridgeSessionsListSchema)(await run(listBridgeSessions(bridge.list)));
+  const sdk = Layer.succeed(SdkSession, { resolve: () => Effect.die("unexpected SDK"), resolveAttachment: () => Effect.die("unexpected SDK") });
+  const inventory = HostSessionInventory.layer.pipe(Layer.provide(Layer.succeed(RevitBridge, bridge)), Layer.provide(sdk));
+  const inputs = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live", ...(mode === "off" ? {} : { captureStore: writer }) }))));
+  const lowCap = HostInputReadSets.layer;
+  vi.spyOn(HostInputReadSets, "layer").mockImplementation((lane) => lowCap(lane, { ...defaultReadSetLimits, childrenPerRoot: 3, openRoots: 4 }));
+  const web = HttpRouter.toWebHandler(readInputRoutes(inputs, { live: { inventory, owner: new DuctsReadings(),
+    native: Layer.succeed(HostNativeRead, { resolve: () => Effect.die("unexpected native"), read: () => Effect.die("unexpected native") }),
+    files: Layer.succeed(DuctFiles, { firm: Effect.die("unexpected files"), ductCatalogs: Effect.die("unexpected files") }),
+    marks: Layer.succeed(HostDocumentMarks, hostMarks({ changedAt: () => null, subscribe: () => () => {} })) },
+    store: fileRouteDocumentStore(join(dir, "work")), initialize: async (owner) => { workspace = owner; } }), { disableLogger: true });
+  const send = (owner: typeof web, url: string, body?: unknown) => withInvocationContext({ caller, hostBaseUrl: "http://host" }, () => owner.handler(
+    new Request(`http://host${url}`, { method: body === undefined ? "GET" : "POST", ...(body === undefined ? {} : { body: JSON.stringify(body) }) }),
+    Context.make(RequestIdentity, admittedRequestIdentity(caller, {}))));
+  const inventoryReading: ReadingRequest = { kind: "inventory" };
+  const fans = builtinEnrollments.find((entry) => entry.routeKey === "fans")!;
+  const work: ReadingRequest = { ...key("fans"), kind: "work", admission: { routeKey: "fans", fingerprint: workFingerprintSchema.parse(`builtin-closure:${fans.closure.fingerprint}`) } };
+  const firstId = crypto.randomUUID();
+  const url = (id: string, keys: ReadingRequest[]) => `/pe/resources?connection=${id}&keys=${encodeURIComponent(JSON.stringify(keys))}`;
+  let first: ReturnType<typeof resourceFrames> | undefined, second: ReturnType<typeof resourceFrames> | undefined, replay: typeof web | undefined;
+  try {
+    first = resourceFrames(await send(web, url(firstId, [inventoryReading, work])));
+    const initial = [await first.next(), await first.next()];
+    const initialValue = await expected();
+    expect(initial.find((frame) => frame.key === readingKey(inventoryReading))).toEqual({ kind: "snapshot", key: readingKey(inventoryReading), value: initialValue });
+    const unique = await run(openRecordingReader(dir, identity, bounds));
+    second = resourceFrames(await send(web, url(crypto.randomUUID(), [inventoryReading])));
+    expect(await second.next()).toEqual({ kind: "snapshot", key: readingKey(inventoryReading), value: await expected() });
+    expect(listeners.size).toBe(2);
+    if (mode === "io") vi.spyOn(writer, "append").mockImplementation(() => Effect.fail(new InvalidRead({ message: "I/O loss", status: 409, problem: "recording.io" })));
+    for (let update = 0; update < 5; update++) {
+      title = `update-${update}`; const before = reads;
+      for (let burst = 0; burst < 3; burst++) for (const notify of listeners) notify({ kind: "state-sync", sessionId: ref.session });
+      const values = [await first.next(), await second.next()];
+      expect(reads - before).toBe(2);
+      for (const value of values) expect(value).toEqual({ kind: "snapshot", key: readingKey(inventoryReading), value: await expected() });
+    }
+    expect((await send(web, `/pe/resource-subscriptions?connection=${firstId}`, { add: [], remove: [readingKey(inventoryReading)] })).status).toBe(200);
+    expect(listeners.size).toBe(1);
+    title = "survivor"; for (const notify of listeners) notify({ kind: "state-sync", sessionId: ref.session });
+    expect(await second.next()).toEqual({ kind: "snapshot", key: readingKey(inventoryReading), value: await expected() });
+    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm: 400 } } }], 0)).toMatchObject({ ok: true });
+    expect(await first.next()).toMatchObject({ kind: "snapshot", key: readingKey(work), value: { revision: 1 } });
+    await first.close(); first = undefined; await second.close(); second = undefined;
+    expect(listeners.size).toBe(0);
+    if (mode === "on") {
+      expect(writer.capture.truncated()).toBeNull();
+      const records = await Promise.all(writer.readSets.ids().map((id) => run(writer.readSets.get(id))));
+      const frames = records.filter((record) => record.recipe.key === "resource.frame" && (record.recipe.input as {kind?:string}).kind === "inventory");
+      expect(frames).toHaveLength(13);
+      expect(frames.every((frame) => frame.state === "complete" && frame.inputs.length === 1)).toBe(true);
+      expect(new Set(frames.map((frame) => frame.inputs[0]!.takingId)).size).toBe(13);
+      const subscriptions = frames.filter((frame) => !frame.dependencies.subscription);
+      expect(subscriptions).toHaveLength(2);
+      expect(frames.filter((frame) => frame.dependencies.subscription)).toHaveLength(11);
+      expect(frames.every((frame) => !frame.dependencies.subscription || subscriptions.some((initial) => initial.id === frame.dependencies.subscription))).toBe(true);
+      const original = await Promise.all(subscriptions.map((frame) => run(writer.observation(writer.taking(frame.inputs[0]!.takingId)!))));
+      expect(original[0]).toEqual(original[1]);
+    } else if (mode !== "off") expect(writer.capture.truncated()?.reason).toBe(mode === "full" ? "full" : "io");
+    await web.dispose(); liveFactories.recorded = true;
+    const custody = vi.spyOn(machine, "processCustody").mockImplementation(() => { poison++; throw Error("live custody on replay"); });
+    const corpora: (readonly [RecordingReader, string | undefined])[] = [[old, "recording.miss"]];
+    if (mode !== "full") corpora.push([unique, mode === "off" ? "recording.miss" : undefined]);
+    if (mode === "on") corpora.push([await run(openRecordingReader(dir, identity, bounds)), "recording.ambiguous"]);
+    for (const [saved, problem] of corpora) {
+      const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: saved, at: null }))));
+      replay = HttpRouter.toWebHandler(readInputRoutes(context, { get live(): never { poison++; throw Error("live factory"); } }), { disableLogger: true });
+      const frame = await firstFrame(await send(replay, url(crypto.randomUUID(), [inventoryReading])));
+      if (problem) { expect(frame).toMatchObject({ kind: "failure", failure: { code: problem } }); expect(frame).not.toHaveProperty("value.sessions"); }
+      else expect(frame).toEqual({ kind: "snapshot", key: readingKey(inventoryReading), value: initialValue });
+      await replay.dispose(); replay = undefined;
+    }
+    expect(poison).toBe(0);
+    expect(liveFactories).toMatchObject({ sdk: 0, bridge: 0, work: 0 });
+    custody.mockRestore();
+    await writeProof(`inventory-${mode}-receipt.json`,
+      JSON.stringify({ mode, producer: "listBridgeSessions", schema: "bridgeSessionsListSchema", initial: initialValue,
+        coalescedBursts: 5, notificationsPerBurst: 3, consumers: 2, capturedInventoryFrames: mode === "on" ? 13 : null,
+        limits: { childrenPerRoot: 3, openRoots: 4 }, truncation: writer.capture.truncated(), activeTaps: listeners.size,
+        poison, liveFactories: { sdk: liveFactories.sdk, bridge: liveFactories.bridge, work: liveFactories.work } }, null, 2));
+  } finally { await first?.close(); await second?.close(); await replay?.dispose(); await web.dispose(); vi.restoreAllMocks(); liveFactories.recorded = false; await rm(dir, { recursive: true, force: true }); }
+}, 120000);

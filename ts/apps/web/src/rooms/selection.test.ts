@@ -1,15 +1,18 @@
 import { expect, test } from "vite-plus/test";
 import { roomsAddress } from "../../../../packages/agent-contracts/src/routes/rooms";
 import { roomSelection } from "./selection";
+import { roomsPageSchema } from "./page";
 
 const cards = [
   { id: "mark-1", guids: ["room-1", "room-2"] },
   { id: "note-1", guids: [] },
 ];
 test("list and inbox picks share the picture/card projection after a URL round trip", () => {
-  const field = roomsAddress.fields.selected;
+  const field = roomsAddress.fields.picked;
   for (const ids of [["room-2"], ["card:mark-1"], ["card:note-1"], []]) {
-    const restored = field.schema.parse(field.codec.decode(field.codec.encode(ids)));
+    const restored = roomsPageSchema.shape.selected.parse(
+      field.schema.parse(field.codec.decode(field.codec.encode(ids))),
+    );
     expect(roomSelection(restored, cards)).toEqual(roomSelection(ids, cards));
   }
   expect(roomSelection(["room-2"], cards)).toEqual({ pinned: "mark-1", guids: ["room-2"] });

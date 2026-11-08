@@ -262,7 +262,7 @@ function liveContext(
       if (!writer || writer.capture.truncated()) return Effect.void;
       if (budget.lost) {
         const at = writer.capture.begin();
-        return at === null ? Effect.void : writer.capture.stop(at, "full");
+        return at === null ? Effect.void : writer.capture.stop(at, "full", { site: "occurrence", op: recipe.key });
       }
       const records: InputReadSetRecord[] = [];
       const walk = (node: LiveNode) => {
@@ -277,7 +277,7 @@ function liveContext(
       );
       if (bytes > limits.metadataBytesPerRoot) {
         const at = writer.capture.begin();
-        return at === null ? Effect.void : writer.capture.stop(at, "full");
+        return at === null ? Effect.void : writer.capture.stop(at, "full", { site: "occurrence", op: recipe.key });
       }
       // Children before parents, so every durable link resolves.
       return Effect.forEach(records.reverse(), (value) => writer.readSets.keep(value), {
@@ -285,7 +285,7 @@ function liveContext(
       }).pipe(
         Effect.catch(() => {
           const at = writer.capture.begin();
-          return at === null ? Effect.void : writer.capture.stop(at, "io");
+          return at === null ? Effect.void : writer.capture.stop(at, "io", { site: "occurrence", op: recipe.key });
         }),
       );
     }),
@@ -325,6 +325,7 @@ function detachedContext(recipe: ConsumerRecipe, parentOpen: () => boolean): Inp
 interface Loaded {
   readonly record: InputReadSetRecord;
   readonly children: ReadonlyMap<string, Loaded>;
+  readonly dependencies: readonly Loaded[];
 }
 /** The whole replay graph shares one budget: nodes beyond the root, bytes, and depth. */
 const load = (
@@ -357,10 +358,30 @@ const load = (
       children.set(key, loaded);
     }
     // Dependencies must resolve and stay acyclic; they are opened by their own consumer.
+    const dependencies: Loaded[] = [];
     for (const dependency of Object.values(record.dependencies))
-      yield* load(reader, dependency, limits, budget, [...path, id]);
-    return { record, children };
+      dependencies.push(yield* load(reader, dependency, limits, budget, [...path, id]));
+    return { record, children, dependencies };
   });
+
+/** The same bounded, complete graph admitted by replay, including retained dependencies. */
+export const readSetRecords = (
+  reader: RecordingReader,
+  id: string,
+  limits = defaultReadSetLimits,
+) =>
+  load(reader, id, limits).pipe(
+    Effect.map((root) => {
+      const records: InputReadSetRecord[] = [];
+      const walk = (node: Loaded) => {
+        records.push(node.record);
+        node.children.forEach(walk);
+        node.dependencies.forEach(walk);
+      };
+      walk(root);
+      return records;
+    }),
+  );
 
 /** Replay: every start and child resolves the stored occurrence, or refuses before any access. */
 function recordedContext(loaded: Loaded, parentOpen: () => boolean = () => true): InputConsumption {
@@ -432,7 +453,8 @@ export class HostInputReadSets extends Context.Service<
   {
     readonly open: (
       recipe: ConsumerRecipe,
-      selected: ReadSetId | null,
+      /** Exact read set, or an exact taking that must belong to one matching consumer. */
+      selected: ReadSetId | { readonly takingId: string } | null,
     ) => Effect.Effect<InputConsumption, InvalidRead>;
   }
 >()("pe/HostInputReadSets") {
@@ -443,27 +465,46 @@ export class HostInputReadSets extends Context.Service<
         Effect.suspend(() => {
           if (lane.kind === "fixture")
             return Effect.fail(refuse("fixture", "A fixture has no input source"));
-          if (lane.kind === "recording") {
-            if (selected === null)
-              return Effect.fail(
-                refuse("context", "A recording serves only an explicitly selected read set"),
+          if (lane.kind === "recording")
+            return Effect.gen(function* () {
+              let id = typeof selected === "string" ? selected : null;
+              if (id === null) {
+                // ponytail: O(read sets) admission; memoize recipeKey→ids only if measured slow.
+                const matches: string[] = [];
+                for (const id of lane.recordingStore.readSets.ids()) {
+                  const record = yield* lane.recordingStore.readSets.get(id);
+                  if (
+                    recipeKey(record.recipe) === recipeKey(recipe) &&
+                    (selected === null || typeof selected === "string" ||
+                      record.inputs.some((entry) => entry.takingId === selected.takingId))
+                  )
+                    matches.push(id);
+                }
+                if (matches.length === 0)
+                  return yield* refuse("miss", "No recorded consumer matches this recipe");
+                if (matches.length > 1)
+                  return yield* refuse(
+                    "ambiguous",
+                    `${matches.length} recorded consumers match; bind one`,
+                  );
+                id = matches[0] as ReadSetId;
+              }
+              return yield* load(lane.recordingStore, id, limits).pipe(
+                Effect.flatMap((loaded) =>
+                  recipeKey(loaded.record.recipe) === recipeKey(recipe)
+                    ? Effect.succeed(recordedContext(loaded))
+                    : Effect.fail(
+                        refuse("mismatch", `Read set ${id} was taken by another consumer`),
+                      ),
+                ),
               );
-            return load(lane.recordingStore, selected, limits).pipe(
-              Effect.flatMap((loaded) =>
-                recipeKey(loaded.record.recipe) === recipeKey(recipe)
-                  ? Effect.succeed(recordedContext(loaded))
-                  : Effect.fail(
-                      refuse("mismatch", `Read set ${selected} was taken by another consumer`),
-                    ),
-              ),
-            );
-          }
+            });
           if (selected !== null)
             return Effect.fail(refuse("context", "Live input selects no recorded read set"));
           // Past the cap, a live read still computes, in a detached context, while capture stops (K4).
           if (open + 1 > limits.openRoots) {
             const at = lane.captureStore?.capture.begin() ?? null;
-            const stopped = at === null ? Effect.void : lane.captureStore!.capture.stop(at, "full");
+            const stopped = at === null ? Effect.void : lane.captureStore!.capture.stop(at, "full", { site: "occurrence", op: recipe.key });
             return Effect.as(
               stopped,
               detachedContext(recipe, () => true),

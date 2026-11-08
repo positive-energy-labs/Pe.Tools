@@ -32,13 +32,13 @@ export function noRunBranches(
   snapshot: DuctSnapshot,
   solved: Pick<LossResult, "paths" | "byGroup" | "crossClass">,
   scope: SystemScope,
-  flows: ReadonlyMap<number, { cfm: number | null }>,
+  flows: ReadonlyMap<number, { cfm: number | null }> | Readonly<Record<number,{cfm:number|null}>>,
 ): Map<number, NoRunBranch> {
   const elements = new Map([...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e]));
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
   const name = elementLabeler(snapshot);
   const flow = (id: number) =>
-    (flows.has(id) ? flows.get(id)!.cfm : terminalCfm(nodes.get(id))) ?? 0;
+    (flows instanceof Map ? (flows.has(id)?flows.get(id)!.cfm:terminalCfm(nodes.get(id))) : Object.hasOwn(flows,id)?(flows as Readonly<Record<number,{cfm:number|null}>>)[id]!.cfm:terminalCfm(nodes.get(id))) ?? 0;
   const stops = new Set(solved.crossClass.map((c) => `${c.id}:${c.from}`));
   const valid = (terminal: number, path: readonly number[]) =>
     scope.terminals.has(terminal) &&

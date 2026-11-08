@@ -28,9 +28,11 @@ test("Pea's Work read is the doc, revision and provenance, not the transport sch
   expect(peaWorkValue(refusal)).toBe(refusal);
 });
 
-test("Driver C14: Pea is told to stage the fan walk and exact cells before planning losses", () => {
+test("Driver C14: Pea stages the fan walk and passes the primary Ducts handle before planning losses", () => {
   const text = renderDuctsSkill();
   expect(text).toContain("writeIntent.walk");
-  expect(text).toContain("writeIntent.cells naming exactly the fan cells");
-  expect(text).toContain("the open Page never supplies it");
+  expect(text).toContain("work: { key, revision }, the route:ducts Work handle");
+  expect(text).toContain("Fan write cells are derived");
+  expect(text).not.toContain("key, expectedRevision");
+  expect(text).toContain("The open Page never supplies the walk");
 });

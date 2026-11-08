@@ -1,135 +1,16 @@
 import { z } from "zod";
 import { canonicalRouteInput, isWritePreviewKey } from "@pe/agent-contracts";
 import { DEFAULT_WAIT_S } from "#/route/waits";
-import type {
-  ActionReceipt,
+import type { ActionReceipt,
   DocumentRef,
   Effect,
   ExecutionTarget,
-  ReadingDecl,
-  WorkKey,
-} from "@pe/agent-contracts";
+  ReadingDecl, } from "@pe/agent-contracts";
 
-export interface ReadingScope<P = unknown, W = unknown> {
-  target: ExecutionTarget;
-  workKey: WorkKey | null;
-  workRevision: number | null;
-  page: Readonly<P>;
-  work: Readonly<W> | null;
-  settings?: Readonly<Record<string, unknown>>;
-}
+import type { DeriveSource, PortSession, ReadingAttempt, ReadingContext, ReadingDelivery, ReadingGraphDeps, ReadingPublication, ReadingScope, ReadingSource, ReadingState, WorkerChannel, } from "./source-contract";
 
-export interface ReadingAttempt {
-  readonly target: ExecutionTarget;
-  readonly workKey: WorkKey | null;
-  readonly generation: number;
-}
-
-export interface ReadingBasis {
-  readonly attempt: ReadingAttempt;
-  readonly inputs: Readonly<Record<string, number>>;
-  readonly workRevision: number | null;
-  readonly algorithmVersion?: string;
-  readonly sourceVersion?: string;
-}
-
-export interface ReadingState<T = unknown> {
-  readonly status: "absent" | "pending" | "partial" | "ready" | "stale" | "failed";
-  readonly value?: T;
-  readonly previous?: T;
-  /** Only a complete, fresh observation can be a mutation basis. */
-  readonly current: boolean;
-  readonly complete: boolean;
-  readonly basis: ReadingBasis | null;
-  readonly version: number;
-  /**
-   * Content hash of `value` (ADR 0028 snapshot groundwork): the source's own version when it
-   * declares one, else a hash of the value's canonical JSON. Absent for non-JSON values.
-   */
-  readonly hash?: string;
-  readonly error?: string;
-  readonly errorDetails?: string;
-}
-
-export type ReadingPublication<T = unknown> =
-  | {
-      kind: "part" | "complete";
-      value: T;
-      revision: number;
-      sourceVersion?: string;
-      fresh?: boolean;
-    }
-  | { kind: "pending" | "stale" }
-  | { kind: "failure"; error: unknown }
-  | { kind: "log"; value: unknown; id?: string };
-
-export interface ReadingContext extends ReadingScope {
-  readonly attempt: ReadingAttempt;
-  /** Sources subscribe on demand; an expensive capture starts only for an explicit invocation. */
-  readonly trigger: { kind: "demand" } | { kind: "verb"; invocation: string };
-  readonly args: unknown;
-  readonly inputs: Readonly<Record<string, ReadingState>>;
-  readonly signal: AbortSignal;
-}
-
-export type ReadingDelivery<T = unknown> = (publication: ReadingPublication<T>) => void;
 type Release = () => void;
-interface SourcePolicy {
-  /** Source-owned input selection, e.g. parameter slots; unrelated Work edits do not reacquire it. */
-  key?(scope: ReadingScope): unknown;
-  /** Defaults to the attempt's exact document/session. Disk and service sources declare theirs. */
-  effects?(context: ReadingContext): readonly Effect[];
-  dirties?: readonly string[];
-}
-export interface UseSource<T = unknown> extends SourcePolicy {
-  kind: "use" | "feed";
-  open(
-    context: ReadingContext,
-    deliver: ReadingDelivery<T>,
-  ): void | Release | Promise<void | Release>;
-}
-export interface DeriveSource<T = unknown> extends SourcePolicy {
-  kind: "derive";
-  derive(context: ReadingContext): T;
-}
-export interface WorkerChannel<T = unknown> {
-  update(context: ReadingContext, deliver: ReadingDelivery<T>): void;
-  stop(): void;
-}
-export interface WorkerSource<T = unknown> extends SourcePolicy {
-  kind: "worker";
-  readonly algorithmVersion: string;
-  connect(): WorkerChannel<T>;
-}
-export interface PortSession<T = unknown> {
-  value: T;
-  close(): void;
-}
-export interface PortSource<T = unknown> extends SourcePolicy {
-  kind: "port";
-  open(context: ReadingContext): PortSession<T> | Promise<PortSession<T>>;
-}
-export type ReadingSource<T = unknown> =
-  | UseSource<T>
-  | DeriveSource<T>
-  | WorkerSource<T>
-  | PortSource<T>;
 
-export interface ReadingLog {
-  kind: "drop" | "feed" | "failure";
-  reading: string;
-  attempt: ReadingAttempt;
-  message?: string;
-  value?: unknown;
-  id?: string;
-}
-export interface ReadingGraphDeps<P, W> {
-  sources: Readonly<Record<string, ReadingSource>>;
-  scope: ReadingScope<P, W>;
-  log(entry: ReadingLog): void;
-  /** Seconds an attempt may stay silent before it fails; defaults to `DEFAULT_WAIT_S`. */
-  waitS?: number;
-}
 export class ReadingGraphRefusal extends Error {}
 
 interface Node<P> {
@@ -771,7 +652,6 @@ export function createReadingGraph<P, W>(
   }
 }
 
-export type ReadingGraph<P, W> = ReturnType<typeof createReadingGraph<P, W>>;
 
 /** One source-open: release before a port's answer; rejection fails; a leased (graph) worker is never stopped here. */
 export function openSource<T>(

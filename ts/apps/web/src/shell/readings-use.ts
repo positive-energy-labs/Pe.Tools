@@ -1,17 +1,18 @@
 import type { ReadingRequest } from "@pe/agent-contracts";
-import type { Readings } from "../readings";
+import type { Readings } from "../host/resource-stream";
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { Immutable } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import { z } from "zod";
 import {
   contentHash,
   openSource,
+} from "./readings";
+import {
   type DeriveSource,
   type ReadingContext,
   type ReadingPublication,
   type ReadingSource,
-  type UseSource,
-} from "./readings";
+  type UseSource} from "./source-contract";
 
 /** A demand attempt's context: no Page or Work, only its target, attempt generation and args. */
 export const demandContext = (
@@ -67,7 +68,7 @@ export function openSourceReading<T>(
     }, live.waitS * 1000);
   };
   const emit = (snapshot: ReadingSnapshot<T>) => {
-    if (context.signal.aborted) return;
+    if (context.signal.aborted || closed) return;
     if (snapshot.value !== undefined) value = snapshot.value;
     deliver(snapshot);
   };
@@ -77,7 +78,7 @@ export function openSourceReading<T>(
     source,
     context,
     (frame) => {
-      if (context.signal.aborted) return;
+      if (context.signal.aborted || closed) return;
       if (live && frame.kind !== "log") {
         // A live subject's failure is said until its next answer; silence re-arms the deadline.
         if (failed && (frame.kind === "pending" || frame.kind === "stale")) return;
@@ -92,7 +93,7 @@ export function openSourceReading<T>(
         case "complete":
           return emit(
             frame.fresh === false
-              ? held("unavailable", "Reading is stale", sent)
+              ? held("unavailable", frame.reason ?? "Reading is stale", sent)
               : {
                   status: "ready",
                   current: true,
@@ -186,7 +187,7 @@ export function subscriptionSource<T>(options: {
     dirties: options.dirties,
     async open(context, deliver) {
       // Lazy import keeps the graph React-free and construction free of browser/service effects.
-      const resources = options.resources ?? (await import("../readings")).peReadings;
+      const resources = options.resources ?? (await import("../host/resource-stream")).peReadings;
       if (context.signal.aborted) return;
       let revision = 0;
       let value: T | undefined;

@@ -1,16 +1,17 @@
-import { isWritePreviewKey } from "./semantic-actions.ts";
-import { routeWorkSubject } from "./route-work-subject.ts";
 import { z } from "zod";
-import type { SchemaTable } from "./route-kernel-page.ts";
+import { link, type CatalogLink } from "./catalog.ts";
+import type { Command } from "./command.ts";
+import { bare } from "./route-field.ts";
+import { canonicalRouteJson } from "./route-graph.ts";
 import {
   RouteGraphJson,
   type RouteDiagnostic,
   type ReadingDependencies,
   type LayoutJson,
 } from "./route-kernel-data.ts";
-import { canonicalRouteJson } from "./route-graph.ts";
-import { bare } from "./route-field.ts";
-import { link, type CatalogLink } from "./catalog.ts";
+import type { SchemaTable } from "./route-kernel-page.ts";
+import { routeWorkSubject } from "./route-work-subject.ts";
+import { commands, isWritePreviewKey } from "./semantic-actions.ts";
 
 const fn = z.custom<(...args: unknown[]) => unknown>((value) => typeof value === "function");
 const schema = z.custom<z.ZodType>((value) => value instanceof z.ZodType);
@@ -177,16 +178,18 @@ export function linkRouteBodies(
   const list = (table: object, ids: readonly string[], path: string, kind: string) =>
     ids.forEach((id, i) => reference(table, id, `${path}.${i}`, kind));
   if (
-    Object.values(data.fields).filter((f) => f.role === "subject").length !== 1 ||
-    data.fields[data.subject.field]?.role !== "subject"
+    Object.values(data.fields).filter((f) => f.role === "subject").length !== (data.subject ? 1 : 0) ||
+    (data.subject && data.fields[data.subject!.field]?.role !== "subject")
   )
-    fail("subject.field", data.subject.field, "one subject field", "Declare exactly one subject");
+    fail("subject.field", data.subject?.field ?? "", "declared subject field", "Subject fields must match the subject declaration");
   if (Object.values(data.fields).filter((f) => f.role === "selection").length !== 1)
     fail("fields", "", "one selection field", "Declare exactly one selection");
-  reference(data.panes, data.subject.pane, "subject.pane", "pane");
-  reference(data.readings, data.subject.roster, "subject.roster", "reading");
-  reference(data.readings, data.subject.detail, "subject.detail", "reading");
-  body(data.subject.show, "subject.show", "show");
+  if(data.subject) {
+    reference(data.panes, data.subject!.pane, "subject.pane", "pane");
+    reference(data.readings, data.subject!.roster, "subject.roster", "reading");
+    reference(data.readings, data.subject!.detail, "subject.detail", "reading");
+    body(data.subject!.show, "subject.show", "show");
+  }
   body(data.subjectText, "subjectText", "subject");
   body(data.transition, "transition", "transition");
   if (data.transitionDeps) {
@@ -194,15 +197,6 @@ export function linkRouteBodies(
     if (!data.transition)
       fail("transitionDeps", "", "transition body", "Dependencies require transition");
   }
-  body(data.salvage, "salvage", "salvage");
-  body(data.salvagePresent, "salvagePresent", "present");
-  if (data.salvageDeps) {
-    deps(data.salvageDeps, "salvageDeps");
-    if (!data.salvagePresent)
-      fail("salvageDeps", "", "salvage presentation", "Dependencies require salvagePresent");
-  }
-  if (data.salvagePresent && !data.salvage)
-    fail("salvagePresent", "", "salvage body", "Presentation requires salvage");
   for (const [key, identity] of Object.entries(data.identities)) {
     reference(bindings.identities, identity.codec, `identities.${key}.codec`, "identity codec");
     if (bindings.identities[identity.codec]?.kind !== identity.kind)
@@ -316,25 +310,6 @@ export function linkRouteBodies(
         "Work belongs to its declaring route",
         "policy",
       );
-    for (let version = 1; version < data.work.version; version++)
-      if (!Object.hasOwn(data.work.migrations, String(version)))
-        fail(
-          `work.migrations.${version}`,
-          "",
-          "migration",
-          "Incomplete migration chain",
-          "missing",
-        );
-    for (const [version, id] of Object.entries(data.work.migrations)) {
-      if (Number(version) >= data.work.version)
-        fail(
-          `work.migrations.${version}`,
-          id,
-          "older version",
-          "Migration exceeds current version",
-        );
-      body(id, `work.migrations.${version}`, "migration");
-    }
   }
   const result = link(catalog);
   if (!result.ok)
@@ -488,10 +463,13 @@ export function linkRouteBodies(
       }
   }
   const chords = new Set<string>();
+  for (const [id, entry] of Object.entries(data.local ?? {})) {
+    requireCapability("local", `local.${id}`);
+    schemaRef(entry.input, `local.${id}.input`);
+    schemaRef(entry.output, `local.${id}.output`);
+  }
   for (const [key, verb] of Object.entries(data.verbs)) {
     const path = `verbs.${key}`;
-    if (key === "work.start-fresh" || key === "work.salvage")
-      fail(path, key, "authored verb", "Recovery verbs are kernel reserved", "policy");
     deps(verb.deps, `${path}.deps`);
     schemaRef(verb.input, `${path}.input`);
     list(data.readings, verb.captures, `${path}.captures`, "reading");
@@ -503,6 +481,13 @@ export function linkRouteBodies(
       chords.add(verb.chord);
     }
     switch (verb.kind) {
+      case "local": {
+        requireCapability("local", path);
+        const entry = data.local?.[verb.entry];
+        if (!entry) fail(`${path}.entry`, verb.entry, "local entry", "Local entry is not declared");
+        body(verb.intent, `${path}.intent`, "intent");
+        break;
+      }
       case "work":
         // ADR 0030 rule 9: a targeted verb edits the named reading's owner Work, not its own.
         if (verb.target === undefined && !data.work)
@@ -523,11 +508,11 @@ export function linkRouteBodies(
       case "page":
         body(verb.patch, `${path}.patch`, "page");
         for (const field of verb.fields)
-          if (!["query", "draft"].includes(data.fields[field]?.role ?? ""))
+          if (!["query", "draft", "device", "transient"].includes(data.fields[field]?.role ?? ""))
             fail(
               `${path}.fields`,
               field,
-              "query or draft",
+              "query, draft, device or transient",
               "Page verbs cannot write this role",
               "policy",
             );
@@ -543,6 +528,42 @@ export function linkRouteBodies(
         body(verb.lands, `${path}.lands`, "lands");
         break;
     }
+  }
+  if (data.work?.adopt) {
+    const id = data.work.adopt;
+    const verb = data.verbs[id];
+    const command: Command | undefined =
+      verb?.kind === "command" && Object.hasOwn(commands, verb.entry)
+        ? commands[verb.entry as keyof typeof commands]
+        : undefined;
+    const reachesModelWrite = (key: string, seen = new Set<string>()): boolean => {
+      if (seen.has(key)) return false;
+      seen.add(key);
+      const entry = linked.get(key);
+      return (
+        entry?.effect === "ModelWrite" ||
+        !!entry?.uses.some((child) =>
+          reachesModelWrite(typeof child === "string" ? child : child.key, seen),
+        )
+      );
+    };
+    if (
+      verb?.kind !== "command" ||
+      verb.review !== "none" ||
+      !bindings.schemas[verb.input]?.safeParse({}).success ||
+      command?.autoAdopt !== true ||
+      !command.work ||
+      command.work.optional ||
+      command.work.route !== data.work.route ||
+      reachesModelWrite(verb.entry)
+    )
+      fail(
+        "work.adopt",
+        id,
+        "eligible automatic Work command",
+        "Automatic adoption requires a trusted required owner Work command, empty input, no review and no ModelWrite",
+        "policy",
+      );
   }
   for (const [key, pane] of Object.entries(data.panes)) {
     const path = `panes.${key}`;

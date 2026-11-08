@@ -234,7 +234,50 @@ const privateModules = new Set([
   `${WEB}shell/owner.ts`,
   `${WEB}route/view-owner.ts`,
 ]);
-const compositionRoots = new Set([`${WEB}shell/mount-work.tsx`, `${WEB}shell/fixture-lane.ts`]);
+const compositionRoots = new Set([
+  // Typed mounts own the fixture/live composition boundary.
+  `${WEB}shell/typed-mount.ts`,
+  `${WEB}shell/typed-shell.tsx`,
+  `${WEB}shell/mount-work.tsx`,
+  `${WEB}shell/fixture-lane.ts`,
+  // The shared selector was extracted without the retired fixture engine.
+  `${WEB}shell/fixture-name.ts`,
+  `${WEB}chat/owner.tsx`,
+]);
+// Admitted Place composition may bind app capabilities and fixture inputs. Its implementation
+// is private like the shell; direct private-owner imports and re-exports still cross the fence.
+const admittedPlaceRoots = new Set([`${WEB}chat/owner.tsx`, `${WEB}workbench/provider/view.tsx`, `${WEB}workbench/thread-view.tsx`, `${WEB}route/builtin-routes.tsx`, `${WEB}pods/route.tsx`, `${WEB}router.tsx`]);
+/** A declared pane may display its public provenance; this grants no legacy-owner access. */
+function paneFixture(source: ts.SourceFile, node: ts.Node): boolean {
+  if (!ts.isPropertyAccessExpression(node) || !ts.isIdentifier(node.expression)) return false;
+  const imports = new Set<string>();
+  const aliases = new Map<string, ts.TypeNode>();
+  for (const statement of source.statements) {
+    if (ts.isTypeAliasDeclaration(statement)) aliases.set(statement.name.text, statement.type);
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const module = statement.moduleSpecifier.text;
+    if (module !== "@pe/agent-contracts" && !/\/route-kernel-bodies(?:\.ts)?$/.test(module)) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings && ts.isNamedImports(bindings))
+      for (const name of bindings.elements)
+        if ((name.propertyName ?? name.name).text === "PaneContext") imports.add(name.name.text);
+  }
+  const pane = (type: ts.TypeNode | undefined, seen = new Set<string>()): boolean => {
+    if (!type || !ts.isTypeReferenceNode(type) || !ts.isIdentifier(type.typeName)) return false;
+    const name = type.typeName.text;
+    if (imports.has(name)) return true;
+    if (name === "Pick" && type.typeArguments?.[1]?.getText(source) === '"fixture"') return pane(type.typeArguments[0], seen);
+    if (seen.has(name)) return false;
+    seen.add(name);
+    return pane(aliases.get(name), seen);
+  };
+  for (let parent = node.parent; parent; parent = parent.parent)
+    if (ts.isFunctionLike(parent)) {
+      const parameter = parent.parameters.find((parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === node.expression.getText(source));
+      if (parameter) return pane(parameter.type);
+    }
+  return false;
+}
 /** Temporary legacy inventory. Source exports follow the same graph.ts convention as
  * codegen:routes; executable declarations, mount calls and registrations share one ratchet. */
 export function legacyInventory(input?: Record<string, string>) {
@@ -403,7 +446,7 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
         if (ts.isStringLiteralLike(specifier)) {
           const name = specifier.text;
           const target =
-            [...sources.keys()].find((p) => p === name) ??
+            [...sources.keys()].find((p) => p === name || (name.startsWith("#/") && [".ts",".tsx"].some(ext=>p === `${WEB}${name.slice(2)}${ext}`))) ??
             resolveModule(file, name) ??
             (name.startsWith("#/") ? `${WEB}${name.slice(2)}.ts` : name);
           imports.push({ node, target });
@@ -412,6 +455,7 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
       if (
         file.startsWith(WEB) &&
         !compositionRoots.has(file) &&
+        !paneFixture(source, node) &&
         ((ts.isPropertyAccessExpression(node) && node.name.text === "fixture") ||
           (ts.isElementAccessExpression(node) &&
             node.argumentExpression &&
@@ -442,15 +486,24 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
       }
     });
   }
+  // A type import may name a declaration beside its runtime without importing that runtime.
+  // Direct private-owner type access remains forbidden, as does every executable/re-export path.
+  const typeOnly=(node:ts.Node)=>
+    (ts.isImportDeclaration(node) && (node.importClause?.isTypeOnly ||
+      (node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) &&
+       node.importClause.namedBindings.elements.every(binding=>binding.isTypeOnly)))) ||
+    (ts.isExportDeclaration(node) && node.isTypeOnly);
   function reaches(file: string, targets: Set<string>, seen = new Set<string>()): boolean {
     if (targets.has(file)) return true;
     if (seen.has(file)) return false;
     seen.add(file);
-    // A kernel implementation may privately use its owners. Only re-exports cross its facade;
-    // route/body wrappers outside shell remain fully traversed.
+    // Kernel and admitted Place implementations may use private owners. Only re-exports cross
+    // those composition facades; every other route/body wrapper remains fully traversed.
     return (edges.get(file) ?? []).some(
       (edge) =>
-        (!file.startsWith(WEB + "shell/") || ts.isExportDeclaration(edge.node)) &&
+        !typeOnly(edge.node) &&
+        ((!file.startsWith(WEB + "shell/") && !admittedPlaceRoots.has(file)) ||
+          ts.isExportDeclaration(edge.node)) &&
         reaches(edge.target, targets, seen),
     );
   }
@@ -462,7 +515,9 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
       ) &&
       !privateModules.has(file);
     for (const edge of imports) {
-      if (route && reaches(edge.target, privateModules))
+      const compositionImport = admittedPlaceRoots.has(file) &&
+        !privateModules.has(edge.target) && !ts.isExportDeclaration(edge.node);
+      if (route && !compositionImport && (!typeOnly(edge.node) || privateModules.has(edge.target)) && reaches(edge.target, privateModules))
         result.rawPageImports!.push(identity(edge.node));
       if (
         file.startsWith(WEB) &&

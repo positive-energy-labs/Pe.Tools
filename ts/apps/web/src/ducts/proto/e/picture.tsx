@@ -33,9 +33,10 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { useAdmittedSubject } from "#/shell/subject";
 import type { OrbitViewport, PicturePage } from "@pe/agent-contracts";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import type { Priced } from "@pe/ducts-domain/pricing";
+import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 import type * as Atom from "effect/reactivity/Atom";
-import type { PaneContext } from "../../../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type { DuctsDrawContext } from "../../route.ts";
+import { network } from "../../route.ts";
 import type { Ruling } from "../../annotations";
 import { elementNamer } from "../../claims";
 import { coloursOf } from "../../colours";
@@ -45,15 +46,7 @@ import type { StageIssue } from "../../inbox-rows";
 import type { Claim, Run } from "../../legs";
 import { labelOfNode, legsOf } from "../../legs";
 import type { Split } from "../../loss-split";
-import {
-  activeName,
-  ductsData,
-  entries,
-  localId,
-  localSubject,
-  namesOf,
-  schemas,
-} from "../../neutral";
+import { activeName, localId, localSubject, namesOf } from "../../identity.ts";
 import { DuctsOverlay, linesOf, useEquipment } from "../../picture-content";
 import { ProvisionalNote } from "../../provisional";
 import { indexOf, sceneOf, subjectScene } from "../../scene";
@@ -73,13 +66,14 @@ import { RulingBody, useMarks } from "./rulings";
 import { RunDetail, runOf } from "./run-detail";
 import { DUCTS_FLAT, DUCTS_LAYER_OPTIONS } from "./teaching";
 
-type PictureContext = PaneContext<typeof ductsData, typeof schemas, typeof entries, "e-picture">;
+type PictureContext = DuctsDrawContext;
 interface DuctsPictureProps {
   ctx: PictureContext;
   snapshot: DuctSnapshot | null;
   captureSource?: { document: { session: string; openId: string }; version: string } | null;
   doc: { session: string; openId: string } | null;
   priced: Priced | null;
+  analysis: import("@pe/agent-contracts").DuctsPricingData["analysis"] | null;
   subject: Run | null;
   claims: readonly Claim[];
   onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
@@ -156,7 +150,7 @@ export function DuctsPicture(props: DuctsPictureProps & DuctsPictureExtra) {
   if (!snapshot)
     return (
       <p className="p-3 text-ink-2">
-        {props.ctx.readings.ducts.status === "pending" ? "Reading ducts..." : "No snapshot"}
+        {props.ctx.read(network).status === "pending" ? "Reading ducts..." : "No snapshot"}
       </p>
     );
   // Route UI stays retained; capture buffers, clipped meshes and layer descriptors do not.
@@ -173,6 +167,7 @@ function Content({
   captureSource,
   doc,
   priced,
+  analysis,
   ctx,
   subject,
   claims,
@@ -208,7 +203,7 @@ function Content({
     ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
   const pickIssue = (selected: string) => {
     select(selected);
-    ctx.verbs.browse({ rulingSearch: emptyListSearch() });
+    ctx.page.query({ rulingSearch: emptyListSearch() });
   };
   const movePicture = picturePageMove<PicturePage<string, "schematic">>(
     (patch, intent) => ctx.page.pose(patch, intent),
@@ -281,6 +276,7 @@ function Content({
     return line ? (line[Math.floor((line.length - 1) / 2)] ?? null) : null;
   };
   const { rulings, labels, cumulative } = useMarks({
+    heal: analysis?.heal ?? null,
     snapshot,
     priced,
     scene,
@@ -306,8 +302,19 @@ function Content({
   const heal3d: Layer3D[] = [];
   const reviewTargets = new Set<number>();
   const findings3d = useMemo(
-    () => findingLayers(findingShapes(snapshot, annotated, work.doc, scope?.members), issues),
-    [snapshot, annotated, work.doc, scope, issues],
+    () =>
+      findingLayers(
+        findingShapes(
+          snapshot,
+          annotated,
+          work.doc,
+          scope?.members,
+          analysis?.heal.groups.flatMap((group) => group.items) ?? [],
+          analysis?.inference ?? { joints: [], taps: [], inline: [], findings: [] },
+        ),
+        issues,
+      ),
+    [snapshot, annotated, work.doc, scope, issues, analysis],
   );
   // Damage follows the shown meshes; the layer and the overlay's covered pins share one per read.
   const damageOf = useMemo(() => {

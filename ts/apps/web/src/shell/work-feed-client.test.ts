@@ -1,6 +1,6 @@
 import { workFingerprintSchema } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import { expect, test, vi } from "vite-plus/test";
-import type { Readings } from "../readings";
+import type { Readings } from "../host/resource-stream";
 import type {
   WorkFeedState,
   WorkScope,
@@ -70,6 +70,33 @@ function harness(replay: Frame[] = []) {
     emit: (kind: string, frame: Frame) => listeners.get(kind)!(frame),
   };
 }
+test("absent Work stays absent without failing or releasing feeds, then accepts current Work", () => {
+  const h = harness();
+  h.emit("work-acks", { kind: "snapshot", key: "acks", value: null });
+  h.emit("work", { kind: "snapshot", key: "work", value: null });
+  expect(h.values.at(-1)).toEqual({ kind: "absent" });
+  expect(h.values.some((state) => state.kind === "failed")).toBe(false);
+  expect(h.end).not.toHaveBeenCalled();
+  expect(h.stops.every((stop) => stop.mock.calls.length === 0)).toBe(true);
+  h.emit("work", snapshot(0));
+  expect(h.values.at(-1)).toMatchObject({ kind: "ready", snapshot: { revision: 0, value: { amount: 0 } } });
+  h.unsubscribe();
+  expect(h.stops.every((stop) => stop.mock.calls.length === 1)).toBe(true);
+});
+
+test("ack invalidation after a ready snapshot requests a new snapshot instead of stranding Work", () => {
+  const h = harness();
+  h.emit("work", snapshot(1));
+  h.emit("work-acks", { kind: "stale", key: "acks" });
+  expect(h.values.at(-1)).toEqual({ kind: "pending" });
+  expect(h.source.dirty).toHaveBeenCalledWith(expect.objectContaining({ kind: "work" }));
+  h.emit("work", snapshot(1));
+  expect(h.values.at(-1)).toMatchObject({ kind: "ready", snapshot: { revision: 1 } });
+  h.emit("work-acks", ack(2));
+  expect(h.values.at(-1)).toMatchObject({ kind: "ack", ack: { revision: 2 } });
+  h.unsubscribe();
+});
+
 test("subscribe before snapshot, buffer and sort acks, drop revisions covered by snapshot", () => {
   const h = harness([ack(3), ack(1), ack(2)]);
   expect(h.order).toEqual(["work-acks", "work"]);
@@ -203,12 +230,7 @@ test.each([
     received: scope.fingerprint,
   },
   {
-    kind: "migration-failed",
-    routeKey: "note",
-    fromVersion: 1,
-    toVersion: 2,
-    step: 1,
-    message: "upgrade failed",
+    kind: "failed", code: "WorkReadFailed", message: "read failed",
   },
   { kind: "failed", code: "HostUnavailable", message: "offline" },
 ] as const)(

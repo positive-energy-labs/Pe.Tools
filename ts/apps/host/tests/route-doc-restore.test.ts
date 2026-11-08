@@ -65,7 +65,7 @@ async function fixture() {
     heads: { observe: () => () => {} },
   });
   const events: RouteWorkspaceEvent[] = [];
-  app.workspace.subscribe((event) => {
+  app.workspace.subscribeUncaptured((event) => {
     if (event.ok) events.push(event);
   });
   const post = async (body: unknown, caller: Caller = human, operation = "apply") => {
@@ -201,48 +201,6 @@ test("ordinary restore still validates the inverse against the current Work sche
     error: "the patched document is invalid",
   });
   expect(await h.stored()).toEqual(before);
-});
-
-test("startFresh returns the set-aside inverse and recovery restores the unparsed document", async () => {
-  const h = await fixture();
-  const original = {
-    version: 1,
-    schemaVersion: 1,
-    revision: 7,
-    doc: { legacy: true, old: [1, 2] },
-  };
-  await h.store.setState({ targetKey: workKey(h.scope), route: h.scope.route, value: original });
-  const fresh = await h.post({}, human, "start-fresh");
-  expect(fresh.write).toMatchObject({
-    kind: "start-fresh",
-    base: 7,
-    revision: 8,
-    press: null,
-    undoable: true,
-    aside: `${h.scope.route}:aside:1`,
-    inverse: [{ path: [], value: original.doc }],
-  });
-  expect(await h.store.getState({ targetKey: workKey(h.scope), route: fresh.write.aside })).toEqual(
-    original,
-  );
-  expect(await h.restore(fresh.write)).toMatchObject({
-    ok: true,
-    revision: 9,
-    doc: original.doc,
-    write: { kind: "restore", press: null },
-  });
-  expect(await h.stored()).toMatchObject({ ...original, revision: 9, history: expect.any(Array) });
-});
-
-test("startFresh refuses an unmarked malformed envelope and preserves its exact bytes", async () => {
-  const h = await fixture();
-  await h.store.setState({
-    targetKey: workKey(h.scope),
-    route: h.scope.route,
-    value: "unreadable envelope",
-  });
-  expect(await h.post({}, human, "start-fresh")).toMatchObject({ ok: false });
-  expect(await h.stored()).toBe("unreadable envelope");
 });
 
 test("the wire requires a press field and a human apply requires a nonempty dispatch identity", async () => {

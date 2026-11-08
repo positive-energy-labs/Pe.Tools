@@ -1,7 +1,7 @@
 import { peClient } from "#/host/pe-client";
 import { useEffect, useRef, useState } from "react";
-import { peReadings } from "#/readings";
-import { previousOf, useReading } from "#/shell/readings-hooks";
+import { peReadings } from "#/host/resource-stream";
+import { previousOf, useReading } from "#/host/resource-state";
 import {
   threadHeadSchema,
   putTargetResultSchema,
@@ -58,7 +58,7 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
   const generation = useRef(0);
   const [refusal, setRefusal] = useState<string | null>(null);
   const request = { kind: "thread-head" as const, thread: threadId };
-  const subscribed = useReading<ThreadHead>(enabled && !observed ? request : null);
+  const subscribed = useReading<ThreadHead>(enabled && threadId && !observed ? request : null);
   const reading = observed ?? subscribed;
   const raw = previousOf(reading);
   const parsed = threadHeadSchema.safeParse(raw);
@@ -74,7 +74,7 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
   const set = async (targets: readonly TargetEntry[]): Promise<boolean> => {
     const attempt = ++generation.current;
     setRefusal(null);
-    if (!enabled) {
+    if (!enabled || !threadId) {
       setRefusal("target changes are unavailable in this view");
       return false;
     }

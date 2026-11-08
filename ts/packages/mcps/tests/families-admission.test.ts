@@ -2,11 +2,13 @@ import { Effect, Exit, Layer, Scope } from "effect";
 import { admittedBuiltinsLayer } from "../../../apps/host/src/admitted-builtins.ts";
 import { builtinEnrollments } from "../../../apps/host/src/builtin-enrollment.ts";
 import { afterEach, expect, test } from "vite-plus/test";
-import { address, familiesRouteState, familyCellKey } from "@pe/agent-contracts";
+import { address, familiesRouteState, familyCellKey, type RouteStateSpec } from "@pe/agent-contracts";
 
 import { RouteWorkspace } from "../../runtime/src/route-workspace.ts";
 import { hostLoadedFamilies, type HostCall } from "../src/pea/families-admission.ts";
 import { createRouteRegistrations } from "../src/pea/routes.ts";
+
+const familiesSpec: RouteStateSpec<typeof familiesRouteState.schema> = familiesRouteState;
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -55,7 +57,7 @@ async function workspace() {
       reads.push({ target, filter });
       return loaded;
     },
-    { version: 1, revision: 0, doc: { scope: { edit: { value: casework([]) } } } },
+    { version: 1, schemaVersion: familiesSpec.schemaVersion ?? 1, revision: 0, doc: { scope: { edit: { value: casework([]) } } } },
   );
   return { reads, work };
 }
@@ -202,7 +204,7 @@ async function seededWork(doc: unknown, host: HostCall = liveHost()) {
       if (key === "revit.catalog.loaded-families") calls.push(request);
       return host(key, request, on);
     }) as HostCall),
-    { version: 1, revision: 1, doc },
+    { version: 1, schemaVersion: familiesSpec.schemaVersion ?? 1, revision: 1, doc },
   );
   return { work, at: { binding: "address" as const, route: "families", target }, calls };
 }

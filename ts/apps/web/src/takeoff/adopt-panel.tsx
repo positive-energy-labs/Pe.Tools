@@ -7,11 +7,23 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Input } from "@pe/kit/lang/input";
 import { fmtNum } from "@pe/kit/table/model";
 import { type CandidateRegion } from "#/takeoff/model";
-import type { TakeoffStore } from "./store";
+import type { Immutable } from "@pe/agent-contracts";
+import type { CellLike } from "@pe/agent-contracts";
+import type { CellWire } from "../components/work/band";
+export interface AdoptionStore {
+  views: readonly string[];
+  world: { zones: readonly unknown[] };
+  adoptRows: readonly AdoptRow[] | null;
+  cells: { adopt: Readonly<Record<string, CellLike>> };
+  wires: { adopt: CellWire };
+  candidatesIssue: Error | null;
+  candidatesReading: boolean;
+  actions: { patchAdopt(view: string, elementId: number, patch: Partial<AdoptRow>): void };
+}
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export interface AdoptRow {
-  region: CandidateRegion;
+  region: Immutable<CandidateRegion>;
   view: string;
   checked: boolean;
   name: string;
@@ -39,7 +51,7 @@ function CommitInput({
   );
 }
 
-export function AdoptRegions({ store }: { store: TakeoffStore }) {
+export function AdoptRegions({ store }: { store: AdoptionStore }) {
   const views = store.views;
   const zones = store.world.zones;
   const listed = store.adoptRows;

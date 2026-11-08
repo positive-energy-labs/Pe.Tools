@@ -46,9 +46,10 @@ export function editCell(cell: HTMLTableCellElement, replacement?: string): bool
     return true;
   }
   focusQuiet(editor);
-  if (replacement !== undefined) editor.value = replacement;
+  // Opening by typing selects the old value; native text insertion owns every character.
+  // Seeding the key here duplicates a separately delivered char/IME input.
   const end = editor.value.length;
-  editor.setSelectionRange(end, end);
+  editor.setSelectionRange(replacement === undefined ? end : 0, end);
   return true;
 }
 

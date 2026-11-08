@@ -11,6 +11,15 @@ vi.mock("#/navigation/state", () => ({ useDestination: () => vi.fn() }));
 
 const { useThreadScope } = await import("./scope");
 
+test("a browser draft has no thread-head subscription", () => {
+  function Draft() {
+    const scope = useThreadScope("", true);
+    return <output>{scope.targets.length}</output>;
+  }
+  render(<Draft />);
+  expect(screen.getByText("0")).toBeTruthy();
+});
+
 vi.mock("#/machine/use-machine", () => ({ useMachine: () => ({ reading: { state: "absent" } }) }));
 vi.mock("#/shell/binding", () => ({ useChooseTarget: () => [null, vi.fn()] }));
 

@@ -110,7 +110,10 @@ test("the host-owned /pe surface answers without Revit", async () => {
     const keys = catalog.capabilities.map((row) => row.key);
     expect(keys).toContain("op:host.shell.open");
     expect(keys).toContain("op:instances.start");
-    expect(keys.some((key) => key.startsWith("route:ops"))).toBe(false);
+    // Root ruling: Ops is person-only and exposes no Pea Page lease.
+    expect(keys).not.toContain("route:ops.view");
+    expect(keys).not.toContain("route:ops.set-view");
+    expect(keys).not.toContain("route:ops.edit");
     // The member Work route is named for the pods its members live in.
     expect(keys).toContain("route:pods.edit");
     expect(keys).not.toContain("route:pods.propose");

@@ -1,10 +1,9 @@
-import { settingsCandidate, type FamilyDraft, type SettingsSnapshot } from "@pe/agent-contracts";
-import type { BindingScope } from "#/shell/mount-owner";
+import type { FamilyDraft } from "@pe/agent-contracts";
+import type { WorkHandle } from "@pe/agent-contracts";
 import { familyLockOf } from "./store";
-import type { FamilyPage } from "./graph";
-import { readingValue } from "./sources";
+import type { FamilyPage } from "./page";
 
-export type FamilyScope = BindingScope<FamilyPage, FamilyDraft>;
+export type FamilyScope = { page: FamilyPage; work: { handle: WorkHandle; doc: FamilyDraft } | null };
 export const familyWorkRefusal = (scope: FamilyScope) =>
   scope.page.stage === "history"
     ? "History is inspection only"
@@ -12,60 +11,12 @@ export const familyWorkRefusal = (scope: FamilyScope) =>
       ? null
       : "Read the family Work first";
 
-export function familyBinding(id: string, row: unknown, scope: FamilyScope) {
-  const value = (row ?? {}) as Record<string, unknown>;
-  const blocked = familyWorkRefusal(scope);
-  if (id === "read") return { subject: null, args: { refusal: blocked } };
-  if (id === "edit") return { subject: null, args: { ...value, refusal: blocked } };
-  if (id === "saved")
-    return { subject: null, args: { request: { id: value.readingId ?? "" }, refusal: null } };
-  const profile = readingValue<SettingsSnapshot>(scope.readings.profile);
-  const source = profile?.sha256 ? { ...profile.member, sha256: profile.sha256 } : null;
-  if (id === "open") return { subject: null, args: { source: value.source, refusal: blocked } };
-  if (id === "build")
-    return {
-      subject: null,
-      args: {
-        source,
-        refusal:
-          blocked ??
-          (!source || !scope.readings.profile?.current
-            ? "Wait for the current saved family profile"
-            : profile?.validation?.isValid !== true
-              ? "The saved family profile does not validate"
-              : Object.values(scope.work?.doc.cells ?? {}).some((cell) => cell.edit)
-                ? "Save the family edits before building the saved profile"
-                : null),
-      },
-    };
-  if (id === "apply")
-    return {
-      subject: null,
-      args: {
-        refusal:
-          blocked ?? (scope.work?.doc.reading ? null : "Read or open a family before applying"),
-      },
-    };
-  if (id === "capture") {
-    let spec: string | undefined;
-    let invalid: string | null = null;
-    try {
-      if (scope.work?.doc.reading)
-        spec = settingsCandidate(scope.work.doc.reading, scope.work.doc.cells);
-      if (spec) JSON.parse(spec.replace(/^\uFEFF/, ""));
-    } catch (error) {
-      invalid = error instanceof Error ? error.message : String(error);
-    }
-    return {
-      subject: null,
-      args: {
-        pod: scope.page.pod || "",
-        spec,
-        refusal: blocked ?? invalid ?? (scope.page.pod ? null : "Choose a destination pod"),
-      },
-    };
-  }
-  return { subject: null, args: value };
+/** Test-only forwarding binding: the frozen graph declares only edit. */
+export function familyBinding(_id: string, row: unknown, scope: FamilyScope) {
+  return {
+    subject: null,
+    args: { ...(row as Record<string, unknown>), refusal: familyWorkRefusal(scope) },
+  };
 }
 
 export function familyCell(row: unknown, scope: FamilyScope) {
@@ -74,7 +25,8 @@ export function familyCell(row: unknown, scope: FamilyScope) {
   let authored: unknown = null;
   try {
     authored = JSON.parse(scope.work.doc.reading ?? "null");
-  } catch (error) { console.warn("ts/apps/web/src/family/actions.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/web/src/family/actions.ts: fallback after failure", error);
     return null;
   }
   if (familyLockOf(authored)(value.key)) return null;

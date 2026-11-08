@@ -6,9 +6,9 @@ import {
   type ThreadWorkSnapshot,
   type WorkResume,
 } from "@pe/agent-contracts";
-import { useEnvironmentReading } from "#/shell/environment-readings";
+import { useEnvironmentReading } from "#/host/environment-state";
 import { peClient } from "#/host/pe-client";
-import { previousOf } from "#/shell/readings-hooks";
+import { previousOf } from "#/host/resource-state";
 
 /** The one swap point: the `thread-work` Reading's last good snapshot, checked at the boundary.
  *  Nothing yet (or a malformed payload) is null, and rows keep their conversation titles. */

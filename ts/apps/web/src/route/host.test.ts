@@ -2,7 +2,7 @@
 /** Accepted-delta transport, browser end: real PeReadings over a stand-in EventSource. */
 import { expect, test } from "vite-plus/test";
 import { readingKey, type WorkKey, type WorkWriteAck } from "@pe/agent-contracts";
-import { PeReadings } from "#/readings";
+import { PeReadings } from "#/host/resource-stream";
 import { subscribeAcceptedDeltas } from "./host";
 
 const key: WorkKey = { binding: "host", route: "test-route", target: null };

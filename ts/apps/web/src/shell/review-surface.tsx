@@ -3,8 +3,8 @@ import { useList } from "@pe/kit/lang/collection";
 import { PlainList } from "@pe/kit/lang/list-view";
 import { Button } from "@pe/kit/lang/button";
 import { Popover, SubjectPopoverContent } from "@pe/kit/lang/popover";
-import { borrowWords, WorksharingNote } from "./mount-verbs";
-import type { Worksharing } from "./verbs";
+import { borrowWords, WorksharingNote } from "./worksharing-note";
+import {type Worksharing} from "./review-contract";
 
 /** One review portal for admitted and legacy projections. Authority stays with the owner. */
 export function ReviewSurface({

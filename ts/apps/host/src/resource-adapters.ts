@@ -12,12 +12,11 @@ import {
   commandTool,
   type ReadingFrame,
 } from "@pe/agent-contracts";
-import { OwnerReads, resourceSnapshot, type ResourceObserver, type OwnerValue, type WorkCarriage } from "@pe/runtime";
+import { resourceSnapshot, type ResourceObserver, type OwnerValue, type WorkCarriage } from "@pe/runtime";
 import type { BridgeError, RevitBridge } from "./bridge.ts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { ActionJournal } from "./action-journal.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
-import { listBridgeSessions } from "./local-ops.ts";
 import { observeSdkReading } from "./session-route.ts";
 import { sdkSession } from "./sdk-session.ts";
 import type { DocumentMarks, DocumentRef } from "./document-marks.ts";
@@ -119,6 +118,8 @@ export const markReadings =
   (marks: DocumentMarks, readFrame: (ref: DocumentRef | null, key: string, at?: number, carriage?: WorkCarriage, update?: boolean) => Promise<import('./document-marks.ts').MarkFrame | null>) =>
   (observe: ResourceObserver): ResourceObserver =>
   (request, publish, after) => {
+    // Thread logs have no document frame to capture; their bounded SSE lane owns cursor recovery.
+    if (request.kind === "thread") return observe(request, publish, after);
     let bound = documentOf(request as never);
     let latest: (ReadingFrame & { kind: 'snapshot' }) | null = null;
     let servedAt: number | undefined;
@@ -181,7 +182,6 @@ export function hostResourceObserver(
     scope: HostSessionScope,
   ) => Effect.Effect<{ sessionId: string }, BridgeError> = sdkSession,
 ): ResourceObserver {
-  const inventoryReads = new OwnerReads();
   return (request, publish) => {
     const headers = invocationContext()?.headers;
     const key = readingKey(request);
@@ -314,6 +314,8 @@ export function hostResourceObserver(
           });
         case "takeoff-reading":
           return captures().observe(request.target, accept);
+        case "families-reading":
+          return captures().observeFamilies(request.work,accept);
         case "families-matrix":
           return captures().observeFamiliesMatrix(request.target, request.filter, accept);
         case "family-readings": {
@@ -365,17 +367,6 @@ export function hostResourceObserver(
             live = false;
           };
         }
-        case "inventory":
-          return inventoryReads.observe(
-            "inventory",
-            () =>
-              bridge
-                ? // effect-edge: island, phase 5
-                  Effect.runPromise(listBridgeSessions(bridge.list))
-                : Promise.resolve({ sessions: [] }),
-            (notify) => (bridge ? bridge.subscribe(() => notify()) : () => {}),
-            accept,
-          );
         case "world": {
           const release = bridge
             ? bridge.subscribe((event) =>

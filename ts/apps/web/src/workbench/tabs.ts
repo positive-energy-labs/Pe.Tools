@@ -22,7 +22,7 @@ import {
 } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { focusQuiet } from "@pe/kit/lib/utils";
-import { useHostEvents } from "#/readings";
+import { useHostEvents } from "#/host/resource-stream";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import type { Resumed } from "#/chat/thread-work";
 import { useWorkbench } from "./provider";
@@ -37,6 +37,7 @@ import { parseTarget } from "#/route/route-target";
  */
 const PLACES = "pe.places";
 const FOCUS = "pe.place.focus";
+const PLACE_LIMIT = `This window keeps ${THREAD_TABS_MAX} Places; close one first.`;
 const read = (): ThreadTab[] => {
   try {
     return (
@@ -90,15 +91,15 @@ const params = (link: string) =>
 
 // Registration is read live; retired Places remain evidence but cannot be selected.
 const canonical = (route: string, link: string) =>
-  canonicalPlace(route, link, publicRoutes.admitted(route)?.data.address);
-const admitted = (route: string) => publicRoutes.admitted(route) !== null;
+  canonicalPlace(route, link, publicRoutes.declaration(route)?.address);
+const admitted = (route: string) => publicRoutes.declaration(route) !== null;
 function unowned(route: string, raw: string, search: Record<string, unknown>, local: boolean) {
   const builtin = routeOf(route);
   if (builtin && !admitted(route)) return place(builtin, search, local);
   const query = new URLSearchParams(raw);
   query.delete("thread");
   query.delete("shell");
-  const path = publicRoutes.admitted(route)?.data.address;
+  const path = publicRoutes.declaration(route)?.address;
   return path ? `${path}${query.size ? `?${query}` : ""}` : null;
 }
 
@@ -158,6 +159,7 @@ function holdsWork(tab: ThreadTab, route: string, resumed: Resumed): boolean {
 
 /** The route a tab holds at `pathname`: any but Pea's own page. */
 const tabRouteAt = (pathname: string) => {
+  if (pathname === routeAddress("pea").path) return null;
   const route = publicRoutes.byAddress(pathname)?.manifest.key ?? routeAt(pathname);
   return route === "pea" ? null : route;
 };
@@ -207,6 +209,8 @@ export function useRouteTabs() {
   const commit = (next: ThreadTab[]) => {
     save(next);
     setTabs(next);
+    if (next.length < THREAD_TABS_MAX)
+      setFailure(prior => prior === PLACE_LIMIT ? null : prior);
     return next;
   };
   const put = (id: string, tabRoute: string, tabLink: string) => {
@@ -215,7 +219,7 @@ export function useRouteTabs() {
     const prior = read();
     const existing = prior.some((tab) => tab.id === id);
     if (!existing && prior.length >= THREAD_TABS_MAX)
-      throw Error(`This window keeps ${THREAD_TABS_MAX} Places; close one first.`);
+      throw Error(PLACE_LIMIT);
     const next = { id, route: tabRoute, link: tabLink, at: new Date().toISOString() };
     return commit(existing ? prior.map((tab) => (tab.id === id ? next : tab)) : [...prior, next]);
   };
@@ -440,7 +444,7 @@ export function useRouteTabs() {
             const destination = saved
               ? rebased(saved, resumed?.url ?? null)
               : (resumed?.url ??
-                publicRoutes.admitted(workRoute)?.data.address ??
+                publicRoutes.declaration(workRoute)?.address ??
                 (routeOf(workRoute) ? routeAddress(routeOf(workRoute)!).link() : ""));
             const id = saved?.id ?? crypto.randomUUID();
             const checked = canonical(workRoute, destination);

@@ -40,7 +40,7 @@ export interface FirmReading {
   error?: string;
 }
 
-/** The `HostFiles` layer body; callers read the firm through `HostFiles`, never this. */
+/** The `DuctFiles` layer body; callers read the firm through `DuctFiles`, never this. */
 export async function readFirm(path = firmFilePath()): Promise<FirmReading> {
   let text: string;
   try {

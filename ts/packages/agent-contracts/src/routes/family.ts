@@ -1,35 +1,20 @@
+// Generated from family/route.ts by codegen:routes. Do not edit.
 import { z } from "zod";
-import { field, text, type RouteDeclaration } from "../route-field.ts";
-import { entityFields, tableFields } from "./entity.ts";
-
-export const familyAddress = {
-  path: "/family",
-  title: "Family",
-  fields: {
-    ...entityFields,
-    ...tableFields(),
-    /** The table's values: the staged draft, what Revit carries, or the saved member. */
-    overlay: field(z.enum(["draft", "live", "saved"]).default("draft"), {
-      url: "push",
-      agent: "set",
-    }),
-    /** The type the table drills into; empty = the family's parameter table. */
-    drill: field(text(512), { url: "push", agent: "set" }),
-    /** The inspector's subject: `part:<slug>` or `param:<name>`; empty = closed. */
-    inspector: field(
-      z
-        .string()
-        .max(1024)
-        .regex(/^((part|param):.+)?$/, "an inspector subject is part:<slug> or param:<name>")
-        .default(""),
-      { url: "replace", agent: "set" },
-    ),
-    /** The doc pane reads as text or as a sheet. */
-    doc: field(z.enum(["text", "sheet"]).default("text"), { url: "replace", agent: "set" }),
-  },
-  agent: {
-    finds: ["parameters", "types", "inspector", "overlay"],
-    policy:
-      "Change the visible Family view: stage, the table's query line, sort (`-key` descending) and hidden columns, the overlay (draft, live or saved values), the drilled type (a type name; empty = the family table), the inspector (`part:<slug>` or `param:<name>`; empty = closed) and the doc pane (text or sheet). Facts name the family, its types, parts and parameters. The opened spec (pod, path) is the person's: read it. A view change never reads Revit, stages a value, builds or applies.",
-  },
-} satisfies RouteDeclaration;
+import type { Immutable } from "../route-kernel-data.ts";
+import { focusSelectionSchema } from "../route-kernel-codecs.ts";
+import { jsonCodec } from "../route-field.ts";
+const field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: jsonCodec(schema) });
+export const familyAddress = { path: "/family" as const, title: "Family", fields: {
+"stage": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"audit","type":"string","enum":["audit","apply","history"]}) as z.ZodType<Immutable<"audit" | "apply" | "history">>).default("audit"), "push"),
+"pod": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string","maxLength":512}) as z.ZodType<Immutable<string>>).default(""), "push"),
+"path": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string","maxLength":1024}) as z.ZodType<Immutable<string>>).default(""), "push"),
+"pane": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"spec","type":"string","enum":["spec","output"]}) as z.ZodType<Immutable<"spec" | "output">>).default("spec"), "replace"),
+"query": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string","maxLength":4096}) as z.ZodType<Immutable<string>>).default(""), "replace"),
+"sort": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":{"columns":[]},"type":"object","properties":{"columns":{"type":"array","items":{"type":"object","properties":{"key":{"type":"string"},"dir":{"type":"string","enum":["asc","desc"]}},"required":["key","dir"]}}},"required":["columns"]}) as z.ZodType<Immutable<{"columns": Array<{"key": string; "dir": "asc" | "desc"}>}>>).default({"columns":[]}), "replace"),
+"hidden": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":{},"type":"object","propertyNames":{"type":"string"},"additionalProperties":{"type":"boolean","const":true}}) as z.ZodType<Immutable<{}>>).default({}), "replace"),
+"overlay": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"draft","type":"string","enum":["draft","live","saved"]}) as z.ZodType<Immutable<"draft" | "live" | "saved">>).default("draft"), "push"),
+"drill": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string","maxLength":512}) as z.ZodType<Immutable<string>>).default(""), "push"),
+"inspector": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string","maxLength":1024,"pattern":"^((part|param):.+)?$"}) as z.ZodType<Immutable<string>>).default(""), "replace"),
+"doc": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"text","type":"string","enum":["text","sheet"]}) as z.ZodType<Immutable<"text" | "sheet">>).default("text"), "replace"),
+selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
+}, agent: { policy: "Use the route fields as declared." } };

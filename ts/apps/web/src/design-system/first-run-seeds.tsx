@@ -9,7 +9,7 @@ import { FirstOpenCard, ProviderRepair } from "#/chat/first-open";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { SettingsBody } from "#/machine/body";
 import { UpdateGroup } from "#/machine/update";
-import { MACHINE_SEEDS } from "#/open/seeds";
+import { MACHINE_SEEDS } from "#/design-system/open-examples";
 import type { Login, ProvidersState } from "#/workbench/provider/providers";
 
 import { Demo } from "./exhibit";

@@ -12,7 +12,7 @@ import { InvalidRead } from "./native-reads.ts";
 
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { execFile, spawn } from "node:child_process";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { Context, Deferred, Effect, Layer, type Scope } from "effect";
 import { ReceiptExport, admittedReceiptStamps, recordUpdateFact } from "./receipt-export.ts";
@@ -30,6 +30,22 @@ export type HostInputSelection =
   | { readonly kind: "live"; readonly capture: "automatic" | "off" }
   | { readonly kind: "recording"; readonly directory: string; readonly at: string | null; readonly bindings?: ReadonlyMap<string, string> };
 
+/** One exact process flag: --recording <directory>; all other host flags keep their existing owner. */
+export const recordingInputSelection = (argv: readonly string[]): Effect.Effect<HostInputSelection | undefined, InvalidRead> => {
+  const flags = argv.filter((arg) => arg.toLowerCase().startsWith("--recording"));
+  if (!flags.length) return Effect.succeed(undefined);
+  // Historical entry cannot inherit the live launcher's incumbent-eviction authority.
+  if (argv.includes("--take-over-host"))
+    return Effect.fail(new InvalidRead({ message: "Recording cannot take over another host", status: 400, problem: "recording.argument" }));
+  const directory = argv[argv.indexOf("--recording") + 1];
+  if (flags.length !== 1 || flags[0] !== "--recording" || !directory?.trim() || directory.startsWith("-") || directory.includes("\0"))
+    return Effect.fail(new InvalidRead({ message: "Use --recording <directory> exactly once", status: 400, problem: "recording.argument" }));
+  return Effect.try({
+    try: (): HostInputSelection => ({ kind: "recording", directory: resolve(directory), at: null }),
+    catch: () => new InvalidRead({ message: "Invalid --recording directory", status: 400, problem: "recording.argument" }),
+  });
+};
+
 /** Identity comes from the already admitted artifact stamp, never current HEAD or a path. */
 export const hostInputs = (stamp: ReceiptStamp | null, selection: HostInputSelection) => Effect.gen(function* () {
   if (selection.kind === "live" && selection.capture === "off")
@@ -42,14 +58,14 @@ export const hostInputs = (stamp: ReceiptStamp | null, selection: HostInputSelec
     const reader = yield* openRecordingReader(selection.directory, identity, bounds);
     return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null, bindings: selection.bindings && new Map(selection.bindings) })));
   }
-  const directory = join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "recordings", createHash("sha256").update(identity.build).digest("hex"), identity.catalog, stamp.processSessionId);
+  const directory = join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "recordings", createHash("sha256").update(identity.build).digest("hex"), identity.catalog, hostOwnership.serviceName, "history");
   // Automatic capture is ancillary to live input: a store that cannot open (full or I/O) stops
   // recording before its first taking, not the host. Identity and tamper problems stay strict.
   const lane = yield* openRecordingWriter(directory, identity, bounds).pipe(
     Effect.map((writer): HostInputLane => ({ kind: "live", captureStore: writer })),
     Effect.catch((error) =>
       error.problem === "recording.full" || error.problem === "recording.io"
-        ? Effect.succeed<HostInputLane>({ kind: "live", captureSetup: { at: 1, reason: "setup" } })
+        ? Effect.succeed<HostInputLane>({ kind: "live", captureSetup: { at: 1, stoppedAt: Date.now(), reason: "setup", site: "builtin", op: "capture.setup" } })
         : Effect.fail(error),
     ),
   );

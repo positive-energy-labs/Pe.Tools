@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { lifetime } from "./family-actions.ts";
+import { lifetime } from "./document-lifetime.ts";
 import { command, refused, type CommandContext } from "./command-executor.ts";
 import { preparedTakeoffSchema } from "@pe/agent-contracts";
 import type { NativeProcess, SdkReceiptReader } from "./native-receipts.ts";
@@ -44,6 +44,7 @@ export const fileVersion = async (path: string) =>
     .digest("hex");
 export type TakeoffActionDependencies = {
   workspace?: RouteWorkspace;
+  workReads?: import("./command-executor.ts").CommandResources["workReads"];
   sdk?: SdkReceiptReader;
   fileVersion?: typeof fileVersion;
   openFile?: (path: string) => Promise<RhvacExtractData>;
@@ -184,12 +185,13 @@ export function takeoffExecutors(
       seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Materialization", (native) =>
-          value(ctx, native, "takeoffs.partition", {
-            ...ctx.admission.input,
+        runCarrier(ctx, execution, captures, bridge, "Materialization", (native) => {
+          const { work: _work, ...input } = ctx.admission.input;
+          return value(ctx, native, "takeoffs.partition", {
+            ...input,
             runId: ctx.admission.id,
-          }),
-        ),
+          });
+        }),
     }),
     "rooms.partition": command(commands["rooms.partition"], preparedCarrierSchema, {
       seal: (p) => ({ request: { process: p.process } }),

@@ -1,22 +1,11 @@
-import { field, text, type RouteDeclaration } from "../route-field.ts";
-import { entityFields, tableFields, workLinesField } from "./entity.ts";
-
-/** The Families query a page opens with: its filter clauses that default on (web `FAMILIES_FILTERS`). */
-export const FAMILIES_DEFAULT_QUERY = "!empty !absent";
-
-export const familiesAddress = {
-  path: "/families",
-  title: "Families",
-  fields: {
-    ...entityFields,
-    ...tableFields(FAMILIES_DEFAULT_QUERY),
-    lines: workLinesField,
-    /** History's picked past read (a saved matrix reading id); empty = the newest. */
-    past: field(text(128), { url: "push", agent: "set" }),
-  },
-  agent: {
-    finds: ["history", "past read", "rules", "query", "columns"],
-    policy:
-      "Change the visible Families view: stage, the Work lines tab (suggestions, edits, all), the query line, sort (`-key` descending), hidden columns, and in History the past read (an id from facts; empty = newest). Facts give the rule help, the visible reading and its counts, and the past reads. The opened spec (pod, path) is the person's: read it. A view change never reads the matrix, writes Work or touches Revit.",
-  },
-} satisfies RouteDeclaration;
+// Generated from families/route.ts by codegen:routes. Do not edit.
+import { z } from "zod";
+import type { Immutable } from "../route-kernel-data.ts";
+import { focusSelectionSchema } from "../route-kernel-codecs.ts";
+import { jsonCodec } from "../route-field.ts";
+const field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: jsonCodec(schema) });
+export const familiesAddress = { path: "/families" as const, title: "Families", fields: {
+"readId": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "replace"),
+"focus": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "replace"),
+selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
+}, agent: { policy: "Use the route fields as declared." } };

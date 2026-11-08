@@ -13,7 +13,8 @@ import {
 } from "@pe/agent-contracts";
 import { BridgeError } from "@pe/host-internal/dispatch";
 import { canonicalJson } from "@pe/host-internal/native-read";
-import type { HostSessionScope } from "@pe/host-contracts/operation-types";
+import { bridgeSessionsListSchema, type BridgeSessionsListData, type HostSessionScope } from "@pe/host-contracts/operation-types";
+import { listBridgeSessions } from "./local-ops.ts";
 import type { DoorFailure, RequestIdentity } from "@pe/host-internal/request-contracts";
 import { RevitBridge } from "./bridge.ts";
 import { InvalidRead } from "./native-reads.ts";
@@ -35,6 +36,8 @@ export interface DocumentRow {
 }
 type Read<A> = Effect.Effect<A, DoorFailure, RequestIdentity>;
 interface Inventory {
+  readonly list: () => Read<BridgeSessionsListData>;
+  readonly subscribe: (notify: () => void) => () => void;
   /** The canonical bridge session behind an SDK alias or bridge id (`SdkSession.resolveAttachment`). */
   readonly attachment: (id: string) => Read<{ readonly sessionId: string }>;
   /** The exact attachment a reading scope names (`SdkSession.resolve`). */
@@ -47,7 +50,7 @@ const sessionCodec = Schema.Struct({ sessionId: Schema.String });
 const documentRow = documentRefSchema.extend({ address: addressSchema.nullable() });
 const rowCodec = Schema.declare((u): u is DocumentRow => documentRow.safeParse(u).success);
 /** One selector's input and its fence: the selector with its exact arguments. */
-const selector = (name: keyof Inventory, args: Schema.Json) => {
+const selector = (name: Exclude<keyof Inventory, "subscribe">, args: Schema.Json) => {
   const scope = canonicalJson([name, args]);
   return { input: { kind: "document", scope } satisfies RecordedInput, scope };
 };
@@ -61,6 +64,8 @@ export class HostSessionInventory extends Context.Service<HostSessionInventory, 
       const sdk = yield* SdkSession;
       const bridge = yield* RevitBridge;
       return {
+        list: () => listBridgeSessions(bridge.list),
+        subscribe: (notify) => bridge.subscribe(() => notify()),
         attachment: (id) =>
           sdk.resolveAttachment({ id }).pipe(Effect.map(({ sessionId }) => ({ sessionId }))),
         session: (scope) => sdk.resolve(scope).pipe(Effect.map(({ sessionId }) => ({ sessionId }))),
@@ -97,7 +102,7 @@ export class HostSessionInventory extends Context.Service<HostSessionInventory, 
       HostSessionInventory,
       Effect.map(Effect.service(HostSessionInventory), (live) => {
         const keep = <A, I>(
-          name: keyof Inventory,
+          name: Exclude<keyof Inventory, "subscribe">,
           args: Schema.Json,
           codec: Schema.Codec<A, I>,
           read: Read<A>,
@@ -111,9 +116,12 @@ export class HostSessionInventory extends Context.Service<HostSessionInventory, 
               codec,
               Effect.provide(read, context),
               observed,
+              `inventory.${name}`,
             );
           });
         return {
+          list: () => keep("list", null, bridgeSessionsListSchema, live.list()),
+          subscribe: live.subscribe,
           attachment: (id) => keep("attachment", id, sessionCodec, live.attachment(id)),
           session: (scope) => keep("session", scope, sessionCodec, live.session(scope)),
           document: (ref) => keep("document", ref, rowCodec, live.document(ref)),
@@ -125,11 +133,13 @@ export class HostSessionInventory extends Context.Service<HostSessionInventory, 
     reader: RecordingReader,
     bindings: ReadonlyMap<string, string> = new Map(),
   ) => {
-    const replay = <A, I>(name: keyof Inventory, args: Schema.Json, codec: Schema.Codec<A, I>) => {
+    const replay = <A, I>(name: Exclude<keyof Inventory, "subscribe">, args: Schema.Json, codec: Schema.Codec<A, I>) => {
       const { input, scope } = selector(name, args);
       return replayInput(reader, input, scope, codec, bindings.get(inputBindingKey(input, scope)));
     };
     return Layer.succeed(HostSessionInventory, {
+      list: () => replay("list", null, bridgeSessionsListSchema),
+      subscribe: () => () => {},
       attachment: (id) => replay("attachment", id, sessionCodec),
       session: (scope) => replay("session", scope, sessionCodec),
       document: (ref) => replay("document", ref, rowCodec),

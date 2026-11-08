@@ -73,7 +73,7 @@ export async function serveRoutes<E, R>(
  * The whole host (`makeHttpLive`) on isolated state and product homes. `terminal` is the human/cli
  * context the host writes beside its receipt, as the owner's own `pea` reads it.
  */
-export async function bootHost(options: Pick<Partial<import("../src/app.ts").HttpLiveOptions>, "inputs" | "fans"> & { clock?: number } = {}) {
+export async function bootHost(options: Pick<Partial<import("../src/app.ts").HttpLiveOptions>, "inputs" | "reads" | "webRoot" | "revitCompositionFactory"> & { clock?: number } = {}) {
   const base = process.env.PE_TEST_HOME_ROOT ?? tmpdir();
   const localAppData = mkdtempSync(join(base, "pe-host-real-"));
   const home = mkdtempSync(join(base, "pe-host-real-home-"));
@@ -99,11 +99,12 @@ export async function bootHost(options: Pick<Partial<import("../src/app.ts").Htt
         const handle = yield* Deferred.make<ServiceHostHandle>();
         const HttpLive = makeHttpLive({
           inputs: options.inputs ?? testInputContext(),
-          fans: options.fans,
+          reads: options.reads,
+          revitCompositionFactory: options.revitCompositionFactory,
           capabilities: { revit: true },
           port: 0,
           lifecycle: { latch, handle },
-          webRoot: webDir,
+          webRoot: options.webRoot === undefined ? webDir : options.webRoot,
         }).pipe(Layer.provide(HostReceipts.layer(null)),
           Layer.provide(options.clock === undefined ? Layer.empty :
             Layer.effectDiscard(TestClock.setTime(options.clock)).pipe(Layer.provideMerge(TestClock.layer()))));

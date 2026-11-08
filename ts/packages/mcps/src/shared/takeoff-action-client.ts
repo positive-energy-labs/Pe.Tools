@@ -26,9 +26,6 @@ import {
   type DocumentRef,
   type ActionReceipt,
   type SemanticActionKey,
-  familyCaptureSchema,
-  familyReads,
-  type FamilyReadKey,
   type WorkKey,
 } from "@pe/agent-contracts";
 
@@ -67,17 +64,17 @@ function retain(slot: string, value?: InvocationRecord) {
   else records.delete(slot);
 }
 const terminal = (row: ActionReceipt) => ["succeeded", "failed", "cancelled"].includes(row.state);
-const normalizedInput = (key: string, input: Record<string, unknown>) =>
-  Object.hasOwn(commands, key) ? commands[key as SemanticActionKey].input.parse(input) : input;
-function assertIdentity(admission: ActionAdmission, row: ActionReceipt) {
+function commandInput(key: string, input: Record<string, unknown>) {
+  return Object.hasOwn(commands, key) ? commands[key as SemanticActionKey].input.parse(input) : input;
+}
+
+async function assertIdentity(admission: ActionAdmission, row: ActionReceipt) {
   if (
-    row.id !== admission.id ||
-    row.key !== admission.key ||
+    row.id !== admission.id || row.key !== admission.key ||
     canonicalRouteInput(row.target) !== canonicalRouteInput(admission.target) ||
-    canonicalRouteInput(normalizedInput(row.key, row.input)) !==
-      canonicalRouteInput(normalizedInput(admission.key, admission.input))
-  )
-    throw Error(`Action '${admission.id}' returned a receipt for different intent or target`);
+    canonicalRouteInput(await commandInput(row.key, row.input)) !==
+      canonicalRouteInput(await commandInput(admission.key, admission.input))
+  ) throw Error(`Action '${admission.id}' returned a receipt for different intent or target`);
 }
 function transportLost(error: unknown) {
   if (error instanceof z.ZodError || (error as { receiptRejected?: boolean })?.receiptRejected)
@@ -175,8 +172,8 @@ export async function recoverAction(
   if (script) ({ key, input } = script);
   if (
     original.key !== key ||
-    canonicalRouteInput(normalizedInput(key, input)) !==
-      canonicalRouteInput(normalizedInput(key, original.input))
+    canonicalRouteInput(await commandInput(key, input)) !==
+      canonicalRouteInput(await commandInput(key, original.input))
   )
     throw Error(`Action '${id}' conflicts with its original intent`);
   if (target && canonicalRouteInput(target) !== canonicalRouteInput(original.target))
@@ -250,7 +247,7 @@ async function recoverInvocation(
 ): Promise<ActionReceipt | DetachedAction> {
   const row = await readAction(pending.id, base).catch(transportLost);
   if (row) {
-    if (pending.admission) assertIdentity(pending.admission, row);
+    if (pending.admission) await assertIdentity(pending.admission, row);
     retain(slot, { id: pending.id });
     return waitForAction(pending.id, base, waitMs, undefined, row);
   }
@@ -265,10 +262,12 @@ export async function submitAction(
   slot = retentionKey(base, admission.id, null),
 ): Promise<ActionReceipt | DetachedAction> {
   admission = structuredClone(actionAdmissionSchema.parse(admission));
+  const retainedAdmission = {...admission, input: await commandInput(admission.key, admission.input)};
   const prior = getRetained(slot);
-  if (prior?.admission && canonicalRouteInput(prior.admission) !== canonicalRouteInput(admission))
+  if (prior?.admission && canonicalRouteInput(prior.admission) !== canonicalRouteInput(retainedAdmission))
     throw Error(`Action '${prior.id}' has an unacknowledged immutable request`);
-  retain(slot, { id: admission.id, admission });
+  // Upload bytes travel in the POST only. Recovery retains the same digest intent, not a PDF in localStorage.
+  retain(slot, { id: admission.id, admission: retainedAdmission });
   const deadline = Date.now() + waitMs;
   inFlight().set(admission.id, base);
   let row: ActionReceipt | undefined;
@@ -284,7 +283,7 @@ export async function submitAction(
         );
       } catch {
         row = await readAction(admission.id, base, AbortSignal.timeout(5000)).catch(transportLost);
-        if (row) assertIdentity(admission, row);
+        if (row) await assertIdentity(admission, row);
         if (!row) {
           if (Date.now() >= deadline)
             return { state: "detached", id: admission.id, key: admission.key, acceptance };
@@ -299,7 +298,7 @@ export async function submitAction(
         throw refusal;
       }
       row = actionReceiptSchema.parse(await response.json());
-      assertIdentity(admission, row);
+      await assertIdentity(admission, row);
     }
     acceptance = "admitted";
     retain(slot, { id: admission.id });
@@ -364,9 +363,9 @@ export async function waitForAction(
         const release = observer(
           id,
           base,
-          (next) => {
+          async (next) => {
             try {
-              assertIdentity(original, next);
+              await assertIdentity(original, next);
               if (next.state !== "waiting" && next.state !== "running") finish(() => resolve(next));
             } catch (error) {
               finish(() => reject(error));
@@ -440,28 +439,6 @@ export async function controlAction(
   );
   if (!response.ok) throw Error(await response.text());
   return actionReceiptSchema.parse(await response.json());
-}
-export async function readFamilyCapture(
-  key: FamilyReadKey,
-  input: unknown,
-  scope: WorkKey,
-  target?: DocumentRef,
-  base = "",
-) {
-  const response = await fetch(`${base}/family/readings`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ key, input, scope, target }),
-  });
-  const value = await response.json();
-  if (!response.ok)
-    throw Object.assign(
-      Error((value as { error?: string }).error ?? `Family read failed (${response.status})`),
-      { status: response.status },
-    );
-  if (key === "family.read") return familyReads[key].result.parse(value);
-  if (key === "family.cancel-read") return familyReads[key].result.parse(value);
-  return familyCaptureSchema.parse(value);
 }
 
 export async function readActionStatuses(

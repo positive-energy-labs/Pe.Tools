@@ -1,22 +1,13 @@
+// Generated from pods/route.ts by codegen:routes. Do not edit.
 import { z } from "zod";
-import { field, text, type RouteDeclaration } from "../route-field.ts";
-
-export const podsAddress = {
-  path: "/pods",
-  title: "Pods",
-  fields: {
-    /**
-     * The open member. Its spec editor holds the person's unsaved typing, and a move to another
-     * member starts a fresh editor, so Pea reads the member and never moves it.
-     */
-    pod: field(text(), { url: "push", agent: "read" }),
-    path: field(text(1024), { url: "push", agent: "read" }),
-    /** The runs pane lists the open member's runs, or the whole pod's (a draft's run has no member). */
-    runs: field(z.enum(["member", "pod"]).default("member"), { url: "replace", agent: "set" }),
-  },
-  agent: {
-    finds: ["pod", "member", "runs"],
-    policy:
-      "Change the visible Pods view: which runs the runs pane lists (the open member's, or the whole pod's). Facts list the installed pods and their members, the open member's schema and its runs. The open member (pod, path) is the person's: read it. A view change never writes a member or runs anything.",
-  },
-} satisfies RouteDeclaration;
+import type { Immutable } from "../route-kernel-data.ts";
+import { focusSelectionSchema } from "../route-kernel-codecs.ts";
+import { jsonCodec } from "../route-field.ts";
+const field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: jsonCodec(schema) });
+export const podsAddress = { path: "/pods" as const, title: "Pods", fields: {
+"pod": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
+"path": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
+"runs": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","enum":["member","pod"]}) as z.ZodType<Immutable<"member" | "pod">>).default("member"), "replace"),
+"mode": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","enum":["form","raw"]}) as z.ZodType<Immutable<"form" | "raw">>).default("form"), "replace"),
+selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
+}, agent: { policy: "Use the route fields as declared." } };

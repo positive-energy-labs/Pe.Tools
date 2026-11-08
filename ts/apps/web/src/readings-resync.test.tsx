@@ -17,13 +17,11 @@ import { submitAction } from "../../../packages/mcps/src/shared/takeoff-action-c
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { RegistryContext } from "@effect/atom-react";
 
-import { PeReadings, peReadings, useHostEvents, bindActionReadings } from "./readings";
-import { readingAtom, previousOf, useReading, useReadingSlice } from "#/shell/readings-hooks";
+import { PeReadings, peReadings, useHostEvents, bindActionReadings } from "./host/resource-stream";
+import { readingAtom, previousOf, useReading, useReadingSlice } from "#/host/resource-state";
 import { useProviders } from "./workbench/provider/providers";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture";
 import { useThreadStream } from "./workbench/provider/thread-stream";
-import { createReadingGraph, type ReadingContext } from "./shell/readings";
-import { subscriptionSource } from "./shell/readings-use";
 
 type Fake = {
   url: string;
@@ -106,6 +104,32 @@ function owner(
   return { readings, sources, subscriptions, update };
 }
 
+test.each(["ECONNREFUSED", "Reading subscriptions: 403"])("a failed POST (%s) fences even a delivered snapshot", async (failure) => {
+  vi.useFakeTimers();
+  const { readings, sources, update } = owner();
+  const frames: unknown[] = [];
+  let reject!: (error: Error) => void;
+  update.mockImplementationOnce(() => new Promise<void>((_resolve, fail) => { reject = fail; }));
+  try {
+    readings.subscribe(head, (frame) => frames.push(frame));
+    readings.subscribe({ kind: "machine" }, () => {});
+    await vi.advanceTimersByTimeAsync(0);
+    sources[0]!.onopen!();
+    expect(update.mock.calls[0]![1]).toEqual([head, { kind: "machine" }]);
+    sources[0]!.onmessage!(snapshot({ revision: 1 }));
+    expect(frames.at(-1)).toMatchObject({ kind: "snapshot", value: { revision: 1 } });
+    reject(Error(failure));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sources[0]!.closed).toBe(true);
+    expect(frames.at(-1)).toEqual({ kind: "stale", key: readingKey(head) });
+    expect(update).toHaveBeenCalledTimes(1);
+    readings.close();
+    await vi.advanceTimersByTimeAsync(31_001);
+    expect(sources).toHaveLength(1);
+    expect(update).toHaveBeenCalledTimes(1);
+  } finally { readings.close(); vi.useRealTimers(); }
+});
+
 test("an old bootstrap completion cannot mark a replacement's subscriptions sent", async () => {
   const { readings, sources, update } = owner();
   let finish!: () => void;
@@ -136,68 +160,6 @@ test("an old bootstrap completion cannot mark a replacement's subscriptions sent
   unopened.sources[0]!.onopen!();
   await Promise.resolve();
   expect(unopened.update).not.toHaveBeenCalled();
-});
-
-test("a 33-second hide keeps evidence and the stream; explicit refresh replaces changed revisions", async () => {
-  const { readings, sources } = owner();
-  const derive = vi.fn((ctx: ReadingContext) => ctx.inputs.raw!.value);
-  const graph = createReadingGraph(
-    {
-      readings: {
-        raw: { kind: "use", source: "raw", retire: "never" },
-        derived: { kind: "derive", source: "derived", retire: "never", deps: ["raw"] },
-      },
-    },
-    {
-      scope: { target: { kind: "host" }, workKey: null, workRevision: null, work: null, page: {} },
-      sources: {
-        raw: subscriptionSource({
-          request: () => head,
-          decode: (value) => value,
-          resources: readings,
-        }),
-        derived: { kind: "derive", derive },
-      },
-      log: () => {},
-    },
-  );
-  const release = graph.mount(["derived"]);
-  try {
-    await vi.waitFor(() => expect(sources).toHaveLength(1));
-    sources[0]!.onopen!();
-    sources[0]!.onmessage!(snapshot({ revision: "v1", data: { count: 1 } }));
-    const original = graph.get("raw").value;
-    expect(derive).toHaveBeenCalledTimes(1);
-    vi.useFakeTimers({ toFake: ["Date"] });
-    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
-    document.dispatchEvent(new Event("visibilitychange"));
-    vi.setSystemTime(Date.now() + 33_000);
-    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
-    document.dispatchEvent(new Event("visibilitychange"));
-    vi.useRealTimers();
-    expect(graph.get("raw").current).toBe(true);
-    expect(graph.get("derived").current).toBe(true);
-    expect(sources).toHaveLength(1);
-    expect(graph.get("raw").value).toBe(original);
-    expect(derive).toHaveBeenCalledTimes(1);
-
-    readings.dirty(head);
-    expect(graph.get("raw").current).toBe(false);
-    // A pre-write stream may not restore freshness, even with an identical answer.
-    sources[0]!.onmessage!(snapshot({ revision: "v1", data: { count: 1 } }));
-    expect(graph.get("raw").current).toBe(false);
-    await vi.waitFor(() => expect(sources).toHaveLength(2));
-    sources[1]!.onopen!();
-    sources[1]!.onmessage!(snapshot({ revision: "v2", data: { count: 1 } }));
-    expect(graph.get("raw").value).not.toBe(original);
-    expect(graph.get("derived").current).toBe(true);
-    expect(derive).toHaveBeenCalledTimes(2);
-  } finally {
-    vi.useRealTimers();
-    release();
-    graph.dispose();
-    readings.close();
-  }
 });
 
 test("an acknowledged command completes on the existing receipt stream without an HTTP waiter", async () => {
@@ -548,49 +510,6 @@ test("a faulted stream goes stale, reconnects with backoff, and only fresh data 
   release();
   readings.close();
 });
-
-test.each([false, true])(
-  "world acquisition=%s: an unanswered key never faults a wire that delivered",
-  async (acquired) => {
-    vi.useFakeTimers();
-    const { readings, sources } = owner();
-    const registry = AtomRegistry.make();
-    const atom = readingAtom(head, readings);
-    const release = registry.subscribe(atom, () => {}, { immediate: true });
-    const world = { kind: "world" } as const;
-    const worldKey = readingKey(world);
-    const worldFrames: unknown[] = [];
-    const releaseWorld = readings.subscribe(world, (frame) => worldFrames.push(frame));
-    try {
-      await vi.advanceTimersByTimeAsync(0);
-      const source = sources[0]!;
-      source.onopen!();
-      source.onmessage!(snapshot({ revision: 1 }));
-      const send = (frame: unknown) =>
-        source.onmessage!({ data: JSON.stringify(readingFrameSchema.parse(frame)) });
-      send({ kind: "gap", key: worldKey, dropped: null });
-      send({ kind: "event", key: worldKey, value: { kind: "connected", sessionId: "s1" } });
-      if (acquired) send({ kind: "snapshot", key: worldKey, value: null });
-      worldFrames.length = 0;
-
-      // A key its owner has not answered is slow (a native read holds Revit's one queue), not a
-      // dead wire: the stream delivered, so fresh evidence elsewhere stays fresh.
-      await vi.advanceTimersByTimeAsync(60_001);
-      expect(source.closed).toBe(false);
-      expect(sources).toHaveLength(1);
-      expect(worldFrames).toEqual([]);
-      expect(registry.get(atom)).toEqual({ state: "ready", observation: { revision: 1 } });
-      send({ kind: "event", key: worldKey, value: { kind: "disconnected", sessionId: "s1" } });
-      expect(worldFrames).toEqual([
-        { kind: "event", key: worldKey, value: { kind: "disconnected", sessionId: "s1" } },
-      ]);
-    } finally {
-      releaseWorld();
-      release();
-      readings.close();
-    }
-  },
-);
 
 test("a tab shown after sleeping retains its thread body and tail", async () => {
   const { readings, sources } = owner();

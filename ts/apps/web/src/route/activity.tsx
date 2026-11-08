@@ -15,6 +15,7 @@ type Disposable = { dispose(): void };
 /** A retained tree owns local state, but only the addressed tab may affect the outside world. */
 export interface RouteActivityScope {
   pathname: string;
+  /** Retained address codec text; semantic decoding belongs to its Page, after capture. */
   search: Record<string, unknown>;
   readonly current: () => boolean;
   retain(owner: Disposable): void;

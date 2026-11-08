@@ -14,7 +14,6 @@ import type {
   SchemaValue,
   WorkOf,
 } from "./route-kernel-page.ts";
-import type { RouteStateSpec } from "./route-state.ts";
 import type { WorkSchema } from "./route-kernel-page.ts";
 import type { ExecutionTarget } from "./target.ts";
 import type { JournalSubmission, Observation, WorkWriteOutcome } from "./work-journal-door.ts";
@@ -26,6 +25,7 @@ import type { JournalSubmission, Observation, WorkWriteOutcome } from "./work-jo
  */
 export const presentCellSchema = z.strictObject({
   key: z.string(),
+  group: z.string().optional(),
   label: z.string(),
   before: z.string().nullable(),
   after: z.string(),
@@ -63,6 +63,14 @@ type IntentForEffect<I, Effect> = Effect extends "ModelWrite"
 type CommandIntent<E extends EntryTable, K> = K extends keyof E
   ? IntentForEffect<Input<E, K>, E[K]["axes"]["effect"]>
   : never;
+type Intent<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, V> = V extends {
+  kind: "local";
+  entry: infer K;
+}
+  ? K extends keyof NonNullable<G["local"]>
+    ? SchemaValue<S, NonNullable<G["local"]>[K]["input"]>
+    : never
+  : CommandIntent<E, At<V, "entry">>;
 type Output<E extends EntryTable, K> = K extends keyof E ? z.output<E[K]["output"]> : never;
 export type ReadingValue<
   G extends RouteGraphJson,
@@ -118,7 +126,7 @@ export interface BodyContext<
   readonly work: Immutable<Pick<WorkOf<G, S>, Extract<DepKeys<D, "work">, keyof WorkOf<G, S>>>>;
   readonly readings: Reads<G, S, E, DepKeys<D, "readings">>;
 }
-/** Predicates/salvage are global observers: invalidate on every Page/Work/reading
+/** Predicates are global observers: invalidate on every Page/Work/reading
  * publication. They are never scheduled under a reading's narrower dependency declaration. */
 export interface GlobalBodyContext<
   G extends RouteGraphJson,
@@ -190,7 +198,7 @@ type TargetPatches<G extends RouteGraphJson, S extends SchemaTable, V> = V exten
 type PageVerbPatch<G extends RouteGraphJson, S extends SchemaTable, V> = V extends {
   fields: readonly (infer K)[];
 }
-  ? Partial<Pick<PageOf<G, S>, Extract<K, RoleKeys<G, "query" | "draft">>>>
+  ? Partial<Pick<PageOf<G, S>, Extract<K, RoleKeys<G, "query" | "draft" | "device" | "transient">>>>
   : never;
 type VerbInput<
   G extends RouteGraphJson,
@@ -213,7 +221,9 @@ type WorkVerbOutcome<V> = V extends { review: "none" }
       ? MoveResult
       : V extends { kind: "command" }
         ? JournalSubmission
-        : void
+        : V extends { kind: "local" }
+          ? { readonly kind: "local"; readonly press: string }
+          : void
   : V extends { review: "shown" }
     ?
         | { readonly kind: "review"; readonly preview: unknown }
@@ -251,18 +261,6 @@ export interface WorkHistoryPort<Meta = import("./route-graph.ts").GraphJsonValu
   redo(press?: string): unknown;
   revert(press?: string): unknown;
 }
-/** Recovery is composed by the mount. Routes never receive a raw reset or Work key. */
-export interface WorkRecoveryPort {
-  state(): Readonly<{
-    sentence: string | null;
-    startFresh: boolean;
-    carryOver: boolean;
-    busy: boolean;
-    problem: string | null;
-  }>;
-  startFresh(): Promise<unknown>;
-  carryOver(): Promise<unknown>;
-}
 export type PaneContext<
   G extends RouteGraphJson,
   S extends SchemaTable,
@@ -278,22 +276,11 @@ export type PaneContext<
     ) => Observation<WorkWriteOutcome>;
   };
   readonly history?: "work" extends keyof G ? WorkHistoryPort<HistoryMeta<G, S>> : never;
-  readonly recovery?: "work" extends keyof G ? WorkRecoveryPort : never;
   readonly work: Immutable<WorkOf<G, S>> | null;
   /** Issued with this rendered Work value. Its token.scope.identity.work is the handle
    * and workRevision is the accepted revision. Kernel membership rejects copied bases. */
   readonly workBasis: InvocationToken | null;
   readonly readings: Reads<G, S, E, G["panes"][P]["draws"][number]>;
-  /** Declared explicit geometry readings only. The mount owns invocation and refresh. */
-  readonly readingActions?: {
-    readonly [K in Extract<
-      G["panes"][P]["draws"][number],
-      keyof G["readings"]
-    > as G["readings"][K] extends { geometry: { representation: "detailed" } } ? K : never]: {
-      readDetailed(): void;
-      refresh(): void;
-    };
-  };
   /** Event-only row placement; the mount refuses dispatch during pane draw. */
   readonly place?: G["panes"][P]["verbs"] extends { row: infer R; allowed: readonly (infer V)[] }
     ? (
@@ -301,8 +288,9 @@ export type PaneContext<
         input: unknown,
       ) => Readonly<Partial<Record<Extract<V, string>, () => unknown>>>
     : never;
-  readonly readCosts?: Readonly<Record<string, import("./native-read-door.ts").ReadCost>>;
   readonly visible: boolean;
+  /** Presentational Place provenance only; never Target, Work or dispatch authority. */
+  readonly fixture: string | null;
   readonly verbs: {
     readonly [V in Extract<Allowed<G["panes"][P]["verbs"]>, keyof G["verbs"]>]: (
       input: VerbInput<G, S, V>,
@@ -408,7 +396,7 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         (
           ctx: InvocationContext<G, S, E, G["verbs"][K]>,
           input: VerbInput<G, S, K>,
-        ) => CommandIntent<E, At<G["verbs"][K], "entry">>
+        ) => Intent<G, S, E, G["verbs"][K]>
       >
     | Slot<
         At<G["verbs"][K], "args">,
@@ -510,7 +498,17 @@ export interface RouteSeed<G extends RouteGraphJson, S extends SchemaTable, E ex
   readonly work?: WorkOf<G, S>;
   readonly works?: Readonly<Record<string, WorkOf<G, S>>>;
   readonly target?: Immutable<ExecutionTarget>;
-  readonly readings: { readonly [K in keyof G["readings"]]?: ReadingValue<G, S, E, K> };
+  readonly readings: {
+    readonly [K in keyof G["readings"]]?:
+      | ReadingValue<G, S, E, K>
+      | {
+          readonly fixtureSelect: {
+            readonly fields: readonly string[];
+            readonly values: Readonly<Record<string, ReadingValue<G, S, E, K>>>;
+            readonly fallback: ReadingValue<G, S, E, K>;
+          };
+        };
+  };
   readonly queries?: {
     readonly [K in keyof G["verbs"] as G["verbs"][K] extends { kind: "query" }
       ? K
@@ -526,16 +524,6 @@ export type BodySlots<
   E extends EntryTable,
   Render = unknown,
 > =
-  | (G extends { work: { migrations: infer M } }
-      ? {
-          [K in keyof M & string]: Slot<
-            M[K],
-            `work.migrations.${K}`,
-            "migration",
-            NonNullable<RouteStateSpec<z.ZodType>["migrations"]>[number]
-          >;
-        }[keyof M & string]
-      : never)
   | ReadingSlots<G, S, E>
   | PickerSlots<G, S, E>
   | VerbSlots<G, S, E>
@@ -581,21 +569,7 @@ export type BodySlots<
         ctx: BodyContext<G, S, E, { deps: At<G, "transitionDeps"> }>,
       ) => DecodeResult<PagePatch<G, S>>
     >
-  | Slot<
-      At<G, "salvagePresent">,
-      "salvagePresent",
-      "present",
-      (
-        result: WorkPatches<G, S>,
-        evidence: Immutable<BodyContext<G, S, E, { deps: At<G, "salvageDeps"> }>>,
-      ) => Presentation
-    >
-  | Slot<
-      At<G, "salvage">,
-      "salvage",
-      "salvage",
-      (old: unknown, ctx: GlobalBodyContext<G, S, E>) => DecodeResult<WorkPatches<G, S>>
-    >;
+;
 export type BodyBindings<
   G extends RouteGraphJson,
   S extends SchemaTable,

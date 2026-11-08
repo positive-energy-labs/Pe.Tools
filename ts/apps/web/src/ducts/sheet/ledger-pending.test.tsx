@@ -3,7 +3,7 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 import type { LedgerProps } from "./types";
 import { Ledger } from "./view";
-import { openSheetSchema } from "../neutral";
+import { openFanSheetSchema as openSheetSchema } from "@pe/agent-contracts";
 import fixture from "./sheet.fixture.json";
 
 afterEach(cleanup);

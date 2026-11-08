@@ -9,13 +9,13 @@ import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 vi.mock("#/open/bay", () => ({ useThreadSummaries: () => null }));
-vi.mock("#/shell/readings-hooks", () => ({
+vi.mock("#/host/resource-state", () => ({
   useInventory: () => ({ state: "absent" }),
   previousOf: () => undefined,
   inventoryOf: () => [],
 }));
 
-import { BindPicker } from "./picker";
+import { BindPicker } from "./bind-picker";
 
 afterEach(cleanup);
 

@@ -27,7 +27,7 @@ export interface ExecutableMember {
  * executables is [{client,entry,members:[{path,sha256}]}] sorted by client then entry,
  * members sorted by path. Sorts use UTF-16 code units, never locale ordering.
  * Each member hash covers exact shipped artifact bytes. Include the transitive closure
- * of body, renderer, adapter, refinement, transform, codec, migration and seed modules,
+ * of body, renderer, adapter, refinement, transform, codec and seed modules,
  * plus all transitively loaded assets/dependencies. No timestamps or absolute paths.
  * Bundles may represent that closure as one member. Externals need pinned content hashes;
  * unresolved/dynamic dependency closure refuses admission. Function.toString is forbidden.
@@ -38,7 +38,7 @@ export interface RouteFingerprintInput {
   readonly data: RouteGraphJson;
   readonly contracts: readonly { readonly id: string; readonly sha256: string }[];
   readonly executables: readonly {
-    readonly client: "web" | "pea" | "shared";
+    readonly client: "web" | "pea" | "shared" | "host";
     readonly entry: string;
     readonly members: readonly ExecutableMember[];
   }[];
@@ -100,8 +100,8 @@ export type RouteBodyRender<B> =
  * transitive native geometry dependency requires an overview or explicit-detail declaration.
  * Journal-owned semantic plans retain their Geometry and Read or rolled-back TransactRead axes without that policy. Default
  * overview closure contains no detailed request. Detail demand AND refresh must be explicit.
- * Validate mixed-subject schema/identity agreement, finite dependency keys and the complete
- * migration chain (saved age to work.version), then hash migration bytes with all other bodies. */
+ * Validate mixed-subject schema/identity agreement and finite dependency keys, then hash
+ * declared body bytes. */
 export interface RouteAdmissionPort {
   admit<
     G extends RouteGraphJson,

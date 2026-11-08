@@ -1,14 +1,8 @@
-import { z } from "zod";
-import {
-  createAdmittedRouteRegistry,
-  resolveRouteBindings,
-} from "../../../../packages/agent-contracts/src/route-module";
-import { routeWorkSubject } from "../../../../packages/agent-contracts/src/route-work-subject";
-import { useMemo, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { publicRoutes } from "../route/route-discovery";
-import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
-import type { AdmittedAddressPort } from "../shell/admitted-address";
-import { applicationRouteShell as ApplicationRouteShell } from "../shell/application-route-shell";
+import type { AdmittedAddressPort } from "../shell/typed-address";
+import { localId } from "../route/typed-route";
+import type { TypedRoute } from "../route/typed-route";
 export interface HostedRouteProps {
   thread: string;
   visible: boolean;
@@ -17,30 +11,16 @@ export interface HostedRouteProps {
 }
 /** A hosted Place never reads or writes the outside router address. */
 export function hostedRouteAddress(
-  route: AdmittedRoute,
+  route: TypedRoute,
   { thread, target, work }: HostedRouteProps,
 ): AdmittedAddressPort {
   let search = new URLSearchParams({ thread, target: target ?? "", work: work ?? "" });
   const listeners = new Set<() => void>();
-  if (work !== undefined && route.data.workSubject) {
-    const registry = createAdmittedRouteRegistry();
-    const registration = registry.register(route);
-    try {
-      const bindings = resolveRouteBindings(registry, route)!;
-      const field = route.data.fields[route.data.workSubject]!;
-      if (field.role !== "subject") throw Error("Work subject must be a subject field");
-      const codec = bindings.codecs[field.codec]!;
-      const decoded = z
-        .object({ ok: z.literal(true), value: z.unknown() })
-        .parse(codec.decode(work));
-      const value = bindings.schemas[field.schema]!.parse(decoded.value);
-      if (routeWorkSubject(route.data, bindings, { [route.data.workSubject]: value }) !== work)
-        throw Error("Hosted Work subject differs from recorded Work");
-      search.set(route.data.workSubject, z.string().parse(codec.encode(value)));
-    } finally {
-      registration.deactivate();
-    }
-  }
+  const retainSubject = () => {
+    const subject = route.spec.subject;
+    if (work !== undefined && subject) search.set(subject.field, JSON.stringify(route.spec.fields[subject.field]!.schema.parse({kind:"ids", ids:[localId(route.spec.key, work)]})));
+  };
+  retainSubject();
   return {
     read: () => new URLSearchParams(search),
     write(next) {
@@ -48,6 +28,7 @@ export function hostedRouteAddress(
       search.set("thread", thread);
       search.set("target", target ?? "");
       search.set("work", work ?? "");
+      retainSubject();
       for (const listener of listeners) listener();
     },
     subscribe(listener) {
@@ -57,18 +38,6 @@ export function hostedRouteAddress(
       };
     },
   };
-}
-export function HostedAdmittedRoute({
-  route,
-  ...props
-}: HostedRouteProps & { route: AdmittedRoute }) {
-  const address = useMemo(
-    () => hostedRouteAddress(route, props),
-    [route, props.thread, props.target, props.work],
-  );
-  return props.visible ? (
-    <ApplicationRouteShell route={route} address={address} />
-  ) : null;
 }
 /** The workbench consumes the same registration as chat summaries and recorded exits. */
 export function HostedRoute({ route, ...props }: HostedRouteProps & { route: string }) {

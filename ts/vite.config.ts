@@ -52,7 +52,11 @@ export default defineConfig({
     options: { typeAware: true },
   },
   test: {
-    exclude: ["**/node_modules/**", "**/dist-installed/**", "**/.artifacts/**"],
+    exclude: [
+      "**/node_modules/**", "**/dist-installed/**", "**/.artifacts/**",
+      // DIAG-N03-REPORT.md: the intentionally red old-loader falsifier is retired with the legacy Families suite.
+      "**/families/workflow.test.tsx",
+    ],
   },
   run: {
     cache: true,

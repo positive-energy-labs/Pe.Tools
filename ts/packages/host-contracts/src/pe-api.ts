@@ -1,10 +1,10 @@
-import type { HostLocalCatalogEntry } from "./operation-types.ts";
 import { z } from "zod";
-import { podRouteDescriptorSchema } from "./pod-route.ts";
-export * from "./pod-route.ts";
 import { hostDescriptorSchema } from "./host-descriptor.ts";
+import type { HostLocalCatalogEntry } from "./operation-types.ts";
+import { podRouteDescriptorSchema } from "./pod-route.ts";
 import { deviceListingSchema, deviceSessionSchema, pairingSchema } from "./remote-device.ts";
 import type { SessionObservation } from "./vendor/generated/pe-revit-contract.ts";
+export * from "./pod-route.ts";
 export * from "./remote-device.ts";
 
 /** An authored scratch Page. Publication needs no document target. */
@@ -159,6 +159,12 @@ export type PeApiSchemas = Record<
   | "turnElementNamesObservationSchema"
   | "routeStatePatchSchema"
   | "workWriteSchema"
+  | "valueReadRequest"
+  | "valueReadResponse"
+  | "fansReadRequest"
+  | "fansReadResponse"
+  | "ductsReadRequest"
+  | "ductsReadResponse"
   | "ductsSheetRequestSchema"
   | "ductsSheetResponseSchema"
   | "ductsRosterRequestSchema"
@@ -173,6 +179,8 @@ export type PeApiSchemas = Record<
   | "diagnosticBodySchema"
   | "actionAdmissionSchema"
   | "actionReceiptSchema"
+  | "blobRefSchema"
+  | "blobUploadSchema"
   | "actionStatusSchema"
   | "actionControlInputSchema"
   | "familiesObservationSchema"
@@ -339,6 +347,7 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "gateway",
       "operation",
     ),
+    "blobs.put": route("POST", "/actions/blobs", schemas.blobUploadSchema as S["blobUploadSchema"], schemas.blobRefSchema as S["blobRefSchema"], "human-or-pea", "gateway", "human-or-pea"),
     "actions.admit": route(
       "POST",
       "/actions",
@@ -807,15 +816,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "human-or-pea",
     ),
     "work.get": route("GET", "/pe/route-state/:route", none, object, "read", "pe", "read"),
-    "work.salvage": route(
-      "GET",
-      "/pe/route-state/:route/salvage",
-      none,
-      object.nullable(),
-      "human",
-      "pe",
-      "human",
-    ),
     "work.apply": route(
       "POST",
       "/pe/route-state/:route/apply",
@@ -838,33 +838,8 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "pe",
       "human-or-pea",
     ),
-    "work.fresh": route(
-      "POST",
-      "/pe/route-state/:route/start-fresh",
-      z.object({}),
-      object,
-      "human",
-      "pe",
-      "human",
-    ),
-    "ducts.sheet": route(
-      "POST",
-      "/pe/ducts/sheet",
-      schemas.ductsSheetRequestSchema as S["ductsSheetRequestSchema"],
-      schemas.ductsSheetResponseSchema as S["ductsSheetResponseSchema"],
-      "read",
-      "pe",
-      "read",
-    ),
-    "ducts.roster": route(
-      "POST",
-      "/pe/ducts/roster",
-      schemas.ductsRosterRequestSchema as S["ductsRosterRequestSchema"],
-      schemas.ductsRosterResponseSchema as S["ductsRosterResponseSchema"],
-      "read",
-      "pe",
-      "read",
-    ),
+    "reads.events": route("GET", "/pe/read-events", none, object, "read", "pe", "read", "stream"),
+      "reads.value": route("POST", "/pe/reads/value", schemas.valueReadRequest as S["valueReadRequest"], schemas.valueReadResponse as S["valueReadResponse"], "read", "pe", "read"),
     "ducts.analysis": route(
       "POST",
       "/pe/ducts/analysis",

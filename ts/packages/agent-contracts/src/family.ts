@@ -16,16 +16,16 @@ import { settingsFieldStateSchema } from "./settings.ts";
 /** `/family` Work: an immutable capture baseline plus keyed JSON-pointer cells. */
 export const familyDraftSchema = z
   .object({
-    writeIntent: writeIntentSchema.optional(),
+    writeIntent: writeIntentSchema.optional().meta({ title: "Write scope", internal: true }),
     /** Immutable draft baseline; it is not a claim about current Revit state. */
-    reading: z.string().nullable().default(null),
+    reading: z.string().nullable().default(null).meta({ title: "Family reading" }),
     spec: z
       .object({ member: z.object({ pod: z.string(), path: z.string() }), doc: parsedDocViewSchema })
       .nullable()
-      .default(null),
-    cells: z.record(z.string(), settingsFieldStateSchema).default({}),
+      .default(null).meta({ title: "Attached PDF" }),
+    cells: z.record(z.string(), settingsFieldStateSchema).default({}).meta({ title: "Family fields" }),
     /** When the Reading these staged rungs rest on was taken, on the host's clock. The change mark compares against this. */
-    takenAt: z.string().nullable().default(null),
+    takenAt: z.string().nullable().default(null).meta({ title: "Captured at" }),
   })
   .strict();
 export type FamilyDraft = z.infer<typeof familyDraftSchema>;

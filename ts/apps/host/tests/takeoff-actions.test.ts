@@ -1,4 +1,4 @@
-import { testHostFiles, testDocumentMarks } from "./effect-test.ts";
+import { testDuctFiles, testDocumentMarks } from "./effect-test.ts";
 import { detachedBridge, sessionView, testConsents, captureStore } from "./effect-test.ts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -88,7 +88,7 @@ test.each(["selected", "unrelated", "none"] as const)(
       );
       const rendered = (await work.read(key, "rooms"))!;
       const owner = new ActionJournal(join(directory, "journal.jsonl"), Date.now);
-      const deps = { workspace: work, sdk: sdkSessions, files: testHostFiles(), marks: testDocumentMarks(bridge) };
+      const deps = { workspace: work, sdk: sdkSessions, files: testDuctFiles(), marks: testDocumentMarks(bridge) };
       const write = takeoffExecutors(captureStore(directory), bridge, deps)["rooms.write"];
       const entries: Record<string, ReturnType<typeof workWriteBoundary>> = {
         "rooms.write": workWriteBoundary(write, bridge, deps),
@@ -109,7 +109,7 @@ test.each(["selected", "unrelated", "none"] as const)(
           target: { kind: "document", ref: target },
           input: { work: { key, revision: rendered.revision } },
         },
-        { caller: { kind: "human", via: "local" }, basis: { kind: "human" } },
+        { caller: { kind: "pea", context: "rooms-test", thread: run.thread, run, root: run }, basis: null },
       );
       expect((await owner.wait("preview")).state).toBe("succeeded");
       await owner.invoke(

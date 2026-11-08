@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import { Switcher } from "@pe/kit/lang/switcher";
 import { SettingsBody } from "#/machine/body";
-import { MACHINE_SEEDS, type MachineSeed } from "#/open/seeds";
+import { MACHINE_SEEDS, type MachineSeed } from "#/design-system/open-examples";
 
 import { Demo } from "./exhibit";
 

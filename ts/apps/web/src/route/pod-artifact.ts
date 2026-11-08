@@ -18,7 +18,7 @@ const envelope = z.object({
     contracts: z.array(z.object({ id: z.string(), bytes: octets })),
     executables: z.array(
       z.object({
-        client: z.enum(["web", "pea", "shared"]),
+        client: z.enum(["web", "pea", "shared", "host"]),
         entry: z.string(),
         resolved: z.boolean(),
         members: z.array(z.object({ path: z.string(), bytes: octets })),
@@ -29,14 +29,12 @@ const envelope = z.object({
 
 /** Inventory is authority. The response stamps are consistency metadata only; the
  * existing loader recomputes every contract/member digest before evaluating bytes. */
-export async function admitPodArtifact(
-  row: PodRouteDescriptor,
-  value: unknown,
-  evaluate = evaluatePodBytes,
-) {
+export function podArtifactInput(row: PodRouteDescriptor, value: unknown): RouteArtifactBytes {
   if (!row.trusted) throw Error("Trust this Pod fingerprint before loading.");
   const wire = envelope.parse(value);
-  const identity = z.object({ key: z.string(), address: z.string() }).parse(wire.artifact.artifact.data);
+  const identity = z
+    .object({ key: z.string(), address: z.string() })
+    .parse(wire.artifact.artifact.data);
   if (identity.key !== row.workRoute || identity.address !== podRoutePath(row.key))
     throw Error("Pod route identity differs from inventory");
   if (
@@ -57,6 +55,14 @@ export async function admitPodArtifact(
       members: item.members.map((member) => ({ ...member, bytes: Uint8Array.from(member.bytes) })),
     })),
   };
+  return input;
+}
+export async function admitPodArtifact(
+  row: PodRouteDescriptor,
+  value: unknown,
+  evaluate = evaluatePodBytes,
+) {
+  const input = podArtifactInput(row, value);
   // loadRouteArtifact owns createRouteAdmission -> admitUnknown. Never mint a second handle.
   const result = await loadRouteArtifact(input, [...linkedCatalog().entries.values()], evaluate);
   if (!result.ok) throw Error(result.diagnostics.map((d) => `${d.path}: ${d.message}`).join("; "));

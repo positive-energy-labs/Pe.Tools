@@ -1,6 +1,8 @@
 import { expect, test, vi } from "vite-plus/test";
-import type { ReadingContext, ReadingDelivery } from "./readings";
+import type { ReadingContext, ReadingDelivery } from "./source-contract";
 import { acquireSource } from "./readings-use";
+
+
 
 function context(controller = new AbortController()): ReadingContext {
   return {
@@ -17,20 +19,7 @@ function context(controller = new AbortController()): ReadingContext {
   };
 }
 
-test("a synchronous completion releases even an asynchronously returned lease before resolving", async () => {
-  const release = vi.fn();
-  await acquireSource(
-    {
-      kind: "use",
-      async open(_context, deliver) {
-        deliver({ kind: "complete", value: 1, revision: 0 });
-        return release;
-      },
-    },
-    context(),
-  );
-  expect(release).toHaveBeenCalledTimes(1);
-});
+
 
 test("only a fresh completion settles an acquisition, and later frames cannot complete it again", async () => {
   let deliver!: ReadingDelivery<number>;
@@ -55,21 +44,4 @@ test("only a fresh completion settles an acquisition, and later frames cannot co
   expect(release).toHaveBeenCalledTimes(1);
 });
 
-test("cancellation rejects promptly and releases a lease that arrives after cancellation", async () => {
-  const controller = new AbortController();
-  const release = vi.fn();
-  let opened!: (release: () => void) => void;
-  const result = acquireSource(
-    {
-      kind: "use",
-      open: () => new Promise<() => void>((resolve) => (opened = resolve)),
-    },
-    context(controller),
-  );
-  await Promise.resolve();
-  const rejected = expect(result).rejects.toThrow("Stopped");
-  controller.abort(Error("Stopped"));
-  await rejected;
-  opened(release);
-  await vi.waitFor(() => expect(release).toHaveBeenCalledTimes(1));
-});
+

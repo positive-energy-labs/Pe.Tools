@@ -84,6 +84,13 @@ export function artifactRelative(root: string, path: string) {
   return from.replaceAll("\\", "/");
 }
 
+export class ContentAddressCorruption extends Error {
+  override readonly name = "ContentAddressCorruption";
+  constructor(readonly path: string, readonly expected: string, readonly actual: string) {
+    super(`ContentAddressCorruption: artifact hash collision at ${path}; hashes to ${actual}, expected ${expected}`);
+  }
+}
+
 /** The one artifact writer, for Pages, exports and Pods: no directory it creates or writes into
  * resolves outside `root`. `replace` swaps atomically; otherwise an existing artifact must already
  * hold the same bytes. Neither mode changes the supplied bytes. */
@@ -104,15 +111,32 @@ export async function writeArtifact(
     });
     artifactRelative(root, await realpath(directory));
   }
+  const expected = sha256Hex(bytes);
+  const existing = async () => {
+    let stored: Buffer;
+    try {
+      const resolved = await realpath(path);
+      artifactRelative(root, resolved);
+      stored = await readFile(resolved);
+    }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw error;
+    }
+    const actual = sha256Hex(stored);
+    if (actual !== expected) throw new ContentAddressCorruption(path, expected, actual);
+    return true;
+  };
+  if (!replace && await existing()) return path;
   const temporary = join(directory, `.artifact-${randomUUID()}`);
   try {
     await writeFile(temporary, bytes, { flag: "wx" });
     if (replace) await rename(temporary, path);
+    // Node rename can replace a concurrent winner; link atomically publishes only if absent.
     else
       await link(temporary, path).catch(async (error: NodeJS.ErrnoException) => {
         if (error.code !== "EEXIST") throw error;
-        artifactRelative(root, await realpath(path));
-        if (!(await readFile(path)).equals(bytes)) throw Error("Export artifact hash collision");
+        if (!await existing()) throw error;
       });
   } finally {
     await rm(temporary, { force: true });

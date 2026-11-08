@@ -54,14 +54,6 @@ export const workFeedFailureSchema = z.discriminatedUnion("kind", [
     expected: workFingerprintSchema,
     received: workFingerprintSchema,
   }),
-  z.strictObject({
-    kind: z.literal("migration-failed"),
-    routeKey: z.string(),
-    fromVersion: z.number().int().positive(),
-    toVersion: z.number().int().positive(),
-    step: z.number().int().positive().optional(),
-    message: z.string(),
-  }),
   z.strictObject({ kind: z.literal("failed"), code: z.string(), message: z.string() }),
 ]);
 export type WorkFeedFailure = z.infer<typeof workFeedFailureSchema>;
@@ -78,6 +70,7 @@ export type WorkAdmission = z.infer<typeof workAdmissionSchema>;
 
 export type WorkFeedState =
   | { readonly kind: "pending" }
+  | { readonly kind: "absent" }
   | {
       readonly kind: "failed";
       readonly failure: WorkFeedFailure;
@@ -90,7 +83,7 @@ export type WorkFeedState =
          * ending at snapshot.revision (or empty when nothing is retained). */
         readonly acks: readonly WorkWriteAck[];
         /** First revision the journal view may reach. Undo never crosses below it.
-         * Complete: first revision or last start-fresh boundary. Trimmed/unavailable:
+         * Complete: first revision. Trimmed/unavailable:
          * first retained revision, or snapshot.revision + 1 when none. */
         readonly from: WorkWriteAck["revision"];
       };

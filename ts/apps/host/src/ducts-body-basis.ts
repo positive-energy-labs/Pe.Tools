@@ -38,10 +38,12 @@ export function ductBodySubject(input: NativeReadInput): DuctsReadingRequest {
 
 export interface DuctsBasisRead {
   readonly recorded?: DuctsBodyBasis;
+  readonly refuse: (error: DoorFailure) => Effect.Effect<never, DoorFailure>;
   readonly link: (answer: Answer) => Effect.Effect<string | undefined, DoorFailure>;
   readonly consume: (body: DuctsBody, admittedTarget: Answer["actualTarget"]) => Effect.Effect<void, DoorFailure>;
 }
 export interface DuctsBodyBasisSource {
+  readonly replaying: boolean;
   readonly observed: TakingObserver;
   readonly prepare: (input: NativeReadInput, subject: DuctsReadingRequest) => Effect.Effect<DuctsBasisRead, DoorFailure>;
 }
@@ -58,14 +60,14 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
       native.set(taking.outcome.nativeRequestId, ids);
     }
   })));
-  return { observed: observer, prepare: (input, subject) => Effect.gen(function* () {
+  return { replaying: lane.kind === "recording", observed: observer, prepare: (input, subject) => Effect.gen(function* () {
     if (lane.kind === "fixture") return yield* refused("Fixture has no recorded Ducts basis", "recording.fixture");
     const store = lane.kind === "live" ? lane.captureStore! : lane.recordingStore;
     const stopCapture = (error: DoorFailure) => {
       if (lane.kind !== "live") return Effect.fail(error);
       const at = lane.captureStore!.capture.begin();
       return at === null ? Effect.void : lane.captureStore!.capture.stop(at,
-        error.problem === "recording.full" ? "full" : error.problem === "recording.io" ? "io" : "observer");
+        error.problem === "recording.full" ? "full" : error.problem === "recording.io" ? "io" : "observer", { site: "builtin", op: input.key });
     };
     const scope = canonicalJson(JSON.parse(JSON.stringify(input.scope)));
     const selector = canonicalJson(["ducts-body-basis", JSON.parse(JSON.stringify(subject))]);
@@ -92,8 +94,6 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
     };
     const codec = Schema.declare(validate);
     // A consumer's basis occurrence is reserved ONCE, here at prepare; link and consume reuse it.
-    // TODO: Record retained validation refusals as terminal basis outcomes before recording closes.
-    // Falsifier: invalidate an optional sheet, recover its roster, then replay that read set without live inputs.
     const consumption = yield* Effect.serviceOption(CurrentInputConsumption);
     const reserved = yield* attemptFor(basisInput, scope);
     if (reserved && Result.isFailure(reserved)) {
@@ -118,6 +118,11 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
     };
     return {
       recorded,
+      // A refused lookup has no body or native acquisition to link. Capture must preserve its failure (K4).
+      refuse: (error: DoorFailure) => lane.kind === "live"
+        ? under(captureInput(lane.captureStore!, basisInput, scope, codec, Effect.fail(error), observed, input.key)).pipe(
+            Effect.andThen(Effect.fail(error)), Effect.catch(() => Effect.fail(error)))
+        : Effect.fail(error),
       link: (answer: Answer) => Effect.gen(function* () {
         if (lane.kind === "live" && lane.captureStore!.capture.truncated()) return undefined;
         const candidates = recorded ? [recorded.nativeTakingId] :
@@ -145,7 +150,7 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
         if (!validate(basis) || (recorded && !sameTarget(recorded, basis)))
           return yield* refused("Retained owner evidence disagrees with the original basis");
         if (lane.kind !== "live") return;
-        yield* under(captureInput(lane.captureStore!, basisInput, scope, codec, Effect.succeed(basis), observed));
+        yield* under(captureInput(lane.captureStore!, basisInput, scope, codec, Effect.succeed(basis), observed, input.key));
         // Hits included: the ORIGINAL durable native acquisition; a hit adds no native taking.
         if (consumption._tag === "Some" && !lane.captureStore!.capture.truncated())
           yield* consumption.value.linkTaking("native", taking.id);

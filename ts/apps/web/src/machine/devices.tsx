@@ -7,6 +7,12 @@ import {
   type ReactNode,
 } from "react";
 import { Button } from "@pe/kit/lang/button";
+import { FactChip } from "@pe/kit/lang/chip";
+import { hostDescriptorSchema } from "@pe/host-contracts/host-descriptor";
+import {
+  sourceProvenanceSchema,
+  type SourceProvenance,
+} from "@pe/agent-contracts";
 import { Input } from "@pe/kit/lang/input";
 import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
@@ -15,11 +21,30 @@ import type { DeviceListing, Pairing } from "@pe/host-contracts/pe-api";
 import { peClient } from "#/host/pe-client";
 import { LoadingContext } from "#/route/loading-context";
 import { HOST_READ_WAIT_S } from "#/route/waits";
-import { useEnvironmentAccess } from "#/shell/environment-readings";
+import { useEnvironmentAccess } from "#/host/environment-state";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
-const LocalDevice = createContext(true);
-export const useLocalDevice = () => useContext(LocalDevice);
+type Access =
+  | { kind: "fixture" }
+  | { kind: "device"; environmentId: string; paired: boolean; local: boolean }
+  | { kind: "recording"; source: Extract<SourceProvenance, { kind: "recording" }> };
+const HostAccess = createContext<Access | null>(null);
+export const useLocalDevice = () => {
+  const access = useContext(HostAccess);
+  return access?.kind === "fixture" || (access?.kind === "device" && access.local);
+};
+export function RecordedSourceChip() {
+  const access = useContext(HostAccess);
+  if (access?.kind !== "recording") return null;
+  const source = access.source;
+  return (
+    <FactChip
+      title={`Build ${source.build}; catalog ${source.catalog}; coverage: ${source.coverage.join(", ")}${source.at === null ? "" : `; at ${source.at}`}${source.truncated ? `; truncated at ${source.truncated.at}: ${source.truncated.reason}` : ""}`}
+    >
+      Recorded · read only{source.truncated ? " · partial" : ""}
+    </FactChip>
+  );
+}
 type DeviceSession = DeviceListing["sessions"][number];
 const endedDevice = (session: DeviceSession) =>
   session.revokedAt ? "Revoked" : Date.parse(session.expiresAt) <= Date.now() ? "Expired" : null;
@@ -405,7 +430,7 @@ export function RemoteDeviceGate(props: DeviceGateProps) {
   useEffect(() => setMounted(true), []);
   return !remote ? (
     mounted ? (
-      <LocalDevice.Provider value={true}>{props.children}</LocalDevice.Provider>
+      <HostAccess.Provider value={{ kind: "fixture" }}>{props.children}</HostAccess.Provider>
     ) : (
       <LoadingContext name={props.name} says="Loading fixture…">
         {props.guidance}
@@ -417,30 +442,48 @@ export function RemoteDeviceGate(props: DeviceGateProps) {
 }
 
 function HostDeviceGate({ name, guidance, children }: DeviceGateProps) {
-  const [state, setState] = useState<{
-    environmentId: string;
-    paired: boolean;
-    local: boolean;
-  } | null>(null);
+  const [state, setState] = useState<Access | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let current = true;
-    // Unanswered past the host-read wait, the gate says so and offers Retry, never an endless wait.
-    void peClient
-      .call("device.environment", {}, { signal: AbortSignal.timeout(HOST_READ_WAIT_S * 1000) })
-      .then((next) => current && setState(next))
-      .catch(
-        (error) =>
-          current &&
-          setError(
-            error instanceof DOMException && error.name === "TimeoutError"
-              ? `No answer from this host after ${HOST_READ_WAIT_S}s.`
-              : message(error),
-          ),
+    const controller = new AbortController();
+    const signal = AbortSignal.any([
+      controller.signal,
+      AbortSignal.timeout(HOST_READ_WAIT_S * 1000),
+    ]);
+    const fail = (error: unknown) =>
+      current &&
+      setError(
+        error instanceof DOMException && error.name === "TimeoutError"
+          ? `No answer from this host after ${HOST_READ_WAIT_S}s.`
+          : message(error),
       );
+    const aborted = () => fail(signal.reason);
+    signal.addEventListener("abort", aborted, { once: true });
+    // One bounded attempt observes source before asking a live-only device door.
+    void (async (): Promise<Access> => {
+      const response = await peClient.response("features.get", {}, { signal });
+      if (response.ok) {
+        hostDescriptorSchema.parse(await response.json());
+        const header = response.headers.get("x-pe-source");
+        if (header !== null) {
+          // ADR0029 rules7–8: consume the canonical, still-unconverted kernel schema.
+          const parsed = sourceProvenanceSchema.safeParse(JSON.parse(header));
+          if (!parsed.success || parsed.data.kind === "fixture")
+            throw Error("Host source is unreadable.");
+          if (parsed.data.kind === "recording") return { kind: "recording", source: parsed.data };
+        }
+      }
+      signal.throwIfAborted();
+      return { kind: "device", ...(await peClient.call("device.environment", {}, { signal })) };
+    })()
+      .then((next) => current && !signal.aborted && setState(next))
+      .catch(fail)
+      .finally(() => signal.removeEventListener("abort", aborted));
     return () => {
       current = false;
+      controller.abort();
     };
   }, [attempt]);
   if (!state)
@@ -461,7 +504,7 @@ function HostDeviceGate({ name, guidance, children }: DeviceGateProps) {
         <noscript>Enable JavaScript to connect. This public guide remains readable.</noscript>
       </LoadingContext>
     );
-  if (!state.local && !state.paired)
+  if (state.kind === "device" && !state.local && !state.paired)
     return (
       <>
         {guidance}
@@ -471,5 +514,5 @@ function HostDeviceGate({ name, guidance, children }: DeviceGateProps) {
         />
       </>
     );
-  return <LocalDevice.Provider value={state.local}>{children}</LocalDevice.Provider>;
+  return <HostAccess.Provider value={state}>{children}</HostAccess.Provider>;
 }

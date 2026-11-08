@@ -21,7 +21,8 @@ const addressOf = (key: string): { guid: string; field: RoomEditField } | null =
       JSON.stringify(parts) === key
       ? { guid: parts[0], field: parts[1] as RoomEditField }
       : null;
-  } catch (error) { console.warn("ts/packages/agent-contracts/src/rooms.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/packages/agent-contracts/src/rooms.ts: fallback after failure", error);
     return null;
   }
 };
@@ -70,7 +71,7 @@ export const roomsDocumentSchema = z
       )
       .default({}),
     marks: z.record(z.string(), draftCellSchema(markSchema)).default({}),
-    notes: z.record(z.string(), noteSchema).default({}),
+    notes: z.record(z.string(), noteSchema).default({}).meta({ title: "room notes" }),
   })
   .superRefine((doc, ctx) => {
     for (const [key, cell] of Object.entries(doc.edits)) {
@@ -110,3 +111,6 @@ export const roomsRouteState = {
     "Shared edited room fields (name, type, ceiling, people, lighting, equipment, ventilation), one cell per [region guid, field]. Either author may edit or suggest, and rooms.write reads current edits only. Feedback marks (merge, reject, wall, split) are cells keyed by id with a model-feet anchor and the run they were drawn against: Either author edits these cells. Notes are anchored text either may write. Regions and geometry are read from rooms.snapshot.",
   schema: roomsDocumentSchema,
 } satisfies RouteStateSpec<typeof roomsDocumentSchema>;
+
+/** Solver layer vocabulary shared by typed Rooms and its drawings. */
+export const ROOMS_LAYERS = ["rails", "openings", "network", "faces"] as const;

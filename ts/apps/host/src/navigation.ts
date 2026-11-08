@@ -1,3 +1,5 @@
+import {identityCodecs} from "@pe/agent-contracts";
+const scheduleIdentity=(subject:string)=>{const result=identityCodecs.local.encode({namespace:"schedules",subject});if(!result.ok) throw Error(result.reason);return result.value;};
 import { z } from "zod";
 import {
   routeAddress,
@@ -46,7 +48,7 @@ export async function readThreadWork(
   if (!contexts) observations.push("Remembered thread connections are unavailable.");
   if (!census?.available) observations.push("Persisted Work discovery is unavailable.");
   if (census?.unindexed)
-    observations.push(`${census.unindexed} older Work files have no discoverable identity.`);
+    observations.push(`${census.unindexed} stored Work files have no discoverable identity.`);
   const unreadable =
     (census?.unreadable ?? 0) + (census?.works.filter((w) => w.state !== "ready").length ?? 0);
   if (unreadable)
@@ -68,6 +70,7 @@ export async function readThreadWork(
     truncated: Boolean(census?.truncated || (contexts?.length ?? 0) > 200),
     threads: (contexts ?? []).slice(0, 200).map(({ threadId, context }) => ({
       threadId,
+      ...(context?.works.at(-1) ? { place: context.works.at(-1)!.key.route } : {}),
       documents: (context?.documents ?? []).flatMap((doc) =>
         doc.name === null
           ? []
@@ -164,7 +167,7 @@ async function resumeDestination(
       key: work.scope,
       url:
         unique.length === 1 && work.state === "ready"
-          ? routeAddress("schedules").link({ workspaceId: work.scope.work }, { target: unique[0]! })
+          ? routeAddress("schedules").link({ workspaceId: {kind:"ids",ids:[scheduleIdentity(work.scope.work)]} }, { target: unique[0]! })
           : null,
       reason:
         unique.length === 1 && work.state === "ready"

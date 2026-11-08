@@ -1,3 +1,4 @@
+import { writeArtifact } from "./page-artifacts.ts";
 /**
  * Host input recording (ADR 0031 rules 1, 2 and 5). One bundle of takings answers the host's input
  * services: native reads through `HostNativeRead`, and every other owner (files, marks, inventory,
@@ -11,6 +12,8 @@ import { Cause, Clock, Effect, Exit, Layer, Option, Result, Schema } from "effec
 import { attemptFor, CurrentInputConsumption } from "./input-occurrence.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { validationIssueSchema } from "@pe/host-contracts/contracts";
+import { nativeOutputSchema } from "@pe/agent-contracts";
+import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { BridgeError } from "@pe/host-internal/dispatch";
 import { HostNativeRead, canonicalJson, type NativeReadInput } from "@pe/host-internal/native-read";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
@@ -25,6 +28,11 @@ import {
 import { Refused } from "./control.ts";
 import { InvalidRead, ReadBusy, ReadRetiring } from "./native-reads.ts";
 import { readSchemas } from "./request-services.ts";
+import {
+  recordingPointSchema,
+  recordingPointIdSchema,
+  type RecordingPoint,
+} from "@pe/agent-contracts";
 
 export interface RecordingIdentity {
   readonly build: string;
@@ -95,11 +103,13 @@ const sha256Name = Schema.String.check(
 const FORMAT = 3;
 /** What one taking recorded: a native read, or one input owner's exact read shape. */
 const recordedInput = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("resource"), key: Schema.String, args: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("publication"), key: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("native"), key: Schema.String, args: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("document"), scope: Schema.String }),
   Schema.Struct({
     kind: Schema.Literal("files"),
-    file: Schema.Literals(["firm", "duct-catalogs"]),
+    file: Schema.String,
   }),
   Schema.Struct({
     kind: Schema.Literal("marks"),
@@ -219,6 +229,13 @@ const observationOf = (taking: Taking) =>
 /** A historical bundle, read only: replay can select and read takings but never add one. */
 export interface RecordingReader {
   readonly identity: RecordingIdentity;
+  /** Half-open append cursors; timestamps and candidate order never select a point. */
+  readonly takingCursor: () => number;
+  readonly takingAt: (cursor: number) => Taking | undefined;
+  readonly points: {
+    readonly ids: () => readonly string[];
+    readonly get: (id: string) => Effect.Effect<RecordingPoint, InvalidRead>;
+  };
   /** Every taking of one input identity, oldest first; equal bytes never merge takings. */
   readonly candidates: (identity: string) => readonly Taking[];
   readonly taking: (id: string) => Taking | undefined;
@@ -230,6 +247,8 @@ export interface RecordingReader {
   /** Sealed consumption metadata, by host-minted id; every input and link names a real taking. */
   readonly readSets: {
     readonly get: (id: string) => Effect.Effect<InputReadSetRecord, InvalidRead>;
+    /** Loaded (or durably kept) host-minted names; no order or recency meaning. */
+    readonly ids: () => readonly string[];
   };
 }
 /**
@@ -241,10 +260,14 @@ export interface CaptureLatch {
   readonly begin: () => number | null;
   readonly truncated: () => Truncation | null;
   /** The first stop wins; its marker is persisted best-effort and never fails a read. */
-  readonly stop: (at: number, reason: Truncation["reason"]) => Effect.Effect<void>;
+  readonly stop: (at: number, reason: Truncation["reason"], source: Pick<Truncation, "site" | "op">) => Effect.Effect<void>;
 }
 /** The one capture writer of a bundle in this process (no cross-process lock is claimed). */
 export interface RecordingWriter extends RecordingReader {
+  readonly points: RecordingReader["points"] & {
+    readonly keep: (point: RecordingPoint) => Effect.Effect<void, InvalidRead>;
+  };
+
   /** Visible to `candidates` only after its observation and line are durable. */
   readonly append: (input: TakingInput, outcome: Outcome) => Effect.Effect<Taking, InvalidRead>;
   readonly capture: CaptureLatch;
@@ -325,10 +348,43 @@ const loadBundle = Effect.fn("Recording.load")(function* (
       used += (yield* io(() => stat(join(observations, `${sha}.json`)))).size;
     }
   }
-  const sets = yield* io(() =>
+  // A crash between the blob and taking append must not recover uncharged disk capacity.
+  for (const name of yield* io(() => readdir(observations).catch((error: unknown) => missing(error) ? [] : Promise.reject(error)))) {
+    const sha = yield* Schema.decodeUnknownEffect(sha256Name)(name.endsWith(".json") ? name.slice(0, -5) : null)
+      .pipe(Effect.mapError(() => refuse("tamper", "Observation filename is not a SHA-256")));
+    if (!stored.has(sha)) used += (yield* io(() => stat(join(observations, name)))).size;
+  }
+  const names = yield* io(() =>
     readdir(join(dir, READ_SETS)).catch((error: unknown) => (missing(error) ? [] : Promise.reject(error))),
   );
-  for (const name of sets) used += (yield* io(() => stat(join(dir, READ_SETS, name)))).size;
+  const sets: string[] = [];
+  for (const name of names) {
+    // A crashed atomic save may leave its uncommitted temp; charge its bytes, never publish it.
+    const pending = name.endsWith(".json.tmp");
+    const suffix = pending ? ".json.tmp" : ".json";
+    const id = yield* Schema.decodeUnknownEffect(readSetIdName)(
+      name.endsWith(suffix) ? name.slice(0, -suffix.length) : null,
+    ).pipe(Effect.mapError(() => refuse("tamper", `Read-set filename ${name} is not host minted`)));
+    used += (yield* io(() => stat(join(dir, READ_SETS, name)))).size;
+    if (!pending) sets.push(id);
+  }
+  const pointNames = yield* io(() =>
+    readdir(join(dir, "points")).catch((error: unknown) =>
+      missing(error) ? [] : Promise.reject(error),
+    ),
+  );
+  if (pointNames.length > bounds.maxTakings)
+    return yield* refuse("full", "Recording has too many point metadata files", 507);
+  const points: string[] = [];
+  for (const name of pointNames) {
+    const pending = name.endsWith(".json.tmp");
+    const suffix = pending ? ".json.tmp" : ".json";
+    const id = yield* Schema.decodeUnknownEffect(recordingPointIdSchema)(
+      name.endsWith(suffix) ? name.slice(0, -suffix.length) : null,
+    ).pipe(Effect.mapError(() => refuse("tamper", "Point filename is not host minted")));
+    used += (yield* io(() => stat(join(dir, "points", name)))).size;
+    if (!pending) points.push(id);
+  }
   if (used > bounds.maxBytes || takings.length > bounds.maxTakings)
     return yield* refuse("full", "Recording exceeds its bounds", 507);
   const marker = yield* bounded(join(dir, TRUNCATION), null);
@@ -341,6 +397,28 @@ const loadBundle = Effect.fn("Recording.load")(function* (
         });
   const reader: RecordingReader = {
     identity,
+    takingCursor: () => takings.length,
+    takingAt: (cursor) => takings[cursor],
+    points: {
+      ids: () => points.slice(),
+      get: Effect.fn("Recording.point")(function* (id: string) {
+        const name = yield* Schema.decodeUnknownEffect(recordingPointIdSchema)(id).pipe(
+          Effect.mapError(() => refuse("point", "Point id is not host minted")),
+        );
+        const text = yield* bounded(join(dir, "points", `${name}.json`), null);
+        if (text === null) return yield* refuse("point", "No such recording point");
+        const point = yield* Schema.decodeUnknownEffect(
+          Schema.fromJsonString(recordingPointSchema),
+        )(text).pipe(Effect.mapError(() => refuse("tamper", "Point metadata is damaged")));
+        if (
+          point.id !== name ||
+          point.identity.build !== identity.build ||
+          point.identity.catalog !== identity.catalog
+        )
+          return yield* refuse("mismatch", "Point belongs to another build, catalog or name");
+        return point;
+      }),
+    },
     candidates: (wanted: string) =>
       takings.filter((taking) => inputIdentity(taking.input) === wanted),
     taking: (id: string) => takings.find((taking) => taking.id === id),
@@ -354,9 +432,10 @@ const loadBundle = Effect.fn("Recording.load")(function* (
         Effect.mapError(() => refuse("tamper", `Observation ${sha} is not JSON`)),
       );
     }),
-    coverage: () => [...new Set(takings.map((taking) => taking.input.kind))],
+    coverage: () => [...new Set(takings.flatMap((taking) => taking.input.kind === "publication" ? [] : [taking.input.kind]))],
     truncation,
     readSets: {
+      ids: () => sets.slice(),
       get: Effect.fn("Recording.readSet")(function* (id: string) {
         const name = yield* Schema.decodeUnknownEffect(readSetIdName)(id).pipe(
           Effect.mapError(() => refuse("context", "Read-set id is not host minted")),
@@ -385,7 +464,7 @@ const loadBundle = Effect.fn("Recording.load")(function* (
       }),
     },
   };
-  return { reader, takings, stored, used, takingsPath, observations };
+  return { reader, takings, stored, sets, points, used, takingsPath, observations };
 });
 
 /** Opens an existing bundle for replay. A missing, damaged, foreign or oversized bundle refuses. */
@@ -413,16 +492,13 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
   let truncated = reader.truncation;
   // In-flight observation writes, so two equal observations share one durable write.
   const writing = new Map<string, Promise<void>>();
+  const pointWrites = new Set<string>();
   let reserved = 0;
   const clock = yield* Clock.Clock;
   const writeObservation = (sha: string, bytes: string) => {
     const path = join(observations, `${sha}.json`);
-    const write = writeFile(path, bytes, { flag: "wx" })
-      .catch(async (error: unknown) => {
-        // A blob left by an earlier failed append is reused only if it hashes to its name.
-        if ((error as { code?: string }).code !== "EEXIST") throw error;
-        if ((await readFile(path, "utf8")) !== bytes) throw error;
-      })
+    // An opened bundle losing its observations directory is damage, not a new store.
+    const write = stat(observations).then(() => writeArtifact(observations, path, bytes))
       .then(() => {
         stored.add(sha);
       })
@@ -452,20 +528,52 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
       used -= size;
       return yield* Effect.failCause(kept.cause);
     }
+    if (!loaded.sets.includes(record.id)) loaded.sets.push(record.id);
   });
   return {
     ...reader,
-    readSets: { get: reader.readSets.get, keep: keepReadSet },
+    points: {
+      ...reader.points,
+      keep: Effect.fn("Recording.keepPoint")(function* (point: RecordingPoint) {
+        const bytes = yield* Schema.encodeUnknownEffect(
+          Schema.fromJsonString(recordingPointSchema),
+        )(point).pipe(
+          Effect.mapError(() => refuse("input", "Point metadata is not encodable", 400)),
+        );
+        if (point.identity.build !== identity.build || point.identity.catalog !== identity.catalog)
+          return yield* refuse("mismatch", "Point belongs to another build or catalog");
+        const size = Buffer.byteLength(bytes);
+        if (reader.points.ids().includes(point.id) || pointWrites.has(point.id))
+          return yield* refuse("point", "Point already exists");
+        if (used + size > bounds.maxBytes || reader.points.ids().length + pointWrites.size >= bounds.maxTakings)
+          return yield* refuse("full", "Recording is full; point was not kept", 507);
+        used += size;
+        pointWrites.add(point.id);
+        const path = join(dir, "points", `${point.id}.json`);
+        // Same reservation and atomic metadata durability as read sets. Failed IO remains charged.
+        const kept = yield* Effect.exit(io(async () => {
+          await mkdir(join(dir, "points"), { recursive: true });
+          await writeFile(`${path}.tmp`, bytes, { flag: "wx" });
+          await rename(`${path}.tmp`, path);
+        }));
+        pointWrites.delete(point.id);
+        if (Exit.isFailure(kept)) return yield* Effect.failCause(kept.cause);
+        loaded.points.push(point.id);
+      }),
+    },
+    readSets: { ...reader.readSets, keep: keepReadSet },
     get truncation() {
       return truncated;
     },
     capture: {
       begin: () => (truncated ? null : ++attempts),
       truncated: () => truncated,
-      stop: (at, reason) =>
+      stop: (at, reason, source) =>
         Effect.suspend(() => {
           if (truncated) return Effect.void;
-          truncated = { at, reason };
+          const op = truncationSchema.shape.op.safeParse(source.op);
+          truncated = { at, stoppedAt: clock.currentTimeMillisUnsafe(), reason,
+            site: source.site, op: op.success ? op.data : "unknown" };
           // ponytail: best-effort marker; on an already failed disk only this process knows.
           return io(() => writeFile(join(dir, TRUNCATION), JSON.stringify(truncated))).pipe(
             Effect.orElseSucceed(() => undefined),
@@ -503,7 +611,7 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
       reserved++;
       const durable = yield* Effect.exit(
         io(async () => {
-          if (holds && !stored.has(sha)) await (writing.get(sha) ?? writeObservation(sha, bytes));
+          if (holds) await (writing.get(sha) ?? writeObservation(sha, bytes));
           await appendFile(takingsPath, line);
         }),
       );
@@ -659,6 +767,7 @@ const reasonOf = (cause: Cause.Cause<InvalidRead>): Truncation["reason"] => {
 type Occurrence = { readonly input: RecordedInput; readonly scope: string };
 const captured = <A, E, R>(
   writer: RecordingWriter,
+  op: string,
   live: Effect.Effect<A, E, R>,
   record: (
     exit: Exit.Exit<A, E>,
@@ -678,7 +787,7 @@ const captured = <A, E, R>(
     if (at === null) return yield* exit;
     // A consumer whose occurrence cannot be reserved loses capture, not its live answer (K4).
     if (attempt && Result.isFailure(attempt)) {
-      yield* writer.capture.stop(at, "unsupported");
+      yield* writer.capture.stop(at, "unsupported", { site: "occurrence", op });
       return yield* exit;
     }
     const bind: TakingObserver = attempt
@@ -695,7 +804,8 @@ const captured = <A, E, R>(
             ),
       ),
     );
-    if (Exit.isFailure(kept)) yield* writer.capture.stop(at, reasonOf(kept.cause));
+    if (Exit.isFailure(kept)) yield* writer.capture.stop(at, reasonOf(kept.cause),
+      { site: Exit.isFailure(exit) ? "failure" : "json", op });
     return yield* exit;
   });
 /** A live failure as its recorded outcome, or null for an interrupted read, which is no taking. */
@@ -714,7 +824,7 @@ const capturing = (store: RecordingWriter, observed: TakingObserver) =>
       return {
         resolve: live.resolve,
         read: (request) =>
-          captured(store, live.read(request), (exit) =>
+          captured(store, request.key, live.read(request), (exit) =>
             Effect.gen(function* () {
               const outcome: Outcome | null = Exit.isSuccess(exit)
                 ? {
@@ -802,12 +912,10 @@ const replaying = (store: RecordingReader, bindings: ReadonlyMap<string, string>
       Effect.gen(function* () {
         const { taking, answer } = yield* select(request, true);
         const raw = yield* store.observation(taking);
-        const schemas = yield* readSchemas(request.key);
-        const value = yield* Schema.decodeUnknownEffect(schemas.response)(raw).pipe(
-          Effect.mapError(() =>
-            refuse("mismatch", `Recorded ${request.key} no longer satisfies its contract`),
-          ),
-        );
+        const value = yield* Effect.try({
+          try:()=>Schema.decodeUnknownSync(Schema.Json)(nativeOutputSchema(request.key as HostOperationKey).parse(raw)),
+          catch:()=>refuse("mismatch", `Recorded ${request.key} no longer satisfies its contract`),
+        });
         return {
           value,
           nativeRequestId: answer.nativeRequestId,
@@ -853,14 +961,20 @@ const encoded = <A, I>(codec: Schema.Codec<A, I>, value: A) =>
  * One owner's live read, kept as a taking before its answer is returned. A value or a
  * class-faithful failure is recorded; a capture failure stops recording without changing the live exit.
  */
-/** The taking an occurrence selects: its consumer's stored link, else the root's exact binding. */
+/** An occurrence must agree with an explicit binding; only an unowned read uses the binding alone. */
 const selectedFor = (input: RecordedInput, scope: string, bound: string | undefined) =>
   Effect.flatMap(attemptFor(input, scope), (attempt) =>
     attempt === null
       ? Effect.succeed(bound)
       : Result.isFailure(attempt)
         ? Effect.fail(attempt.failure)
-        : attempt.success.selected,
+        : attempt.success.selected.pipe(
+            Effect.flatMap((selected) =>
+              bound === undefined || bound === selected
+                ? Effect.succeed(selected)
+                : Effect.fail(refuse("mismatch", "The bound taking differs from the consumer occurrence")),
+            ),
+          ),
   );
 
 export const captureInput = <A, I>(
@@ -870,8 +984,11 @@ export const captureInput = <A, I>(
   codec: Schema.Codec<A, I>,
   live: Effect.Effect<A, DoorFailure>,
   observed: TakingObserver = unobserved,
+  op = input.kind === "native" || input.kind === "publication" ? input.key : input.kind === "work" ? `work.${input.view}`
+    : input.kind === "files" ? `files.${input.file}` : input.kind === "marks"
+      ? `marks.${input.frame === null ? "snapshot" : "frame"}` : input.kind,
 ): Effect.Effect<A, DoorFailure> =>
-  captured(writer, live, (exit) =>
+  captured(writer, op, live, (exit) =>
     Effect.gen(function* () {
       const outcome: Outcome | null = Exit.isSuccess(exit)
         ? { kind: "observed", value: yield* encoded(codec, exit.value) }

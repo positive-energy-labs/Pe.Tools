@@ -1,17 +1,13 @@
+// Generated from bind/route.ts by codegen:routes. Do not edit.
 import { z } from "zod";
-import { field, text, type RouteDeclaration } from "../route-field.ts";
-
-/**
- * No agent access, deliberately: binding a Page to a thread or a document is the person's door
- * (the host writes the binding on their press), so Pea has nothing here to read or set.
- */
-export const bindAddress = {
-  path: "/bind",
-  title: "Bind",
-  fields: {
-    page: field(text(), { url: "push" }),
-    view: field(z.boolean().default(false), { url: "push" }),
-    query: field(text(), { url: "push" }),
-    fragment: field(text(), { url: "push" }),
-  },
-} satisfies RouteDeclaration;
+import type { Immutable } from "../route-kernel-data.ts";
+import { focusSelectionSchema } from "../route-kernel-codecs.ts";
+import { jsonCodec } from "../route-field.ts";
+const field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, codec: jsonCodec(schema) });
+export const bindAddress = { path: "/bind" as const, title: "Bind", fields: {
+"page": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
+"view": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"boolean"}) as z.ZodType<Immutable<boolean>>).default(false), "replace"),
+"query": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","propertyNames":{"type":"string"},"additionalProperties":{"type":"string"}}) as z.ZodType<Immutable<{}>>).default({}), "replace"),
+"fragment": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "replace"),
+selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
+} };

@@ -28,7 +28,7 @@ import { EncodingPicker } from "../proto/encoding/picker";
 import { ScaleLegend } from "../proto/encoding/scale-legend";
 import { flowDirections } from "../proto/encoding/flow";
 import { encodingFor } from "../encoding";
-import type { OpenSheet } from "../neutral.ts";
+import type { OpenSheet } from "./types.ts";
 import { DuctsOverlay, linesOf, useEquipment } from "../picture-content";
 import { GoToSubject } from "../proto/e/go-to";
 import { DUCTS_LAYER_OPTIONS } from "../proto/e/teaching";

@@ -31,12 +31,26 @@ import {
   ReadFreshness,
   RequestIdentity,
 } from "../src/request-services.ts";
-import { SdkSession } from "../src/sdk-session.ts";
+import { readSessionScope, SdkSession } from "../src/sdk-session.ts";
+import { HOST_RPC_SDK_SESSION_HEADER, HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
 
 const pea = { kind: "pea", thread: "t1" } as Caller;
 const identity = { build: "build-1", catalog: nativeCatalogIdentity() };
 const bounds = { maxBytes: 1_000_000, maxTakings: 100 };
 const catalogAnswer = { operations: [], constants: {} };
+
+effectTest("stop provenance never retains paths, messages or oversized operation names", () =>
+  Effect.gen(function* () {
+    for (const op of ["C:/private/model.rvt", "failure message with value", "x".repeat(97)]) {
+      const dir = yield* bundle;
+      const writer = yield* openRecordingWriter(dir, identity, bounds);
+      yield* writer.capture.stop(writer.capture.begin()!, "unsupported", { site: "builtin", op });
+      const marker = JSON.parse(yield* Effect.promise(() => readFile(join(dir, "truncation.json"), "utf8")));
+      expect(marker).toEqual({ at: 1, stoppedAt: expect.any(Number), reason: "unsupported", site: "builtin", op: "unknown" });
+      expect((yield* openRecordingReader(dir, identity, bounds)).truncation).toEqual(marker);
+    }
+  }),
+);
 
 /** The real live admission over a fake SDK and native join; `built` counts live SDK acquisitions. */
 function live() {
@@ -139,6 +153,31 @@ const outcome = <A, R>(effect: Effect.Effect<A, unknown, R>) =>
 const bundle = Effect.acquireRelease(
   Effect.promise(() => mkdtemp(join(tmpdir(), "pe-recording-"))),
   (dir) => Effect.promise(() => rm(dir, { recursive: true, force: true })),
+);
+
+effectTest("absent transport selectors do not truncate the first catalog taking", () =>
+  Effect.gen(function* () {
+    const dir = yield* bundle;
+    const store = yield* openRecordingWriter(dir, identity, bounds);
+    const source = live();
+    // The retained browser's unscoped /ops uses this exact producer, then pins its resolved bridge.
+    const scope = { ...readSessionScope({}), bridgeSessionId: "bridge-1" };
+    const answered = yield* run({ kind: "live", captureStore: store }, source)(read("host.ops.catalog", {}, scope));
+    expect(answered.value).toEqual(catalogAnswer);
+    expect(store.capture.truncated()).toBeNull();
+    expect(store.candidates(yield* nativeInputIdentity({ key: "host.ops.catalog", input: {}, scope }))).toHaveLength(1);
+    const reader = yield* openRecordingReader(dir, identity, bounds);
+    const forbidden = live();
+    const lane = { kind: "recording", recordingStore: reader, at: null } as const;
+    expect(yield* run(lane, forbidden)(read("host.ops.catalog", {}, scope))).toEqual(answered);
+    expect(yield* outcome(run(lane, forbidden)(read("host.ops.catalog", {}, { ...scope, openDocumentId: "another-document" })))).toMatchObject({ problem: "recording.scope" });
+    expect(forbidden.counts).toEqual({ built: 0, joins: 0 });
+    expect(readSessionScope({
+      [HOST_RPC_SDK_SESSION_HEADER]: '{"pid":7}',
+      [HOST_RPC_BRIDGE_SESSION_HEADER]: "bridge-1",
+      [HOST_RPC_DOCUMENT_HEADER]: "doc-A",
+    })).toEqual({ session: { pid: 7 }, bridgeSessionId: "bridge-1", openDocumentId: "doc-A" });
+  }),
 );
 
 effectTest(
@@ -249,7 +288,7 @@ effectTest("a miss, another build, a tampered observation and a full bundle each
     expect(
       yield* outcome(run({ kind: "live", captureStore: full })(read("host.ops.catalog"))),
     ).toMatchObject({ ok: { value: catalogAnswer, outcome: "committed", nativeRequestId: "native-1" } });
-    expect(full.capture.truncated()).toEqual({ at: 2, reason: "full" });
+    expect(full.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "full" });
     expect(
       full.candidates(
         yield* nativeInputIdentity({ key: "host.ops.catalog", input: {}, scope: {} }),
@@ -308,7 +347,7 @@ effectTest(
       expect(
         yield* outcome(run({ kind: "live", captureStore: broken })(read("host.ops.catalog"))),
       ).toMatchObject({ ok: { value: catalogAnswer } });
-      expect(broken.capture.truncated()).toEqual({ at: 1, reason: "io" });
+      expect(broken.capture.truncated()).toEqual({ at: 1, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "io" });
       const key = yield* nativeInputIdentity({ key: "host.ops.catalog", input: {}, scope: {} });
       expect(broken.candidates(key)).toEqual([]);
       expect((yield* openRecordingReader(dir, identity, bounds)).candidates(key)).toEqual([]);
@@ -399,7 +438,7 @@ effectTest(
       expect(
         yield* outcome(run({ kind: "live", captureStore: unsupported })(read("revit.context.journal"))),
       ).toEqual(yield* outcome(run({ kind: "live" })(read("revit.context.journal"))));
-      expect(unsupported.capture.truncated()).toEqual({ at: 1, reason: "unsupported" });
+      expect(unsupported.capture.truncated()).toEqual({ at: 1, stoppedAt: expect.any(Number), site: "failure", op: "revit.context.journal", reason: "unsupported" });
       expect(
         unsupported.candidates(
           yield* nativeInputIdentity({ key: "revit.context.journal", input: {}, scope: {} }),
@@ -458,15 +497,9 @@ effectTest(
       );
       const before = yield* Effect.promise(() => readFile(join(absent, "takings.jsonl"), "utf8"));
       const reader = yield* openRecordingReader(absent, identity, bounds);
-      expect(Object.keys(reader).sort()).toEqual([
-        "candidates",
-        "coverage",
-        "identity",
-        "observation",
-        "readSets",
-        "taking",
-        "truncation",
-      ]);
+      expect(reader).not.toHaveProperty("append");
+      expect(reader.readSets).not.toHaveProperty("keep");
+      expect(reader.points).not.toHaveProperty("keep");
       expect(
         (yield* run({ kind: "recording", at: null, recordingStore: reader })(read("host.ops.catalog"))).value,
       ).toEqual(catalogAnswer);
@@ -493,16 +526,16 @@ effectTest("K4: a full capture stops recording at the second read and every live
     const second = yield* run(lane, source)(read("host.ops.catalog"));
     expect(second.value).toEqual(catalogAnswer);
     expect(source.counts.joins).toBe(2);
-    expect((yield* inputs).source).toEqual({ kind: "live", capturing: false, truncated: { at: 2, reason: "full" } });
+    expect((yield* inputs).source).toEqual({ kind: "live", capturing: false, truncated: { at: 2, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "full" } });
     const third = yield* run(lane, source)(read("host.ops.catalog"));
     expect(third.value).toEqual(catalogAnswer);
     expect(source.counts.joins).toBe(3);
     const reader = yield* openRecordingReader(dir, identity, bounds);
     expect(reader.coverage()).toEqual(["native"]);
     expect(reader.candidates(yield* nativeInputIdentity({ key: "host.ops.catalog", input: {}, scope: {} }))).toEqual([]);
-    expect(reader.truncation).toEqual({ at: 2, reason: "full" });
+    expect(reader.truncation).toEqual({ at: 2, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "full" });
     // The third read made no capture attempt: the latch still names the second.
-    expect(store.capture.truncated()).toEqual({ at: 2, reason: "full" });
+    expect(store.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "full" });
   }),
 );
 
@@ -516,7 +549,7 @@ effectTest("K4: an I/O capture failure keeps the exact native answer, and a live
     const answer = yield* run(lane)(read("host.ops.catalog"));
     expect(answer).toEqual(uncaptured);
     expect(answer).toMatchObject({ nativeRequestId: "native-1", outcome: "committed", value: catalogAnswer });
-    expect(store.capture.truncated()).toEqual({ at: 1, reason: "io" });
+    expect(store.capture.truncated()).toEqual({ at: 1, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "io" });
     for (const key of Object.keys(failures))
       expect(yield* outcome(run(lane)(read(key)))).toEqual(yield* outcome(run({ kind: "live" })(read(key))));
   }),
@@ -540,7 +573,7 @@ effectTest("an observer failure truncates capture and leaves the actual native a
     const identityOf = yield* nativeInputIdentity({ key: "host.ops.catalog", input: {}, scope: {} });
     expect(seen).toEqual(store.candidates(identityOf).map((taking) => taking.id));
     expect(yield* through(true)).toEqual(answer);
-    expect(store.capture.truncated()).toEqual({ at: 2, reason: "observer" });
+    expect(store.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "observer" });
     expect(yield* through(false)).toEqual(answer);
     expect(seen).toHaveLength(1);
   }),

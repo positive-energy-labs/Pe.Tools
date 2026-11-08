@@ -144,23 +144,3 @@ export function useLegacyEnvironmentBridge<P, W>(graph: RouteGraph<P, W>) {
 export const legacyMountMetadata = (environment?: LegacyVerbEnvironment) => ({
   fixture: environment?.fixture,
 });
-
-/** An admitted mount must never fall back to the legacy transport while S1c switches dispatch. */
-export const unavailableLegacyVerbs: LegacyVerbEnvironment = {
-  reads: {
-    lifetime: "read",
-    query: async () => {
-      throw Error("Use the admitted reading capability");
-    },
-  },
-  commands: {
-    lifetime: "command",
-    refusal: "Use the admitted command capability",
-    semantic: () => {
-      throw Error("Use the admitted command capability");
-    },
-    raw: () => {
-      throw Error("Use the admitted command capability");
-    },
-  },
-};

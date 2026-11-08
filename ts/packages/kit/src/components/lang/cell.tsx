@@ -1,3 +1,4 @@
+import { usePaneValue } from "./value";
 import { land } from "./land";
 import { reachProps } from "./reach";
 import { useWork } from "./work";
@@ -44,7 +45,6 @@ export const stateCellRecipe = tv({
 import { focusQuiet } from "../../lib/utils";
 import {
 cellFactsText,
-fmtNum,
 stagedBy,
 parseCell,
 readCell,
@@ -58,6 +58,9 @@ type StateCellProps,
 } from "./cell-state";
 import { ListPopup } from "./list-popup";
 import { TooltipHint } from "./tooltip";
+import { handleCellProps, type HandleCellProps } from "./cell-handle";
+export { useCellCollection, useCollectionCell, handleCellProps, cellSource } from "./cell-handle";
+export type { CellHandle, HandleCellProps } from "./cell-handle";
 
 export {
 CELL_STATE_ORDER,
@@ -81,6 +84,9 @@ StateCellProps
 /** Each kind's glyph, key and plain sentence. The caller's `reason` overrides the sentence. */
 const TRANSITION: Record<CellTransitionKind, { key: string; says: string }> = {
   clear: { key: "u", says: "Clear the edit value" },
+  take: { key: "a", says: "Keep the staged value and its sources" },
+  unsuggest: { key: "d", says: "Deny the staged proposal" },
+  undo: { key: "z", says: "Undo this cell edit" },
 };
 
 /**
@@ -126,7 +132,9 @@ const RefusalDetail = ({ detail }: { detail: string }) => (
 
 export const CellHost = createContext<RefObject<HTMLElement | null> | null>(null);
 
-export function StateCell(props: StateCellProps) {
+export function StateCell(input: StateCellProps | HandleCellProps) {
+  const paneValue=usePaneValue();
+  const props = "cell" in input ? handleCellProps({...input,value:input.value??paneValue??undefined}) : input;
   const { value, modelValue, capReason, grounding, confidence, note } = props;
   const read = readCell(props);
   const reviewed = read.unsettled === "drift" && props.reviewed !== undefined && modelValue != null;
@@ -239,18 +247,14 @@ export function StateCell(props: StateCellProps) {
       let out = text;
       if (props.numeric != null) {
         const parsed = parseCell(text, props.numeric);
-        if (parsed === null) {
+        if (typeof parsed !== "number") {
           submitted.current = null;
           el.value = initial.current; // restore the prior value, visibly
-          setRefusal({
-            message:
-              text.trim() === ""
-                ? "blank commits nothing — a cleared cell is not zero"
-                : `"${text}" is not a number — nothing committed`,
-          });
+          setRefusal(parsed);
           return;
         }
-        out = fmtNum(parsed, props.numeric.digits);
+        // Display precision must not change the value that reaches Work.
+        out = String(parsed);
       }
       const settle = (refused: string | CellRefusal | null | void) => {
         if (version !== editVersion.current) return;
@@ -265,7 +269,10 @@ export function StateCell(props: StateCellProps) {
         }
       };
       const send = (refused: ReturnType<CellCommit>) => {
-        if (refused instanceof Promise) void refused.then(settle);
+        if (refused instanceof Promise) startRun(async () => {
+          try { settle(await refused); }
+          catch (error) { settle({ message: error instanceof Error ? error.message : String(error) }); }
+        });
         else settle(refused);
       };
       // The measured kind: a bare number stages with the column's unit and calls nothing; anything
@@ -304,6 +311,8 @@ export function StateCell(props: StateCellProps) {
           tabIndex={props.land !== undefined && !editable ? -1 : ownHost ? 0 : undefined}
           className={slots.base()}
           data-scale="row"
+          data-choice-cell={"cell" in input && input.options ? input.label : undefined}
+          data-cell-owner={"cell" in input ? input.cell.owner.route : undefined}
           data-unit={props.unit != null ? "" : undefined}
           // The whole box is the input's: a press on the unit or padding focuses it, caret last.
           onMouseDown={
@@ -370,7 +379,6 @@ export function StateCell(props: StateCellProps) {
               onPick={(o) => {
                 if (o.disabled) return;
                 if (o.key === props.choice!.current) return;
-                const out = props.choice!.pick(o.key);
                 const settle = (refused: string | CellRefusal | null | void) =>
                   setRefusal(
                     refused == null
@@ -379,13 +387,16 @@ export function StateCell(props: StateCellProps) {
                         ? { message: refused }
                         : refused,
                   );
-                if (out instanceof Promise) void out.then(settle);
-                else settle(out);
+                startRun(async () => {
+                  try { settle(await props.choice!.pick(o.key)); }
+                  catch (error) { settle({ message: error instanceof Error ? error.message : String(error) }); }
+                });
               }}
             />
           ) : editable ? (
             <input
               ref={inputRef}
+              aria-label={"cell" in input ? input.label : undefined}
               key={initial.current}
               defaultValue={initial.current}
               placeholder={
@@ -514,6 +525,7 @@ export function StateCell(props: StateCellProps) {
         ref={rootRef}
         tabIndex={props.land !== undefined && !editable ? -1 : ownHost ? 0 : undefined}
         aria-busy={pending || undefined}
+        data-cell-owner={"cell" in input ? input.cell.owner.route : undefined}
         onClick={locate}
       >
         <span className={slots.line()}>
@@ -701,3 +713,5 @@ export function CellStateKey() {
     </div>
   );
 }
+
+export type { CellCollection } from "./cell-handle";

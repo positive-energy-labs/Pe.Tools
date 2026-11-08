@@ -1,5 +1,7 @@
+import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
-import { commands, tools, canonicalRouteInput, workKey, type DuctsApplyInput } from "@pe/agent-contracts";
+import { commands, tools, canonicalRouteInput, workKey, type DuctsApplyInput ,
+} from "@pe/agent-contracts";
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
 import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
@@ -15,7 +17,7 @@ import { z } from "zod";
 import { invokeBridge, type RevitBridge } from "./bridge.ts";
 import { command, refused, type CommandContext } from "./command-executor.ts";
 import type { ActionExecution } from "./action-journal.ts";
-import { lifetime } from "./family-actions.ts";
+import { lifetime } from "./document-lifetime.ts";
 import { ductsReadings } from "./ducts-readings.ts";
 import { runPods } from "./family-actions.ts";
 import { buildSheet, resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
@@ -23,13 +25,15 @@ import { accessoryWrites } from "@pe/ducts-domain/sheet/accessory-writes";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import { workLayer } from "./ducts-inputs.ts";
 import { followAcceptedJoins } from "./ducts-walk.ts";
-import { scopeApplyRequest, appliedCellPaths } from "@pe/ducts-domain/staged";
+import { scopeApplyRequest, appliedCellPaths, pendingCount, fanWriteCells } from "@pe/ducts-domain/staged";
 import type { DuctsApply, DuctsHeal } from "@pe/host-contracts/generated";
 
 const prepared = z.object({
   process: z.unknown(),
   input: z.record(z.string(), z.unknown()),
   dependencies: z.unknown(),
+  nothingToWrite: z.boolean().optional(),
+  labels: z.record(z.string(), z.string()).optional(),
 });
 const targetOf = (ctx: CommandContext) => {
   if (ctx.admission.target.kind !== "document") throw refused("Exact document target required");
@@ -39,9 +43,9 @@ type Kind = "losses" | "heal" | "assign-fan";
 /** plan seals (Read), rehearse rolls back (TransactRead, never seal authority), apply commits. */
 type Phase = "plan" | "rehearse" | "apply";
 
-/** A loss plan that plans nothing and refuses something arms nothing: its native reasons, else null. */
+/** Refused intent cannot authorize ancillary writes, even when those writes planned successfully. */
 export const lossPlanRefusal = (writes: DuctsApply.Res.Response["writes"]) =>
-  !writes.some((w) => w.outcome === "planned") && writes.some((w) => w.outcome === "refused")
+  writes.some((w) => w.outcome === "refused")
     ? [...new Set(writes.filter((w) => w.outcome === "refused").map((w) => w.reason))].join("; ")
     : null;
 
@@ -74,7 +78,8 @@ export async function lossSnapshot(
   read: (selector: Record<string, unknown>) => Promise<DuctSnapshot>,
 ): Promise<DuctSnapshot> {
   if (!intent?.walk && !intent?.groups?.length)
-    throw refused("Preview needs writeIntent.walk from the fan roster or writeIntent.groups; stage a scope before previewing losses");
+    throw refused("Preview needs writeIntent.walk from the fan roster or writeIntent.groups; stage a scope before previewing losses",
+    );
   const snapshot = await (intent?.walk
     ? read({ kind: "from", unitId: intent.walk.unitId })
     : healSnapshot(intent?.groups ?? [], read));
@@ -95,14 +100,16 @@ export function unwrittenCells(
     flows: request.terminalFlows,
     equipmentFlows: request.equipmentFlows,
   };
-  return cells.filter(([segment, key]) => written[segment] && !written[segment]!.some((row) => String(row.id) === key));
+  return cells.filter(([segment, key]) => written[segment] && !written[segment]!.some((row) => String(row.id) === key),
+  );
 }
 
 /**
  * Why one requested cell derived no write. A cell whose Work edit is empty (published, restored or
  * never staged) is not a staged value: the scope naming it is no authority to write it.
  */
-export function unwrittenReason(staged: ReturnType<typeof stagedDucts>, [segment, key]: readonly [string, string]) {
+export function unwrittenReason(staged: ReturnType<typeof stagedDucts>, [segment, key]: readonly [string, string],
+) {
   const cells = staged[segment as keyof typeof staged] as Record<string, unknown> | undefined;
   return cells && key in cells
     ? "staged, but this scope derives no write for it"
@@ -134,7 +141,8 @@ export function healedCellPaths(
 /** Work is the only authored input. Plan, rehearsal and apply share the same derivation and journal. */
 export function ductsExecutors(
   bridge: RevitBridge["Service"],
-  deps: import("./family-actions.ts").FamilyActionDependencies & { nativeRead?: HostNativeRead["Service"] } = {},
+  deps: import("./family-actions.ts").FamilyActionDependencies & { nativeRead?: HostNativeRead["Service"] ;
+  } = {},
 ) {
   const bind = async (ctx: CommandContext, kind: Kind, phase: Phase) => {
     const target = targetOf(ctx);
@@ -154,7 +162,8 @@ export function ductsExecutors(
     const fans = await ctx.selectWork(tools.fans.work, readWorks?.fans ?? fanView.handle, (_doc, cells) => ({
       edits: tools.fans.work.editable,
       cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
-    }));
+    }),
+    );
     const design = ductsDesign(doc, fans);
     // The store's appliedAt is stamped at the plan and reused by apply, so an unchanged plan seals the same request.
     const plan = ctx.read
@@ -185,22 +194,22 @@ export function ductsExecutors(
       prepare: async () => {
         const ductsScope = doc.writeIntent.edit?.value;
         const fanScope = fans.writeIntent.edit?.value;
-        const cells =
-          ductsScope?.cells || fanScope?.cells
-            ? [...(ductsScope?.cells ?? []), ...(fanScope?.cells ?? [])]
-            : undefined;
-        const intent = { ...ductsScope, walk: fanScope?.walk, cells };
+        const intent = { ...ductsScope, walk: fanScope?.walk };
         const { firm } = await runPods(deps, deps.files!.firm);
         const criteria = resolveCriteria(workLayer(design), null, firm);
         const nativeRead = deps.nativeRead;
-        if (!nativeRead) throw refused("Ducts preparation requires the root native Read capability", "read.unavailable");
-        const readNative = <K extends "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables">(key: K, input: unknown) =>
+        if (!nativeRead) throw refused("Ducts preparation requires the root native Read capability", "read.unavailable",
+          );
+        const readNative = <K extends "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables",
+        >(key: K, input: unknown,
+        ) =>
           runPods(deps, admittedCommandReadIdentity(ctx).pipe(
             Effect.flatMap((identity) => nativeRead.read({ key, input, scope: identity.scope }).pipe(
-              Effect.provideService(RequestIdentity, identity),
-            )),
+              Effect.provideService(RequestIdentity, identity)),
+            ),
             Effect.map((answer) => nativeResponseSchema(key).parse(answer.value)),
-          ));
+          ),
+          );
         const read = (selector: Record<string, unknown>): Promise<DuctSnapshot> =>
           readNative(selector.kind === "roster" ? "ducts.snapshot.roster" : "ducts.snapshot.walk",
             {
@@ -210,8 +219,7 @@ export function ductsExecutors(
                 candidateBoxIn: criteria.healBoxIn.value,
               } : selector,
               slots: stagedDucts(doc, fans).parameters,
-            },
-          );
+            });
         let snapshot = await {
           "assign-fan": () => {
             if (!intent?.fan) throw refused("Stage writeIntent.fan before assigning a fan");
@@ -220,7 +228,7 @@ export function ductsExecutors(
           losses: () => lossSnapshot(intent, read),
           heal: () => healSnapshot(intent?.groups ?? [], read),
         }[kind]();
-        const { input, dependencies } = await {
+        const derived = await {
           losses: async () => {
             const tables = await readNative("ducts.tables", { ids: TABLE_IDS });
             const grids = toGrids(tables);
@@ -239,7 +247,8 @@ export function ductsExecutors(
                 (unitId) => read({ kind: "from", unitId }),
               );
             if (snapshot.walk?.truncated)
-              throw refused("The fan walk or an accepted continuation is truncated; no writes can be previewed");
+              throw refused("The fan walk or an accepted continuation is truncated; no writes can be previewed",
+              );
             // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
             const request = applyRequest(
               snapshot,
@@ -250,8 +259,10 @@ export function ductsExecutors(
             if (intent?.walk) {
               const inputs = resolveInputs(layers());
               const roster = suggestRoster(snapshot, [], {
-                kinds: Object.fromEntries(Object.entries(inputs.units).map(([id, u]) => [id, u.kind.value])),
-                roles: Object.fromEntries(Object.entries(inputs.units).map(([id, u]) => [id, u.role.value])),
+                kinds: Object.fromEntries(Object.entries(inputs.units).map(([id, u]) => [id, u.kind.value]),
+                ),
+                roles: Object.fromEntries(Object.entries(inputs.units).map(([id, u]) => [id, u.role.value]),
+                ),
               });
               const sheet = buildSheet({
                 snapshot,
@@ -269,16 +280,25 @@ export function ductsExecutors(
                 ).values(),
               ];
             }
-            const scoped = scopeApplyRequest(request, snapshot.store, intent?.cells);
-            const unwritten = unwrittenCells(scoped, intent?.cells ?? []);
+            const cells = fanScope?.walk
+              ? [...(ductsScope?.cells ?? []), ...fanWriteCells(fans, snapshot)]
+              : ductsScope?.cells;
+            const scoped = scopeApplyRequest(request, snapshot.store, cells);
+            const unwritten = unwrittenCells(scoped, cells ?? []);
             if (unwritten.length)
               throw refused(
                 `These requested cells derive no write in this scope: ${unwritten
-                  .map((cell) => `${cell.join("/")} (${unwrittenReason(stagedDucts(doc, fans), cell)})`)
+                  .map(
+                    (cell) =>
+                      `${cell.join("/")} (${unwrittenReason(stagedDucts(doc, fans), cell)})`,
+                  )
                   .join("; ")}`,
               );
+            const label = elementLabeler(snapshot, { unique: true });
             return {
               input: scoped as unknown as Record<string, unknown>,
+              nothingToWrite: pendingCount(design, snapshot.store) === 0,
+              labels: Object.fromEntries(snapshot.nodes.map((n) => [String(n.id), label(n.id)])),
               dependencies: {
                 snapshot: ductWriteEvidence(snapshot),
                 grids,
@@ -306,13 +326,20 @@ export function ductsExecutors(
             return { input: intent.fan, dependencies: ductWriteEvidence(snapshot) };
           },
         }[kind]();
-        return { process, input, dependencies };
+        return { process, ...derived };
       },
     };
   };
   const run = async (ctx: CommandContext, execution: ActionExecution, kind: Kind, phase: Phase) => {
     const p = prepared.parse(execution.prepared),
       target = targetOf(ctx);
+    // Default slot initialization is bookkeeping, never an authored model change.
+    if (p.nothingToWrite) {
+      if (phase === "apply") throw refused("Nothing to write: no staged changes in the selected scope");
+      return { value: { previewOnly: true, writes: [], counts: { planned: 0, written: 0, refused: 0, unchanged: 0 } ,
+        }, derivedRequest: p.input ,
+      };
+    }
     const entry = {
       losses: {
         key: "ducts.apply",
@@ -328,7 +355,8 @@ export function ductsExecutors(
         retires: (input: Record<string, unknown>, value: unknown) =>
           healedCellPaths(input, value as DuctsHeal.Res.Response),
       },
-      "assign-fan": { key: "ducts.assign-fan", native: "ducts.assign-fan.preview", refusePlan: null, retires: () => [] as string[][] },
+      "assign-fan": { key: "ducts.assign-fan", native: "ducts.assign-fan.preview", refusePlan: null, retires: () => [] as string[][] ,
+      },
     }[kind];
     // The losses plan reads through the native Read sibling; a rehearsal calls its rolled-back TransactRead;
     // only apply reaches the ModelWrite leaf. Heal and fan plans never get here: the write boundary seals them.
@@ -340,15 +368,26 @@ export function ductsExecutors(
       (id) => invokeBridge(bridge, target, key, p.input, id),
       { process: p.process as import("@pe/agent-contracts").NativeProcess },
     );
-    // A plan the native owner refuses outright (a shared type write it cannot scope, a refused store) seals
-    // nothing, so it can never arm an apply; its reasons are the plan's refusal and every staged cell stays.
+    // Retain the review and its read evidence. A refusal blocks the whole intent at the write boundary;
+    // bookkeeping and computed losses cannot authorize Apply while an authored edit is refused.
     if (phase !== "apply") {
       const refusal = entry.refusePlan?.(value);
-      if (refusal) throw refused(refusal, "ducts.plan-refused");
+      if (refusal) return {
+          value,
+          derivedRequest: p.input,
+          planRefusalCode: "ducts.plan-refused",
+          planRefusal: (value as DuctsApply.Res.Response).writes
+            .filter((w) => w.outcome === "refused")
+            .map(
+              (w) =>
+                `${p.labels?.[String(w.id)] ?? "Requested write"}: ${w.reason}. ${/neither|missing|no .*parameter/i.test(w.reason ?? "") ? "Add the missing parameter to the family or map the value to an existing writable parameter." : "Resolve this refusal and Plan again."}`,
+            ).join("; "),
+        };
     }
     const handle = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
     const paths = phase === "apply" ? entry.retires(p.input, value) : [];
-    const fanPaths = paths.filter((path) => tools.fans.work.editable.some((pattern) => pattern[0] === path[0]));
+    const fanPaths = paths.filter((path) => tools.fans.work.editable.some((pattern) => pattern[0] === path[0]),
+    );
     const ductPaths = paths.filter((path) => !fanPaths.includes(path));
     const retired = ductPaths.length ? await execution.retireWork(handle.key, "ducts", ductPaths) : undefined;
     if (fanPaths.length) await execution.retireWork({ ...handle.key, route: "fans" }, "fans", fanPaths);

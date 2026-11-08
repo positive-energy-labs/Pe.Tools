@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { callOp, callCompose } from "./readings-api";
+import { callOp, callCompose } from "../host/catalog-client";
 const fetched = vi.hoisted(() => ({ host: vi.fn() }));
 vi.mock("../host/runtime", () => ({ hostFetch: fetched.host }));
 afterEach(() => fetched.host.mockReset());

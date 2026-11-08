@@ -1,4 +1,4 @@
-import { testHostFiles, testDocumentMarks } from "./effect-test.ts";
+import { testDuctFiles, testDocumentMarks } from "./effect-test.ts";
 import { randomUUID } from "node:crypto";
 import { Effect, FileSystem } from "effect";
 import { expect, test, vi } from "vite-plus/test";
@@ -41,6 +41,7 @@ function fixture() {
   let duringRead: (() => Promise<void>) | undefined;
   let stored = {
     version: 1,
+    schemaVersion: 1,
     revision: 1,
     doc: familyDraftRouteState.schema.parse({
       reading: "Before",
@@ -102,7 +103,7 @@ function fixture() {
       bridge,
       {
         sdk: sdkSessions,
-        files: testHostFiles(),
+        files: testDuctFiles(),
         marks: testDocumentMarks(bridge),
         workspace,
       },

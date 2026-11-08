@@ -1,17 +1,11 @@
+// Generated from captures/route.ts by codegen:routes. Do not edit.
 import { z } from "zod";
-import { manyField, field, type RouteDeclaration } from "../route-field.ts";
-
-export const capturesAddress = {
-  path: "/captures",
-  title: "Captures",
-  fields: {
-    /** The picture the list scrolls to and marks; absent = none. */
-    sha: field(z.string().max(64).optional(), { url: "push", agent: "set" }),
-    /** The shas whose receipt is unfolded. */
-    open: manyField("name", { url: "replace", agent: "set" }),
-  },
-  agent: {
-    policy:
-      "Focus one kept picture by sha, and unfold or fold receipts. Facts list the kept captures (sha, view, time). This does not take a capture or read Revit.",
-  },
-} satisfies RouteDeclaration;
+import type { Immutable } from "../route-kernel-data.ts";
+import { focusSelectionSchema } from "../route-kernel-codecs.ts";
+import { jsonCodec } from "../route-field.ts";
+const field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: jsonCodec(schema) });
+export const capturesAddress = { path: "/captures" as const, title: "Captures", fields: {
+"focus": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "replace"),
+"open": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"array","items":{"type":"string"}}) as z.ZodType<Immutable<Array<string>>>).default([]), "replace"),
+selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
+}, agent: { policy: "Use the route fields as declared." } };

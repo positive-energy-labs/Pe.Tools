@@ -5,6 +5,9 @@ using Pe.Revit.DocumentData.Schedules.Apply;
 using Pe.Revit.DocumentData.Schedules.Collect;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
+using Pe.Shared.RevitData.Serialization;
+using Newtonsoft.Json;
+using System.IO;
 
 namespace Pe.Revit.Tests;
 
@@ -48,6 +51,12 @@ public sealed class ScheduleCellBindingProofTests {
                         Assert.That(binding.Targets, Has.Count.EqualTo(1));
                         Assert.That(binding.Targets[0].ParameterId, Is.Not.Zero);
                         Assert.That(binding.Targets[0].HasValue, Is.True);
+                        var target = binding.Targets[0];
+                        Assert.That(target.ElementLabel, Is.AnyOf(MarkA, MarkB));
+                        Assert.That(target.UniqueId, Is.EqualTo(projectDocument.GetElement(target.ElementId.ToElementId()).UniqueId));
+                        Assert.That(target.ParameterName, Is.EqualTo("Mark"));
+                        Assert.That(target.Scope, Is.EqualTo("instance"));
+                        Assert.That(target.DisplayValue, Is.EqualTo(target.RawValue));
                     }
 
                     // Type column: every row resolves to the SAME shared type element — one write
@@ -57,6 +66,12 @@ public sealed class ScheduleCellBindingProofTests {
                     foreach (var binding in typeCommentBindings) {
                         Assert.That(binding.IsTypeParameter, Is.True, binding.ToString());
                         Assert.That(binding.IsEditable, Is.True, binding.ToString());
+                        var target = binding.Targets.Single();
+                        Assert.That(target.ElementLabel, Is.Not.Null.And.Not.Empty);
+                        Assert.That(target.UniqueId, Is.EqualTo(projectDocument.GetElement(fixture.SymbolId.ToElementId()).UniqueId));
+                        Assert.That(target.ParameterName, Is.EqualTo("Type Comments"));
+                        Assert.That(target.Scope, Is.EqualTo("type"));
+                        Assert.That(target.DisplayValue, Is.EqualTo(TypeComment));
                     }
 
                     // The Revit lie that shaped the resolver: UserModifiable reports false for
@@ -68,6 +83,32 @@ public sealed class ScheduleCellBindingProofTests {
                     Assert.That(markParameter.UserModifiable, Is.False,
                         "UserModifiable now reports true for Mark — the resolver could re-add it to the editability gate.");
                 });
+                // Review metadata is not raw mutation evidence: changing only its presentation must
+                // leave native admission intact, while CurrentBinding returns the real native identity.
+                var reviewed = markBindings[0] with {
+                    Targets = markBindings[0].Targets.Select(target => target with {
+                        ElementLabel = "old label", DisplayValue = "old display"
+                    }).ToList()
+                };
+                var plan = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
+                    entry.ScheduleId, entry.ScheduleUniqueId,
+                    [new(dataRows[0].RowNumber, reviewed.ColumnNumber, reviewed, "PE-REVIEW-AFTER")], DryRun: true));
+                var after = CollectEntry(projectDocument, entry.ScheduleId);
+                var settings = RevitDataJson.CreateSerializerSettings();
+                settings.DefaultValueHandling = DefaultValueHandling.Include;
+                settings.NullValueHandling = NullValueHandling.Include;
+                var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory("ScheduleReviewIdentity");
+                var evidence = Path.Combine(output, "native-review.json");
+                File.WriteAllText(evidence, JsonConvert.SerializeObject(new {
+                    before = entry, response = plan, after
+                }, Formatting.Indented, settings));
+                TestContext.WriteLine($"Schedule review native evidence: {evidence}");
+                Assert.That(JsonConvert.SerializeObject(after, settings), Is.EqualTo(JsonConvert.SerializeObject(entry, settings)),
+                    "DryRun must leave independently recollected native values and bindings unchanged.");
+                Assert.That(plan.Results.Single().Ok, Is.True);
+                Assert.That(plan.Results.Single().CurrentBinding!.Targets.Single().ElementLabel, Is.AnyOf(MarkA, MarkB));
+                Assert.That(plan.Results.Single().ParameterResults.Single().ParsedRaw, Is.EqualTo("PE-REVIEW-AFTER"));
+                Assert.That(plan.AppliedParameterWrites, Is.Zero);
             });
     }
 

@@ -1,31 +1,12 @@
+// Generated from schedules/route.ts by codegen:routes. Do not edit.
 import { z } from "zod";
-import { field, text, type RouteDeclaration } from "../route-field.ts";
-import { entityFields, tableFields, workLinesField } from "./entity.ts";
-
-export const schedulesAddress = {
-  path: "/schedules",
-  title: "Schedules",
-  fields: {
-    ...entityFields,
-    /**
-     * The open schedule's Work, so a reload reopens it; opening one replaces the place. Opening a
-     * schedule may read Revit, so it stays the person's (the Ladder): Pea reads it.
-     */
-    workspaceId: field(text(), { url: "replace", agent: "read" }),
-    ...tableFields(),
-    lines: workLinesField,
-    /** The located grid cell, `row::column` (a schedule cell key); empty = none. */
-    cell: field(
-      z
-        .string()
-        .regex(/^(\d+::\d+)?$/, "a cell is row::column")
-        .default(""),
-      { url: "replace", agent: "set" },
-    ),
-  },
-  agent: {
-    finds: ["schedule", "grid", "query", "columns", "cell"],
-    policy:
-      "Change the visible Schedules view: stage, the Work lines tab (suggestions, edits, all), the grid's query line, sort (`-key` descending) and hidden columns (column keys from facts), and the located cell (`row::column`, empty = none). Facts name the open schedule, its columns and its row and staged counts. The open schedule (workspaceId) and the opened spec (pod, path) are the person's: read them. A view change never reads Revit, stages a cell or applies.",
-  },
-} satisfies RouteDeclaration;
+import type { Immutable } from "../route-kernel-data.ts";
+import { subjectSchema, focusSelectionSchema } from "../route-kernel-codecs.ts";
+import { jsonCodec } from "../route-field.ts";
+const field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: jsonCodec(schema) });
+export const schedulesAddress = { path: "/schedules" as const, title: "Schedules", fields: {
+"workspaceId": field(subjectSchema(1).default({"kind":"ids","ids":[]}), "push"),
+"table": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"query":{"type":"string"},"sorts":{"type":"array","items":{"type":"object","properties":{"key":{"type":"string"},"dir":{"type":"string","enum":["asc","desc"]}},"required":["key","dir"]}},"hiddenColumns":{"type":"array","items":{"type":"string"}}},"required":["query","sorts","hiddenColumns"]}) as z.ZodType<Immutable<{"query": string; "sorts": Array<{"key": string; "dir": "asc" | "desc"}>; "hiddenColumns": Array<string>}>>).default({"query":"","sorts":[],"hiddenColumns":[]}), "replace"),
+"cell": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","pattern":"^(\\d+::\\d+)?$"}) as z.ZodType<Immutable<string>>).default(""), "replace"),
+selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
+}, agent: { policy: "Choose schedule through workspaceId, using the module's local identities." } };

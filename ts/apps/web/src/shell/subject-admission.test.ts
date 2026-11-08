@@ -4,15 +4,15 @@ import { waitFor } from "@testing-library/react";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { z } from "zod";
 import { identityCodecs } from "./page-port";
-import { localId } from "../ducts/neutral";
+import { localId } from "../ducts/identity";
 import { subjectState } from "./subject";
 import { tabTitle } from "../workbench/route-tabs";
 import { admit } from "../fans/admission.fixture";
-import { createRouteShell } from "./admitted-mount";
-import { admittedRouterAddress } from "./admitted-pane";
-import { placeInput } from "./admitted-place.test-fixture";
-import { admittedSources } from "./admitted-sources";
-import { sourceRouteServices } from "./source-route-services";
+import { mountTypedRoute } from "../shell/typed-mount";
+import { nativeTestAdapter } from "../fans/native.test-support";
+import { createWorkFeedClient } from "./work-feed-client";
+import { admittedRouterAddress } from "./typed-place-boundary";
+import { placeInput } from "./typed-place.test-support";
 const mounts: { dispose(): void }[] = [];
 afterEach(() => mounts.splice(0).forEach((mount) => mount.dispose()));
 
@@ -20,12 +20,9 @@ test("admitted Fans uses its actual picker labels and decoded subject; foreign a
   const { presenter } = await admit();
   const history = createMemoryHistory({ initialEntries: ["/fans?fixture=layout"] });
   const input = placeInput(admittedRouterAddress(history));
-  const mount = createRouteShell(sourceRouteServices(admittedSources(presenter))).mount(
-    presenter,
-    input,
-  );
+  const mount = nativeTestAdapter(mountTypedRoute(presenter.typed,input,presenter.workFingerprint),createWorkFeedClient());
   mounts.push(mount);
-  await waitFor(() => expect(mount.readingStatus("fans").snapshot.current).toBe(true));
+  await waitFor(() => expect(mount.readingStatus("value").snapshot.current).toBe(true));
   const options = z
     .array(z.object({ id: z.unknown(), label: z.string() }))
     .parse(mount.picker("fan"));
@@ -55,7 +52,7 @@ test("admitted Fans uses its actual picker labels and decoded subject; foreign a
     history.location.search ? new URLSearchParams(history.location.search).get("fan") : null,
   );
   mount.controls.subject({ kind: "ids", ids: [ids[1]!] });
-  expect(mount.subjectState(search())?.label).toBe(options[1]!.label);
+  await waitFor(() => expect(mount.subjectState(search())?.label).toBe(options[1]!.label));
   expect(mount.subjectState({ ...search(), fan: "{broken" })).toMatchObject({
     ready: false,
     refusal: expect.stringContaining("malformed"),

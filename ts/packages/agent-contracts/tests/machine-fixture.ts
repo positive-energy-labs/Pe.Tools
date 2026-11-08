@@ -50,10 +50,7 @@ export function machineFixture(
           },
           receipt: {
             payload: "installed",
-            buildStamp: null,
-            generationId: null,
             generationRoot: "C:/test/installed",
-            overridePath: null,
             receiptPath: "test.json",
           },
           bridge: {

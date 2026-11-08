@@ -11,7 +11,8 @@ import { GoToPopup } from "@pe/kit/lang/go-to";
 import { SvgTip } from "@pe/kit/lang/tooltip";
 import { useContext, type CSSProperties, type ReactNode, useMemo } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
-import { PictureStage, stageViewport } from "#/scene/stage-controller";
+import { PictureStage } from "#/scene/stage-controller";
+import type { ValueHandle } from "@pe/kit/lang/collection";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
@@ -20,26 +21,18 @@ import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
-import type { RoomsPage } from "./graph";
 
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { boundsOf, contentViewport, fitFrame, type Bounds2, type Point2 } from "#/lib/affine-frame";
 import { token } from "@pe/kit/lib/token";
-import { PlanImageLayer, planCorners, type TakeoffPlanImage } from "#/takeoff/level-plan";
-import { pathD } from "#/takeoff/model";
-import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan";
+import { PlanImageLayer, planCorners } from "#/scene/plan-image";
+import { pathD, PLAN_REFUSAL } from "./plan-drawing";
+import type { PlanImage, PlanRefusal } from "./plan-reading";
 import { ROOMS_LAYERS, toggleLayer } from "@pe/agent-contracts";
 import { LAYER_SAYS, TraceFaces, TraceLayers, type Layer, type TraceRead } from "./layers";
 import { CALLOUT_FONT_PX, holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
 import type { PlanGeo } from "./sketch";
-import { useRouteLease } from "#/route/view-bridge";
-
-export interface RoomsPlanLease {
-  thread?: string;
-  ready: boolean;
-  context: Record<string, unknown>;
-}
 
 export type RoomsRegion = RoomsSnapshot.Res.RoomsRegion;
 
@@ -136,10 +129,21 @@ const ZOOM_PAD_PX = 48;
 const FILL_PCT = 27;
 const FILL_HOT_PCT = 40;
 
+type PlanPage = {
+  read(): {
+    readonly view: string;
+    readonly layers: readonly string[] | "all";
+    readonly viewport: PlaneViewport | null;
+  };
+  pose(
+    patch: { layers?: readonly string[] | "all"; viewport?: PlaneViewport | null },
+    intent?: "gesture" | "named",
+  ): unknown;
+};
+
 export function RoomsPlan({
   renderPane,
   fixture = false,
-  lease,
   rows,
   plan,
   planRefusal,
@@ -147,19 +151,18 @@ export function RoomsPlan({
   empty,
   onSelect,
   trace,
-  page,
-  setPage,
+  page: place,
+  value,
   overlay,
 }: {
   renderPane: PaneApi;
   /** A synthetic plan (`?fixture=plan`): said in the pane's meta, where the view is named. */
   fixture?: boolean;
-  lease?: RoomsPlanLease;
   /** Drawn over the plan in screen px (the feedback layer), given the plan's frame. */
   overlay?: (geo: PlanGeo) => ReactNode;
   /** The regions on the drawn view, labelled as the table labels them. */
   rows: readonly RoomRow[];
-  plan: TakeoffPlanImage | null;
+  plan: PlanImage | null;
   planRefusal: PlanRefusal | null;
   planError: string | null;
   /** Why nothing can be drawn yet (no document, no view, snapshot failed); null = draw. */
@@ -168,9 +171,10 @@ export function RoomsPlan({
   onSelect: (guid: string | null, add: boolean) => void;
   /** `rooms.trace` for the drawn view; `none` names why there is nothing to draw. */
   trace: TraceRead;
-  page: RoomsPage;
-  setPage: (next: Partial<RoomsPage>, move?: { history: "push" | "replace" }) => void;
+  page: PlanPage;
+  value?: ValueHandle<unknown>;
 }) {
+  const page = place.read();
   const doc = useContext(AttentionDocument) ?? "";
   const registry = useContext(RegistryContext);
   const attention = useAttention(doc);
@@ -266,7 +270,7 @@ export function RoomsPlan({
   const viewport = usePlaneViewport(
     page.viewport,
     world?.fit ?? null,
-    stageViewport<PlaneViewport>(setPage),
+    (viewport, how) => place.pose({ viewport }, how === "gesture" ? "gesture" : "named"),
     readout,
   );
   const {
@@ -280,7 +284,9 @@ export function RoomsPlan({
     dragDistance: dragDist,
     handlers,
   } = viewport;
-  const layers = (ROOMS_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer)));
+  const layers = ROOMS_LAYERS.filter(
+    (layer) => page.layers === "all" || page.layers.includes(layer),
+  );
   const mapShapes = useMemo(
     () =>
       world?.shapes.map((shape) => ({ d: shape.d, ink: token(REGION_INK[shape.state].ink!) })) ??
@@ -299,9 +305,15 @@ export function RoomsPlan({
       value: layers,
       options: ROOMS_LAYERS.map((key) => ({ key, label: key, says: LAYER_SAYS[key] })),
       onToggle: (key: string) =>
-        setPage(
-          { layers: toggleLayer(ROOMS_LAYERS, (ROOMS_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer))), key as Layer) },
-          { history: "push" },
+        place.pose(
+          {
+            layers: toggleLayer(
+              ROOMS_LAYERS,
+              ROOMS_LAYERS.filter((layer) => page.layers === "all" || page.layers.includes(layer)),
+              key as Layer,
+            ),
+          },
+          "named",
         ),
     },
   };
@@ -313,34 +325,6 @@ export function RoomsPlan({
         [shape.box.minX, shape.box.minY] as const,
         [shape.box.maxX, shape.box.maxY] as const,
       ]) ?? [];
-
-  // The lease's one key is the viewport (`roomsAddress.agent`); the rest stays the person's.
-  useRouteLease("rooms", [page, setPage], {
-    thread: lease?.thread,
-    visible: !!lease?.ready && !empty && !!world && !!size,
-    context: {
-      ...lease?.context,
-      size,
-      frame: world?.frame.transform ?? null,
-      plan: plan ? { href: plan.href, registration: plan.registration } : null,
-    },
-    facts: {
-      pose: view,
-      size,
-      fit: world?.fit ?? null,
-      frame: world?.frame.transform ?? null,
-      units: "model XY feet; affine frame to world pixels; viewport scale and screen translations",
-      counts,
-      totalRegions: rows.length,
-      truncated: rows.length > 100,
-      regions: (world?.shapes ?? []).slice(0, 100).map((shape) => ({
-        guid: shape.region.guid,
-        label: shape.label,
-        role: shape.region.role,
-        bounds: shape.box,
-      })),
-    },
-  });
 
   const callouts = useMemo(() => {
     if (!world || !size) return [];
@@ -402,6 +386,13 @@ export function RoomsPlan({
 
   const notice = (
     <>
+      {value && !value.current ? (
+        <OutcomeLine
+          kind={value.status === "pending" ? "busy" : "error"}
+          label="Plan reading"
+          says={value.reason}
+        />
+      ) : null}
       {!trace.data && trace.none ? (
         <OutcomeLine
           kind="advisory"

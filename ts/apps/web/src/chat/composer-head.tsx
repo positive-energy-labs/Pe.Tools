@@ -19,15 +19,15 @@ import { useAtomValue } from "@effect/atom-react";
 
 import { Button } from "@pe/kit/lang/button";
 import { useCopy } from "@pe/kit/lib/use-copy";
-import { previousOf } from "#/shell/readings-hooks";
+import { previousOf } from "#/host/resource-state";
 import { Ladder } from "#/route/ladder";
 import { useDocumentLadder } from "#/route/situation-ladder";
-import { parseTarget } from "#/route/route-target";
+import { parseTarget } from "#/route/target-codec";
 import type { RouteHandle } from "#/route/handle";
-import { chatReading, type ChatHandle } from "./graph";
-export type { ChatHandle } from "./graph";
-import { GraphHistory } from "#/shell/mount";
-import { TimelineHead } from "#/shell/situation-band";
+
+import { chatReading, type ChatHandle } from "./owner-ports";
+export type { ChatHandle } from "./owner-ports";
+
 import { SituationBand } from "#/shell/situation-band";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 import { RouteHelpButton } from "#/route/help";
@@ -54,22 +54,28 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /**
  * Send, scoped to the composer draft: the one verb, whether pressed in the head or entered in the
- * textarea. The route declares it once (`chat/graph.ts`); this only names its input.
+ * textarea. The host's thread prompt command owns validation and the harness stream owns completion.
  */
-export function useSend(handle: ChatHandle, draft: ChatDraft, onSent?: (sent: ChatDraft) => void) {
-  const send = handle.control("send", {
+export function useSend(_handle: ChatHandle, draft: ChatDraft, onSent?: (sent: ChatDraft) => void) {
+  const input = {
     text: draft.text.trim(),
     attachments: draft.attachments.length ? draft.attachments : undefined,
     mentions: draft.mentions.length ? draft.mentions : undefined,
-  });
+  };
+  const workbench = useWorkbench();
   return {
-    label: handle.verbs.send!.label,
-    says: handle.verbs.send!.says,
-    refusal: send.refusal ?? emptyPrompt(draft),
+    label: "Send",
+    says: undefined,
+    refusal: workbench.sendRefusal ?? emptyPrompt(draft),
     run: async () => {
-      const result = await send.run();
-      if (result.state === "done") onSent?.(draft);
-      return "refusal" in result ? result.refusal : null;
+      try {
+        // SHIM: S gap 9 must expose typed host commands before this can use the shared consent door.
+        await workbench.sendPrompt(input);
+        onSent?.(draft);
+        return null;
+      } catch (error) {
+        return { code: "not-ready" as const, message: String(error) };
+      }
     },
   };
 }
@@ -120,10 +126,12 @@ const documentAddress = (
  * The thread's head, or the draft's own target before the first send creates a thread. A draft
  * holds one document; more are added once the thread exists.
  */
-function useThreadHead(handle: ChatHandle) {
+function useThreadHead(_handle: ChatHandle) {
   const { currentThreadId, draftTarget, setDraftTarget } = useWorkbench();
-  const scope = useThreadScope(currentThreadId, !handle.fixture, chatReading(handle, "head"));
-  if (currentThreadId || handle.fixture) return scope;
+  // SHIM: live head stays outside Value until the shared thread Page/carry contract is available.
+  // Scope PUTs publish thread-head snapshots; the existing body cache is not invalidated by them.
+  const scope = useThreadScope(currentThreadId, true);
+  if (currentThreadId) return scope;
   const set = async (targets: Parameters<typeof scope.set>[0]) => {
     setDraftTarget(targets.at(-1)?.request ?? null);
     return true;
@@ -271,15 +279,9 @@ export function ChatSituationHead({
 }
 
 /** Lamp · gauge · help · theme for Chat — it rides the thread head, not the composer. */
-export function ChatCluster({ handle }: { handle: ChatHandle; situation: ChatSituation }) {
+export function ChatCluster(_props: { handle: ChatHandle; situation: ChatSituation }) {
   return (
     <>
-      <PrimaryRouteControls route="chat" slot="inspector">
-        {/* The one Timeline head, in a popover: an inline disclosure in this header slot spilled its
-            rows over the thread header (Manual D). The thread and target already lead the Situation;
-            the target's own "r0" read as the Work revision, so it is not repeated here. */}
-        <TimelineHead owner={handle} history={<GraphHistory owner={handle} />} />
-      </PrimaryRouteControls>
       <PrimaryRouteControls route="chat">
         <RouteHelpButton
           name="Pea"

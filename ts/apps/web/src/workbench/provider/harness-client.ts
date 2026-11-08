@@ -19,7 +19,7 @@ import { followThread } from "@pe/agent-contracts/chat-state";
 import { fromStandardSchema } from "@pe/host-contracts/contracts";
 import { Cause, Exit, Schema } from "effect";
 import type { z } from "zod";
-import { openEventSource, peReadings } from "#/readings";
+import { openEventSource, peReadings } from "#/host/resource-stream";
 
 /** What a send posts: text, attachments, mentions (`promptRequestSchema`); the client mints its id. */
 export type PromptRequest = Omit<z.input<typeof promptRequestSchema>, "id">;
@@ -151,6 +151,7 @@ export function streamThread(options: {
     const events = open(readingsUrl(origin, { kind: "thread", thread: threadId }, cursor));
     source = events;
     events.onmessage = (message: MessageEvent<string>) => {
+      if (stopped || source !== events) return;
       // Promise/React caller until phase 5: a message that does not decode, whether its frame or
       // its cursor, is a fault then a reread; the resume cursor moves only for an accepted frame.
       const accepted = Schema.decodeUnknownExit(ThreadMessage)({
@@ -163,8 +164,17 @@ export function streamThread(options: {
         onReread();
         return;
       }
+      const frame = accepted.value.data;
+      // SHIM: S gap 6 queues event tails behind mark capture. Remove this failure-body reread
+      // and its backlog test once the kernel bypasses that queue and exposes stream failures.
+      if (frame.kind === "failure") {
+        stop();
+        onFault?.(new Error(frame.error));
+        onReread();
+        return;
+      }
       if (accepted.value.id !== undefined) cursor = accepted.value.id;
-      const step = followThread(last, accepted.value.data);
+      const step = followThread(last, frame);
       if (step.kind === "apply") {
         last = step.event.seq;
         onEvent(step.event);

@@ -1,4 +1,8 @@
-import { identityCodecs, identityPartSchema, decodeFailure } from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
+import {
+  identityCodecs,
+  identityPartSchema,
+  decodeFailure,
+} from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
 export { identityCodecs } from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
 import { z } from "zod";
 import { deepEqual } from "@tanstack/react-router";
@@ -26,10 +30,11 @@ const selectionShape = z.array(selectionItem);
 type Item = z.output<typeof selectionItem>;
 
 /** Fixed shape and kind-specific identity validation; membership is evidence, not syntax. */
-export function selectionCodec<G extends RouteGraphJson, const K extends readonly string[]>(
-  graph: G,
-  kinds: K,
-) {
+export function selectionCodec<
+  G extends RouteGraphJson,
+  const K extends readonly string[],
+  All extends boolean = false,
+>(graph: G, kinds: K, allowAll: All = false as All) {
   type Selected = Extract<SelectionItem<G>, { kind: K[number] }>;
   const isSelected = (item: Item): item is Selected => {
     const identity = Object.hasOwn(graph.identities, item.kind)
@@ -39,7 +44,9 @@ export function selectionCodec<G extends RouteGraphJson, const K extends readonl
       !!identity && kinds.includes(item.kind) && identityCodecs[identity.kind].decode(item.id).ok
     );
   };
-  const normalize = (value: unknown): DecodeResult<readonly Selected[]> => {
+  type Value = readonly Selected[] | (All extends true ? "all" : never);
+  const normalize = (value: unknown): DecodeResult<Value> => {
+    if (allowAll && value === "all") return { ok: true, value: "all" as Value };
     const parsed = selectionShape.safeParse(value);
     if (!parsed.success) return decodeFailure("Selection must be an array of {kind,id}");
     const seen = new Set<string>();
@@ -56,11 +63,13 @@ export function selectionCodec<G extends RouteGraphJson, const K extends readonl
     normalize,
     encode(value: unknown): DecodeResult<string> {
       const result = normalize(value);
-      return result.ok ? { ok: true, value: JSON.stringify(result.value) } : result;
+      return result.ok
+        ? { ok: true, value: result.value === "all" ? "all" : JSON.stringify(result.value) }
+        : result;
     },
-    decode(text: string): DecodeResult<readonly Selected[]> {
+    decode(text: string): DecodeResult<Value> {
       try {
-        return normalize(JSON.parse(text));
+        return normalize(text === "all" ? text : JSON.parse(text));
       } catch {
         return decodeFailure("Invalid selection JSON");
       }
@@ -103,7 +112,17 @@ const record = z
 const originSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("human"),
-    source: z.enum(["subject", "stage", "selection", "setting", "pose", "query", "draft"]),
+    source: z.enum([
+      "subject",
+      "stage",
+      "selection",
+      "setting",
+      "pose",
+      "query",
+      "draft",
+      "device",
+      "transient",
+    ]),
     history: z.enum(["push", "replace"]),
   }),
   z.strictObject({
@@ -140,6 +159,7 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
   schemas: S,
   membership: (page: PageOf<G, S>) => "verified" | "unresolved" | { readonly reason: string },
   transition?: (current: PageOf<G, S>, patch: unknown, origin: MoveOrigin) => DecodeResult<unknown>,
+  fixtureDefaults: unknown = {},
 ) {
   const fields = Object.entries(graph.fields);
   const subject = fields.filter(([, field]) => field.role === "subject");
@@ -154,7 +174,8 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
   const decodeField = (key: string, value: unknown): DecodeResult<unknown> => {
     const field = graph.fields[key];
     if (!field) return decodeFailure(`Unknown Page field: ${key}`);
-    if (field.role === "selection") return selectionCodec(graph, field.kinds).normalize(value);
+    if (field.role === "selection")
+      return selectionCodec(graph, field.kinds, field.allowAll === true).normalize(value);
     const parsed = schemas[field.schema]?.safeParse(value);
     if (!parsed?.success) return decodeFailure(`Invalid Page field: ${key}`);
     if (field.role === "subject") {
@@ -214,10 +235,20 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
     }
     return isPage(out) ? { ok: true, value: freezePage(out) } : decodeFailure("Invalid Page");
   };
-  const defaults = () =>
-    Object.fromEntries(
+  const fixture = record.safeParse(structuredClone(fixtureDefaults));
+  const defaultFailure =
+    !fixture.success ||
+    Object.keys(fixture.data).some(
+      (key) => !role(key) || ["setting", "device", "transient"].includes(role(key)!),
+    )
+      ? "Invalid fixture Page defaults"
+      : null;
+  const defaults = () => ({
+    ...Object.fromEntries(
       fields.map(([key, field]) => [key, field.role === "selection" ? [] : field.initial]),
-    );
+    ),
+    ...(fixture.success ? fixture.data : {}),
+  });
   type RestoreState = Parameters<PageOwner<G, S>["restorePage"]>[0];
   const isRestoreState = (input: Record<string, unknown>): input is RestoreState =>
     Object.hasOwn(input, subjectKey) &&
@@ -231,7 +262,8 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
     origin: MoveOrigin,
     runTransition = true,
   ): PagePreparation<G, S> => {
-    if (!originSchema.safeParse(origin).success) return decodeFailure("Missing or invalid move origin");
+    if (!originSchema.safeParse(origin).success)
+      return decodeFailure("Missing or invalid move origin");
     const parsed = record.safeParse(patch);
     if (!parsed.success) return decodeFailure("Invalid Page patch");
     const entries = Object.entries(parsed.data);
@@ -297,9 +329,10 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
   };
   return Object.freeze({
     decode,
-    initial: () => decode(defaults()),
+    initial: () => (defaultFailure ? decodeFailure(defaultFailure) : decode(defaults())),
     /** Inputs are decoded fields with presence retained. Empty values are never absence. */
     restoreState(url: unknown, memory: unknown): DecodeResult<RestoreState> {
+      if (defaultFailure) return decodeFailure(defaultFailure);
       const u = record.safeParse(url);
       const m = record.safeParse(memory);
       if (!u.success || !m.success) return decodeFailure("Invalid restore fields");
@@ -368,7 +401,11 @@ export function createRolePagePorts<P>(
       return refused("Invalid Page patch");
     }
   };
-  const field = (key: unknown, value: unknown, source: "setting" | "query" | "draft") =>
+  const field = (
+    key: unknown,
+    value: unknown,
+    source: "setting" | "query" | "draft" | "device" | "transient",
+  ) =>
     typeof key === "string"
       ? send({ [key]: value }, source, "replace")
       : refused("Invalid field key");
@@ -383,6 +420,8 @@ export function createRolePagePorts<P>(
       read: () => freezePage(owner.readPage()),
       select: (next: unknown) => one("selection", next),
       set: (key: keyof P, value: P[keyof P]) => field(key, value, "setting"),
+      device: (key: keyof P, value: P[keyof P]) => field(key, value, "device"),
+      transient: (key: keyof P, value: P[keyof P]) => field(key, value, "transient"),
       pose: (patch: unknown, intent: "gesture" | "named") =>
         intent === "gesture" || intent === "named"
           ? send(patch, "pose", intent === "gesture" ? "replace" : "push")
@@ -393,6 +432,8 @@ export function createRolePagePorts<P>(
       stage: (value: unknown) => one("stage", value),
       query: (key: keyof P, value: P[keyof P]) => field(key, value, "query"),
       draft: (key: keyof P, value: P[keyof P]) => field(key, value, "draft"),
+      device: (key: keyof P, value: P[keyof P]) => field(key, value, "device"),
+      transient: (key: keyof P, value: P[keyof P]) => field(key, value, "transient"),
     }),
   });
 }

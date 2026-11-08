@@ -1,6 +1,6 @@
 import { captureListSchema, type GraphSeedData } from "@pe/agent-contracts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { solve, type DuctInput } from "#/duct-loss/duct/math";
+import { solve, type DuctInput } from "../../../../packages/ducts-domain/src/duct-loss-math";
 
 // TODO: docs/features/routes/LEDGER.md#s7-5d8183e3b5 Link response examples to catalog entries when OpAttribute.Example supports responses.
 // It currently projects requestExamples only. Native writes stay refused in the fixture lane.

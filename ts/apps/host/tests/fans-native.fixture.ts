@@ -3,7 +3,7 @@ import { HostNativeRead } from "@pe/host-internal/native-read";
 import { NativeReads } from "../src/native-reads.ts";
 import type { RequestIdentityData } from "@pe/host-internal/request-contracts";
 import { testHostInputs } from "./effect-test.ts";
-import { testHostFiles } from "./effect-test.ts";
+import { testDuctFiles } from "./effect-test.ts";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -11,7 +11,7 @@ import { NodeCrypto, NodeServices, NodeHttpClient } from "@effect/platform-node"
 import { Context, Effect, Exit, Layer, Queue, Scope } from "effect";
 import { HttpRouter } from "effect/http";
 import { TestClock } from "effect/testing";
-import { bindWork, DUCTS_BODY_VERSION_HEADER, type Address, type Caller } from "@pe/agent-contracts";
+import { bindWork, NATIVE_BODY_VERSION_HEADER, type Address, type Caller } from "@pe/agent-contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
@@ -30,7 +30,10 @@ import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
 import { RunConsents, runConsentsPromise, type ConsentEvent } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
-import type { DuctsSheetSources } from "../src/ducts-sheet.ts";
+import type { ReadSources } from "../src/reads/inputs.ts";
+import { Publications } from "../src/reads/evaluator.ts";
+import { graphRoute } from "../src/reads/routes.ts";
+import { sheetPort } from "./ducts-read.fixture.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { CaptureStore } from "../src/takeoff-captures.ts";
@@ -326,19 +329,23 @@ export async function nativeFixture(
           ),
         ),
     );
-    const readDucts: DuctsSheetSources["call"] = (op, input, ref, version) =>
-      request(
+    const readDucts: ReadSources["call"] = (op, input, raw, version) => {
+      const ref="kind" in raw ? raw.kind === "document"?raw.ref:null : raw;
+      if(!ref) throw Error("Fixture requires a document target");
+      return request(
         new Request("http://fixture/call", {
           method: "POST",
           headers: {
             "content-type": "application/json",
             [HOST_RPC_BRIDGE_SESSION_HEADER]: ref.session,
             [HOST_RPC_DOCUMENT_HEADER]: ref.openId,
-            ...(version && { [DUCTS_BODY_VERSION_HEADER]: version }),
+            ...(version && { [NATIVE_BODY_VERSION_HEADER]: version }),
           },
           body: JSON.stringify({ key: op, request: input }),
         }),
       );
+    };
+    const publications = new Publications();
     const api = createPeRoutes({
       workspace: saved,
       registrations: [],
@@ -348,7 +355,12 @@ export async function nativeFixture(
         threads: async () => [],
         documents: async () => [{ ...target.ref, address }],
       },
-      ductsSheets: { firm: () => settle(testHostFiles().firm), catalogs: () => settle(testHostFiles().ductCatalogs), call: readDucts },
+      readGraph: async raw => {
+        const port = sheetPort({ firm: () => settle(testDuctFiles().firm), catalogs: () => settle(testDuctFiles().ductCatalogs), call: readDucts,
+          workKey: async ref => bindWork("ducts", address, undefined, ref) }, saved);
+        const graph = graphRoute("reads.value", raw);
+        return graph.publish(publications, graph.publication!.subscription, graph.publication!.generation, port);
+      },
       observeHostResource,
     });
     return {

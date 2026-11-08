@@ -1,5 +1,4 @@
 import "./ensure-source-lane.ts";
-import { isSea } from "node:sea";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
@@ -9,13 +8,11 @@ import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { serviceFilePath } from "@pe/host-contracts/pe-service";
 import { publishDevTraySession } from "../scripts/dev-tray-session.ts";
 import { hostOwnership } from "./host-ownership.ts";
-import { prepareSourceClosures } from "./source-closures.ts";
+import { prepareDevRouteProjection } from "./source-closures.ts";
 
 // The host graph imports closures from disk: prepare them, then link it (see source-closures.ts).
-await prepareSourceClosures();
+const routeProjection = await prepareDevRouteProjection();
 const { hostProgram } = await import("./host-program.ts");
-
-declare const __PE_HOST_RECEIPT_BUILD__: unknown;
 
 if (process.argv.includes("--share"))
   throw new Error("--share was removed. Use the Share switch on the installed host (/pe/share).");
@@ -67,9 +64,10 @@ const program = hostProgram(
       const url = yield* Effect.tryPromise({
         try: () =>
           new Promise<string>((resolve, reject) => {
+            // Bridge, not tuned: double route-closure build measured ~57s at 38% load; commit 2 reuses the host projection.
             const timeout = setTimeout(
-              () => reject(new Error("Dev frontend did not start within 60s")),
-              60_000,
+              () => reject(new Error("Dev frontend did not start within 180s")),
+              180_000,
             );
             child.once("error", (error) => {
               clearTimeout(timeout);
@@ -108,6 +106,7 @@ const program = hostProgram(
               port: handle.serviceFile.port,
               sourceRoot: handle.serviceFile.sourceRoot,
               name: hostOwnership.serviceName,
+              routeProjection,
             });
           }),
         catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
@@ -125,10 +124,6 @@ const program = hostProgram(
     if (process.connected) process.send?.("retired");
     else console.log("Dev session retiring after host shutdown.");
   },
-  // Explicit unrecorded source exception; baked identity still goes through root admission.
-  !isSea() && typeof __PE_HOST_RECEIPT_BUILD__ === "undefined"
-    ? { kind: "live", capture: "off" }
-    : undefined,
 );
 
 // effect-edge: process-main

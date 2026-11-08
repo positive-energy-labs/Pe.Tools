@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The chrome Settings popover asks the kernel for the active registered graph. */
+/** The chrome Settings popover projects settings for the active typed route. */
 import {
   createMemoryHistory,
   createRootRoute,
@@ -13,8 +13,8 @@ import { ChromeSettings } from "./chrome-settings";
 import { RouteControlsProvider } from "./route-controls";
 import { SurfaceHostProvider } from "./surface-host";
 
-vi.mock("#/shell/settings-registry", () => ({
-  RegisteredRouteSettings: ({ route }: { route?: string }) => <p>{route} registered settings</p>,
+vi.mock("#/settings/options", () => ({
+  SettingsProjection: ({ subject }: { subject?: string }) => <p>{subject} registered settings</p>,
 }));
 afterEach(() => {
   cleanup();

@@ -211,7 +211,8 @@ export class RouteViewStore {
       !sameView ||
       !same(current.page, input.page) ||
       !same(current.facts, input.facts) ||
-      Object.entries(pending.patch).some(([key, value]) => input.page[key] !== value)
+      // Admitted owners decode names into identities; only legacy codecs promise wire equality.
+      (!this.admitted(current.route) && Object.entries(pending.patch).some(([key, value]) => input.page[key] !== value))
     )
       return { ok: false, error: "view context changed before acknowledgement" };
     this.finish(input.commandId, {

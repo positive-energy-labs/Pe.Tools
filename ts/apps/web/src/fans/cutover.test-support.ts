@@ -1,23 +1,30 @@
+import { systemList } from "@pe/ducts-domain/system-list";
+import { createHash } from "node:crypto";
+import { withStoredRulings } from "@pe/ducts-domain/rulings";
+import { pricingResult } from "@pe/ducts-domain/pricing-result";
+import { ductsDesign, ductsDocumentSchema, fansDocumentSchema } from "@pe/agent-contracts";
+import {
+  fansSheetData,
+  openFanSheetSchema,
+} from "../../../../packages/agent-contracts/src/fans-read.ts";
+import { sheetState } from "../ducts/sheet/state.ts";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
-import type { EntryTable } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
-import type { SchemaTable } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-module";
 import sheet from "../ducts/sheet/sheet.fixture.json";
 import { snapshot } from "../ducts/test-fixture";
-import { createRouteShell } from "../shell/admitted-mount";
-import { placeInput } from "../shell/admitted-place.test-fixture";
-import type { ReadingSource } from "../shell/readings";
-import { sourceRouteServices } from "../shell/source-route-services";
-import { createWorkFeedClient } from "../shell/work-feed-client";
+import { placeInput } from "../shell/typed-place.test-support";
+import type { ReadingSource } from "../shell/source-contract";
+import { browserWorkPorts, createWorkFeedClient } from "../shell/work-feed-client";
 
+import { mountTypedRoute } from "../shell/typed-mount";
+import { nativeTestAdapter } from "./native.test-support";
 import { admit } from "./admission.fixture";
 
 export async function createWitness(
   closes: (() => void)[],
   saved = new Map<string, unknown>(),
   overrides: Readonly<Record<string, ReadingSource>> = {},
-  work?: import("../shell/admitted-place").PlaceInput["work"],
+  work?: import("../shell/typed-place").PlaceInput["work"],
+  receipts?: import("@pe/agent-contracts").WorkJournalDoor["receipts"],
 ) {
   const admitted = await admit();
   const ws = new RouteWorkspace({
@@ -27,8 +34,6 @@ export async function createWitness(
       setState: async ({ route, value }) => {
         saved.set(route, structuredClone(value));
       },
-      // Ducts Work declares a 1 -> 2 migration, so admission takes a census; every Work this
-      // witness saves is born at the current schema age, so none is older.
       listState: async () => ({ records: [], truncated: false, unreadable: 0, unindexed: 0 }),
     },
   });
@@ -37,18 +42,24 @@ export async function createWitness(
     await registration.ready;
     closes.push(() => registration.close());
   }
+  // Explicit fixture setup: reading absent production Work never creates it.
+  for(const module of [admitted.owner.typed,admitted.presenter.typed]) {
+    const state=module.spec.edits!.work;
+    if(!saved.has(state.route)) saved.set(state.route,{version:1,schemaVersion:state.schemaVersion??1,revision:0,doc:state.schema.parse({})});
+  }
   const observe = observeResources(ws, { observe: () => () => {} });
+  const calls = new Map<string,number>();
+  const inputs = new Map<string,unknown>();
   const connected = createWorkFeedClient(
     { subscribe: observe, dirty() {} },
     {
       write: (key, write) => ws.write(key, key.route, "human", write),
-      submit: async () => {
-        throw Error("Native writes require the sealed-review fixture");
-      },
+      submit: async command => { const call = `fans:${command.key}`; inputs.set(call,command.input); calls.set(call,(calls.get(call)??0)+1); return browserWorkPorts.submit(command); },
     },
   );
   const feed = {
     ...connected,
+    receipts: receipts ?? connected.receipts,
     open: (scope: Parameters<typeof connected.open>[0]) => ({
       subscribe: (
         deliver: Parameters<ReturnType<typeof connected.open>["subscribe"]>[0],
@@ -63,49 +74,162 @@ export async function createWitness(
         }, end),
     }),
   };
-  const calls = new Map<string, number>();
-  const inputs = new Map<string, unknown>();
   const native: Record<string, ReadingSource> = {};
-  for (const [entry, value] of Object.entries({
-    "ducts.roster": snapshot,
-    "ducts.networks": snapshot,
-    "ducts.tables": {},
-    "ducts.catalogs": { tables: {}, findings: [] },
-    "ducts.fans": sheet.roster,
-    "ducts.sheet": {
-      open: {
-        overview: sheet.overview,
-        inputs: sheet.inputs,
-        elements: null,
-        legs: null,
-        worstLegs: [],
-        worksheet: null,
-      },
-      opened: [],
-      rows: sheet.roster.rows,
-      progress: null,
+  const wire = (value: unknown) =>
+    JSON.parse(
+      JSON.stringify(value, (_key, value) =>
+        value instanceof Map
+          ? Object.fromEntries(value)
+          : value instanceof Set
+            ? [...value]
+            : value,
+      ),
+    );
+  const packet = (data: unknown, version: number) => ({
+    key: "fixture",
+    generation: 0,
+    version,
+    state: "current",
+    value: {
+      data,
+      evaluation: `fixture:${version}`,
+      inputs: "fixture",
+      origin: { kind: "fixture", name: "cutover" },
+      trace: [],
+      coverage: { requested: [], covered: [], unknown: [], refused: [] },
+      freshness: "current",
     },
-    "ducts.sheet-snapshot": snapshot,
-  }))
+  });
+  for (const [entry, read] of Object.entries({
+    "ducts.roster.value": "roster",
+    "ducts.network.value": "network",
+    "ducts.pricing.value": "pricing",
+  })) {
     native[entry] = {
       kind: "use",
       open(_ctx, deliver) {
-        deliver({ kind: "complete", value, revision: 1 });
+        let version = 0;
+        const send = () => {
+          const ductsWork = ductsDocumentSchema.parse(
+            (saved.get("ducts") as { doc?: unknown })?.doc ?? {},
+          );
+          const fansWork = fansDocumentSchema.parse(
+            (saved.get("fans") as { doc?: unknown })?.doc ?? {},
+          );
+          const network = {
+            ...snapshot,
+            sourceVersion: "fixture",
+            systemReads: { completed: snapshot.systems.map((system) => system.id), missing: [] },
+          };
+          const roster = {
+            ...snapshot,
+            rows: systemList(snapshot, null),
+            sourceVersion: "fixture",
+          };
+          const data =
+            read === "roster"
+              ? roster
+              : read === "network"
+                ? network
+                : {
+                    ...wire(pricingResult(snapshot, {}, {}, ductsDesign(ductsWork, fansWork))),
+                    roster,
+                    network,
+                    fanRows: sheet.roster.rows,
+                    ductsWork,
+                    fansWork,
+                    design: ductsDesign(ductsWork, fansWork),
+                    effectiveDesign:
+                      withStoredRulings(ductsDesign(ductsWork, fansWork), snapshot.store) ??
+                      ductsDesign(ductsWork, fansWork),
+                    catalogFindings: [],espOptions:null,espOptionsError:"Fixture has no native parameter options",
+                  };
+          deliver({ kind: "complete", revision: ++version, value: packet(data, version) });
+        };
+        send();
+        return ws.subscribeUncaptured(() => {
+          deliver({ kind: "stale" });
+          queueMicrotask(send);
+        });
       },
     };
-  const baseServices = sourceRouteServices({ ...native, ...overrides });
-  const services: typeof baseServices = { ...baseServices, work: feed, reads: {
-    ...baseServices.reads,
-    acquire(request, token) {
-      const call = `${request.route.data.key}:${request.key.op}`;
-      calls.set(call, (calls.get(call) ?? 0) + 1);
-      inputs.set(call, JSON.parse(request.key.sortedKeyInput));
-      return baseServices.reads.acquire(request, token);
+  }
+  native["fans.sheet"] = {
+    kind: "use",
+    async open(ctx, deliver) {
+      let version = 0;
+      const send = (capture: unknown) => {
+        const ductsWork = ductsDocumentSchema.parse(
+          (saved.get("ducts") as { doc?: unknown })?.doc ?? {},
+        );
+        const fansWork = fansDocumentSchema.parse(
+          (saved.get("fans") as { doc?: unknown })?.doc ?? {},
+        );
+        const open = openFanSheetSchema.parse({
+          overview: sheet.overview,
+          inputs: sheet.inputs,
+          elements: null,
+          legs: null,
+          worstLegs: [],
+          worksheet: null,
+        });
+        const data = fansSheetData.parse({espOptions:null,espOptionsError:"Fixture has no native parameter options",
+          open,
+          opened: [],
+          rows: sheet.roster.rows,
+          progress: null,
+          fans: sheet.roster,
+          sheetSnapshot: capture,
+          sheetView: sheetState(open),
+          ductsWork,
+          fansWork,
+          design: ductsDesign(ductsWork, fansWork),
+        });
+        deliver({
+          kind: "complete",
+          revision: ++version,
+          value: {
+            key: "fixture",
+            generation: 0,
+            version,
+            state: "current",
+            value: {
+              data,
+              // Mirror host content identity; reopening a recorded source restarts its frame counter.
+              evaluation: createHash("sha256").update(JSON.stringify(data)).digest("hex"),
+              inputs: "fixture",
+              origin: { kind: "fixture", name: "cutover" },
+              trace: [],
+              coverage: { requested: [], covered: [], unknown: [], refused: [] },
+              freshness: "current",
+            },
+          },
+        });
+      };
+      const capture = overrides["ducts.sheet-snapshot"];
+      let captured: unknown = snapshot;
+      const stopCapture =
+        capture?.kind === "use" || capture?.kind === "feed"
+          ? await capture.open(ctx, (frame) => {
+              if (frame.kind === "complete" || frame.kind === "part") {
+                captured = frame.value;
+                send(captured);
+              }
+            })
+          : (send(captured), undefined);
+      const stopWork = ws.subscribeUncaptured(() => {
+        deliver({ kind: "stale" });
+        queueMicrotask(() => send(captured));
+      });
+      return () => {
+        stopCapture?.();
+        stopWork();
+      };
     },
-  } };
+  };
   const places = new Map<string, ReturnType<typeof placeInput>>();
-  function mount<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, R>(
-    route: AdmittedRoute<G, S, E, R>,
+  function mount(
+    route: {typed: unknown; data: import("@pe/agent-contracts").RouteGraphJson; workFingerprint: import("@pe/agent-contracts").RouteFingerprint},
     initial = new URLSearchParams(),
     place: string = route.data.key,
   ) {
@@ -133,11 +257,16 @@ export async function createWitness(
       });
       places.set(place, input);
     }
-    const mounted = createRouteShell(services).mount(route, input);
-    closes.push(mounted.close);
+    const mounted = nativeTestAdapter(mountTypedRoute(route.typed as import("../route/typed-route").TypedRoute, input, route.workFingerprint, {work: feed, sources: Object.fromEntries(Object.entries({...native,...overrides}).map(([entry,source])=>[entry, source.kind === "use" ? { ...source, open(ctx,deliver) {
+      const call = `${route.data.key}:${entry}`; calls.set(call,(calls.get(call)??0)+1); inputs.set(call,ctx.args);
+      return source.open(ctx,deliver);
+    } } : source])) }), feed);
+    closes.push(() => mounted.close());
     return mounted;
   }
+  const fansMount=mount(admitted.presenter);
   return {
+    typed: fansMount.native,
     admitted,
     calls,
     inputs,
@@ -146,6 +275,6 @@ export async function createWitness(
     mount,
     places,
     owner: mount(admitted.owner),
-    fans: mount(admitted.presenter),
+    fans: fansMount,
   };
 }

@@ -1,11 +1,11 @@
-import { mkdtemp, rm, rename, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import { CurrentInputConsumption, HostInputReadSets, type InputConsumption } from "../src/input-occurrence.ts";
 import { HttpRouter } from "effect/http";
 import { afterEach, expect, test } from "vite-plus/test";
-import { addressSchema, DUCTS_BODY_VERSION_HEADER, DUCTS_REFRESH_HEADER } from "@pe/agent-contracts";
+import { addressSchema, NATIVE_BODY_VERSION_HEADER, DUCTS_REFRESH_HEADER } from "@pe/agent-contracts";
 import { canonicalJson, HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
 import { admittedRequestIdentity, RequestIdentity } from "../src/request-services.ts";
 import { admitNativeCaller } from "../src/native-read-policy.ts";
@@ -37,6 +37,7 @@ const producer = (counts: { reads: number }) => Layer.succeed(HostNativeRead, {
     actualTarget, freshness: { freshnessGeneration: "g1" }, cost: {}, outcome: "committed" as const }))),
 });
 const inventory = Layer.succeed(HostSessionInventory, {
+  list: () => Effect.die("inventory not requested"), subscribe: () => () => {},
   attachment: () => Effect.succeed({ sessionId: ref.session }), session: () => Effect.succeed({ sessionId: ref.session }),
   document: () => Effect.succeed(row),
 });
@@ -50,7 +51,7 @@ function router(lane: HostInputLane, owner: DuctsReadings, counts: { reads: numb
   const web = HttpRouter.toWebHandler(HttpRouter.add("POST", "/call", (req) => Effect.gen(function* () {
     const documents = yield* HostSessionInventory;
     const read = retainedDuctsRead(owner, input,
-      { version: req.headers[DUCTS_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] },
+      { version: req.headers[NATIVE_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] },
       { document: documents.document, basis });
     // The caller's own retained-call child, provided as the request's consumption (Sol wires this).
     return yield* (consumer?.current ? Effect.provideService(read, CurrentInputConsumption, consumer.current) : read);
@@ -81,8 +82,9 @@ test("same retained handler captures miss/hit and replays original version, nati
   const c = await captured();
   const first = await c.web.post(); expect(first.status, await first.clone().text()).toBe(200);
   const firstSet = [...c.takes]; const firstBindings = await bindings(firstSet);
-  const version = first.headers.get(DUCTS_BODY_VERSION_HEADER)!;
-  const hit = await c.web.post({ [DUCTS_BODY_VERSION_HEADER]: version });
+  const version = first.headers.get(NATIVE_BODY_VERSION_HEADER)!;
+  expect(first.headers.get("x-pe-native-body-version"), "the producer publishes the generic wire header").toBe(version);
+  const hit = await c.web.post({ [NATIVE_BODY_VERSION_HEADER]: version });
   expect(hit.status).toBe(200); expect(hit.headers.get("x-pe-ducts-reused")).toBe("true");
   expect(c.counts.reads).toBe(1);
   const hitSet = c.takes.slice(firstSet.length);
@@ -100,7 +102,7 @@ test("same retained handler captures miss/hit and replays original version, nati
     const web = router({ kind: "recording", recordingStore: reader, at: null, bindings: selected }, owner, counts);
     try {
       const answer = await web.post(); expect(answer.status, await answer.clone().text()).toBe(200);
-      expect(answer.headers.get(DUCTS_BODY_VERSION_HEADER)).toBe(version);
+      expect(answer.headers.get(NATIVE_BODY_VERSION_HEADER)).toBe(version);
       expect(answer.headers.get("x-pe-native-request-id")).toBe("native-1");
       expect(answer.headers.get("x-pe-resolved-session")).toBe(ref.session);
       expect(answer.headers.get("x-pe-ducts-reused")).toBe(String(index > 0));
@@ -124,6 +126,48 @@ test("full native or basis capture stops recording but preserves the live miss a
       const count = c.takes.length;
       const hit = await c.web.post(); expect(hit.status).toBe(200); expect(hit.headers.get("x-pe-ducts-reused")).toBe("true");
       expect(c.counts.reads).toBe(1); expect(c.takes).toHaveLength(count);
+    } finally { await c.web.close(); }
+  }
+});
+
+test("admitted stale validation keeps its typed refusal through capture, cold replay, full and I/O loss", async () => {
+  let original: unknown;
+  for (const mode of ["record", "full", "io"] as const) {
+    const c = await captured(mode === "full" ? 3 : 100);
+    try {
+      const first = await c.web.post(); expect(first.status).toBe(200);
+      const version = first.headers.get(NATIVE_BODY_VERSION_HEADER)!;
+      const before = c.takes.length;
+      expect((await c.web.post({}, true)).status).toBe(403);
+      expect(c.takes).toHaveLength(before); // admission denies before any basis capture
+      c.owner.changed({ kind: "event", sessionId: ref.session, eventName: "document-changed",
+        payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }) });
+      if (mode === "io") {
+        await rename(join(c.dir, "takings.jsonl"), join(c.dir, "saved-takings.jsonl"));
+        await mkdir(join(c.dir, "takings.jsonl"));
+      }
+      const refused = await c.web.post({ [NATIVE_BODY_VERSION_HEADER]: version });
+      expect(refused.status).toBe(409);
+      const problem = await refused.json(); expect(problem.problem).toBe("read.retained");
+      if (mode === "record") original = problem; else expect(problem).toEqual(original);
+      expect(c.counts.reads).toBe(1);
+      if (mode !== "record") {
+        expect(c.writer.capture.truncated()?.reason).toBe(mode === "full" ? "full" : "io");
+        expect((await c.web.post()).status).toBe(200); // capture loss cannot break fresh acquisition
+        continue;
+      }
+      const failed = c.takes.slice(before);
+      expect(failed).toHaveLength(1);
+      expect(failed[0]!.outcome).toMatchObject({ kind: "refused", failure: { tag: "InvalidRequest", problem: "read.retained" } });
+      const reader = await run(openRecordingReader(c.dir, identity, bounds));
+      const counts = { reads: 0 };
+      const cold = router({ kind: "recording", recordingStore: reader, at: null, bindings: await bindings(failed) }, new DuctsReadings(), counts);
+      try {
+        const replay = await cold.post({ [NATIVE_BODY_VERSION_HEADER]: version });
+        expect(replay.status).toBe(409); expect(await replay.json()).toEqual(problem);
+        expect((await cold.post({}, true)).status).toBe(403);
+      } finally { await cold.close(); }
+      expect(counts.reads).toBe(0);
     } finally { await c.web.close(); }
   }
 });
@@ -183,7 +227,7 @@ test("foreign native binding, corrupt basis target/version and missing basis ref
     const seeded = router({ kind: "recording", recordingStore: reader, at: null, bindings: selected }, conflictOwner, { reads: 0 });
     try {
       const good = await seeded.post(); expect(good.status).toBe(200);
-      expect((await seeded.post({ [DUCTS_BODY_VERSION_HEADER]: "foreign-version" })).status).toBe(409);
+      expect((await seeded.post({ [NATIVE_BODY_VERSION_HEADER]: "foreign-version" })).status).toBe(409);
       await expect(conflictOwner.read(ductBodySubject(input), async () => { throw Error("must not acquire"); },
         { source: { revision: "conflicting-original" } })).rejects.toMatchObject({ problem: "recording.mismatch" });
     } finally { await seeded.close(); }
@@ -207,7 +251,7 @@ test("overlapping consumers share one acquisition and retain separate basis occu
   try {
     const answers = await Promise.all([c.web.post(), c.web.post()]);
     expect(answers.map((answer) => answer.status)).toEqual([200, 200]);
-    expect(answers[0]!.headers.get(DUCTS_BODY_VERSION_HEADER)).toBe(answers[1]!.headers.get(DUCTS_BODY_VERSION_HEADER));
+    expect(answers[0]!.headers.get(NATIVE_BODY_VERSION_HEADER)).toBe(answers[1]!.headers.get(NATIVE_BODY_VERSION_HEADER));
     expect(answers.map((answer) => answer.headers.get("x-pe-ducts-reused")).sort()).toEqual(["false", "true"]);
     expect(c.counts.reads).toBe(1);
     expect(c.takes.filter((taking) => taking.input.kind === "native")).toHaveLength(1);
@@ -239,9 +283,9 @@ test("retained calls in their own child contexts link the original native taking
   const child = (role: string) => { const made = root.child(retained(role)); if (Result.isFailure(made)) throw made.failure; return made.success; };
   consumer.current = child("acquire");
   const first = await web.post(); expect(first.status, await first.clone().text()).toBe(200);
-  const version = first.headers.get(DUCTS_BODY_VERSION_HEADER)!;
+  const version = first.headers.get(NATIVE_BODY_VERSION_HEADER)!;
   consumer.current = child("validate");
-  const hit = await web.post({ [DUCTS_BODY_VERSION_HEADER]: version });
+  const hit = await web.post({ [NATIVE_BODY_VERSION_HEADER]: version });
   expect(hit.headers.get("x-pe-ducts-reused")).toBe("true");
   await run(root.seal); await web.close();
   const native = takes.filter((taking) => taking.input.kind === "native");
@@ -262,9 +306,9 @@ test("retained calls in their own child contexts link the original native taking
     for (const role of ["acquire", "validate"]) {
       const made = replayedRoot.child(retained(role)); if (Result.isFailure(made)) throw made.failure;
       replayed.current = made.success;
-      const answer = await again.post(role === "validate" ? { [DUCTS_BODY_VERSION_HEADER]: version } : {});
+      const answer = await again.post(role === "validate" ? { [NATIVE_BODY_VERSION_HEADER]: version } : {});
       expect(answer.status, await answer.clone().text()).toBe(200);
-      expect(answer.headers.get(DUCTS_BODY_VERSION_HEADER)).toBe(version);
+      expect(answer.headers.get(NATIVE_BODY_VERSION_HEADER)).toBe(version);
     }
   } finally { await again.close(); }
   expect(replayCounts.reads).toBe(0);
@@ -283,9 +327,9 @@ test("a cold hit-only child selects its stored native link for resolve and read;
     const made = consumption.child(retained(role)); if (Result.isFailure(made)) throw made.failure; return made.success;
   };
   consumer.current = child(root, "acquire");
-  const first = await web.post(); const version = first.headers.get(DUCTS_BODY_VERSION_HEADER)!;
+  const first = await web.post(); const version = first.headers.get(NATIVE_BODY_VERSION_HEADER)!;
   consumer.current = child(root, "validate");
-  expect((await web.post({ [DUCTS_BODY_VERSION_HEADER]: version })).headers.get("x-pe-ducts-reused")).toBe("true");
+  expect((await web.post({ [NATIVE_BODY_VERSION_HEADER]: version })).headers.get("x-pe-ducts-reused")).toBe("true");
   await run(root.seal); await web.close();
   const reader = await run(openRecordingReader(dir, identity, bounds));
   const lane = { kind: "recording", recordingStore: reader, at: null } as const;
@@ -298,7 +342,7 @@ test("a cold hit-only child selects its stored native link for resolve and read;
   try {
     const answer = await cold.post();
     expect(answer.status, await answer.clone().text()).toBe(200);
-    expect(answer.headers.get(DUCTS_BODY_VERSION_HEADER)).toBe(version);
+    expect(answer.headers.get(NATIVE_BODY_VERSION_HEADER)).toBe(version);
     expect(answer.headers.get("x-pe-native-request-id")).toBe("native-1");
     expect(await answer.json()).toEqual(await first.clone().json());
   } finally { await cold.close(); }

@@ -1,4 +1,4 @@
-import type { ReadingState } from "#/shell/readings";
+import type { ReadingState } from "#/shell/source-contract";
 /**
  * THE PATCH BAY (host MAP round 4, promoted 2026-10-12): documents are jacks on the left (the
  * master table with its filters), Revits are sockets on the right (one `SessionCard` each, plus a
@@ -43,7 +43,7 @@ import { queryWords, readClause, visibleRows } from "@pe/kit/table/view";
 
 import { keyOf, pidOf, processOf, selectionOf } from "#/machine/session";
 
-import { OpenControlScope, outcomeOf, useOpenKernel, useOpenOwner } from "./kernel";
+import { OpenControlScope, outcomeOf, useOpenKernel, useOpenOwner } from "./context";
 import type { OutcomeKind } from "@pe/kit/lang/outcome";
 import type { TableState } from "@pe/kit/table/model";
 
@@ -62,7 +62,7 @@ import {
   type LaunchDraft,
   type LaunchPlan,
 } from "./model";
-import { BAY_THREADS } from "./seeds";
+import { BAY_THREADS } from "../design-system/open-examples";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
@@ -538,7 +538,8 @@ function PatchBayBody({
       className={
         layout === "row"
           ? "flex min-h-0 min-w-0 flex-col"
-          : "flex max-h-72 min-w-0 shrink-0 flex-col pr-6 [&_table]:table-fixed [&_[data-slot=table-filters]]:gap-y-1 [&_[data-slot=query-box]]:basis-full [&_[data-slot=query-box]]:flex-none [&_[role=group]]:max-w-full [&_[role=group]]:flex-wrap"
+          // Only switchers wrap; wrapping the column-oriented ArtifactFrame moves the grid offscreen.
+          : "flex max-h-72 min-w-0 shrink-0 flex-col pr-6 [&_table]:table-fixed [&_[data-slot=table-filters]]:gap-y-1 [&_[data-slot=query-box]]:basis-full [&_[data-slot=query-box]]:flex-none [&_span[role=group]]:max-w-full [&_span[role=group]]:flex-wrap"
       }
     >
       <ModelTable
@@ -574,7 +575,7 @@ function PatchBayBody({
       {table}
       {layout === "row" ? <span aria-hidden /> : null}
       {sockets}
-      {!sessions.length && !loading ? (
+      {machine?.revit.sessions?.length === 0 && !loading && !shellRefusal ? (
         <div className="absolute inset-x-0 bottom-0">
           <EmptyState story="scope" exit="patch a document into the free socket to start one">
             no Revit is running

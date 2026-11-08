@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { callerSchema } from "./caller.ts";
 import { draftCellSchema } from "./draft.ts";
-import { workHandleSchema, type Command, type WorkHandle } from "./command.ts";
+import { workHandleSchema, workHandleForRoute, type Command, type WorkHandle } from "./command.ts";
 
 /** Operation options are authored cells; suggestions never authorize a write. */
 export const writeIntentSchema = z.record(
@@ -15,6 +16,7 @@ export const writeIntentSchema = z.record(
  * restart moves `observedSince`, and either one is "plan changed". No separate freshness probe.
  */
 export const writeSealSchema = z.object({
+  caller: callerSchema,
   requestHash: z.string(),
   work: z.unknown(),
   documentMark: z.object({
@@ -37,6 +39,9 @@ export const writeResponseSchema = z.object({
 export const writePreviewSchema = writeResponseSchema
   .extend({
     previewOnly: z.literal(true),
+    /** A retained review can explain why this Plan grants no Apply authority. */
+    planRefusal: z.string().optional(),
+    planRefusalCode: z.string().optional(),
     authoredIntent: z.record(z.string(), z.unknown()).optional(),
   })
   .loose();
@@ -78,16 +83,17 @@ interface WorkIntentOptions {
   derive?: (work: unknown) => unknown;
 }
 
-const workWriteInputSchema = z.strictObject({
-  work: workHandleSchema,
-  readWorks: z.record(z.string(), workHandleSchema).optional(),
-});
+const workWriteInputSchema = (route: string) =>
+  z.strictObject({
+    work: workHandleForRoute(route),
+    readWorks: z.record(z.string(), workHandleSchema).optional(),
+  });
 
 /** Named boundaries keep declaration emit out of the local generic entry closure (TS 6.0.3). */
 type IntentEntry<D extends Command> = Omit<D, "input" | "work"> & {
   authoredInput: D["input"];
   workIntent: WorkIntentBinding;
-  input: typeof workWriteInputSchema;
+  input: ReturnType<typeof workWriteInputSchema>;
   work: { route: string; bind: (input: unknown, handle: WorkHandle) => { work: WorkHandle } };
 };
 
@@ -111,7 +117,7 @@ function intentEntry<D extends Command>(
     ...metadata,
     authoredInput: source.input as D["input"],
     workIntent: intent,
-    input: workWriteInputSchema,
+    input: workWriteInputSchema(route),
     work: { route, bind: (_input: unknown, handle: WorkHandle) => ({ work: handle }) },
   };
 }

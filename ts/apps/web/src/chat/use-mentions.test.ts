@@ -2,7 +2,7 @@ import { capabilityCatalogSchema, documentRows } from "@pe/agent-contracts";
 import { expect, test } from "vite-plus/test";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture.ts";
 
-import { CHAT_SEEDS } from "#/chat/seeds";
+import { CHAT_SEEDS } from "#/design-system/chat-examples";
 import { liveCatalog, mentionRows } from "./use-mentions";
 
 // What the composer's menu reads: the seed catalog with open documents from the seed inventory.

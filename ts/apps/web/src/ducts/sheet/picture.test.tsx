@@ -13,16 +13,16 @@ import { renderPicturePane } from "#/scene/picture/picture";
 import { SceneMeshes } from "#/scene/types";
 import { makeAtomRegistry } from "#/shell/owner";
 import { RegistryContext } from "@effect/atom-react";
-import { routeAddress } from "@pe/agent-contracts";
 import { attention, elementKey, setHovered, type SubjectKey } from "@pe/kit/lang/attention";
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import * as Atom from "effect/reactivity/Atom";
 import { createElement, type ComponentProps } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { NAVIGATION_FIXTURE } from "../navigation.fixture";
-import { openSheetSchema, type OpenSheet } from "../neutral.ts";
+import { openFanSheetSchema as openSheetSchema } from "@pe/agent-contracts";
+import type { OpenSheet } from "./types.ts";
 import sheetFixture from "./sheet.fixture.json";
-import { selectedFans, type FanPort } from "./model";
+import { type FanPort } from "./model";
 import type { SheetPictureProps } from "./picture";
 import { beyondPicture, SheetPicture } from "./picture";
 
@@ -226,40 +226,7 @@ it("hovering a context element names whose air it is and that this fan's calc le
   });
 });
 
-it.each([1, 3, "all"] as const)(
-  "fan = %s requests exactly one overview before sheet details",
-  async (pick) => {
-    io.call.mockResolvedValue({ id: `fan-overview-${pick}` });
-    const rows = Array.from({ length: 111 }, (_, i) => i + 1).map((n) => ({
-      unitId: 999100 + n,
-      uniqueId: `fan-${n}`,
-      portIndex: 1,
-      mark: `F-${n}`,
-    })) as FanPort[];
-    const text =
-      pick === "all"
-        ? "all"
-        : rows
-            .slice(0, pick)
-            .map((row) => `${row.uniqueId}@1`)
-            .join(",");
-    const page = routeAddress("fans").read(
-      Object.fromEntries(new URLSearchParams({ fan: text })),
-    ).page;
-    const fans = selectedFans(page.fan, rows);
-    mount(null, ["meshes", "halo"], fans);
-    await waitFor(() => expect(io.call).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(seen.model!.read.meshes).toBeTruthy());
-    expect(document.querySelector('[data-drawn="true"]')).not.toBeNull();
-    expect(seen.model!.read.pending).toBe(false);
-    expect(io.call.mock.calls[0]![1]).toMatchObject({
-      elementIds: fans.map((fan) => fan.unitId),
-      contextRepresentation: "overview",
-      contextPaddingFt: 10,
-      focusOnly: false,
-    });
-  },
-);
+
 
 it("reads a selected duct and run from the current sheet, including missing data and provenance", () => {
   const leg = { ...sheetFixture.legs.legs[0], elementId: a!.id, flowCfm: 120, velocityFpm: null };

@@ -227,6 +227,16 @@ export function familySource(
     if (!param) return [];
     return [{ ...shared, param, ...(typeName ? { typeName } : {}) }];
   });
+  for (const proposal of world.proposals) {
+    const sources = fields[proposal.id]?.edit?.sources;
+    if (!proposal.param || !sources?.length) continue;
+    world.grounding[proposal.param] = [
+      ...new Set([
+        ...(world.grounding[proposal.param] ?? []),
+        ...sources.map((source) => source.blockId),
+      ]),
+    ];
+  }
   addProposedStructure(world, reading, fields);
   return {
     world,

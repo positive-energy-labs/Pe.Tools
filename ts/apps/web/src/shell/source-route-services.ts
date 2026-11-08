@@ -1,20 +1,17 @@
 import {
   commands,
+  canonicalRouteInput,
   refusalSchema,
   writePreviewSchema,
   type SemanticActionKey,
 } from "@pe/agent-contracts";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { callOp } from "./readings-api";
-import { createGeometryReadDoor } from "./geometry-read-door";
-import type {
-  KernelServices,
-  ResolvedRead,
-} from "../../../../packages/agent-contracts/src/route-kernel-environment";
+import { callOp } from "../host/catalog-client";
+import type { KernelServices, ResolvedRead } from "@pe/agent-contracts";
 import type { AcceptanceToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import type { ReadingSource, UseSource } from "./readings";
+import type { ReadingSnapshot } from "@pe/agent-contracts";
+import type { ReadingSource, UseSource } from "./source-contract";
 import { demandContext, openSourceReading } from "./readings-use";
 import { contentHash } from "./readings";
 import { z } from "zod";
@@ -49,8 +46,22 @@ export const sourceReadingEvidence = (services: KernelServices) =>
 /** Application adapter for existing domain sources. Acceptance and validation stay in the mount. */
 export function sourceRouteServices(
   sources: Record<string, ReadingSource>,
-  composition: Pick<KernelServices, "target" | "geometry"> = {},
+  composition: Pick<KernelServices, "target"> = {},
+  history?: { point?: string; pose(): import("@pe/agent-contracts").HistoryPose },
 ): KernelServices {
+  const idlePublications: { subscription: string; generation: number }[] = [];
+  const subjects = new Map<
+    string,
+    {
+      subscription: string;
+      generation: number;
+      attempts: Map<string, number>;
+      listeners: Map<object, (snapshot: ReadingSnapshot<unknown>) => void>;
+      controller?: AbortController;
+      close?: () => void;
+      snapshot?: ReadingSnapshot<unknown>;
+    }
+  >();
   const queries = new Set(
     hostOpCatalog.filter((entry) => entry.effect === "Read").map((entry) => entry.key),
   );
@@ -71,7 +82,6 @@ export function sourceRouteServices(
       new AbortController().signal,
     );
   const services: KernelServices = {
-    geometry: composition.geometry ?? createGeometryReadDoor(),
     target: composition.target,
     reads: {
       lifetime: "read",
@@ -98,11 +108,12 @@ export function sourceRouteServices(
       lifetime: "subscription",
       subscribe<T>(
         request: ResolvedRead<T>,
-        _token: unknown,
+        token: AcceptanceToken,
         deliver: (value: ReadingSnapshot<T>) => void,
       ) {
         const state = reads.get(request);
         // Semantic previews belong to the host journal, never the native /call door.
+        // TODO: historical Read plans need a recorded command-input port; current executors acquire native lifecycle outside the read graph.
         const command = Object.hasOwn(commands, request.key.op)
           ? commands[request.key.op as SemanticActionKey]
           : undefined;
@@ -144,8 +155,7 @@ export function sourceRouteServices(
               publish({
                 status: "ready",
                 current: true,
-                value:
-                  value as import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>,
+                value: value as import("@pe/agent-contracts").Immutable<T>,
                 hash: z.string().parse(contentHash(value)),
                 receipt: row,
               });
@@ -196,20 +206,82 @@ export function sourceRouteServices(
         }
         if (typeof request.key.freshnessGeneration !== "number")
           throw Error("Ordinary source requires its attempt generation");
-        const close = openSourceReading(
-          source,
-          demandContext(
-            state.target,
-            request.key.freshnessGeneration,
-            JSON.parse(request.key.sortedKeyInput),
-            state.controller.signal,
-          ),
-          (snapshot) => deliver((state.snapshot = snapshot as ReadingSnapshot<T>)),
-          { observe: (value) => observers.get(request)?.(value) },
-        );
+        // Equal reads on one Page own one source and one host publication, including History.
+        const key = canonicalRouteInput([state.target, request.key.op, request.key.sortedKeyInput]);
+        let subject = subjects.get(key);
+        if (!subject) {
+          subject = {
+            ...(idlePublications.pop() ?? { subscription: crypto.randomUUID(), generation: 0 }),
+            attempts: new Map(),
+            listeners: new Map(),
+          };
+          subjects.set(key, subject);
+        }
+        const shared = subject;
+        const accept = (snapshot: ReadingSnapshot<unknown>) => {
+          if (!state.controller.signal.aborted)
+            deliver((state.snapshot = snapshot as ReadingSnapshot<T>));
+        };
+        shared.listeners.set(request, accept);
+        const previous = shared.attempts.get(token.channel);
+        shared.attempts.set(token.channel, request.key.freshnessGeneration);
+        if (
+          !shared.close ||
+          (previous !== undefined && previous !== request.key.freshnessGeneration)
+        ) {
+          shared.controller?.abort();
+          shared.close?.();
+          shared.controller = new AbortController();
+          shared.generation++;
+          if (shared.snapshot) {
+            shared.snapshot = {
+              status: "pending",
+              current: false,
+              value: shared.snapshot.value,
+              reason: "Reading pending",
+            };
+            for (const listener of shared.listeners.values()) listener(shared.snapshot);
+          }
+          shared.close = openSourceReading(
+            source,
+            {
+              ...demandContext(
+                state.target,
+                request.key.freshnessGeneration,
+                JSON.parse(request.key.sortedKeyInput),
+                shared.controller.signal,
+              ),
+              historyPoint: history?.point,
+              historyPose: history?.pose(),
+              publication: { subscription: shared.subscription, generation: shared.generation },
+            },
+            (snapshot) => {
+              shared.snapshot = snapshot;
+              for (const listener of shared.listeners.values()) listener(snapshot);
+            },
+            {
+              observe: (value) => {
+                for (const request of shared.listeners.keys()) observers.get(request)?.(value);
+              },
+            },
+          );
+        } else if (shared.snapshot) accept(shared.snapshot);
+        let released = false;
         return () => {
+          if (released) return;
+          released = true;
           state.controller.abort();
-          close();
+          shared.listeners.delete(request);
+          if (!shared.listeners.size) {
+            shared.controller?.abort();
+            shared.close?.();
+            subjects.delete(key);
+            // Reuse the released slot with a newer attempt, even when its args changed.
+            idlePublications.push({
+              subscription: shared.subscription,
+              generation: shared.generation,
+            });
+          }
         };
       },
     },
@@ -231,6 +303,7 @@ export function sourceRouteServices(
         );
       },
       observe(request, token, deliver) {
+        if (history?.point) return () => {};
         observers.set(request, (value) => deliver({ kind: "log", value }));
         const abort = new AbortController();
         let timer: ReturnType<typeof setTimeout> | undefined;

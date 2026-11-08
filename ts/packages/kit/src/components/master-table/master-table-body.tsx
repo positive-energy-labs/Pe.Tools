@@ -15,7 +15,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import type { ReactTable, RowData } from "@tanstack/react-table";
 import { defaultRangeExtractor, useVirtualizer, type Range } from "@tanstack/react-virtual";
 
@@ -443,7 +443,8 @@ export function MasterTableBody<Row extends RowData>({
   useScopeKeys(actionScopeKeys(actions), tbody);
   const handleGridKey = useCallback(
     (event: KeyboardEvent<HTMLTableCellElement>) => {
-      if (cellEdit && isTypingKey(event) && table.getSelectedCellCount() > 1) {
+      const typing = isTypingKey(event) || event.nativeEvent.isComposing || event.keyCode === 229;
+      if (cellEdit && typing && table.getSelectedCellCount() > 1) {
         const selected = visibleRows.flatMap((row) =>
           row
             .getVisibleCells()
@@ -454,8 +455,14 @@ export function MasterTableBody<Row extends RowData>({
             })),
         );
         draftFinished.current = false;
-        setDraft({ id: event.currentTarget.dataset.cellId!, text: event.key, targets: selected });
-        event.preventDefault();
+        // Mount/focus before this keystroke's native text event. Never seed a character
+        // in keydown: the text event is its only owner, including composition.
+        const id = event.currentTarget.dataset.cellId!;
+        flushSync(() => setDraft({ id, text: "", targets: selected }));
+        return;
+      }
+      if (typing && event.currentTarget.querySelector(CELL_EDITOR)) {
+        editCell(event.currentTarget, "");
         return;
       }
       if (isTypingKey(event) && editCell(event.currentTarget, event.key))
@@ -568,6 +575,9 @@ export function MasterTableBody<Row extends RowData>({
                             onKeyDown={(event) => {
                               if (event.target === event.currentTarget) handleGridKey(event);
                             }}
+                            onCompositionStart={(event) => {
+                              if (event.target === event.currentTarget) editCell(event.currentTarget, "");
+                            }}
                             onCopy={
                               cellEdit
                                 ? (event) => {
@@ -605,9 +615,8 @@ export function MasterTableBody<Row extends RowData>({
                             }
                             onMouseDown={(event) => {
                               // A click SELECTS the cell (F-J3-5a): an idle editor under the pointer
-                              // would take the caret and make typing append. The td takes focus; the
-                              // first printable key then replaces the value, and a double-click, F2 or
-                              // Enter edits in place.
+                              // would take the caret and make typing append. The td takes focus during
+                              // selection; mouse-up gives a single selected editor the whole value.
                               const target = event.target as HTMLElement;
                               const interceptEditor =
                                 target.matches(CELL_EDITOR) && document.activeElement !== target;
@@ -619,6 +628,24 @@ export function MasterTableBody<Row extends RowData>({
                               }
                               if (!isInteractive(event.target) || interceptEditor)
                                 cell.getSelectionStartHandler(document)(event);
+                            }}
+                            onMouseUp={(event) => {
+                              // Keep range selection on the td, but give a single-cell edit a native
+                              // input: IME/paste/insertText may supply no printable keydown to open it.
+                              if (
+                                event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey ||
+                                table.getSelectedCellCount() > 1
+                              ) return;
+                              const target = event.target as HTMLElement;
+                              const editor = event.currentTarget.querySelector<
+                                HTMLInputElement | HTMLTextAreaElement
+                              >(CELL_EDITOR);
+                              if (
+                                !editor || document.activeElement === editor ||
+                                (target !== event.currentTarget && target !== editor)
+                              ) return;
+                              editor.focus();
+                              editor.select();
                             }}
                             onDoubleClick={(event) => {
                               if (document.activeElement === event.currentTarget)

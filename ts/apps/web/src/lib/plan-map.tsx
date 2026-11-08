@@ -3,7 +3,7 @@ import type { PlaneViewport } from "@pe/agent-contracts";
 import type { FloaterSpec } from "@pe/kit/lang/floater";
 import { PlaneMinimap } from "@pe/kit/lang/minimap";
 import type { AffineFrame, Viewport2 } from "./affine-frame";
-import type { TakeoffPlanImage } from "#/takeoff/level-plan";
+import type { TakeoffPlanImage } from "#/scene/plan-image";
 
 /** The same registered plan underlay and region paths as the field, in its world pixels. */
 export function usePlanMap(

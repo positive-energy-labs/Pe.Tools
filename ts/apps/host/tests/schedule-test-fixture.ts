@@ -1,5 +1,8 @@
 import { testDocumentMarks } from "./effect-test.ts";
-import { HostFiles } from "../src/host-files.ts";
+import { graphRoute } from "../src/reads/routes.ts";
+import { Publications } from "../src/reads/evaluator.ts";
+import { inputPort } from "../src/reads/inputs.ts";
+import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { detachedBridge, sessionView, captureStore } from "./effect-test.ts";
@@ -62,13 +65,34 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
-export async function setup() {
+export async function setup(options: { cold?: boolean } = {}) {
   vi.stubEnv("PE_LANE", "dev");
   const dir = await mkdtemp(join(tmpdir(), "pe-schedule-chain-"));
   cleanup.push(() => rm(dir, { recursive: true, force: true, maxRetries: 5 }));
   const captures = captureStore(join(dir, "captures"));
   let capabilities: ReturnType<typeof createCapabilityCatalogSource>;
+  const publications = new Publications();
   const app = createPeRoutes({
+    readGraph: async (request) => {
+      const graph = graphRoute("reads.value", request);
+      const publication = graph.publication!;
+      return graph.publish(publications, publication.subscription, publication.generation, inputPort({
+        evaluation: crypto.randomUUID(), origin: () => null, revision: () => 0,
+        workspace: app.workspace, marks: hostMarks(marks), run: Effect.runPromise,
+        source: {
+          workKey: async () => { throw Error("Unexpected Work binding"); },
+          file: async () => { throw Error("Unexpected file input"); },
+          call: async () => { throw Error("Unexpected native input"); },
+          resource: (request) => new Promise((resolve, reject) => {
+            let stop = () => {};
+            stop = observeHost(request as never, (frame) => {
+              if (frame.kind === "snapshot") { stop(); resolve(frame.value); }
+              if (frame.kind === "failure") { stop(); reject(Error(frame.error)); }
+            });
+          }),
+        },
+      }));
+    },
     capabilityCatalog: { read: (scope) => capabilities.read(scope) },
     store: fileRouteDocumentStore(join(dir, "work")),
     heads: { observe: () => () => {} },
@@ -94,6 +118,7 @@ export async function setup() {
   let response: unknown = cellsApplied([[1, 2, true]]);
   let detail = detailResponse();
   let readCount = 0;
+  let onCatalog = () => {};
   // The document's schedules, as Revit lists them; a test's apply may add one.
   const catalog = [
     {
@@ -159,8 +184,10 @@ export async function setup() {
         try: async () => {
           if (id) await markDispatched(id);
           sent.push({ key, input, session: session!, openId: openId!, id });
-          if (key === "revit.catalog.schedules")
+          if (key === "revit.catalog.schedules") {
+            onCatalog();
             return { target: { session: session!, document: null }, value: { entries: structuredClone(catalog) } };
+          }
           if (key === "revit.detail.schedules") {
             readCount++;
             if (readbackFails && sent.some((s) => s.key === "schedule.cells.apply"))
@@ -185,6 +212,8 @@ export async function setup() {
     bridge,
     () => owner,
     () => captures,
+    "http://host",
+    (url, init) => contextFetch(new URL(url.pathname + url.search, server.base), init),
   );
   const sdk = async (args: readonly string[]) => {
     if (args[0] === "session" || args[0] === "doc") return sdkSessions(args);
@@ -218,7 +247,7 @@ export async function setup() {
   );
   const mount = () =>
     serveRoutes(
-      Layer.mergeAll(pe, makeCallRoute(owner, captures, { workspace: work, sdk }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(marks))))),
+      Layer.mergeAll(pe, makeCallRoute(owner, captures, { workspace: work, sdk }).pipe(Layer.provide(DuctFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(marks))))),
       bridge,
     );
   let server = await mount();
@@ -263,10 +292,10 @@ export async function setup() {
     work: reading.workspaceId,
   };
   const client = () => createPeClient(server.base, contextFetch);
-  const view = () =>
+  const view = (workId = scope.work) =>
     client().call("work.get", {
       params: { route: "schedules" },
-      query: { work: scope.work },
+      query: { work: workId },
     }) as Promise<{
       revision: number;
       doc: { basis?: { captureId: string }; cells: Record<string, any> };
@@ -298,10 +327,12 @@ export async function setup() {
     if (receipt.state !== "succeeded") throw Error(JSON.stringify(receipt));
     return receipt.result;
   };
-  await bindReading({ readingId: reading.id, expectedRevision: 0, reading });
-  expect(
-    await patch([{ path: ["cells", "1::2"], value: { edit: { value: "150 VA" } } }]),
-  ).toMatchObject({ ok: true });
+  if (!options.cold) {
+    await bindReading({ readingId: reading.id, expectedRevision: 0, reading });
+    expect(
+      await patch([{ path: ["cells", "1::2"], value: { edit: { value: "150 VA" } } }]),
+    ).toMatchObject({ ok: true });
+  }
   const admission = async (id = crypto.randomUUID(), ref = b): Promise<ActionAdmission> => {
     const value: ActionAdmission = {
       id,
@@ -326,6 +357,8 @@ export async function setup() {
       return server.base;
     },
     scope,
+    observeWork: work.observeFeed.bind(work),
+    observeHostResource: observeHost,
     a,
     b,
     view,
@@ -349,6 +382,7 @@ export async function setup() {
       detail = value;
     },
     reads: () => readCount,
+    onCatalog: (callback: () => void) => { onCatalog = callback; },
     revitChanged,
     bridgeDetached,
     addSchedule: (scheduleId: number, name: string) =>

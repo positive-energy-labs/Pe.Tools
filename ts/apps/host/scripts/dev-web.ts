@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { once } from "node:events";
 import { createServer } from "vite-plus";
@@ -9,10 +9,12 @@ import {
   productScratchPath,
 } from "@pe/host-contracts/service-identity";
 
+import type { RouteStartupProjection } from "@pe/host-contracts/route-startup";
+
 if (!process.send) throw new Error("Run vp run dev from the host or workspace package.");
 const disconnected = once(process, "disconnect");
 const [file] = await Promise.race([
-  once(process, "message") as Promise<[{ port: number; sourceRoot: string; name: string }]>,
+  once(process, "message") as Promise<[{ port: number; sourceRoot: string; name: string; routeProjection?: RouteStartupProjection }]>,
   disconnected.then(() => {
     throw new Error("Host exited before frontend startup");
   }),
@@ -31,6 +33,11 @@ await mkdir(scratch, { recursive: true });
 const cacheDir = await mkdtemp(join(scratch, "pe-vite-"));
 let vite: Awaited<ReturnType<typeof createServer>> | undefined;
 try {
+  if (file.routeProjection) {
+    const projectionPath = join(cacheDir, "route-startup.json");
+    await writeFile(projectionPath, JSON.stringify(file.routeProjection));
+    process.env.PE_DEV_ROUTE_PROJECTION = projectionPath;
+  }
   vite = await createServer({
     root: webRoot,
     configFile: join(webRoot, "vite.config.ts"),

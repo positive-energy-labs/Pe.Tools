@@ -1,3 +1,4 @@
+import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 /**
  * proto: copied from losses-view.tsx (round 3, E2 Rules section). The losses item's table chips per
  * rule and its stated-drop cell are unexported there, so the minimum is copied here unchanged;
@@ -5,7 +6,7 @@
  */
 import { cellPatches, type DuctsDesign, type RouteStatePatch } from "@pe/agent-contracts";
 import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
-import { tableOf, type Priced } from "@pe/ducts-domain/pricing";
+import { tableOf } from "@pe/ducts-domain/pricing";
 import { Button } from "@pe/kit/lang/button";
 import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
 import { ValueDiff } from "@pe/kit/lang/value-diff";

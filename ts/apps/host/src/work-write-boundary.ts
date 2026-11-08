@@ -1,12 +1,14 @@
 import { createHash } from "node:crypto";
 import { type DocumentMarks, type DocumentRef } from "./document-marks.ts";
-import { lifetime } from "./family-actions.ts";
+import { lifetime } from "./document-lifetime.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { z } from "zod";
 import {
   canonicalRouteInput,
+  sameCaller,
   writeResponseSchema,
+  writePreviewSchema,
   workHandleSchema,
   workBinding,
   tools,
@@ -25,13 +27,15 @@ const hash = (value: unknown) =>
 const canonicalSet = <T>(values: readonly T[]): T[] =>
   [...new Set(values.map(canonicalRouteInput))].sort().map((value) => JSON.parse(value));
 /** The document mark the plan read, as the seal carries it (ADR 0030 rule 4). */
-export const sealedDocumentMark = (marks: DocumentMarks, ref: DocumentRef): WriteSeal["documentMark"] => ({
+export const sealedDocumentMark = (marks: DocumentMarks, ref: DocumentRef,
+): WriteSeal["documentMark"] => ({
   session: ref.session,
   openId: ref.openId,
   observedSince: marks.observedSince ?? null,
   changedAt: marks.changedAt(ref),
 });
 export interface WriteSealInput {
+  caller: WriteSeal["caller"];
   request: unknown;
   input: unknown;
   work: WorkHandle;
@@ -41,7 +45,8 @@ export interface WriteSealInput {
   consumed: readonly Exclude<Consumed, { kind: "document-mark" }>[];
   evidence: unknown;
 }
-export function writeSeal({ request, input, work, incarnation, documentMark, consumed, evidence }: WriteSealInput): WriteSeal {
+export function writeSeal({ caller, request, input, work, incarnation, documentMark, consumed, evidence ,
+}: WriteSealInput): WriteSeal {
   const dependencies = canonicalSet(
     consumed
       .map((item) =>
@@ -58,6 +63,7 @@ export function writeSeal({ request, input, work, incarnation, documentMark, con
       ),
   );
   return {
+    caller,
     requestHash: hash(request),
     work: { handle: work, consumed: dependencies.filter((item) => item.kind === "work") },
     documentMark,
@@ -88,7 +94,8 @@ async function deriveFromWork(
   bridge: RevitBridge["Service"],
   deps: { sdk?: SdkReceiptReader },
 ) {
-  const { work, readWorks } = z.object({ work: workHandleSchema, readWorks: z.record(z.string(), workHandleSchema).optional() }).parse(definition.input.parse(ctx.admission.input));
+  const { work, readWorks } = z.object({ work: workHandleSchema, readWorks: z.record(z.string(), workHandleSchema).optional() ,
+    }).parse(definition.input.parse(ctx.admission.input));
   if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
   const target = ctx.admission.target.ref;
   const observed = await lifetime(bridge, target, false, deps);
@@ -192,15 +199,27 @@ export function workWriteBoundary(
         bridge,
         deps,
       );
-      const preview = ctx.read
+      const previews = ctx.read
         .receipts()
         .filter(
           (row) =>
             row.key === hooks.previewKey &&
             row.state === "succeeded" &&
             canonicalRouteInput(row.target) === canonicalRouteInput(ctx.admission.target),
-        )
-        .at(-1);
+        );
+      const latest = previews.at(-1);
+      const planRefusal =
+        latest?.state === "succeeded"
+          ? writePreviewSchema.parse(latest.result)
+          : null;
+      if (!previewOnly && planRefusal?.planRefusal)
+        throw refused(planRefusal.planRefusal, planRefusal.planRefusalCode ?? "preview.refused");
+      const preview = previews.filter((row ) => row.state === "succeeded" &&
+        sameCaller((row.result as { seal?: WriteSeal }).seal?.caller, ctx.caller),
+      ).at(-1);
+      if (!previewOnly && !preview && previews.length)
+        throw refused("Plan belongs to another caller; plan the current Work first", "preview.caller",
+        );
       const derivedContext = withInput(ctx, input);
       // Reproduce generated paths and plan references from this exact preview, never a new caller payload.
       derivedContext.admission.id = !previewOnly && preview ? preview.id : ctx.admission.id;
@@ -209,7 +228,7 @@ export function workWriteBoundary(
         const value = executor.prepared.parse(await bound.prepare?.());
         if (!previewOnly && !preview)
           throw refused("Plan the current Work first", "preview.stale");
-        // The seal names the document mark itself; mark probes (the plan's sealed mark below, a family
+        // The seal names the document mark itself; mark probes (the plan's sealed mark below, a document
         // read's takenAt) are the journal's dispatch guard and stay out of the hash.
         const dependencies = [...ctx.consumed, ...(bound.consumes ?? [])].filter(
           (item): item is Exclude<Consumed, { kind: "document-mark" }> => item.kind !== "document-mark",
@@ -217,6 +236,7 @@ export function workWriteBoundary(
         const projection = project(value);
         await marks.settled?.();
         const seal = writeSeal({
+          caller: ctx.caller,
           request: projection.request,
           input,
           work,
@@ -227,14 +247,16 @@ export function workWriteBoundary(
         });
         const previousSeal =
           preview?.state === "succeeded"
-            ? (preview.result as { seal?: Record<string, unknown> }).seal
+            ? (preview.result as { seal?: WriteSeal }).seal
             : undefined;
-        if (!previewOnly && canonicalRouteInput(previousSeal) !== canonicalRouteInput(seal)) {
-          const changed = Object.keys(seal).filter(
-            (key) =>
-              canonicalRouteInput(previousSeal?.[key]) !==
-              canonicalRouteInput(seal[key as keyof typeof seal]),
-          );
+        // Wrap field values so a missing field cannot compare equal to an empty object.
+        const changed = [...new Set([...Object.keys(previousSeal ?? {}), ...Object.keys(seal)])].filter(
+          (key) => key === "caller"
+            ? !sameCaller(previousSeal?.caller, seal.caller)
+            : canonicalRouteInput({ value: previousSeal?.[key as keyof WriteSeal] }) !==
+              canonicalRouteInput({ value: seal[key as keyof WriteSeal] }),
+        );
+        if (!previewOnly && changed.length) {
           throw refused(
             `Plan changed; plan the current Work again (${changed.join(", ")})`,
             "preview.stale",
@@ -258,7 +280,8 @@ export function workWriteBoundary(
                   kind: "document-mark" as const,
                   probe: {
                     ref: target,
-                    sealed: { observedSince: plannedMark.observedSince, changedAt: plannedMark.changedAt },
+                    sealed: { observedSince: plannedMark.observedSince, changedAt: plannedMark.changedAt ,
+                    },
                   },
                   expected: true as const,
                 },
@@ -266,7 +289,8 @@ export function workWriteBoundary(
             : []),
         ],
         effects: previewOnly ? [] : bound.effects,
-        claims: [
+        // A read-only preview must not consume the adopted plan before Apply can claim it.
+        claims: previewOnly ? [] : [
           ...(bound.claims ?? []),
           ...(!previewOnly && preview ? [{ kind: "receipt" as const, id: preview.id }] : []),
         ],

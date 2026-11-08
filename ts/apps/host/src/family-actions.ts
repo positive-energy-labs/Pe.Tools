@@ -1,10 +1,11 @@
-import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
+import { currentDocument as current, lifetime } from "./document-lifetime.ts";
 import { createHash } from "node:crypto";
 import { join, resolve, win32 } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { NodeFileSystem } from "@effect/platform-node";
 import {
   commands,
+  sameCaller,
   familyActions,
   familyReads,
   familyLiveReadSchema,
@@ -32,6 +33,8 @@ import {
   workKey,
   bindWork,
   address,
+  addressSchema,
+  familiesObservationSchema,
   type FamilyActionKey,
   type FamilyReadKey,
   type DocumentRef,
@@ -82,7 +85,7 @@ import {
 import { z } from "zod";
 import type { Consumed as Dependency, WorkHandle } from "@pe/agent-contracts";
 import { type TakeoffActionDependencies } from "./takeoff-actions.ts";
-import { readOriginalProcess, readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
+import { readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
 import {
   composedSpec,
   podFolder,
@@ -117,15 +120,16 @@ export const sourceRunOutput = async (pod: string | null | undefined, deps: PodD
 
 /** Pod I/O runs against the product Pods root unless an owner (the demo lane) supplies its own. */
 export type PodDependencies = {
+  parsePdf?: (file: File) => Promise<unknown>;
   podsRoot?: string;
   runPods?: <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) => Promise<A>;
 };
 export type FamilyActionDependencies = TakeoffActionDependencies &
   PodDependencies & {
     marks?: DocumentMarks;
-    files?: import("./host-files.ts").HostFiles["Service"];
+    files?: import("./ducts-files.ts").DuctFiles["Service"];
     pictures?: import("./captures-route.ts").PictureCaptureStore["Service"];
-    families?: Pick<FamiliesReader["Service"], "cancel">;
+    families?: Pick<FamiliesReader["Service"], "read" | "cancel">;
     /** The demo owner keeps native reads inside its own root; a build has no output path to place. */
     nativePaths?: (
       input: { modelDirectory?: string },
@@ -267,51 +271,6 @@ export const writeCaptureRun = (
   );
 };
 
-async function current(
-  bridge: RevitBridge["Service"],
-  target: DocumentRef,
-  family: boolean | "project",
-  process?: NativeProcess,
-) {
-  // effect-edge: island, phase 5
-  const session = await Effect.runPromise(
-    SdkSession.resolve(bridge, { session: target.session }).pipe(
-      Effect.mapError((error) => refused(error.message)),
-    ),
-  );
-  const doc = session.state?.openDocuments.find((d) => d.openId === target.openId);
-  if (
-    !doc ||
-    (family === true && !doc.isFamilyDocument) ||
-    (family === "project" && doc.isFamilyDocument) ||
-    (process &&
-      (session.processId !== process.pid ||
-        session.processStartUtcUnixMs !== Date.parse(process.processStartUtc)))
-  )
-    throw refused("The exact admitted document lifetime/process is no longer available");
-  return session;
-}
-export async function lifetime(
-  bridge: RevitBridge["Service"],
-  target: DocumentRef,
-  family: boolean | "project",
-  deps: TakeoffActionDependencies,
-) {
-  const session = await resolveSdkSession(
-    bridge,
-    { bridgeSessionId: target.session, openDocumentId: target.openId },
-    deps.sdk,
-  );
-  await current(bridge, target, family);
-  if (!session.processId || session.processStartUtcUnixMs == null)
-    throw refused("Original process identity unavailable");
-  const process = await readOriginalProcess(
-    session.processId,
-    session.processStartUtcUnixMs,
-    deps.sdk,
-  );
-  return { session: await current(bridge, target, family, process), process };
-}
 
 const retirementSchema = z.strictObject({
   key: workKeySchema,
@@ -806,6 +765,8 @@ export function familyExecutors(
       throw refused(`Apply must name a succeeded ${key} action`);
     if (canonicalRouteInput(plan.target) !== canonicalRouteInput(ctx.admission.target))
       throw refused("The plan was made for a different document");
+    if (!sameCaller(plan.caller, ctx.caller))
+      throw refused("Plan belongs to another caller", "preview.caller");
     return plan;
   };
   const planFacts = (ctx: CommandContext, plan: ActionReceipt): Dependency[] => {
@@ -1538,6 +1499,81 @@ export function familyExecutors(
     "settings.write": settingsWrite,
     "family.observe": familyObserve,
     "family.capture": familyCapture,
+    "families.read": command(
+      familyActions["families.read"],
+      z.object({
+        work: familyActions["families.read"].input.shape.work,
+        readId: z.uuid(),
+        filter: appliedScopeSchema,
+        document: documentRefSchema,
+        title: z.string().optional(),
+      }),
+      {
+        bind: async (ctx) => {
+          if (!deps.families) throw refused("Families reader is unavailable");
+          const target = targetOf(ctx);
+          const { session } = await lifetime(bridge, target, "project", deps);
+          const document = session.state?.openDocuments.find((d) => d.openId === target.openId);
+          const handle = ctx.admission.input.work;
+          const expected = bindWork(
+            "families",
+            document?.address ? addressSchema.parse(document.address) : null,
+            undefined,
+            target,
+          );
+          if (workKey(handle.key) !== workKey(expected))
+            throw refused("Families Work belongs to another document");
+          const work = await ctx.selectWork(tools.families.work, handle, () => ({
+            facts: [["scope"]],
+          }));
+          const filter = stagedFilter(work);
+          if (!filter?.categoryNames.length) throw refused("Choose a family category before reading");
+          return {
+            effects: [],
+            prepare: async () => ({
+              work: handle,
+              readId: ctx.admission.input.readId,
+              filter,
+              document: target,
+              title: document?.title ?? undefined,
+            }),
+          };
+        },
+        run: async (ctx, execution) => {
+          if (!deps.families) throw refused("Families reader is unavailable");
+          const p = execution.prepared;
+          const saved = await deps.families.read({
+            bridge,
+            captures,
+            readId: p.readId,
+            work: p.work.key,
+            document: p.document,
+            documentTitle: p.title,
+            filter: p.filter,
+          });
+          if (saved.progress && saved.progress.state !== "complete")
+            throw refused(saved.progress.message ?? `Families read ${saved.progress.state}`);
+          const published = await execution.step(
+            "publication",
+            "families.bind-observation",
+            { work: p.work, observation: saved.id },
+            () =>
+              ctx.work.publish(
+                p.work.key,
+                "families",
+                [{ path: ["takenAt"], value: saved.capturedAt }],
+                p.work.revision,
+              ),
+          );
+          if (!published.ok)
+            throw refused("Families Work changed during the read; read the current scope again");
+          return familiesObservationSchema.parse({
+            ...saved,
+            envelope: { revision: published.revision },
+          });
+        },
+      },
+    ),
     "families.cancel-read": command(
       commands["families.cancel-read"],
       z.strictObject({ readId: z.uuid(), document: documentRefSchema }),
@@ -1670,7 +1706,8 @@ export async function readFamily(
   const target = documentRefSchema.parse(raw.target);
   const reader = await projectReader(bridge, target, deps);
   if (!deps.workspace) throw refused("Route Work is unavailable");
-  const view = await deps.workspace.read(scope, "parameter-links");
+  // Legacy inspection is outside graph/command replay; the typed reading owns tracked Work input.
+  const view = await deps.workspace.readUncaptured(scope, "parameter-links");
   if (!view) throw refused("Author this route's Work before reading it");
   const document = parameterLinksRouteState.schema.parse(view.doc);
   const { evaluate } = familyReads["parameter-links.read"].input.parse(input);

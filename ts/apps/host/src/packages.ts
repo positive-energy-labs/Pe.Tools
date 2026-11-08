@@ -17,6 +17,7 @@ import {
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPodsRootPath } from "./product-paths.ts";
 import { verifyPodArtifact } from "./pod-artifact.ts";
+import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 
 export type PackageEntrypoint = {
   sourcePath: string;
@@ -336,6 +337,8 @@ async function readFolder(directory: string, folder: string): Promise<AdmittedPa
       .replace(/^\uFEFF/, ""),
   );
   packageIdSchema.parse(value?.id);
+  const updateRefusal = shippedPodUpdateRefusals.get(value.id);
+  if (updateRefusal) diagnostics.push(problem("ShippedExampleUpdateKept", "pod.json", updateRefusal));
   const entrypoints: PackageEntrypoint[] = [];
   for (const entry of Array.isArray(value.entrypoints) ? value.entrypoints : []) {
     try {

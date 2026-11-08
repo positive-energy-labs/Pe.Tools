@@ -1,3 +1,5 @@
+import { currentRouteStartupProjection } from "@pe/host-contracts/route-startup";
+import type { RouteStartupProjection } from "@pe/host-contracts/route-startup";
 import { readFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -9,7 +11,7 @@ import ts from "typescript";
 import { routeFingerprint } from "../../packages/agent-contracts/src/route-module.ts";
 import type { RouteFingerprintInput } from "../../packages/agent-contracts/src/route-kernel-admission.ts";
 import type { RouteGraphJson } from "../../packages/agent-contracts/src/route-kernel-data.ts";
-import { sharedContractId, type SharedRouteModule } from "./src/route/route-artifact.ts";
+import { sharedContractId, type SharedRouteModule, type RouteArtifactBytes } from "./src/route/route-artifact.ts";
 
 /** Pod packaging only. Builtins use buildBuiltinClosure, with ordinary source imports.
  * Produce the exact self-contained JS closure the package loader will evaluate. Source EOLs
@@ -17,11 +19,22 @@ import { sharedContractId, type SharedRouteModule } from "./src/route/route-arti
  * No source-map is loaded. Unresolved imports and runtime-computed imports refuse. */
 export async function buildRouteArtifact(options: {
   readonly entry: string;
+  readonly source?: string;
+  readonly hostEntry?: {readonly entry:string;readonly source:string};
   readonly root?: string;
   readonly data: RouteGraphJson;
   readonly contracts: readonly { readonly id: string; readonly bytes: Uint8Array }[];
   readonly shared?: readonly SharedRouteModule[];
-}) {
+}):Promise<RouteArtifactBytes> {
+  if(options.hostEntry) {
+    const {hostEntry,...browser}=options;
+    const [web,host]=await Promise.all([buildRouteArtifact(browser),buildRouteArtifact({...browser,...hostEntry,shared:[]})]);
+    const hostExecutable={...host.executables[0]!,client:"host" as const,entry:"host.js",
+      members:host.executables[0]!.members.map(member=>({...member,path:member.path==="route.js"?"host.js":member.path}))};
+    const artifact={...web.artifact,executables:[...web.artifact.executables,{client:"host" as const,entry:"host.js",
+      members:hostExecutable.members.map(member=>({path:member.path,sha256:createHash("sha256").update(member.bytes).digest("hex")}))}]};
+    return {...web,artifact,fingerprint:await routeFingerprint(artifact),executables:[...web.executables,hostExecutable]};
+  }
   if (!isAbsolute(options.entry) || (options.root !== undefined && !isAbsolute(options.root)))
     throw Error("Pod artifact entry and root must be absolute");
   const shared = (options.shared ?? [])
@@ -52,7 +65,8 @@ export async function buildRouteArtifact(options: {
       {
         name: "route-artifact-source-eol",
         enforce: "pre",
-        resolveId(id) {
+        resolveId(id, importer) {
+          if(options.source !== undefined && id === options.entry) return id;
           // Never silently bundle a second copy of a stateful shell runtime. Subpath
           // imports need their own explicit deployment pin, not the parent package's bytes.
           if (
@@ -61,9 +75,10 @@ export async function buildRouteArtifact(options: {
             ) &&
             !shared.some((item) => item.specifier === id)
           )
-            throw Error(`Shared route module needs an explicit deployment pin: ${id}`);
+            throw Error(`Shared route module needs an explicit deployment pin: ${id} (imported by ${importer})`);
         },
         load(id) {
+          if(options.source !== undefined && id === options.entry) return options.source;
           if (/\.[cm]?[jt]sx?$/.test(id)) return readFileSync(id, "utf8").replaceAll("\r\n", "\n");
         },
       },
@@ -146,6 +161,18 @@ export async function buildRouteArtifact(options: {
 
 const exec = promisify(execFile);
 async function runtimeRoutes() {
+  const handoff = process.env.PE_DEV_ROUTE_PROJECTION;
+  // One launch handoff only: edits and subsequent builds always return to the producer.
+  delete process.env.PE_DEV_ROUTE_PROJECTION;
+  if (handoff) {
+    try {
+      const receipt = JSON.parse(readFileSync(handoff, "utf8")) as RouteStartupProjection;
+      const root = fileURLToPath(new URL("../../../", import.meta.url));
+      if (currentRouteStartupProjection(root, receipt)) return receipt.projections;
+    } catch {
+      // Unavailable or malformed handoff: recompute rather than serving stale projections.
+    }
+  }
   const producer = fileURLToPath(new URL("./scripts/route-graphs.ts", import.meta.url));
   const { stdout } = await exec(process.execPath, [producer, "--runtime"], {
     maxBuffer: 16 * 1024 * 1024,

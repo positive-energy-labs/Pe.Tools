@@ -27,7 +27,6 @@ test("borrowed host mode changes only web identity and permits Ducts reads, neve
       ["POST", "/call", { key: "ducts.apply" }],
       ["POST", "/pe/route-state/ducts/apply", {}],
       ["POST", "/host/shutdown", {}],
-      ["GET", "/pe/route-state/ducts/salvage", undefined],
       ["GET", "/api/bridge", undefined],
     ] as const)
       expect(readHostRequest(method, path, body)).toBe(false);

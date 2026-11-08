@@ -11,7 +11,7 @@ import { LegStrip } from "#/components/lang/leg-strip";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { PidChip } from "#/components/lang/process";
 import { SwitchRow } from "@pe/kit/lang/switch-row";
-import { dirty } from "#/readings";
+import { dirty } from "#/host/resource-stream";
 import { useAction } from "#/actions/use-action";
 import { recheckUpdate } from "#/host/install";
 import { automaticUpdatesRpc } from "../../../../packages/mcps/src/shared/rpc-client";

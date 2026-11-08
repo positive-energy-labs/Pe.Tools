@@ -1,4 +1,4 @@
-import type { GeometryReadDoor, ResolvedReadDescriptor } from "./native-read-door.ts";
+import type { ResolvedReadDescriptor } from "./native-read-door.ts";
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 import type { z } from "zod";
 import type { AdmittedRoute } from "./route-kernel-admission.ts";
@@ -396,12 +396,15 @@ export type KernelServices = Pick<
   RouteEnvironment,
   "reads" | "readings" | "clock" | "availability"
 > & {
+  readonly local?: LocalCommandPort;
   readonly work?: import("./work-journal-door.ts").WorkJournalDoor;
-  readonly geometry?: GeometryReadDoor<unknown>;
   readonly target?: () => ScopeToken["identity"]["target"];
   readonly nativeWrite?: import("./work-journal-door.ts").WorkJournalDoor;
   readonly submitNative?: import("./work-journal-door.ts").WorkJournalDoor["submit"];
 };
+/** Application effects stay outside pure route bodies and the native action journal. */
+export type LocalCommandCall = Readonly<{ verb: string; entry: string; input: unknown }>;
+export type LocalCommandPort = (call: LocalCommandCall, signal: AbortSignal) => Promise<unknown>;
 type GroupFor<
   D extends Pick<RouteGraphJson, "capabilities">,
   C extends RouteGraphJson["capabilities"][number],

@@ -1,6 +1,6 @@
 import { reviewChanges } from "#/shell/review-value";
 import type { FamilyPlanResult } from "@pe/agent-contracts";
-import type { VerbPresentation } from "#/shell/verbs";
+import {type VerbPresentation} from "#/shell/review-contract";
 
 /** Family and Families review the same native plan, including refusals and run effects. */
 export function presentFamilyPlan(result: unknown): VerbPresentation {

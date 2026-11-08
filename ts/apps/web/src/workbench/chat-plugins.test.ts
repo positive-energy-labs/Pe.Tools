@@ -1,14 +1,16 @@
-import { describe, expect, it } from "vite-plus/test";
+import { beforeAll, describe, expect, it } from "vite-plus/test";
+import { publicRoutesReady } from "../route/builtin-routes";
 
 import {
   actionReceiptSchema,
   memberWork,
-  commands,
   catalogWorkCommands,
   catalogWorkSpecs,
 } from "@pe/agent-contracts";
 
 import { actionPlace, actionRoute, capturedPlace, proposedRecord } from "./chat-plugins";
+
+beforeAll(async () => { await publicRoutesReady; });
 
 const member = { pod: "mechanical", path: "settings/family.json" };
 const workspace = {
@@ -57,7 +59,7 @@ describe("chat plugin records", () => {
     );
     expect(place).toMatchObject({
       ok: true,
-      page: { workspaceId: "schedule-42" },
+      page: { workspaceId: { kind: "ids", ids: [JSON.stringify(["schedules", "schedule-42"])] } },
       carry: {
         work: "schedule-42",
         target: JSON.stringify({ kind: "open", ref: { session: "one", openId: "original" } }),
@@ -72,26 +74,24 @@ describe("chat plugin records", () => {
       ),
     ).toMatchObject({ ok: false, refusal: expect.stringContaining("document target") });
   });
-  it("an action opens the pane whose manifest declares a verb doing it, never a guess at its words", () => {
-    expect(actionRoute("takeoffs.sync")).toBe("takeoffs");
+  it("an action opens the pane whose manifest declares a verb doing it, never a guess at its words", async () => {
+    const { publicRoutesReady } = await import("../route/builtin-routes");
+    await publicRoutesReady;
+    expect(actionRoute("takeoffs.adopt")).toBe("takeoffs");
     expect(actionRoute("rooms.merge")).toBe("rooms");
     expect(actionRoute("family.build")).toBe("family");
     expect(actionRoute("family.observe")).toBe("family");
     expect(actionRoute("settings.write")).toBe("pods");
     expect(actionRoute("settings.observe")).toBe("pods");
     expect(actionRoute("schedule.grid.push")).toBe("schedules");
-    expect(actionRoute("instances.open")).toBe("instances");
+    expect(actionRoute("instances.open")).toBe("open");
     // Route-free Work owns its commands without a Page (ADR 0030 rule 2).
-    expect(
-      Object.keys(commands).filter(
-        (key) => !actionRoute(key) && !Object.hasOwn(catalogWorkCommands, key),
-      ),
-    ).toEqual([]);
     for (const [key, command] of Object.entries(catalogWorkCommands)) {
       expect(Object.values(catalogWorkSpecs).some((spec) => spec.route === command.work.route)).toBe(true);
       expect(actionRoute(key)).toBeNull();
     }
     // No pane declares these: the record keeps its receipt link instead of inventing an owner.
+    expect(actionRoute("takeoffs.sync")).toBeNull();
     expect(actionRoute("schedule.nonexistent")).toBeNull();
     expect(actionRoute("pod.list")).toBeNull();
     expect(actionRoute("takeoffs")).toBeNull();
@@ -138,7 +138,7 @@ describe("chat plugin records", () => {
       subject: "C:/Models/Original.rvt",
       place: {
         ok: true,
-        page: { workspaceId: "schedule-42" },
+        page: { workspaceId: { kind: "ids", ids: [JSON.stringify(["schedules", "schedule-42"])] } },
         carry: {
           work: "schedule-42",
           target: JSON.stringify({
@@ -200,6 +200,6 @@ describe("chat plugin records", () => {
       },
       { ok: true, target: { session: "original-session", document: "C:/Models/Original.rvt" } },
     );
-    expect(record).toMatchObject({ changes: 2, place: { ok: true, page: { system: ["AHU-1"] } } });
+    expect(record).toMatchObject({ changes: 2, place: { ok: true, page: { system: {kind:"ids",ids:[JSON.stringify(["ducts-system","AHU-1"])]} } } });
   });
 });

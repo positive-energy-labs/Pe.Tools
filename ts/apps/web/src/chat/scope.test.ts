@@ -1,6 +1,6 @@
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { expect, test } from "vite-plus/test";
-import { documentRequestSchema, type Machine } from "@pe/agent-contracts";
+import { documentRequestSchema } from "@pe/agent-contracts";
 
 import { soleUserDocument } from "./scope";
 
@@ -27,10 +27,23 @@ test("two documents, two Revits, Pea's own document or no reading leave the draf
     { session: "a", documents: [doc("one")] },
     { session: "b", documents: [doc("two")] },
   ]);
-  const peas = machineFixture([{ session: "a", documents: [doc("one")] }]) as Machine & {
-    revit: { sessions: { attachment: { documents: { access: unknown }[] } }[] };
+  const base = machineFixture([{ session: "a", documents: [doc("one")] }]);
+  const peas = {
+    ...base,
+    revit: {
+      ...base.revit,
+      sessions: base.revit.sessions!.map((session) => ({
+        ...session,
+        attachment: {
+          ...session.attachment!,
+          documents: session.attachment!.documents!.map((document) => ({
+            ...document,
+            access: { kind: "pea" as const, acquisition: "acq-1" },
+          })),
+        },
+      })),
+    },
   };
-  peas.revit.sessions[0]!.attachment.documents[0]!.access = { kind: "pea", acquisition: "acq-1" };
   for (const machine of [twoDocs, twoRevits, peas, null])
     expect(soleUserDocument(machine)).toBeNull();
 });

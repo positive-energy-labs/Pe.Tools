@@ -1,20 +1,7 @@
-import { sessionsGraph } from "../sessions/graph";
-import { indexGraph } from "../index/graph";
-import type { RouteGraph } from "@pe/agent-contracts";
-import { openGraph } from "../open/graph";
-import { podsGraph } from "../pods/graph";
-import { roomsGraph } from "../rooms/graph";
-import { familyGraph } from "../family/graph";
-import { takeoffGraph } from "../takeoff/graph";
-import { settingsGraph } from "../settings/graph";
-import { chatGraph } from "../chat/graph";
-import { designSystemGraph } from "../design-system/graph";
-import { ductLossGraph } from "../duct-loss/graph";
-import { opsGraph } from "../ops/graph";
-import { bindGraph } from "../pages-bind/graph";
+import { builtinRouteKeys, typedBuiltin } from "../route/builtin-inventory";
+import type { Page, Fields } from "../route/typed-route";
+import type { HostRead } from "../route/host-read";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { createFixtureMount } from "./fixture";
-import { legacySubjectState } from "./subject";
 import { leaks } from "./visible-text";
 import { fanLabel } from "../ducts/sheet/model";
 import { SCENE_FIXTURE } from "../ducts/scene.fixture";
@@ -23,76 +10,38 @@ import { elementLabeler } from "@pe/ducts-domain/element-label";
 import type { FanPort } from "@pe/ducts-domain/roster";
 import { buildSheet, type SheetSnapshot } from "@pe/ducts-domain/sheet/index";
 import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
-import { admit } from "../fans/admission.fixture.ts";
 
-/**
- * Manual D re-drive #4, defect 7: internal keys rendered as text. Every fixture route's visible
- * subject words (roster labels, the kernel's subject label with and without a roster, verb, pane
- * and stage words) must come from declared display labels, never UniqueIds, port keys or ids.
- */
+// Registry words and actual declared fixture publications must name things, never their keys.
 afterEach(() => vi.unstubAllGlobals());
-const routes = [
-  indexGraph,
-  sessionsGraph,
-  designSystemGraph,
-  ductLossGraph,
-  opsGraph,
-  bindGraph,
-  openGraph,
-  podsGraph,
-  roomsGraph,
-  familyGraph,
-  takeoffGraph,
-  settingsGraph,
-  chatGraph(() => ({ thread: "" })),
-] as unknown as RouteGraph<any, any>[];
+const routes = builtinRouteKeys.map(typedBuiltin);
+const fixtures = (module: (typeof routes)[number]) => {
+  const page: Page<Fields> = { ...Object.fromEntries(Object.entries(module.spec.fields).map(([key, field]) => [key, field.initial])), selected: [] };
+  const reads = new Set<HostRead & { args?(page: Page<Fields>): unknown }>([
+    ...Object.values(module.spec.reads ?? {}),
+    ...Object.values(module.spec.panes).flatMap((pane) => pane.read ? [pane.read] : []),
+    ...(module.spec.core ? [module.spec.core] : []),
+  ]);
+  return [...reads].flatMap((read) => Object.keys(read.fixtures ?? {}).map((name) => ({
+    read, name, publication: read.source.provide!(name, read.args?.(page) ?? {}),
+  })));
+};
 
-test.each(routes.map((graph) => [graph.address, graph] as const))(
+// C746 Family runtime picker/roster/stage labels are also driven by the D G07 Family journey
+// in route/kernel-journeys-focus.test.tsx; this registry inventory stays exhaustive.
+test.each(routes.map((module) => [module.data.address, module] as const))(
   "/%s renders no internal identity in its subject, verb, pane or stage words",
-  async (_, graph) => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => {
-        throw Error("Real host called");
-      }),
-    );
-    const internal = [...Object.keys(graph.verbs), ...Object.keys(graph.panes ?? {})].filter((id) =>
-      id.includes("-"),
-    );
-    const words = [
-      ...Object.values(graph.verbs).map((verb) => verb.label),
-      ...Object.values(graph.panes ?? {}).map((pane) => (pane as { label?: string }).label ?? ""),
-      ...Object.values(graph.stages ?? {}).map((stage) => (stage as { word?: string }).word ?? ""),
-    ];
-    const subject = graph.subjectField;
-    const picker = subject && graph.fields[subject.field]?.picker;
-    for (const name of Object.keys(graph.seeds ?? {})) {
-      const owner = await createFixtureMount(graph, name);
-      const release = owner.connect();
-      const demand = picker ? owner.readings.mount([picker.reading]) : () => {};
-      try {
-        if (picker && subject) {
-          const options = picker.options(owner.readings.get(picker.reading).value);
-          words.push(...options.map((option) => option.label));
-          const search = { fixture: name };
-          for (const option of options.slice(0, 5)) {
-            const page = {
-              ...search,
-              [subject.field]: subject.cardinality === "many" ? [option.id] : option.id,
-            };
-            // Before the roster lands, then after: neither may fall back to the raw key.
-            words.push(legacySubjectState(graph, page).label);
-            words.push(legacySubjectState(graph, page, owner.readings.get(picker.reading)).label);
-          }
-        }
-      } finally {
-        demand();
-        release();
-        owner.dispose();
-      }
-    }
-    for (const text of words)
-      expect(leaks(text, internal), `${graph.address}: "${text}"`).toEqual([]);
+  (_, module) => {
+    vi.stubGlobal("fetch", vi.fn(() => { throw Error("Real host called"); }));
+    const data = module.data;
+    const internal = [...Object.keys(data.verbs), ...Object.keys(data.panes)].filter(id => id.includes("-"));
+    const words = [data.name, data.directory.label, ...(data.subject ? [data.subject.noun] : []),
+      ...Object.values(data.verbs).map(verb => verb.label),
+      ...Object.values(data.panes).flatMap(pane => [pane.label, pane.purpose]),
+      ...Object.values(data.stages).map(stage => stage.word)];
+    for (const fixture of fixtures(module))
+      if (module.spec.subject && fixture.read === (module.spec.subject.read ?? module.spec.core))
+        words.push(...module.spec.subject.options(fixture.publication.value!.data).map(option => option.label));
+    for (const word of words) expect(leaks(word, internal), `${data.key}: ${word}`).toEqual([]);
   },
 );
 
@@ -107,15 +56,16 @@ function displayStrings(value: unknown, key = "", out: string[] = []): string[] 
   return out;
 }
 
-// Manual D re-drive #5 defect 7: widened from words to what each fixture seed hands its panes.
-test.each(routes.map((graph) => [graph.address, graph] as const))(
+// C747 Family has no fixture publication: the same D G07 Family journey renders actual Work
+// and the asynchronous host-evaluated member payload. Keep every provider check below as well.
+// Inspect the display fields of the actual typed fixture providers, not legacy seed URLs.
+test.each(routes.map((module) => [module.data.address, module] as const))(
   "/%s fixture seeds carry no internal identity in any display text",
-  async (_, graph) => {
-    for (const [name, seed] of Object.entries(graph.seeds ?? {})) {
-      const loaded = await (seed as { load: () => Promise<unknown> }).load();
-      for (const text of displayStrings(loaded))
-        expect(leaks(text), `${graph.address}?fixture=${name}: "${text}"`).toEqual([]);
-    }
+  (_, module) => {
+    vi.stubGlobal("fetch", vi.fn(() => { throw Error("Real host called"); }));
+    for (const { read, name, publication } of fixtures(module))
+      for (const text of displayStrings(publication.value?.data))
+        expect(leaks(text), `${module.spec.key}/${read.key}/${name}: ${text}`).toEqual([]);
   },
 );
 
@@ -196,18 +146,18 @@ test("a duplicate fan mark is told apart by level, then system, then order; neve
   expect(fanLabel({ ...a, mark: "MUAS-1" }, [a, b])).toBe("MUAS-1 / port 0");
 });
 
-test("admitted ducts and fans render declared subject and pane words without internal ids", async () => {
-  const { owner, presenter } = await admit();
-  for (const route of [owner, presenter]) {
-    const words = [
-      route.data.name,
-      route.data.subject.noun,
-      ...Object.values(route.data.panes).flatMap((pane) => [pane.label, pane.purpose]),
-      ...Object.values(route.data.verbs).map((verb) => verb.label),
-    ];
-    expect(
-      words.flatMap((word) => leaks(word)),
-      route.data.key,
-    ).toEqual([]);
+test("registered routes render declared subject and pane words without internal ids", () => {
+  for (const route of routes) {
+    const words = [route.data.name, ...(route.data.subject ? [route.data.subject.noun] : []),
+      ...Object.values(route.data.panes).flatMap(pane => [pane.label, pane.purpose]),
+      ...Object.values(route.data.verbs).map(verb => verb.label)];
+    expect(words.flatMap(word => leaks(word)), route.data.key).toEqual([]);
   }
+});
+
+test("typed modules publish display words without internal identities",async()=>{
+ for(const module of routes) {
+   const words=[module.data.name,...Object.values(module.data.panes).flatMap(p=>[p.label,p.purpose]),...Object.values(module.data.verbs).map(v=>v.label)];
+   expect(words.flatMap(word=>leaks(word)),module.data.key).toEqual([]);
+ }
 });

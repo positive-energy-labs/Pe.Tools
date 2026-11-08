@@ -1,7 +1,7 @@
 import { useContext } from "react";
 import { DuctsOwner } from "../../pane-context";
 import { stableFanKey } from "../../sheet/model";
-import { fansLink } from "../../../fans/neutral.ts";
+import { fansLink } from "../../../fans/route.ts";
 import { useRouteSearchSlice } from "#/route/activity";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
@@ -14,7 +14,6 @@ import { useNativeObservation } from "#/revit/observation";
  * carries them as cards (kaitpw 2026-10-23: "only takes up space"): they read in the system row's
  * breakdown popover and on each unit's Inputs row.
  */
-import type { Priced } from "@pe/ducts-domain/pricing";
 import { worstRun, type FanResult } from "@pe/ducts-domain/losses";
 
 import { fmtFt } from "./bar";
@@ -33,7 +32,7 @@ export interface FanFact {
 
 /** Every fan of these groups, in each group's largest-first order. */
 export function fanFacts(
-  priced: Priced | null,
+  priced: {next:Pick<import("@pe/ducts-domain/losses").LossResult,"byGroup"|"paths">} | null,
   groups: readonly string[],
   nameOf: (id: number) => string,
   terminals?: ReadonlySet<number>,

@@ -26,12 +26,16 @@ export type TimelineBarrier = TimelineEntry & {
   kind: "receipt";
   paths: readonly RouteStatePatch["path"][];
 };
-export const receiptBarrier = (entry: TimelineEntry): TimelineBarrier | null =>
-  entry.kind === "receipt" &&
-  entry.paths?.length &&
-  (!entry.outcome || ["succeeded", "outcome-unknown"].includes(entry.outcome.state))
+export const receiptBarrier = (entry: TimelineEntry): TimelineBarrier | null => {
+  const receipt = (entry.basis as { receipt?: ActionStatus } | undefined)?.receipt;
+  // Reading Work during a successful preview does not commit the edits it consumed.
+  if (receipt?.state === "succeeded" && !receipt.effects.length) return null;
+  return entry.kind === "receipt" &&
+    entry.paths?.length &&
+    (!entry.outcome || ["succeeded", "outcome-unknown"].includes(entry.outcome.state))
     ? (structuredClone(entry) as TimelineBarrier)
     : null;
+};
 
 type Transition = {
   revision: number;
@@ -127,6 +131,7 @@ function project(doc: unknown, patches: RouteStatePatch[]): unknown {
 /** In-memory history for exactly one Work. Call accept for local acks AND accepted host deltas. */
 export function createWorkJournal(key: WorkKey) {
   const identity = workKey(key);
+  const intents = new Map<string, { id:string; owner:WorkKey; input:WorkWrite; label:string; at:number; status:"pending"|"refused"; reason?:string }>();
   let revision: number | null = null;
   let from = 0;
   let current: { revision: number; doc: unknown } | null = null;
@@ -201,16 +206,14 @@ export function createWorkJournal(key: WorkKey) {
   };
   const applyAcknowledgement = (acknowledged: WorkWriteAck, detail?: JournalDetail): void => {
     if (workKey(acknowledged.key) !== identity) return;
+    for (const [id,intent] of intents) if (intent.input.press && intent.input.press === acknowledged.press) intents.delete(id);
     const ack = structuredClone(acknowledged);
     // Local callbacks and the host stream can deliver the same acknowledgement twice.
     if (revision !== null && ack.revision <= revision) return;
     if (revision !== null && ack.base !== revision)
       for (const step of [...undo, ...redo]) supersede(step, ack.revision, []);
     revision = ack.revision;
-    if (ack.kind === "start-fresh") {
-      clear();
-      return;
-    }
+
     const ownRestore =
       ack.kind === "restore" &&
       sending?.expectedRevision === ack.base &&
@@ -322,7 +325,7 @@ export function createWorkJournal(key: WorkKey) {
     move("apply", undo.at(-1)!, pea ? "pea" : "human", ack.at ?? Date.now());
   };
 
-  // Receipts outlive the visible revision and undo branch, including start-fresh.
+  // Receipts outlive the visible revision and undo branch.
   const receipts = new Map<number, WorkWriteAck>();
   const reconcile = (
     ack: WorkWriteAck,
@@ -510,6 +513,17 @@ export function createWorkJournal(key: WorkKey) {
 
   return {
     key: structuredClone(key),
+    retainIntent(input: WorkWrite, label: string) {
+      if (intents.size >= 32) throw Error("Discard a retained edit in History before editing again (32 retained edits)");
+      const id = crypto.randomUUID();
+      intents.set(id, structuredClone({id, owner:key, input, label, at:Date.now(), status:"pending" as const}));
+      return id;
+    },
+    refuseIntent(id: string, reason: string) {
+      const intent = intents.get(id);
+      if (intent) { intent.status="refused"; intent.reason=reason; }
+    },
+    discardIntent(id: string) { intents.delete(id); },
     accept,
     reconcile,
     /** Rebuild only the journal view from the host's canonical acquisition. Never publish Work. */
@@ -631,6 +645,7 @@ export function createWorkJournal(key: WorkKey) {
         }
       }
       return structuredClone({
+        intents: [...intents.values()],
         revision,
         from,
         undo,

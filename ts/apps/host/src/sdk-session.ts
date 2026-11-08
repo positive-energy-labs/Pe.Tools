@@ -43,10 +43,11 @@ export const SdkCacheLimits = Context.Reference<{ entries: number; bytes: number
 
 export function readSessionScope(headers: Record<string, string | undefined>): HostSessionScope {
   const raw = headers[HOST_RPC_SDK_SESSION_HEADER];
+  // Absent selectors stay absent: this same scope is the native capture/replay JSON fence.
   return {
-    session: raw === undefined ? undefined : sdkSessionSelectionSchema.parse(JSON.parse(raw)),
-    bridgeSessionId: headers[HOST_RPC_BRIDGE_SESSION_HEADER],
-    openDocumentId: headers[HOST_RPC_DOCUMENT_HEADER],
+    ...(raw === undefined ? {} : { session: sdkSessionSelectionSchema.parse(JSON.parse(raw)) }),
+    ...(headers[HOST_RPC_BRIDGE_SESSION_HEADER] === undefined ? {} : { bridgeSessionId: headers[HOST_RPC_BRIDGE_SESSION_HEADER] }),
+    ...(headers[HOST_RPC_DOCUMENT_HEADER] === undefined ? {} : { openDocumentId: headers[HOST_RPC_DOCUMENT_HEADER] }),
   };
 }
 
@@ -197,9 +198,12 @@ export type SdkSession = Effect.Success<ReturnType<typeof resolveSdkCore>>;
 export const sdkSession = resolveSdk;
 
 /** Transitional: phase 5 I deletes resolveSdkSession with its remaining consumers. Do not add imports. */
-export const resolveSdkSession = (...args: Parameters<typeof resolveSdk>) =>
+// Existing command consumers share one SDK-owned Promise boundary while the fiber cutover continues.
+const sessionPromise = <A, E>(lookup: Effect.Effect<A, E>) =>
   // effect-edge: island, phase 5
-  Effect.runPromise(resolveSdk(...args));
+  Effect.runPromise(lookup);
+export const resolveSdkSession = (...args: Parameters<typeof resolveSdk>) => sessionPromise(resolveSdk(...args));
+export const attachedSession = (...args: Parameters<typeof resolveAttachment>) => sessionPromise(resolveAttachment(...args));
 
 /** Which attachment a caller means: its bridge id, its SDK session id, or either. */
 export type AttachmentTarget = { session: string } | { sdkSession: string } | { id: string };

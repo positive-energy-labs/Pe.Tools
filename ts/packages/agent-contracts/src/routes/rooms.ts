@@ -1,42 +1,15 @@
+// Generated from rooms/route.ts by codegen:routes. Do not edit.
 import { z } from "zod";
-import { manyField, field, text, type RouteDeclaration } from "../route-field.ts";
-import { planViewport } from "./shared.ts";
-
-/** The solver layers the Rooms plan draws, in strip order. */
-export const ROOMS_LAYERS = ["rails", "openings", "network", "faces"] as const;
-
-/** The review inbox's state filter: every card, or one state's (the web card states). */
-const ROOMS_CARD_SHOWS = [
-  "all",
-  "proposed",
-  "fail",
-  "stale",
-  "gone",
-  "accepted",
-  "pass",
-  "note",
-] as const;
-
-export const roomsAddress = {
-  path: "/rooms",
-  title: "Rooms",
-  fields: {
-    stage: field(z.enum(["partition", "review", "history"]).default("partition"), {
-      url: "push",
-    }),
-    /** The plan view partition runs on; empty = none chosen. */
-    view: field(text(), { url: "push" }),
-    /** Solver layers drawn on the plan (`rails,openings`); empty = none. */
-    layers: manyField("name", { url: "push", choices: ROOMS_LAYERS }),
-    /** Region GUIDs or card:<id>; every surface projects this exact selection. */
-    selected: manyField("name", { url: "replace", agent: "set" }),
-    /** The review inbox's state filter. */
-    show: field(z.enum(ROOMS_CARD_SHOWS).default("all"), { url: "replace" }),
-
-    viewport: planViewport,
-  },
-  agent: {
-    policy:
-      "Change only the viewport of the visible Rooms plan. Use plane:scale,tx,ty in the displayed frame, or an empty viewport to fit. Facts name the displayed document, acquired snapshot and plan. Focus, view, stage, layers, inbox filter, pinned card and room selection remain the person's. A view change does not partition rooms, stage Work or write Revit.",
-  },
-} satisfies RouteDeclaration;
+import type { Immutable } from "../route-kernel-data.ts";
+import { focusSelectionSchema } from "../route-kernel-codecs.ts";
+import { jsonCodec } from "../route-field.ts";
+const field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: jsonCodec(schema) });
+export const roomsAddress = { path: "/rooms" as const, title: "Rooms", fields: {
+"stage": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"partition","type":"string","enum":["partition","review","history"]}) as z.ZodType<Immutable<"partition" | "review" | "history">>).default("partition"), "push"),
+"view": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
+"layers": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":[],"anyOf":[{"type":"array","items":{"type":"string"}},{"type":"string","const":"all"}]}) as z.ZodType<Immutable<Array<string> | "all">>).default([]), "replace"),
+"show": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"all","type":"string","enum":["all","proposed","fail","stale","gone","accepted","pass","note"]}) as z.ZodType<Immutable<"all" | "proposed" | "fail" | "stale" | "gone" | "accepted" | "pass" | "note">>).default("all"), "replace"),
+"viewport": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":null,"anyOf":[{"type":"object","properties":{"kind":{"type":"string","const":"plane"},"scale":{"type":"number"},"tx":{"type":"number"},"ty":{"type":"number"}},"required":["kind","scale","tx","ty"]},{"type":"null"}]}) as z.ZodType<Immutable<{"kind": "plane"; "scale": number; "tx": number; "ty": number} | null>>).default(null), "replace"),
+"picked": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":[],"anyOf":[{"type":"array","items":{"type":"string"}},{"type":"string","const":"all"}]}) as z.ZodType<Immutable<Array<string> | "all">>).default([]), "replace"),
+selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
+}, agent: { policy: "Use the route fields as declared." } };

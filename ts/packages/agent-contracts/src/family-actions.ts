@@ -1,11 +1,14 @@
+import { blobRefSchema } from "./blob-ref.ts";
 import type { Command } from "./command.ts";
 import { z } from "zod";
 import { specDocSchema } from "./family.ts";
 import { documentRefSchema } from "./target.ts";
 import { nativeProcessSchema } from "./native-process.ts";
 import { workKeySchema } from "./route-state.ts";
+import { workHandleSchema } from "./command.ts";
 import { podDraftSourceSchema, podMemberSchema, podMemberSourceSchema } from "./settings.ts";
 import {
+  familiesObservationSchema,
   diagnosticSchema,
   familyExecutionOptionsSchema,
   ffPlanEntrySchema,
@@ -113,6 +116,14 @@ const applyInputSchema = z
     "Choose one source, source batch, preview, or the reviewed Work",
   );
 export const familyActions = {
+  "families.read": {
+    says: "Audit the selected Families Work scope in the exact document, then bind its completed observation at the reviewed Work revision.",
+    dirties: ["families"],
+    needs: "project-document",
+    effect: "command",
+    input: z.strictObject({ work: workHandleSchema, readId: z.uuid() }),
+    result: familiesObservationSchema,
+  },
   "families.cancel-read": {
     says: "Cancel this exact running Families read in the selected document.",
     dirties: [],
@@ -128,11 +139,7 @@ export const familyActions = {
     dirties: ["pods"],
     input: z.object({
       member: podMemberSchema,
-      source: z.union([
-        z.strictObject({ path: z.string().min(1) }),
-        z.strictObject({ url: z.url() }),
-        z.strictObject({ fileName: z.string().min(1), base64: z.string().min(1) }),
-      ]),
+      source: blobRefSchema,
     }),
     result: z.object({
       member: podMemberSchema,
@@ -157,6 +164,7 @@ export const familyActions = {
       }),
   },
   "settings.observe": {
+    autoAdopt: true,
     says: "Adopt verified saved member bytes as the shared Work baseline; replacing pending edits requires explicit intent.",
     needs: "nothing",
     effect: "command",

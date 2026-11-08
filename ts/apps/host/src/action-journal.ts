@@ -6,10 +6,10 @@ import type {
   CommandExecutor,
 } from "./command-executor.ts";
 import { CommandRejected, StepFailure, refused } from "./command-executor.ts";
-import { readJournalSnapshot } from "./legacy-action-journal.ts";
+import { readJournalSnapshot } from "./journal-snapshot.ts";
 import { nativeEffect, validateNativeInput } from "./native-input.ts";
 import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
-import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, writeFile, rm } from "node:fs/promises";
 import { renameReplacing } from "./rename-retry.ts";
 import { dirname, join, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -17,6 +17,7 @@ import { OwnerReads, type OwnerValue } from "@pe/runtime";
 import { z } from "zod";
 import {
   canonicalRouteInput,
+  sameCaller,
   actionReceiptSchema,
   actionStepSchema,
   actionAdmissionSchema,
@@ -156,13 +157,6 @@ const selectedEdits = (document: unknown, paths: readonly WorkPath[]) =>
     .map(({ path, cell }) => ({ path, edit: cell.edit }))
     .sort((a, b) => canonicalRouteInput(a.path).localeCompare(canonicalRouteInput(b.path)));
 
-const sameCaller = (a: Caller, b: Caller) =>
-  a.kind === b.kind &&
-  (a.kind === "pea" && b.kind === "pea"
-    ? a.thread === b.thread
-    : a.kind === "human" && b.kind === "human"
-      ? a.via === b.via && a.login === b.login && a.device === b.device
-      : canonicalRouteInput(a) === canonicalRouteInput(b));
 const pathInside = (root: string, path: string) => {
   const relative = win32.relative(win32.resolve(root), win32.resolve(path));
   return (
@@ -445,7 +439,7 @@ const isOpen = (row: ActionReceipt) =>
 /**
  * One host journal. Execution never holds the authored Work lock or the journal write tail.
  *
- * Storage is append-only lines: a `{"version":7}` header, then one `{receipt}` per committed
+ * Storage is append-only lines: a `{"version":8}` header, then one `{receipt}` per committed
  * revision and one `{mapping}` per minted opaque id; the last revision of an id wins. A commit
  * appends only what it changed, and compaction rewrites the newest {@link RETAIN_RECEIPTS} telemetry
  * facts plus every command once the file holds twice what is live.
@@ -879,19 +873,26 @@ export class ActionJournal implements ReceiptReader {
       });
     return visible;
   }
+  private workReads(admission: ActionAdmission) {
+    const owner = this.environment?.work;
+    // Standalone inspection compositions use uncaptured reads. Production supplies workReads.
+    return this.environment?.workReads?.(admission) ?? (owner && {
+      read: owner.readUncaptured.bind(owner), view: owner.viewUncaptured.bind(owner),
+    });
+  }
   private context(
     admission: ActionAdmission,
     crossing: Crossing,
     consumed: Consumed[],
   ): CommandContext {
-    const workspace = this.environment?.work;
+    const workspace = this.workReads(admission), owner = this.environment?.work;
     const cached = new Map<string, { doc: unknown; revision: number }>();
     const context: CommandContext = {
       admission,
       ...crossing,
       get work() {
-        if (!workspace) throw refused("Work is unavailable", "work.unavailable");
-        return workspace;
+        if (!workspace || !owner) throw refused("Work is unavailable", "work.unavailable");
+        return { read: workspace.read.bind(workspace), view: workspace.view.bind(workspace), publish: owner.publish.bind(owner) };
       },
       consumed,
       selectWork: async (spec, handle, select) => {
@@ -1018,7 +1019,7 @@ export class ActionJournal implements ReceiptReader {
             row.steps.every((step) => step.state === "succeeded"))
         )
           continue;
-        const current = await this.environment?.work?.view(
+        const current = await this.workReads(row)?.view(
           dependency.probe.handle.key,
           dependency.probe.handle.key.route,
         );
@@ -1371,7 +1372,7 @@ export class ActionJournal implements ReceiptReader {
         publishWork: (key, route, patches) =>
           execution.step("publication", "work.publish", { work: key, route, patches }, async () => {
             const work = this.environment?.work;
-            const current = await work?.view(key, route);
+            const current = await this.workReads(row)?.view(key, route);
             if (!work || !current) throw Error("Work publication is unavailable");
             const result = await work.publish(key, route, [...patches], current.revision);
             if (!result.ok) throw new ActionIncomplete("Work publication did not land", result);
@@ -1405,7 +1406,7 @@ export class ActionJournal implements ReceiptReader {
               ),
             );
           if (!outstanding.length) {
-            const current = await this.environment?.work?.view(key, route);
+            const current = await this.workReads(row)?.view(key, route);
             if (!current) throw Error("Work retirement is unavailable");
             return { retired: alreadyRetired, revision: current.revision };
           }
@@ -1431,7 +1432,7 @@ export class ActionJournal implements ReceiptReader {
                     "refused",
                   );
                 const work = this.environment?.work;
-                const current = await work?.view(key, route);
+                const current = await this.workReads(row)?.view(key, route);
                 const original = row.consumes.find(
                   (dependency) =>
                     dependency.kind === "work" &&
@@ -1974,17 +1975,13 @@ export class ActionJournal implements ReceiptReader {
     });
     if (originalBytes === null) return;
     const version = JSON.parse(originalBytes.toString("utf8").split("\n")[0]!)?.version;
-    // ponytail: archive file naming, not an event time; wall time keeps names unique under a fixed test clock.
-    const archive = `${this.path}.v${String(version)}.${Date.now()}.archived`;
-    const snapshot = readJournalSnapshot(originalBytes, archive);
+    const snapshot = readJournalSnapshot(originalBytes);
     if (!snapshot) {
-      await renameReplacing(this.path, archive);
-      console.warn(
-        `${this.path} has unsupported journal version ${String(version)}; archived as ${archive}`,
-      );
+      await rm(this.path);
+      console.warn(`${this.path} has unsupported journal data (${String(version)}); discarded`);
       return;
     }
-    const { receipts, mappings, imported } = snapshot;
+    const { receipts, mappings } = snapshot;
     this.torn = snapshot.torn;
     this.lines = snapshot.lines;
     this.header = true;
@@ -2032,10 +2029,6 @@ export class ActionJournal implements ReceiptReader {
       next = actionReceiptSchema.parse(next);
       this.index(next);
       if (canonicalRouteInput(next) !== canonicalRouteInput(row)) changed.push(next);
-    }
-    if (imported) {
-      await writeFile(archive, originalBytes, { flag: "wx" });
-      this.torn = true;
     }
     if (this.torn) await this.compact();
     if (changed.length) await this.commit(changed);
@@ -2106,7 +2099,7 @@ export class ActionJournal implements ReceiptReader {
     ];
     if (lines.length) {
       if (!this.header) await mkdir(dirname(this.path), { recursive: true });
-      const text = `${this.torn ? "\n" : ""}${this.header ? "" : '{"version":7}\n'}${lines
+      const text = `${this.torn ? "\n" : ""}${this.header ? "" : '{"version":8}\n'}${lines
         .map((line) => `${JSON.stringify(line)}\n`)
         .join("")}`;
       try {
@@ -2164,7 +2157,7 @@ export class ActionJournal implements ReceiptReader {
     await mkdir(dirname(this.path), { recursive: true });
     await writeFile(
       `${this.path}.tmp`,
-      `{"version":7}\n${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
+      `{"version":8}\n${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
       "utf8",
     );
     await renameReplacing(`${this.path}.tmp`, this.path);

@@ -453,3 +453,5 @@ export const accessOf = (
   document: SessionDocument,
 ): MachineAccess | undefined =>
   session.attachment?.documents?.find((each) => each.openId === document.openId)?.access;
+
+export type Recents = { result?: { recents?: RecentDocument[] } };

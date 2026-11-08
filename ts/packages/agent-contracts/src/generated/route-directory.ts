@@ -2,6 +2,30 @@
 import type { RouteDirectory } from "../route-graph.ts";
 export const routeDirectory: readonly {key: string; directory: RouteDirectory}[] = [
   {
+    "key": "bind",
+    "directory": {
+      "label": "Document",
+      "icon": "Link2",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "document",
+        "binding"
+      ],
+      "runtimeNeed": "Host document bindings",
+      "listed": false,
+      "satellites": [],
+      "path": "/bind",
+      "title": "Bind",
+      "category": "Start / open work",
+      "blurb": "Bind a Page to a document or thread"
+    }
+  },
+  {
     "key": "captures",
     "directory": {
       "label": "Revit data",
@@ -26,10 +50,36 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
-    "key": "schedules",
+    "key": "chat",
     "directory": {
-      "label": "Revit data",
-      "icon": "LayoutGrid",
+      "label": "Workbench",
+      "icon": "MessageSquare",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": "compact"
+      },
+      "aliases": [
+        "chat",
+        "agent",
+        "assistant",
+        "threads"
+      ],
+      "runtimeNeed": "Host for conversation; Revit depends on the requested capability",
+      "listed": true,
+      "satellites": [],
+      "path": "/pea",
+      "title": "Pea",
+      "category": "Ask / automate",
+      "blurb": "The Pea agent workbench and context world inspector."
+    }
+  },
+  {
+    "key": "design-system",
+    "directory": {
+      "label": "Design language",
+      "icon": "Palette",
       "exposure": "Preview",
       "surfaces": {
         "web": "full",
@@ -37,24 +87,48 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
         "tray": false
       },
       "aliases": [
-        "Revit",
-        "data"
+        "Design",
+        "language"
       ],
-      "runtimeNeed": "Open project document",
+      "runtimeNeed": "Browser component catalogue",
       "listed": true,
-      "satellites": [],
-      "resume": "document",
-      "path": "/schedules",
-      "title": "Schedules",
-      "category": "Coordinate model data",
-      "blurb": "Inspect document schedules"
+      "satellites": [
+        {
+          "to": "/design-system/band",
+          "label": "band"
+        },
+        {
+          "to": "/design-system/list",
+          "label": "list"
+        },
+        {
+          "to": "/design-system/arming",
+          "label": "arming"
+        },
+        {
+          "to": "/design-system/popovers",
+          "label": "popovers"
+        },
+        {
+          "to": "/design-system/swatch",
+          "label": "swatch"
+        },
+        {
+          "to": "/design-system/revit",
+          "label": "revit"
+        }
+      ],
+      "path": "/design-system",
+      "title": "Design System",
+      "category": "Explore / maintain",
+      "blurb": "Production design language, laws and component specimens"
     }
   },
   {
-    "key": "families",
+    "key": "duct-loss",
     "directory": {
-      "label": "Family Foundry",
-      "icon": "Table2",
+      "label": "Duct friction",
+      "icon": "Wind",
       "exposure": "Main",
       "surfaces": {
         "web": "full",
@@ -62,17 +136,18 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
         "tray": false
       },
       "aliases": [
-        "audit",
-        "parameters"
+        "friction",
+        "airflow",
+        "pressure",
+        "calculator"
       ],
-      "runtimeNeed": "Revit for model actions",
+      "runtimeNeed": "Host calculation",
       "listed": true,
       "satellites": [],
-      "resume": "document",
-      "path": "/families",
-      "title": "Families",
-      "category": "Build / audit families",
-      "blurb": "Audit and reconcile loaded family parameters"
+      "path": "/duct-loss",
+      "title": "Duct Loss",
+      "category": "Calculate loads & airflow",
+      "blurb": "Calculate duct friction with intermediate terms beside the equation"
     }
   },
   {
@@ -103,6 +178,59 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
+    "key": "families",
+    "directory": {
+      "label": "Family Foundry",
+      "icon": "Table2",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "audit",
+        "parameters"
+      ],
+      "runtimeNeed": "Revit for model actions",
+      "listed": true,
+      "satellites": [],
+      "resume": "document",
+      "path": "/families",
+      "title": "Families",
+      "category": "Build / audit families",
+      "blurb": "Audit and reconcile loaded family parameters"
+    }
+  },
+  {
+    "key": "family",
+    "directory": {
+      "label": "Family Foundry",
+      "icon": "Boxes",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "rfa",
+        "author",
+        "build",
+        "capture",
+        "matrix"
+      ],
+      "runtimeNeed": "Revit for capture and apply",
+      "listed": true,
+      "satellites": [],
+      "resume": "document",
+      "path": "/family",
+      "title": "Family",
+      "category": "Build / audit families",
+      "blurb": "Inspect saved family profiles, edit cells and review PDF evidence"
+    }
+  },
+  {
     "key": "fans",
     "directory": {
       "label": "Fan ESP",
@@ -129,132 +257,233 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
-    "key": "chat",
+    "key": "home",
     "directory": {
-      "path": "/pea",
-      "title": "Pea",
-      "label": "Workbench",
+      "label": "Home",
+      "icon": "Home",
       "exposure": "Main",
-      "runtimeNeed": "Host for conversation; Revit depends on the requested capability",
-      "icon": "MessageSquare",
-      "category": "Ask / automate",
-      "blurb": "The Pea agent workbench — chat and the context world inspector.",
-      "aliases": [
-        "chat",
-        "agent",
-        "assistant",
-        "threads"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": "compact"
-      }
-    }
-  },
-  {
-    "key": "design-system",
-    "directory": {
-      "path": "/design-system",
-      "title": "Design System",
-      "label": "Design language",
-      "exposure": "Preview",
-      "runtimeNeed": "Browser component catalogue",
-      "icon": "Palette",
-      "category": "Explore / maintain",
-      "blurb": "The spec and catalogue for the design language â€” production components under production tokens, with the gaps they cannot yet express marked in place.",
-      "aliases": [
-        "Design",
-        "language"
-      ],
-      "listed": true,
-      "satellites": [
-        {
-          "to": "/design-system/band",
-          "label": "band"
-        },
-        {
-          "to": "/design-system/list",
-          "label": "list"
-        },
-        {
-          "to": "/design-system/arming",
-          "label": "arming"
-        },
-        {
-          "to": "/design-system/popovers",
-          "label": "popovers"
-        },
-        {
-          "to": "/design-system/swatch",
-          "label": "swatch"
-        },
-        {
-          "to": "/design-system/revit",
-          "label": "revit"
-        }
-      ],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      }
-    }
-  },
-  {
-    "key": "duct-loss",
-    "directory": {
-      "path": "/duct-loss",
-      "title": "Duct Loss",
-      "label": "Duct friction",
-      "exposure": "Main",
-      "runtimeNeed": "Browser calculation",
-      "icon": "Wind",
-      "category": "Calculate loads & airflow",
-      "blurb": "The imperial duct friction loss formula, live — type a duct and airflow, read Δp with every intermediate term beside the equation.",
-      "aliases": [
-        "friction",
-        "airflow",
-        "pressure",
-        "calculator"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      }
-    }
-  },
-  {
-    "key": "family",
-    "directory": {
-      "path": "/family",
-      "title": "Family",
-      "label": "Family Foundry",
-      "exposure": "Main",
-      "runtimeNeed": "Revit for capture/apply; portable authoring is separate",
-      "icon": "Boxes",
-      "category": "Build / audit families",
-      "blurb": "One family, two lanes: an authored family.json (anatomy, matrix, build) or the family open in Revit's editor. Binding picks the lane; capture bridges them.",
-      "aliases": [
-        "rfa",
-        "author",
-        "build",
-        "capture",
-        "matrix"
-      ],
-      "listed": true,
-      "satellites": [],
       "surfaces": {
         "web": "full",
         "pwa": "full",
         "tray": false
       },
-      "resume": "document"
+      "aliases": [],
+      "runtimeNeed": "Host activity and tool directory",
+      "listed": false,
+      "satellites": [],
+      "path": "/",
+      "title": "Home",
+      "category": "Start / open work",
+      "blurb": "Find tools and resume open work"
+    }
+  },
+  {
+    "key": "open",
+    "directory": {
+      "label": "Open document",
+      "icon": "Server",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": "compact"
+      },
+      "aliases": [
+        "documents",
+        "model",
+        "launcher"
+      ],
+      "runtimeNeed": "Host document discovery and Revit lifecycle",
+      "listed": true,
+      "satellites": [],
+      "path": "/open",
+      "title": "Open document",
+      "category": "Start / open work",
+      "blurb": "Choose a document and its destination Revit"
+    }
+  },
+  {
+    "key": "ops",
+    "directory": {
+      "label": "Host API",
+      "icon": "Terminal",
+      "exposure": "Preview",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "host",
+        "api",
+        "operations",
+        "playground"
+      ],
+      "runtimeNeed": "Host; Revit depends on the operation",
+      "listed": true,
+      "satellites": [],
+      "path": "/ops",
+      "title": "Ops",
+      "category": "Explore / maintain",
+      "blurb": "Inspect catalog operations and original action receipts"
+    }
+  },
+  {
+    "key": "pods",
+    "directory": {
+      "label": "Pods",
+      "icon": "Settings2",
+      "exposure": "Preview",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "Pods"
+      ],
+      "runtimeNeed": "Host catalogue; Revit depends on the pod",
+      "listed": true,
+      "satellites": [],
+      "path": "/pods",
+      "title": "Pods",
+      "category": "Ask / automate",
+      "blurb": "Author a Pod member and inspect its runs."
+    }
+  },
+  {
+    "key": "rooms",
+    "directory": {
+      "label": "Manual J",
+      "icon": "LayoutDashboard",
+      "exposure": "Preview",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "manual",
+        "j",
+        "loads",
+        "regions"
+      ],
+      "runtimeNeed": "Revit for room plans and writes",
+      "listed": true,
+      "satellites": [],
+      "resume": "document",
+      "path": "/rooms",
+      "title": "Rooms",
+      "category": "Calculate loads & airflow",
+      "blurb": "Inspect room regions, stage loads and review anchored feedback"
+    }
+  },
+  {
+    "key": "schedules",
+    "directory": {
+      "label": "Revit data",
+      "icon": "LayoutGrid",
+      "exposure": "Preview",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "Revit",
+        "data"
+      ],
+      "runtimeNeed": "Open project document",
+      "listed": true,
+      "satellites": [],
+      "resume": "document",
+      "path": "/schedules",
+      "title": "Schedules",
+      "category": "Coordinate model data",
+      "blurb": "Inspect document schedules"
+    }
+  },
+  {
+    "key": "session-admin",
+    "directory": {
+      "label": "Sessions",
+      "icon": "Server",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": "compact"
+      },
+      "aliases": [
+        "session",
+        "administration"
+      ],
+      "runtimeNeed": "Host document discovery and Revit lifecycle",
+      "listed": true,
+      "satellites": [],
+      "path": "/session-admin",
+      "title": "Sessions",
+      "category": "Start / open work",
+      "blurb": "Start, stop or restart one Revit session."
+    }
+  },
+  {
+    "key": "settings",
+    "directory": {
+      "label": "Settings",
+      "icon": "Settings2",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": "compact"
+      },
+      "aliases": [
+        "machine",
+        "Revit",
+        "update",
+        "share",
+        "providers",
+        "approvals",
+        "host",
+        "theme",
+        "preferences"
+      ],
+      "runtimeNeed": "Host machine configuration",
+      "listed": true,
+      "satellites": [],
+      "path": "/settings",
+      "title": "Settings",
+      "category": "Explore / maintain",
+      "blurb": "This machine and every route's user settings"
+    }
+  },
+  {
+    "key": "takeoffs",
+    "directory": {
+      "label": "Manual J",
+      "icon": "Map",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "manual",
+        "j",
+        "loads",
+        "rhvac",
+        "zones"
+      ],
+      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+      "listed": true,
+      "satellites": [],
+      "resume": "document",
+      "path": "/takeoffs",
+      "title": "View adoption",
+      "category": "Calculate loads & airflow",
+      "blurb": "Adopt zoning regions from chosen views."
     }
   },
   {
@@ -280,225 +509,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
         "pwa": "full",
         "tray": false
       }
-    }
-  },
-  {
-    "key": "instances",
-    "directory": {
-      "path": "/open",
-      "title": "Open document",
-      "label": "Revit",
-      "exposure": "Main",
-      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-      "icon": "Server",
-      "category": "Start / open work",
-      "blurb": "Choose a document and its destination Revit.",
-      "aliases": [
-        "documents",
-        "model",
-        "launcher"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": "compact"
-      }
-    }
-  },
-  {
-    "key": "ops",
-    "directory": {
-      "path": "/ops",
-      "title": "Ops Playground",
-      "label": "Host API",
-      "exposure": "Preview",
-      "runtimeNeed": "Host operation; Revit depends on the operation",
-      "icon": "Terminal",
-      "category": "Explore / maintain",
-      "blurb": "Inspect operation requests and action receipts, and run host reads.",
-      "aliases": [
-        "host",
-        "api",
-        "operations",
-        "playground"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      }
-    }
-  },
-  {
-    "key": "bind",
-    "directory": {
-      "path": "/bind",
-      "title": "Bind",
-      "label": "Document",
-      "exposure": "Main",
-      "runtimeNeed": "Host document bindings",
-      "icon": "Link2",
-      "category": "Start / open work",
-      "blurb": "Bind a document",
-      "aliases": [
-        "document",
-        "binding"
-      ],
-      "listed": false,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      }
-    }
-  },
-  {
-    "key": "pods",
-    "directory": {
-      "path": "/pods",
-      "title": "Pods",
-      "label": "Pods",
-      "exposure": "Preview",
-      "runtimeNeed": "Host catalogue; Revit depends on the pod",
-      "icon": "Settings2",
-      "category": "Ask / automate",
-      "blurb": "Author a Pod member and inspect its runs.",
-      "aliases": [
-        "Pods"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      }
-    }
-  },
-  {
-    "key": "rooms",
-    "directory": {
-      "path": "/rooms",
-      "title": "Rooms",
-      "label": "Manual J",
-      "exposure": "Preview",
-      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-      "icon": "LayoutDashboard",
-      "category": "Calculate loads & airflow",
-      "blurb": "Split a level's plan view into room regions, stage each room's name, type and loads, and write them to the regions in Revit.",
-      "aliases": [
-        "manual",
-        "j",
-        "loads",
-        "regions"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      },
-      "resume": "document"
-    }
-  },
-  {
-    "key": "session-admin",
-    "directory": {
-      "path": "/session-admin",
-      "title": "Sessions",
-      "label": "Revit",
-      "exposure": "Main",
-      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-      "icon": "Server",
-      "category": "Start / open work",
-      "blurb": "Start, stop or restart one Revit session.",
-      "aliases": [
-        "session",
-        "administration"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": "compact"
-      }
-    }
-  },
-  {
-    "key": "settings",
-    "directory": {
-      "path": "/settings",
-      "title": "Settings",
-      "label": "Settings",
-      "exposure": "Main",
-      "runtimeNeed": "Host machine configuration",
-      "icon": "Settings2",
-      "category": "Explore / maintain",
-      "blurb": "This machine and every route's user settings: Revit sessions, update, sharing, Pea providers and approvals, host, notifications, appearance, diagnostics, and route preferences.",
-      "aliases": [
-        "machine",
-        "Revit",
-        "update",
-        "share",
-        "providers",
-        "sign-in",
-        "approvals",
-        "host",
-        "startup",
-        "diagnostics",
-        "theme",
-        "route",
-        "preferences",
-        "slots",
-        "colours"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": "compact"
-      }
-    }
-  },
-  {
-    "key": "takeoffs",
-    "directory": {
-      "path": "/takeoffs",
-      "title": "View adoption",
-      "label": "Manual J",
-      "exposure": "Main",
-      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-      "icon": "Map",
-      "category": "Calculate loads & airflow",
-      "blurb": "Adopt zoning regions from chosen views.",
-      "aliases": [
-        "manual",
-        "j",
-        "loads",
-        "rhvac",
-        "zones"
-      ],
-      "listed": true,
-      "satellites": [
-        {
-          "to": "/zone-audit",
-          "label": "Zone audit"
-        }
-      ],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      },
-      "resume": "document"
     }
   }
 ];

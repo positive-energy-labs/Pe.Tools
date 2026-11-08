@@ -15,13 +15,22 @@ import { createPluginsHandler } from "../src/plugins-handler.ts";
 import { linkedCatalog, peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { admitPodArtifact } from "../src/pod-artifact.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
+import { createPeRoutes } from "../src/pe-routes.ts";
+import { withInvocationContext } from "@pe/runtime/context";
 
-async function fixture(root: string, fail = false, salt = "first", native?: { key: string; cost: "Cheap" | "Bounded" }, address = `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}`) {
+async function fixture(
+  root: string,
+  salt = "first",
+  native?: { key: string; cost: "Cheap" | "Bounded" },
+  address = `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}`,
+  initialWork = false,
+) {
   const data = {
     ...builtinData,
     key: "pod.fixture.tool",
     address,
-    work: { schema: "work", route: "pod.fixture.tool", version: 2, migrations: { "1": "upgrade" } },
+    name: `Fixture ${salt}`,
+    work: { schema: "work", route: "pod.fixture.tool", version: 2, },
   };
   const entry = join(root, "entry.ts");
   const imports = fileURLToPath(
@@ -31,9 +40,10 @@ async function fixture(root: string, fail = false, salt = "first", native?: { ke
     entry,
     `import { builtinModule } from ${JSON.stringify(imports)};
 export const module = { ...builtinModule, data: ${JSON.stringify(data)},
+${initialWork ? `schemas: {...builtinModule.schemas, work: builtinModule.schemas.work.extend({amount: builtinModule.schemas.work.shape.amount.default(0), note: builtinModule.schemas.work.shape.note.default("")})},` : ""}
 entries: {...builtinModule.entries, roster: {...builtinModule.entries.roster, ${native ? `native: [${JSON.stringify(native.key)}], axes: {...builtinModule.entries.roster.axes, cost: '${native.cost}'}` : ""}}}, bodies: {
 ...Object.fromEntries(Object.entries(builtinModule.bodies).map(([key, body]) => [key, {...body, source: {module:'route.js', export:key}}])),
-upgrade: {kind:'migration', slot:'work.migrations.1', source:{module:'route.js',export:'upgrade'}, run(raw) { ${fail ? "raw.oldAmount = 999; throw Error('broken upgrade');" : `return {amount: raw.oldAmount + 1, note: '${salt}'};`} }}
+
 }};`,
   );
   const artifact = await buildRouteArtifact({
@@ -69,18 +79,34 @@ upgrade: {kind:'migration', slot:'work.migrations.1', source:{module:'route.js',
 test("host and browser refuse a fingerprinted raw-slash Pod address alias", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-pod-address-"));
   try {
-    const artifact = await fixture(root, false, "address", undefined, "/tool/route:@fixture/routes/tool/route.artifact");
-    const lifecycle = createPackageLifecycle({ packages: () => listPackages(join(root, "Pods")), decisionsPath: join(root, "enabled.json") });
-    const workspace = new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(join(root, "Work")) });
+    const artifact = await fixture(
+      root,
+      "address",
+      undefined,
+      "/tool/route:@fixture/routes/tool/route.artifact",
+    );
+    const lifecycle = createPackageLifecycle({
+      packages: () => listPackages(join(root, "Pods")),
+      decisionsPath: join(root, "enabled.json"),
+    });
+    const workspace = new RouteWorkspace({
+      registrations: [],
+      store: fileRouteDocumentStore(join(root, "Work")),
+    });
     const routes = createPodRoutes(lifecycle, { workspace, trustPath: join(root, "trust.json") });
     try {
       const [row] = await routes.list();
       await expect(routes.trust(row!.key, artifact.fingerprint, true)).rejects.toThrow("identity");
       expect(workspace.admittedRoutes()).toEqual([]);
-      const { admitPodArtifact: browserAdmit } = await import("../../web/src/route/pod-artifact.ts");
-      await expect(browserAdmit({ ...row!, trusted: true }, { fingerprint: artifact.fingerprint, artifact: artifact.wire },
-        (bytes) => import(`data:text/javascript;base64,${Buffer.from(bytes).toString("base64")}`),
-      )).rejects.toThrow("identity");
+      const { admitPodArtifact: browserAdmit } =
+        await import("../../web/src/route/pod-artifact.ts");
+      await expect(
+        browserAdmit(
+          { ...row!, trusted: true },
+          { fingerprint: artifact.fingerprint, artifact: artifact.wire },
+          (bytes) => import(`data:text/javascript;base64,${Buffer.from(bytes).toString("base64")}`),
+        ),
+      ).rejects.toThrow("identity");
     } finally {
       routes.close();
       await lifecycle.close();
@@ -92,14 +118,20 @@ test("host and browser refuse a fingerprinted raw-slash Pod address alias", asyn
 
 test("Pod loader preserves native dependency cost through the linked catalog", async () => {
   const leaf = [...linkedCatalog().entries.values()].find(
-    (entry) => !entry.key.startsWith("command:") && entry.cost === "Bounded" && entry.cardinality === "One" && entry.effect === "Read",
+    (entry) =>
+      !entry.key.startsWith("command:") &&
+      entry.cost === "Bounded" &&
+      entry.cardinality === "One" &&
+      entry.effect === "Read",
   )!;
   expect(leaf).toBeDefined();
   const root = await mkdtemp(join(tmpdir(), "pe-pod-native-link-"));
   try {
-    const valid = await fixture(root, false, "linked", { key: leaf.key, cost: "Bounded" });
-    expect((await admitPodArtifact(valid.wire, valid.fingerprint)).data.key).toBe("pod.fixture.tool");
-    const understated = await fixture(root, false, "refused", { key: leaf.key, cost: "Cheap" });
+    const valid = await fixture(root, "linked", { key: leaf.key, cost: "Bounded" });
+    expect((await admitPodArtifact(valid.wire, valid.fingerprint)).data.key).toBe(
+      "pod.fixture.tool",
+    );
+    const understated = await fixture(root, "refused", { key: leaf.key, cost: "Cheap" });
     await expect(admitPodArtifact(understated.wire, understated.fingerprint)).rejects.toThrow(
       `roster: cost understates ${leaf.key}`,
     );
@@ -108,10 +140,17 @@ test("Pod loader preserves native dependency cost through the linked catalog", a
   }
 }, 30_000);
 
-async function setup(fail = false) {
+const currentWork = {
+  version: 1,
+  schemaVersion: 2,
+  revision: 7,
+  doc: { amount: 4, note: "first" },
+  history: [],
+};
+async function setup(saved: unknown = currentWork, blockRead = false, initialWork = false) {
   const root = await mkdtemp(join(tmpdir(), "pe-p2-"));
   try {
-    const artifact = await fixture(root, fail);
+    const artifact = await fixture(root, "first", undefined, undefined, initialWork);
     const lifecycle = createPackageLifecycle({
       packages: () => listPackages(join(root, "Pods")),
       decisionsPath: join(root, "enabled.json"),
@@ -121,7 +160,7 @@ async function setup(fail = false) {
     await disk.setState({
       targetKey: workKey(key),
       route: key.route,
-      value: { version: 1, schemaVersion: 1, revision: 7, doc: { oldAmount: 3 }, history: [] },
+      value: saved,
     });
     const savedPath = join(root, "Work", (await readdir(join(root, "Work")))[0]!);
     const original = await readFile(savedPath, "utf8");
@@ -129,13 +168,20 @@ async function setup(fail = false) {
     const gate = new Promise<void>((resolve) => {
       unblock = resolve;
     });
+    let readStarted!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      readStarted = resolve;
+    });
     const workspace = new RouteWorkspace({
       registrations: [],
       store: {
         ...disk,
-        listState: async () => {
-          await gate;
-          return disk.listState!();
+        getState: async (query) => {
+          if (blockRead && query.targetKey === workKey(key) && query.route === key.route) {
+            readStarted();
+            await gate;
+          }
+          return disk.getState(query);
         },
       },
     });
@@ -161,10 +207,17 @@ async function setup(fail = false) {
       artifact,
       lifecycle,
       workspace,
+      readStored: () =>
+        withInvocationContext({ caller: { kind: "human", via: "local" } }, () =>
+          createPeRoutes({ workspace, registrations: [] }).fetch(
+            new Request(`http://host/pe/route-state/${key.route}`),
+          ),
+        ),
       routes,
       key,
       feed,
       unblock,
+      reading,
       savedPath,
       original,
       close: async () => {
@@ -181,7 +234,7 @@ async function setup(fail = false) {
   }
 }
 
-test("trusted Pod transports complete evidence and opens fingerprint-bound feeds only after persisted migration", async () => {
+test("trusted Pod transports complete evidence and opens fingerprint-bound current Work feeds", async () => {
   const f = await setup();
   try {
     const [row] = await f.routes.list();
@@ -215,21 +268,16 @@ test("trusted Pod transports complete evidence and opens fingerprint-bound feeds
     );
     const snapshot = f.feed("work"),
       acks = f.feed("work-acks");
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(snapshot).toEqual([]);
-    expect(acks).toEqual([]);
-    expect(await readFile(f.savedPath, "utf8")).toBe(f.original);
-    f.unblock();
     await vi.waitFor(() => expect(snapshot).toHaveLength(1));
     expect(snapshot[0]).toMatchObject({
       kind: "snapshot",
-      value: { schemaVersion: 2, revision: 8, doc: { amount: 4, note: "first" } },
+      value: { schemaVersion: 2, revision: 7, doc: { amount: 4, note: "first" } },
     });
     expect(JSON.parse(await readFile(f.savedPath, "utf8")).value.schemaVersion).toBe(2);
     await vi.waitFor(() =>
       expect(acks[0]).toMatchObject({
         kind: "snapshot",
-        value: { revision: 8, doc: { amount: 4, note: "first" }, history: { from: 9, acks: [] } },
+        value: { revision: 7, doc: { amount: 4, note: "first" }, history: { from: 8, acks: [] } },
       }),
     );
     // Missing, stale digest, and wrong source are independent hostile feed requests.
@@ -273,24 +321,6 @@ test("trusted Pod transports complete evidence and opens fingerprint-bound feeds
   }
 }, 30_000);
 
-test("failed Pod migration preserves exact v1 bytes and refuses both feeds", async () => {
-  const f = await setup(true);
-  try {
-    const [row] = await f.routes.list();
-    await f.routes.trust(row!.key, f.artifact.fingerprint, true);
-    const snapshot = f.feed("work"),
-      acks = f.feed("work-acks");
-    f.unblock();
-    await vi.waitFor(() =>
-      expect(snapshot[0]).toMatchObject({ kind: "failure", failure: { kind: "migration-failed" } }),
-    );
-    expect(acks[0]).toMatchObject({ kind: "failure", failure: { kind: "migration-failed" } });
-    expect(await readFile(f.savedPath, "utf8")).toBe(f.original);
-  } finally {
-    await f.close();
-  }
-}, 30_000);
-
 test("replacement retires old feeds and requires trust in the new closure; removal releases registration", async () => {
   const f = await setup();
   try {
@@ -299,7 +329,7 @@ test("replacement retires old feeds and requires trust in the new closure; remov
     f.unblock();
     const frames = f.feed("work");
     await vi.waitFor(() => expect(frames).toHaveLength(1));
-    const next = await fixture(f.root, false, "replacement");
+    const next = await fixture(f.root, "replacement");
     await f.lifecycle.refresh();
     expect(f.workspace.list()).toEqual([]);
     await vi.waitFor(() => expect(frames).toHaveLength(2));
@@ -323,14 +353,15 @@ test("replacement retires old feeds and requires trust in the new closure; remov
   }
 }, 30_000);
 
-test("replacement during persisted Work census fences the retired migration", async () => {
-  const f = await setup();
+test("replacement during Work acquisition fences the retired feed", async () => {
+  const f = await setup(currentWork, true);
   try {
     const [row] = await f.routes.list();
     await f.routes.trust(row!.key, f.artifact.fingerprint, true);
     const old = f.feed("work");
+    await f.reading;
     expect(await readFile(f.savedPath, "utf8")).toBe(f.original);
-    const next = await fixture(f.root, false, "replacement-before-ready");
+    const next = await fixture(f.root, "replacement-before-ready");
     await f.lifecycle.refresh();
     await f.routes.trust(row!.key, next.fingerprint, true);
     f.unblock();
@@ -338,13 +369,11 @@ test("replacement during persisted Work census fences the retired migration", as
     await vi.waitFor(() =>
       expect(current[0]).toMatchObject({
         kind: "snapshot",
-        value: { revision: 8, doc: { amount: 4, note: "replacement-before-ready" } },
+        value: { revision: 7, doc: { amount: 4, note: "first" } },
       }),
     );
     expect(old[0]?.kind).toBe("failure");
-    expect(JSON.parse(await readFile(f.savedPath, "utf8")).value.doc.note).toBe(
-      "replacement-before-ready",
-    );
+    expect(JSON.parse(await readFile(f.savedPath, "utf8")).value.doc.note).toBe("first");
   } finally {
     await f.close();
   }
@@ -356,7 +385,8 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
   const { buildCapabilities } = await import("../../../packages/mcps/src/pea/capabilities.ts");
   const { peDo } = await import("../../../packages/mcps/src/pea/capability-tools.ts");
   const { fakeRuntimeHost } = await import("../../../packages/mcps/tests/runtime-host-fixture.ts");
-  const { machineFixture } = await import("../../../packages/agent-contracts/tests/machine-fixture.ts");
+  const { machineFixture } =
+    await import("../../../packages/agent-contracts/tests/machine-fixture.ts");
   const { hostResourceObserver } = await import("../src/resource-adapters.ts");
   const { emptyThreadHead } = await import("@pe/agent-contracts");
   const root = await mkdtemp(join(tmpdir(), "pe-pod-view-"));
@@ -375,23 +405,44 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
       heads: { observe: () => () => {} },
       observeHostResource: hostResourceObserver(),
     });
-    const pods = createPodRoutes(lifecycle, { workspace: app.workspace, trustPath: join(root, "trust.json") });
+    const pods = createPodRoutes(lifecycle, {
+      workspace: app.workspace,
+      trustPath: join(root, "trust.json"),
+    });
     // The host's capability provider wiring (pe-routes `admittedRoutes`), over this app's workspace.
     const rows = () =>
-      buildCapabilities({ ops: [], routes: [], packages: [], skills: [], admittedRoutes: () => app.workspace.admittedRoutes() });
+      buildCapabilities({
+        ops: [],
+        routes: [],
+        packages: [],
+        skills: [],
+        admittedRoutes: () => app.workspace.admittedRoutes(),
+      });
     fakeRuntimeHost("http://127.0.0.1:9");
     vi.stubEnv("PE_CONTEXT", `context-${thread}`);
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
       if (url.pathname === "/pe/scope/self") return Response.json({ ...emptyThreadHead, thread });
       if (url.pathname === "/pe/capabilities")
-        return Response.json({ at: new Date().toISOString(), machine: machineFixture([]), sources: {}, diagnostics: [], capabilities: rows() });
+        return Response.json({
+          at: new Date().toISOString(),
+          machine: machineFixture([]),
+          sources: {},
+          diagnostics: [],
+          capabilities: rows(),
+        });
       return app.fetch(input instanceof Request ? input : new Request(url, init));
     });
     const pe = (key: string, input: object) =>
-      peDo.execute!({ key, input, timeoutSeconds: 30 } as never, { agent: { toolCallId: "call-1" } } as never) as Promise<Record<string, unknown>>;
+      peDo.execute!(
+        { key, input, timeoutSeconds: 30 } as never,
+        { agent: { toolCallId: "call-1" } } as never,
+      ) as Promise<Record<string, unknown>>;
     const stream = await app.fetch(
-      new Request(`http://host/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ kind: "world" }]))}`, { signal: abort.signal }),
+      new Request(
+        `http://host/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ kind: "world" }]))}`,
+        { signal: abort.signal },
+      ),
     );
     const reader = stream.body!.getReader();
     const intents: Record<string, unknown>[] = [];
@@ -416,7 +467,16 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
         new Request(`http://host/pe/route-view/${route}`, {
           method: "PUT",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ route, thread, instance, surface: "route", page, context: {}, facts: {}, ...(openCommandId ? { openCommandId } : {}) }),
+          body: JSON.stringify({
+            route,
+            thread,
+            instance,
+            surface: "route",
+            page,
+            context: {},
+            facts: {},
+            ...(openCommandId ? { openCommandId } : {}),
+          }),
         }),
       );
 
@@ -425,20 +485,31 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
     expect((await mounted({ system: "" })).status).toBe(404);
     const [row] = await pods.list();
     await pods.trust(row!.key, fingerprint, true);
-    await vi.waitFor(() => expect(app.workspace.admittedRoutes().map((each) => each.key)).toContain(route));
-    expect(rows().filter((each) => each.key.startsWith(`route:${route}.`)).map((each) => each.key)).toEqual([
-      `route:${route}.view`,
-      `route:${route}.set-view`,
-    ]);
+    await vi.waitFor(() =>
+      expect(app.workspace.admittedRoutes().map((each) => each.key)).toContain(route),
+    );
+    expect(
+      rows()
+        .filter((each) => each.key.startsWith(`route:${route}.`))
+        .map((each) => each.key),
+    ).toEqual([`route:${route}.view`, `route:${route}.set-view`]);
 
     // Explicit open: the host links the registered address; the call waits for the matching rendered command.
     const opening = pe(`route:${route}.set-view`, { system: "owner-text" });
-    await vi.waitFor(() => expect(intents.some((each) => each.type === "route-view-open")).toBe(true));
+    await vi.waitFor(() =>
+      expect(intents.some((each) => each.type === "route-view-open")).toBe(true),
+    );
     const open = intents.find((each) => each.type === "route-view-open")!;
-    expect(open).toMatchObject({ route, thread, link: `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}` });
+    expect(open).toMatchObject({
+      route,
+      thread,
+      link: `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}`,
+    });
     const page = { system: "", viewport: "" };
     expect((await mounted(page, open.commandId as string)).status).toBe(200);
-    await vi.waitFor(() => expect(intents.some((each) => each.type === "route-view-intent")).toBe(true));
+    await vi.waitFor(() =>
+      expect(intents.some((each) => each.type === "route-view-intent")).toBe(true),
+    );
     const intent = intents.find((each) => each.type === "route-view-intent")!;
     // The owner codec's text crosses undecoded.
     expect(intent.patch).toEqual({ system: "owner-text" });
@@ -447,7 +518,14 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
       new Request(`http://host/pe/route-view/${route}/ack`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ outcome: "rendered", instance, commandId: intent.commandId, revision: intent.revision, page: { ...page, system: "owner-text" }, facts: {} }),
+        body: JSON.stringify({
+          outcome: "rendered",
+          instance,
+          commandId: intent.commandId,
+          revision: intent.revision,
+          page: { ...page, system: "owner-text" },
+          facts: {},
+        }),
       }),
     );
     expect(ack.status).toBe(200);
@@ -457,7 +535,9 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
     // Withdrawal: discovery drops the rows, and execution through a stale row refuses at the live gate.
     const work = await readdir(join(root, "Work")).catch(() => []);
     await pods.trust(row!.key, fingerprint, false);
-    await vi.waitFor(() => expect(app.workspace.admittedRoutes().map((each) => each.key)).not.toContain(route));
+    await vi.waitFor(() =>
+      expect(app.workspace.admittedRoutes().map((each) => each.key)).not.toContain(route),
+    );
     expect(rows().some((each) => each.key.startsWith(`route:${route}.`))).toBe(false);
     expect((await mounted(page)).status).toBe(404);
     expect(await readdir(join(root, "Work")).catch(() => [])).toEqual(work);

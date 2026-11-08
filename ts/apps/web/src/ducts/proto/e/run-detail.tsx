@@ -9,7 +9,7 @@ import { PlainList } from "@pe/kit/lang/list-view";
  * fittings it feeds each as equivalent feet and an SP loss. A "run" here is one duct and the parts
  * its air passes before the next duct, read off the priced path that carries the selected element.
  */
-import type { Priced } from "@pe/ducts-domain/pricing";
+import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 import type { Row } from "@pe/ducts-domain/losses";
 
 import { fmt, fmtFt } from "./bar";

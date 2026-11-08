@@ -1,162 +1,102 @@
 {
-  "address": "design-system",
+  "version": 1,
+  "capabilities": [],
+  "key": "design-system",
+  "address": "/design-system",
+  "name": "Design System",
   "directory": {
+    "group": "Explore / maintain",
+    "summary": "Production design language, laws and component specimens",
+    "label": "Design language",
+    "icon": "Palette",
+    "exposure": "Preview",
+    "surfaces": {
+      "web": "full",
+      "pwa": "full",
+      "tray": false
+    },
     "aliases": [
       "Design",
       "language"
     ],
-    "blurb": "The spec and catalogue for the design language â€” production components under production tokens, with the gaps they cannot yet express marked in place.",
-    "category": "Explore / maintain",
-    "exposure": "Preview",
-    "icon": "Palette",
-    "label": "Design language",
-    "listed": true,
-    "path": "/design-system",
     "runtimeNeed": "Browser component catalogue",
+    "listed": true,
     "satellites": [
       {
-        "label": "band",
-        "to": "/design-system/band"
+        "to": "/design-system/band",
+        "label": "band"
       },
       {
-        "label": "list",
-        "to": "/design-system/list"
+        "to": "/design-system/list",
+        "label": "list"
       },
       {
-        "label": "arming",
-        "to": "/design-system/arming"
+        "to": "/design-system/arming",
+        "label": "arming"
       },
       {
-        "label": "popovers",
-        "to": "/design-system/popovers"
+        "to": "/design-system/popovers",
+        "label": "popovers"
       },
       {
-        "label": "swatch",
-        "to": "/design-system/swatch"
+        "to": "/design-system/swatch",
+        "label": "swatch"
       },
       {
-        "label": "revit",
-        "to": "/design-system/revit"
+        "to": "/design-system/revit",
+        "label": "revit"
       }
-    ],
-    "surfaces": {
-      "pwa": "full",
-      "tray": false,
-      "web": "full"
-    },
-    "title": "Design System"
+    ]
   },
   "fields": {
-    "catalog": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "subject",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "builtin",
-        "enum": [
-          "builtin"
-        ],
-        "type": "string"
-      },
-      "share": true,
-      "url": "push"
-    },
     "selected": {
-      "agent": "set",
-      "cardinality": "many",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "keyKind": "name",
       "role": "selection",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "anyOf": [
-          {
-            "items": {
-              "minLength": 1,
-              "type": "string"
-            },
-            "maxItems": 50000,
-            "type": "array"
-          },
-          {
-            "const": "all",
-            "type": "string"
-          }
-        ],
-        "default": []
-      },
-      "share": true,
-      "url": "replace"
+      "kinds": [
+        "focus"
+      ]
     }
   },
-  "key": "design-system",
-  "layout": {
-    "id": "main",
-    "kind": "pane"
+  "identities": {
+    "subject": {
+      "kind": "local",
+      "codec": "local"
+    },
+    "focus": {
+      "kind": "local",
+      "codec": "local"
+    }
   },
-  "moduleHash": "d195926c81beef734644e2b0007b2fde8e12b12e45b7667cfa53cd704b16bd04",
-  "name": "Design System",
+  "readings": {},
+  "verbs": {},
   "panes": {
     "main": {
-      "draws": [
-        "catalog"
-      ],
       "label": "Design System",
-      "purpose": "The spec and catalogue for the design language â€” production components under production tokens, with the gaps they cannot yet express marked in place.",
+      "purpose": "Browse laws and production specimens",
+      "draws": [],
       "verbs": []
     }
   },
-  "readings": {
-    "catalog": {
-      "kind": "derive",
-      "retire": "never",
-      "source": "catalog"
-    }
+  "layout": {
+    "kind": "pane",
+    "id": "main"
   },
-  "seeds": {
+  "stages": {
     "main": {
-      "title": "main"
+      "word": "Design System",
+      "panes": [
+        "main"
+      ],
+      "verbs": []
     }
   },
   "stageOrder": [
     "main"
   ],
-  "stages": {
-    "main": {
-      "panes": [
-        "main"
-      ],
-      "verbs": [],
-      "word": "Design System"
-    }
-  },
-  "subjectField": {
-    "cardinality": "one",
-    "detail": "catalog",
-    "field": "catalog",
-    "keyKind": "name",
-    "kind": "singleton",
-    "noun": "design language",
-    "pane": "main",
-    "roster": "catalog",
-    "show": {
-      "runtime": true
-    }
-  },
-  "verbs": {}
+  "predicates": {},
+  "cells": {},
+  "workFields": {},
+  "seeds": {},
+  "needs": "nothing",
+  "resetOnTarget": [],
+  "observe": []
 }

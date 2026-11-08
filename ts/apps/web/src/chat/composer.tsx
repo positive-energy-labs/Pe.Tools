@@ -24,12 +24,12 @@ import {
 import { composerAnswer } from "./question-form";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
-import { chatReading } from "./graph";
+import { chatReading } from "./owner-ports";
 import { Composer, ComposerFrame } from "#/components/lang/conversation";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { MentionChip } from "@pe/kit/lang/chip";
-import { previousOf } from "#/shell/readings-hooks";
+import { previousOf } from "#/host/resource-state";
 import { AssetReel, referModel, threadAssets } from "./asset-reel";
 import { AttachmentChip } from "./attachment-chip";
 import { useAttachments } from "./use-attachments";
@@ -83,6 +83,10 @@ export function ThreadComposer({
     threads,
     draft: head,
     answerQuestion,
+    // SHIM: S gap 9; keep these Workbench callbacks until typed host commands share the consent door.
+    cancel,
+    forkThread,
+    operationError,
   } = useWorkbench();
   const { providerId, isRunning, commands, assets, asking } = useTranscript((state) => ({
     providerId: state.providerId,
@@ -103,8 +107,7 @@ export function ThreadComposer({
     setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current));
   });
   const files = useAttachments(draft, setDraft);
-  const sendResult = handle.results.get("send");
-  const refusedSend = sendResult && "refusal" in sendResult ? sendResult.refusal.message : null;
+  const refusedSend = operationError;
   const slash = useSlashMenu(draft.text, commands);
   const [area, setArea] = useState<HTMLTextAreaElement | null>(null);
   const form = area?.form ?? null;
@@ -276,8 +279,14 @@ export function ThreadComposer({
             <Button
               label="fork"
               icon={GitFork}
-              refusal={handle.control("fork").refusal}
-              onClick={() => void handle.control("fork").run()}
+              refusal={
+                !currentThreadId
+                  ? "No thread to fork yet"
+                  : isRunning
+                    ? "Fork after the running turn ends"
+                    : null
+              }
+              onClick={() => void forkThread()}
             />
           }
           attach={
@@ -296,8 +305,8 @@ export function ThreadComposer({
                 <Button
                   label="stop"
                   icon={Square}
-                  refusal={handle.control("stop").refusal}
-                  onClick={() => void handle.control("stop").run()}
+                  refusal={!currentThreadId ? "No running thread" : null}
+                  onClick={() => void cancel()}
                 />
                 <Button
                   kind="commit"
@@ -317,8 +326,8 @@ export function ThreadComposer({
               <Button
                 label="stop"
                 icon={Square}
-                refusal={handle.control("stop").refusal}
-                onClick={() => void handle.control("stop").run()}
+                refusal={!currentThreadId ? "No running thread" : null}
+                onClick={() => void cancel()}
               />
             ) : (
               <TooltipHint content={refusedSend ?? send.refusal ?? send.says}>
@@ -326,7 +335,7 @@ export function ThreadComposer({
                   kind="commit"
                   label={send.label}
                   icon={ArrowUp}
-                  busy={handle.busy()?.key === "send"}
+                  busy={isRunning}
                   data-tone={refusedSend ? "caution" : undefined}
                   aria-disabled={Boolean(send.refusal) || undefined}
                   onClick={sendCurrent}

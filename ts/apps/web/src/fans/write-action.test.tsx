@@ -16,9 +16,9 @@ afterEach(() =>
 
 test("Fans plans losses through the ducts owner handle and its own handle as readWorks.fans", async () => {
   const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.fans.readingStatus("ductsWork").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("owner:ducts").snapshot.current).toBe(true));
   await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
-  f.fans.invoke("scope", { walk: { unitId: 1, portIndex: 0 } }, f.fans.workBasis()!);
+  f.fans.invoke("edit", { patches: [{ path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } } }] }, f.fans.workBasis()!);
   await vi.waitFor(() =>
     expect(f.fans.work()?.value).toMatchObject({
       writeIntent: { edit: { value: { walk: { unitId: 1 } } } },
@@ -26,7 +26,7 @@ test("Fans plans losses through the ducts owner handle and its own handle as rea
   );
   expect(f.fans.invoke("losses", {})).toEqual({ kind: "preview" });
   await vi.waitFor(() => expect(f.inputs.get("fans:ducts.plan-losses")).toBeTruthy());
-  const owner = f.fans.readingStatus("ductsWork").snapshot as unknown as {
+  const owner = f.fans.readingStatus("owner:ducts").snapshot as unknown as {
     handle: { key: { route: string }; revision: number };
   };
   expect(f.inputs.get("fans:ducts.plan-losses")).toMatchObject({
@@ -43,11 +43,13 @@ test("after a reopen the human plan sends both owner feeds' handles, which the h
   const first: (() => void)[] = [];
   const before = await createWitness(first, saved, {}, { address, open: { session: "s", openId: "first" } });
   await vi.waitFor(() => expect(before.fans.workBasis()).toBeTruthy());
-  before.fans.invoke("scope", { walk: { unitId: 1, portIndex: 0 } }, before.fans.workBasis()!);
-  await vi.waitFor(() => expect(saved.get("fans")).toBeTruthy());
+  before.fans.invoke("edit", { patches: [{ path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } } }] }, before.fans.workBasis()!);
+  await vi.waitFor(() => expect(saved.get("fans")).toMatchObject({
+    doc: { writeIntent: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } } },
+  }));
   first.reverse().forEach((close) => close());
   const f = await createWitness(closes, saved, {}, { address, open: { session: "s", openId: "reopened" } });
-  await vi.waitFor(() => expect(f.fans.readingStatus("ductsWork").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("owner:ducts").snapshot.current).toBe(true));
   await vi.waitFor(() =>
     expect(f.fans.work()?.value).toMatchObject({ writeIntent: { edit: { value: { walk: { unitId: 1 } } } } }),
   );

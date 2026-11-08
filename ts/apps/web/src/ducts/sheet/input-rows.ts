@@ -7,17 +7,17 @@ import type { SheetInputs } from "./model";
  * per [family, type], naming the units it covers (it was one raw-key row per instance).
  */
 import {
-DUCT_UNIT_KINDS,
-type DuctUnitKind,
-type DuctsDesign,
-type DuctsSheetEdits,
-type Resolved,
+  DUCT_UNIT_KINDS,
+  type DuctUnitKind,
+  type DuctsDesign,
+  type DuctsSheetEdits,
+  type Resolved,
 } from "@pe/agent-contracts";
 import { catalogLinkKey } from "@pe/ducts-domain/catalog";
-import { END_KEY,FITTING_DROP_CELL,JOIN_KEY } from "@pe/ducts-domain/sheet/index";
+import { END_KEY, FITTING_DROP_CELL, JOIN_KEY } from "@pe/ducts-domain/sheet/index";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { SubjectPart } from "@pe/kit/lang/subject-text";
-import { kindDisabledReason,kindMeaning } from "./kind-meaning";
+import { kindDisabledReason, kindMeaning } from "./kind-meaning";
 import type { WorkCell } from "./sheet-cell";
 
 export type InputSection = "units" | "terminals" | "parts" | "rulings";
@@ -36,6 +36,7 @@ export type InputControl =
       digits: number;
       cell: WorkCell;
       positive?: boolean;
+      refusal?: string;
       edit: (value: number) => DuctsSheetEdits;
     }
   | {
@@ -66,12 +67,13 @@ export type InputRow = {
 };
 
 export interface RowContext {
-  snapshot: Pick<DuctSnapshot, "nodes">;
+  snapshot: Pick<DuctSnapshot, "nodes"> & Partial<Pick<DuctSnapshot, "slots">>;
   doc: DuctsDesign | null;
   inputs: SheetInputs | null;
   /** The open fan's unit: its ESP is an input of this sheet; another unit's is not. */
   fanUnitId: number | null;
   flowConflict?: string;
+  directionOverride?: string | null;
   /** Proposed path keys to the subject that names them (from the fittings census). */
   pathSubject?: (key: string) => SubjectPart[] | null;
 }
@@ -142,7 +144,12 @@ export function inputRows(ctx: RowContext): InputRow[] {
         value: unit.kind.value,
         options: DUCT_UNIT_KINDS.map((kind) => ({
           kind,
-          meaning: node ? kindMeaning(node, kind, unit) : "wait for the element snapshot",
+          meaning: node
+            ? kindMeaning(node, kind, unit) +
+              (kind === unit.kind.value && ids.includes(ctx.fanUnitId!) && ctx.directionOverride
+                ? `; ${ctx.directionOverride}`
+                : "")
+            : "wait for the element snapshot",
           // Only "this kind removes the unit from the fan list" disables; the rest stay pickable.
           disabled: node ? kindDisabledReason(node, kind, unit) : null,
         })),
@@ -167,6 +174,10 @@ export function inputRows(ctx: RowContext): InputRow[] {
       (cfm) => ({ equipmentFlows: { [id]: { cfm } } }),
       { equipmentFlows: { [id]: null } },
     );
+    const node = nodes.get(n);
+    const flowControl = rows[rows.length - 1]!.control;
+    if (node && node.flowParameter === null && flowControl.kind === "number")
+      flowControl.refusal = `${[node.type, node.family].filter(Boolean).join(" / ") || "This fan"} has no ${ctx.snapshot.slots?.fanFlow ?? "selected airflow"} parameter; add it to the family or map flow to an existing parameter`;
     if (n === ctx.fanUnitId && ctx.flowConflict)
       rows[rows.length - 1]!.source = ctx.flowConflict.replace(/^fan \d+: /, "Conflict: ");
     if (n === ctx.fanUnitId || unit.esp.source === "Work")

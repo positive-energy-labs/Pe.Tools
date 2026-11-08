@@ -1,39 +1,6 @@
-import { HostInputContext } from "./input-context.ts";
-import { InvalidRead } from "./native-reads.ts";
-import { httpProblems, isDoorFailure } from "./http-problems.ts";
-import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/request-contracts";
-import type { DocumentRow } from "./session-inventory.ts";
+import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
 import type { DocumentRef } from "@pe/agent-contracts";
-import { createScheduledTasks } from "./scheduled-tasks.ts";
-import { createRouteSettings } from "./route-settings.ts";
-import { productRouteSettingsPath } from "./product-paths.ts";
-import { createDuctsSheets, type DuctsSheetSources } from "./ducts-sheet.ts";
-import { eligibleThreads, threadHistory } from "./thread-history.ts";
-import { normalizePeError } from "@pe/host-contracts/pe-api";
-import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
-import {
-  httpRoutes as peRoutes,
-  peRouteUrl,
-  servePeRoute,
-  matchPeRoute,
-} from "@pe/agent-contracts/pe-api";
-import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import { resolveSdkSession } from "./sdk-session.ts";
-import {
-  createDuctsAnalysis,
-  ductsNativeRead,
-  type DuctsAnalysisSources,
-} from "./ducts-analysis.ts";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
-import type { MachineShareAdapter } from "./machine.ts";
-import { Context, Effect, Layer, Option, Stream } from "effect";
-import {
-  HttpEffect,
-  HttpRouter,
-  HttpServer,
-  HttpServerRequest,
-  HttpServerResponse,
-} from "effect/http";
 import {
   addressSchema,
   sameAddress,
@@ -46,7 +13,6 @@ import {
   routeViewSchema,
   readingKey,
   recentRows,
-  START_FRESH,
   contributionKey,
   isCanonicalSlug,
   parseContributionKey,
@@ -62,6 +28,18 @@ import {
   type Caller,
   HOST_LOG_PAGE_MAX,
 } from "@pe/agent-contracts";
+import { receiptQuerySchema } from "@pe/agent-contracts";
+
+import {
+  httpRoutes as peRoutes,
+  peRouteUrl,
+  servePeRoute,
+  matchPeRoute,
+} from "@pe/agent-contracts/pe-api";
+import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
+import type { HostSessionScope } from "@pe/host-contracts/operation-types";
+import { normalizePeError } from "@pe/host-contracts/pe-api";
+import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/request-contracts";
 import {
   createCapabilityCatalogSource,
   createRouteRegistrations,
@@ -69,12 +47,6 @@ import {
   publishPeaSkills,
   peaAgentInstructions,
 } from "@pe/mcps";
-import {
-  captureUserShellPath,
-  userCodexConfigPath,
-  userCodexMcpServers,
-  writePeaCodexProjectConfig,
-} from "./harness/user-shell.ts";
 import {
   observeResources,
   OwnerReads,
@@ -88,32 +60,23 @@ import {
   type RouteWorkspaceRegistration,
   type ThreadHeadSource,
 } from "@pe/runtime";
+import { Context, Effect, Layer, Option, Stream } from "effect";
+import {
+  HttpEffect,
+  HttpRouter,
+  HttpServer,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/http";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { z } from "zod";
+import type { CapabilityContent } from "../../../packages/mcps/src/pea/capabilities.ts";
+import { skillSnapshot } from "../../../packages/mcps/src/pea/skill-publication.ts";
+import { alignBootstrap } from "./bootstrap.ts";
 import { RevitBridge } from "./bridge.ts";
-import { HostDocumentMarks } from "./document-marks.ts";
-import { runPods } from "./family-actions.ts";
-import { HostFiles } from "./host-files.ts";
 import { PictureCaptureStore } from "./captures-route.ts";
-import { createProviders } from "./harness/providers.ts";
-import { peaMcpServer } from "./harness/adapter.ts";
-import { makeHarnessThreads } from "./harness/threads.ts";
-import { Spawner } from "./harness/spawner.ts";
-import { hostOwnership } from "./host-ownership.ts";
-import {
-  productDuctsAnalysesPath,
-  productHarnessThreadsPath,
-  productRouteWorkPath,
-} from "./product-paths.ts";
-import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
-import { CaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
-import {
-  MachineOwner,
-  hostMachineFace,
-  type MachineOptions,
-  machineAcquisition,
-  machineSessionAcquisition,
-  machineSources,
-} from "./machine.ts";
 import {
   bindControl,
   callerThread,
@@ -122,52 +85,91 @@ import {
   workAuthorOf,
   threadHead,
 } from "./control.ts";
-import { bindRevoke } from "./revoke.ts";
-import { HostReceipts } from "./gateway-owner.ts";
-import { RunConsents } from "./run-consent.ts";
-import type { HostLog } from "./host-log.ts";
-import { UpdateReader } from "./update-reader.ts";
-import { makeInstalledUpdateReader } from "./update-route.ts";
-import { resolveHostVersion } from "./host-lifecycle.ts";
+import { HostDocumentMarks } from "./document-marks.ts";
+import {
+  createDuctsAnalysis,
+  ductsNativeRead,
+  type DuctsAnalysisSources,
+} from "./ducts-analysis.ts";
+import { DuctFiles } from "./ducts-files.ts";
+import { runPods } from "./family-actions.ts";
 import { familySpecAsset } from "./family-spec.ts";
-import { fileRouteDocumentStore } from "./route-document-store.ts";
+import { HostReceipts } from "./gateway-owner.ts";
+import { peaMcpServer } from "./harness/adapter.ts";
+import { createProviders } from "./harness/providers.ts";
+import { Spawner } from "./harness/spawner.ts";
+import { makeHarnessThreads } from "./harness/threads.ts";
+import {
+  captureUserShellPath,
+  userCodexConfigPath,
+  userCodexMcpServers,
+  writePeaCodexProjectConfig,
+} from "./harness/user-shell.ts";
+import { resolveHostVersion } from "./host-lifecycle.ts";
+import type { HostLog } from "./host-log.ts";
+import { hostOwnership } from "./host-ownership.ts";
+import { httpProblems, isDoorFailure } from "./http-problems.ts";
+import { HostInputContext } from "./input-context.ts";
+import { importShippedPods } from "./installed-pods.ts";
+import type { MachineShareAdapter } from "./machine.ts";
+import {
+  MachineOwner,
+  hostMachineFace,
+  type MachineOptions,
+  machineAcquisition,
+  machineSessionAcquisition,
+  machineSources,
+} from "./machine.ts";
+
+import { InvalidRead } from "./native-reads.ts";
 import {
   readNavigation,
   readThreadWork,
   resumeWork,
   type NavigationSources,
 } from "./navigation.ts";
+import { createNotices } from "./notices.ts";
+import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
 import {
   captureDirectory,
   capturePackage,
   listPackages,
   type AdmittedPackage,
 } from "./packages.ts";
-import { skillSnapshot } from "../../../packages/mcps/src/pea/skill-publication.ts";
-import type { CapabilityContent } from "../../../packages/mcps/src/pea/capabilities.ts";
 import {
   packagePageDescriptors,
   pageFolderCollisions,
   scratchPageDescriptors,
   type PageDescriptor,
 } from "./page-libraries.ts";
-import { join } from "node:path";
-import { readFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
-import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
+import { observePluginOperations } from "./plugin-receipts.ts";
 import { createPluginsHandler } from "./plugins-handler.ts";
 import { createPodRoutes } from "./pod-routes.ts";
-import { observePluginOperations } from "./plugin-receipts.ts";
-import { importShippedPods } from "./installed-pods.ts";
-import { receiptQuerySchema } from "@pe/agent-contracts";
+import { productRouteSettingsPath } from "./product-paths.ts";
+import {
+  productDuctsAnalysesPath,
+  productHarnessThreadsPath,
+  productRouteWorkPath,
+} from "./product-paths.ts";
+import { graphRouteIds } from "./reads/routes.ts";
 import {
   ReceiptExport,
   createThreadReceiptAdapter,
   type AgentReportContext,
   type ReceiptExporter,
 } from "./receipt-export.ts";
-import { createNotices } from "./notices.ts";
-import { alignBootstrap } from "./bootstrap.ts";
+import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
+import { bindRevoke } from "./revoke.ts";
+import { fileRouteDocumentStore } from "./route-document-store.ts";
+import { createRouteSettings } from "./route-settings.ts";
+import { RunConsents } from "./run-consent.ts";
+import { createScheduledTasks } from "./scheduled-tasks.ts";
+import { resolveSdkSession } from "./sdk-session.ts";
+import type { DocumentRow } from "./session-inventory.ts";
+import { CaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
+import { eligibleThreads, threadHistory } from "./thread-history.ts";
+import { UpdateReader } from "./update-reader.ts";
+import { makeInstalledUpdateReader } from "./update-route.ts";
 export { fileRouteDocumentStore } from "./route-document-store.ts";
 
 export interface HostWork {
@@ -197,13 +199,15 @@ export interface PeRoutesOptions {
   /** The log from the composing HostReceipts service. */
   log?: HostLog;
   ductsAnalysis?: Omit<DuctsAnalysisSources, "readWork">;
-  ductsSheets?: DuctsSheetSources;
+  readGraph?: (request: unknown) => Promise<unknown>;
 }
 export interface PeRouteInvocation {
-  readonly sheets?: DuctsSheetSources;
+  readonly readEvents?: Response;
+  readonly readGraph?: (request: unknown) => Promise<unknown>;
   readonly document?: (ref: DocumentRef) => Promise<DocumentRow>;
   readonly observe?: ResourceObserver;
   readonly closeResources?: () => void;
+  readonly resourceOwner?: string | null;
   readonly work?: import("@pe/runtime").WorkReadContext;
   readonly finish?: (result: { response: Response } | { error: unknown }) => Promise<void>;
 }
@@ -220,10 +224,10 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 
 const historicalPeRefusal = (inputs: HostInputContext["Service"] | undefined, method: string, id: string) => {
   if (inputs?.lane.kind !== "recording") return null;
-  if (!["ducts.sheet", "ducts.roster", "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get"].includes(id))
+  if (!["reads.events", ...graphRouteIds, "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get"].includes(id))
     return method === "GET" ? new InvalidRead({ message: "Recording does not cover this route owner", status: 409, problem: "recording.coverage" })
       : inputs.check({ kind: "work", verb: "edit" });
-  const needs = id.startsWith("work.") ? ["work" as const] : id.startsWith("ducts.") ? ["document" as const, "files" as const, "marks" as const, "work" as const] : [];
+  const needs = id.startsWith("work.") ? ["work" as const] : [];
   for (const input of needs) { const refusal = inputs.check({ kind: "input", input }); if (refusal) return refusal; }
   return null;
 };
@@ -305,32 +309,16 @@ export function createPeRoutes(options: PeRoutesOptions) {
     // Identity and revision checks govern shared Work; thread targets only constrain trust adapters.
     return bindWork(route, doc.address, undefined, { session: doc.session, openId: doc.openId });
   }
-  const analysis = options.ductsAnalysis
+  const analysis = (context?: import("@pe/runtime").WorkReadContext) => options.ductsAnalysis
     ? createDuctsAnalysis({
         ...options.ductsAnalysis,
         readWork: async (key) => {
-          const saved = await work.readRaw(key, key.route);
+          const saved = await (context ? work.read(key, key.route, context) : work.readUncaptured(key, key.route));
           if (!saved) throw Error(`Work is absent for ${key.route}`);
           return saved;
         },
       })
     : null;
-  const sheets = createDuctsSheets(options.ductsSheets, {
-        workspace: work,
-        author: () => (currentCaller().kind === "pea" ? "pea" : "human"),
-        key: async (target) => {
-          const documents = options.navigation
-            ? z
-                .array(documentRefSchema.extend({ address: addressSchema.nullable() }))
-                .parse(await options.navigation.documents())
-            : null;
-          const doc = documents?.find(
-            (d) => d.session === target.session && d.openId === target.openId,
-          );
-          if (documents && !doc) throw new Error("Sheet Work target is no longer open");
-          return bindWork("ducts", doc?.address ?? null, undefined, target);
-        },
-      });
   const views = new RouteViewStore(() => work.admittedRoutes());
   const workReads = new OwnerReads();
   const resources = observeResources(work, options.heads, (request, publish, after) => {
@@ -341,7 +329,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
       key,
       () => readThreadWork(work, options.navigation),
       (notify) => {
-        const releaseWork = work.subscribe(() => notify());
+        const releaseWork = work.subscribeUncaptured(() => notify());
         const releaseContext = options.navigation?.subscribe?.(notify);
         return () => {
           releaseWork();
@@ -387,13 +375,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
         const { direction, expectedRevision } = body as z.infer<typeof historyBody>;
         return work.step(scope, route, by, direction, expectedRevision);
       },
-    },
-    // Authenticated authors share recovery; the workspace preserves unreadable source bytes.
-    [START_FRESH]: {
-      schema: z.object({}),
-      hint: "expected {}",
-      run: (scope: WorkKey, route: string, by: "pea" | "human") =>
-        work.startFresh(scope, route, by),
     },
   } as Record<
     string,
@@ -446,29 +427,18 @@ export function createPeRoutes(options: PeRoutesOptions) {
         );
       }
     }
-    if (declared.id === "ducts.sheet" || declared.id === "ducts.roster") {
-      if (!options.ductsSheets && !invocation.sheets) return json({ error: "Duct sheets are unavailable" }, 503);
-      try {
-        return json(
-          declared.id === "ducts.sheet"
-            ? await sheets.sheet(peRoutes["ducts.sheet"].body.parse(await request.json()), invocation.sheets)
-            : await sheets.roster(peRoutes["ducts.roster"].body.parse(await request.json()), invocation.sheets),
-        );
-      } catch (error) {
-        if (isDoorFailure(error)) throw error;
-        const problem = error as { statusCode?: number; message?: unknown };
-        return json(
-          { error: typeof problem?.message === "string" ? problem.message : message(error) },
-          error instanceof z.ZodError ? 400 : (problem?.statusCode ?? 409),
-        );
-      }
+    if (declared.id === "reads.events") return invocation.readEvents ?? json({ error: "Read publications are unavailable" }, 503);
+    if (graphRouteIds.includes(declared.id)) {
+      const read = invocation.readGraph ?? options.readGraph;
+      if (!read) return json({ error: "Host read graph is unavailable" }, 503);
+      return json(await read(await request.json()));
     }
     if (declared.id === "ducts.analysis" || declared.id === "ducts.analysis-artifact") {
-      if (!analysis) return json({ error: "Ducts analysis is unavailable" }, 503);
+      if (!options.ductsAnalysis) return json({ error: "Ducts analysis is unavailable" }, 503);
       try {
         return declared.id === "ducts.analysis"
-          ? json(await analysis.read(peRoutes["ducts.analysis"].body.parse(await request.json())))
-          : await analysis.artifact(declared.params.id!);
+          ? json(await analysis(invocation.work)!.read(peRoutes["ducts.analysis"].body.parse(await request.json())))
+          : await analysis()!.artifact(declared.params.id!);
       } catch (error) {
         const problem = error as { message?: unknown; statusCode?: unknown };
         const status =
@@ -608,9 +578,9 @@ export function createPeRoutes(options: PeRoutesOptions) {
       }
     }
     if (method === "POST" && declared.id === "resources.subscriptions")
-      return updateResourceSubscriptions(request, observe);
+      return updateResourceSubscriptions(request, observe, invocation.resourceOwner);
     if (method === "GET" && declared.id === "resources.stream")
-      return resourceResponse(request, invocation.observe ?? observe, undefined, observe, invocation.closeResources);
+      return resourceResponse(request, invocation.observe ?? observe, undefined, observe, invocation.closeResources, invocation.resourceOwner);
     // Agent feedback (owner ruling 2026-10-14): any admitted caller may file; the host stamps it.
     if (method === "POST" && declared.id === "agent-feedback.submit") {
       const parsed = agentFeedbackSchema.safeParse(await body());
@@ -743,9 +713,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
         const thread = url.searchParams.get("thread");
         if (!thread) return json({ error: "thread required" }, 400);
         const result = views.select(thread, route, url.searchParams.get("instance") ?? undefined);
-        return result && !("ok" in result)
-          ? json(result)
-          : json(result ?? { ok: false, error: "view unavailable" }, 409);
+        if (!result || "ok" in result) return json(result ?? { ok: false, error: "view unavailable" }, 409);
+        const mounted = mountedWorkKeySchema.safeParse(result.context.work);
+        const mountedWork = mounted.success && mounted.data.route === route
+          ? await (invocation.work ? work.view(mounted.data, route, invocation.work) : work.viewUncaptured(mounted.data, route)) : null;
+        return json({ ...result, ...(mountedWork ? { work: mountedWork } : {}) });
       }
       if (method === "POST" && instance === "set") {
         const parsed = routeViewSetSchema.safeParse(await body());
@@ -781,20 +753,13 @@ export function createPeRoutes(options: PeRoutesOptions) {
         const scope = await routeWorkKey(url, route, "read", caller, invocation.document);
         if (scope instanceof Response) return scope;
         try {
-          const view = await work.view(scope, route, invocation.work);
+          // Direct inspection compositions have no read graph. HTTP composition supplies invocation.work.
+          const view = await (invocation.work ? work.view(scope, route, invocation.work) : work.viewUncaptured(scope, route));
           return view ? json(view) : json({ error: `unknown route '${route}'` }, 404);
         } catch (error) {
           if (isDoorFailure(error)) throw error;
           return json({ error: message(error) }, 403);
         }
-      }
-      // Human-only and read-only; any other caller is refused by name, not 404.
-      if (method === "GET" && route && verb === "salvage") {
-        const scope = workKey(url, route, "read");
-        if (scope instanceof Response) return scope;
-        const salvaged = await work.salvage(scope, route);
-        if (!salvaged) return json(null);
-        return "ok" in salvaged ? json(salvaged, 403) : json(salvaged);
       }
       const write = method === "POST" && route && verb ? writes[verb] : undefined;
       if (write && route && caller.kind !== "human" && caller.kind !== "pea")
@@ -923,6 +888,7 @@ export function createContributionContent(options: {
   packages?: typeof listPackages;
   pages?: (packages: readonly AdmittedPackage[]) => Promise<readonly PageDescriptor[]>;
   bootstrap?: () => Promise<unknown>;
+  bootstrapInBackground?: boolean;
   decisionsPath?: string;
   changed?: () => void;
 }) {
@@ -931,12 +897,13 @@ export function createContributionContent(options: {
   let snapshot: Promise<CapabilityContent> | undefined;
   let observedAt = 0;
   let pending = false;
-  let initialized: Promise<unknown> | undefined;
+  let bootstrapProblem: string | undefined;
   let admitted: readonly AdmittedPackage[] = [];
+  const importing = Promise.resolve().then(() => options.bootstrap?.());
   const lifecycle = createPackageLifecycle({
     decisionsPath: options.decisionsPath,
     packages: async () => {
-      await (initialized ??= options.bootstrap?.() ?? Promise.resolve());
+      if (!options.bootstrapInBackground) await importing;
       return (options.packages ?? listPackages)();
     },
     changed: () => {
@@ -944,6 +911,18 @@ export function createContributionContent(options: {
       latest.clear();
       options.changed?.();
     },
+  });
+  // Shipped examples are optional content, not a prerequisite for the host door. Reconcile
+  // after import and invalidate the catalog so Home discovers them without restarting.
+  const bootstrap = importing.then(async () => {
+    if (!options.bootstrap || !options.bootstrapInBackground) return;
+    await lifecycle.refresh();
+    snapshot = undefined;
+    options.changed?.();
+  }).catch(error => {
+    bootstrapProblem = `Shipped Pods unavailable: ${String(error)}`;
+    snapshot = undefined;
+    options.changed?.();
   });
   const remember = (key: string, value: { sha256: string } & Record<string, unknown>) => {
     let versions = revisions.get(key);
@@ -983,7 +962,6 @@ export function createContributionContent(options: {
       });
   }
   async function build(): Promise<CapabilityContent> {
-    await (initialized ??= options.bootstrap?.() ?? Promise.resolve());
     await lifecycle.ready;
     const listing = lifecycle.listing();
     admitted = lifecycle.packages();
@@ -1104,6 +1082,7 @@ export function createContributionContent(options: {
       pages,
       diagnostics,
       sourceDiagnostics: [
+        ...(bootstrapProblem ? [bootstrapProblem] : []),
         ...publication.notices,
         ...listing.unreadable.map((d) => `${d.folder}: ${d.message}`),
         ...listing.packages.flatMap((p) =>
@@ -1118,6 +1097,7 @@ export function createContributionContent(options: {
   }
   return {
     lifecycle,
+    close: async () => { await bootstrap; await lifecycle.close(); },
     read: () => {
       if (!snapshot || (!pending && Date.now() - observedAt >= 30_000)) {
         pending = true;
@@ -1162,13 +1142,14 @@ function* hostPeRoutes(
   const receipts = yield* HostReceipts;
   const marks = yield* HostDocumentMarks;
   const pictures = yield* PictureCaptureStore;
-  const files = yield* HostFiles;
+  const files = yield* DuctFiles;
   const inputContext = yield* Effect.serviceOption(HostInputContext);
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();
   let invalidateCatalog = () => {};
   const content = createContributionContent({
     worldRoot,
+    bootstrapInBackground: true,
     changed: () => invalidateCatalog(),
     bootstrap: async () => {
       const imported = await importShippedPods({ captures: pictures });
@@ -1444,7 +1425,7 @@ function* hostPeRoutes(
       podRoutes.close();
       stopOperationHooks();
       stopWorkContext?.();
-      await content.lifecycle.close();
+      await content.close();
       bindPackageLifecycle(undefined);
     },
     fetch: createPluginsHandler(content, podRoutes),
@@ -1468,6 +1449,8 @@ const addPeHttpRoutes = (router: HttpRouter.HttpRouter,
     yield* router.add(route.method, route.path, (request) => Effect.gen(function* () {
       const context = yield* Effect.context<RequestIdentityKey>();
       const declared = matchPeRoute(request.method, new URL(request.originalUrl, "http://host").pathname)!;
+      if (request.headers["x-pe-history-point"] && ![...graphRouteIds, "features.get", "capabilities.list"].includes(declared.id))
+        return yield* new InvalidRead({ message: "needs live Revit", status: 409, problem: "history.read-only" });
       const denied = historicalPeRefusal(inputs, request.method, declared.id);
       if (denied) return yield* denied;
       let failure: import("@pe/host-internal/request-contracts").DoorFailure | undefined;

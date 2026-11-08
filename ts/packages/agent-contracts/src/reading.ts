@@ -1,3 +1,4 @@
+import { holdingsReadingSchema } from "./holdings-reading.ts";
 import { workAdmissionSchema, workFeedFailureSchema } from "./work-journal-door.ts";
 import type { HeldElement, ProcessIdentity } from "@pe/host-contracts/pe-revit-contract";
 import type { MachineLeg } from "./machine.ts";
@@ -76,7 +77,7 @@ export const ductsReadingEnvelopeSchema = z.strictObject({
   error: z.string().optional(),
 });
 export type DuctsReadingEnvelope = z.infer<typeof ductsReadingEnvelopeSchema>;
-export const DUCTS_BODY_VERSION_HEADER = "x-pe-ducts-version";
+export const NATIVE_BODY_VERSION_HEADER = "x-pe-native-body-version";
 export const DUCTS_REFRESH_HEADER = "x-pe-ducts-refresh";
 
 export { address, addressSchema, sameAddress, type Address } from "./target.ts";
@@ -139,21 +140,11 @@ export const sdkStandardReadingSchema = z.strictObject({
   year: z.string().min(1).optional(),
   all: z.boolean().optional(),
 });
-export const holdingsReadingSchema = z.strictObject({
-  kind: z.literal("sdk"),
-  read: z.literal("holdings"),
-  section: z.enum(["elements", "worksets"]).default("elements"),
-  session: sdkSessionSelectionSchema,
-  processStartUtc: z.iso.datetime(),
-  openId: z.string().min(1),
-  limit: z.number().int().min(1).max(100).default(50),
-  cursor: z.string().max(300).optional(),
-});
 export const sdkReadingSchema = z.discriminatedUnion("read", [
   sdkStandardReadingSchema,
   holdingsReadingSchema,
 ]);
-export type HoldingsReading = z.infer<typeof holdingsReadingSchema>;
+export { holdingsReadingSchema, type HoldingsReading } from "./holdings-reading.ts";
 export type HoldingsReadingResult =
   | { state: "refused"; code: string; detail: string }
   | {
@@ -234,6 +225,7 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
    */
   z.strictObject({ kind: z.literal("notices"), as: z.literal("tray").optional() }),
   z.strictObject({ kind: z.literal("takeoff-reading"), target: documentRefSchema }),
+  z.strictObject({kind:z.literal("families-reading"),work:workKeySchema}),
   /**
    * The families matrix of one document over one filter, by ENVELOPE only
    * (`familiesMatrixEnvelopeSchema`): the stream says when the last matrix read completed and which
@@ -322,6 +314,7 @@ export const readingFrameSchema = z.discriminatedUnion("kind", [
     kind: z.literal("snapshot"),
     key: z.string(),
     value: z.unknown(),
+    /** Signed claims for actual accepted bodies; an envelope alone has none. */
     /**
      * Document-bound Readings only: Revit changed this Reading's document after the host served
      * it. The host owns the mark and the comparison; a surface draws what the envelope says.

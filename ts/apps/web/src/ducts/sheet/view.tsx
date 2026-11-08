@@ -45,7 +45,7 @@ export function Roster({ props }: { props: RosterProps }) {
   const list = useList({
     persist: props.address,
     sorts: { name: (fan: FanPort) => fan.mark },
-    items: props.roster,
+    ...(props.value ? { value: props.value, rowsOf: () => props.roster } : { items: props.roster }),
     keyOf: fanKey,
     search: rosterSearch,
     select: "multi",
@@ -122,6 +122,7 @@ function Sides({ props }: { props: LedgerProps }) {
       <h3 className="t-head">
         {fan.mark} · port {fan.portIndex}
       </h3>
+      {fan.directionOverride && <p data-tone="caution">{fan.directionOverride}</p>}
       <div className="t-small grid grid-cols-[auto_minmax(0,1fr)] gap-x-3">
         <span className="text-ink-2">required ESP</span>
         <span className="face-mono truncate">

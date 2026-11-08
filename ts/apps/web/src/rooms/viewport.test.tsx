@@ -3,7 +3,7 @@ import { useState } from "react";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { DEMO_PLAN, DEMO_ROOMS, DEMO_VIEW } from "./demo";
-import { roomsPageSchema, type RoomsPage } from "./graph";
+import { roomsPageSchema, type RoomsPage } from "./page";
 import { RoomsPlan } from "./plan";
 import { Pane } from "@pe/kit/lang/pane";
 import { roomRows } from "./table";
@@ -47,10 +47,12 @@ test("a null viewport fits without a write, wheel preserves its cursor point, an
         empty={null}
         onSelect={() => {}}
         trace={{ data: null, none: "no trace" }}
-        page={page}
-        setPage={(next, move) => {
-          writes(next, move);
-          navigate(next);
+        page={{
+          read: () => page,
+          pose: (next, intent) => {
+            writes(next, intent);
+            set((previous) => roomsPageSchema.parse({ ...previous, ...next }));
+          },
         }}
       />
     );
@@ -72,7 +74,7 @@ test("a null viewport fits without a write, wheel preserves its cursor point, an
   const next = pose();
   expect((200 - initial.tx) / initial.scale).toBeCloseTo((200 - next.tx) / next.scale);
   expect((150 - initial.ty) / initial.scale).toBeCloseTo((150 - next.ty) / next.scale);
-  expect(writes.mock.calls[0]![1]).toEqual({ history: "replace" });
+  expect(writes.mock.calls[0]![1]).toEqual("gesture");
   act(() => navigate({ selected: [rows[1]!.region.guid] }));
   expect(writes).toHaveBeenCalledTimes(1);
   expect(pose()).toEqual(next);

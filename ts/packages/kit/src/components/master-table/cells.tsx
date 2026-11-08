@@ -38,6 +38,7 @@ export function NumberCell({
   digits = 2,
   integer = false,
   min,
+  max,
   title,
 }: {
   value: number;
@@ -45,6 +46,7 @@ export function NumberCell({
   digits?: number;
   integer?: boolean;
   min?: number;
+  max?: number;
   className?: string;
   title?: string;
 }) {
@@ -53,9 +55,9 @@ export function NumberCell({
     <StateCell
       scale="row"
       value={fmtNum(value, digits)}
-      numeric={{ integer, min, digits }}
+      numeric={{ integer, min, max, digits }}
       note={title}
-      // `numeric` already parsed, clamped and normalized — a refused parse never reaches here.
+      // `numeric` already validated without coercion — a refused parse never reaches here.
       onCommit={(text) => onCommit(Number(text))}
       onNavigate={(direction) => move?.(direction) ?? false}
     />

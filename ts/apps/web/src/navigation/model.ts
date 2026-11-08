@@ -8,17 +8,17 @@ import {
 } from "@pe/agent-contracts";
 import { TOOLS } from "./catalogue";
 import { publicRoutes } from "#/route/route-discovery";
-import { podRoutePath } from "#/route/pod-address";
+import { isPodRoutePath, podRoutePath } from "#/route/pod-address";
 
 // A registered route (builtin or trusted Pod) answers from its authenticated declaration; the generated
 // table covers routes not registered yet. Read at call time, never at import.
 export const routePath = (key: string) =>
-  publicRoutes.admitted(key)?.data.address ?? builtinRoutePath(key);
+  publicRoutes.typed(key)?.data.address ?? builtinRoutePath(key);
 export const routeKey = (path: string) =>
   publicRoutes.byAddress(path)?.manifest.key ?? builtinRouteKey(path);
 /** A Pod row opens its registered declaration's address; an unregistered row opens only its trust page. */
 export const podPath = (row: PodRouteDescriptor) =>
-  (row.trusted && publicRoutes.admitted(row.workRoute)?.data.address) || podRoutePath(row.key);
+  (row.trusted && publicRoutes.typed(row.workRoute)?.data.address) || podRoutePath(row.key);
 export const TASKS = APP_TASKS;
 const CATALOGUE = TOOLS;
 /** Home and the shell's route icons. Without the global field, the pressed icon is the location. */
@@ -44,9 +44,6 @@ export function resumeRefusal(
   return target.url ? undefined : (target.reason ?? "No resumable destination");
 }
 export function friendlyObservation(observation: string) {
-  const older = /^([0-9]+) legacy hash-only files/.exec(observation);
-  if (older)
-    return `${older[1]} older saved Works cannot be included in search yet. They remain available in their original tool and document.`;
   const unreadable = /^([0-9]+) stored files could not be read or verified/.exec(observation);
   if (unreadable)
     return `${unreadable[1]} saved items could not be read. They were left unchanged.`;
@@ -58,7 +55,7 @@ export function admittedDestination(destination: string, origin: string): string
     const url = new URL(destination, origin);
     return url.origin === new URL(origin).origin &&
       ["http:", "https:"].includes(url.protocol) &&
-      (appRouteByPath(url.pathname) || publicRoutes.byAddress(url.pathname))
+      (appRouteByPath(url.pathname) || publicRoutes.byAddress(url.pathname) || isPodRoutePath(url.pathname))
       ? `${url.pathname}${url.search}${url.hash}`
       : null;
   } catch (error) { console.warn("ts/apps/web/src/navigation/model.ts: fallback after failure", error);

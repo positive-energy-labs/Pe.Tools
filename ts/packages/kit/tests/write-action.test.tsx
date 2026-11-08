@@ -3,7 +3,7 @@ import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { WriteAction, writeWord, type WriteHeld } from "../src/components/lang/write-action";
+import { WriteAction, PreviewAction, writeWord, type WriteHeld } from "../src/components/lang/write-action";
 import { TooltipProvider } from "../src/components/lang/tooltip";
 
 afterEach(() => {
@@ -14,6 +14,25 @@ afterEach(() => {
 const HELD: WriteHeld = { word: "heal · planned 3", summary: "3 pass · 1 refused" };
 
 const spy = vi.fn();
+
+test("a plan handle is resampled after settling; an unsealed review never arms apply", async () => {
+  let review: import("../src/components/lang/write-action").PlanReview | null = null;
+  const handle = {
+    read: () => review,
+    plan: vi.fn(async () => { review = { sentence: "1 change", rows: ["Inspect this change"], stale: false }; }),
+    apply: vi.fn(), cancel: vi.fn(),
+  };
+  const view = render(<TooltipProvider delay={0}><PreviewAction handle={handle} label="Write" /></TooltipProvider>);
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "plan Write" })));
+  expect(await screen.findByText("Inspect this change")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Write" }).getAttribute("aria-disabled")).toBe("true");
+  fireEvent.click(screen.getByRole("button", { name: "Write" }));
+  expect(handle.apply).not.toHaveBeenCalled();
+  review = { sentence: null, rows: [], stale: true };
+  view.rerender(<TooltipProvider delay={0}><PreviewAction handle={handle} label="Write" /></TooltipProvider>);
+  expect(view.container.querySelector('[data-write-action="stale"]')).toBeTruthy();
+  expect(handle.plan).toHaveBeenCalledOnce();
+});
 
 /** A route in miniature: it keeps the plan and the input it rested on, as the page does. */
 function Route({ commit }: { commit?: () => Promise<{ message: string } | null> }) {
@@ -152,6 +171,7 @@ test("before, after and each author are drawn; the open window offers Reject? in
   expect(cell.textContent).toContain("10");
   expect(cell.querySelector("[data-write-author]")!.textContent).toBe("Pea");
   expect(document.querySelector('[data-write-cell="b"] [data-write-author]')!.textContent).toBe("you");
+  expect(document.querySelector('[data-write-cell="b"]')!.textContent).toContain("unavailable");
   expect(screen.queryByRole("button", { name: "apply heal" })).toBeNull();
   await act(async () => fireEvent.click(document.querySelector("[data-write-reject]")!));
   expect(reject).toHaveBeenCalledTimes(1);

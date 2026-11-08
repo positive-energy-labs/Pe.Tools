@@ -40,19 +40,22 @@ const RELAUNCH_WINDOW_MS = 120_000;
 
 /**
  * An enforced host (inherited from msiexec through the old update stub) hands itself to the desktop
- * shell, which starts it unguarded, and exits. Explorer carries no args or env, so "once" is a marker
+ * shell, which starts it unguarded, and exits. Explorer carries no args or env. Explicit requests
+ * continue guarded rather than lose their intent (ADR0031 rule1). For no-argument starts, "once" is a marker
  * file written before the launch: a child that is still enforced and finds a fresh marker logs and
  * continues guarded rather than looping. Returns true when this process should exit.
  * Facts mirrored from the SDK's ShellLaunch.cs: `explorer.exe "<exe>"`, no arguments (Run-key form).
  */
 export function relaunchOutOfGuard(o: {
   trust: RedirectionTrust | null;
+  argv: readonly string[];
   exe: string;
   marker: string;
   log?: (line: string) => void;
   launch?: (exe: string) => void;
 }): boolean {
-  if (o.trust !== "enforced") return false;
+  // Node and SEA reserve argv[0..1]; user arguments start at 2 (nodejs.org/api/single-executable-applications.html#execution-arguments).
+  if (o.trust !== "enforced" || o.argv.slice(2).length) return false;
   const log = o.log ?? console.log;
   try {
     if (Date.now() - statSync(o.marker).mtimeMs < RELAUNCH_WINDOW_MS) {

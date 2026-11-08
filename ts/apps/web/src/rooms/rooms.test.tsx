@@ -3,7 +3,7 @@ import { roomEditKey, roomsRouteState, stagedRoomWrites } from "@pe/agent-contra
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
 import { DEMO_PLAN, DEMO_ROOMS, DEMO_VIEW } from "./demo";
-import { roomsPageSchema } from "./graph";
+import { roomsPageSchema } from "./page";
 import { RoomsPlan } from "./plan";
 import { Pane } from "@pe/kit/lang/pane";
 import { RoomsTable, roomRows } from "./table";
@@ -66,13 +66,7 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
   const onSelect = vi.fn();
   const view = render(
     <>
-      <RoomsTable
-        rows={rows}
-        cells={{}}
-        wire={{ segment: "edits", revision: 0, write: vi.fn() } as never}
-        onSelect={() => {}}
-        empty={{ says: "empty", exit: "none" }}
-      />
+      <RoomsTable rows={rows} onSelect={() => {}} empty={{ says: "empty", exit: "none" }} />
       <RoomsPlan
         renderPane={(body, furniture) => (
           <Pane picture {...furniture}>
@@ -86,8 +80,7 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
         empty={null}
         onSelect={onSelect}
         trace={{ data: null, none: "fixture" }}
-        page={page}
-        setPage={() => {}}
+        page={{ read: () => page, pose: () => {} }}
       />
     </>,
   );
@@ -115,4 +108,55 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
   expect(onSelect).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000001", false);
   cleanup();
   vi.unstubAllGlobals();
+});
+
+
+test("pending Values retain Rooms navigation while edits refuse, then reject late deliveries",async()=>{
+  const {act,screen}=await import("@testing-library/react");
+  const {useSyncExternalStore}=await import("react");
+  const {module}=await import("./route");
+  const {ScopeBody}=await import("./mount");
+  const {RoomsProvider}=await import("./workspace");
+  const {mountTypedRoute}=await import("../shell/typed-mount");
+  const {createFixtureWorkDoor}=await import("../shell/fixture-work-door");
+  const {retainedValueLabel}=await import("../shell/typed-shell");
+  const {workFingerprintSchema}=await import("@pe/agent-contracts");
+  const frames:Parameters<Extract<import("../shell/source-contract").ReadingSource,{kind:"use"|"feed"}>["open"]>[1][]=[];
+  let search=new URLSearchParams();
+  const mount=mountTypedRoute({...module,spec:{...module.spec,panes:{main:{...module.spec.panes.main,draw:(ctx:unknown)=>ctx}}}},
+    {address:{read:()=>search,write:next=>{search=next;},subscribe:()=>()=>{}},fixture:null,target:{kind:"document",ref:{session:"retained",openId:"rooms"}},
+      work:{address:null,open:{session:"retained",openId:"rooms"}},custody:{current:()=>true},memory:()=>({})},
+    workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),{work:createFixtureWorkDoor(roomsRouteState,roomsRouteState.schema.parse({})),
+      sources:{"rooms.workspace":{kind:"use",open:(_context,deliver)=>{frames.push(deliver);return ()=>{};}}}});
+  const ctx=()=>mount.draw("main") as import("./route").RoomsContext;
+  const packet=(label:string)=>({key:"retained",generation:0,version:1,state:"current",value:{
+    data:{roomsWork:roomsRouteState.schema.parse({}),handle:null,snapshot:{...DEMO_ROOMS,levels:[{name:label,elevation:0,views:["First view","Second view"]}]},trace:null,traceError:null,plan:null,planError:null},
+    evaluation:label,inputs:"retained",origin:{kind:"fixture"},trace:[],freshness:"current",coverage:{requested:[],covered:[],unknown:[],refused:[]}}});
+  const emit=(index:number,label:string)=>frames[index]!({kind:"complete",revision:1,value:packet(label)});
+  function Chooser(){useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);const current=ctx();return <RoomsProvider ctx={current}>
+    <ScopeBody ctx={current} page={roomsPageSchema.parse({...current.page.read(),selected:current.page.read().picked})} verbs={()=>null}/>
+    <output>{retainedValueLabel(current.value)}</output></RoomsProvider>;}
+  try {
+    emit(0,"Fixture level");
+    await vi.waitFor(()=>expect(ctx().cells.ready).toBe(true));
+    render(<Chooser/>);
+    fireEvent.click(screen.getByRole("button",{name:"Choose level"}));
+    fireEvent.click(await screen.findByRole("option",{name:/Fixture level/}));
+    expect(mount.page.read().view).toBe("First view");
+    expect(ctx().value).toMatchObject({current:false,status:"pending",publication:{freshness:"refresh-needed"}});
+    expect(screen.getByText("Showing previous Value; refreshing")).toBeTruthy();
+    expect(ctx().cells.ready).toBe(false);
+    expect(await ctx().cells.at(["edits",roomEditKey(DEMO_ROOMS.regions[0]!.guid,"name")]).stage("Unsafe")).not.toBeNull();
+    fireEvent.click(await screen.findByRole("option",{name:"Second view"}));
+    expect(mount.page.read().view).toBe("Second view");
+    await act(async()=>emit(frames.length-1,"Replacement floor"));
+    expect(ctx().value.current).toBe(true);
+    expect(screen.queryByText("Showing previous Value; refreshing")).toBeNull();
+    await act(async()=>emit(0,"Late old floor"));
+    expect(ctx().value.value?.snapshot.levels[0]!.name).toBe("Replacement floor");
+    await act(async()=>mount.refresh());
+    await act(async()=>frames.at(-1)!({kind:"failure",error:"Offline"}));
+    expect(screen.getByText("Showing previous Value; refresh needed")).toBeTruthy();
+    expect(ctx().cells.ready).toBe(false);
+  } finally {cleanup();mount.dispose();}
 });

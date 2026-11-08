@@ -4,7 +4,7 @@
  * three. It changes only with the key or the data: picking a key recolours and never refits.
  */
 import { useMemo } from "react";
-import type { Priced } from "@pe/ducts-domain/pricing";
+import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { snapshotById } from "@pe/ducts-domain/readiness";

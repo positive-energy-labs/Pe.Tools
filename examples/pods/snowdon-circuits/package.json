@@ -1,0 +1,11 @@
+{
+  "name": "@pe/example-snowdon-circuits",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@pe/web": "workspace:*",
+    "@pe/host": "workspace:*",
+    "@pe/agent-contracts": "workspace:*",
+    "zod": "catalog:"
+  }
+}

@@ -7,13 +7,13 @@ import { familyDraftRouteState, type FamilyDraft, type WorkKey } from "@pe/agent
 import { RouteWorkspace } from "@pe/runtime";
 import { createGraphMount, type MountScope } from "#/shell/mount";
 import { familyGraph } from "./graph";
-import { familySources } from "./sources";
+import { familySources, familyWitnessContext, type FamilyMount } from "./sources";
 import { familyBinding, familyCell } from "./actions";
 import { FamilyProvider } from "./workspace";
 import { useFamilyWorkspace } from "./workspace-context";
 import { FamilyWorkspaceDocPane } from "./workspace-doc-pane";
 import { FamilyWorkspaceAnatomy } from "./workspace-anatomy";
-import { familyLockOf, type FamilyMount } from "./store";
+import { familyLockOf } from "./store";
 
 const releases: (() => void)[] = [];
 afterEach(() => {
@@ -60,7 +60,7 @@ function Editor({ owner }: { owner: FamilyMount }) {
   useSyncExternalStore(owner.subscribe, owner.version, owner.version);
   return (
     <RegistryContext value={owner.registry}>
-      <FamilyProvider owner={owner}>
+      <FamilyProvider ctx={familyWitnessContext(owner)}>
         <Cells />
       </FamilyProvider>
     </RegistryContext>
@@ -101,7 +101,6 @@ async function mounted(cells: FamilyDraft["cells"], reading = raw) {
       sources: familySources(),
       binding: familyBinding,
       cell: familyCell,
-      verbDepends: { apply: ["profile"], build: ["profile"] },
       getSnapshot: () => scope,
       subscribe: (notify) => {
         listeners.add(notify);
@@ -131,6 +130,7 @@ async function mounted(cells: FamilyDraft["cells"], reading = raw) {
   owner.connect();
   releases.push(() => owner.dispose());
   render(<Editor owner={owner} />);
+  await waitFor(() => expect(familyWitnessContext(owner).value.current).toBe(true));
   return {
     owner,
     host,

@@ -15,7 +15,7 @@ import type {
   WorkJournalDoor,
   WorkFeedState,
 } from "../../../../packages/agent-contracts/src/work-journal-door";
-import { peReadings, type Readings } from "../readings";
+import { peReadings, type Readings } from "../host/resource-stream";
 import { writeRouteWork } from "../route/host";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type {
@@ -82,6 +82,12 @@ export function createWorkFeedClient(
           let stop = () => {};
           stop = source.subscribe(request, (frame) => {
             if (closed || ("stale" in frame && frame.stale)) return;
+            if (frame.kind === "gap") {
+              cursor = null;
+              deliver({ kind: "pending" });
+              source.dirty(request, "subject");
+              return;
+            }
             if (frame.kind === "failure") {
               deliver({
                 kind: "failed",
@@ -127,7 +133,7 @@ export function createWorkFeedClient(
                 });
                 deliver({ kind: "pending" });
                 cursor = null;
-                source.dirty(request);
+                source.dirty(request, "subject");
                 return;
               }
               cursor = state.cursor;
@@ -214,7 +220,11 @@ export function createWorkFeedClient(
           let stopAcks = () => {};
           let stopSnapshot = () => {};
           const buffered: WorkWriteAck[] = [];
-          const admission = { routeKey: scope.route, fingerprint: scope.fingerprint, ...(scope.reading ? { reading: scope.reading } : {}) };
+          const admission = {
+            routeKey: scope.route,
+            fingerprint: scope.fingerprint,
+            ...(scope.reading ? { reading: scope.reading } : {}),
+          };
           const request = { ...scope.key, kind: "work" as const, admission };
           const stop = () => {
             if (closed) return;
@@ -285,7 +295,22 @@ export function createWorkFeedClient(
             stopAcks = source.subscribe(
               { kind: "work-acks", work: scope.key, admission },
               (frame) => {
-                if (closed || ("stale" in frame && frame.stale)) return;
+                if (closed) return;
+                if (frame.kind === "stale" || ("stale" in frame && frame.stale)) {
+                  const wasReady = !acquiring;
+                  acquiring = true;
+                  emit({ kind: "pending" });
+                  // The ack stream can invalidate after the snapshot already arrived.
+                  // Pending must own a new snapshot request, not wait for an unrelated edit.
+                  if (wasReady && !closed) {
+                    try {
+                      source.dirty(request);
+                    } catch (error) {
+                      fail(error instanceof Error ? error.message : String(error));
+                    }
+                  }
+                  return;
+                }
                 if (frame.kind === "failure")
                   return fail(
                     frame.failure ? workFeedFailureMessage(frame.failure) : frame.error,
@@ -294,6 +319,12 @@ export function createWorkFeedClient(
                 if (frame.kind === "gap")
                   return fail("Work acknowledgement transport lost an unknown revision interval");
                 if (frame.kind === "snapshot" && acquiring) {
+                  if (frame.value === null) {
+                    buffered.length = 0;
+                    revision = null;
+                    emit({ kind: "absent" });
+                    return;
+                  }
                   const parsed = snapshotSchema.safeParse(frame.value);
                   if (!parsed.success) return fail(parsed.error.message);
                   revision = parsed.data.revision;
@@ -320,13 +351,24 @@ export function createWorkFeedClient(
               return stop;
             }
             stopSnapshot = source.subscribe(request, (frame) => {
-              if (closed || ("stale" in frame && frame.stale)) return;
+              if (closed) return;
+              if (frame.kind === "stale" || ("stale" in frame && frame.stale)) {
+                acquiring = true;
+                emit({ kind: "pending" });
+                return;
+              }
               if (frame.kind === "failure")
                 return fail(
                   frame.failure ? workFeedFailureMessage(frame.failure) : frame.error,
                   frame.failure,
                 );
               if (!acquiring || frame.kind !== "snapshot") return;
+              if (frame.value === null) {
+                buffered.length = 0;
+                revision = null;
+                emit({ kind: "absent" });
+                return;
+              }
               const parsed = snapshotSchema.safeParse(frame.value);
               if (!parsed.success) return fail(parsed.error.message);
               revision = parsed.data.revision;

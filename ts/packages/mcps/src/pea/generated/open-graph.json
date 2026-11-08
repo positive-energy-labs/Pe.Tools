@@ -1,0 +1,234 @@
+{
+  "version": 1,
+  "capabilities": [
+    "native-write"
+  ],
+  "key": "open",
+  "address": "/open",
+  "name": "Open document",
+  "directory": {
+    "group": "Start / open work",
+    "summary": "Choose a document and its destination Revit",
+    "label": "Open document",
+    "icon": "Server",
+    "exposure": "Main",
+    "surfaces": {
+      "web": "full",
+      "pwa": "full",
+      "tray": "compact"
+    },
+    "aliases": [
+      "documents",
+      "model",
+      "launcher"
+    ],
+    "runtimeNeed": "Host document discovery and Revit lifecycle",
+    "listed": true,
+    "satellites": []
+  },
+  "fields": {
+    "draft": {
+      "role": "pose",
+      "schema": "draft",
+      "codec": "draft",
+      "initial": {
+        "doc": null,
+        "target": null,
+        "year": null,
+        "owner": "you",
+        "addins": "on",
+        "detach": false,
+        "links": "refuse"
+      },
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "table": {
+      "role": "query",
+      "schema": "table",
+      "codec": "table",
+      "initial": {
+        "query": "",
+        "sorts": []
+      },
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "selected": {
+      "role": "selection",
+      "kinds": [
+        "focus"
+      ]
+    }
+  },
+  "identities": {
+    "subject": {
+      "kind": "local",
+      "codec": "local"
+    },
+    "focus": {
+      "kind": "local",
+      "codec": "local"
+    }
+  },
+  "readings": {
+    "value": {
+      "kind": "use",
+      "entry": "open.documents",
+      "deps": {
+        "page": [
+          "draft",
+          "table",
+          "selected"
+        ],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    }
+  },
+  "verbs": {
+    "stop": {
+      "kind": "command",
+      "input": "none",
+      "label": "Stop Revit",
+      "review": "shown",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "instances.stop",
+      "intent": "stop"
+    },
+    "restart": {
+      "kind": "command",
+      "input": "none",
+      "label": "Hot reload Revit",
+      "review": "shown",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "instances.restart",
+      "intent": "restart"
+    },
+    "start": {
+      "kind": "command",
+      "input": "none",
+      "label": "Start Revit and open",
+      "review": "shown",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "instances.start",
+      "intent": "start"
+    },
+    "open": {
+      "kind": "command",
+      "input": "none",
+      "label": "Open document",
+      "review": "shown",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "instances.open",
+      "intent": "open"
+    },
+    "close": {
+      "kind": "command",
+      "input": "none",
+      "label": "Close document",
+      "review": "shown",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "instances.close",
+      "intent": "close"
+    }
+  },
+  "panes": {
+    "documents": {
+      "label": "Documents",
+      "purpose": "Choose a model and destination Revit",
+      "draws": [
+        "value"
+      ],
+      "verbs": [
+        "stop",
+        "restart",
+        "start",
+        "open",
+        "close"
+      ]
+    }
+  },
+  "layout": {
+    "kind": "pane",
+    "id": "documents"
+  },
+  "stages": {
+    "main": {
+      "word": "Open document",
+      "panes": [
+        "documents"
+      ],
+      "verbs": [
+        "stop",
+        "restart",
+        "start",
+        "open",
+        "close"
+      ]
+    }
+  },
+  "stageOrder": [
+    "main"
+  ],
+  "predicates": {},
+  "cells": {},
+  "workFields": {},
+  "seeds": {},
+  "needs": "nothing",
+  "resetOnTarget": [],
+  "observe": []
+}

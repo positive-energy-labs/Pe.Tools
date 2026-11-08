@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import { ListChips, ListPopup } from "@pe/kit/lang/list-popup";
-import { previousOf, type FieldOptionsData } from "#/shell/readings-hooks";
+import { previousOf, type FieldOptionsData } from "#/host/resource-state";
 import type { ParameterReference, Reading } from "@pe/agent-contracts";
 
 export type FieldOption = {

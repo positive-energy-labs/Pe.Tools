@@ -63,8 +63,9 @@ export type RouteViewRoute = {
 }[RouteKey];
 
 /** Root keys a link carries beside any route's fields; no route declares one. `shell` is never carried. */
-const carryKeys = ["thread", "target", "work"] as const;
+const carryKeys = ["thread", "target", "work", "fixture", "open", "at", "atInstance", "compare"] as const;
 export type Carry = Partial<Record<(typeof carryKeys)[number], string>>;
+type LinkedPage<R extends RouteKey> = R extends RouteKey ? LinkPage<R> & Omit<Carry,keyof FieldsOf<R>> : never;
 
 type Moved<P> = { ok: true; page: P; patch: Partial<P> } | { ok: false; error: string };
 
@@ -125,7 +126,7 @@ export interface RouteAddress<R extends RouteKey> {
    * dropped. A key that is not a URL key is a type error, and a thrown one for an untyped caller;
    * nothing is read from the current location, so no draft or shell leaks.
    */
-  link(page?: LinkPage<R>, carry?: Carry): string;
+  link(page?: LinkPage<R> | LinkedPage<R>, carry?: Carry): string;
   /**
    * A browser Place's link, canonical: `link(page, { target, work })`. The path must be the route's; a
    * draft or the browser `shell` drops; a conversation's `thread`, an unknown key, or a value
@@ -252,6 +253,11 @@ function build(route: RouteKey) {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(page)) {
       const field = fields[key];
+      if (!field && carryKeys.some(name=>name===key)) {
+        if(value !== undefined && typeof value !== "string") throw Error(`${route} shell key '${key}' must be text`);
+        if(value) params.set(key,value);
+        continue;
+      }
       if (!field?.url) throw Error(`${route} links carry no '${key}'`);
       if (field.share === false) continue;
       const written = writeField(field, value);

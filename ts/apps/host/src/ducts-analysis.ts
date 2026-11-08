@@ -1,12 +1,3 @@
-import { createPeClient } from "@pe/agent-contracts/pe-api";
-import { contextFetch } from "@pe/runtime/context";
-import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  HOST_RPC_DOCUMENT_HEADER,
-} from "@pe/host-contracts/operation-types";
-import { readFile } from "node:fs/promises";
-import { gzipSync, gunzipSync } from "node:zlib";
-import { join } from "node:path";
 import {
   addressSchema,
   canonicalRouteInput,
@@ -14,13 +5,10 @@ import {
   ductsDesign,
   ductsDocumentSchema,
   fansDocumentSchema,
-  salvageWork,
   ductsApplyRequestArtifactSchema,
   ductsApplyInputSchema,
   ductsApplyRequestProducerSchema,
   stagedDucts,
-  salvageDuctsWork,
-  type DuctFinding,
   type DuctPortPin,
   type DuctComponentWitness,
   type DocumentRef,
@@ -30,8 +18,9 @@ import {
   type DuctsAnalysisRequest,
   type DuctsAnalysisResponse,
 } from "@pe/agent-contracts";
-import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
+import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { assessDucts } from "@pe/ducts-domain/assessment";
+import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import {
   price,
@@ -42,6 +31,14 @@ import {
 } from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import {
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
+} from "@pe/host-contracts/operation-types";
+import { contextFetch } from "@pe/runtime/context";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { gzipSync, gunzipSync } from "node:zlib";
 import type { DocumentMarks } from "./document-marks.ts";
 import { sha256Hex, writeArtifact } from "./page-artifacts.ts";
 
@@ -73,8 +70,6 @@ type EffectiveInputs = {
   fans: FansRouteDocument;
   catalogs?: Catalogs;
   catalogFindings?: string[];
-  /** Saved Work segments/cells this version could not read and priced without (see salvageDuctsWork). */
-  workDropped?: string[];
 };
 const solve = ({
   snapshot: raw,
@@ -329,8 +324,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       target,
     );
     const owned = await sources.readWork(key);
-    const salvaged = owned ? salvageDuctsWork(owned.doc) : null;
-    const work = salvaged?.doc ?? null;
+    const work = owned ? ductsDocumentSchema.parse(owned.doc) : null;
     const fansKey = bindWork(
       "fans",
       observation.address ? addressSchema.parse(observation.address) : null,
@@ -339,12 +333,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     );
     const fansOwned = await sources.readWork(fansKey);
     if (!fansOwned) throw Error("Fans Work is unreadable at this binding");
-    const fansSalvaged = salvageWork(fansDocumentSchema, fansOwned.doc);
-    const fans = fansSalvaged.doc;
-    const workDropped = [
-      ...(salvaged?.dropped ?? []),
-      ...fansSalvaged.dropped.map((cell) => `fans:${cell}`),
-    ];
+    const fans = fansDocumentSchema.parse(fansOwned.doc);
     const acquisition: Artifact["acquisition"] = [];
     async function read(key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables", request: unknown) {
       const response = await sources.call(key, request, target);
@@ -389,7 +378,6 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       fans,
       catalogs: catalogs.tables,
       catalogFindings: catalogs.findings,
-      ...(workDropped.length ? { workDropped } : {}),
     } satisfies EffectiveInputs);
     if (Buffer.byteLength(inputJson) > MAX_BYTES)
       throw Error("Full analysis inputs exceed the byte budget; graph was not clipped");
@@ -449,7 +437,6 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       artifact.work.kind !== "canonical" ||
       artifact.work.revision === null ||
       !input.work ||
-      input.workDropped?.length ||
       artifact.freshness.state !== "fresh"
     )
       throw Error(
@@ -621,16 +608,6 @@ const countBy = <T>(items: T[], key: (item: T) => string) =>
     return acc;
   }, {});
 
-/** The facts about saved Work that could not be read in full; the price ran without it. Pea writes what to say. */
-const unreadableWorkFinding = (dropped: string[]): DuctFinding => ({
-  id: "work:unreadable",
-  kind: "unreadable-work",
-  elementIds: [],
-  note: `Saved Work for this document has cells this version cannot read: ${dropped.join(", ")}. The rest of the Work still holds. Edit those values again to keep them, or use Start fresh to preserve the original aside and start empty Work.`,
-  assumed: "Priced from Revit facts alone; the unreadable saved values were not applied.",
-  clearer: "person",
-});
-
 function project(
   artifact: Artifact,
   input: EffectiveInputs,
@@ -649,7 +626,6 @@ function project(
   });
   const { snapshot, flows, groups, selectedTerminals, reached, equipment } = assessment;
   const findings = [
-    ...(input.workDropped?.length ? [unreadableWorkFinding(input.workDropped)] : []),
     ...assessment.findings,
   ];
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));

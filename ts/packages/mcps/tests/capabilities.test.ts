@@ -15,11 +15,16 @@ import {
 import { buildCapabilities, createCapabilityCatalogSource } from "../src/pea/capabilities.ts";
 import { builtinPeaSkillSnapshots } from "../src/pea/skill-publication.ts";
 import type { PackageProjection } from "@pe/agent-contracts";
-import { peDo, peRead } from "../src/pea/capability-tools.ts";
+import { peDo, peRead, peFind } from "../src/pea/capability-tools.ts";
 
+import { nativeFixture } from "../../../apps/host/tests/fans-native.fixture.ts";
+import { commands } from "@pe/agent-contracts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 import { createServer } from "node:http";
 import { once } from "node:events";
+import bindGraph from "../src/pea/generated/bind-graph.json" with { type: "json" };
+import opsGraph from "../src/pea/generated/ops-graph.json" with { type: "json" };
+import { RouteGraphJson } from "../../agent-contracts/src/route-kernel-data.ts";
 import { createHash } from "node:crypto";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
@@ -488,6 +493,86 @@ async function withHead<T>(head: Head, body: () => Promise<T>): Promise<T> {
 const run = (tool: ExecutableTool, input: unknown, head = turn) =>
   withHead(head, () => tool.execute!(input as never, { agent: { toolCallId: "call-1" } } as never));
 
+test("Pea discovers the Ducts Plan owner, refuses Fans at schema decode, and previews Ducts", async () => {
+  fakeRuntimeHost("http://127.0.0.1:19999");
+  const f = await nativeFixture();
+  try {
+    const staged = await f.saved.apply(
+      { ...f.key, route: "fans" },
+      "fans",
+      "human",
+      [
+        { path: ["flows", "4", "edit"], value: { value: { cfm: 250 } } },
+        { path: ["parameters", "terminalFlow", "edit"], value: { value: "PE_M_Grd_AirFlow" } },
+      ],
+      0,
+    );
+    expect(staged.ok).toBe(true);
+    const ducts = await f.saved.apply(
+      f.key,
+      "ducts",
+      "human",
+      [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } }],
+      0,
+    );
+    expect(ducts.ok).toBe(true);
+    const fans = (await f.saved.view({ ...f.key, route: "fans" }, "fans"))!.handle;
+    const work = (await f.saved.view(f.key, "ducts"))!.handle;
+    const source = catalog();
+    const paths: string[] = [];
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const request = new Request(input, init);
+      const path = new URL(request.url).pathname;
+      paths.push(path);
+      if (path === "/pe/capabilities") return Response.json(source);
+      if (path === "/ops") return Response.json({ operations: [] });
+      return path.startsWith("/pe/")
+        ? f.api.fetch(request)
+        : f.request(request, { kind: "pea", context: "context-t1", thread: "t1" });
+    });
+    const head: Head = {
+      thread: "t1",
+      revision: 1,
+      targets: [{ request: { kind: "open", ref: f.target.ref }, admission: null }],
+    };
+    const discovery = (await run(peFind, { query: "ducts.plan-losses", limit: 8 }, head)) as {
+      matches: Array<{ key: string; description: string; input: unknown }>;
+    };
+    const row = discovery.matches.find((row) => row.key === "op:ducts.plan-losses")!;
+    expect(row.description).toContain("route:ducts Work handle");
+    const schema = row.input as {
+      properties: {
+        work: {
+          properties: { key: { oneOf: Array<{ properties: { route: { const: string } } }> } };
+        };
+      };
+    };
+    expect(
+      schema.properties.work.properties.key.oneOf.map((branch) => branch.properties.route.const),
+    ).toEqual(["ducts", "ducts", "ducts", "ducts"]);
+    expect(commands["ducts.plan-losses"].input.safeParse({ work: fans }).success).toBe(false);
+    const before = paths.length;
+    const refused = await run(
+      peDo,
+      { key: row.key, input: { work: fans }, timeoutSeconds: 5 },
+      head,
+    );
+    expect(refused).toMatchObject({ ok: false, content: expect.stringContaining("route:ducts Work handle") });
+    expect(JSON.stringify(refused)).toContain("work");
+    expect(paths.slice(before)).not.toContain("/pe/route-state/ducts");
+    expect(await f.journal.list()).toHaveLength(0);
+    const preview = await run(peDo, { key: row.key, input: { work }, timeoutSeconds: 5 }, head);
+    expect(preview, JSON.stringify(preview)).toMatchObject({
+      ok: true,
+      result: { state: "succeeded", result: { previewOnly: true } },
+    });
+    expect(f.dispatched.some((row) => row.key === "ducts.apply.plan")).toBe(true);
+    expect(f.dispatched.some((row) => row.key === "ducts.apply")).toBe(false);
+  } finally {
+    await f.close();
+  }
+});
+
 test("an exact-open turn Target reads and writes route Work under its document's Address (E2E-J1)", async () => {
   // The browser keys Families Work by the Chat document's Address; a Pea read that dropped the
   // Address hit the Target-less key, found no Work, and reported "unknown route 'families'".
@@ -583,7 +668,7 @@ test("a linked catalog route dispatches through its declared transport whatever 
   const listed = catalog();
   // Presentation kind is display only: a catalog route labelled as an op still runs as its route (before S1, kind "op" threw in dispatch).
   listed.capabilities = listed.capabilities.map((row) =>
-    row.key === "route:ducts.roster" ? { ...row, kind: "op" } : row,
+    row.key === "route:reads.value" ? { ...row, kind: "op" } : row,
   );
   const called: string[] = [];
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
@@ -592,13 +677,13 @@ test("a linked catalog route dispatches through its declared transport whatever 
     called.push(`${init?.method ?? "GET"} ${url.pathname}`);
     return Response.json({ rows: [] });
   });
-  const done = (await run(peDo, { key: "route:ducts.roster", input: { target: { session: "b1", openId: "A" } }, timeoutSeconds: 30 })) as {
+  const done = (await run(peDo, { key: "route:reads.value", input: { read: "fans.roster", args: { target: { session: "b1", openId: "A" } }, subscription: "presentation-kind", generation: 0 }, timeoutSeconds: 30 })) as {
     ok: boolean;
     result: unknown;
   };
   expect(done).toMatchObject({ ok: true, result: { rows: [] } });
   expect(called).toHaveLength(1);
-  expect(called[0]).toMatch(/ducts/);
+  expect(called[0]).toMatch(/reads\/value/);
 });
 
 test("ADR 0021: a thread with several targets refuses a call with no override; an override names one", async () => {
@@ -871,43 +956,44 @@ test("the live head names an open lifetime; reopen needs an explicit override an
   }
 });
 
-test("Pea dispatches roster and sheet through their declared routes without an analysis read", async () => {
+test("Pea dispatches roster and sheet through the registered read door without an analysis read", async () => {
   fakeRuntimeHost("http://127.0.0.1:9");
   const target = { session: "s1", openId: "open-1" };
   let fail = false;
   vi.stubGlobal("fetch", async (url: string | URL | Request, init?: RequestInit) => {
     const path = new URL(url instanceof Request ? url.url : String(url)).pathname;
     if (path === "/pe/capabilities") return Response.json(catalog());
-    if (path === "/pe/ducts/roster") {
-      expect(JSON.parse(init?.body as string)).toEqual({ target });
+    const request = JSON.parse(init?.body as string);
+    if (path === "/pe/reads/value" && request.read === "fans.roster") {
+      expect(request).toEqual({ read: "fans.roster", args: { target }, subscription: "pea-roster", generation: 0 });
       return Response.json({ target, rows: [] });
     }
-    if (path === "/pe/ducts/sheet") {
-      expect(JSON.parse(init?.body as string)).toMatchObject({
+    if (path === "/pe/reads/value" && request.read === "ducts.sheet") {
+      expect(request).toMatchObject({ read: "ducts.sheet", subscription: "pea-sheet", generation: 0, args: {
         target,
         mode: "fan",
         unitId: 14577391,
         portIndex: 2,
-      });
+      } });
       if (fail) return Response.json({ error: "Stale sheet basis" }, { status: 409 });
       return Response.json({ target, kind: "overview", mode: "fan", basis: "observation" });
     }
     throw Error(`Unexpected guide request ${path}`);
   });
   expect(
-    await run(peRead, { key: "route:ducts.roster", input: { target }, timeoutSeconds: 30 }),
+    await run(peRead, { key: "route:reads.value", input: { read: "fans.roster", args: { target }, subscription: "pea-roster", generation: 0 }, timeoutSeconds: 30 }),
   ).toMatchObject({
     ok: true,
     target: { session: "s1", document: "open-1" },
     result: { rows: [] },
   });
-  const input = { target, mode: "fan", unitId: 14577391, portIndex: 2 };
-  expect(await run(peRead, { key: "route:ducts.sheet", input, timeoutSeconds: 30 })).toMatchObject({
+  const input = { read: "ducts.sheet", args: { target, mode: "fan", unitId: 14577391, portIndex: 2 }, subscription: "pea-sheet", generation: 0 };
+  expect(await run(peRead, { key: "route:reads.value", input, timeoutSeconds: 30 })).toMatchObject({
     ok: true,
     result: { kind: "overview", basis: "observation" },
   });
   fail = true;
-  expect(await run(peRead, { key: "route:ducts.sheet", input, timeoutSeconds: 30 })).toMatchObject({
+  expect(await run(peRead, { key: "route:reads.value", input, timeoutSeconds: 30 })).toMatchObject({
     ok: false,
   });
 });
@@ -959,13 +1045,14 @@ test("route:ducts.set-view with no mounted view opens only through an explicit c
   expect(opens).toMatchObject([{ thread: "t1" }]);
   expect(opens[0]).not.toHaveProperty("link");
   expect(reads).toBeGreaterThanOrEqual(2);
-  // The open is the set: the mounted view's own names resolve "sa 19", and its lease revision is used.
+  // Transport-only fixture: MCP preserves casing and uses the acquired lease revision.
+  // pea-casing.test.tsx drives name resolution through the actual mounted typed owner and its ack.
   expect(sets).toMatchObject([
     {
       thread: "t1",
       instance: "6f1c2a9e-4b7d-4c3e-9a1f-2d8e5b7c0a11",
       revision: 3,
-      patch: { system: "SA 19" },
+      patch: { system: "sa 19" },
     },
   ]);
   expect(result).toMatchObject({ ok: true });
@@ -1010,6 +1097,22 @@ test("route:ducts.set-view with no mounted view opens only through an explicit c
   }
   expect(opens).toHaveLength(1);
   expect(sets).toEqual([]);
+});
+
+test("person-only admin routes expose no Page fields in builtin or admitted capability discovery", () => {
+  for (const admitted of [[], [bindGraph, opsGraph]]) {
+    const rows = buildCapabilities({
+      ops: [], routes: [], packages: [], skills: [],
+      admittedRoutes: () => admitted.map(graph => {
+        const data = RouteGraphJson.parse(graph);
+        return { key: data.key, title: data.name, address: data.address, fields: data.fields };
+      }),
+    });
+    for (const key of ["bind", "ops"]) {
+      expect(rows.filter(row => row.key.startsWith(`route:${key}.`))).toEqual([]);
+    }
+    expect(rows.some(row => row.key === "route:ducts.set-view")).toBe(true);
+  }
 });
 
 test("an admitted route's view rows project keys from its agent policy, never the legacy codec", () => {

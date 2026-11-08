@@ -1,24 +1,23 @@
 import { z } from "zod";
 import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/generated";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { healPlan } from "@pe/ducts-domain/heal";
+import type { HealView as HealPlan } from "@pe/ducts-domain/pricing-view";
 import { healSystems, healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
-import { ductsHealInputSchema, ductsDesign, neutralFansWork } from "@pe/agent-contracts";
-import type { BodyContext } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
-import type { ductsData, schemas, entries } from "./neutral.ts";
-type ReviewContext = BodyContext<
-  typeof ductsData,
-  typeof schemas,
-  typeof entries,
-  typeof ductsData.verbs.losses
->;
+import { ductsHealInputSchema } from "@pe/agent-contracts";
 type ReviewEvidence = {
-  readonly page?: Partial<Omit<ReviewContext["page"], "stage">> & {
-    readonly stage?: "network" | "sheet";
-  };
-  readonly work?: ReviewContext["work"] | null;
+  readonly heal?: import("@pe/agent-contracts").Immutable<Pick<HealPlan,"groups">> | null;
+  readonly page?: { readonly stage?: "network" | "sheet" };
+  readonly work?:
+    | import("@pe/agent-contracts").Immutable<import("@pe/agent-contracts").DuctsRouteDocument>
+    | null;
   readonly readings: {
-    readonly [K in keyof ReviewContext["readings"]]?: Pick<ReviewContext["readings"][K], "value">;
+    readonly ducts?: { readonly value?: unknown };
+    readonly sheetSnapshot?: { readonly value?: unknown };
+    readonly fansWork?: {
+      readonly value?: import("@pe/agent-contracts").Immutable<
+        import("@pe/agent-contracts").FansDocument
+      >;
+    };
   };
 };
 import { elementLabeler as subjectNamer } from "@pe/ducts-domain/element-label";
@@ -66,9 +65,7 @@ export function presentHeal(result: unknown, scope: ReviewEvidence) {
   const response = responseOf<DuctsHeal.Res.Response>(result);
   const snapshot = snapshotOf(scope);
   const name = snapshot ? subjectNamer(snapshot) : () => null;
-  const plan = snapshot
-    ? healPlan(snapshot, ductsDesign(scope.work ?? null, scope.readings.fansWork?.value ?? neutralFansWork))
-    : null;
+  const plan = scope.heal ?? null;
   const targets = response.groups.flatMap((group) =>
     group.items.map((item) => {
       const proposed = plan?.groups
@@ -171,103 +168,136 @@ const spoken = (value: string | null | undefined) =>
 export function presentLosses(result: unknown, scope: ReviewEvidence) {
   const response = responseOf<DuctsApply.Res.Response>(result);
   const envelope = result as {
+    seal?: { caller?: { kind?: string } };
     derivedRequest?: import("@pe/agent-contracts").DuctsApplyInput;
     receipt?: { result?: { derivedRequest?: import("@pe/agent-contracts").DuctsApplyInput } };
   };
+  const caller = envelope.seal?.caller?.kind;
+  const author: "human" | "pea" | null = caller === "human" || caller === "pea" ? caller : null;
   const request = envelope.derivedRequest ?? envelope.receipt?.result?.derivedRequest;
   const snapshot =
     snapshotOf(scope) ?? (scope.readings.sheetSnapshot?.value as DuctSnapshot | undefined);
   const slots = { ...snapshot?.slots, ...request?.slots };
-  const name = snapshot ? subjectNamer(snapshot) : () => null;
-  const lines = response.writes.map((write) => {
-      const proposed =
-        write.kind === "component"
-          ? request?.components?.find((r) => r.id === write.id)
-          : write.kind === "terminal"
-            ? request?.terminals?.find((r) => r.id === write.id)
-            : write.kind === "equipment-flow"
-              ? request?.equipmentFlows?.find((r) => r.id === write.id)
+  const name = snapshot ? subjectNamer(snapshot, { unique: true }) : () => null;
+  const lines = response.writes.flatMap((write) => {
+    const proposed =
+      write.kind === "component"
+        ? request?.components?.find((r) => r.id === write.id)
+        : write.kind === "terminal"
+          ? request?.terminals?.find((r) => r.id === write.id)
+          : write.kind === "equipment-flow"
+            ? request?.equipmentFlows?.find((r) => r.id === write.id)
+            : write.kind === "terminal-flow"
+              ? request?.terminalFlows?.find((r) => r.id === write.id)
+              : write.kind === "equipment"
+                ? request?.equipment?.find((r) => r.id === write.id)
+                : write.kind === "fitting"
+                  ? request?.fittings?.find((r) => r.id === write.id)
+                  : undefined;
+    const slot =
+      write.kind === "equipment-flow"
+        ? slots.fanFlow
+        : write.kind === "equipment"
+          ? slots.fanStatic
+          : write.kind === "component"
+            ? "Specific Loss"
+            : write.kind === "terminal"
+              ? slots.terminalDrop
               : write.kind === "terminal-flow"
-                ? request?.terminalFlows?.find((r) => r.id === write.id)
-                : write.kind === "equipment"
-                  ? request?.equipment?.find((r) => r.id === write.id)
-                  : write.kind === "fitting"
-                    ? request?.fittings?.find((r) => r.id === write.id)
-                    : undefined;
-      const slot =
-        write.kind === "equipment-flow"
-          ? slots.fanFlow
-          : write.kind === "equipment"
-            ? slots.fanStatic
-            : write.kind === "component"
-              ? "Specific Loss"
-              : write.kind === "terminal"
-                ? slots.terminalDrop
-                : proposed && "slot" in proposed
-                  ? proposed.slot
-                  : (write.key ?? write.kind);
-      const next =
-        proposed && "inWg" in proposed
-          ? `${proposed.inWg} in-wg`
-          : proposed && "cfm" in proposed
-            ? `${proposed.cfm} cfm`
-            : proposed && "externalStaticInWg" in proposed
-              ? `${proposed.externalStaticInWg} in-wg`
-              : proposed && "coefficient" in proposed
-                ? `C = ${proposed.coefficient}`
-                : null;
-      const source =
-        proposed && "source" in proposed
-          ? (proposed.source ?? "Work")
-          : proposed && "table" in proposed
-            ? proposed.table
-            : proposed
-              ? "Work"
-              : "derived Work";
-      const tail = `${write.outcome}${write.reason ? ` · ${write.reason}` : ""}`;
-      const before = spoken(write.before) ?? null;
-      const key = `${write.kind}:${write.id ?? write.key ?? ""}`;
-      // The store row is Pe's provenance record in Project Information; its "absent"/"revision n" are machine words.
-      // A slot entry names the slot the value resolver now reads (after), not only the record's old name.
-      if (write.id == null && write.kind === "slot") {
-        const label = `Pe loss record (Project Information): ${SLOT_WORDS[write.key ?? ""] ?? write.key} slot`;
-        return {
-          row: `${label} ${before ?? "none"} → ${spoken(write.after) ?? "none"} · ${tail}`,
-          cell: { key, label, before, after: `${spoken(write.after) ?? "none"} · ${tail}`, author: "unknown" as const },
-        };
-      }
-      if (write.id == null) {
-        const label = "Pe loss record (Project Information)";
-        return {
-          row: `${label}: ${write.before === "absent" ? "none yet → created" : `${before ?? "not available"} → updated`} · ${tail}`,
-          cell: {
-            key,
-            label,
-            before: write.before === "absent" ? "none yet" : before,
-            after: `${write.before === "absent" ? "created" : "updated"} · ${tail}`,
-            author: "unknown" as const,
-          },
-        };
-      }
-      const label = `${name(write.id) ?? "element"} · ${slot ?? write.kind}`;
-      const after = spoken(write.after) ?? next ?? "derived from Work";
+                ? proposed && "slot" in proposed ? proposed.slot : slots.terminalFlow: write.kind === "fitting"
+                  ? "Loss Method"
+                  : proposed && "slot" in proposed
+                    ? proposed.slot
+                    : (write.key ?? write.kind);
+    const next =
+      proposed && "inWg" in proposed
+        ? `${proposed.inWg} in-wg`
+        : proposed && "cfm" in proposed
+          ? `${proposed.cfm} cfm`
+          : proposed && "externalStaticInWg" in proposed
+            ? `${proposed.externalStaticInWg} in-wg`
+            : proposed && "coefficient" in proposed
+              ? `C = ${proposed.coefficient}`
+              : null;
+    const source =
+      proposed && "source" in proposed
+        ? (proposed.source ?? "Work")
+        : proposed && "table" in proposed
+          ? proposed.table
+          : proposed
+            ? "Work"
+            : "derived Work";
+    const tail = `${write.outcome}${write.reason ? ` · ${write.reason}` : ""}`;
+    const before = spoken(write.before) ?? null;
+    const key = `${write.kind}:${write.id ?? write.key ?? ""}`;
+    // The store row is Pe's provenance record in Project Information; its "absent"/"revision n" are machine words.
+    // A slot entry names the slot the value resolver now reads (after), not only the record's old name.
+    if (write.id == null && write.kind === "slot") {
+      const label = `Pe loss record (Project Information): ${SLOT_WORDS[write.key ?? ""] ?? write.key} slot`;
       return {
-        row: `${label}: ${before ?? "not available"} → ${after} · source: ${source} · ${tail}`,
+        row: `${label} ${before ?? "none"} → ${spoken(write.after) ?? "none"} · ${tail}`,
         cell: {
           key,
           label,
+          group: "Pe loss record",
           before,
-          after: `${after} · ${source} · ${tail}`,
-          author: fanAuthor(scope, write.kind, write.id),
+          after: `${spoken(write.after) ?? "none"} · ${tail}`,
+          author: author ?? ("unknown" as const),
+        },
+      };
+    }
+    if (write.id == null) {
+      const label = "Pe loss record (Project Information)";
+      return {
+        row: `${label}: ${write.before === "absent" ? "none yet → created" : `${before ?? "not available"} → updated`} · ${tail}`,
+        cell: {
+          key,
+          label,
+          group: "Pe loss record",
+          before: write.before === "absent" ? "none yet" : before,
+          after: `${write.before === "absent" ? "created" : "updated"} · ${tail}`,
+          author: author ?? ("unknown" as const),
+        },
+      };
+    }
+    // Write review is an audit: show a searchable id here. element-label.ts stays id-free elsewhere.
+    const element = `${write.elementLabel ?? name(write.id) ?? "element"} · ${write.id}`;
+    const group = write.kind === "component" &&
+      !scope.readings.fansWork?.value?.componentDrops?.[String(write.id)]?.edit
+        ? "Computed losses written back" : "Your edits";
+    const changes = write.changes?.length ? write.changes : [{
+      parameter: write.parameter ?? slot ?? write.kind, before: write.before, after: write.after ?? next,
+    }];
+    return changes.map((change, index) => {
+      const label = `${element} · ${change.parameter}${write.scope ? ` (${write.scope})` : ""}`;
+      const reported = change.parameter === "Specific Loss" && write.reportedPressureDropInWg != null
+        ? ` (reported effective pressure: ${write.reportedPressureDropInWg} in-wg)` : "";
+      const before = change.before == null ? null : `${spoken(change.before)}${reported}`;
+      const after = spoken(change.after) ?? "unavailable";
+      const remedy = write.outcome === "refused" && /neither|missing|no .*parameter/i.test(write.reason ?? "")
+        ? "; add the missing parameter to the family or map to an existing writable parameter" : "";
+      return {
+        row: `${label}: ${before ?? "unavailable"} → ${after} · source: ${source} · ${tail}${remedy}`,
+        cell: {
+          key: changes.length === 1 ? key : `${key}:${index}`,
+          label, group, before,
+          after: `${after} · ${source} · ${tail}${remedy}`,
+          author: author ?? fanAuthor(scope, write.kind, write.id!),
         },
       };
     });
+  });
   return {
     sentence: response.writes.length
       ? `${response.writes.length} Revit target${response.writes.length === 1 ? "" : "s"}: ${outcomeWords(response)}`
       : "Nothing to write: no native targets were derived from this Work in the selected scope.",
     rows: lines.map((line) => line.row),
-    cells: lines.map((line) => line.cell),
+    cells: lines.map((line) => line.cell)
+      .sort(
+        (a, b) =>
+          ["Your edits", "Computed losses written back", "Pe loss record"].indexOf(a.group) -
+          ["Your edits", "Computed losses written back", "Pe loss record"].indexOf(b.group),
+      ),
   };
 }
 

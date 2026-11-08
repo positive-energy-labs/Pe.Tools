@@ -2,14 +2,13 @@ import { expect, test } from "vite-plus/test";
 import { bindWork, type WorkWriteAck } from "@pe/agent-contracts";
 import { createWorkJournal } from "#/shell/journal";
 import { writeLabel } from "#/shell/work-writes";
-import { ductsData } from "../neutral";
 import { editLabel, presentInputHistory } from "./input-history.neutral";
 
 test("staging the write scope is named in History and never shown in Inputs", () => {
   const key = bindWork("ducts", null, "inputs-internal");
   const journal = createWorkJournal(key);
   journal.name((patches) =>
-    writeLabel(patches, { workFields: { writeIntent: ductsData.workFields.writeIntent } }),
+    writeLabel(patches, { workFields: { writeIntent: { label: "write scope", internal: true } } }),
   );
   const ack = (revision: number, path: string[], press: string): WorkWriteAck => ({
     key,

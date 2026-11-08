@@ -1,22 +1,15 @@
-import { currentFixture } from "#/shell/fixture-lane";
-import { createContext, use, useEffect, useMemo, useState, type ReactNode } from "react";
-import { message, type PodRouteDescriptor } from "@pe/agent-contracts";
+import { currentFixture } from "../shell/fixture-name";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { type PodRouteDescriptor } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { readPeError } from "@pe/host-contracts/pe-api";
-import { registerRoute } from "../shell/route-registration";
-import { admitPodArtifact } from "./pod-artifact";
+import { registerTypedRoute } from "../shell/route-registration";
+import { loadPodRoute } from "./pod-module";
 import { createPodRouteLoader } from "./pod-loader";
+import { readableRefusal } from "./readable-refusal";
 
-type Inventory = {
-  rows: PodRouteDescriptor[];
-  errors: Readonly<Record<string, string>>;
-  loading: boolean;
-  trust: (row: PodRouteDescriptor, trusted: boolean) => Promise<void>;
-};
-const Context = createContext<Inventory | null>(null);
-export function usePodRoutes() {
-  return use(Context);
-}
+import {PodRoutesContext} from "./pod-route-context";
+export {usePodRoutes} from "./pod-route-context";
 
 export function PodRoutesProvider({ children }: { children: ReactNode }) {
   const [rows, setRows] = useState<PodRouteDescriptor[]>([]);
@@ -40,11 +33,11 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
           if (!response.ok) throw Error((await readPeError(response)).message);
           artifact = await response.json();
         }
-        const route = await admitPodArtifact(row, artifact);
+        const route = await loadPodRoute(row, artifact);
         if (!current()) return () => {};
-        return registerRoute(route);
+        return registerTypedRoute(route.module, route.fingerprint);
       } catch (error) {
-        if (current()) setErrors((prior) => ({ ...prior, [row.key]: message(error) }));
+        if (current()) setErrors((prior) => ({ ...prior, [row.key]: readableRefusal(error, "Pod route unavailable: its artifact does not match the typed route contract. Rebuild this Pod before trusting it.") }));
         throw error;
       }
     });
@@ -82,7 +75,7 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
       })
       .catch(async (error: unknown) => {
         if (controller.signal.aborted) return;
-        setErrors({ inventory: message(error) });
+        setErrors({ inventory: readableRefusal(error, "Pod inventory unavailable: the host response does not match its contract. Refresh to try again.") });
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -96,5 +89,5 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
     });
     await publish(next);
   };
-  return <Context value={{ rows, errors, loading, trust }}>{children}</Context>;
+  return <PodRoutesContext value={{ rows, errors, loading, trust }}>{children}</PodRoutesContext>;
 }

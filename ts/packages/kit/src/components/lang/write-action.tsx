@@ -9,7 +9,9 @@
  * "checked in Revit" is the caller's, derived from the plan entry's catalog effect (a TransactRead
  * rehearsal) and never from a response flag.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, useReducer, type ReactNode } from "react";
+import { z } from "zod";
+import { writePreviewSchema, writeResponseSchema } from "@pe/agent-contracts";
 import { Popover } from "@base-ui/react/popover";
 import type { LucideIcon } from "lucide-react";
 
@@ -23,6 +25,7 @@ export type WriteRun = Promise<{ readonly message: string } | null>;
 /** One consumed value the write changes: the model's value, the staged one, and who staged it. */
 export interface WriteCell {
   key: string;
+  group?: string;
   label: string;
   before: string | null;
   after: string;
@@ -41,6 +44,79 @@ export interface WriteHeld {
 }
 
 const AUTHOR = { pea: "Pea", human: "you", unknown: "unknown author" } as const;
+
+export interface PlanReview {
+  preview?: unknown;
+  sentence: string | null;
+  rows: readonly string[];
+  cells?: readonly WriteCell[];
+  stale: boolean;
+}
+
+/** Structural plan handle supplied by the shell; kit owns no Work, consent or transport. */
+export interface PlanHandle {
+  readonly pending?: boolean;
+  readonly refusal?: string | null;
+  readonly failure?: string | null;
+  readonly consent?: { until: string; run(): void; content?:ReactNode } | null;
+  plan(): unknown;
+  apply(): unknown;
+  cancel(): unknown;
+  read(): PlanReview | null;
+}
+const reviewSchema = z.object({
+  preview: z.unknown().optional(),
+  sentence: z.string().nullable(),
+  rows: z.array(z.string()),
+  cells: z.array(z.object({
+    key: z.string(), group: z.string().optional(), label: z.string(),
+    before: z.string().nullable(), after: z.string(), author: z.enum(["pea", "human", "unknown"]),
+  })).optional(),
+  stale: z.boolean(),
+});
+
+/** The handle stays authoritative across remounts; local state only redraws after a gesture. */
+export function PreviewAction({ handle, label, children, says = `Plan ${label} from current Work`, ...props }: {
+  handle: PlanHandle;
+  children?:ReactNode;
+  label: string;
+  says?: string;
+} & Pick<WriteActionProps, "refusal" | "busy" | "failed" | "reject" | "icon">) {
+  const [, redraw] = useReducer((value) => value + 1, 0);
+  const raw = handle.read();
+  const parsed = reviewSchema.safeParse(raw);
+  const review = parsed.success ? parsed.data : null;
+  const nativeWrites = z.object({ value: z.object({ writes: z.array(z.object({ outcome: z.string(), reason: z.string().optional() })) }) }).safeParse(review?.preview);
+  const refused = nativeWrites.success ? nativeWrites.data.value.writes.filter(write => write.outcome === "refused") : [];
+  const preview = writePreviewSchema.safeParse(review?.preview);
+  const planRefusal = preview.success ? preview.data.planRefusal ?? preview.data.planRefusalCode : null;
+  const refusal = planRefusal ?? (refused.length
+    ? [...new Set(refused.map(write => write.reason).filter(Boolean))].join("; ") || `${refused.length} planned writes were refused.`
+    : null);
+  const empty = nativeWrites.success && (!nativeWrites.data.value.writes.some((write) => write.outcome === "planned") ||
+      nativeWrites.data.value.writes.some((write) => write.outcome === "refused"));
+  const sealed = !!review && !review.stale && writeResponseSchema.safeParse(review.preview).success;
+  const run = async (action: () => unknown): WriteRun => {
+    try { await action(); return null; }
+    catch (error) { return { message: error instanceof Error ? error.message : String(error) }; }
+    finally { redraw(); }
+  };
+  const consent=handle.consent??props.reject;
+  return (
+    <WriteAction {...props} busy={handle.pending ?? props.busy} refusal={handle.refusal ?? props.refusal} reject={consent?{...consent,content:children??consent.content}:null} label={`plan ${label}`} says={says}
+    failed={raw != null && !parsed.success ? "Plan review unavailable" : (handle.failure ?? props.failed)
+      }
+    held={review && !review.stale ? {
+      word: writeWord(label, review.cells?.length || review.rows.length, false),
+      summary: review.sentence ?? "",
+      ...(review.cells?.length ? { cells: review.cells } : { rows: review.rows }),
+    } : null}
+    stale={review?.stale ? "changed since plan" : null}
+    plan={() => run(() => handle.plan())}
+    apply={{ hidden: empty, label, says: `${label} what the plan sealed`, refusal: refusal ?? (sealed ? null : "Plan the current Work first"),
+      run: () => run(() => handle.apply()), done: `${label} sent`,
+      }} />);
+}
 /** The armed word. A plan is a Read: only a successful declared rehearsal says "checked in Revit". */
 export const writeWord = (verb: string, count: number, rehearsed: boolean) =>
   `${verb} · ${rehearsed ? "checked in Revit" : "planned"} ${count}`;
@@ -61,6 +137,7 @@ export interface WriteActionProps {
   failed?: string | null;
   plan: () => WriteRun;
   apply: {
+    hidden?: boolean;
     label: string;
     says: string;
     /** Why apply is not armed even with a plan held. */
@@ -73,7 +150,7 @@ export interface WriteActionProps {
    * The open Reject? window (ADR 0027): apply lands at `until` unless rejected. Present only while a
    * receipt's consent window is open; the popover keeps the before and after visible meanwhile.
    */
-  reject?: { until: string; run: () => void } | null;
+  reject?: { until: string; run: () => void; content?: ReactNode } | null;
   /** Draw the button as one glyph (a dense row); `label` is its name and tooltip. */
   icon?: LucideIcon;
 }
@@ -164,13 +241,15 @@ export function WriteAction({
         {armed ? (
           <div className="flex flex-col gap-1.5">
             <div className="t-small face-mono text-ink-2">{held.summary}</div>
-            {held.cells?.map((cell) => (
+            {held.cells?.map((cell, index) => (
               <div key={cell.key} data-write-cell={cell.key} className="flex flex-col">
+                {cell.group && cell.group !== held.cells?.[index - 1]?.group ? (
+                  <p className="t-small">{cell.group}</p>
+                ) : null}
                 <span className="t-small text-ink-2">
-                  {cell.label} ·{" "}
-                  <span data-write-author={cell.author}>{AUTHOR[cell.author]}</span>
+                  {cell.label} ·<span data-write-author={cell.author}>{AUTHOR[cell.author]}</span>
                 </span>
-                <StateCell value={cell.after} modelValue={cell.before ?? "unknown"} agree="drift" author={cell.author} stage="edit" />
+                <StateCell value={cell.after} modelValue={cell.before ?? "unavailable"} agree="drift" author={cell.author} stage="edit" />
               </div>
             ))}
             {held.rows?.map((row, index) => (
@@ -189,7 +268,12 @@ export function WriteAction({
             {outcome.text}
           </p>
         ) : null}
-        {armed && outcome?.kind !== "done" ? (
+        {reject?.content}
+        {/* E8-03: the action refusal is an exception to sentence-free working surfaces; a hidden Apply must explain its hold. */}
+        {armed && !reject && apply.refusal ? (
+          <p role="status" data-tone="caution" className="t-small">Apply is held: {apply.refusal}</p>
+        ) : null}
+        {(armed || reject) && outcome?.kind !== "done" ? (
           <div className="mt-2 flex items-center justify-between gap-2">
             {reject ? (
               <Button
@@ -201,7 +285,7 @@ export function WriteAction({
               >
                 Reject? · {reject.until}
               </Button>
-            ) : (
+            ) : !apply.hidden ? (
               <Button
                 kind="commit"
                 label={apply.label}
@@ -212,7 +296,7 @@ export function WriteAction({
               >
                 {apply.label}
               </Button>
-            )}
+            ) : null}
             <span className="face-mono text-ink-mute t-small">Esc</span>
           </div>
         ) : null}

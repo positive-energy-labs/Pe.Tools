@@ -1,6 +1,6 @@
 import { sdkSessionSelectionSchema } from "./sdk-session.ts";
 import { z } from "zod";
-import { capabilityNeedsSchema } from "./capability.ts";
+import { capabilityNeedsSchema } from "./capability-needs.ts";
 
 const documentAddressPattern =
   /^(?:[A-Za-z]:[\\/]|\\\\)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -87,6 +87,12 @@ export const executionTargetSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("document"), ref: documentRefSchema }),
 ]);
 export type ExecutionTarget = z.infer<typeof executionTargetSchema>;
+
+/** Document reads accept either wire address and execute against one canonical DocumentRef. */
+export const documentReadTargetSchema = z.union([
+  documentRefSchema,
+  executionTargetSchema.options[3].transform((target) => target.ref),
+]);
 
 export type TargetResolution =
   | {

@@ -1,13 +1,6 @@
-import { testHostFiles, settle } from "./effect-test.ts";
+import { testDuctFiles, settle } from "./effect-test.ts";
 // U4 wires the real fans Work for callers without one.
 import { neutralFansWork, fansRouteState } from "@pe/agent-contracts";
-import { createHash } from "node:crypto";
-import { gzipSync, gunzipSync } from "node:zlib";
-import { createPeRoutes } from "../src/pe-routes.ts";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, expect, test } from "vite-plus/test";
 import {
   ductsAnalysisRequestSchema,
   ductsAnalysisResponseSchema,
@@ -21,11 +14,18 @@ import {
   DUCT_PARAMETER_KEYS,
   type DuctPortPin,
 } from "@pe/agent-contracts";
-import { price, applyRequest } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { price, applyRequest } from "@pe/ducts-domain/pricing";
 import { TEST_SLOTS } from "@pe/ducts-domain/sheet/test-inputs";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { gzipSync, gunzipSync } from "node:zlib";
+import { afterEach, expect, test } from "vite-plus/test";
 import { createDuctsAnalysis, type DuctsAnalysisSources } from "../src/ducts-analysis.ts";
+import { createPeRoutes } from "../src/pe-routes.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -135,7 +135,7 @@ function fixture() {
     resolutions = 0,
     workReads = 0,
     mark: number | null = null;
-  const files = testHostFiles();
+  const files = testDuctFiles();
   const sources: DuctsAnalysisSources = {
     catalogs: () => settle(files.ductCatalogs),
     root,
@@ -256,7 +256,7 @@ test("the declared host route reads canonical Work and unreadable Work refuses b
     store: {
       getState: async ({ route }) => {
         if (unreadable) throw Error("Unreadable fixture Work");
-        return { version: 1, revision: 7, doc: route === "fans" ? fansDocumentSchema.parse({}) : ductsDocumentSchema.parse({}) };
+        return { version: 1, schemaVersion: (route === "fans" ? fansRouteState : ductsRouteState).schemaVersion, revision: 7, doc: route === "fans" ? fansDocumentSchema.parse({}) : ductsDocumentSchema.parse({}) };
       },
       setState: async () => {
         writes++;
@@ -909,15 +909,12 @@ test("apply-request builds a canonical immutable candidate without reacquiring",
 
 test("a fan cell left in the ducts Work is not priced; at the fans binding it is", async () => {
   const f = fixture();
-  // A v1 ducts Work still holding a fan cell: the 1 -> 2 migration drops it (Q5), and the
-  // analysis reads drops from the fans Work only.
+  // Analysis reads fan drops from the fans Work only.
   const drop = { "2": { edit: { value: { inWg: 0.12, source: "Approved purpose point" } } } };
-  expect(ductsRouteState.migrations[1]({ terminalDrops: drop })).toEqual({});
   f.sources.readWork = works(() => ({}), 1, () => ({ terminalDrops: drop }));
+  await expect(f.api.read(read({ kind: "fresh", target: f.target }))).rejects.toThrow();
+  f.sources.readWork = works(() => ({}));
   const stale = await f.api.read(read({ kind: "fresh", target: f.target }));
-  expect(stale.findings).toContainEqual(
-    expect.objectContaining({ id: "work:unreadable", note: expect.stringContaining("terminalDrops") }),
-  );
   f.sources.readWork = works(() => ({ terminalDrops: drop }));
   const fresh = await f.api.read(read({ kind: "fresh", target: f.target }));
   const staged = async (id: string) =>
@@ -1107,7 +1104,6 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from Revit a
   expect(terminals.findingCounts).toEqual(summary.findingCounts);
 
 });
-
 
 test("apply-request refuses a terminal without an observed slot before dispatch", () => {
   const f = fixture();

@@ -1,4 +1,6 @@
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
+import { createHash } from "node:crypto";
+import { ResourceConnectionOwner } from "./request-services.ts";
 import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import { RequestIdentity, admittedRequestIdentity } from "./request-services.ts";
 import { readSessionScope } from "./sdk-session.ts";
@@ -101,6 +103,9 @@ export async function readRequestIdentity(
         detail: `Caller requires '${expectedService ?? queryServices.join(",")}', but this host is '${hostOwnership.serviceName}'.`,
       },
     };
+  // EventSource cannot set headers: caller admission consumes the same owner evidence, validated above.
+  if (expectedService === undefined && queryServices.length)
+    headers = { ...headers, [HOST_RUNTIME_SERVICE_HEADER]: queryServices[0] };
   let pathname: string;
   try {
     pathname =
@@ -460,7 +465,12 @@ export const requestIdentityLayer = (options: IdentityLayerOptions) =>
             typeof call.key === "string" &&
             !isTsOnlyOperationKey(call.key));
         const services = yield* Effect.context<never>();
-        const run = Effect.provideService(handler, RequestIdentity, admitted);
+        const run = Effect.provideService(handler, RequestIdentity, admitted).pipe(
+          Effect.provideService(ResourceConnectionOwner,
+            identity.headers.cookie ?? identity.headers[HOST_CONTEXT_HEADER]
+              ? createHash("sha256").update(JSON.stringify([identity.principal, identity.headers.cookie ?? identity.headers[HOST_CONTEXT_HEADER]])).digest("hex")
+              : null),
+        );
         const exit = native
           ? yield* Effect.exit(run)
           : yield* Effect.promise((signal) =>

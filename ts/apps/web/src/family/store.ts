@@ -1,31 +1,28 @@
-/** Family's model projections and pane memory. The graph mount owns acquisition, Work and verbs. */
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { uploadBlob } from "../../../../packages/mcps/src/shared/blob-client.ts";
+import { familyPageSchema } from "./page";
+/** Family's domain projections and pane memory; the typed shell owns acquisition, Work and verbs. */
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, useRef } from "react";
 import {
-  familyEvidenceSchema,
   settingsCandidate,
   settingsFieldDirectives,
   settingsFieldSegments,
   cellPatches,
-  type ActionReceipt,
-  type FamilyDraft,
+  workKey,
+  workHandleSchema,
   type PodMember,
 } from "@pe/agent-contracts";
-import { z } from "zod";
+import { useValue } from "@pe/kit/lang/collection";
 import type { TableState } from "@pe/kit/table/model";
 import type { CellWire } from "#/components/work/band";
-import type { GraphMount } from "#/shell/mount";
 import { useWork } from "@pe/kit/lang/work";
-import { familyGraph, type FamilyPage } from "./graph";
-import { readingValue, type FamilySpecReading } from "./sources";
 import { familySource } from "./source";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "./model";
 import { draftToPatches, FAMILY_CELLS } from "./project";
 import { familyEditBuffer } from "./edit-buffer";
 import { displaySpec } from "./spec";
-import { projectBuildReceipt } from "./build";
-import type { FamilySnapshot } from "./types";
+import type { FamilySnapshot, EvidenceSlice } from "./types";
+import type { FamilyContext } from "./route";
 
-export type FamilyMount = GraphMount<FamilyPage, FamilyDraft>;
 export type Inspect = { kind: "part"; slug: string } | { kind: "param"; name: string } | null;
 export type Binding = { slug: string; property: string } | null;
 export type PickerState = { open: string | null; level: string | null; query: string };
@@ -43,15 +40,18 @@ const inspectorOf = (value: Inspect) =>
 const noEdit = { draft: null, failure: null };
 const noSubscribe = () => () => {};
 
-export function useFamilyStore(owner: FamilyMount) {
-  const scope = {
-    ...owner.snapshot(),
-    page: owner.view.read().page,
-    readings: Object.fromEntries(
-      Object.keys(familyGraph.readings).map((id) => [id, owner.readings.get(id)]),
-    ),
+export function useFamilyStore(ctx: FamilyContext) {
+  const current=useRef(ctx);current.current=ctx;
+  const data=useValue(ctx.value);
+  const page=familyPageSchema.parse(ctx.page.read());
+  const target=ctx.target??{kind:"host" as const};
+  const work=data?.handle?{handle:workHandleSchema.parse(data.handle),doc:data.familyWork}:null;
+  const scope={page,target,work};
+  const setPage=(patch:Record<string,unknown>)=>{
+    const {stage,pane,overlay,drill,inspector,doc,...query}=patch;
+    ctx.page.query(query);
+    ctx.page.pose(Object.fromEntries(Object.entries({stage,pane,overlay,drill,inspector,doc}).filter(([,v])=>v!==undefined)));
   };
-  const { page, work, target } = scope;
   const member = useMemo<PodMember | null>(
     () => (page.pod && page.path ? { pod: page.pod, path: page.path } : null),
     [page.pod, page.path],
@@ -66,18 +66,19 @@ export function useFamilyStore(owner: FamilyMount) {
   );
   const inspect = useMemo(() => inspectOf(page.inspector), [page.inspector]);
   const drillType = page.drill || null;
-  const run = useCallback(
-    async (id: string, input: unknown = {}) => {
-      const result = await owner.control(id, input).run();
-      return "refusal" in result ? result.refusal : null;
-    },
-    [owner],
-  );
-  const write = useCallback<CellWire["write"]>(
-    (patches, expectedRevision = owner.snapshot().work?.handle.revision ?? -1) =>
-      run("edit", { patches, expectedRevision }),
-    [owner, run],
-  );
+  const run=useCallback(async(id:string,input:unknown={})=>{
+    try {await current.current.write(id === "attach-spec"?"attach":id).run(input);return null;}
+    catch(error){return {message:error instanceof Error?error.message:String(error)};}
+  },[]);
+  const identity=work?workKey(work.handle.key):null;
+  const write=useCallback<CellWire["write"]>((patches,expectedRevision=work?.handle.revision??-1)=>{
+    const latest=current.current;
+    const handle=latest.value.value?.handle?workHandleSchema.parse(latest.value.value.handle):null;
+    if(!handle||workKey(handle.key)!==identity||handle.revision!==expectedRevision)
+      return Promise.resolve({code:"stale-work",message:"Family Work changed; review the current cells"});
+    return latest.cells.patch(patches,{label:"Edit family cells"});
+  },[identity,work?.handle.revision]);
+  // CHEAT(K gaps 1/4): grouped domain edits retain their unacknowledged input until typed Work observes it.
   const edits = useMemo(
     () => (work ? familyEditBuffer(work.handle.key, write) : null),
     [work?.handle.key, write],
@@ -94,7 +95,6 @@ export function useFamilyStore(owner: FamilyMount) {
   const flush = useCallback(async () => {
     await edits?.flush();
   }, [edits]);
-  const fields = work?.doc.cells ?? {};
   const draftSnapshot = useCallback(
     (edited: boolean): FamilySnapshot | null => {
       if (!work?.doc.reading) return null;
@@ -130,7 +130,17 @@ export function useFamilyStore(owner: FamilyMount) {
     },
     [work?.doc, member],
   );
-  const snapshot = useMemo(() => draftSnapshot(false), [draftSnapshot]);
+  const profile = ctx.value.current ? data?.profile : null;
+  // Selecting a saved member is inspection; only an explicit Open replaces the document draft.
+  const snapshot = useMemo(() => {
+    if (member)
+      return profile?.member.pod === member.pod && profile.member.path === member.path
+        ? profile
+        : null;
+    return draftSnapshot(false);
+  }, [draftSnapshot, member, profile]);
+  const inspecting = !!member && snapshot?.rawContent !== work?.doc.reading;
+  const fields = inspecting ? {} : (work?.doc.cells ?? {});
   const authored = useMemo((): unknown => {
     try {
       return snapshot ? JSON.parse(snapshot.rawContent.replace(/^\uFEFF/, "")) : null;
@@ -148,9 +158,13 @@ export function useFamilyStore(owner: FamilyMount) {
         return write(patches, revision);
       },
       lockOf: (key) =>
-        page.stage === "history" ? "History is inspection only" : familyLockOf(authored)(key),
+        inspecting
+          ? "Open this saved member before editing its cells"
+          : page.stage === "history"
+            ? "History is inspection only"
+            : familyLockOf(authored)(key),
     }),
-    [work?.handle.revision, write, flush, authored, page.stage],
+    [work?.handle.revision, write, flush, authored, page.stage, inspecting],
   );
   const [memory, setMemory] = useState({
     drill: { sorts: [], query: "" } as TableState,
@@ -168,22 +182,10 @@ export function useFamilyStore(owner: FamilyMount) {
     (value: Partial<typeof memory>) => setMemory((current) => ({ ...current, ...value })),
     [],
   );
-  const capturedResult = readingValue<ActionReceipt[]>(scope.readings.captureReceipt)?.[0];
-  const captured = useMemo(() => {
-    const parsed = z
-      .object({
-        member: z.object({ pod: z.string(), path: z.string() }),
-        evidence: familyEvidenceSchema,
-      })
-      .safeParse(capturedResult?.state === "succeeded" ? capturedResult.result : null);
-    return parsed.success ? parsed.data : null;
-  }, [capturedResult]);
-  const evidence =
-    captured && captured.member.pod === member?.pod && captured.member.path === member.path
-      ? captured.evidence
-      : null;
+  // Capture/build receipts belong to shell History; this Value exposes no native evidence sheet.
+  const evidence: EvidenceSlice | null = null;
   const attached = work?.doc.spec;
-  const fileSpec = readingValue<FamilySpecReading>(scope.readings.spec);
+  const fileSpec = ctx.value.current ? data?.spec : null;
   const spec = useMemo(() => {
     if (!member) return null;
     const doc =
@@ -200,8 +202,11 @@ export function useFamilyStore(owner: FamilyMount) {
   );
   const saved = useMemo(() => savedFrom(initialDraft(lane.world)), [lane]);
   const draft = useMemo(
-    () => editState.draft ?? initialDraft(familySource(draftSnapshot(true), evidence).world),
-    [editState.draft, draftSnapshot, evidence],
+    () =>
+      inspecting
+        ? initialDraft(lane.world)
+        : (editState.draft ?? initialDraft(familySource(draftSnapshot(true), evidence).world)),
+    [editState.draft, draftSnapshot, evidence, inspecting, lane],
   );
   const documentTarget = target.kind === "document" ? target.ref : null;
   const documentScope = useMemo(
@@ -211,14 +216,11 @@ export function useFamilyStore(owner: FamilyMount) {
         : undefined,
     [documentTarget?.session, documentTarget?.openId],
   );
-  const buildReceipts = readingValue<ActionReceipt[]>(scope.readings.buildReceipt);
-  const buildReceipt = buildReceipts?.[0]
-    ? projectBuildReceipt(buildReceipts, buildReceipts[0].id)
-    : null;
   const actions = useMemo(
     () => ({
       setDraft: (value: Setter<Draft>): string | void => {
         if (page.stage === "history") return "History is inspection only";
+        if (inspecting) return "Open this saved member before editing its cells";
         if (!lane.document || !edits || !work) return "Read the family before editing fields";
         const previous = edits.getSnapshot().draft ?? draft;
         const updated = next(value, previous);
@@ -244,10 +246,10 @@ export function useFamilyStore(owner: FamilyMount) {
         edits.stage(updated, patches, work.handle.revision);
       },
       setOverlay: (value: Setter<Overlay>) =>
-        owner.view.setPage({ overlay: next(value, page.overlay) }),
+        setPage({ overlay: next(value, page.overlay) }),
       setTable: (value: Setter<TableState>) => {
         const updated = next(value, table);
-        owner.view.setPage(
+        setPage(
           {
             query: updated.query,
             sort: { columns: updated.sorts },
@@ -255,17 +257,16 @@ export function useFamilyStore(owner: FamilyMount) {
               (updated.hiddenColumns ?? []).map((key) => [key, true as const]),
             ),
           },
-          { history: "replace" },
         );
       },
       setDrill: (value: Setter<TableState>) =>
         setMemory((c) => ({ ...c, drill: next(value, c.drill) })),
       setDocMode: (value: Setter<"text" | "sheet">) =>
-        owner.view.setPage({ doc: next(value, page.doc) }),
+        setPage({ doc: next(value, page.doc) }),
       setDocZoom: (value: Setter<number>) =>
         setMemory((c) => ({ ...c, docZoom: next(value, c.docZoom) })),
       setDrillType: (value: Setter<string | null>) =>
-        owner.view.setPage({ drill: next(value, drillType) ?? "" }),
+        setPage({ drill: next(value, drillType) ?? "" }),
       setStageType: (value: Setter<string>) =>
         setMemory((c) => ({ ...c, stageType: next(value, c.stageType) })),
       setFocus: (value: Setter<Focus>) => setMemory((c) => ({ ...c, focus: next(value, c.focus) })),
@@ -274,7 +275,7 @@ export function useFamilyStore(owner: FamilyMount) {
       setPinnedParam: (value: Setter<string | null>) =>
         setMemory((c) => ({ ...c, pinnedParam: next(value, c.pinnedParam) })),
       setInspect: (value: Setter<Inspect>) =>
-        owner.view.setPage({ inspector: inspectorOf(next(value, inspect)) }),
+        setPage({ inspector: inspectorOf(next(value, inspect)) }),
       setBinding: (value: Setter<Binding>) =>
         setMemory((c) => ({ ...c, binding: next(value, c.binding) })),
       setPicker: (value: Setter<PickerState>) =>
@@ -292,13 +293,14 @@ export function useFamilyStore(owner: FamilyMount) {
         });
         const refused = await run("attach-spec", {
           member,
-          source: { fileName: file.name, base64 },
+          source: await uploadBlob({ fileName: file.name, base64 }),
         });
         if (refused) throw Error(refused.message);
       },
     }),
     [
       page,
+      inspecting,
       lane,
       edits,
       work,
@@ -306,7 +308,7 @@ export function useFamilyStore(owner: FamilyMount) {
       fields,
       authored,
       patch,
-      owner,
+      ctx,
       table,
       drillType,
       inspect,
@@ -316,14 +318,13 @@ export function useFamilyStore(owner: FamilyMount) {
     ],
   );
   return {
-    owner,
+    ctx,
     scope,
     member,
     profile: member?.path ?? "",
     target: documentTarget?.session ?? "",
     documentScope,
     evidence,
-    captured,
     lane,
     snapshot,
     review: { revision: work?.handle.revision ?? null },
@@ -331,14 +332,13 @@ export function useFamilyStore(owner: FamilyMount) {
     wire,
     saved,
     draft,
-    buildReceipt,
     ...memory,
     overlay: page.overlay,
     table,
     docMode: page.doc,
     drillType,
     inspect,
-    busy: owner.busy(),
+    busy:ctx.value.status === "pending"?{key:"read"}:null,
     failure: editState.failure,
     editFailure: editState.failure,
     actions,

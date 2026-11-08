@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
+import { ductsRosterResponseSchema } from "@pe/agent-contracts";
 import { composeSource } from "./readings-api";
 import { createReadingGraph } from "./readings";
 
@@ -21,7 +22,15 @@ const fixture = () => {
     ),
   );
   transport.mockImplementation(
-    async () => new Response(JSON.stringify({ target, slots: [], activeSlot: "", rows: [] })),
+    async () => Response.json({
+      key: "fans.roster", generation: 0, version: 1, state: "current",
+      value: {
+        data: { target, slots: [], activeSlot: "", rows: [] },
+        evaluation: "sdk-refreshed", inputs: "sdk-inputs", trace: [],
+        coverage: { requested: [], covered: [], unknown: [], refused: [] },
+        origin: { kind: "live" }, freshness: "current",
+      },
+    }),
   );
   const graph = createReadingGraph(
     {
@@ -32,9 +41,12 @@ const fixture = () => {
     {
       sources: {
         "ducts.fans": composeSource({
-          key: "ducts.roster",
-          input: () => ({ body: { target } }),
+          key: "reads.value",
+          input: () => ({
+            body: { read: "fans.roster", args: { target }, subscription: "sdk-read-409", generation: 0 },
+          }),
           absent: null,
+          map: response => response.value ? ductsRosterResponseSchema.parse(response.value.data) : null,
         }),
       },
       scope: {

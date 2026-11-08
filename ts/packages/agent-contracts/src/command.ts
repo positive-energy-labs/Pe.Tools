@@ -1,3 +1,4 @@
+import { blobRefSchema } from "./blob-ref.ts";
 import { z } from "zod";
 import {
   canonicalWorkKey,
@@ -16,6 +17,17 @@ export const workHandleSchema = z.strictObject({
   revision: z.number().int().nonnegative(),
 });
 export type WorkHandle = z.infer<typeof workHandleSchema>;
+/** A command's primary Work owner is part of its wire contract, for every binding. */
+export function workHandleForRoute(route: string) {
+  const keys = workKeySchema.options.map((key) =>
+    key.extend({ route: z.literal(route, { error: `Expected the route:${route} Work handle` }) }),
+  );
+  return workHandleSchema
+    .extend({
+      key: z.discriminatedUnion("binding", [keys[0]!, ...keys.slice(1)]),
+    })
+    .describe(`The route:${route} Work handle { key, revision }.`);
+}
 /**
  * The one handle every stored Work read and write returns (ADR 0030 rule 9): the canonical key and
  * revision. Call it after the Save As carry-over ran, since the handle no longer carries `from`.
@@ -52,9 +64,11 @@ export const consumedSchema = z.discriminatedUnion("kind", [
   ),
   observed("member", { pod: z.string(), path: z.string() }, sha.nullable()).extend({
     bytesBase64: z.string().optional(),
+    blob: blobRefSchema.optional(),
   }),
   observed("file", { path: z.string() }, sha.nullable()).extend({
     bytesBase64: z.string().optional(),
+    blob: blobRefSchema.optional(),
   }),
   // A read names when it was taken; a sealed write names the mark its plan sealed (ADR 0030 rule 4),
   // so the journal's dispatch probe and the seal share one authority, never a second wall clock.
@@ -78,7 +92,7 @@ export const consumedSchema = z.discriminatedUnion("kind", [
   observed(
     "capture",
     {
-      bytesBase64: z.string(),
+      blob: blobRefSchema,
       origin: z.strictObject({ kind: z.literal("url"), url: z.url() }),
       capturedAt: z.string(),
     },
@@ -164,6 +178,8 @@ export interface Command<I = unknown, R = unknown> {
     preview?(request: unknown): unknown;
   };
   announce?: true;
+  /** Trusted semantic eligibility for once-per-Work automatic baseline adoption. */
+  autoAdopt?: true;
   /** Native implementation keys hidden when the semantic command owns the callable path. */
   native?: readonly string[];
   target?(input: I): ExecutionTarget;

@@ -22,7 +22,7 @@ import {
   type ChatPluginRoute,
 } from "#/workbench/chat-plugins";
 
-import { publicRoutes } from "#/route/builtin-routes";
+import { publicRoutes } from "#/route/route-discovery";
 import type { HeadWork } from "./proposal-head";
 
 export interface HeadExits {
@@ -58,7 +58,7 @@ export function useHeadWorks(
   const headed = useMemo(
     () =>
       publicRoutes.entries().flatMap(({ manifest, work }) =>
-        manifest.needs && work?.cells.length
+        manifest.needs && work?.cells.length && !work.memberKey
           ? [
               {
                 route: manifest.key,

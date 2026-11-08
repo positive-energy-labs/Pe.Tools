@@ -1,6 +1,8 @@
-import type { WorkOf } from "./route-kernel-page.ts";
-import type { BodyBindings, EntryTable } from "./route-kernel-bodies.ts";
-import type { SchemaTable } from "./route-kernel-page.ts";
+import type { z } from "zod";
+import { z as kernelZ } from "zod";
+import { commandLink, requireLinkedCatalog, type CatalogAxes } from "./catalog.ts";
+import type { CatalogLink } from "./catalog.ts";
+import type { Command } from "./command.ts";
 import {
   captureHostModule,
   type HostRouteModule,
@@ -8,15 +10,24 @@ import {
   type HostRouteAdmissionPort,
   type HostAdmittedRoute,
 } from "./host-route-admission.ts";
-import type { RouteModule as KernelModule, RouteBodyRender } from "./route-kernel-admission.ts";
-import { bare, manyCodec } from "./route-field.ts";
 import { linkedCatalog } from "./pe-api.ts";
-import { commandLink, requireLinkedCatalog, type CatalogAxes } from "./catalog.ts";
-import type { z } from "zod";
-import type { Command } from "./command.ts";
-import type { RouteStateSpec } from "./route-state.ts";
+import { bare, manyCodec } from "./route-field.ts";
 import type { RouteGraph } from "./route-graph.ts";
 import { validateRouteGraph } from "./route-graph.ts";
+import { canonicalRouteJson } from "./route-graph.ts";
+
+import type { RouteModule as KernelModule, RouteBodyRender } from "./route-kernel-admission.ts";
+import type {
+  RouteFingerprint,
+  RouteFingerprintInput,
+  RouteAdmissionPort,
+  RouteAdmission,
+  AdmittedRouteRegistry,
+} from "./route-kernel-admission.ts";
+import type { BodyBindings, EntryTable } from "./route-kernel-bodies.ts";
+import type { WorkOf } from "./route-kernel-page.ts";
+import type { SchemaTable } from "./route-kernel-page.ts";
+import type { RouteStateSpec } from "./route-state.ts";
 
 /** The same admission envelope for shipped and Pod-authored route modules. */
 export interface RouteModule<B = unknown> {
@@ -88,8 +99,7 @@ export const admittedRouteEntries = new Map<
 
 // Kernel admission is prepared independently of the legacy directory above. S2 removes
 // the old executable-graph API when its remaining mount/Pod consumers migrate.
-import { z as kernelZ } from "zod";
-import { canonicalRouteJson } from "./route-graph.ts";
+
 import {
   decodeRouteGraph,
   linkRouteBodies,
@@ -97,19 +107,12 @@ import {
   routeDiagnostic,
   type RouteBindings,
 } from "./route-bodies.ts";
-import type { CatalogLink } from "./catalog.ts";
+
 import type {
   RouteGraphJson as KernelGraph,
   Immutable,
   RouteDiagnostic,
 } from "./route-kernel-data.ts";
-import type {
-  RouteFingerprint,
-  RouteFingerprintInput,
-  RouteAdmissionPort,
-  RouteAdmission,
-  AdmittedRouteRegistry,
-} from "./route-kernel-admission.ts";
 
 const sha = kernelZ.string().regex(/^[a-f0-9]{64}$/);
 const packagePath = kernelZ
@@ -131,7 +134,7 @@ const envelopeSchema = kernelZ.strictObject({
   executables: kernelZ
     .array(
       kernelZ.strictObject({
-        client: kernelZ.enum(["web", "pea", "shared"]),
+        client: kernelZ.enum(["web", "pea", "shared", "host"]),
         entry: packagePath,
         members: kernelZ.array(kernelZ.strictObject({ path: packagePath, sha256: sha })).min(1),
       }),
@@ -171,7 +174,8 @@ async function hashBytes(bytes: Uint8Array): Promise<string> {
   const hash = await globalThis.crypto.subtle.digest("SHA-256", new Uint8Array(bytes));
   return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
-export async function routeFingerprint(input: RouteFingerprintInput): Promise<RouteFingerprint> {
+/** Decode an untrusted manifest before hashing; wire callers need no type assertion. */
+export async function routeFingerprint(input: unknown): Promise<RouteFingerprint> {
   const hex = await hashBytes(
     new TextEncoder().encode(`pe.route.v1\n${canonicalRouteJson(fingerprintEnvelope(input))}`),
   );
@@ -183,6 +187,8 @@ export async function routeFingerprint(input: RouteFingerprintInput): Promise<Ro
  * Contract bytes include catalog/schema/codec/kernel implementations or their pinned bundle.
  * This is loader evidence, not a sandbox for a malicious JavaScript loader. */
 export interface PackageRouteAdmissionEvidence {
+  /** Typed package host exports use the same neutral projection as builtins. */
+  readonly host?: true;
   /** Exact exports evaluated by the loader from the byte closure below. Admission
    * captures their references before hashing, so a replacement function cannot reuse a stamp. */
   readonly loadedBindings: unknown;
@@ -190,7 +196,7 @@ export interface PackageRouteAdmissionEvidence {
   readonly expectedFingerprint: string;
   readonly contracts: readonly { readonly id: string; readonly bytes: Uint8Array }[];
   readonly executables: readonly {
-    readonly client: "web" | "pea" | "shared";
+    readonly client: "web" | "pea" | "shared" | "host";
     readonly entry: string;
     readonly resolved: boolean;
     readonly members: readonly { readonly path: string; readonly bytes: Uint8Array }[];
@@ -436,7 +442,8 @@ export class AdmittedRoute<
         if (fingerprint !== owned.fingerprint) throw Error("Builtin closure fingerprint mismatch");
       } else {
         envelope = fingerprintEnvelope(evidence.artifact);
-        loadedBindings = routeBindingSchema.parse(evidence.loadedBindings);
+        if (evidence.host) hostModule = captureHostModule(evidence.loadedBindings as HostRouteModule);
+        else loadedBindings = routeBindingSchema.parse(evidence.loadedBindings);
         // Copy all loader evidence before the first await; callers cannot race verification.
         const contracts = evidence.contracts.map((item) => ({
           id: item.id,
@@ -595,7 +602,7 @@ export class AdmittedRoute<
     return {
       admitHost(module) {
         if (diagnostics.length) return { ok: false, diagnostics };
-        if (!source || !fingerprint || !hostModule)
+        if ((!source && !envelope) || !fingerprint || !hostModule)
           return {
             ok: false,
             diagnostics: [
@@ -604,13 +611,13 @@ export class AdmittedRoute<
                 "module",
                 "",
                 "host builtin evidence",
-                "Host admission requires a neutral builtin inventory",
+                "Host admission requires verified neutral exports",
                 "identity",
               ),
             ],
           };
         try {
-          return admitHostProjection(captureHostModule(module), hostModule, source, fingerprint);
+          return admitHostProjection(captureHostModule(module), hostModule, source ?? {data:envelope!.data}, fingerprint, source ? "builtin-closure" : "pod-bytes");
         } catch (error) {
           return {
             ok: false,
@@ -787,8 +794,9 @@ const hostBindings = new WeakMap<HostAdmittedRoute, HostRouteModule>();
 function admitHostProjection(
   module: HostRouteModule,
   captured: HostRouteModule,
-  closure: BuiltinClosure,
+  closure: Pick<BuiltinClosure,"data">,
   fingerprint: RouteFingerprint,
+  source: "builtin-closure" | "pod-bytes" = "builtin-closure",
 ): HostRouteAdmission {
   const decoded = decodeRouteGraph(module.data);
   if (!decoded.ok) return decoded;
@@ -800,7 +808,7 @@ function admitHostProjection(
     fail("data", "Neutral declaration differs from the verified builtin closure");
   if (canonicalRouteJson(data) !== canonicalRouteJson(captured.data))
     fail("data", "Neutral declaration changed after capture");
-  for (const table of ["schemas", "bodies"] as const) {
+  for (const table of ["schemas"] as const) {
     if (
       Object.keys(module[table]).sort().join("\n") !==
       Object.keys(captured[table]).sort().join("\n")
@@ -810,17 +818,6 @@ function admitHostProjection(
   for (const [id, schema] of Object.entries(module.schemas))
     if (captured.schemas[id] !== schema)
       fail(`schemas.${id}`, "Schema differs from captured exports");
-  for (const [id, body] of Object.entries(module.bodies)) {
-    const original = captured.bodies[id];
-    if (
-      !original ||
-      original.run !== body.run ||
-      original.slot !== body.slot ||
-      original.kind !== body.kind ||
-      canonicalRouteJson(original.source) !== canonicalRouteJson(body.source)
-    )
-      fail(`bodies.${id}`, "Body differs from captured exports");
-  }
   if (
     Object.hasOwn(module, "admit") !== Object.hasOwn(captured, "admit") ||
     module.admit !== captured.admit ||
@@ -829,9 +826,11 @@ function admitHostProjection(
     fail("admit", "Host write admission differs from captured exports");
   if (module.admit && (!data.work?.schema || data.work.route !== data.key))
     fail("admit", "Only a Work owner declares write admission");
+  if (canonicalRouteJson(module.readWorks ?? []) !== canonicalRouteJson(captured.readWorks ?? []))
+    fail("readWorks", "Work owners differ from captured exports");
   const state = module.workState;
   const originalState = captured.workState;
-  // Whole neutral exports have the same captured-function authority as named migration bodies.
+  // Neutral Work exports retain captured-function authority.
   if (
     Object.keys(state ?? {})
       .sort()
@@ -845,18 +844,6 @@ function admitHostProjection(
     const original = originalState?.[key as keyof NonNullable<typeof originalState>];
     if (key === "schema" || typeof value === "function") {
       if (value !== original) fail(`workState.${key}`, "Work spec export changed after capture");
-    } else if (key === "migrations") {
-      const migrations = value as NonNullable<NonNullable<typeof state>["migrations"]>;
-      if (
-        Object.keys(migrations).sort().join() !==
-          Object.keys(originalState?.migrations ?? {})
-            .sort()
-            .join() ||
-        Object.entries(migrations).some(
-          ([age, run]) => originalState?.migrations?.[Number(age)] !== run,
-        )
-      )
-        fail("workState.migrations", "Work migrations changed after capture");
     } else if (
       value === undefined || original === undefined
         ? value !== original
@@ -866,7 +853,7 @@ function admitHostProjection(
   }
   const work = data.work;
   let resolvedWork: HostAdmittedRoute["resolvedWork"];
-  let workFingerprint = `builtin-closure:${fingerprint}` as RouteFingerprint;
+  let workFingerprint = `${source}:${fingerprint}` as RouteFingerprint;
   if (work && !data.capabilities.includes("work")) fail("work", "Work capability is missing");
   if (!work && data.capabilities.includes("work")) fail("work", "Work declaration is missing");
   if (work) {
@@ -878,21 +865,6 @@ function admitHostProjection(
         fail("work.schema", "Work needs a finite object schema");
       else
         resolvedWork = { spec: work as Extract<KernelGraph["work"], { schema: string }>, schema };
-      for (let age = 1; age < work.version; age++)
-        if (!Object.hasOwn(work.migrations, String(age)))
-          fail(`work.migrations.${age}`, "Incomplete migration chain");
-      for (const [age, id] of Object.entries(work.migrations)) {
-        const body = module.bodies[id];
-        if (Number(age) >= work.version)
-          fail(`work.migrations.${age}`, "Migration age must precede current version");
-        if (
-          !body ||
-          body.kind !== "migration" ||
-          body.slot !== `work.migrations.${age}` ||
-          typeof body.run !== "function"
-        )
-          fail(`work.migrations.${age}`, "Missing or misbound host migration");
-      }
     }
   }
   if (work?.schema && work.route === data.key) {
@@ -904,33 +876,9 @@ function admitHostProjection(
         (state.schemaVersion ?? 1) !== work.version
       )
         fail("workState", "Work spec differs from the declared owner/schema/version");
-      if (
-        Object.keys(state.migrations ?? {})
-          .sort()
-          .join() !== Object.keys(work.migrations).sort().join()
-      )
-        fail("workState.migrations", "Work spec migration chain differs from declaration");
-      for (const [age, id] of Object.entries(work.migrations))
-        if (state.migrations?.[Number(age)] !== module.bodies[id]?.run)
-          fail(`workState.migrations.${age}`, "Work migration differs from captured body");
-      if (data.salvage && state.salvage !== module.bodies[data.salvage]?.run)
-        fail("workState.salvage", "Work recovery differs from captured body");
+
     }
   } else if (state) fail("workState", "Only a Work owner declares a Work spec");
-  if (data.salvage && work?.schema) {
-    const body = module.bodies[data.salvage];
-    if (!body || body.kind !== "recovery" || body.slot !== "salvage")
-      fail("salvage", "Missing or misbound host recovery extraction");
-  }
-  for (const [id, body] of Object.entries(module.bodies))
-    if (
-      !work?.schema ||
-      (!(body.kind === "recovery" && id === data.salvage && body.slot === "salvage") &&
-        !Object.entries(work.migrations).some(
-          ([age, ref]) => ref === id && body.slot === `work.migrations.${age}`,
-        ))
-    )
-      fail(`bodies.${id}`, "Undeclared host body");
   if (errors.length) return { ok: false, diagnostics: errors };
   // Only this factory, after source verification and host linking, asserts the nominal type.
   const route = Object.freeze({

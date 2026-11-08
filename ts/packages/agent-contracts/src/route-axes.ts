@@ -1,6 +1,6 @@
-import type { CatalogAxes, CatalogLink } from "./catalog.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import type { CatalogAxes, CatalogLink } from "./catalog.ts";
 import type { PeRouteId } from "./pe-api.ts";
 
 type Declaration = Omit<CatalogLink, "key">;
@@ -157,6 +157,7 @@ export function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId,
       "host.ops.catalog",
     ]),
     "contributions.read": axes("None", "One", ["Metadata"], "SessionWrite", "Expensive", []),
+    "blobs.put": axes("None", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "family.spec": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "feedback.submit": axes("None", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "feedback.deliver": axes("None", "One", ["Metadata"], "SessionWrite", "Expensive", []),
@@ -205,21 +206,10 @@ export function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId,
     "route-settings.get": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "route-settings.set": axes("None", "One", ["Metadata"], "SessionWrite", "Cheap", []),
     "work.get": axes("Document", "One", ["Metadata"], "Read", "Bounded", []),
-    "work.salvage": axes("Document", "One", ["Metadata"], "Read", "Bounded", []),
     "work.apply": axes("Document", "One", ["Metadata"], "SessionWrite", "Bounded", []),
-    "work.fresh": axes("Document", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "work.history": axes("Document", "One", ["Metadata"], "SessionWrite", "Bounded", []),
-    "ducts.sheet": axes(
-      "Elements",
-      "One",
-      ["Metadata", "Topology", "Geometry"],
-      "Read",
-      "Expensive",
-      ["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"],
-    ),
-    "ducts.roster": axes("Document", "One", ["Metadata", "Topology"], "Read", "Bounded", [
-      "ducts.snapshot.roster",
-    ]),
+    "reads.value": axes("None","One",["Metadata"],"Read","Bounded",[]),
+    "reads.events": axes("None", "Many", ["Metadata"], "Read", "Cheap", []),
     "ducts.analysis": axes(
       "Document",
       "One",

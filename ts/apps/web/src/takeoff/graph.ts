@@ -48,7 +48,7 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
     icon: "Map",
     category: "Calculate loads & airflow",
     blurb:
-      "The takeoff atlas â€” zones on the plan, rooms in the table, Manual J data through to a synced RHVAC .r10.",
+      "The takeoff atlas — zones on the plan, rooms in the table, Manual J data through to a synced RHVAC .r10.",
     aliases: ["manual", "j", "loads", "rhvac", "zones"],
     listed: true,
     satellites: [],
@@ -62,32 +62,6 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
   key: "takeoffs",
   address: "takeoffs",
   name: "Takeoffs",
-  seeds: {
-    adopt: {
-      title: "project-a â€” regions drawn, nothing adopted",
-      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["adopt"]!),
-    },
-    partition: {
-      title: "project-a â€” zones adopted, ready to partition",
-      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["partition"]!),
-    },
-    refresh: {
-      title: "project-a â€” a stale model waiting for a re-read",
-      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["refresh"]!),
-    },
-    sync: {
-      title: "project-a â€” partitioned, .r10 bound, sync unreviewed",
-      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["sync"]!),
-    },
-    launch: {
-      title: "project-a â€” synced, RHVAC not open",
-      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["launch"]!),
-    },
-    "retry-r10": {
-      title: "project-a â€” the .r10 read failed",
-      load: () => import("./graph-seeds").then((m) => m.takeoffSeeds["retry-r10"]!),
-    },
-  },
   needs: "project",
   work: takeoffsRouteState.schema,
   workRoute: "takeoffs",
@@ -283,23 +257,11 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
 export const takeoffGraph: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = defineRouteGraph({
   ...takeoffBase,
   name: "View adoption",
-  seeds: Object.fromEntries(
-    Object.entries(takeoffBase.seeds!).map(([id, seed]) => [
-      id,
-      {
-        ...seed,
-        load: async () => {
-          const data = await seed.load();
-          return { ...data, page: { ...data.page, stage: "adopt" as const } };
-        },
-      },
-    ]),
-  ),
   directory: {
     ...takeoffBase.directory!,
     title: "View adoption",
     blurb: "Adopt zoning regions from chosen views.",
-    satellites: [{ to: "/zone-audit", label: "Zone audit" }],
+    satellites: [],
   },
   subject: (p) => (p.views === "all" ? "All views" : p.views.join(", ")) || "Choose views",
   fields: {

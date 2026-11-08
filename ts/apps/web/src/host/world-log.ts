@@ -1,8 +1,8 @@
 import { useCallback, useRef } from "react";
 
-import type { SessionInventory } from "#/shell/readings-hooks";
-import { useHostEvents } from "#/readings";
-import { previousOf, useHostStatusSlice } from "#/shell/readings-hooks";
+import type { SessionInventory } from "#/host/resource-state";
+import { useHostEvents } from "#/host/resource-stream";
+import { previousOf, useHostStatusSlice } from "#/host/resource-state";
 
 type HostEvent = {
   atMs: number;
@@ -41,7 +41,7 @@ function toWorldEvent(event: HostEvent, sessions: SessionInventory[]): SessionEv
     case "connected": {
       const session = sessions.find((s) => s.sessionId === event.sessionId);
       const who = session
-        ? (session.sdkSessionId ?? `Revit ${session.processId}`)
+        ? (session.sdkSessionId ?? `Revit${session.processId === null ? "" : ` ${session.processId}`}`)
         : event.sessionId;
       return {
         ...base,

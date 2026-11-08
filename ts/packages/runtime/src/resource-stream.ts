@@ -107,7 +107,7 @@ export function observeResources(
       publish({ kind: "failure", key, error: failure.message, failure });
       return () => {};
     }
-    if (request.kind === "work") return work.observe(request, request.route, accept);
+    if (request.kind === "work") return work.observe(request, request.route, accept, false, false, context);
     if (request.kind === "thread-head" && heads) return heads.observe(request.thread, accept);
     if (request.kind === "work-acks")
       return work.observeAccepted(
@@ -129,7 +129,7 @@ export function observeResources(
 // Subscription ownership is host-local and scoped to the same observer as the stream.
 const connections = new WeakMap<
   ResourceObserver,
-  Map<string, (add: ReadingRequest[], remove: string[]) => void>
+  Map<string, { update: (add: ReadingRequest[], remove: string[], owner: string | null) => Promise<void> }>
 >();
 /** The host and its borrowed-read proxy admit the same bounded subscription body. */
 export function decodeResourceSubscriptionUpdate(raw: string): { add: ReadingRequest[]; remove: string[] } | { error: string } {
@@ -149,14 +149,14 @@ export function decodeResourceSubscriptionUpdate(raw: string): { add: ReadingReq
     return { error: "Invalid resource keys" };
   }
 }
-export async function updateResourceSubscriptions(request: Request, observe: ResourceObserver): Promise<Response> {
+export async function updateResourceSubscriptions(request: Request, observe: ResourceObserver, owner: string | null = null): Promise<Response> {
   const id = new URL(request.url).searchParams.get("connection") ?? "";
   const update = connections.get(observe)?.get(id);
   if (!update) return Response.json({ error: "Reading connection retired" }, { status: 409 });
   const value = decodeResourceSubscriptionUpdate(await request.text());
   if ("error" in value) return Response.json({ error: value.error }, { status: 400 });
   try {
-    update(value.add, value.remove);
+    await update.update(value.add, value.remove, owner);
     return Response.json({ ok: true });
   } catch {
     return Response.json({ error: "Invalid resource keys" }, { status: 400 });
@@ -185,6 +185,7 @@ export function resourceResponse(
   },
   registryOwner: ResourceObserver = observe,
   onClose?: () => void,
+  owner: string | null = null,
 ): Response {
   const url = new URL(request.url);
   const raw = url.searchParams.get("keys") ?? "";
@@ -372,7 +373,11 @@ export function resourceResponse(
             }
           }
         };
-        if (connection) registry!.set(connection, update);
+        if (connection) registry!.set(connection, { update: async (add, remove, caller) => {
+          if (closed) throw Error("Connection is closed");
+          if (owner && caller !== owner) throw Error("Foreign reading connection");
+          update(add, remove);
+        } });
         update([...requested.values()], []);
       },
       pull() {

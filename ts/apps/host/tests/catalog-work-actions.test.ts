@@ -1,4 +1,4 @@
-import { testHostFiles, testDocumentMarks } from "./effect-test.ts";
+import { testDuctFiles, testDocumentMarks } from "./effect-test.ts";
 import { detachedBridge, sessionView, testConsents } from "./effect-test.ts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -63,7 +63,7 @@ async function catalogRun(
       }),
   });
   const apply = owner === "data-tables" ? "data-table.apply" : "parameter-links.apply";
-  const deps = { workspace: work, sdk: sdkSessions, files: testHostFiles(), marks: testDocumentMarks(bridge) };
+  const deps = { workspace: work, sdk: sdkSessions, files: testDuctFiles(), marks: testDocumentMarks(bridge) };
   const write = catalogWorkExecutors(bridge, deps)[apply]!;
   try {
     await work.publish(key, owner, patches, 0);
@@ -80,7 +80,7 @@ async function catalogRun(
     const handle = { key, revision: rendered.revision };
     await journal.invoke(
       { id: "plan", key: `${apply}.plan`, target: { kind: "document", ref: target }, input: { work: handle } },
-      { caller: { kind: "human", via: "local" }, basis: { kind: "human" } },
+      { caller: { kind: "pea", context: "catalog-test", thread: run.thread, run, root: run }, basis: null },
     );
     const plan = await journal.wait("plan");
     const planCalls = calls.map((c) => c.key);

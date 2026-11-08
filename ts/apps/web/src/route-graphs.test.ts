@@ -1,20 +1,25 @@
 import { expect, test } from "vite-plus/test";
-import { projectRouteGraph, validateRouteGraph } from "@pe/agent-contracts";
-import { legacyGraphs } from "./legacy-test-inventory.test-support";
+import { RouteGraphJson } from "../../../packages/agent-contracts/src/route-kernel-data";
+import { builtinRouteKeys, typedBuiltin } from "./route/builtin-inventory";
+import { agentFields } from "@pe/agent-contracts";
 
 const projections = import.meta.glob<{ default: unknown }>(
   "../../../packages/mcps/src/pea/generated/*-graph.json",
   { eager: true },
 );
-test.each(legacyGraphs.map((graph) => [graph.key, graph] as const))(
-  "%s admits and publishes the same legacy graph to Pea (codegen:graphs)",
-  (_, graph) => {
-    expect(validateRouteGraph(graph)).toEqual([]);
-    const projection =
-      projections[`../../../packages/mcps/src/pea/generated/${graph.key}-graph.json`];
-    expect(projection, `Missing projection for ${graph.key}`).toBeDefined();
-    // Closure identity is checked by the artifact producer; source graph bodies carry no pin.
-    const { moduleHash: _pin, ...declared } = projection!.default as Record<string, unknown>;
-    expect(projectRouteGraph(graph)).toEqual(declared);
+
+test.each(builtinRouteKeys)(
+  "%s admits and publishes the same typed route to Pea (codegen:routes)",
+  (key) => {
+    const module = typedBuiltin(key);
+    const declared = RouteGraphJson.parse(module.data);
+    const projection = projections[`../../../packages/mcps/src/pea/generated/${key}-graph.json`];
+    expect(projection, `Missing projection for ${key}`).toBeDefined();
+    // Pea receives JSON data; executable drawing/command bodies stay in the typed module.
+    expect(projection!.default).toEqual(JSON.parse(JSON.stringify(declared)));
+    const agent = module.spec.agent !== false;
+    expect(agentFields(declared.fields).map(([key]) => key)).toEqual(
+      agent ? Object.keys(module.spec.fields) : [],
+    );
   },
 );

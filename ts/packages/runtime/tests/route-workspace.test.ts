@@ -1,7 +1,7 @@
 import { observeResources, resourceResponse, updateResourceSubscriptions } from "../src/resource-stream.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { address, routeBindingsSchema, workKey } from "@pe/agent-contracts";
+import { address, routeBindingsSchema } from "@pe/agent-contracts";
 import type { WorkAuthor, RouteStatePatch, RouteStateSpec, WorkKey } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 import type {
@@ -80,10 +80,10 @@ test("throwing accepted and publish listeners cannot fail a committed write or s
       false,
     ),
     module.observeAccepted(documentA, accepted, undefined, false),
-    module.subscribe(() => {
+    module.subscribeUncaptured(() => {
       throw Error("publish listener failed");
     }),
-    module.subscribe(published),
+    module.subscribeUncaptured(published),
   ];
   try {
     const result = await bind(module).apply("human", [{ path: ["count"], value: 1 }], 0);
@@ -100,54 +100,6 @@ test("throwing accepted and publish listeners cannot fail a committed write or s
       "Work accepted listener failed",
       "Work publication listener failed",
     ]);
-  } finally {
-    stops.forEach((stop) => stop());
-    logged.mockRestore();
-  }
-});
-
-test("start-fresh commits and publishes despite a throwing accepted listener", async () => {
-  const memory = memoryStore();
-  await memory.store.setState({
-    targetKey: workKey(documentA),
-    route: documentA.route,
-    value: { version: 1, schemaVersion: 1, revision: 4, doc: { count: "unreadable" } },
-  });
-  const module = workspace(memory.store);
-  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-  const accepted = vi.fn();
-  const published = vi.fn();
-  const stops = [
-    module.observeAccepted(
-      documentA,
-      () => {
-        throw Error("accepted listener failed");
-      },
-      undefined,
-      false,
-    ),
-    module.observeAccepted(documentA, accepted, undefined, false),
-    module.subscribe(published),
-  ];
-  try {
-    expect(await module.startFresh(documentA, documentA.route, "human")).toMatchObject({
-      ok: true,
-      revision: 5,
-    });
-    expect(await bind(workspace(memory.store)).read()).toMatchObject({
-      revision: 5,
-      doc: { count: 0 },
-    });
-    expect(accepted).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ kind: "start-fresh", revision: 5 }),
-    );
-    expect(published).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ ok: true, revision: 5 }),
-    );
-    expect(logged).toHaveBeenCalledExactlyOnceWith(
-      "Work accepted listener failed",
-      expect.any(Error),
-    );
   } finally {
     stops.forEach((stop) => stop());
     logged.mockRestore();
@@ -434,7 +386,7 @@ test("Save As carries the addressless Work to the Address once and silently", as
   await bind(module, unsaved).apply("human", [{ path: ["values", "a"], value: "A" }], 0);
 
   const events: RouteWorkspaceEvent[] = [];
-  module.subscribe((event) => events.push(event));
+  module.subscribeUncaptured((event) => events.push(event));
   expect((await bind(module, savedAs).read())?.doc).toMatchObject({ values: { a: "A" } });
   // The migration is a move, not a copy, and says nothing on the event stream.
   expect(events).toEqual([]);
@@ -542,8 +494,8 @@ test("a write racing feed acquisition is delivered exactly once", async () => {
   const release = module.observeFeed(
     documentA,
     (raw) => {
-      const value = raw as { history: { acks: { revision: number }[] } };
-      revisions.push(...value.history.acks.map((ack) => ack.revision));
+      const value = raw as { history: { acks: { revision: number }[] } } | null;
+      if (value) revisions.push(...value.history.acks.map((ack) => ack.revision));
     },
     (ack) => revisions.push(ack.revision),
     (error) => {
@@ -551,7 +503,7 @@ test("a write racing feed acquisition is delivered exactly once", async () => {
     },
   );
   await bind(module).apply("human", [{ path: ["count"], value: 1 }], 0);
-  expect(revisions).toEqual([1]);
+  await vi.waitFor(() => expect(revisions).toEqual([1]));
   release();
 });
 

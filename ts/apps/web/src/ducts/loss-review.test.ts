@@ -27,7 +27,8 @@ test("fan review exposes refused targets with their requested value, slot, unit 
     },
     { readings: {} },
   );
-  expect(review.rows[0]).not.toContain("14088043");
+  // Root's round-4 ruling requires a searchable element id in write-review rows.
+  expect(review.rows[0]).toContain("14088043");
   expect(review.sentence).toContain("1 Revit target:");
   expect(review.rows[0]).toContain("PE_M_Grd_ExternalStaticPressure: 0 in-wg → 0.026 in-wg");
   expect(review.rows[0]).toContain("source: catalog p. 3 · refused · parameter missing");

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/tes
 
 import { acknowledgeUpdate } from "#/host/install";
 import { alignRevitBootstrap, switchRemoteAdministration, switchShare } from "#/host/machine";
-import { BAY_YOURS_25, MACHINE_SEEDS } from "#/open/seeds";
+import { BAY_YOURS_25, MACHINE_SEEDS } from "#/design-system/open-examples";
 import { GENERATED_FROM } from "@pe/host-contracts/pe-revit-contract";
 import { Button } from "@pe/kit/lang/button";
 import { BootstrapAlignment } from "./bootstrap";
@@ -15,6 +15,7 @@ import { SettingsBody } from "./body";
 import { machineOf } from "./model";
 import { ShareSettings } from "./share";
 import { UpdateGroup } from "./update";
+import { installOpenControls, OpenOwnerContext, type OpenOwner } from "#/open/context";
 
 const surface = vi.hoisted(() => ({ surface: "web", native: false }));
 const go = vi.hoisted(() => vi.fn());
@@ -62,6 +63,13 @@ const body = (reading: Reading<Machine>, shell: "web" | "tray" = "web") =>
 
 const header = (label: string) =>
   within(screen.getByRole("region", { name: label })).getAllByRole("button")[0]!;
+
+test("the addressed Revit settings group supplies its lifecycle scope", () => {
+  const owner = { subscribe: () => () => {}, version: () => 0, busy: () => null } as unknown as OpenOwner;
+  installOpenControls(({ children }) => <OpenOwnerContext value={owner}>{children}</OpenOwnerContext>);
+  render(<SettingsBody reading={MACHINE_SEEDS["patch-bay"]} fixture shell="web" group="revit" />);
+  expect(screen.getByLabelText("Revit runtime")).toBeTruthy();
+});
 
 test("frozen Settings does not open a host transport for lifecycle controls", async () => {
   const source = vi.fn();

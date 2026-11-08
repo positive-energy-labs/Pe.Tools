@@ -180,7 +180,7 @@ Work          pending deltas only, per machine, per document (today's rule, kept
 | Model store | roster, rulings, slot choice, overrides, defaults version | Same write |
 | Fitting `Pe_C` via `PeLossServer` | the named exception to one engine: the server transports the sheet's critical-leg coefficient from `Pe_C`; its C# recompute branch (`PeLossServer.cs:112`) is deleted with `DuctFittingPricing.cs`; a tap's second leg is noted on the sheet as not carried by Revit's report [Astra 18] | Same write; proof owed (ledger) |
 | `/ducts` page | Roster table (one row per fan port: required ESP or completeness state, TEL, blocker count, basis freshness), sorted by blockers; open a row for the sheet; 3D draws the open sheet's worst path and blocker marks as one more layer, existing layers and colours stay as ruled 2026-10-24; calc-derived encodings (size, flow, health, legs, provenance) become sheet columns [history 10, Space] | |
-| Pea | `route:ducts.sheet` in two discriminated modes: fan-port (whole sheet) or start+end with asserted direction (one chain, no ESP claim) [Astra 14]; the response is a bounded overview (ranked paths, totals, blockers, basis) with detail handles for legs, provenance and the walked element set [Astra 11]; `route:ducts.roster`; the same heal and write verbs with basis-bound candidates. Instructions: name a start, read blockers back, propose a default or a previewed heal with its effect on the total. Never grep, never elect, never compute. | Skill rendered from the same guide object as the tutorial |
+| Pea | `route:reads.value (read ducts.sheet)` in two discriminated modes: fan-port (whole sheet) or start+end with asserted direction (one chain, no ESP claim) [Astra 14]; the response is a bounded overview (ranked paths, totals, blockers, basis) with detail handles for legs, provenance and the walked element set [Astra 11]; `route:reads.value (read fans.roster)`; the same heal and write verbs with basis-bound candidates. Instructions: name a start, read blockers back, propose a default or a previewed heal with its effect on the total. Never grep, never elect, never compute. | Skill rendered from the same guide object as the tutorial |
 | Network surface (kept, re-keyed) | Reads sheets and the `document` selector; colours by sheet, never by group | Behind the compile wall until re-keyed |
 | Export | The sheet as the firm's static calc sheet (RHVAC tree layout: sections with grouped fitting counts, cumulative loss, available SP) [eng 10] | Owed |
 
@@ -207,7 +207,7 @@ Work          pending deltas only, per machine, per document (today's rule, kept
    allowance excluded from the comparison [eng 8, history 13, Astra 16].
 4. Roster: seeding order, (unit, port) identity, confirmation write, failed-write state.
    Fresh proof: census of Chadds units by kind, 71 ERVs yielding 142 ports.
-5. Sheet contract with basis token, overview plus detail handles; `route:ducts.sheet` in both
+5. Sheet contract with basis token, overview plus detail handles; `route:reads.value (read ducts.sheet)` in both
    modes; Pea skill rewritten from the guide object; the black-box MUAS-1 prompt replayed as
    the acceptance test (one call, a sheet, its blockers, no number claimed as ESP).
 6. Batch: recompute all roster fan ports on one document read with a shared acquisition;

@@ -21,18 +21,11 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   /** Search words for this route's edit door. */
   finds?: readonly string[];
   schema: TSchema;
-  /** Monotonic authored-Work schema age, independent of the transport envelope version. */
+  /** Current decoded Work schema stamp, independent of the transport envelope version. */
   schemaVersion?: number;
-  /** Each key upgrades exactly that saved schema age to the next. */
-  migrations?: Readonly<Record<number, (doc: unknown) => unknown>>;
   editable?: readonly import("./command.ts").WorkPath[];
   /** Domain-derived bookkeeping after an authored edit, before validation. */
   reconcileEdit?: (next: unknown, patches: readonly RouteStatePatch[]) => unknown;
-  /**
-   * What a person may carry over from Work this schema can no longer read (before or after start
-   * fresh), read tolerantly from the old document. Never throws, never parses into Work.
-   */
-  salvage?: (raw: unknown) => unknown;
 }
 
 /**
@@ -131,7 +124,7 @@ export type RouteDocOf<TSpec> =
   TSpec extends RouteStateSpec<infer TSchema> ? z.infer<TSchema> : never;
 
 /** A segment-array patch. Omit `value` to delete. Host-issued restore may replace the root at []. */
-export const routeStatePatchSchema = z.object({
+export const routeStatePatchSchema = z.strictObject({
   path: z.array(z.union([z.string(), z.number()]), {
     error: 'must be a segment array, e.g. ["scope","edit"]',
   }),
@@ -163,7 +156,7 @@ export const workWriteSchema = z.object({
 export type WorkWrite = z.infer<typeof workWriteSchema>;
 export type WorkWriteAck = {
   key: WorkKey;
-  kind: "apply" | "restore" | "publish" | "start-fresh";
+  kind: "apply" | "restore" | "publish";
   by: import("./route-doc.ts").WorkAuthor;
   press: string | null;
   /** Host-issued step identity and exact transition restored, never inferred from patch equality. */
@@ -187,13 +180,12 @@ export type WorkWriteAck = {
   /** Sent from the host's retained window when a reader subscribed: history it inherits, not a live edit. */
   replay?: true;
   /** Recovery keeps the unparsed envelope at this host-owned location. */
-  aside?: string;
 };
 
 /** The wire form of an accepted write: what the host stamped, validated where a browser receives it. */
 export const workWriteAckSchema: z.ZodType<WorkWriteAck> = z.object({
   key: workKeySchema,
-  kind: z.enum(["apply", "restore", "publish", "start-fresh"]),
+  kind: z.enum(["apply", "restore", "publish"]),
   by: z.enum(["pea", "human"]),
   press: z.string().min(1).nullable(),
   step: z.string().min(1).optional(),
@@ -210,7 +202,6 @@ export const workWriteAckSchema: z.ZodType<WorkWriteAck> = z.object({
   undoable: z.boolean(),
   at: z.number().optional(),
   replay: z.literal(true).optional(),
-  aside: z.string().optional(),
 });
 
 export type RouteWriteKind = "error" | "refused" | "advisory" | "partial";
@@ -270,52 +261,4 @@ export function message(error: unknown): string {
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * Saved Work this version's schema refuses, read as far as it still parses: every segment (and
- * every keyed cell of a record segment) that parses is kept, only the broken ones are dropped and
- * named in `dropped` (`segment` or `segment.key`). No migration of old shapes: a dropped cell is
- * just gone from this read. A document-level refusal (a cross-cell rule) drops the segments it
- * names. `whole` is true when nothing at all was readable.
- */
-export function salvageWork<S extends z.ZodObject>(
-  schema: S,
-  raw: unknown,
-): { doc: z.infer<S>; dropped: string[]; whole: boolean } {
-  const whole = schema.safeParse(raw);
-  if (whole.success) return { doc: whole.data, dropped: [], whole: false };
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw))
-    return { doc: schema.parse({}), dropped: ["(whole document)"], whole: true };
-  const kept: Record<string, unknown> = {};
-  const dropped: string[] = [];
-  for (const [segment, value] of Object.entries(raw)) {
-    const shape = (schema.shape as Record<string, z.ZodType | undefined>)[segment];
-    if (!shape) {
-      dropped.push(segment);
-      continue;
-    }
-    if (shape.safeParse(value).success) {
-      kept[segment] = value;
-      continue;
-    }
-    const isRecord = typeof value === "object" && value !== null && !Array.isArray(value);
-    const cells = isRecord ? Object.entries(value) : [];
-    const keptCells = cells.filter(([key, cell]) => {
-      const ok = shape.safeParse({ [key]: cell }).success;
-      if (!ok) dropped.push(`${segment}.${key}`);
-      return ok;
-    });
-    if (!cells.length) dropped.push(segment);
-    else if (keptCells.length) kept[segment] = Object.fromEntries(keptCells);
-  }
-  const second = schema.safeParse(kept);
-  if (second.success) return { doc: second.data, dropped: [...new Set(dropped)], whole: false };
-  // A cross-cell rule broke the kept cells: drop the segments its issues name, whole.
-  const broken = new Set(second.error.issues.map((issue) => String(issue.path[0])));
-  return {
-    doc: schema.parse(Object.fromEntries(Object.entries(kept).filter(([k]) => !broken.has(k)))),
-    dropped: [...new Set([...dropped, ...broken])],
-    whole: false,
-  };
 }

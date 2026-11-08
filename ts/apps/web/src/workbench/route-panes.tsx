@@ -1,3 +1,4 @@
+import { usePlaceViews, PlaceViewsProvider, PublishedPlaceViews } from "../shell/typed-shell";
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
@@ -14,7 +15,7 @@ import {
 import { ChatPlanIntent } from "#/route/situation-ladder";
 import { useWorkbench } from "./provider";
 import { useRouteTabs } from "./tabs";
-import { RouteTabActions, RouteTabs } from "./route-tabs";
+import { RouteTabActions, RouteTabs, tabTitle } from "./route-tabs";
 import { RouteRetention } from "./route-retention";
 
 /** Under these a side folds to its rail: Pea reads thin, a tool needs room for its table. */
@@ -29,6 +30,7 @@ export function RouteDock({
   renderRoute: (body: ReactNode) => ReactNode;
 }) {
   const { store } = useWorkbench();
+  const views = usePlaceViews();
   const tabs = useRouteTabs();
   const pea = useRouterState({
     select: (state) => state.location.pathname === routeAddress("pea").path,
@@ -128,7 +130,14 @@ export function RouteDock({
           pea: (frame) =>
             frame(
               tabs.route || pea ? (
-                <ChatShell docked={Boolean(tabs.route)} target={tabs.target} />
+                <>
+                  {layout.tools?.folded && tabs.active && (
+                    <span aria-label="Pea context" className="shrink-0 truncate p-(--gutter) hairline-b">
+                      {tabTitle(tabs.active)}
+                    </span>
+                  )}
+                  <ChatShell docked={Boolean(tabs.route)} target={tabs.target} />
+                </>
               ) : (
                 children
               ),
@@ -142,7 +151,7 @@ export function RouteDock({
                     onOpen={() => void navigate({ to: "/open" })}
                   />
                 )}
-                <RouteRetention {...tabs} renderRoute={renderRoute} />
+                <PlaceViewsProvider value={views}><RouteRetention {...tabs} renderRoute={renderRoute} /></PlaceViewsProvider>
               </>,
               {
                 tabs: strip,
@@ -163,6 +172,7 @@ export function RouteDock({
             ),
         }}
       />
+      <PublishedPlaceViews views={views} />
     </ChatPlanIntent.Provider>
   );
 }

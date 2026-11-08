@@ -1,8 +1,9 @@
+import { healPlan } from "@pe/ducts-domain/heal";
 import { expect, test } from "vite-plus/test";
 import { presentHeal, presentFan, presentLosses } from "./reviews";
 import { ra23Snapshot, twoHealNetworksSnapshot } from "./heal.fixture";
 import { snapshot } from "./test-fixture";
-const scope = (ducts = structuredClone(snapshot)) => ({ readings: { ducts: { value: ducts } } });
+const scope = (ducts = structuredClone(snapshot)) => ({ heal: healPlan(ducts, null), readings: { ducts: { value: ducts } } });
 test("fan review names targets from the Place sheet snapshot even when network scope is empty", () => {
   const review = presentLosses(
     {

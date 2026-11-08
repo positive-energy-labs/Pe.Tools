@@ -1,6 +1,9 @@
 import type { DuctsSheetEdits } from "@pe/agent-contracts";
-import type { ListPersist } from "@pe/kit/lang/collection";
-import type { OpenSheet } from "../neutral";
+import type { ValueHandle, ListPersist } from "@pe/kit/lang/collection";
+import { openFanSheetSchema } from "@pe/agent-contracts";
+import type { Immutable } from "@pe/agent-contracts";
+import type { z } from "zod";
+export type OpenSheet = Immutable<z.output<typeof openFanSheetSchema>>;
 import type { Closer } from "./closer";
 import type { FanPort, SheetInputs } from "./model";
 import type { SheetBlocker } from "./tiers";
@@ -13,6 +16,7 @@ export interface SheetFirm {
 }
 /** Presentation leaves receive only the data their own pane draws. */
 export interface RosterProps {
+  value?: ValueHandle<unknown>;
   nameOf: (id: number) => string;
   address?: ListPersist<"name">;
   roster: readonly FanPort[];

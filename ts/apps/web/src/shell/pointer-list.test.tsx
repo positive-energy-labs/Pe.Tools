@@ -8,7 +8,7 @@ import type { Pointer } from "../../../../packages/agent-contracts/src/pointers.
 
 // The host list behind `pointers.list`/`pointers.dismiss`; the components read and dismiss through it.
 let list: Pointer[] = [];
-vi.mock("./readings-api", () => ({
+vi.mock("../host/catalog-client", () => ({
   callOp: vi.fn(async (_ctx: unknown, key: string, request: { thread: string; id?: string }) => {
     if (key === "pointers.dismiss") list = list.filter((p) => p.id !== request.id);
     return { threadId: request.thread, pointers: list };

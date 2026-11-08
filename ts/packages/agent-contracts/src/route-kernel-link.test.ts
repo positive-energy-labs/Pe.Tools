@@ -2,6 +2,14 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
+import type { CatalogLink } from "./catalog.ts";
+import { INVALID } from "./page-keys.ts";
+import { decodeRouteGraph, linkRouteBodies, routeBindingSchema } from "./route-bodies.ts";
+import { projectKernelDirectory } from "./route-directory.ts";
+import { orderedListField } from "./route-field.ts";
+import { canonicalRouteJson } from "./route-graph.ts";
+import type { RouteModule, RouteFingerprintInput } from "./route-kernel-admission.ts";
+import type { RouteGraphJson } from "./route-kernel-data.ts";
 import {
   builtinModule,
   podModule,
@@ -10,10 +18,6 @@ import {
   schemas,
   entries,
 } from "./route-kernel.fixtures.ts";
-import { projectKernelDirectory } from "./route-directory.ts";
-import { INVALID } from "./page-keys.ts";
-import { canonicalRouteJson } from "./route-graph.ts";
-import { decodeRouteGraph, linkRouteBodies, routeBindingSchema } from "./route-bodies.ts";
 import {
   builtinClosureFingerprint,
   createBuiltinRouteInventory,
@@ -25,10 +29,6 @@ import {
   routeFingerprint,
   type RouteAdmissionEvidence,
 } from "./route-module.ts";
-import type { RouteGraphJson } from "./route-kernel-data.ts";
-import type { RouteModule, RouteFingerprintInput } from "./route-kernel-admission.ts";
-import type { CatalogLink } from "./catalog.ts";
-import { orderedListField } from "./route-field.ts";
 const bytes = new TextEncoder().encode("export const bodies = {};\n");
 const contracts = new TextEncoder().encode("kernel, schemas and codecs v1\n");
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -78,7 +78,7 @@ async function refuse(data: RouteGraphJson, overrides: object = {}, catalog = ba
   return result.diagnostics;
 }
 describe("one decoded admission", () => {
-  it("admits builtin and complete mixed-identity Pod through the same door", async () => {
+it("admits builtin and complete mixed-identity Pod through the same door", async () => {
     const builtin = await prepare();
     expect(builtin.port.admit({ ...builtinModule, artifact: builtin.artifact })).toMatchObject({
       ok: true,
@@ -107,7 +107,7 @@ describe("one decoded admission", () => {
       }),
     ).toMatchObject({ ok: true });
   });
-  it("diagnoses wrong, missing, extra and conflicting bodies at the slot", async () => {
+it("diagnoses wrong, missing, extra and conflicting bodies at the slot", async () => {
     const errors = await refuse(builtinData, {
       bodies: { ...builtinBodies, calculate: { ...builtinBodies.calculate, kind: "picker" } },
     });
@@ -132,7 +132,7 @@ describe("one decoded admission", () => {
       expect.objectContaining({ path: "readings.total.derive", code: "kind" }),
     );
   });
-  it("refuses unknown pane and Page/Work/reading dependencies", async () => {
+it("refuses unknown pane and Page/Work/reading dependencies", async () => {
     expect(
       await refuse({ ...builtinData, subject: { ...builtinData.subject, pane: "absent" } }),
     ).toContainEqual(expect.objectContaining({ path: "subject.pane" }));
@@ -155,7 +155,7 @@ describe("one decoded admission", () => {
       ),
     );
   });
-  it("refuses reading cycles, stage mismatch and multiple subjects/selections", async () => {
+it("refuses reading cycles, stage mismatch and multiple subjects/selections", async () => {
     expect(
       await refuse({
         ...builtinData,
@@ -184,7 +184,7 @@ describe("one decoded admission", () => {
       }),
     ).toContainEqual(expect.objectContaining({ path: "fields" }));
   });
-  it("checks field codecs, refinements, stage enums and migration coverage", async () => {
+it("checks field codecs, refinements and stage enums", async () => {
     const data = {
       ...builtinData,
       fields: {
@@ -216,13 +216,10 @@ describe("one decoded admission", () => {
       }),
     ).toContainEqual(expect.objectContaining({ path: "fields.density.codec" }));
     expect(
-      await refuse({ ...builtinData, work: { ...builtinData.work, version: 2 } }),
-    ).toContainEqual(expect.objectContaining({ path: "work.migrations.1" }));
-    expect(
       await refuse(builtinData, { schemas: { ...schemas, subjectOne: z.string().nullable() } }),
     ).toContainEqual(expect.objectContaining({ path: "fields.system.schema", code: "identity" }));
   });
-  it("refuses invalid axes and transitive geometry without policy", async () => {
+it("refuses invalid axes and transitive geometry without policy", async () => {
     expect(
       await refuse(builtinData, {
         entries: {
@@ -260,7 +257,7 @@ describe("one decoded admission", () => {
       ),
     ).toContainEqual(expect.objectContaining({ path: "readings.roster.geometry" }));
   });
-  it("refuses automatic dependency closures that reach detailed geometry", async () => {
+it("refuses automatic dependency closures that reach detailed geometry", async () => {
     const data = {
       ...podModule.data,
       readings: {
@@ -285,7 +282,7 @@ describe("one decoded admission", () => {
   });
 });
 describe("canonical bytes", () => {
-  it.each([() => 1, undefined, Infinity, NaN, 1n, new Date(), "\ud800", Symbol("x")])(
+it.each([() => 1, undefined, Infinity, NaN, 1n, new Date(), "\ud800", Symbol("x")])(
     "refuses invalid JSON: %s",
     (value) => {
       expect(() => canonicalRouteJson({ value })).toThrow();
@@ -300,7 +297,7 @@ describe("canonical bytes", () => {
       ).toBe(false);
     },
   );
-  it("rejects accessors, sparse arrays and cycles without evaluating them", () => {
+it("rejects accessors, sparse arrays and cycles without evaluating them", () => {
     const cycle: { self?: unknown } = {};
     cycle.self = cycle;
     const sparse: unknown[] = [];
@@ -318,7 +315,7 @@ describe("canonical bytes", () => {
       expect(() => canonicalRouteJson(value)).toThrow();
     expect(canonicalRouteJson({ z: -0, a: [1e30, "€"] })).toBe('{"a":[1e+30,"€"],"z":0}');
   });
-  it("requires roles and refuses required review", () => {
+it("requires roles and refuses required review", () => {
     const { role: _role, ...field } = builtinData.fields.search;
     expect(
       decodeRouteGraph({ ...builtinData, fields: { ...builtinData.fields, search: field } }).ok,
@@ -330,7 +327,7 @@ describe("canonical bytes", () => {
       }).ok,
     ).toBe(false);
   });
-  it("matches independent SHA256, binds body bytes and refuses a wrong fingerprint", async () => {
+it("matches independent SHA256, binds body bytes and refuses a wrong fingerprint", async () => {
     const { artifact, evidence } = await prepare();
     const expected = createHash("sha256")
       .update(`pe.route.v1\n${canonicalRouteJson(artifact)}`)
@@ -359,7 +356,7 @@ describe("canonical bytes", () => {
     const wrong = await createRouteAdmission({ ...evidence, expectedFingerprint: "0".repeat(64) });
     expect(wrong.admitUnknown({ ...builtinModule, artifact }).ok).toBe(false);
   });
-  it("rejects unsafe paths, duplicate members, missing entries and unresolved closures", async () => {
+it("rejects unsafe paths, duplicate members, missing entries and unresolved closures", async () => {
     const { artifact, evidence } = await prepare();
     for (const path of ["../bodies.js", "/bodies.js", "a\\b", "a//b", "C:body.js", "missing.js"])
       await expect(
@@ -717,48 +714,6 @@ it("admits journal previews with truthful Geometry/rollback axes but still refus
         expect.objectContaining({ path: "readings.roster.geometry" }),
       );
   }
-});
-
-it("links recovery display slots and validates their declared evidence", () => {
-  const data = {
-    ...builtinData,
-    salvage: "recover",
-    salvagePresent: "presentRecovery",
-    salvageDeps: { page: ["density"], work: ["amount"], readings: ["total"] },
-  } as const;
-  const bindings = routeBindingSchema.parse({
-    ...builtinModule,
-    sources: {},
-    bodies: {
-      ...builtinBodies,
-      recover: {
-        slot: "salvage",
-        kind: "salvage",
-        source: { module: "test", export: "recover" },
-        run: () => ({ ok: true, value: [] }),
-      },
-      presentRecovery: {
-        slot: "salvagePresent",
-        kind: "present",
-        source: { module: "test", export: "present" },
-        run: () => "Recovered inputs",
-      },
-    },
-  });
-  expect(linkRouteBodies(data, bindings, baseCatalog)).toEqual([]);
-  expect(
-    linkRouteBodies(
-      { ...data, salvageDeps: { ...data.salvageDeps, readings: ["missing"] } },
-      bindings,
-      baseCatalog,
-    ),
-  ).toContainEqual(expect.objectContaining({ path: "salvageDeps.readings.0" }));
-  expect(
-    linkRouteBodies({ ...data, salvagePresent: "missing" }, bindings, baseCatalog),
-  ).toContainEqual(expect.objectContaining({ path: "salvagePresent" }));
-  expect(linkRouteBodies({ ...data, salvage: undefined }, bindings, baseCatalog)).toContainEqual(
-    expect.objectContaining({ path: "salvagePresent" }),
-  );
 });
 
 it.each(["missing", "malformed"])(

@@ -1,4 +1,7 @@
-import type { AdmittedMount } from "./admitted-mount";
+import type { TypedMount } from "./typed-mount";
+import type { WorkKey } from "@pe/agent-contracts";
+import type { WorkJournal } from "./journal";
+import type { createRouteTimeline } from "./timeline";
 /**
  * ADR 0027 rule 3: the Situation is one line. The route's name and context lead, one primary verb
  * stands framed, the rest wait in an overflow, and the Timeline head closes the line. Layout only:
@@ -16,7 +19,6 @@ import { harnessClient } from "#/workbench/provider/harness-client";
 import { WorkbenchContext } from "#/workbench/provider/thread-summary";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
-import type { GraphMount } from "./mount-owner";
 import { activityTime, projectTimeline, type TimelineVerbs, type TimelineEntry } from "./timeline";
 import { secondsLeft, useSecondTick } from "./countdown";
 import "./situation-band.css";
@@ -94,8 +96,20 @@ export const entryCaller = (entry: TimelineEntry) =>
     : "you";
 
 /** The Work journal behind the owner's current scope: the one history of authored edits. */
-type HistoryOwner<P, W> = GraphMount<P, W> | AdmittedMount;
-export function useWorkJournal<P, W>(owner: HistoryOwner<P, W>) {
+export type JournalOwner = Pick<TypedMount, "subscribe" | "revision" | "restoreWork" | "stopCommand"> & { spec?: Pick<TypedMount["spec"], "commands">; discardIntent?(id:string):void; journalRefusal(): string | null; journal(): ReturnType<WorkJournal["read"]> | null; timeline(): readonly TimelineEntry[] };
+export interface LegacyJournalOwner {
+  subscribe(notify: () => void): () => void;
+  version(): number;
+  snapshot(): { work: { handle: { key: WorkKey } } | null; workKey?: WorkKey; unreadable?: WorkKey };
+  journals: ReadonlyMap<string, WorkJournal>;
+  restore(direction: "undo" | "redo"): Promise<unknown>;
+  journalRefusal(): string | null;
+  commandRefusal: string | null;
+  timeline: ReturnType<typeof createRouteTimeline>;
+  verbs: TimelineVerbs;
+}
+type HistoryOwner = LegacyJournalOwner | JournalOwner;
+export function useWorkJournal(owner: HistoryOwner) {
   const version = "restoreWork" in owner ? owner.revision : owner.version;
   useSyncExternalStore(owner.subscribe, version, version);
   if ("restoreWork" in owner) return owner.journal();
@@ -134,17 +148,34 @@ export const lastMove = (journal: Journal) => {
  * restore Mod+Z runs, refused with the journal's own reason. `words` draws the labels beside the
  * glyphs (the History); the head draws glyphs alone, their names as tooltips.
  */
-export function JournalButtons<P, W>({
+export function JournalButtons({
   owner,
   words = false,
 }: {
-  owner: HistoryOwner<P, W>;
+  owner: HistoryOwner;
   words?: boolean;
 }) {
   const journal = useWorkJournal(owner);
   if (!journal) return null;
   const undo = journal.undo.at(-1);
   const redo = journal.redo.at(-1);
+  const entries = "restoreWork" in owner ? owner.timeline() : owner.timeline.read();
+  const verbs = "restoreWork" in owner
+    ? Object.fromEntries(Object.entries(owner.spec?.commands ?? {}).map(([id, command]) => [id, { label: command.label, entry: command.entry }]))
+    : owner.verbs;
+  const rows = projectTimeline(entries, verbs, journal);
+  const barrierRefusal = (step: typeof undo, direction: "undo" | "redo") => {
+    if (!step?.barrier) return null;
+    const receiptId = step.barrier.receiptId ?? (step.barrier.basis as { receiptId?: string } | undefined)?.receiptId;
+    const label = rows.find(row => row.key === `receipt:${receiptId}`)?.verb;
+    return label ? `Cannot ${direction}: '${label}' already wrote this to Revit. Reverse it in Revit.`
+      : `Cannot ${direction}: a later action changed this Work. Inspect History.`;
+  };
+  const restore = async (direction: "undo" | "redo") => {
+    const result = await ("restoreWork" in owner ? owner.restoreWork(direction) : owner.restore(direction));
+    return result && typeof result === "object" && "ok" in result && result.ok === false && "message" in result
+      ? { message: String(result.message) } : null;
+  };
   return (
     <>
       <Button
@@ -153,11 +184,10 @@ export function JournalButtons<P, W>({
         refusal={
           owner.journalRefusal() ??
           undo?.superseded?.message ??
+          barrierRefusal(undo, "undo") ??
           (undo ? null : "Nothing to undo: no edit to this Work since this tab opened it")
         }
-        onClick={() =>
-          void ("restoreWork" in owner ? owner.restoreWork("undo") : owner.restore("undo"))
-        }
+        onPress={() => restore("undo")}
       >
         {words ? "undo" : undefined}
       </Button>
@@ -165,11 +195,11 @@ export function JournalButtons<P, W>({
         icon={Redo2}
         label={redo ? `Redo ${redo.label}` : "Redo"}
         refusal={
-          owner.journalRefusal() ?? redo?.superseded?.message ?? (redo ? null : "Nothing to redo")
+          owner.journalRefusal() ?? redo?.superseded?.message ??
+          barrierRefusal(redo, "redo") ??
+          (redo ? null : "Nothing to redo")
         }
-        onClick={() =>
-          void ("restoreWork" in owner ? owner.restoreWork("redo") : owner.restore("redo"))
-        }
+        onPress={() => restore("redo")}
       >
         {words ? "redo" : undefined}
       </Button>
@@ -182,13 +212,13 @@ export function JournalButtons<P, W>({
  * command ran after it; else the latest entry, in one line and every open consent window as its
  * "Reject?" countdown. The full history opens beneath it; it never takes a row of its own.
  */
-export function TimelineHead<P, W>({
+export function TimelineHead({
   owner,
   history,
   thread,
   verbs: declaredVerbs,
 }: {
-  owner: HistoryOwner<P, W>;
+  owner: HistoryOwner;
   verbs?: TimelineVerbs;
   history: ReactNode;
   thread?: string;
