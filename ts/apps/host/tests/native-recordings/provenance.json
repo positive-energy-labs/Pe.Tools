@@ -592,5 +592,41 @@
     "asset": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools-drive\\.artifacts\\accept\\solc1b\\home\\Pe.Tools\\.local-state\\scratch\\pe-view-captures\\view-7889091-bb2c555293a643eeaaa4d7271cc1a685 - Floor Plan - Coordination Plan - Level 1-crop.png",
     "assetCopy": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/runs/takeoffs-initialize-leaf/other-sdk-copies/view-asset.png",
     "assetSha256": "ca5709fa9f9b531a4704d3449c4631e380a841b0c79c15c59ff86dfd2dc2f28f"
+  },
+  "retained-revit.detail.elements": {
+    "operation": "revit.detail.elements",
+    "source": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/runs/takeoffs-initialize-leaf/other-sdk-copies/7854d03ac4aa19a900b1e8.json",
+    "originalSource": "C:/Users/kaitp/AppData/Local/Pe.Revit.Sdk/sessions/receipts/f11c8011-2642-4fe9-87c6-f34ad8166373.67124-639296595725235675.response.json",
+    "sourceSha256": "1a01fc61eab00d683b10a45a36bdf7bc5867462dc129fa7cec6a6986e55c628e",
+    "responseSha256": "38b2c450805b5217f3548e2dd5de0e9708bf2c49af6889dcd2117d2261473191",
+    "terminal": {
+      "requestId": "f11c8011-2642-4fe9-87c6-f34ad8166373",
+      "key": "revit.detail.elements",
+      "pid": 67124,
+      "processStartUtc": "2026-11-07T14:46:12.5235675Z",
+      "verdict": "ok",
+      "responsePath": "f11c8011-2642-4fe9-87c6-f34ad8166373.67124-639296595725235675.response.json",
+      "startedUtc": "2026-11-07T15:33:40.3453190Z",
+      "completedUtc": "2026-11-07T15:33:40.8197789Z"
+    },
+    "date": "2026-11-07T15:33:40.8197789Z",
+    "commit": null,
+    "modelCopy": null,
+    "lane": "retained SDK native receipt; original custody not reconstructed"
+  },
+  "fresh-revit.context.lens": {
+    "operation": "revit.context.lens",
+    "source": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/tmp/leaf-native-07/lens.json",
+    "sourceSha256": "c5dc2276aa8fc6f8a9f0c2e69fe3208d86a8d95b378382ebc4dc2a52882ecbbc",
+    "responseSha256": "5ae1e2478b2af2c07f2b7731613a10dd054a72771057be32282484ae03d5b781",
+    "pointer": "response",
+    "requestFile": "fresh-revit.context.lens-request.json",
+    "commit": "f32e26007fa83b001f4328ab9060f1c66d63c02f",
+    "recorderSha256": "a2e1d9558bf4490e66e3ff0dd439ad2c68c862c098737cabb2be73ddd914308b",
+    "lane": "fresh",
+    "date": "2026-11-08T03:30:14.1310449Z",
+    "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-07\\lens-fixture-model.rvt",
+    "modelCopySha256": "7aa8f68267e7ddcc21ab3734d89d539d128d7592a2572e0afdd9eef6e8fdd98a",
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-07.json"
   }
 }
