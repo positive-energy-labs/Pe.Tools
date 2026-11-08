@@ -84,3 +84,43 @@ test("closed old turn stays refused after a new turn opens", async () => {
   expect(JSON.stringify(refused)).toContain("run.closed");
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(0);
 });
+
+// Port of R7 from d65a96e7:ts/apps/host/tests/kernel-write-safety.journey.test.ts.
+test("R7 Schedule HTTP applies atomically reserve one Plan while consent waits", async () => {
+  const f = await fixture();
+  const turn = f.newTurn("exclusive-schedule");
+  expect(await f.command("exclusive-plan", turn.token, true)).toMatchObject({ state: "succeeded" });
+  const before = f.sent.length;
+  const first = f.command("first-apply", turn.token);
+  let second: ReturnType<typeof f.command> | undefined;
+  try {
+    await vi.waitFor(() => expect(f.runs.commandWindow("first-apply")).toBeDefined());
+    second = f.command("second-apply", turn.token);
+    await vi.waitFor(async () =>
+      expect((await f.owner().list()).find((row) => row.id === "second-apply")).toBeDefined(),
+    );
+    const rows = (await f.owner().list()).filter((row) =>
+      ["first-apply", "second-apply"].includes(row.id),
+    );
+    expect(rows.filter((row) => row.refusal?.kind === "claimed")).toHaveLength(1);
+    expect(rows.find((row) => row.id === "second-apply")).toMatchObject({
+      state: "failed",
+      notDispatched: true,
+      steps: [],
+      refusal: {
+        kind: "claimed",
+        by: "first-apply",
+        claim: { kind: "receipt", id: "exclusive-plan" },
+      },
+    });
+    expect(f.sent.slice(before)).toEqual([]);
+    expect(f.sent.filter((call) => call.key === "schedule.cells.apply")).toHaveLength(0);
+    f.runs.decide(turn.run.thread, f.runs.commandWindow("first-apply")!.requestId, "allow_now");
+    expect(await first).toMatchObject({ state: "succeeded", result: { applied: 1 } });
+    expect(await second).toMatchObject({ state: "failed", refusal: { kind: "claimed" } });
+    expect(f.sent.filter((call) => call.key === "schedule.cells.apply")).toHaveLength(1);
+  } finally {
+    f.runs.closeAll();
+    await Promise.allSettled([first, ...(second ? [second] : [])]);
+  }
+});
