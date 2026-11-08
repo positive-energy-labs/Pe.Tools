@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { canonicalRouteInput } from "./route-doc.ts";
 import { pageKeySchema } from "./contribution.ts";
 import { addressSchema, documentRefSchema, executionTargetSchema } from "./target.ts";
 
@@ -42,6 +43,15 @@ export const callerSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("anonymous") }),
 ]);
 export type Caller = z.infer<typeof callerSchema>;
+
+/** Stable plan/journal ownership; turn credentials remain evidence and require separate run admission. */
+export const sameCaller = (a: Caller | null | undefined, b: Caller | null | undefined): boolean =>
+  !!a && !!b && a.kind === b.kind &&
+  (a.kind === "pea" && b.kind === "pea"
+    ? a.thread === b.thread
+    : a.kind === "human" && b.kind === "human"
+      ? a.via === b.via && a.login === b.login && a.device === b.device
+      : canonicalRouteInput(a) === canonicalRouteInput(b));
 
 /** Why a crossing was admitted; stored on the receipt and rechecked at every step begin (D4). */
 export const basisSchema = z.discriminatedUnion("kind", [

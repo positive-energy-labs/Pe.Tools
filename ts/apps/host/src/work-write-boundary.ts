@@ -6,6 +6,7 @@ import type { SdkReceiptReader } from "./native-receipts.ts";
 import { z } from "zod";
 import {
   canonicalRouteInput,
+  sameCaller,
   writeResponseSchema,
   writePreviewSchema,
   workHandleSchema,
@@ -214,7 +215,7 @@ export function workWriteBoundary(
       if (!previewOnly && planRefusal?.planRefusal)
         throw refused(planRefusal.planRefusal, planRefusal.planRefusalCode ?? "preview.refused");
       const preview = previews.filter((row ) => row.state === "succeeded" &&
-        canonicalRouteInput((row.result as { seal?: WriteSeal }).seal?.caller) === canonicalRouteInput(ctx.caller),
+        sameCaller((row.result as { seal?: WriteSeal }).seal?.caller, ctx.caller),
       ).at(-1);
       if (!previewOnly && !preview && previews.length)
         throw refused("Plan belongs to another caller; plan the current Work first", "preview.caller",
@@ -246,14 +247,16 @@ export function workWriteBoundary(
         });
         const previousSeal =
           preview?.state === "succeeded"
-            ? (preview.result as { seal?: Record<string, unknown> }).seal
+            ? (preview.result as { seal?: WriteSeal }).seal
             : undefined;
-        if (!previewOnly && canonicalRouteInput(previousSeal) !== canonicalRouteInput(seal)) {
-          const changed = Object.keys(seal).filter(
-            (key) =>
-              canonicalRouteInput(previousSeal?.[key]) !==
-              canonicalRouteInput(seal[key as keyof typeof seal]),
-          );
+        // Wrap field values so a missing field cannot compare equal to an empty object.
+        const changed = [...new Set([...Object.keys(previousSeal ?? {}), ...Object.keys(seal)])].filter(
+          (key) => key === "caller"
+            ? !sameCaller(previousSeal?.caller, seal.caller)
+            : canonicalRouteInput({ value: previousSeal?.[key as keyof WriteSeal] }) !==
+              canonicalRouteInput({ value: seal[key as keyof WriteSeal] }),
+        );
+        if (!previewOnly && changed.length) {
           throw refused(
             `Plan changed; plan the current Work again (${changed.join(", ")})`,
             "preview.stale",

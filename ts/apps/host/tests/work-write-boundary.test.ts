@@ -398,3 +398,19 @@ test("a change the host received but has not applied yet still refuses the seale
   expect(marks.changedAt(ref), "the cache has not caught up").toBeNull();
   await expect(assertSealed(marks, ref, sealed)).rejects.toThrow("Plan changed (documentMark)");
 });
+
+test.each(["caller", "requestHash", "work", "documentMark", "incarnation", "dependencies"] as const)(
+  "prepare independently rechecks sealed %s after bind", async key => {
+    const f = await fixture();
+    const previewBinding = await f.executor.bind(f.ctx);
+    const preview = await f.executor.run(f.ctx, { prepared: await previewBinding.prepare!() } as ActionExecution);
+    f.recordPreview("preview", preview);
+    f.apply();
+    const apply = await f.executor.bind(f.ctx);
+    const result = f.receipts[0].state === "succeeded" ? f.receipts[0].result : null;
+    const seal = (result as { seal: Record<string, unknown> }).seal;
+    seal[key] = key === "caller" ? { kind: "human", via: "cli" } : { tampered: true };
+    await expect(apply.prepare!()).rejects.toMatchObject({ refusal: { code: "preview.stale" } });
+    expect(f.run).not.toHaveBeenCalled();
+  },
+);
