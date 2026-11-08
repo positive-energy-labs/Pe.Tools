@@ -325,7 +325,7 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    expect(plan.input.components).toEqual([expect.objectContaining({id:13493812,inWg:0.01})]);
    expect(JSON.stringify(plan.input)).not.toContain("14577394");
    expect(mount.reviewProblem("losses")).toBeNull();
-   expect(screen.getByRole("button",{name:"Write to Revit"}).hasAttribute("disabled")).toBe(false);
+   expect((await screen.findByRole("button",{name:"Write to Revit"})).hasAttribute("disabled")).toBe(false);
    expect(document.body.textContent).not.toContain("no staged edit");
  } finally {
    phase("finally");
