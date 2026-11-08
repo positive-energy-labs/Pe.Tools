@@ -643,12 +643,13 @@ test("absent Work feeds capture and replay null without stopping recording", asy
 
 test("command Work reads carry context through binding and revalidation", async () => {
   const { dir, writer } = await bundle();
+  const commandWorkKey = { ...key, route: "ducts" };
   const { ActionJournal } = await import("../src/action-journal.ts");
   const { commands, tools } = await import("@pe/agent-contracts");
   const { z } = await import("zod");
   const { crossingOf } = await import("./callers.ts");
   const workspace = new RouteWorkspace({
-    registrations: [{ spec: tools.fans.work }],
+    registrations: [{ spec: tools.ducts.work }],
     store: memory(),
     capture: capturedWorkReads(writer, run),
   });
@@ -665,7 +666,7 @@ test("command Work reads carry context through binding and revalidation", async 
       definition: commands["ducts.plan-losses"],
       prepared: z.unknown(),
       bind: async (ctx) => {
-        await ctx.selectWork(tools.fans.work, { key, revision: 0 });
+        await ctx.selectWork(tools.ducts.work, { key: commandWorkKey, revision: 0 });
         return { prepare: async () => null, effects: [] };
       },
       run: async () => ({
@@ -674,7 +675,7 @@ test("command Work reads carry context through binding and revalidation", async 
         seal: {
           caller: { kind: "human", via: "local" },
           requestHash: "fixture",
-          work: { handle: { key, revision: 0 } },
+          work: { handle: { key: commandWorkKey, revision: 0 } },
           documentMark: { session: "s", openId: "open", observedSince: null, changedAt: null },
           incarnation: {},
           dependencies: "fixture",
@@ -688,7 +689,7 @@ test("command Work reads carry context through binding and revalidation", async 
       id,
       key: "ducts.plan-losses",
       target: { kind: "document", ref: { session: "s", openId: "open" } },
-      input: { work: { key, revision: 0 } },
+      input: { work: { key: commandWorkKey, revision: 0 } },
     },
     crossingOf(),
   );
@@ -698,12 +699,12 @@ test("command Work reads carry context through binding and revalidation", async 
   await run(request.consumption.seal);
   const store = await reader(dir);
   const replay = new RouteWorkspace({
-    registrations: [{ spec: tools.fans.work }],
+    registrations: [{ spec: tools.ducts.work }],
     recorded: recordedWorkSource(store),
   });
   const again = await consumer(
     { kind: "recording", recordingStore: store, at: null },
     request.consumption.id,
   );
-  expect((await replay.view(key, "fans", again.context))?.revision).toBe(0);
+  expect((await replay.view(commandWorkKey, "ducts", again.context))?.revision).toBe(0);
 });
