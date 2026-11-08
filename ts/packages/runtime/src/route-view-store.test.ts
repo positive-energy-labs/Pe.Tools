@@ -3,13 +3,14 @@ import { routeAddress } from "@pe/agent-contracts";
 import type { RouteView } from "@pe/agent-contracts";
 import { RouteViewStore } from "./route-view-store.ts";
 
+const wire = (value: string) => JSON.stringify(value);
 const counts = { families: 2, types: 3, parameters: 4 };
 const view = (instance: string, thread = "t"): RouteView => ({
   route: "families",
   thread,
   instance,
   surface: "chat",
-  page: { focus: "" },
+  page: { readId: wire("") },
   context: {
     stage: "history",
     readingId: "read-1",
@@ -89,20 +90,20 @@ describe("mounted route view custody", () => {
     store.subscribe((value) => {
       intent = value;
     });
-    const result = store.set("t", "families", id1, first.revision, { focus: "blank" });
-    const ack = (focus: string) =>
+    const result = store.set("t", "families", id1, first.revision, { readId: wire("blank") });
+    const ack = (readId: string) =>
       store.ack({
         outcome: "rendered",
         instance: id1,
         commandId: intent!.commandId,
         revision: first.revision,
-        page: { focus },
+        page: { readId: wire(readId) },
         facts: first.facts,
       }).ok;
     expect(ack("wrong")).toBe(false);
-    store.publish({ ...view(id1), page: { focus: "blank" } });
+    store.publish({ ...view(id1), page: { readId: wire("blank") } });
     expect(ack("blank")).toBe(true);
-    await expect(result).resolves.toMatchObject({ ok: true, page: { focus: "blank" } });
+    await expect(result).resolves.toMatchObject({ ok: true, page: { readId: wire("blank") } });
     const next = store.select("t", "families", id1)!;
     expect("revision" in next && next.revision).toBeGreaterThan(first.revision);
   });
@@ -147,11 +148,11 @@ describe("mounted route view custody", () => {
       store.subscribe((intent) => {
         commandId = intent.commandId;
       });
-      const result = store.set("t", "families", id1, first.revision, { focus: "filled" });
+      const result = store.set("t", "families", id1, first.revision, { readId: wire("filled") });
       store.publish({
         ...view(id1),
         context: { ...view(id1).context, readingId: "read-2" },
-        page: { focus: "filled" },
+        page: { readId: wire("filled") },
       });
       expect(
         store.ack({
@@ -159,7 +160,7 @@ describe("mounted route view custody", () => {
           instance: id1,
           commandId,
           revision: first.revision,
-          page: { focus: "filled" },
+          page: { readId: wire("filled") },
           facts: first.facts,
         }).ok,
       ).toBe(false);
@@ -181,8 +182,8 @@ describe("mounted route view custody", () => {
       store.subscribe((intent) => {
         commandId = intent.commandId;
       });
-      const result = store.set("old-thread", "families", id1, first.revision, { focus: "blank" });
-      store.publish({ ...view(id1, "new-thread"), page: { focus: "blank" } });
+      const result = store.set("old-thread", "families", id1, first.revision, { readId: wire("blank") });
+      store.publish({ ...view(id1, "new-thread"), page: { readId: wire("blank") } });
       expect(store.select("old-thread", "families", id1)).toBeNull();
       expect(
         store.ack({
@@ -190,7 +191,7 @@ describe("mounted route view custody", () => {
           instance: id1,
           commandId,
           revision: first.revision,
-          page: { focus: "blank" },
+          page: { readId: wire("blank") },
           facts: first.facts,
         }).ok,
       ).toBe(false);
