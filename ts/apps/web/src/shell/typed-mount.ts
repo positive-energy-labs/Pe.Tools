@@ -171,6 +171,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             accept(record, { key: ack.key, revision: ack.revision }, result.envelope.doc);
           }
           lease.entry.journal.accept(ack);
+        } else if (state.kind === "absent" && id !== own && config.state.schema.safeParse({}).success) {
+          // A composed owner's read uses the host's schema-default view at r0, not persisted presence.
+          const handle = { key: scope.key, revision: 0 }, value = config.state.schema.parse({});
+          accept(record, handle, value);
+          lease.entry.restore({ kind: "ready", snapshot: { handle, revision: 0, value }, history: { from: 1, acks: [] } });
         } else if (state.kind !== "ack") {
           record.ready = false;
           record.absent=state.kind === "absent";
