@@ -1,3 +1,5 @@
+import { markReadings } from "../src/resource-adapters.ts";
+import { openRecordingWriter, openRecordingReader, nativeCatalogIdentity } from "../src/native-recording.ts";
 import { fansDocumentSchema } from "@pe/agent-contracts";
 import { detachedBridge, sessionView, consentService, harnessThreads, testSpawner, settle, testHostInputs, captureStore } from "./effect-test.ts";
 import { nativeReadRoot } from "../src/app.ts";
@@ -5,7 +7,7 @@ import { HostNativeRead } from "@pe/host-internal/native-read";
 import { RevitBridge } from "../src/bridge.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
-import { HostDocumentMarks } from "../src/document-marks.ts";
+import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, onTestFinished, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
@@ -25,7 +27,7 @@ import type {
   PluginHooks,
   WorkHandle,
 } from "@pe/agent-contracts";
-import { HARNESS_EVENT_MAX_BYTES, tools, bindWork, stagedDucts, workKey, address as documentAddress } from "@pe/agent-contracts";
+import { HARNESS_EVENT_MAX_BYTES, readingKey, tools, bindWork, stagedDucts, workKey, address as documentAddress } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "./callers.ts";
 import {
@@ -1805,4 +1807,91 @@ test("Stop escalation logs a retiring failure as ThreadRetireFailed", async () =
     await settle(stopChild(detached));
     await h.close();
   }
+});
+
+
+test("DocLab terminal burst replays through HTTP beside real mark capture without a false backlog", async () => {
+  const dir = await mkdtemp(join(root, "mark-burst-"));
+  const identity = { build: "mark-burst", catalog: nativeCatalogIdentity() };
+  const bounds = { maxBytes: 1024 * 1024, maxTakings: 100 };
+  const writer = await settle(openRecordingWriter(join(dir, "recording"), identity, bounds));
+  const live = hostMarks({ changedAt: () => null, subscribe: () => () => {} });
+  const marks = await settle(HostDocumentMarks.pipe(Effect.provide(
+    HostDocumentMarks.capturing(writer).pipe(Layer.provide(Layer.succeed(HostDocumentMarks, live))),
+  )));
+  const h = await host();
+  const thread = "doclab-burst";
+  const ref = { session: "A", openId: "open-A" };
+  // Gate c1 copied events seq 49..341: 293 terminal deltas in 328 ms from one skill-file read.
+  const events: HarnessEvent[] = Array.from({ length: 293 }, (_, i) => ({
+    kind: "update", seq: i + 1, at: new Date(1_000 + i).toISOString(), turnId: "doclab",
+    update: { sessionUpdate: "tool_call_update", toolCallId: "read-skill",
+      _meta: { terminal_output_delta: { data: `line ${i}\n`, terminal_id: "read-skill" } } },
+  }));
+  events.push({ kind: "turn_end", seq: 294, at: new Date(1_294).toISOString(),
+    turnId: "doclab", stopReason: "end_turn" });
+  const cursor = h.log.last;
+  for (const event of events) h.log.append({ kind: "thread", thread, event });
+  let storm = false;
+  const routes = createPeRoutes({
+    registrations: [], heads: { observe: () => () => {} },
+    store: fileRouteDocumentStore(join(dir, "work")),
+    observeHostResource: (request, publish, after) => h.observe(request, publish, after) ?? (() => {
+      for (let i = 0; i < (storm ? 65 : 1); i++)
+        publish({ kind: "snapshot", key: readingKey(request), value: { takenAt: new Date(1).toISOString() } });
+      return () => {};
+    })(),
+    markReadings: markReadings(marks, (ref, key, at) => ref
+      ? settle(marks.readFrame(ref, key, at)) : Promise.resolve(null)),
+  });
+  const schedule = { kind: "schedule-reading", subject: "catalog", target: ref };
+  const connect = async (keys: unknown[], after?: number) => {
+    const url = new URL("http://host/pe/resources");
+    url.searchParams.set("keys", JSON.stringify(keys));
+    if (after !== undefined) url.searchParams.set("after", String(after));
+    const response = await routes.fetch(new Request(url));
+    expect(response.status).toBe(200);
+    return response.body!.getReader();
+  };
+  const frames = async (stream: ReadableStreamDefaultReader<Uint8Array>, until: (f: any[]) => boolean) => {
+    let text = "";
+    const result: any[] = [];
+    while (!until(result)) {
+      const chunk = await stream.read();
+      if (chunk.done) throw Error(`Stream closed: ${text}`);
+      text += new TextDecoder().decode(chunk.value);
+      let end: number;
+      while ((end = text.indexOf("\n\n")) >= 0) {
+        const block = text.slice(0, end); text = text.slice(end + 2);
+        const data = block.split("\n").find(line => line.startsWith("data: "));
+        if (data) result.push(JSON.parse(data.slice(6)));
+      }
+    }
+    return result;
+  };
+  const stream = await connect([{ kind: "thread", thread }, schedule], cursor);
+  try {
+    const got = await frames(stream, fs => fs.some(f => f.kind === "failure") ||
+      (fs.some(f => f.value?.kind === "turn_end") && fs.some(f => f.kind === "snapshot")));
+    expect(got.filter(f => f.kind === "failure")).toEqual([]);
+    expect(got.filter(f => f.kind === "event").map(f => f.value)).toEqual(events);
+    const next: HarnessEvent = { kind: "turn_end", seq: 295, at: new Date(1_295).toISOString(),
+      turnId: "next", stopReason: "end_turn" };
+    h.log.append({ kind: "thread", thread, event: next });
+    expect(await frames(stream, fs => fs.length > 0)).toEqual([
+      expect.objectContaining({ kind: "event", value: next }),
+    ]);
+  } finally { await stream.cancel(); }
+  const recorded = await settle(openRecordingReader(join(dir, "recording"), identity, bounds));
+  expect(recorded.takingAt(0)?.input.kind).toBe("marks");
+  expect(recorded.takingAt(0)?.outcome.kind).toBe("observed");
+  // A real snapshot storm still refuses visibly; the fix must not hide capture overflow.
+  storm = true;
+  const overloaded = await connect([schedule]);
+  try {
+    const got = await frames(overloaded, fs => fs.some(f => f.kind === "failure"));
+    expect(got).toContainEqual(expect.objectContaining({ kind: "failure",
+      error: "Mark-frame capture backlog exceeded its bound",
+      failure: expect.objectContaining({ code: "ReadingFrameBacklog" }) }));
+  } finally { await overloaded.cancel(); }
 });
