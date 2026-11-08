@@ -235,6 +235,25 @@ test("E3/E4 a lost delivered write stays unknown and blocks a fresh overlapping 
   } finally { await f.close(); }
 });
 
+test("E3 late native refusal cannot erase a delivered write or release its overlap fence", async () => {
+  const f = await fixture();
+  try {
+    expect(await f.submit("plan", "parameter-links.apply.plan")).toMatchObject({ state: "succeeded" });
+    f.native.refuseNextDeliveredReply("revit.apply.parameter-links");
+    const original = await f.apply();
+    const step = original.steps.find(step => step.key === "revit.apply.parameter-links");
+    expect(step).toMatchObject({ state: "unknown", dispatchedAt: expect.any(String), nativeOutcome: "RefusedQueueDisposed" });
+    expect(step).not.toHaveProperty("notDispatched");
+    expect(original).toMatchObject({ state: "unknown" });
+    expect(original).not.toHaveProperty("notDispatched");
+    expect(await f.submit("new-plan", "parameter-links.apply.plan")).toMatchObject({ state: "succeeded" });
+    await f.admit("overlap", "parameter-links.apply");
+    expect((await f.native.journal.list()).find(row => row.id === "overlap")).toMatchObject({ state: "failed", notDispatched: true });
+    expect(f.native.calls.filter(call => call.key === "revit.apply.parameter-links")).toHaveLength(1);
+    expect(await f.native.journal.wait("apply")).toEqual(original);
+  } finally { await f.close(); }
+});
+
 test("E7 recovery reads the original native UUID and resume never dispatches a second write", async () => {
   const f = await fixture();
   try {

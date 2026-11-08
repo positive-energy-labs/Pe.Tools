@@ -57,6 +57,7 @@ export async function fixtureNative(
   let beforeReply: (key: string) => Promise<void> = async () => {};
   let emitDocumentChange: (() => Promise<void>) | undefined;
   let loseReply: string | undefined;
+  let refuseDeliveredReply: string | undefined;
   let lostReply: { requestId: string; operation: string; openDocumentId: string | null; value: unknown } | undefined;
   const recoveryReplies = new Map<string, NonNullable<typeof lostReply>>();
   const calls: { key: string; input: unknown; action: string | null | undefined }[] = [];
@@ -66,6 +67,7 @@ export async function fixtureNative(
     bridge, journal, calls, receipts: Context.get(context, HostReceipts),
     onRequest(listener: (key: string) => Promise<void>) { beforeReply = listener; },
     loseNextReply(operation: string) { loseReply = operation; },
+    refuseNextDeliveredReply(operation: string) { refuseDeliveredReply = operation; },
     makeLostReplyRecoverable() {
       if (!lostReply) throw Error("No lost recording reply");
       recoveryReplies.set(lostReply.requestId, lostReply);
@@ -163,9 +165,7 @@ export async function fixtureNative(
             if (owners.length > 1) throw Error("Fixture cannot attribute this native read to one admitted action");
             const action = req.derivedCommand ?? owners[0] ?? `native:${req.operationKey}`;
             const value = transport.reply(action, req.operationKey, input);
-            if (loseReply === req.operationKey) {
-              loseReply = undefined;
-              lostReply = { requestId: req.requestId, operation: req.operationKey, openDocumentId: req.openDocumentId ?? null, value };
+            if (loseReply === req.operationKey || refuseDeliveredReply === req.operationKey) {
               // Drop a validated recorded answer only after production persisted delivery evidence.
               yield* Effect.promise(async () => {
                 const limit = Date.now() + 2_000;
@@ -174,6 +174,20 @@ export async function fixtureNative(
                   await new Promise<void>(resolve => setImmediate(resolve));
                 }
               });
+              if (refuseDeliveredReply === req.operationKey) {
+                refuseDeliveredReply = undefined;
+                // Root's E3 fault-injection ruling: a transport refusal after durable delivery,
+                // not a hand-written Revit DTO or a claim that Revit refused this request.
+                yield* Queue.offer(socket.incoming, JSON.stringify({ kind: "Response", response: {
+                  requestId: req.requestId, openDocumentId: req.openDocumentId,
+                  ok: false, statusCode: 409, payloadJson: null, errorMessage: "Injected late transport refusal",
+                  issues: [{ code: "RefusedQueueDisposed", instancePath: "$", message: "Injected late transport refusal", schemaPath: null, severity: "error", suggestion: null }],
+                  metrics: { requestBytes: 0, responseBytes: 0, revitExecutionMs: 0, roundTripMs: 0, serializationMs: 0 },
+                } }));
+                continue;
+              }
+              loseReply = undefined;
+              lostReply = { requestId: req.requestId, operation: req.operationKey, openDocumentId: req.openDocumentId ?? null, value };
               yield* Fiber.interrupt(socket.connection);
               continue;
             }
