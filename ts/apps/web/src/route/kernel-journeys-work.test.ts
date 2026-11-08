@@ -368,7 +368,8 @@ async function journey(module: TypedRoute = fans) {
     async start() {
       await ready();
       await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
-      await vi.waitFor(() => expect(m.owner("ducts")?.absent).toBe(true));
+      await vi.waitFor(() => expect(m.owner("ducts")?.ready).toBe(true));
+      expect(m.owner("ducts")?.handle?.revision).toBe(0);
       await m.startAction()!.run();
       await vi.waitFor(() => expect(m.owner()?.ready).toBe(true));
       await vi.waitFor(() => expect(m.owner("ducts")?.ready).toBe(true));
