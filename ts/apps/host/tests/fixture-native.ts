@@ -46,15 +46,35 @@ export async function fixtureNative(
   const context = await settle(Layer.buildWithScope(
     RevitBridgeLive.pipe(Layer.provideMerge(HostReceipts.layer(null, directory))), scope,
   ));
-  const bridge = Context.get(context, RevitBridge);
+  const actualBridge = Context.get(context, RevitBridge);
+  let nextInventory: (() => Promise<void>) | undefined;
+  const bridge = { ...actualBridge, list: Effect.suspend(() => {
+    const pause = nextInventory; nextInventory = undefined;
+    return pause ? Effect.promise(pause).pipe(Effect.andThen(actualBridge.list)) : actualBridge.list;
+  }) };
   const journal = Context.get(context, HostReceipts).journal;
   let beforeReply: (key: string) => Promise<void> = async () => {};
+  let emitDocumentChange: (() => Promise<void>) | undefined;
   const calls: { key: string; input: unknown; action: string | null | undefined }[] = [];
   const tokens = new Map<string, string>();
   const handlers: Promise<{ close(): Promise<void> }>[] = [];
   return {
     bridge, journal, calls,
     onRequest(listener: (key: string) => Promise<void>) { beforeReply = listener; },
+    changeAfterPreparation(actionId: string, milliseconds: number) {
+      let injected = false;
+      // Observe a real durable preparation; inject only an incoming bridge event and inventory delay.
+      const stop = journal.subscribe({ kinds: ["action"] }, receipt => {
+        if (receipt.body.kind !== "action") return;
+        const row = receipt.body.value;
+        if (row.id !== actionId || row.prepared.state !== "ready" || injected) return;
+        injected = true;
+        nextInventory = async () => { await new Promise(resolve => setTimeout(resolve, milliseconds)); };
+        if (!emitDocumentChange) throw Error("No connected recording transport");
+        void emitDocumentChange();
+      });
+      return { injected: () => injected, stop };
+    },
     get transport() { return transport; },
     select(...names: string[]) {
       const next = nativeRecordings(...names);
@@ -92,6 +112,9 @@ export async function fixtureNative(
       const socket = await settle(connectTestBridge(pid, {}, state).pipe(
         Effect.provideService(RevitBridge, bridge), Effect.provideService(Scope.Scope, scope),
       ));
+      emitDocumentChange = () => settle(Queue.offer(socket.incoming, JSON.stringify({ kind: "Event", event: {
+        eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: [socket.target.openId] }),
+      } })).pipe(Effect.asVoid));
       await settle(Effect.forkIn(Effect.gen(function* () {
         while (true) {
           const frame = yield* Queue.take(socket.outgoing);
