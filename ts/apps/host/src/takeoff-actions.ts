@@ -185,12 +185,13 @@ export function takeoffExecutors(
       seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Materialization", (native) =>
-          value(ctx, native, "takeoffs.partition", {
-            ...ctx.admission.input,
+        runCarrier(ctx, execution, captures, bridge, "Materialization", (native) => {
+          const { work: _work, ...input } = ctx.admission.input;
+          return value(ctx, native, "takeoffs.partition", {
+            ...input,
             runId: ctx.admission.id,
-          }),
-        ),
+          });
+        }),
     }),
     "rooms.partition": command(commands["rooms.partition"], preparedCarrierSchema, {
       seal: (p) => ({ request: { process: p.process } }),

@@ -523,7 +523,32 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
       write: (page:object) => Object.fromEntries(Object.keys(spec.fields).map(key=>[key,JSON.stringify((page as Record<string,unknown>)[key])])),
-      read: (patch:Record<string,string>) => Object.fromEntries(Object.entries(patch).map(([key,value])=>[key,(()=>{const field=spec.fields[key];if(!field) throw Error(`${key} is not an attention field`);return field.schema.parse(JSON.parse(value));})()])),
+      read: (patch: Record<string, string>) => Object.fromEntries(Object.entries(patch).map(([key, text]) => {
+        const field = spec.fields[key];
+        if (!field) throw Error(`${key} is not an attention field`);
+        const subject = spec.subject;
+        let value: unknown;
+        try { value = JSON.parse(text); } catch (cause) {
+          if (subject?.field !== key) throw cause;
+          value = text;
+        }
+        if (subject?.field === key && !field.schema.safeParse(value).success) {
+          const reading = reads.get(subject.read ?? spec.core!)?.snapshot;
+          if (!reading?.current) throw Error("Read the subject roster before choosing a name");
+          const options = subject.options(reading.value);
+          const resolve = (name: unknown) => {
+            if (typeof name !== "string") throw Error("A subject name must be text");
+            const exact = options.filter(option => option.id === name || option.label === name);
+            const matches = exact.length ? exact : options.filter(option => option.label.toLowerCase() === name.toLowerCase());
+            if (matches.length !== 1) throw Error(`${matches.length ? "Ambiguous" : "Unknown"} ${subject.noun}: ${name}; choose an exact roster identity`);
+            return matches[0]!.id;
+          };
+          value = value === "all" && !options.some(option => option.label === "all")
+            ? { kind: "all" }
+            : { kind: "ids", ids: (Array.isArray(value) ? value : [value]).map(resolve) };
+        }
+        return [key, field.schema.parse(value)];
+      })),
     }, current: (token:InvocationToken) => gate.current(token),
     value: (read: import("../route/host-read").HostRead | undefined = spec.core) => read ? reads.get(read)?.snapshot ?? unavailable(read.demand === "explicit"?"Press Read":"Reading...") : unavailable("No read declared"),
     owner: (id = own) => owners.get(id),
