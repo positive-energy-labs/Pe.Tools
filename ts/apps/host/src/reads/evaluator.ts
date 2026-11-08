@@ -315,6 +315,9 @@ type Slot = { generation: number; key: string; published?: Publication<unknown>;
 /** One entry per (read,args), one generation per client subscription; no client acknowledgement. */
 export class Publications {
   private readonly slots = new Map<string, Slot>();
+  private readonly released = new Map<string, { generation: number; sequence: number }>();
+  private releaseSequence = 0;
+  private retiredSequence = 0;
   private readonly retainedBytes = new Map<string, number>();
   private bytes = 0;
   private readonly keys = new Map<
@@ -394,19 +397,42 @@ export class Publications {
       }
     }
   }
+  /** Capture before opening inputs. Evicted release fences reject older admissions conservatively. */
+  admission(id: string, generation: number): () => boolean {
+    const sequence = this.releaseSequence;
+    const allowed = generation > (this.released.get(id)?.generation ?? -1);
+    return () => allowed && sequence >= this.retiredSequence &&
+      generation > (this.released.get(id)?.generation ?? -1);
+  }
+  private pruneKeys() {
+    const used = new Set<string>();
+    for (const slot of this.slots.values()) {
+      used.add(slot.key);
+      if (slot.published) used.add(slot.published.key);
+    }
+    for (const key of this.keys.keys()) if (!used.has(key)) this.keys.delete(key);
+  }
   release(id: string, generation: number) {
     const slot = this.slots.get(id);
-    if (!slot) {
-      // Release may overtake admission while its input read set is opening.
-      if (this.slots.size < this.capacity) this.slots.set(id, { generation, key: "", attempt: 0 });
-      return;
+    if (generation < (slot?.generation ?? -1) ||
+      generation < (this.released.get(id)?.generation ?? -1)) return;
+    this.released.delete(id);
+    this.released.set(id, { generation, sequence: ++this.releaseSequence });
+    // Tombstones share the subscription bound, but never consume live subscription capacity.
+    while (this.released.size > this.capacity) {
+      const [oldest, fence] = this.released.entries().next().value!;
+      this.retiredSequence = fence.sequence;
+      this.released.delete(oldest);
     }
-    if (generation >= slot.generation) {
-      slot.generation = generation;
-      slot.key = "";
-      slot.attempt++;
+    if (slot) {
+      // A detached flight still closes over this slot until it settles.
+      slot.published = undefined;
       slot.pending = undefined;
     }
+    this.slots.delete(id);
+    this.bytes -= this.retainedBytes.get(id) ?? 0;
+    this.retainedBytes.delete(id);
+    this.pruneKeys();
   }
   async publish<I, O>(
     id: string,
@@ -415,32 +441,36 @@ export class Publications {
     args: I,
     port: InputPort,
     keep?: (publication: Publication<O>) => Promise<() => void>,
+    admitted = this.admission(id, generation),
   ): Promise<Publication<O>> {
     const key = fingerprint([definition.name, definition.input.parse(args)]);
+    let slot = this.slots.get(id);
+    const obsolete = (): Publication<O> =>
+      immutable({ key, generation, version: 0, value: null, state: "superseded" });
+    if (
+      !admitted() || (slot &&
+      (generation < slot.generation || (generation === slot.generation && key !== slot.key)))
+    )
+      return obsolete();
+    if (!slot) {
+      if (this.slots.size >= this.capacity) throw Error("Read subscription capacity reached");
+    }
     let owner = this.keys.get(key);
     if (!owner) {
       if (this.keys.size >= 512) throw Error("Read key capacity reached");
       owner = { version: 0, flights: new Map() };
       this.keys.set(key, owner);
     }
-    let slot = this.slots.get(id);
-    const obsolete = (): Publication<O> =>
-      immutable({ key, generation, version: 0, value: null, state: "superseded" });
-    if (
-      slot &&
-      (generation < slot.generation || (generation === slot.generation && key !== slot.key))
-    )
-      return obsolete();
     if (!slot) {
-      if (this.slots.size >= this.capacity) throw Error("Read subscription capacity reached");
       slot = { generation, key, attempt: 0 };
       this.slots.set(id, slot);
     }
     slot.generation = generation;
     slot.key = key;
+    this.pruneKeys();
     const attempt = ++slot.attempt;
     const mine = () =>
-      slot.generation === generation && slot.key === key && slot.attempt === attempt;
+      this.slots.get(id) === slot && slot.generation === generation && slot.key === key && slot.attempt === attempt;
     // Share only the same admitted input set. Equal args cannot substitute another recording's inputs.
     const flightKey = fingerprint([
       key,
@@ -492,6 +522,7 @@ export class Publications {
       this.bytes = retainedBytes;
       this.retainedBytes.set(id, bytes);
       slot.published = published;
+      this.pruneKeys();
       commit?.();
       this.notify(id);
       return published;

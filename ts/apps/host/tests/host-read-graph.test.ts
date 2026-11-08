@@ -47,6 +47,74 @@ import {
   snapshot,
 } from "./host-read-graph.test-support.ts";
 
+test("JZ read subscriptions reclaim capacity through release and reject released flights", async () => {
+  const hold = gate();
+  const definition = read("test.capacity-lifetime", {
+    input: z.number(),
+    output: z.number(),
+    async run(_ctx, value) {
+      if (value === -1) {
+        hold.entered.resolve();
+        await hold.release.promise;
+      }
+      return value;
+    },
+  });
+  const unregister = registeredReads.register({ capacity: definition });
+  const f = await fixture();
+  const send = async (subscription: string, generation: number, args: number, release = false) => {
+    const response = await f.probe({ read: definition.name, subscription, generation, args, release });
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    return body;
+  };
+  let pending: Promise<any> | undefined;
+  try {
+    // Reuse one slot first so the base exposes the independent 512-key leak.
+    for (let i = 0; i < 600; i++) {
+      const value = await send("changing-key", i, i);
+      expect(value.state, JSON.stringify(value)).toBe("current");
+      expect(value.value.data).toBe(i);
+      await send("changing-key", i, i, true);
+    }
+    pending = send("released-flight", 0, -1);
+    await hold.entered.promise;
+    await send("released-flight", 0, -1, true);
+    expect((await send("released-flight", 0, -1)).state).toBe("superseded");
+    // Cross the tombstone bound while the old evaluation remains in flight.
+    for (let i = 0; i < 160; i++) {
+      const id = `churn-${i}`;
+      expect((await send(id, 0, i)).state).toBe("current");
+      await send(id, 0, i, true);
+    }
+    const successor = await send("released-flight", 1, 999);
+    expect(successor.state).toBe("current");
+    hold.release.resolve();
+    expect((await pending).state).toBe("superseded");
+    // An old flight cannot overwrite the successor's retained publication.
+    expect((await send("released-flight", 1, 999)).value.data).toBe(999);
+    await send("released-flight", 1, 999, true);
+    // Shared ownership survives releasing just one of its subscriptions.
+    const shared = await send("shared-left", 0, 1000);
+    await send("shared-right", 0, 1000);
+    await send("shared-left", 0, 1000, true);
+    expect((await send("shared-right", 1, 1000)).version).toBeGreaterThan(shared.version);
+    await send("shared-right", 1, 1000, true);
+    // The simultaneous slot cap remains a limit, rather than a churn counter.
+    for (let i = 0; i < 128; i++) expect((await send(`live-${i}`, 0, i)).state).toBe("current");
+    const full = await f.probe({ read: definition.name, subscription: "overflow", generation: 0, args: 128 });
+    expect(full.status).not.toBe(200);
+    expect(await full.text()).toContain("Read subscription capacity reached");
+    await send("live-0", 0, 0, true);
+    expect((await send("overflow", 0, 128)).state).toBe("current");
+  } finally {
+    hold.release.resolve();
+    await pending;
+    unregister();
+    await f.close();
+  }
+});
+
 test("HTTP document targets normalize once before generated native handles and preserve the mark fence", async () => {
   const tables = nativeRead("ducts.tables");
   const definition = read("test.document-target", {

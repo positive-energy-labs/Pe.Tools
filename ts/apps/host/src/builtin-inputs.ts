@@ -404,6 +404,9 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           };
         },
       };
+    const admission = graphRequest ? publications.admission(
+      canonicalJson([identity.caller, graphRequest.subscription]), graphRequest.generation,
+    ) : undefined;
     const recipe: ConsumerRecipe = {
       key: declared.id,
       input: json(graph ? { body: { read: graph.name, args: graph.args } } : input),
@@ -970,6 +973,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                           );
                         }
                       : undefined,
+                    admission,
                   )
                 : graph.evaluate(port).catch((error: unknown) => {
                     if (isDoorFailure(error)) throw error;
