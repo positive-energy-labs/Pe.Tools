@@ -289,7 +289,8 @@ export function workWriteBoundary(
             : []),
         ],
         effects: previewOnly ? [] : bound.effects,
-        claims: [
+        // A read-only preview must not consume the adopted plan before Apply can claim it.
+        claims: previewOnly ? [] : [
           ...(bound.claims ?? []),
           ...(!previewOnly && preview ? [{ kind: "receipt" as const, id: preview.id }] : []),
         ],
