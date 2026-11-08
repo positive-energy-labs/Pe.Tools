@@ -195,3 +195,5 @@ export const ductsPricing = read("ducts.pricing", {
     );
   },
 });
+
+export const reads = { roster: ductsRoster, network: ductsNetwork, pricing: ductsPricing };

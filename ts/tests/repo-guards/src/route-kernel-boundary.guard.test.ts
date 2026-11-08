@@ -126,6 +126,7 @@ it("ADR 0033 rule 7 keeps the Work write kernel free of route names, request typ
   const routeName = new RegExp(`(?:["'/](?:${names.join("|")})(?=[./"'-])|\\b(?:${types.join("|")})(?=[A-Z]|\\b))`, "g");
   const files = [
     "ts/apps/host/src/work-write-boundary.ts",
+    "ts/apps/host/src/reads/routes.ts",
     "ts/apps/host/src/document-lifetime.ts",
     "ts/packages/agent-contracts/src/write-intent.ts",
   ];

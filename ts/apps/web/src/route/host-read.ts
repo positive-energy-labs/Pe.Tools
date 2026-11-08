@@ -31,7 +31,7 @@ export interface HostRead {
   demand?: "mount" | "explicit";
   fixtures?: Readonly<Record<string, (args: any) => FixtureValue<z.ZodType<Publication>>>>;
   endpoint?: PeRouteId;
-  request?(args: any): object;
+  request?(args: any, target?: import("@pe/agent-contracts").ExecutionTarget): object;
   source: Omit<UseSource,"open"> & { provide?(name: string, args: unknown): Publication };
 }
 type FixtureValue<O extends z.ZodType<Publication>> = Pick<
@@ -44,7 +44,7 @@ export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
   contract: {
     key: string;
     endpoint?: PeRouteId;
-    request?(args: z.output<I>): object;
+    request?(args: z.output<I>, target?: import("@pe/agent-contracts").ExecutionTarget): object;
     input: I;
     output: O;
     axes: EntryContract["axes"];

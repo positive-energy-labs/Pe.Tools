@@ -1072,3 +1072,30 @@ test("JZ H19 wait beyond the browser budget, then inspect queue and conflict ref
     } finally { await f.close(); }
   } finally { vi.useRealTimers(); held?.release.resolve(); await j.close(); }
 }, 60_000);
+
+
+test("JZ registry publishes fan roster and sheet through the shared read door only", async () => {
+  const { fixture, ref } = await import("../../../host/tests/host-read-graph.test-support");
+  const f = await fixture(true);
+  try {
+    let generation = 0;
+    const read = async (name: string, args: object) => {
+      const response = await f.request(new Request("http://host/pe/reads/value", {
+        method: "POST", body: JSON.stringify({ read: name, args, subscription: "jz-registry", generation: ++generation }),
+      }));
+      expect(response.status, await response.clone().text()).toBe(200);
+      return response.json();
+    };
+    const roster = await read("fans.roster", { target: ref });
+    const fan = roster.value.data.rows.find((row: { mark: string }) => row.mark === "MUAS-1");
+    expect(fan).toBeTruthy();
+    const sheet = await read("ducts.sheet", { target: ref, mode: "fan", unitId: fan.unitId, portIndex: fan.portIndex });
+    expect(sheet.value.data).toHaveProperty("basis");
+    const fans = await read("fans.sheet", { target: ref, fan: [], sheetPath: "" });
+    expect(fans.value.data.rows.length).toBeGreaterThan(0);
+    for (const path of ["/pe/ducts/roster", "/pe/ducts/sheet", "/pe/fans/sheet"]) {
+      const response = await f.request(new Request(`http://host${path}`, { method: "POST", body: "{}" }));
+      expect(response.status, path).toBe(404);
+    }
+  } finally { await f.close(); }
+}, 60_000);
