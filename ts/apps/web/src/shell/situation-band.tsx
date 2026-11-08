@@ -159,6 +159,11 @@ export function JournalButtons({
   if (!journal) return null;
   const undo = journal.undo.at(-1);
   const redo = journal.redo.at(-1);
+  const restore = async (direction: "undo" | "redo") => {
+    const result = await ("restoreWork" in owner ? owner.restoreWork(direction) : owner.restore(direction));
+    return result && typeof result === "object" && "ok" in result && result.ok === false && "message" in result
+      ? { message: String(result.message) } : null;
+  };
   return (
     <>
       <Button
@@ -167,11 +172,10 @@ export function JournalButtons({
         refusal={
           owner.journalRefusal() ??
           undo?.superseded?.message ??
+          (undo?.barrier ? "Cannot undo: a later action changed this Work. Revit model undo is not available." : null) ??
           (undo ? null : "Nothing to undo: no edit to this Work since this tab opened it")
         }
-        onClick={() =>
-          void ("restoreWork" in owner ? owner.restoreWork("undo") : owner.restore("undo"))
-        }
+        onPress={() => restore("undo")}
       >
         {words ? "undo" : undefined}
       </Button>
@@ -179,11 +183,11 @@ export function JournalButtons({
         icon={Redo2}
         label={redo ? `Redo ${redo.label}` : "Redo"}
         refusal={
-          owner.journalRefusal() ?? redo?.superseded?.message ?? (redo ? null : "Nothing to redo")
+          owner.journalRefusal() ?? redo?.superseded?.message ??
+          (redo?.barrier ? "Cannot redo: a later action changed this Work. Revit model undo is not available." : null) ??
+          (redo ? null : "Nothing to redo")
         }
-        onClick={() =>
-          void ("restoreWork" in owner ? owner.restoreWork("redo") : owner.restore("redo"))
-        }
+        onPress={() => restore("redo")}
       >
         {words ? "redo" : undefined}
       </Button>
