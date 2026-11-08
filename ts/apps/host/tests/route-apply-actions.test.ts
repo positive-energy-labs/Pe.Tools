@@ -5,8 +5,8 @@ import type { CommandExecutor, CommandContext } from "../src/command-executor.ts
 import { detachedBridge } from "./effect-test.ts";
 import { z } from "zod";
 
-vi.mock("../src/family-actions.ts", async (actual) => ({
-  ...(await actual<typeof import("../src/family-actions.ts")>()),
+vi.mock("../src/document-lifetime.ts", async (actual) => ({
+  ...(await actual<typeof import("../src/document-lifetime.ts")>()),
   lifetime: async () => ({ session: { state: { openDocuments: [] } }, process: {} }),
 }));
 
