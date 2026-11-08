@@ -219,7 +219,7 @@ test.each(["insertText", "pointer keyboard", "navigation keyboard", "pointer shi
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-test("JZ Ducts chooser query keys preserve open systems until an explicit choice", async () => {
+test("JZ header chooser query keys preserve open systems until an explicit choice", async () => {
   const [{ default: userEvent }, { fixture, ref, path }, { registeredReads }, reads,
     { module: ducts }, { TypedSubject }, { observeResources }, { valueReadResponse }, { localId }] = await Promise.all([
     import("@testing-library/user-event"), import("../../../host/tests/host-read-graph.test-support"),
@@ -256,7 +256,12 @@ test("JZ Ducts chooser query keys preserve open systems until an explicit choice
     write: (key, write) => host.workspace.write(key, key.route, "human", write),
     submit: () => { throw Error("Chooser journey cannot write native data"); },
   });
-  const mount = mounts.mountTypedRoute(ducts, {
+  // C042: the shared header chooser belongs to a route with no subject-list pane.
+  // Real Ducts owns its roster choice there; this journey retains the chooser's query safety.
+  const chooserOnly = route({ ...ducts.spec, subject: { ...ducts.spec.subject!, pane: "value" },
+    panes: { value: { title: "System value", purpose: "Inspect chosen systems", draw: () => null } },
+    layout: { kind: "pane", id: "value" } });
+  const mount = mounts.mountTypedRoute(chooserOnly, {
     target: { kind: "document", ref }, fixture: null, work: { address: path, open: ref },
     custody: { current: () => true }, memory: () => ({}),
     address: { read: () => new URLSearchParams(search), write(next) { search = next; listeners.forEach(f => f()); },
