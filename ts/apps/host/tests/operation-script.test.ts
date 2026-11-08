@@ -1,164 +1,26 @@
-import { nativeReadRoot } from "../src/app.ts";
-import { testHostInputs } from "./effect-test.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it, vi } from "vite-plus/test";
+import { expect, it } from "vite-plus/test";
 import { freezeScript } from "../src/operation-script.ts";
-import { randomUUID } from "node:crypto";
-import { createServer } from "node:http";
-import { Deferred, Effect, Layer } from "effect";
-import { NodeHttpClient, NodeHttpServer } from "@effect/platform-node";
-import { HttpRouter } from "effect/http";
-import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
-import { ActionJournal } from "../src/action-journal.ts";
-import { RevitBridge } from "../src/bridge.ts";
-import { detachedBridge, sessionView } from "./effect-test.ts";
-import { makeCallRoute } from "../src/call-route.ts";
-import { mintContext } from "../src/control.ts";
-import { hostOwnership } from "../src/host-ownership.ts";
-import { requestIdentityLayer } from "../src/request-identity.ts";
-import { sdkSessions } from "./native-receipt-fixture.ts";
+import { fixtureNative } from "./fixture-native.ts";
 
-it.each([
-  ["Succeeded", "succeeded"],
-  ["RuntimeFailed", "failed"],
-  ["Cancelled", "cancelled"],
-  ["UnexpectedStatus", "failed"],
-  [undefined, "failed"],
-])(
-  "HTTP script outcome %s settles the durable action as %s",
-  async (status, state) => {
-    const dir = await mkdtemp(join(tmpdir(), "pe-script-outcome-"));
-    const journal = new ActionJournal(join(dir, "actions.json"), Date.now);
-    const result = {
-      ...(status === undefined ? {} : { status }),
-      diagnostics: [{ stage: "policy", message: "diagnostic kept" }],
-    };
-    const invoke = vi.fn((key: string) =>
-      Effect.succeed({
-        value:
-          key === "host.ops.catalog"
-            ? {
-                operations: [
-                  {
-                    subject: "None",
-                    touches: "Metadata",
-                    effect: "Read",
-                    cardinality: "One",
-                    costTier: "Cheap",
-                    key: "scripting.execute",
-                    intent: "Mutate",
-                    needs: "document",
-                    requestSchemaJson: JSON.stringify({ type: "object" }),
-                  },
-                ],
-              }
-            : result,
-        target: { session: "bridge-script", document: null },
-      }),
-    );
-    const bridge = detachedBridge({
-      list: Effect.succeed([
-        sessionView({
-          sessionId: "bridge-script",
-          connected: true,
-          lane: hostOwnership.lane,
-          sourceRoot: hostOwnership.sourceRoot,
-          serviceName: hostOwnership.serviceName,
-          processId: 42,
-          processStartUtcUnixMs: 1000,
-          state: {
-            openDocuments: [
-              {
-                openId: "open-script",
-                address: "C:/Copy.rvt",
-                title: "Copy",
-                isFamilyDocument: false,
-              },
-            ],
-          },
-        }),
-      ]),
-      invoke,
-    });
-    const server = createServer();
-    const port = () => {
-      const address = server.address();
-      return address && typeof address !== "string" ? address.port : 0;
-    };
-    // effect-edge: island, phase 5
-    const latch = Effect.runSync(Deferred.make<void>());
-    // effect-edge: island, phase 5
-    const done = Effect.runPromise(
-      Effect.raceFirst(
-        Layer.launch(
-          HttpRouter.serve(
-            makeCallRoute(journal, undefined, { sdk: sdkSessions }).pipe(nativeReadRoot()).pipe(Layer.provide(testHostInputs)).pipe(
-              Layer.provide(
-                requestIdentityLayer({
-                  port,
-                  frontendOrigin: Effect.succeed(undefined),
-                  share: {
-                    read: async () => {
-                      throw Error("loopback only");
-                    },
-                    observe: () => {},
-                  },
-                }),
-              ),
-            ),
-            { disableLogger: true },
-          ).pipe(
-            Layer.provide(Layer.succeed(RevitBridge, bridge)),
-            Layer.provide(NodeHttpClient.layerUndici),
-            Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: 0 })),
-          ),
-        ),
-        Deferred.await(latch),
-      ),
-    );
+it.each([["Succeeded", "succeeded"], ["RuntimeFailed", "failed"], ["CompilationFailed", "failed"]] as const)(
+  "real HTTP script admission classifies retained %s as %s", async (status, state) => {
+    const dir = await mkdtemp(join(tmpdir(), "pe-script-recorded-"));
+    const native = await fixtureNative(dir, `retained-script-${status}`, "retained-host-ops-catalog"); const socket = await native.connect();
     try {
-      for (let i = 0; !port() && i < 200; i++)
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(port()).toBeGreaterThan(0);
-      const id = randomUUID();
-      const response = await fetch(`http://127.0.0.1:${port()}/actions`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }),
-        },
-        body: JSON.stringify({
-          id,
-          key: "scripting.execute",
-          target: {
-            kind: "document",
-            ref: { session: "bridge-script", openId: "open-script" },
-          },
-          input: { scriptContent: "WriteLine(1);" },
-        }),
-      });
-      expect([200, 202], await response.clone().text()).toContain(response.status);
-      const receipt = await journal.wait(id);
-      expect(invoke.mock.calls.some(([key]) => key === "scripting.execute")).toBe(true);
-      expect(receipt.state).toBe(state);
-      expect(receipt.steps.at(-1)?.state).toBe(state);
-      if (state === "failed") {
-        expect(receipt).toMatchObject({ evidence: { result } });
-        expect(receipt.steps.at(-1)).toMatchObject({ evidence: { result } });
-        const reloaded = new ActionJournal(join(dir, "actions.json"), Date.now);
-        expect(await reloaded.wait(id)).toMatchObject({ state, evidence: { result } });
-      }
-    } finally {
-      // effect-edge: island, phase 5
-      Effect.runSync(Deferred.succeed(latch, undefined));
-      await done;
-      await rm(dir, { recursive: true, force: true });
-    }
+      const response = await native.actions()({ id: "script", key: "scripting.execute", target: { kind: "document", ref: socket.target }, input: { scriptContent: "WriteLine(1);" } });
+      expect(response.status, await response.clone().text()).toBeLessThan(400);
+      const result = await native.journal.wait("script");
+      expect(result, JSON.stringify(result)).toMatchObject({ state });
+      expect(native.calls.filter(call => call.key === "scripting.execute")).toMatchObject([{ key: "scripting.execute", input: { scriptContent: "WriteLine(1);" } }]);
+      expect(native.calls.every(call => call.action === "scripting.execute")).toBe(true);
+      if (state === "failed") expect(result.steps.at(-1)).toMatchObject({ state: "failed", evidence: { result: { status } } });
+    } finally { await native.close(); await rm(dir, { recursive: true, force: true }); }
   },
-  30_000,
 );
+// UNPROVEN[no recording]: Cancelled and unrecognized script statuses. Former replies were hand-written.
 
 it("freezes a supplied snapshot without reading disk and rejects ambiguous or authority bytes", async () => {
   const files = [{ path: "src/Run.cs", bytesBase64: Buffer.from("original").toString("base64") }];

@@ -186,6 +186,10 @@ const preparedGatewaySchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
+/** The gateway observes availability before invoking a public native action. */
+export const gatewayNativeLeaves = (key: string): readonly string[] =>
+  isTsOnlyOperationKey(key) ? [] : ["host.ops.catalog", key];
+
 /** Generated native metadata is the fallback contract; public semantic implementations are hidden. */
 export function gatewayExecutor(
   key: string,
@@ -236,6 +240,7 @@ export function gatewayExecutor(
     definition: async (ctx): Promise<Command> => {
       const { metadata } = await observe(ctx);
       return {
+        native: gatewayNativeLeaves(key),
         says: metadata.description ?? key,
         needs:
           !isTsOnlyOperationKey(key) && metadata.needs === "nothing" ? "session" : metadata.needs,

@@ -7,6 +7,7 @@ import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { HostReceipts } from "../src/gateway-owner.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { settle } from "./effect-test.ts";
+import { gatewayNativeLeaves } from "../src/gateway-actions.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
@@ -38,7 +39,7 @@ export async function fixtureNative(
     const declaration = linkedCatalog().entries.get(`command:${action}`);
     if (declaration) return declaration.uses.map(use => typeof use === "string" ? use : use.key);
     // A public native operation admitted as an action uses its own generated declaration.
-    return hostOpCatalog.some(op => op.key === action && !op.internal) ? [action] : undefined;
+    return hostOpCatalog.some(op => op.key === action && !op.internal) ? gatewayNativeLeaves(action) : undefined;
   } });
   let transport = makeTransport();
   const scope = Scope.makeUnsafe();
