@@ -10,7 +10,8 @@
     "modelCopy": "Manuella_mileage.rvt",
     "session": "mileage-manuella",
     "commit": null,
-    "provenance": "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/mileage/REPORT.md"
+    "provenance": "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/mileage/REPORT.md",
+    "canonicalResponseSha256": "e10ef74da7cdf262b1f41c012c4b17c3370fc67e8baaa8b1fdfaac7b7e3c7715"
   },
   "fans-accessory-initial": {
     "operation": "ducts.apply.plan",
@@ -22,7 +23,8 @@
     "lane": "fresh",
     "commit": "4c6c3ef0dfe63de7bd0544d517fded3ffcf9652c",
     "modelCopy": "native proof-owned fixture copy / generated fan project",
-    "receipt": "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/kernel-crusade-20261104/takeover/fans-review-before-evidence/native/run-02/sdk.json"
+    "receipt": "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/kernel-crusade-20261104/takeover/fans-review-before-evidence/native/run-02/sdk.json",
+    "canonicalResponseSha256": "19e11a95202a97cce60fc762860c1657f34f852ebaf492b697456cc536aa0c04"
   },
   "fans-accessory-missing": {
     "operation": "ducts.apply.plan",
@@ -34,7 +36,8 @@
     "lane": "fresh",
     "commit": "4c6c3ef0dfe63de7bd0544d517fded3ffcf9652c",
     "modelCopy": "native proof-owned fixture copy / generated fan project",
-    "receipt": "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/kernel-crusade-20261104/takeover/fans-review-before-evidence/native/run-02/sdk.json"
+    "receipt": "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/kernel-crusade-20261104/takeover/fans-review-before-evidence/native/run-02/sdk.json",
+    "canonicalResponseSha256": "6ce4cc315aa1f7e7a7945ae8f6e8f729984d22324ff1a4657388be8ef9c3684a"
   },
   "fresh-takeoffs.initialize-carrier": {
     "operation": "takeoffs.initialize-carrier",
@@ -49,7 +52,8 @@
     "date": "2026-11-08T01:47:36.0473956Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-04\\native-fixture-model.rvt",
     "modelCopySha256": "d1dd5f91aa6f49479ca2b5d21bb40e3cdf8666d264915e7774503f51470d03b5",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json",
+    "canonicalResponseSha256": "b473c1bbeee53503090e715ef9e4461db2178171b04fafd1ca845f016fba1b26"
   },
   "fresh-takeoffs.adopt": {
     "operation": "takeoffs.adopt",
@@ -64,7 +68,8 @@
     "date": "2026-11-08T01:47:36.1544226Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-04\\native-fixture-model.rvt",
     "modelCopySha256": "d1dd5f91aa6f49479ca2b5d21bb40e3cdf8666d264915e7774503f51470d03b5",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json",
+    "canonicalResponseSha256": "96f04770fe4486ae779f45998a5d52f0fb972fda17113c006b0db3017794f2c6"
   },
   "fresh-takeoffs.partition": {
     "operation": "takeoffs.partition",
@@ -79,7 +84,8 @@
     "date": "2026-11-08T01:47:36.9146549Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-04\\native-fixture-model.rvt",
     "modelCopySha256": "d1dd5f91aa6f49479ca2b5d21bb40e3cdf8666d264915e7774503f51470d03b5",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json",
+    "canonicalResponseSha256": "3f196cb586b8d122f5ecf2b591c3eb905e2ddfaa92bba7f63116daeca3491060"
   },
   "fresh-rooms.partition": {
     "operation": "rooms.partition",
@@ -94,7 +100,8 @@
     "date": "2026-11-08T01:47:37.1589537Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-04\\native-fixture-model.rvt",
     "modelCopySha256": "d1dd5f91aa6f49479ca2b5d21bb40e3cdf8666d264915e7774503f51470d03b5",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json",
+    "canonicalResponseSha256": "e307cfa85a914c2b4891b647500a77ef29aa6605b53199a564baa58e208f5f71"
   },
   "fresh-rooms.draw": {
     "operation": "rooms.draw",
@@ -109,7 +116,8 @@
     "date": "2026-11-08T01:47:36.2786512Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-04\\native-fixture-model.rvt",
     "modelCopySha256": "d1dd5f91aa6f49479ca2b5d21bb40e3cdf8666d264915e7774503f51470d03b5",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json",
+    "canonicalResponseSha256": "7640c10b71d4025d3282bcf60a9cb4f2b245793ad9f19a41569705e09c476a62"
   },
   "fresh-rooms.write": {
     "operation": "rooms.write",
@@ -124,7 +132,8 @@
     "date": "2026-11-08T01:47:36.2962570Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-04\\native-fixture-model.rvt",
     "modelCopySha256": "d1dd5f91aa6f49479ca2b5d21bb40e3cdf8666d264915e7774503f51470d03b5",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json",
+    "canonicalResponseSha256": "a3c068a7efc2b5c4c49a31dcf4fd4e4450a5ec7085b03be9d0e3aaca2b4815d3"
   },
   "fresh-takeoffs.rhvac-links": {
     "operation": "takeoffs.rhvac-links",
@@ -139,7 +148,8 @@
     "date": "2026-11-08T01:47:36.3161852Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-04\\native-fixture-model.rvt",
     "modelCopySha256": "d1dd5f91aa6f49479ca2b5d21bb40e3cdf8666d264915e7774503f51470d03b5",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json",
+    "canonicalResponseSha256": "225067d208e1943fe2b8ecb93c9157716beebfa4be3276084441abbe1a823f7a"
   },
   "fresh-rooms.merge": {
     "operation": "rooms.merge",
@@ -154,7 +164,8 @@
     "date": "2026-11-08T01:47:36.6285972Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-04\\native-fixture-model.rvt",
     "modelCopySha256": "d1dd5f91aa6f49479ca2b5d21bb40e3cdf8666d264915e7774503f51470d03b5",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-04.json",
+    "canonicalResponseSha256": "c5cdfc199a85b0a7e63ffa83eeb5aec4885cd01597bfe824149012cd28ad0e6b"
   },
   "driver-revit.catalog.field-options": {
     "operation": "revit.catalog.field-options",
@@ -175,7 +186,8 @@
     "commit": "c1aaa1808aef8041e977b12fb9f741200daf3014",
     "lane": "session",
     "date": "2026-11-07T23:34:58.6444095Z",
-    "modelCopy": "Driver gate c1 owned model copy; original SDK receipt identifies its exact process"
+    "modelCopy": "Driver gate c1 owned model copy; original SDK receipt identifies its exact process",
+    "canonicalResponseSha256": "de12246b0e638963997042aee1af41ad5aba82da4869a4500a67d901a120f98b"
   },
   "driver-op.cancel": {
     "operation": "op.cancel",
@@ -196,7 +208,8 @@
     "commit": "c1aaa1808aef8041e977b12fb9f741200daf3014",
     "lane": "session",
     "date": "2026-11-07T23:34:07.1553324Z",
-    "modelCopy": "Driver gate c1 owned model copy; original SDK receipt identifies its exact process"
+    "modelCopy": "Driver gate c1 owned model copy; original SDK receipt identifies its exact process",
+    "canonicalResponseSha256": "371c2d9f2545704d388299b59c2b64cda90f27d73f8f395048fb2289534e282b"
   },
   "driver-ducts.snapshot.walk": {
     "operation": "ducts.snapshot.walk",
@@ -217,7 +230,8 @@
     "commit": "c1aaa1808aef8041e977b12fb9f741200daf3014",
     "lane": "session",
     "date": "2026-11-07T22:48:31.1844987Z",
-    "modelCopy": "Driver gate c1 owned model copy; original SDK receipt identifies its exact process"
+    "modelCopy": "Driver gate c1 owned model copy; original SDK receipt identifies its exact process",
+    "canonicalResponseSha256": "362a79a4178f3923e60fcf333b44095bd6b6985203ef2863b1557c00eea961eb"
   },
   "driver-ducts.tables": {
     "operation": "ducts.tables",
@@ -238,7 +252,8 @@
     "commit": "c1aaa1808aef8041e977b12fb9f741200daf3014",
     "lane": "session",
     "date": "2026-11-07T22:38:02.6864525Z",
-    "modelCopy": "Driver gate c1 owned model copy; original SDK receipt identifies its exact process"
+    "modelCopy": "Driver gate c1 owned model copy; original SDK receipt identifies its exact process",
+    "canonicalResponseSha256": "6a71aed3e5b9a63a6bb154be7db1d06a64567a921a12e4578285e101d969f226"
   },
   "driver-ducts.snapshot.roster": {
     "operation": "ducts.snapshot.roster",
@@ -259,7 +274,8 @@
     "commit": "c1aaa1808aef8041e977b12fb9f741200daf3014",
     "lane": "session",
     "date": "2026-11-07T22:33:45.3204785Z",
-    "modelCopy": "Driver gate c1 owned model copy; original SDK receipt identifies its exact process"
+    "modelCopy": "Driver gate c1 owned model copy; original SDK receipt identifies its exact process",
+    "canonicalResponseSha256": "38a8c9f8fce9eeb5ff040ba21388d72123f83ae13b389987e20784b9f476634d"
   },
   "sdk-ducts.apply": {
     "operation": "ducts.apply",
@@ -280,7 +296,8 @@
     "commit": null,
     "lane": "retained SDK native receipt; original custody not reconstructed",
     "date": "2026-11-06T12:10:08.8250004Z",
-    "modelCopy": null
+    "modelCopy": null,
+    "canonicalResponseSha256": "2d2383275b99c0f86b8aed7fe85edf40a2dbdfddb02e0848851cf63b9c88ff01"
   },
   "sdk-revit.detail.parameter-links": {
     "operation": "revit.detail.parameter-links",
@@ -301,7 +318,8 @@
     "commit": null,
     "lane": "retained SDK native receipt; original custody not reconstructed",
     "date": "2026-11-05T11:10:29.4804861Z",
-    "modelCopy": null
+    "modelCopy": null,
+    "canonicalResponseSha256": "2dd72b0f3c96734055d31ea7c30727b0fa1fe9c852fe772d58ffa1ad272d3d24"
   },
   "sdk-revit.apply.parameter-links": {
     "operation": "revit.apply.parameter-links",
@@ -322,7 +340,8 @@
     "commit": null,
     "lane": "retained SDK native receipt; original custody not reconstructed",
     "date": "2026-11-05T11:10:29.5211203Z",
-    "modelCopy": null
+    "modelCopy": null,
+    "canonicalResponseSha256": "f931852e3f4e1020bb152e22b1796dec1737112842fff228e83dba19cc7b5dc0"
   },
   "fresh-schedule-01-revit.detail.schedules": {
     "operation": "revit.detail.schedules",
@@ -336,7 +355,8 @@
     "lane": "fresh",
     "date": "2026-11-08T01:53:48.5658958Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-06\\native-schedule-model.rvt",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-06.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-06.json",
+    "canonicalResponseSha256": "6e6c8fca1ee1e4f378e08ff10ec63132de39da8849d6c20afd0d7934a4cc563d"
   },
   "fresh-schedule-02-revit.catalog.schedules": {
     "operation": "revit.catalog.schedules",
@@ -350,7 +370,8 @@
     "lane": "fresh",
     "date": "2026-11-08T01:53:48.7284296Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-06\\native-schedule-model.rvt",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-06.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-06.json",
+    "canonicalResponseSha256": "98926b41b1e98f54992708491cd5fc4348fbf2754e4d3c688c57945cc02b7ae0"
   },
   "fresh-schedule-03-schedule.cells.apply": {
     "operation": "schedule.cells.apply",
@@ -364,7 +385,8 @@
     "lane": "fresh",
     "date": "2026-11-08T01:53:48.8788348Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-06\\native-schedule-model.rvt",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-06.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-06.json",
+    "canonicalResponseSha256": "0acf4da4bf671130e06125e899207efa3eb42bad0d60817b183fe0b1eacef00a"
   },
   "fresh-schedule-04-revit.detail.schedules": {
     "operation": "revit.detail.schedules",
@@ -378,7 +400,8 @@
     "lane": "fresh",
     "date": "2026-11-08T01:53:48.9206046Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-06\\native-schedule-model.rvt",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-06.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-06.json",
+    "canonicalResponseSha256": "fc6fee268b2eb3e8ceb32b7c251255a6fad2a732c71b586a7f73a4fd9b5ad800"
   },
   "fresh-schedule-07-revit.detail.schedules": {
     "operation": "revit.detail.schedules",
@@ -392,7 +415,8 @@
     "lane": "fresh",
     "date": "2026-11-08T01:53:49.0434316Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-06\\native-schedule-model.rvt",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-06.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-06.json",
+    "canonicalResponseSha256": "79a50ac5e0b3bc7885e68dfefdf61f734c142e5cf112dc1d578fd74bc657baac"
   },
   "fresh-schedule-09-schedule.cells.apply": {
     "operation": "schedule.cells.apply",
@@ -406,7 +430,8 @@
     "lane": "fresh",
     "date": "2026-11-08T01:53:49.1104687Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-06\\native-schedule-model.rvt",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-06.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-06.json",
+    "canonicalResponseSha256": "12c1313b93661005280122002b7d585855fdfefcd5d508dc11dc8352e2658880"
   },
   "fresh-schedule-13-revit.catalog.schedules": {
     "operation": "revit.catalog.schedules",
@@ -420,7 +445,8 @@
     "lane": "fresh",
     "date": "2026-11-08T01:53:49.2258790Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-06\\native-schedule-model.rvt",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-06.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-06.json",
+    "canonicalResponseSha256": "c09fd250a7e01ccbf6350eb9eb3e3ec026e76e5b8563f2e9ba69d93577bc0ace"
   },
   "sdk-earlier-parameter-links": {
     "operation": "revit.detail.parameter-links",
@@ -441,7 +467,8 @@
     },
     "commit": null,
     "modelCopy": null,
-    "lane": "retained SDK native receipt; original custody not reconstructed"
+    "lane": "retained SDK native receipt; original custody not reconstructed",
+    "canonicalResponseSha256": "2acfcce13241f538cc4f48aecc214ea6643b43ee09ba9254cd360cae773fe20a"
   },
   "retained-families-prepared": {
     "operation": "revit.matrix.loaded-families",
@@ -462,7 +489,8 @@
     "commit": null,
     "modelCopy": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools-drive\\.artifacts\\accept\\sol19\\docs\\Chadds-sol19.rvt",
     "lane": "retained SDK native receipt; original custody not reconstructed",
-    "date": "2026-11-07T04:02:39.3553992Z"
+    "date": "2026-11-07T04:02:39.3553992Z",
+    "canonicalResponseSha256": "4e17e875e956bd78ba6b8fee0f87a8d43ac42f115e08d6467c66a542f919cb27"
   },
   "retained-families-final": {
     "operation": "revit.matrix.loaded-families",
@@ -483,7 +511,8 @@
     "commit": null,
     "modelCopy": null,
     "lane": "retained SDK native receipt; original custody not reconstructed",
-    "date": "2026-11-07T04:00:53.8735141Z"
+    "date": "2026-11-07T04:00:53.8735141Z",
+    "canonicalResponseSha256": "a5cae3aaf8855139828ea8bb0fb9bcd472521cbd3360749435d3bf0005ff6065"
   },
   "retained-script-Succeeded": {
     "operation": "scripting.execute",
@@ -504,7 +533,8 @@
     "commit": null,
     "modelCopy": null,
     "lane": "retained SDK native receipt; original custody not reconstructed",
-    "date": "2026-11-06T12:15:19.1779389Z"
+    "date": "2026-11-06T12:15:19.1779389Z",
+    "canonicalResponseSha256": "bda25d9c7e6c729b9dd32627d57c71fba8becda9dd7b52472572ad9e71a5f961"
   },
   "retained-script-RuntimeFailed": {
     "operation": "scripting.execute",
@@ -525,7 +555,8 @@
     "commit": null,
     "modelCopy": null,
     "lane": "retained SDK native receipt; original custody not reconstructed",
-    "date": "2026-11-02T13:08:19.8915001Z"
+    "date": "2026-11-02T13:08:19.8915001Z",
+    "canonicalResponseSha256": "245b23c4632ceea59056638d674bb65d4ac7a22e5f27e65023b8d64a1f81fd8f"
   },
   "retained-script-CompilationFailed": {
     "operation": "scripting.execute",
@@ -546,7 +577,8 @@
     "commit": null,
     "modelCopy": null,
     "lane": "retained SDK native receipt; original custody not reconstructed",
-    "date": "2026-11-03T12:35:18.8312419Z"
+    "date": "2026-11-03T12:35:18.8312419Z",
+    "canonicalResponseSha256": "a11d04541c357d88aa28bd2b1d846a58381cae85aee1cb503a743b9c7eef0b70"
   },
   "retained-host-ops-catalog": {
     "operation": "host.ops.catalog",
@@ -567,7 +599,8 @@
     "date": "2026-11-07T23:30:28.9175561Z",
     "lane": "retained SDK native receipt; original custody not reconstructed",
     "commit": null,
-    "modelCopy": null
+    "modelCopy": null,
+    "canonicalResponseSha256": "b05a978a5f96be438dcb5f1874d7c3a4bb3f2ee4de8d738ed093016ad331f317"
   },
   "retained-view-image": {
     "operation": "revit.context.view-image",
@@ -591,7 +624,8 @@
     "modelCopy": "project:path:C:\\Users\\kaitp\\source\\repos\\Pe.Tools-drive\\.artifacts\\accept\\solc1b\\docs\\Chadds-solc1b.rvt",
     "asset": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools-drive\\.artifacts\\accept\\solc1b\\home\\Pe.Tools\\.local-state\\scratch\\pe-view-captures\\view-7889091-bb2c555293a643eeaaa4d7271cc1a685 - Floor Plan - Coordination Plan - Level 1-crop.png",
     "assetCopy": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/runs/takeoffs-initialize-leaf/other-sdk-copies/view-asset.png",
-    "assetSha256": "ca5709fa9f9b531a4704d3449c4631e380a841b0c79c15c59ff86dfd2dc2f28f"
+    "assetSha256": "ca5709fa9f9b531a4704d3449c4631e380a841b0c79c15c59ff86dfd2dc2f28f",
+    "canonicalResponseSha256": "97e220805bf732b4dc63c3bb18b5027b57d8d670dfa855bf536fc316b8d606e7"
   },
   "retained-revit.detail.elements": {
     "operation": "revit.detail.elements",
@@ -612,7 +646,8 @@
     "date": "2026-11-07T15:33:40.8197789Z",
     "commit": null,
     "modelCopy": null,
-    "lane": "retained SDK native receipt; original custody not reconstructed"
+    "lane": "retained SDK native receipt; original custody not reconstructed",
+    "canonicalResponseSha256": "e5efb2617ad443b391e0540003a95fc34ce17f9c4db31a78ea9014500e76f0de"
   },
   "fresh-revit.context.lens": {
     "operation": "revit.context.lens",
@@ -627,6 +662,7 @@
     "date": "2026-11-08T03:30:14.1310449Z",
     "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-d59e206f\\.artifacts\\tmp\\leaf-native-07\\lens-fixture-model.rvt",
     "modelCopySha256": "7aa8f68267e7ddcc21ab3734d89d539d128d7592a2572e0afdd9eef6e8fdd98a",
-    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-07.json"
+    "receipt": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-d59e206f/.artifacts/accept/takeoffs-native-recordings/ev/capture-07.json",
+    "canonicalResponseSha256": "8291c4fed1030863711bcf488e91ca7a8c95885de01effea6efa4ab66c0bb042"
   }
 }
