@@ -79,7 +79,7 @@ export interface Leaf<I, O> {
   readonly validate: boolean;
   readonly fence?: boolean;
   /** Content identity may exclude sampling telemetry; the full evidence still reaches the pane. */
-  content?(value: O): unknown;
+  content?(value: O, args: I): unknown;
 }
 export const leaf = <I, O>(
   name: string,
@@ -183,7 +183,7 @@ export async function evaluate<I, O>(
               ? await port.take(definition.name, args,ctx)
               : await definition.run(ctx, args);
           const data = immutable(wireValue(definition.output.parse(raw)));
-          const hash = fingerprint("leaf" in definition && definition.content ? definition.content(data) : data);
+          const hash = fingerprint("leaf" in definition && definition.content ? definition.content(data, args) : data);
           trace.push({ recipe, name: definition.name, args, outcome: "answered", hash });
           if ("leaf" in definition) {
             if (port.revision(definition.name, args) !== revision)
@@ -261,7 +261,7 @@ export async function evaluate<I, O>(
     const current = check.definition.output.parse(
       await port.take(check.definition.name, check.args),
     );
-    const hash = fingerprint(check.definition.content ? check.definition.content(current) : current);
+    const hash = fingerprint(check.definition.content ? check.definition.content(current, check.args) : current);
     trace.push({
       recipe: fingerprint([check.definition.name, check.args, "validation"]),
       name: check.definition.name,

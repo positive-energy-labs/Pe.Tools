@@ -18,32 +18,22 @@ import { leaf, read } from "./reads/evaluator.ts";
 import { assetFile } from "./reads/inputs.ts";
 import { readingRequestSchema, chatValue, openData, opsData, bindData } from "@pe/agent-contracts";
 import { firmReading, catalogReading } from "./ducts-files.ts";
-const resource = <I extends z.ZodType, O extends z.ZodType>(input: I, output: O) =>
-  leaf("resource", input, output);
+import { resourceContent } from "./resource-content.ts";
+const resource = <O extends z.ZodType>(output: O) => ({
+  ...leaf("resource", readingRequestSchema, output),
+  content: (value: z.output<O>, args: z.output<typeof readingRequestSchema>) => resourceContent(args, value),
+});
 export const firm = leaf("file:firm", z.null(), firmReading);
 export const catalogs = leaf("file:catalogs", z.null(), catalogReading);
-// Sampling times, heartbeat and process telemetry do not change the census (ADR 0033).
-// Keep null/present observation evidence, errors, process identity and all admission facts.
-function machineContent(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(machineContent);
-  if (value === null || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value).flatMap(([key, value]) =>
-    key === "uptimeSeconds" || key === "privateBytes" ? [] : [[key,
-      key === "observedAtUtc" || key === "attemptedAtUtc" || key === "lastTickUtc"
-        ? value === null ? null : true
-        : machineContent(value),
-    ]],
-  ));
-}
 export const resources = {
-  machine: { ...resource(readingRequestSchema, chatValue.shape.machine), content: machineContent },
-  capabilities: resource(readingRequestSchema, chatValue.shape.capabilities),
-  threads: resource(readingRequestSchema, openData.shape.threads),
-  inventory: resource(readingRequestSchema, bindData.shape.inventory),
-  recents: resource(readingRequestSchema, openData.shape.recents),
-  catalog: resource(readingRequestSchema, opsData.shape.catalog),
-  statuses: resource(readingRequestSchema, opsData.shape.receipts),
-  receipt: resource(readingRequestSchema, opsData.shape.receipt),
+  machine: resource(chatValue.shape.machine),
+  capabilities: resource(chatValue.shape.capabilities),
+  threads: resource(openData.shape.threads),
+  inventory: resource(bindData.shape.inventory),
+  recents: resource(openData.shape.recents),
+  catalog: resource(opsData.shape.catalog),
+  statuses: resource(opsData.shape.receipts),
+  receipt: resource(opsData.shape.receipt),
 };
 
 export const familyObservation = leaf(
