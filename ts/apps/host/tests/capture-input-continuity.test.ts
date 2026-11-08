@@ -8,7 +8,7 @@ import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import { HostNativeRead, canonicalJson } from "@pe/host-internal/native-read";
 import {
-  DUCTS_BODY_VERSION_HEADER,
+  NATIVE_BODY_VERSION_HEADER,
   address,
 } from "@pe/agent-contracts";
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
@@ -179,7 +179,7 @@ test.each(["metadata", "full", "io"])(
       expect(response.status, await response.clone().text()).toBe(200);
       expect(JSON.stringify(await response.json())).toBe(JSON.stringify(snapshot));
       expect(owner.writer.capture.truncated()).not.toBeNull();
-    const refused = await owner.send("/call", { key: "ducts.snapshot.roster", request: {} }, { [DUCTS_BODY_VERSION_HEADER]: "missing-version" });
+    const refused = await owner.send("/call", { key: "ducts.snapshot.roster", request: {} }, { [NATIVE_BODY_VERSION_HEADER]: "missing-version" });
     expect(refused.status, await refused.clone().text()).toBe(409);
     } finally {
       await owner.close();

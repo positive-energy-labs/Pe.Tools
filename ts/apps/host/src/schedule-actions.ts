@@ -1,3 +1,4 @@
+import { lifetime } from "./document-lifetime.ts";
 import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
 import { createHash } from "node:crypto";
 import { Effect } from "effect";
@@ -42,7 +43,6 @@ import type { PodMemberWritten } from "@pe/host-contracts/operation-types";
 import type { ScheduleCapture } from "@pe/host-contracts/generated";
 import { composedSpec, podFolder, writeRun } from "./settings.ts";
 import {
-  lifetime,
   podContext,
   runPods,
   writeCaptureRun,

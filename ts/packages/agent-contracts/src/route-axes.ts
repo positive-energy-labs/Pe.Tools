@@ -1,8 +1,6 @@
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import type { CatalogAxes, CatalogLink } from "./catalog.ts";
-import { DUCTS_SYSTEM_MAX } from "./ducts-read.ts";
-import { FAN_READ_MAX } from "./fans-read.ts";
 import type { PeRouteId } from "./pe-api.ts";
 
 type Declaration = Omit<CatalogLink, "key">;
@@ -159,6 +157,7 @@ export function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId,
       "host.ops.catalog",
     ]),
     "contributions.read": axes("None", "One", ["Metadata"], "SessionWrite", "Expensive", []),
+    "blobs.put": axes("None", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "family.spec": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "feedback.submit": axes("None", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "feedback.deliver": axes("None", "One", ["Metadata"], "SessionWrite", "Expensive", []),
@@ -211,33 +210,6 @@ export function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId,
     "work.history": axes("Document", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "reads.value": axes("None","One",["Metadata"],"Read","Bounded",[]),
     "reads.events": axes("None", "Many", ["Metadata"], "Read", "Cheap", []),
-    "fans.sheet": {
-      ...axes("Document", "Many", ["Metadata", "Topology", "Geometry"], "Read", "Bounded", [
-        "ducts.snapshot.roster",
-        "ducts.snapshot.walk",
-        "ducts.tables",
-      ]),
-      cap: FAN_READ_MAX,
-    },
-    "ducts.read": {
-      ...axes("Document", "Many", ["Metadata", "Topology"], "Read", "Bounded", [
-        "ducts.snapshot.roster",
-        "ducts.snapshot.walk",
-        "ducts.tables",
-      ]),
-      cap: DUCTS_SYSTEM_MAX,
-    },
-    "ducts.sheet": axes(
-      "Elements",
-      "One",
-      ["Metadata", "Topology", "Geometry"],
-      "Read",
-      "Expensive",
-      ["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"],
-    ),
-    "ducts.roster": axes("Document", "One", ["Metadata", "Topology"], "Read", "Bounded", [
-      "ducts.snapshot.roster",
-    ]),
     "ducts.analysis": axes(
       "Document",
       "One",

@@ -65,30 +65,30 @@ test("fixture HTTP roster uses the real sheet service and strict open-document i
     (frame) => frames.push(frame),
   );
   const response = await f.api.fetch(
-    new Request("http://fixture/pe/ducts/roster", {
+    new Request("http://fixture/pe/reads/value", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ target: f.target.ref }),
+      body: JSON.stringify({ read: "fans.roster", args: { target: f.target.ref }, subscription: "roster", generation: 0 }),
     }),
   );
-  const body = await response.json();
+  const body = (await response.json()).value.data;
   expect(response.status, JSON.stringify(body)).toBe(200);
   expect(body.rows.length).toBeGreaterThan(0);
   const muas = body.rows.find((row: { mark: string }) => row.mark === "MUAS-1");
   expect(muas).toBeDefined();
   const sheet = await f.api.fetch(
-    new Request("http://fixture/pe/ducts/sheet", {
+    new Request("http://fixture/pe/reads/value", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+      body: JSON.stringify({ read: "ducts.sheet", args: {
         target: f.target.ref,
         mode: "fan",
         unitId: muas.unitId,
         portIndex: muas.portIndex,
-      }),
+      }, subscription: "overview", generation: 0 }),
     }),
   );
-  const opened = await sheet.json();
+  const opened = (await sheet.json()).value.data;
   expect(sheet.status, JSON.stringify(opened)).toBe(200);
   expect(opened.fan.mark).toBe("MUAS-1");
   const edit = await withInvocationContext({ caller: { kind: "human", via: "local" } }, () =>
@@ -133,22 +133,22 @@ test("fixture HTTP roster uses the real sheet service and strict open-document i
     portIndex: muas.portIndex,
   };
   const next = await f.api.fetch(
-    new Request("http://fixture/pe/ducts/sheet", {
+    new Request("http://fixture/pe/reads/value", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(sheetRequest),
+      body: JSON.stringify({ read: "ducts.sheet", args: sheetRequest, subscription: "updated-overview", generation: 0 }),
     }),
   );
-  const latest = await next.json();
+  const latest = (await next.json()).value.data;
   expect(next.status, JSON.stringify(latest)).toBe(200);
   const inputs = await f.api.fetch(
-    new Request("http://fixture/pe/ducts/sheet", {
+    new Request("http://fixture/pe/reads/value", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...sheetRequest, basis: latest.basis, detail: { kind: "inputs" } }),
+      body: JSON.stringify({ read: "ducts.sheet", args: { ...sheetRequest, basis: latest.basis, detail: { kind: "inputs" } }, subscription: "inputs", generation: 0 }),
     }),
   );
-  const detail = await inputs.json();
+  const detail = (await inputs.json()).value.data;
   expect(inputs.status, JSON.stringify(detail)).toBe(200);
   expect(detail.inputs.units[String(muas.unitId)].cfm.value).toBe(900);
   expect(Object.keys(detail.inputs.components).length).toBeGreaterThan(0);

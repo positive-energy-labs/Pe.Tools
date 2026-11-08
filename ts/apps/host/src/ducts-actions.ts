@@ -17,7 +17,7 @@ import { z } from "zod";
 import { invokeBridge, type RevitBridge } from "./bridge.ts";
 import { command, refused, type CommandContext } from "./command-executor.ts";
 import type { ActionExecution } from "./action-journal.ts";
-import { lifetime } from "./family-actions.ts";
+import { lifetime } from "./document-lifetime.ts";
 import { ductsReadings } from "./ducts-readings.ts";
 import { runPods } from "./family-actions.ts";
 import { buildSheet, resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
@@ -375,6 +375,7 @@ export function ductsExecutors(
       if (refusal) return {
           value,
           derivedRequest: p.input,
+          planRefusalCode: "ducts.plan-refused",
           planRefusal: (value as DuctsApply.Res.Response).writes
             .filter((w) => w.outcome === "refused")
             .map(

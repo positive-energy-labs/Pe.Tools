@@ -214,7 +214,7 @@ export async function fixture(
     if (hold) holds.set(admitted.requestId, hold);
     const response = await withInvocationContext({ caller: who }, () =>
       web.handler(
-        new Request("http://host/pe/fans/sheet", {
+        new Request("http://host/pe/reads/value", {
           method: "POST",
           headers: at
             ? {
@@ -230,6 +230,7 @@ export async function fixture(
               }
             : {},
           body: JSON.stringify({
+            read: "fans.sheet",
             subscription,
             generation,
             release,

@@ -114,3 +114,18 @@ it("type-only route context imports do not import a colocated runtime owner",()=
  expect(actual.rawPageImports).toHaveLength(2);
  expect(actual.rawPageImports!.some(row=>row.includes("drawing.tsx"))).toBe(false);
 });
+
+
+import { kernelRouteInventory, kernelRouteFloors } from "./kernel-route-names-census.ts";
+import kernelRoutes from "./kernel-route-names.baseline.json" with { type: "json" };
+
+it("ADR 0033 rule 7 inventories every kernel path and ratchets route sites", () => {
+  const actual = kernelRouteInventory(kernelRoutes.paths);
+  expect(actual.paths, "Enroll every discovered kernel path; no missing or silently skipped files").toEqual(kernelRoutes.paths);
+  expect(additions(actual.sites, kernelRoutes.sites)).toEqual([]);
+});
+
+it("ADR 0033 rule 7 allowances only shrink against every committed floor", () => {
+  for (const floor of kernelRouteFloors())
+    expect(additions(kernelRoutes.sites, floor.sites)).toEqual([]);
+});

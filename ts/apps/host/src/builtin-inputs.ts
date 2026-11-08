@@ -12,7 +12,7 @@ import { hostOpSafety } from "@pe/host-contracts/generated";
 import {
   executionTargetSchema,
   documentRefSchema,
-  DUCTS_BODY_VERSION_HEADER,
+  NATIVE_BODY_VERSION_HEADER,
   readingRequestSchema,
 } from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
@@ -567,7 +567,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             return new Response(JSON.stringify(answer.value), {
               // Admission generations fence native flights; sealed read versions describe content.
               // Keep freshness evidence in the native taking, outside the Value's content identity.
-              headers: { [DUCTS_BODY_VERSION_HEADER]: fingerprint(answer.value) },
+              headers: { [NATIVE_BODY_VERSION_HEADER]: fingerprint(answer.value) },
             });
           }
           if (!ref) throw Error("Retained document read requires a document target");

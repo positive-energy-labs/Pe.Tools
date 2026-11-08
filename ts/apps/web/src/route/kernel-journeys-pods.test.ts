@@ -697,3 +697,90 @@ test("JZ Open machine census: sampling drift lists documents; content conflict n
     expect(await read("retry")).toMatchObject({ state: "current" });
   } finally { openNavigation.bypass = false; mounts.forEach(mount => mount.dispose()); cleanup(); await host.close(); }
 }, 60_000);
+
+
+test("JZ route-neutral Plan refusal preserves the reason and holds Apply through HTTP", async () => {
+  const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
+  const f = await nativeFixture();
+  try {
+    const reason = "Shared type cannot scope this authored flow";
+    f.planRefusal.reason = reason;
+    const fans = await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [
+      { path: ["flows", "4", "edit"], value: { value: { cfm: 321 } } },
+      { path: ["parameters", "terminalFlow", "edit"], value: { value: "PE_M_Grd_AirFlow" } },
+    ], 0);
+    if (!fans.ok) throw Error(JSON.stringify(fans));
+    const staged = await f.saved.apply(f.key, "ducts", "human", [
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+    ], 0);
+    if (!staged.ok) throw Error(JSON.stringify(staged));
+    const input = { work: { key: f.key, revision: staged.revision } };
+    expect((await f.post("/actions", { id: "jz-refusal-plan", key: "ducts.plan-losses", target: f.target, input })).ok).toBe(true);
+    const plan = await f.journal.wait("jz-refusal-plan");
+    expect(plan.state, JSON.stringify(plan)).toBe("succeeded");
+    if (plan.state !== "succeeded") throw Error(JSON.stringify(plan));
+    expect(plan.result).toMatchObject({ planRefusal: expect.stringContaining(reason), planRefusalCode: "ducts.plan-refused" });
+    expect((await f.post("/actions", { id: "jz-refusal-apply", key: "ducts.apply-losses", target: f.target, input })).ok).toBe(true);
+    const apply = await f.journal.wait("jz-refusal-apply");
+    expect(apply.state, JSON.stringify(apply)).toBe("failed");
+    expect(JSON.stringify(apply)).toContain(reason);
+    expect(JSON.stringify(apply)).toContain("ducts.plan-refused");
+    expect(f.dispatched.filter(row => row.key === "ducts.apply")).toEqual([]);
+  } finally { await f.close(); }
+}, 60_000);
+
+
+test("JZ upload retains BlobRef before command admission and rejects inline intent", async () => {
+  const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
+  const { bindWork } = await import("@pe/agent-contracts");
+  const f = await nativeFixture();
+  try {
+    const upload = { fileName: "spec.pdf", base64: Buffer.from("%PDF-jz-immutable").toString("base64") };
+    const response = await f.post("/actions/blobs", upload);
+    expect(response.status, await response.clone().text()).toBe(200);
+    const source = await response.json();
+    expect(await (await f.post("/actions/blobs", upload)).json()).toEqual(source);
+    expect((await f.post("/actions/blobs", { ...upload, base64: "invalid!" })).status).toBe(400);
+    expect((await f.post("/actions/blobs", upload, { kind: "external-mcp", label: "upload", context: "jz" })).status).toBe(403);
+    expect(source).toMatchObject({ fileName: "spec.pdf", size: 17, digest: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    const key = bindWork("family", null);
+    const started = await f.saved.start(key, {}, "human");
+    if (!started.ok) throw Error(JSON.stringify(started));
+    const input = { member: { pod: "absent", path: "settings/family/F.json" }, work: { key, revision: started.revision }, source };
+    expect((await f.post("/actions", { id: "jz-inline", key: "family.attach-spec", target: { kind: "host" }, input: { ...input, source: upload } })).status).toBe(409);
+    expect((await f.journal.list(undefined, "jz-inline"))).toEqual([]);
+    const admitted = await f.post("/actions", { id: "jz-blob", key: "family.attach-spec", target: { kind: "host" }, input });
+    expect(admitted.ok, await admitted.clone().text()).toBe(true);
+    const row = await f.journal.wait("jz-blob");
+    // The intentionally absent member refuses execution after immutable input admission.
+    expect(row.state).toBe("failed");
+    expect(row.input.source).toEqual(source);
+    expect(JSON.stringify(row)).not.toMatch(/"(?:base64|bytesBase64)"/);
+  } finally { await f.close(); }
+}, 60_000);
+
+
+test("JZ cold HTTP action inspection discards old journal rows without conversion", async () => {
+  const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
+  const { readFile, writeFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const first = await nativeFixture();
+  let bytes: string;
+  try {
+    const staged = await first.saved.apply(first.key, "ducts", "human", [
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+    ], 0);
+    if (!staged.ok) throw Error(JSON.stringify(staged));
+    await first.post("/actions", { id: "jz-old-row", key: "ducts.plan-losses", target: first.target, input: { work: { key: first.key, revision: staged.revision } } });
+    expect((await first.journal.wait("jz-old-row")).state).toBe("succeeded");
+    bytes = (await readFile(join(first.dir, "actions.jsonl"), "utf8")).replace(/^.*?\n/, '{"version":7}\n');
+  } finally { await first.close(); }
+  const cold = await nativeFixture();
+  try {
+    await writeFile(join(cold.dir, "actions.jsonl"), bytes, "utf8");
+    const response = await cold.request(new Request("http://fixture/actions?id=jz-old-row"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([]);
+    expect(cold.dispatched).toEqual([]);
+  } finally { await cold.close(); }
+}, 60_000);

@@ -57,6 +57,7 @@ export type { Context as FansDrawContext } from "./context.generated";
 import type { Context as FansDrawContext } from "./context.generated";
 export const module = route({
   key: "fans",
+  host: "../../../host/src/reads/fans.ts",
   name: "Fans",
   directory: {
     aliases: ["fan", "ESP", "pressure"],

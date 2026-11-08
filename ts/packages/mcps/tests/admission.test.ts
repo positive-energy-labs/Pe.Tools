@@ -400,7 +400,7 @@ test.each(["open", "address", "workspace", "host"] as const)("loss preview reads
     expect(await run()).toMatchObject({state: "succeeded"});
     expect(posts).toHaveLength(1);
   } else {
-    await expect(run()).rejects.toThrow("Preview needs a fan walk. Read route:ducts.roster");
+    await expect(run()).rejects.toThrow("Preview needs a fan walk. Read route:reads.value (read fans.roster)");
     await expect(run()).rejects.not.toThrow("ducts.analysis");
     expect(posts).toEqual([]);
   }

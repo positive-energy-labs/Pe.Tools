@@ -1,4 +1,3 @@
-import { retainUpload } from "./action-blobs.ts";
 import type { HostInputContext } from "./input-context.ts";
 import type {
   CommandContext,
@@ -7,10 +6,10 @@ import type {
   CommandExecutor,
 } from "./command-executor.ts";
 import { CommandRejected, StepFailure, refused } from "./command-executor.ts";
-import { readJournalSnapshot } from "./legacy-action-journal.ts";
+import { readJournalSnapshot } from "./journal-snapshot.ts";
 import { nativeEffect, validateNativeInput } from "./native-input.ts";
 import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
-import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, writeFile, rm } from "node:fs/promises";
 import { renameReplacing } from "./rename-retry.ts";
 import { dirname, join, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -446,7 +445,7 @@ const isOpen = (row: ActionReceipt) =>
 /**
  * One host journal. Execution never holds the authored Work lock or the journal write tail.
  *
- * Storage is append-only lines: a `{"version":7}` header, then one `{receipt}` per committed
+ * Storage is append-only lines: a `{"version":8}` header, then one `{receipt}` per committed
  * revision and one `{mapping}` per minted opaque id; the last revision of an id wins. A commit
  * appends only what it changed, and compaction rewrites the newest {@link RETAIN_RECEIPTS} telemetry
  * facts plus every command once the file holds twice what is live.
@@ -1129,7 +1128,6 @@ export class ActionJournal implements ReceiptReader {
     const inputRefusal = this.inputContext?.check({ kind: "command", key: raw.key });
     if (inputRefusal) throw inputRefusal;
     const admission = actionAdmissionSchema.parse(structuredClone(raw));
-    if (admission.key === "family.attach-spec") admission.input = await retainUpload(admission.input);
     const portable = commands[admission.key as keyof typeof commands];
     if (portable)
       admission.input = portable.input.parse(admission.input) as Record<string, unknown>;
@@ -1983,24 +1981,13 @@ export class ActionJournal implements ReceiptReader {
     });
     if (originalBytes === null) return;
     const version = JSON.parse(originalBytes.toString("utf8").split("\n")[0]!)?.version;
-    // ponytail: archive file naming, not an event time; wall time keeps names unique under a fixed test clock.
-    const archive = `${this.path}.v${String(version)}.${Date.now()}.archived`;
-    // ADR 0033 rule 5: inline Family PDF rows are reset, never migrated into executable intent.
-    const inlineFamily = originalBytes.toString("utf8").split("\n").slice(1).some((line) => {
-      try {
-        const value = JSON.parse(line)?.receipt?.body?.value;
-        return value?.key === "family.attach-spec" && /"(?:bytesBase64|base64)"\s*:/.test(JSON.stringify(value));
-      } catch { return false; } // The journal decoder below owns torn-tail/corruption rules.
-    });
-    const snapshot = inlineFamily ? null : readJournalSnapshot(originalBytes, archive);
+    const snapshot = readJournalSnapshot(originalBytes);
     if (!snapshot) {
-      await renameReplacing(this.path, archive);
-      console.warn(
-        `${this.path} has unsupported journal data (${inlineFamily ? "inline Family PDF bytes" : String(version)}); archived as ${archive}`,
-      );
+      await rm(this.path);
+      console.warn(`${this.path} has unsupported journal data (${String(version)}); discarded`);
       return;
     }
-    const { receipts, mappings, imported } = snapshot;
+    const { receipts, mappings } = snapshot;
     this.torn = snapshot.torn;
     this.lines = snapshot.lines;
     this.header = true;
@@ -2048,10 +2035,6 @@ export class ActionJournal implements ReceiptReader {
       next = actionReceiptSchema.parse(next);
       this.index(next);
       if (canonicalRouteInput(next) !== canonicalRouteInput(row)) changed.push(next);
-    }
-    if (imported) {
-      await writeFile(archive, originalBytes, { flag: "wx" });
-      this.torn = true;
     }
     if (this.torn) await this.compact();
     if (changed.length) await this.commit(changed);
@@ -2122,7 +2105,7 @@ export class ActionJournal implements ReceiptReader {
     ];
     if (lines.length) {
       if (!this.header) await mkdir(dirname(this.path), { recursive: true });
-      const text = `${this.torn ? "\n" : ""}${this.header ? "" : '{"version":7}\n'}${lines
+      const text = `${this.torn ? "\n" : ""}${this.header ? "" : '{"version":8}\n'}${lines
         .map((line) => `${JSON.stringify(line)}\n`)
         .join("")}`;
       try {
@@ -2180,7 +2163,7 @@ export class ActionJournal implements ReceiptReader {
     await mkdir(dirname(this.path), { recursive: true });
     await writeFile(
       `${this.path}.tmp`,
-      `{"version":7}\n${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
+      `{"version":8}\n${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
       "utf8",
     );
     await renameReplacing(`${this.path}.tmp`, this.path);

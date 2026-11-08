@@ -71,6 +71,7 @@ const evidence = (
 });
 export const module = route({
   key: "ducts",
+  host: "../../../host/src/reads/ducts.ts",
   name: "Ducts",
   directory: {
     group: "Calculate loads & airflow",

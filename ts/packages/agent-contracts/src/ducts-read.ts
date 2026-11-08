@@ -1,3 +1,4 @@
+import type { ExecutionTarget } from "./target.ts";
 import { circuitReadSchema, inferenceReadSchema, overridesReadSchema, stagedDuctsReadSchema } from "./ducts-pricing-read.ts";
 import { z } from "zod";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
@@ -250,24 +251,24 @@ const axes = {
 } as const;
 export const ductsRosterCapability = {
   key: "ducts.roster.value",
-  endpoint: "ducts.read",
-  request: () => ({ read: "ducts.roster" }),
+  endpoint: "reads.value",
+  request: (args: object, target?: ExecutionTarget) => ({ read: "ducts.roster", args: { ...args, target: target?.kind === "document" ? target.ref : target } }),
   input: ductsRosterArgs.omit({ target: true }),
   output: ductsRosterReadResponse,
   axes,
 } as const;
 export const ductsNetworkCapability = {
   key: "ducts.network.value",
-  endpoint: "ducts.read",
-  request: () => ({ read: "ducts.network" }),
+  endpoint: "reads.value",
+  request: (args: object, target?: ExecutionTarget) => ({ read: "ducts.network", args: { ...args, target: target?.kind === "document" ? target.ref : target } }),
   input: ductsNetworkArgs.omit({ target: true }),
   output: ductsNetworkReadResponse,
   axes,
 } as const;
 export const ductsPricingCapability = {
   key: "ducts.pricing.value",
-  endpoint: "ducts.read",
-  request: () => ({ read: "ducts.pricing" }),
+  endpoint: "reads.value",
+  request: (args: object, target?: ExecutionTarget) => ({ read: "ducts.pricing", args: { ...args, target: target?.kind === "document" ? target.ref : target } }),
   input: ductsNetworkArgs.omit({ target: true }),
   output: ductsPricingReadResponse,
   axes,

@@ -1,3 +1,4 @@
+import { uploadBlob } from "../../../../packages/mcps/src/shared/blob-client.ts";
 import { familyPageSchema } from "./page";
 /** Family's domain projections and pane memory; the typed shell owns acquisition, Work and verbs. */
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, useRef } from "react";
@@ -292,7 +293,7 @@ export function useFamilyStore(ctx: FamilyContext) {
         });
         const refused = await run("attach-spec", {
           member,
-          source: { fileName: file.name, base64 },
+          source: await uploadBlob({ fileName: file.name, base64 }),
         });
         if (refused) throw Error(refused.message);
       },

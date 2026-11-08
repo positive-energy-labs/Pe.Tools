@@ -11,7 +11,7 @@ import { NodeCrypto, NodeServices, NodeHttpClient } from "@effect/platform-node"
 import { Context, Effect, Exit, Layer, Queue, Scope } from "effect";
 import { HttpRouter } from "effect/http";
 import { TestClock } from "effect/testing";
-import { bindWork, DUCTS_BODY_VERSION_HEADER, type Address, type Caller } from "@pe/agent-contracts";
+import { bindWork, NATIVE_BODY_VERSION_HEADER, type Address, type Caller } from "@pe/agent-contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
@@ -31,10 +31,9 @@ import { RunConsents, runConsentsPromise, type ConsentEvent } from "../src/run-c
 import { bindControl } from "../src/control.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import type { ReadSources } from "../src/reads/inputs.ts";
-import { evaluate } from "../src/reads/evaluator.ts";
-import { ductSheet, fanRoster } from "../src/reads/fan-sheet.ts";
+import { Publications } from "../src/reads/evaluator.ts";
+import { graphRoute } from "../src/reads/routes.ts";
 import { sheetPort } from "./ducts-read.fixture.ts";
-import { ductsSheetRequestSchema, ductsRosterRequestSchema } from "@pe/agent-contracts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { CaptureStore } from "../src/takeoff-captures.ts";
@@ -340,12 +339,13 @@ export async function nativeFixture(
             "content-type": "application/json",
             [HOST_RPC_BRIDGE_SESSION_HEADER]: ref.session,
             [HOST_RPC_DOCUMENT_HEADER]: ref.openId,
-            ...(version && { [DUCTS_BODY_VERSION_HEADER]: version }),
+            ...(version && { [NATIVE_BODY_VERSION_HEADER]: version }),
           },
           body: JSON.stringify({ key: op, request: input }),
         }),
       );
     };
+    const publications = new Publications();
     const api = createPeRoutes({
       workspace: saved,
       registrations: [],
@@ -358,9 +358,8 @@ export async function nativeFixture(
       readGraph: async raw => {
         const port = sheetPort({ firm: () => settle(testDuctFiles().firm), catalogs: () => settle(testDuctFiles().ductCatalogs), call: readDucts,
           workKey: async ref => bindWork("ducts", address, undefined, ref) }, saved);
-        return "mode" in (raw as object)
-          ? (await evaluate(ductSheet, ductsSheetRequestSchema.parse(raw), port)).data
-          : (await evaluate(fanRoster, ductsRosterRequestSchema.parse(raw), port)).data;
+        const graph = graphRoute("reads.value", raw);
+        return graph.publish(publications, graph.publication!.subscription, graph.publication!.generation, port);
       },
       observeHostResource,
     });

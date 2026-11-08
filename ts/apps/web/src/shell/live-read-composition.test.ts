@@ -110,10 +110,11 @@ test("source startup records a cold Fans publication through real host inputs", 
   const host = await liveHost(true);
   const { target, headers } = host;
   try {
-    const response = await fetch(`${host.base}/pe/fans/sheet`, {
+    const response = await fetch(`${host.base}/pe/reads/value`, {
       method: "POST",
       headers,
       body: JSON.stringify({
+        read: "fans.sheet",
         subscription: "cold-fans",
         generation: 0,
         args: { target, fan: [], sheetPath: "" },
@@ -152,10 +153,11 @@ test("an empty ancestor directory cannot invalidate the missing firm input mid-r
     }
   });
   try {
-    const response = await fetch(`${host.base}/pe/fans/sheet`, {
+    const response = await fetch(`${host.base}/pe/reads/value`, {
       method: "POST",
       headers: host.headers,
       body: JSON.stringify({
+        read: "fans.sheet",
         subscription: "metadata",
         generation: 1,
         args: { target: host.target, fan: [], sheetPath: "" },
@@ -194,10 +196,11 @@ test("an empty ancestor directory cannot invalidate the missing firm input mid-r
 test("release fences its own attempt without consuming the next generation's changed args", async () => {
   const host = await liveHost();
   const send = async (generation: number, sheetPath: string, release = false) => {
-    const response = await fetch(`${host.base}/pe/fans/sheet`, {
+    const response = await fetch(`${host.base}/pe/reads/value`, {
       method: "POST",
       headers: host.headers,
       body: JSON.stringify({
+        read: "fans.sheet",
         subscription: "changing-args",
         generation,
         release,
@@ -279,7 +282,7 @@ test("mounted Fans core and roster cannot supersede one another through their sh
     });
     const point = await capture.json();
     expect(capture.status, JSON.stringify(point)).toBe(200);
-    const replay = await fetch(`${host.base}/pe/fans/sheet`, {
+    const replay = await fetch(`${host.base}/pe/reads/value`, {
       method: "POST",
       headers: {
         ...host.headers,
@@ -289,6 +292,7 @@ test("mounted Fans core and roster cannot supersede one another through their sh
         ),
       },
       body: JSON.stringify({
+        read: "fans.sheet",
         subscription: "recorded",
         generation: 1,
         args: { target: host.target, fan: [], sheetPath: "" },
@@ -312,7 +316,7 @@ test("a stopped recording preserves live Fans but cannot hide a late closed targ
   const writer=await Effect.runPromise(openRecordingWriter(dir,automatic.lane.captureStore.identity,{maxBytes:256*1024*1024,maxTakings:10000}));
   const inputs=await Effect.runPromise(HostInputContext.pipe(Effect.provide(HostInputContext.layer({kind:"live",captureStore:writer}))));
   const host = await liveHost(false,undefined,inputs);
-  const publish = () => fetch(`${host.base}/pe/fans/sheet`, {method:"POST",headers:host.headers,body:JSON.stringify({subscription:"capture-stop",generation:0,args:{target:host.target,fan:[],sheetPath:""}})});
+  const publish = () => fetch(`${host.base}/pe/reads/value`, {method:"POST",headers:host.headers,body:JSON.stringify({read:"fans.sheet",subscription:"capture-stop",generation:0,args:{target:host.target,fan:[],sheetPath:""}})});
   try {
     const initial = await publish();
     expect(initial.status,await initial.clone().text()).toBe(200);

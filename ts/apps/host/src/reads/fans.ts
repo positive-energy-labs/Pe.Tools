@@ -14,6 +14,7 @@ import { nativeRead } from "./inputs.ts";
 
 import { read } from "./evaluator.ts";
 import {
+  ductSheet,
   fanElements,
   fanInputs,
   fanLegs,
@@ -167,3 +168,5 @@ export const fansSheet = read("fans.sheet", {
     }));
   },
 });
+
+export const reads = { sheet: fansSheet, roster: fanRoster, pressureSheet: ductSheet };

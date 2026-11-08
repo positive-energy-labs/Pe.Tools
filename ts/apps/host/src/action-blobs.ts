@@ -25,9 +25,3 @@ export async function get(ref: BlobRef): Promise<Buffer> {
     throw refused(`Stored bytes failed integrity for ${ref.fileName} (${ref.digest})`, "blob.corrupt");
   return bytes;
 }
-export async function retainUpload(input: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const source = input.source;
-  if (!source || typeof source !== "object" || !("base64" in source)) return input;
-  const upload = source as {base64: string; fileName: string};
-  return {...input, source: await put(Buffer.from(upload.base64, "base64"), upload.fileName)};
-}

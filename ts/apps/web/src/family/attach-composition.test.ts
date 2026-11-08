@@ -1,3 +1,5 @@
+import { uploadBlob } from "../../../../packages/mcps/src/shared/blob-client.ts";
+import { put as putBlob } from "../../../host/src/action-blobs.ts";
 import { serveRoutes } from "../../../host/tests/real-server.ts";
 import { mintContext } from "../../../host/src/control.ts";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
@@ -101,14 +103,14 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
     expect(mount.owner()?.handle).toBeNull();
     await mount.startAction()!.run();
     startReturnHandle = mount.owner()?.handle ?? null;
-    await expect(mount.run("attach", false, {member, source: {fileName: "small.pdf", base64: Buffer.from("%PDF-1.4\nsmall manufacturer source\n%%EOF").toString("base64")}})).resolves.toMatchObject({member, pages: 0});
+    await expect(mount.run("attach", false, {member, source: await uploadBlob({fileName: "small.pdf", base64: Buffer.from("%PDF-1.4\nsmall manufacturer source\n%%EOF").toString("base64")})})).resolves.toMatchObject({member, pages: 0});
     expect((await journal.list()).find(row=>row.key === "work.start")).toMatchObject({state: "succeeded", result: {revision: 1}});
     const attached = (await journal.list()).find(row=>row.key === "family.attach-spec")!;
     expect(attached).toMatchObject({state: "succeeded", input: {work: {revision: 1}}});
     expect((await work.read(bindWork("family", null), "family", workReadContext(feed, Effect.runPromise)))?.doc).toMatchObject({spec: {member, doc: {jobId: "small"}}});
     expect(JSON.parse(await readFile(join(dir, member.pod, `${member.path}.spec.json`), "utf8"))).toMatchObject({path: "settings/family/small-small.json"});
     await vi.waitFor(() => expect(mount.owner()?.handle?.revision).toBe(2));
-    const run = mount.run("attach", false, {member, source: {fileName: "source.pdf", base64: (await readFile(pdf)).toString("base64")}});
+    const run = mount.run("attach", false, {member, source: await uploadBlob({fileName: "source.pdf", base64: (await readFile(pdf)).toString("base64")})});
     await expect(run).rejects.toThrow("PDF parser refused this source");
     expect(mount.reviewProblem("attach")).toContain("PDF parser refused this source");
     const receipt = (await journal.list()).find(row=>row.key === "family.attach-spec" && row.state === "failed")!;
@@ -163,7 +165,7 @@ test("resume reads prepared Family assets by digest without parsing again", asyn
   try {
     const view = (await work.view(key, "family"))!;
     const crossing = {caller: {kind: "human" as const, via: "local" as const}, basis: {kind: "human" as const}};
-    await journal.invoke({id: "resume", key: "family.attach-spec", target: {kind: "host"}, input: {member, source: {path: pdf}, work: {key, revision: view.revision}}}, crossing);
+    await journal.invoke({id: "resume", key: "family.attach-spec", target: {kind: "host"}, input: {member, source: await putBlob(await readFile(pdf), "source.pdf"), work: {key, revision: view.revision}}}, crossing);
     const prepared = await journal.wait("resume");
     expect(prepared.state, JSON.stringify(prepared)).toBe("incomplete");
     await journal.close();

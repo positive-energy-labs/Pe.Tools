@@ -39,6 +39,9 @@ export const writeResponseSchema = z.object({
 export const writePreviewSchema = writeResponseSchema
   .extend({
     previewOnly: z.literal(true),
+    /** A retained review can explain why this Plan grants no Apply authority. */
+    planRefusal: z.string().optional(),
+    planRefusalCode: z.string().optional(),
     authoredIntent: z.record(z.string(), z.unknown()).optional(),
   })
   .loose();

@@ -179,6 +179,8 @@ export type PeApiSchemas = Record<
   | "diagnosticBodySchema"
   | "actionAdmissionSchema"
   | "actionReceiptSchema"
+  | "blobRefSchema"
+  | "blobUploadSchema"
   | "actionStatusSchema"
   | "actionControlInputSchema"
   | "familiesObservationSchema"
@@ -345,6 +347,7 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "gateway",
       "operation",
     ),
+    "blobs.put": route("POST", "/actions/blobs", schemas.blobUploadSchema as S["blobUploadSchema"], schemas.blobRefSchema as S["blobRefSchema"], "human-or-pea", "gateway", "human-or-pea"),
     "actions.admit": route(
       "POST",
       "/actions",
@@ -837,26 +840,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
     ),
     "reads.events": route("GET", "/pe/read-events", none, object, "read", "pe", "read", "stream"),
       "reads.value": route("POST", "/pe/reads/value", schemas.valueReadRequest as S["valueReadRequest"], schemas.valueReadResponse as S["valueReadResponse"], "read", "pe", "read"),
-    "fans.sheet": route("POST", "/pe/fans/sheet", schemas.fansReadRequest as S["fansReadRequest"], schemas.fansReadResponse as S["fansReadResponse"], "read", "pe", "read"),
-    "ducts.read": route("POST", "/pe/ducts/read", schemas.ductsReadRequest as S["ductsReadRequest"], schemas.ductsReadResponse as S["ductsReadResponse"], "read", "pe", "read"),
-    "ducts.sheet": route(
-      "POST",
-      "/pe/ducts/sheet",
-      schemas.ductsSheetRequestSchema as S["ductsSheetRequestSchema"],
-      schemas.ductsSheetResponseSchema as S["ductsSheetResponseSchema"],
-      "read",
-      "pe",
-      "read",
-    ),
-    "ducts.roster": route(
-      "POST",
-      "/pe/ducts/roster",
-      schemas.ductsRosterRequestSchema as S["ductsRosterRequestSchema"],
-      schemas.ductsRosterResponseSchema as S["ductsRosterResponseSchema"],
-      "read",
-      "pe",
-      "read",
-    ),
     "ducts.analysis": route(
       "POST",
       "/pe/ducts/analysis",

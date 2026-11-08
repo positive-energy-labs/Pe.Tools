@@ -10,7 +10,7 @@ import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
-import { bindWork, address, DUCTS_BODY_VERSION_HEADER, readingKey, readingRequestsSchema, type Caller, type ReadingRequest } from "@pe/agent-contracts";
+import { bindWork, address, NATIVE_BODY_VERSION_HEADER, readingKey, readingRequestsSchema, type Caller, type ReadingRequest } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
 import { readInputRoutes } from "../src/app.ts";
@@ -99,7 +99,7 @@ const caller = { kind: "human" as const, via: "local" as const };
 const key = (route: string) => bindWork(route, path, undefined, ref);
 const nativeValue = async (response: Response) => ({
   sha256: createHash("sha256").update(canonicalJson(await response.json())).digest("hex"),
-  nativeRequestId: response.headers.get("x-pe-native-request-id"), version: response.headers.get(DUCTS_BODY_VERSION_HEADER),
+  nativeRequestId: response.headers.get("x-pe-native-request-id"), version: response.headers.get(NATIVE_BODY_VERSION_HEADER),
 });
 
 function resourceFrames(response: Response) {
@@ -227,20 +227,22 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
   const send = (web: typeof live, url: string, body?: unknown, identity = admitted()) => withInvocationContext({ caller: identity.caller, hostBaseUrl: "http://host" }, () => web.handler(new Request(`http://host${url}`, {
     method: body === undefined ? "GET" : "POST", headers: { "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }), Context.make(RequestIdentity, identity)));
-  const cases: { url: string; body?: any; value: any; readSet: ReadSetId; stream?: boolean; caller: Caller }[] = [];
+  const readBody = (read: string, args: unknown) => ({ read, args, subscription: crypto.randomUUID(), generation: 0 });
+  const cases: { wire?: any; url: string; body?: any; value: any; readSet: ReadSetId; stream?: boolean; caller: Caller }[] = [];
   const claimed = new Set<ReadSetId>();
   const capture = async (url: string, body?: unknown, stream = false, who: Caller = caller) => {
     const started = completed.length;
     const identity = admitted(who); const response = await send(live, url, body, identity);
     if (!stream) expect(response.status, await response.clone().text()).toBe(200);
-    const value = stream ? await firstFrame(response) : url === "/call" ? await nativeValue(response) : await response.json();
+    const wire = stream ? await firstFrame(response) : url === "/call" ? await nativeValue(response) : await response.json();
+    const value = url === "/pe/reads/value" ? wire.value.data : wire;
     if (stream) expect(value.kind, JSON.stringify(value)).toBe("snapshot");
     if (url === "/call") { expect(response.headers.get("x-pe-ducts-reused")).toBe("true"); expect(value.nativeRequestId).not.toBe(identity.requestId); }
-    const key = stream ? "resource.frame" : url === "/call" ? "native.call" : url.endsWith("/sheet") ? "ducts.sheet" : url.includes("route-state") ? "work.get" : "ducts.roster";
+    const key = stream ? "resource.frame" : url === "/call" ? "native.call" : url === "/pe/reads/value" ? "reads.value" : "work.get";
     const roots = completed.slice(started).filter((entry) => !claimed.has(entry.id) && entry.caller?.kind === who.kind && entry.recipe.key === key);
     expect(roots, "The actual consumer must complete exactly one stored read set").toHaveLength(1);
     claimed.add(roots[0]!.id);
-    cases.push({ url, body, value, readSet: roots[0]!.id, stream, caller: who }); return value;
+    cases.push({ url, body, value, wire, readSet: roots[0]!.id, stream, caller: who }); return value;
   };
   let historical: typeof live | undefined;
   const persistentProof = async () => {
@@ -268,7 +270,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
         eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }) });
       await next("stale");
       const beforeReacquire = nativeCalls;
-      const roster = recovery ? (await capture("/pe/ducts/roster", { target: ref }), undefined)
+      const roster = recovery ? (await capture("/pe/reads/value", readBody("fans.roster", { target: ref })), undefined)
         : await send(live, "/call", { key: "ducts.snapshot.roster", request: { selector: { kind: "roster" } } });
       if (roster) expect(roster.status, await roster.clone().text()).toBe(200);
       if (recovery) {
@@ -278,16 +280,16 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       }
       await next("loading"); const fresh = await next("ready");
       expect(fresh.value.version).not.toBe(original.value.version);
-      if (roster) expect(fresh.value.version).toBe(roster.headers.get(DUCTS_BODY_VERSION_HEADER));
+      if (roster) expect(fresh.value.version).toBe(roster.headers.get(NATIVE_BODY_VERSION_HEADER));
       const refresh = ductsExecutors(liveFactories.service!)["ducts.refresh"]!;
       await refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution);
       await next("stale");
-      const refreshed = recovery ? await send(live, "/pe/ducts/roster", { target: ref })
+      const refreshed = recovery ? await send(live, "/pe/reads/value", readBody("fans.roster", { target: ref }))
         : await send(live, "/call", { key: "ducts.snapshot.roster", request: { selector: { kind: "roster" } } });
       expect(refreshed.status, await refreshed.clone().text()).toBe(200);
       await next("loading");
       const refreshedFrame = await next("ready");
-      if (!recovery) expect(refreshedFrame.value.version).toBe(refreshed.headers.get(DUCTS_BODY_VERSION_HEADER));
+      if (!recovery) expect(refreshedFrame.value.version).toBe(refreshed.headers.get(NATIVE_BODY_VERSION_HEADER));
       if (mode === "endurance") for (let i = 0; i < 140; i++) {
         changedAt = i % 2 ? 300 : 0; for (const notify of markListeners) notify();
         await next("ready");
@@ -300,7 +302,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
         await frames.close();
         await vi.waitFor(() => expect(markListeners.size).toBe(0));
         releaseMark.resolve();
-        const afterClose = await send(live, "/pe/ducts/roster", { target: ref });
+        const afterClose = await send(live, "/pe/reads/value", readBody("fans.roster", { target: ref }));
         expect(afterClose.status, await afterClose.clone().text()).toBe(200);
         expect(completed.filter((entry) => entry.recipe.key.startsWith("resource.")).length).toBe(sealedFrames);
         expect(writer.capture.truncated()).toBeNull();
@@ -309,7 +311,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
         expect(writer.capture.truncated()).toBeNull();
         const beforeRefusal = nativeCalls;
         const refused = await live.handler(new Request(`${liveHost.base}/call`, { method: "POST", headers: {
-          "content-type": "application/json", [DUCTS_BODY_VERSION_HEADER]: retiredWalk.value.version,
+          "content-type": "application/json", [NATIVE_BODY_VERSION_HEADER]: retiredWalk.value.version,
         }, body: JSON.stringify(retiredWalk.body) }), Context.make(RequestIdentity, admitted()));
         expect(refused.status, await refused.clone().text()).toBe(409);
         expect(await refused.json()).toMatchObject({ error: { details: { problem: "read.retained" } } });
@@ -482,12 +484,12 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       return;
     }
     if (!capturing) {
-      const warm = await send(live, "/pe/ducts/roster", { target: ref });
+      const warm = await send(live, "/pe/reads/value", readBody("fans.roster", { target: ref }));
       expect(warm.status, await warm.clone().text()).toBe(200);
       await persistentProof(); return;
     }
     if (!recovery) await persistentProof();
-    const roster = await capture("/pe/ducts/roster", { target: ref });
+    const roster = await capture("/pe/reads/value", readBody("fans.roster", { target: ref }));
     expect(roster.rows.length).toBeGreaterThan(0);
     const rosterCalls = nativeCalls;
     const resource: ReadingRequest = { kind: "ducts-snapshot", target: ref, selector: { kind: "roster" } };
@@ -497,9 +499,9 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     expect(nativeCalls).toBe(rosterCalls);
     const fan = roster.rows.find((row: any) => row.unitId === 14577391) ?? roster.rows[0];
     const request = { target: ref, mode: "fan", unitId: fan.unitId, portIndex: fan.portIndex };
-    const overview = await capture("/pe/ducts/sheet", request);
+    const overview = await capture("/pe/reads/value", readBody("ducts.sheet", request));
     for (const kind of ["inputs", "worksheet"] as const) {
-      const detail = await capture("/pe/ducts/sheet", { ...request, basis: overview.basis, detail: { kind } });
+      const detail = await capture("/pe/reads/value", readBody("ducts.sheet", { ...request, basis: overview.basis, detail: { kind } }));
       expect(detail.kind).toBe(kind);
       expect(detail.basis).toBe(overview.basis);
     }
@@ -549,13 +551,13 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     expect([humanView.revision, peaView.revision]).toEqual([2, 3]);
     if (recovery) {
       await persistentProof();
-      const fresh = await send(live, "/pe/ducts/sheet", request);
+      const fresh = await send(live, "/pe/reads/value", readBody("ducts.sheet", request));
       expect(fresh.status, await fresh.clone().text()).toBe(200);
-      expect((await fresh.json()).basis).not.toBe(overview.basis);
-      const recovered = cases.filter((entry) => entry.url === "/pe/ducts/roster").at(-1)!;
+      expect((await fresh.json()).value.data.basis).not.toBe(overview.basis);
+      const recovered = cases.filter((entry) => entry.url === "/pe/reads/value" && entry.body.read === "fans.roster").at(-1)!;
       const saved = await run(writer.readSets.get(recovered.readSet));
       expect(saved.state).toBe("complete");
-      const roots = completed.filter((entry) => entry.recipe.key === "ducts.roster");
+      const roots = completed.filter((entry) => entry.recipe.key === "reads.value" && (entry.recipe.input as any).body.read === "fans.roster");
       await writeProof("version-records.json", JSON.stringify({
         truncated: writer.capture.truncated(), roots: await Promise.all(roots.map(async (entry) => ({ id: entry.id, state: (await run(writer.readSets.get(entry.id))).state }))),
       }, null, 2));
@@ -582,9 +584,9 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       expect(response.status, await response.clone().text()).toBe(200);
       await response.json();
       expect(nativeCalls, "A model change must retire the exact /call retained body").toBeGreaterThan(calls);
-      const sheet = await send(live, "/pe/ducts/sheet", request);
+      const sheet = await send(live, "/pe/reads/value", readBody("ducts.sheet", request));
       expect(sheet.status, await sheet.clone().text()).toBe(200);
-      expect((await sheet.json()).basis).not.toBe(overview.basis);
+      expect((await sheet.json()).value.data.basis).not.toBe(overview.basis);
     };
     for (const listener of liveFactories.listeners) listener({ sessionId: ref.session, kind: "event",
       eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }) });
@@ -664,10 +666,15 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
         expect(await response.json()).toMatchObject({ problem: "recording.ambiguous" });
       } else {
         expect(response.status, await response.clone().text()).toBe(200);
-        expect(JSON.parse(response.headers.get("x-pe-source")!)).toMatchObject({ kind: "recording", at: null, ...identity,
+        const provenance = JSON.parse(response.headers.get("x-pe-source")!);
+        expect(provenance).toMatchObject({ kind: "recording", at: null, ...identity,
           coverage: expect.arrayContaining(["native", "document", "work", "files", "marks"]) });
         expect(response.headers.get("x-pe-source")).not.toContain(dir);
-        expect(recorded.url === "/call" ? await nativeValue(response) : await response.json()).toEqual(recorded.value);
+        // Replay owns provenance; captured data and every other Publication field remain exact.
+        const expected = recorded.url === "/pe/reads/value"
+          ? { ...recorded.wire, value: { ...recorded.wire.value, origin: provenance } }
+          : recorded.value;
+        expect(recorded.url === "/call" ? await nativeValue(response) : await response.json()).toEqual(expected);
       }
     }
     const feeds = cases.filter((entry) => entry.stream && entry.value.value?.handle);
@@ -698,7 +705,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     const refused = await send(historical, "/pe/route-state/fans/apply?open=captured-chadds/chadds-open", { patches: [], expectedRevision: 2, press: crypto.randomUUID() });
     expect(refused.status).toBe(409);
     expect(await refused.json()).toMatchObject({ problem: "recording.historical" });
-    const missing = await send(historical, "/pe/ducts/roster", { target: { ...ref, openId: "unrecorded-open" } });
+    const missing = await send(historical, "/pe/reads/value", readBody("fans.roster", { target: { ...ref, openId: "unrecorded-open" } }));
     expect(missing.status).toBe(409);
     expect(await missing.json()).toMatchObject({ problem: "recording.miss" });
     expect(poisoned).toBe(0); expect(nativeCalls).toBe(calls);
