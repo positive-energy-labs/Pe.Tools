@@ -241,6 +241,59 @@ test("Families HTTP apply adopts the same Pea thread's plan in the next minted t
   expect(applied.caller.run).toEqual(next.run);
   expect(f.dispatched.filter((operation) => operation === "families.apply")).toHaveLength(1);
   const reused = await f.invoke("reused-plan-apply", next.token, "families.apply");
-  expect(reused).toMatchObject({ state: "failed", refusal: { kind: "claimed", by: "next-turn-apply" } });
+  expect(reused).toMatchObject({
+    state: "failed",
+    refusal: { kind: "claimed", by: "next-turn-apply" },
+  });
   expect(f.dispatched.filter((operation) => operation === "families.apply")).toHaveLength(1);
+});
+
+// R7's owner claim must survive the generic boundary independently of the outer preview claim.
+test("R7 Families HTTP applies reserve the adopted Plan across distinct outer previews", async () => {
+  const f = await fixture();
+  const turn = f.newTurn("exclusive-family");
+  expect(
+    await f.invoke("exclusive-plan", turn.token, "families.plan", { source: f.source }),
+  ).toMatchObject({ state: "succeeded" });
+  await f.stage({ plan: "exclusive-plan" });
+  expect(await f.invoke("first-preview", turn.token, "families.apply.preview")).toMatchObject({
+    state: "succeeded",
+  });
+  const before = f.dispatched.length;
+  const first = f.invoke("first-apply", turn.token, "families.apply");
+  let second: ReturnType<typeof f.invoke> | undefined;
+  try {
+    await vi.waitFor(() => expect(f.runs.commandWindow("first-apply")).toBeDefined());
+    // A new read-only preview must not reserve the inner plan; its later Apply must.
+    expect(await f.invoke("second-preview", turn.token, "families.apply.preview")).toMatchObject({
+      state: "succeeded",
+    });
+    second = f.invoke("second-apply", turn.token, "families.apply");
+    await vi.waitFor(async () =>
+      expect((await f.journal.list()).find((row) => row.id === "second-apply")).toBeDefined(),
+    );
+    const rows = (await f.journal.list()).filter((row) =>
+      ["first-apply", "second-apply"].includes(row.id),
+    );
+    expect(rows.filter((row) => row.refusal?.kind === "claimed")).toHaveLength(1);
+    expect(rows.find((row) => row.id === "second-apply")).toMatchObject({
+      state: "failed",
+      notDispatched: true,
+      steps: [],
+      refusal: {
+        kind: "claimed",
+        by: "first-apply",
+        claim: { kind: "receipt", id: "exclusive-plan" },
+      },
+    });
+    expect(f.dispatched.slice(before)).toEqual([]);
+    expect(f.dispatched.filter((operation) => operation === "families.apply")).toHaveLength(0);
+    f.runs.decide(turn.run.thread, f.runs.commandWindow("first-apply")!.requestId, "allow_now");
+    expect(await first).toMatchObject({ state: "succeeded" });
+    expect(await second).toMatchObject({ state: "failed", refusal: { kind: "claimed" } });
+    expect(f.dispatched.filter((operation) => operation === "families.apply")).toHaveLength(1);
+  } finally {
+    f.runs.closeAll();
+    await Promise.allSettled([first, ...(second ? [second] : [])]);
+  }
 });
