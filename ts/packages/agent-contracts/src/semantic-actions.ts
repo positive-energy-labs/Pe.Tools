@@ -133,7 +133,7 @@ export const ductsActions = {
     dirties: ["snapshot"],
   },
   "ducts.plan-losses": {
-    native: ["ducts.apply.plan"],
+    native: ["ducts.snapshot.walk", "ducts.snapshot.roster", "ducts.tables", "ducts.apply.plan"],
     says: "First stage the fan walk { unitId, portIndex } from route:ducts.roster in route:fans writeIntent, and cells naming exactly the cells requested (fan cells are route:fans Work, rule cells route:ducts Work). Then plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
     needs: "project-document",
     effect: "query",
@@ -141,7 +141,7 @@ export const ductsActions = {
     dirties: [],
   },
   "ducts.apply-losses": {
-    native: ["ducts.apply"],
+    native: ["ducts.snapshot.walk", "ducts.snapshot.roster", "ducts.tables", "ducts.apply"],
     says: "Stage writeIntent.cells to limit this write to the requested rule cells. Omit cells only for a whole-network write that was explicitly reviewed. Write the staged duct loss values to Revit (fitting coefficients, terminal and component drops, fan static) and record their provenance in Project Information.",
     needs: "project-document",
     effect: "command",
@@ -150,7 +150,7 @@ export const ductsActions = {
   },
   "ducts.plan-heal": {
     // The host derives the plan from these Reads; it opens no transaction and calls no rehearsal.
-    native: ["ducts.snapshot.walk"],
+    native: ["ducts.snapshot.walk", "ducts.snapshot.roster"],
     says: "Plan healing the staged duct groups: derive each group's repairs (cap dangling open ends, connect coincident same-size ends, close same-size gaps of at most 3 in) from Work and seal them, without opening a transaction. Show the person the planned items before any apply.",
     needs: "project-document",
     effect: "query",
@@ -158,7 +158,7 @@ export const ductsActions = {
     dirties: [],
   },
   "ducts.rehearse-heal": {
-    native: ["ducts.heal.preview"],
+    native: ["ducts.snapshot.walk", "ducts.snapshot.roster", "ducts.heal.preview"],
     says: "Optionally rehearse the planned heal in Revit: runs every repair and Pe's post-check, then rolls all of it back. Refused on a workshared model before any transaction. A rehearsal never arms apply; plan does.",
     needs: "project-document",
     effect: "query",
@@ -166,7 +166,7 @@ export const ductsActions = {
     dirties: [],
   },
   "ducts.apply-heal": {
-    native: ["ducts.heal"],
+    native: ["ducts.snapshot.walk", "ducts.snapshot.roster", "ducts.heal"],
     says: "Heal duct groups in Revit, one transaction per group, with exactly the items a plan showed and a person approved; an item failing Pe's post-check is refused and rolled back. Revit gives rebuilt elements new ids: read the duct snapshot again after.",
     needs: "project-document",
     effect: "command",
@@ -183,7 +183,7 @@ export const ductsActions = {
     dirties: [],
   },
   "ducts.rehearse-assign-fan": {
-    native: ["ducts.assign-fan.preview"],
+    native: ["ducts.snapshot.walk", "ducts.assign-fan.preview"],
     says: "Optionally rehearse the planned fan assignment in Revit: runs Pe's guards, the write and its read back, then rolls it back. Refuses a system that already has base equipment, a unit with no port of the system's air classification, and a workshared model before any transaction. A rehearsal never arms apply; plan does.",
     needs: "project-document",
     effect: "query",
@@ -191,7 +191,7 @@ export const ductsActions = {
     dirties: [],
   },
   "ducts.apply-assign-fan": {
-    native: ["ducts.assign-fan"],
+    native: ["ducts.snapshot.walk", "ducts.assign-fan"],
     says: "Make a unit the base equipment (the fan) of a duct system in Revit, as a plan showed and a person approved; the system keeps its id, name and type. Read the duct snapshot again after: the unit's role reads base equipment of that system.",
     needs: "project-document",
     effect: "command",
