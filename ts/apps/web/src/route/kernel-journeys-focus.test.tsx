@@ -679,7 +679,9 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
   } }) };
   const pending = new Set<Promise<unknown>>(), roster = Promise.withResolvers<void>();
   let memberReads = 0;
+  let failReading: (error: Error) => void;
   const source: UseSource = { kind: "use", open(ctx, deliver) {
+    failReading = error => deliver({ kind: "failure", error });
     const task = (async () => {
       await ready.promise; await roster.promise;
       const value = await evaluate(familyReads.workspace, { ...(ctx.args as { member: { pod: string; path: string } | null }), target: ctx.target }, {
@@ -727,14 +729,16 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
   try {
     const readiness = await surfaceReadiness("pending");
     expect(readiness.getAttribute("data-readiness")).toBe("pending");
-    expect(readiness.textContent).toContain("Reading");
+    expect(screen.getByRole("alert").textContent).toContain("Reading");
+    expect(readiness.textContent, "The readiness marker must not repeat the problem alert").toBe("");
     expect(screen.queryByText(member)).toBeNull(); // No member can be chosen before its roster arrives.
     await ready.promise;
     expect(mount.value().current).toBe(false);
     cleanWords("C746: before the roster publication, no raw identity fallback");
     roster.resolve();
-    await surfaceReadiness("ready");
-    expect(readiness.textContent).toBe("Ready");
+    expect((await surfaceReadiness()).getAttribute("data-readiness")).toBe("ready");
+    expect(readiness.textContent).toBe("");
+    expect(screen.queryByText(/^Ready$/)).toBeNull();
     expect(mount.owner()?.doc).toEqual(original);
     expect.soft(await screen.findByText(member)).toBeTruthy();
     expect.soft(screen.queryByText("Mechanical library")).toBeTruthy();
@@ -760,6 +764,12 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
     expect(mount.page.read()).toMatchObject({ pod: "new-mechanical", path: "" });
     expect((screen.getByRole("textbox", { name: "Destination pod" }) as HTMLInputElement).value).toBe("new-mechanical");
     expect(mount.owner()?.doc).toEqual(original);
+    expect((await surfaceReadiness()).getAttribute("data-readiness")).toBe("ready");
+    await act(async () => failReading!(Error("Family roster unavailable")));
+    const blocked = await surfaceReadiness();
+    expect(blocked.getAttribute("data-readiness")).toBe("blocked");
+    expect(blocked.textContent, "Blocked readiness must not duplicate the problem alert").toBe("");
+    expect(screen.getAllByRole("alert").filter(alert => alert.textContent === mount.problem())).toHaveLength(1);
   } finally { roster.resolve(); view.unmount(); mount.dispose(); await Promise.all(pending); }
 }, 30_000);
 

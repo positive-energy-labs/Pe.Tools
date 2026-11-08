@@ -182,7 +182,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   }
   };
   syncWork();
-  const allReads = new Set([spec.core,spec.subject?.read,...Object.values(spec.reads ?? {}),...Object.values(spec.panes).map(p=>p.read)].filter((read):read is import("../route/host-read").HostRead=>!!read));
+  const allReads = new Set([spec.core,...Object.values(spec.reads ?? {}),...Object.values(spec.panes).map(p=>p.read)].filter((read):read is import("../route/host-read").HostRead=>!!read));
   const demanded = new Set<import("../route/host-read").HostRead>();
   const syncReads = (force = false) => {
     if (disposed || released) return;
@@ -272,6 +272,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (spec.core && !core?.current) return core?.reason ?? "Reading Value...";
     return valueAfterWork();
   };
+  const writeRefusal = () => input.fixture !== null ? "Fixture has no native writes" : basisRefusal();
   // Settlement includes every demanded reading, not only the core write basis.
   const readiness = (): RouteReadiness => {
     if (disposed || released || !input.custody.current()) return { kind: "blocked", reason: "Place is inactive or retired" };
@@ -294,6 +295,19 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (reason) return { kind: "pending", reason };
     return { kind: "ready" };
   };
+  const whenSettled = (writable: boolean) => new Promise<void>((resolve, reject) => {
+    let stop = () => {};
+    const inspect = () => {
+      const state = readiness();
+      if (state.kind === "pending") return;
+      stop();
+      const reason = state.kind === "blocked" ? state.reason : writable ? writeRefusal() : null;
+      if (reason) reject(Error(reason));
+      else resolve();
+    };
+    stop = mounted.subscribe(inspect);
+    inspect();
+  });
   const basis = () => {
     if (basisRefusal()) return null;
     if(renderedBasis && gate.current(renderedBasis)) return renderedBasis;
@@ -438,20 +452,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   syncReads();
   const mounted = {
     spec, data: module.data, subjectState, move, readiness,
-    whenReady() {
-      return new Promise<void>((resolve, reject) => {
-        let stop = () => {};
-        const inspect = () => {
-          const state = readiness();
-          if (state.kind === "pending") return;
-          stop();
-          if (state.kind === "ready") resolve();
-          else reject(Error(state.reason));
-        };
-        stop = mounted.subscribe(inspect);
-        inspect();
-      });
-    },
+    whenReady: () => whenSettled(false),
+    whenWritable: () => whenSettled(true),
     absentOwners:()=>[...owners].filter(([id,owner])=>id!==own&&owner.absent).map(([route])=>route),
     startAction():import("../route/typed-route").ActionHandle|null {
       if([...owners.values()].some(record=>!record.ready&&!record.absent)) return null;
@@ -520,7 +522,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     subscribe(listener: () => void) { released = false; listeners.add(listener); syncReads(); return () => { listeners.delete(listener); }; },
     available: () => !disposed && input.custody.current(), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
     commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions" : "kind" in spec.commands[id]! ? null : basisRefusal(),
-    problem: () => edits?basisRefusal():null, writeRefusal: () => input.fixture !== null ? "Fixture has no native writes" : basisRefusal(),
+    problem: () => edits?basisRefusal():null, writeRefusal,
     refresh: (read?:import("../route/host-read").HostRead) => {
       requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true);
     }, run, result:(id:string)=>results.get(id),

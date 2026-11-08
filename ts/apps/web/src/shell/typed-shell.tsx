@@ -108,7 +108,7 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
 export function TypedChrome({ mount, document, thread }: { mount: TypedMount; document: ReactNode; thread?: string }) {
   useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);
   const { spec }=mount;
-  const readiness = mount.readiness();
+  const readiness = mount.readiness(), problem = mount.problem();
   const visible=useContext(RouteVisibility), portal=useHasGlobalNavigation();
   const [panes,setPanes]=useState<GraphLayoutState>(()=>readLayoutState(`route:${spec.key}`));
   const slot=usePaneActionSlot();
@@ -121,7 +121,7 @@ export function TypedChrome({ mount, document, thread }: { mount: TypedMount; do
     mount.move(patch as Record<string,unknown>,"push"); return {ok:true,moved:true,receipt:{current:()=>visible,rendered:page=>canonicalRouteInput(page)===canonicalRouteInput(mount.page.read())}};
   } }} />;
   const head=<SituationBand name={spec.name} context={<>{document}<TypedSubject mount={mount} />{spec.edits && mount.work()?<span>{`r${mount.work()!.revision}`}</span>:null}</>}
-    alerts={<><span role="status" aria-label="Route readiness" data-readiness={readiness.kind}>{readiness.kind === "ready" ? "Ready" : readiness.reason}</span>{mount.value().value!==undefined&&!mount.value().current?<span role="status">{retainedValueLabel(mount.value())}</span>:null}{mount.problem() ? <span role="alert">{mount.problem()}</span> : null}{mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}<CatalogWorkReviews mount={mount} /></>}
+    alerts={<><span role="status" aria-label="Route readiness" data-readiness={readiness.kind}>{readiness.kind !== "ready" && readiness.reason !== problem ? readiness.reason : null}</span>{mount.value().value!==undefined&&!mount.value().current?<span role="status">{retainedValueLabel(mount.value())}</span>:null}{problem ? <span role="alert">{problem}</span> : null}{mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}<CatalogWorkReviews mount={mount} /></>}
     verbs={[...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),...Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />)]}
     timeline={<TimelineHead owner={mount} history={<GraphHistory owner={mount} />} />} />;
   return <SubjectDoor.Provider value={subject}>{view}<KeyScopeHost id={`route:${spec.key}`} hidden={!visible} className="flex min-h-0 flex-1 flex-col">
