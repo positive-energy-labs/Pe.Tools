@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { z } from "zod";
-import { historyPointSchema, type Address } from "@pe/agent-contracts";
+import { historyPointSchema, historyListSchema, type Address } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { historyRequest, historySnapshotSchema, pointHref, type HistorySnapshot } from "./history.ts";
@@ -44,6 +44,7 @@ export function HistoryRail({
 }) {
   const [rows, setRows] = useState<z.infer<typeof historyPointSchema>[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
+  const [unavailable, setUnavailable] = useState<z.infer<typeof historyListSchema>["unavailable"]>([]);
   useEffect(() => {
     if (!document) return;
     let closed = false;
@@ -51,10 +52,9 @@ export function HistoryRail({
       void historyRequest(`?document=${encodeURIComponent(document)}`)
         .then((value) => {
           if (closed) return;
-          const result = z
-            .object({ points: z.array(historyPointSchema), problem: z.string().nullable() })
-            .parse(value);
+          const result = historyListSchema.parse(value);
           setRows(result.points);
+          setUnavailable(result.unavailable);
           setProblem(result.problem);
         })
         .catch((error) => {
@@ -95,6 +95,7 @@ export function HistoryRail({
     return (poses.length ? poses : [undefined]).map((pose) => ({
       point,
       pose,
+      refusal: pose ? unavailable.find(item => item.point === point.id && item.instance === pose.instance)?.reason : "This route was never published at this point",
       label,
       id: `${point.id}:${pose?.instance ?? "unavailable"}`,
     }));
@@ -122,11 +123,11 @@ export function HistoryRail({
         row={(item) => ({
           label: item.label,
           meta: new Date(item.point.at).toLocaleString(),
-          sub: item.pose ? undefined : "Unavailable here",
+          sub: item.refusal ? `Unavailable: ${item.refusal}` : undefined,
         })}
         onPick={(item) => {
-          if (!item.pose) {
-            setProblem("This route was never published at this point");
+          if (!item.pose || item.refusal) {
+            setProblem(item.refusal ?? "This route was never published at this point");
             return;
           }
           window.location.assign(pointHref(item.point, item.pose.instance));

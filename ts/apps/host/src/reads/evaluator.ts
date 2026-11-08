@@ -351,24 +351,30 @@ export class Publications {
   history() {
     return immutable(
       Object.fromEntries(
-        [...this.slots].flatMap(([id, slot]) =>
-          slot.published
+        [...this.slots.keys()].flatMap((id) => {
+          const published = this.publication(id);
+          return published
             ? [
                 [
                   id,
                   {
-                    key: slot.published.key,
-                    version: slot.published.version,
-                    evaluation: slot.published.value?.evaluation,
+                    key: published.key,
+                    version: published.version,
+                    evaluation: published.value?.evaluation,
                   },
                 ],
               ]
-            : [],
-        ),
+            : [];
+        }),
       ),
     );
   }
-  publication(id: string) { return this.slots.get(id)?.published; }
+  /** Retained bytes do not make a released or superseded subscription open. */
+  publication(id: string) {
+    const slot = this.slots.get(id), published = slot?.published;
+    if (!slot?.key || !published || published.generation !== slot.generation || published.key !== slot.key) return undefined;
+    return published;
+  }
   invalidate(matches: (trace: Dependency) => boolean) {
     for (const [id, slot] of this.slots) {
       const previous = slot.published;

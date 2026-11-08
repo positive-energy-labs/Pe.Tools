@@ -27,6 +27,223 @@ import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { contextFetch } from "@pe/runtime/context";
 import { routeInput } from "./host";
 import userEvent from "@testing-library/user-event";
+import { createServer } from "node:http";
+import { HistoryRail } from "../shell/history-rail";
+import { historySnapshotSchema } from "../shell/history";
+import * as historyLinks from "../shell/history";
+import { ref, path } from "../../../host/tests/host-read-graph.test-support";
+import { publicationSource } from "../host/publication-source";
+import { builtinRouteStamp } from "./builtin-inventory";
+
+test("JZ Families History offers published values and marks ambiguous publications Unavailable", async () => {
+  const browserHref = window.location.href;
+  window.history.replaceState({}, "", "/families");
+  const j = await takeoffJourney({ route: "families" });
+  const fetchHttp = globalThis.fetch;
+  const server = createServer(async (req, res) => {
+    try {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(Buffer.from(chunk));
+      const response = await j.host.request(new Request(`http://host${req.url}`, {
+        method: req.method, headers: req.headers as Record<string, string>,
+        ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
+      }));
+      res.writeHead(response.status, Object.fromEntries(response.headers));
+      res.end(Buffer.from(await response.arrayBuffer()));
+    } catch (error) { res.writeHead(500); res.end(String(error)); }
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const request = (url: string, init?: RequestInit) => fetchHttp(new URL(url, base), init);
+  vi.stubGlobal("fetch", request);
+  const pose = { instance: "families:history-journey", route: "families", page: {}, href: "/families" };
+  const publish = async (subscription: string) => {
+    const response = await request("/pe/reads/value", { method: "POST", headers: {
+      "content-type": "application/json", "x-pe-history-page": encodeURIComponent(JSON.stringify(pose)),
+    }, body: JSON.stringify({ read: "families.view", args: { target: ref, readId: "" }, subscription, generation: 1 }) });
+    expect(response.status, await response.clone().text()).toBe(200);
+    return response.json();
+  };
+  const mountsToClose: mounts.TypedMount[] = [];
+  const streams = new Set<{ close(): void }>();
+  // Browser EventSource over the real host SSE handler; no fixture chooses invalidations.
+  class Stream {
+    onmessage?: (event: { data: string }) => void;
+    onerror?: () => void;
+    private reader?: ReadableStreamDefaultReader<Uint8Array>;
+    private closed = false;
+    constructor(url: string) {
+      streams.add(this);
+      void (async () => {
+        const response = await j.host.request(new Request(new URL(url, "http://host")));
+        this.reader = response.body!.getReader();
+        if (this.closed) return void this.reader.cancel();
+        let buffer = "";
+        const decoder = new TextDecoder();
+        while (!this.closed) {
+          const frame = await this.reader.read(); if (frame.done) break;
+          buffer += decoder.decode(frame.value, { stream: true });
+          let end: number;
+          while ((end = buffer.indexOf("\n\n")) >= 0) {
+            const frame = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+            for (const line of frame.split("\n")) if (line.startsWith("data: ")) this.onmessage?.({ data: line.slice(6) });
+          }
+        }
+      })().catch(() => { if (!this.closed) this.onerror?.(); });
+    }
+    addEventListener() {}
+    removeEventListener() {}
+    close() { this.closed = true; void this.reader?.cancel(); streams.delete(this); }
+  }
+  vi.stubGlobal("EventSource", Stream);
+  const workListeners = new Set<(state: any) => void>();
+  const refreshWork = async () => {
+    const response = await createPeClient(base, request).response("work.get", { params: { route: "families" }, query: { target: path } });
+    expect(response.status, await response.clone().text()).toBe(200);
+    const state = await response.json();
+    for (const deliver of workListeners) deliver({ kind: "ready", snapshot: { handle: state.handle, revision: state.revision, value: state.doc },
+      history: { acks: [], from: state.revision + 1 } });
+  };
+  const writeScope = async () => {
+    const state = await j.host.workspace.viewUncaptured(j.key, "families");
+    const doc = familiesRouteState.schema.parse(state!.doc);
+    const categoryNames = doc.scope.edit?.value.categoryNames.length ? [] : ["Air Terminal Tags"];
+    const response = await createPeClient(base, request).response("work.apply", { params: { route: "families" }, query: { target: path }, body: {
+      kind: "apply", press: crypto.randomUUID(), expectedRevision: state!.revision,
+      patches: [{ path: ["scope", "edit"], value: { value: { categoryNames, familyNames: [], placementScope: "AllLoaded" } } }],
+    } });
+    const result = await response.json();
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true });
+    await refreshWork();
+    return categoryNames;
+  };
+  try {
+    await j.ready();
+    const address = { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} };
+    const lifecyclePose = { ...pose, instance: "families:hide-show" };
+    const requests: { subscription: string; generation: number; release: boolean }[] = [];
+    const source = publicationSource({ async read(ctx, publication, release) {
+      const response = await request("/pe/reads/value", { method: "POST", headers: {
+        "content-type": "application/json", "x-pe-history-page": encodeURIComponent(JSON.stringify(ctx.historyPose)),
+      }, body: JSON.stringify({ read: "families.view", args: { target: ref, ...(ctx.args as object) }, ...publication, release }) });
+      expect(response.status, await response.clone().text()).toBe(200);
+      requests.push({ ...publication, release });
+      return response.json();
+    } });
+    const feed = createWorkFeedClient({ subscribe: () => () => {}, dirty() {} }, {
+      write: (key, write) => j.host.workspace.write(key, key.route, "human", write),
+      submit() { throw Error("This lifecycle journey writes through HTTP"); },
+    });
+    // Work observations come from HTTP inspection; publication invalidations use host SSE above.
+    const work: WorkJournalDoor = { ...feed, open: () => ({ subscribe(deliver) {
+      workListeners.add(deliver); void refreshWork();
+      return () => { workListeners.delete(deliver); };
+    } }) };
+    const live = mounts.mountTypedRoute(families, { address, fixture: null, publicationInstance: lifecyclePose.instance,
+      target: { kind: "document", ref }, work: { address: path, open: ref }, custody: { current: () => true }, memory: () => ({}),
+    }, workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("families")}`), { work, sources: { "families.view": source } });
+    mountsToClose.push(live);
+    const firstStop = live.subscribe(() => {});
+    await waitFor(() => expect(live.value().current).toBe(true));
+    const earlier = await j.host.history("", { kind: "captured", document: path });
+    const originalBinding = earlier.history.publications.find((b: any) => b.instance === lifecyclePose.instance);
+    await waitFor(() => expect(streams.size).toBeGreaterThan(0));
+    firstStop(); live.release();
+    await waitFor(() => expect(requests.filter(r => r.release)).toHaveLength(1));
+    live.subscribe(() => {});
+    await waitFor(() => expect(live.value().current).toBe(true));
+    await waitFor(() => expect(new Set(requests.filter(r => !r.release).map(r => r.subscription)).size).toBe(2));
+    await writeScope();
+    // A point records what the host has published, including a Value awaiting refresh after a write.
+    // No Revit: the write receipt boundary asks History to snapshot the open subscriptions.
+    j.host.reads.history!.afterWrite(ref, "lifecycle-write");
+    const afterShow = await j.host.history(`?document=${encodeURIComponent(path)}`);
+    const reopened = afterShow.points.find((p: any) => p.reason.receipt === "lifecycle-write");
+    const bindings = reopened.history.publications.filter((b: any) => b.instance === lifecyclePose.instance);
+    expect(bindings, "hide/show must retire the first subscription before a later point").toHaveLength(1);
+    expect(bindings[0].subscription).not.toBe(originalBinding.subscription);
+    expect(afterShow.unavailable.some((item: any) => item.point === reopened.id && item.instance === lifecyclePose.instance)).toBe(false);
+    const old = await j.host.history(`?at=${earlier.id}`);
+    expect(old.point.history.publications.find((b: any) => b.instance === lifecyclePose.instance)).toEqual(originalBinding);
+    live.release();
+    await waitFor(() => expect(requests.filter(r => r.release)).toHaveLength(2));
+    const first = await publish("first");
+    const good = await j.host.history("", { kind: "captured", document: path });
+    await writeScope();
+    const second = await publish("second");
+    expect(second.version).not.toBe(first.version);
+    // No Revit: inject the native completion notification at the host's receipt boundary.
+    j.host.reads.history!.afterWrite(ref, "history-journey-write");
+    const listed = await j.host.history(`?document=${encodeURIComponent(path)}`);
+    const bad = listed.points.find((point: any) => point.reason.receipt === "history-journey-write");
+    expect(bad).toBeTruthy();
+    expect(bad.history.publications.filter((binding: any) => binding.instance === pose.instance)).toHaveLength(2);
+    render(<HistoryRail document={path} route="families" address={address} compare={false} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open History" }));
+    const rows = await screen.findAllByRole("option");
+    const badRow = rows.find(row => row.getAttribute("data-key") === `${bad.id}:${pose.instance}`)!;
+    expect(badRow.textContent).toContain("Unavailable: Ambiguous pane at this point");
+    fireEvent.click(badRow);
+    expect(await screen.findByRole("status")).toHaveProperty("textContent", "Ambiguous pane at this point");
+    // jsdom cannot leave the document. Intercept only navigation, retaining the actual point URL.
+    const pointHref = historyLinks.pointHref;
+    let picked = "";
+    vi.spyOn(historyLinks, "pointHref").mockImplementation((point, instance) => {
+      picked = pointHref(point, instance); return "#history-picked";
+    });
+    // Every enabled menu entry is opened through the host's HTTP replay door and typed mount.
+    const available = listed.points.flatMap((point: any) => point.history.poses
+      .filter((pose: any) => pose.route === "families" && !listed.unavailable.some((item: any) => item.point === point.id && item.instance === pose.instance))
+      .map((pose: any) => ({ point, pose })));
+    expect(available.map(({ point }: any) => point.id)).toContain(good.id);
+    for (const { point, pose: recordedPose } of available) {
+      cleanup();
+      render(<HistoryRail document={path} route="families" address={address} compare={false} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Open History" }));
+      const options = await screen.findAllByRole("option");
+      picked = "";
+      const option = options.find(option => option.getAttribute("data-key") === `${point.id}:${recordedPose.instance}`)!;
+      expect(option.textContent).not.toContain("Unavailable");
+      fireEvent.click(option);
+      await waitFor(() => expect(new URL(picked, base).searchParams.get("atInstance")).toBe(recordedPose.instance));
+      cleanup();
+      const opened = await request(`/pe/history?at=${new URL(picked, base).searchParams.get("at")}`);
+      const history = historySnapshotSchema.parse(await opened.json());
+      const source: UseSource = { kind: "use", open(ctx, deliver) {
+        void request("/pe/reads/value", { method: "POST", headers: {
+          "content-type": "application/json", "x-pe-history-point": history.point.id,
+          "x-pe-history-page": encodeURIComponent(JSON.stringify(recordedPose)),
+        }, body: JSON.stringify({ read: "families.view", args: { target: ref, ...(ctx.args as object) }, subscription: "replay", generation: 1 }) })
+          .then(async response => { expect(response.status, await response.clone().text()).toBe(200);
+            deliver({ kind: "complete", value: await response.json(), revision: 1 }); });
+        return () => {};
+      } };
+      const mounted = mounts.mountTypedRoute(families, { address, fixture: null, history,
+        publicationInstance: recordedPose.instance, readOnly: true, target: { kind: "document", ref },
+        work: { address: path, open: ref }, custody: { current: () => true }, memory: () => recordedPose.page,
+      }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { sources: { "families.view": source } });
+      mountsToClose.push(mounted);
+      function Recorded() {
+        useSyncExternalStore(mounted.subscribe, mounted.revision, mounted.revision);
+        return <TypedChrome mount={mounted} document={<span>Recorded Families</span>} />;
+      }
+      const router = createRouter({ routeTree: createRootRoute({ component: Recorded }), history: createMemoryHistory({ initialEntries: [picked] }) });
+      render(<RouterProvider router={router} />);
+      expect(await screen.findByRole("button", { name: "Choose Air Terminal Tags" })).toBeTruthy();
+      const binding = point.history.publications.find((b: any) => b.instance === recordedPose.instance && b.read === "families.view");
+      expect(mounted.value().publication!.evaluation).toBe(binding.evaluation);
+      if (recordedPose.instance === pose.instance) expect(mounted.value().value).toEqual(first.value.data);
+    }
+  } finally {
+    cleanup();
+    for (const mounted of mountsToClose) mounted.dispose();
+    for (const stream of streams) stream.close();
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", browserHref);
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    await j.close();
+  }
+}, 60000);
 
 test.each(["review identity", "insertText", "pointer keyboard", "navigation keyboard", "pointer shifted text", "navigation shifted text", "navigation composition", "navigation paste", "range shifted text"] as const)("JZ Schedules Description Enter stages r3, reviews BEFORE to AFTER, and shows a refused edit at its cell (%s)", async (entryMode) => {
   const user = userEvent.setup();

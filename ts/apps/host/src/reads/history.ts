@@ -39,6 +39,7 @@ const documentId = (address: Address) => {
   return result.value;
 };
 type Published = {
+  generation: number;
   binding: HistoryBinding;
   pose: HistoryPose;
   address: Address;
@@ -101,6 +102,7 @@ export class History {
       ),
     );
     const kept: Published = immutable({
+      generation: publication.generation,
       address,
       target: { session: target.session, openId: target.openId },
       pose,
@@ -131,10 +133,22 @@ export class History {
     };
   }
 
+  /** The live ledger owns membership; deleting a binding here never changes an archived point. */
+  private openPublications() {
+    for (const [subscription, kept] of this.published) {
+      const current = this.ledger?.publication(subscription);
+      if (!current?.value || current.generation !== kept.generation ||
+          current.key !== kept.binding.key || current.version !== kept.binding.version ||
+          current.value.evaluation !== kept.binding.evaluation)
+        this.published.delete(subscription);
+    }
+    return [...this.published.values()];
+  }
+
   pose(address: Address, raw: unknown) {
     const pose = historyPoseSchema.parse(raw);
     if (
-      ![...this.published.values()].some(
+      !this.openPublications().some(
         (p) => sameAddress(p.address, address) && p.pose.instance === pose.instance,
       )
     )
@@ -146,7 +160,7 @@ export class History {
   private snapshot(address: Address, reason: RecordingPointReason): RecordingPoint {
     if (!this.writer || this.writer.capture.truncated())
       throw fail("History storage is full or unavailable");
-    const slots = [...this.published.values()].filter((p) => sameAddress(p.address, address));
+    const slots = this.openPublications().filter((p) => sameAddress(p.address, address));
     if (!slots.length) throw fail("No published Values for this document");
     const end = this.writer.takingCursor();
     return {
@@ -199,7 +213,7 @@ export class History {
   }
   afterWrite(target: DocumentRef, receipt: string) {
     for (const address of new Set(
-      [...this.published.values()]
+      this.openPublications()
         .filter((p) => canonicalJson(p.target) === canonicalJson(target))
         .map((p) => p.address),
     ))
@@ -213,7 +227,17 @@ export class History {
       if (point.document === documentId(address) && point.history)
         points.push(historyPointSchema.parse(point));
     }
-    return { points: points.sort((a, b) => b.at - a.at), problem: this.stopped() ?? this.problem };
+    const unavailable: { point: string; instance: string; reason: string }[] = [];
+    for (const point of points) for (const pose of point.history.poses) {
+      try {
+        const bindings = new Map(point.history.publications.filter(b => b.instance === pose.instance).map(b => [canonicalJson([b.read, b.key]), b]));
+        if (!bindings.size) throw fail("This route was never published at this point");
+        for (const binding of bindings.values()) await this.publication(point.id, pose.instance, binding.read, binding.key);
+      } catch (error) {
+        unavailable.push({ point: point.id, instance: pose.instance, reason: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return { points: points.sort((a, b) => b.at - a.at), unavailable, problem: this.stopped() ?? this.problem };
   }
   async get(id: string) {
     await this.pending;
