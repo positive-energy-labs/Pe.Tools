@@ -64,6 +64,24 @@ test.each(["selected", "unrelated", "none"] as const)(
   },
 );
 
+test("invalid derived room GUID refuses before the carrier can mutate the model", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pe-rooms-invalid-"));
+  const native = await fixtureNative(join(directory, "native"), "fresh-takeoffs.initialize-carrier", "fresh-rooms.write");
+  const socket = await native.connect();
+  let state: unknown;
+  const work = new RouteWorkspace({ registrations: [{ spec: tools.rooms.work }], store: {
+    getState: async () => state, setState: async ({ value }) => { state = value; },
+  } });
+  const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "rooms" };
+  try {
+    await work.publish(key, "rooms", [{ path: ["edits", roomEditKey("invalid-guid", "name")], value: { edit: { value: "Authored room" } } }], 0);
+    const response = await native.actions({ workspace: work, marks: testDocumentMarks(native.bridge) })({ id: "invalid-preview", key: "rooms.write.preview", target: { kind: "document", ref: socket.target }, input: { work: { key, revision: 1 } } });
+    expect(response.status).toBeLessThan(400);
+    expect(await native.journal.wait("invalid-preview")).toMatchObject({ state: "failed", notDispatched: true, refusal: { code: "native.input" } });
+    expect(native.calls).toEqual([]);
+  } finally { await native.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
 test("foreign Rooms Work is refused by real action admission before native preparation", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pe-rooms-foreign-"));
   const native = await fixtureNative(join(directory, "native")); const socket = await native.connect();
