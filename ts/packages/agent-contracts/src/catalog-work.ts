@@ -219,7 +219,7 @@ export const catalogWorkSpecs = Object.fromEntries(
 ) as { [O in Owner]: RouteStateSpec<(typeof catalogWorks)[O]["schema"]> & { editable: readonly WorkPath[] } };
 
 function catalogWorkCommand<const K extends string>(owner: Owner, key: K, dirties: readonly ActionReadingKey[]) {
-  const work: Pick<CatalogWork, "op" | "schema"> = catalogWorks[owner];
+  const work: Pick<CatalogWork, "op" | "schema" | "base"> = catalogWorks[owner];
   const leaf = native(work.op);
   // The apply carries its native ModelWrite's axes; the plan declares its own Read (ADR 0030 rule 4).
   const axes: CatalogAxes = {
@@ -231,14 +231,14 @@ function catalogWorkCommand<const K extends string>(owner: Owner, key: K, dirtie
   };
   const definition = {
     says: leaf.description,
-    native: [work.op],
+    native: [work.base.op, work.op],
     needs: "project-document",
     effect: "command",
     dirties,
     input: z.object({}),
     axes,
   } as const;
-  // The plan only derives from Work and sends nothing native, so it names no leaf and declares Read.
+  // The plan reads the stored base to derive from Work; only apply reaches the write leaf.
   // The boundary only parses the Work; the host executor reads the owner's base and derives (both phases).
   return workWriteCommands(owner, key, definition, {
     derive: (doc) => ({ doc: work.schema.parse(doc) }),
@@ -246,7 +246,7 @@ function catalogWorkCommand<const K extends string>(owner: Owner, key: K, dirtie
       key: `${key}.plan`,
       definition: {
         ...definition,
-        native: [],
+        native: [work.base.op],
         axes: { ...axes, effect: "Read" },
         says: `Plan, nothing committed: ${definition.says}`,
       },
