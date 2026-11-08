@@ -110,9 +110,9 @@ test("the host-owned /pe surface answers without Revit", async () => {
     const keys = catalog.capabilities.map((row) => row.key);
     expect(keys).toContain("op:host.shell.open");
     expect(keys).toContain("op:instances.start");
-    // ADR 0030 rule 10: Ops leases its declared Page fields, without shared Work.
-    expect(keys).toContain("route:ops.view");
-    expect(keys).toContain("route:ops.set-view");
+    // Root ruling: Ops is person-only and exposes no Pea Page lease.
+    expect(keys).not.toContain("route:ops.view");
+    expect(keys).not.toContain("route:ops.set-view");
     expect(keys).not.toContain("route:ops.edit");
     // The member Work route is named for the pods its members live in.
     expect(keys).toContain("route:pods.edit");
