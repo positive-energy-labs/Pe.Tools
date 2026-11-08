@@ -635,7 +635,7 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
     target: f.target, fixture: null, work: { address: null, open: f.target.ref },
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => true }, memory: () => ({}),
-  }, workFingerprintSchema.parse(builtinRouteStamp("fans")), { work, sources: { "fans.sheet": { kind: "use", open: () => () => {} } } });
+  }, workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("fans")}`), { work, sources: { "fans.sheet": { kind: "use", open: () => () => {} } } });
   const view = render(<JournalButtons owner={mount} />);
   try {
     const staged = await stage("ducts", [
