@@ -1,4 +1,53 @@
 import { expect, test, vi } from "vite-plus/test";
+import { fileURLToPath } from "node:url";
+
+test("JZ Ducts chooser search box does not move across recorded Reading settlement", async () => {
+  const [{ createServer }, { default: tailwind }, { openBrowser }] = await Promise.all([
+    import("vite-plus"), import("@tailwindcss/vite"), import("@pe/browser"),
+  ]);
+  const root = fileURLToPath(new URL("../..", import.meta.url));
+  const server = await createServer({ configFile: false, root, plugins: [tailwind() as never],
+    define: { __PE_WEB_RECEIPT_BUILD__: JSON.stringify({ version: "fixture", build: "layout", commit: "source" }) },
+    resolve: { alias: { "#": root + "/src" }, dedupe: ["react", "react-dom"] },
+    server: { host: "127.0.0.1", port: 0 },
+  });
+  let browser: Awaited<ReturnType<typeof openBrowser>> | undefined;
+  try {
+    await server.listen();
+    browser = await openBrowser({ mode: "headless", args: ["--disable-background-timer-throttling", "--disable-renderer-backgrounding"] });
+    const page = await browser.page();
+    const errors: unknown[] = [];
+    page.subscribe(event => { if (event.method === "Runtime.exceptionThrown") errors.push(event.params); });
+    await page.send("Runtime.enable");
+    await page.send("Network.enable");
+    await page.send("Network.setBlockedURLs", { urls: ["https://fonts.googleapis.com/*", "https://fonts.gstatic.com/*"] });
+    await page.send("Page.navigate", { url: server.resolvedUrls!.local[0] + "src/route/ducts-chooser-layout.fixture.html" });
+    await vi.waitFor(async () => {
+      expect(errors).toEqual([]);
+      expect(await page.evaluate(() => !!document.querySelector('input[aria-label="Search systems"]'))).toBe(true);
+    }, { timeout: 10_000 });
+    const measure = () => page.evaluate(async () => {
+      await document.fonts.ready;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const input = document.querySelector<HTMLInputElement>('input[aria-label="Search systems"]')!;
+      const { x, y, width, height } = input.getBoundingClientRect();
+      return { x, y, width, height, reading: !!document.querySelector('[data-startup]'), connected: input.isConnected,
+        statuses: Array.from(document.querySelectorAll('[role="status"], [role="alert"]')).map(n => ({ text: n.textContent, y: n.getBoundingClientRect().y, height: n.getBoundingClientRect().height })) };
+    });
+    const before = await measure();
+    expect(before).toMatchObject({ reading: true, connected: true });
+    expect(before.width).toBeGreaterThan(0);
+    expect(before.height).toBeGreaterThan(0);
+    await page.evaluate(() => { (window as any).settleChooser(); return null; });
+    await vi.waitFor(async () => expect((await measure()).reading).toBe(false));
+    const after = await measure();
+    expect(errors).toEqual([]);
+    const shift = { x: after.x - before.x, y: after.y - before.y, width: after.width - before.width, height: after.height - before.height };
+    console.log("Ducts chooser layout (CSS px)", JSON.stringify({ before, after, shift }));
+    if (process.env.PE_CHOOSER_LAYOUT_RECEIPT) await writeFile(process.env.PE_CHOOSER_LAYOUT_RECEIPT, JSON.stringify({ before, after, shift }, null, 2));
+    expect(shift).toEqual({ x: 0, y: 0, width: 0, height: 0 });
+  } finally { await browser?.close(); await server.close(); }
+});
 import { z } from "zod";
 import { observeResources } from "@pe/runtime";
 import { workFingerprintSchema, actionReceiptSchema } from "@pe/agent-contracts";
@@ -23,7 +72,7 @@ import { commandContract } from "./typed-actions";
 import { publicationSource } from "../host/publication-source";
 import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
 import savedNetwork from "../ducts/fixtures/synthetic-snapshot.json";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Layer, Scope, Exit } from "effect";
