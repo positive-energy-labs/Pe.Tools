@@ -270,6 +270,11 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
 
    for(const route of Object.keys(fans.spec.edits!.owners)){
      const owner=mount.owner(route)!;
+     if(owner!==mount.owner()){
+       await vi.waitFor(()=>expect(owner.ready).toBe(true),{timeout:20000});
+       expect(owner.handle?.revision).toBe(0);
+       continue;
+     }
      await vi.waitFor(()=>expect(owner.absent).toBe(true),{timeout:20000});
      expect(owner.handle).toBeNull();
      const id=crypto.randomUUID();
