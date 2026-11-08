@@ -8,6 +8,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { route, type TypedRoute } from "./typed-route";
 import { module as fans } from "../fans/route";
+import { module as ducts } from "../ducts/route";
 import { TypedChrome, TypedShell } from "../shell/typed-shell";
 import * as mounts from "../shell/typed-mount";
 import { familiesRouteState, address, workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
@@ -1371,9 +1372,10 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
 });
 
 // The declared roster is the route's sole subject-choice surface, even on another pane.
-test("JZ C042 a subject-list route suppresses the header chooser across panes", async () => {
+test.each(["Fans", "Ducts"] as const)("JZ C042 %s subject-list declaration suppresses the header chooser across panes", async name => {
   const { useAdmittedSubject } = await import("../shell/subject");
   const read = fans.spec.core!;
+  const declared = name === "Fans" ? fans.spec.panes["sheet-roster"] : ducts.spec.panes["e-systems"];
   function Roster({ ctx }: { ctx: any }) {
     const subject = useAdmittedSubject()!;
     const first = fans.spec.subject!.options(ctx.value.value)[0]!;
@@ -1383,7 +1385,7 @@ test("JZ C042 a subject-list route suppresses the header chooser across panes", 
     const module = route({ ...fans.spec, needs: "browser", edits: undefined, commands: {}, reads: {},
       subject: { ...fans.spec.subject!, pane: "roster", read },
       panes: {
-        roster: { title: "Fan list", purpose: "Choose the subject", read, draw: ctx => <Roster ctx={ctx} /> },
+        roster: { subjectList: declared.subjectList, title: "Fan list", purpose: "Choose the subject", read: { ...read }, draw: ctx => <Roster ctx={ctx} /> },
         detail: { title: "Detail", purpose: "Inspect the subject", read: { ...read }, draw: () => <p>Subject detail</p> },
       }, layout: { kind: "pane", id: pane } });
     const mount = mounts.mountTypedRoute(module, {

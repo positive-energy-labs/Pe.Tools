@@ -160,6 +160,7 @@ export type Specification<
     readonly [K in keyof Reads]: {
       title: string;
       purpose: string;
+      subjectList?: true;
       read?: Reads[K];
       bindings?(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): PaneBindings;
       draw(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): unknown;

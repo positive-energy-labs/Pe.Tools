@@ -87,6 +87,7 @@ export const module = route({
   fields,
   panes: {
     "sheet-roster": {
+      subjectList: true,
       title: "Fans",
       purpose: "Open fan ports",
       bindings,

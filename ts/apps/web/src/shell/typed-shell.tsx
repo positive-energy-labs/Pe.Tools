@@ -145,7 +145,7 @@ export function TypedSubject({ mount }: { mount: TypedMount }) {
   const subject = mount.spec.subject;
   if (!subject) return null;
   // One capability has one choice path: a declared subject-list pane owns subject choice, even when hidden.
-  if (Object.values(mount.spec.panes).some(pane => pane.read === (subject.read ?? mount.spec.core))) return null;
+  if (Object.values(mount.spec.panes).some(pane => pane.subjectList)) return null;
   const roster = mount.value(subject.read ?? mount.spec.core);
   if (!roster.current) return <OutcomeLine kind={roster.status === "pending" ? "busy" : "refused"} label={`Choose ${subject.noun}`} says={roster.reason} />;
   return <SubjectPicker data={mount.data} single={subject.multiple === false} mount={{
