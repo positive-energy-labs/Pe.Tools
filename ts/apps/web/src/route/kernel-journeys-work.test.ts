@@ -180,10 +180,10 @@ async function journey(module = fans) {
     }),
   };
   const mounts: ReturnType<typeof mountTypedRoute>[] = [];
-  const mount = (readOnly = false, place: Partial<typeof input> = {}) => {
+  const mount = (readOnly = false, place: Partial<typeof input> = {}, ports: Parameters<typeof mountTypedRoute>[3] = {}) => {
     const m = mountTypedRoute(module, { ...input, ...place, readOnly }, fingerprint, {
       work,
-      sources: { "fans.sheet": read },
+      sources: { "fans.sheet": read }, ...ports,
     });
     mounts.push(m);
     m.subscribe(() => {});
@@ -700,4 +700,38 @@ test("JZ a null Place target refuses Work before dispatch but still permits clie
     unbound.page.query({ sheetPath: "inspection-only" });
     expect(unbound.page.read().sheetPath).toBe("inspection-only");
   } finally { await j.close(); }
+}, 60_000);
+
+test("JZ released reads resume once after custody returns through an unchanged address", async () => {
+  const j = await journey();
+  const tasks = new Set<Promise<unknown>>(), listeners = new Set<() => void>();
+  let current = true, reads = 0;
+  const source: UseSource = { kind: "use", open(ctx, deliver) {
+    const generation = ++reads;
+    const task = j.host.send(generation, (ctx.args as { fan: string[] }).fan, undefined, `lease-${generation}`)
+      .then(value => { if (!ctx.signal.aborted) deliver({ kind: "complete", value, revision: generation }); });
+    tasks.add(task); void task.finally(() => tasks.delete(task));
+    return () => {};
+  } };
+  try {
+    await j.start();
+    const m = j.mount(false, { custody: { current: () => current }, address: {
+      read: () => new URLSearchParams(), write() {}, subscribe(notify) { listeners.add(notify); return () => { listeners.delete(notify); }; },
+    } }, { sources: { "fans.sheet": source } });
+    await Promise.allSettled([...tasks]);
+    expect(m.value().current).toBe(true);
+    const initial = reads, retained = m.value().value;
+    expect(initial).toBeGreaterThan(0);
+    m.release(); current = false;
+    const stop = m.subscribe(() => {});
+    expect(reads, "A hidden Place cannot acquire another native read").toBe(initial);
+    expect(m.value().value).toEqual(retained);
+    current = true; listeners.forEach(notify => notify());
+    await vi.waitFor(() => expect(reads, "Address notification resumes each declared read once").toBe(initial * 2));
+    await Promise.allSettled([...tasks]);
+    expect(m.value().current).toBe(true);
+    listeners.forEach(notify => notify());
+    expect(reads, "An equal current address cannot duplicate the subscription").toBe(initial * 2);
+    stop();
+  } finally { await Promise.allSettled(tasks); await j.close(); }
 }, 60_000);

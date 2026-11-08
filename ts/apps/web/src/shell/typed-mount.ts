@@ -183,7 +183,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const allReads = new Set([spec.core,...Object.values(spec.reads ?? {}),...Object.values(spec.panes).map(p=>p.read)].filter((read):read is import("../route/host-read").HostRead=>!!read));
   const demanded = new Set<import("../route/host-read").HostRead>();
   const syncReads = (force = false) => {
-    if (disposed || released) return;
+    if (disposed || released || !input.custody.current()) return;
     for (const read of allReads) {
       if(read.demand === "explicit" && !demanded.has(read)) continue;
       const project = "args" in read && typeof read.args === "function" ? read.args : spec.core?.args ?? (()=>({}));
@@ -252,7 +252,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const stopAddress = input.address.subscribe(() => {
     const next = decodePage();
     const selected = input.address.read().has("selected") ? next.selected : page.selected;
-    if (canonicalRouteInput({ ...next, selected }) === canonicalRouteInput(page)) return;
+    // An unchanged address can be the custody-return notification for released read resources.
+    if (canonicalRouteInput({ ...next, selected }) === canonicalRouteInput(page)) { syncReads(); return; }
     page = freezePage({ ...next, selected });
     gate.movePage(page, { kind: "human", source: "query", history: "replace" }); syncWork(); syncReads(); notify();
   });
