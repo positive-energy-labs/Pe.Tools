@@ -876,6 +876,7 @@ export class RouteWorkspace {
     snapshot: (value: unknown) => void,
     listener: (ack: WorkWriteAck) => void,
     failed: (error: unknown) => void,
+    orEmpty = false,
   ): () => void {
     if (this.options.recorded) {
       failed(Error("A recorded Work feed is served only through observeAdmittedFeed"));
@@ -895,7 +896,7 @@ export class RouteWorkspace {
         } satisfies WorkFeedFailure);
         return;
       }
-      const envelope = await this.#load(scope, spec, false);
+      const envelope = await this.#load(scope, spec, orEmpty);
       if (disposed) return;
       if (!envelope) { state = "absent"; snapshot(null); return; }
       state = "ready";
@@ -954,11 +955,14 @@ export class RouteWorkspace {
     context?: WorkReadContext,
   ): () => void {
     const { recorded, capture } = this.options;
+    // Composed reads share view()'s defaults; the primary Work keeps explicit Start semantics.
+    const registered = this.#admissions.get(admission.routeKey);
+    const orEmpty = registered?.workRoute !== scope.route && !!registered?.readWorks.includes(scope.route);
     const request = { kind: "feed", key: scope, admission, shape } as const;
     if (!recorded && !capture)
       return shape === "work"
-        ? this.observe(scope, scope.route, deliver, false, true)
-        : this.observeFeed(scope, (value) => deliver({ value }), ack, failed);
+        ? this.observe(scope, scope.route, deliver, orEmpty, true)
+        : this.observeFeed(scope, (value) => deliver({ value }), ack, failed, orEmpty);
     let closed = false;
     let stop = () => {};
     const close = () => {
@@ -1045,7 +1049,7 @@ export class RouteWorkspace {
             if (got && !closed) deliver(got, carriage);
           }).catch(end);
         },
-        false,
+        orEmpty,
         true,
       );
     } else {
@@ -1069,6 +1073,7 @@ export class RouteWorkspace {
           if (held.push(write) > limit) overflow();
         },
         (error) => void captured((carriage) => lost(error, carriage)).then(() => end(error)),
+        orEmpty,
       );
     }
     if (closed) stop(); // a synchronous failure ended the feed before its subscription was known
