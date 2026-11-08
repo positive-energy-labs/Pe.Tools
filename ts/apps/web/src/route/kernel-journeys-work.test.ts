@@ -219,6 +219,7 @@ async function journey(module: TypedRoute = fans) {
     cells,
     key,
     writes,
+    settle: () => Promise.allSettled([...pending]),
     holdBeforeWrite() { beforeWrite = gate(); return beforeWrite; },
     holdStream() { streamHeld = true; },
     flushStream() { streamHeld = false; streamQueue.splice(0).forEach(deliver => deliver()); },
@@ -875,3 +876,68 @@ test("JZ audit page Bind validates its live HTTP contract before dispatch and pe
     });
   } finally { vi.unstubAllGlobals(); await rm(dir, { recursive: true, force: true }); }
 });
+
+
+test("JZ cut foreign owner cell keeps its label revision and inverse through concurrent editing", async () => {
+  const { JOIN_KEY } = await import("@pe/ducts-domain/sheet/inputs");
+  const j = await journey();
+  try {
+    await j.start();
+    const cells = j.cells(), key = JOIN_KEY(["10:1", "30:1"]);
+    expect(cells.owner(["assumptions"])).toEqual({ route: "ducts", label: "from /ducts" });
+    const local = j.m.owner()!.handle, foreign = j.m.owner("ducts")!.handle!;
+    const cell = cells.at(["assumptions", key], "ducts");
+    const outcomes = await Promise.all([1, 2].map(() => cell.stage({ kind: "verdict", verdict: "connect" }, { label: "Accept join" })));
+    expect(outcomes.filter(result => result === null)).toHaveLength(1);
+    expect(outcomes.filter(result => result?.code === "refused")).toHaveLength(1);
+    await j.settle(); await j.ready();
+    expect(j.m.owner()!.handle).toEqual(local);
+    expect(j.m.owner("ducts")!.handle!.revision).toBe(foreign.revision + 1);
+    expect(j.m.owner("ducts")!.doc.assumptions[key].edit.value.verdict).toBe("connect");
+    const step = j.m.journal().undo.at(-1)!;
+    expect(step.label).toContain("from /ducts");
+    expect(step.transitions[0]!.forward.map(patch => patch.path)).toEqual([["assumptions", key]]);
+    expect(await j.m.history.undo()).toMatchObject({ ok: true });
+    await j.ready(); expect(j.m.owner("ducts")!.doc.assumptions).toEqual({});
+    expect(await j.m.history.redo()).toMatchObject({ ok: true });
+    await j.ready(); expect(j.m.owner("ducts")!.doc.assumptions[key].edit.value.verdict).toBe("connect");
+    expect(await cell.stage({ kind: "verdict", verdict: "connect" })).toMatchObject({ code: "refused" });
+  } finally { await j.close(); }
+}, 60_000);
+
+test("JZ cut two Places retain independent Page pose selection Value and inactive URL custody", async () => {
+  const { createAdmittedPlace } = await import("../shell/typed-place");
+  const j = await journey(), places: ReturnType<typeof createAdmittedPlace>[] = [];
+  let active = "a", search = new URLSearchParams("target=one"), writes = 0;
+  const listeners = new Set<() => void>();
+  const address = { read: () => new URLSearchParams(search), write(next: URLSearchParams) { search = new URLSearchParams(next); writes++; listeners.forEach(f => f()); },
+    subscribe(f: () => void) { listeners.add(f); return () => { listeners.delete(f); }; } };
+  function place(id: string) {
+    const scope = { pathname: "/fans", search: {}, current: () => active === id, retain() {}, retire(owner: { dispose(): void }) { owner.dispose(); } };
+    const p = createAdmittedPlace<ReturnType<typeof j.mount>>({ scope, address, search: address.read(), visible: true });
+    places.push(p);
+    return { p, m: p.state(() => j.mount(false, { address: p.address, custody: { current: p.current }, memory: p.memory, fixture: p.fixture })) };
+  }
+  try {
+    const a = place("a"); await j.settle();
+    a.m.page.pose({ contextRadiusFt: 11 }); a.m.page.select([{ kind: "focus", id: localId("audit", "a") }]);
+    await j.settle(); const beforeA = a.m.page.read(), valueA = a.m.value().value, urlA = address.read();
+    expect(valueA).toBeDefined(); a.p.remember(beforeA); a.p.setVisible(false); a.m.release();
+    active = "b"; address.write(new URLSearchParams("target=two"));
+    const b = place("b"); await j.settle();
+    b.m.page.pose({ contextRadiusFt: 22 }); b.m.page.select([{ kind: "focus", id: localId("audit", "b") }]);
+    await j.settle(); const beforeB = b.m.page.read(), count = writes;
+    a.p.address.write(new URLSearchParams("target=wrong&fixture=changed"), "replace");
+    expect(writes, "Inactive callback cannot overwrite the active Place address").toBe(count);
+    expect(a.p.address.read().get("target")).toBe("one"); expect(b.p.address.read().get("target")).toBe("two");
+    expect(a.p.fixture).toBeNull();
+    expect(() => a.m.page.pose({ contextRadiusFt: 99 })).toThrow();
+    expect(a.m.page.read()).toEqual(beforeA); expect(b.m.page.read()).toEqual(beforeB);
+    expect(a.m.value().value).toEqual(valueA); expect(a.p.memory()).toEqual(beforeA);
+    active = "none"; address.write(urlA); active = "a"; a.p.setVisible(true);
+    const resumed = a.m.subscribe(() => {}); await j.settle();
+    expect(a.p.state(() => { throw Error("Reveal must retain its typed mount"); })).toBe(a.m);
+    expect(a.m.page.read()).toEqual(beforeA); expect(b.m.page.read()).toEqual(beforeB); expect(a.m.value().current).toBe(true);
+    resumed();
+  } finally { places.forEach(p => p.dispose()); await j.close(); }
+}, 60_000);
