@@ -374,7 +374,7 @@ test("JZ DuctLoss numeric drafts refuse negatives without changing the URL and r
   } finally { cleanup(); mount.dispose(); }
 });
 
-test.each(["review identity", "insertText", "pointer keyboard", "navigation keyboard", "pointer shifted text", "navigation shifted text", "navigation composition", "navigation paste", "range shifted text"] as const)("JZ Schedules Description Enter stages r3, reviews BEFORE to AFTER, and shows a refused edit at its cell (%s)", async (entryMode) => {
+test.each(["undo after apply", "review identity", "insertText", "pointer keyboard", "navigation keyboard", "pointer shifted text", "navigation shifted text", "navigation composition", "navigation paste", "range shifted text"] as const)("JZ Schedules Description Enter stages r3, reviews BEFORE to AFTER, and shows a refused edit at its cell (%s)", async (entryMode) => {
   const user = userEvent.setup();
   const host = await scheduleHost({ cold: true });
   if (entryMode.startsWith("range")) host.setResponse(cellsApplied([[1, 2, true], [2, 2, true]]));
@@ -412,7 +412,7 @@ test.each(["review identity", "insertText", "pointer keyboard", "navigation keyb
   };
   // Replay the existing fixture's HTTP inspection transport. Every state and refusal
   // comes from the production host; no fixture code chooses a revision or edited value.
-  const native = createWorkFeedClient({ subscribe: () => () => {}, dirty() {} }, {
+  const native = createWorkFeedClient({ subscribe: (request, deliver) => entryMode === "undo after apply" ? host.observeHostResource(request, deliver) : () => {}, dirty() {} }, {
     write: async (key, body) => {
       const response = await client.response("work.apply", { ...routeInput(key.route, key), body });
       const wire = await response.json();
@@ -427,6 +427,10 @@ test.each(["review identity", "insertText", "pointer keyboard", "navigation keyb
     },
   });
   const work: WorkJournalDoor = { ...native, open: () => ({ subscribe(deliver) {
+    if (entryMode === "undo after apply") return host.observeWork(host.scope,
+      (state: any) => deliver(state ? { kind: "ready", history: state.history,
+        snapshot: { handle: state.handle, revision: state.revision, value: state.doc } } : { kind: "absent" }),
+      ack => deliver({ kind: "ack", ack }), error => { throw error; });
     listeners.add(deliver); const task = publishWork(); pending.add(task);
     void task.finally(() => pending.delete(task));
     return () => { listeners.delete(deliver); };
@@ -554,6 +558,23 @@ test.each(["review identity", "insertText", "pointer keyboard", "navigation keyb
         parameterName: "PE_G___Description", displayValue: "Duct heater",
       });
     } else await screen.findByText(/SH1.*Description.*Duct heater → Duct heater - gate review/);
+    if (entryMode === "undo after apply") {
+      // Drive the real Work, Plan, consent, apply and toolbar. Only native transport is recorded.
+      fireEvent.click(screen.getByRole("button", { name: "Apply cells" }));
+      await waitFor(async () => expect((await host.view()).doc.cells["1::2"].edit).toBeNull());
+      await waitFor(() => expect(mount.problem()).toBeNull());
+      const undo = screen.getByRole("button", { name: "Undo Edit schedule cell 1::2" });
+      expect(undo.getAttribute("aria-disabled"), "Applied Work must not offer a silently refused undo").toBe("true");
+      // Kit tips wait for real movement after a press; jsdom's hover omits movementX.
+      fireEvent(window, Object.assign(new Event("pointermove"), { movementX: 1 }));
+      await user.hover(undo);
+      await screen.findByText("Cannot undo: 'Apply cells' already wrote this to Revit. Reverse it in Revit.");
+      const settled = await host.view();
+      fireEvent.click(undo);
+      expect(await host.view()).toEqual(settled);
+      expect(screen.getByRole("button", { name: "Redo" }).getAttribute("aria-disabled")).toBe("true");
+      return;
+    }
     act(() => mount.cancel("push"));
     // Another writer advances Work behind the drawn cell. The host must refuse the
     // stale revision and its real reason must remain beside the user's cell.
@@ -576,6 +597,74 @@ test.each(["review identity", "insertText", "pointer keyboard", "navigation keyb
 }, 30_000);
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+test("JZ Fans undo after apply: public write journey leaves an honest toolbar refusal", async () => {
+  const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
+  const { observeResources } = await import("@pe/runtime");
+  const { JournalButtons } = await import("../shell/situation-band");
+  const { withInvocationContext } = await import("@pe/runtime/context");
+  const { peRouteUrl } = await import("@pe/agent-contracts/pe-api");
+  const f = await nativeFixture();
+  const human = { kind: "human" as const, via: "local" as const };
+  const stage = async (route: string, patches: unknown[], label: string) => {
+    const response = await withInvocationContext({ caller: human }, () => f.api.fetch(new Request(
+      peRouteUrl("work.apply", routeInput(route, { ...f.key, route }), "http://fixture"),
+      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+        kind: "apply", expectedRevision: 0, press: crypto.randomUUID(), label, patches,
+      }) },
+    )));
+    expect(response.status, await response.clone().text()).toBe(200);
+    return response.json();
+  };
+  const read = observeResources(f.saved, undefined, f.observeHostResource);
+  const connected = createWorkFeedClient({ subscribe: read, dirty() {} }, {
+    write: (key, write) => f.saved.write(key, key.route, "human", write),
+    submit: async command => {
+      const response = await f.post("/actions", command);
+      expect(response.ok, await response.clone().text()).toBe(true);
+      return f.journal.wait(command.id);
+    },
+  });
+  const work: WorkJournalDoor = { ...connected, open: scope => ({ subscribe(deliver) {
+    return f.saved.observeFeed(scope.key,
+      (state: any) => deliver(state ? { kind: "ready", history: state.history,
+        snapshot: { handle: state.handle, revision: state.revision, value: state.doc } } : { kind: "absent" }),
+      ack => deliver({ kind: "ack", ack }), error => { throw error; });
+  } }) };
+  const mount = mounts.mountTypedRoute(fans, {
+    target: f.target, fixture: null, work: { address: null, open: f.target.ref },
+    address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+    custody: { current: () => true }, memory: () => ({}),
+  }, builtinRouteStamp("fans"), { work, sources: { "fans.sheet": { kind: "use", open: () => () => {} } } });
+  const view = render(<JournalButtons owner={mount} />);
+  try {
+    const staged = await stage("ducts", [
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+    ], "Choose fan walk");
+    await stage("fans", [
+      { path: ["flows", "4", "edit"], value: { value: { cfm: 250 } } },
+      { path: ["parameters", "terminalFlow", "edit"], value: { value: "PE_M_Grd_AirFlow" } },
+    ], "Edit fan airflow");
+    await screen.findByRole("button", { name: "Undo Edit fan airflow" });
+    const command = async (id: string, commandKey: string) => {
+      const response = await f.post("/actions", { id, key: commandKey, target: f.target,
+        input: { work: { key: f.key, revision: staged.revision } } });
+      expect(response.ok, await response.clone().text()).toBe(true);
+      expect(await f.journal.wait(id)).toMatchObject({ state: "succeeded" });
+    };
+    await command("undo-plan", "ducts.plan-losses");
+    await command("undo-apply", "ducts.apply-losses");
+    expect(f.native.get(4)).toBe(250);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Undo Edit fan airflow" }).getAttribute("aria-disabled")).toBe("true"));
+    const undo = screen.getByRole("button", { name: "Undo Edit fan airflow" });
+    fireEvent(window, Object.assign(new Event("pointermove"), { movementX: 1 }));
+    await userEvent.setup().hover(undo);
+    await screen.findByText("Cannot undo: 'Write to Revit' already wrote this to Revit. Reverse it in Revit.");
+    fireEvent.click(undo);
+    expect(f.native.get(4)).toBe(250);
+    expect(screen.getByRole("button", { name: "Redo" }).getAttribute("aria-disabled")).toBe("true");
+  } finally { view.unmount(); mount.dispose(); await f.close(); }
+}, 30_000);
 
 test("JZ header chooser query keys preserve the current schedule until an explicit choice", async () => {
   const { TypedSubject } = await import("../shell/typed-shell");
