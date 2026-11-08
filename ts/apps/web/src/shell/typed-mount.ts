@@ -71,7 +71,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const registry = input.fixture === null && !input.history ? applicationWorkRegistry : createApplicationWorkRegistry();
   const listeners = new Set<() => void>();
   let revision = 0, disposed = false, released = false;
-  const notify = () => { if (!disposed) { revision++; listeners.forEach(f => f()); } };
+  const publish = () => { revision++; listeners.forEach(f => f()); };
+  const notify = () => { if (!disposed) publish(); };
   const requireCurrent = () => {
     if (disposed || !input.custody.current()) throw Error("Place is not writable");
   };
@@ -305,7 +306,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       if (reason) reject(Error(reason));
       else resolve();
     };
-    stop = mounted.subscribe(inspect);
+    // Waiting observes custody; it must not reacquire a released Place.
+    listeners.add(inspect);
+    stop = () => { listeners.delete(inspect); };
     inspect();
   });
   const basis = () => {
@@ -618,8 +621,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     // Retaining hidden read connections was a Plan-identity workaround; content fingerprints
     // now survive reconnect. Keep Work journals/receipts connected so pending edits settle.
     // Read release preserves write authority; disposal and Place custody fence writes.
-    release() { released = true; for (const r of reads.values()) { r.args=""; r.stop(); } },
-    dispose() { if (disposed) return; disposed=true; cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },
+    release() { if (disposed || released) return; released = true; notify(); for (const r of reads.values()) { r.args=""; r.stop(); } },
+    dispose() { if (disposed) return; disposed=true; publish(); cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },
   };
   const stopSubject=observeSubject(spec.key,{current:()=>!disposed&&!released&&input.custody.current(),read:subjectState,subscribe:mounted.subscribe});
   cleanups.push(stopSubject);

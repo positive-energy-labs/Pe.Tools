@@ -13,7 +13,7 @@ import { TypedChrome, TypedShell } from "../shell/typed-shell";
 import * as mounts from "../shell/typed-mount";
 import { familiesRouteState, address, workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
 import { ReviewSurface } from "../shell/review-surface";
-import { RouteVisibility } from "./activity";
+import { RouteActivity, RouteVisibility } from "./activity";
 import { setup as scheduleHost, cellsApplied } from "../../../host/tests/schedule-test-fixture";
 import { module as schedules } from "../schedules/route";
 import { namesOf } from "./typed-route";
@@ -656,6 +656,60 @@ import { reads as familyReads } from "../../../host/src/reads/family";
 import { FAMILY_MODEL_SCHEMA } from "../family/page";
 import { leaks } from "../shell/visible-text";
 
+
+test("JZ readiness waiters reject when a held Family Place is hidden or retired", async () => {
+  const create = mounts.mountTypedRoute, owners: mounts.TypedMount[] = [];
+  let opens = 0;
+  const held: UseSource = { kind: "use", open() { opens++; return () => {}; } }; // Upstream publication stays pending.
+  vi.spyOn(mounts, "mountTypedRoute").mockImplementation((module, input, stamp) => {
+    const mount = create(module, input, stamp, {
+      work: createFixtureWorkDoor(familyDraftRouteState, familyDraftRouteState.schema.parse({})),
+      sources: { "family.workspace": held },
+    });
+    owners.push(mount);
+    return mount;
+  });
+  const retained = new Set<{ dispose(): void }>();
+  const scope = { pathname: "/family", search: {}, current: () => true,
+    retain: (owner: { dispose(): void }) => { retained.add(owner); },
+    retire: (owner: { dispose(): void }) => { retained.delete(owner); owner.dispose(); } };
+  const address = () => ({ read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} });
+  const first = address(), next = address();
+  const stamp = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
+  function Journey() {
+    const [visible, show] = useState(true), [port, bind] = useState(first);
+    return <><button onClick={() => show(false)}>Hide Family</button>
+      <button onClick={() => { bind(next); show(true); }}>Rebind Family</button>
+      <button onClick={() => { for (const owner of [...retained]) scope.retire(owner); bind(first); }}>Retire Family</button>
+      <RouteActivity.Provider value={scope}><RouteVisibility.Provider value={visible}>
+        <div hidden={!visible}><TypedShell module={family} fingerprint={stamp} address={port} /></div>
+      </RouteVisibility.Provider></RouteActivity.Provider></>;
+  }
+  const root = createRootRoute({ component: Journey });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/family"] }) });
+  const view = render(<RouterProvider router={router} />);
+  const outcome = (waiter: Promise<void>) => waiter.then(() => "unexpected ready", error => (error as Error).message);
+  const capture = (mount: mounts.TypedMount) => [outcome(mount.whenReady()), outcome(mount.whenWritable())];
+  try {
+    expect((await surfaceReadiness("pending")).getAttribute("data-readiness")).toBe("pending");
+    const hidden = owners.at(-1)!;
+    const hiding = capture(hidden);
+    fireEvent.click(screen.getByRole("button", { name: "Hide Family" }));
+    expect(hidden.readiness()).toMatchObject({ kind: "blocked", reason: "Place is inactive or retired" });
+    expect(await Promise.all(hiding)).toEqual(["Place is inactive or retired", "Place is inactive or retired"]);
+    const beforeLateWaiters = opens;
+    expect(await Promise.all(capture(hidden)), "Waiting must not reacquire a hidden Place").toEqual(["Place is inactive or retired", "Place is inactive or retired"]);
+    expect(opens, "Late waiters do not open new reading connections").toBe(beforeLateWaiters);
+    fireEvent.click(screen.getByRole("button", { name: "Rebind Family" }));
+    expect((await surfaceReadiness("pending")).getAttribute("data-readiness")).toBe("pending");
+    const retired = owners.at(-1)!;
+    expect(retired).not.toBe(hidden);
+    const retiring = capture(retired);
+    fireEvent.click(screen.getByRole("button", { name: "Retire Family" }));
+    expect(await Promise.all(retiring)).toEqual(["Place is inactive or retired", "Place is inactive or retired"]);
+    expect(await Promise.all(capture(retired)), "Disposed mounts also reject new waiters").toEqual(["Place is inactive or retired", "Place is inactive or retired"]);
+  } finally { view.unmount(); for (const owner of retained) owner.dispose(); }
+});
 
 test("D G07 Family renders named picker, member roster, Work and stage words without internal identities", async () => {
   const pod = "f88cf37a-6fda-4ee6-9f20-5b39b47d29ba", member = "Box.family.json";
