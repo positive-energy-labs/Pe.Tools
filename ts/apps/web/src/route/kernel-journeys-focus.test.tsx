@@ -1559,3 +1559,42 @@ test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow in
     expect(mount.owner()!.doc.basis.stale ?? []).toEqual([]);
   } finally { mount.journal().intents.forEach(intent => mount.discardIntent(intent.id)); mount.dispose(); }
 }, 60_000);
+
+test("JZ Plan refusal marker holds a valid sealed ancillary-only review at the typed action", async () => {
+  const f = await createWitness(closes, new Map(), { "ducts.sheet-snapshot": {
+    kind: "use", open(_ctx, deliver) { deliver({ kind: "complete", value: structuredClone(realMuas), revision: 1 }); },
+  } });
+  await vi.waitFor(() => expect(f.fans.work()).not.toBeNull());
+  await f.ws.apply(f.fans.workBasis()!.token.scope.identity.work!, "fans", "human", [
+    { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
+    { path: ["equipmentFlows", "14577391", "edit"], value: { value: { cfm: 925, source: "test" } } },
+  ], f.fans.work()!.revision);
+  f.fans.refresh("value"); await vi.waitFor(() => expect(f.typed.value().current).toBe(true));
+  const reason = "MUAS-1: required airflow parameter is missing; add the missing parameter";
+  native.submit.mockClear();
+  native.submit.mockImplementation(async () => ({ id: "marker-only-plan", state: "succeeded", result: {
+    previewOnly: true, planRefusal: reason,
+    seal: { caller: { kind: "human", via: "local" }, requestHash: "marker-only-plan",
+      work: { handle: (f.inputs.get("fans:ducts.plan-losses") as { work: unknown }).work },
+      documentMark: { session: "fixture", openId: "fans", observedSince: null, changedAt: null }, incarnation: null, dependencies: "exact" },
+    // No refused native row can accidentally supply the shell's refusal. Only the Plan marker holds Apply.
+    value: { writes: [{ kind: "store", outcome: "planned", before: "absent", after: "revision 1" }],
+      counts: { refused: 0, planned: 1, written: 0, unchanged: 0 } },
+  } }));
+  function Write() {
+    const [, changed] = useReducer(n => n + 1, 0);
+    useEffect(() => f.fans.subscribe(changed), []);
+    return <TypedWrite mount={f.typed} id="losses" />;
+  }
+  render(<Write />);
+  fireEvent.click(screen.getByRole("button", { name: "plan Write to Revit" }));
+  const trigger = await screen.findByRole("button", { name: /Write to Revit.*planned/ });
+  if (trigger.getAttribute("aria-expanded") !== "true") fireEvent.click(trigger);
+  const apply = screen.getByRole("button", { name: "Write to Revit" });
+  expect.soft(screen.queryByRole("status")?.textContent).toBe(`Apply is held: ${reason}`);
+  expect.soft(apply.getAttribute("aria-disabled")).toBe("true");
+  expect(document.body.textContent).toContain("Pe loss record");
+  expect(native.submit).toHaveBeenCalledTimes(1);
+  await act(async () => { fireEvent.click(apply); });
+  expect(native.submit, "A valid seal and ancillary planned write cannot authorize a refused Plan").toHaveBeenCalledTimes(1);
+});
