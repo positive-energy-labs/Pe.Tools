@@ -33,7 +33,8 @@ function bind<I, O>(
       generation: number,
       port: InputPort,
       keep?: (publication: Publication<O>) => Promise<() => void>,
-    ) => owner.publish(id, generation, definition, args, port, keep),
+      admitted?: ReturnType<Publications["admission"]>,
+    ) => owner.publish(id, generation, definition, args, port, keep, admitted),
   };
 }
 /** Trusted host modules extend the graph without an endpoint or port branch. */

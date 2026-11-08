@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { takeoffSnapshotInput } from "../src/reads/takeoffs.ts";
 import { takeoffCaptureSchema } from "@pe/agent-contracts";
@@ -46,6 +46,143 @@ import {
   bounds,
   snapshot,
 } from "./host-read-graph.test-support.ts";
+
+test("JZ read subscriptions reclaim capacity through release and reject released flights", async () => {
+  const hold = gate();
+  const definition = read("test.capacity-lifetime", {
+    input: z.number(),
+    output: z.number(),
+    async run(_ctx, value) {
+      if (value === -1) {
+        hold.entered.resolve();
+        await hold.release.promise;
+      }
+      return value;
+    },
+  });
+  const unregister = registeredReads.register({ capacity: definition });
+  const f = await fixture();
+  const send = async (subscription: string, generation: number, args: number, release = false) => {
+    const response = await f.probe({ read: definition.name, subscription, generation, args, release });
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    return body;
+  };
+  let pending: Promise<any> | undefined;
+  try {
+    // Reuse one slot first so the base exposes the independent 512-key leak.
+    for (let i = 0; i < 600; i++) {
+      const value = await send("changing-key", i, i);
+      expect(value.state, JSON.stringify(value)).toBe("current");
+      expect(value.value.data).toBe(i);
+      await send("changing-key", i, i, true);
+    }
+    pending = send("released-flight", 0, -1);
+    await hold.entered.promise;
+    await send("released-flight", 0, -1, true);
+    expect((await send("released-flight", 0, -1)).state).toBe("superseded");
+    // Cross the tombstone bound while the old evaluation remains in flight.
+    for (let i = 0; i < 160; i++) {
+      const id = `churn-${i}`;
+      expect((await send(id, 0, i)).state).toBe("current");
+      await send(id, 0, i, true);
+    }
+    const successor = await send("released-flight", 1, 999);
+    expect(successor.state).toBe("current");
+    hold.release.resolve();
+    expect((await pending).state).toBe("superseded");
+    // An old flight cannot overwrite the successor's retained publication.
+    expect((await send("released-flight", 1, 999)).value.data).toBe(999);
+    await send("released-flight", 1, 999, true);
+    // Shared ownership survives releasing just one of its subscriptions.
+    const shared = await send("shared-left", 0, 1000);
+    await send("shared-right", 0, 1000);
+    await send("shared-left", 0, 1000, true);
+    expect((await send("shared-right", 1, 1000)).version).toBeGreaterThan(shared.version);
+    await send("shared-right", 1, 1000, true);
+    // The simultaneous slot cap remains a limit, rather than a churn counter.
+    for (let i = 0; i < 128; i++) expect((await send(`live-${i}`, 0, i)).state).toBe("current");
+    const full = await f.probe({ read: definition.name, subscription: "overflow", generation: 0, args: 128 });
+    expect(full.status).not.toBe(200);
+    expect(await full.text()).toContain("Read subscription capacity reached");
+    await send("live-0", 0, 0, true);
+    expect((await send("overflow", 0, 128)).state).toBe("current");
+  } finally {
+    hold.release.resolve();
+    await pending;
+    unregister();
+    await f.close();
+  }
+});
+
+test("JZ input-open admissions survive unrelated release churn", async () => {
+  const liveOpen = gate(), releasedOpen = gate(), flight = gate();
+  const lateFlight = Promise.withResolvers<void>();
+  let starts = 0;
+  const definition = read("test.exact-admission", {
+    input: z.number(), output: z.number(),
+    async run(_ctx, value) {
+      if (value === -1) {
+        flight.entered.resolve();
+        if (++starts === 2) lateFlight.resolve();
+        await flight.release.promise;
+      }
+      return value;
+    },
+  });
+  const unregister = registeredReads.register({ exact: definition });
+  const f = await fixture();
+  const send = async (subscription: string, args = 0, release = false) => {
+    const response = await f.probe({ read: definition.name, subscription, generation: 0, args, release });
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    return body;
+  };
+  const pending: Promise<any>[] = [];
+  let restore = () => {};
+  try {
+    await send("initialize");
+    const sets = Context.get(f.reads.services, HostInputReadSets);
+    const open = sets.open;
+    const spy = vi.spyOn(sets, "open");
+    restore = () => spy.mockRestore();
+    const holdOpen = (hold: ReturnType<typeof gate>) => spy.mockImplementationOnce((...args) =>
+      Effect.gen(function* () {
+        hold.entered.resolve();
+        yield* Effect.promise(() => hold.release.promise);
+        return yield* open(...args);
+      }));
+    holdOpen(liveOpen);
+    pending.push(send("live-opening"));
+    await liveOpen.entered.promise;
+    holdOpen(releasedOpen);
+    pending.push(send("released-opening"));
+    await releasedOpen.entered.promise;
+    await send("released-opening", 0, true);
+    // Neither request has acquired a publication slot yet.
+    for (let i = 0; i < 160; i++) await send(`other-release-${i}`, 0, true);
+    liveOpen.release.resolve();
+    releasedOpen.release.resolve();
+    const [live, released] = await Promise.all(pending);
+    expect(live.state, JSON.stringify(live)).toBe("current");
+    expect(released.state).toBe("superseded");
+    // Releasing the last slot must not discard its still-running key owner.
+    pending.push(send("flight-left", -1));
+    await flight.entered.promise;
+    await send("flight-left", -1, true);
+    pending.push(send("flight-right", -1));
+    // Both input sets are independent, but their key's version lineage is shared.
+    await lateFlight.promise;
+    flight.release.resolve();
+    expect((await pending[2]).state).toBe("superseded");
+    expect((await pending[3]).state).toBe("current");
+    expect((await pending[3]).version).toBe(2);
+  } finally {
+    liveOpen.release.resolve(); releasedOpen.release.resolve(); flight.release.resolve();
+    await Promise.allSettled(pending);
+    restore(); unregister(); await f.close();
+  }
+});
 
 test("HTTP document targets normalize once before generated native handles and preserve the mark fence", async () => {
   const tables = nativeRead("ducts.tables");
