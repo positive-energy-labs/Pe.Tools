@@ -33,16 +33,17 @@ import { testConsents } from "../../../host/tests/effect-test";
 import type { ConsentEvent } from "../../../host/src/run-consent";
 import { module as fans } from "../fans/route";
 import { mountTypedRoute } from "../shell/typed-mount";
+import type { PlaceInput } from "../shell/typed-place";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { routeInput } from "./host";
 import { localId } from "./typed-route";
 import type { Readings } from "../host/resource-stream";
 import type { UseSource } from "../shell/source-contract";
-import type { DrawContext } from "./typed-route";
+import type { DrawContext, TypedRoute } from "./typed-route";
 
 // Only recorded native inputs and the address bar are adapters. Work, HTTP, SSE,
 // the action registry, consent, journal and typed mount all run their production code.
-async function journey(module = fans) {
+async function journey(module: TypedRoute = fans) {
   const host = await fixture(true);
   const roster = await host.send(0, []);
   const fan = roster.value!.data.fans.rows.find((row) => row.mark === "MUAS-1")!;
@@ -169,7 +170,7 @@ async function journey(module = fans) {
   const fingerprint = workFingerprintSchema.parse(
     `builtin-closure:${builtinEnrollments.find((e) => e.routeKey === "fans")!.closure.fingerprint}`,
   );
-  const input = {
+  const input: PlaceInput = {
     target: { kind: "document" as const, ref },
     fixture: null,
     work: { address: path, open: ref },
@@ -180,8 +181,8 @@ async function journey(module = fans) {
     }),
   };
   const mounts: ReturnType<typeof mountTypedRoute>[] = [];
-  const mount = (readOnly = false, place: Partial<typeof input> = {}, ports: Parameters<typeof mountTypedRoute>[3] = {}) => {
-    const m = mountTypedRoute(module, { ...input, ...place, readOnly }, fingerprint, {
+  const mount = (readOnly = false, place: Partial<PlaceInput> = {}, ports: Parameters<typeof mountTypedRoute>[3] = {}, candidate: TypedRoute = module) => {
+    const m = mountTypedRoute(candidate, { ...input, ...place, readOnly }, fingerprint, {
       work,
       sources: { "fans.sheet": read }, ...ports,
     });
@@ -735,3 +736,142 @@ test("JZ released reads resume once after custody returns through an unchanged a
     stop();
   } finally { await Promise.allSettled(tasks); await j.close(); }
 }, 60_000);
+
+test.each(["accepted", "refused"] as const)("JZ audit member switch keeps a late %s Work outcome out of the replacement", async outcome => {
+  const { z } = await import("zod");
+  const { route, field } = await import("./typed-route");
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    const module = route({ key: "fans", name: "Member Work", directory: fans.spec.directory,
+      fields: { member: field(z.string(), "a", "query", "push") },
+      edits: { ...fans.spec.edits!, owners: {}, value: undefined, seed: () => fans.spec.edits!.work.schema.parse({}), key: page => page.member },
+      panes: { main: { title: "Member", purpose: "Edit one member Work", draw: () => null } },
+      layout: { kind: "pane", id: "main" } });
+    const m = j.mount(false, {}, {}, module);
+    await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
+    await m.startAction()!.run();
+    await vi.waitFor(() => expect(m.owner()?.ready).toBe(true));
+    const keyA = m.owner()!.handle!.key, revisionA = m.owner()!.handle!.revision;
+    const inspectorA = j.mount(true, {}, {}, module);
+    await vi.waitFor(() => expect(inspectorA.owner()?.ready).toBe(true));
+    const cells = () => m.draw("main", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"];
+    held = j.holdBeforeWrite();
+    const pending = cells().at(["flows", "4"]).stage({ cfm: 210 }, { label: "Member A delayed edit" });
+    await held.entered.promise;
+    m.page.query({ member: "b" });
+    await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
+    await m.startAction()!.run();
+    await vi.waitFor(() => expect(m.owner()?.ready).toBe(true));
+    expect(await cells().at(["flows", "4"]).stage({ cfm: 520 }, { label: "Member B edit" })).toBeNull();
+    const before = structuredClone(m.owner()!.doc), handle = m.owner()!.handle!;
+    if (outcome === "refused") expect(await j.write(keyA, { kind: "apply", expectedRevision: revisionA,
+      press: crypto.randomUUID(), patches: [{ path: ["flows", "4", "edit"], value: { value: { cfm: 700 } } }] })).toMatchObject({ ok: true });
+    held.release.resolve();
+    const result = await pending;
+    if (outcome === "accepted") expect(result).toBeNull(); else expect(result).toMatchObject({ code: "refused" });
+    expect(m.owner()!.doc, "The replacement never receives the old member's delta").toEqual(before);
+    expect(m.owner()!.handle).toEqual(handle);
+    expect(m.problem()).toBeNull();
+    expect(m.journal().intents.some(intent => intent.label === "Member A delayed edit")).toBe(false);
+    await vi.waitFor(() => expect(inspectorA.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: outcome === "accepted" ? 210 : 700 }));
+  } finally { held?.release.resolve(); await j.close(); }
+}, 60_000);
+
+test("JZ audit explicit demand refuses malformed HTTP Value data and recovers without exposing it", async () => {
+  const { route } = await import("./typed-route");
+  const j = await journey(), tasks = new Set<Promise<unknown>>();
+  let opened = 0, corrupt = true;
+  const read = { ...fans.spec.core!, demand: "explicit" as const };
+  const module = route({ ...fans.spec, edits: undefined, commands: {}, subject: undefined, reads: {}, core: read,
+    panes: { main: { title: "Explicit Fan read", purpose: "Inspect a demanded Value", read, draw: () => null } },
+    layout: { kind: "pane", id: "main" } });
+  const source: UseSource = { kind: "use", open(ctx, deliver) {
+    const id = ++opened;
+    const task = j.host.send(id, (ctx.args as { fan: string[] }).fan, undefined, `explicit-${id}`).then(packet => {
+      const wire = structuredClone(packet);
+      if (corrupt) (wire.value as { data: unknown }).data = 12;
+      if (!ctx.signal.aborted) deliver({ kind: "complete", value: wire, revision: id });
+    });
+    tasks.add(task); void task.finally(() => tasks.delete(task)); return () => {};
+  } };
+  try {
+    const m = j.mount(false, {}, { sources: { "fans.sheet": source } }, module);
+    expect(opened, "Explicit reads are idle until demand").toBe(0);
+    expect(m.value().value).toBeUndefined();
+    m.refresh(read); await Promise.allSettled([...tasks]);
+    expect(opened).toBe(1);
+    expect(m.value().current).toBe(false);
+    expect(m.value().value, "Malformed wire data is never drawn").toBeUndefined();
+    const failed = m.value();
+    if (failed.current) throw Error("Malformed Value became current");
+    expect(failed.reason).toMatch(/reading|contract|unavailable/i);
+    expect(failed.reason).not.toMatch(/ZodError|invalid_type|expected.*object/i);
+    corrupt = false; m.refresh(read); await Promise.allSettled([...tasks]);
+    expect(m.value().current).toBe(true);
+    const before = m.value().value;
+    corrupt = true; m.refresh(read); await Promise.allSettled([...tasks]);
+    expect(m.value().current).toBe(false);
+    expect(m.value().value, "A malformed replacement retains the last decoded Value").toEqual(before);
+    corrupt = false; m.refresh(read); await Promise.allSettled([...tasks]);
+    expect(m.value().current).toBe(true);
+  } finally { await Promise.allSettled(tasks); await j.close(); }
+}, 60_000);
+
+test("JZ audit validation readiness and per-action busy admission prevent dispatch", async () => {
+  const { z } = await import("zod");
+  const { queryAction } = await import("./typed-actions");
+  const held = gate();
+  let calls = 0, j: Awaited<ReturnType<typeof journey>>;
+  const module = { ...fans, spec: { ...fans.spec, commands: { ...fans.spec.commands,
+    audit: { ...queryAction({ key: "fans.audit-admission", input: z.strictObject({ n: z.number() }),
+      run: async input => { calls++; if (typeof input.n === "number") { held.entered.resolve(); await held.release.promise; }
+        return j.host.send(910 + calls, []); } }), label: "Read fan" },
+  } } };
+  j = await journey(module);
+  try {
+    await j.ready();
+    expect(await j.cells().at(["flows", "4"]).stage({ cfm: 220 })).toMatchObject({ code: "unavailable" });
+    expect(j.writes).toHaveLength(0);
+    await j.start();
+    await expect(j.m.action("audit").run({ n: "bad" })).rejects.toThrow();
+    expect(calls).toBe(0);
+    const first = j.m.action("audit").run({ n: 1 });
+    await held.entered.promise;
+    const duplicate = j.m.action("audit").run({ n: 2 }).then(value => ({ value }), error => ({ error }));
+    held.release.resolve();
+    await first;
+    expect(await duplicate).toHaveProperty("error", expect.objectContaining({ message: "Action already pending" }));
+    expect(calls).toBe(1);
+    expect(j.m.action("audit").pending).toBe(false);
+    await j.m.action("audit").run({ n: 3 });
+    expect(calls).toBe(2);
+    expect(j.writes).toHaveLength(0);
+  } finally { held.release.resolve(); await j.close(); }
+}, 60_000);
+
+test("JZ audit page Bind validates its live HTTP contract before dispatch and persists the valid binding", async () => {
+  const { mkdtemp, mkdir, writeFile, readFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { createPagesHandler } = await import("../../../host/src/pages-route");
+  const { pageBindRpc } = await import("../../../../packages/mcps/src/shared/rpc-client");
+  const dir = await mkdtemp(join(tmpdir(), "jz-pagebind-"));
+  expect(dir.startsWith(join(tmpdir(), "jz-pagebind-"))).toBe(true);
+  const pages = join(dir, "Pages"), pods = join(dir, "Pods");
+  await mkdir(join(pages, "todo"), { recursive: true }); await mkdir(pods);
+  await writeFile(join(pages, "todo", "index.html"), "<title>Audit Page</title><p>Bind this page</p>", "utf8");
+  const handle = createPagesHandler(pages, pods);
+  let dispatches = 0;
+  vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+    dispatches++; return withInvocationContext({ caller: who }, () => handle(new Request(new URL(url, "http://host"), init)));
+  });
+  try {
+    await expect(pageBindRpc.run({ slug: "todo", binding: { kind: "wrong" } })).rejects.toThrow();
+    expect(dispatches, "Malformed input fails before the HTTP door").toBe(0);
+    await pageBindRpc.run({ slug: "todo", binding: { kind: "none" } });
+    expect(dispatches).toBe(1);
+    expect(JSON.parse(await readFile(join(pages, "todo", ".state", "binding.json"), "utf8"))).toMatchObject({
+      slots: { default: { kind: "none" } }, boundBy: { default: "human" },
+    });
+  } finally { vi.unstubAllGlobals(); await rm(dir, { recursive: true, force: true }); }
+});

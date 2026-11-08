@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
-import { route } from "./typed-route";
+import { route, type TypedRoute } from "./typed-route";
 import { module as fans } from "../fans/route";
 import { TypedChrome, TypedShell } from "../shell/typed-shell";
 import * as mounts from "../shell/typed-mount";
@@ -434,6 +434,10 @@ test("JZ B04 read a long review, dismiss with Escape and return to its opener", 
   fireEvent.click(opener);
   const commit = await screen.findByRole("button", { name: "Commit Update airflows" });
   expect(view.container.contains(commit), "B04: review is portalled").toBe(false);
+  const footer = commit.closest(".shrink-0");
+  expect(footer, "Commit stays outside the scrollable change list").not.toBeNull();
+  expect(footer!.previousElementSibling?.className).toContain("overflow-y-auto");
+  expect(commit.textContent).toContain("Commit Update airflows");
   expect(screen.getByText("Change 199"), "B04: final change is present").toBeTruthy();
   commit.focus();
   expect(document.activeElement).toBe(commit);
@@ -1296,7 +1300,13 @@ test("JZ E8-12 close Home clears a capacity refusal and permits another Place", 
 });
 
 test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the action area", async () => {
-  const capture = structuredClone(realMuas);
+  const capture = structuredClone(realMuas) as unknown as DuctSnapshot;
+  Object.assign(capture.nodes.find(node => node.id === 14577391)!, { flowParameter: null });
+  capture.slots = { ...capture.slots!, fanFlow: "PE_M_Fan_AirFlowDesign" };
+  // Controlled native-input twins exercise label disambiguation; this is not a native-model claim.
+  const damper = capture.nodes.find(node => node.id === 14607308)!;
+  Object.assign(damper, { partType: "Damper" });
+  capture.nodes.push({ ...structuredClone(damper), id: 99999991, uniqueId: "fixture-other-damper", levelId: 30, connectors: [] });
   const f = await createWitness(closes, new Map(), { "ducts.sheet-snapshot": {
     kind: "use", open(_ctx, deliver) { deliver({ kind: "complete", value: capture, revision: 1 }); },
   } });
@@ -1316,8 +1326,9 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
       incarnation: null, dependencies: "exact" },
     value: { writes: [
       { id: 14577391, kind: "equipment-flow", outcome: "refused", before: null, reason },
+      { id: 14607308, kind: "component", outcome: "planned", parameter: "Specific Loss", before: "unset", after: "0.0398 in-wg" },
       { kind: "store", outcome: "planned", before: "absent", after: "revision 1" },
-    ], counts: { refused: 1, planned: 1, written: 0, unchanged: 0 } },
+    ], counts: { refused: 1, planned: 2, written: 0, unchanged: 0 } },
   } }));
   function Write() {
     const [, changed] = useReducer(n => n + 1, 0);
@@ -1333,6 +1344,30 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
   const explanation = screen.getByRole("status");
   expect(explanation.textContent).toBe(`Apply is held: ${reason}`);
   expect(explanation.parentElement?.textContent).toContain("Esc");
+  expect(screen.getByText("Computed losses written back")).toBeTruthy();
+  expect(screen.getByText("Pe loss record")).toBeTruthy();
+  expect(document.body.textContent).toContain("unset");
+  expect(document.body.textContent).toContain("14607308");
+  expect(document.body.textContent).toMatch(/damper/i);
+  expect(document.body.textContent).toContain("Level 2/Upper Level");
+  cleanup();
+  // The recorded adapter has no unit rows; prepare the native input model before rendering.
+  const nativeInputs = inputsFor(capture);
+  const attempted = vi.fn();
+  function MissingFlow({ ctx }: { ctx: any }) {
+    const data = ctx.value.value;
+    if (!data.open) throw Error("The native Fan must be open");
+    const rows = inputRows({ snapshot: data.sheetSnapshot, doc: null, fanUnitId: 14577391, inputs: nativeInputs });
+    const control = rows.find(row => row.key === "unit:14577391:cfm")!.control;
+    if (control.kind !== "number") throw Error("Fan airflow must have a number control");
+    return <SheetCell label="MUAS-1 airflow" value={control.value} unit={{ label: "cfm" }} digits={0} source="none"
+      refusal={control.refusal ?? null} onValue={value => { attempted(value); return ctx.cells.at(["equipmentFlows", "14577391"]).stage({ cfm: value, source: "Work" }, { label: "MUAS airflow" }); }} />;
+  }
+  render(f.typed.draw("sheet-inputs", ctx => <MissingFlow ctx={ctx} />) as React.ReactElement);
+  expect(document.querySelector('[data-body="locked"]'), "The missing native parameter locks the actual typed cell before Plan").not.toBeNull();
+  expect(document.body.innerHTML).toContain("PE_M_Fan_AirFlowDesign");
+  expect(attempted).not.toHaveBeenCalled();
+
 });
 
 // The declared roster is the route's sole subject-choice surface, even on another pane.
@@ -1371,3 +1406,149 @@ test("JZ C042 a subject-list route suppresses the header chooser across panes", 
     } finally { view.unmount(); mount.dispose(); cleanup(); }
   }
 });
+
+test("JZ audit named subject choices preserve all none add and toggle without raw ids", async () => {
+  const { fixture, ref, path: documentPath } = await import("../../../host/tests/host-read-graph.test-support");
+  const { localId } = await import("./typed-route");
+  const { typedSubjectDoor } = await import("../shell/subject");
+  const host = await fixture(true), tasks = new Set<Promise<unknown>>();
+  const roster = fans.spec.subject!.read!;
+  const module = route({ ...fans.spec, core: roster, edits: undefined, commands: {},
+    subject: { ...fans.spec.subject!, pane: "detail" },
+    panes: { detail: { title: "Subject choices", purpose: "Choose named subjects", draw: () => <p>Subject choice surface</p> } },
+    layout: { kind: "pane", id: "detail" } });
+  let seq = 0, search = new URLSearchParams(), moves = 0;
+  const unknown = localId("ducts-fan", "unknown-roster-audit@0");
+  const source: UseSource = { kind: "use", open(ctx, deliver) {
+    const generation = ++seq;
+    const task = host.send(generation, [], undefined, `subject-${generation}`).then(value => {
+      if (!ctx.signal.aborted) deliver({ kind: "complete", value, revision: generation });
+    });
+    tasks.add(task); void task.finally(() => tasks.delete(task)); return () => {};
+  } };
+  const mount = mounts.mountTypedRoute(module, {
+    target: { kind: "document", ref }, fixture: null, work: { address: documentPath, open: ref },
+    memory: () => ({ fan: { kind: "ids", ids: [unknown] } }), custody: { current: () => true },
+    address: { read: () => new URLSearchParams(search), write(next) { search = next; moves++; }, subscribe: () => () => {} },
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { sources: { "fans.sheet": source } });
+  const router = createRouter({ routeTree: createRootRoute({ component: () => <TypedChrome mount={mount} document={<span>Recorded subjects</span>} /> }), history: createMemoryHistory({ initialEntries: ["/"] }) });
+  let view: ReturnType<typeof render> | undefined;
+  try {
+    await Promise.allSettled([...tasks]);
+    view = render(<RouterProvider router={router} />);
+    await screen.findByRole("button", { name: "Choose fan" });
+    expect(document.body.textContent).not.toContain(unknown);
+    expect(screen.getByText(/outside the current roster/)).toBeTruthy();
+    const options = module.spec.subject!.options(mount.value(roster).value);
+    expect(options.length).toBeGreaterThan(1);
+    fireEvent.click(screen.getByRole("button", { name: "No fan" }));
+    expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [] }); expect(moves).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: "All fan" }));
+    expect(mount.page.read().fan).toEqual({ kind: "all" }); expect(moves).toBe(2);
+    const door = typedSubjectDoor(mount)!;
+    act(() => door.add([options[0]!.id]));
+    expect(mount.page.read().fan).toEqual({ kind: "all" }); expect(moves).toBe(2);
+    act(() => door.clear()); expect(moves).toBe(3);
+    act(() => door.add([options[0]!.id]));
+    act(() => door.add([options[0]!.id, options[1]!.id]));
+    expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [options[0]!.id, options[1]!.id] });
+    act(() => door.toggle(options[0]!.id));
+    expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [options[1]!.id] });
+    expect(document.body.textContent).toContain(options[1]!.label);
+    expect(document.body.textContent).not.toContain(String(options[1]!.id));
+    expect(seq, "Subject selection does not enumerate subjects into extra roster reads").toBe(1);
+  } finally { view?.unmount(); mount.dispose(); await Promise.allSettled(tasks); await host.close(); cleanup(); }
+}, 60_000);
+
+test("JZ audit optional document pins retain exact source authority and retire replaced custody", async () => {
+  const resources = await import("../host/resource-state");
+  const Atom = await import("effect/reactivity/Atom");
+  const { machineFixture } = await import("../../../../packages/agent-contracts/tests/machine-fixture");
+  const observed = { state: "ready", observation: { sessions: [{ connected: true, sessionId: "bridge-one", processId: 1,
+    sdkSessionId: "audit", openDocumentCount: 2, openDocuments: [
+      { openId: "project-one", title: "Project A", isFamilyDocument: false },
+      { openId: "family-one", title: "Family A", isFamilyDocument: true },
+    ] }] } };
+  const inventory = Atom.make(observed), machine = Atom.make({ state: "ready", observation: machineFixture() });
+  const atoms = vi.spyOn(resources, "readingAtom").mockImplementation(((request: { kind: string }) => request.kind === "inventory" ? inventory : machine) as typeof resources.readingAtom);
+  const created: mounts.TypedMount[] = [];
+  const original = mounts.mountTypedRoute;
+  const factory = vi.spyOn(mounts, "mountTypedRoute").mockImplementation((...args) => { const m = original(...args); created.push(m); return m; });
+  const module = route({ ...family.spec, needs: "host", optionalTarget: "document", edits: undefined, core: undefined, reads: {}, commands: {}, fields: {},
+    panes: { main: { title: "Optional document", purpose: "Inspect exact document authority", draw: ctx => <p>{ctx.target?.kind === "document" ? `Pinned ${ctx.target.ref.session}/${ctx.target.ref.openId}` : ctx.target?.kind === "host" ? "Host browsing" : "No authority"}</p> } }, layout: { kind: "pane", id: "main" } });
+  let search = new URLSearchParams();
+  const listeners = new Set<() => void>();
+  const address = { read: () => new URLSearchParams(search), write(next: URLSearchParams) { search = next; listeners.forEach(f => f()); }, subscribe(f: () => void) { listeners.add(f); return () => { listeners.delete(f); }; } };
+  const router = createRouter({ routeTree: createRootRoute({ component: () => <TypedShell module={module} fingerprint={workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`)} address={address} /> }), history: createMemoryHistory({ initialEntries: ["/"] }) });
+  const view = render(<RouterProvider router={router} />);
+  const pin = (ref: { session: string; openId: string }) => new URLSearchParams({ target: JSON.stringify({ kind: "open", ref }) });
+  try {
+    await screen.findByText("Host browsing");
+    await act(async () => address.write(pin({ session: "bridge-one", openId: "project-one" })));
+    await screen.findByText("Pinned bridge-one/project-one");
+    const first = created.at(-1)!;
+    expect(first.target()).toEqual({ kind: "document", ref: { session: "bridge-one", openId: "project-one" } });
+    await act(async () => address.write(pin({ session: "bridge-one", openId: "family-one" })));
+    await screen.findByText("Pinned bridge-one/family-one");
+    expect(first.available(), "Old exact source custody is retired").toBe(false);
+    expect(first.target()).toEqual({ kind: "document", ref: { session: "bridge-one", openId: "project-one" } });
+    for (const params of [pin({ session: "bridge-one", openId: "closed" }), pin({ session: "foreign", openId: "project-one" }), new URLSearchParams({ target: "{invalid" })]) {
+      await act(async () => address.write(params));
+      expect(screen.queryByText("Host browsing"), "An invalid pin never becomes host authority").toBeNull();
+      expect(screen.queryByText("Pinned bridge-one/family-one")).toBeNull();
+    }
+    await act(async () => address.write(new URLSearchParams()));
+    await screen.findByText("Host browsing");
+  } finally { view.unmount(); created.forEach(m => m.dispose()); factory.mockRestore(); atoms.mockRestore(); cleanup(); }
+});
+
+test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow inverse restoration", async () => {
+  const host = await scheduleHost();
+  const detail = detailResponse(), first = detail.entries[0]!.rows[0]!;
+  const second = structuredClone(first); second.rowNumber = 2; second.subjectIds = [8];
+  second.bindings[0]!.targetElementIds = [8]; second.bindings[0]!.targets[0]!.elementId = 8;
+  detail.entries[0]!.rows.push(second); host.setDetail(detail);
+  await host.bind(await host.read());
+  expect(await host.patch([1, 2].map(row => ({ path: ["cells", `${row}::2`, "edit"], value: { value: `${row * 150} VA` } })))).toMatchObject({ ok: true });
+  const changed = structuredClone(detail);
+  for (const row of changed.entries[0]!.rows) { row.values[1] = "999 VA"; row.bindings[0]!.rawValue = "999"; row.bindings[0]!.displayValue = "999 VA"; row.bindings[0]!.targets[0]!.rawValue = "999"; }
+  host.setDetail(changed); await host.bind(await host.read());
+  const client = createPeClient(host.base, contextFetch);
+  let last: any;
+  const native = createWorkFeedClient({ subscribe: () => () => {}, dirty() {} }, {
+    write: async (key, body) => { const response = await client.response("work.apply", { ...routeInput(key.route, key), body }); const wire = await response.json(); last = response.ok ? wire : wire.error.details; return last; },
+    submit: async () => { throw Error("This Work journey does not submit native commands"); },
+  });
+  const work: WorkJournalDoor = { ...native, open: () => ({ subscribe(deliver) {
+    let closed = false;
+    void host.view().then(state => { if (!closed) deliver({ kind: "ready", history: { from: 0, acks: [] }, snapshot: { handle: { key: host.scope, revision: state.revision }, revision: state.revision, value: state.doc } }); });
+    return () => { closed = true; };
+  } }) };
+  // Keep the real schemas while bounding TypeScript's recursive JSON-schema expansion.
+  const spec = (schedules as TypedRoute).spec;
+  const module = route({ key: "schedules", name: "Schedule cells", directory: spec.directory, fields: {},
+    edits: { ...spec.edits!, value: undefined, seed: undefined, key: () => host.scope.work },
+    panes: { main: { title: "Schedule cells", purpose: "Review stale cells", draw: () => null } }, layout: { kind: "pane", id: "main" } });
+  const mount = mounts.mountTypedRoute(module, { target: { kind: "document", ref: host.b }, fixture: null,
+    work: { address: null, open: host.b }, address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+    custody: { current: () => true }, memory: () => ({}),
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work });
+  const cells = () => mount.draw("main", ctx => ctx.cells) as any;
+  try {
+    await vi.waitFor(() => expect(mount.owner()?.ready).toBe(true));
+    expect(mount.owner()!.doc.basis.stale.map((row: { key: string }) => row.key).sort()).toEqual(["1::2", "2::2"]);
+    const revision = mount.owner()!.handle!.revision;
+    expect(await cells().at(["cells", "1::2"]).stage("175 VA", { label: "Review first stale cell" })).toBeNull();
+    expect(mount.owner()!.handle!.revision).toBe(revision + 1);
+    expect(mount.owner()!.doc.basis.stale.map((row: { key: string }) => row.key)).toEqual(["2::2"]);
+    const reviewed = structuredClone(mount.owner()!.doc);
+    const stale = await client.call("work.apply", { ...routeInput("schedules", host.scope), body: { kind: "apply", expectedRevision: revision, press: crypto.randomUUID(), patches: [{ path: ["cells", "2::2", "edit"], value: { value: "old" } }] } });
+    expect(stale).toMatchObject({ ok: false, code: "stale_revision" });
+    expect(await cells().at(["cells", "1::2"]).delete({ label: "Delete first cell" })).toBeNull();
+    expect(last.write.inverse.filter((p: { path: string[] }) => p.path[0] === "cells").map((p: { path: string[] }) => p.path)).toEqual([["cells", "1::2"]]);
+    expect(await mount.history.undo()).toMatchObject({ ok: true });
+    expect(mount.owner()!.doc).toEqual(reviewed);
+    expect(await cells().patch([{ path: ["cells"], value: reviewed.cells }], { label: "Replace collection deliberately" })).toBeNull();
+    expect(mount.owner()!.doc.basis.stale ?? []).toEqual([]);
+  } finally { mount.journal().intents.forEach(intent => mount.discardIntent(intent.id)); mount.dispose(); }
+}, 60_000);
