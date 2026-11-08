@@ -285,6 +285,7 @@ function NetworkFrame({
               refProps: subjectProps,
             }}
           >
+            {children}
             {!data.snapshotRead.value && (
               <LoadingContext
                 name="Ducts"
@@ -300,7 +301,6 @@ function NetworkFrame({
                 {ctx.value.reason}
               </p>
             )}
-            {children}
           </SubjectTextContext.Provider>
 
 
@@ -365,13 +365,6 @@ export function SystemsPane({ ctx }: { ctx: DuctsDrawContext }) {
   );
   const systemsPane = (
     <>
-      <ReadCoverage coverage={coverage} />
-
-      {(rosterState.status === "failed" ? rosterState.reason : null) ? (
-        <p role="alert" data-tone="alarm">
-          {rosterState.status === "failed" ? rosterState.reason : null}
-        </p>
-      ) : null}
       <Scroll className="min-h-0 flex-1">
         <SystemsList
           header={
@@ -399,6 +392,12 @@ export function SystemsPane({ ctx }: { ctx: DuctsDrawContext }) {
           coverage={coverage}
         />
       </Scroll>
+      <ReadCoverage coverage={coverage} />
+      {(rosterState.status === "failed" ? rosterState.reason : null) ? (
+        <p role="alert" data-tone="alarm">
+          {rosterState.status === "failed" ? rosterState.reason : null}
+        </p>
+      ) : null}
     </>
   );
   return (
