@@ -1,3 +1,5 @@
+import { z } from "zod";
+import type { Read } from "./evaluator.ts";
 import { workRead } from "./inputs.ts";
 
 import { executionTargetSchema, familyDraftSchema } from "@pe/agent-contracts";
@@ -7,9 +9,10 @@ import { familySpec, podProfile } from "../builtin-read-handles.ts";
 import { workBinding } from "./inputs.ts";
 
 import { familyArgs, familyData } from "@pe/agent-contracts";
-export const reads = {
+const workspaceArgs = familyArgs.extend({ target: executionTargetSchema });
+export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<typeof familyData>> } = {
   workspace: read("family.workspace", {
-    input: familyArgs.extend({ target: executionTargetSchema }),
+    input: workspaceArgs,
     output: familyData,
     async run(ctx, args) {
       const target = args.target;

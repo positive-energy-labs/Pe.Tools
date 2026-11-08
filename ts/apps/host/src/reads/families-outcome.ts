@@ -1,6 +1,6 @@
 /** Presentation of the single semantic Families Apply result. */
 // TODO: F3a live write proof remains owed: Broan reload refused system compatibility (7524f854-2853-4b41-9929-d551a7d8319e); see .artifacts/accept/u2-f3a/RESULTS.md.
-import { familyApplyResultSchema, writePreviewSchema } from "@pe/agent-contracts";
+import { familyApplyResultSchema, writePreviewSchema, type FamilyApplyResult } from "@pe/agent-contracts";
 type ApplyReceipt = {
   readonly state: string;
   readonly result?: unknown;
@@ -11,7 +11,7 @@ type ApplyReceipt = {
 type Refusal = { code: "not-ready" | "failed" | "partial"; message: string };
 const refuse = (code: Refusal["code"], message: string): Refusal => ({ code, message });
 
-export const applyResults = (result: unknown) => {
+export const applyResults = (result: unknown): Extract<FamilyApplyResult, { native: unknown }>[] => {
   if (writePreviewSchema.safeParse(result).success) return [];
   const parsed = familyApplyResultSchema.parse(result);
   return "results" in parsed ? parsed.results : [parsed];

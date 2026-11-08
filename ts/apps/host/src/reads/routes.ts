@@ -37,8 +37,13 @@ function bind<I, O>(
     ) => owner.publish(id, generation, definition, args, port, keep, admitted),
   };
 }
+export interface HostReadRegistry {
+  readonly reads: Map<string, NonNullable<HostRouteModule["reads"]>[string]>;
+  readonly leaves: Record<string, NonNullable<HostRouteModule["leaves"]>[string]>;
+  register(definitions?: HostRouteModule["reads"], inputs?: HostRouteModule["leaves"]): () => void;
+}
 /** Trusted host modules extend the graph without an endpoint or port branch. */
-export function readRegistry(modules: readonly Pick<HostRouteModule, "reads" | "leaves">[]) {
+export function readRegistry(modules: readonly Pick<HostRouteModule, "reads" | "leaves">[]): HostReadRegistry {
   const reads = new Map<string, Read<any, any>>();
   const leaves: Record<string, NonNullable<HostRouteModule["leaves"]>[string]> =
     Object.create(null);
@@ -77,9 +82,9 @@ export function readRegistry(modules: readonly Pick<HostRouteModule, "reads" | "
   for (const module of modules) register(module.reads, module.leaves);
   return { reads, leaves, register };
 }
-export const registeredReads = readRegistry(hostReadModules);
+export const registeredReads: HostReadRegistry = readRegistry(hostReadModules);
 /** HTTP adapters select a read; composition and freshness belong to the evaluator. */
-export function graphRoute(id: string, raw: unknown, registry = registeredReads) {
+export function graphRoute(id: string, raw: unknown, registry: HostReadRegistry = registeredReads) {
   if (!graphRouteIds.includes(id)) throw Error(`Unknown read door: ${id}`);
   const request = valueReadRequest.parse(raw), definition = registry.reads.get(request.read);
   if (!definition) throw Error(`Host read is not registered: ${request.read}`);

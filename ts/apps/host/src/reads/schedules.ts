@@ -1,3 +1,5 @@
+import { z } from "zod";
+import type { Read } from "./evaluator.ts";
 import { workRead } from "./inputs.ts";
 import {
   scheduleCatalog,
@@ -16,7 +18,7 @@ import { documentMark } from "./inputs.ts";
 import { scheduleOutcome } from "./schedule-outcome.ts";
 
 /** One selected schedule owns one workspace Work, independently of its native capture. */
-export const schedulesView = read("schedules.view", {
+export const schedulesView: Read<z.output<typeof schedulesViewArgs>, z.output<typeof schedulesViewData>> = read("schedules.view", {
   input: schedulesViewArgs,
   output: schedulesViewData,
   async run(ctx, args) {
@@ -75,4 +77,4 @@ export const schedulesView = read("schedules.view", {
   },
 });
 
-export const reads = { view: schedulesView };
+export const reads: { view: typeof schedulesView } = { view: schedulesView };

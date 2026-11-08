@@ -1,3 +1,5 @@
+import { z } from "zod";
+import type { Read } from "./evaluator.ts";
 import { workRead } from "./inputs.ts";
 import { nativeRead } from "./inputs.ts";
 
@@ -6,9 +8,10 @@ import { read, workScope } from "./evaluator.ts";
 import { documentMark } from "./inputs.ts";
 import { roomsArgs, roomsData } from "@pe/agent-contracts";
 import { planOf } from "./rooms-plan.ts";
-export const reads = {
+const workspaceArgs = roomsArgs.extend({ target: executionTargetSchema });
+export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<typeof roomsData>> } = {
   workspace: read("rooms.workspace", {
-    input: roomsArgs.extend({ target: executionTargetSchema }),
+    input: workspaceArgs,
     output: roomsData,
     async run(ctx, { target, view }) {
       if (target.kind !== "document") throw Error("Choose a project document");
