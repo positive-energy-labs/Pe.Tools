@@ -237,6 +237,8 @@ test("Families HTTP apply adopts the same Pea thread's plan in the next minted t
     state: "succeeded",
     result: { native: { receipts: [{ familyId: 1, success: true }] } },
   });
+  if (applied.caller.kind !== "pea" || plan.caller.kind !== "pea")
+    throw Error("Expected Pea callers for cross-turn family adoption");
   expect(applied.caller.context).not.toBe(plan.caller.context);
   expect(applied.caller.run).toEqual(next.run);
   expect(f.dispatched.filter((operation) => operation === "families.apply")).toHaveLength(1);
