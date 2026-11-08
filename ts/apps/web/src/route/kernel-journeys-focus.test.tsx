@@ -412,7 +412,7 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
   };
   // Replay the existing fixture's HTTP inspection transport. Every state and refusal
   // comes from the production host; no fixture code chooses a revision or edited value.
-  const native = createWorkFeedClient({ subscribe: () => () => {}, dirty() {} }, {
+  const native = createWorkFeedClient({ subscribe: (request, deliver) => entryMode === "undo after apply" ? host.observeHostResource(request, deliver) : () => {}, dirty() {} }, {
     write: async (key, body) => {
       const response = await client.response("work.apply", { ...routeInput(key.route, key), body });
       const wire = await response.json();
@@ -568,7 +568,7 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
       // Kit tips wait for real movement after a press; jsdom's hover omits movementX.
       fireEvent(window, Object.assign(new Event("pointermove"), { movementX: 1 }));
       await user.hover(undo);
-      await screen.findByText(/Cannot undo.*later action.*Revit model undo is not available/i);
+      await screen.findByText("Cannot undo: 'Apply cells' already wrote this to Revit. Reverse it in Revit.");
       const settled = await host.view();
       fireEvent.click(undo);
       expect(await host.view()).toEqual(settled);
@@ -659,7 +659,7 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
     const undo = screen.getByRole("button", { name: "Undo Edit fan airflow" });
     fireEvent(window, Object.assign(new Event("pointermove"), { movementX: 1 }));
     await userEvent.setup().hover(undo);
-    await screen.findByText(/Cannot undo.*later action.*Revit model undo is not available/i);
+    await screen.findByText("Cannot undo: 'Write to Revit' already wrote this to Revit. Reverse it in Revit.");
     fireEvent.click(undo);
     expect(f.native.get(4)).toBe(250);
     expect(screen.getByRole("button", { name: "Redo" }).getAttribute("aria-disabled")).toBe("true");

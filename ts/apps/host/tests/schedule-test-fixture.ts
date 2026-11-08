@@ -358,6 +358,7 @@ export async function setup(options: { cold?: boolean } = {}) {
     },
     scope,
     observeWork: work.observeFeed.bind(work),
+    observeHostResource: observeHost,
     a,
     b,
     view,

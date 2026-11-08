@@ -96,7 +96,7 @@ export const entryCaller = (entry: TimelineEntry) =>
     : "you";
 
 /** The Work journal behind the owner's current scope: the one history of authored edits. */
-export type JournalOwner = Pick<TypedMount, "subscribe" | "revision" | "restoreWork" | "stopCommand"> & { discardIntent?(id:string):void; journalRefusal(): string | null; journal(): ReturnType<WorkJournal["read"]> | null; timeline(): readonly TimelineEntry[] };
+export type JournalOwner = Pick<TypedMount, "subscribe" | "revision" | "restoreWork" | "stopCommand"> & { spec?: Pick<TypedMount["spec"], "commands">; discardIntent?(id:string):void; journalRefusal(): string | null; journal(): ReturnType<WorkJournal["read"]> | null; timeline(): readonly TimelineEntry[] };
 export interface LegacyJournalOwner {
   subscribe(notify: () => void): () => void;
   version(): number;
@@ -159,6 +159,18 @@ export function JournalButtons({
   if (!journal) return null;
   const undo = journal.undo.at(-1);
   const redo = journal.redo.at(-1);
+  const entries = "restoreWork" in owner ? owner.timeline() : owner.timeline.read();
+  const verbs = "restoreWork" in owner
+    ? Object.fromEntries(Object.entries(owner.spec?.commands ?? {}).map(([id, command]) => [id, { label: command.label, entry: command.entry }]))
+    : owner.verbs;
+  const rows = projectTimeline(entries, verbs, journal);
+  const barrierRefusal = (step: typeof undo, direction: "undo" | "redo") => {
+    if (!step?.barrier) return null;
+    const receiptId = step.barrier.receiptId ?? (step.barrier.basis as { receiptId?: string } | undefined)?.receiptId;
+    const label = rows.find(row => row.key === `receipt:${receiptId}`)?.verb;
+    return label ? `Cannot ${direction}: '${label}' already wrote this to Revit. Reverse it in Revit.`
+      : `Cannot ${direction}: a later action changed this Work. Inspect History.`;
+  };
   const restore = async (direction: "undo" | "redo") => {
     const result = await ("restoreWork" in owner ? owner.restoreWork(direction) : owner.restore(direction));
     return result && typeof result === "object" && "ok" in result && result.ok === false && "message" in result
@@ -172,7 +184,7 @@ export function JournalButtons({
         refusal={
           owner.journalRefusal() ??
           undo?.superseded?.message ??
-          (undo?.barrier ? "Cannot undo: a later action changed this Work. Revit model undo is not available." : null) ??
+          barrierRefusal(undo, "undo") ??
           (undo ? null : "Nothing to undo: no edit to this Work since this tab opened it")
         }
         onPress={() => restore("undo")}
@@ -184,7 +196,7 @@ export function JournalButtons({
         label={redo ? `Redo ${redo.label}` : "Redo"}
         refusal={
           owner.journalRefusal() ?? redo?.superseded?.message ??
-          (redo?.barrier ? "Cannot redo: a later action changed this Work. Revit model undo is not available." : null) ??
+          barrierRefusal(redo, "redo") ??
           (redo ? null : "Nothing to redo")
         }
         onPress={() => restore("redo")}
