@@ -3789,6 +3789,10 @@ export namespace RevitApplyParameterValues {
       isReadOnly: boolean;
       hasValue: boolean;
       rawValue: null | string;
+      elementLabel?: null | string;
+      uniqueId?: null | string;
+      scope?: null | string;
+      displayValue?: null | string;
     }
   }
   export namespace Res {
@@ -3831,6 +3835,10 @@ export namespace RevitApplyParameterValues {
       isReadOnly: boolean;
       hasValue: boolean;
       rawValue: null | string;
+      elementLabel?: null | string;
+      uniqueId?: null | string;
+      scope?: null | string;
+      displayValue?: null | string;
     }
   }
 }
@@ -7142,6 +7150,10 @@ export namespace RevitDetailSchedules {
       isReadOnly: boolean;
       hasValue: boolean;
       rawValue: null | string;
+      elementLabel?: null | string;
+      uniqueId?: null | string;
+      scope?: null | string;
+      displayValue?: null | string;
     }
     /**
      * That a surface measures this value, and the unit it renders it in, read from the Reading's own
@@ -10310,7 +10322,7 @@ export namespace ScheduleCapture {
   }
 }
 
-/** Write reviewed schedule cells by their exact reviewed bindings (target element id, parameter id, storage, read-only, hasValue, raw value) in one transaction. Stale, missing, blocked, or conflicting evidence refuses per cell; results keep the request cell index and each cell's own target index. */
+/** Write reviewed schedule cells by their exact reviewed bindings (target element id, parameter id, storage, read-only, hasValue, raw value) in one transaction. Stale, missing, blocked, or conflicting evidence refuses per cell; results keep the request cell index and each cell's own target index. CurrentBinding targets carry native element label, UniqueId, parameter name, instance/type scope and formatted before value for write review. */
 export namespace ScheduleCellsApply {
   export namespace Req {
     export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
@@ -10375,6 +10387,10 @@ export namespace ScheduleCellsApply {
       isReadOnly: boolean;
       hasValue: boolean;
       rawValue: null | string;
+      elementLabel?: null | string;
+      uniqueId?: null | string;
+      scope?: null | string;
+      displayValue?: null | string;
     }
     /**
      * That a surface measures this value, and the unit it renders it in, read from the Reading's own
@@ -10469,6 +10485,10 @@ export namespace ScheduleCellsApply {
       isReadOnly: boolean;
       hasValue: boolean;
       rawValue: null | string;
+      elementLabel?: null | string;
+      uniqueId?: null | string;
+      scope?: null | string;
+      displayValue?: null | string;
     }
     /**
      * That a surface measures this value, and the unit it renders it in, read from the Reading's own

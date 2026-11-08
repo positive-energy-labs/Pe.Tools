@@ -125,17 +125,29 @@ export const module = route({
         const edits = Object.entries(work.cells).filter(([, cell]) => cell.edit);
         return {
           sentence: `Apply ${edits.length} edited schedule cells`,
-          rows: edits.map(([key, cell]) => {
+          rows: edits.flatMap(([key, cell]) => {
             const { rowNumber, columnNumber } = splitScheduleCellKey(key);
             const row = data.saved?.snapshot.rows.find((row) => row.rowNumber === rowNumber);
             const column = data.saved?.snapshot.columns.find(
               (column) => column.columnNumber === columnNumber,
             );
-            const index =
-              data.saved?.snapshot.columns.findIndex(
-                (column) => column.columnNumber === columnNumber,
-              ) ?? -1;
-            return `${row?.values[0] ?? `Row ${rowNumber}`} \u00b7 ${column?.headerText ?? `Column ${columnNumber}`}: ${showCellValue(row?.values[index])} \u2192 ${showCellValue(cell.edit?.value)}`;
+            const binding = row?.bindings.find(binding => binding.columnNumber === columnNumber);
+            const schedule = data.saved?.snapshot.scheduleName ?? "Schedule unavailable";
+            const after = showCellValue(cell.edit?.value);
+            const stale = work.basis?.stale?.some(cell => cell.key === key);
+            const reason = stale ? "Staged value is stale; read and restage it"
+              : binding?.blocker !== "None" ? binding?.blocker ?? "Missing binding" : null;
+            if (!binding?.targets.length)
+              return [`${schedule} · ${column?.headerText ?? `Column ${columnNumber}`}: unavailable → ${after} · refused: ${reason ?? "Missing targets"}`];
+            // Root's write-review audit ruling permits ids here; ordinary schedule labels stay id-free.
+            // Expand grouped/type bindings by native target, never by the rendered row's first value.
+            return binding.targets.map(target => {
+              const element = `${target.elementLabel ?? "Element"} · Id ${target.elementId}`;
+              const parameter = target.parameterName ?? binding.parameterName ?? "Parameter unavailable";
+              const scope = target.scope ?? (binding.isTypeParameter ? "type" : "instance");
+              const before = target.hasValue ? target.displayValue ?? target.rawValue : "unset";
+              return `${schedule} · ${element} · ${parameter} (${scope}): ${before ?? "unavailable"} → ${after}${reason ? ` · refused: ${reason}` : ""}`;
+            });
           }),
         };
       },

@@ -14,5 +14,10 @@ public sealed record ParameterTarget(
     [property: JsonProperty(Required = Required.Always)] RequestedParameterStorageType StorageType,
     [property: JsonProperty(Required = Required.Always)] bool IsReadOnly,
     [property: JsonProperty(Required = Required.Always)] bool HasValue,
-    [property: JsonProperty(Required = Required.AllowNull, NullValueHandling = NullValueHandling.Include)] string? RawValue
+    [property: JsonProperty(Required = Required.AllowNull, NullValueHandling = NullValueHandling.Include)] string? RawValue,
+    // Native review metadata, separate from the raw evidence compared by the writer.
+    string? ElementLabel = null,
+    string? UniqueId = null,
+    string? Scope = null,
+    string? DisplayValue = null
 );
