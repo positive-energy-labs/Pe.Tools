@@ -82,11 +82,11 @@ export interface StateCellBase {
   foot?: "inline" | "hover";
   /**
    * Numeric commit: present ⇒ the commit path parses per `parseCell` before `onCommit` sees anything. A
-   * refused parse (blank, not a number) RETURNS a reason, so the built-in refusal note fires —
-   * never a silent restore. Integers truncate, `min` clamps, and `onCommit` receives the
-   * normalized text (`fmtNum`, `digits`).
+   * refused parse RETURNS a reason, so the built-in refusal note fires —
+   * never a silent restore. Bounds and integer constraints refuse; valid numbers commit
+   * without rounding. `digits` controls display formatting only.
    */
-  numeric?: { integer?: boolean; min?: number; digits?: number };
+  numeric?: { integer?: boolean; min?: number; max?: number; digits?: number };
   /** Placeholder for the editable value slot — e.g. an inherited value the cell would take. */
   placeholder?: string;
   /** Semantic selection request; the cell lands its own input when the key changes. */
@@ -273,15 +273,23 @@ export function fmtNum(value: number, digits = 2): string {
   return String(Number(value.toFixed(digits)));
 }
 
-/** Parse an edited number cell. Returns null when the text is not a number (commit is refused). */
+/** Decode a numeric commit without clamping, truncating or rounding what was typed. */
 export function parseCell(
   text: string,
-  opts: { integer?: boolean; min?: number } = {},
-): number | null {
-  if (text.trim() === "") return null; // blank is not zero — an emptied cell commits nothing
-  const parsed = opts.integer ? Number.parseInt(text, 10) : Number(text);
-  if (Number.isNaN(parsed)) return null;
-  return opts.min !== undefined && parsed < opts.min ? opts.min : parsed;
+  opts: { integer?: boolean; min?: number; max?: number } = {},
+): number | CellRefusal {
+  const typed = text.trim();
+  if (typed === "") return { message: "blank commits nothing — a cleared cell is not zero" };
+  const parsed = Number(typed);
+  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(typed) || !Number.isFinite(parsed))
+    return { message: `"${text}" is not a finite number — nothing committed` };
+  if (opts.integer && !Number.isInteger(parsed))
+    return { message: `Enter a whole number; "${text}" commits nothing` };
+  if (opts.min !== undefined && parsed < opts.min)
+    return { message: `Enter a number at least ${opts.min}; "${text}" commits nothing` };
+  if (opts.max !== undefined && parsed > opts.max)
+    return { message: `Enter a number at most ${opts.max}; "${text}" commits nothing` };
+  return parsed;
 }
 
 interface CellRead {

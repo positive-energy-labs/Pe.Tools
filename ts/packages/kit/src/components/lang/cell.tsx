@@ -45,7 +45,6 @@ export const stateCellRecipe = tv({
 import { focusQuiet } from "../../lib/utils";
 import {
 cellFactsText,
-fmtNum,
 stagedBy,
 parseCell,
 readCell,
@@ -248,18 +247,14 @@ export function StateCell(input: StateCellProps | HandleCellProps) {
       let out = text;
       if (props.numeric != null) {
         const parsed = parseCell(text, props.numeric);
-        if (parsed === null) {
+        if (typeof parsed !== "number") {
           submitted.current = null;
           el.value = initial.current; // restore the prior value, visibly
-          setRefusal({
-            message:
-              text.trim() === ""
-                ? "blank commits nothing — a cleared cell is not zero"
-                : `"${text}" is not a number — nothing committed`,
-          });
+          setRefusal(parsed);
           return;
         }
-        out = fmtNum(parsed, props.numeric.digits);
+        // Display precision must not change the value that reaches Work.
+        out = String(parsed);
       }
       const settle = (refused: string | CellRefusal | null | void) => {
         if (version !== editVersion.current) return;
