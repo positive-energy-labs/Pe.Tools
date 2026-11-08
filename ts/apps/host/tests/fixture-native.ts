@@ -59,7 +59,7 @@ export async function fixtureNative(
   const tokens = new Map<string, string>();
   const handlers: Promise<{ close(): Promise<void> }>[] = [];
   return {
-    bridge, journal, calls,
+    bridge, journal, calls, receipts: Context.get(context, HostReceipts),
     onRequest(listener: (key: string) => Promise<void>) { beforeReply = listener; },
     changeAfterPreparation(actionId: string, milliseconds: number) {
       let injected = false;

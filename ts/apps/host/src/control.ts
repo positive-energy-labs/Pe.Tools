@@ -655,7 +655,8 @@ export function mintPageDoor(
   return {
     token,
     retire: () => {
-      pageDoors.delete(caller);
+      // The HTTP token expires now; an already admitted action retains this weak capability
+      // until its active caller is released. Every continuation still rechecks live trust.
       retireContext(token);
     },
   };

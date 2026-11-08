@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
@@ -9,10 +9,13 @@ import { nativeRecordings } from "./native-recordings.ts";
 import { testConsents } from "./effect-test.ts";
 import { bindControl } from "../src/control.ts";
 import type { ConsentEvent } from "../src/run-consent.ts";
-import { nativeFixture } from "./fans-native.fixture.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
+import { nativeFixture } from "./fans-native.fixture.ts";
+import { pagesRoute } from "../src/pages-route.ts";
+import { HostReceipts } from "../src/gateway-owner.ts";
+import { Layer } from "effect";
 
-async function fixture() {
+async function fixture(withPage = false) {
   const dir = await mkdtemp(join(tmpdir(), "pe-write-safety-"));
   const recordings = ["sdk-revit.detail.parameter-links", "sdk-revit.apply.parameter-links"];
   let native = await fixtureNative(join(dir, "native"), ...recordings);
@@ -27,7 +30,10 @@ async function fixture() {
   const run = { thread: crypto.randomUUID(), turn: "write" };
   runs.open(run); bindControl({ runs });
   const caller: Caller = { kind: "pea", context: "safety", thread: run.thread, run, root: run };
-  let post = native.actions({ workspace });
+  const pageRoot = join(dir, "pages");
+  if (withPage) { await mkdir(join(pageRoot, "probe"), { recursive: true }); await writeFile(join(pageRoot, "probe", "index.html"), "<p>Write safety probe</p>", "utf8"); }
+  const routes = withPage ? pagesRoute(() => pageRoot, () => join(dir, "pods")).pipe(Layer.provide(Layer.succeed(HostReceipts, native.receipts))) : Layer.empty;
+  let post = native.actions({ workspace }, undefined, {}, routes);
   const patch = async (value: unknown) => workspace.publish(key, "parameter-links", [{ path: ["definitions", "authored-extra"], value: { edit: { value } } }], (await workspace.read(key, "parameter-links"))?.revision ?? 0);
   await patch(definition);
   const admit = async (id: string, command: string, actor: Caller = caller) => {
@@ -51,6 +57,15 @@ async function fixture() {
   };
   return { get native() { return native; }, get workspace() { return workspace; }, get target() { return socket.target; }, key, definition, patch, admit, submit, approve, apply, events,
     send: (body: unknown, actor: Caller = caller) => post(body, actor),
+    async bindPage() {
+      const response = await post.request(new Request("http://host/pe/pages/probe/binding", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "thread", thread: "safety-page" }) }));
+      expect(response.status, await response.clone().text()).toBe(200);
+    },
+    async page(command: string) {
+      const response = await post.request(new Request("http://host/pages/probe/act", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: command, input: { work: { key, revision: (await workspace.read(key, "parameter-links"))!.revision } } }) }));
+      expect(response.status, await response.clone().text()).toBeLessThan(400);
+      return await response.json() as { id: string };
+    },
     async restart() {
       const target = socket.target;
       await native.close();
@@ -76,6 +91,28 @@ test("R1 a fresh Work handle with identical native intent cannot redeem an older
     expect(f.native.calls.some(c => c.key === "revit.apply.parameter-links")).toBe(false);
     expect(f.events.some(e => e.kind === "permission_request")).toBe(false);
   } finally { await f.close(); }
+});
+
+test.each([false, true])("R8 Page trust after a suspended preparation: revoked=%s", async revoke => {
+  const f = await fixture(true);
+  let targets = [f.target];
+  bindControl({ heads: () => ({ revision: 1, targets: targets.map(ref => ({ request: { kind: "open" as const, ref }, admission: { revision: 1, at: "2026-11-08T05:00:00.000Z", via: "local" as const } })) }) });
+  let release = () => {};
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  try {
+    await f.bindPage();
+    const plan = await f.page("parameter-links.apply.plan");
+    expect(await f.native.journal.wait(plan.id)).toMatchObject({ state: "succeeded", caller: { kind: "page" } });
+    let held = false;
+    f.native.onRequest(async key => { if (key === "revit.detail.parameter-links") { held = true; await hold; } });
+    const apply = await f.page("parameter-links.apply");
+    await vi.waitFor(async () => expect(held, JSON.stringify(await f.native.journal.list(undefined, apply.id))).toBe(true));
+    if (revoke) targets = [];
+    release();
+    const receipt = await f.native.journal.wait(apply.id);
+    expect(receipt, JSON.stringify(receipt)).toMatchObject(revoke ? { state: "failed", notDispatched: true, refusal: { kind: "trust" } } : { state: "succeeded" });
+    expect(f.native.calls.filter(c => c.key === "revit.apply.parameter-links")).toHaveLength(revoke ? 0 : 1);
+  } finally { release(); bindControl({ heads: null }); await f.close(); }
 });
 
 test("E2 a repeated action id preserves exact intent and refuses a changed target without redispatch", async () => {
