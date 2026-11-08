@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
-import { address, catalogWorkSpecs, type Caller } from "@pe/agent-contracts";
+import { address, catalogWorkSpecs, tools, roomEditKey, type Caller, type WorkKey } from "@pe/agent-contracts";
 import { fixtureNative } from "./fixture-native.ts";
-import { nativeRecordings } from "./native-recordings.ts";
+import { nativeRecordings, nativeRecordingRequest } from "./native-recordings.ts";
 import { testConsents } from "./effect-test.ts";
 import { bindControl } from "../src/control.ts";
 import type { ConsentEvent } from "../src/run-consent.ts";
@@ -20,7 +20,7 @@ async function fixture(withPage = false) {
   const recordings = ["sdk-revit.detail.parameter-links", "sdk-revit.apply.parameter-links"];
   let native = await fixtureNative(join(dir, "native"), ...recordings);
   let socket = await native.connect();
-  const makeWorkspace = () => new RouteWorkspace({ registrations: [{ spec: catalogWorkSpecs["parameter-links"] }], store: fileRouteDocumentStore(join(dir, "work")) });
+  const makeWorkspace = () => new RouteWorkspace({ registrations: [{ spec: catalogWorkSpecs["parameter-links"] }, { spec: tools.rooms.work }], store: fileRouteDocumentStore(join(dir, "work")) });
   let workspace = makeWorkspace();
   const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "parameter-links" };
   const body = nativeRecordings("sdk-revit.detail.parameter-links").responses["revit.detail.parameter-links"] as any;
@@ -50,19 +50,25 @@ async function fixture(withPage = false) {
   };
   const apply = async (id = "apply", actor: Caller = caller) => {
     let done = false;
+    const from = events.length;
     const pending = submit(id, "parameter-links.apply", actor).finally(() => { done = true; });
-    await vi.waitFor(() => expect(done || events.some(e => e.kind === "permission_request")).toBe(true));
+    await vi.waitFor(() => expect(done || events.slice(from).some(e => e.kind === "permission_request")).toBe(true));
     if (!done) await approve();
     return pending;
   };
   return { get native() { return native; }, get workspace() { return workspace; }, get target() { return socket.target; }, key, definition, patch, admit, submit, approve, apply, events,
     send: (body: unknown, actor: Caller = caller) => post(body, actor),
+    async control(verb: string, id: string) {
+      const response = await post.request(new Request(`http://host/actions/${verb}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) }), caller);
+      expect(response.status, await response.clone().text()).toBeLessThan(400);
+      return response.json();
+    },
     async bindPage() {
       const response = await post.request(new Request("http://host/pe/pages/probe/binding", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "thread", thread: "safety-page" }) }));
       expect(response.status, await response.clone().text()).toBe(200);
     },
-    async page(command: string) {
-      const response = await post.request(new Request("http://host/pages/probe/act", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: command, input: { work: { key, revision: (await workspace.read(key, "parameter-links"))!.revision } } }) }));
+    async page(command: string, workKey: WorkKey = key) {
+      const response = await post.request(new Request("http://host/pages/probe/act", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: command, input: { work: { key: workKey, revision: (await workspace.read(workKey, workKey.route))!.revision } } }) }));
       expect(response.status, await response.clone().text()).toBeLessThan(400);
       return await response.json() as { id: string };
     },
@@ -76,7 +82,12 @@ async function fixture(withPage = false) {
       post = native.actions({ workspace });
       expect(await native.journal.wait("plan")).toMatchObject({ state: "succeeded" });
     },
-    async close() { runs.closeAll(); bindControl({ runs: undefined }); await native.close(); await rm(dir, { recursive: true, force: true }); },
+    async close() {
+      runs.closeAll();
+      // Completion can race cleanup's Stop; always close the owning transport scope afterward.
+      await Promise.allSettled((await native.journal.list()).filter(row => ["running", "waiting", "queued"].includes(row.state)).map(row => native.journal.cancel(row.id)));
+      bindControl({ runs: undefined }); await native.close(); await rm(dir, { recursive: true, force: true });
+    },
   };
 }
 
@@ -202,4 +213,74 @@ test("R5 a real native rehearsal receipt cannot substitute for the declared Plan
     expect(f.dispatched.filter(call => call.key === "ducts.heal.preview")).toHaveLength(1);
     expect(f.dispatched.filter(call => call.key === "ducts.heal")).toEqual([]);
   } finally { await f.close(); }
+});
+
+test("E3/E4 a lost delivered write stays unknown and blocks a fresh overlapping action", async () => {
+  const f = await fixture();
+  try {
+    expect(await f.submit("plan", "parameter-links.apply.plan")).toMatchObject({ state: "succeeded" });
+    f.native.loseNextReply("revit.apply.parameter-links");
+    const original = await f.apply();
+    expect(original, JSON.stringify(original)).toMatchObject({ state: "unknown", steps: expect.arrayContaining([expect.objectContaining({ key: "revit.apply.parameter-links", state: "unknown", dispatchedAt: expect.any(String) })]) });
+    const reconnected = await f.native.connect();
+    await f.native.deliverLostReply(reconnected);
+    expect(await f.native.journal.wait("apply")).toEqual(original);
+    expect(await f.submit("new-plan", "parameter-links.apply.plan")).toMatchObject({ state: "succeeded" });
+    await f.admit("overlap", "parameter-links.apply");
+    const next = (await f.native.journal.list()).find(row => row.id === "overlap");
+    expect(next).toMatchObject({ state: "failed", notDispatched: true });
+    expect(f.native.calls.filter(call => call.key === "revit.apply.parameter-links")).toHaveLength(1);
+    expect(await f.native.journal.wait("apply")).toEqual(original);
+  } finally { await f.close(); }
+});
+
+test("E7 recovery reads the original native UUID and resume never dispatches a second write", async () => {
+  const f = await fixture();
+  try {
+    expect(await f.submit("plan", "parameter-links.apply.plan")).toMatchObject({ state: "succeeded" });
+    f.native.loseNextReply("revit.apply.parameter-links");
+    const original = await f.apply();
+    expect(original).toMatchObject({ state: "unknown" });
+    f.native.makeLostReplyRecoverable();
+    const connection = await f.native.connect();
+    await f.native.deliverLostReply(connection);
+    await f.control("recover", original.id);
+    expect(await f.native.journal.wait(original.id)).toMatchObject({ steps: expect.arrayContaining([expect.objectContaining({ key: "revit.apply.parameter-links", state: "succeeded" })]) });
+    await f.control("resume", original.id);
+    expect(await f.native.journal.wait(original.id)).toMatchObject({ state: "succeeded" });
+    expect(f.native.calls.filter(c => c.key === "revit.apply.parameter-links")).toHaveLength(1);
+  } finally { await f.close(); }
+});
+
+test("E9 a queued Page command loses authority before its first effect", async () => {
+  const f = await fixture(true);
+  let targets = [f.target], release = () => {};
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  bindControl({ heads: () => ({ revision: 1, targets: targets.map(ref => ({ request: { kind: "open" as const, ref }, admission: { revision: 1, at: "2026-11-08T05:00:00.000Z", via: "local" as const } })) }) });
+  let stop = () => {};
+  try {
+    await f.bindPage();
+    f.native.select("fresh-takeoffs.initialize-carrier", "fresh-rooms.write");
+    const rooms = { ...f.key, route: "rooms" };
+    const request = nativeRecordingRequest("fresh-rooms.write");
+    expect(await f.workspace.publish(rooms, "rooms", request.regions.map((room: any) => ({ path: ["edits", roomEditKey(room.guid, "name")], value: { edit: { value: room.name } } })), 0)).toMatchObject({ ok: true });
+    const firstPlan = await f.page("parameter-links.apply.plan");
+    expect(await f.native.journal.wait(firstPlan.id)).toMatchObject({ state: "succeeded" });
+    let held = false;
+    f.native.onRequest(async key => { if (key === "revit.apply.parameter-links") { held = true; await hold; } });
+    const first = await f.page("parameter-links.apply");
+    await vi.waitFor(() => expect(held).toBe(true));
+    const secondPlan = await f.page("rooms.write.preview", rooms);
+    expect(await f.native.journal.wait(secondPlan.id)).toMatchObject({ state: "succeeded" });
+    const second = await f.page("rooms.write", rooms);
+    // The journal reports running while waitForTurn holds it before preparation/effects.
+    await vi.waitFor(async () => expect((await f.native.journal.list(undefined, second.id))[0]).toMatchObject({ state: "running", prepared: { state: "unprepared" }, steps: [] }));
+    stop = f.native.journal.subscribe({ kinds: ["action"] }, receipt => {
+      if (receipt.body.kind === "action" && receipt.body.value.id === first.id && receipt.body.value.state === "succeeded") targets = [];
+    });
+    release();
+    expect(await f.native.journal.wait(first.id)).toMatchObject({ state: "succeeded" });
+    expect(await f.native.journal.wait(second.id)).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "trust" } });
+    expect(f.native.calls.filter(call => call.key === "takeoffs.initialize-carrier" || call.key === "rooms.write")).toEqual([]);
+  } finally { stop(); release(); bindControl({ heads: null }); await f.close(); }
 });

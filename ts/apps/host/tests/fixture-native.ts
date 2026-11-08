@@ -1,4 +1,4 @@
-import { Context, Effect, Exit, Layer, Queue, Scope } from "effect";
+import { Context, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
 import type { BridgeStateSnapshot } from "@pe/host-contracts/contracts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
@@ -19,6 +19,7 @@ import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import type { Caller } from "@pe/agent-contracts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { nativeRecordings } from "./native-recordings.ts";
 
 const fetchRecorded = globalThis.fetch;
@@ -55,12 +56,29 @@ export async function fixtureNative(
   const journal = Context.get(context, HostReceipts).journal;
   let beforeReply: (key: string) => Promise<void> = async () => {};
   let emitDocumentChange: (() => Promise<void>) | undefined;
+  let loseReply: string | undefined;
+  let lostReply: { requestId: string; operation: string; openDocumentId: string | null; value: unknown } | undefined;
+  const recoveryReplies = new Map<string, NonNullable<typeof lostReply>>();
   const calls: { key: string; input: unknown; action: string | null | undefined }[] = [];
   const tokens = new Map<string, string>();
   const handlers: Promise<{ close(): Promise<void> }>[] = [];
   return {
     bridge, journal, calls, receipts: Context.get(context, HostReceipts),
     onRequest(listener: (key: string) => Promise<void>) { beforeReply = listener; },
+    loseNextReply(operation: string) { loseReply = operation; },
+    makeLostReplyRecoverable() {
+      if (!lostReply) throw Error("No lost recording reply");
+      recoveryReplies.set(lostReply.requestId, lostReply);
+    },
+    async deliverLostReply(socket: { incoming: Queue.Queue<string | readonly string[]> }) {
+      if (!lostReply) throw Error("No lost recording reply");
+      const reply = lostReply; lostReply = undefined;
+      await settle(Queue.offer(socket.incoming, JSON.stringify({ kind: "Response", response: {
+        requestId: reply.requestId, openDocumentId: reply.openDocumentId, ok: true, statusCode: 200,
+        payloadJson: JSON.stringify(reply.value),
+        metrics: { requestBytes: 0, responseBytes: 0, revitExecutionMs: 0, roundTripMs: 0, serializationMs: 0 },
+      } })));
+    },
     changeAfterPreparation(actionId: string, milliseconds: number) {
       let injected = false;
       // Observe a real durable preparation; inject only an incoming bridge event and inventory delay.
@@ -82,7 +100,20 @@ export async function fixtureNative(
       transport = makeTransport();
     },
     actions(deps: Parameters<typeof makeCallRoute>[2] = {}, captures?: Parameters<typeof makeCallRoute>[1], composition: Parameters<typeof makeCallRoute>[3] = {}, routes: Layer.Layer<never, any, any> = Layer.empty) {
-      const dependencies = { ...deps, sdk: deps.sdk ?? sdkSessions };
+      const readSdk = deps.sdk ?? sdkSessions;
+      const dependencies = { ...deps, sdk: async (args: readonly string[]) => {
+        const reply = args[0] === "op" && args[1] === "result" ? recoveryReplies.get(args[2]!) : undefined;
+        if (!reply) return readSdk(args);
+        const step = (await journal.list()).flatMap(row => row.steps).find(step => step.id === reply.requestId);
+        if (!step?.process) throw Error("No admitted native process for recovery");
+        // SDK envelope adaptation rebinds correlation only. The native DTO is the unchanged,
+        // validated real recording; production SDK decoders and receipt matching still decide.
+        const envelope = JSON.parse(readFileSync(join(import.meta.dirname, "sdk-envelopes/op-result.ok.json"), "utf8"));
+        envelope.result.requestId = reply.requestId;
+        Object.assign(envelope.result.receipt, { requestId: reply.requestId, key: reply.operation, pid: step.process.pid, processStartUtc: step.process.processStartUtc });
+        envelope.result.response = reply.value;
+        return JSON.stringify(envelope);
+      } };
       const web = serveRoutes(Layer.mergeAll(routes, makeCallRoute(journal, captures, dependencies, composition)).pipe(
         Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
         Layer.provideMerge(PictureCaptureStore.layer(join(directory, "pictures"))),
@@ -132,6 +163,20 @@ export async function fixtureNative(
             if (owners.length > 1) throw Error("Fixture cannot attribute this native read to one admitted action");
             const action = req.derivedCommand ?? owners[0] ?? `native:${req.operationKey}`;
             const value = transport.reply(action, req.operationKey, input);
+            if (loseReply === req.operationKey) {
+              loseReply = undefined;
+              lostReply = { requestId: req.requestId, operation: req.operationKey, openDocumentId: req.openDocumentId ?? null, value };
+              // Drop a validated recorded answer only after production persisted delivery evidence.
+              yield* Effect.promise(async () => {
+                const limit = Date.now() + 2_000;
+                while (!(await journal.list()).some(row => row.steps.some(step => step.id === req.requestId && step.dispatchedAt))) {
+                  if (Date.now() > limit) throw Error("Delivery was not durably recorded before transport loss");
+                  await new Promise<void>(resolve => setImmediate(resolve));
+                }
+              });
+              yield* Fiber.interrupt(socket.connection);
+              continue;
+            }
             response = { ok: true, statusCode: 200, payloadJson: JSON.stringify(value) };
           } catch (error) {
             response = { ok: false, statusCode: 409, errorMessage: String(error) };
@@ -146,9 +191,12 @@ export async function fixtureNative(
       return socket;
     },
     close: async () => {
-      for (const web of handlers) await (await web).close();
+      // A corrupt journal can reject startup; still retire contexts and close the owning scope.
+      const stopped = await Promise.allSettled(handlers.map(async web => (await web).close()));
       for (const token of tokens.values()) retireContext(token);
       await settle(Scope.close(scope, Exit.void));
+      const failed = stopped.find(result => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
     },
   };
 }
