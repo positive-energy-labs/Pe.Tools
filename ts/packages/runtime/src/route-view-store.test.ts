@@ -9,7 +9,7 @@ const view = (instance: string, thread = "t"): RouteView => ({
   thread,
   instance,
   surface: "chat",
-  page: { query: "" },
+  page: { focus: "" },
   context: {
     stage: "history",
     readingId: "read-1",
@@ -89,20 +89,20 @@ describe("mounted route view custody", () => {
     store.subscribe((value) => {
       intent = value;
     });
-    const result = store.set("t", "families", id1, first.revision, { query: "blank" });
-    const ack = (query: string) =>
+    const result = store.set("t", "families", id1, first.revision, { focus: "blank" });
+    const ack = (focus: string) =>
       store.ack({
         outcome: "rendered",
         instance: id1,
         commandId: intent!.commandId,
         revision: first.revision,
-        page: { query },
+        page: { focus },
         facts: first.facts,
       }).ok;
     expect(ack("wrong")).toBe(false);
-    store.publish({ ...view(id1), page: { query: "blank" } });
+    store.publish({ ...view(id1), page: { focus: "blank" } });
     expect(ack("blank")).toBe(true);
-    await expect(result).resolves.toMatchObject({ ok: true, page: { query: "blank" } });
+    await expect(result).resolves.toMatchObject({ ok: true, page: { focus: "blank" } });
     const next = store.select("t", "families", id1)!;
     expect("revision" in next && next.revision).toBeGreaterThan(first.revision);
   });
@@ -147,11 +147,11 @@ describe("mounted route view custody", () => {
       store.subscribe((intent) => {
         commandId = intent.commandId;
       });
-      const result = store.set("t", "families", id1, first.revision, { query: "filled" });
+      const result = store.set("t", "families", id1, first.revision, { focus: "filled" });
       store.publish({
         ...view(id1),
         context: { ...view(id1).context, readingId: "read-2" },
-        page: { query: "filled" },
+        page: { focus: "filled" },
       });
       expect(
         store.ack({
@@ -159,7 +159,7 @@ describe("mounted route view custody", () => {
           instance: id1,
           commandId,
           revision: first.revision,
-          page: { query: "filled" },
+          page: { focus: "filled" },
           facts: first.facts,
         }).ok,
       ).toBe(false);
@@ -181,8 +181,8 @@ describe("mounted route view custody", () => {
       store.subscribe((intent) => {
         commandId = intent.commandId;
       });
-      const result = store.set("old-thread", "families", id1, first.revision, { query: "blank" });
-      store.publish({ ...view(id1, "new-thread"), page: { query: "blank" } });
+      const result = store.set("old-thread", "families", id1, first.revision, { focus: "blank" });
+      store.publish({ ...view(id1, "new-thread"), page: { focus: "blank" } });
       expect(store.select("old-thread", "families", id1)).toBeNull();
       expect(
         store.ack({
@@ -190,7 +190,7 @@ describe("mounted route view custody", () => {
           instance: id1,
           commandId,
           revision: first.revision,
-          page: { query: "blank" },
+          page: { focus: "blank" },
           facts: first.facts,
         }).ok,
       ).toBe(false);
