@@ -134,7 +134,7 @@ export const ductsActions = {
   },
   "ducts.plan-losses": {
     native: ["ducts.apply.plan"],
-    says: "First stage the fan walk { unitId, portIndex } from route:reads.value (read fans.roster) in route:fans writeIntent, and cells naming exactly the cells requested (fan cells are route:fans Work, rule cells route:ducts Work). Then plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
+    says: "Pass the route:ducts Work handle { key, revision } as the primary work argument. Separately, stage the fan walk { unitId, portIndex } from route:reads.value (read fans.roster) in route:fans writeIntent; the plan reads sibling Fans Work at the same document, or readWorks.fans. Fan write cells are derived from that walk and staged edits. Stage writeIntent.cells in Ducts Work only to limit rule writes. Then plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
     needs: "project-document",
     effect: "query",
     input: z.strictObject({}),

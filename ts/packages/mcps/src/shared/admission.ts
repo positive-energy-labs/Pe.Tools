@@ -122,6 +122,8 @@ export async function runCapability(
 ): Promise<unknown> {
   if (Object.hasOwn(actionControls, key))
     return controlAction(key as ActionControlKey, input, context.hostBaseUrl);
+  // Decode the exposed command contract before recovery, prerequisite reads or admission.
+  if (Object.hasOwn(commands, key)) input = commands[key as SemanticActionKey].input.parse(input);
   if (context.actionId && (!intent || intent.door === "command")) {
     const target =
       context.bridgeSessionId && context.openDocumentId
@@ -184,8 +186,6 @@ export async function runCapability(
   // same key (or readWorks.fans), or writeIntent.groups in ducts Work.
   if (key === "ducts.plan-losses") {
     const handle = workHandleSchema.parse(input.work);
-    if (handle.key.route !== "ducts")
-      throw Error("Preview needs the route:ducts Work handle; the fan walk is read from route:fans Work at the same document. No preview was submitted.");
     const fansHandle = z.object({ fans: workHandleSchema.optional() }).optional().parse(input.readWorks)?.fans;
     const read = async (key: WorkHandle["key"]) => {
       const response = await createPeClient(context.hostBaseUrl, fetch).response("work.get", {
