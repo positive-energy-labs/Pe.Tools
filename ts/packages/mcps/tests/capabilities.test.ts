@@ -960,13 +960,13 @@ test("route:ducts.set-view with no mounted view opens only through an explicit c
   expect(opens).toMatchObject([{ thread: "t1" }]);
   expect(opens[0]).not.toHaveProperty("link");
   expect(reads).toBeGreaterThanOrEqual(2);
-  // The open is the set: the mounted view's own names resolve "sa 19", and its lease revision is used.
+  // The typed view owns decoding; MCP preserves caller casing and uses the acquired lease revision.
   expect(sets).toMatchObject([
     {
       thread: "t1",
       instance: "6f1c2a9e-4b7d-4c3e-9a1f-2d8e5b7c0a11",
       revision: 3,
-      patch: { system: "SA 19" },
+      patch: { system: "sa 19" },
     },
   ]);
   expect(result).toMatchObject({ ok: true });
