@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { surfaceReadiness } from "../route/readiness.test.fixture";
 import { Context, Effect, Layer, Queue, Option } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -147,12 +148,13 @@ test("Plan keeps capture and review valid across watched publications and batche
  const sample=()=>{const {gate,options}=trace.gates.at(-1);const state=gate.read();const mount=trace.mounts.at(-1);return {pageEpoch:state.pageEpoch,pageRevision:state.pageRevision,workRevision:state.work?.revision??null,dependencies:options.dependencies(),workSignature:canonicalRouteInput(Object.keys(mount.spec.edits.owners).map(id=>{const o=mount.owner(id);return[id,o.ready,o.handle];}))};};
  try{
    render(<RouterProvider router={router}/>);
-   await vi.waitFor(()=>expect(trace.mounts.at(-1)?.startAction()).toBeTruthy(),{timeout:20000});
    await vi.waitFor(()=>expect(trace.mounts.at(-1)?.owner()?.scope.key.binding).toBe("address"),{timeout:20000});
    const mount=trace.mounts.at(-1);
+   await mount.whenReady();
+   expect(mount.startAction()).toBeTruthy();
    for(const route of Object.keys(fans.spec.edits!.owners)){
      const owner=mount.owner(route);
-     await vi.waitFor(()=>expect(owner.absent).toBe(true),{timeout:20000});
+     expect(owner.absent).toBe(true);
      expect(owner.handle).toBeNull();
      const id=crypto.randomUUID();
      const started=await forward("/actions",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
@@ -161,26 +163,20 @@ test("Plan keeps capture and review valid across watched publications and batche
      expect([200,202]).toContain(started.status);
      const settled=await forward(`/actions?id=${id}&wait=25000`);
      expect((await settled.json())[0]).toMatchObject({id,key:"work.start",state:"succeeded"});
+     // External HTTP completion does not acknowledge the mount's Work feed; known absence is already settled.
      await vi.waitFor(()=>expect(mount.owner(route)?.ready).toBe(true),{timeout:20000});
    }
    await screen.findByRole("button",{name:"plan Write to Revit"});
-   await vi.waitFor(()=>expect(trace.mounts.at(-1)?.writeRefusal()).toBeNull(),{timeout:20000});
+   await mount.whenWritable();
    fireEvent.click(await screen.findByRole("button",{name:"None"},{timeout:20000}));
    fireEvent.click(await screen.findByRole("option",{name:/MUAS-1.*0 staged/}));
-   await vi.waitFor(()=>{expect(trace.mounts.at(-1)?.owner()?.handle?.revision).toBe(1);expect(trace.mounts.at(-1)?.writeRefusal()).toBeNull();},{timeout:20000});
-   await vi.waitFor(()=>{
-     const settled=mount.journal().moves.findLast((move:any)=>move.label==="Choose write scope");
-     expect(settled).toBeDefined();
-     expect(mount.owner()?.handle?.revision).toBe(settled.revision);
-     expect(mount.value().current).toBe(true);
-     expect(mount.writeRefusal()).toBeNull();
-   },{timeout:20000});
+   expect((await surfaceReadiness()).getAttribute("data-readiness")).toBe("ready");
    await act(async()=>{
      const failure=await mount.draw("sheet-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{"14577391":{cfm:925}}},{label:"Stage MUAS-1 airflow"}));
      if(failure) throw Error(failure.message);
    });
    fireEvent.click(await screen.findByRole("button",{name:"Refresh Fans"}));
-   await vi.waitFor(()=>expect(trace.mounts.at(-1)?.writeRefusal()).toBeNull(),{timeout:20000});
+   await mount.whenWritable();
    for(mode of ["recording","batched"] as const){
      if(mode==="batched"){batchReleased=false;receiptBatch.length=0;heldReceipts.length=0;readyAfterBatch.length=0;}
      before=sample();

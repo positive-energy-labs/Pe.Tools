@@ -49,6 +49,10 @@ import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";
 
 
 
+export type RouteReadiness =
+  | { kind: "ready" }
+  | { kind: "pending" | "blocked"; reason: string };
+
 type Value = DrawContext<any, any, any, any>["value"];
 const unavailable = (reason: string, value?: any, publication: Value["publication"] = null): Extract<Value,{current:false}> =>
   ({ current: false, status: "unavailable", reason, publication, ...(value === undefined ? {} : { value }) });
@@ -67,7 +71,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const registry = input.fixture === null && !input.history ? applicationWorkRegistry : createApplicationWorkRegistry();
   const listeners = new Set<() => void>();
   let revision = 0, disposed = false, released = false;
-  const notify = () => { if (!disposed) { revision++; listeners.forEach(f => f()); } };
+  const publish = () => { revision++; listeners.forEach(f => f()); };
+  const notify = () => { if (!disposed) publish(); };
   const requireCurrent = () => {
     if (disposed || !input.custody.current()) throw Error("Place is not writable");
   };
@@ -258,6 +263,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     gate.movePage(page, { kind: "human", source: "query", history: "replace" }); syncWork(); syncReads(); notify();
   });
   cleanups.push(stopAddress);
+  const valueAfterWork = () => [...owners.values()].some(owner => owner.ready && owner.config.value && spec.core &&
+    canonicalRouteInput(owner.doc) !== canonicalRouteInput(reads.get(spec.core)?.snapshot.value?.[owner.config.value!]))
+    ? "Refreshing Value after Work changed" : null;
   const basisRefusal = () => {
     if (input.readOnly || input.history) return "needs live Revit";
     if(!edits) return "No Work declared";
@@ -266,8 +274,46 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (owner) return owner.problem ?? "Reading Work...";
     const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
     if (spec.core && !core?.current) return core?.reason ?? "Reading Value...";
-    return [...owners.values()].some(o=>o.config.value && spec.core && canonicalRouteInput(o.doc)!==canonicalRouteInput(core?.value?.[o.config.value!])) ? "Refreshing Value after Work changed" : null;
+    return valueAfterWork();
   };
+  const writeRefusal = () => input.fixture !== null ? "Fixture has no native writes" : basisRefusal();
+  // Settlement includes every demanded reading, not only the core write basis.
+  const readiness = (): RouteReadiness => {
+    if (disposed || released || !input.custody.current()) return { kind: "blocked", reason: "Place is inactive or retired" };
+    for (const owner of owners.values()) {
+      // Known absence is settled: Start remains available, while edit admission still refuses.
+      if (owner.absent) continue;
+      const journal = owner.lease.entry.journal.read();
+      if (journal.busy || journal.intents.some(intent => intent.status === "pending") ||
+          owner.ready && journal.revision !== owner.handle?.revision)
+        return { kind: "pending", reason: "Acknowledging Work..." };
+      if (!owner.ready) return { kind: owner.failure || owner.problem && owner.problem !== "Reading Work..." ? "blocked" : "pending", reason: owner.problem ?? "Reading Work..." };
+    }
+    for (const read of allReads) {
+      if (read.demand === "explicit" && !demanded.has(read)) continue;
+      const value = reads.get(read)?.snapshot;
+      if (!value?.current) return { kind: !value || value.status === "pending" ? "pending" : "blocked", reason: value?.reason ?? "Reading..." };
+    }
+    // Recorded and fixture views can settle without granting native write authority.
+    const reason = valueAfterWork();
+    if (reason) return { kind: "pending", reason };
+    return { kind: "ready" };
+  };
+  const whenSettled = (writable: boolean) => new Promise<void>((resolve, reject) => {
+    let stop = () => {};
+    const inspect = () => {
+      const state = readiness();
+      if (state.kind === "pending") return;
+      stop();
+      const reason = state.kind === "blocked" ? state.reason : writable ? writeRefusal() : null;
+      if (reason) reject(Error(reason));
+      else resolve();
+    };
+    // Waiting observes custody; it must not reacquire a released Place.
+    listeners.add(inspect);
+    stop = () => { listeners.delete(inspect); };
+    inspect();
+  });
   const basis = () => {
     if (basisRefusal()) return null;
     if(renderedBasis && gate.current(renderedBasis)) return renderedBasis;
@@ -414,7 +460,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   syncReads();
   const mounted = {
-    spec, data: module.data, subjectState, move,
+    spec, data: module.data, subjectState, move, readiness,
+    whenReady: () => whenSettled(false),
+    whenWritable: () => whenSettled(true),
     absentOwners:()=>[...owners].filter(([id,owner])=>id!==own&&owner.absent).map(([route])=>route),
     startAction():import("../route/typed-route").ActionHandle|null {
       if([...owners.values()].some(record=>!record.ready&&!record.absent)) return null;
@@ -483,7 +531,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     subscribe(listener: () => void) { released = false; listeners.add(listener); syncReads(); return () => { listeners.delete(listener); }; },
     available: () => !disposed && input.custody.current(), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
     commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions" : "kind" in spec.commands[id]! ? null : basisRefusal(),
-    problem: () => edits?basisRefusal():null, writeRefusal: () => input.fixture !== null ? "Fixture has no native writes" : basisRefusal(),
+    problem: () => edits?basisRefusal():null, writeRefusal,
     refresh: (read?:import("../route/host-read").HostRead) => {
       requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true);
     }, run, result:(id:string)=>results.get(id),
@@ -582,8 +630,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     // Retaining hidden read connections was a Plan-identity workaround; content fingerprints
     // now survive reconnect. Keep Work journals/receipts connected so pending edits settle.
     // Read release preserves write authority; disposal and Place custody fence writes.
-    release() { released = true; for (const r of reads.values()) { r.args=""; r.stop(); } },
-    dispose() { if (disposed) return; disposed=true; cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },
+    release() { if (disposed || released) return; released = true; notify(); for (const r of reads.values()) { r.args=""; r.stop(); } },
+    dispose() { if (disposed) return; disposed=true; publish(); cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },
   };
   const stopSubject=observeSubject(spec.key,{current:()=>!disposed&&!released&&input.custody.current(),read:subjectState,subscribe:mounted.subscribe});
   cleanups.push(stopSubject);

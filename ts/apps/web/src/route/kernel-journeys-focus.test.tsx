@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { surfaceReadiness } from "./readiness.test.fixture";
 import { useState, useSyncExternalStore } from "react";
 import { journey as takeoffJourney, Drawing as TakeoffDrawing } from "../takeoff/adoption.test.fixture";
 import { adoptionData } from "@pe/agent-contracts/takeoff-read";
@@ -13,7 +14,7 @@ import { TypedChrome, TypedShell } from "../shell/typed-shell";
 import * as mounts from "../shell/typed-mount";
 import { familiesRouteState, address, workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
 import { ReviewSurface } from "../shell/review-surface";
-import { RouteVisibility } from "./activity";
+import { RouteActivity, RouteVisibility } from "./activity";
 import { setup as scheduleHost, cellsApplied } from "../../../host/tests/schedule-test-fixture";
 import { module as schedules } from "../schedules/route";
 import { namesOf } from "./typed-route";
@@ -662,6 +663,60 @@ import { FAMILY_MODEL_SCHEMA } from "../family/page";
 import { leaks } from "../shell/visible-text";
 
 
+test("JZ readiness waiters reject when a held Family Place is hidden or retired", async () => {
+  const create = mounts.mountTypedRoute, owners: mounts.TypedMount[] = [];
+  let opens = 0;
+  const held: UseSource = { kind: "use", open() { opens++; return () => {}; } }; // Upstream publication stays pending.
+  vi.spyOn(mounts, "mountTypedRoute").mockImplementation((module, input, stamp) => {
+    const mount = create(module, input, stamp, {
+      work: createFixtureWorkDoor(familyDraftRouteState, familyDraftRouteState.schema.parse({})),
+      sources: { "family.workspace": held },
+    });
+    owners.push(mount);
+    return mount;
+  });
+  const retained = new Set<{ dispose(): void }>();
+  const scope = { pathname: "/family", search: {}, current: () => true,
+    retain: (owner: { dispose(): void }) => { retained.add(owner); },
+    retire: (owner: { dispose(): void }) => { retained.delete(owner); owner.dispose(); } };
+  const address = () => ({ read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} });
+  const first = address(), next = address();
+  const stamp = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
+  function Journey() {
+    const [visible, show] = useState(true), [port, bind] = useState(first);
+    return <><button onClick={() => show(false)}>Hide Family</button>
+      <button onClick={() => { bind(next); show(true); }}>Rebind Family</button>
+      <button onClick={() => { for (const owner of [...retained]) scope.retire(owner); bind(first); }}>Retire Family</button>
+      <RouteActivity.Provider value={scope}><RouteVisibility.Provider value={visible}>
+        <div hidden={!visible}><TypedShell module={family} fingerprint={stamp} address={port} /></div>
+      </RouteVisibility.Provider></RouteActivity.Provider></>;
+  }
+  const root = createRootRoute({ component: Journey });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/family"] }) });
+  const view = render(<RouterProvider router={router} />);
+  const outcome = (waiter: Promise<void>) => waiter.then(() => "unexpected ready", error => (error as Error).message);
+  const capture = (mount: mounts.TypedMount) => [outcome(mount.whenReady()), outcome(mount.whenWritable())];
+  try {
+    expect((await surfaceReadiness("pending")).getAttribute("data-readiness")).toBe("pending");
+    const hidden = owners.at(-1)!;
+    const hiding = capture(hidden);
+    fireEvent.click(screen.getByRole("button", { name: "Hide Family" }));
+    expect(hidden.readiness()).toMatchObject({ kind: "blocked", reason: "Place is inactive or retired" });
+    expect(await Promise.all(hiding)).toEqual(["Place is inactive or retired", "Place is inactive or retired"]);
+    const beforeLateWaiters = opens;
+    expect(await Promise.all(capture(hidden)), "Waiting must not reacquire a hidden Place").toEqual(["Place is inactive or retired", "Place is inactive or retired"]);
+    expect.soft(opens, "Late waiters do not open new reading connections").toBe(beforeLateWaiters);
+    fireEvent.click(screen.getByRole("button", { name: "Rebind Family" }));
+    expect((await surfaceReadiness("pending")).getAttribute("data-readiness")).toBe("pending");
+    const retired = owners.at(-1)!;
+    expect(retired).not.toBe(hidden);
+    const retiring = capture(retired);
+    fireEvent.click(screen.getByRole("button", { name: "Retire Family" }));
+    expect(await Promise.all(retiring)).toEqual(["Place is inactive or retired", "Place is inactive or retired"]);
+    expect(await Promise.all(capture(retired)), "Disposed mounts also reject new waiters").toEqual(["Place is inactive or retired", "Place is inactive or retired"]);
+  } finally { view.unmount(); for (const owner of retained) owner.dispose(); }
+});
+
 test("D G07 Family renders named picker, member roster, Work and stage words without internal identities", async () => {
   const pod = "f88cf37a-6fda-4ee6-9f20-5b39b47d29ba", member = "Box.family.json";
   const reading = JSON.stringify({ family: { name: "Box" },
@@ -684,7 +739,9 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
   } }) };
   const pending = new Set<Promise<unknown>>(), roster = Promise.withResolvers<void>();
   let memberReads = 0;
+  let failReading: (error: Error) => void;
   const source: UseSource = { kind: "use", open(ctx, deliver) {
+    failReading = error => deliver({ kind: "failure", error });
     const task = (async () => {
       await ready.promise; await roster.promise;
       const value = await evaluate(familyReads.workspace, { ...(ctx.args as { member: { pod: string; path: string } | null }), target: ctx.target }, {
@@ -730,12 +787,18 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
     expect.soft(words.join(" "), where).not.toContain(pod);
   };
   try {
-    await screen.findByText("Family library");
+    const readiness = await surfaceReadiness("pending");
+    expect(readiness.getAttribute("data-readiness")).toBe("pending");
+    expect(screen.getByRole("alert").textContent).toContain("Reading");
+    expect(readiness.textContent, "The readiness marker must not repeat the problem alert").toBe("");
+    expect(screen.queryByText(member)).toBeNull(); // No member can be chosen before its roster arrives.
     await ready.promise;
     expect(mount.value().current).toBe(false);
     cleanWords("C746: before the roster publication, no raw identity fallback");
     roster.resolve();
-    await waitFor(() => expect(mount.value().current, JSON.stringify(mount.value())).toBe(true));
+    expect((await surfaceReadiness()).getAttribute("data-readiness")).toBe("ready");
+    expect(readiness.textContent).toBe("");
+    expect(screen.queryByText(/^Ready$/)).toBeNull();
     expect(mount.owner()?.doc).toEqual(original);
     expect.soft(await screen.findByText(member)).toBeTruthy();
     expect.soft(screen.queryByText("Mechanical library")).toBeTruthy();
@@ -761,6 +824,12 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
     expect(mount.page.read()).toMatchObject({ pod: "new-mechanical", path: "" });
     expect((screen.getByRole("textbox", { name: "Destination pod" }) as HTMLInputElement).value).toBe("new-mechanical");
     expect(mount.owner()?.doc).toEqual(original);
+    expect((await surfaceReadiness()).getAttribute("data-readiness")).toBe("ready");
+    await act(async () => failReading!(Error("Family roster unavailable")));
+    const blocked = await surfaceReadiness();
+    expect(blocked.getAttribute("data-readiness")).toBe("blocked");
+    expect(blocked.textContent, "Blocked readiness must not duplicate the problem alert").toBe("");
+    expect(screen.getAllByRole("alert").filter(alert => alert.textContent === mount.problem())).toHaveLength(1);
   } finally { roster.resolve(); view.unmount(); mount.dispose(); await Promise.all(pending); }
 }, 30_000);
 
