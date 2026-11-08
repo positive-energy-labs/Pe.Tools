@@ -49,6 +49,10 @@ import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";
 
 
 
+export type RouteReadiness =
+  | { kind: "ready" }
+  | { kind: "pending" | "blocked"; reason: string };
+
 type Value = DrawContext<any, any, any, any>["value"];
 const unavailable = (reason: string, value?: any, publication: Value["publication"] = null): Extract<Value,{current:false}> =>
   ({ current: false, status: "unavailable", reason, publication, ...(value === undefined ? {} : { value }) });
@@ -178,7 +182,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   }
   };
   syncWork();
-  const allReads = new Set([spec.core,...Object.values(spec.reads ?? {}),...Object.values(spec.panes).map(p=>p.read)].filter((read):read is import("../route/host-read").HostRead=>!!read));
+  const allReads = new Set([spec.core,spec.subject?.read,...Object.values(spec.reads ?? {}),...Object.values(spec.panes).map(p=>p.read)].filter((read):read is import("../route/host-read").HostRead=>!!read));
   const demanded = new Set<import("../route/host-read").HostRead>();
   const syncReads = (force = false) => {
     if (disposed || released) return;
@@ -255,6 +259,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     gate.movePage(page, { kind: "human", source: "query", history: "replace" }); syncWork(); syncReads(); notify();
   });
   cleanups.push(stopAddress);
+  const valueAfterWork = () => [...owners.values()].some(owner => owner.ready && owner.config.value && spec.core &&
+    canonicalRouteInput(owner.doc) !== canonicalRouteInput(reads.get(spec.core)?.snapshot.value?.[owner.config.value!]))
+    ? "Refreshing Value after Work changed" : null;
   const basisRefusal = () => {
     if (input.readOnly || input.history) return "needs live Revit";
     if(!edits) return "No Work declared";
@@ -263,7 +270,29 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (owner) return owner.problem ?? "Reading Work...";
     const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
     if (spec.core && !core?.current) return core?.reason ?? "Reading Value...";
-    return [...owners.values()].some(o=>o.config.value && spec.core && canonicalRouteInput(o.doc)!==canonicalRouteInput(core?.value?.[o.config.value!])) ? "Refreshing Value after Work changed" : null;
+    return valueAfterWork();
+  };
+  // Settlement includes every demanded reading, not only the core write basis.
+  const readiness = (): RouteReadiness => {
+    if (disposed || released || !input.custody.current()) return { kind: "blocked", reason: "Place is inactive or retired" };
+    for (const owner of owners.values()) {
+      // Known absence is settled: Start remains available, while edit admission still refuses.
+      if (owner.absent) continue;
+      const journal = owner.lease.entry.journal.read();
+      if (journal.busy || journal.intents.some(intent => intent.status === "pending") ||
+          owner.ready && journal.revision !== owner.handle?.revision)
+        return { kind: "pending", reason: "Acknowledging Work..." };
+      if (!owner.ready) return { kind: owner.failure || owner.problem && owner.problem !== "Reading Work..." ? "blocked" : "pending", reason: owner.problem ?? "Reading Work..." };
+    }
+    for (const read of allReads) {
+      if (read.demand === "explicit" && !demanded.has(read)) continue;
+      const value = reads.get(read)?.snapshot;
+      if (!value?.current) return { kind: !value || value.status === "pending" ? "pending" : "blocked", reason: value?.reason ?? "Reading..." };
+    }
+    // Recorded and fixture views can settle without granting native write authority.
+    const reason = valueAfterWork();
+    if (reason) return { kind: "pending", reason };
+    return { kind: "ready" };
   };
   const basis = () => {
     if (basisRefusal()) return null;
@@ -408,7 +437,21 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   syncReads();
   const mounted = {
-    spec, data: module.data, subjectState, move,
+    spec, data: module.data, subjectState, move, readiness,
+    whenReady() {
+      return new Promise<void>((resolve, reject) => {
+        let stop = () => {};
+        const inspect = () => {
+          const state = readiness();
+          if (state.kind === "pending") return;
+          stop();
+          if (state.kind === "ready") resolve();
+          else reject(Error(state.reason));
+        };
+        stop = mounted.subscribe(inspect);
+        inspect();
+      });
+    },
     absentOwners:()=>[...owners].filter(([id,owner])=>id!==own&&owner.absent).map(([route])=>route),
     startAction():import("../route/typed-route").ActionHandle|null {
       if([...owners.values()].some(record=>!record.ready&&!record.absent)) return null;

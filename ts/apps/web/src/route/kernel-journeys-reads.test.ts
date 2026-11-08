@@ -55,7 +55,6 @@ import { fixture, ref, path, gate, snapshot, roster } from "../../../host/tests/
 import { module as fans } from "../fans/route";
 import { localId } from "./typed-route";
 import { mountTypedRoute } from "../shell/typed-mount";
-import type { HostRead } from "./host-read";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
 import { Effect } from "effect";
@@ -100,23 +99,6 @@ import { NodeServices, NodeHttpClient } from "../../../host/tests/family-attach-
 
 const trace = z.array(z.object({ name: z.string(), args: z.unknown() }));
 
-async function settledValues(mount: ReturnType<typeof mountTypedRoute>, reads: readonly HostRead[], move = () => {}) {
-  const completion = Promise.withResolvers<void>();
-  let armed = false;
-  const inspect = () => {
-    if (!armed) return;
-    const values = reads.map(read => mount.value(read));
-    const refusal = values.find(value => !value.current && value.status === "unavailable");
-    if (refusal && !refusal.current) completion.reject(Error(refusal.reason));
-    else if (values.every(value => value.current)) completion.resolve();
-  };
-  const stop = mount.subscribe(inspect);
-  try {
-    // File validation can outlast a polling budget. Observe delivery, including synchronous completion.
-    move(); armed = true; inspect();
-    await completion.promise;
-  } finally { stop(); }
-}
 
 test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work stales review", async () => {
   let nativeGeneration = "incarnation:24";
@@ -158,7 +140,6 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
   vi.stubGlobal("EventSource", Stream);
   try {
     await j.ready();
-    await vi.waitFor(() => expect(j.mount.value(fans.spec.reads!.roster).current).toBe(true), { timeout: 20_000 });
     const source = publicationSource({ read: (ctx, publication, release) => j.host.send(publication.generation,
       (ctx.args as { fan: string[] }).fan, undefined, publication.subscription, release) });
     const row = j.mount.value(fans.spec.reads!.roster).value.rows.find((row: { mark: string }) => row.mark === "MUAS-1")!;
@@ -226,11 +207,11 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     })]));
     const ductMount = mountTypedRoute(ducts, { ...j.input, address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} } },
       workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(e => e.routeKey === "ducts")!.closure.fingerprint}`), { work, sources });
-    const ductReads = [ducts.spec.core!, ducts.spec.reads!.roster];
     try {
-      await settledValues(ductMount, ductReads);
+      await ductMount.whenReady();
       const system = ductMount.value(ducts.spec.reads!.roster).value.systems[0]!.name;
-      await settledValues(ductMount, ductReads, () => { ductMount.page.subject({ kind: "ids", ids: [localId("ducts-system", system)] }); });
+      ductMount.page.subject({ kind: "ids", ids: [localId("ducts-system", system)] });
+      await ductMount.whenReady();
       expect(ductMount.value().value.network.systemReads.completed).toEqual([systemRoster.systems[0]!.id]);
     } finally { ductMount.dispose(); unregister(); }
     // The Driver recording has identical native content at admission generations :24 and :31.
@@ -260,7 +241,6 @@ test("JM H02/B05 select a Fan whose native walk is malformed and inspect the ref
   const j = await journey({ snapshot: malformed });
   try {
     await j.ready();
-    await settledValues(j.mount, [fans.spec.reads!.roster]);
     const before = j.mount.value().value;
     const roster = j.mount.value(fans.spec.reads!.roster).value.rows;
     const row = roster.find((row: { mark: string }) => row.mark === "MUAS-1")!;
@@ -275,6 +255,8 @@ test("JM H02/B05 select a Fan whose native walk is malformed and inspect the ref
 // HTTP publications and file Work are real; only native inputs and the address port are recorded.
 async function journey(recorded: Parameters<typeof fixture>[1] = {}) {
   const host = await fixture(true, recorded);
+  // The HTTP fixture acquires its workspace lazily; construct feeds only after acquisition.
+  await host.send(0, []);
   let generation = 0;
   let hold: ReturnType<typeof gate> | undefined;
   const pending = new Set<Promise<void>>();
@@ -318,14 +300,13 @@ async function journey(recorded: Parameters<typeof fixture>[1] = {}) {
     custody: { current: () => true },
     memory: () => ({}),
   };
-  const fingerprint = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
+  const fingerprint = workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(entry => entry.routeKey === "fans")!.closure.fingerprint}`);
   const mount = mountTypedRoute(fans, input, fingerprint, {
     work,
     sources: { "fans.sheet": source },
   });
   const stop = mount.subscribe(() => {});
-  const ready = () =>
-    vi.waitFor(() => expect(mount.value()).toMatchObject({ current: true }), { timeout: 20_000 });
+  const ready = () => mount.whenReady();
   return {
     host,
     mount,

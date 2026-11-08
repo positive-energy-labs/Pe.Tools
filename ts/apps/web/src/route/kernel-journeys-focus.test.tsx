@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { surfaceReadiness } from "./readiness.test.fixture";
 import { useState, useSyncExternalStore } from "react";
 import { journey as takeoffJourney, Drawing as TakeoffDrawing } from "../takeoff/adoption.test.fixture";
 import { adoptionData } from "@pe/agent-contracts/takeoff-read";
@@ -724,12 +725,16 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
     expect.soft(words.join(" "), where).not.toContain(pod);
   };
   try {
-    await screen.findByText("Family library");
+    const readiness = await surfaceReadiness("pending");
+    expect(readiness.getAttribute("data-readiness")).toBe("pending");
+    expect(readiness.textContent).toContain("Reading");
+    expect(screen.queryByText(member)).toBeNull(); // No member can be chosen before its roster arrives.
     await ready.promise;
     expect(mount.value().current).toBe(false);
     cleanWords("C746: before the roster publication, no raw identity fallback");
     roster.resolve();
-    await waitFor(() => expect(mount.value().current, JSON.stringify(mount.value())).toBe(true));
+    await surfaceReadiness("ready");
+    expect(readiness.textContent).toBe("Ready");
     expect(mount.owner()?.doc).toEqual(original);
     expect.soft(await screen.findByText(member)).toBeTruthy();
     expect.soft(screen.queryByText("Mechanical library")).toBeTruthy();
