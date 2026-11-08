@@ -17,6 +17,7 @@ import { OwnerReads, type OwnerValue } from "@pe/runtime";
 import { z } from "zod";
 import {
   canonicalRouteInput,
+  sameCaller,
   actionReceiptSchema,
   actionStepSchema,
   actionAdmissionSchema,
@@ -156,13 +157,6 @@ const selectedEdits = (document: unknown, paths: readonly WorkPath[]) =>
     .map(({ path, cell }) => ({ path, edit: cell.edit }))
     .sort((a, b) => canonicalRouteInput(a.path).localeCompare(canonicalRouteInput(b.path)));
 
-const sameCaller = (a: Caller, b: Caller) =>
-  a.kind === b.kind &&
-  (a.kind === "pea" && b.kind === "pea"
-    ? a.thread === b.thread
-    : a.kind === "human" && b.kind === "human"
-      ? a.via === b.via && a.login === b.login && a.device === b.device
-      : canonicalRouteInput(a) === canonicalRouteInput(b));
 const pathInside = (root: string, path: string) => {
   const relative = win32.relative(win32.resolve(root), win32.resolve(path));
   return (
