@@ -20,6 +20,9 @@ import { peDo, peRead } from "../src/pea/capability-tools.ts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 import { createServer } from "node:http";
 import { once } from "node:events";
+import bindGraph from "../src/pea/generated/bind-graph.json" with { type: "json" };
+import opsGraph from "../src/pea/generated/ops-graph.json" with { type: "json" };
+import { RouteGraphJson } from "../../agent-contracts/src/route-kernel-data.ts";
 import { createHash } from "node:crypto";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
@@ -1012,6 +1015,22 @@ test("route:ducts.set-view with no mounted view opens only through an explicit c
   }
   expect(opens).toHaveLength(1);
   expect(sets).toEqual([]);
+});
+
+test("person-only admin routes expose no Page fields in builtin or admitted capability discovery", () => {
+  for (const admitted of [[], [bindGraph, opsGraph]]) {
+    const rows = buildCapabilities({
+      ops: [], routes: [], packages: [], skills: [],
+      admittedRoutes: () => admitted.map(graph => {
+        const data = RouteGraphJson.parse(graph);
+        return { key: data.key, title: data.name, address: data.address, fields: data.fields };
+      }),
+    });
+    for (const key of ["bind", "ops"]) {
+      expect(rows.filter(row => row.key.startsWith(`route:${key}.`))).toEqual([]);
+    }
+    expect(rows.some(row => row.key === "route:ducts.set-view")).toBe(true);
+  }
 });
 
 test("an admitted route's view rows project keys from its agent policy, never the legacy codec", () => {

@@ -35,7 +35,7 @@
       "initial": "",
       "url": "push",
       "share": true,
-      "agent": "set"
+      "agent": "none"
     },
     "actionId": {
       "role": "query",
@@ -44,7 +44,7 @@
       "initial": "",
       "url": "push",
       "share": true,
-      "agent": "set"
+      "agent": "none"
     },
     "selected": {
       "role": "selection",

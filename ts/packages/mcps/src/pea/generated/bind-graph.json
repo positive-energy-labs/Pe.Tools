@@ -33,7 +33,7 @@
       "initial": "",
       "url": "push",
       "share": true,
-      "agent": "set"
+      "agent": "none"
     },
     "view": {
       "role": "pose",
@@ -42,7 +42,7 @@
       "initial": false,
       "url": "replace",
       "share": true,
-      "agent": "set"
+      "agent": "none"
     },
     "query": {
       "role": "query",
@@ -51,7 +51,7 @@
       "initial": {},
       "url": "replace",
       "share": true,
-      "agent": "set"
+      "agent": "none"
     },
     "fragment": {
       "role": "pose",
@@ -60,7 +60,7 @@
       "initial": "",
       "url": "replace",
       "share": true,
-      "agent": "set"
+      "agent": "none"
     },
     "selected": {
       "role": "selection",

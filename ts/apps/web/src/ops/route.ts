@@ -20,6 +20,8 @@ export type { Context as OpsContext } from "./context.generated";
 export const module = route({
   key: "ops",
   name: "Ops",
+  // This admin console is person-only; Pea runs operations through pe_do.
+  agent: false,
   needs: "host",
   optionalTarget: "session",
   host: "../../../host/src/reads/ops.ts",
