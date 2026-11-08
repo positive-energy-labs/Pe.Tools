@@ -1,9 +1,5 @@
-import ts from "typescript";
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { routeDirectory } from "../../../packages/agent-contracts/src/generated/route-directory.ts";
 import { expect, it } from "vite-plus/test";
-import { additions, boundaryCensus, legacyInventory, root, syntax, walk } from "./unification-2-census.ts";
+import { additions, boundaryCensus, legacyInventory } from "./unification-2-census.ts";
 
 it("scans source despite mocked imports, aliases, exports and malformed fixture code", () => {
   const actual = boundaryCensus({
@@ -120,34 +116,16 @@ it("type-only route context imports do not import a colocated runtime owner",()=
 });
 
 
-it("ADR 0033 rule 7 keeps the Work write kernel free of route names, request types and files", () => {
-  const names = routeDirectory.map(({ key }) => key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  // Lowercase identifiers such as openId and bindIntent are kernel vocabulary, not route types.
-  const types = names.map(name => name.replace(/(^|-)([a-z])/g, (_, _dash, letter) => letter.toUpperCase()));
-  const routeName = new RegExp(`(?:["'/](?:${names.join("|")})(?=[./"'-])|\\b(?:${types.join("|")})(?=[A-Z]|\\b))`, "g");
-  const files = [
-    "ts/apps/host/src/work-write-boundary.ts",
-    "ts/apps/host/src/reads/routes.ts",
-    "ts/apps/host/src/action-journal.ts",
-    "ts/apps/host/src/journal-snapshot.ts",
-    "ts/packages/mcps/src/shared/takeoff-action-client.ts",
-    "ts/apps/host/src/document-lifetime.ts",
-    "ts/packages/agent-contracts/src/write-intent.ts",
-  ];
-  const hits = files.filter(file => existsSync(resolve(root, file))).flatMap(file => {
-    let text = readFileSync(resolve(root, file), "utf8");
-    const source = syntax(text, file), tags: [number, number][] = [];
-    walk(source, node => {
-      // Work's binding enum shares a word with the navigation route; it is not a route reference.
-      if (ts.isStringLiteral(node) && node.text === "open" && ts.isBinaryExpression(node.parent) &&
-        ts.isPropertyAccessExpression(node.parent.left) && node.parent.left.name.text === "binding")
-        tags.push([node.getStart(source), node.end]);
-    });
-    for (const [start, end] of tags.reverse()) text = text.slice(0, start) + "_".repeat(end - start) + text.slice(end);
-    return text.split("\n").flatMap((line, index) => {
-      routeName.lastIndex = 0;
-      return routeName.test(line) ? [`${file}:${index + 1}: ${line.trim()}`] : [];
-    });
-  });
-  expect(hits).toEqual([]);
+import { kernelRouteInventory, kernelRouteFloors } from "./kernel-route-names-census.ts";
+import kernelRoutes from "./kernel-route-names.baseline.json" with { type: "json" };
+
+it("ADR 0033 rule 7 inventories every kernel path and ratchets route sites", () => {
+  const actual = kernelRouteInventory(kernelRoutes.paths);
+  expect(actual.paths, "Enroll every discovered kernel path; no missing or silently skipped files").toEqual(kernelRoutes.paths);
+  expect(additions(actual.sites, kernelRoutes.sites)).toEqual([]);
+});
+
+it("ADR 0033 rule 7 allowances only shrink against every committed floor", () => {
+  for (const floor of kernelRouteFloors())
+    expect(additions(kernelRoutes.sites, floor.sites)).toEqual([]);
 });
