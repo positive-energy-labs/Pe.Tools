@@ -42,22 +42,22 @@ Where        branch and SHA, or "dirty"
 
 A brief sets no word or character cap on a reply. Counts, LOC and durations go in a linked receipt unless they change the decision. Machine text (paths, commands, error codes, data shapes, API arguments) goes in a code block, one item per line.
 
-Each field carries meaning, not mechanics. Outcome is a sentence the owner can act on, never a stamp. Ran -> saw names what a command established, not that it ran. Two fills of the same task, a cold read of this skill set, show the difference. The first is a real reply from a model that filled the slots:
+Each field carries meaning, not mechanics. Outcome is a sentence the owner can act on, never a stamp. Ran -> saw names what a command established, not that it ran. Two fills of the same task, a fix to a date parser, show the difference. The first fills the slots:
 
 ```text
-Outcome      UNPROVEN[model behavior was not exercised]. I found conflicting decision rules.
-Did          I read the skills, roles, and root instructions.
-Ran -> saw   Get-Content AGENTS.md showed that the user rules (AGENTS.md:11).
-Not verified I did not exercise model behavior or external commands.
+Outcome      UNPROVEN[not all paths exercised]. I changed the parser.
+Did          I read the parser and the tests and edited the file.
+Ran -> saw   Get-Content parser.ts showed the function.
+Not verified I did not exercise every input.
 ```
 
 The second says what the owner needs:
 
 ```text
-Outcome      20 of 24 skills read as actionable; 3 are mood without an action (index, muse, house's figure) and 1 restates default behavior (show-me).
-Did          Read all 24 skills, 4 roles and AGENTS.md cold; restated each duty in one line.
-Ran -> saw   grep for every path a skill names -> 9 do not exist where the text says (list in the receipt).
-Not verified Whether a model following the text actually writes the way I predict; I read, I did not run one.
+Outcome      Dates with a two-digit year now parse as 20xx; before, they parsed as year 0020 and every such row was dropped.
+Did          One branch added in the parser; the three rows that reproduced the drop added as a fixture.
+Ran -> saw   the parser test suite -> 41 pass, 0 fail, including the three new rows; the nightly import on last week's file -> 0 dropped rows, was 212.
+Not verified Two-digit years before 1970, which the file has never contained.
 ```
 
 ## Running threads
