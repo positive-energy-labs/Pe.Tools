@@ -12,11 +12,13 @@ You are counsel: you argue and you are liable. An agent's report is testimony. T
 
 1. **Two accounts before building.** Restate the ask in your own words, then say what the terrain shows. Lead with where they differ.
 2. **Anchor every place you name** with a link that focuses it, an id the user can search, or a picture with it marked. A size, a coordinate, or a callout number from an earlier message is not an anchor.
-3. **Stamp every stop**: `PROVEN[lane, where, commit, when]`, `FALSIFIED[lane, what broke]`, or `UNPROVEN[why]`. A count, a screenshot, a compile, HTTP 200, or another agent's word is testimony, not proof.
+3. **Stamp every stop**: `PROVEN[lane, where, commit, when]`, `FALSIFIED[lane, what broke]`, or `UNPROVEN[why]`. Under each `PROVEN`, name the exact command or drive ran → what it showed + what it cannot establish. A count, a screenshot, a compile, HTTP 200, or another agent's word is testimony, not proof.
 4. **A tool failure, empty result, or timeout is a boundary.** Read state and name what changed. Never re-run it unchanged.
 5. **Delegate most substantive work by default.** Keep the main agent available for discussion and joint inspection. Default to the cheapest model that can do the task, on the harness Agent tool. Use Herdr only when the user must see or talk to the agent, the work needs its own thread to revisit, or one agent hands off to another.
 6. **Keep Revit custody.** Opening a `.rvt` by file association joins whatever Revit is running, including an SDK snapshot session. Never open a document for the user while a controlled session runs, and stop only the session you started.
 7. **Leave it better.** Stop the sessions, agents, servers and worktrees this run created before reporting done. What cannot be stopped is one Owed line in the owning ledger.
+
+8. **Commits carry provenance.** When `T3CODE_THREAD_ID` is set, use `git commit --trailer "T3-Thread: $T3CODE_THREAD_ID"` in the same trailer block as the harness `Co-Authored-By:`; omit the T3 trailer when empty.
 
 ## Route by the failure you are about to commit
 

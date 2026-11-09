@@ -32,7 +32,7 @@ Exactly one loop or pass owns the route at a time. Ordinary building is not a st
 ## Tenets
 
 - Maximize semantic density. Skills are written in their own register; no other writing copies it.
-- Maximize latent-space activation. A figure, an archetype, a quote, a physical process, invokes an idea that encapsulates many rules at once.
+- Untested hypothesis: figures activate useful latent-space associations and examples teach more strongly than instructions. Neither priming advantage nor example-copy causality is established. All agent output must use ordinary words. A fresh reader must restate the duty in ordinary words; output leakage or failure to restate requires rewriting the text plain.
 - One word per thing. The Lexicon in `index` owns every shared word and every figure alias; a per-stance vocabulary is dead.
 - Inline the hot path. What a stance always needs, it carries; a pointer is for the cold path only. Repo information sits in a slot unless a stance always needs it, and then it is inlined there.
 - The set checks itself. A check script sits beside `index`; the kind table in `index` is its projection of each skill's directory and frontmatter (`figure`, `stop`, `scope`, `disable-model-invocation`), never hand-edited. It also asserts the kinds, one owner per trigger phrase, no Parlance sections, nothing repo-shaped outside a slot, and one home for the set. `execute` names how to run it. A stance edit that does not pass is not landed.

@@ -2,7 +2,7 @@
 name: purge
 description: Delete first, then fix. Trigger on "purge", "prune", "delete then fix", "LOC down", "gut it", "too much code", "no back compat", "aggressive deletion", "stay occam", "what can we delete", "fewer comments", "squash", "fold", "harvest", "canonicalize", "census what exists", "no legacy", or whenever a change would add code to a place that already has too much. Not for greenfield shape; that is `muse`.
 argument-hint: "What is bloated, and what must still work after?"
-figure: Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — delete at least as much as you add
+figure: Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — remove or reuse before adding
 prevents: "bloat: adding to a place that already has too much"
 ---
 # Purge
@@ -15,17 +15,18 @@ Where Occam hesitates, be the Iconoclast: nothing is sacred because it exists. P
 
 **When the block is big, be the burn boss.** A prescribed burn is lit on purpose, inside a firebreak cut first, so the understory goes and the canopy stands. The census is the firebreak; no burn without it.
 
-Mode: the diff must delete at least as much as it adds. If it cannot, say why before writing.
+Mode: the owner names what can be removed or reused before adding. No net-LOC success condition.
 
 ## Laws
 
 - Measure before a migration: repetition, standards violations, the dependency graph, and who breaks. The numbers set the order of the cuts.
 - Delete, then fix. Read the compile errors as the list of what was load-bearing. Do not write a shim before the deletion.
-- Count literal LOC. Fewer files, fewer hops, fewer identities. An abstraction that serves one caller is a caller with extra steps.
+- The owner explains reduced knowledge, coupling, and state. Report complexity delta in the receipt as a gauge, never a target or progress headline. An abstraction that serves one caller is a caller with extra steps.
+- A purge partner may write bounded deletions on an explicitly owned seam. The handoff names the accountable owner, preserved consumers and trust boundaries, behavior checks, and who owns later failures.
 - When two things do one job, keep the richer one, delete the other, and say which.
 - Purge docs and comments on the same rule: keep the why and the trap, delete the what.
 - Make a census before any deletion that touches 3+ files or more than one call site: what exists, who calls it, what dies. The census is a deliverable even if nothing else lands.
 - A deletion rides the change that makes the code dead. "Net LOC down" as the only edge invites behavior changes wearing a deletion's label: a graceful return becomes a throw, a guard is dropped, an expression is rewritten.
 - Census every door before deleting a command: route, Pea, Work tool and catalog. Deleting the last door to a write deletes the write (2026-11-04: an archive pass deleted the only callers of two internal write ops while their Work tools still staged edits nothing could apply).
 - A test that builds a production type by cast or partial literal is a second engine. Replace the family with one production-owned constructor and delete the casts (2026-11-04: 40 `as unknown as` bridge casts hid a required member; one constructor took the host suite from 42 failures to 0).
-- Stop at the honesty bar. Validation at trust boundaries, data-integrity seams, and proofs stay unless their replacement carries the same proof.
+- Stop at the honesty bar. Census consumers, doors, and trust boundaries. Validation, data-integrity seams, and proofs stay until the replacement demonstrates the preserved behavior with the same proof.

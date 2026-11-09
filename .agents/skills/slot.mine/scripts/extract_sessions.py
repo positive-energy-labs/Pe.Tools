@@ -153,6 +153,7 @@ class Miner:
                 self.home / ".codex" / "history.jsonl",
                 self.home / ".codex" / "thread_history_1.sqlite",
                 self.home / ".t3" / "userdata" / "state.sqlite",
+                self.home / ".t3" / "userdata" / "statev2.sqlite",
             ) if path.exists()
         )
         return sorted(paths)
@@ -345,6 +346,7 @@ class Miner:
         self.scan_tui_history()
         self.scan_desktop_history()
         self.scan_t3_history()
+        self.scan_t3_v2()
 
     def scan_tui_history(self):
         path = self.home / ".codex" / "history.jsonl"
@@ -442,6 +444,44 @@ class Miner:
         except sqlite3.Error:
             self.errors["T3 SQLite"] += 1
 
+    def scan_t3_v2(self):
+        # state.sqlite (v1) stops at 2026-10-04; everything later lives in statev2.sqlite. Keep v1: it is the only source for older history.
+        path = self.home / ".t3" / "userdata" / "statev2.sqlite"
+        if not path.exists():
+            return
+        store = "T3 projection v2"
+        self.stores[store].update(files=1, bytes=path.stat().st_size)
+        try:
+            with sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True) as db:
+                q = """select t.thread_id,t.title,t.created_at,t.updated_at,json_extract(t.payload_json,'$.modelSelection.model'),
+                              p.driver,p.provider_session_id,p.provider_thread_id
+                       from orchestration_v2_projection_threads t
+                       join orchestration_v2_projection_provider_threads p on p.thread_id=t.thread_id
+                       where p.driver in ('codex','claudeAgent')"""
+                for thread, title, created, updated, model, driver, psession, pthread in db.execute(q):
+                    self.record_session(store, thread, provider="claude" if driver == "claudeAgent" else "codex", client="T3 Code",
+                                        path=self.path(path), title=title, model=model, created_at=created, updated_at=updated,
+                                        provider_session_id=psession, provider_thread_id=pthread,
+                                        canonical_session=psession or pthread,
+                                        join_method="provider id" if psession or pthread else "unresolved",
+                                        join_confidence="hard" if psession or pthread else "none")
+                q = """select m.message_id,m.thread_id,m.run_id,json_extract(m.payload_json,'$.text'),m.created_at,
+                              json_extract(m.payload_json,'$.createdBy'),json_extract(m.payload_json,'$.creationSource'),
+                              (select p.driver from orchestration_v2_projection_provider_threads p where p.thread_id=m.thread_id limit 1)
+                       from orchestration_v2_projection_messages m where m.role='user' order by m.created_at,m.message_id"""
+                for number, (message, thread, run, value, created, by, src, driver) in enumerate(db.execute(q), 1):
+                    if driver not in ("codex", "claudeAgent"):
+                        continue
+                    self.stores[store]["scanned"] += 1
+                    if not (by == "user" and src in ("web", "mobile")):  # same predicate as retro.py: server rows are agent text
+                        self.drops["T3 v2 user row not human-sourced"] += 1
+                        continue
+                    self.add(provider="claude" if driver == "claudeAgent" else "codex", client="T3 Code", session=thread, timestamp=created,
+                             path=path, locator=f"message {number} ({message}; run {run})", representation=store,
+                             text=str(value or ""), canonical=False)
+        except sqlite3.Error as e:
+            self.errors[f"T3 v2 SQLite: {e}"] += 1  # name the failure; a missing table must not read as zero coverage
+
     def reconcile(self) -> list[dict]:
         canonical, seen = [], {}
         for row in self.rows:
@@ -467,7 +507,7 @@ class Miner:
                 index for index in exact.get((row["provider"], row["session"], row["hash"]), [])
                 if (row["representation"], index) not in used
             ]
-            if not candidates and row["representation"] == "T3 projection" and row["epoch"] is not None:
+            if not candidates and row["representation"] in ("T3 projection", "T3 projection v2") and row["epoch"] is not None:
                 candidates = [
                     index for index in by_hash.get((row["provider"], row["hash"]), [])
                     if (row["representation"], index) not in used
@@ -496,7 +536,7 @@ def self_test():
                      path=Path("rollout.jsonl"), locator="line 1", representation="Codex rollout",
                      text="mine this", canonical=True) is None
     assert miner.add(provider="codex", client="T3 Code", session="projection", timestamp=1001,
-                     path=Path("state.sqlite"), locator="message 1", representation="T3 projection",
+                     path=Path("statev2.sqlite"), locator="message 1", representation="T3 projection v2",
                      text="mine this", canonical=False) is None
     assert miner.drops["projection of excluded session"] == 1
     repeated = Miner(argparse.Namespace(since=None, until=None, exclude_session=[]))
@@ -507,6 +547,14 @@ def self_test():
     assert len(repeated.reconcile()) == 2
     repeated.record_session("T3 projection", "thread", title="A title", model="a-model")
     assert repeated.sessions[("T3 projection", "thread")]["model"] == "a-model"
+    # v2 row: a T3 v2 projection with a different session id and a 5-minute timestamp skew must fold into its rollout (reconcile fallback), not stand alone
+    v2 = Miner(argparse.Namespace(since=None, until=None, exclude_session=[]))
+    v2.add(provider="codex", client="T3 Code", session="rollout-s", timestamp=1000, path=Path("rollout.jsonl"), locator="line 1",
+           representation="Codex rollout", text="a v2 authored statement", canonical=True)
+    v2.add(provider="codex", client="T3 Code", session="t3-thread", timestamp=1300, path=Path("statev2.sqlite"), locator="message 1",
+           representation="T3 projection v2", text="a v2 authored statement", canonical=False)
+    merged = v2.reconcile()
+    assert len(merged) == 1 and merged[0]["copies"][0]["representation"] == "T3 projection v2"
 
 
 def main():

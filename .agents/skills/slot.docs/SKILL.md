@@ -52,6 +52,7 @@ One `LEDGER.md` per `docs/features/<name>/` directory. Features aggregate work s
 ```
 
 Rules:
+- Before a sweep, preserve rationale and its evidence locator. Reproducibility-critical evidence cannot be deleted while a ledger claims replay; record a retention condition and verify a cold reader can reconstruct the promised result before deletion.
 - Decided and Tried & rejected are append-only one-liners with dates. If a decision needs more than two lines of rationale, it is probably an ADR.
 - An Owed item may link a spec file in the same dir if the work genuinely needs one, but default to a line.
 - Deleted Owed lines are not lost, git history is the archive.
@@ -95,7 +96,7 @@ Handoffs are disposable by construction: a handoff is *consumed* when anything w
 Gitignored, so convention is the only structure. Top level holds build-tool-owned dirs (whatever `BuildArtifactLayout` writes, hands off) plus exactly four hand homes:
 
 - `handoffs/`, as above.
-- `runs/<lane>-<yyyymmdd>[-<slug>]/`, dated evidence output; deletable once its verdict is in a ledger.
+- `runs/<lane>-<yyyymmdd>[-<slug>]/`, dated evidence output; keep reproducibility-critical runs while any ledger claims replay. Before deletion, name and meet a retention condition: preserve source identity, method, exclusions, and sufficient inputs for promised replay. Keep decisive numbers or text in the ledger or a committed research home. Git never archives gitignored runs.
 - `tmp/`, nothing here may be referenced by anything; anyone may delete any of it at any time.
 
 Worktrees are NOT an `.artifacts/` home: create them **from the command line** as siblings of the repo at the same root so every session is a peer (`~/source/repos/Pe.Tools-<slug>` for kaitpw).

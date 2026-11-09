@@ -33,6 +33,19 @@ Mode: a claim leaves your hands as PROVEN, FALSIFIED, or UNPROVEN, never as "sho
 - A hang or timeout is a diagnostic boundary, not a failure; name it, do not retry blind.
 - Report state as PROVEN / BLOCKED / OPEN, each with its stake.
 
+## Drive as a user
+
+A route's acceptance is a person's task driven through its real controls; tests, HTTP 200s and native readback only corroborate it. `execute` owns the browser and custody mechanics.
+
+- **The bugs live where something crosses a boundary isolated checks never cross.** In the kernel crusade (2026-11), nearly every finding was stuck UI after one of these: a second conversation turn (Pea planned, the person said "apply" next turn, and the per-turn seal refused it; a same-turn shortcut would have been a false green), a writer outside the page (Pea changed Work while the mounted page still said "Work is absent"), a cold start through the ordinary launch path, a leave-and-return, or a native edit behind the UI. Choose the one the feature crosses and push on it; the happy path in one tab finds little.
+- **Pick challenges from what the feature promises, not from a ritual.** A mutation journey is baseline, one real write, independent readback, the consumed re-plan refused, then a change made behind the UI. A read-only audit needs no write. Never add a mutation to complete a checklist.
+- **A disabled, stale, covered or refused control is the result.** Record what the person sees; never route around it.
+- **Compare intended, typed, staged, reviewed and written.** Real keystrokes once staged `DDuct` for `Duct`; only the staged value, not the screenshot, showed it.
+- **Preserve the first failure before any recovery.** Refresh, restart and remount erase it. To diagnose, trace for the first false fact (one facet losing currency) rather than the last error, which is usually aftermath, and stop at what the trace proves.
+- **A visual claim needs both correspondence and a rendered observation.** Resolve the real tokens or ids and label the pixels by nearest token; matching data still cannot prove the meshes drew or the menu is on screen.
+- **Keep observation, corroboration, diagnosis and inherited proof apart.** A green on a lower lane or an older commit keeps its own stamp.
+- **Inherited behavior is a hypothesis.** A missing old feature is a question for the ledger, not a regression to restore; an old bug is never parity.
+
 ## Ground: proof before the shape
 
 Where the platform or the data is adversarial (a building model, a firm's standards, a reference calculation), the terrain is bored before any rule is written. A deterministic utility with no adversarial input needs a fixture and the laws above; these are paid for where assumed soil costs a month.

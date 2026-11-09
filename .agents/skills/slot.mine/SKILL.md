@@ -16,13 +16,13 @@ Extraction establishes evidence. Interpretation never rewrites it. Never turn a 
 
 ## Verbs
 
-Three verbs, smallest first. Most asks name one to three threads; the corpus census is the rare one.
+Three verbs, smallest first, plus the session extractor. Most asks name one to three threads; `corpus` is the rare one.
 
 | Verb | Input | Writes |
 |---|---|---|
-| `thread` | T3 thread ids | rulings, landings, owed lines, and steers with their item ids, to a file the reader opens instead of the thread |
-| `retro` | T3 thread ids | `retro.json` and `retro.html`: hours, owner turns, API calls, compactions, max context, cost, tool calls, tool output by tool, inflows over 20k characters, the context curve |
-| `census` | a window and a question | the corpus run below |
+| `thread` | T3 thread ids | rulings, landings, owed lines, and steers with their item ids, stated in chat so the reader never opens the thread; raw extracts stay in the run directory |
+| `retro` | T3 thread ids | `retro.json` and `retro.html`: hours, owner turns, API calls, compactions, max context, cost, tool calls, tool output by tool, inflows over 20k characters, the context curve; cost is a floor when descendants exist (`cost_is_floor`) |
+| `corpus` | a T3 project and two UTC instants | one command, one run directory: events, threads, lanes, epochs and shards, commits with attribution method and landed state, survival and a module table, and `retro.html` |
 
 `thread` reads through the T3 thread tools (`t3_thread_read` messages and activity views, paged by item id) and `t3_thread_search`; it never pastes a thread into the reader's context. `retro` runs:
 
@@ -30,11 +30,17 @@ Three verbs, smallest first. Most asks name one to three threads; the corpus cen
 python .agents/skills/slot.mine/scripts/retro.py --out .artifacts/runs/retro-YYYYMMDD-<slug> <thread-id-prefix>...
 ```
 
-It resolves each thread to its native Claude session or Codex rollout through T3's state database, counts the main thread only, and prices tokens from T3's model rates; an unpriced model is an empty cost, never a zero. T3 search is bounded, so a count drawn from it is a floor.
+It resolves each thread to its native Claude session or Codex rollout through T3's state database, counts the main thread only, and prices tokens from T3's model rates; an unpriced model is an empty cost, never a zero. T3 search is bounded, so a count drawn from it is a floor. The landed figure is a ladder (strong / +weak / +unknown); unknown is never a failure, and a deleted branch is `unknown`, not unmerged.
 
-## Corpus
+`corpus` runs from the checkout root:
 
-Run from the checkout root:
+```powershell
+python .agents/skills/slot.mine/scripts/corpus/run.py --project <t3-project-id> --since <UTC instant> --until <UTC instant> --out .artifacts/runs/retro-YYYYMMDD-<slug>
+```
+
+Bounds are explicit UTC instants (a bare date is 00:00Z), `since` inclusive and `until` exclusive, echoed in every output; a loosely spelled bound moved one window by 35 commits. Stages `t3,native,commits,epochs,survival,samples,page` each write their artifact to the run directory, so `--stages` reruns one. Owner turn is `landed.owner_turn` (createdBy user and source web or mobile); agent text relayed through the user role is `relay`. Commit attribution runs trailer, commit-line, patch-id, first-mention (weak) and prints coverage by commits and by lines. Roles are never asked of agents; a separate labelling loop (`pass.retro`, `corpus/label_brief.md`) writes `roles.json` and `render.py --run <dir> --roles roles.json` re-renders the page. Read `corpus/run.py --help` for the stage contracts.
+
+For the retained Claude and Codex session stores, run from the checkout root:
 
 ```powershell
 python .agents/skills/slot.mine/scripts/extract_sessions.py --out .artifacts/runs/deterministic-YYYYMMDD-<slug> [--since YYYY-MM-DD] [--exclude-session <id>]

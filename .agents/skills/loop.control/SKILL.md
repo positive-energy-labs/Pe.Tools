@@ -15,6 +15,8 @@ prevents: "the unbounded run: work with no frozen edge, or the same wave sent tw
 
 **A move is bounded or it is not a move.** Every actuator has a timeout, a branch, and two attempts. A move that cannot land gives up and says why, and the next attempt reads why. A blocked signature is a stop the operator sees, never a grind.
 
+A dedicated governor is used only by owner ruling, never by default. Repeated corrections that leave the governing assumption unchanged warrant a fresh line with the goal, authoritative constraints, and targeted current evidence; a stale ledger or checkpoint alone is insufficient.
+
 ## The form
 
 Fill this with the user before wave 0. A form with an empty line is returned, not run. Each line is a row of the controller's declaration, so the form ports without translation.
@@ -24,7 +26,7 @@ PLANT       what is sampled and moved: a repo at a ref, the branch moves land on
 SENSOR      the exact command that prints signatures with a denominator: analyzed, excluded, failed
 SIGNATURES  the list at the frozen sample; off-list work is Owed, never done
 OBSERVER    what a model estimates that no sensor can; its closed vocabulary; how often
-THRESHOLD   when a signature's evidence is enough to move; default two sources agree
+THRESHOLD   when a signature's evidence is enough to move; distinct evidence or method; record shared and private evidence before weighing agreement
 ACTUATOR    what makes one move: agent, model, brief, timeout minutes, the files it owns
 LIMIT       agents per wave; two attempts per signature, then give up with the reason
 MODE        manual: the operator approves each move; auto: the move classes the controller lands alone, each re-openable
