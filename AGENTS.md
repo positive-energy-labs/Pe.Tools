@@ -8,32 +8,31 @@ Repo-wide agent guidance for conventions, current paths, validation habits, Revi
 
 # Always
 
-You are counsel: you argue and you are liable. An agent's report is testimony. The user rules.
+You are the main agent: you argue for a recommendation and you answer for it. The user rules.
 
-1. **Two accounts before building.** Restate the ask in your own words, then say what the terrain shows. Lead with where they differ.
+1. **Two accounts before building.** Restate the ask in your own words, then say what the repo shows. Lead with where they differ.
 2. **Anchor every place you name** with a link that focuses it, an id the user can search, or a picture with it marked. A size, a coordinate, or a callout number from an earlier message is not an anchor.
-3. **Stamp every stop**: `PROVEN[lane, where, commit, when]`, `FALSIFIED[lane, what broke]`, or `UNPROVEN[why]`. Under each `PROVEN`, name the exact command or drive ran → what it showed + what it cannot establish. A count, a screenshot, a compile, HTTP 200, or another agent's word is testimony, not proof.
+3. **Stamp every stop** as PROVEN, FALSIFIED, or UNPROVEN, in the format the `prove` skill defines. A count, a screenshot, a compile, HTTP 200, or another agent's report is testimony until you check it.
 4. **A tool failure, empty result, or timeout is a boundary.** Read state and name what changed. Never re-run it unchanged.
-5. **Delegate most substantive work by default.** Keep the main agent available for discussion and joint inspection. Default to the cheapest model that can do the task, on the harness Agent tool. Use Herdr only when the user must see or talk to the agent, the work needs its own thread to revisit, or one agent hands off to another.
+5. **Delegate most substantive work by default,** to the cheapest model that can do the task. Keep the main agent available for discussion and joint inspection. The `execute` skill says which tool runs a subagent.
 6. **Keep Revit custody.** Opening a `.rvt` by file association joins whatever Revit is running, including an SDK snapshot session. Never open a document for the user while a controlled session runs, and stop only the session you started.
 7. **Leave it better.** Stop the sessions, agents, servers and worktrees this run created before reporting done. What cannot be stopped is one Owed line in the owning ledger.
-
-8. **Commits carry provenance.** When `T3CODE_THREAD_ID` is set, use `git commit --trailer "T3-Thread: $T3CODE_THREAD_ID"` in the same trailer block as the harness `Co-Authored-By:`; omit the T3 trailer when empty.
+8. **Commits carry provenance** through the repo's `prepare-commit-msg` hook, which adds the T3 thread trailer. `python .agents/skills/check.py --fix` installs the hook.
 
 ## Route by the failure you are about to commit
 
 <!-- routing:start -->
 | About to commit | Stance |
 |---|---|
-| context rot: one session carrying everything, counsel building | `delegate` |
+| context rot: one session carrying everything, the main agent building | `delegate` |
 | templated surfaces: a screen that fits no house | `house` |
-| plausible, not real: done on a mock, a count, a screenshot, or another agent's word; or built on assumed soil, a shape settled before the real model was bored | `prove` |
+| plausible, not real: done on a mock, a count, a screenshot, or another agent's word; or built on assumed soil, a shape settled before the real model was examined | `prove` |
 | bloat: adding to a place that already has too much | `purge` |
-| the dropped baton: the next session re-derives what this one knew | `relay` |
+| the dropped handoff: the next session re-derives what this one knew | `relay` |
 | premature release closure: shipped bytes never made the crossing | `release` |
-| the repeated wound: a costly session pattern paid again because nobody measured it | `retro` |
+| the repeated cost: a costly session pattern paid again because nobody measured it | `retro` |
 | shims for done: a settled surface over a fake backend | `close` |
-| the unbounded run: work with no frozen edge, or the same wave sent twice at a plateau | `control` |
+| the unbounded run: work with no frozen limits, or the same wave sent twice at a plateau | `control` |
 | guessed fix: a diff before a cause | `diagnose` |
 | decisions made for the user: a plan built on verdicts never given | `grill` |
 | first shape kept: a seam settled before the alternatives were seen | `muse` |
@@ -77,9 +76,8 @@ Among other things, this requires Pe.Tools packages to expose good "public" apis
 ### Engineering
 
 - Keep deterministic sequencing, validation, safety, and freshness in the harness; put reusable judgment-heavy workflows in skills and changing maps in generated artifacts.
-- Agent-facing work stays bounded, checkpointable, and honest about residual gaps. A timeout is a diagnostic boundary, not a blind retry.
-- Long time on task or unprogressing loops warrant a look at underlying problems. Time on task for subagents in particular reveal high "this architecture is bad" signal, in part becasue your context is not contaminated with the implementation history.
-- Name the proof lane. Source compile, package artifact, deterministic, fresh, attached, session, and installed behavior prove different things, and a Revit-backed claim also names the session's custody. Protect the user-owned dev session; SDK `pe-revit` owns execution-loop orchestration.
+- Agent-facing work stays bounded, checkpointable, and honest about residual gaps.
+- Long time on task or a loop that stops progressing calls for a look at the underlying problem. A subagent's time on task is a strong signal that the architecture is bad, because its context holds none of the implementation history.
 - Delete a data-integrity or runtime seam only when the simpler replacement preserves its behavior and proof.
 - When departing from a prior decision or philosophy, leave a short comment at the exception naming the rule, why it does not apply here, and the boundary that still holds. Correct nearby comments that now contradict the code; do not make the next agent infer a deliberate exception from a diff.
 
@@ -87,68 +85,59 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for product direction, [docs/B
 
 ### Coding
 
-Default to zero edits: a request to look, diagnose, review, or explain is not authorization to change files — propose, then wait.
+Default to zero edits: a request to look, diagnose, review, or explain is not authorization to change files. Propose, then wait.
 
 This entire repo is greenfield: build for ideal long-term shape, and do not preserve compatibility shims unless they are *absolutely necessary* as a temporary compile bridge. Even when shims seem necessary, prefer breaking compile to surface loose ends. Code style should optimize for linear execution flow, fail-fast behavior, composable systems, and wrappers around finicky Revit API behavior.
 
 ## Repo Operating Etiquette
 
-C# development with the Revit API requires very a specific and fragile tooling setup. Thus Pe.Tools has a custom set of tools to work around this; ALWAYS use these tools when executing or proving code, failure to use them causes unexpected behavior, catastrophic workflow interruptions, and general confusion. This highly bespoke setup requires rigorous attention to keeping documentation and repo truth in sync.
+C# development with the Revit API needs a specific and fragile tooling setup, so Pe.Tools has its own tools for running and proving code. Always use them, because working around them interrupts the user's workflow and confuses every later agent.
 
 ### Executing code
 
-Use the SDK control plane; do not hand-orchestrate Revit. The `execute` skill is the judgment layer over these rules.
-- Terminal `dotnet build`/`publish` are safe beside a running session (isolated lane → `.artifacts/`; deploy/launch from it is a build error). Raw `dotnet test` is banned for Revit-backed projects — it launches or reuses Revit itself. `pe-revit test --project <P>` is the whole test surface: it picks the rung from the project and says which and why (`--plan` prints the choice and runs nothing).
-- Never `Stop-Process`/`Start-Process`/`taskkill` Revit.exe — `pe-revit session` owns Revit process lifecycle; companion hosts belong to the product that owns them (`pe-revit service` only lists and sweeps their files).
-- `pe-revit start|hr|open|stop` are the checkout's default forms; `session start|list|hr|stop|reset|logs|dialogs` is the lifecycle family. `--id <name>` names a session and `--pid <number>` names a process. `doc open|save|close|list` acts on documents and `op run|wait|cancel|result|list` runs ops and re-reads their durable receipts. A checkout session is disposable: its stop, reset, close and cold HR default to `--unsaved discard`; every other shape requires `--unsaved keep|discard`, so `keep` is always typed.
-- `pe-revit session hr` is the whole edit loop: hot apply when the payload allows it, cold swap otherwise; `--restart` forces the swap. `session list [--id|--all]` is the read-only registry state; `pe-revit doctor [--fix]` is for reported wiring trouble.
-- Custody records acquisition: `controlled` means pe-revit holds a registry row; `observed` permits reads by pid and is adopted by the first targeted mutation, only inside the caller's execution boundary (SDK ADR 0012: a checkout never drives an installed Revit, nor the reverse). The SDK resolver enforces that boundary. Never re-implement that guard here.
-- Read `pe-revit guide session|test|install` for mechanics; repo docs never restate them. The vendored `pe-revit-contract.ts` is the consumer contract — never hand-sync a selector grammar or argv shape beside it.
-- Use pea scripts, host operations, or `pea --prompt` only after SDK freshness when product behavior is the proof target.
-- Use Pea's doors (`pe_find`, `pe_read`, `pe_do`, Revit API docs) plus the `pea --prompt` CLI probe only for black-box product feedback, not repo source review.
+The `execute` skill holds the proof lanes and the run mechanics. `pe-revit guide session|test|install` holds the verbs, flags, and exit codes, so repo docs never restate them. Four rules hold everywhere:
+- Never run raw `dotnet test` on a Revit-backed project, because it launches or reuses Revit itself. `pe-revit test --project <P>` is the test surface.
+- Never start or kill `Revit.exe` with `Start-Process`, `Stop-Process`, or `taskkill`.
+- `pe-revit session` owns the Revit process lifecycle.
+- The SDK resolver enforces custody (the pe-revit SDK's ADR 0012, not this repo's: a checkout never drives an installed Revit, nor the reverse). Never re-implement that guard here.
 
 ### Session Discipline
 
 - Assume you will be interrupted. Checkpoint durable state before any multi-minute step; on resume, report progress against a named phase.
-- A user interrupt kills every in-flight subagent — after any interruption, check-then-relaunch; never assert a subagent is alive.
-- No review or standards subagents unless asked. Delegation defaults are Always 5.
+- A user interrupt kills every in-flight subagent, so after any interruption, check-then-relaunch; never assert a subagent is alive.
+- Do not run standards-only review subagents. A change to a contract, a data-loss path, or an installed surface gets a non-author review as part of its landing, and the `prove` skill names the tiers.
 
 ### Documentation
 
 `AGENTS.md`: Primary knowledge map; should stay high-level and focused on constraints, justifications for decisions, broad intent, current direction, and broad direction.
 ANY change to repo architecture, tooling, or builds MUST consult these documents:
 - `docs/ARCHITECTURE.md` - read before multi module changes, debugging, and code review. Contains target architecture; code should always seek to align and documentation can be future facing.
-- `docs/BUILD.md` - read before changing anything build, deploy, or dev-loop related. Contians repo tooling justification and explanation. Always prove (or disprove) before changing the document. Information and correctness here is mission critical. TL;DR:
+- `docs/BUILD.md` - read before changing anything build, deploy, or dev-loop related. Contains repo tooling justification and explanation. Always prove (or disprove) before changing the document. Information and correctness here is mission critical. TL;DR:
   - Keep terminal compile/package proof separate from live-runtime freshness.
   - Protect the current dev session aggressively. Breaking it can turn a small edit into a multi-minute restart plus document reopen wait.
 
 
-After any large changes, ALWAYS clarify user intent and capture the durable knowledge. Where it goes is governed by the `docs` skill (the single source of truth): feature ledgers (`docs/features/<name>/LEDGER.md`), ADRs, scoped grounding docs, or code comments. AGENTS.md holds operating rules only — not feature goals, not session knowledge.
+After any large changes, ALWAYS clarify user intent and capture the durable knowledge. Where it goes is governed by the `docs` skill (the single source of truth): feature ledgers (`docs/features/<name>/LEDGER.md`), ADRs, scoped grounding docs, or code comments. AGENTS.md holds operating rules only, not feature goals, not session knowledge.
 
 ### Tooling Footguns
 
-- A skill whose `description:` frontmatter value contains `: "` is parsed by gray-matter as an invalid YAML mapping, and
-  the skill is dropped silently — no warning, it simply never loads. Keep `: "` out of skill descriptions.
 - `talk_to_pea` prompts containing embedded double quotes crash the PowerShell 5.1 arg path (exit 255). Reword or use a
   here-string path instead.
-- **Windows shell tax** (top friction source in 2 months of session history — mined 2026-08-18):
-  the shell is PowerShell, not bash. rg alternation/quotes/globs need PS-safe forms (`unclosed group`,
+- **Windows shell tax**: the shell is PowerShell, not bash. rg alternation/quotes/globs need PS-safe forms (`unclosed group`,
   `os error 123` = your quoting, not the tool); `$PID`/`$Host` are readonly built-ins; `2>&1` on a
-  native exe fabricates NativeCommandError from benign stderr — a "failure" wrapping a success;
+  native exe fabricates NativeCommandError from benign stderr, a "failure" wrapping a success;
   rg exit 1 means "no matches", not an error. Never blind-retry a quoting variant, and never put
   JSON on a command line (`pea ... --request '{...}'` dies in re-quoting): one failed quote → write
-  the payload/pattern to a file (harness Read/Grep tools where available) — see the `execute` skill.
-- `pe-revit dev link` run through the shim fails with "file in use", because the shim locks its own `pe-revit.exe` and `Pe.Revit.Cli.dll`. Run `dotnet tool run pe-revit -- dev link` from the checkout instead (proven 2026-10-27: the shim form failed 3 times, and the pinned-tool form linked `pe-revit` and `pea` to the root checkout).
-- Background + poll anything minutes-scale, and read `status` before any retry. (Client-kill orphans
-  were field-disproven at beta.118 — the SDK reaps its own children.)
-- A `preview_evaluate` that runs past its 15 s limit kills whatever JavaScript the page is running then; inside a React render that leaves the page wedged with no error (2026-10-21, /ducts read as "stuck on pricing…"). Poll with short evaluates; never wait inside one.
-- `git stash` is one stack shared by every worktree of this repo: a `stash pop` in one worktree applies
-  another agent's work (2026-10-13, wave C popped wave B's event-spine WIP). Never stash in a worktree;
-  commit WIP on your branch instead.
+  the payload/pattern to a file (harness Read/Grep tools where available), see the `execute` skill.
+- `pe-revit dev link` run through the shim fails with "file in use", because the shim locks its own `pe-revit.exe` and `Pe.Revit.Cli.dll`. Run `dotnet tool run pe-revit -- dev link` from the checkout instead.
+- Background and poll anything minutes-scale, and read `status` before any retry. The SDK reaps its own children.
+- A `preview_evaluate` that runs past its 15 s limit kills whatever JavaScript the page is running then; inside a React render that leaves the page wedged with no error. Poll with short evaluates; never wait inside one.
+- `git stash` is one stack shared by every worktree of this repo, so a `stash pop` in one worktree applies
+  another agent's work. Never stash in a worktree. Commit WIP on your branch instead.
 
 ### Non-Doc Artifacts
 
-`.artifacts/` is deliberately gitignored: disposable evidence, scratch scripts (`.artifacts/tmp`), run outputs, and build tooling live there and never reach git. The routing question is "will a human need this in git?" — anything the user must review, commit, or hand forward is a **doc**, and its home comes from the `docs` skill. Never invent `docs/context/`, `.scratch/`, or repo-root `SHOUTY.md` homes.
+`.artifacts/` is deliberately gitignored: disposable evidence, scratch scripts (`.artifacts/tmp`), run outputs, and build tooling live there and never reach git. The routing question is "will a human need this in git?", anything the user must review, commit, or hand forward is a **doc**, and its home comes from the `docs` skill. Never invent `docs/context/`, `.scratch/`, or repo-root `SHOUTY.md` homes.
 
 
 ## Critical Entry Points
@@ -168,8 +157,8 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 
 | Term            | Meaning                                                                                                                              | Prefer / Avoid                                                                                          |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| **dev session** | The controlled session on the `dev` lane for `Pe.App` — the one the user drives from this checkout (`pe-revit session`, payload byte-copied from `--project`). Treat it as expensive state. | Avoid implying hot reload exists outside a converged dev-lane session. Never write `live`, `sandbox`, `Rrd`, or `owner` for a session, a lane, or a custody value |
-| **HR**          | Hot reload into a dev session: `pe-revit session hr` hot-applies when the payload allows it and cold-swaps otherwise. *Extremely useful*, but not fully trustworthy. When functional it allows the fastest feedback loop. | Avoid treating a hot apply as proof that Revit is running fresh code — `session hr --restart` or a fresh test is what proves it |
+| **dev session** | The controlled session on the `dev` lane for `Pe.App`, the one the user drives from this checkout (`pe-revit session`, payload byte-copied from `--project`). Treat it as expensive state. | Avoid implying hot reload exists outside a converged dev-lane session. Never write `live`, `sandbox`, `Rrd`, or `owner` for a session, a lane, or a custody value |
+| **HR**          | Hot reload into a dev session: `pe-revit session hr` hot-applies when the payload allows it and cold-swaps otherwise. *Extremely useful*, but not fully trustworthy. When functional it allows the fastest feedback loop. | Avoid treating a hot apply as proof that Revit is running fresh code, `session hr --restart` or a fresh test is what proves it |
 
 ### Repo-wide language
 
@@ -177,7 +166,7 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 | --------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | **FF**                | Family Foundry                                                                           | Prefer `Family Foundry` on first mention in prose                                            |
 | **workflow**          | The operator intent such as build, verify, package, or publish                           | Prefer this over overloading `Configuration` strings to carry every concern                  |
-| **rung** | One branch of the `pe-revit test` ladder — deterministic, fresh, attached — chosen by the verb from the project and disclosed (ADR 0008) | Prefer `--plan` to learn a project's rung; avoid writing `test fresh` as though it were a verb you type |
+| **rung** | One branch of the `pe-revit test` ladder, deterministic, fresh, attached, chosen by the verb from the project and disclosed (ADR 0008) | Prefer `--plan` to learn a project's rung; avoid writing `test fresh` as though it were a verb you type |
 | **custody** | Whether pe-revit holds a session's receipt: `controlled` (full lifecycle and doc ops) or `observed` (status and doc reads only) | Replaces the retired `contact` axis and the `owner: agent\|user` values |
 | **package**           | A repo-local code unit such as `Pe.Host` or `Pe.Revit.FamilyFoundry`                     | Prefer this over `project` when discussing one code area                                     |
 | **app**               | `Pe.App`, the in-proc desktop Revit add-in runtime                                       | Avoid using `app` to mean the whole repo or product                                          |
@@ -190,32 +179,20 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 
 ## Proof Lanes
 
-Every run claim names the lane that proves it, and a Revit-backed claim also names the session's **custody** (ADR 0008): `controlled` (pe-revit holds the session receipt — full lifecycle and document operations) or `observed` (no receipt — status and document reads only). The proof lane names which runtime proves the claim:
-
-- **deterministic**: no-Revit tests/scorers over saved snapshots; also the `pe-revit test` rung a year-neutral project takes.
-- **compile**: isolated terminal `dotnet build`; proves compilation only.
-- **artifact**: build/pack output; proves durable output shape only.
-- **fresh**: the `pe-revit test` rung that owns one ephemeral controlled Revit; the default autonomous Revit-backed proof.
-- **attached**: the `pe-revit test --attach` rung, running inside a controlled session that already exists; requires behavior proof when freshness is uncertain.
-- **session**: a durable controlled Revit under `pe-revit session` — also name its payload lane, `dev` (byte copy of this checkout's build, from `--project`) or `installed`, because they prove different bytes.
-- **installed**: MSI/product-root behavior; never validated against dev roots.
-
-Deterministic, fresh, and attached are rungs `pe-revit test` picks from the project and discloses — never verbs you type, and never facts about the machine. `pe-revit test --plan --project <P>` prints the rung and the reason.
-
-If proof depends on user-owned Revit/Windows state, say so and coordinate the loop instead of pretending autonomy.
+Every run claim names the lane that proves it, and a Revit-backed claim also names the session's custody (ADR 0008). When proof depends on the user's own Revit or Windows state, say so and run the loop with the user. The `execute` skill lists the lanes and what each one cannot prove.
 
 ## Routing
 
-The `index` skill is the entry point and router for the whole skill set — invoke it with intent and it picks the route and drives the loop. The `docs` skill governs where durable knowledge lands. Don't guess at routes; read those two.
+The `index` skill is the entry point and router for the whole skill set: invoke it with intent and it picks the route and drives the loop. The `docs` skill governs where durable knowledge lands. Don't guess at routes; read those two.
 
 
 ### Docs conventions
 
-No external issue tracker. Durable knowledge lives in feature ledgers (`docs/features/<name>/LEDGER.md`), ADRs (`docs/adr/`), authority docs, and disposable handoffs (`.artifacts/handoffs/`). The `docs` skill is the single source of truth — read it before writing any markdown.
+No external issue tracker. Durable knowledge lives in feature ledgers (`docs/features/<name>/LEDGER.md`), ADRs (`docs/adr/`), authority docs, and disposable handoffs (`.artifacts/handoffs/`). The `docs` skill is the single source of truth, read it before writing any markdown.
 
 ### Product surfaces
 
-`docs/design/SURFACE-PHILOSOPHY.md` holds what our UI surfaces are for and how they behave; the `triangulate` skill is the loop that produces and updates it. The live design frontier — rulings, gaps, and owed work for the one-system design cluster — lives at `docs/features/design-system/LEDGER.md`; the `/design-system` route is the executable design authority.
+`docs/design/SURFACE-PHILOSOPHY.md` holds what our UI surfaces are for and how they behave, `house` reads it, and a `protoui` verdict that changes it is captured there per `docs`. The open design decisions, rulings, gaps, and owed work for the design system live at `docs/features/design-system/LEDGER.md`. The web app's design-system route is the executable design authority.
 
 ### Domain docs
 

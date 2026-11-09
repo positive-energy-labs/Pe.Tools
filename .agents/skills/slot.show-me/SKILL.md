@@ -4,128 +4,24 @@ description: Help the user understand the current topic visually with concise di
 figure: the sketch on the back of the envelope
 prevents: "the wall of text: a topic explained in prose that a diagram would settle"
 scope: skills
-disable-model-invocation: true
 ---
 
-Help the user understand the current topic of conversation visually. Skip the preamble and keep prose brief. Pick the smallest view that makes the key point clear.
+# Show me
 
-- Show logic or an algorithm as pseudocode:
+**Draw the sketch on the back of the envelope.** It is small, it sits beside the sentence it supports, and it shows only the part in question. Do not draw the whole system when one call or one file settles the point, and do not let the sketch carry an answer the reply text leaves out.
 
-```text
-on(save)
-  if content is unchanged
-    return cached result
-  write new content
-  return fresh result
-```
+## Laws
 
-- Show runtime control flow as a call tree:
-
-```text
-submitForm
-  createSession
-    persistPrompt
-    launchAgent
-  navigateToSession
-```
-
-- Show UI structure as a component tree, including state and module boundaries that matter:
-
-```tsx
-<SessionPage> (apps/example/src/routes/session.tsx)
-  useSessionEvents()
-  <SessionToolbar>
-    <RunSkillButton> (packages/ui)
-```
-
-- Show file responsibility or a broad refactor as a shallow file tree:
-
-```text
-src/
-├── commands/       # parses user actions
-├── sessions/       # owns session state
-└── transport/      # sends API requests
-```
-
-- Show component interaction, control flow, or data flow with Mermaid:
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant UI
-    participant Daemon
-    User->>UI: choose command
-    UI->>Daemon: send expanded prompt
-    Daemon-->>UI: stream result
-```
-
-- Use `diff` when the point is what changes and the surrounding shape already exists. Match the diff shape to the topic.
-
-For a component change:
-
-```diff
- <SessionPage>
-   useSessionEvents()
-   <SessionToolbar>
-+    <RunSkillButton />
-   <SessionTimeline>
-+    <SkillResultCard />
-```
-
-For a file-layout change:
-
-```diff
- src/
- ├── commands/
-+│   └── show-me.ts       # expands the slash command
- ├── sessions/
--└── transport.ts
-+└── transport/
-+    ├── client.ts
-+    └── stream.ts
-```
-
-For a call-tree or call-stack change:
-
-```diff
- submitForm
-   createSession
-     persistPrompt
-+    expandSkillMention
-     launchAgent
--  navigateToSession
-+  navigateToSession
-+    subscribeToEvents
-```
-
-For a state or control-flow change:
-
-```diff
- on(save)
--  write content
-+  if content is unchanged
-+    return cached result
-+  write new content
-+  invalidate cache
-```
-
-- Show the whole block when most of it is new, when omitted context would hide ownership or order, or when the user needs a copyable target shape:
-
-```ts
-function expandSkill(command: string): string {
-  const skillName = command.slice(1)
-  return `use the ${skillName} skill`
-}
-```
-
-- For a visual UI, layout, state comparison, or concept too dense for Mermaid, write one focused HTML file — a diagram, an infographic, or a short slide deck, whichever fits the point. Match the product's colors, type, spacing, and components; use real labels and data; support desktop and mobile. Then open it for the user:
-
-```
-Bash(open path/to/show-me-{description}.html)
-```
-
-### guidance
-
-Place each visual next to the short text it supports. Keep only the calls, files, props, states, and boundaries needed to answer the user's current question or the options to resolve the current discussion point.
-
-You may use one of these, you may use several, it is unlikely you will use all of them. Use your judgement and don't overwhelm the user.
+- Skip the preamble and keep the prose short. Pick the smallest view that makes the key point clear.
+- A diagram or page adds to the reply. It never replaces it. The decision, and what the user must rule on, must still be readable in the reply text alone, because some of the user's interfaces show only that text.
+- Place each visual next to the short text it supports. Keep only the calls, files, props, states and boundaries the current question or option needs.
+- Use one view, or a few. Do not use every form below.
+- Match the form to the point:
+  - logic or an algorithm: pseudocode in a `text` block;
+  - runtime control flow: an indented call tree;
+  - UI structure: a component tree, with the state and module boundaries that matter and their paths;
+  - file responsibility or a broad refactor: a shallow file tree with one comment per entry;
+  - component interaction, control flow or data flow: Mermaid;
+  - what changes inside a shape that already exists: a `diff` block of the tree, layout or call tree;
+  - a copyable target shape, or a block that is mostly new: the whole block.
+- For a UI, layout, state comparison or concept too dense for Mermaid, build one focused page per `page`. Use the product's colors, type, spacing and components, real labels and data, and make it work on desktop and mobile.

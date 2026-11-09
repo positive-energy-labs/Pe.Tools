@@ -8,35 +8,33 @@ scope: repo
 
 # Docs
 
-**Code is the spec**. Markdown exists only for what code cannot say: why, what was tried and failed, and what is still owed. Before writing a doc, ask whether the knowledge belongs in code, a test, or a commit message instead, those are preferred. Exception: product/design **verdicts always go to the feature ledger**, never commit messages (the `protoui` rule wins).
+**Docs are the Ise shrine, not the pyramid.** Ise is rebuilt identical on the next plot every twenty years and the old one comes down, so the knowledge survives by rebuilding, and git keeps the old timber. Do not append to a ledger past the point where its timeline describes code that no longer exists: rebuild it as the current truth. **And a sand mandala:** when the effort ends, sweep it. Do not keep a doc that nobody is likely to relitigate.
 
-Be the **zealous hermit building the apocrypha** and the **diligent redactor masorete guarding the canon**. The hermit writes what code can't say, the redactor makes sure only that survives.
+Code is the spec. Markdown holds only what code cannot say: why, what was tried and failed, and what is still owed. Before you write a doc, ask whether the knowledge belongs in code, a test or a commit message instead, and prefer those. One exception: product and design verdicts always go to the feature ledger, never to a commit message.
 
-**Docs are the Ise shrine, not the pyramid.** Ise is rebuilt identical on the adjacent plot every twenty years and the old one is taken down; the knowledge is kept by rebuilding, not by preserving, and the old timber goes to lesser shrines (git). A ledger is rebuilt as the current truth, never appended past the point where its timeline refers to ground that no longer exists. **And a sand mandala**: when the effort completes, the sand is swept and goes to the river. Persisted knowledge is protected only while it is likely to be relitigated; the code's growing mass is the rejection of everything else.
+Write in ASD-STE100 Simplified Technical English, without slop.
 
-Use ASD-STE100 Simplified Technical English and grow glossaries. Predictability and shared language allow everyone to say less and understand more. 
-
-There is no external issue tracker. No GitHub issues, no `.scratch/`, no ticket files. Open work is an Owed item in a ledger.
+There is no external issue tracker: no GitHub issues, no `.scratch/`, no ticket files. Open work is an Owed line in a ledger.
 
 ## Homes, by kind of knowledge
 
-| Home| Knowledge |
+| Home | Knowledge |
 |---|---|
-| `docs/features/<name>/LEDGER.md` |  Feature-scoped decisions, rejected paths, open work |
-| `docs/features/<name>/MAP.md`, deleted when the effort ends |  Live-effort frontier (protoui rounds, muse shapes) |
-| `docs/adr/NNNN-slug.md` |  Decisions that constrain other features |
-| Nearest package `AGENTS.md` Shared Language table; feature terms in `docs/features/<name>/GLOSSARY.md` (lazy, `grill` grows them; formats: `GLOSSARY-FORMAT.md`, `ADR-FORMAT.md` beside this skill) |  Domain vocabulary |
-| Hard-won wide-breadth rationale | Authority docs (registry below) |
-| `.artifacts/handoffs/<date>-<topic>.md` |  Session-to-session bridges |
-| relevant `docs/features/<feat>`, else `docs/research/` |  Research findings |
-| Code comments at the site; a scoped grounding doc only when no code site exists |  Behavior-proven platform facts (gotchas, quirks) |
-| X |  Everything else |
+| `docs/features/<name>/LEDGER.md` | Feature-scoped decisions, rejected paths, open work |
+| `docs/features/<name>/MAP.md`, deleted when the effort ends | Open decisions of a live effort (protoui rounds, muse shapes, a large change) |
+| `docs/adr/NNNN-slug.md` | Decisions that constrain other features |
+| Nearest package `AGENTS.md` Shared Language table; feature terms in `docs/features/<name>/GLOSSARY.md` (created when first needed; `grill` grows them; formats in `GLOSSARY-FORMAT.md` and `ADR-FORMAT.md` beside this skill) | Domain vocabulary |
+| Authority docs (registry below) | Hard-won rationale of wide breadth |
+| `.artifacts/handoffs/<date>-<topic>.md` | Session-to-session bridges |
+| The relevant `docs/features/<feat>`, else `docs/research/` | Research findings |
+| Code comments at the site; a scoped grounding doc only when no code site exists | Behavior-proven platform facts (gotchas, quirks) |
+| Not written down | Everything else |
 
 ## Ledgers
 
-**A feature = a canon product surface, a web-route family or a shipped ability.** Sub-efforts, per-route design sweeps, prototype rounds, and research spikes write into the OWNING cluster's ledger; they never earn a new dir. If you cannot name the shipped surface a dir serves, it is not a feature.
+A feature is a production product surface, a web-route family or a shipped ability. Sub-efforts, per-route design sweeps, prototype rounds and research spikes write into the owning feature's ledger. They never get a new directory. If you cannot name the shipped surface a directory serves, it is not a feature.
 
-One `LEDGER.md` per `docs/features/<name>/` directory. Features aggregate work spanning multiple packages; the feature dir is the unit of documentation, not the package. Exactly three sections:
+Each `docs/features/<name>/` directory has one `LEDGER.md`. A feature can span several packages, so the feature directory, not the package, is the unit of documentation. A ledger has exactly three sections:
 
 ```markdown
 # <feature> ledger
@@ -45,88 +43,105 @@ One `LEDGER.md` per `docs/features/<name>/` directory. Features aggregate work s
 - 2026-08-17, one-line decision, with the one-line why.
 
 ## Tried & rejected
-- 2026-08-17, what was tried; why it failed. (The expensive knowledge, falsified hypotheses, losing prototypes, dead seams.)
+- 2026-08-17, what was tried; why it failed. (Falsified hypotheses, losing prototypes, dead seams.)
 
 ## Owed
 - open item. Delete the line when done, never mark "done".
 ```
 
 Rules:
-- Before a sweep, preserve rationale and its evidence locator. Reproducibility-critical evidence cannot be deleted while a ledger claims replay; record a retention condition and verify a cold reader can reconstruct the promised result before deletion.
-- Decided and Tried & rejected are append-only one-liners with dates. If a decision needs more than two lines of rationale, it is probably an ADR.
-- An Owed item may link a spec file in the same dir if the work genuinely needs one, but default to a line.
-- Deleted Owed lines are not lost, git history is the archive.
-- Rebuild, don't append. A ledger longer than two screens, or whose Decided lines predate the current shape of the code, is rewritten as the current truth in one commit (date the rewrite; git holds the timeline). A Decided line that current code makes obvious is cut. A Tried & rejected line that current code makes impossible to re-propose is cut. A `MAP.md` whose frontier has moved wholesale is swept, not amended.
-- Legacy feature dirs keep their existing files until touched; when working in one, converge: fold living content into `LEDGER.md`, delete what is stale.
-- **Cross-route rule: design-language and primitive gaps are owned by `docs/features/design-system/LEDGER.md`**, one line there, consumer routes named. Route ledgers record their own application and evidence; they never restate the verdict or the gap. Same shape for any gap that spans surfaces: it lives in one ledger, and the others cite it.
-- Ledgers never grow a fourth section. Reusable *method* belongs in a skill; *schema* belongs in doc-comments on the owning type (plus a showcase fixture beside the data when intent needs prose).
-- **Mid-session discovered gaps** (tooling in active use finds its own hole): a code site in this repo → `TODO:` at the site, never a ledger line. No code site here (SDK defect, upstream dep) → one Owed line in the *owning* surface's ledger, never the ledger of the session that discovered it.
-- When a `MAP.md` is deleted, sweep its Out-of-scope once: promote only what is expensive to re-derive or likely to be re-proposed by an agent (feature-scoped → a Tried & rejected line; cross-feature → a rejected-architecture ADR). Everything else dies with the map, code's growing mass is the real rejection.
-- **A guard turned green by deleting what it guards is a defect, not a fix.** Before removing a file a guard names, grep its content for citers; prose citations without markdown links are invisible to the guard and to the grep you did not run.
-- **Promotion and deletion happen in the same commit.** A HISTORICAL/CLOSED banner on a tracked doc is a failing state, not an archive method.
-- **Merge hygiene:** fold files with `git mv` / append-then-delete so history follows. Git history is the archive only if the path chain is followable, a file that was retyped into its new home instead of moved has no chain, and the archive claim is false. When a doc line's fact belongs at a code seam, move it and delete the line; behavior-proven platform facts are the one exception and are deliberately dual-homed (see Grounding).
+- Before a sweep, keep each rationale and the locator of its evidence. Do not delete evidence a ledger needs for a promised replay. Record a retention condition, and check that a cold reader can rebuild the promised result before you delete.
+- Decided and Tried & rejected lines are dated one-liners, appended in order. A decision that needs more than two lines of rationale is probably an ADR.
+- An Owed line may link a spec file in the same directory when the work needs one. Default to a line.
+- Delete an Owed line when it is done. Git history keeps it.
+- Rebuild, don't append. When a ledger is longer than two screens, or its Decided lines predate the current shape of the code, rewrite it as the current truth in one commit and date the rewrite. Cut a Decided line that current code makes obvious. Cut a Tried & rejected line that current code makes impossible to propose again. Sweep a `MAP.md` whose open decisions have all moved, and do not amend it.
+- Legacy feature directories keep their files until someone works in them. When you work in one, fold its living content into `LEDGER.md` and delete what is stale.
+- Design-language and primitive gaps belong to `docs/features/design-system/LEDGER.md`, as one line that names the consumer routes. A route ledger records only its own application and evidence, and never restates the verdict or the gap. Any gap that spans surfaces works the same way: one ledger holds it, and the others cite it.
+- A ledger never gets a fourth section. Reusable method belongs in a skill. Schema belongs in doc comments on the owning type, plus a showcase fixture beside the data when the intent needs prose.
+- A gap found mid-session in tooling you are using goes to a code site in this repo as a `TODO:`, never as a ledger line. When no code site exists here (an SDK defect, an upstream dependency), write one Owed line in the ledger of the surface that owns it, not the ledger of the session that found it.
+- When you delete a `MAP.md`, sweep its out-of-scope list once. Promote only what is expensive to rebuild or likely to be proposed again by an agent: a feature-scoped item becomes a Tried & rejected line, and a cross-feature item becomes a rejected-architecture ADR. Everything else goes with the map.
+- Deleting the thing a guard checks, so that the guard turns green, is a defect. Before you remove a file a guard names, grep for text that cites it, because a prose citation without a markdown link is invisible to the guard.
+- Promote and delete in the same commit. A HISTORICAL or CLOSED banner on a tracked doc is a failing state, not a way to archive.
+- Fold files with `git mv`, or append and then delete, so that history follows. Git history is the archive only when the path chain can be followed, so a file retyped into its new home has no archive. When a doc line's fact belongs at a code seam, move it there and delete the line. Behavior-proven platform facts are the one exception, and they live in both places on purpose (see Grounding).
+
+## Maps
+
+A large change gets a `MAP.md` in its feature directory, with these headings in this order:
+
+```markdown
+# <effort> map
+## Nouns and invariants
+## Ordered deletable slices
+## Deletion criteria
+## Risk tier per surface
+## Decision log
+```
+
+The decision log is append-only. The map is deleted when the effort ends, after the sweep the Ledgers rules describe.
 
 ## ADRs
 
-`docs/adr/NNNN-slug.md`, sequential (scan for highest number, increment). Format: Context / Decision / Consequences, one page max. Immutable once accepted; reversals are a new ADR that supersedes.
+`docs/adr/NNNN-slug.md`, numbered in sequence: find the highest number and add one. The format is Context, Decision, Consequences, at most one page. An accepted ADR does not change. A reversal is a new ADR that supersedes it.
 
-Promotion bar: write an ADR only when the decision constrains *other* features, a seam, a proof lane, a persistence model, a public contract. Feature-scoped decisions stay in the feature ledger. Rejected architecture candidates also get ADRs so future reviews don't re-suggest them.
+Write an ADR only when the decision constrains other features: a seam, a proof lane, a persistence model or a public contract. A feature-scoped decision stays in the feature ledger. A rejected architecture candidate also gets an ADR, so that later reviews do not suggest it again.
 
 ## Authority docs
 
-Expensive-to-derive, slowly-evolving rationale that agents repeatedly fail to intuit. Not per-feature (that's a ledger), not a single decision (that's an ADR), not operating rules (that's AGENTS.md).
+An authority doc holds rationale that is expensive to derive, changes slowly, and that agents repeatedly fail to work out. It is not per feature (that is a ledger), not one decision (that is an ADR), and not operating rules (that is `AGENTS.md`).
 
 Current registry:
 - `docs/design/SURFACE-PHILOSOPHY.md`, what UI surfaces are for and how they behave
 - `docs/features/agent/PHILOSOPHY.md`, agent design
-- `docs/features/host/EFFECT-V4-PATTERNS.md`, Effect v4 idioms for the host (v3 reflexes produce wrong code)
+- `docs/features/host/EFFECT-V4-PATTERNS.md`, Effect v4 idioms for the host (v3 habits produce wrong code)
 - `docs/features/spatial/READING-REVIT.md`, what a Revit geometry read costs and what passes as geometry but is not
 - `docs/ARCHITECTURE.md`, `docs/BUILD.md`, `docs/OBSERVABILITY.md`, repo-wide authority
 
-Creation bar: only after wide-breadth synthesis work that should rarely be repeated. New authority docs live where their scope lives and must be added to this registry.
+Write a new authority doc only after synthesis work of wide breadth that should rarely be repeated. Put it where its scope lives, and add it to this registry.
 
 ## Handoffs
 
-`.artifacts/handoffs/<yyyy-mm-dd>-<topic>.md`, for passing research, baselines, or tooling/feedback-loop issues to the next agent. Prefer a copy-pasteable inline handoff when it fits in a message; write a file only for substantive payloads.
+`.artifacts/handoffs/<yyyy-mm-dd>-<topic>.md` passes research, baselines, or tooling and feedback-loop issues to the next agent. Prefer an inline handoff the user can copy when it fits in a message. Write a file only for a large payload.
 
-Handoffs are disposable by construction: a handoff is *consumed* when anything worth keeping has been promoted into a ledger, ADR, or code, then delete it. `.artifacts/` is gitignored, so deleted handoffs are gone, promote first; git history never applies here. Recurring tooling issues belong in AGENTS.md, not handoffs. Never park handoffs in the OS temp dir or a `docs/` subdir.
+A handoff is consumed when everything worth keeping has moved into a ledger, an ADR or code. Then delete it. `.artifacts/` is gitignored, so a deleted handoff is gone, and you promote before you delete. A recurring tooling issue belongs in `AGENTS.md`, not in a handoff. Never put a handoff in the OS temp directory or under `docs/`.
 
 ### `.artifacts/` layout
 
-Gitignored, so convention is the only structure. Top level holds build-tool-owned dirs (whatever `BuildArtifactLayout` writes, hands off) plus exactly four hand homes:
+`.artifacts/` is gitignored, so convention is its only structure. The top level holds directories the build tools own (whatever `BuildArtifactLayout` writes; do not touch them), plus three hand homes:
 
 - `handoffs/`, as above.
-- `runs/<lane>-<yyyymmdd>[-<slug>]/`, dated evidence output; keep reproducibility-critical runs while any ledger claims replay. Before deletion, name and meet a retention condition: preserve source identity, method, exclusions, and sufficient inputs for promised replay. Keep decisive numbers or text in the ledger or a committed research home. Git never archives gitignored runs.
-- `tmp/`, nothing here may be referenced by anything; anyone may delete any of it at any time.
+- `runs/<lane>-<yyyymmdd>[-<slug>]/`, dated evidence output. Keep a run while any ledger claims to replay it. Before you delete one, name and meet a retention condition: keep the source identity, method, exclusions, and enough inputs for the promised replay. Keep the decisive numbers or text in the ledger or a committed research home, because git never archives a gitignored run.
+- `runs/<effort>/` also holds a `control` loop's declaration and receipts and an archivist's `RECORD.md`. Verdicts from either go to the feature ledger.
+- `tmp/`. Nothing may reference anything here, and anyone may delete any of it at any time.
 
-Worktrees are NOT an `.artifacts/` home: create them **from the command line** as siblings of the repo at the same root so every session is a peer (`~/source/repos/Pe.Tools-<slug>` for kaitpw).
+A skill that names its own workspace under `.artifacts/` (`page`, `debrief`, `recon`) owns that directory.
 
-A probe or spike dir carries a one-line README naming its question. If a file isn't in `handoffs/` or a dated `runs/` dir, it is not part of live work. Third-party repos cloned for research live at `./.explore/<repo>` (see the `research` skill), never in `.artifacts/`.
+Worktrees are not an `.artifacts/` home. Create them from the command line as siblings of the repo, so that every session is a peer (`~/source/repos/Pe.Tools-<slug>`).
+
+A probe or spike directory has a one-line README that names its question. A file outside `handoffs/`, a dated `runs/` directory or a skill workspace is not part of live work. Clone a third-party repo for research to `./.explore/<repo>`, never into `.artifacts/`.
 
 ## Grounding
 
-Behavior-proven facts about adversarial platforms (Revit API, Jet/RHVAC, DWG export…) are proven by real behavior, not metadata. Default home is a **code comment or test at the site the fact governs**, recurring, systemic, or big-picture gotchas especially. Write a grounding doc only when no single code site exists (e.g. a manual runbook that *is* the proof lane, an API-wide gotcha list with no wrapper to annotate), and keep it **scoped to one subject in the feature dir it serves**, never merge subjects (Revit API gotchas, Jet quirks, tooling notes) into one shared doc; that's how facts get lost.
+Behavior-proven facts about hostile platforms (Revit API, Jet/RHVAC, DWG export and others) are proven by real behavior, not by metadata. Their default home is a code comment or test at the site the fact governs. Write a grounding doc only when no single code site exists, such as a manual runbook that is itself the proof lane, or an API-wide gotcha list with no wrapper to annotate. Keep each grounding doc to one subject, in the feature directory it serves. Never merge subjects (Revit API gotchas, Jet quirks, tooling notes) into one shared doc, because facts get lost there.
 
-**Proven grounding:** the second time a fact is re-derived or contested, pin it with a proof test in `Pe.Revit.Tests/Proofs/`, the `FOOTGUN:` comment names the test verbatim, the test's comment quotes the `FOOTGUN:` phrase, so one grep connects claim and proof in either direction. Don't pre-prove; the first derivation gets the comment, the second payment is the signal it's load-bearing. Grounding docs with no code site name their proof test the same way.
+The second time a fact is derived again or disputed, pin it with a proof test in `Pe.Revit.Tests/Proofs/`. The `FOOTGUN:` comment names the test verbatim, and the test's comment quotes the `FOOTGUN:` phrase, so one grep connects claim and proof in either direction. Do not prove a fact in advance: the first derivation gets the comment, and the second derivation shows the fact matters. A grounding doc with no code site names its proof test the same way.
 
 ## Research
 
-A single cited markdown file. Feature-scoped → the feature dir (link it from an Owed or Decided line). Repo-wide → `docs/research/`. No research branches.
+Research is one cited markdown file. Feature-scoped research goes in the feature directory, linked from an Owed or Decided line. Repo-wide research goes in `docs/research/`. Research never gets its own branch.
 
 ## Greppable prose
 
-Docs earn their keep by being findable from code and vice versa. Pragmatic rules:
+A doc is useful when code can find it and it can find code.
 
-- ASD-STE100 and unslop ALL captured knowledge, no exceptions!
-- Name code identifiers **verbatim** (`FamilyModel`, `build_evidence`, `w-(--anchor-width)`), never paraphrase, abbreviate, or synonym them. One grep should connect the doc line to its code.
-- In code, mark durable knowledge with a greppable prefix: `TODO:` (owed, small enough to live in code), `SHIM:` (stand-in, name the replacement condition), `FOOTGUN:` (behavior-proven platform trap). Prefer these over doc files when a code site exists; a ledger Owed line may point at a `TODO:` rather than restating it.
-- Ledger/doc lines that reference a marked site quote the marker text so grep finds both ends.
+- Name code identifiers verbatim (`FamilyModel`, `build_evidence`, `w-(--anchor-width)`). Never paraphrase, abbreviate or substitute a synonym, so that one grep connects the doc line to its code.
+- In code, mark durable knowledge with a prefix grep can find: `TODO:` (owed, small enough to live in code), `SHIM:` (a stand-in; name the condition that replaces it), `FOOTGUN:` (a behavior-proven platform trap). Prefer these to doc files when a code site exists. A ledger Owed line may point at a `TODO:` instead of restating it.
+- A ledger or doc line that refers to a marked site quotes the marker text, so grep finds both ends.
 
 ## Commits
 
-- No size rules; annotate big commits with rough shape in the subject or body: `(+85/-2098)`.
-- Messages are human-readable and concrete, lead with how **behavior** changes, not abstractions ("family page reads real family.json, fixture becomes fallback" beats "refactor family data layer").
+- Commits have no size rule. Note the rough shape of a large commit in its subject or body, such as `(+85/-2098)`.
+- Write messages a person can read, and lead with how behavior changes. "family page reads real family.json, fixture becomes fallback" is better than "refactor family data layer".
 
-## Frozen
+## Deleted homes
 
-`docs/context/` and `docs/rework/` were swept and deleted on 2026-08-17 (every surviving fact folded into ledgers, grounding docs, ADRs, or code comments, git history holds the long forms). Neither dir may be recreated. New writing goes to ledgers, handoffs, or (research only) `docs/research/`.
+`docs/context/` and `docs/rework/` were swept and deleted. Do not recreate either. New writing goes to ledgers, handoffs, or (research only) `docs/research/`.

@@ -8,26 +8,30 @@ prevents: "first shape kept: a seam settled before the alternatives were seen"
 ---
 # Muse
 
-**Be the Platonic Demiurge.** The Demiurge does not create; it shapes what is toward the forms, as well as matter allows, and it does not choose a form before it has gazed at all of them. Wander the realm of forms alongside the user; converge only when every form has been seen, and one of the shapes on the table is always one you would argue against. If you catch yourself defending one shape before all are on the table, you converged early.
+**Be the Platonic Demiurge.** The Demiurge does not create. It shapes what exists toward the forms, as far as matter allows, and it does not choose a form before it has looked at all of them. Do not converge until every form is on the table, and keep one shape on the table that you would argue against. If you catch yourself defending a shape before all of them are out, you converged early.
 
-> Spiritually, the repo is greenfield: back compat is banned, no consumers exist, no legacy constraints bind.
+The repo is greenfield: back compat is banned, no external consumer exists, and no legacy constraint binds. Internal callers exist and are censused, then rewritten.
 
-Wander every path like slime mold in an oat maze; fit like a glove wet-molded to a hand. The final shape is a Steiner tree of the true requirements, pulled to pitch like a drum skin: Occam's razor as tension. The ideal shape is the balance point between goals and constraints, which oppose. Nothing that doesn't connect, nothing longer than it must be. Shape is often a question of desired capabilities in disguise. "Code is the spec" still holds, but we are writing the new spec; it exists nowhere yet in code or in concept.
+## Terms
 
-Speak in deep-module words and no others: a **module** is anything with an interface and an implementation, at any scale; its **interface** is everything a caller must know (types, invariants, ordering, errors, config, perf), not the signature; an **adapter** is the thin thing at a **seam**. A deep module hides much behind little. Deepen where `git log` is hot, never by scanning cold.
+Use the deep-module terms. A **module** is anything with an interface and an implementation, at any scale. Its **interface** is everything a caller must know (types, invariants, ordering, errors, config, performance), not only the signature. An **adapter** is the thin part at a **seam**. A deep module hides a lot behind a small interface. Deepen modules where `git log` shows frequent change, not by scanning code nobody touches.
+
+The ideal shape balances goals against constraints. It connects every true requirement and nothing else, with no part longer than it must be. A question about shape is often a question about which capabilities the user wants. Code is the spec, but here the new spec does not exist yet in code or in concept.
 
 ## Loop
 
-1. Name the nouns from first principles, as if the codebase did not exist. Flag any noun that exists only because of legacy structure; it may not survive. Align on language before anything compounds.
-2. Typologize along every axis. Every axis yields a shape, both poles included, from too simple to too radical; the user sets the width.
-3. List the anchors: precedent, metrics, limits, speculative consumers. Label each LAW (physics, platform, primitives) or LORE (convention, habit). LORE may be defied; say when.
-4. Baseline: failure modes, consumption census, quantify the bad.
-5. Prune legibly: write each shape's epitaph before it advances.
-6. Get feedback early: no shape is selected until each survivor has faced a mock consumer or a spike.
-7. Refine until aligned. Two rounds that add no shape and kill none end the loop.
+1. Name the nouns from first principles, as if the codebase did not exist. Flag any noun that exists only because of legacy structure, because it may not survive. Agree on the words before anything builds on them.
+2. Lay out the options along every axis. Each axis yields a shape at each pole, from too simple to too radical. The user sets how wide to go.
+3. List the anchors: precedent, metrics, limits, speculative consumers. Label each LAW (physics, platform, primitives) or LORE (convention, habit). LORE may be defied, and you say when you defy it.
+4. Take a baseline: failure modes, a census of how the current shape is consumed, and numbers for what is bad.
+5. Write each shape's kill criterion before it advances.
+6. Get feedback early. Do not select a shape until each survivor has faced a mock consumer or a spike.
+7. Refine until the user and you agree.
 
-Score shapes on what they make impossible, never on what past reviews caught. A bar keyed to known findings silently defers every layer nobody has read yet, so the largest correct cut is the one it drops.
+For a seam, a service boundary or a terminology split, run the round in this order: independent readings on non-overlapping evidence, then one agreed decisive test or spike before anyone argues for a shape, then the owner rules. `delegate` holds the rules for those readings.
 
-The prompt is signal, never the whole picture; `grill` throughout. Once a shape is found, `index` routes. Not every ideal demands implementation; this is an exercise for the user as much as anything. Verdicts persist per `docs`.
+Score each shape on what it makes impossible, not on what past reviews caught. A bar built from known findings defers every layer nobody has read yet, so it drops the largest correct cut.
 
-Report in `index`'s artifact register: shapes side by side, never a wall of prose.
+The prompt is a signal, not the whole picture, so use `grill` throughout. Once a shape is found, `index` routes the next step. Not every ideal needs to be built, and the exercise can be for the user's understanding alone. Persist verdicts per `docs`.
+
+Report the shapes side by side, not as a wall of prose.

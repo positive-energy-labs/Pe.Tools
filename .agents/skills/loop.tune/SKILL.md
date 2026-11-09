@@ -8,18 +8,18 @@ prevents: "tuned by ear: a constant fixed by hand where a rule should hold"
 ---
 # Tune
 
-**Be the Tuner; strike the fork first.** The tuner never touches a peg before the fork sounds, and never tunes one string to taste: the instrument is set to a temperament, one rule every string obeys, and then the whole scale is played again. A string pulled to a number by ear is flat within the hour. A wolf, one interval that got worse, says the temperament is wrong, not the string. Play the scale yourself after every pass; a pupil's word that it sounds right is not pitch.
+**Be the Tuner; strike the fork first.** Do not touch a peg before the fork sounds, and do not tune one string to taste. The tuner sets the instrument to a temperament, one rule every string obeys, and then plays the whole scale again. A string pulled to a number by ear is flat within the hour. A wolf, one interval that got worse, says the temperament is wrong, not the string. Do not accept a pupil's word that it sounds right: play the scale yourself.
 
-Mode: no edit until an instrument has measured the complaint and proven it can register; no number lands where a rule could.
+No edit lands until an instrument has measured the complaint and shown it can register it. No number lands where a rule could.
 
 ## Laws
 
-- The fork is the first deliverable. Build the instrument that measures the felt complaint directly (interaction timing, hover-to-popover, layout shift with sources, long tasks, bytes and ms per read), and prove it registers before trusting a zero: a zero must be distinguishable from "not observing". It checks the page's health and aborts a run on a reload or a crash screen rather than skipping what vanished.
-- A lying lane is a boundary. A throttled tab, a background window, a page reloaded mid-run, a CLI spawn per call: each makes the numbers false, and the first false run is the finding, not a retry. Name the lane the numbers came from.
-- Census before any fix, read-only, ranked by share of the damage, with the global fix named per cause and the file:line that proves it. The census is deliverable one even if nothing else lands.
-- Tune the temperament. A fix is a rule that makes the whole class impossible (draw only what is on screen; one row height; one placeholder per route until its projection lands; a popover only expands what its row holds), landed in the house document with a guard or a test. A constant that mirrors a size elsewhere is a string tuned by ear: a count comes from the projection or the component that owns it, never a literal.
-- The fixing wave is sequenced by collision, not by topic: each agent owns a disjoint file set, and nothing edits the tree while anything measures it, because a save reloads the server and voids the run. Measure, then fix, then measure; never both at once.
-- Purge before the final pass, so the numbers judge the final shape and the net line count is reported by bucket.
-- Play the scale again with your own hands: re-measure only what the census touched, from the same instrument, and show before and after side by side. Say which fixes held, which did not, and which were never exercised.
-- A wolf ends the approach. When a pass makes any number worse, the method was wrong (a guess, a mirror, a mode), and the next move is back to the rule, not a better guess.
-- Stop with four things: the before/after table, the rule in the house document with its guard, the purge, and the rulings the user still owes. Mechanics of tabs, sessions and harnesses live in `execute`; who flies which line lives in `delegate`.
+- The instrument is the first deliverable. Build one that measures the felt complaint directly (interaction timing, hover-to-popover, layout shift with sources, long tasks, bytes and ms per read). Prove it registers before you trust a zero, so that a zero is distinguishable from "not observing". It checks the page's health, and it aborts a run on a reload or a crash screen instead of skipping what vanished.
+- A throttled tab, a background window, a page reloaded mid-run, or a CLI spawn per call makes the numbers false. Report the first false run as the finding. Name the lane the numbers came from.
+- Before any fix, take a read-only census per `purge`, ranked by share of the damage, with the global fix named per cause and the file:line that proves it.
+- Fix with a rule that makes the whole class impossible: draw only what is on screen, use one row height, show one placeholder per route until its projection lands, let a popover expand only what its row holds. Land the rule in code with a guard, and a design rule in the component library per `house` or a test. A constant that mirrors a size elsewhere is a hand-tuned value: a count comes from the projection or the component that owns it, never from a literal.
+- Measure, then fix, then measure. Never edit while anything measures. `delegate` sequences the fixing agents by collision.
+- Purge before the final pass, so the numbers judge the final shape. Report the net line count by bucket.
+- Re-measure yourself, with the same instrument, only what the census touched. Show before and after side by side. Say which fixes held, which did not, and which were never exercised.
+- When a pass makes a number worse, suspect the method first (a guess, a mirrored constant, a mode) and go back to the rule before trying a better guess.
+- Stop with four things: the before/after table, the rule landed with its guard, the purge, and the rulings the user still owes. `execute` holds the mechanics of tabs, sessions and harnesses.

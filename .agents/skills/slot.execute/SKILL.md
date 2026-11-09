@@ -8,24 +8,19 @@ scope: repo
 
 # Execute
 
-**Everything must be learned.** Pe.Tools tooling is deliberate and changes quickly. Doubt memory; read current repo commands, tool guides, and returned identity before action.
+**Enter the proving ground.** A run proves only the bytes, process, state and surface it touched. Do not climb to a higher lane that touches the wrong thing, and do not report a claim from a lane that could not have failed it.
 
-**Enter the proving ground.** A run proves only the bytes, process, state, and surface it touched. Climb to the cheapest lane that can falsify the claim. A higher lane is not better when it touches the wrong thing.
+**Keep the chain of custody.** Name the checkout, commit, command, binary, session and result that connect the claim to reality. Do not infer a link: one inferred link makes the claim unproven. Do not trust memory of a command either, because this tooling changes quickly.
 
-**Keep the chain of custody.** Name the checkout, commit, command, binary, session, and result that connect the claim to reality. If one link is inferred, the claim is unproven.
+## Before a run
 
-**Tooling failures are systemic signals.** One unexpected failure starts diagnosis. Do not retry until you know what changed. Repeated friction belongs in the substrate or a check before it becomes another paragraph here.
-
-## Operating contract
-
-- Name the claim and proof lane before the run. Report it as `PROVEN[lane, where, commit, when]`, `FALSIFIED[lane, what broke]`, or `UNPROVEN[why]`.
-- Use an explicit working directory. Read the checkout and commit before a long or stateful run. Read the answering binary identity when a CLI exposes one.
-- Preserve user and concurrent state. Stop only processes, panes, sessions, and servers this run created.
-- Prefer the repo's command, then the tool's guide or help. Do not preserve a copied CLI manual here.
-- Read `docs/ARCHITECTURE.md` and `docs/BUILD.md` before multi-package, build, deployment, or dev-loop changes.
-- Use PowerShell. `AGENTS.md` owns Windows quoting and exit-code footguns.
-- A native claim (Revit, tray, installed host) runs through `tools/acceptance.py` (setup, probe, census, teardown; read its docstring) and records its SDK calls as envelopes under the run's `ev/`. Round 4 to 4e (RUN.md, 2026-10-13) re-built setup and census each time and found three isolation leaks one round at a time.
-- One agent owns a native FALSIFIED from diagnosis through fix to the native re-check, in one task. In 4d to 4e the cause, the fix, and the native re-check went to three agents and a falsified cleanup took two more rounds.
+- Name the claim and its lane before the run. Stamp the result in the format `prove` gives.
+- Use an explicit working directory. Read the checkout and commit before a long or stateful run, and read the answering binary's identity when the CLI reports one.
+- Prefer the repo's command, then the tool's own guide or `--help`. This file does not copy a CLI manual.
+- Read `docs/ARCHITECTURE.md` and `docs/BUILD.md` before a multi-package, build, deployment or dev-loop change.
+- The shell is PowerShell. `AGENTS.md` Tooling Footguns holds the quoting and exit-code traps.
+- A native claim (Revit, tray, installed host) runs through `tools/acceptance.py`, which does setup, probe, census and teardown. Read its docstring. Record its SDK calls as envelopes under the run's `ev/`.
+- One agent owns a native FALSIFIED from diagnosis through fix to the native re-check, in one task. Splitting cause, fix and re-check across agents costs extra rounds.
 
 ## Stack
 
@@ -33,9 +28,11 @@ scope: repo
 |---|---|
 | C# and Revit | `dotnet`; the checkout-pinned `pe-revit` tool |
 | Host and web | VitePlus through the `vp` command or package scripts |
-| Pea and host operations | `pea`, after verifying which checkout and host lane it resolved |
-| Browser | `pea browser` (`@pe/browser`); the harness preview only to show the person a page |
-| Agents | the harness Agent tool by default; `.agents/skills/slot.execute/herdr.ps1` only when the user must see or talk to the agent, the work needs its own thread to revisit, or one agent hands off to another |
+| Pea and host operations | `pea`, after you verify which checkout and host lane it resolved |
+| Browser | `pea browser` (`@pe/browser`); the harness preview only to show the user a page |
+| Subagents | see the paragraph below |
+
+**Subagents.** Use the harness Agent tool for work that returns as text, or that edits files inside this checkout, when the main agent does not wait on it. Use T3 `delegate_task` for work the main agent waits on, or work that needs its own worktree. Use `.agents/skills/slot.execute/herdr.ps1` only when the user must see or talk to the agent, the work needs its own thread to revisit, or one agent hands off to another. `delegate` decides who gets the work. Never use Codex-native `spawn_agent` for work anyone waits on, because its children are invisible to T3 and `wait_agent` times out.
 
 ## Proof lanes
 
@@ -46,15 +43,17 @@ scope: repo
 | artifact | the produced package or generated file has the inspected shape | installation or execution |
 | fresh | a Revit-backed test in its own ephemeral controlled Revit | an existing durable session |
 | attached | a test in a named existing controlled session | fresh boot or installed bytes |
-| session | behavior in a named durable controlled Revit; name `dev` or `installed` payload | another session or payload lane |
+| session | behavior in a named durable controlled Revit; name the `dev` or `installed` payload | another session or payload lane |
 | installed | product-root or MSI behavior | checkout bytes |
-| browser | the rendered and interactive route the browser actually loaded | Revit mutation unless the route's receipt proves it |
+| browser | the rendered and interactive route the browser actually loaded | Revit mutation, unless the route's receipt proves it |
+| visual | what a rendered frame shows, labelled against real ids or tokens | behavior or data the frame did not draw |
+| static decompile | what shipped code says | what that code does at runtime |
 
-HTTP, source inspection, screenshots, logs, and hot-reload verdicts are evidence inside a lane. None upgrades the lane by itself.
+HTTP responses, source reads, screenshots, logs and hot-reload verdicts are evidence inside a lane. None of them raises the lane.
 
 ## Revit control plane
 
-The SDK owns generic build, process, session, document, test, package, and install mechanics. Ask it instead of guessing:
+The SDK owns build, process, session, document, test, package and install mechanics. Ask it for verbs, flags and exit codes:
 
 ```powershell
 dotnet tool run pe-revit -- guide
@@ -64,53 +63,54 @@ dotnet tool run pe-revit -- <family> --help
 dotnet tool run pe-revit -- <command> --json
 ```
 
-- Run `test --plan` or `session start --plan` before first Revit contact in a checkout. `pe-revit test --project <P>` chooses deterministic or fresh from the project; `--attach --id <session>` chooses attached.
-- `session list` is the machine census. It projects controlled rows from receipts and observed rows from exact Revit process identity. `--all` adds gone, failed, and unreadable evidence.
-- `session start --quarantine` is the opt-in clean boot for Revit 2025.3+; it disables third-party add-ins only for that session and restores the native store when the session ends.
-- Custody records acquisition. `controlled` means the SDK holds a registry row; an observed Revit answers reads through `--pid`, and its first targeted mutation adopts it, only inside the caller's execution boundary (SDK ADR 0012: a checkout never drives an installed Revit, nor the reverse; a Revit with no answering Pe bridge is refused). The SDK owns that guard.
-- An agent's own Revit starts `--background`: `session start --background --id <name> --year <Y>`, or `doc open <file> --start --window headless` to start and open in one verb. Background cancels any dialog with no proved answer and fails the running op; a person's session keeps its dialogs.
-- `pe-revit start`, `hr`, `open <source>`, and `stop` are the checkout's default forms. `--id <name>` names a session; `--pid <number>` names a process. The SDK resolves the checkout and year, then the single running session, and refuses ambiguity.
-- `pe-revit hr` is the disposable development edit loop. Its hot or cold verdict proves delivery, not product behavior. Re-run the behavior. A cold swap discards unsaved edits and reopens all recoverable documents from a fresh checkpoint, including documents opened outside the CLI; never-saved documents are dropped and views are not restored. HR requires `shape.reload: hot`. Use other shapes for work that must survive.
-- `doc list [--id <session>]` is the document census before acting (no `--id`: every live session; `--recent [--year <Y>]` needs no Revit). `doc open <file> --id <session> --window headless` opens, `doc save --doc <openId> [--out <F>]` saves, `doc close --doc <openId> --unsaved keep|discard` closes.
-- `op run <key> --id <session> [--doc <openId>] [--body <file>]` runs an SDK or product op on the session's one queue and waits; `--no-wait` returns `running`. Then `op wait <requestId>`, `op cancel <requestId>`, and `op result <requestId>` (needs no Revit); `op list` tails the receipts.
-- Every mutating verb takes `--request-id <uuid>` (your recovery handle), `--expect-session <receiptPath>|absent`, and `--expect-doc <openId>|absent|new`. Exit codes: 0 ok, 1 failed, timed-out, cancelled or abandoned, 2 bad invocation, 3 refused (never ran), 4 running or transport-lost (read the receipt).
-- A wedged Revit ends with `session reset` (`--restart` relaunches and reopens recoverable documents from the available checkpoint), never a kill. `pe-revit stop` stops the resolved checkout session. A checkout session is disposable: stop, reset, close and cold HR default to `--unsaved discard`. Every other shape requires `--unsaved keep|discard`; `keep` is always typed, and `--force` never skips the save.
-- Terminal `dotnet build` and `publish` are isolated compile or artifact lanes. Raw `dotnet test` is forbidden for Revit-backed projects.
-- The MSI installs the product; `update check|apply` plans and applies product updates through the host's update route, and `doctor [--fix]` reports and repairs wiring.
-- Never use `Stop-Process`, `taskkill`, or direct Revit launch. `pe-revit session` owns controlled Revit lifecycle. Never mutate installed product state without explicit authority.
-- Opening a `.rvt` by file association joins whatever Revit is running, including an SDK snapshot session with add-ins quarantined. Never open a document for the person while `session list` shows a controlled session; the person launches their own Revit first. A delegated agent stops only the session id it started, and reports the person's Revit pid alive before and after (2026-09-25: a stopped snapshot took the person's unsaved work with it).
+- Run `test --plan` or `session start --plan` before the first Revit contact in a checkout.
+- Never use `Stop-Process`, `taskkill`, or a direct Revit launch. `pe-revit session` owns the Revit lifecycle. A wedged Revit ends with `session reset`, never a kill.
+- Raw `dotnet test` is banned for Revit-backed projects, because it launches or reuses Revit itself. Terminal `dotnet build` and `publish` are safe beside a running session.
+- An agent's own Revit starts in the background, so a dialog with no proved answer fails the op instead of waiting for a person. `guide session` gives the form.
+- An HR verdict proves delivery, not behavior. Re-run the behavior after it. A cold swap discards unsaved edits, so use another session shape for work that must survive.
+- Opening a `.rvt` by file association joins whatever Revit is running, including an SDK snapshot session with add-ins quarantined. Never open a document for the user while `session list` shows a controlled session. The user launches their own Revit first. A delegated agent stops only the session id it started, and reports the user's Revit pid alive before and after.
+- Never mutate installed product state without the user's explicit authority.
+- The generated `ts/packages/host-contracts/src/vendor/generated/pe-revit-contract.ts` owns `pe-revit` argv and envelopes. Do not hand-write either.
+- A Revit-backed drive runs on its own controlled session, a disposable copy of the model, and an isolated product home (`PE_TOOLS_PRODUCT_HOME`), all named in its receipt. `pea script` against that session needs the same `PE_TOOLS_PRODUCT_HOME`, or it reports no running dev host.
 
-## Host, web, Pea, and browser
+## Host, web and Pea
 
-- `pnpm verify` from `ts` is the comprehensive workspace checkpoint and CI command. Use it before a worktree merge or release, after a large accumulation of messy changes, or after roughly one to three major campaign waves; choose the seam by scale and coupling, not a rigid count. Do not run it after every tweak or checkpoint commit. During iteration, use the affected package check, a focused reproducer, manual UI interaction, or a bounded `pe-browser`/Vitest user-flow run that can falsify the current claim. Consolidate durable coverage at the substantial checkpoint. After a gate failure, diagnose and rerun the affected stage; repeat wider stages only when intervening changes or unresolved failures invalidate their evidence. Coordinate one coherent candidate across owners; do not chase a moving tree into one all-green run. Preserve full output in an artifact and bring only the decision-relevant result into the conversation. Record unrelated failures with their owner and consequence; they do not silently expand the current task or disappear from a readiness claim.
-- A dependency install, an owner-config compile or a focused package test needs no grant, slot or queue; a line runs them when its source is ready. Only native Revit runs, browser measurements and the integrator's coupled checkpoint are serialized (2026-11-04: 49 of 171 pilot messages asked permission for a 30-second install, and source-ready candidates sat "UNPROVEN pending slot").
-- A tracked generated artifact is regenerated by the commit that changes its source, never by a check. A check that writes a tracked file mutates the candidate it claims to verify; a merge that changes a pinned source without regenerating it breaks the next build. Prefer deleting the tracked artifact when the build can derive it (2026-11-05: three kernel tips in one night refused to build on stale closure pins, and a test run rewrote them under the purger; the agent-time retro had named the same hidden writer).
-- Source files and patches are written by the edit tool or by git (`git diff --output`, `git apply`), never through PowerShell's Set-Content, Out-File or a pipe, which add a BOM, CRLF or codepage bytes. A destructive step such as checkout or reset runs as its own command, after the check that guards it has passed (2026-11-05, twice: a patch saved by Set-Content failed its check while the chained checkout ran anyway; a feedback line committed a source file that was not valid UTF-8 and broke the Vite dependency scan).
-- A message that unblocks a line in a running turn is sent as a steer. Queue only what can wait for that turn to end, and mode auto starts a turn on an idle line (2026-11-05, twice: five rulings sat behind a 75-minute kernel turn overnight; a contract another line was coding against was queued behind a 100-minute feedback turn).
-- While the user's dev session runs from the root checkout, a fast-forward of main there is an edit burst to their live dev server and a merge over their own edits. Land it when they ask or between sessions, and stop any fast-forward that touches a path they modified (2026-11-05, twice: three fast-forwards in one afternoon queued a full route-closure rebuild per changed file and wedged 5175; a triage fix in route-panes.tsx sat in the same working tree that main was moving).
-- A resource hold names the rule it obeys, who set it, and the reading that trips it now; a rule from an earlier wave expires with that wave. A line that is held asks the owner of the rule in one line and does not wait more than ten minutes (2026-11-05: the Driver held twice in one night on a 16.5 GiB floor and a one-Revit slot inherited from the previous wave, while 17 GiB were free; the same inherited RAM gate recurred across the prior wave).
-- Run host or web dev servers as background processes; use Herdr only when the user needs the pane. Ports are dynamic; read the service receipt under `%LOCALAPPDATA%\Positive Energy\Pe.Tools\state\service\` instead of assuming one.
-- The generated contract in `packages/host-contracts/src/vendor/generated/pe-revit-contract.ts` owns `pe-revit` argv and envelopes. Do not hand-write either.
-- `pea` is checkout-pinned. Read the checkout and host URL it reports before treating its answer as evidence, especially from a worktree.
-- The platform record for `prove` is Pea's `revit_docs_search` tool (`ts/packages/mcps/src/shared/autodesk-docs/`): sources `help` and `blog` first; `help` covers the newest Revit year. Our WHY-NOT-REVIT claim "one coefficient per fitting" stood until a 2026 class showed per-leg analytical-segment overrides the help site had documented all along.
-- Before telling the user a tool or account capability is absent, read the tool's own protocol and help. `codex app-server generate-json-schema` lists `account/rateLimits/read` and the reset-credit redeem; a private stdio `codex app-server` serves them without touching T3's processes. Claude usage reads the same account endpoint `/usage` does. Both are in `.agents/skills/slot.execute/meter.py`, which only reads; redeeming is `account/rateLimitResetCredit/consume` with a fresh idempotency key, on the user's rule only (2026-11-05: "I cannot read either meter" was false within ten minutes of looking).
-- Discover host operations before calling them. Put structured requests in a file; do not pass JSON through PowerShell quoting. A mutation script ends with an independent read-back.
-- Show a picture to the person with a markdown image whose absolute path uses forward slashes: `![x](C:/Users/.../out.png)`. A backslash path does not render in the T3 chat (2026-09-26). Put the backslash path in a code block beside it for copying.
-- **Browser proof is `pea browser`.** It is on PATH through the `pea` shim (`pe-browser` is not), and `pea browser guide` prints its manual without starting anything. It owns its Chrome (headless or `--visible`), leases one tab, records receipts and retires what it started. Its gestures re-locate the control by role and name on every call, hit-test the point before pressing, and read typed values back, so a covered, disabled or mistyped control comes back `blocked` or `mismatch` instead of being forced. That is the only input that proves what a person can do. The harness preview and T3 preview tools are for showing the person a page; their timeouts are tool boundaries, never product findings. Computer Use is banned on this machine. A scripted `element.click()`, dispatched event, store call or endpoint never stands in for a UI step (2026-11-06: earlier drive greens on DOM clicks had to be re-scoped; agents reached for preview, chrome-agent and playwright because this skill named them, and never found the package).
-- A repeatable journey is a typed program under `ts/tests/e2e/` (`journey()` from `cdp.ts`, beside `j1`–`j5`), not prose. Run one from `ts` with `node tests/e2e/<j>.ts`; one-off checks use the CLI verbs (`pea browser SESSION click|type|press|shot`). Inspect console, network and visible state; if no browser can be driven, report the browser claim UNPROVEN and prove only the lower lane.
-- A measured browser claim (hover timing, layout shift, long tasks) needs a visible, unthrottled tab: `pea browser launch --visible --unthrottled`. A background tab pauses animation frames and throttles timers, so popovers never open and no shift or long-task entry is recorded.
-- Keep one observer connection for the whole run and write captured bodies to a file; a CLI spawn per call costs seconds. Any edit to the tree reloads the dev server and voids a run in progress.
-- A Revit-backed drive runs on its own controlled session (`pe-revit session start --id <name>`), a disposable copy of the model and an isolated product home (`PE_TOOLS_PRODUCT_HOME`), named in its receipt; `pea script` against that session needs the same `PE_TOOLS_PRODUCT_HOME` or it reports no running dev host.
+Run pea scripts, host operations, or `pea --prompt` only after the SDK session is fresh, and only when product behavior is the proof target. Use Pea's own doors (`pe_find`, `pe_read`, `pe_do`, the Revit API docs) and the `pea --prompt` probe for black-box product feedback, never for reviewing repo source.
+
+- `pnpm verify` from `ts` is the whole-workspace checkpoint and the CI command. Run it before a worktree merge or a release, and after a large batch of messy changes. Do not run it after every edit. During iteration, run the affected package check, a focused reproducer, or a bounded `pea browser` or Vitest user flow that can falsify the current claim.
+- After a gate failure, diagnose it and rerun the failed stage. Rerun wider stages only when later changes or open failures invalidate their evidence. Keep the full output in an artifact, and bring into the conversation only the result that changes the decision.
+- Record an unrelated failure with its owner and consequence. It does not expand the current task, and it stays in any readiness claim.
+- A dependency install, an owner-config compile or a focused package test needs no grant, slot or queue. A thread runs them when its source is ready. Only native Revit runs, browser measurements and the integrator's coupled checkpoint are serialized.
+- The commit that changes a tracked generated artifact's source also regenerates the artifact. A check never regenerates a tracked file, because it would change the candidate it claims to verify. Delete the tracked artifact when the build can derive it.
+- Write source files and patches with the edit tool or with git (`git diff --output`, `git apply`). Never use PowerShell `Set-Content`, `Out-File` or a pipe, because they add a BOM, CRLF or codepage bytes. Run a destructive step such as checkout or reset as its own command, after the check that guards it has passed.
+- Send a message that unblocks a running turn as a steer. Queue only what can wait for that turn to end.
+- While the user's dev session runs from the root checkout, a fast-forward of main there rebuilds their dev server and merges over their edits. Land it when they ask or between sessions. Do not fast-forward over a path they modified.
+- A resource hold names the rule it obeys, who set it, and the reading that trips it now. A hold from an earlier batch expires with that batch. A held thread asks the rule's owner in one line and waits at most ten minutes.
+- Run host and web dev servers as background processes. Ports are dynamic, so read the service receipt under `%LOCALAPPDATA%\Positive Energy\Pe.Tools\state\service\`.
+- `pea` is checkout-pinned. Read the checkout and host URL it reports before you treat its answer as evidence, especially from a worktree.
+- Discover host operations before you call them. Put a structured request in a file, never in PowerShell quoting. End a mutation script with an independent read-back.
+- Pea's `revit_docs_search` tool (`ts/packages/mcps/src/shared/autodesk-docs/`) searches the Revit platform record. Use sources `help` and `blog` first. `help` covers the newest Revit year. `prove` says when a claim must cite it.
+- Before you tell the user a tool or account capability is absent, read the tool's own protocol and help. `.agents/skills/slot.execute/meter.py` reads the Claude and Codex usage meters and changes nothing. Redeem a reset credit (`account/rateLimitResetCredit/consume`, with a fresh idempotency key) only on the user's rule.
+- Show a picture to the user with a markdown image whose absolute path uses forward slashes, such as `![x](C:/Users/.../out.png)`, because a backslash path does not render in T3 chat. Put the backslash path in a code block beside it for copying.
+
+## Browser
+
+- Browser proof is `pea browser`. The `pea` shim puts it on PATH, but `pe-browser` is not on PATH. `pea browser guide` prints its manual without starting anything. It owns its Chrome (headless or `--visible`), leases one tab, records receipts and retires what it started.
+- Its gestures find the control by role and name on every call, hit-test the point before pressing, and read typed values back. A covered, disabled or mistyped control returns `blocked` or `mismatch`. Only these gestures prove what a user can do.
+- A scripted `element.click()`, a dispatched event, a store call or an endpoint never stands in for a UI step.
+- The harness preview and T3 preview tools only show the user a page. Their timeouts are tool limits, not product findings. Computer Use is banned on this machine.
+- A repeatable journey is a typed program under `ts/tests/e2e/` (`journey()` from `cdp.ts`, beside `j1` to `j5`). Run one from `ts` with `node tests/e2e/<j>.ts`. One-off checks use the CLI verbs (`pea browser SESSION click|type|press|shot`). Inspect console, network and visible state. If no browser can be driven, stamp the browser claim UNPROVEN and prove only the lower lane.
+- A measured browser claim (hover timing, layout shift, long tasks) needs a visible, unthrottled tab: `pea browser launch --visible --unthrottled`. A background tab pauses animation frames and throttles timers, so popovers never open and no shift or long task is recorded.
+- Keep one observer connection for the whole run and write captured bodies to a file, because a CLI spawn per call costs seconds. `delegate` sequences edits around a measuring run.
 
 ## Worktrees and Herdr
 
-- Create worktrees as sibling directories with `git worktree add`; never nest them.
-- A fresh worktree has no dependency install. From `ts`, run `vp i --frozen-lockfile --prefer-offline`. Vite+ owns dependency installation; never use bare `pnpm install`.
-- Fresh worktrees use the release feed at `%USERPROFILE%\source\feeds\pe-revit-sdk` or `sdk.feed` in `product.payloads.json`; `pe-revit sdk adopt <version>` repins and regenerates the client. Review `--plan` first. Do not copy, junction, or symlink a feed into the worktree.
-- Bare `pe-revit` on PATH is the product shim. Run `dotnet tool run pe-revit -- dev link` once from any checkout so the shim's dev lane runs the pinned tool of whatever cwd you are in (SDK beta.163); `dotnet tool run pe-revit -- <verb>` is the same tool without the shim.
-- Never `git stash` in a worktree. `refs/stash` is shared by every worktree of one repo; parallel lanes pop each other's work. Baseline with a throwaway worktree or `git diff > file`.
-- Herdr is for agents and processes the user must see; otherwise it is ceremony (kaitpw, 2026-09-26). Herdr is PowerShell. Use one named Herdr session per worktree. Parse its returned session, workspace, tab, and pane IDs; never infer focus.
-- Before first use, resolve `herdr` with `Get-Command herdr`. If it is absent, set `HERDR_BIN` to the executable or report the agent lane unavailable; do not retry the wrapper unchanged.
+- Create a worktree as a sibling directory with `git worktree add`. Never nest one.
+- A fresh worktree has no dependency install. From `ts`, run `vp i --frozen-lockfile --prefer-offline`. Vite+ owns dependency installation, so never run bare `pnpm install`.
+- A fresh worktree uses the release feed at `%USERPROFILE%\source\feeds\pe-revit-sdk`, or `sdk.feed` in `product.payloads.json`. `pe-revit sdk adopt <version>` repins and regenerates the client. Review its `--plan` first. Do not copy, junction or symlink a feed into the worktree.
+- Bare `pe-revit` on PATH is the product shim. Run `dotnet tool run pe-revit -- dev link` once from any checkout, so the shim's dev lane runs the pinned tool of the current directory. `dotnet tool run pe-revit -- <verb>` is the same tool without the shim.
+- Herdr is for agents and processes the user must see. Otherwise it is overhead. Herdr is PowerShell. Use one named Herdr session per worktree. Parse the session, workspace, tab and pane ids it returns, and never infer focus.
+- Before first use, resolve `herdr` with `Get-Command herdr`. If it is absent, set `HERDR_BIN` to the executable or report the agent lane unavailable.
 
 ```powershell
 & .\.agents\skills\slot.execute\herdr.ps1 up <session> <cwd> <posture.md> <name>:<kind>[:<model>][:<effort>]
@@ -124,18 +124,17 @@ dotnet tool run pe-revit -- <command> --json
 & .\.agents\skills\slot.execute\herdr.ps1 read <session> <agent> [<lines>]
 ```
 
-Do not retire a working agent. Keep long runs observable, read state before retrying, and stop only the Herdr session or pane this run created.
+Do not retire a working agent.
+
+## Skill set
+
+The skill set checks itself: `python .agents/skills/check.py` from the repo root, `--fix` to reproject the tables and reinstall the junction and the commit hook. `reflect` says when it must run.
 
 ## Evidence
 
-- Capture complete output before filtering it. Read JSON `diagnostics`, `result`, `nextSteps`, `related`, and `binary`; branch on diagnostic codes rather than one exit number.
-- Treat a thin success as suspect until one independent witness agrees. A compile, `ready`, HTTP 200, or accepted hot reload can each hide a broken downstream surface.
-- When state and output disagree, stop. Record both and enter `diagnose`; do not repair the discrepancy by assumption.
+- Capture complete output before you filter it. Read JSON `diagnostics`, `result`, `nextSteps`, `related` and `binary`, and branch on diagnostic codes rather than one exit number.
+- When state and output disagree, stop. Record both and enter `diagnose`. Do not repair the discrepancy by assumption.
 
 ## Admitting new caveats
 
-A caveat enters this file only when it changes a future execution choice and no code, check, tool guide, or `AGENTS.md` rule can own it. Put it at the decision point. Temporary caveats name the condition that deletes them. One-off incidents stay out.
-
-## Skill-set check
-
-After any skill edit, run `python .agents/skills/check.py`. `--fix` may repair the generated index table and skill junction; rerun without `--fix` for the verdict.
+A caveat enters this file only when it changes a future execution choice and no code, check, tool guide or `AGENTS.md` rule can hold it. Put it at the decision point. A temporary caveat names the condition that deletes it. One-off incidents stay out.

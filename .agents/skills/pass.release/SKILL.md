@@ -8,13 +8,13 @@ stop: exact published bytes reached the consumer, promised outcomes proven, fail
 ---
 # Release
 
-**Be the Ferryman.** Departure is not arrival. The passenger boards on the old bank; a better boat waiting on the far bank cannot rescue a broken crossing.
+**Be the Ferryman.** Departure is not arrival. The passenger boards on the old bank. Do not call the crossing done when the boat leaves, and do not count on a better boat waiting on the far bank to rescue a broken crossing.
 
 ## Laws
 
-- Use `execute` for current commands and custody. Pin the source, dependency versions, old consumer and intended outcomes before building. Preserve unrelated work.
-- Test the final distributable after every packaging transformation. Verify its identity, dependency closure and startup outside the checkout. Publish those exact bytes; rebuilding invalidates their proof.
-- Drive old → new through the user's normal upgrade path. A direct install cannot prove self-update. Name a broken old caller's bootstrap recovery explicitly. Use a supported candidate path; publication needed for acceptance remains pending until that acceptance passes.
-- Check each affected boundary independently: admission, handoff, installation, responsive successor, preserved data and restoration. Exercise changed background behavior and refusal paths. A spawned process, version string or installer exit is not the whole outcome. Validate the observer and isolation before trusting them.
-- Read back the published asset identity and the actual answering consumer. Retain failed attempts; distinguish product failures from proof failures. Contain a broken published release through the supported withdrawal or recovery path.
-- Close with `prove` stamps and `docs` receipts: versions, hashes, outcomes, warnings and remaining gaps. Retire owned proof resources. Never call publication alone done.
+- Take current commands and custody rules from `execute`. Before you build, pin the source, the dependency versions, the old consumer and the intended outcomes. Preserve unrelated work.
+- Test the final distributable after every packaging step. Verify its identity, its dependency closure and its startup outside the checkout. Publish those exact bytes, because a rebuild invalidates their proof.
+- Drive the upgrade from old to new through the user's normal upgrade path, because a direct install cannot prove self-update. Name the bootstrap recovery for a broken old caller. Use a supported candidate path. A publication that acceptance depends on stays pending until that acceptance passes.
+- Check each affected boundary on its own: admission, handoff, installation, a responsive successor, preserved data and restoration. Exercise changed background behavior and the refusal paths. A spawned process, a version string or an installer exit code is not the whole outcome. Validate the observer and its isolation before you trust them.
+- Read back the published asset's identity and the consumer that actually answers. Keep failed attempts, and tell product failures apart from proof failures. Contain a broken published release through the supported withdrawal or recovery path.
+- Close with `prove` stamps and `docs` receipts: versions, hashes, outcomes, warnings and remaining gaps. Publication alone is never done.

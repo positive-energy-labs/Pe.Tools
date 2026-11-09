@@ -9,84 +9,82 @@ scope: skills
 ---
 # Reflect
 
-**Refit the ship of Theseus.** The set stays itself while every plank is replaced; the craft of refitting, not any plank, is what must survive. The set was distilled from real usage and is shaped for the AI era, where a feature is cheap, a tangent is backgrounded, and a migration is overnighted. Lower cost raises the bar: bigger changes, more churn, and no plank is sacred for being original.
+**Refit the ship of Theseus.** The set stays itself while every plank is replaced, so no plank is kept for being original and none is added for grace. A cheap migration raises the bar: replace the rotten plank, do not patch around it.
 
-**Every skill edit is a Ulysses contract.** Ulysses bound himself to the mast because the self who hears the sirens cannot judge. A stance binds a future agent, you, cold, with no memory of why the rope is there. The hand that writes the law is primed and cannot feel what the cold reader feels, so edited prose is unproven until a fresh agent, given only the text, does the intended thing.
-
-**Two scripts, one language.** Egypt wrote the same language in two scripts. The **hieratic** script is the priest's: compressed, figured, apophatic, read by initiates who hold the key. The **demotic** script is the scribe's: plain, cursive, one word per thing, read by anyone. A stance is hieratic above its fold. Everything else the agent writes is demotic: laws below the fold, ledgers, comments, replies, code. A hieratic sentence in a demotic place is a sentence the reader cannot parse without the key, and the reader does not have the key. Below the fold the laws say **figured** and **plain**; the Egyptian names stay up here.
-
-**Above the fold, be the Lapidary.** An inscription is cut in stone; every letter costs a stroke, and none is added for grace. What is cut cannot be hedged, so it is cut right or not at all.
+**Every skill edit is a Ulysses contract.** Ulysses had himself bound because the self who hears the sirens cannot judge. The hand that writes a law is primed and may not grade its own rope: an edit is unproven until a fresh agent, given only the text, does the intended thing.
 
 ## Kinds
 
-Five kinds. The directory prefix carries the kind, so the set is legible from a listing.
+Five kinds. The directory prefix carries the kind, so a listing shows the set.
 
-- **root** frames the set itself: `index` routes and is read at every session start; `reflect` maintains and is read only when the set changes. A root never does the work.
+- **root** frames the set itself. `index` routes and is read at every session start. `reflect` maintains the set and is read only when the set changes. A root never does the work.
 - **loop** owns the route, runs rounds, and names a stop. A loop may run inside another loop's round.
 - **pass** owns the route, makes one pass, and hands over its artifact.
-- **lens** stacks on the owning loop or pass and changes what is allowed, what counts as evidence, and what the work costs; invoked bare, it owns the route. A lens that constrains the diff bounds the owner's net, never each edit; where lens and owner cannot both hold, the lens yields and says so in the reply.
-- **slot** is a receptacle: always available, never a route, and the only place anything repo-shaped may live. `scope: repo` marks facts rewritten per repo; `scope: skills` marks policy that travels with the set. A repo that fills no slots still runs every stance.
+- **lens** stacks on the owning loop or pass. It changes what is allowed, what counts as evidence, and what the work costs. Invoked alone, it owns the route. A lens that limits the diff applies to the owner's whole diff, not to each edit. Where the lens and the owner cannot both hold, the lens yields and the reply says so.
+- **slot** holds reference material. It is always available, never a route, and the only place repo-shaped content may live. `scope: repo` marks facts that are rewritten per repo. `scope: skills` marks policy that travels with the set. A repo that fills no slots still runs every stance.
 
-Exactly one loop or pass owns the route at a time. Ordinary building is not a stance: it is the owner's own work under whatever lenses are stacked. A new skill takes the kind that matches how it is invoked (always-read, routed in rounds, one pass, stacked, or looked up), never what it is about.
+Exactly one loop or pass owns the route at a time. Ordinary building is not a stance: it is the owner's own work under whatever lenses are stacked. A new skill takes the kind that matches how it is invoked (always read, routed in rounds, one pass, stacked, or looked up), not what it is about.
 
 ## Tenets
 
-- Maximize semantic density. Skills are written in their own register; no other writing copies it.
-- Untested hypothesis: figures activate useful latent-space associations and examples teach more strongly than instructions. Neither priming advantage nor example-copy causality is established. All agent output must use ordinary words. A fresh reader must restate the duty in ordinary words; output leakage or failure to restate requires rewriting the text plain.
-- One word per thing. The Lexicon in `index` owns every shared word and every figure alias; a per-stance vocabulary is dead.
-- Inline the hot path. What a stance always needs, it carries; a pointer is for the cold path only. Repo information sits in a slot unless a stance always needs it, and then it is inlined there.
-- The set checks itself. A check script sits beside `index`; the kind table in `index` is its projection of each skill's directory and frontmatter (`figure`, `stop`, `scope`, `disable-model-invocation`), never hand-edited. It also asserts the kinds, one owner per trigger phrase, no Parlance sections, nothing repo-shaped outside a slot, and one home for the set. `execute` names how to run it. A stance edit that does not pass is not landed.
+- Skill files have their own register: figured above the fold, plain below it. No other writing copies it.
+- It is an untested hypothesis that figures prime useful behavior and that examples teach more strongly than instructions. All agent output uses ordinary words. If a fresh reader cannot restate a skill's duty in ordinary words, or figure nouns leak into output, rewrite the text plain.
+- One word per thing. The Glossary in `index` defines the few shared words that stay. A skill has no private vocabulary.
+- Inline the hot path. A stance carries what it always needs, and a pointer serves only the cold path. Repo information sits in a slot unless a stance always needs it.
 
-## Signals
+## What the check asserts
 
-The set speaks through separate channels. Each row names one, who reads it, and what holds its boundary. **Checked** fails the check on drift; **convention** is held only by review; **unchecked** is held by nothing, and drift starts there. A new signal lands with its row; an unchecked row is owed a check or a deletion.
-
-| Signal | Home | Reader | Changes | Held by |
-|---|---|---|---|---|
-| Kind | directory prefix | a listing; the router | rare | checked |
-| Triggers | frontmatter description | the harness routing a prompt | per edit | checked, one owner per phrase |
-| Figure | frontmatter and the fold | the model entering the stance | rare | checked it exists; that it compresses is convention |
-| Laws | below the fold | the model inside the stance | per edit | convention |
-| Stop | frontmatter | the loop's exit | per edit | checked it exists; its honesty is `prove`'s stamp |
-| Kind table | `index` | a cold session orienting | per edit | checked, projected, never hand-edited |
-| Lexicon | `index` | every register | rare | Parlance ban checked; alias tails unchecked |
-| Registers and style | `index` | the model writing anything | rare | convention |
-| Approach, Disposition, Rungs | `index` | the model, always | rare | convention |
-| Verdict vocabularies | `index` Lexicon | the model reporting | rare | unchecked |
-| Scope | slot and satellite frontmatter | the porting agent | rare | checked on slots; unchecked elsewhere |
-| Repo purity | stance bodies | the porting agent | per edit | checked, token scan |
-| One home | the junction | the harness | never | checked |
-| Cross-routes ("that is `X`") | descriptions | the routing model | per edit | unchecked |
-| The vault | ledger beside `index` | whoever re-litigates a kill | on a kill | unchecked |
+The set's `check.py` sits in the skills directory, and `execute` gives the command. It fails when a skill directory is not named `<kind>.<name>`, has no `SKILL.md`, or has a `name:` that differs from the directory suffix. It fails on a missing description, `figure:`, or `prevents:`, on a loop or pass with no `stop:`, and on a slot with no `scope:`. It fails when two skills claim the same trigger phrase, and when an unquoted frontmatter value holds a colon and a space, because the harness then drops the description silently. It fails on repo names, paths, or code fences in a skill that is not a slot, outside a section headed `[scope: repo]`. It fails on a `## Parlance` section, on a backticked retired skill name, and on a quoted slash command that names no skill. It fails when the client skill mirror is a copy instead of a junction, when the commit hook is not installed, and when the user-global skill directory holds anything but the harness's own bucket. The kind table in `index` and the routing table in `AGENTS.md` are projections of each skill's frontmatter, and `--fix` rewrites them along with the junction and the hook. Everything else in the set is held by review only.
 
 ## Writing a stance
 
-A stance activates a space, then states its laws. A mix between parable, manifesto, and creed. The fold is the line between the two scripts.
+The fold is the line between the figure paragraphs under the H1 and the first H2.
 
-- Above the fold, figured: the invocations that activate the space. A figure, a physical process, a formal object, and more of each where the stance earns them. Each must compress 3+ sentences of rules; otherwise it is decoration, cut it. A figure names what the agent may *not* do (the Coroner cannot treat, the Herald holds no opinion, the Witness does not act); a figure that only licenses dissolves into "be good at this". The strongest figured line from any law lives here, distilled, and the law below restates it plain.
-- Below the fold, plain: canonical words only, every sentence with a finite verb and a named actor. Prefer a gate to a disposition: a number, a forbidden action, a Lexicon word, or a slot pointer moves the model; "rank wisely" describes it. A law that is only a description of good behavior is cut or given a gate. Keep the gate general enough to survive a repo it was not written in.
-- A figure's noun lives above the fold; the law below says the canonical word. An alias the laws lean on is pinned in its Lexicon row in `index`, never in a table of its own.
-- Below: what is always true, and what the user cannot be expected to say. Never what the user will say in the prompt. Developers have opinions; the prompt carries them.
-- No if-then trees. A condition is either a question to the user or a sibling file.
-- A loop, when the stance owns one, with a verdict per round and a stop condition. A stance that makes one pass says so and names the artifact it hands over. Either way, hand off by naming the next stance and where the verdict persists.
-- Name it with the verb you'd say mid-sentence, and prefer the common name the user actually types over a clever synonym. Plain verb when the stance is cheap and safe to auto-trigger; a rarer word when it is expensive or mode-changing.
-- As short as the laws allow; satellites inline. No repo path, product name, or tool invocation in a stance: those live in a `slot.` skill, which the stance names and never quotes.
-- Frontmatter: `name` (the verb, equals the directory name after the prefix), `description` (the router, quoted if it holds a colon), `argument-hint`, `figure` (the index table projects it), `stop` on every pass and loop, `scope` on every slot, and `disable-model-invocation: true` on any stance only the user may start.
-- Description is the router: trigger phrases verbatim, synonyms, and the one case it is *not* for.
+- Above the fold, write one figure. A second figure stays only if it compresses rules the first cannot. In two to four sentences, the figure says what the agent may not do, in the figure's own terms. A figure that only licenses dissolves into "be good at this", so cut it. Cut any ornament that compresses no rule.
+- Figure nouns stay above the fold. Below it, every sentence uses ordinary words, has one finite verb, and names its actor.
+- Prefer a gate to a disposition. A number, a forbidden action, a Glossary word, or a slot pointer moves the model, but "rank wisely" only describes it. Cut a law that only describes good behavior, or give it a concrete trigger. Keep the gate general enough to survive another repo.
+- A law carries no dated anecdote. The incident goes to the `## Incidents` section of the ledger beside `index`, with its date and the skill and law it backs.
+- Write what is always true and what the user cannot be expected to say. Never write what the user will say in the prompt, because the prompt carries it.
+- Write no if-then trees. A condition becomes a question to the user or a sibling file.
+- A loop has a verdict per round and a stop condition. A pass says it makes one pass and names the artifact it hands over. Either way, the stance hands off by naming the next stance and where the verdict persists.
+- Name the stance with the verb the user types mid-sentence. Use a plain verb when the stance is cheap and safe to auto-trigger, and a rarer word when it is expensive or changes mode.
+- Keep it as short as the laws allow, with satellites inlined. A stance holds no repo path, product name, or tool invocation. Those live in a slot, which the stance names and never quotes.
+- Frontmatter: `name` (the verb, equal to the directory suffix), `description` (quoted if it holds a colon), `argument-hint`, `figure`, `prevents`, `stop` on every pass and loop, `scope` on every slot, and `disable-model-invocation: true` on any stance only the user may start.
+- The description is the router: trigger phrases verbatim, synonyms, and the one case it is not for.
+
+## Style mechanisms
+
+These mechanisms break plain writing in every register. Three rules make plain prose: a sentence has one finite verb and a named actor, the head noun comes first with its qualifiers after, and the connective (because, so, but) is written instead of implied by a semicolon. The hard sentence to fix is rarely the poetic one. It is usually a plain sentence built wrong.
+
+| Mechanism | What it is | Example | Fix |
+|---|---|---|---|
+| Elegant variation | a second noun for the same thing | apostle, bird, runner for *agent* | one word per thing, repeated |
+| Noun stack | modifiers piled before the head noun | "the one-owner-per-trigger rule" | head noun first, then "of" or a clause |
+| Nominalization | a verb turned into a noun, so the actor vanishes | "delegation leaves a wake" | restore the verb and name the actor |
+| Verbless fragment | no finite verb | "Reports over messages." | give it a verb |
+| Asyndeton | clauses joined by a semicolon, connective implied | "A is B; C goes down D" | write because, so, or but, or split |
+| Garden path | a word reads as the wrong part of speech first | "the lens bounds the net" | choose the unambiguous word |
+| Metaphoric copula | "X is Y" where Y is a figure | "Relaying is Telephone" | above the fold only; below it, say the mechanism |
+| Register splice | a figure noun and a mechanism noun in one clause | "an apostle past its time box" | one vocabulary per sentence |
+| Aphorism | a maxim in place of an instruction | "A finding you do not pay for is not a finding" | the instruction and its reason |
+| Hedge stack | may, might, consider, worth | "it may be worth considering" | the verdict or the number |
+| Filler and puffery | "in order to", inflated verbs, stock AI words | serves as, pivotal, delve, tapestry | the plain word: use, help, many, if |
+
+Four kinds of writer produce most of these: the bard stacks metaphors, the consultant stacks hedges, the tour guide restates what was built, and the intern asks permission for reversible work. When you remove the mechanisms, keep the meaning and the material caveats, then add an opinion.
 
 ## Editing the set
 
-A skill edit is a Prose fix, the last rung of `index`'s strength ladder, and it breaks the fourth wall: the writer and the governed reader are the same model in different states. The strangeness is real, name it and work inside it.
+A skill edit is level 9 on `index`'s strength ladder, the weakest. The writer and the reader it governs are the same model in different states, so the writer cannot test the edit on itself.
 
-- Prose decays fast. Before adding a law, walk the ladder: a type, a projection, a boundary decode, or a guard that holds it instead.
-- A stance edit is a verdict-grade change: the user rules on it. In a sanctioned autonomous session, file the edit as Owed instead of landing it.
-- After any edit, run the check; a set that fails is not landed.
-- The edit is unproven until a fresh agent, given only the text, does the intended thing. You cannot test it on yourself; you are already primed.
-- A killed law is vaulted, not erased: the vaulted originals and why live in the ledger beside `index`.
+- Before adding a law, walk the ladder for a type, a projection, a boundary decode, or a guard that can hold the rule instead.
+- The user rules on every stance edit. In a sanctioned autonomous session, file the edit as Owed instead of landing it.
+- Run the check after any edit. A set that fails the check is not landed.
+- A fresh agent, given only the text, proves the edit by doing the intended thing.
+- A killed law moves to the ledger beside `index` with the reason it was killed.
 
 ## Porting to a new repo
 
-- The set has one home, a single directory in the repo, mirrored into the client's skill directory as a junction, never a copy; the check's `--fix` lays the junction. The user-global skill directory stays empty.
-- Slots hold the old repo's facts. Rewrite every `scope: repo` slot's facts under its existing headings; a deleted section is a verdict, not a scrub. Delete a whole slot only when the repo cannot fill it at all. Every other stance travels unchanged.
-- The ledger does not travel. A port starts a fresh ledger that names the origin; the set's design history stays single-sourced in the origin repo.
-- Adapt the set to the user's needs; it is a foundation, not a creed frozen at its first repo. Run the check before first use.
+- The set has one home, a single directory in the repo. The client's skill directory mirrors it as a junction, never a copy, and the check's `--fix` creates the junction. The user-global skill directory stays empty.
+- Slots hold the old repo's facts. Rewrite every `scope: repo` slot under its existing headings. Deleting a section is a verdict, not cleanup. Delete a whole slot only when the new repo cannot fill it at all. Every other stance travels unchanged.
+- The ledger does not travel. A port starts a fresh ledger that names the origin, so the design history stays in the origin repo.
+- Adapt the set to the user's needs, and run the check before first use.

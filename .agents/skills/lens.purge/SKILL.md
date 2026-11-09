@@ -2,31 +2,26 @@
 name: purge
 description: Delete first, then fix. Trigger on "purge", "prune", "delete then fix", "LOC down", "gut it", "too much code", "no back compat", "aggressive deletion", "stay occam", "what can we delete", "fewer comments", "squash", "fold", "harvest", "canonicalize", "census what exists", "no legacy", or whenever a change would add code to a place that already has too much. Not for greenfield shape; that is `muse`.
 argument-hint: "What is bloated, and what must still work after?"
-figure: Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — remove or reuse before adding
+figure: Shiva at the winnowing floor, the burn boss — remove or reuse before adding
 prevents: "bloat: adding to a place that already has too much"
 ---
 # Purge
 
-**Be Shiva at the winnowing floor.** Everything goes up; the wind, not you, decides what returns. The winnower throws the whole harvest into the air and picks no grain by hand: what falls back was load-bearing, what blows off is chaff and is not carried back to the barn. No wind, no winnowing; a deletion never tested by a run is a pile moved, not a purge. The compile errors after a deletion are the map of what was load-bearing; a shim written before the deletion is a guess.
+**Be Shiva at the winnowing floor.** Throw the whole harvest into the air and let the wind decide what returns, so you may not pick grain by hand or carry chaff back to the barn. A deletion never tested by a run is a pile moved, not a purge. Necessity is proven by deletion, as Occam would have it, never argued, and nothing is sacred because it exists.
 
-**Be Occam.** Entities are not multiplied beyond necessity, and necessity is proven by deletion, not argued. The repo is greenfield in spirit: no consumers, no legacy, no compatibility. What is not load-bearing is dust.
-
-Where Occam hesitates, be the Iconoclast: nothing is sacred because it exists. Precedent is an idol until it earns its place again.
-
-**When the block is big, be the burn boss.** A prescribed burn is lit on purpose, inside a firebreak cut first, so the understory goes and the canopy stands. The census is the firebreak; no burn without it.
-
-Mode: the owner names what can be removed or reused before adding. No net-LOC success condition.
+**When the block is big, be the burn boss.** You may not light a burn before the firebreak is cut. The census is the firebreak, so the understory goes and the canopy stands.
 
 ## Laws
 
-- Measure before a migration: repetition, standards violations, the dependency graph, and who breaks. The numbers set the order of the cuts.
+- Make a census before any deletion that touches three or more files or more than one call site, and before any fan-out: what exists, who calls it, and what dies. The census is deliverable one, even if nothing else lands. Before a migration, the census also measures repetition, standards violations, the dependency graph, and who breaks, and those numbers set the order of the cuts.
+- Census every door before deleting a command: each surface, agent tool and catalog entry that reaches it. Deleting the last door to a write deletes the write.
 - Delete, then fix. Read the compile errors as the list of what was load-bearing. Do not write a shim before the deletion.
-- The owner explains reduced knowledge, coupling, and state. Report complexity delta in the receipt as a gauge, never a target or progress headline. An abstraction that serves one caller is a caller with extra steps.
-- A purge partner may write bounded deletions on an explicitly owned seam. The handoff names the accountable owner, preserved consumers and trust boundaries, behavior checks, and who owns later failures.
+- Name what can be removed or reused before adding anything.
+- A deletion rides the change that makes the code dead. Never set "net LOC down" as a success condition or as the only limit, because it invites behavior changes labelled as deletions: a graceful return becomes a throw, a guard is dropped, an expression is rewritten.
+- Report what the change removed in knowledge, coupling and state. Report the complexity delta in the receipt as a gauge, never as a target or a headline.
+- Inline an abstraction that serves one caller.
 - When two things do one job, keep the richer one, delete the other, and say which.
-- Purge docs and comments on the same rule: keep the why and the trap, delete the what.
-- Make a census before any deletion that touches 3+ files or more than one call site: what exists, who calls it, what dies. The census is a deliverable even if nothing else lands.
-- A deletion rides the change that makes the code dead. "Net LOC down" as the only edge invites behavior changes wearing a deletion's label: a graceful return becomes a throw, a guard is dropped, an expression is rewritten.
-- Census every door before deleting a command: route, Pea, Work tool and catalog. Deleting the last door to a write deletes the write (2026-11-04: an archive pass deleted the only callers of two internal write ops while their Work tools still staged edits nothing could apply).
-- A test that builds a production type by cast or partial literal is a second engine. Replace the family with one production-owned constructor and delete the casts (2026-11-04: 40 `as unknown as` bridge casts hid a required member; one constructor took the host suite from 42 failures to 0).
-- Stop at the honesty bar. Census consumers, doors, and trust boundaries. Validation, data-integrity seams, and proofs stay until the replacement demonstrates the preserved behavior with the same proof.
+- A test that builds a production type by cast or partial literal duplicates the production constructor. Replace the family with one production-owned constructor and delete the casts.
+- Purge docs and comments by the same rule: keep the why and the trap, and delete the what.
+- The purger may write bounded deletions on a seam it explicitly owns. The handoff names the accountable owner, the preserved consumers and trust boundaries, the behavior checks, and who owns later failures.
+- Stop at the honesty bar. Validation, data-integrity seams, and proofs stay until the replacement demonstrates the preserved behavior with the same proof.

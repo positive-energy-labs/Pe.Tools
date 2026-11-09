@@ -3,16 +3,16 @@ name: page
 description: "Disposable HTML as a working surface between agent and user: explain a system, review claims on a picture, compare variants, or test an interaction model. Trigger on \"make me a page\", \"html\", \"interactive diagram\", \"diagram this\", \"explain it visually\", \"scratchpad\", \"throwaway page\", \"disposable html\", \"mock it up\", \"something I can click\", or when a reply would otherwise be a wall of text about a system, a set of places, or a choice. Not for settling a product surface on real primitives; that is `protoui`."
 figure: the orrery, not the painting — a page that holds state and turns
 prevents: "the painting: a page with no state behind it"
-scope: skills
+scope: repo
 ---
 
 # Page
 
-**Build the orrery, not the painting.** A painting of the planets is admired once. An orrery is turned: the user moves one wheel and every body answers, because the gears are real. A page without state is a painting, however good it looks, and the user judges function over form.
+**Build the orrery, not the painting.** A painting of the planets is looked at once. An orrery is turned: the user moves one wheel and every body answers, because the gears are real. Do not ship a page without state behind it, however good it looks. The user judges what it does, not how it looks.
 
-**The page is a letter that expects a reply.** It carries the question, the evidence in place, and the envelope back. A page the user cannot answer from is a poster.
+**The page is a letter that expects a reply.** It carries the question, the evidence in place, and the envelope back. Do not ship a page the user cannot answer from.
 
-## Kit
+## Templates
 
 Start from a template in `kit/`, never from a blank file. `kit/index.html` is the gallery.
 
@@ -23,29 +23,30 @@ Start from a template in `kit/`, never from a blank file. `kit/index.html` is th
 | `kit/lineup.html` | compare variants of one thing and collect numbered rulings | the poc-feedback index |
 | `kit/sandbox.html` | test whether an interaction model holds, by firing events against invariants | none yet |
 
-`python kit/build.py <template> <data.json> <out.html>` fills the template's data block from real artifacts. `kit/check.py <page>` renders it headless, fails on any script error, and runs the page's own `window.__walk()`.
+`python kit/build.py <template> <data.json> <out.html>` fills the template's data block from real artifacts. `kit/check.py <page>` renders the page headless, fails on any script error, and runs the page's own `window.__walk()`.
 
 ## Laws
 
-- Data is replayed, not typed. A build script fills the page from real artifacts, so the page regenerates when the data changes. Hand-typed or invented data carries a visible "stand-in" mark on the page.
-- State is one pure `reduce(state, event)`. Everything visible derives from it, the URL carries the view state, and every user act is an event in a log. A page with no reducer is a picture: ship an image instead.
-- Every thing the page names is locatable on the page: an id the user can search, a coordinate readout, a link that focuses it. A size or a callout number from another message is not a location.
+- A build script fills the page from real artifacts, so the page regenerates when the data changes. Hand-typed or invented data carries a visible "stand-in" mark on the page.
+- State is one pure `reduce(state, event)`. Everything visible derives from it, the URL carries the view state, and every user act is an event in a log. If the page needs no reducer, ship an image instead.
 - A page that asks the user anything has one export. The export writes a typed file the agent reads, and the page shows what the agent will do with it.
 - Use the product's real rules and messages where they exist. A refusal the product would give appears word for word.
-- Show state as a glyph and a colour, and put explanations in hover text. A card is a picture, a glyph, one line, and its verbs. A verb sits on the thing it changes, and an impossible verb is hidden, not greyed.
-- A decision ships as a numbered rulings sheet with copy-as-markdown. Returned rulings go to the ledger `docs` names, the same turn.
+- Show state as a glyph and a colour, and put explanations in hover text. A card is a picture, a glyph, one line, and its verbs. A verb sits on the thing it changes. Hide an impossible verb instead of greying it.
+- A decision ships as a numbered rulings sheet with copy-as-markdown. Write the returned rulings to the ledger `docs` names, in the same turn.
 - Report a page only after `kit/check.py` passes. Say what the walk did not cover, and say that nobody has clicked it by hand yet.
-- Put the page under `.artifacts/<topic>/`. It is thrown away; a winner is rewritten on real primitives by `protoui` and `close`, never promoted.
-- Open the page for the user and give its absolute path in a code block.
-- Refuse the page when the demo would have to reimplement the product's own live state beyond a pure function or two. A faithful fake of a complex surface costs more than the real route, and a partial one misleads. Prototype on the route with `protoui` instead.
+- Put the page under `.artifacts/<topic>/`. It is thrown away. `protoui` and `close` rewrite a winner on real primitives, and a page is never promoted.
+- Open the page for the user, and give its absolute path in a code block.
+- Refuse the page when it would have to reimplement the product's own live state beyond a pure function or two. A faithful fake of a complex surface costs more than the real route, and a partial fake misleads. Prototype on the route with `protoui` instead.
 
 ## Hosted pages (the product serves them)
 
-A page the host serves lives under `Documents/Pe.Tools/Pages/<slug>/` or inside a Pod at `Pods/<pod>/pages/<slug>/`, and opens at `/pages/<slug>/` (a pod page is `/pages/<pod>--<slug>/`). Its doors are `/pages/pe.js` (find, read, do, script, picture, diff, reading, kernel, state, describe) and `/pages/revit.js` (Revit windows as specs, and projections from facts). The header of each file is the whole reference; the pages ledger holds the decisions. Laws for these pages, ruled 2026-10-05:
+A page the host serves lives under `Documents/Pe.Tools/Pages/<slug>/`, or inside a Pod at `Pods/<pod>/pages/<slug>/`, and opens at `/pages/<slug>/` (a pod page opens at `/pages/<pod>--<slug>/`). Its entry points are `/pages/pe.js` (find, read, do, script, picture, diff, reading, kernel, state, describe) and `/pages/revit.js` (Revit windows as specs, and projections from facts). The header of each file is the whole reference, and the pages ledger holds the decisions.
 
-- A script over about a screen lives as a file beside the page (`checks/census.csx`), and `pe.script` takes its path. C# as a template string in the HTML is for one-liners.
-- A reading is `{ source, at, rows }`: what produced it, when, and the rows. Every table or facsimile drawn from Revit projects a reading and shows its `at`, so a stale one is visibly stale.
+- A script longer than about a screen lives as a file beside the page (`checks/census.csx`), and `pe.script` takes its path. C# as a template string in the HTML is for one-liners.
+- A reading is `{ source, at, rows }`: what produced it, when, and the rows. Every table or facsimile drawn from Revit projects a reading and shows its `at`, so a stale reading is visibly stale.
 - A page never stores a dependency on a Pod. It calls op keys, and the live host answers availability. A page that needs a Pod ships inside that Pod.
-- Promotion: a script run from two pages, or on a schedule, becomes a Pod entrypoint and the pages call its key.
-- The page describes itself: `pe.describe` writes a markdown projection of the state beside the snapshot, so an agent reads what the page says, not its reducer.
-- A page never chooses its document. `pe.target()` takes no argument and returns `{ session, openId, title }` for the page's binding, set by the person with the chip at the bottom-right (`Bind…` opens `/bind?page=<slug>`); it throws `PeTargetRefusal` (`ambiguous`, `document-closed`, `session-gone`, `missing`) when the binding names no one document. A thread binding writes only while that thread holds rw; a pinned Address writes only Pea's documents; an unbound page reads when one Revit is connected and gets `page.unbound` on a write. Show `error.message` as the host wrote it, and never send `x-pe-origin`, session or document headers.
+- When two pages, or a schedule, run the same script, it becomes a Pod entrypoint and the pages call its key.
+- The page describes itself. `pe.describe` writes a markdown projection of the state beside the snapshot, so an agent reads what the page says instead of its reducer.
+- A page never chooses its document. `pe.target()` takes no argument and returns `{ session, openId, title }` for the page's binding, which the user sets with the chip at the bottom-right (`Bind…` opens `/bind?page=<slug>`). It throws `PeTargetRefusal` (`ambiguous`, `document-closed`, `session-gone`, `missing`) when the binding names no single document.
+- A thread binding writes only while that thread holds rw. A pinned Address writes only Pea's documents. An unbound page reads when one Revit is connected, and gets `page.unbound` on a write.
+- Show `error.message` as the host wrote it. Never send `x-pe-origin`, session or document headers.

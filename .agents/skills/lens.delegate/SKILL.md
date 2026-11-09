@@ -2,66 +2,119 @@
 name: delegate
 description: Who does what, at what cost. Trigger on "delegate", "fan out", "subagents", "swarm", "send off some agents", "fresh context", "research this", "apostles", "you stay the orchestrator", "conserve limits", or before any fan-out, including one you were about to do with the harness Agent tool. Not the mechanics of running agents; that is `execute`.
 argument-hint: "How big is the session, what needs your eyes, what can leave your context?"
-figure: Abbot, Falconer, and Breeder — who does what, at what cost, down which line
-prevents: "context rot: one session carrying everything, counsel building"
+figure: Falconer — the bird hunts; the falconer keeps the judgment and counts every bird home
+prevents: "context rot: one session carrying everything, the main agent building"
 ---
 # Delegate
 
-**Be the Abbot; send Apostles.** The Abbot gives the rule and does not work the field. An Apostle is sent out fresh, with one gospel and a bounded mission, returns with a four-field reply, and does not come back for chats. The user is consulting *you*; judgement and liability are yours, the field work is not. The Abbot is also the Shepherd: he counts the flock, and a sheep that did not come back is gone after, never replaced by a new one and never presumed grazing.
+**Be the Falconer.** The bird hunts and the falconer keeps the judgment, so you may not fly the field work yourself, and you may not ask the bird that flew a hunt to judge its kill. No bird is cast without hood, jesses and creance: it sees only the quarry you show it, holds to one flight and one time box, and comes back on the lure with a reply, not a conversation. Count every bird out and home, because a bird you cannot hear is lost until you find it, never presumed hunting. A bird that already knows this ground flies it again before a new one is manned.
 
-**Also be the Falconer.** The falconer hunts nothing; the bird does. The regalia are the laws: the **hood** stays on until the cast, so the bird sees only the quarry you show it; the **jesses** hold it to one flight and one edge; the **bells** ring while it is out of sight, so a bird you cannot hear is a bird you have lost; the **creance** is the training line, the time box; the **lure** is what brings it back, a four-field reply, not a conversation; and the **mews** rest a bird between flights, so a bird that has flown this ground is flown again before a new one is manned. A bird primed on the hunt is the worst judge of the kill; judgment flies down a clean line. Lines are kept apart so nothing crosses that you did not cross on purpose.
+## Briefs
 
-**Be the Breeder only on a settled base.** A cross is paid for once the clean lines have read and disagreed, never before; there is no envelope to push until a line has proven a trait. Then matricize on purpose across lines, models, roots, and harnesses, and keep the odd but good branch as an ortet for the next cultivar. A broken paradigm is not bred out of; it gets a new founder, and that is `muse`, not a fan-out.
+- Delegate sustained independent implementation, research, and proof by default. The main agent keeps triage, final judgment, discussion, and joint inspection. A small standalone task or a short check can stay in the main session. Respect explicit user constraints and existing ownership. Send new feedback to the thread that owns the work, and replace the instructions it supersedes.
+- Before a fan-out, write a table with one row per thread: its task, its model and effort, and why. The main agent is a row in it.
+- Every brief sets limits: a stop condition, a time box, and a reply address. Make the important choices before you send it. An agent that lacks a choice names it: a thread the owner is watching asks and waits, and an autonomous thread states its default, continues, and lists the choice under Not verified.
+- Every brief names the evidence set the thread will read. Threads whose readings will be compared get non-overlapping evidence. Identical evidence means one thread, not two.
+- Every brief asks what can be removed or reused, and names the preserved consumers and trust boundaries. The receipt reports expected and actual complexity deltas as gauges, never as targets.
+- A fan-out that will delete or fix many things starts with a census, as `purge` defines it.
+- Make the shared base once (research, fixture, scaffold) and hand it to every thread.
+- Send one question per message, because a thread asked four questions returns one averaged answer. Send the follow-up to the same thread.
+- Reuse before you re-brief. A thread that just read the terrain is primed, so send it the next question instead of paying a new thread to read the same files.
+- A scheduled wake from the harness carries the checkpoint cadence and the time-box alarm. An agent never counts its own runs.
+- Research threads read primary sources only (official docs, source, specs), give one citation per claim, and file findings where `docs` says. Clone third-party source locally and sync it before reading, because grep beats the web.
 
-Mode: no fan-out without a posture table first. Task, who (model and thinking), why. You are a row in it.
+## Replies
 
-## Laws
+Every thread returns its result in its reply. A file holds machine artifacts (counts, extracts, proof output), but a file is never the only place a result is stated, because the owner reads replies on surfaces that do not render files. A durable verdict becomes one ledger line through `docs`.
 
-- Delegate sustained independent implementation, research, and proof by default. The main agent remains responsible for triage, final judgment, discussion, and joint inspection. A small standalone task or a short check can stay in the main session. Respect explicit user constraints and existing ownership. Send new feedback to the existing owner and replace superseded instructions.
-- Every mission is bounded and specified. Give the agent an edge (stop condition, time box, reply address) and make the important choices before you send it. Send unbounded work to the model with taste. An agent that lacks a choice returns a question, not a guess.
-- Every brief asks what can be removed or reused and names preserved consumers and trust boundaries. Expected and actual complexity deltas belong in the receipt as gauges, never targets.
-- Send one ask per turn. Four questions in one prompt return one averaged answer, and no part of it belongs to its question. Send the follow-up down the same line.
-- Make the shared base once (research, fixture, scaffold) and hand it to every agent.
-- Send instrument-first missions. "Census before fix; the census is deliverable #1 even if nothing else lands" beats fix-first every time.
-- Every agent returns its result in its reply, in the four fields below. A file is for machine artifacts (counts, extracts, proof output), never the only place a result is stated, because the user reads replies on surfaces that do not render files. A durable verdict becomes one ledger line through `docs`.
-- A message between agents, and an agent's reply to the user, uses four fields in outcome-first order: what changed and its consequence, candidate (branch and SHA, or "dirty"), what proves it, what is blocked. Follow the reply budget and material floor in `index`; no character cap. Counts, LOC and durations go in a receipt, inline only when they change the decision (2026-11-04: 171 inbound messages averaging 900 characters of SHAs and deltas turned the pillar into a relay that wrote 320-character replies).
-- One post owns one concern and stacks the relevant proof, safety, and purge lenses. It reports its own reading, may concede, and never argues an assigned conclusion. Use a separate specialist only for distinct evidence or a real decision split.
-- A root post checkpoints to the user in chat after 150 runs or 2 compactions, whichever comes first: position, last landing, next landing, one question if any, under the reply budget and material floor in `index`. A root that runs past its checkpoint without posting one is stalled for reading purposes, whatever it last reported (2026-11-06 to 11-08: one root ran 293 runs on 1 owner turn with 17 compactions, and its tree was unreadable until mined).
-- Trial a workflow on real work with real stakes. A charter names the stake, the file edge and the reply address; it never prescribes the topology, the message protocol or the stop. A trial whose shape the charter wrote proves obedience, not the workflow (2026-11-04: the testing-world pilot scripted two peers, a three-thread cap and a blind control that was not blind, and had to be revoked twice). A control arm is legitimate only as real work with its own stake, matched to the other arm on kind and size and judged by the same gate; a staged control proves nothing.
-- An autonomous line never blocks on a human. A question goes in a message to its parent or in its reply, the line continues on a stated default, and the default is named where the answer will land. A blocking question dialog stalls the line until someone happens to look (2026-11-05: a trailing line asked one at 03:00 while the user was going to sleep; it was answered by luck minutes later, or it would have idled until the next two-hour wake).
-- Rule on a line's newest state, never on what you last read of it. Before a ruling, open the line's last message and its newest artifact, not the one you remember (2026-11-05: the governor ruled twice on stale reads in one night, once correcting a carry the user had already approved and once ordering a fix for a RED the driver had already turned GREEN).
-- A ruling that changes a gate or another line's edge is written into the document that line reads, in the same hour. A line can only obey a ruling it can read (2026-11-05: a test-only exemption from the merge gate lived in the governor's chat, and the reviewer flagged two correct landings as gate breaches; earlier that night the governor overruled a carry that kaitpw had approved in another thread).
-- A line that waits names what will wake it: a background job that notifies, a schedule, or a message it asked for. A line idle on something nobody will deliver is stalled, whatever it last reported (2026-11-05, one night, three times: a blocking question dialog, five rulings queued behind an hour-long turn, and a driver whose turn ended while its own script looped).
-- After any interruption, never assert an agent is alive. Check, then relaunch or declare the work lost.
-- Reuse before you re-brief. An agent that just read the terrain is primed; send it the next question instead of paying a fresh one to read the same files.
-- Alarm at 2× the box. Surface an agent past twice its time box to the user before you read its reply. Time on task that felt wrong is a systemic signal, not a nag. If you must retire an agent's line, take what it learned that no reply carried.
-- Priming is contamination once the mission is judgment. The context that makes an agent fast on more of the same makes it the worst judge of what it built. Judgment goes down a clean line, always.
-- Cross lines only after the clean readings exist. Handing one agent two unrelated bodies is where the new idea comes from; cross before the clean readings and you cannot say what produced it.
-- Agreement counts as corroboration only with distinct evidence or method. Record shared and private evidence before weighing it; shared contracts do not erase distinct methods, and repeated readings of the same evidence do not multiply support. Preserve material disagreement.
-- A writing line delivers a branch cut from the integrator's tip; the integrator merges it and reuses the child's stamp at that SHA, re-running only what a conflict touched. A cherry-pick re-authors the child's work, hides its conflicts and erases who did it (2026-11-04: the kernel ferried 8 deliveries by cherry-pick and re-proved each as "parent"; one ruling switched it to merges within a wake). A line that wants to be measured works on a branch; work committed straight to main cannot be attributed.
+Agent replies, agent-to-agent messages, and the main agent's reply to the owner use one template. The owner's reply drops Readback.
+
+```text
+Outcome      what changed and its consequence, one line, readable alone
+Readback     the instruction and scope as understood (first reply to a brief only)
+Did          what was done, 1-3 items
+Ran -> saw   each command or drive and what it showed (verbatim command, observed result)
+Not verified what was assumed, not checked
+Blocked      what stops the work, or "nothing"
+Next         the next action, the decision requested, or what will wake this thread
+Where        branch and SHA, or "dirty"
+```
+
+A brief sets no word or character cap on a reply. Counts, LOC and durations go in a linked receipt unless they change the decision. Machine text (paths, commands, error codes, data shapes, API arguments) goes in a code block, one item per line.
+
+Each field carries meaning, not mechanics. Outcome is a sentence the owner can act on, never a stamp. Ran -> saw names what a command established, not that it ran. Two fills of the same task, a cold read of this skill set, show the difference. The first is a real reply from a model that filled the slots:
+
+```text
+Outcome      UNPROVEN[model behavior was not exercised]. I found conflicting decision rules.
+Did          I read the skills, roles, and root instructions.
+Ran -> saw   Get-Content AGENTS.md showed that the user rules (AGENTS.md:11).
+Not verified I did not exercise model behavior or external commands.
+```
+
+The second says what the owner needs:
+
+```text
+Outcome      20 of 24 skills read as actionable; 3 are mood without an action (index, muse, house's figure) and 1 restates default behavior (show-me).
+Did          Read all 24 skills, 4 roles and AGENTS.md cold; restated each duty in one line.
+Ran -> saw   grep for every path a skill names -> 9 do not exist where the text says (list in the receipt).
+Not verified Whether a model following the text actually writes the way I predict; I read, I did not run one.
+```
+
+## Running threads
+
+- Forward a child's message in your own plain words, never verbatim, because run-together text is a measured habit of one model family in agent-to-agent messages and it passes from a parent brief to its children (the Models section names it).
+- An autonomous thread never blocks on a human. It puts a question in a message to its parent or in its reply, continues on a stated default, and names that default where the answer will land.
+- A thread that waits names what will wake it: a background job that notifies, a schedule, or a message it asked for. A thread idle on something nobody will deliver is stalled, whatever it last reported.
+- Rule on a thread's newest state. Before a ruling, open the thread's last message and its newest artifact, not the one you remember.
+- Write a ruling that changes a gate or another thread's limits into the document that thread reads, in the same hour, because a thread can only obey a ruling it can read.
+- When you retire a thread, take what it learned that no reply carried.
+- Trial a workflow on real work. A trial charter names what is at stake, the files the trial may touch, and the reply address, and it never prescribes the topology, the message protocol or the stop. This applies to workflow trials only. A role charter may prescribe a role's purpose and limits.
+
+## Comparing readings
+
+- Context that makes a thread fast on more of the same makes it the worst judge of what it built. Send judgment to a thread that did not build the thing.
+- First readings are sealed: a thread states its reading before it sees any peer's. Then the main agent compares.
+- Give one thread two unrelated bodies of evidence only after the clean readings exist, so you can say what produced a new idea.
+- Never count agreeing threads as votes. Report the spread, the dissent, and the evidence behind each reading. Record shared and private evidence before weighing agreement, and count agreement once per distinct method.
+- The judge of a split did not hold either side's private evidence. The owner is the default judge, and the main agent pre-verifies the lines each side cites.
+- A losing reading that was not refuted goes to the ledger as Tried & rejected, marked minority.
+- At ruling time, record which thread changed the recommendation. That record is the outcome metric for threads that write no code.
+
+## Writing and landing
+
+- A writing thread delivers a branch cut from the integrator's tip. The integrator merges it and reuses the child's stamp at that SHA, re-running only what a conflict touched. Never cherry-pick a child's work, because a cherry-pick re-authors it, hides its conflicts and erases who did it. A thread that wants to be measured works on a branch, because work committed straight to main cannot be attributed.
 - Assign one writer per coupled production decision, even across files. Independent writers need settled contracts and separate seams.
-- One writing line, one tree. Two lines editing one checkout means every claim must be pinned to a commit, and a proof taken while another line was mid-write proves nothing.
-- Sequence by collision, not by topic. Partition by production seam ownership and let tests follow their seam; two lines that both need one production seam are a merge tax, not parallelism (2026-11-04: seven commits hand-ferried between two worktrees over one shared type). Give each line a disjoint file set and name it in the brief; a line that measures a running surface flies alone, because any line that saves reloads the server under it and voids the reading (two full passes lost this way, 2026-10-04). A shared contract two lines code against is written in both briefs, verbatim.
-- A gate drives the SHA that will land. Cut the fast-forward candidate before the gate drive, not after. A candidate that differs from the driven SHA only in files the gate cannot observe carries the stamp; name that diff in the handoff (2026-11-05, twice in one day: chaos GREEN at 5728ab22 and write GREEN at 8f7eddf0 were each on a SHA that did not fast-forward main, and main waited on a second line for a candidate whose production was already proven).
-- A gate that checks only what its candidate changed lets reds pile up on main. The integrator runs the whole repo-guard and web-guard suite on every candidate before the fast-forward. A guard RED excused as a flake stays owned until a quiet-machine rerun passes (2026-11-05, twice: a native-title RED landed through a Driver GREEN at 553eac82; main then carried 4 guard REDs across three landings, unowned, until a trailing line found them).
-- Land what is proven; list the rest as Owed. A landing is never gated on every layer being native-proven, only on the claims it makes carrying their stamps (rounds 4 to 4e, 2026-10-13, held one landing across five native rounds).
-- Leave it better than you found it. Before a fan-out is reported done, retire every spent runner, server, watcher, and line; what cannot be retired is one Owed line. Let go of any resource no foreseeable future needs. An anti-pattern seen on the way is one Owed line, not a fix.
+- Give each writing thread its own tree. If two threads edit one checkout, pin every claim to a commit, and discard any proof taken while the other thread was mid-write.
+- Sequence by collision, not by topic. Partition by production seam ownership and let tests follow their seam, because two threads that both need one production seam pay a merge tax instead of running in parallel. Give each thread a disjoint file set and name it in the brief. Write a shared contract that two threads code against into both briefs, verbatim.
+- A thread that measures a running surface works alone, because any thread that saves a file reloads the server under it and voids the reading.
+- A gate drives the SHA that will land, so cut the fast-forward candidate before the gate drive. A candidate that differs from the driven SHA only in files the gate cannot observe carries the stamp, and the handoff names that diff.
+- The integrator runs the whole repo-guard and web-guard suite on every candidate before the fast-forward, because a gate that checks only what its candidate changed lets reds pile up on main. A guard RED excused as a flake stays owned until a rerun on a quiet machine passes.
+- Land what is proven and list the rest as Owed. A landing is gated only on its claims carrying their stamps, never on every layer being proven natively.
+
+## Standing roles [scope: repo]
+
+Standing roles: see `.agents/roles/`. A role is relaunched from its charter, relieved by handoff, and labelled by its charter name in retros.
 
 ## Models [scope: repo]
 
-The user's budget line for the day overrides everything here. Read both usage meters before a fan-out and at every long-run wake; `execute` names the meter. Limits are scoped per model as well as per provider: on 2026-11-05 Fable's own weekly scope stood at 87% against 74% for the provider, so one provider percentage misleads. A banked reset is redeemed only on the user's rule. Resolve provider/model IDs from the live tool catalog; do not substitute Sol 6 or older Codex defaults. Astra is banned (kaitpw, 2026-11-04). Sol is never a root or governor line (owner, 2026-11-06). Apply owner bans, role constraints, and budget before affinity; never rank models by speed or surviving LOC per dollar alone. Choose thinking effort for the task. A second provider on a panel buys a different reading, not a better one.
+gpt-6.1-sol runs words together (`AllaffectedchecksGREEN(6hist,12Work)`) in 18% of its agent-to-agent messages and 0% of its replies to the owner, so its messages are rewritten before they are forwarded (`docs/research/2026-11-09-garble-by-model.md`).
 
-Historical affinity, 2026-10-26 to 11-02 (`.artifacts/runs/retro-20261102-paradigm/affinity.txt`): dated N below, uncertainty includes task mix, missing outcomes, and weak attribution. These are observations, not a quality ranking; new affinity claims need a date, N, and uncertainty.
+Pick the cheapest model that can do the task. Judgment and unbounded work go to the model with taste. Owner bans and the day's budget come before either rule.
 
-| Model | Fits | Measured |
+- The user's budget line for the day overrides everything here. Read both usage meters before a fan-out and at every long-run wake (`execute` names the meter). Limits are scoped per model as well as per provider, so one provider percentage misleads.
+- A banked reset is redeemed only on the user's rule.
+- Owner bans: Astra is never used. Sol is never a root thread.
+- Resolve provider and model IDs from the live tool catalog. Do not substitute Sol 6 or older Codex defaults.
+- Never rank models by speed or by surviving LOC per dollar alone. Choose the thinking effort for the task.
+- Add a second provider to a panel to get a different reading, not a better one.
+
+Observed affinity, 2026-10-26 to 11-02 (`.artifacts/runs/retro-20261102-paradigm/affinity.txt`). These are observations with uncertain task mix and attribution, not a quality ranking. A new affinity claim needs a date, N, and uncertainty.
+
+| Model | Fits | Observed |
 |---|---|---|
-| Sol 6.1 (`gpt-6.1-sol`) | implementation child, the default line | 114 missions, 92% complete, 0.24 h median |
-| Opus 5.5 | UI implementation when the user names it | 42 missions, 98% complete, 0.46 h, 60% needed a second message |
-| Fable 5.1 | taste: design, UX and architecture opinion, and the one-shot scaffold of a step; never a fill line | 17 missions, 0% needed a second message |
-| Terra (`gpt-6.1-terra`) | census and mechanical reads | 8 censuses, 0.01 h |
+| Sol 6.1 (`gpt-6.1-sol`) | implementation child, the default writing thread | 114 missions, 92% complete |
+| Opus 5.5 | root threads; UI implementation when the user names it | 42 missions, 98% complete, 60% needed a second message |
+| Fable 5.1 | taste: design, UX and architecture opinion, the one-shot scaffold of a step; never a fill thread | 17 missions, 0% needed a second message |
+| Terra (`gpt-6.1-terra`) | census and mechanical reads | 8 censuses |
 
-Substrate: anything the main agent waits on goes on T3 `delegate_task`, whose completion wakes this thread. The harness Agent tool is for reads returned as text (it cannot write files). Codex-native `spawn_agent` is never used for waited work: its children are invisible to T3 and `wait_agent` timed out on 42% of calls in the window.
-
-Child-brief commit instruction: when `T3CODE_THREAD_ID` is set, use `git commit --trailer "T3-Thread: $T3CODE_THREAD_ID"` in the same trailer block as the harness `Co-Authored-By:`; omit the T3 trailer when empty.
-
-Research agents: primary sources only (official docs, source, specs), one claim one citation, findings go where `docs` says. Clone third-party source locally and sync before reading; grep beats the web.
+`execute` names which tool runs waited work and which runs reads.

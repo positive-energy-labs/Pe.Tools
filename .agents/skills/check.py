@@ -15,6 +15,12 @@ REPO_TOKENS = re.compile(
     r'|(?<![\w/.])(?:docs|packages|apps|source|tools)/|\.artifacts/|\.agents/|\.claude/'
     r'|\.ps1\b|\btsx?\b|\bjsx\b|searchParams|\bReact\b|useState|\bnpm\b|\bvitest\b')
 
+# Skill names that no longer exist. A backticked mention of one is a dead cross-route.
+RETIRED = re.compile(r'`(triangulate|demiurge|goal|research|write|ground|realy)`')
+# A slash command in quotes or backticks must name a skill. SLASH_OK holds harness commands and paths that share the shape.
+SLASH = re.compile(r'["`]/([a-z][a-z0-9-]*)["`]')
+SLASH_OK = {'usage', 'tmp'}
+
 fails, fixes = [], []
 
 
@@ -169,10 +175,28 @@ def main():
         if code:
             fail(d, 'code fence(s) in a portable stance (%s); mechanics belong in a slot' % ', '.join(sorted(set(code))))
 
-    # 5b. Parlance is dead: aliases live in the Lexicon rows of root.index, nowhere else.
+    # 5b. Parlance is dead: a skill has no private vocabulary and no alias table; shared words live in the root.index Glossary.
     for d, (kind, name, text) in sorted(skills.items()):
         if re.search(r'^## Parlance', text, re.M):
-            fail(d, 'a `## Parlance` section; Parlance is dead, pin aliases in the Lexicon row in root.index')
+            fail(d, 'a `## Parlance` section; a skill has no private vocabulary, use the Glossary in root.index')
+
+    # 5c. dead names: a backticked retired skill name, or a quoted or backticked slash command that names no skill,
+    # sends the reader to a route that does not exist. The ledger keeps history, so it is not scanned.
+    names = set(n for (_, n, _) in skills.values())
+    texts = [(d, t) for d, (_, _, t) in skills.items()]
+    for d in skills:
+        for sat in glob.glob(os.path.join(HERE, d, '*.md')):
+            if not sat.endswith('SKILL.md'):
+                texts.append((d + '/' + os.path.basename(sat), read(sat)))
+    for role in glob.glob(os.path.join(REPO, '.agents', 'roles', '*.md')):
+        texts.append(('roles/' + os.path.basename(role), read(role)))
+    texts.append(('AGENTS.md', read(os.path.join(REPO, 'AGENTS.md'))))
+    for where, t in sorted(texts):
+        for m in sorted(set(RETIRED.findall(t))):
+            fail(where, 'names retired skill `%s`; use the live route' % m)
+        body = t[t.index('---', 3) + 3:] if frontmatter(t) else t  # a trigger phrase is what the user types, not a route
+        for m in sorted(set(SLASH.findall(body)) - names - SLASH_OK):
+            fail(where, 'slash command /%s names no skill' % m)
 
     # 6. the client mirror is a junction, never a copy that can drift
     mirror = os.path.join(os.path.dirname(os.path.dirname(HERE)), '.claude', 'skills')

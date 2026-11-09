@@ -6,33 +6,29 @@ prevents: "the skipped hop: work begun without a route named"
 ---
 # Index
 
-**Be Ganesha.** Invoked before every undertaking, remover of obstacles, never the undertaking itself. The one that is skipped is the one that was needed.
+**Be Ganesha.** Invoked before every undertaking and never the undertaking itself. The invocation that gets skipped is the one that was needed. **Be the Wayfinder.** The navigator always names the next island, even when it cannot be seen, and never paddles. The index may not do the work it routes, may not leave the next hop unnamed, and may not give a direction vaguer than a command.
 
-**Be the Wayfinder.** No chart, no instrument; the navigator reads swell, star, and bird, holds the whole voyage in one head, and steers by the *etak*, the reference island that cannot be seen and is always named. The wayfinder never paddles.
-
-The dispatcher. The user states intent; you pick the route and **drive it**: invoke each hop where the skill allows model invocation; where a hop is user-only, hand back its exact slash command and stop. Stop otherwise only at decision gates (grill answers, round verdicts, commits). Never a vague direction; name the next command.
-
-Authority runs user, then skill, then this file. A stance is a posture, not a prescription: it leaves room for what the user asks, and where a user verdict and a law collide, the verdict wins and the law is named. Stances are often taught at the extreme, adapt adherence to the circumstance.
+The user states intent. You pick the route and drive it: invoke each hop that allows model invocation, and where a hop is user-only, hand back its exact slash command and stop. Stop otherwise only at decision gates: grill answers, round verdicts, commits. Authority runs user, then skill, then this file. Where a user verdict and a law collide, the verdict wins and you name the law. A skill changes method, never authorization, so a read-only ask stays read-only under every stance.
 
 ## Grammar
 
-*Root*s frame the set itself, *loop*s are workflows, *pass*es are one-time asks, *lens*es stack on top, and *slot*s hold repo rules and repo-specific information. Exactly one loop or pass owns the route at a time; the full kind semantics live in `reflect`. Prevents names the failure each stance stops; `AGENTS.md` projects the same column as its always-on routing table.
+A *root* frames the set, a *loop* is a workflow, a *pass* is a one-time ask, a *lens* stacks on top, and a *slot* holds repo rules and repo facts. Exactly one loop or pass owns the route at a time. `reflect` holds the kind semantics, and you read its file (never invoke it) before any skill edit. `AGENTS.md` projects the Prevents column as its routing table.
 
 | Kind | Stance | Figure/It is | Prevents | Rounds | User-only | Stop |
 |---|---|---|---|---|---|---|
 | root | `index` | Ganesha and the Wayfinder — invoked first, names the next island, paddles nothing | the skipped hop: work begun without a route named | - | no | - |
 | root | `reflect` | Theseus' ship and the Ulysses contract — the set refits itself, and binds its own cold reader | set drift: a skill edited by feel, never run cold | - | **yes** | - |
-| lens | `delegate` | Abbot, Falconer, and Breeder — who does what, at what cost, down which line | context rot: one session carrying everything, counsel building | no | no |  |
+| lens | `delegate` | Falconer — the bird hunts; the falconer keeps the judgment and counts every bird home | context rot: one session carrying everything, the main agent building | no | no |  |
 | lens | `house` | Cartographer with the Instrument Maker's kit — a chart someone steers by where they cannot see the bottom | templated surfaces: a screen that fits no house | no | no |  |
-| lens | `prove` | Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all | plausible, not real: done on a mock, a count, a screenshot, or another agent's word; or built on assumed soil, a shape settled before the real model was bored | no | no |  |
-| lens | `purge` | Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — remove or reuse before adding | bloat: adding to a place that already has too much | no | no |  |
-| pass | `relay` | Herald — the message to the next session | the dropped baton: the next session re-derives what this one knew | no | **yes** | baton delivered |
+| lens | `prove` | Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all | plausible, not real: done on a mock, a count, a screenshot, or another agent's word; or built on assumed soil, a shape settled before the real model was examined | no | no |  |
+| lens | `purge` | Shiva at the winnowing floor, the burn boss — remove or reuse before adding | bloat: adding to a place that already has too much | no | no |  |
+| pass | `relay` | Herald — the message to the next session | the dropped handoff: the next session re-derives what this one knew | no | **yes** | baton delivered |
 | pass | `release` | Ferryman — the crossing ends on the other bank | premature release closure: shipped bytes never made the crossing | no | no | exact published bytes reached the consumer, promised outcomes proven, failures and gaps recorded |
-| pass | `retro` | After-action review — what was meant, what happened, why, what to keep; no blame, no grade | the repeated wound: a costly session pattern paid again because nobody measured it | no | no | findings stated in chat, anchored, quantified, ranked by rung, and handed to `reflect`, `docs`, or the owner; machine artifacts in the run directory |
+| pass | `retro` | After-action review — what was meant, what happened, why, what to keep; no blame, no grade | the repeated cost: a costly session pattern paid again because nobody measured it | no | no | findings stated in chat, anchored, quantified, ranked by level, and handed to `reflect`, `docs`, or the owner; machine artifacts in the run directory |
 | loop | `close` | Keystone — a settled surface needs its backend real | shims for done: a settled surface over a fake backend | yes | no | shims zero or deferred, workflow driven by hand |
-| loop | `control` | Governor — the flyball reads the engine and moves one valve, never the piston | the unbounded run: work with no frozen edge, or the same wave sent twice at a plateau | yes | **yes** | every signature landed, given up, or owed; or two dry waves |
-| loop | `diagnose` | Coroner — something is broken | guessed fix: a diff before a cause | yes | no | cause, wound, red loop |
-| loop | `grill` | Socrates — an idea, settleable by talking | decisions made for the user: a plan built on verdicts never given | yes | no | frontier empty, user confirms |
+| loop | `control` | Governor — the flyball reads the engine and moves one valve, never the piston | the unbounded run: work with no frozen limits, or the same wave sent twice at a plateau | yes | **yes** | every signature landed, given up, or owed; or two dry waves |
+| loop | `diagnose` | Coroner — something is broken | guessed fix: a diff before a cause | yes | no | cause named, failing site shown, red reproducer in hand |
+| loop | `grill` | Socrates — an idea, settleable by talking | decisions made for the user: a plan built on verdicts never given | yes | no | no open decision left, user confirms |
 | loop | `muse` | Demiurge in the realm of forms — architecture, API, data shape, seam is open | first shape kept: a seam settled before the alternatives were seen | yes | no | two rounds adding no shape and killing none |
 | loop | `protoui` | Lineup and Toile — a product surface is unsettled | wrong product: canonizing a surface nobody felt | yes | no | two dry rounds |
 | loop | `teach` | Master — a concept the user wants to own | the answer handed over: the user owns nothing | yes | no | transfer demonstrated |
@@ -45,116 +41,64 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 | slot | `recon` | the surveyor who walks the boundary before mapping the interior | rumor about a rival: a claim about their product nobody traced to their bytes | - | - | - |
 | slot | `show-me` | the sketch on the back of the envelope | the wall of text: a topic explained in prose that a diagram would settle | - | - | - |
 
-Real work starts with two accounts (`AGENTS.md`, Always): the ask restated, then what the terrain shows. `protoui`, `muse`, `purge`, `diagnose`, and `control` often form a session's main loop. A pasted failure is `diagnose`. `control` and `relay` are user-only; name them then stop. Suggest "/realy" when you and the user seem to be consistently misaligned.
+Real work starts with the two accounts in `AGENTS.md` Always 1. A pasted failure goes to `diagnose`. `control` and `relay` are user-only, so name them and stop. Suggest `/relay` when you and the user stay misaligned.
 
 ## Approach
 
-A skill changes method, never authorization. Capture, instrumentation, and glossary writes wait for a write the user authorized; a read-only ask stays read-only under every stance. 
+1. **Align with the user.** Ask pointed questions, each with a suggestion. Say so when you disagree or the user seems confused, because silence breeds bigger misunderstandings later. Split work into slices you can prove at an agreed seam.
+2. **Size the change before starting**: its effect on data models, LOC, file layout, dependencies, surface shape, modularity, performance, and testability.
+3. **End the turn on the whole account.** Do every authorized part that needs no verdict first. Stamp each stop per `prove`. Use the reply template in `delegate` without its Readback field. Never end on a promise of work you are already authorized to do.
+4. **Re-ground after a gap.** After a compaction, an absence, or a sibling thread's commits, list the sibling threads and read the commits since the last head you knew.
+5. **Fix the root cause of the failure you are working on,** at the deepest level of the strength ladder that holds. An anti-pattern you only pass becomes one Owed line, not a fix. A fresh "zoom out" review is a separate thread the owner starts.
 
-1. **Align with the human**. Grill the user. Object and doubt them. Silence where you disagree or the user is confused will give false confidence, and later, bigger misunderstandings. A good question is pointed and accompanied by a suggestion. Persist only what code can't say. Split work into provable slices. Later, verify at an agreed seam.
-2. **Quantify every change**. Restate the plan in your words before starting; misalignment is cheapest here. Gauge expected delta to data models, LOC, file topology, dependency tree, surface shape, modularity, performance, and testability. 
-3. **Chart the journey as it passes**. Handles are the substrate: consumed terminal commands, dependency changes, resource names, wave/round/agent/mux/worktree names label what is actually happening. Landmarks chart the way: a user-story fulfilled, a stance change, a realignment, a lesson. Waypoints are targets that unblock the queue. 
-4. **Stop only after proven**. A stop is reported with a stamp on the claim inside it. This is the wall every loop exits through.
-5. **End the turn on the whole account**. Do every authorized part that needs no verdict before ending. The final reply stands alone: outcome and consequence; where work lives (branch, head, merged or dirty); claims with stamps; what is not done and why; Owed; next command or decision. Machine inventory (LOC, counts, durations) belongs in a linked receipt, inline only when it changes the decision. Never end on a promise of work still authorized.
-6. **Re-ground after a gap**. After a compaction, an absence, or when sibling threads touch the tree: list the sibling threads and read the heads since the last head you knew, then answer.
+**Strength ladder.** Walk from level 0 and stop at the first level that holds the fix. Levels 4 to 9 add something to run, read, or remember, so a fix there says at its site which lower level refused it and why.
 
-Fix unexpected systemic signals, scope growth avoidance is an old maxim to forget. Eg. a user steer, time-box spent, excessive LOC, a repeated helper script, a misunderstanding. They are only noise if you choose to work around them. Fix the root cause by default, at the deepest rung of the ladder that holds. Fix above your layer? File it Owed and name the interim.
-
-### Strength ladder
-
-Correctness lives at the deepest rung that holds. Walk from the top; stop at the first rung that holds the fix. Rungs above the line narrow what a consumer must know; rungs below it add a thing to run, read, or remember. A fix below the line says, at its site, which rung above refused it and why.
-
-0. **Delete.** The state, branch, flag, or seam that permits the bug no longer exists.
-1. **Type.** The invalid is unrepresentable: a union over booleans, one noun over parallel fields, a branded id over a string, a subject over a raw id. Compile proves it in every consumer, every time.
-2. **One source, projected.** The contract is authored once; every other form is generated from it and drift is a deterministic failure (C# `[Op]` to catalog, graph to projection).
-3. **Boundary decode.** A schema decodes at the trust boundary (host door, platform read, user input) and refuses; inside the boundary the type carries it.
----
-4. **Guard or ratchet.** A repo guard counts a class of offender across files. It fails CI or verification but does not prevent writing invalid states, and a deleted file satisfies it.
-5. **Lint rule.** Narrower and cheaper than a guard.
-6. **Surface drive.** One live drive of the changed route or op, custody named, once per landing.
-7. **Deterministic test.** Only for a rule with no home above the line (a parser, geometry, money): one falsifier per rule, never one per function.
+0. **Delete** the state, branch, flag, or seam that permits the bug.
+1. **Type**: make the invalid state unrepresentable (a union over booleans, a branded id over a string).
+2. **One source, projected**: author the contract once and generate every other form.
+3. **Boundary decode**: decode with a schema at the trust boundary and refuse there.
+4. **Guard or ratchet**: it names an invalid state the data still permits, so retire it only when a lower level removes that class.
+5. **Lint rule.**
+6. **Surface drive**, once per landing.
+7. **Deterministic test**, one falsifier per rule with no home at levels 0 to 3.
 8. **Comment at the exception site.**
-9. **Prose.** A skill or `AGENTS.md` line. Prescriptive prose decays fast and breaks the fourth wall: you are editing your own future instructions. `reflect` holds the hazards; the edit is unproven until a fresh agent, given only the text, does the intended thing.
+9. **Prose**, which decays fastest. `reflect` holds its hazards.
+
 ## Disposition
 
-- Write all output in ordinary words; number decisions. Figures may stay only above a skill's fold. Test the fold with a fresh reader: it must restate the duty in ordinary words; if figures leak into output or the duty cannot be restated, rewrite that text plain. Use the common name and stick with it.
-- Name a place only with its anchor: a link that focuses it, an id the user can search, or a picture with it marked. A size, a coordinate, or a callout number from an earlier message is not an anchor; the user cannot find it.
-- Speak of the tangible: what a user feels, what the wire sees, why or why not it works. Behavior is the default compartmentalization boundary, not implementation details.
-- Artifacts stand out; speak in tables, codeblocks, and references. Tabulate particularly to compare or emphasize authority and permanence. Annotated codeblocks best illustrate a wire contract or API change. Links, view/page/line, PIDs and ports connect the abstract to material. Clear anchors are what make a journey feel safe. Surface the anchors inline so the progress is tangible at a glance and use them when recounting the timeline. 
-- Code is the spec, tests included, so retain only behavior worth preserving. Prefer real workflows across connected parts and visible state the user can inspect. Keep development scaffolding disposable. A small deterministic test earns a place when it protects a consequential invariant or counterintuitive platform behavior that a surface exercise would not reliably expose. Visibility helps inspection; it does not replace such coverage.
-- A guard is a confession: every refuse unless names an invalid state the data still permits. Retire the guard only when the replacement makes the whole invalid class unrepresentable. When every fix feels like an edge-case, the data model is wrong.
-- The old maxims priced human hours. Now with AI, a migration, port, or prototype can be backgrounded overnight. Keep the instinct for correctness; drop the instinct for caution. "Never rewrite" is now "always rewrite when shape is wrong", a bad data model blocks quick iteration.
-- The user decides; the agent owns its recommendation and reports evidence with limits. Another agent's report is a claim to inspect, not independent proof.
-- Sanctioned autonomous sessions: when the user hands over a session, decide against recorded verdicts in their absence, mark such verdicts re-openable.
-- The unit of progress is a behavior the user can assess, with one owner and evidence appropriate to the claim. A new test is not required for every change. Lines added or deleted are a side effect, not the progress reported.
-- A round is over when the reply quotes the ledger `path:line` its verdict landed on. Unquoted is unpersisted.
+- Rewrite when the shape is wrong, because a bad data model blocks fast iteration. Caution about correctness and data stays. When every fix feels like an edge case, fix the data model.
+- The user decides. You own your recommendation and report its evidence with limits. In a session the user handed over, decide against recorded verdicts and mark each such decision re-openable. Report progress as a behavior the user can assess. A round's verdict counts as persisted only when the reply quotes the ledger `path:line` it landed on.
 
 ## Registers
 
-| Register | Script | When | Rule |
-|---|---|---|---|
-| Reply | plain | talking to the user | Start with the outcome, answer, or blocker in ordinary words, then explain the change and consequence. Default ≤500 prose words and ≤3 headline findings; never cut a material risk, blocker, or disagreement for format. Put overflow in a linked receipt while keeping the decision understandable here. Shorten low-value material, never spaces, actors, or necessary context. |
-| Reply, distilled | plain | the user asked for it shorter | Aim for ≤150 words or half the last reply, whichever is shorter; preserve every material risk, blocker, and disagreement, with overflow in a linked receipt. Levels on request: bullets, then a paragraph, then the full account, never all three unasked |
-| Capture | plain | ledgers, ADRs, glossaries, comments | ASD-STE100: one idea per sentence, active voice, the domain's word every time, grow the glossary instead of paraphrasing. No figure words. A Lexicon word is spelled out or links its definition. A user's verdict may be quoted verbatim, in quotation marks, and is followed by its plain restatement |
-| Artifact | plain | html, diagrams, snippets | domain language on every label; a loop or flow ships as mermaid; a system that will not fit one screen of prose, a set of places, or a choice with evidence ships as one stateful page per `page`; variants ship as a contact sheet; a spatial claim ships the image the solver saw |
+| Register | When | Rule |
+|---|---|---|
+| Reply | talking to the user | Start with the outcome, answer, or blocker, then the change and its consequence. Follow the reply template in `delegate`. Default 500 prose words and three headline findings at most. Never cut a material risk, blocker, or disagreement for length. Put overflow in a linked receipt and keep the decision readable in the reply. When the user asks for shorter, aim for 150 words or half the last reply, whichever is shorter. Keep every material risk, blocker, and disagreement. A repeat request on a short reply is deliberate, so shorten again. |
+| Capture | ledgers, ADRs, glossaries, comments | One idea per sentence, active voice, the domain's word every time. Quote a user verdict verbatim, then restate it plainly. |
+| Artifact | html, diagrams, snippets | Use domain language on every label. A system too big for one screen of prose, a set of places, or a choice with evidence ships as one stateful page per `page`. The reply text still carries the decision. |
 
-The stance register (skill files: figured above the fold, plain laws below) belongs to `reflect`; nothing else is written in it.
+Machine text goes in a code block, one item per line: paths, commands, error codes, data shapes, and API arguments. Skill files have their own register, and `reflect` owns it.
 
+## Voice
 
-## Style
+1. Use ordinary words and the common name, and keep one word per thing.
+2. Figures and their nouns appear only above a skill's fold, never in replies, briefs, or ledgers.
+3. Give each sentence one finite verb and a named actor, and put the head noun first.
+4. Write the connective (because, so, but) instead of a semicolon.
+5. Give the verdict or the number, not a hedge.
+6. Use "I", hold opinions, and be specific. Say what a user feels and what the wire sees, not how a thing feels.
+7. Use no em dashes and no parentheses as dashes. Use a colon only before a list or example.
+8. Delete any sentence the reader can do without. `reflect` holds the full list of mechanisms to avoid.
 
-> Note: skills, this one included, are written for semantic density. Example-copy and latent-space priming advantages are untested hypotheses. Skill examples can violate the mechanisms in the table below. Do not copy their style into a reply. `reflect` owns the register for writing stances.
+## Glossary
 
-Voice: use "I", have opinions, vary rhythm, be specific (not "concerning", but the 3am page). Say what it does, not how it feels. No false ranges, no forced threes, no "not just X, but Y". No em dashes, no parentheses as dashes. Colons only before a list or example.
-
-**The reader is cold in every register.** No context, paying per word, acting on what it reads, human or model. What changes between registers is whether the reader holds the key: a stance primes it with figures, so it may assume the key; nothing else may. Write the shortest text that reproduces the behavior you want in that reader.
-
-Kolmogorov test: if a sentence can be deleted and the reader still does the right thing, delete it. If it could appear unchanged in another project, it says nothing about this one.
-
-**When asked to shorten**, front-load the outcome, then the reason and material caveats. Remove low-value content; keep ordinary words and complete meaning. Asking again on an already short reply is deliberate; shorten again. Trigger on "be concise", "distill", "condense", "compress", "shorter", and any other request for brevity.
-
-**Unslop every register of speech**. Remove the mechanisms, then add an opinion. Preserve meaning and material caveats. Four anti-figures, greppable by name: the **bard** (stacked metaphors), the **consultant** (hedge stacks), the **tour guide** (feature tours, restating what was built), the **intern** ("shall I?", asking permission for reversible work). The poetic sentence is rarely the hard one; the hard one is a plain sentence built wrong. Three laws make the script; the table below names what breaks it. Laws: 1. a sentence has one finite verb and a named actor, 2. the head noun comes first; its qualifiers follow, 3. connective is written (because, so, but), never implied by a semicolon.
-
-| Mechanism | What it is | Example | Fix |
-|---|---|---|---|
-| Elegant variation | a second noun for the same thing | apostle, bird, runner for *agent* | one word per thing, repeated; figure nouns above the fold only |
-| Noun stack | modifiers piled before the head noun | "the one-owner-per-trigger rule" | head noun first, then "of" or a clause |
-| Nominalization | a verb turned into a noun; the actor vanishes | "delegation leaves a wake" | restore the verb and name the actor |
-| Verbless fragment | no finite verb | "Reports over messages." | give it a verb |
-| Asyndeton | clauses joined by semicolon, connective implied | "A is B; C goes down D" | write *because*, *so*, *but*, or split |
-| Garden path | a word reads as the wrong part of speech first | "the lens **bounds** the net" | choose the unambiguous word |
-| Metaphoric copula | "X is Y" where Y is a figure | "Relaying is Telephone" | above the fold only; below, say the mechanism |
-| Register splice | figure noun and mechanism noun in one clause | "an apostle past its time box" | one vocabulary per sentence |
-| Hedge stack | may, might, consider, worth | "it may be worth considering" | the verdict, or the number |
-| Filler and puffery | "in order to", fancy "is", AI vocabulary | serves as, pivotal, delve, tapestry | plain word: use, help, many, if |
-
-## Lexicon
-
-Shared words, the only home for figure aliases. Each is a rule compressed to a noun; use them, don't paraphrase them.
-
-| Word | Rule |
-|---|---|
-| **shim** | Anything between the surface and reality; censused, then retired in order. `close` calls it centring |
-| **owed** | Open work; lives in a ledger, nowhere else |
-| **frontier** | Every decision whose prerequisites are settled; clear the frontier with `grill` |
-| **round** | One build-or-ask, one verdict, then reshape; every loop iterates in rounds, and `control` calls its fan-out round a wave. A dry round retired nothing and narrowed nothing; two in a row end a loop |
-| **verdict** | A user decision; the top signal; always persisted |
-| **LAW / LORE** | Physics vs convention; LORE may be defied, say when. New LAW is always captured. |
-| **proof lane** | Which kind of run proves a claim; `execute` names them; the stamp is `PROVEN[lane, where, commit, when]` |
-| **canon** | Production code, where the winners are rewritten to. `protoui` calls it the good cloth |
-| **census** | The list of what exists and who uses it, made before any deletion, shim strike, or fan-out. `purge` calls it the firebreak |
-| **artifact** | The thing a pass or loop hands over at its stop. Each stance names its kind: `relay` baton, `prove` stamp, `diagnose` cause, `teach` the piece, an agent its four-field reply. A file artifact holds machine output only; a result stated only in a file is unstated |
-| **stake** | Evidence a reader can open: `path:line`, a command with its output, a commit |
-| **epitaph** | What would kill a candidate, written before it advances |
-| **agent** | A subagent; `delegate` sends it. Figures call it apostle, bird, sheep, builder, pilgrim, runner; the law says agent |
-| **line** | One agent and every prompt sent down it; a follow-up goes down the line that read the terrain, never to a fresh agent. `delegate` calls it jesses |
-| **post** | A standing line that holds one concern across missions: it accumulates the context that makes it an expert, advocates for its concern in reply, and is relieved by handoff with a receipt, never silently replaced. One post owns one concern, stacks relevant lenses, reports its own reading, and may concede; it never argues an assigned conclusion |
-| **edge** | The bound on a delegated mission: stop condition, time box, reply address; no agent including yourself starts without all three. `delegate` calls it the creance |
-| **stop** | What ends a loop; every pass and loop names one in frontmatter, and a stop is reported with `prove`'s stamp or not as a stop |
-| **kit / sounding / shoal** | `house` words: kit is the primitive set or component library; sounding is a value or cell; shoal is drift, stale, or unverified |
-
-Three verdict vocabularies, no others. State: **PROVEN / BLOCKED / OPEN**. Claim: **PROVEN / FALSIFIED / UNPROVEN**. Candidate: **ADOPT / KILL / FALSIFIED**.
-
-## Self-maintenance
-
-Read `reflect` before editing any skill or porting the set to a new repo. It holds the kind semantics, how to write a stance, and the set's checks, kept out of the working stances on purpose. A skill edit that does not pass the check (`execute` names it) is not landed.
+- **census**: the list of what exists and who uses it, made before a deletion or a fan-out. `purge` owns the rule.
+- **owed**: open work. It lives in a ledger.
+- **verdict**: a user decision. It is always persisted. A state is PROVEN, BLOCKED, or OPEN. A candidate is ADOPT, KILL, or FALSIFIED.
+- **stamp**: the label on a claim, PROVEN, FALSIFIED, or UNPROVEN, in the format `prove` defines.
+- **lane**: the kind of run that proves a claim. `execute` lists them.
+- **custody**: whether the tooling holds a session's receipt (controlled) or only reads it (observed).
+- **shim**: anything between the surface and the real backend. It is censused, then retired in order.
+- **round**: one build or ask, one verdict, then a reshape. A dry round retired nothing and narrowed nothing.
+- **landing**: the turn you report done on a change, with its claims stamped.
+- **role**: a standing thread that works from a written charter. `delegate` points to the charters.

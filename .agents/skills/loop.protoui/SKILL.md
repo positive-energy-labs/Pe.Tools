@@ -8,34 +8,34 @@ prevents: "wrong product: canonizing a surface nobody felt"
 ---
 # protoui
 
-**Stage a Lineup.** The officer does not pick. Suspects stand in the same light, same height marks, same distance; the witness picks one, or none, or "the jaw from three with the eyes from five". A lineup of one is a confession you wrote yourself; a suspect you dressed differently from the others is a rigged lineup. One variant is a portrait; three, a keypress apart, are a fix on the product. A suspect the witness cannot see drew no verdict. Think Pareto front, not winner: the round retires what is dominated and keeps what trades.
+**Stage a Lineup.** The officer does not pick. The suspects stand in the same light, against the same height marks, at the same distance, and the witness picks one, or none, or "the jaw from three with the eyes from five". Do not stage a lineup of one, and do not dress one suspect differently from the others. A suspect the witness cannot see draws no verdict. The round retires what is dominated and keeps what trades off, so think Pareto front, not winner.
 
-**Cut toiles, not cloth.** The tailor pins three muslins on the same body before the cloth is cut; the body rules, the tailor pins. A toile is cheap, unlined, and thrown away; a toile in the good cloth is a garment you cannot afford to lose the argument on.
+**Cut toiles, not cloth.** The tailor pins three muslins on the same body before the cloth is cut, and the body decides. Do not build a variant in the good cloth: a polished variant is one you cannot afford to lose the argument on.
 
-The UI comes first because it is the cheapest way to surface what a user might want. It clarifies nouns, reveals the real problem, and shows where the backend falls short. When the surface settles, `close` makes the backend real.
+The UI comes first because it is the cheapest way to find what a user might want. It clarifies nouns, shows the real problem, and shows where the backend falls short. When the surface settles, `close` makes the backend real.
 
 ## Laws
 
-- Make variants structurally different: layout, hierarchy, primary affordance. When drafts converge, redo one under a prohibition ("no card grid"). Color is wallpaper.
-- Overreach. Round 1 includes one variant past feasibility and prunes zero for it; the user cuts it, never you.
-- Build on the real base: real components, real data, mounted in or beside the host page. Never rebuild proven canon inside a variant; import it and record each gap it exposes as Owed.
-- Compare in the same light: side by side, or one param and a switcher. Compare nothing under different conditions.
+- Make variants structurally different: layout, hierarchy, primary affordance. When drafts converge, redo one under a prohibition ("no card grid"). A difference in colour alone does not count.
+- Overreach. Round 1 includes one variant past feasibility, and you prune none for that reason. The user cuts it, never you.
+- Build on the real base: real components, real data, mounted in or beside the host page. Never rebuild proven production code inside a variant. Import it, and record each gap it exposes as Owed.
+- Compare under the same conditions: side by side, or one param and a switcher.
 - Variants are throwaway from day one, loudly named, with no polish.
-- A variant renders or it is not in the lineup. A variant the user cannot open and click drew no verdict ("Fix, I cant review"); fix the render before you report the round.
-- Report a round as one table the user can answer with `pros:` / `cons:` per named variant; the verdict comes back in that shape.
-- A round that retired nothing and narrowed nothing produced no information. Reshape the next round; two dry rounds in a row end the loop.
+- A variant that does not render is not in the lineup. A variant the user cannot open and click gets no verdict, so fix the render before you report the round.
+- Report a round as one table the user can answer with `pros:` / `cons:` per named variant. The verdict comes back in that shape.
+- A round that retired nothing and narrowed nothing produced no information. Reshape the next round.
 
 ## Loop
 
-Round: build variants, user decides, record the verdict, reshape. `grill` on what the product *is*, interleaved, not as a gate; a question a variant can answer is cheaper built than argued. Under `delegate` when variants are many; the user sets the width.
+A round is: build variants, the user decides, record the verdict, reshape. Use `grill` on what the product is, interleaved with rounds and not as a gate, because a question a variant can answer is cheaper to build than to argue. Use `delegate` when the variants are many. The user sets how many.
 
-User verdicts are the top signal. Losing the layout argument while winning the product argument is normal. Persist per `docs`: frontier and per-round verdicts live; settled law promotes; the winner is rewritten to canon, never promoted as-is, or captured as a chimera; the round's losers are thrown away.
+User verdicts are the strongest signal. It is normal to lose the layout argument and win the product argument. Persist per `docs`: the open decisions and per-round verdicts stay in the live map, and settled rules are promoted. The winner is rewritten as production code, never promoted as it is, or it is recorded as a combination of variants. The round's losers are thrown away.
 
-Mounting, the switcher bar, and cleanup follow, scoped to this repo. A standalone page variant, for a question about one widget or interaction, is `page`.
+Mounting, the switcher bar and cleanup follow, scoped to this repo. A standalone page variant, for a question about one widget or interaction, is `page`.
 
 ## Mounting [scope: repo]
 
-Prefer an existing host page. Variants render on the same route, gated by `?variant=`; data fetching, params, and auth stay, only the rendered subtree swaps. A throwaway route (project routing conventions, named `prototype-*`) is a last resort; an empty route hides problems a populated one exposes.
+Prefer an existing host page. Variants render on the same route, gated by `?variant=`. Data fetching, params and auth stay, and only the rendered subtree swaps. A throwaway route (project routing conventions, named `prototype-*`) is a last resort, because an empty route hides problems a populated one exposes.
 
 ```tsx
 const variant = searchParams.get('variant') ?? 'A';
@@ -49,12 +49,12 @@ return (
 );
 ```
 
-Shared `<Header>` fine; shared `<Layout>` defeats the point.
+A shared `<Header>` is fine. A shared `<Layout>` defeats the comparison.
 
 ## Switcher bar [scope: repo]
 
-Fixed *bottom-centre*, *constant-width* pill: ← arrow, `B — Sidebar layout` label, → arrow, wrapping. Arrows update the URL param via the router (shareable, reload-stable). Arrow keys cycle too, except when an input, textarea, or contenteditable is focused. Visually alien to the page so it reads as not-the-design. Gated out of production builds. One shared component, with the project's shared UI.
+The switcher is a fixed, bottom-centre, constant-width pill: a ← arrow, a `B — Sidebar layout` label, and a → arrow that wraps. The arrows update the URL param through the router, so the view is shareable and survives reload. Arrow keys cycle too, except when an input, textarea or contenteditable has focus. Make it look foreign to the page, so it reads as not part of the design. Gate it out of production builds. Build it once, as one shared component in the project's shared UI.
 
 ## Cleanup [scope: repo]
 
-Winner folds into canon, rewritten to prod standard. Losers, switcher, and throwaway routes leave main; the full round only kept on a throwaway branch if the user's verdicts lacked confidence.
+The winner is rewritten into production code to production standard. The losers, the switcher and throwaway routes leave main. Keep the full round on a throwaway branch only if the user's verdicts lacked confidence.

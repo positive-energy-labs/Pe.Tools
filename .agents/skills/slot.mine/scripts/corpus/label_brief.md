@@ -12,15 +12,18 @@ Read-only analysis. Write nothing except your own output file. Roles are inferre
 - One subagent per batch; the cheapest model that reads long text is enough. Run batches in parallel, then merge.
 - Thin shards (under ~8 events, no owner text) get `confidence: low`; do not guess.
 
-## Role vocabulary (the owner's)
+## Role vocabulary
+
+The first four are standing roles with charters in `.agents/roles/`; use the charter's name exactly.
 
 - `implementor`: writes product code itself; its own commits and edits dominate.
-- `purger`: deletes tests and dead code, hunts churn-causing architecture, lowers LOC.
+- `purger`: refuses to take any claimed fix on its word (re-runs or mutation-tests it), owns the test world, deletes dead tests and code, hunts churn-causing architecture.
 - `driver`: drives the product at its surface (browser, Revit, Pea), finds defects, files them to others; writes no tests.
+- `archivist`: keeps the record of what happened across threads so the owner can ask it instead of re-reading; writes no product code.
 - `architect/muse`: high-level re-architecture with the owner, synthesizes other agents' expertise, writes plans and ADRs.
 - `meta-manager`: keepalive, nudges and monitors other agents, fixes systemic inefficiency of the agent network.
 - `integrator/orchestrator`: merges branches, sequences waves, dispatches child agents, owns a merge train or gate.
-- `resource archivist`: gathers and curates reference resources (docs, videos, external material).
+- `resource curator`: gathers and curates reference resources (docs, videos, external material).
 - `one-off`: a side question roped into the loop.
 - `other:<name>`: anything else, named in a word or two (for example `other:auditor`, `other:retro-analyst`).
 
