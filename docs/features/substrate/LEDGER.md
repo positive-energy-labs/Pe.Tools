@@ -14,7 +14,13 @@ The substrate is the declared set of tools, runtimes, tasks, env, and dotfiles t
 - 2026-10-05, `Pe.Revit.Sdk` gets a private GitHub remote and a private NuGet feed now; a nuget.org release is the final target, later.
 - 2026-10-05, the substrate serves 1-2 macOS machines and 2-3 Windows machines; 2 Windows machines run Revit. All are owner-administered, so admin steps are allowed.
 
+- 2026-10-16, the factory is swell; the `control` skill applies its laws by hand until a `swell.config.ts` exists.
+- 2026-09-18, sensors produce deterministic evidence; model-authored reports do not enter the error term.
+
 ## Tried & rejected
+- 2026-09-18, count gates and setpoint arithmetic: sensor verdicts found them Goodhart bait; counts are gauges.
+- 2026-09-18, SQLite, git notes, and an orphan log branch for re-derivable readings: they added sharing machinery without durable value.
+- 2026-09-17, Temporal as first controller: it added a second state owner and determinism constraints to buy durable timers a log did not need.
 - 2026-10-05, an `http:` mise tool that hydrates a zip of nupkgs as a folder feed. Restore fails repo-wide (MSB4236, NU1301) when `PE_FEED` is unset on a cold cache.
 - 2026-10-05, dotagents for skills distribution. It needs file symlinks, and Developer Mode is off.
 - 2026-10-05, a git submodule for the public config fragment. `mise bootstrap --adopt` leaves the submodule empty.
@@ -31,7 +37,7 @@ The substrate is the declared set of tools, runtimes, tasks, env, and dotfiles t
 - `pnpm --dir ts verify` is red at `bd50cb55` on Node 25.7.0 and 26.10.0 alike (knip on `peaClaudeSkillsRoot`, 6 guard files). Every Node claim needs it green first.
 - `product.payloads.json:113` and `product-mirror.test.ts:114` call `corepack`, which Node 25+ does not ship.
 - mise trust posture: `trusted_config_paths` alone is dead (Tried & rejected). Open ruling: `paranoid = true` plus a `mise trust` step in worktree tooling, with or without shims off the agent PATH. Land `auto_install = false` in the user config before any shim reaches a registry PATH.
-- fallow as a factory sensor: `github:fallow-rs/fallow` 3.31.0 installs in 2.9 s and `fallow health --format json` over `ts/` takes 2.4 s (387 findings, score 63.2). It writes a cache at `ts/.fallow`, which must be gitignored before it lands. Reading: `.artifacts/runs/mise-trial-20261005/exp-fallow/health.json`.
+- fallow as a possible sensor: `github:fallow-rs/fallow` 3.31.0 installs in 2.9 s and `fallow health --format json` over `ts/` takes 2.4 s (387 findings, score 63.2). It writes a cache at `ts/.fallow`, which must be gitignored before it lands. Reading: `.artifacts/runs/mise-trial-20261005/exp-fallow/health.json`.
 - The page kit's `check.py` got an empty DOM from Edge 154 headless on this box; Chrome renders. The kit now falls through to the next browser on an empty dump.
 - Candidate `mise.toml`, `mise.lock`, and task layer sit on local branches `mise/tools-trial` and `mise/tasks-trial`; wave evidence is in `.artifacts/mise-swarm/w2/SYNTHESIS.md`.
 - Node 26 wave: `pnpm verify` and `vp pack` pass on an exact 26.x pin; the shipped executables embed it.
