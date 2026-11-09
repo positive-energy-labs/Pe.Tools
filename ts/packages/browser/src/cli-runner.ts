@@ -8,6 +8,7 @@ import {
 } from "./browser.ts";
 import { formatProtocolHelp } from "./protocol.ts";
 import { renderBrowserGuide } from "./guide.ts";
+import { gestures, type GestureResult, type GestureTarget } from "./gestures.ts";
 
 const output = (value: unknown) => process.stdout.write(JSON.stringify(value ?? null) + "\n");
 export async function runBrowserCli(
@@ -53,7 +54,7 @@ export async function runBrowserCli(
       output({
         commands: [
           "guide (plain Markdown; other commands emit JSON)",
-          "launch|open [--visible] [--profile DIR] [--executable PATH]",
+          "launch|open [--visible] [--unthrottled] [--profile DIR] [--executable PATH]",
           "attach --endpoint URL|PORT | --auto-connect --profile CHROME_USER_DATA_ROOT",
           "list|status [SESSION]",
           "targets SESSION",
@@ -61,6 +62,7 @@ export async function runBrowserCli(
           "help SESSION [Domain[.method]]",
           "SESSION Domain.method --target TARGET|--browser [--params-file FILE|--params-stdin]",
           "events SESSION --target TARGET [--method Domain.event] [--duration-ms N]",
+          "SESSION click|type|press|shot --target TARGET [--name TEXT [--role R] [--within CSS] | --selector CSS] [--text T] [--key K] [--out FILE] (JSON outcome; exit 2 when blocked or mismatch)",
         ],
         options: ["--home DIR", "--client-id ID", "--timeout-ms N"],
         manual:
@@ -74,6 +76,8 @@ export async function runBrowserCli(
       if (visible && headless) throw new Error("Choose --visible or --headless");
       const profile = option("--profile");
       const executablePath = option("--executable");
+      const unthrottled = flag("--unthrottled");
+      const extra = args[0] === "--" ? args.slice(1) : args;
       const session = await openBrowser({
         home,
         mode: visible ? "visible" : "headless",
@@ -81,7 +85,14 @@ export async function runBrowserCli(
         executablePath,
         timeoutMs,
         lifetime: "session",
-        args: args[0] === "--" ? args.slice(1) : args,
+        args: unthrottled
+          ? [
+              "--disable-background-timer-throttling",
+              "--disable-renderer-backgrounding",
+              "--disable-backgrounding-occluded-windows",
+              ...extra,
+            ]
+          : extra,
       });
       output(session.info);
       await session.disconnect();
@@ -150,7 +161,10 @@ export async function runBrowserCli(
             if (!method || event.method === method || event.method.startsWith(method + "."))
               output({ targetId, ...event });
           });
-          if (method) await page.sendRaw(`${method.split(".")[0]}.enable`).catch((error) => { console.error("cli-runner: asynchronous operation failed", error); });
+          if (method)
+            await page.sendRaw(`${method.split(".")[0]}.enable`).catch((error) => {
+              console.error("cli-runner: asynchronous operation failed", error);
+            });
           await new Promise<void>((done) => {
             const timer = setTimeout(done, durationMs);
             process.once("SIGINT", () => {
@@ -165,6 +179,43 @@ export async function runBrowserCli(
         return;
       }
       const method = args.shift();
+      if (method === "click" || method === "type" || method === "press" || method === "shot") {
+        if (!targetId) throw new Error(`${method} requires --target TARGET`);
+        const name = option("--name");
+        const role = option("--role");
+        const within = option("--within");
+        const selector = option("--selector");
+        if (name && selector) throw new Error("Choose --name or --selector");
+        const control: GestureTarget | undefined = name
+          ? { name, ...(role ? { role } : {}), ...(within ? { within } : {}) }
+          : selector;
+        const text = option("--text");
+        const key = option("--key");
+        const out = option("--out");
+        const page = await session.page({ targetId });
+        try {
+          const g = gestures(page);
+          let result: GestureResult;
+          if (method === "shot") {
+            if (!out) throw new Error("shot requires --out FILE");
+            result = await g.shot(out, control);
+          } else if (method === "press") {
+            if (!key) throw new Error("press requires --key K");
+            result = await g.press(key, control ? { target: control } : {});
+          } else {
+            if (!control) throw new Error(`${method} requires --name TEXT or --selector CSS`);
+            if (method === "click") result = await g.click(control);
+            else if (text === undefined) throw new Error("type requires --text T");
+            else result = await g.type(control, text);
+          }
+          output(result);
+          // A blocked or mismatched gesture is an observation, not a CLI failure: exit 2, not 1.
+          if (result.outcome !== "done") process.exitCode = 2;
+        } finally {
+          await page.release();
+        }
+        return;
+      }
       if (!method?.includes(".")) throw new Error("Raw call requires Domain.method");
       const paramsFile = option("--params-file");
       const paramsStdin = flag("--params-stdin");

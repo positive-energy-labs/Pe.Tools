@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 
 export async function fixtureServer() {
   const html = await readFile(new URL("./page.html", import.meta.url));
+  const gesturesHtml = await readFile(new URL("./gestures.html", import.meta.url));
   const requests: string[] = [];
   const sessionCookie = `pe_fixture_auth=${randomUUID()}`;
   const authRequests: {
@@ -48,6 +49,9 @@ export async function fixtureServer() {
       response.end(
         "<button id=\"frame-button\" onclick=\"this.textContent=event.isTrusted?'Frame trusted':'Frame untrusted'\">Frame action</button>",
       );
+    } else if (request.url === "/gestures") {
+      response.setHeader("content-type", "text/html");
+      response.end(gesturesHtml);
     } else if (request.url === "/popup") {
       response.setHeader("content-type", "text/html");
       response.end("<h1>Native popup</h1>");

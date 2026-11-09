@@ -4,6 +4,7 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 
 ## Decided
 
+- 2026-11-09, Fans acceptance is the mutation journey [j6-fans-write](../../../ts/tests/e2e/j6-fans-write.ts), driven with real gestures: baseline, Pea stages ESP, the human plans and writes once, native readback, re-plan refuses the consumed edit. The kernel crusade found its blocking Fans bugs by crossing a boundary inside this journey: the next Pea turn, Pea editing while the page stays mounted, a cold start, leave and return. Those are its chaos moves. j6 has not yet run live.
 - 2026-11-04, Q2a removes the Ducts Inputs pane; colours remain in Ducts Systems and kinds in All Rules, while fan settings and roles move to Fans InputsBody. Ducts links to Fans instead of writing Fans Work. (U3)
 - 2026-11-04, Drop the InputsPane list-presentation parity rows “inputs preserve scoped order and selection, while editing and fan verbs stay isolated from list activation” and “inputs use address grammar/name order and retain the unpriced waiting state” with the deleted pane (58f5b5e8); preserve owner-route editor and admitted-pane laws. (U3)
 

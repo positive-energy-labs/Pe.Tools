@@ -190,6 +190,8 @@ Rules (rulings-1640 §1): act only through real controls with trusted input, ass
 
 Run: `chrome-agent launch --headless --port 924x` (your own instance), then `CDP_PORT=924x E2E_WEB=… E2E_LABEL=green node tests/e2e/j<N>.ts` from `ts`. **Ports:** hold operators own 9222, 9223 and 9231; workers pick a free 924x and never launch or drive those three. `CDP_PORT` has no default; unset, the lane stops with `PRECONDITION: CDP_PORT`. Revit journeys also take `E2E_TARGET`, `E2E_ROWS`, `E2E_PARAM` and `E2E_VALUE`. `E2E_DOC` (the document's title as the Situation ladder lists it, optional `E2E_SESSION`) binds the target through the ladder when a new thread shows `no document selected`; unset there, the journey stops as `PRECONDITION`. A matrix gets 150 s to draw its rows (project-a took ~69 s).
 
+Clicks and keys go through `@pe/browser` gestures: a disabled, covered or absent control is retried, never pressed, and the timeout names the last refusal. `E2E_TRACE=<file>.jsonl` records every gesture. `tsc --project tests/e2e/tsconfig.journeys.json` (from `ts`) typechecks `cdp.ts` and the node journeys.
+
 A missing precondition (no Revit bridge, no seed, wrong chips) ends as `RESULT: BLOCKED — …`, never `FAIL`.
 
 ## Revit data per journey
@@ -198,6 +200,7 @@ A missing precondition (no Revit bridge, no seed, wrong chips) ends as `RESULT: 
 - **Draft execution (J3, J4):** staged cells plan and apply without selecting a pod. Plan files nothing. A saved-member scenario may still choose a pod because that scenario manages the member itself.
 - **`E2E_ROWS`:** pick types that carry `E2E_PARAM`. A blank cell means the type lacks the parameter and renders no editor; `setCell`/`clickCell` then stop as `PRECONDITION: <row> has no <param>` (J3 on 666a58e lost a run to Balancing Damper this way).
 - **J3 `E2E_ROWS`:** two rows whose apply is natively clean for a plain text write. Not Mechanical Damper (F-J3-2: its connector reconciliation fails a plain text write), and `E2E_PARAM` is not a Yes/No parameter. The stale-refusal check reads the proposals band row: the Revit value struck, then `→ {edited}`.
+- **J6-fans (`j6-fans-write.ts`):** a fan whose type is shared (`E2E_FAN`, default `MUAS-1`; `E2E_VALUE` is the ESP in. wg). Pea stages, the human plans, Write runs once, and the re-plan must refuse with `no staged edit`. `E2E_CHAOS=leave-return` leaves and re-enters /fans by links before Plan. UNPROVEN: never run.
 - **J4:** one row whose `E2E_PARAM` is a non-empty text parameter. The band row must say `by you`; no visible grid or band control may say delete/remove.
 
 ## Seeding J6 (old-shape Work)

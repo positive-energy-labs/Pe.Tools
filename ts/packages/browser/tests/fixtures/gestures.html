@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><title>Pe browser gestures</title>
+  <style>
+    body {
+      font: 18px system-ui;
+      margin: 24px;
+    }
+    button,
+    input {
+      font: inherit;
+      margin: 8px;
+      padding: 8px;
+    }
+    #under-box {
+      position: relative;
+      display: inline-block;
+    }
+    #overlay {
+      position: absolute;
+      inset: 0;
+      background: rgb(0 0 0 / 0.3);
+    }
+  </style>
+  <button id="enabled">Enabled action</button>
+  <button id="disabled" disabled>Disabled action</button>
+  <span id="under-box"><button id="under">Covered action</button><span id="overlay"></span></span>
+  <label>Doubling <input id="doubling" /></label>
+  <output id="log"></output>
+  <script>
+    const log = (word) => (document.getElementById("log").textContent += word + ";");
+    for (const id of ["enabled", "disabled", "under"])
+      document.getElementById(id).addEventListener("click", () => log(id));
+    // The "DDuct" bug: the first input event doubles its first character.
+    const doubling = document.getElementById("doubling");
+    doubling.addEventListener("input", () => {
+      if (doubling.dataset.seen) return;
+      doubling.dataset.seen = "1";
+      doubling.value = doubling.value[0] + doubling.value;
+    });
+  </script>
+</html>

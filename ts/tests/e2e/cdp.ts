@@ -1,8 +1,15 @@
 // The whole e2e helper: trusted CDP input on a real control, and reads of the rendered DOM.
-// No element.click(), app handlers, stores or fetch. Runtime.evaluate locates/reads and records trusted input targets.
+// No element.click(), app handlers, stores or fetch. Gestures come from @pe/browser: they re-locate,
+// refuse disabled/covered controls and hit-test before pressing; Runtime.evaluate only reads.
 // Browser: explicitly owned or consented CDP endpoint; pass its port as CDP_PORT.
 // Hold operators own 9222/9223/9231, so there is no default port.
-import { connectCdp, getTargets } from "@pe/browser";
+import {
+  connectCdp,
+  gestures,
+  getTargets,
+  type GestureResult,
+  type GestureTarget,
+} from "@pe/browser";
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -67,51 +74,27 @@ export async function connect(
     await transport.close();
     throw error;
   }
+  const g = gestures(transport, { trace: process.env.E2E_TRACE });
   const inputEvents: unknown[] = [];
-  const click = async (element: string, what: string, completed?: () => Promise<boolean>) => {
-    const box = await page
+  /** A blocked gesture pressed nothing, so retry it until it lands; time out with the last refusal. */
+  const click = async (
+    target: GestureTarget,
+    what: string,
+    completed?: () => Promise<boolean>,
+    prepare?: () => Promise<unknown>,
+  ) => {
+    let last: GestureResult | undefined;
+    await page
       .until(async () => {
-        if (await completed?.()) return { completed: true as const };
-        const first = await read<{ x: number; y: number } | null>(center(element));
-        if (!first) return null;
-        await send("Input.dispatchMouseEvent", { type: "mouseMoved", ...first });
-        const stable = await read<{ x: number; y: number } | null>(center(element));
-        return stable && Math.abs(first.x - stable.x) < 0.5 && Math.abs(first.y - stable.y) < 0.5
-          ? stable
-          : null;
+        if (await completed?.()) return true;
+        await prepare?.();
+        last = await g.click(target);
+        inputEvents.push({ what, ...last });
+        return last.outcome === "done";
       }, what)
-      .catch(async (error) => {
-        const probe = await read(`(() => {
-        const el = ${element};
-        if (!el) return {missing:true,url:location.href};
-        const r=el.getBoundingClientRect(), style=getComputedStyle(el);
-        const parents=[];
-        for(let node=el.parentElement;node;node=node.parentElement){
-          const s=getComputedStyle(node);parents.push({tag:node.tagName,slot:node.getAttribute("data-slot"),box:node.getBoundingClientRect().toJSON(),display:s.display,overflow:s.overflow,visibility:s.visibility});
-        }
-        return {url:location.href,viewport:[innerWidth,innerHeight],expected:el.outerHTML,box:r.toJSON(),display:style.display,visibility:style.visibility,opacity:style.opacity,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML?.slice(0,700),parents};
-      })()`).catch((cause) => ({ error: String(cause) }));
-        inputEvents.push({ failed: what, probe });
-        throw error;
+      .catch((error) => {
+        throw new Error(`CDP click blocked on ${what}: ${JSON.stringify(last)}`, { cause: error });
       });
-    if ("completed" in box) return;
-    await read(`(() => {
-      const expected = ${element};
-      globalThis.__peCdpClick = null;
-      document.addEventListener("click", event => {
-        globalThis.__peCdpClick = { trusted: event.isTrusted, expected: expected?.outerHTML?.slice(0, 500),
-          hit: expected?.contains(event.target), target: event.target?.outerHTML?.slice(0, 500),
-          x: event.clientX, y: event.clientY, url: location.href, at: Date.now() };
-      }, {once: true, capture: true});
-    })()`);
-    for (const type of ["mousePressed", "mouseReleased"])
-      await send("Input.dispatchMouseEvent", { type, ...box, button: "left", clickCount: 1 });
-    const evidence = await read<{ trusted: boolean; hit: boolean } | null>(
-      "globalThis.__peCdpClick",
-    );
-    inputEvents.push(evidence);
-    if (!evidence?.trusted || !evidence.hit)
-      throw new Error(`CDP click missed ${what}: ${JSON.stringify(evidence)}`);
   };
   const page = {
     inputEvents,
@@ -136,9 +119,9 @@ export async function connect(
       ),
     /** Is a visible control with this text or aria-label rendered (optionally inside `within`)? */
     has: async (name: string | RegExp, within?: string) =>
-      await read<boolean>(
-        `(() => {const el = ${control(name, within)}; return Boolean(el?.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}) && el.getClientRects().length);})()`,
-      ),
+      (await g.locate({ name, ...(within ? { within } : {}) })) !== null,
+    /** The @pe/browser gestures on this page, for outcome-returning calls (type with read-back). */
+    gestures: g,
     url: () => read<string>("location.href"),
     async open(url: string) {
       const before = loadSerial;
@@ -181,7 +164,7 @@ export async function connect(
       page.until(async () => (await page.text()).includes(s), `text "${s}"`, ms),
     /** Click the visible control (button, link, role=button/menuitem/tab, summary) whose text or aria-label matches. */
     async click(name: string | RegExp, within?: string, completed?: () => Promise<boolean>) {
-      await click(control(name, within), `control ${name}`, completed);
+      await click({ name, ...(within ? { within } : {}) }, `control ${name}`, completed);
     },
     /**
      * Click a grid cell's editor: the row whose text has every `row` word, under header `column`.
@@ -202,9 +185,12 @@ export async function connect(
       );
       if (cell === "none")
         throw new Error(`PRECONDITION: ${row.join("/")} has no ${column} (the cell has no editor)`);
-      await click(
-        `${cellOf(row, column)}.querySelector(${JSON.stringify(EDITOR)})`,
-        `cell ${row.join("/")} ? ${column} editor`,
+      // Gestures take a selector, so mark the cell's editor on every attempt and target the mark.
+      await click("[data-e2e-cell]", `cell ${row.join("/")} × ${column} editor`, undefined, () =>
+        read(`(() => {
+          for (const e of document.querySelectorAll("[data-e2e-cell]")) e.removeAttribute("data-e2e-cell");
+          ${cellOf(row, column)}?.querySelector(${JSON.stringify(EDITOR)})?.setAttribute("data-e2e-cell", "");
+        })()`),
       );
     },
     /** Type a value into a grid cell as a person does: click, select all, delete, type, Enter. */
@@ -252,41 +238,14 @@ export async function connect(
       })()`),
     /** Click the element matching a CSS selector (for controls with no text, e.g. a cell). */
     async clickAt(selector: string) {
-      await click(
-        `[...document.querySelectorAll(${JSON.stringify(selector)})].find((e) => e.getClientRects().length && e.getBoundingClientRect().width)`,
-        selector,
-      );
+      await click(selector, selector);
     },
     /** Type into whatever has focus, one trusted key event per character. */
     async type(text: string) {
-      for (const ch of text) {
-        await send("Input.dispatchKeyEvent", {
-          type: "keyDown",
-          key: ch,
-          text: ch,
-          unmodifiedText: ch,
-        });
-        await send("Input.dispatchKeyEvent", { type: "keyUp", key: ch });
-      }
+      for (const ch of text) await g.press(ch);
     },
-    async press(key: keyof typeof KEYS, modifiers = 0) {
-      const [code, vk] = KEYS[key];
-      const text = key === "Enter" ? "\r" : undefined;
-      await send("Input.dispatchKeyEvent", {
-        type: "rawKeyDown",
-        key,
-        code,
-        windowsVirtualKeyCode: vk,
-        modifiers,
-      });
-      if (text) await send("Input.dispatchKeyEvent", { type: "char", key, text, modifiers });
-      await send("Input.dispatchKeyEvent", {
-        type: "keyUp",
-        key,
-        code,
-        windowsVirtualKeyCode: vk,
-        modifiers,
-      });
+    async press(key: string, modifiers = 0) {
+      await g.press(key, { modifiers });
     },
     /** Evidence: DOM dump + screenshot into the run directory. */
     async dump(dir: string, name: string) {
@@ -330,30 +289,7 @@ const EDITOR = 'input:not([disabled]):not([aria-hidden="true"]),textarea:not([di
 export const PLAN = /^(re-)?plan\s*\d*$/;
 export const SITUATION = 'section[aria-label="Situation"]';
 
-const KEYS = {
-  Enter: ["Enter", 13],
-  Escape: ["Escape", 27],
-  Delete: ["Delete", 46],
-  Backspace: ["Backspace", 8],
-  Tab: ["Tab", 9],
-  a: ["KeyA", 65],
-  r: ["KeyR", 82],
-} as const;
 export const CTRL = 2;
-
-const center = (el: string) => `(async () => {
-  const el = ${el};
-  if (!el?.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})) return null;
-  el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
-  const before = el.getBoundingClientRect();
-  await new Promise(requestAnimationFrame);
-  await new Promise(requestAnimationFrame);
-  if (!el.isConnected || !el.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})) return null;
-  const r = el.getBoundingClientRect();
-  if (!r.width || !r.height || ["x","y","width","height"].some(k => Math.abs(before[k]-r[k])>=0.5)) return null;
-  const x = r.x+r.width/2, y=r.y+r.height/2;
-  return el.contains(document.elementFromPoint(x,y)) ? {x,y} : null;
-})()`;
 
 /**
  * The <td> at (row, column): under the header titled `column`, in the row holding every `row` word.
@@ -368,17 +304,6 @@ const cellOf = (row: string[], column: string) => `(() => {
   const h = th.getBoundingClientRect(), x = h.left + h.width / 2;
   return [...tr.children].find((td) => { const r = td.getBoundingClientRect(); return r.left <= x && x <= r.right; }) ?? null;
 })()`;
-
-const control = (name: string | RegExp, within?: string) =>
-  `(() => {
-    const want = ${name instanceof RegExp ? name.toString() : JSON.stringify(name)};
-    const root = ${within ? `document.querySelector(${JSON.stringify(within)})` : "document"};
-    if (!root) return null;
-    const labels = (e) => [e.getAttribute("aria-label"), e.innerText].map((s) => (s || "").trim()).filter(Boolean);
-    const hit = (e) => labels(e).some((l) => typeof want === "string" ? l === want : want.test(l));
-    return [...root.querySelectorAll("button, a, [role=button], [role=menuitem], [role=tab], [role=option], [role=combobox], summary")]
-      .find((e) => hit(e) && e.getClientRects().length > 0) ?? null;
-  })()`;
 
 /**
  * Run one journey: `E2E_LABEL=green|red node tests/e2e/j5.ts`. Writes steps, the failing
@@ -572,7 +497,10 @@ export async function sendChat(page: Page, text: string, ms = 300_000) {
       });
   }
   await page.clickAt(COMPOSER);
-  await page.type(text);
+  // Focus and read-back, not blind keys: a stray focus once staged "DDuct" for "Duct".
+  const typed = await page.gestures.type(COMPOSER, text);
+  if (typed.outcome !== "done")
+    throw new Error(`ASSERT the composer takes the message: ${JSON.stringify(typed)}`);
   await page.press("Enter");
   await page.waitText(text, 30_000);
   const end = await page.until(

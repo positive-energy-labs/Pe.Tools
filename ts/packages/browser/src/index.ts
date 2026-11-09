@@ -18,3 +18,13 @@ export type {
   BrowserPage,
   SessionInfo,
 } from "./browser.ts";
+export { gestures, describeTarget } from "./gestures.ts";
+export type {
+  BlockedReason,
+  GestureOptions,
+  GesturePage,
+  GestureRect,
+  GestureResult,
+  GestureTarget,
+  Gestures,
+} from "./gestures.ts";

@@ -15,7 +15,7 @@ Use ${command} for shell work and @pe/browser for typed Node programs. The same 
 
 Read DOM or Accessibility for content, labels, controls, and state. Use a screenshot for geometry, overlays, canvas, images, or what a person actually sees; open the captured image before making visual claims. Inspect Network for requests, responses, and bodies; Runtime for console messages and exceptions. A blank-looking page needs these observations before a diagnosis. Derive element identities from data rather than pixels.
 
-The hot path is locate, trusted input, independent read-back. Inspect the intended control and its current state; compute its visible bounding rectangle; dispatch Input at its viewport coordinates; then read the resulting DOM, selected values, navigation, or response. A successful CDP return proves dispatch, not the user's outcome. For a form submission, check a confirmation or durable result before submitting again. Read-only inspection usually needs fewer actions than clicking through everything.
+The hot path is locate, trusted input, independent read-back. Inspect the intended control and its current state; act with a gesture (below), which locates and hit-tests it on every call; then read the resulting DOM, selected values, navigation, or response. A successful CDP return proves dispatch, not the user's outcome. For a form submission, check a confirmation or durable result before submitting again. Read-only inspection usually needs fewer actions than clicking through everything.
 
 Wait for a bounded observable condition: a target control, application state, matching response, or navigation event. Subscribe before acting when an event could race the action. Do not insert arbitrary sleeps. A timeout or abort with outcome unknown means Chrome may have acted. Inspect current state and the request journal before retrying a mutation. Navigation destroys evaluation contexts; inspect the new page before deciding whether work remains.
 
@@ -30,7 +30,7 @@ Wait for a bounded observable condition: a target control, application state, ma
 
 navigate.json contains {"url":"https://example.com"}. Use the returned session and target ids, and keep them explicit on subsequent commands. Re-enumerate targets after tabs change. --params-file FILE or --params-stdin carries structured JSON safely, especially in PowerShell; avoid embedding JSON in shell arguments. --home DIR isolates receipts; repeat the same --home DIR on every command for that session. --browser is privileged browser-level raw CDP, with effects outside a single page lease.
 
-Launch defaults to headless with a private temporary profile. Use --visible when a person needs the window. Performance and visual timing measurements require a visible foreground page; record that condition. Do not compare those measurements with a hidden or background tab.
+Launch defaults to headless with a private temporary profile. Use --visible when a person needs the window. Add --unthrottled when a background or occluded page must keep its timers and rendering running. Performance and visual timing measurements require a visible foreground page; record that condition. Do not compare those measurements with a hidden or background tab.
 
 An explicit --profile DIR retains a dedicated automation profile and its sign-in state. Retain it only when the task calls for persistence. Attaching to daily Chrome requires the person's consent through Chrome's remote-debugging UI; the agent cannot approve that prompt. Google sign-in remains a manual human step. Do not clone a daily profile or extract credentials to work around consent or sign-in.
 
@@ -41,16 +41,25 @@ For repeated inspection, write a short typed program with @pe/browser. Both Brow
     const state = await page.evaluate((selector) => {
       const node = document.querySelector(selector);
       if (!node) return null;
-      const r = node.getBoundingClientRect();
-      return { text: node.textContent, x: r.x + r.width / 2,
-        y: r.y + r.height / 2, width: r.width, height: r.height };
+      return { text: node.textContent, disabled: node.matches(":disabled") };
     }, "button[type=submit]");
 
 Evaluation rejects unsupported values such as functions, bigint, non-finite numbers, cycles, accessors, class instances, and sparse arrays. Local argument failures are not-sent. Callback/result failures have unknown outcome because the callback may already have acted. Read the original error, data.phase, and data.path; evaluation never retries automatically. Raw Runtime.evaluate remains available when a protocol-specific expression or remote object is needed.
 
-For a click, send Input.dispatchMouseEvent mousePressed then mouseReleased with button left and clickCount 1. Input coordinates are CSS pixels relative to the viewport, including when Chrome routes them into an iframe; do not add document scroll offsets. Re-read geometry after scrolling or layout changes. Input.insertText types into the focused control; dispatchKeyEvent provides explicit keyDown/keyUp. Verify the controlled input's actual value afterward.
+For clicks and typing, use gestures(page) from @pe/browser, or the CLI verbs:
 
-For wheel input, locate the intended scroll container and dispatch mouseWheel with x, y, deltaX, deltaY. Read its scroll position or visible content afterward. For a drag, press with button left and buttons 1, move through bounded viewport points with buttons 1, then release with buttons 0. Ensure release in cleanup if interrupted. A synthetic element.click() can bypass the native input path; use trusted Input for UI behavior claims and when synthetic input silently does nothing.
+    const g = gestures(page, { trace: "run/gestures.jsonl" });
+    await g.click({ role: "button", name: "Save" });
+    await g.type({ name: "Search" }, "Duct");
+    await g.press("Enter");
+    ${command} SESSION click --target TARGET --name Save [--role button] [--within CSS]
+    ${command} SESSION type --target TARGET --selector "input[name=q]" --text Duct
+    ${command} SESSION press --target TARGET --key Ctrl+a
+    ${command} SESSION shot --target TARGET --out page.png
+
+A target is { role?, name, within? } (name is exact text, aria-label, label or placeholder, or a RegExp) or a CSS selector. Every call re-locates it, scrolls it into view, checks disabled and aria-disabled, and hit-tests the press point; it never presses a disabled, covered, absent or offscreen control. type also requires focus inside the target and reads the value back. The result is done, blocked with a reason, or mismatch with wanted and got; the CLI exits 2 for the last two. A blocked or mismatched gesture is a product observation: record it, and do not route around it with raw Input, element.click() or a forced value.
+
+Raw Input remains for what gestures do not cover. Input coordinates are CSS pixels relative to the viewport, including in an iframe; re-read geometry after scrolling. For wheel input, locate the intended scroll container and dispatch mouseWheel with x, y, deltaX, deltaY. Read its scroll position or visible content afterward. For a drag, press with button left and buttons 1, move through bounded viewport points with buttons 1, then release with buttons 0. Ensure release in cleanup if interrupted. A synthetic element.click() can bypass the native input path; use trusted Input for UI behavior claims and when synthetic input silently does nothing.
 
 ## Observe failures and keep the observer alive
 
