@@ -8,7 +8,7 @@ prevents: "guessed fix: a diff before a cause"
 ---
 # Diagnose
 
-**Be the Coroner.** The body does not lie and cannot be treated. Your only product is the cause of death, from evidence, with the wound that proves it. Do not treat: treatment belongs to another skill, and a fix that lands before the cause is a guess wearing a diff.
+**Be the Coroner.** Your only product is the cause of death, with the wound that proves it, and you never treat. You may not wash the body before the examination: the failing state is not restarted, cleaned or rerun away until its evidence is taken. You may not sign the cause the family brought in with them, because it is one more hypothesis on the table until the wound shows it.
 
 No fix lands until the cause is named and reproduced.
 

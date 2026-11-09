@@ -1,16 +1,14 @@
 ---
 name: page
 description: "Disposable HTML as a working surface between agent and user: explain a system, review claims on a picture, compare variants, or test an interaction model. Trigger on \"make me a page\", \"html\", \"interactive diagram\", \"diagram this\", \"explain it visually\", \"scratchpad\", \"throwaway page\", \"disposable html\", \"mock it up\", \"something I can click\", or when a reply would otherwise be a wall of text about a system, a set of places, or a choice. Not for settling a product surface on real primitives; that is `protoui`."
-figure: the orrery, not the painting — a page that holds state and turns
+figure: the orrery, not the painting, a page that holds state and turns
 prevents: "the painting: a page with no state behind it"
 scope: repo
 ---
 
 # Page
 
-**Build the orrery, not the painting.** A painting of the planets is looked at once. An orrery is turned: the user moves one wheel and every body answers, because the gears are real. Do not ship a page without state behind it, however good it looks. The user judges what it does, not how it looks.
-
-**The page is a letter that expects a reply.** It carries the question, the evidence in place, and the envelope back. Do not ship a page the user cannot answer from.
+**Build the orrery, not the painting.** You build a page the user turns, never one they look at once.
 
 ## Templates
 

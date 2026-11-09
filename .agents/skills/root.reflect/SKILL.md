@@ -9,9 +9,9 @@ scope: skills
 ---
 # Reflect
 
-**Refit the ship of Theseus.** The set stays itself while every plank is replaced, so no plank is kept for being original and none is added for grace. A cheap migration raises the bar: replace the rotten plank, do not patch around it.
+**Refit the ship of Theseus.** No plank is kept for being original and none is added for grace, and a cheap refit raises the bar: you may not patch around a rotten plank.
 
-**Every skill edit is a Ulysses contract.** Ulysses had himself bound because the self who hears the sirens cannot judge. The hand that writes a law is primed and may not grade its own rope: an edit is unproven until a fresh agent, given only the text, does the intended thing.
+**Every skill edit is a Ulysses contract.** The sailor at the mast may not cut his own ropes while the sirens sing, so a law is never loosened by the agent it binds, in the task it binds. The hand that tied a rope may not grade it.
 
 ## Kinds
 
@@ -41,7 +41,7 @@ The set's `check.py` sits in the skills directory, and `execute` gives the comma
 The fold is the line between the figure paragraphs under the H1 and the first H2.
 
 - Above the fold, write one figure. A second figure stays only if it compresses rules the first cannot. In two to four sentences, the figure says what the agent may not do, in the figure's own terms. A figure that only licenses dissolves into "be good at this", so cut it. Cut any ornament that compresses no rule.
-- Figure nouns stay above the fold. Below it, every sentence uses ordinary words, has one finite verb, and names its actor.
+- Figure nouns stay above the fold. Below it, every sentence uses ordinary words, stays short, and names its actor.
 - Prefer a gate to a disposition. A number, a forbidden action, a Glossary word, or a slot pointer moves the model, but "rank wisely" only describes it. Cut a law that only describes good behavior, or give it a concrete trigger. Keep the gate general enough to survive another repo.
 - A law carries no dated anecdote. The incident goes to the `## Incidents` section of the ledger beside `index`, with its date and the skill and law it backs.
 - Write what is always true and what the user cannot be expected to say. Never write what the user will say in the prompt, because the prompt carries it.
@@ -54,7 +54,7 @@ The fold is the line between the figure paragraphs under the H1 and the first H2
 
 ## Style mechanisms
 
-These mechanisms break plain writing in every register. Three rules make plain prose: a sentence has one finite verb and a named actor, the head noun comes first with its qualifiers after, and the connective (because, so, but) is written instead of implied by a semicolon. The hard sentence to fix is rarely the poetic one. It is usually a plain sentence built wrong.
+These mechanisms break plain writing in every register. Three rules make plain prose: a sentence stays short and names its actor, the head noun comes first with its qualifiers after, and the connective (because, so, but) is written instead of implied by a semicolon. The hard sentence to fix is rarely the poetic one. It is usually a plain sentence built wrong.
 
 | Mechanism | What it is | Example | Fix |
 |---|---|---|---|

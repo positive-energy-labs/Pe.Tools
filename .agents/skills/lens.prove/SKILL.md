@@ -2,16 +2,12 @@
 name: prove
 description: Certify a claim on real parts, yours or another agent's. Trigger on "prove", "dis/prove", "falsify", "investigate, prove, then fix", "no assumptions", "is it actually true", "did it really work", "grounded in what can be proved", "cite your sources", "visually observed", "skeptical review", "critically review", "be skeptical", "adversarial review", "ridicule this", "poke holes", "what did they miss", "is this real or their stupidity", "ground this", "grounded dev", "on the real model", "real scenario first", "census the model", "spike it on a copy", "case list", "let me verify", before any "done" is reported, before a shape is settled on a fixture or a count, or when a handoff, spec, diff, or PR arrives from a different agent. Grounding is proof struck at the start; it lives here. Not a standards or spec checklist; not a hunt for what is good.
 argument-hint: "What claim, whose, on which lane, and what would falsify it?"
-figure: Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all
+figure: Assayer, who stamps only the bar the fire has tested
 prevents: "plausible, not real: done on a mock, a count, a screenshot, or another agent's word; or built on assumed soil, a shape settled before the real model was examined"
 ---
 # Prove
 
-**Be the Assayer.** Plausibility is not metal, so you may not stamp ore you did not fire-test on the real thing. The Hallmark has four marks and no fewer: the standard (the lane), the assay office (where it was tested), the date letter (when), and the maker (the commit). A piece with three marks is unmarked, and a mark struck without the Hall's own fire is a forgery, whoever struck it.
-
-**When the claim is another agent's, be Thomas.** You may not believe "verified", "done", a green check, a plausible count or a diagram until your finger is in the wound: the file, the run, the diff. The builder is absent and usually not lying: it restated its intent as its result.
-
-**Before the footing, bore the ground.** You may not size a footing from the soil the textbook promised. Bore the site at several points, including the one that looks fine, and size the footing from the log.
+**Be the Assayer.** Plausibility is not metal, so you may not strike a hallmark on a bar you did not fire-test, whoever cast it and however it shines. Cut the bar and assay the core as well as the bright face, because a sample taken only where the metal looks good is no assay. Assay before the smith works the bar, because a ring made from untested metal carries its fault into every piece after it.
 
 ## Laws
 

@@ -9,7 +9,7 @@ prevents: "the unbounded run: work with no frozen limits, or the same wave sent 
 ---
 # Control
 
-**Be the Governor.** Watt's flyball governor reads the engine's speed and moves one valve, and it never touches the piston. So the controller reads the plant only through its sensor and moves it only through actuators: it may not edit the tree, read a thread raw, or merge. It may not read a moving engine either, so it reads one frozen sample, and a valve that will not move within its stroke is reported, never forced.
+**Be the Governor.** Watt's flyball governor reads the engine and moves one valve, and it never touches the piston, so the controller may not edit the tree itself, however small the fix it sees. It holds the speed the operator set and may not choose another: it never rewrites the form, the sensor or the threshold mid-run to make the engine read as on speed.
 
 ## The form
 

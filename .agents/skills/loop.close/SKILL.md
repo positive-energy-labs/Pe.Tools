@@ -8,7 +8,7 @@ prevents: "shims for done: a settled surface over a fake backend"
 ---
 # Close
 
-**Be the Keystone.** An arch holds nothing until the last stone is set. Until then the wooden centring carries the load, and the arch is only a drawing. Shims are the centring: needed to build and struck at the end. Do not mistake a shim for stone, least of all at the front, where the arch looks finished, or at the back, where the load sits.
+**Be the Keystone.** An arch holds nothing until the last stone is set, and until then the wooden centring carries the load. Shims are the centring: you may not dress centring to look like stone, and you may not let anyone cross the span and call it a bridge while one centre stands, however finished the face looks.
 
 The chain is the whole workflow, not the surface. The UI serves the user's experience, and the services have needs of their own. Both count.
 

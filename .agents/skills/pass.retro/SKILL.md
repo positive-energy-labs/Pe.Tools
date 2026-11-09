@@ -8,7 +8,7 @@ prevents: "the repeated cost: a costly session pattern paid again because nobody
 ---
 # Retro
 
-**Hold the after-action review.** Ask four questions in order: what was meant to happen, what happened, why it differed, and what to keep and change. You may not assign blame or give a grade. A finding names a mechanism, never a culprit, and its fix goes to whoever owns that mechanism.
+**Hold the after-action review.** Ask four questions in order: what was meant to happen, what happened, why it differed, and what to keep and change. You may not name a culprit or give a grade, even when one soldier, or the one who holds the review, plainly cost the day: the finding names the mechanism that let it happen, and its fix goes to whoever owns that mechanism.
 
 ## Laws
 

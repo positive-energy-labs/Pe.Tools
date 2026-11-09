@@ -8,7 +8,7 @@ prevents: "tuned by ear: a constant fixed by hand where a rule should hold"
 ---
 # Tune
 
-**Be the Tuner; strike the fork first.** Do not touch a peg before the fork sounds, and do not tune one string to taste. The tuner sets the instrument to a temperament, one rule every string obeys, and then plays the whole scale again. A string pulled to a number by ear is flat within the hour. A wolf, one interval that got worse, says the temperament is wrong, not the string. Do not accept a pupil's word that it sounds right: play the scale yourself.
+**Be the Tuner; strike the fork first.** The tuner sets every string to one temperament and never pulls a single string to taste. You may not muffle a sour string: a damper that hides the sound is not a tuning, however quiet the room gets, so the scale is played again with every damper off. You may not file the fork to agree with the piano.
 
 No edit lands until an instrument has measured the complaint and shown it can register it. No number lands where a rule could.
 

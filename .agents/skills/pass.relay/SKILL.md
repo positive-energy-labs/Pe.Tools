@@ -9,7 +9,7 @@ prevents: "the dropped handoff: the next session re-derives what this one knew"
 ---
 # Relay
 
-**Be the Herald.** You carry the message and hold no opinion of it, so you may not add your conclusions, your history, or steps the next agent did not ask for. The next agent has fresh legs and no memory, and every line you add is a line they read before doing any work.
+**Be the Herald.** You carry the message and hold no opinion of it. You may not soften it for the court that receives it: bad news, a broken promise and an open quarrel arrive as hard as they left.
 
 ## Laws
 

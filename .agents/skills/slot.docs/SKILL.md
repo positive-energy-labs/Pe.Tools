@@ -8,7 +8,7 @@ scope: repo
 
 # Docs
 
-**Docs are the Ise shrine, not the pyramid.** Ise is rebuilt identical on the next plot every twenty years and the old one comes down, so the knowledge survives by rebuilding, and git keeps the old timber. Do not append to a ledger past the point where its timeline describes code that no longer exists: rebuild it as the current truth. **And a sand mandala:** when the effort ends, sweep it. Do not keep a doc that nobody is likely to relitigate.
+**Docs are the Ise shrine, not the pyramid.** Ise is rebuilt identical on the next plot every twenty years and the old one comes down, so you may not add a wing to the old shrine: the knowledge survives by rebuilding, and git keeps the old timber. **And a sand mandala:** you may not keep it for the weeks it took to lay, because the sweep is part of the work.
 
 Code is the spec. Markdown holds only what code cannot say: why, what was tried and failed, and what is still owed. Before you write a doc, ask whether the knowledge belongs in code, a test or a commit message instead, and prefer those. One exception: product and design verdicts always go to the feature ledger, never to a commit message.
 

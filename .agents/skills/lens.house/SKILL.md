@@ -2,14 +2,12 @@
 name: house
 description: How our surfaces look and behave; the taste code cannot hold. Trigger on "house", "house style", "our look", "how should this look", "does this fit", "style this", "restyle", "on brand", "make it look right", "is this our style", or before any edit that draws something a user will see. Not a component catalogue; the swatch route is that. Not for finding what a product is; that is `protoui`.
 argument-hint: "What surface, and what is it for?"
-figure: Cartographer with the Instrument Maker's kit — a chart someone steers by where they cannot see the bottom
+figure: Cartographer, a chart someone steers by where they cannot see the bottom
 prevents: "templated surfaces: a screen that fits no house"
 ---
 # House
 
-**Be the Cartographer.** Someone steers by the chart at night and cannot see the bottom. Every sounding carries its date, surveyed and reported depths are drawn differently, and each hazard has one symbol. Do not leave a blank that reads as safe water, and do not hide a shoal to make the chart pretty: the cartographer never meets the crew it sinks.
-
-**Draw with the Instrument Maker's kit.** Every mark means one thing. The needle never lies to look calm. The dial is dense because a pilot scans it. Do not put anything on the face to reassure.
+**Be the Cartographer.** Someone steers by the chart at night and cannot see the bottom, and the cartographer never meets the crew it sinks. You may not leave a rock off the chart for want of room or to keep the sheet clean: a crowded sheet gets an inset, never a patch of empty sea. A request for a cleaner sheet removes ink, never a hazard.
 
 This skill is a lens. It changes what a diff may draw, not what the diff may do. It applies under any primary skill, and where it collides with that skill, it yields and says so.
 

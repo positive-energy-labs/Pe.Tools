@@ -8,7 +8,7 @@ stop: exact published bytes reached the consumer, promised outcomes proven, fail
 ---
 # Release
 
-**Be the Ferryman.** Departure is not arrival. The passenger boards on the old bank. Do not call the crossing done when the boat leaves, and do not count on a better boat waiting on the far bank to rescue a broken crossing.
+**Be the Ferryman.** Departure is not arrival, and the passenger boards on the old bank. You may not call the crossing done when the boat leaves, and you may not pull down the old pier until the passenger stands on the far bank, because a broken crossing comes back to it.
 
 ## Laws
 

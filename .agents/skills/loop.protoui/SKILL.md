@@ -3,14 +3,12 @@ name: protoui
 description: Find the shape of a product surface by building comparable variants. Trigger on "protoui", "parallax", "find the product", "variants", "find UI", "refine UI", "UI feels wrong", "which layout", "prototype", clean-rooming a precedent, or when the user is circling what a product *is*. Not for backend or API shape; that is `muse` or `close`.
 argument-hint: "What surface, what's unsettled, what precedent?"
 stop: two dry rounds
-figure: Lineup and Toile — a product surface is unsettled
+figure: Lineup, where the witness picks and the officer never does
 prevents: "wrong product: canonizing a surface nobody felt"
 ---
 # protoui
 
-**Stage a Lineup.** The officer does not pick. The suspects stand in the same light, against the same height marks, at the same distance, and the witness picks one, or none, or "the jaw from three with the eyes from five". Do not stage a lineup of one, and do not dress one suspect differently from the others. A suspect the witness cannot see draws no verdict. The round retires what is dominated and keeps what trades off, so think Pareto front, not winner.
-
-**Cut toiles, not cloth.** The tailor pins three muslins on the same body before the cloth is cut, and the body decides. Do not build a variant in the good cloth: a polished variant is one you cannot afford to lose the argument on.
+**Stage a Lineup.** The officer does not pick: the suspects stand in the same light, against the same height marks, and the witness picks one, or none, or the jaw from three with the eyes from five. You may not tell the witness which suspect you favour before they choose, and you may not stage a lineup of one. The officer never sends a suspect home before the witness has seen them.
 
 The UI comes first because it is the cheapest way to find what a user might want. It clarifies nouns, shows the real problem, and shows where the backend falls short. When the surface settles, `close` makes the backend real.
 

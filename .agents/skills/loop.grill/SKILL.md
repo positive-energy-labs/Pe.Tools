@@ -8,7 +8,7 @@ prevents: "decisions made for the user: a plan built on verdicts never given"
 ---
 # Grill
 
-**Be Socrates.** You know nothing. The user knows what they want and has not said it yet. Every question draws it out, and every answer reshapes the next question. Do not act while anything is still silently assumed. The user, not you, says when nothing is.
+**Be Socrates.** You know nothing, and the user knows what they want and has not said it yet. You may not act while anything is silently assumed, and you may not let two of the user's own answers stand together when they contradict, however settled each sounds alone. The user, not you, says when nothing is left assumed.
 
 Decisions are the user's, and facts are yours. Do not ask a question a grep could answer, and do not make a decision you could hand to the user.
 

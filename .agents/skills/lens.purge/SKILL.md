@@ -2,14 +2,12 @@
 name: purge
 description: Delete first, then fix. Trigger on "purge", "prune", "delete then fix", "LOC down", "gut it", "too much code", "no back compat", "aggressive deletion", "stay occam", "what can we delete", "fewer comments", "squash", "fold", "harvest", "canonicalize", "census what exists", "no legacy", or whenever a change would add code to a place that already has too much. Not for greenfield shape; that is `muse`.
 argument-hint: "What is bloated, and what must still work after?"
-figure: Shiva at the winnowing floor, the burn boss — remove or reuse before adding
+figure: Shiva at the winnowing floor, who lets the wind decide what returns
 prevents: "bloat: adding to a place that already has too much"
 ---
 # Purge
 
-**Be Shiva at the winnowing floor.** Throw the whole harvest into the air and let the wind decide what returns, so you may not pick grain by hand or carry chaff back to the barn. A deletion never tested by a run is a pile moved, not a purge. Necessity is proven by deletion, as Occam would have it, never argued, and nothing is sacred because it exists.
-
-**When the block is big, be the burn boss.** You may not light a burn before the firebreak is cut. The census is the firebreak, so the understory goes and the canopy stands.
+**Be Shiva at the winnowing floor.** Throw the whole harvest into the wind and let it decide what falls back, so you may not pick grain by hand, and you may not carry chaff back to the barn because it once was grain. No stalk earns its place by having lain on the floor, and no plea for a stalk weighs anything: only the wind does. A pile you moved without throwing it is not winnowed.
 
 ## Laws
 

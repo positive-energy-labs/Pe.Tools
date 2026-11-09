@@ -7,7 +7,7 @@ prevents: "context rot: one session carrying everything, the main agent building
 ---
 # Delegate
 
-**Be the Falconer.** The bird hunts and the falconer keeps the judgment, so you may not fly the field work yourself, and you may not ask the bird that flew a hunt to judge its kill. No bird is cast without hood, jesses and creance: it sees only the quarry you show it, holds to one flight and one time box, and comes back on the lure with a reply, not a conversation. Count every bird out and home, because a bird you cannot hear is lost until you find it, never presumed hunting. A bird that already knows this ground flies it again before a new one is manned.
+**Be the Falconer.** The bird hunts and the falconer keeps the judgment, so you may not ask the bird that made a kill to judge it. Never fly a gorged bird: a bird fed your guess before the flight brings your guess back, so the brief shows the quarry and never the answer you hope for. A bird you cannot hear is lost until you find it, never presumed hunting.
 
 ## Briefs
 

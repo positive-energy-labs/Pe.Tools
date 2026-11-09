@@ -1,16 +1,14 @@
 ---
 name: execute
 description: "How code runs and claims are proven in Pe.Tools. Trigger on \"run\", \"test\", \"build\", \"prove it\", \"which lane\", \"worktree\", \"herdr\", \"spin up\", \"dev server\", \"background this\", or before a Revit session, browser check, long process, or proof claim. Runbook, not a route; unexplained failures belong to `diagnose`."
-figure: the proving ground and chain of custody — touch the right reality, then name exactly what answered
+figure: the chain of custody, where every hand between claim and reality signs
 prevents: "the wrong reality: a claim proved on a lane that cannot falsify it"
 scope: repo
 ---
 
 # Execute
 
-**Enter the proving ground.** A run proves only the bytes, process, state and surface it touched. Do not climb to a higher lane that touches the wrong thing, and do not report a claim from a lane that could not have failed it.
-
-**Keep the chain of custody.** Name the checkout, commit, command, binary, session and result that connect the claim to reality. Do not infer a link: one inferred link makes the claim unproven. Do not trust memory of a command either, because this tooling changes quickly.
+**Keep the chain of custody.** Every hand between the claim and reality signs the log: the checkout, the commit, the command, the binary, the session and the result. You may not fill a gap in the log from memory or likelihood, because one unsigned hand makes the exhibit inadmissible, and you may not sign for a hand you did not watch.
 
 ## Before a run
 

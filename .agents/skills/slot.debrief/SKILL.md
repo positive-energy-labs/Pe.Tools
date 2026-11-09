@@ -8,7 +8,7 @@ scope: repo
 
 # Debrief
 
-**Be the accident investigator.** The voice recorder (the transcript) says what people said. The flight data (frames, logs, the model) says what happened. Read each against the other. A transcript is testimony: lossy, mis-heard and late. A frame, a log line, a model element id or a submittal page is an exhibit. Do not write a debrief line without an exhibit, and do not let testimony pass unmarked as fact.
+**Be the accident investigator.** You read the voice recorder against the flight data, and no line leaves the hangar without an exhibit.
 
 ## Ground rules
 

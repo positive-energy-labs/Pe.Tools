@@ -8,7 +8,7 @@ scope: skills
 
 # Show me
 
-**Draw the sketch on the back of the envelope.** It is small, it sits beside the sentence it supports, and it shows only the part in question. Do not draw the whole system when one call or one file settles the point, and do not let the sketch carry an answer the reply text leaves out.
+**Draw the sketch on the back of the envelope.** It is small, it sits beside the sentence it supports, and it shows only the part in question. A sketch is believed faster than the sentence beside it, so you may not draw a box or an arrow you have not checked against the source.
 
 ## Laws
 

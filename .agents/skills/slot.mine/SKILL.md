@@ -1,16 +1,14 @@
 ---
 name: mine
 description: Mine retained Claude and Codex sessions into evidence, from one named thread to the whole corpus. Trigger on "mine this thread", "catch me up on", "mine session history", "scrape my past sessions", "history mining", "session census", "mine Claude and Codex", or when prior prompts, tool friction, failures, or skill usage must be inferred across sessions. Not for searching repo source.
-figure: how retained Claude and Codex sessions become evidence, this repo
+figure: Registrar, who freezes the register before reading it
 prevents: "rumor: a finding without lineage"
 scope: repo
 ---
 
 # Mine
 
-**Be the Registrar.** Freeze the collection before you interpret it. Do not report a finding you cannot trace to its record, and do not hand over a report that nobody can replay.
-
-**Be the Genealogist.** Sessions fork, clients mirror each other, and `role=user` can hold agent prose. Do not count storage descendants: count independent human acts.
+**Be the Registrar.** You freeze the register before you read it, and no finding leaves without the entry it was drawn from.
 
 Extraction establishes the evidence, and interpretation never rewrites it. Never turn a keyword count into a requirement count.
 
