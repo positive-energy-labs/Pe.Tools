@@ -6,6 +6,7 @@ Run from anywhere: python .agents/skills/check.py [--fix]
 import io, os, re, sys, glob, subprocess, collections
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(HERE))
 KINDS = ('root', 'lens', 'pass', 'slot', 'loop')
 DIR_RE = re.compile(r'^(root|lens|pass|slot|loop)\.([a-z][a-z0-9-]*)$')
 # A stance is portable. Anything naming this repo, its tools, or its paths belongs in a slot.
@@ -185,9 +186,19 @@ def main():
     elif not os.path.islink(mirror) and os.path.realpath(mirror) != os.path.realpath(HERE):
         fail('mirror', '%s is a copy, not a junction; it will drift. Delete it and run --fix' % mirror)
 
-    # 7. the user-global skills dir carries nothing; the set has one home
+    # 7. the commit hook that stamps T3-Thread trailers is installed via core.hooksPath
+    cur = subprocess.run(['git', 'config', '--get', 'core.hooksPath'], cwd=REPO, capture_output=True, text=True).stdout.strip()
+    if cur != 'tools/git-hooks':
+        if do_fix:
+            subprocess.run(['git', 'config', 'core.hooksPath', 'tools/git-hooks'], cwd=REPO, check=True)
+            fixes.append('set core.hooksPath = tools/git-hooks')
+        else:
+            fail('hooks', 'core.hooksPath is %r, not tools/git-hooks; run --fix' % cur)
+
+    # 8. the user-global skills dir carries nothing; the set has one home
     home = os.path.join(os.path.expanduser('~'), '.claude', 'skills')
-    stray = [d for d in (os.listdir(home) if os.path.isdir(home) else [])]
+    # `synced` is the claude.ai skill bucket the harness manages; it is not ours to delete.
+    stray = [d for d in (os.listdir(home) if os.path.isdir(home) else []) if d != 'synced']
     if stray:
         fail('home', '%s holds %s; the set has one home, delete them' % (home, ', '.join(stray)))
 

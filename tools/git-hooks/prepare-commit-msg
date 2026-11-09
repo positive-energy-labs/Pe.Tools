@@ -1,0 +1,8 @@
+#!/bin/sh
+# Stamps every commit with the T3 thread that made it, so retro attribution
+# never depends on an agent remembering a --trailer flag.
+# Installed by: python .agents/skills/check.py --fix  (sets core.hooksPath).
+msg="$1"
+[ -n "$T3CODE_THREAD_ID" ] || exit 0
+git interpret-trailers --in-place --if-exists doNothing \
+  --trailer "T3-Thread: $T3CODE_THREAD_ID" "$msg"
