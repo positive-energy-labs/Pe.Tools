@@ -47,7 +47,7 @@ Each field carries meaning, not mechanics. Outcome is a sentence the owner can a
 ```text
 Outcome      UNPROVEN[not all paths exercised]. I changed the parser.
 Did          I read the parser and the tests and edited the file.
-Ran -> saw   Get-Content parser.ts showed the function.
+Ran -> saw   the parser file printed to the terminal, so the function is there.
 Not verified I did not exercise every input.
 ```
 
