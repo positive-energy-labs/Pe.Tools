@@ -113,10 +113,17 @@ async function start(
   const receiptFile = join(directory, "session.json");
   // A session keeper outlives its launcher; on Windows that means leaving the launcher's job too.
   const outside = config.lifetime === "session" && process.platform === "win32";
+  // A hardened Windows machine can refuse process creation through WMI. The plain detached keeper still
+  // works there unless the launcher sits in a kill-on-close job, which only a task runner gives it.
   const outsidePid = outside
-    ? await createOutsideJob(directory, worker.command, worker.args)
+    ? await createOutsideJob(directory, worker.command, worker.args).catch((error: Error) => {
+        console.error(
+          `browser: the keeper starts inside its launcher's job and ends with it (${error.message})`,
+        );
+        return undefined;
+      })
     : undefined;
-  const child = outside
+  const child = outsidePid
     ? undefined
     : spawn(worker.command, worker.args, {
         detached: true,
