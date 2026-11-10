@@ -42,7 +42,7 @@ import { publicationPose, recordedWorkDoor } from "./history";
 import { settleWork } from "./work-door-observation";
 import { freezePage } from "./page-port";
 import type { PlaceInput } from "./typed-place";
-import type { ReadingContext, ReadingSource } from "./source-contract";
+import type { ReadingContext, UseSource } from "./source-contract";
 import type { DrawContext, EditFailure, EditHistory, TypedRoute } from "../route/typed-route";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";
@@ -59,7 +59,7 @@ const unavailable = (reason: string, value?: any, publication: Value["publicatio
 
 /** Typed routes execute declarations directly. No graph admission, body slots or reading scheduler. */
 export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerprint: RouteFingerprint,
-  ports: { work?: WorkJournalDoor; sources?: Record<string, ReadingSource> } = {}) {
+  ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource> } = {}) {
   const cleanups: (() => void)[] = [];
   try {
   const { spec } = module;
@@ -200,7 +200,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const controller = new AbortController();
       const record: {snapshot:Value;args:string;stop():void} = { args: signature, snapshot: { ...unavailable("Reading...", previous?.value,retained),status:"pending" }, stop: () => controller.abort() };
       reads.set(read, record);
-      const deliver = (frame: Parameters<Extract<ReadingSource, { kind: "use" | "feed" }>["open"]>[1] extends (arg: infer P) => any ? P : never) => {
+      const deliver = (frame: Parameters<UseSource["open"]>[1] extends (arg: infer P) => any ? P : never) => {
         if (controller.signal.aborted || disposed || reads.get(read) !== record) return;
         if (frame.kind === "complete" || frame.kind === "part") {
           try {
@@ -224,7 +224,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           work: null, page, args, signal: controller.signal, inputs: {},
           attempt: { target: input.target!, workKey: key, generation: revision }, trigger: { kind: "demand" } };
         const source = ports.sources?.[read.key] ?? hostReadSource(read);
-        if (source.kind !== "use" && source.kind !== "feed") throw Error("Typed panes require a host Value");
         Promise.resolve(source.open(ctx, deliver)).then(stop => {
           if (controller.signal.aborted) stop?.();
           else record.stop = () => { controller.abort(); stop?.(); };

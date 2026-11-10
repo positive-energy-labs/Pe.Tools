@@ -4,11 +4,7 @@ import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/pop
 import { ListView } from "@pe/kit/lang/list-view";
 import { teachText } from "@pe/kit/lang/use-teach";
 import { useEffect, useState } from "react";
-import { actionStatusSchema, receiptsForWork, routeAddress } from "@pe/agent-contracts";
-import { readingList } from "../host/resource-list";
-import type { LegacyJournalOwner } from "./situation-band";
-import type { ReadingState } from "./source-contract";
-type HistoryReadOwner = LegacyJournalOwner & { readings: { get(id: string): ReadingState } };
+import { routeAddress } from "@pe/agent-contracts";
 import type { JournalOwner } from "./situation-band";
 import { entryCaller, stepState, useWorkJournal } from "./situation-band";
 import { activityTime, projectTimeline, type TimelineVerbs } from "./timeline";
@@ -16,62 +12,26 @@ import { activityTime, projectTimeline, type TimelineVerbs } from "./timeline";
 /** One History presentation for graph panes: accepted calls and exact Work receipts. */
 export function GraphHistory({
   owner,
-  receipts,
   workOnly = false,
   label = "History",
   verbs: declaredVerbs,
 }: {
-  owner: HistoryReadOwner | JournalOwner;
+  owner: JournalOwner;
   verbs?: TimelineVerbs;
-  receipts?: string;
   workOnly?: boolean;
   label?: string;
 }) {
-  const admitted = "restoreWork" in owner;
-  const readTimeline = () => (admitted ? owner.timeline() : owner.timeline.read());
-  const [entries, setEntries] = useState(readTimeline);
-  useEffect(
-    () =>
-      admitted
-        ? owner.subscribe(() => setEntries(readTimeline()))
-        : owner.timeline.subscribe(() => setEntries(readTimeline())),
-    [owner],
-  );
+  const [entries, setEntries] = useState(owner.timeline);
+  useEffect(() => owner.subscribe(() => setEntries(owner.timeline())), [owner]);
   const journal = useWorkJournal(owner);
-  const reading = !admitted && receipts ? owner.readings.get(receipts) : null;
-  const receiptRows = reading
-    ? readingList(reading, (value) => {
-        const parsed = actionStatusSchema.array().safeParse(value);
-        return parsed.success ? parsed.data : [];
-      })
-    : null;
-  const scope = !admitted ? owner.snapshot() : null;
-  const key = scope?.work?.handle.key ?? scope?.workKey ?? scope?.unreadable;
-  const saved = !workOnly
-    ? key
-      ? receiptsForWork(receiptRows?.items ?? [], key)
-      : (receiptRows?.items ?? [])
-    : [];
-  const verbs = declaredVerbs ?? (admitted ? {} : owner.verbs);
-  const projected = projectTimeline(
-    [
-      ...saved.map((receipt) => ({
-        kind: "receipt" as const,
-        at: receipt.startedAt,
-        receiptId: receipt.id,
-        basis: { receipt },
-      })),
-      ...entries,
-    ],
-    verbs,
-    journal,
-  );
+  const verbs = declaredVerbs ?? {};
+  const projected = projectTimeline(entries, verbs, journal);
   const rows = [...(journal?.intents ?? []).map(intent => ({
     key: `intent:${intent.id}`, label: intent.label,
     sub: `${intent.status} / ${intent.owner.route} / expected r${intent.input.expectedRevision} / ${intent.reason ?? "Awaiting acknowledgement"}`,
     actions: <><Popover><PopoverTrigger aria-label={`Inspect ${intent.label}`}>Inspect</PopoverTrigger>
       <SubjectPopoverContent aria-label={`Original input: ${intent.label}`}><pre>{JSON.stringify(intent,null,2)}</pre></SubjectPopoverContent>
-    </Popover>{admitted && owner.discardIntent && <Button label={`Discard ${intent.label}`} refusal={intent.status === "pending" ? "Awaiting acknowledgement" : null} onClick={()=>owner.discardIntent!(intent.id)}>Discard</Button>}</>,
+    </Popover>{owner.discardIntent && <Button label={`Discard ${intent.label}`} refusal={intent.status === "pending" ? "Awaiting acknowledgement" : null} onClick={()=>owner.discardIntent!(intent.id)}>Discard</Button>}</>,
   })), ...[...projected]
     .reverse()
     .filter((row) => !workOnly || row.kind === "journal")
@@ -105,8 +65,7 @@ export function GraphHistory({
               {row.outcome.recovery}
             </a>
           )}
-          {admitted &&
-            row.entry.receiptId &&
+          {row.entry.receiptId &&
             ["queued", "running", "outcome-unknown"].includes(row.outcome?.state ?? "") && (
               <Button
                 label="Stop command"
@@ -120,8 +79,6 @@ export function GraphHistory({
     }))];
   const list = useList({
     items: rows,
-    status: receiptRows?.status,
-    failure: receiptRows?.failure,
     keyOf: (row) => row.key,
     search: (row) => ({ text: [teachText(row.label), row.sub] }),
     select: "none",

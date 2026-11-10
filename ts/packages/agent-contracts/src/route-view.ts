@@ -5,7 +5,7 @@ import type { RouteGraphJson } from "./route-kernel-data.ts";
 /**
  * The one codec a leased view crosses the browser/host boundary with: `write` the owner's Page as
  * the strings `RouteView.page` carries, `read` Pea's string patch back into the owner's values.
- * The legacy address's `agent` is one; an admitted route projects one from its graph's agent
+ * The builtin address's `agent` is one; an admitted route projects one from its graph's agent
  * fields through `bindings.codecs` (ADR 0030 rule 10). The host never decodes: it fences keys and
  * strings, and the Page owner's decode is the only decode.
  */
@@ -14,7 +14,7 @@ export interface ViewCodec {
   read(patch: Record<string, string>): object;
 }
 
-/** An admitted graph's field table (the kernel graph, not the legacy RouteGraph projection). */
+/** An admitted graph's field table (the kernel graph, not the RouteGraph projection). */
 export type AdmittedFields = RouteGraphJson["fields"];
 /** An admitted route's attention keys: the fields whose agent policy is not "none" (opt-in). */
 export const agentFields = (fields: AdmittedFields, policy?: "read" | "set") =>
@@ -23,7 +23,7 @@ export const agentFields = (fields: AdmittedFields, policy?: "read" | "set") =>
   );
 
 /** A builtin address that declares an `agent` lease, or null. */
-export const legacyViewRoute = (route: string): RouteViewRoute | null =>
+export const builtinViewRoute = (route: string): RouteViewRoute | null =>
   routeViewRoutes.find((key) => key === route) ?? null;
 /** One live registration as the workspace's admission owner projects it (read-only). */
 export interface AdmittedView {
@@ -32,10 +32,10 @@ export interface AdmittedView {
   address: string;
   fields: AdmittedFields;
 }
-/** A route that leases a view, as Pea discovers, opens and sets it. `legacy` names a builtin address. */
+/** A route that leases a view, as Pea discovers, opens and sets it. `builtin` names the builtin address. */
 export interface ViewRoute extends Omit<AdmittedView, "fields"> {
   fields: AdmittedFields | null;
-  legacy: RouteViewRoute | null;
+  builtin: RouteViewRoute | null;
 }
 /**
  * The one route-view identity authority (ADR 0030 rule 10): a builtin address with an `agent`
@@ -43,19 +43,19 @@ export interface ViewRoute extends Omit<AdmittedView, "fields"> {
  * An unregistered key, and a registered Pod whose fields are all agent "none", lease nothing.
  */
 export function viewRoute(route: string, admitted: AdmittedView | null): ViewRoute | null {
-  const legacy = legacyViewRoute(route);
-  if (legacy) {
-    const { title, path } = routeAddress(legacy);
-    return { key: legacy, title, address: path, fields: admitted?.fields ?? null, legacy };
+  const builtin = builtinViewRoute(route);
+  if (builtin) {
+    const { title, path } = routeAddress(builtin);
+    return { key: builtin, title, address: path, fields: admitted?.fields ?? null, builtin };
   }
   return admitted?.key === route && agentFields(admitted.fields).length
-    ? { ...admitted, legacy: null }
+    ? { ...admitted, builtin: null }
     : null;
 }
 /** Every leasing route once: builtin agent addresses, then registered opt-in admissions. */
 export const viewRoutes = (admitted: readonly AdmittedView[]): ViewRoute[] => [
   ...routeViewRoutes.map((key) => viewRoute(key, admitted.find((each) => each.key === key) ?? null)!),
-  ...admitted.flatMap((each) => (legacyViewRoute(each.key) ? [] : (viewRoute(each.key, each) ?? []))),
+  ...admitted.flatMap((each) => (builtinViewRoute(each.key) ? [] : (viewRoute(each.key, each) ?? []))),
 ];
 /** What an explicit open delivers: the registered address carrying the target. The browser owner decodes. */
 export const viewOpenLink = (view: ViewRoute, target?: string) =>
