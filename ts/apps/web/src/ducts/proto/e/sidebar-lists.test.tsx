@@ -157,7 +157,7 @@ test("critical context opens initially; one selected part reveals, retains nativ
   const ref = { elementId: 20, uniqueId: "part-twenty", documentKey: "model" };
   const registry = makeAtomRegistry();
   render(
-    <TestAttention registry={registry}>
+    <TestAttention registry={registry} ids={Array.from({ length: 100 }, (_, i) => i)}>
       <NativeObservationScope value={{ scope: null, references: [ref] }}>
         <SystemTree ctx={ctx} />
       </NativeObservationScope>

@@ -5,7 +5,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Moments } from "./moments";
 import { forgetTurnNames } from "./turn-names";
-import { eKey } from "#/test-attention";
+import { elementKey } from "@pe/kit/lang/attention";
 
 const host = vi.hoisted(() => ({
   read: vi.fn<(body: TurnElementNamesRequest) => Promise<TurnElementNamesObservation>>(),
@@ -81,7 +81,7 @@ test("only an id resolved to one element links, through attention, in its pinned
   const links = [...view.container.querySelectorAll(".subject-ref")];
   expect(
     links.map((link) => [link.getAttribute("data-subject"), link.getAttribute("data-subject-doc")]),
-  ).toEqual([[eKey(10101), "s/o1"]]);
+  ).toEqual([[elementKey("u-10101"), "s/o1"]]);
   expect(links[0]!.textContent).toBe("FR-11");
   // Ambiguous and unresolved ids are plain text; the code span keeps its literal id.
   expect(view.container.textContent).toContain("and 10102.");
@@ -133,5 +133,5 @@ test("old persisted low-id names cannot rewrite dimensions or equipment tags", a
     "30×30 end cap (Standard1). FA 43 → DH-20 inlet → FC-23.",
   );
   const links = [...view.container.querySelectorAll(".subject-ref")];
-  expect(links.map((link) => link.getAttribute("data-subject"))).toEqual([eKey(14107111)]);
+  expect(links.map((link) => link.getAttribute("data-subject"))).toEqual([elementKey("u-14107111")]);
 });

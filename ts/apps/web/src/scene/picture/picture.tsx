@@ -401,7 +401,7 @@ export function Picture<L extends string, F extends string>({
     [overSubjects, members],
   );
   const coreLayer = useMemo<PictureLayer | null>(() => {
-    const built = strandLayers(strands, strandLines, overKeys);
+    const built = strandLayers(strands, strandLines, overKeys, elements);
     const overIds = new Set([...overKeys].map(elements.idOf));
     return built.length || overIds.size
       ? {

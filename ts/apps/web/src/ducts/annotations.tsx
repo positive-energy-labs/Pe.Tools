@@ -329,7 +329,7 @@ export function Annotations({
         project={footnoteProject}
         size={size}
         obstacles={pins}
-        onGo={(ref) => subjects?.go?.(Number(ref.key.slice(2)))}
+        onGo={(ref) => subjects?.go?.(elements.idOf(ref.key))}
       />
     </svg>
   );

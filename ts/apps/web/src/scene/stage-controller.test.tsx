@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vite-plus/test";
 import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { PictureStage, useStage, stageViewport, projectBounds } from "./stage-controller";
 import { makeAtomRegistry } from "#/shell/owner";
-import { TestAttention, eKey } from "#/test-attention";
+import { TestAttention, eKey, uid } from "#/test-attention";
 import { mention } from "@pe/kit/lang/attention";
 import { Row } from "@pe/kit/lang/row";
 import { revitTarget } from "@pe/kit/lang/revit-target";
@@ -21,7 +21,7 @@ it("plane marks and rows share native identity without route hover handlers", ()
   const registry = makeAtomRegistry();
   const view = render(
     <TestAttention registry={registry}>
-      <Row label="region" revit={[42]} />
+      <Row label="region" revit={[42]} uniqueIds={[uid(42)]} />
       <div data-testid="picture">
         <svg>
           <path {...mention({ doc: "test", key: eKey(42) })} {...revitTarget([42])} d="M0 0L1 1" />

@@ -4,7 +4,7 @@ import { expect, test } from "vite-plus/test";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { chain, lanes, segments, strandLayers, type Strand } from "./strands";
 import type { LayerFrame } from "./types";
-import { eKey } from "#/test-attention";
+import { eKey, testElements } from "#/test-attention";
 
 const lines = [
   // e:1 drawn with flow, e:2 drawn against it, e:3 a fitting's one point, e:4 against again.
@@ -119,7 +119,7 @@ test("a pick meets the nearer lane, so a bundled strand selects its own subject"
     { key: "run:a", path: [eKey(1)] },
     { key: "run:b", path: [eKey(1)] },
   ];
-  const built = strandLayers(strands, lines, new Set());
+  const built = strandLayers(strands, lines, new Set(), testElements([1, 2, 3, 4]));
   expect(built.map((l) => l.targets)).toEqual([
     [{ key: "run:a", elementId: 1, subject: true }],
     [{ key: "run:b", elementId: 1, subject: true }],
@@ -162,6 +162,7 @@ test("only the heavy, hovered or selected strand flows; reduced motion holds it 
     ],
     lines,
     new Set([eKey(2)]),
+    testElements([1, 2, 3, 4]),
   );
   const [plain, heavy] = built.map((layer) => {
     const group = new THREE.Group();
