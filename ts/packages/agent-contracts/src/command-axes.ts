@@ -22,6 +22,9 @@ const ownAxes = Object.fromEntries(
 
 /** Explicit command budgets; adding a command requires an axis declaration. */
 const handAxes = {
+  // Slice 9 (findings): a Read of the findings Work and a Work write; neither touches Revit.
+  "findings.list": { subject: "None", touches: ["Metadata"], effect: "Read", cost: "Mutation", cardinality: "One" },
+  "findings.write": { subject: "None", touches: ["Metadata"], effect: "SessionWrite", cost: "Mutation", cardinality: "One" },
   "settings.observe": {
     subject: "None",
     touches: ["Metadata"],

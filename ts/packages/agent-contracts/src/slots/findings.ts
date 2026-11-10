@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { subjectRefCodeSchema } from "../subject-ref.ts";
 import type { RouteStateSpec } from "../route-state.ts";
+import { workCommand } from "../command.ts";
 import { markSchema } from "./picture.ts";
 
 /*
@@ -24,24 +25,23 @@ export const FINDINGS_OWNER = "findings" as const;
 /** The two catalog doors. `write` lands in the document's findings Work; `list` reads it. */
 export const FINDINGS_DOORS = { list: "findings.list", write: "findings.write" } as const;
 
-export const findingSchema = z
-  .strictObject({
-    id: z.string().min(1),
-    subject: subjectRefCodeSchema,
-    kind: z.enum(Object.keys(FINDING_KINDS) as [FindingKind, ...FindingKind[]]),
-    text: z.string().min(1),
-    by: z.enum(["person", "pea"]),
-    at: z.iso.datetime(),
-    verdict: z.string().optional(),
-    /** The route's attention codec text for where this finding lands (what `Pointer.place` carries). */
-    place: z.record(z.string(), z.string()),
-    /** The mark the picture draws for it; absent = the subject's own geometry. */
-    mark: markSchema.optional(),
-  })
-  .refine(
-    (f) => f.verdict === undefined || (FINDING_KINDS[f.kind] as readonly string[]).includes(f.verdict),
-    { error: "a verdict must be one the finding's kind declares; a note declares none" },
-  );
+const findingFields = z.strictObject({
+  id: z.string().min(1),
+  subject: subjectRefCodeSchema,
+  kind: z.enum(Object.keys(FINDING_KINDS) as [FindingKind, ...FindingKind[]]),
+  text: z.string().min(1),
+  by: z.enum(["person", "pea"]),
+  at: z.iso.datetime(),
+  verdict: z.string().optional(),
+  /** The route's attention codec text for where this finding lands (what `Pointer.place` carries). */
+  place: z.record(z.string(), z.string()),
+  /** The mark the picture draws for it; absent = the subject's own geometry. */
+  mark: markSchema.optional(),
+});
+const declaredVerdict = (f: { kind: FindingKind; verdict?: string | undefined }) =>
+  f.verdict === undefined || (FINDING_KINDS[f.kind] as readonly string[]).includes(f.verdict);
+const verdictError = { error: "a verdict must be one the finding's kind declares; a note declares none" };
+export const findingSchema = findingFields.refine(declaredVerdict, verdictError);
 export type Finding = z.output<typeof findingSchema>;
 
 export const findingsWorkSchema = z.strictObject({
@@ -58,3 +58,25 @@ export const findingsWork = {
   schemaVersion: 1,
   editable: [["findings", "*"]],
 } satisfies RouteStateSpec<typeof findingsWorkSchema>;
+
+/** What a caller sends to `findings.write`: the host stamps `by` from the caller and `at` on arrival. */
+export const findingInputSchema = findingFields.omit({ by: true, at: true }).refine(declaredVerdict, verdictError);
+export type FindingInput = z.output<typeof findingInputSchema>;
+
+/** The two doors, each bound to the document's findings Work handle (`workCommand`). */
+export const findingsCommands = {
+  [FINDINGS_DOORS.list]: workCommand(FINDINGS_OWNER, {
+    says: "List this document's findings, oldest first, optionally only those on one subject (a SubjectRef code).",
+    needs: "project-document",
+    effect: "query",
+    input: z.strictObject({ subject: subjectRefCodeSchema.optional() }),
+    dirties: [],
+  }),
+  [FINDINGS_DOORS.write]: workCommand(FINDINGS_OWNER, {
+    says: "Write one finding on a subject of this document (a note, a yes/no/not-this claim, or a pass/fail check) into its findings Work. Writing the same id replaces it. Never changes Revit.",
+    needs: "project-document",
+    effect: "command",
+    input: z.strictObject({ finding: findingInputSchema }),
+    dirties: [],
+  }),
+} as const;

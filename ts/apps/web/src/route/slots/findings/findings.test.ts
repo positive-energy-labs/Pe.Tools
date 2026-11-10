@@ -24,7 +24,7 @@ const at = "2026-11-10T12:00:00.000Z";
 const finding = (id: string, subject: SubjectRefCode, by: Finding["by"], kind: Finding["kind"], verdict?: string): Finding =>
   findingSchema.parse({ id, subject, kind, text: `${by} on ${id}`, by, at, place: { subject }, ...(verdict ? { verdict } : {}) });
 
-test("slice 9: Pea and a person each write a finding on a fan port and a /families row; findings.list returns each; undo leaves the other; a note with a verdict is refused; one mark draws on the port's geometry", () => {
+test("slice 9: Pea and a person each write a finding on a fan port and a /families row; findings.list returns each; undo leaves the other; a note with a verdict is refused", () => {
   // The contract: a note declares no verdict; the kinds and their verdicts are closed.
   expect(FINDING_KINDS.note).toEqual([]);
   expect(findingSchema.safeParse({ ...finding("n", port, "pea", "note"), verdict: "yes" }).success).toBe(false);
@@ -43,9 +43,17 @@ test("slice 9: Pea and a person each write a finding on a fan port and a /famili
   expect(store.list().map((f) => f.id)).toEqual(["p1", "h1", "h2"]);
   store.undo("person");
   expect(store.list().map((f) => f.id)).toEqual(["p1", "h1"]);
-  expect(findingMark(store.list(port)[0]!, [{ ref: port, point: [448.6, 738.7, 1.8] }])).toEqual({
+  // A semantic command links under `command:` (catalog.ts `commandLink`); bare keys are native ops.
+  expect([...linkedCatalog().entries.keys()]).toEqual(
+    expect.arrayContaining([`command:${FINDINGS_DOORS.list}`, `command:${FINDINGS_DOORS.write}`]),
+  );
+});
+
+// Red until slice 8: the fans scene capture carries no SubjectRef per port, so nothing real feeds `captured`.
+test("slice 9: one mark draws on the port's geometry (needs slice 8 Captured SubjectRef per port)", () => {
+  const pea = finding("p1", port, "pea", "claim", "no");
+  expect(findingMark(pea, [{ ref: port, point: [448.6, 738.7, 1.8] }])).toEqual({
     kind: "ring",
     at: { point: [448.6, 738.7, 1.8] },
   });
-  expect([...linkedCatalog().entries.keys()]).toEqual(expect.arrayContaining([FINDINGS_DOORS.list, FINDINGS_DOORS.write]));
 });

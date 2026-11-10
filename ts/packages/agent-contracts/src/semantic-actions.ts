@@ -219,6 +219,7 @@ import { takeoffsRouteState } from "./takeoffs.ts";
 import { roomsRouteState } from "./rooms.ts";
 import { ductsRouteState } from "./ducts.ts";
 import { catalogWorkCommands } from "./catalog-work.ts";
+import { findingsCommands, findingsWork } from "./slots/findings.ts";
 /** Ducts derives its native request from the whole staged Work, not one writeIntent cell. */
 const ductsDerive = (work: unknown) =>
   ductsRouteState.schema.parse(work);
@@ -385,6 +386,13 @@ export const tools = {
       ),
     },
   },
+  // Slice 9 (findings): an implicit kernel module, route-free Work per document (ADR 0035 rule 9).
+  findings: {
+    name: "findings",
+    says: findingsWork.description,
+    work: findingsWork,
+    commands: findingsCommands,
+  },
   instances: {
     name: "instances",
     says: "Revit sessions and document lifecycle",
@@ -424,6 +432,7 @@ export const commands = {
   ...tools.takeoffs.commands,
   ...tools.rooms.commands,
   ...tools.ducts.commands,
+  ...tools.findings.commands,
   ...tools.instances.commands,
 };
 export function commandTool(key: string): Tool | undefined {
