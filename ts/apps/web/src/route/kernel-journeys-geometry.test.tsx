@@ -259,23 +259,22 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
  const React=await import("react");
  const {InputsBody}=await import("../ducts/sheet/mount");
  const registry=makeAtomRegistry();
- // Controller readiness can precede React's commit; use the product subscription and React-aware waits.
- function Journey(){React.useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);return <TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(mount)}><KeyScopeHost id="scope-revert"><TypedWrite mount={mount} id="losses"/>{mount.draw("sheet-inputs",ctx=><InputsBody ctx={ctx as any}/>) as React.ReactNode}</KeyScopeHost></SubjectDoor></TestAttention>;}
+ function Journey(){const [,set]=React.useState(0);React.useEffect(()=>mount.subscribe(()=>set(n=>n+1)),[]);return <TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(mount)}><KeyScopeHost id="scope-revert"><TypedWrite mount={mount} id="losses"/>{mount.draw("sheet-inputs",ctx=><InputsBody ctx={ctx as any}/>) as React.ReactNode}</KeyScopeHost></SubjectDoor></TestAttention>;}
  const router=createRouter({routeTree:createRootRoute({component:Journey}),history:createMemoryHistory({initialEntries:["/fans"]})});
  const phase=(at:string)=>{if(process.env.PE_FANS_SCOPE_EVIDENCE)writeFileSync(process.env.PE_FANS_SCOPE_EVIDENCE,JSON.stringify({at,revision:mount.owner()?.handle?.revision,problem:mount.reviewProblem("losses"),results:(trace as any).results,requests},null,2));};
  try{
    render(<RouterProvider router={router}/>);
-   await waitFor(()=>expect(mount.startAction()).toBeTruthy(),{timeout:20000});
-   await waitFor(()=>expect(mount.owner()?.scope.key.binding).toBe("address"),{timeout:20000});
+   await vi.waitFor(()=>expect(mount.startAction()).toBeTruthy(),{timeout:20000});
+   await vi.waitFor(()=>expect(mount.owner()?.scope.key.binding).toBe("address"),{timeout:20000});
 
    for(const route of Object.keys(fans.spec.edits!.owners)){
      const owner=mount.owner(route)!;
      if(owner!==mount.owner()){
-       await waitFor(()=>expect(owner.ready).toBe(true),{timeout:20000});
+       await vi.waitFor(()=>expect(owner.ready).toBe(true),{timeout:20000});
        expect(owner.handle?.revision).toBe(0);
        continue;
      }
-     await waitFor(()=>expect(owner.absent).toBe(true),{timeout:20000});
+     await vi.waitFor(()=>expect(owner.absent).toBe(true),{timeout:20000});
      expect(owner.handle).toBeNull();
      const id=crypto.randomUUID();
      const started=await forward("/actions",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
@@ -284,43 +283,43 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
      expect([200,202]).toContain(started.status);
      const settled=await forward(`/actions?id=${id}&wait=25000`);
      expect((await settled.json())[0]).toMatchObject({id,key:"work.start",state:"succeeded"});
-     await waitFor(()=>expect(mount.owner(route)?.ready).toBe(true),{timeout:20000});
+     await vi.waitFor(()=>expect(mount.owner(route)?.ready).toBe(true),{timeout:20000});
    }
 
-   await act(async()=>{mount.refresh();});
+   act(()=>mount.refresh());
    await screen.findByRole("button",{name:"None"},{timeout:20000});
    const user=userEvent.setup();
    const edit=async(id:string,value:string)=>{
-     const row=await waitFor(()=>{const row=document.querySelector(`[data-input-field="component:${id}:drop"]`);expect(row, JSON.stringify({fields:[...document.querySelectorAll("[data-input-field]")].map(e=>e.getAttribute("data-input-field")),text:document.body.textContent?.slice(-3500),value:mount.value().status})).toBeTruthy();return row!;});
+     const row=await vi.waitFor(()=>{const row=document.querySelector(`[data-input-field="component:${id}:drop"]`);expect(row, JSON.stringify({fields:[...document.querySelectorAll("[data-input-field]")].map(e=>e.getAttribute("data-input-field")),text:document.body.textContent?.slice(-3500),value:mount.value().status})).toBeTruthy();return row!;});
      const input=within(row as HTMLElement).getByRole("textbox");
      await user.clear(input);await user.type(input,`${value}{Enter}`);
    };
    await edit("14577394","0.02");
-   await waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(2),{timeout:20000});
+   await vi.waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(2),{timeout:20000});
    phase("r2");
-   await act(async()=>{mount.refresh();});
-   await waitFor(()=>expect(mount.value().current).toBe(true),{timeout:20000});
-   await user.click(await screen.findByRole("button",{name:"None"}));
-   await user.click(await screen.findByRole("option",{name:/MUAS-1.*1 staged/}));
-   await waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(3),{timeout:20000});
+   act(()=>mount.refresh());
+   await vi.waitFor(()=>expect(mount.value().current).toBe(true),{timeout:20000});
+   fireEvent.click(await screen.findByRole("button",{name:"None"}));
+   fireEvent.click(await screen.findByRole("option",{name:/MUAS-1.*1 staged/}));
+   await vi.waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(3),{timeout:20000});
    phase("r3");
-   await act(async()=>{mount.refresh();});
-   await waitFor(()=>expect(mount.value().current).toBe(true),{timeout:20000});
-   await user.click(screen.getByRole("button",{name:/Revert.*DS.?1/i}));
-   await waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(4),{timeout:20000});
+   act(()=>mount.refresh());
+   await vi.waitFor(()=>expect(mount.value().current).toBe(true),{timeout:20000});
+   fireEvent.click(screen.getByRole("button",{name:/Revert.*DS.?1/i}));
+   await vi.waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(4),{timeout:20000});
    phase("r4");
-   await act(async()=>{mount.refresh();});
-   await waitFor(()=>expect(mount.value().current).toBe(true),{timeout:20000});
+   act(()=>mount.refresh());
+   await vi.waitFor(()=>expect(mount.value().current).toBe(true),{timeout:20000});
    await edit("13493812","0.01");
-   await waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(5),{timeout:20000});
+   await vi.waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(5),{timeout:20000});
    phase("r5");
-   await act(async()=>{mount.refresh();});
-   await waitFor(()=>expect(mount.value().current).toBe(true),{timeout:20000});
+   act(()=>mount.refresh());
+   await vi.waitFor(()=>expect(mount.value().current).toBe(true),{timeout:20000});
    phase("before Plan");
-   await user.click(await screen.findByRole("button",{name:"plan Write to Revit"}));
-   await waitFor(()=>expect(trace.results).toHaveLength(1),{timeout:20000});
+   fireEvent.click(await screen.findByRole("button",{name:"plan Write to Revit"}));
+   await vi.waitFor(()=>expect(trace.results).toHaveLength(1),{timeout:20000});
    expect(trace.results[0].state,trace.results[0].error ?? mount.reviewProblem("losses")).toBe("succeeded");
-   await waitFor(()=>expect(mount.review("losses")?.cells?.length).toBeGreaterThan(0),{timeout:20000});
+   await vi.waitFor(()=>expect(mount.review("losses")?.cells?.length).toBeGreaterThan(0),{timeout:20000});
    const plan=requests.findLast(row=>row.key==="ducts.apply.plan");
    expect(plan.input.components).toEqual([expect.objectContaining({id:13493812,inWg:0.01})]);
    expect(JSON.stringify(plan.input)).not.toContain("14577394");
