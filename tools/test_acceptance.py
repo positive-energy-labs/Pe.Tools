@@ -1,6 +1,6 @@
 """Plain-assert checks for the setup logic in acceptance.py: python tools/test_acceptance.py. No Revit, no host."""
 
-import os, shutil, sys, tempfile
+import json, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -35,7 +35,48 @@ def test_pick_models(tmp: Path) -> None:
     assert a.pick_models([], fixture) == [[str(fixture), "A.rvt"]]
 
 
+def test_host_wait(tmp: Path) -> None:
+    """A python sleeper stands in for the host launcher; a hand-written service file stands in for the host."""
+    run, home = "t", tmp / "home"
+    a.run_dir = lambda r: tmp / "run"
+    (tmp / "run").mkdir()
+    state = {"home": str(home), "lane": "dev", "web": False, "sessions": [], "docs": ["d.rvt"], "host": None}
+    service_file = home / ".local-state" / "state" / "service" / "host-source-t.json"
+    sleeper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+    resumed = []
+    a.dev_session = lambda r, s, args: resumed.append(s["host"])
+    def no_launch(*_, **__): raise AssertionError("a second host was launched")
+    real_env, a.env = a.env, no_launch  # env() feeds only the host launch and the sdk calls
+    try:
+        # 1. timeout while the launcher lives: exits, but the launcher is already recorded.
+        try:
+            a.adopt_host(run, state, sleeper.pid, lambda: sleeper.poll() is None, patience=1)
+            raise AssertionError("expected exit")
+        except SystemExit as e:
+            assert "still booting" in str(e) and "setup t" in str(e), e
+        assert a.load(run)["host"] == {"launcher": sleeper.pid}
+        # 2. the host appears; a second setup call adopts it without launching anything.
+        service_file.parent.mkdir(parents=True)
+        service_file.write_text(json.dumps({"port": 1234, "pid": 4321, "sourceRoot": str(a.CHECKOUT)}))
+        a.setup(run, [])
+        assert a.load(run)["host"]["pid"] == 4321 and a.load(run)["host"]["launcher"] == sleeper.pid
+        assert resumed and resumed[0]["port"] == 1234
+        # 3. a launcher that died with no service file is reported, not adopted.
+        service_file.unlink()
+        assert a.pid_alive(sleeper.pid)  # the liveness probe a resumed call uses
+        sleeper.kill(); sleeper.wait()
+        assert not a.pid_alive(sleeper.pid)
+        try:
+            a.adopt_host(run, state, sleeper.pid, lambda: sleeper.poll() is None, patience=1)
+            raise AssertionError("expected exit")
+        except SystemExit as e:
+            assert "exited without a service file" in str(e), e
+    finally:
+        a.env = real_env
+        sleeper.kill()
+
+
 with tempfile.TemporaryDirectory() as t:
-    test_pod_build_skip(Path(t))
-    test_pick_models(Path(t))
+    for test in (test_pod_build_skip, test_pick_models, test_host_wait):
+        test(Path(tempfile.mkdtemp(dir=t)))
 print("ok")
