@@ -711,6 +711,11 @@ export function createProviders(options: ProvidersOptions) {
       return [];
     }
   };
+  /** The one redaction set: every key that can reach a child, providers.json's and the shared keys.json's. */
+  const redactionKeys = () => {
+    stored();
+    return [...new Set([...knownKeys, ...sharedKeyValues()])];
+  };
   const save = (records: EndpointRecord[]) => {
     stored();
     if (providerReadError) throw Error(providerReadError);
@@ -794,9 +799,8 @@ export function createProviders(options: ProvidersOptions) {
       }
     }
     const secrets = [
-      ...knownKeys,
+      ...redactionKeys(),
       ...(record.auth.kind === "endpoint" && record.auth.apiKey ? [record.auth.apiKey] : []),
-      ...sharedKeyValues(),
       ...Object.entries(process.env)
         .filter(([key]) => /key|token|secret|password|credential/i.test(key))
         .map(([, value]) => value)
@@ -1185,11 +1189,8 @@ export function createProviders(options: ProvidersOptions) {
           throw error;
         }
     },
-    /** Every endpoint key, so no thread record keeps one even when a harness echoes it. */
-    keys: () => {
-      stored();
-      return [...knownKeys];
-    },
+    /** Every key that can reach a child, shared ones included, so no thread record keeps one. */
+    keys: redactionKeys,
     /** The web handler for `/pe/providers*`. */
     fetch: (request: Request) =>
       handle(request).catch((error) => json({ error: String(error?.message ?? error) }, 502)),
