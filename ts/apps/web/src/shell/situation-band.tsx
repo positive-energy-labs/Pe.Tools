@@ -5,7 +5,7 @@ import type { createRouteTimeline } from "./timeline";
 /**
  * ADR 0027 rule 3: the Situation is one line. The route's name and context lead, one primary verb
  * stands framed, the rest wait in an overflow, and the Timeline head closes the line. Layout only:
- * mount-chrome.tsx renders each verb and each context control; this file owns where they sit.
+ * typed-shell.tsx renders each verb and each context control; this file owns where they sit.
  *
  * The Timeline head's Reject answers the same host consent API as Pea's composer (`thread.permission`).
  * TODO: docs/features/routes/LEDGER.md#s7-a91a2429a1 H2 — Reject dispatch and host cancellation are proven separately by fixture tests; press it against a live

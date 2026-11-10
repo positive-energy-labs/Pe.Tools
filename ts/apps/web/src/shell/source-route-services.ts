@@ -13,7 +13,7 @@ import type { AcceptanceToken } from "../../../../packages/agent-contracts/src/r
 import type { ReadingSnapshot } from "@pe/agent-contracts";
 import type { ReadingSource, UseSource } from "./source-contract";
 import { demandContext, openSourceReading } from "./readings-use";
-import { contentHash } from "./readings";
+import { contentHash } from "./source-open";
 import { z } from "zod";
 import type { Effect } from "@pe/agent-contracts";
 import { hostFetch } from "../host/runtime";

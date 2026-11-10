@@ -54,7 +54,6 @@ export interface EnvironmentOptions {
     Partial<Pick<EnvironmentPorts, "work" | "geometry">>;
 }
 
-// Mounted owners consume these capabilities through mount-environment.ts.
 /** Resource ownership ends on release/unsubscribe/Effect scope close. Submitted commands
  * belong to ActionJournal and deliberately survive this environment's disposal. */
 export function createRouteEnvironment({ issuer, validate, ports }: EnvironmentOptions) {

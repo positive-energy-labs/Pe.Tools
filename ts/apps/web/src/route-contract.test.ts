@@ -15,7 +15,6 @@ import {
   type VerbDecl,
 } from "../../../packages/agent-contracts/src/route-graph.ts";
 import { indexGraph } from "./index/graph";
-import { createLegacyRouteRegistry, legacyRouteDiscovery } from "./shell/legacy-route-door";
 import { ductLossGraph as ductLoss } from "./shell/projection-graph.test.fixture";
 
 const fields = ductLoss.fields;
@@ -386,33 +385,4 @@ test("a query verb projects its read identity; selecting Work requires workSubje
   expect(await routeGraphHash(projectRouteGraph(unselecting as RouteGraph))).not.toBe(
     await routeGraphHash(json),
   );
-});
-
-test("public legacy discovery has no registration door and new builtin keys refuse", () => {
-  expect(Object.isFrozen(legacyRouteDiscovery)).toBe(true);
-  expect("register" in legacyRouteDiscovery).toBe(false);
-  expect("registerGraph" in legacyRouteDiscovery).toBe(false);
-  expect("registerModule" in legacyRouteDiscovery).toBe(false);
-  const registry = createLegacyRouteRegistry();
-  expect(() => registry.registerGraph({ ...ductLoss, key: "new-offender" }, () => null)).toThrow(
-    /Unenumerated legacy route/,
-  );
-  expect(registry.keys()).toEqual([]);
-});
-
-// COMMON 25: discovery does not carry a second copy of the closure pin.
-test("a builtin can re-enter registerModule without a directory hash", () => {
-  const registry = createLegacyRouteRegistry();
-  const graph = { ...ductLoss, moduleHash: "a".repeat(64) };
-  const remove = registry.registerModule({
-    version: 1,
-    namespace: "builtin",
-    key: `builtin:${graph.key}`,
-    moduleHash: graph.moduleHash,
-    graph,
-    bodies: () => null,
-  });
-  expect(registry.get(graph.key)?.graph).toBe(graph);
-  remove();
-  expect(registry.get(graph.key)).toBeUndefined();
 });
