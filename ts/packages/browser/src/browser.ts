@@ -11,8 +11,14 @@ import { BrowserError } from "./errors.ts";
 import type { Evaluation } from "./evaluate.ts";
 import { browserWorkerCommand } from "./worker.ts";
 
+export interface Viewport {
+  width: number;
+  height: number;
+}
 export interface OpenBrowserOptions {
   mode?: "headless" | "visible";
+  /** CSS-pixel page viewport held for the whole session by sizing the window. Default 1600x900. */
+  viewport?: Viewport;
   executablePath?: string;
   profile?: string;
   home?: string;
@@ -36,6 +42,7 @@ export interface SessionInfo {
   pid?: number;
   executablePath?: string;
   browserVersion?: string;
+  viewport?: Viewport;
   profile?: string;
   temporaryProfile: boolean;
   keeperPid?: number;

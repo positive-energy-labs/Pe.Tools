@@ -17,6 +17,7 @@ export type {
   BrowserSession,
   BrowserPage,
   SessionInfo,
+  Viewport,
 } from "./browser.ts";
 export { gestures, describeTarget } from "./gestures.ts";
 export type {

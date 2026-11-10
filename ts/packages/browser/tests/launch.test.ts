@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, test } from "vite-plus/test";
 import { connectBrowser, openBrowser, type BrowserPage } from "../src/browser.ts";
+import { gestures } from "../src/gestures.ts";
 import { launchGuarded } from "../src/platform.ts";
 
 const roots: string[] = [];
@@ -83,6 +84,34 @@ test("a visible window that leaves the screen keeps drawing", async () => {
     });
     await new Promise((done) => setTimeout(done, 1000));
     expect(await framesIn2s(page)).toBeGreaterThan(60);
+  } finally {
+    await session.close();
+  }
+});
+
+test("the launch viewport holds across screenshots and client reconnects", async () => {
+  const want = { width: 1600, height: 900 };
+  const session = await openBrowser({ viewport: want });
+  try {
+    const targetId = (await session.targets()).find((target) => target.type === "page")!.id;
+    const read = async () => {
+      const page = await session.page({ targetId });
+      try {
+        return await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+      } finally {
+        await page.release();
+      }
+    };
+    expect(session.info.viewport).toEqual(want);
+    expect(await read()).toEqual(want);
+    const page = await session.page({ targetId });
+    const shots = await mkdtemp(join(tmpdir(), "pe-viewport-"));
+    roots.push(shots);
+    const g = gestures(page);
+    expect((await g.shot(join(shots, "page.png"))).outcome).toBe("done");
+    expect((await g.shot(join(shots, "body.png"), "body")).outcome).toBe("done");
+    await page.release();
+    expect(await read()).toEqual(want);
   } finally {
     await session.close();
   }
