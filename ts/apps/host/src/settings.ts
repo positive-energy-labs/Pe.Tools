@@ -36,7 +36,7 @@ import {
 } from "./files/index.ts";
 
 /**
- * Pod members are host-native file I/O under `Documents/Pe.Tools/Pods/<folder>/`; a pod is found by
+ * Pod members are host-native file I/O under `Pods/<folder>/` in the content home; a pod is found by
  * its manifest `id`, never its folder name. Structural (JSON schema) validation runs here, offline.
  * Composition and semantic validation belong to the Revit session and arrive through the bridge.
  */
