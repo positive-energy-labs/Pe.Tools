@@ -2,6 +2,7 @@ import type { ActionJournal } from "./action-journal.ts";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { commandResources } from "./command-reads.ts";
 import { workStartExecutor } from "./work-start.ts";
+import { findingsExecutors } from "./slots/findings.ts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { workIntentBoundary, workWriteBoundary } from "./work-write-boundary.ts";
 import { CatalogCommand, catalogCommandContext } from "./catalog-command-context.ts";
@@ -56,6 +57,7 @@ export function commandRegistry(
     takeoffExecutors(captures, bridge, deps),
     ductsExecutors(bridge, deps),
     catalogWorkExecutors(bridge, deps),
+    findingsExecutors(deps.workspace),
   ]) {
     for (const [key, factory] of Object.entries(group)) {
       if (implementations[key]) throw Error(`Command '${key}' has two executors`);
