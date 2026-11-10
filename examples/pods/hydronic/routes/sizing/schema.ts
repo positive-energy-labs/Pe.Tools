@@ -22,7 +22,7 @@ export const edit = work.omit({ version: true }).partial();
 
 const row = z.object({
   uniqueId: z.string(), label: z.string(), flow: z.number().nullable(), diameter: z.number(),
-  length: z.number(), upstream: z.string().nullable(), candidate: z.number().nullable(),
+  length: z.number(), upstream: z.string().nullable(), segment: z.string().nullable(), candidate: z.number().nullable(),
   chosen: z.number().nullable(), status: z.enum(["ok", "undersized", "oversized", "no-flow"]),
 });
 export const value = z.object({
