@@ -15,7 +15,7 @@ Live frontier for [ADR 0035](../../adr/0035-route-slots-subjectref-one-notice-fe
 
 | # | Slice | Deletes | Red falsifier |
 |---|---|---|---|
-| 1 | Legacy delete | the twenty `shell/mount-*` and `legacy-*` files, `shell/readings.ts`, `readings-api.ts` and its `takeoff/sources.ts` consumer, the legacy branches at `runtime/route-view-store.ts`, `/duct-loss`; design-system leaves the kernel; `typed-shell.tsx` stops importing `mount-page` and `mount-timeline` | the web app builds with zero `mount-*` imports and every one of the 17 surviving routes still mounts (no route goes dark; amended 2026-11-10) |
+| 1 | Legacy delete | the twenty `shell/mount-*` and `legacy-*` files, `shell/readings.ts`, `readings-api.ts` and its `takeoff/sources.ts` consumer, the legacy branches at `runtime/route-view-store.ts`; `typed-shell.tsx` stops importing `mount-page` and `mount-timeline` | the web app builds with zero `mount-*` imports and all 18 routes still mount (no route goes dark or is deleted; amended twice 2026-11-10) |
 | 2 | Storage root | OneDrive-bound paths in `host/src/product-paths.ts` | Work, route settings and the firm file resolve under the shared mount; `productPeaWorkPath` stays on machine state |
 | 3 | Journal services | `new ActionJournal` and `new HostLog` outside a Layer (`gateway-owner.ts:29-30`) | one test provides a fake journal through a Layer |
 | 4 | Run islands | the 9 `Effect.runPromise` calls in `call-route.ts` | an aborted `/call` read interrupts its native call; `RequestIdentity` is readable after the session resolve |
@@ -24,7 +24,7 @@ Live frontier for [ADR 0035](../../adr/0035-route-slots-subjectref-one-notice-fe
 | 7 | Sheet slot | hydronic `mount.tsx`, fans' borrowed `InputsBody`, hand-written plan and apply registration, `ducts.apply.preview` as a false TransactRead (wave 2 V1) | the slot draws a binding's StateCells; a ModelWrite binds a plan whose effect is Read or TransactRead |
 | 8 | Picture slot | `poseFields`, `ductsPictureFields` on fans, route-authored SceneRequests, halo and context aliases, selection-string bridges, the borrowed picture body | point, select and frame a linked fan port in two placements, and inspect an empty region, with no route translator |
 | 9 | Findings | `ductClaimSchema`, rooms notes, the ducts proto inbox as a notice surface | Pea and a person each write a finding on a fan port and on a /families row; `findings.list` returns each; undo leaves the other; a `note` with a verdict is refused; one mark draws on the port's geometry |
-| 10 | Non-exemplar routes onto slots | each route's hand-authored panes, readings and codecs as it moves to slots, in the order chat, pods, settings, index, ops, bind, family, rooms | the route is driven live on a controlled document (ADR 0026 D8); /family keeps the doc-lab acceptance below |
+| 10 | Non-exemplar routes onto slots | each route's hand-authored panes, readings and codecs as it moves to slots, in the order chat, pods, settings, index, ops, bind, family, rooms; duct-loss is ported to a Pod; design-system stays | the route is driven live on a controlled document (ADR 0026 D8); /family keeps the doc-lab acceptance below |
 
 Aggregate exit, not a slice: `fans/route.ts` is about 30 lines with zero imports from web `ducts/`, and a fresh agent re-audits fans and ducts against the kernel's duties and finds nothing new.
 
@@ -56,7 +56,7 @@ A real PDF and real cells; no mock witness. Pea stages a cited value as a Pea St
 
 - 2026-11-10, kaitpw: S1 adopted, S2 rejected, S3 as method. "your set is beautifully minimal."
 - 2026-11-10, kaitpw: two chrome layers only; the thread name moves into the pane head.
-- 2026-11-10, kaitpw: delete the legacy mounts now; all routes stay except duct-loss and design-system; kernel-level routes are the UX exercise.
+- 2026-11-10, kaitpw: delete the legacy mounts now; kernel-level routes are the UX exercise. Corrected the same day: "i do not want duct loss or design system deleted ... id prefer to port duct loss to a pod, but design system must stay".
 - 2026-11-10, kaitpw: Space is a dev playground, as a specimen on the design-system page.
 - 2026-11-10, kaitpw: storage root to a shared drive mount before cloud.
 - 2026-11-10, kaitpw: Q8 to Q14 yes (dark period, dock tabs as the dock head, storage landing, one notice feed, consent in two places, the tray's job, the ducts inbox is the goal slot).
