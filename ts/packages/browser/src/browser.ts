@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ProtocolMapping } from "devtools-protocol/types/protocol-mapping.js";
 import type { CdpEvent, CdpTarget, CommandOptions } from "./cdp.ts";
 import { SessionClient } from "./client.ts";
-import { activeEndpoint, browserHome, defaultChromeProfile } from "./platform.ts";
+import { activeEndpoint, browserHome, createOutsideJob, defaultChromeProfile } from "./platform.ts";
 import { readSessionReceipt } from "./receipts.ts";
 import { BrowserError } from "./errors.ts";
 import type { Evaluation } from "./evaluate.ts";
@@ -103,22 +103,39 @@ async function start(
   const worker = browserWorkerCommand("keeper", configFile);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await writeFile(configFile, JSON.stringify(full), { mode: 0o600 });
-  const child = spawn(worker.command, worker.args, {
-    detached: true,
-    windowsHide: true,
-    stdio: [config.lifetime === "caller" ? "pipe" : "ignore", "ignore", "pipe"],
-  });
+  const receiptFile = join(directory, "session.json");
+  // A session keeper outlives its launcher; on Windows that means leaving the launcher's job too.
+  const outside = config.lifetime === "session" && process.platform === "win32";
+  const outsidePid = outside
+    ? await createOutsideJob(directory, worker.command, worker.args)
+    : undefined;
+  const child = outside
+    ? undefined
+    : spawn(worker.command, worker.args, {
+        detached: true,
+        windowsHide: true,
+        stdio: [config.lifetime === "caller" ? "pipe" : "ignore", "ignore", "pipe"],
+      });
   let stderr = "";
   let spawnError: Error | undefined;
-  child.stderr?.on("data", (chunk) => {
+  child?.stderr?.on("data", (chunk) => {
     stderr = (stderr + String(chunk)).slice(-12000);
   });
-  child.once("error", (error) => {
+  child?.once("error", (error) => {
     spawnError = error;
   });
+  const exited = async () => {
+    if (child) return child.exitCode !== null;
+    try {
+      process.kill(outsidePid!, 0);
+      return false;
+    } catch {
+      stderr = await readFile(join(directory, "worker-error.txt"), "utf8").catch(() => "");
+      return true;
+    }
+  };
   const deadline =
     Date.now() + (config.open?.timeoutMs ?? config.attach?.timeoutMs ?? 20000) + 5000;
-  const receiptFile = join(directory, "session.json");
   try {
     while (Date.now() < deadline) {
       if (spawnError) throw spawnError;
@@ -131,20 +148,25 @@ async function start(
         );
       if (receipt?.status === "active") {
         const session = await SessionClient.connect(receipt, config.attach?.clientId);
-        if (config.lifetime === "caller") session.onDisconnected = () => child.stdin?.end();
-        child.unref();
-        child.stderr?.destroy();
+        if (config.lifetime === "caller") session.onDisconnected = () => child?.stdin?.end();
+        child?.unref();
+        child?.stderr?.destroy();
         return session;
       }
-      if (child.exitCode !== null) throw new Error(`Keeper exited ${child.exitCode}: ${stderr}`);
+      if (await exited()) throw new Error(`Keeper exited: ${stderr}`);
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     throw new BrowserError("Timeout", `Browser keeper startup deadline exceeded: ${stderr}`, {
       outcome: "not-sent",
     });
   } catch (error) {
-    child.stdin?.end();
-    child.kill();
+    child?.stdin?.end();
+    child?.kill();
+    if (outsidePid) {
+      try {
+        process.kill(outsidePid);
+      } catch {}
+    }
     throw error;
   }
 }
