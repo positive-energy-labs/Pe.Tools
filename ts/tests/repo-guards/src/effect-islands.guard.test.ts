@@ -77,6 +77,8 @@ beforeAll(() => {
       // History for "never trusts": a raise, then a later commit that only reformats it.
       { branch: "raised", from: "base", files: { [baselinePath]: json({ [oldFile]: 2 }) } },
       { branch: "ratified", from: "raised", files: { [baselinePath]: json({ [oldFile]: 2 }, 2) } },
+      // A rename committed after the newest baseline: HEAD differs from the baseline's commit.
+      { branch: "renamed-later", from: "base", files: { [`ts/${oldFile}`]: null, [`ts/${newFile}`]: source } },
     ]),
   );
 });
@@ -110,6 +112,11 @@ it("never trusts a committed baseline raise, even on main", () => {
   // A later commit naming the raise as its base cannot ratify it.
   checkout("ratified");
   expect(trustedBaseline(cwd).baseline).toEqual({ src: { [oldFile]: 1 }, tests: {} });
+});
+
+it("carries a cap across a rename committed after the newest baseline", () => {
+  checkout("renamed-later");
+  expect(trustedBaseline(cwd).baseline).toEqual({ src: { [newFile]: 1 }, tests: {} });
 });
 
 describe("effect islands shrink only (ADR 0029 rule 2)", () => {
