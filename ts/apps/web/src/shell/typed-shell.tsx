@@ -173,7 +173,7 @@ function TypedPane({mount,id,ctx}: {mount:TypedMount;id:string;ctx:DrawContext<a
   const selected=useMemo(()=>Atom.make(()=>new Set(bindings?.selected??[])),[bindings?.selected]);
   const observation=bindings?.observation??{scope:null,references:[]};
   // Bindings rebuild their references every render; the index changes only when the pairs do.
-  const refs=observation.references as readonly {elementId:number;uniqueId?:string|null}[];
+  const refs=(observation.references??[]) as readonly {elementId:number;uniqueId?:string|null}[];
   const pairs=refs.map(r=>`${r.elementId}=${r.uniqueId??""}`).join();
   const elements=useMemo(()=>elementIndex(refs),[pairs]); // eslint-disable-line react-hooks/exhaustive-deps
   return <ValueScope value={ctx.value}><AttentionScope doc={doc} selected={selected} members={bindings?.members} elements={elements}>
