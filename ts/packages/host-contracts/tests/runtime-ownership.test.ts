@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { productInstallLayout } from "../src/contracts/product.ts";
+import { productHomePath } from "../src/product-paths.ts";
 import {
   installedRuntimeRoot,
   productRoot,
@@ -20,16 +21,41 @@ const fixture = JSON.parse(
     lane: "dev" | "installed";
     ownerRoot: string;
     productHome: string | null;
+    sharedRoot?: string | null;
     stateRoot?: string;
+    error?: string;
+  }[];
+  contentRoots: {
+    name: string;
+    productHome: string | null;
+    sharedRoot: string | null;
+    contentRoot?: string;
     error?: string;
   }[];
   trayLaunches: { name: string; owner: RuntimeOwner; launch: string[]; argv: string[] }[];
 };
 
 test.each(fixture.stateRoots)("state root: $name", (row) => {
-  const resolve = () => stateRoot(row.lane, row.ownerRoot, row.productHome ?? undefined);
-  if (row.error) expect(resolve).toThrow(row.error);
-  else expect(resolve()).toBe(row.stateRoot);
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", row.productHome ?? undefined);
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", row.sharedRoot ?? undefined);
+  vi.stubEnv("PE_TEST_HOME_ROOT", "");
+  const resolvers = [
+    () =>
+      stateRoot(row.lane, row.ownerRoot, row.productHome ?? undefined, row.sharedRoot ?? undefined),
+    () => productRoot({ lane: row.lane, sourceRoot: row.ownerRoot, installedRoot: row.ownerRoot }),
+  ];
+  for (const resolve of resolvers) {
+    if (row.error) expect(resolve).toThrow(row.error);
+    else expect(resolve()).toBe(row.stateRoot);
+  }
+});
+
+test.each(fixture.contentRoots)("content root: $name", (row) => {
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", row.productHome ?? undefined);
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", row.sharedRoot ?? undefined);
+  vi.stubEnv("PE_TEST_HOME_ROOT", "");
+  if (row.error) expect(productHomePath).toThrow(row.error);
+  else expect(productHomePath()).toBe(row.contentRoot);
 });
 
 test.each(fixture.trayLaunches)("tray argv: $name", (row) => {

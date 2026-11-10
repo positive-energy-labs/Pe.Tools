@@ -7,16 +7,22 @@ internal static class ProductPathing {
     ///     checkout's <c>.artifacts\pe-tools</c>, else the SDK install root itself. Pure: the TS twin
     ///     is <c>stateRoot</c> in service-identity.ts, and both assert runtime-ownership.fixture.json.
     /// </summary>
-    public static string StateRoot(ProductLane lane, string ownerRoot, string? productHome) {
+    public static string StateRoot(ProductLane lane, string ownerRoot, string? productHome, string? sharedRoot = null) {
         if (!Path.IsPathRooted(ownerRoot))
             throw new ArgumentException($"A {lane} runtime needs an absolute owner root.", nameof(ownerRoot));
-        // v0.7.30 refused an installed payload under a home override (its root check failed); kept unchanged.
         if (lane == ProductLane.Installed && !string.IsNullOrWhiteSpace(productHome))
             throw new ArgumentException($"An installed runtime does not run under {ProductPathNames.ProductHomeVariable}; unset it, or use a dev session.", nameof(productHome));
-        if (!string.IsNullOrWhiteSpace(productHome))
-            return Path.Combine(Path.GetFullPath(productHome!.Trim()), ProductPathNames.LocalStateDirectoryName);
+        var stateOwner = Path.GetFullPath(string.IsNullOrWhiteSpace(productHome) ? ownerRoot : productHome!.Trim());
         // Installed is the SDK's install root verbatim: byte-identical to v0.7.30's LocalApplicationData formula.
-        return lane == ProductLane.Dev ? Path.Combine(Path.GetFullPath(ownerRoot), ".artifacts", "pe-tools") : ownerRoot;
+        var root = !string.IsNullOrWhiteSpace(productHome) ? Path.Combine(stateOwner, ProductPathNames.LocalStateDirectoryName)
+            : lane == ProductLane.Dev ? Path.Combine(stateOwner, ".artifacts", "pe-tools") : ownerRoot;
+        if (!string.IsNullOrWhiteSpace(sharedRoot)) {
+            var shared = Path.GetFullPath(sharedRoot!.Trim());
+            var sharedPrefix = shared.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if ((Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar).StartsWith(sharedPrefix, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException($"Machine state root '{root}' cannot be at or under {ProductPathNames.SharedRootVariable} '{shared}'.");
+        }
+        return root;
     }
 
     /// <summary>
@@ -33,15 +39,18 @@ internal static class ProductPathing {
 
     /// <summary>
     ///     The product home: an explicit path, else <see cref="ProductPathNames.ProductHomeVariable" />,
-    ///     else <c>Documents\Pe.Tools</c>. The host's <c>productHomePath</c> resolves the same way.
+    ///     else <see cref="ProductPathNames.SharedRootVariable" />. The host resolves the same way.
     /// </summary>
     public static string ResolveProductHome(string? productHomePath) {
         var explicitHome = string.IsNullOrWhiteSpace(productHomePath)
             ? Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable)
             : productHomePath;
-        return string.IsNullOrWhiteSpace(explicitHome)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), ProductIdentity.ProductName)
-            : Path.GetFullPath(explicitHome.Trim());
+        var root = string.IsNullOrWhiteSpace(explicitHome)
+            ? Environment.GetEnvironmentVariable(ProductPathNames.SharedRootVariable)
+            : explicitHome;
+        if (string.IsNullOrWhiteSpace(root))
+            throw new InvalidOperationException($"Set {ProductPathNames.SharedRootVariable} to the shared content mount.");
+        return Path.GetFullPath(root!.Trim());
     }
 
     public static string ResolveSafeSubDirectoryPath(string rootPath, string? subdirectory, string paramName) {

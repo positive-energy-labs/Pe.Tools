@@ -454,7 +454,7 @@ export class PeaCliCommands {
   private scriptPodImportCommand() {
     return define({
       name: "import",
-      description: "Import a Pod zip archive into Documents/Pe.Tools/Pods.",
+      description: "Import a Pod zip archive into Pods in the content home.",
       args: {
         host: commonArgs.host,
         actionId: commonArgs.actionId,

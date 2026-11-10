@@ -18,8 +18,8 @@ It is not the installed-layout authority. `product.payloads.json` is the single 
 - `ProductIdentity` — vendor, product, and user-visible names.
 - `ProductPathNames` — product-owned state and user-content names.
 - `ProductLane` / `ProductRuntimeLayout` — the process's one runtime record (lane, owner root, state root) and its state/log/cache/scratch trees, including APS tokens. No binary paths.
-- `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — `Documents\Pe.Tools\preferences.json` and portable Pods.
-- `ProductPathing` — the product home (`PE_TOOLS_PRODUCT_HOME`, else `Documents\Pe.Tools`; the host resolves the same variable), safe subdirectory resolution, and the pure `StateRoot(lane, ownerRoot, home)`: `<home>\.local-state` under the override (an isolated run shares no state with the owner's host), else the dev checkout's `.artifacts\pe-tools`, else the SDK install root verbatim. TS `stateRoot` and PowerShell `Resolve-ProductRuntimeRoot` assert the same `ts/packages/host-contracts/tests/runtime-ownership.fixture.json`.
+- `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — content preferences and portable Pods.
+- `ProductPathing` — the content home (isolated `PE_TOOLS_PRODUCT_HOME`, else required `PE_TOOLS_SHARED_ROOT`; the host resolves the same names), safe subdirectory resolution, and the pure `StateRoot(lane, ownerRoot, home)`: `<home>\.local-state` under the override (an isolated run shares no state with the owner's host), else the dev checkout's `.artifacts\pe-tools`, else the SDK install root verbatim. The shared root never changes state. TS `stateRoot` and PowerShell `Resolve-ProductRuntimeRoot` assert the same `ts/packages/host-contracts/tests/runtime-ownership.fixture.json`.
 
 ## Hard Dependency Rule
 
@@ -37,7 +37,7 @@ Transport lives in `Pe.Shared.HostContracts`: `HostEndpoint`, `TsHostCallClient`
   logs\
   cache\
 
-Documents\Pe.Tools\
+<PE_TOOLS_SHARED_ROOT>\
   AGENTS.md
   README.md
   preferences.json

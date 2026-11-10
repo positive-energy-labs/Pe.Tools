@@ -22,7 +22,7 @@ afterEach(() => {
 // The host's root is computed once at module load (ISOFIX-R), so each test imports after its env stub.
 test("the production Work resolver honors the dev home", async () => {
   const { productRouteWorkPath } = await import("../src/product-paths.ts");
-  expect(productRouteWorkPath()).toBe(join(root, "home", ".local-state", "state", "route-work"));
+  expect(productRouteWorkPath()).toBe(join(root, "home", "Work"));
 });
 
 // ISOFIX-R dropped junction resolution (canonicalPath) by ruling; a home inside installed state still refuses.

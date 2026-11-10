@@ -2,6 +2,78 @@
   "$comment": "One table, three resolvers: C# ProductPathing.StateRoot (Pe.Shared.Tests RuntimeOwnershipTests), TS stateRoot (host-contracts runtime-ownership.test.ts), PowerShell Resolve-ProductRuntimeRoot (tools/tests/host-state-isolation.ps1). trayLaunches: TS trayOwnerArguments emits argv; C# Pe.Host.Tray Program.ParseOwner must accept it.",
   "stateRoots": [
     {
+      "name": "a dev owner under the shared root refuses",
+      "lane": "dev",
+      "ownerRoot": "S:\\Pe.Tools\\checkout",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "Machine state root 'S:\\Pe.Tools\\checkout\\.artifacts\\pe-tools' cannot be at or under PE_TOOLS_SHARED_ROOT 'S:\\Pe.Tools'."
+    },
+    {
+      "name": "a dev owner equal to the shared root refuses",
+      "lane": "dev",
+      "ownerRoot": "S:\\Pe.Tools",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "Machine state root 'S:\\Pe.Tools\\.artifacts\\pe-tools' cannot be at or under PE_TOOLS_SHARED_ROOT 'S:\\Pe.Tools'."
+    },
+    {
+      "name": "an installed owner under the shared root refuses",
+      "lane": "installed",
+      "ownerRoot": "S:\\Pe.Tools\\installed",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "Machine state root 'S:\\Pe.Tools\\installed' cannot be at or under PE_TOOLS_SHARED_ROOT 'S:\\Pe.Tools'."
+    },
+    {
+      "name": "an installed owner equal to the shared root refuses",
+      "lane": "installed",
+      "ownerRoot": "S:\\Pe.Tools",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "Machine state root 'S:\\Pe.Tools' cannot be at or under PE_TOOLS_SHARED_ROOT 'S:\\Pe.Tools'."
+    },
+    {
+      "name": "an isolated home cannot put model copies on the shared mount",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": "S:\\Pe.Tools\\isolated",
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "PE_TOOLS_SHARED_ROOT"
+    },
+    {
+      "name": "the shared mount itself cannot be an isolated home",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": "S:\\Pe.Tools",
+      "sharedRoot": "S:\\Pe.Tools\\",
+      "error": "PE_TOOLS_SHARED_ROOT"
+    },
+    {
+      "name": "shared containment ignores casing and whitespace and includes dot-prefixed children",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": " s:\\PE.TOOLS\\..isolated ",
+      "sharedRoot": " S:\\Pe.Tools ",
+      "error": "PE_TOOLS_SHARED_ROOT"
+    },
+    {
+      "name": "a sibling with the same prefix is not on the shared content root",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": "S:\\Pe.Tools-local",
+      "sharedRoot": "S:\\Pe.Tools",
+      "stateRoot": "S:\\Pe.Tools-local\\.local-state"
+    },
+    {
+      "name": "a shared content mount never moves machine state",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "stateRoot": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools"
+    },
+    {
       "name": "installed keeps the SDK install root verbatim",
       "lane": "installed",
       "ownerRoot": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools",
@@ -56,6 +128,32 @@
       "ownerRoot": "src\\Pe.Tools",
       "productHome": null,
       "error": "absolute owner root"
+    }
+  ],
+  "contentRoots": [
+    {
+      "name": "isolated home wins",
+      "productHome": " D:\\isolated ",
+      "sharedRoot": "S:\\Pe.Tools",
+      "contentRoot": "D:\\isolated"
+    },
+    {
+      "name": "shared mount supplies content",
+      "productHome": null,
+      "sharedRoot": " S:\\Pe.Tools ",
+      "contentRoot": "S:\\Pe.Tools"
+    },
+    {
+      "name": "blank home falls through to shared mount",
+      "productHome": "  ",
+      "sharedRoot": "S:\\Pe.Tools",
+      "contentRoot": "S:\\Pe.Tools"
+    },
+    {
+      "name": "unconfigured content refuses",
+      "productHome": null,
+      "sharedRoot": null,
+      "error": "PE_TOOLS_SHARED_ROOT"
     }
   ],
   "trayLaunches": [
