@@ -1,7 +1,11 @@
 import { mkdir, mkdtemp, rm, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Context, Effect, Layer, Result, Schema } from "effect";
+import { Context, Deferred, Effect, Fiber, Layer, Result, Schema } from "effect";
+import { RevitBridge } from "../src/bridge.ts";
+import { NativeReads } from "../src/native-reads.ts";
+import { prepareRead } from "../../../packages/host-internal/src/read-admission.ts";
+import { detachedBridge, effectTest } from "./effect-test.ts";
 import { CurrentInputConsumption, HostInputReadSets, type InputConsumption } from "../src/input-occurrence.ts";
 import { HttpRouter } from "effect/http";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -77,6 +81,78 @@ const bindings = async (takes: Taking[]) => {
   }
   return map;
 };
+
+effectTest("joined native readers link only the taking appended by their own retained read set", () => Effect.gen(function* () {
+  const dir = yield* Effect.promise(temp);
+  const writer = yield* openRecordingWriter(dir, identity, bounds);
+  const lane = { kind: "live", captureStore: writer } as const;
+  const basis = createDuctsBodyBasis(lane)!;
+  const nativeReady = yield* Deferred.make<void>();
+  const indexed = yield* Deferred.make<void>();
+  const ownTakings = new Map<string, string>();
+  let dispatches = 0;
+  const bridge = detachedBridge({ invokeHandle: (_key, _input, _session, _open, requestId) => Effect.sync(() => {
+    dispatches++;
+    return { answer: Deferred.await(nativeReady).pipe(Effect.as({ value, nativeRequestId: requestId!, actualTarget,
+      freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" as const }, cost: {}, outcome: "native-acknowledged" as const })),
+      terminal: Deferred.await(nativeReady).pipe(Effect.as("native-acknowledged" as const)) };
+  }) });
+  const services = yield* Layer.build(NativeReads.layer.pipe(Layer.provide(Layer.succeed(RevitBridge, bridge))));
+  const reads = Context.get(services, NativeReads);
+  const prepared = yield* prepareRead({ operationKey: input.key, operation: { key: input.key, intent: "Read" },
+    ...actualTarget, freshnessGeneration: "g1", representation: "overview", responseSchemaVersion: "1" },
+    { selector: { kind: "roster" } }, Schema.Json, Schema.Json);
+  const live = Layer.succeed(HostNativeRead, {
+    resolve: () => Effect.die("This witness enters at prepared native admission"),
+    read: () => reads.join(prepared, ref.session),
+  });
+  // Both exact takings must be indexed before either link: choosing first/latest cannot pass.
+  const observed = (taking: Taking) => basis.observed(taking).pipe(Effect.andThen(Effect.gen(function* () {
+    if (taking.input.kind !== "native") return;
+    const consumer = yield* Effect.serviceOption(CurrentInputConsumption);
+    if (consumer._tag === "None") return yield* Effect.die("Native capture lost its reader");
+    ownTakings.set(consumer.value.id, taking.id);
+    if (ownTakings.size === 2) yield* Deferred.succeed(indexed, undefined);
+    yield* Deferred.await(indexed);
+  })));
+  const nativeServices = yield* Layer.build(hostNativeReadFor(lane, live, observed));
+  const native = Context.get(nativeServices, HostNativeRead);
+  const sets = Context.get(yield* Layer.build(HostInputReadSets.layer(lane)), HostInputReadSets);
+  const root = yield* sets.open({ key: "joined-retained", input: {}, scope: canonicalJson(scope) }, null);
+  yield* Effect.addFinalizer(() => root.close);
+  const children = [0, 1].map(() => {
+    const child = root.child({ key: "ducts.retained", input: { key: input.key }, scope: canonicalJson(scope) });
+    if (Result.isFailure(child)) throw child.failure;
+    return child.success;
+  });
+  const reader = (consumer: InputConsumption) => Effect.gen(function* () {
+    const dependency = yield* basis.prepare(input, ductBodySubject(input));
+    const answer = yield* native.read(input);
+    const taking = yield* dependency.link(answer);
+    yield* dependency.consume({ json: JSON.stringify(answer.value), version: "joined-version", nativeRequestId: answer.nativeRequestId,
+      nativeTakingId: taking, target: { session: ref.session, document: row.address, documentRef: ref } }, answer.actualTarget);
+    return { reader: consumer.id, taking, request: answer.nativeRequestId };
+  }).pipe(Effect.provideService(CurrentInputConsumption, consumer), Effect.provideService(RequestIdentity,
+    admittedRequestIdentity({ kind: "human", via: "local" }, scope)));
+  const pending = yield* Effect.all(children.map(reader), { concurrency: "unbounded" }).pipe(Effect.forkScoped);
+  while ((yield* reads.retained).joiners !== 2 || dispatches === 0) yield* Effect.yieldNow;
+  expect(dispatches).toBe(1);
+  yield* Deferred.succeed(nativeReady, undefined);
+  const results = yield* Fiber.join(pending);
+  expect(writer.capture.truncated()).toBeNull();
+  expect(ownTakings.size).toBe(2);
+  expect(new Set(results.map((entry) => entry.request)).size).toBe(1);
+  expect(new Set(results.map((entry) => entry.taking)).size).toBe(2);
+  for (const entry of results) expect(entry.taking).toBe(ownTakings.get(entry.reader));
+  yield* root.seal;
+  const recorded = yield* openRecordingReader(dir, identity, bounds);
+  for (const entry of results) {
+    const stored = yield* recorded.readSets.get(entry.reader);
+    expect(stored.state).toBe("complete");
+    expect(stored.takingLinks.native).toBe(entry.taking);
+    expect(stored.inputs.filter((item) => item.input.kind === "native").map((item) => item.takingId)).toEqual([entry.taking]);
+  }
+}));
 
 test("same retained handler captures miss/hit and replays original version, native taking, target and reuse without live construction", async () => {
   const c = await captured();
