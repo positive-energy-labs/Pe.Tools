@@ -120,7 +120,7 @@ export function ThreadsDrawing({ ctx: handle }: { ctx: ChatHandle }) {
   const findThread = () => setSearchSerial((serial) => serial + 1);
   usePublishPagePalette("chat", false, (open) => open && findThread());
   return (
-    <div data-surface="artifact" className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {!docked && (
         <PrimaryRouteControls route="chat" slot="palette">
           <PagePaletteButton open={findThread} />
