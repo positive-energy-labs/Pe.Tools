@@ -11,7 +11,7 @@ public sealed record ProductUserContentLayout(
     public string ReadmePath => Path.Combine(this.RootPath, ProductPathNames.ReadmeFileName);
 
     public static ProductUserContentLayout ForCurrentUser(string? productHomePath = null) {
-        var rootPath = ProductPathing.ResolveProductHome(productHomePath);
+        var rootPath = ProductPathing.UserRoot(productHomePath);
 
         return new ProductUserContentLayout(
             rootPath,

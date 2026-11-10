@@ -8,6 +8,7 @@ import {
   type PodRouteDeclaration,
 } from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
+import type { Dirent } from "node:fs";
 import { lstat, open, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -15,7 +16,8 @@ import {
   type ScriptingExecute,
 } from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
-import { productPodsRootPath } from "./product-paths.ts";
+import { productPathNames } from "@pe/host-contracts/contracts";
+import { contentDirs } from "./content-homes.ts";
 import { verifyPodArtifact } from "./pod-artifact.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 
@@ -108,8 +110,26 @@ export function kindOfMember(
   return undefined;
 }
 
-/** Read once per snapshot. Hashes, projection, and capture all refer to these exact bytes. */
-export async function listPackages(podsRoot = productPodsRootPath()): Promise<PackageListing> {
+/** One Pods folder, or the product's Pods in every content home, read in order (user first). */
+export type PodsRoots = string | readonly string[];
+export const productPodsRoots = () => contentDirs(productPathNames.podsDirectoryName);
+
+/**
+ * Read once per snapshot. Hashes, projection, and capture all refer to these exact bytes. Across
+ * homes the first root's pod wins by manifest id: the user's copy shadows the shared one.
+ */
+export async function listPackages(podsRoots: PodsRoots = productPodsRoots()): Promise<PackageListing> {
+  const result: PackageListing = { packages: [], unreadable: [] };
+  for (const root of [podsRoots].flat()) {
+    const listing = await listPodsFolder(root);
+    const claimed = new Set(result.packages.map((pod) => pod.id));
+    result.packages.push(...listing.packages.filter((pod) => !claimed.has(pod.id)));
+    result.unreadable.push(...listing.unreadable);
+  }
+  return result;
+}
+
+async function listPodsFolder(podsRoot: string): Promise<PackageListing> {
   const result: PackageListing = { packages: [], unreadable: [] };
   let entries;
   try {
@@ -167,16 +187,16 @@ export function onePackage(
     : refuse(`No installed pod has id '${id}'.`, 404);
 }
 
-export const readPackage = async (id: string, podsRoot = productPodsRootPath()) =>
-  onePackage(await listPackages(podsRoot), id);
+export const readPackage = async (id: string, podsRoots: PodsRoots = productPodsRoots()) =>
+  onePackage(await listPackages(podsRoots), id);
 
 /** Freeze admitted bytes without rereading disk. Admission errors refuse; member semantics stay native. */
 export async function capturePackage(
   packageOrId: AdmittedPackage | string,
-  podsRoot = productPodsRootPath(),
+  podsRoots: PodsRoots = productPodsRoots(),
 ): Promise<CapturedPackage> {
   const pod =
-    typeof packageOrId === "string" ? await readPackage(packageOrId, podsRoot) : packageOrId;
+    typeof packageOrId === "string" ? await readPackage(packageOrId, podsRoots) : packageOrId;
   const errors = pod.diagnostics.filter((issue) =>
     ["PackageMemberInvalid", "DuplicatePodId"].includes(issue.code),
   );
@@ -281,11 +301,21 @@ export async function captureDirectory(
 }
 
 /** Fresh global identity claims, followed by full admission of only the selected folder. */
-export async function resolvePackageIdentity(folder: string, podsRoot = productPodsRootPath()) {
+export async function resolvePackageIdentity(folder: string, podsRoots: PodsRoots = productPodsRoots()) {
   if (packageMemberPathSchema.parse(folder).includes("/"))
     throw Error("An output folder must name one immediate Pod directory");
   const claims: { id: string; folder: string; manifestSha256: string }[] = [];
-  const entries = await readdir(podsRoot, { withFileTypes: true });
+  // The first home holding the folder owns it: the user's folder shadows a shared one.
+  let podsRoot = "";
+  let entries: Dirent[] = [];
+  for (const root of [podsRoots].flat()) {
+    podsRoot = root;
+    entries = await readdir(root, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    });
+    if (entries.some((entry) => entry.name.toLowerCase() === folder.toLowerCase())) break;
+  }
   if (entries.filter((entry) => entry.name.toLowerCase() === folder.toLowerCase()).length !== 1)
     throw Error("No unique output Pod folder");
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {

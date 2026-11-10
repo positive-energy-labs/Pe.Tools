@@ -9,7 +9,9 @@ foreach ($row in $table.stateRoots) {
     $refused = $null
     $actual = $null
     try {
-        $actual = Resolve-ProductRuntimeRoot -Lane $row.lane -Root $row.ownerRoot -ProductHomeOverride $row.productHome
+        # A fixture user root is pure input; otherwise the resolver fences this machine's Documents user root.
+        $user = if ($row.PSObject.Properties['userRoot']) { @{ UserRoot = $row.userRoot } } else { @{} }
+        $actual = Resolve-ProductRuntimeRoot -Lane $row.lane -Root $row.ownerRoot -ProductHomeOverride $row.productHome @user
     } catch {
         $refused = $_.Exception.Message
     } finally {
@@ -29,14 +31,14 @@ foreach ($row in $table.stateRoots) {
     }
 }
 if ($failures.Count) { throw ($failures -join [Environment]::NewLine) }
-foreach ($row in $table.contentRoots) {
-    $refused = $null
-    $actual = $null
-    try { $actual = Resolve-ProductContentRoot -ProductHomeOverride $row.productHome -SharedRoot $row.sharedRoot }
-    catch { $refused = $_.Exception.Message }
-    if ($row.error) {
-        if ($null -eq $refused -or $refused -notlike "*$($row.error)*") { throw "$($row.name): expected '$($row.error)', received '$actual' / '$refused'" }
-    } elseif ($null -ne $refused -or $actual -ne $row.contentRoot) { throw "$($row.name): expected '$($row.contentRoot)', received '$actual' / '$refused'" }
+$documents = [Environment]::GetFolderPath('MyDocuments')
+foreach ($row in $table.contentHomes) {
+    $expected = @($row.homes | ForEach-Object { $_.Replace('%DOCUMENTS%', $documents) }) -join '|'
+    $actual = @(Resolve-ContentHomes -ProductHomeOverride $row.productHome -SharedRoot $row.sharedRoot) -join '|'
+    if ($actual -ne $expected) { throw "$($row.name): homes expected '$expected', received '$actual'" }
+    $firm = Resolve-SharedFirmDir -SharedRoot $row.sharedRoot
+    $keys = Resolve-SharedKeysPath -SharedRoot $row.sharedRoot
+    if ($firm -ne $row.firm -or $keys -ne $row.keys) { throw "$($row.name): shared settings expected '$($row.firm)' / '$($row.keys)', received '$firm' / '$keys'" }
     Write-Output "PASS $($row.name)"
 }
 # A caller that names no lane is refused rather than defaulted to installed.

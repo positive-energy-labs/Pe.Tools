@@ -100,6 +100,7 @@ import {
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { LocalOpError } from "./local-error.ts";
 import { productPodsRootPath } from "./product-paths.ts";
+import { userTwin, userWritable } from "./content-homes.ts";
 import { familiesApplyRun, isFamiliesApplyResponse } from "./family-run-recovery.ts";
 import { familySpecExecutor } from "./family-spec.ts";
 import type { FamiliesReader } from "./families-reader.ts";
@@ -107,7 +108,7 @@ import { nativeInputSchema } from "./native-input.ts";
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 // PodRuns.StartComposedRun writes to this source Pod's output, or operations for a supplied draft.
-export const sourceRunOutput = async (pod: string | null | undefined, deps: PodDependencies) =>
+const resolvedRunOutput = async (pod: string | null | undefined, deps: PodDependencies) =>
   pod
     ? join(
         await runPods(deps, podFolder(pod, { podsRoot: deps.podsRoot })),
@@ -119,6 +120,24 @@ export const sourceRunOutput = async (pod: string | null | undefined, deps: PodD
         productPathNames.outputDirectoryName,
         "operations",
       );
+
+/**
+ * The run output a command declares, before consent: pure, no write. A shared Pod's output is its
+ * user twin, where the run will land once `claimRunOutput` has copied the Pod (ADR 0035 rule 11).
+ */
+export const sourceRunOutput = async (pod: string | null | undefined, deps: PodDependencies) => {
+  const output = await resolvedRunOutput(pod, deps);
+  return userTwin(output) ?? output;
+};
+
+/**
+ * After consent (ADR 0027), before the run writes: copy a shared Pod to the user root on its first
+ * run, so the C# writer (which resolves the folder under the user's Pods) and every later read find it.
+ */
+export const claimRunOutput = async (pod: string | null | undefined, deps: PodDependencies) =>
+  userWritable(await resolvedRunOutput(pod, deps));
+const claimRunOutputs = (sources: readonly Sealed[], deps: PodDependencies) =>
+  Promise.all([...new Set(sources.map((x) => x.source.root.id))].map((pod) => claimRunOutput(pod, deps)));
 
 /** Pod I/O runs against the product Pods root unless an owner (the demo lane) supplies its own. */
 export type PodDependencies = {
@@ -978,7 +997,7 @@ export function familyExecutors(
       const run =
         target.kind === "document"
           ? await familiesApplyRun(
-              await sourceRunOutput(source.root.id, deps),
+              await claimRunOutput(source.root.id, deps),
               step,
               { ...prepared, process },
               target.ref.openId,
@@ -1088,6 +1107,7 @@ export function familyExecutors(
         ...(await outputs(sourceOutputs)),
       ],
       prepare: async () => {
+        await claimRunOutputs(sourceOutputs, deps);
         const intents = plan
           ? [plan]
           : await Promise.all(
@@ -1168,15 +1188,18 @@ export function familyExecutors(
             { kind: "directory" as const, path: await sourceRunOutput(input.pod, deps) },
           ]
         : [],
-      prepare: async () => ({
-        kind: "capture",
-        process: bound.process,
-        input: input.familyIds ? { familyIds: input.familyIds } : {},
-        pod: input.pod ?? null,
-        path: input.path ?? null,
-        spec: input.spec ?? null,
-        at: new Date().toISOString(),
-      }),
+      prepare: async () => {
+        if (input.pod) await claimRunOutput(input.pod, deps);
+        return {
+          kind: "capture" as const,
+          process: bound.process,
+          input: input.familyIds ? { familyIds: input.familyIds } : {},
+          pod: input.pod ?? null,
+          path: input.path ?? null,
+          spec: input.spec ?? null,
+          at: new Date().toISOString(),
+        };
+      },
     };
   };
   const fileCapture = (
@@ -1478,17 +1501,20 @@ export function familyExecutors(
       return {
         consumes: [...bound.consumes, ...sources.consumes],
         effects: [{ kind: "document", ref: bound.target }, ...(await outputs([sealed]))],
-        prepare: async () => ({
-          kind: "native",
-          process: bound.process,
-          input: {
-            specJson: sealed.specJson,
-            source: sealed.source,
-            ...(deps.nativePaths
-              ? await deps.nativePaths(input, ctx.admission.id, file)
-              : { modelDirectory: resolve(input.modelDirectory ?? win32.dirname(file)) }),
-          },
-        }),
+        prepare: async () => {
+          await claimRunOutputs([sealed], deps);
+          return {
+            kind: "native" as const,
+            process: bound.process,
+            input: {
+              specJson: sealed.specJson,
+              source: sealed.source,
+              ...(deps.nativePaths
+                ? await deps.nativePaths(input, ctx.admission.id, file)
+                : { modelDirectory: resolve(input.modelDirectory ?? win32.dirname(file)) }),
+            },
+          };
+        },
       };
     },
     run: (ctx, execution) => Effect.gen(function* () {

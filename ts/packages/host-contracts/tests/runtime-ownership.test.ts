@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { productInstallLayout } from "../src/contracts/product.ts";
-import { productHomePath } from "../src/product-paths.ts";
+import {
+  contentHomes,
+  documentsUserRoot,
+  sharedFirmDir,
+  sharedKeysPath,
+} from "../src/product-paths.ts";
 import {
   installedRuntimeRoot,
   productRoot,
@@ -22,15 +27,17 @@ const fixture = JSON.parse(
     ownerRoot: string;
     productHome: string | null;
     sharedRoot?: string | null;
+    userRoot?: string;
     stateRoot?: string;
     error?: string;
   }[];
-  contentRoots: {
+  contentHomes: {
     name: string;
     productHome: string | null;
     sharedRoot: string | null;
-    contentRoot?: string;
-    error?: string;
+    homes: string[];
+    firm: string | null;
+    keys: string | null;
   }[];
   trayLaunches: { name: string; owner: RuntimeOwner; launch: string[]; argv: string[] }[];
 };
@@ -41,8 +48,20 @@ test.each(fixture.stateRoots)("state root: $name", (row) => {
   vi.stubEnv("PE_TEST_HOME_ROOT", "");
   const resolvers = [
     () =>
-      stateRoot(row.lane, row.ownerRoot, row.productHome ?? undefined, row.sharedRoot ?? undefined),
-    () => productRoot({ lane: row.lane, sourceRoot: row.ownerRoot, installedRoot: row.ownerRoot }),
+      stateRoot(
+        row.lane,
+        row.ownerRoot,
+        row.productHome ?? undefined,
+        row.sharedRoot ?? undefined,
+        row.userRoot,
+      ),
+    // A fixture user root is not this machine's Documents: only the pure resolver can take it.
+    ...(row.userRoot
+      ? []
+      : [
+          () =>
+            productRoot({ lane: row.lane, sourceRoot: row.ownerRoot, installedRoot: row.ownerRoot }),
+        ]),
   ];
   for (const resolve of resolvers) {
     if (row.error) expect(resolve).toThrow(row.error);
@@ -50,12 +69,14 @@ test.each(fixture.stateRoots)("state root: $name", (row) => {
   }
 });
 
-test.each(fixture.contentRoots)("content root: $name", (row) => {
+test.each(fixture.contentHomes)("content homes: $name", (row) => {
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", row.productHome ?? undefined);
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", row.sharedRoot ?? undefined);
   vi.stubEnv("PE_TEST_HOME_ROOT", "");
-  if (row.error) expect(productHomePath).toThrow(row.error);
-  else expect(productHomePath()).toBe(row.contentRoot);
+  const documents = dirname(documentsUserRoot());
+  expect(contentHomes()).toEqual(row.homes.map((home) => home.replace("%DOCUMENTS%", documents)));
+  expect(sharedFirmDir()).toBe(row.firm);
+  expect(sharedKeysPath()).toBe(row.keys);
 });
 
 test.each(fixture.trayLaunches)("tray argv: $name", (row) => {

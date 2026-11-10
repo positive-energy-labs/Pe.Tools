@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { productHomePath } from "@pe/host-contracts/product-paths";
+import { userRoot } from "@pe/host-contracts/product-paths";
 import { runtimeRoot } from "./runtime-owner.ts";
 
 export interface AnalyticsConfig {
@@ -14,7 +14,7 @@ export const ANALYTICS_PAYLOAD_BUDGET = 256 * 1024;
 export function analyticsConfig(lane: "dev" | "installed"): AnalyticsConfig | null {
   const path =
     lane === "dev"
-      ? join(productHomePath(), "preferences.json")
+      ? join(userRoot(), "preferences.json")
       : join(runtimeRoot(), "product.payloads.json");
   const file = readJson(path) as
     | {
