@@ -1,4 +1,5 @@
-import { subjectCode, subjectOf, type Many, type SubjectRefCode } from "@pe/agent-contracts";
+import type { Many } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
+import { subjectCode, subjectOf, type SubjectRefCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { systemScope } from "@pe/ducts-domain/system-scope";

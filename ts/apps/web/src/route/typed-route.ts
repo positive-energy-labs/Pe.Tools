@@ -10,9 +10,8 @@ import type {
   EntryContract,
   WorkHistoryPort,
   Many,
-  SubjectRefCode,
 } from "@pe/agent-contracts";
-import { subjectOf } from "@pe/agent-contracts";
+import { subjectOf, type SubjectRefCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";

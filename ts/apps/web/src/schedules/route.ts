@@ -11,7 +11,7 @@ import {
 } from "@pe/agent-contracts";
 import { schedulesViewCapability } from "../../../../packages/agent-contracts/src/schedules-read.ts";
 import { route, field, subjectSchema, namesOf } from "../route/defaults.ts";
-import { subjectCode } from "@pe/agent-contracts";
+import { subjectCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 export const fields = {

@@ -4,8 +4,8 @@ import type {
   DuctsSheetResponse,
   FittingPricing,
 } from "@pe/agent-contracts";
-import type { Immutable, SubjectRefCode, UniqueId } from "@pe/agent-contracts";
-import { subjectCode } from "@pe/agent-contracts";
+import type { Immutable } from "@pe/agent-contracts";
+import { subjectCode, type SubjectRefCode, type UniqueId } from "../../../../../packages/agent-contracts/src/subject-ref.ts";
 
 export type FanPort = DuctsRosterResponse["rows"][number];
 

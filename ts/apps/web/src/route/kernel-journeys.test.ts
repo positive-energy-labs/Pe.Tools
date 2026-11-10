@@ -247,7 +247,7 @@ test("J3 publish a sheet, capture History, choose another fan and reopen the old
       await host.history("", { kind: "captured", document: path }),
     );
     const row = original.value!.data.fans.rows.find((row) => row.mark === "MUAS-1")!;
-    await host.send(101, [`${row.uniqueId}@${row.portIndex}`]);
+    await host.send(101, [stableFanKey(row)]);
     const calls = host.nativeCalls;
     const restored = await host.send(102, [], undefined, "history-reader", false, point.id);
     expect(restored, "H18: History names the exact host publication").toEqual({
@@ -271,7 +271,7 @@ test("J4 refresh Fans while the document changes and inspect the retained answer
     await j.ready();
     const roster = await j.host.send(100, []);
     const row = roster.value!.data.fans.rows.find((row) => row.mark === "MUAS-1")!;
-    const selected = [`${row.uniqueId}@${row.portIndex}`];
+    const selected = [stableFanKey(row)];
     const before = await j.host.send(101, selected);
     held = j.host.holdNative();
     const refresh = j.host.send(102, selected);
