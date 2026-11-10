@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { contentHomes, sharedRoot, userRoot } from "@pe/host-contracts/product-paths";
@@ -10,7 +10,8 @@ import { hostOwnership } from "../src/host-ownership.ts";
 import { listPackages, readPackage } from "../src/packages.ts";
 import { scratchPageDescriptors, scratchPageDirectory } from "../src/page-libraries.ts";
 import { readDuctCatalogs } from "../src/duct-catalogs.ts";
-import { writeMember } from "../src/settings.ts";
+import { listRuns, readMember, saveMember, writeMember, writeRun } from "../src/settings.ts";
+import { sourceRunOutput } from "../src/family-actions.ts";
 import { peaMcpServer } from "../src/harness/adapter.ts";
 
 // ADR 0035 rule 11 (amended): the user root always, an optional shared root after it.
@@ -31,6 +32,16 @@ const under = (root: string, path: string) => {
   const away = relative(root, path);
   return !isAbsolute(away) && away !== ".." && !away.startsWith("../") && !away.startsWith("..\\");
 };
+/** Every file under a root with its bytes: the shared copy must come out byte-identical. */
+const tree = (root: string) =>
+  Object.fromEntries(
+    readdirSync(root, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => {
+        const path = join(entry.parentPath, entry.name);
+        return [relative(root, path), readFileSync(path, "base64")];
+      }),
+  );
 const run = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 const pod = (home: string, folder: string, id: string, name: string) => {
@@ -124,14 +135,31 @@ test("a Catalog in both homes resolves to the user's copy", async () => {
   ]);
 });
 
-test("a write lands in the user root; a write into a shared Pod refuses", async () => {
-  pod(user, "mine", "mine", "user");
+test("running a Pod that exists only on the shared root writes its output to the user root", async () => {
   pod(shared, "theirs", "theirs", "shared");
-  await run(writeMember({ pod: "mine", path: "settings/a.json", content: "{}" }));
-  expect(readFileSync(join(user, "Pods", "mine", "settings", "a.json"), "utf8")).toBe("{}");
-  await expect(
-    run(writeMember({ pod: "theirs", path: "settings/a.json", content: "{}" })),
-  ).rejects.toThrow("writes go to the user root only");
+  const before = tree(shared);
+  expect(await sourceRunOutput("theirs", {})).toBe(join(user, "Pods", "theirs", "output"));
+  expect(await run(writeRun("theirs", "run-1", { "receipt.json": "{}" }))).toBe("output/run-1");
+  expect(readFileSync(join(user, "Pods", "theirs", "output", "run-1", "receipt.json"), "utf8")).toBe("{}");
+  expect((await run(listRuns({ pod: "theirs" }))).runs.map((r) => r.runId)).toEqual(["run-1"]);
+  expect(tree(shared)).toEqual(before);
+});
+
+test("saving a shared member makes the user copy, and the next read returns it", async () => {
+  pod(shared, "theirs", "theirs", "shared");
+  writeFileSync(join(shared, "Pods", "theirs", "settings", "a.json"), "{}");
+  const before = tree(shared);
+  const member = { pod: "theirs", path: "settings/a.json" };
+  const { sha256 } = await run(readMember(member));
+  await run(saveMember({ ...member, content: '{"b":1}', expectedSha256: sha256 }));
+  expect(readFileSync(join(user, "Pods", "theirs", "settings", "a.json"), "utf8")).toBe('{"b":1}');
+  expect((await run(readMember(member))).content).toBe('{"b":1}');
+  expect(under(user, (await readPackage("theirs")).directory)).toBe(true);
+  expect(tree(shared)).toEqual(before);
+  // A Pod already in the user root is written in place.
+  pod(user, "mine", "mine", "user");
+  await run(writeMember({ pod: "mine", path: "settings/c.json", content: "{}" }));
+  expect(readFileSync(join(user, "Pods", "mine", "settings", "c.json"), "utf8")).toBe("{}");
 });
 
 test("the harness declares the shared mount for its MCP child", () => {

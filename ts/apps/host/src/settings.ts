@@ -33,7 +33,7 @@ import {
 } from "./packages.ts";
 import { requirePackageEnabled, activePackages } from "./package-lifecycle.ts";
 import { LocalOpError } from "./local-error.ts";
-import { requireUserWritable } from "./content-homes.ts";
+import { userWritable as userPath } from "./content-homes.ts";
 import {
   localOpFileError,
   makeDirectory,
@@ -326,11 +326,11 @@ export const saveMember = (request: PodMemberSaveRequest, ctx: PodContext = {}) 
     }),
   );
 
-/** A shared Pod is read-only here: every write goes to the user root (ADR 0035 rule 11). */
+/** Every write goes to the user root: a shared Pod is copied there on its first write (ADR 0035 rule 11). */
 const userWritable = (path: string, key: string) =>
   Effect.try({
-    try: () => requireUserWritable(path),
-    catch: (error) => new LocalOpError(key, errorMessage(error), 409),
+    try: () => userPath(path),
+    catch: (error) => new LocalOpError(key, errorMessage(error), 500),
   });
 
 const writablePath = Effect.fnUntraced(function* (
@@ -338,7 +338,7 @@ const writablePath = Effect.fnUntraced(function* (
   ctx: PodContext,
   key: string,
 ) {
-  const path = yield* userWritable(yield* memberFile(request, ctx, key), key);
+  const path = yield* memberFile(request, ctx, key);
   if (/^(output\/|pod\.json$)/i.test(normalizeMemberPath(request.path)))
     return yield* Effect.fail(
       new LocalOpError(key, "Runs and the manifest are not writable members.", 400),
@@ -351,7 +351,7 @@ const writablePath = Effect.fnUntraced(function* (
         400,
       ),
     );
-  return path;
+  return yield* userWritable(path, key);
 });
 
 const written = (request: PodMember & { content: string }): PodMemberWritten => ({

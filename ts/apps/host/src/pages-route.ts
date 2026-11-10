@@ -6,7 +6,7 @@ import {
   peRouteUrl,
 } from "@pe/agent-contracts/pe-api";
 /** Scratch Pages and admitted Pod Pages share serving, binding and event state. See pe.js for the author API. */
-import { readFileSync, watch } from "node:fs";
+import { existsSync, readFileSync, watch } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,7 +68,7 @@ import {
   type PagesRoots,
 } from "./page-libraries.ts";
 import { exportPage } from "./page-export.ts";
-import { requireUserWritable } from "./content-homes.ts";
+import { userTwin, userWritable } from "./content-homes.ts";
 import { escapeHtml, withPageKey } from "./page-publication.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import { ActionJournalService } from "./receipt-services.ts";
@@ -244,15 +244,22 @@ const unboundRefusal = (door: string): Refusal => ({
   reason: `Refused at ${door}: this Page has no target. Bind it to a thread or pin a document from the chip.`,
 });
 
-/** One page's log and snapshot, under `<page>/.state/`. Appends are serial per page. */
+/**
+ * One page's log and snapshot, under `<page>/.state/`. Appends are serial per page. A shared Page
+ * writes its state into its user copy (made on the first write) and reads from it once it exists.
+ */
 class PageState {
-  private readonly dir: string;
   private readonly listeners = new Set<Listener>();
   private readonly signals = new Set<Signal>();
   private unwatch: (() => void) | null = null;
   private queue: Promise<unknown> = Promise.resolve();
-  constructor(private readonly pageDir: string) {
-    this.dir = join(pageDir, ".state");
+  constructor(private readonly pageDir: string) {}
+  private get dir() {
+    const twin = userTwin(this.pageDir);
+    return join(twin && existsSync(twin) ? twin : this.pageDir, ".state");
+  }
+  private writable() {
+    return join(userWritable(this.pageDir), ".state");
   }
   async rows(): Promise<PageEventRow[]> {
     const text = await readFile(join(this.dir, "events.jsonl"), "utf8").catch((error) => {
@@ -268,8 +275,9 @@ class PageState {
     const job = this.queue.then(async () => {
       const seq = (await this.rows()).length + 1;
       const row: PageEventRow = { seq, at: new Date().toISOString(), origin, event };
-      await mkdir(requireUserWritable(this.dir), { recursive: true });
-      await appendFile(join(this.dir, "events.jsonl"), JSON.stringify(row) + "\n", "utf8");
+      const dir = this.writable();
+      await mkdir(dir, { recursive: true });
+      await appendFile(join(dir, "events.jsonl"), JSON.stringify(row) + "\n", "utf8");
       for (const listen of this.listeners) listen(row);
       return row;
     });
@@ -283,8 +291,9 @@ class PageState {
     return readJson(join(this.dir, "snapshot.json"), z.unknown(), null);
   }
   async writeSnapshot(value: unknown) {
-    await mkdir(requireUserWritable(this.dir), { recursive: true });
-    await writeFile(join(this.dir, "snapshot.json"), JSON.stringify(value, null, 2), "utf8");
+    const dir = this.writable();
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "snapshot.json"), JSON.stringify(value, null, 2), "utf8");
   }
   /** The page's text projection (`pe.describe`): markdown an agent reads instead of the snapshot. */
   async text(): Promise<string | null> {
@@ -294,8 +303,9 @@ class PageState {
     });
   }
   async writeText(text: string) {
-    await mkdir(requireUserWritable(this.dir), { recursive: true });
-    await writeFile(join(this.dir, "snapshot.md"), text, "utf8");
+    const dir = this.writable();
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "snapshot.md"), text, "utf8");
   }
   follow(listen: Listener) {
     this.listeners.add(listen);
@@ -768,14 +778,16 @@ export function createPagesHandler(
         });
     }
     const current = await bindingOf(dir);
-    await mkdir(requireUserWritable(join(dir, ".state")), { recursive: true });
+    // A shared Page binds in its user copy: every write goes to the user root (ADR 0035 rule 11).
+    const home = userWritable(dir);
+    await mkdir(join(home, ".state"), { recursive: true });
     const next: PageBinding = {
       slots: { ...current.slots, default: slot },
       boundBy: { ...current.boundBy, default: caller.kind === "human" ? "human" : "agent" },
     };
-    await writeFile(bindingFile(dir), JSON.stringify(next, null, 2), "utf8");
+    await writeFile(bindingFile(home), JSON.stringify(next, null, 2), "utf8");
     stateOf(dir).signal("binding", {});
-    return json(await target(page, dir));
+    return json(await target(page, home));
   }
 
   return async function handle(request: Request): Promise<Response> {

@@ -100,7 +100,7 @@ import {
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { LocalOpError } from "./local-error.ts";
 import { productPodsRootPath } from "./product-paths.ts";
-import { requireUserWritable } from "./content-homes.ts";
+import { userWritable } from "./content-homes.ts";
 import { familiesApplyRun, isFamiliesApplyResponse } from "./family-run-recovery.ts";
 import { familySpecExecutor } from "./family-spec.ts";
 import type { FamiliesReader } from "./families-reader.ts";
@@ -108,10 +108,10 @@ import { nativeInputSchema } from "./native-input.ts";
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 // PodRuns.StartComposedRun writes to this source Pod's output, or operations for a supplied draft.
-// A run of a shared Pod refuses here: its output would land in the shared root (ADR 0035 rule 11).
+// A shared Pod's run output lands in its user copy, made on this first write (ADR 0035 rule 11).
 export const sourceRunOutput = async (pod: string | null | undefined, deps: PodDependencies) =>
   pod
-    ? requireUserWritable(join(
+    ? userWritable(join(
         await runPods(deps, podFolder(pod, { podsRoot: deps.podsRoot })),
         productPathNames.outputDirectoryName,
       ))
