@@ -1192,7 +1192,7 @@ test.each([false, true])(
     expect(bytes(f.fans.workBasis())).toBeLessThan(2048);
     expect(plan).toBeTypeOf("function");
     const input = f.inputs.get("fans:sheet.plan") as { work: unknown; readWorks: unknown };
-    expect(input.readWorks).toHaveProperty("fans");
+    expect(input.readWorks).toHaveProperty("ducts");
     // H1: a plan the host refuses after invoke returned shows its reason, arms nothing, and retries clean.
     const refusedText = "Fans Work belongs to another document";
     await act(async () => plan({ id: "plan-refused", state: "refused", error: refusedText }));

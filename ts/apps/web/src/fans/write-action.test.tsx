@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// ADR 0030 rule 6 on the real Fans route: the shared write button plans sheet.plan with the
-// ducts owner's Work as `work` and Fans' own Work as `readWorks.fans` (V2: ducts owns the command).
+// ADR 0030 rule 6 on the real Fans route: the shared write button plans sheet.plan with Fans' own
+// Work as `work` and the ducts owner's Work as `readWorks.ducts` (slice 7: the sheet pair is every route's door).
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { canonicalRouteInput } from "../../../../packages/agent-contracts/src/route-doc";
 import type { WorkHandle } from "@pe/agent-contracts";
@@ -14,7 +14,7 @@ afterEach(() =>
     .forEach((close) => close()),
 );
 
-test("Fans plans losses through the ducts owner handle and its own handle as readWorks.fans", async () => {
+test("Fans plans losses through its own handle and the ducts owner handle as readWorks.ducts", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.fans.readingStatus("owner:ducts").snapshot.current).toBe(true));
   await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
@@ -30,8 +30,8 @@ test("Fans plans losses through the ducts owner handle and its own handle as rea
     handle: { key: { route: string }; revision: number };
   };
   expect(f.inputs.get("fans:sheet.plan")).toMatchObject({
-    work: { key: { route: "ducts" }, revision: owner.handle.revision },
-    readWorks: { fans: { key: { route: "fans" }, revision: f.fans.work()!.revision } },
+    work: { key: { route: "fans" }, revision: f.fans.work()!.revision },
+    readWorks: { ducts: { key: { route: "ducts" }, revision: owner.handle.revision } },
   });
 });
 
@@ -55,7 +55,7 @@ test("after a reopen the human plan sends both owner feeds' handles, which the h
   );
   expect(f.fans.invoke("losses", {})).toEqual({ kind: "preview" });
   await vi.waitFor(() => expect(f.inputs.get("fans:sheet.plan")).toBeTruthy());
-  const sent = f.inputs.get("fans:sheet.plan") as { work: WorkHandle; readWorks: { fans: WorkHandle } };
-  expect(sent.readWorks.fans).toEqual(f.fans.work()!.handle);
-  expect(canonicalRouteInput(sent.readWorks.fans.key)).toBe(canonicalRouteInput({ ...sent.work.key, route: "fans" }));
+  const sent = f.inputs.get("fans:sheet.plan") as { work: WorkHandle; readWorks: { ducts: WorkHandle } };
+  expect(sent.work).toEqual(f.fans.work()!.handle);
+  expect(canonicalRouteInput(sent.readWorks.ducts.key)).toBe(canonicalRouteInput({ ...sent.work.key, route: "ducts" }));
 });
