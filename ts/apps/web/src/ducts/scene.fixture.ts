@@ -533,6 +533,7 @@ const snapshot: DuctSnapshot = {
       : [
           {
             id: row.id,
+            uniqueId: `scene:${row.id}`,
             kind: row.k,
             category: row.k,
             type: NAMES[row.id] ?? null,
@@ -546,6 +547,7 @@ const snapshot: DuctSnapshot = {
   ),
   segments: ROWS.flatMap((row, i) => (row.line ? [{ row, i }] : [])).map(({ row, i }) => ({
     id: row.id,
+    uniqueId: `scene:${row.id}`,
     kind: "duct",
     curveKind: "line",
     shape: "round",

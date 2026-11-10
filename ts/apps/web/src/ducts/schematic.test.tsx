@@ -55,7 +55,10 @@ test("hovering a schematic edge settles instead of looping through member declar
     sceneOf(index, scope.groups, () => true),
   );
   const { container } = render(
-    <TestAttention registry={makeAtomRegistry()}>
+    <TestAttention
+      registry={makeAtomRegistry()}
+      ids={[...snapshot.nodes, ...snapshot.segments].map((e) => e.id)}
+    >
       <Schematic
         readout={null}
         index={index}

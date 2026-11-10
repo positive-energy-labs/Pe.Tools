@@ -188,7 +188,7 @@ test("the kit row channel lights the globe through the one scene adapter without
   const view = render(
     <TestAttention registry={registry} ids={[42]}>
       <SubjectTextContext value={{ doc: "test", nameOf: () => "duct", uniqueIdOf: uid }}>
-        <Row label="duct" revit={[42]} />
+        <Row label="duct" revit={[42]} uniqueIds={[uid(42)]} />
         <Picture />
       </SubjectTextContext>
     </TestAttention>,
