@@ -33,6 +33,20 @@ export function rowRevit(row: unknown, key?: string): readonly number[] | undefi
   return Number.isSafeInteger(id) && id > 0 ? [id] : undefined;
 }
 
+/** UniqueIds a row names, the only identity the attention bus keys on; ElementIds stay `rowRevit`'s select payload. */
+export function rowUniqueIds(row: unknown): readonly string[] | undefined {
+  if (!row || typeof row !== "object") return undefined;
+  const fields = row as Record<string, unknown>;
+  const text = (v: unknown): v is string => typeof v === "string" && v !== "";
+  if (Array.isArray(fields.uniqueIds) && fields.uniqueIds.every(text)) return fields.uniqueIds;
+  if (text(fields.uniqueId)) return [fields.uniqueId];
+  const subjects = Object.values(fields).filter(
+    (value): value is RevitElementReference =>
+      !!value && typeof value === "object" && "elementId" in value,
+  );
+  return subjects.length === 1 ? rowUniqueIds(subjects[0]) : undefined;
+}
+
 /** The attribute the app's element menu reads: put it on any element that stands for Revit elements. */
 export const revitTarget = (
   ids: readonly number[] | null | undefined,

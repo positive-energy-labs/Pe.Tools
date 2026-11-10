@@ -1,5 +1,5 @@
 import { reachProps } from "./reach";
-import { rowRevit } from "./revit-target";
+import { rowRevit, rowUniqueIds } from "./revit-target";
 import { rowDamage } from "../master-table/model";
 import type { Tone } from "../../lib/token";
 import {
@@ -200,6 +200,7 @@ export function List<T>(props: ListProps<T>) {
         {...collection.rowProps(row.key)}
         {...slots}
         revit={slots.revit ?? rowRevit(row.item, row.key)}
+        uniqueIds={slots.uniqueIds ?? rowUniqueIds(row.item)}
         damage={slots.damage ?? rowDamage(row.item)}
       />
     );

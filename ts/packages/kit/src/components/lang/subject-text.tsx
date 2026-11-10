@@ -118,15 +118,15 @@ export function SubjectText({
     const plain = doc.parts.map((p) => (typeof p === "string" ? p : p.name)).join("");
     return revit?.length ? <span {...target}>{plain}</span> : <>{plain}</>;
   }
+  const uniqueIdOf = (id: number | null) => (id == null ? null : context!.uniqueIdOf(id));
   const light = (id: number | null) =>
     cite(registry, {
       owner,
-      refs: doc.references.map(({ id, ...ref }) => ({
-        ...ref,
-        doc: context.doc,
-        key: elementKey(id),
-      })),
-      focus: id == null ? null : { doc: context.doc, key: elementKey(id) },
+      refs: doc.references.flatMap(({ id, ...ref }) => {
+        const uniqueId = context.uniqueIdOf(id);
+        return uniqueId == null ? [] : [{ ...ref, doc: context.doc, key: elementKey(uniqueId) }];
+      }),
+      focus: uniqueIdOf(id) == null ? null : { doc: context.doc, key: elementKey(uniqueIdOf(id)!) },
     });
   const dismiss = () => {
     if (!hasContact(block.current)) leaveCitation(registry, owner);
@@ -174,6 +174,7 @@ function SubjectRef({
   onLeave: () => void;
 }) {
   const target = useRevitTarget([part.id]);
+  const uniqueId = scope.uniqueIdOf(part.id);
   const reference = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
   const port = part.connector != null ? ` port ${part.connector}` : "";
@@ -196,7 +197,7 @@ function SubjectRef({
             ref={reference}
             type="button"
             {...contact}
-            {...mention({ doc: scope.doc, key: elementKey(part.id) })}
+            {...(uniqueId == null ? {} : mention({ doc: scope.doc, key: elementKey(uniqueId) }))}
             className="subject-ref"
             data-claim-element={part.id}
             {...target}

@@ -38,6 +38,8 @@ export const chipRecipe = tv({
 
 interface FactChipProps {
   revit?: readonly number[];
+  /** The element's UniqueId: its attention key (`revit` is only the select payload). */
+  uniqueIds?: readonly string[];
   children: React.ReactNode;
   /** Omitted is a neutral machine-measured fact — most chips are this. */
   tone?: Tone;
@@ -48,7 +50,7 @@ interface FactChipProps {
 }
 
 /** A state fact, machine-measured, so mono. Not a control — it has no press. */
-export function FactChip({ children, tone, dashed, title, revit }: FactChipProps) {
+export function FactChip({ children, tone, dashed, title, revit, uniqueIds }: FactChipProps) {
   const target = useRevitTarget(revit);
   const mark = useMention();
   const { base, label } = chipRecipe({ state: dashed ? "seam" : "solid" });
@@ -56,7 +58,7 @@ export function FactChip({ children, tone, dashed, title, revit }: FactChipProps
     <TooltipHint content={title}>
       <span
         {...reachProps()}
-        {...mark(revit?.[0] == null ? null : elementKey(revit[0]))}
+        {...mark(uniqueIds?.[0] == null ? null : elementKey(uniqueIds[0]))}
         {...target}
         className={base()}
         data-tone={tone}
