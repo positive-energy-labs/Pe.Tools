@@ -4,6 +4,12 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-10, kaitpw, kernel crusade ([ADR 0035](../../adr/0035-route-slots-subjectref-one-notice-feed.md), [MAP](MAP.md)): five slots on the route declaration, one SubjectRef, three binding kinds, types inferred and registries generated. "your set is beautifully minimal." Restated: only the kernel grows a closed set.
+- 2026-11-10, kaitpw: two chrome layers, the topbar then pane heads. "im actually gonna ban 3 layers. pea's thread name should move into the pane header." Restated: the History row, the route title row and per-pane Refresh die; the chat pane head shows the thread name through `title(ctx)`.
+- 2026-11-10, kaitpw: the legacy mount kernel is deleted now and the eight routes on it go dark until each returns on slots. "i wanna do that immediatedly." duct-loss dies as a route; design-system leaves the kernel. "duct loss is just a calculator and design system is a swatch with no connections."
+- 2026-11-10, kaitpw: one host notice feed; consent drawn on the asking button and the topbar sweep only; the tray's job is the notice feed, consent and compact chat; the ducts inbox is the goal slot's unresolved list. "8-14 yes."
+- 2026-11-10, kaitpw: the product storage root moves to a shared drive mount as its own landing, before cloud. Pea's model copies stay on machine state.
+
 - 2026-11-06, wave 3 S: Fans and Ducts execute their typed specifications directly in `shell/typed-mount.ts`; `RouteGraphJson` is a discovery/catalog projection. Neutral host `readWorks` names admitted foreign owners directly; typed modules generate no Work reading slots. `PlaceBoundary`, History loading/rail, recorded Work and Page pose recording are shell-owned. Retention captures codec text before Page/target resolution (N-03); decoded JSON capture dropped document, selection and pose on hide. F-02 retains D's sole late-ack invalidation fix (`27cd5a26`); S's competing feed change was removed. Families' preview receipts remain undoable (`304c8b19`); disposed history getters expose an empty projection. Browser/native acceptance remains Driver work.
 
 - 2026-11-06, wave 3 S: `shell/typed-mount.ts` and `shell/typed-shell.tsx` are kernel composition roots. They own the fixture/live boundary for typed modules; route bodies still cannot select fixture transport. This extends the existing composition-root guard, not its offender baseline.
@@ -129,6 +135,9 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - 2026-11-04, archive applied; amended by kaitpw on 2026-11-05: the web folders, registrations and Pea projections of `space`, `parameter-links`, `data-tables`, `grilles`, `rhvac-sync`, `zone-audit` and `pod-admin`, and the `schedule-specs` projection, are deleted. Recover them from `b55b6677` (or tag `archive/routes-20261103`). Not deleted, because live code imports them: `takeoff/` (`rooms/plan.tsx`), `sessions/` (key `session-admin`), and the `instances` registration that /open shares. Address contracts (`spaceAddress`, `parameterLinksRouteState`, `dataTablesWorkSchema`) and C# operations stay. The archived data-table and parameter-links hand commands and orphan Work tools are removed; their route-free catalog write doors are owed to MAP step 4 (governor K1 default).
 - 2026-11-03, kaitpw: Effect slice C finishes in its box; Effect D, phase 8, memory readout/free-memory and SDK document-reopen stay parked on their branches (`t3/u2-effect`).
 - 2026-11-03 runtime ownership derives from the Revit SDK (PePayloadContext / installer manifest); no process infers its lane from where its bytes sit. Supersedes ISOFIX-2/3. (kaitpw; ISOFIX-R, `t3/u2-isofix-r`: `ProductRuntimeLayout.Configure` once per shell, tray told by `--lane --root`, one state-root table `runtime-ownership.fixture.json` for C#, TS and PowerShell.)
+- 2026-11-09, the Timeline belongs to Work and a Place shows every Work it displays; Places live on the host per device. See [ADR 0034](../../adr/0034-timeline-per-work-places-on-host.md).
+- 2026-11-09, undo appends a restore entry and never rewinds the joined Timeline; looking back is a read-only `at` cursor (kaitpw: "yes").
+- 2026-11-09, Timeline entries carry no thread id; an entry records only `by` (you or Pea) (kaitpw: "i think no").
 
 ## Tried & rejected
 
@@ -153,6 +162,16 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Owed
 
+- Kernel crusade slices 1 to 10 are in [MAP.md](MAP.md); each lands with its red falsifier. Rebuild this ledger as current truth at slice 1, because it is longer than two screens and its wave 2 lines predate ADR 0035.
+- The Mod+K pane navigator listing was not found in source (`shell/mount-chrome.tsx:37` calls `adapters.navigate(pane, false)`); name its registry or delete the binding.
+- A person-resolver closer in a route's Goal bridging into the notice feed; wait until two routes return Goals.
+- Whether `route-document-store.ts` keeps a per-Work undo journal (ADR 0030 rule 9); findings (slice 9) needs it.
+- Whether the fans scene capture carries a UniqueId per port; the 3D finding mark (slice 9) needs it.
+
+- 2026-11-09 drive of /ducts and /fans (`.artifacts/tmp/timeline-spike/`): undo pressed on /fans undid the Ducts step but the Fans head read "you undid · r1"; the /fans Timeline popover listed Ducts entries and not Fans r1; redo right after undo refused "The selected history entry is no longer last"; undo refuses while the route re-reads after each edit; a second /fans tab lost its document ("Document unavailable; choose an exact document again.").
+- Join History points into the Work Timeline and delete the `HistoryRail` row; link points to steps and receipts through `reason.receipt`, receipt `snapshots` and ack `receiptId` (fields exist, no data uses them). See [ADR 0034](../../adr/0034-timeline-per-work-places-on-host.md).
+- Move Places from sessionStorage (`workbench/tabs.ts` `pe.places`) to a host store per device; live cross-window sync may follow.
+- Fix the web/host key drift that sends `PUT /pe/route-view/chat` to a 404 (`route/view-bridge.ts:214`; host leases `pea`).
 - Measure History replay and index the O(refs * range) taking scan at `history.ts:271`; the 16,629,415-byte Fans replay took 363 s; remove the labelled 600 s allowance after proof. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:40`.
 - Measure full-web-suite setup and transform cost before tuning; the recorded run took 1389 s, with setup 1116 s and transform 574 s. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:105`.
 - Diagnose guard and live-read timeouts under `maxWorkers=2`. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:107`.
