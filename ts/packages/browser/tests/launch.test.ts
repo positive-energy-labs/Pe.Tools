@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, test } from "vite-plus/test";
-import { connectBrowser } from "../src/browser.ts";
+import { connectBrowser, openBrowser, type BrowserPage } from "../src/browser.ts";
 import { launchGuarded } from "../src/platform.ts";
 
 const roots: string[] = [];
@@ -53,3 +53,37 @@ test.skipIf(process.platform !== "win32")(
     }
   },
 );
+
+const canvas =
+  "data:text/html,<canvas width=300 height=200></canvas><script>const g=document.querySelector('canvas').getContext('webgl');(function f(){g.clear(g.COLOR_BUFFER_BIT);requestAnimationFrame(f)})()</script>";
+const framesIn2s = (page: BrowserPage) =>
+  page.evaluate(async () => {
+    let frames = 0;
+    let on = true;
+    const tick = () => {
+      frames++;
+      if (on) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    await new Promise((done) => setTimeout(done, 2000));
+    on = false;
+    return frames;
+  });
+
+test("a visible window that leaves the screen keeps drawing", async () => {
+  const session = await openBrowser({ mode: "visible" });
+  try {
+    const page = await session.page({ url: canvas });
+    const { windowId } = (await session.sendRaw("Browser.getWindowForTarget", {
+      targetId: page.targetId,
+    })) as { windowId: number };
+    await session.sendRaw("Browser.setWindowBounds", {
+      windowId,
+      bounds: { left: -5000, top: -5000 },
+    });
+    await new Promise((done) => setTimeout(done, 1000));
+    expect(await framesIn2s(page)).toBeGreaterThan(60);
+  } finally {
+    await session.close();
+  }
+});

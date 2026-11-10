@@ -244,6 +244,8 @@ export async function runBrowserKeeper(configFile: string): Promise<void> {
               "--no-default-browser-check",
               "--disable-background-timer-throttling",
               "--disable-renderer-backgrounding",
+              // Without it a covered or off-screen visible window stops drawing (0 frames in 2 s).
+              "--disable-backgrounding-occluded-windows",
               "--window-size=1000,760",
               ...(info.mode === "headless" ? ["--headless=new"] : []),
               ...args,

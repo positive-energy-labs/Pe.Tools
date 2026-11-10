@@ -54,7 +54,7 @@ export async function runBrowserCli(
       output({
         commands: [
           "guide (plain Markdown; other commands emit JSON)",
-          "launch|open [--visible] [--unthrottled] [--profile DIR] [--executable PATH]",
+          "launch|open [--visible] [--profile DIR] [--executable PATH]",
           "attach --endpoint URL|PORT | --auto-connect --profile CHROME_USER_DATA_ROOT",
           "list|status [SESSION]",
           "targets SESSION",
@@ -76,7 +76,8 @@ export async function runBrowserCli(
       if (visible && headless) throw new Error("Choose --visible or --headless");
       const profile = option("--profile");
       const executablePath = option("--executable");
-      const unthrottled = flag("--unthrottled");
+      if (flag("--unthrottled"))
+        throw new Error("--unthrottled is gone: every launch keeps rendering when covered");
       const extra = args[0] === "--" ? args.slice(1) : args;
       const session = await openBrowser({
         home,
@@ -85,14 +86,7 @@ export async function runBrowserCli(
         executablePath,
         timeoutMs,
         lifetime: "session",
-        args: unthrottled
-          ? [
-              "--disable-background-timer-throttling",
-              "--disable-renderer-backgrounding",
-              "--disable-backgrounding-occluded-windows",
-              ...extra,
-            ]
-          : extra,
+        args: extra,
       });
       output(session.info);
       await session.disconnect();
