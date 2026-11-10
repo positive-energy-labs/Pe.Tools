@@ -6,7 +6,7 @@ import { z } from "zod";
 import {
   contentHash,
   openSource,
-} from "./readings";
+} from "./source-open";
 import {
   type DeriveSource,
   type ReadingContext,

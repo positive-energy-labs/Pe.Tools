@@ -36,7 +36,7 @@ test("D8: a head mounted long before a window opens counts the host's 60 s, and 
 });
 
 test("History records a write receipt and caller once rather than echoing its invocation", async () => {
-  const { GraphHistory } = await import("./mount-timeline");
+  const { GraphHistory } = await import("./graph-history");
   const timeline = createRouteTimeline();
   const outcome = { id: "write-1", receiptId: "write-1", state: "cancelled" as const, input: {},
     consentWindow: { requestId: "ask-1", deadline: new Date(Date.now() + 60_000).toISOString() } };
@@ -54,7 +54,7 @@ test("History records a write receipt and caller once rather than echoing its in
 });
 
 test("opening Timeline leaves undo and redo only in the top bar", async () => {
-  const { GraphHistory } = await import("./mount-timeline");
+  const { GraphHistory } = await import("./graph-history");
   const owner = {
     timeline: () => [], journal: () => ({ revision: 0, undo: [], redo: [], moves: [] }),
     subscribe: () => () => {}, revision: () => 0, journalRefusal: () => null,
