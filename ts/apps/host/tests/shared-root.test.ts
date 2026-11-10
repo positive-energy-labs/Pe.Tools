@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { Effect } from "effect";
+import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -31,8 +31,8 @@ const under = (root: string, path: string) => {
   const away = relative(root, path);
   return !isAbsolute(away) && away !== ".." && !away.startsWith("../") && !away.startsWith("..\\");
 };
-const run = <A, E>(effect: Effect.Effect<A, E, never>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)) as Effect.Effect<A, E, never>);
+const run = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
+  Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 const pod = (home: string, folder: string, id: string, name: string) => {
   mkdirSync(join(home, "Pods", folder, "settings"), { recursive: true });
   writeFileSync(
