@@ -259,6 +259,7 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
  const React=await import("react");
  const {InputsBody}=await import("../ducts/sheet/mount");
  const registry=makeAtomRegistry();
+ // Controller readiness can precede React's commit; use the product subscription and React-aware waits.
  function Journey(){React.useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);return <TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(mount)}><KeyScopeHost id="scope-revert"><TypedWrite mount={mount} id="losses"/>{mount.draw("sheet-inputs",ctx=><InputsBody ctx={ctx as any}/>) as React.ReactNode}</KeyScopeHost></SubjectDoor></TestAttention>;}
  const router=createRouter({routeTree:createRootRoute({component:Journey}),history:createMemoryHistory({initialEntries:["/fans"]})});
  const phase=(at:string)=>{if(process.env.PE_FANS_SCOPE_EVIDENCE)writeFileSync(process.env.PE_FANS_SCOPE_EVIDENCE,JSON.stringify({at,revision:mount.owner()?.handle?.revision,problem:mount.reviewProblem("losses"),results:(trace as any).results,requests},null,2));};
