@@ -40,6 +40,8 @@ Two Opus threads build one frozen product spec, hydronic pipe sizing (`.artifact
 
 Pod scope added to the slices: slice 7's falsifier also requires a Pod to plan and apply a parameter write to a Revit document through the sheet slot; slice 8's falsifier also requires a Pod to fill the picture slot with scope and marks from the closed set. Both falsifiers are the Pod author's red tests.
 
+Pod doors, implementor default 2026-11-10 (re-openable), from the Pod author's first gaps (`authors/pod/gaps.json`): no slice owned them, and they block most of the hydronic spec, so they are written now in parallel and land with slice 7. Rung 1: catalog Reads for a document's piping systems with their pipes (flow, diameter, length, upstream, UniqueId) and for a pipe segment's sizes. Kernel: a Pod's typed catalog read door through `@pe/host/read-graph` (today `nativeRead` is private to `host/src/reads/inputs.ts`), and the firm file as a value layer a Pod read can resolve. The goal slot has no slice; it joins slice 7, because the sheet and the Goal draw from the same route core (ADR 0030 rule 3).
+
 File moves and renames are greenlit for every writer when they cut a measure (fewer directories touched per route, a route's code in one place, a name that says what survives). kaitpw: "pls explicitly greenlight and encourage file moves/renames too if it helps measures." Use `git mv` so history follows.
 
 ## Deletion criteria
@@ -72,3 +74,4 @@ File moves and renames are greenlit for every writer when they cut a measure (fe
 - 2026-11-10, implementor exception upheld by the root thread: no route is on the legacy kernel, so nothing goes dark at slice 1; slice 10 moves the eight non-exemplar routes onto slots. Plan docs on `crusade/kernel` at 0e0e6e69.
 - 2026-11-10, kaitpw: two author witnesses on one frozen hydronic spec, Pod and builtin; Pod Revit apply joins slice 7 and Pod picture joins slice 8; the hydronic Pod ships as the first example Pod; file moves and renames greenlit.
 - 2026-11-10, implementor: slice 4's falsifier restated per owner lifetime. A shared flight must not die when one requester aborts, and a journaled command outlives its request by design; `NativeReads` already is the refcounted shared flight, so the snapshot and Ducts owners delete their own sharing code.
+- 2026-11-10, implementor: Pod doors (piping reads, pipe sizes, the Pod catalog read door, the firm layer) are written in parallel and land with slice 7; the goal slot joins slice 7. Re-openable.
