@@ -93,6 +93,7 @@ const session = (sessionId) => ({
 });
 let cancelled = () => {};
 let toolEnv = {};
+let sessionMeta;
 const bindToolEnv = (mcpServers) => {
   toolEnv = Object.fromEntries(
     (mcpServers.find((server) => server.name === "pea")?.env ?? []).map(({ name, value }) => [
@@ -124,7 +125,8 @@ new AgentSideConnection(
       };
     },
     authenticate: () => {},
-    async newSession({ mcpServers }) {
+    async newSession({ mcpServers, _meta }) {
+      sessionMeta = _meta;
       bindToolEnv(mcpServers);
       const auth = process.env.FAKE_ACP_AUTH ?? "account";
       if (auth === "required") throw RequestError.authRequired();
@@ -137,8 +139,9 @@ new AgentSideConnection(
       else await report();
       return session("fake-session");
     },
-    resumeSession({ sessionId, mcpServers }) {
+    resumeSession({ sessionId, mcpServers, _meta }) {
       if (sessionId === "lost") throw RequestError.invalidParams({ sessionId });
+      sessionMeta = _meta;
       bindToolEnv(mcpServers);
       const { sessionId: _, ...rest } = session(sessionId);
       return rest;
@@ -378,6 +381,26 @@ new AgentSideConnection(
             : `question ${answer.action}`,
         );
         return { stopReason: "end_turn" };
+      }
+      // The session `_meta` the host sent, and an init frame as the real adapter forwards it
+      // (`_claude/sdkMessage`): `init-clean` declares only Pea, `init-leak` adds connectors.
+      if (text === "meta") {
+        await say(`META=${JSON.stringify(sessionMeta ?? null)}`);
+        return { stopReason: "end_turn" };
+      }
+      if (text === "init-clean" || text === "init-leak") {
+        const leak = text === "init-leak";
+        await conn.extNotification("_claude/sdkMessage", {
+          sessionId,
+          message: {
+            type: "system",
+            subtype: "init",
+            tools: ["Bash", "Read", "mcp__pea__pe_find", ...(leak ? ["CronCreate", "mcp__claude_ai_Gmail__send_message"] : [])],
+            mcp_servers: [{ name: "pea", status: "connected" }, ...(leak ? [{ name: "claude.ai Gmail", status: "connected" }] : [])],
+          },
+        });
+        await say("init sent");
+        return new Promise((resolve) => (cancelled = () => resolve({ stopReason: "cancelled" })));
       }
       if (text === "env") {
         for (const name of [
