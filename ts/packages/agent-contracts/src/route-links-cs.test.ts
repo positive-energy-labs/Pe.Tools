@@ -15,9 +15,10 @@ describe("the C# route table", () => {
     expect(text).toContain('public const string Pod = "pod";');
     for (const key of ["ThreadSearch", "ThreadSort"])
       expect(text.match(new RegExp(`public const string ${key} =`, "g"))).toHaveLength(
-        routeDirectory.length,
+        new Set(routeDirectory.map(({ directory }) => directory.path)).size,
       );
     // `prompt` is Pea's composer draft (share: false): never in a link, so never in a table of link keys.
     expect(text).not.toContain('"prompt"');
+    expect(text.match(/internal static class Home \{/g)).toHaveLength(1);
   });
 });

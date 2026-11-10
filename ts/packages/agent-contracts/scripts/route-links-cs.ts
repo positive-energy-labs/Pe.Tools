@@ -29,7 +29,13 @@ const pascal = (text: string) =>
 
 /** The generated C#, deterministic: routes and keys in declaration order, LF endings. */
 export function renderRoutesCs(): string {
-  const routes = routeDirectory.map(({ key, directory }) => {
+  // A legacy directory alias can share a typed route's path; C# has one class per path.
+  const paths = new Set<string>();
+  const routes = routeDirectory.filter(({ directory }) => {
+    if (paths.has(directory.path)) return false;
+    paths.add(directory.path);
+    return true;
+  }).map(({ key, directory }) => {
     const route = directory.path.slice(1) || "home";
     const address = routeAddresses[route as keyof typeof routeAddresses];
     const spec = { ...directory, fields: address?.fields ?? {} };
