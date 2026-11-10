@@ -51,12 +51,13 @@ export function sheetWrites(sheet: SheetSlotData, doc: unknown): readonly SheetW
   return Object.entries(sheet.bindings).flatMap(([binding, declared]) => {
     if (declared.kind !== "parameter") return [];
     const staged = (work[binding] ?? {}) as Readonly<Record<string, unknown>>;
-    return Object.entries(staged).flatMap(([subject, value]) =>
-      value === undefined || value === null
+    return Object.entries(staged).flatMap(([subject, held]) => {
+      const value = sheet.draft ? (held as { edit?: { value?: unknown } | null } | undefined)?.edit?.value : held;
+      return value === undefined || value === null
         ? []
         : [{ binding, subject: subject as SubjectRefCode, uniqueId: uniqueIdOf(subject), parameter: declared.parameter,
-            value, ...(declared.unit ? { unit: declared.unit } : {}) }],
-    );
+            value, ...(declared.unit ? { unit: declared.unit } : {}) }];
+    });
   });
 }
 

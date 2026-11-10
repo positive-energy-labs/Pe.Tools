@@ -26,8 +26,12 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
     const schema = slot.bindings[cell.binding]!.schema;
     const parsed = schema.safeParse(text === "" ? undefined : Number.isNaN(Number(text)) ? text : Number(text));
     if (!parsed.success) return;
-    const path = cell.subject ? [cell.binding, cell.subject] : [cell.binding];
-    void ctx.cells.patch([{ path, value: parsed.data }], { label: `${cell.binding} = ${text}` });
+    const path = cell.subject ? [cell.binding, cell.subject] as const : [cell.binding] as const;
+    const history = { label: `${cell.binding} = ${text}` };
+    // A draft slot stages through the cell's one write path (by, at and base stamped by the host); a raw one patches.
+    void (slot.draft
+      ? parsed.data === undefined ? ctx.cells.at(path).clear(history) : ctx.cells.at(path).stage(parsed.data, history)
+      : ctx.cells.patch([{ path: [...path], value: parsed.data }], history));
   };
   if (!cells.length) return <p>Nothing staged yet.</p>;
   return (

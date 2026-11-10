@@ -33,6 +33,8 @@ export const local = <V extends z.ZodType>(schema: V, per: BindingPer = "route")
 /** The declaration: bindings by cell name. Rows are the route subject; the kernel supplies them. */
 export interface SheetSlot<B extends Readonly<Record<string, SheetBinding>> = Readonly<Record<string, SheetBinding>>> {
   readonly bindings: B;
+  /** Work holds an ADR 0030 draft cell (`{ edit: { value, by, at } }`) at every address; absent, a raw value. */
+  readonly draft?: true;
 }
 
 /** The cell's address: a binding name, and the row for a per-subject binding. */
@@ -71,6 +73,7 @@ export const SHEET_COMMANDS = { plan: "sheet.plan", apply: "sheet.apply" } as co
 
 /** The data projection a Pod decodes at the boundary (ADR 0035 rule 4). */
 export const sheetSlotDataSchema = z.strictObject({
+  draft: z.literal(true).optional(),
   bindings: z.record(
     z.string(),
     z.discriminatedUnion("kind", [
@@ -83,6 +86,7 @@ export const sheetSlotDataSchema = z.strictObject({
 export type SheetSlotData = z.output<typeof sheetSlotDataSchema>;
 /** The declaration's data projection: every binding without its schema. */
 export const sheetSlotData = (slot: SheetSlot): SheetSlotData => ({
+  ...(slot.draft ? { draft: true as const } : {}),
   bindings: Object.fromEntries(Object.entries(slot.bindings).map(([name, { schema: _schema, ...binding }]) => [name, binding])),
 });
 /** A binding the plan derives a Revit write from (`local` feeds only the Goal). */

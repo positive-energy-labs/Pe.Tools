@@ -18,6 +18,12 @@ test("sheetWrites derives one parameter write per staged row, by UniqueId, and n
     ["pipe-1", "Diameter", 25, "Millimeters"],
     ["pipe-2", "Diameter", 32, "Millimeters"],
   ]);
+  // A draft slot's cell is `{ edit: { value } }`; `{}` is a draft nobody staged.
+  const draft = sheetWrites(
+    { draft: true, bindings: { chosen: { kind: "parameter", parameter: "Diameter", per: "subject" } } },
+    { chosen: { [code]: { edit: { value: 40, by: "pea" } }, "pipe-2": {} } },
+  );
+  expect(draft.map((w) => [w.uniqueId, w.value])).toEqual([["pipe-1", 40]]);
 });
 
 test("ctx.work with a document ref reads that document's Work for the owner", async () => {
