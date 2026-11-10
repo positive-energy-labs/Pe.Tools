@@ -10,7 +10,15 @@ export function trustedBaseline(cwd = tsRoot): { baseline: Islands; ref: string 
     execFileSync("git", args, { cwd, input, stdio: ["pipe", "pipe", "ignore"] });
   // Trust every committed version reachable from HEAD, oldest first, each capped by the ones before
   // it. merge-base HEAD main is HEAD on main, so it let a committed raise become its own cap.
-  const versions = git(["log", "--reverse", "--topo-order", "--format=%H", "HEAD", "--", `:(top)${baselinePath}`])
+  const versions = git([
+    "log",
+    "--reverse",
+    "--topo-order",
+    "--format=%H",
+    "HEAD",
+    "--",
+    `:(top)${baselinePath}`,
+  ])
     .toString("utf8")
     .split("\n")
     .map((line) => line.trim())
@@ -31,7 +39,9 @@ export function trustedBaseline(cwd = tsRoot): { baseline: Islands; ref: string 
     objects.push({ sha, body: raw.subarray(eol + 1, eol + 1 + size) });
     at = eol + 1 + size + 1;
   }
-  const blobs: Islands[] = objects.slice(0, -1).map(({ body }) => JSON.parse(body.toString("utf8")));
+  const blobs: Islands[] = objects
+    .slice(0, -1)
+    .map(({ body }) => JSON.parse(body.toString("utf8")));
   const ref = versions.at(-1)!;
   const headSha = objects.at(-1)!.sha;
   // Only Git-detected renames inherit a cap; copies and additions remain new files. One diff-tree reads

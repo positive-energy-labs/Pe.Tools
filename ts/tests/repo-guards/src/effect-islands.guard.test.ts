@@ -65,7 +65,10 @@ beforeAll(() => {
   git(
     ["fast-import", "--quiet"],
     commitStream([
-      { branch: "base", files: { [baselinePath]: json({ [oldFile]: 1 }), [`ts/${oldFile}`]: source } },
+      {
+        branch: "base",
+        files: { [baselinePath]: json({ [oldFile]: 1 }), [`ts/${oldFile}`]: source },
+      },
       ...Object.entries(scenarios).map(([scenario, { src, tree }]) => ({
         branch: ref(scenario),
         from: "base",
@@ -79,23 +82,26 @@ beforeAll(() => {
 });
 afterAll(() => rmSync(cwd, { recursive: true, force: true }));
 
-it.each(Object.keys(scenarios) as (keyof typeof scenarios)[])("ratchets a committed %s", (change) => {
-  checkout(change);
-  const actual = { src: scenarios[change].src, tests: {} };
-  const selected = trustedBaseline(cwd);
-  const count = actual.src[newFile]!;
-  expect(increases(actual, selected.baseline, "src")).toEqual(
-    change === "rename"
-      ? []
-      : [`${newFile}: ${count} > ${change === "rename and raise" ? 1 : 0}`],
-  );
-  if (change === "rename")
-    expect(tightenedBaseline(actual, actual, selected.baseline, () => false)).toEqual(actual);
-  else
-    expect(() => tightenedBaseline(actual, actual, selected.baseline, () => false)).toThrow(
-      "refused: islands only shrink",
+it.each(Object.keys(scenarios) as (keyof typeof scenarios)[])(
+  "ratchets a committed %s",
+  (change) => {
+    checkout(change);
+    const actual = { src: scenarios[change].src, tests: {} };
+    const selected = trustedBaseline(cwd);
+    const count = actual.src[newFile]!;
+    expect(increases(actual, selected.baseline, "src")).toEqual(
+      change === "rename"
+        ? []
+        : [`${newFile}: ${count} > ${change === "rename and raise" ? 1 : 0}`],
     );
-});
+    if (change === "rename")
+      expect(tightenedBaseline(actual, actual, selected.baseline, () => false)).toEqual(actual);
+    else
+      expect(() => tightenedBaseline(actual, actual, selected.baseline, () => false)).toThrow(
+        "refused: islands only shrink",
+      );
+  },
+);
 
 it("never trusts a committed baseline raise, even on main", () => {
   checkout("raised");
