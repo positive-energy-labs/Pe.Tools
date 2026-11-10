@@ -74,13 +74,13 @@ vp run --no-cache journey:routes -- --attached --source C:/path/to/served/Pe.Too
 Always pass `--no-cache`: a cached task verdict cannot prove a browser journey.
 It borrows one explicitly named CDP page. The owned launcher uses `@pe/browser`; no Python runtime is required.
 It starts no browser, server, host, Revit session, or inference turn. Stop only the instance and
-server you launched after the run. Keep the tab visible and serve a stable tree: editing the
+server you launched after the run. Serve a stable tree: editing the
 served checkout invalidates a run.
 
 ```powershell
 # Runtime owner: start this checkout's server separately using the repo's vp tooling.
 # Launch owns a disposable profile and returns JSON identity; keep this session id for cleanup.
-$browser = pnpm exec pe-browser launch --visible -- --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows | ConvertFrom-Json
+$browser = pnpm exec pe-browser launch | ConvertFrom-Json
 $env:CDP_PORT = ([uri]$browser.endpoint).Port.ToString()
 # CDP target metadata is not an application-state oracle. Pick the full id of your own page.
 $pages = pnpm exec pe-browser targets $browser.id | ConvertFrom-Json

@@ -58,12 +58,8 @@ export async function connect(
     return r.result.value as T;
   };
   try {
-    await send("Emulation.setDeviceMetricsOverride", {
-      width: 1400,
-      height: 900,
-      deviceScaleFactor: 1,
-      mobile: false,
-    });
+    // No viewport override: `pea browser launch --viewport` holds it, and an override set here would
+    // lift when this client detaches, relayouting the page on every connect.
     await send("Runtime.enable");
     await send("Page.enable");
     // Each dev launch serves deps from a fresh temp dir; a cached module graph points at the old one.
