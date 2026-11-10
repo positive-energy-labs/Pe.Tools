@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { Context, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 // Host-only dependency: this HTTP journey lives beside web route journeys.
 import { NodeHttpClient, NodeServices } from "../../../host/node_modules/@effect/platform-node/dist/index.js";
@@ -10,7 +10,7 @@ import { RouteWorkspace } from "@pe/runtime";
 import { address, commands, tools, roomEditKey, takeoffObservationSchema } from "@pe/agent-contracts";
 import { takeoffSeeds } from "../takeoff/seeds";
 import { fileVersion } from "../../../host/src/takeoff-actions";
-import { captureStore, testDuctFiles, testDocumentMarks, journalAt, callRouteOver } from "../../../host/tests/effect-test";
+import { captureStore, testDuctFiles, testDocumentMarks, journalAt, callRouteOver, settle } from "../../../host/tests/effect-test";
 import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
 import { bindCommandRuntime } from "../../../host/src/command-registry";
 import { fixtureNative } from "../../../host/tests/fixture-native";
@@ -168,7 +168,7 @@ test.each([
       room.r10 = null; room.elementId = 21; room.flags = [];
       room.analysis = { state: "current", hold: null, runId: null, floorZ: null, ceilingZ: null };
       snapshot.world.zones = [zone];
-      const retained = await captures.refresh(ref, async () => ({ result: null, snapshot }), async () => true);
+      const retained = await settle(captures.refresh(ref, Effect.succeed({ result: null, snapshot }), Effect.succeed(true)));
       const file = join(dir, "recorded.r10");
       await writeFile(file, "recorded RHVAC transport input", "utf8");
       authored = { path: file, captureId: retained.capture.id, fileVersion: await fileVersion(file), zones: [zone.zone.guid] };

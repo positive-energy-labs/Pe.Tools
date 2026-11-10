@@ -11,7 +11,7 @@ import { takeoffSeeds } from "#/takeoff/seeds";
 import { RouteWorkspace } from "@pe/runtime";
 import { address, takeoffEditPatches } from "@pe/agent-contracts";
 import type { TakeoffCaptures } from "../../../host/src/takeoff-captures";
-import { captureStore, journalAt } from "../../../host/tests/effect-test";
+import { captureStore, journalAt, settle } from "../../../host/tests/effect-test";
 import { takeoffExecutors, fileVersion } from "../../../host/src/takeoff-actions";
 import { sdkSessions, readRhvacFixture } from "../../../host/tests/native-receipt-fixture";
 import type { RevitBridge } from "../../../host/src/bridge";
@@ -90,11 +90,11 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
         reading: { ...seed.readings.snapshot.capture.snapshot.reading, at: owner.at },
         world: { ...seed.readings.snapshot.capture.snapshot.world, r10Path: path },
       };
-      const capture = await owner.captures.refresh(
+      const capture = await settle(owner.captures.refresh(
         owner.target,
-        async () => ({ result: null, snapshot }),
-        async () => true,
-      );
+        Effect.succeed({ result: null, snapshot }),
+        Effect.succeed(true),
+      ));
       const nativeLinks: unknown[] = [];
       const bridge = {
         list: Effect.succeed([

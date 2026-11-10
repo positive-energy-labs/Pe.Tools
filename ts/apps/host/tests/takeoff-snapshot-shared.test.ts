@@ -3,14 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
 import { expect, test } from "vite-plus/test";
-import { ActionJournal } from "../src/action-journal.ts";
 import { CANCEL_OPERATION_KEY } from "../src/bridge.ts";
-import { makeCallRoute } from "../src/call-route.ts";
 import { mintContext, retireContext } from "../src/control.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { RequestIdentity } from "../src/request-services.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
-import { captureStore, detachedBridge, sessionView, testHostInputs } from "./effect-test.ts";
+import { callRouteOver, captureStore, detachedBridge, journalAt, sessionView, testHostInputs } from "./effect-test.ts";
 import { serveRoutes } from "./real-server.ts";
 import { replay } from "./sdk-replay.ts";
 
@@ -55,7 +53,7 @@ async function harness() {
     }),
   });
   const server = await serveRoutes(
-    makeCallRoute(new ActionJournal(join(root, "journal.jsonl"), Date.now), captureStore(join(root, "captures")), {}, { captureHostOp: () => {} })
+    callRouteOver(journalAt(join(root, "journal.jsonl"), Date.now), captureStore(join(root, "captures")), {}, { captureHostOp: () => {} })
       .pipe(Layer.provide(testHostInputs)),
     bridge,
     Layer.succeed(SdkDriver, () => Effect.succeed(replay("doc-list", { result: { documents: [] }, resolved: {
