@@ -50,7 +50,8 @@ export const module = route({
     settings: {
       title: "Settings",
       purpose: "Configure this machine and every route",
-      draw: draw(() => import("./drawing.tsx"), "SettingsDrawing"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./drawing.tsx"), "SettingsDrawing"),
     },
   },
   layout: paneLayout("settings"),

@@ -217,11 +217,14 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
    */
   z.strictObject({ kind: z.literal("thread"), thread: z.string().min(1).max(200) }),
   /**
-   * The host's card items (`MachineNotice`) from the host log: each `event` frame is one item and
-   * carries its log `id`, so a follower that persists the last id replays exactly what it missed.
-   * With no cursor, or one the log does not hold, the first frame is a `gap` carrying the log's
-   * current id: nothing earlier is owed, follow from there. A `snapshot` frame says whether a tray
-   * follows (`{ tray }`); `as: "tray"` marks the one follower that is the tray itself.
+   * The one notice feed (ADR 0035 rule 7, `notice-feed.ts`): each `snapshot` frame is a
+   * `NoticeFeed`, every row grouped waits, working, interrupted, failed, unread, built at the host
+   * log id it carries. Push (the tray card, the OS notification) raises the rows whose revision
+   * moved past the follower's cursor; pull (home Activity, tray Activity, Mod+Shift+K) draws the
+   * rows as they are. `as: "tray"` marks the one follower that is the tray itself.
+   *
+   * Scaffold (slice 6): the host still serves the card items (`MachineNotice`) as `event` frames
+   * from `notices.ts`; `apps/host/src/notice-feed.ts` replaces that projection.
    */
   z.strictObject({ kind: z.literal("notices"), as: z.literal("tray").optional() }),
   z.strictObject({ kind: z.literal("takeoff-reading"), target: documentRefSchema }),

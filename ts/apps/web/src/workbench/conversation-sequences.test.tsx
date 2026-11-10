@@ -150,6 +150,18 @@ test("folding leaves images, diagrams, proposals, receipts and waiting records v
   expect(screen.container.querySelector(".dl-message-controls")).toBeNull();
 });
 
+test("a failed call speaks once in its run's row: one toned glyph, a count, its label once", () => {
+  const failed = call("restart", "pe_do");
+  Object.assign(failed.call, { status: "failed", error: "no session", caption: "restart session" });
+  const screen = show([message("a", [call("one"), failed, call("three")])]);
+  const summary = screen.container.querySelector("summary")!;
+  expect(summary.textContent).toContain("3 tools · 1 failed");
+  expect(summary.textContent!.split("restart session")).toHaveLength(2);
+  expect([...summary.querySelectorAll("[data-tone]")].map((node) => node.tagName)).toEqual([
+    "svg",
+  ]);
+});
+
 test("one streamed entry renders once at N=10 and N=200, including equal-length text changes", () => {
   const counts: number[] = [];
   const register = () => {};

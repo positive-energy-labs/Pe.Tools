@@ -648,7 +648,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         patch,
         edit: (edit,detail)=>patch(()=>edits!.patches(edits!.input.parse(edit),core.value),detail),
       };
-      return (render ?? pane.draw)({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
+      return (render ?? ((ctx: DrawContext<any,any,any,any>) => pane.draw(ctx).node))({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
         write:mounted.action } as any);
     },
     // Retaining hidden read connections was a Plan-identity workaround; content fingerprints

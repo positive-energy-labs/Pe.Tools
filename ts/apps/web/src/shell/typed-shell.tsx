@@ -16,7 +16,8 @@ import { useRouteTarget } from "../route/route-target";
 import { appAtomRegistry } from "./owner";
 import { admittedRouterAddress, PlaceBoundary } from "./typed-place-boundary";
 import type { AdmittedPlace, PlaceInput } from "./typed-place";
-import { HistoryBoundary, HistoryRail } from "./history-rail";
+import { HistoryBoundary, RecordedPoints } from "./history-rail";
+import { paneFrame } from "../route/body";
 import { historyRequest, publicationPose, type HistorySnapshot } from "./history";
 import { DocumentPicker } from "./document-picker";
 import { RouteVisibility } from "../route/activity";
@@ -100,13 +101,14 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
   }, [mount,place,history,snapshot,target.workAddress,instance,fixture,module]);
   const document = <DocumentPicker place={place} target={resolved} needs={module.spec.optionalTarget ?? needs} enabled={fixture === null && !snapshot && (!!module.spec.optionalTarget || !["browser","host"].includes(needs))} />;
   if (snapshot && !pose) return <p role="status">This route was never published at this point, or its Page is ambiguous</p>;
-  return <><HistoryRail document={snapshot?.point.history.address ?? target.workAddress} route={module.spec.key} address={place.address} snapshot={snapshot} compare={compare} />
-    <section className="flex min-h-0 flex-1 flex-col" data-tone={history ? "caution" : undefined} data-wash={history ? "" : undefined} aria-label={history ? "Recorded view, read-only" : undefined}>
-      {problem ? <>{document}<p role="alert">{problem}</p></> : mount ? <TypedChrome mount={mount} document={document} thread={params.get("thread") ?? undefined} /> : <>{document}<p role="status">{target.resolution.kind === "failed" ? target.resolution.message : target.bindingLost?.sentence ?? "Document unavailable; choose an exact document again."}</p></>}
-    </section></>;
+  // The recorded-point verbs (capture, compare, live) open from the Timeline, the topbar's history door.
+  const recorded = <RecordedPoints document={snapshot?.point.history.address ?? target.workAddress} route={module.spec.key} address={place.address} snapshot={snapshot} compare={compare} />;
+  return <section className="flex min-h-0 flex-1 flex-col" data-tone={history ? "caution" : undefined} data-wash={history ? "" : undefined} aria-label={history ? "Recorded view, read-only" : undefined}>
+      {problem ? <>{document}<p role="alert">{problem}</p></> : mount ? <TypedChrome mount={mount} document={document} recorded={recorded} thread={params.get("thread") ?? undefined} /> : <>{document}<p role="status">{target.resolution.kind === "failed" ? target.resolution.message : target.bindingLost?.sentence ?? "Document unavailable; choose an exact document again."}</p></>}
+    </section>;
 
 }
-export function TypedChrome({ mount, document, thread }: { mount: TypedMount; document: ReactNode; thread?: string }) {
+export function TypedChrome({ mount, document, recorded, thread }: { mount: TypedMount; document: ReactNode; recorded?: ReactNode; thread?: string }) {
   useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);
   const { spec }=mount;
   const readiness = mount.readiness(), problem = mount.problem();
@@ -123,15 +125,17 @@ export function TypedChrome({ mount, document, thread }: { mount: TypedMount; do
   } }} />;
   const head=<SituationBand name={spec.name} context={<>{document}<TypedSubject mount={mount} />{spec.edits && mount.work()?<span>{`r${mount.work()!.revision}`}</span>:null}</>}
     alerts={<><span role="status" aria-label="Route readiness" data-readiness={readiness.kind}>{readiness.kind !== "ready" && readiness.reason !== problem ? readiness.reason : null}</span>{mount.value().value!==undefined&&!mount.value().current?<span role="status">{retainedValueLabel(mount.value())}</span>:null}{problem ? <span role="alert">{problem}</span> : null}{mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}<CatalogWorkReviews mount={mount} /></>}
-    verbs={[...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),...Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />)]}
-    timeline={<TimelineHead owner={mount} history={<GraphHistory owner={mount} />} />} />;
+    verbs={[...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),...Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />),
+      // An explicit-demand read is a verb the person presses; nothing else re-reads from chrome.
+      ...Object.entries(spec.panes).filter(([,p])=>p.read?.demand === "explicit").map(([id,p])=><Button key={`read:${id}`} label={`Read ${p.title}`} onClick={()=>mount.refresh(p.read)}>Read</Button>)]}
+    timeline={<TimelineHead owner={mount} history={<>{recorded}<GraphHistory owner={mount} /></>} />} />;
   return <SubjectDoor.Provider value={subject}>{view}<KeyScopeHost id={`route:${spec.key}`} hidden={!visible} className="flex min-h-0 flex-1 flex-col">
     <ScopeKeys keys={actionScopeKeys((["undo","redo"] as const).map(direction=>({id:`work.${direction}`,label:direction,bindings:direction==="undo"?["Mod+Z"]:["Mod+Shift+Z","Mod+Y"],
       options:{ignoreInputs:true},invoke:()=>{if(visible) void mount.history[direction]();}})))} />
     {portal ? <PrimaryRouteControls route={spec.key} slot="situation">{head}</PrimaryRouteControls> : head}
     <GraphLayoutView layout={layout(spec.layout)} panes={Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,draws:[],verbs:[]}]))}
       active={when=>when === "subject" && !!spec.subject && (mount.page.read()[spec.subject.field]?.kind === "all" || !!mount.page.read()[spec.subject!.field]?.ids?.length)} state={{panes,onChange:next=>{setPanes(next);writeLayoutState(`route:${spec.key}`,next);}}}
-      bodies={Object.fromEntries(Object.keys(spec.panes).map(id=>[id,pane=>pane(mount.draw(id,ctx=><TypedPane mount={mount} id={id} ctx={ctx} />) as ReactNode,{actions:<>{slot(id)}<Button label={`${spec.panes[id]!.read?.demand === "explicit"?"Read":"Refresh"} ${spec.panes[id]!.title}`} onClick={()=>mount.refresh(spec.panes[id]!.read)}>{spec.panes[id]!.read?.demand === "explicit"?"Read":"Refresh"}</Button></>})]))} />
+      bodies={Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,pane=>pane(mount.draw(id,ctx=><TypedPane mount={mount} id={id} ctx={ctx} />) as ReactNode,{...paneFrame(p.body),actions:slot(id)})]))} />
   </KeyScopeHost></SubjectDoor.Provider>;
 }
 export function TypedWrite({ mount, id }: { mount: TypedMount; id: string }) {
@@ -179,7 +183,7 @@ function TypedPane({mount,id,ctx}: {mount:TypedMount;id:string;ctx:DrawContext<a
   return <ValueScope value={ctx.value}><AttentionScope doc={doc} selected={selected} members={bindings?.members} elements={elements}>
     <NativeObservationScope value={ctx.value.current?observation:{...observation,scope:null}}>
       {mount.spec.panes[id]!.read!==mount.spec.core&&retainedValueLabel(ctx.value)?<p role="status">{retainedValueLabel(ctx.value)}</p>:null}
-      {mount.spec.panes[id]!.draw(ctx) as ReactNode}
+      {mount.spec.panes[id]!.draw(ctx).node}
     </NativeObservationScope>
   </AttentionScope></ValueScope>;
 }

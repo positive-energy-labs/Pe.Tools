@@ -25,8 +25,11 @@ type Furniture = Pick<
   | "floaters"
   | "legend"
   | "overlay"
+  | "scroll"
+  | "flush"
 >;
-/** The leaf supplies body and furniture; identity, Pane creation and topology stay with composition. */
+/** The leaf supplies body and furniture (its scroll track from the kernel's reading of the body
+ * kind); identity, Pane creation and topology stay with composition. */
 export type TeachingPaneRender = (body: ReactNode, furniture?: Furniture) => ReactNode;
 type TeachingContent = (pane: TeachingPaneRender) => ReactNode;
 type TeachingLayoutState = {
@@ -178,28 +181,14 @@ export function TeachingLayoutView<const L extends TeachingLayout>({
     if (node.available) condition(node.available);
     if (!("axis" in node)) {
       if (node.mount && condition(node.mount).available === false) return null;
-      const pane: TeachingPaneRender = (body, furniture = {}) => {
-        const { legend, ...chrome } = furniture;
-        const common = {
-          ...chrome,
-          id: node.id,
-          title: node.pane?.header === false ? undefined : (furniture.title ?? node.label),
-          help: node.pane?.header === false ? undefined : node.purpose,
-          scroll: node.pane?.scroll,
-          flush: node.pane?.flush,
-        };
-        return (
-          <TeachPane value={`${instance}:${node.id}`}>
-            {node.pane?.picture ? (
-              <Pane {...common} picture legend={legend}>
-                {body}
-              </Pane>
-            ) : (
-              <Pane {...common}>{body}</Pane>
-            )}
-          </TeachPane>
-        );
-      };
+      // A legend is a picture's furniture; a picture draws its own Pane (scene/picture).
+      const pane: TeachingPaneRender = (body, { legend: _legend, ...furniture } = {}) => (
+        <TeachPane value={`${instance}:${node.id}`}>
+          <Pane {...furniture} id={node.id} title={furniture.title ?? node.label} help={node.purpose}>
+            {body}
+          </Pane>
+        </TeachPane>
+      );
       return (content as Readonly<Record<string, TeachingContent>>)[node.id](pane);
     }
     const choice = node.choice && state.choices?.[node.choice];

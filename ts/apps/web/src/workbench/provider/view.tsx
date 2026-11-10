@@ -44,7 +44,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     strict: false,
     select: (search) => ({
       thread: search.thread,
-      mode: routeAddress("pea").read(search).page.mode,
       turn: search.turn,
       prompt: search.prompt,
     }),
@@ -61,9 +60,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         local: !remote,
         search: {
           ...search,
-          mode: "mode" in search && typeof search.mode === "string" ? search.mode : "threads",
-          // A move of the address's own fields lands in history by the contract's rule (a draft or a
-          // mode tweak replaces); a thread move keeps its caller's choice, as it names another place.
+          // A move of the address's own fields lands in history by the contract's rule (a draft
+          // replaces); a thread move keeps its caller's choice, as it names another place.
           patch: (partial, replace = false) => {
             const pea = routeAddress("pea");
             const before = pea.read(router.state.location.search).page;

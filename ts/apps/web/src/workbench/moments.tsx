@@ -466,8 +466,11 @@ function ToolRunFold({
     const timer = setTimeout(() => setNewCall(false), 1400);
     return () => clearTimeout(timer);
   }, [latest.id]);
+  // One outcome, one voice: the glyph alone wears the alarm tone; the count says "1 failed" in the
+  // row's own ink, and the label names the failed call once (the latest while the run works).
   const Glyph = working ? LoaderCircle : failed ? CircleAlert : Wrench;
-  const summary = toolDetail(latest)?.text ?? toolTitle(latest.title);
+  const named = !working && failures[0] ? failures[0] : latest;
+  const summary = toolDetail(named)?.text ?? toolTitle(named.title);
   return (
     <details
       {...annotation("tool-run")}
@@ -486,16 +489,11 @@ function ToolRunFold({
         <span className="face-mono">
           {calls.length} {calls.length === 1 ? "tool" : "tools"}
           {thoughts > 0 ? ` · ${thoughts} ${thoughts === 1 ? "thought" : "thoughts"}` : ""}
+          {failed > 0 ? ` · ${failed} failed` : ""}
         </span>
         <TooltipHint content={summary}>
           <span className="dl-tool-run-latest">{summary}</span>
         </TooltipHint>
-        {failed > 0 ? (
-          <span data-tone="alarm">
-            {failed} failed:{" "}
-            {failures.map((call) => toolDetail(call)?.text ?? toolTitle(call.title)).join(", ")}
-          </span>
-        ) : null}
         {working ? <span className="sr-only">Running</span> : null}
       </summary>
       {children}
@@ -718,7 +716,7 @@ const ToolCallPart = memo(
           </div>
         ) : null}
         {recordsOnly && proposed ? <ProposedLine record={proposed} /> : null}
-        {recordsOnly && action ? <ActionLine call={action} /> : null}
+        {recordsOnly && action ? <ActionLine call={action} told={failed} /> : null}
         {/* A live ask answers in the Chat head (`chat/composer-head.tsx`), never here: the
           transcript holds its record (F-J1-9). */}
       </div>
