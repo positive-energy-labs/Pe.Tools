@@ -16,7 +16,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
 import { Cause, Effect, Exit, FiberMap, type Fiber } from "effect";
 import type { HttpClient } from "effect/http";
-import type { NodeServices } from "@effect/platform-node";
+import type { FileSystem, Path } from "effect";
 import type { CausalParentId } from "../../../packages/agent-contracts/src/route-kernel-page.ts";
 import type {
   RequestIdentity as IdentityKey,
@@ -220,7 +220,7 @@ export type StepOptions<A> = {
   ): { action: string; claim: Claim }[] | Promise<{ action: string; claim: Claim }[]>;
 };
 /** The services the journal Layer holds once for every attempt it owns. */
-export type AttemptHost = NodeServices.NodeServices | HttpClient.HttpClient;
+export type AttemptHost = FileSystem.FileSystem | Path.Path | HttpClient.HttpClient;
 /** An attempt reads its journal-owned identity, never its submitter's request context. */
 export type AttemptServices = AttemptHost | IdentityKey;
 /** A step of an owned attempt: the error channel carries what the step threw, typed or not. */

@@ -6,7 +6,7 @@ import { ActionJournalService, makeActionJournal } from "../src/receipt-services
 import { makeCallRoute } from "../src/call-route.ts";
 import * as adapter from "../src/harness/adapter.ts";
 import { Spawner } from "../src/harness/spawner.ts";
-import { NodeCrypto, NodeServices } from "@effect/platform-node";
+import { NodeCrypto, NodeFileSystem, NodePath, NodeServices } from "@effect/platform-node";
 import { FetchHttpClient } from "effect/http";
 import { Cause, Context, Effect, Exit, Layer, Logger, References, Scope } from "effect";
 import { TestClock } from "effect/testing";
@@ -287,7 +287,7 @@ export const journalAt = (...args: Parameters<typeof makeActionJournal>) =>
   Context.get(
     testScoped(
       Layer.effect(ActionJournalService, makeActionJournal(...args)).pipe(
-        Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
+        Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, FetchHttpClient.layer)),
       ),
     ),
     ActionJournalService,

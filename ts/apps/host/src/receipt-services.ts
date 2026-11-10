@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { Clock, Context, Effect, FiberMap, Layer } from "effect";
-import { NodeHttpClient, NodeServices } from "@effect/platform-node";
+import { NodeFileSystem, NodeHttpClient, NodePath } from "@effect/platform-node";
 import type { HttpClient } from "effect/http";
 import { receiptStampSchema, type ReceiptStamp } from "@pe/agent-contracts";
 import { ActionJournal, type AttemptHost } from "./action-journal.ts";
@@ -73,7 +73,7 @@ export class ActionJournalService extends Context.Service<ActionJournalService, 
         return journal;
       }),
       // The services every owned attempt runs with, received once here (never per call).
-    ).pipe(Layer.provide(Layer.mergeAll(NodeServices.layer, http)));
+    ).pipe(Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, http)));
   }
   /** The journal with its log: both services, for a runtime that owns them. */
   static live(
