@@ -11,7 +11,7 @@ import { takeoffSeeds } from "#/takeoff/seeds";
 import { RouteWorkspace } from "@pe/runtime";
 import { address, takeoffEditPatches } from "@pe/agent-contracts";
 import type { TakeoffCaptures } from "../../../host/src/takeoff-captures";
-import { captureStore } from "../../../host/tests/effect-test";
+import { captureStore, journalAt } from "../../../host/tests/effect-test";
 import { takeoffExecutors, fileVersion } from "../../../host/src/takeoff-actions";
 import { sdkSessions, readRhvacFixture } from "../../../host/tests/native-receipt-fixture";
 import type { RevitBridge } from "../../../host/src/bridge";
@@ -134,7 +134,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       });
       const deps = { workspace: owner.work, sdk: sdkSessions };
       const executors = takeoffExecutors(owner.captures, bridge, deps);
-      const runtime = (journal = new ActionJournal(join(root, "integration-journal.jsonl"), Date.now));
+      const runtime = (journal = journalAt(join(root, "integration-journal.jsonl"), Date.now));
       runtime.bindCommands({
         ...commandResources(bridge, deps, async (id) => (await runtime.list(undefined, id))[0]),
         resolve: (key) => {

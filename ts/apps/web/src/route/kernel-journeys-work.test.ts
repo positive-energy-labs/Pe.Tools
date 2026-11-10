@@ -10,7 +10,7 @@ import { RouteWorkspace } from "@pe/runtime";
 import { address, commands, tools, roomEditKey, takeoffObservationSchema } from "@pe/agent-contracts";
 import { takeoffSeeds } from "../takeoff/seeds";
 import { fileVersion } from "../../../host/src/takeoff-actions";
-import { captureStore, testDuctFiles, testDocumentMarks } from "../../../host/tests/effect-test";
+import { captureStore, testDuctFiles, testDocumentMarks, journalAt, callRouteOver } from "../../../host/tests/effect-test";
 import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
 import { bindCommandRuntime } from "../../../host/src/command-registry";
 import { fixtureNative } from "../../../host/tests/fixture-native";
@@ -20,8 +20,6 @@ import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { withInvocationContext } from "@pe/runtime/context";
 import { fixture, ref, path, who, gate } from "../../../host/tests/host-read-graph.test-support";
 import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
-import { ActionJournal } from "../../../host/src/action-journal";
-import { makeCallRoute } from "../../../host/src/call-route";
 import { nativeReadRoot } from "../../../host/src/app";
 import { RevitBridgeLive } from "../../../host/src/bridge";
 import { DuctFiles } from "../../../host/src/ducts-files";
@@ -219,12 +217,12 @@ async function journey(module: TypedRoute = fans) {
   const host = await fixture(true);
   const roster = await host.send(0, []);
   const fan = roster.value!.data.fans.rows.find((row) => row.mark === "MUAS-1")!;
-  const journal = new ActionJournal(join(host.dir, "actions.jsonl"), Date.now);
+  const journal = journalAt(join(host.dir, "actions.jsonl"), Date.now);
   const events: ConsentEvent[] = [];
   const runs = testConsents((_run, event) => events.push(event));
   bindControl({ runs, acquired: () => null });
   const web = HttpRouter.toWebHandler(
-    makeCallRoute(journal, undefined, { workspace: host.workspace }).pipe(
+    callRouteOver(journal, undefined, { workspace: host.workspace }).pipe(
       nativeReadRoot(),
       Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
       Layer.provideMerge(PictureCaptureStore.layer(join(host.dir, "pictures"))),
