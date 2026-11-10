@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -49,11 +49,12 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
         if (reason) console.warn(`Discarded stored Work '${path}': ${reason.replace(/\s+/g, " ")}`);
         return;
       }
+      const temporary = `${path}.${randomUUID()}.tmp`;
       writeFileSync(
-        `${path}.tmp`,
+        temporary,
         JSON.stringify({ format: "route-state-record-v2", targetKey, route, value }),
       );
-      renameSync(`${path}.tmp`, path);
+      renameSync(temporary, path);
     },
     listState: async () => {
       const files = (await readdir(dir)).filter((file) => /^[a-f0-9]{64}\.json$/.test(file)).sort();

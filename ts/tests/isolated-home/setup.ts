@@ -7,6 +7,7 @@ const root = process.env.PE_TEST_HOME_ROOT;
 if (!root) throw new Error("isolated-home/setup.ts needs the isolated-home global setup.");
 const home = mkdtempSync(join(root, "file-"));
 process.env.PE_TOOLS_PRODUCT_HOME = join(home, "product");
+delete process.env.PE_TOOLS_SHARED_ROOT;
 process.env.LOCALAPPDATA = join(home, "local");
 // SDK known-folder discovery needs exclusive roots, not LOCALAPPDATA alone.
 process.env.PE_SESSION_REGISTRY_ROOT = join(home, "sdk", "registry");

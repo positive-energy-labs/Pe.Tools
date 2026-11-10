@@ -12,6 +12,7 @@ import {
   HOST_CONTEXT_VARIABLE,
   hostProcessIdentity,
   productInstallLayout,
+  productPathNames,
 } from "@pe/host-contracts/contracts";
 import { checkoutLayout, sourceRootVariable } from "@pe/host-contracts/service-identity";
 import { codexStandaloneRelease, installCommand } from "./install.ts";
@@ -371,7 +372,8 @@ export function peaMcpServer(
 ) {
   const ts = sourceRoot ? join(sourceRoot, checkoutLayout.ts) : null;
   const mcp = ["mcp", "--host", hostBaseUrl];
-  const productHome = process.env.PE_TOOLS_PRODUCT_HOME?.trim();
+  const productHome = process.env[productPathNames.productHomeVariable]?.trim();
+  const sharedRoot = process.env[productPathNames.sharedRootVariable]?.trim();
   return {
     name: "pea",
     command: ts
@@ -395,7 +397,8 @@ export function peaMcpServer(
       { name: HOST_CONTEXT_VARIABLE, value: context },
       // Carry verified ownership through the MCP server's declared environment.
       { name: "PE_LANE", value: hostOwnership.lane },
-      ...(productHome ? [{ name: "PE_TOOLS_PRODUCT_HOME", value: productHome }] : []),
+      ...(productHome ? [{ name: productPathNames.productHomeVariable, value: productHome }] : []),
+      ...(sharedRoot ? [{ name: productPathNames.sharedRootVariable, value: sharedRoot }] : []),
       { name: hostProcessIdentity.serviceNameVariable, value: hostOwnership.serviceName },
       ...(sourceRoot ? [{ name: sourceRootVariable, value: sourceRoot }] : []),
     ],

@@ -23,6 +23,8 @@ public static class ProductPathNames {
 
     /// <summary>The one override for the whole product home; host, Pea and Revit read it identically.</summary>
     public const string ProductHomeVariable = "PE_TOOLS_PRODUCT_HOME";
+    /// <summary>Shared content mount; never a machine-state override.</summary>
+    public const string SharedRootVariable = "PE_TOOLS_SHARED_ROOT";
 
     /// <summary>Under an override, machine-local state, logs and service files live in <c>&lt;home&gt;\.local-state</c>.</summary>
     public const string LocalStateDirectoryName = ".local-state";
