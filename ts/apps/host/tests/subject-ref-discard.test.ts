@@ -18,7 +18,7 @@ test("stored Families Work in the old [family,type,parameter] spelling is discar
   const cell = { edit: { value: { value: "3", storageType: "String" } } };
   const stored = (cellKey: string) =>
     JSON.stringify({ format: "route-state-record-v2", targetKey, route: key.route,
-      value: { version: 1, schemaVersion: spec.schemaVersion ?? 1, revision: 7,
+      value: { version: 1, schemaVersion: 1, revision: 7,
         doc: { cells: { [cellKey]: cell } }, history: [] } });
   const open = async () =>
     (await createPeRoutes({ store: fileRouteDocumentStore(dir), registrations: [{ spec }] })
