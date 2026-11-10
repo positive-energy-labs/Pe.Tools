@@ -1,11 +1,9 @@
 import { z } from "zod";
 import type { Read } from "./evaluator.ts";
 import { workRead } from "./inputs.ts";
-import { nativeRead } from "./inputs.ts";
 
 import { executionTargetSchema, roomsRouteState } from "@pe/agent-contracts";
-import { read, workScope } from "./evaluator.ts";
-import { documentMark } from "./inputs.ts";
+import { read, workScope, documentMark } from "./evaluator.ts";
 import { roomsArgs, roomsData } from "@pe/agent-contracts";
 import { planOf } from "./rooms-plan.ts";
 const workspaceArgs = roomsArgs.extend({ target: executionTargetSchema });
@@ -19,8 +17,7 @@ export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<t
       const key = { ...(await ctx.read(workScope, target.ref)), route: "rooms" };
       const work = await ctx.read(workRead("rooms", roomsRouteState.schema), key);
       const snapshot = (
-        await ctx.read(nativeRead(view ? "rooms.snapshot" : "rooms.roster"), {
-          role: "none",
+        await ctx.native(view ? "rooms.snapshot" : "rooms.roster", {
           request: view ? { view } : {},
           target,
         })
@@ -32,8 +29,7 @@ export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<t
       if (view) {
         try {
           trace = (
-            await ctx.read(nativeRead("rooms.trace"), {
-              role: "none",
+            await ctx.native("rooms.trace", {
               request: { view },
               target: target,
             })
@@ -44,8 +40,7 @@ export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<t
         try {
           plan = planOf(
             (
-              await ctx.read(nativeRead("revit.context.view-image"), {
-                role: "none",
+              await ctx.native("revit.context.view-image", {
                 request: { target: { name: view }, pixelSize: 8000 },
                 target,
               })

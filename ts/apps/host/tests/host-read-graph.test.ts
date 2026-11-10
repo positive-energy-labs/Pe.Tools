@@ -14,7 +14,7 @@ import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
 import { historyPointSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { History } from "../src/reads/history.ts";
-import { nativeRead } from "../src/reads/inputs.ts";
+import { nativeRead } from "../src/reads/evaluator.ts";
 import { registeredReads } from "../src/reads/routes.ts";
 import { familiesViewArgs } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
@@ -402,7 +402,7 @@ test("F2 Work, same-version firm criteria and document mark changes during a mul
       }
       if (cause === "firm" || cause === "all")
         await writeFile(
-          join(f.dir, "firm.json"),
+          join(f.dir, "Firm", "ducts.json"),
           JSON.stringify({
             ...FIRM_SEED,
             criteria: { ...FIRM_SEED.criteria, terminalDropInWg: 0.4 },

@@ -504,7 +504,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       return {
         file: (name, args) =>
           name === "firm"
-            ? invoke(files.firm)
+            ? invoke(files.firm(String(args)))
             : name === "catalogs"
               ? invoke(files.ductCatalogs)
               : name === "capture"

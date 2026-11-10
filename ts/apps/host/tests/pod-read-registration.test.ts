@@ -131,7 +131,7 @@ leaves:{'${leaf}':async()=>({total:17})}};`,
           read: () => Effect.die("No native input"),
           resolve: () => Effect.die("No native target"),
         }),
-        files: DuctFiles.layer({ firm: join(root, "firm.json"), catalogs: join(root, "catalogs") }),
+        files: DuctFiles.layer({ firm: join(root, "Firm"), catalogs: join(root, "catalogs") }),
         marks: Layer.succeed(
           HostDocumentMarks,
           hostMarks({ observedSince: 0, changedAt: () => null, subscribe: () => () => {} }),

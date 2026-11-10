@@ -32,9 +32,8 @@ import { z } from "zod";
 import { workLayer } from "../ducts-inputs.ts";
 import { followAcceptedJoins, mergeSnapshots } from "../ducts-walk.ts";
 import { designLayers } from "./ducts-design.ts";
-import { nativeRead } from "./inputs.ts";
 import { catalogs } from "../builtin-read-handles.ts";
-import { fingerprint, read } from "./evaluator.ts";
+import { fingerprint, nativeRead, read } from "./evaluator.ts";
 const snapshotSchema = nativeResponseSchema("ducts.snapshot.walk");
 export const espOptions = read("fans.esp-options", {
   input: z.object({ target: ductsRosterRequestSchema.shape.target, units: z.array(z.string()) }),
@@ -46,8 +45,7 @@ export const espOptions = read("fans.esp-options", {
     if (!units.length)
       return { espOptions: null, espOptionsError: "No unit identities in this fan scope" };
     try {
-      const response = await ctx.read(nativeRead("revit.catalog.field-options"), {
-        role: "none",
+      const response = await ctx.native("revit.catalog.field-options", {
         target: { kind: "document", ref: target },
         request: {
           key: "parameter-identities",
@@ -147,7 +145,7 @@ const walk = read("fans.walk", {
       throw Error("Fan walk requires a seed");
     return {
       seed: args.request.selector.unitId,
-      snapshot: (await ctx.read(nativeRead("ducts.snapshot.walk"), args)).body,
+      snapshot: (await ctx.native("ducts.snapshot.walk", args)).body,
     };
   },
 });
@@ -180,12 +178,12 @@ const sheetModel = read("fans.calculation", {
               ...tolerances,
             },
     };
-    const response = await ctx.read(nativeRead("ducts.snapshot.walk"), {
+    const response = await ctx.native("ducts.snapshot.walk", {
       role: "acquire",
       request: acquisition,
       target: { kind: "document", ref: request.target },
     });
-    const tables = await ctx.read(nativeRead("ducts.tables"), {
+    const tables = await ctx.native("ducts.tables", {
       role: "acquire",
       request: tableRequest,
       target: { kind: "document", ref: request.target },
@@ -507,7 +505,7 @@ export const fanRoster = read("fans.roster", {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const slots = stagedDucts(design, design).parameters;
-    const response = await ctx.read(nativeRead("ducts.snapshot.roster"), {
+    const response = await ctx.native("ducts.snapshot.roster", {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: { ...(Object.keys(slots).length ? { slots } : {}), selector: { kind: "roster" } },

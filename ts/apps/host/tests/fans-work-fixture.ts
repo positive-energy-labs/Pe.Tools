@@ -354,7 +354,7 @@ export async function nativeFixture(
         documents: async () => [{ ...target.ref, address }],
       },
       readGraph: async raw => {
-        const port = sheetPort({ firm: () => settle(testDuctFiles().firm), catalogs: () => settle(testDuctFiles().ductCatalogs), call: readDucts,
+        const port = sheetPort({ firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().ductCatalogs), call: readDucts,
           workKey: async ref => bindWork("ducts", address, undefined, ref) }, saved);
         const graph = graphRoute("reads.value", raw);
         return graph.publish(publications, graph.publication!.subscription, graph.publication!.generation, port);

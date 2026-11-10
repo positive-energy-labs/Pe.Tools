@@ -14,16 +14,14 @@ import {
   documentRefSchema,
 } from "@pe/agent-contracts";
 import { z } from "zod";
-import { leaf, read } from "./reads/evaluator.ts";
-import { assetFile } from "./reads/inputs.ts";
+import { leaf, read, assetFile } from "./reads/evaluator.ts";
 import { readingRequestSchema, chatValue, openData, opsData, bindData } from "@pe/agent-contracts";
-import { firmReading, catalogReading } from "./ducts-files.ts";
+import { catalogReading } from "./ducts-files.ts";
 import { resourceContent } from "./resource-content.ts";
 const resource = <O extends z.ZodType>(output: O) => ({
   ...leaf("resource", readingRequestSchema, output),
   content: (value: z.output<O>, args: z.output<typeof readingRequestSchema>) => resourceContent(args, value),
 });
-export const firm = leaf("file:firm", z.null(), firmReading);
 export const catalogs = leaf("file:catalogs", z.null(), catalogReading);
 export const resources = {
   machine: resource(chatValue.shape.machine),

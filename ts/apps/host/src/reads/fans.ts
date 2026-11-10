@@ -13,7 +13,6 @@ import { sheetSnapshot } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import { sheetState } from "@pe/ducts-domain/sheet/state";
 import { z } from "zod";
 import { designLayers } from "./ducts-design.ts";
-import { nativeRead } from "./inputs.ts";
 
 import { read } from "./evaluator.ts";
 import {
@@ -145,7 +144,7 @@ export const fansSheet = read("fans.sheet", {
       ),
     ].sort((a, b) => a - b);
     const geometry = ids.length
-      ? await ctx.read(nativeRead("ducts.snapshot.walk"), {
+      ? await ctx.native("ducts.snapshot.walk", {
           role: "acquire",
           request: {
             slots: staged.parameters,
