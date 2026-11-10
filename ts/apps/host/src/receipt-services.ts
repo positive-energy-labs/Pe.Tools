@@ -23,12 +23,13 @@ export class HostLogService extends Context.Service<HostLogService, HostLog>()("
 /**
  * One FiberMap whose fork never replaces a running fiber: a second fork under a running key
  * returns that fiber to join, and its own effect never runs (rule 11: Stop is never an interrupt).
+ * The lookup and the fork are one synchronous step, so no other fork can land between them.
  */
 const fiberOwner = Effect.fnUntraced(function* () {
   const map = yield* FiberMap.make<string, unknown, unknown>();
   const run = yield* FiberMap.runtime(map)<AttemptHost>();
   const fork: FiberOwner["fork"] = (key, effect) =>
-    Option.getOrElse(FiberMap.getUnsafe(map, key), () => run(key, effect, { onlyIfMissing: true }));
+    Option.getOrElse(FiberMap.getUnsafe(map, key), () => run(key, effect));
   return { map, fork } satisfies FiberOwner;
 });
 
@@ -93,9 +94,9 @@ export class ActionJournalService extends Context.Service<ActionJournalService, 
   static at(
     path: string,
     now: () => number,
-    stamp?: () => ReceiptStamp | null,
-    retain?: number,
-    http: Layer.Layer<HttpClient.HttpClient> = NodeHttpClient.layerUndici,
+    stamp: (() => ReceiptStamp | null) | undefined,
+    retain: number | undefined,
+    http: Layer.Layer<HttpClient.HttpClient>,
   ) {
     return Layer.effect(ActionJournalService, makeActionJournal(path, now, stamp, retain)).pipe(
       Layer.provide(attemptHost(http)),

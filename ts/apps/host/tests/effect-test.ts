@@ -2,7 +2,7 @@ import { HostInputContext } from "../src/input-context.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
-import { ActionJournalService } from "../src/receipt-services.ts";
+import { ActionJournalService, type makeActionJournal } from "../src/receipt-services.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import * as adapter from "../src/harness/adapter.ts";
 import { Spawner } from "../src/harness/spawner.ts";
@@ -280,7 +280,7 @@ export const callRouteOver = (
 export const testJournal = () =>
   Context.get(testScoped(ActionJournalService.live(null, undefined, FetchHttpClient.layer)), ActionJournalService);
 /** The production journal over `path` in the running test's scope: closing it joins, as the host's does. */
-export const journalAt = (...[path, now, stamp, retain]: Parameters<typeof ActionJournalService.at>) =>
+export const journalAt = (...[path, now, stamp, retain]: Parameters<typeof makeActionJournal>) =>
   Context.get(testScoped(ActionJournalService.at(path, now, stamp, retain, FetchHttpClient.layer)), ActionJournalService);
 
 export const pictureCaptures = (root: string) => Context.get(testScoped(PictureCaptureStore.layer(root)), PictureCaptureStore);
