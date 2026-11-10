@@ -18,6 +18,7 @@ import {
   documentKeySchema,
   subjectCode,
   subjectRefCodeSchema,
+  type SubjectRefCode,
   uniqueIdSchema,
 } from "../subject-ref.ts";
 
@@ -79,9 +80,10 @@ const SPACE_MODES = ["3d", "top", "north", "east"] as const;
 const spaceViewport = z.discriminatedUnion("kind", [orbitViewportSchema, planeViewportSchema]);
 
 /** `""` is none (null); any other text is the key itself. */
-const nullableText: Codec<string | null> = {
+// The brand is checked by `spaceElementKeySchema` when the address is read, not by this codec.
+const nullableText: Codec<SubjectRefCode | null> = {
   encode: (value) => value ?? "",
-  decode: (text) => (text === "" ? null : text),
+  decode: (text) => (text === "" ? null : (text as SubjectRefCode)),
 };
 
 const spaceFields = {
