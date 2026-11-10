@@ -55,7 +55,6 @@
 
 ## Owed
 
-
 - 2026-10-23, production room-change/navigation proof remains unproven on native Project A: read-only refresh succeeds, but its read has zero zones/rooms and four missing carrier parameters. Initialize/adopt/partition were not run; use an already materialized model in an authorized native lane for nonempty proof. See the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
 - 2026-09-22, the test bar sweep deleted 11 SCAFFOLD test files with no surface replacement. Each behavior they asserted needs a surface test (CDP journey, MCP tool call, host HTTP) or a visible readout. Recover the assertions from git: `rhvac/takeoff`, `runs/palette`, `runs/world`, `takeoff/candidates`, `takeoff/level-plan`, `takeoff/nothing-authored`, `takeoff/ownership`, `takeoff/pane`, `takeoff/proposals`, `takeoff/sync-cells`, `takeoff/takeoff`.
 - /takeoffs picks the plan image by each zone's owner view (`zone.lane.view`), not by level label (`planView`), and names each zone whose `ownerCrop` is Outside instead of drawing it on an image that cannot hold it.
