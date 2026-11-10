@@ -656,8 +656,8 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
       expect(response.ok, await response.clone().text()).toBe(true);
       expect(await f.journal.wait(id)).toMatchObject({ state: "succeeded" });
     };
-    await command("undo-plan", "ducts.plan-losses");
-    await command("undo-apply", "ducts.apply-losses");
+    await command("undo-plan", "sheet.plan");
+    await command("undo-apply", "sheet.apply");
     expect(f.native.get(4)).toBe(250);
     await waitFor(() => expect(screen.getByRole("button", { name: "Undo Edit fan airflow" }).getAttribute("aria-disabled")).toBe("true"));
     const undo = screen.getByRole("button", { name: "Undo Edit fan airflow" });
@@ -1042,7 +1042,7 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
   for (const unreadable of [false, true]) {
     const capture = structuredClone(realMuas);
     native.submit.mockImplementation(async () => {
-      const input = f.inputs.get("fans:ducts.plan-losses") as { work: unknown };
+      const input = f.inputs.get("fans:sheet.plan") as { work: unknown };
       return ({
       id: "native-before-plan", state: "succeeded",
       result: {
@@ -1191,7 +1191,7 @@ test.each([false, true])(
     // The native mount retains handles and hash dependencies; it never serializes a Value into a token.
     expect(bytes(f.fans.workBasis())).toBeLessThan(2048);
     expect(plan).toBeTypeOf("function");
-    const input = f.inputs.get("fans:ducts.plan-losses") as { work: unknown; readWorks: unknown };
+    const input = f.inputs.get("fans:sheet.plan") as { work: unknown; readWorks: unknown };
     expect(input.readWorks).toHaveProperty("fans");
     // H1: a plan the host refuses after invoke returned shows its reason, arms nothing, and retries clean.
     const refusedText = "Fans Work belongs to another document";
@@ -1266,7 +1266,7 @@ test.each([false, true])(
     expect(f.fans.work()!.revision).toBe(stagedRevision);
     // Broad route-surface witness: the real typed action consumes its receipt feed, and the
     // consent review contains the exact owned Work cell rather than a parallel fake handle.
-    const receipt=actionStatusSchema.parse({id:"consent-review",key:"ducts.apply-losses",state:"waiting",
+    const receipt=actionStatusSchema.parse({id:"consent-review",key:"sheet.apply",state:"waiting",
       caller:{kind:"pea",thread:"consent-thread",context:"surface-test"},basis:null,target:{kind:"host"},input:{},startedAt:new Date().toISOString(),
       consentWindow:{requestId:"consent-request",deadline:new Date(Date.now()+60_000).toISOString()}});
     act(()=>{for(const deliver of receiptSubscribers)deliver({kind:"ready",receipts:{rows:[receipt],from:0 as ReceiptCursor,through:1 as ReceiptCursor}});});
@@ -1753,7 +1753,7 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
   const reason = "MUAS-1: missing PE_M_Fan_AirFlowDesign; add the missing parameter";
   native.submit.mockImplementation(async () => ({ id: "atomic-hold", state: "succeeded", result: {
     previewOnly: true, planRefusal: reason,
-    seal: { caller: { kind: "human", via: "local" }, requestHash: "atomic-hold", work: { handle: (f.inputs.get("fans:ducts.plan-losses") as { work: unknown }).work },
+    seal: { caller: { kind: "human", via: "local" }, requestHash: "atomic-hold", work: { handle: (f.inputs.get("fans:sheet.plan") as { work: unknown }).work },
       documentMark: { session: "fixture", openId: "fans", observedSince: null, changedAt: null },
       incarnation: null, dependencies: "exact" },
     value: { writes: [
@@ -2001,7 +2001,7 @@ test("JZ Plan refusal marker holds a valid sealed ancillary-only review at the t
   native.submit.mockImplementation(async () => ({ id: "marker-only-plan", state: "succeeded", result: {
     previewOnly: true, planRefusal: reason,
     seal: { caller: { kind: "human", via: "local" }, requestHash: "marker-only-plan",
-      work: { handle: (f.inputs.get("fans:ducts.plan-losses") as { work: unknown }).work },
+      work: { handle: (f.inputs.get("fans:sheet.plan") as { work: unknown }).work },
       documentMark: { session: "fixture", openId: "fans", observedSince: null, changedAt: null }, incarnation: null, dependencies: "exact" },
     // No refused native row can accidentally supply the shell's refusal. Only the Plan marker holds Apply.
     value: { writes: [{ kind: "store", outcome: "planned", before: "absent", after: "revision 1" }],

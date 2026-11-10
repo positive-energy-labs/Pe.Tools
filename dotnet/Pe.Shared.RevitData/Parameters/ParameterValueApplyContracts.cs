@@ -29,7 +29,9 @@ public sealed record ParameterValueEdit(
     bool RawInternal = false,
     // Evidence the edit was reviewed against (a dry run's Current). Required on a wet run; compared to a fresh
     // read inside the transaction, and any difference refuses the edit as stale.
-    ParameterTarget? Expected = null
+    ParameterTarget? Expected = null,
+    // The element by UniqueId (a sheet binding's SubjectRef key); when given it wins over ElementId.
+    string? UniqueId = null
 );
 
 public sealed record ParameterValueApplyData(

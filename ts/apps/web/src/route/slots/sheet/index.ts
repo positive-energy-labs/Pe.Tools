@@ -18,9 +18,30 @@ export interface SheetInput<W = unknown> {
   readonly model: readonly ModelValue[];
 }
 
-/** A pure projection: the StateCells the slot draws, in row order then binding order. */
+/** A pure projection: the StateCells the slot draws, binding by binding in declaration order, each per-subject binding once per row. */
 export function sheetCells(slot: SheetSlot, input: SheetInput): readonly StateCell[] {
-  void slot;
-  void input;
-  throw Error("not implemented: slice 7 (sheet slot draws a binding's StateCells)");
+  const work = (input.work ?? {}) as Readonly<Record<string, unknown>>;
+  const modelOf = (binding: string, subject?: SubjectRefCode) =>
+    input.model.find((m) => m.binding === binding && m.subject === subject);
+  return Object.entries(slot.bindings).flatMap(([binding, declared]) =>
+    (declared.per === "subject" ? input.rows : [undefined]).map((subject): StateCell => {
+      const held = work[binding];
+      const staged = subject === undefined ? held : (held as Readonly<Record<string, unknown>> | undefined)?.[subject];
+      const model = modelOf(binding, subject);
+      const value = staged ?? model?.value ?? null;
+      return {
+        binding,
+        ...(subject === undefined ? {} : { subject }),
+        kind: declared.kind,
+        value,
+        model: model?.value ?? null,
+        // ponytail: raw Work values carry no author; draw `pending` when a binding stages draft cells.
+        pending: null,
+        // A local binding never reaches Revit, so it cannot drift from it.
+        drift: declared.kind !== "local" && JSON.stringify(value) !== JSON.stringify(model?.value ?? null),
+        freshness: model?.freshness ?? (declared.kind === "local" ? "fresh" : "never"),
+        source: staged !== undefined ? "work" : "model",
+      };
+    }),
+  );
 }

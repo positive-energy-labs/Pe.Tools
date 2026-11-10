@@ -184,7 +184,7 @@ export async function runCapability(
   // Prerequisites are checked before submission, so an unscoped probe is not a journal attempt. Mirrors the
   // host derive (ducts-actions.ts lossSnapshot): the ducts handle, with the fan walk read from fans Work at the
   // same key (or readWorks.fans), or writeIntent.groups in ducts Work.
-  if (key === "ducts.plan-losses") {
+  if (key === "sheet.plan") {
     const handle = workHandleSchema.parse(input.work);
     const fansHandle = z.object({ fans: workHandleSchema.optional() }).optional().parse(input.readWorks)?.fans;
     const read = async (key: WorkHandle["key"]) => {

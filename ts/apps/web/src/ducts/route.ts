@@ -153,7 +153,7 @@ export const module = route({
   },
   commands: {
     losses: {
-      ...command("ducts.apply-losses"),
+      ...command("sheet.apply"),
       label: "Write to Revit",
       present: (result, data, work) => presentLosses(result, evidence(data, work)),
     },

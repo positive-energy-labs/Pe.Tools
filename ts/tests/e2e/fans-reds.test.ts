@@ -392,7 +392,7 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
         popover: document.querySelector('[data-write-outcome="refused"]')?.textContent ?? null,
         armed: !!document.querySelector('[data-write-action="armed"]'),
         // The state word is hyphenated when the host cannot say (`outcome-unknown`, run 3 at d3e0ec65).
-        chip: /ducts\.plan-losses\nyou · [\w-]+ · [\d:]+/.exec(document.body.innerText)?.[0] ?? null,
+        chip: /sheet.plan\nyou · [\w-]+ · [\d:]+/.exec(document.body.innerText)?.[0] ?? null,
       }));
     const prior = (await state()).chip;
     seen.write = await press(page, "body", "^plan Write to Revit$");
@@ -419,7 +419,7 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
       await new Promise((done) => setTimeout(done, 3000));
       seen.history = await page.evaluate(
         () =>
-          /ducts\.plan-losses\n[\w-]+ \/ you \/ [\d:]+ \/ [^\n]+(\n[^\n]+){0,6}/.exec(
+          /sheet.plan\n[\w-]+ \/ you \/ [\d:]+ \/ [^\n]+(\n[^\n]+){0,6}/.exec(
             document.body.innerText,
           )?.[0] ?? null,
       );
@@ -428,7 +428,7 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
       plan.popover ??
       (await page.evaluate(
         () =>
-          /ducts\.plan-losses\n[\w-]+ \/ you \/ [\d:]+ \/ ([^\n]+)/.exec(
+          /sheet.plan\n[\w-]+ \/ you \/ [\d:]+ \/ ([^\n]+)/.exec(
             document.body.innerText,
           )?.[1] ?? null,
       )));

@@ -129,7 +129,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      if(mode==="batched"&&!batchReleased&&trace.tokens.length && (frame.value?.kind==="receipt"||frame.value?.kind==="ready"&&frame.value.receipts)){
        heldReceipts.push(data);receiptBatch.push({kind:"held",key:frame.key,cursor:frame.value.cursor??frame.value.receipts.through,state:frame.value.receipt?.state??frame.value.receipts.rows.at(-1)?.state});return;
      }
-     if(Array.isArray(frame.value)&&frame.value.some((row:any)=>row.key==="ducts.plan-losses"&&row.id!==previousPlan&&row.state==="succeeded")){
+     if(Array.isArray(frame.value)&&frame.value.some((row:any)=>row.key==="sheet.plan"&&row.id!==previousPlan&&row.state==="succeeded")){
        batchReleased=true;
        receiptBatch.push({kind:"flush",count:heldReceipts.length});
        for(const held of heldReceipts.splice(0))this.onmessage?.({data:held});
@@ -198,7 +198,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      fireEvent.click(screen.getByRole("button",{name:"plan Write to Revit"}));
      await vi.waitFor(()=>expect(planPending).toBe(true),{timeout:45000});
      releasePlan.resolve();
-     await vi.waitFor(()=>expect((trace as any).results.at(-1)).toMatchObject({key:"ducts.plan-losses",state:"succeeded"}),{timeout:45000});
+     await vi.waitFor(()=>expect((trace as any).results.at(-1)).toMatchObject({key:"sheet.plan",state:"succeeded"}),{timeout:45000});
      await screen.findByRole("button",{name:"Write to Revit"});
      expect((trace as any).results.at(-1).consumes.some((row:any)=>row.kind==="work" && row.probe.handle.key.route==="ducts" && row.probe.handle.revision===1)).toBe(true);
      fireEvent.click(screen.getByRole("button",{name:"Capture point"}));
@@ -272,7 +272,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    const commandReads=[];
    for(const id of captureStore.readSets.ids()){
      const record=await Effect.runPromise(captureStore.readSets.get(id));
-     if(record.recipe.key==="command.work.view"&&(record.recipe.input as any).command==="ducts.plan-losses") commandReads.push(record);
+     if(record.recipe.key==="command.work.view"&&(record.recipe.input as any).command==="sheet.plan") commandReads.push(record);
    }
    expect(new Set(commandReads.map(record=>(record.recipe.input as any).route))).toEqual(new Set(["ducts","fans"]));
    expect(commandReads.every(record=>record.state==="complete"&&record.inputs.some(input=>input.input.kind==="work"&&input.input.view==="view"))).toBe(true);

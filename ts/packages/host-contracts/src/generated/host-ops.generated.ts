@@ -3904,6 +3904,7 @@ export namespace RevitApplyParameterValues {
       unit?: null | string;
       rawInternal?: boolean;
       expected?: null | ParameterTarget;
+      uniqueId?: null | string;
     }
     /**
      * Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh
@@ -7073,6 +7074,100 @@ export namespace RevitDetailParameterLinks {
       updaterRegistered: boolean;
       activeDefinitionCount: number;
       activeAssignmentCount: number;
+    }
+  }
+}
+
+/** Read the evidence revit.apply.parameter-values needs, without a transaction: resolve each edit (element by UniqueId or ElementId; parameterId exactly, or parameterName), parse its value in the parameter's units, and return Current per edit (element, parameter id, storage, read-only, hasValue, raw value) and the parsed raw and display values. Send Current back as each wet edit's expected. */
+export namespace RevitDetailParameterValues {
+  export namespace Req {
+    export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+
+    /**
+     * Bounded project-document parameter mutation contracts. A wet edit names its exact target (element id +
+     * parameter id) and carries the ParameterTarget evidence it was reviewed against; a stale or
+     * missing Expected refuses. A dry run is the evidence read: it returns Current per edit, and is the only place
+     * ParameterName resolves (discovery for callers that do not yet know the parameter id).
+     *
+     */
+    export interface Request {
+      edits: ParameterValueEdit[];
+      dryRun?: boolean;
+      transactionName?: null | string;
+    }
+    export interface ParameterValueEdit {
+      elementId: number;
+      parameterId?: number | null;
+      parameterName?: null | string;
+      value?: null | string;
+      unit?: null | string;
+      rawInternal?: boolean;
+      expected?: null | ParameterTarget;
+      uniqueId?: null | string;
+    }
+    /**
+     * Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh
+     * read before writing. Schedule cells carry one per target; parameter edits carry one as Expected.
+     *
+     */
+    export interface ParameterTarget {
+      elementId: number;
+      parameterId: number;
+      parameterName?: null | string;
+      storageType: RequestedParameterStorageType;
+      isReadOnly: boolean;
+      hasValue: boolean;
+      rawValue: null | string;
+      elementLabel?: null | string;
+      uniqueId?: null | string;
+      scope?: null | string;
+      displayValue?: null | string;
+    }
+  }
+  export namespace Res {
+    export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+    /**
+     * The closed set of reasons ParameterEditPlan refuses an edit; the prose stays the refusal's message.
+     */
+    export type EditRefusalCode =
+      | "target-evidence-stale"
+      | "target-evidence-missing"
+      | "target-unresolved"
+      | "admission-group-refused"
+      | "alias-conflict";
+
+    export interface Response {
+      applied: number;
+      dryRun: boolean;
+      results: ParameterValueEditResult[];
+    }
+    export interface ParameterValueEditResult {
+      index: number;
+      ok: boolean;
+      error?: null | string;
+      parsedRaw?: null | string;
+      parsedDisplay?: null | string;
+      current?: null | ParameterTarget;
+      code?: null | EditRefusalCode;
+      causeCode?: null | EditRefusalCode;
+    }
+    /**
+     * Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh
+     * read before writing. Schedule cells carry one per target; parameter edits carry one as Expected.
+     *
+     */
+    export interface ParameterTarget {
+      elementId: number;
+      parameterId: number;
+      parameterName?: null | string;
+      storageType: RequestedParameterStorageType;
+      isReadOnly: boolean;
+      hasValue: boolean;
+      rawValue: null | string;
+      elementLabel?: null | string;
+      uniqueId?: null | string;
+      scope?: null | string;
+      displayValue?: null | string;
     }
   }
 }
@@ -11245,6 +11340,7 @@ export interface HostOps {
   "revit.detail.electrical-panel-schedules": { request: RevitDetailElectricalPanelSchedules.Req.Request; response: RevitDetailElectricalPanelSchedules.Res.Response };
   "revit.detail.elements": { request: RevitDetailElements.Req.Request; response: RevitDetailElements.Res.Response };
   "revit.detail.parameter-links": { request: RevitDetailParameterLinks.Req.Request; response: RevitDetailParameterLinks.Res.Response };
+  "revit.detail.parameter-values": { request: RevitDetailParameterValues.Req.Request; response: RevitDetailParameterValues.Res.Response };
   "revit.detail.schedules": { request: RevitDetailSchedules.Req.Request; response: RevitDetailSchedules.Res.Response };
   "revit.detail.sheets": { request: RevitDetailSheets.Req.Request; response: RevitDetailSheets.Res.Response };
   "revit.detail.space-census": { request: RevitDetailSpaceCensus.Req.Request; response: RevitDetailSpaceCensus.Res.Response };
@@ -11349,6 +11445,7 @@ export const hostOpKeys = [
   "revit.detail.electrical-panel-schedules",
   "revit.detail.elements",
   "revit.detail.parameter-links",
+  "revit.detail.parameter-values",
   "revit.detail.schedules",
   "revit.detail.sheets",
   "revit.detail.space-census",
@@ -11453,6 +11550,7 @@ export const hostOpSafety = {
   "revit.detail.electrical-panel-schedules": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.detail.elements": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Elements","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.detail.parameter-links": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Topology","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.detail.parameter-values": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Elements","touches":"Metadata","effect":"Read","cardinality":"One","internal":true,"rollsBack":false},
   "revit.detail.schedules": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.detail.sheets": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.detail.space-census": {"intent":"Read","costTier":"Expensive","usesTransactions":false,"subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},

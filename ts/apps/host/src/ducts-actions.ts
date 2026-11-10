@@ -175,7 +175,7 @@ export function ductsExecutors(
       .receipts()
       .filter(
         (r) =>
-          r.key === `ducts.plan-${kind}` &&
+          r.key === (kind === "losses" ? "sheet.plan" : `ducts.plan-${kind}`) &&
           r.state === "succeeded" &&
           canonicalRouteInput(r.target) === canonicalRouteInput(ctx.admission.target),
       )
@@ -432,8 +432,8 @@ export function ductsExecutors(
     ...Object.fromEntries(
       (
         [
-          ["ducts.plan-losses", "losses", "plan"],
-          ["ducts.apply-losses", "losses", "apply"],
+          ["sheet.plan", "losses", "plan"],
+          ["sheet.apply", "losses", "apply"],
           ["ducts.apply-heal", "heal", "apply"],
           ["ducts.apply-assign-fan", "assign-fan", "apply"],
           ["ducts.rehearse-heal", "heal", "rehearse"],

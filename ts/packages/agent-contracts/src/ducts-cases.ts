@@ -1130,7 +1130,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     whatWeDo: "The review lists every change, old to new.",
     why: "The engineer approves what actually changes.",
     status: "handled",
-    code: "ducts.plan-losses",
+    code: "sheet.plan",
     kinds: [],
     ids: "SA 19: press Write and read the review, every change old to new.",
     examples: [
@@ -1152,7 +1152,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
       "Rulings, slots and flows are written at any time; only the ESP waits for a clean calculation. Every button that has an effect also shows in the header.",
     why: "Rulings must not wait on a clean calculation.",
     status: "fixed",
-    code: "ducts.apply-losses",
+    code: "sheet.apply",
     kinds: [],
     ids: "SA 19: Write with its Fix rows still open; rulings, slots and flows write, only the ESP waits.",
     examples: [

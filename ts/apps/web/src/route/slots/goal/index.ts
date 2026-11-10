@@ -16,6 +16,15 @@ export interface GoalView<R = unknown> {
 }
 
 export function goalView<R>(goal: Goal<R>): GoalView<R> {
-  void goal;
-  throw Error("not implemented: slice 7 (goal slot draws the unresolved list)");
+  const { unresolved, assumed, next, result } = goal;
+  return {
+    unresolved,
+    assumed,
+    next,
+    answer: {
+      value: result.value,
+      greyed: unresolved.length > 0 || result.kind === "estimate",
+      sources: result.kind === "estimate" ? result.sources : [],
+    },
+  };
 }

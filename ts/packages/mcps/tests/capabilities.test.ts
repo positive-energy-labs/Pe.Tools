@@ -535,10 +535,10 @@ test("Pea discovers the Ducts Plan owner, refuses Fans at schema decode, and pre
       revision: 1,
       targets: [{ request: { kind: "open", ref: f.target.ref }, admission: null }],
     };
-    const discovery = (await run(peFind, { query: "ducts.plan-losses", limit: 8 }, head)) as {
+    const discovery = (await run(peFind, { query: "sheet.plan", limit: 8 }, head)) as {
       matches: Array<{ key: string; description: string; input: unknown }>;
     };
-    const row = discovery.matches.find((row) => row.key === "op:ducts.plan-losses")!;
+    const row = discovery.matches.find((row) => row.key === "op:sheet.plan")!;
     expect(row.description).toContain("route:ducts Work handle");
     const schema = row.input as {
       properties: {
@@ -550,7 +550,7 @@ test("Pea discovers the Ducts Plan owner, refuses Fans at schema decode, and pre
     expect(
       schema.properties.work.properties.key.oneOf.map((branch) => branch.properties.route.const),
     ).toEqual(["ducts", "ducts", "ducts", "ducts"]);
-    expect(commands["ducts.plan-losses"].input.safeParse({ work: fans }).success).toBe(false);
+    expect(commands["sheet.plan"].input.safeParse({ work: fans }).success).toBe(false);
     const before = paths.length;
     const refused = await run(
       peDo,

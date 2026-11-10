@@ -16,15 +16,15 @@ export type BindingKind = (typeof BINDING_KINDS)[number];
 export type BindingPer = "subject" | "route";
 
 export type SheetBinding<V extends z.ZodType = z.ZodType> =
-  /** A Revit parameter by name on the row's element: UniqueId key, no sub, no placement (`parameterSubject`). */
-  | { kind: "parameter"; parameter: string; schema: V; per: "subject" }
+  /** A Revit parameter by name on the row's element: UniqueId key, no sub, no placement (`parameterSubject`). `unit` names a measurable value's unit (a Revit UnitTypeId name or symbol). */
+  | { kind: "parameter"; parameter: string; schema: V; per: "subject"; unit?: string }
   /** The model store (for ducts `_PE_DuctLosses`), any key. */
   | { kind: "store"; store: string; schema: V; per: BindingPer }
   /** Work only; feeds the Goal and never reaches Revit. */
   | { kind: "local"; schema: V; per: BindingPer };
 
-export const parameter = <V extends z.ZodType>(parameter: string, schema: V) =>
-  ({ kind: "parameter", parameter, schema, per: "subject" }) as const satisfies SheetBinding<V>;
+export const parameter = <V extends z.ZodType>(parameter: string, schema: V, unit?: string) =>
+  ({ kind: "parameter", parameter, schema, per: "subject", ...(unit ? { unit } : {}) }) as const satisfies SheetBinding<V>;
 export const store = <V extends z.ZodType>(store: string, schema: V, per: BindingPer = "subject") =>
   ({ kind: "store", store, schema, per }) as const satisfies SheetBinding<V>;
 export const local = <V extends z.ZodType>(schema: V, per: BindingPer = "route") =>
@@ -74,10 +74,16 @@ export const sheetSlotDataSchema = z.strictObject({
   bindings: z.record(
     z.string(),
     z.discriminatedUnion("kind", [
-      z.strictObject({ kind: z.literal("parameter"), parameter: z.string().min(1), per: z.literal("subject") }),
+      z.strictObject({ kind: z.literal("parameter"), parameter: z.string().min(1), per: z.literal("subject"), unit: z.string().min(1).optional() }),
       z.strictObject({ kind: z.literal("store"), store: z.string().min(1), per: z.enum(["subject", "route"]) }),
       z.strictObject({ kind: z.literal("local"), per: z.enum(["subject", "route"]) }),
     ]),
   ),
 });
 export type SheetSlotData = z.output<typeof sheetSlotDataSchema>;
+/** The declaration's data projection: every binding without its schema. */
+export const sheetSlotData = (slot: SheetSlot): SheetSlotData => ({
+  bindings: Object.fromEntries(Object.entries(slot.bindings).map(([name, { schema: _schema, ...binding }]) => [name, binding])),
+});
+/** A binding the plan derives a Revit write from (`local` feeds only the Goal). */
+export const writesRevit = (data: SheetSlotData) => Object.values(data.bindings).some((b) => b.kind !== "local");

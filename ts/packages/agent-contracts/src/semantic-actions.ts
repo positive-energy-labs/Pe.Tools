@@ -1,6 +1,7 @@
 import { fansRouteState } from "./generated/fans-work.ts";
 import { stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
-import { workIntent, workWriteCommands } from "./write-intent.ts";
+import { ANY_ROUTE, workIntent, workWriteCommands } from "./write-intent.ts";
+import { SHEET_COMMANDS } from "./slots/sheet.ts";
 import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
 import { familyActions, familyReads } from "./family-actions.ts";
@@ -129,22 +130,6 @@ export const ductsActions = {
     says: "Read this document's duct snapshots and pricing inputs again.",
     needs: "project-document",
     effect: "query",
-    input: z.strictObject({}),
-    dirties: ["snapshot"],
-  },
-  "ducts.plan-losses": {
-    native: ["ducts.snapshot.walk", "ducts.snapshot.roster", "ducts.tables", "ducts.apply.plan"],
-    says: "Pass the route:ducts Work handle { key, revision } as the primary work argument. Separately, stage the fan walk { unitId, portIndex } from route:reads.value (read fans.roster) in route:fans writeIntent; the plan reads sibling Fans Work at the same document, or readWorks.fans. Fan write cells are derived from that walk and staged edits. Stage writeIntent.cells in Ducts Work only to limit rule writes. Then plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
-    needs: "project-document",
-    effect: "query",
-    input: z.strictObject({}),
-    dirties: [],
-  },
-  "ducts.apply-losses": {
-    native: ["ducts.snapshot.walk", "ducts.snapshot.roster", "ducts.tables", "ducts.apply"],
-    says: "Stage writeIntent.cells to limit this write to the requested rule cells. Omit cells only for a whole-network write that was explicitly reviewed. Write the staged duct loss values to Revit (fitting coefficients, terminal and component drops, fan static) and record their provenance in Project Information.",
-    needs: "project-document",
-    effect: "command",
     input: z.strictObject({}),
     dirties: ["snapshot"],
   },
@@ -363,10 +348,6 @@ export const tools = {
     },
     commands: {
       "ducts.refresh": ductsActions["ducts.refresh"],
-      ...workWriteCommands("ducts", "ducts.apply-losses", ductsActions["ducts.apply-losses"], {
-        derive: ductsDerive,
-        preview: { key: "ducts.plan-losses", definition: ductsActions["ducts.plan-losses"] },
-      }),
       ...workWriteCommands("ducts", "ducts.apply-heal", ductsActions["ducts.apply-heal"], {
         derive: ductsDerive,
         preview: { key: "ducts.plan-heal", definition: ductsActions["ducts.plan-heal"] },
@@ -410,6 +391,36 @@ export const tools = {
     },
   },
 } satisfies Record<string, Tool>;
+/*
+ * Slice 7, the sheet slot (ADR 0035 rule 3; ADR 0030 rule 4): one plan/apply pair every sheet reaches
+ * Revit through, builtin or Pod, bound to no one owner. The handle names the route; the host derives the
+ * writes from that route's sheet bindings (a `parameter` binding through the generic parameter-value
+ * leaves, the ducts losses store through its own). Other slots add their own keys in their own blocks.
+ */
+const sheetNative = ["revit.detail.parameter-values", "ducts.snapshot.walk", "ducts.snapshot.roster", "ducts.tables"] as const;
+export const sheetActions = {
+  [SHEET_COMMANDS.plan]: {
+    native: [...sheetNative, "ducts.apply.plan"],
+    says: "Plan the staged sheet writes without changing Revit: pass the route's Work handle { key, revision } as work. A route with parameter bindings plans each staged cell as a parameter write on its row's element (by UniqueId) and reads the value Revit holds now. /ducts and /fans plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static): stage the fan walk { unitId, portIndex } from route:reads.value (read fans.roster) in route:fans writeIntent, and writeIntent.cells in Ducts Work only to limit rule writes; pass the other Work as readWorks. Report each write's outcome; nothing is committed.",
+    needs: "project-document",
+    effect: "query",
+    input: z.strictObject({}),
+    dirties: [],
+  },
+  [SHEET_COMMANDS.apply]: {
+    native: [...sheetNative, "revit.apply.parameter-values", "ducts.apply"],
+    says: "Write the planned sheet values to Revit exactly as the plan showed and a person approved, in one transaction; a value Revit changed since the plan refuses. /ducts and /fans also record the loss provenance in Project Information. Omit writeIntent.cells only for a whole-network duct write that was explicitly reviewed.",
+    needs: "project-document",
+    effect: "command",
+    input: z.strictObject({}),
+    dirties: ["snapshot"],
+  },
+} as const satisfies Record<string, Command>;
+export const sheetCommands = workWriteCommands(ANY_ROUTE, SHEET_COMMANDS.apply, sheetActions[SHEET_COMMANDS.apply], {
+  derive: (doc) => ({ doc }),
+  preview: { key: SHEET_COMMANDS.plan, definition: sheetActions[SHEET_COMMANDS.plan] },
+});
+
 export const commands = {
   "work.start": {
     says:"Start this Work", needs:"nothing", effect:"command", dirties:[],
@@ -417,6 +428,7 @@ export const commands = {
     axes:{subject:"None",touches:["Metadata"],effect:"SessionWrite",cost:"Mutation",cardinality:"One"},
   } as const,
   ...catalogWorkCommands,
+  ...sheetCommands,
   ...tools.pods.commands,
   ...tools.family.commands,
   ...tools.families.commands,

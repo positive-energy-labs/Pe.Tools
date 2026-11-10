@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// ADR 0030 rule 6 on the real Fans route: the shared write button plans ducts.plan-losses with the
+// ADR 0030 rule 6 on the real Fans route: the shared write button plans sheet.plan with the
 // ducts owner's Work as `work` and Fans' own Work as `readWorks.fans` (V2: ducts owns the command).
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { canonicalRouteInput } from "../../../../packages/agent-contracts/src/route-doc";
@@ -25,11 +25,11 @@ test("Fans plans losses through the ducts owner handle and its own handle as rea
     }),
   );
   expect(f.fans.invoke("losses", {})).toEqual({ kind: "preview" });
-  await vi.waitFor(() => expect(f.inputs.get("fans:ducts.plan-losses")).toBeTruthy());
+  await vi.waitFor(() => expect(f.inputs.get("fans:sheet.plan")).toBeTruthy());
   const owner = f.fans.readingStatus("owner:ducts").snapshot as unknown as {
     handle: { key: { route: string }; revision: number };
   };
-  expect(f.inputs.get("fans:ducts.plan-losses")).toMatchObject({
+  expect(f.inputs.get("fans:sheet.plan")).toMatchObject({
     work: { key: { route: "ducts" }, revision: owner.handle.revision },
     readWorks: { fans: { key: { route: "fans" }, revision: f.fans.work()!.revision } },
   });
@@ -54,8 +54,8 @@ test("after a reopen the human plan sends both owner feeds' handles, which the h
     expect(f.fans.work()?.value).toMatchObject({ writeIntent: { edit: { value: { walk: { unitId: 1 } } } } }),
   );
   expect(f.fans.invoke("losses", {})).toEqual({ kind: "preview" });
-  await vi.waitFor(() => expect(f.inputs.get("fans:ducts.plan-losses")).toBeTruthy());
-  const sent = f.inputs.get("fans:ducts.plan-losses") as { work: WorkHandle; readWorks: { fans: WorkHandle } };
+  await vi.waitFor(() => expect(f.inputs.get("fans:sheet.plan")).toBeTruthy());
+  const sent = f.inputs.get("fans:sheet.plan") as { work: WorkHandle; readWorks: { fans: WorkHandle } };
   expect(sent.readWorks.fans).toEqual(f.fans.work()!.handle);
   expect(canonicalRouteInput(sent.readWorks.fans.key)).toBe(canonicalRouteInput({ ...sent.work.key, route: "fans" }));
 });
