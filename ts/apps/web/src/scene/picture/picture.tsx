@@ -78,8 +78,8 @@ export const renderPicturePane: TeachingPaneRender = (body, furniture) => (
 
 /** Everything a surface says about its picture. Numeric ids stop at the renderer adapter. */
 export interface PictureContent<L extends string = string, F extends string = string> {
-  /** What is captured: `walked` draws as ink, `near` joins the capture as stubs. Never implies reach. */
-  focus: { walked: readonly SubjectKey[]; near: readonly SubjectKey[] };
+  /** What is captured, as ElementIds: the capture request is addressed by them and they are payload, never identity. `walked` draws as ink, `near` joins the capture as stubs. Never implies reach. */
+  focus: { walked: readonly number[]; near: readonly number[] };
   /** Group subjects (issue:, run:, leg:, system:) to their element keys; the core registers them. */
   members?: Members;
   /** Reverse hover: a hovered element also lights the smallest declared group this admits.
@@ -153,10 +153,9 @@ export function captureRequest(
   layers: readonly string[],
   radiusFt: number,
   representation: ContextRepresentation,
-  elements: ElementIndex,
   maxTriangles = 3_000_000,
 ) {
-  const ids = [...new Set([...focus.walked, ...focus.near].map(elements.idOf))].filter((id) => id > 0);
+  const ids = [...new Set([...focus.walked, ...focus.near])].filter((id) => id > 0);
   if (!ids.length) return null;
   return {
     ...sceneRequest(
@@ -308,7 +307,6 @@ export function Picture<L extends string, F extends string>({
         visibleLayers,
         page.contextRadiusFt,
         contextRepresentation,
-        elements,
         content.capture?.maxTriangles,
       ),
     [
@@ -316,7 +314,6 @@ export function Picture<L extends string, F extends string>({
       visibleLayers,
       page.contextRadiusFt,
       contextRepresentation,
-      elements,
       content.capture?.maxTriangles,
     ],
   );

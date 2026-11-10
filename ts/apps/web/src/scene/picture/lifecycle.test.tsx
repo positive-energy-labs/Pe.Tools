@@ -59,7 +59,7 @@ const content: PictureContent = {
       maxTriangles: 100000,
     },
   },
-  focus: { walked: [eKey(7311)], near: [] },
+  focus: { walked: [7311], near: [] },
   lines: [],
   name: () => "duct",
   kinds: {},

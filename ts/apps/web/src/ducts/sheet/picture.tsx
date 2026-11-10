@@ -182,10 +182,10 @@ export function SheetPicture({
   // `near` is the context past each stopping unit; the sheet exposes no candidate-box context yet.
   const focus = useMemo<PictureContent["focus"]>(
     () => ({
-      walked: elements.keysOf(focusIds),
-      near: elements.keysOf(beyond.ids),
+      walked: [...focusIds],
+      near: [...beyond.ids],
     }),
-    [focusIds, beyond, elements],
+    [focusIds, beyond],
   );
   const runs = useMemo(() => worksheetPicture(sheet?.worksheet ?? null, elements), [sheet, elements]);
   const members = useMemo<Members>(

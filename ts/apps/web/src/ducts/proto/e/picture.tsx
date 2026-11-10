@@ -7,7 +7,6 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
  * (capture, camera, selection, hover, readout and pane furniture) is the shared `Picture`'s; this
  * file only produces content for it.
  */ import type { Members, SubjectKey } from "@pe/kit/lang/attention";
-import type { ElementIndex } from "#/element-index";
 import { ductElements } from "../../identity";
 import { useContext, useMemo, type ReactNode, type RefObject } from "react";
 
@@ -126,7 +125,6 @@ export interface DuctsPictureExtra {
 
 /** Only opened systems are captured; an unscoped page never captures the whole document. */
 export const ductsFocus = (
-  elements: ElementIndex,
   snapshot: DuctSnapshot | null,
   system: readonly string[],
   drawn: Iterable<number> = [],
@@ -136,8 +134,8 @@ export const ductsFocus = (
   const scope = scopeOf(snapshot, system);
   if (!scope) return null;
   return {
-    walked: elements.keysOf(new Set([...scope.members, ...drawn])),
-    near: elements.keysOf(stubs),
+    walked: [...new Set([...scope.members, ...drawn])],
+    near: [...stubs],
   };
 };
 
@@ -234,8 +232,8 @@ function Content({
   const stubs = useMemo(() => stubIdsOf(neighbours, opened), [neighbours, opened]);
   // E's system scope is one producer of focus: its members walked, the neighbours' stubs near.
   const focus = useMemo(
-    () => ductsFocus(elements, snapshot, page.system, members, stubs) ?? NO_FOCUS,
-    [elements, snapshot, page.system, members, stubs],
+    () => ductsFocus(snapshot, page.system, members, stubs) ?? NO_FOCUS,
+    [snapshot, page.system, members, stubs],
   );
   const systemColours = page.layers.includes("system-colours");
   const colours = coloursOf(work.doc);
