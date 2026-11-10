@@ -34,6 +34,14 @@ Carried from wave 2: V3 (the host filters admitted routes out of Pea's Work tool
 
 A real PDF and real cells; no mock witness. Pea stages a cited value as a Pea StateCell inside the Reject window with a citation to a page, block or image region; Pin keeps the value and citation through review; `attach_spec` accepts a path, a URL and an upload; a saved member reopens without reparsing; the person keeps or reverts the same StateCell beside the highlighted evidence, with no separate Accept/Reject lane.
 
+## Author witnesses (kaitpw, 2026-11-10)
+
+Two Opus threads build one frozen product spec, hydronic pipe sizing (`.artifacts/runs/kernel-crusade-20261110/authors/SPEC-hydronic.md`), blind to the old builtin at `57721b39`: one as a Pod, one as a builtin route on slots. At every slice landing each rebuilds on the new tip and records what it still cannot express as a red `kernel gap:` test; after slices 7 and 9 each re-authors from scratch. One instrument (`authors/measure.py`) measures both: authored lines, files, directories, generated files, gap tests, `unknown` and casts. The before number at `57721b39` is 699 authored lines in 21 files across 11 directories plus 19 generated files. The driver drives both in the browser on real Revit after slices 7 and 9. The hydronic Pod lands on main as the first curated example Pod; the builtin specimen is never merged. kaitpw: "I have yet to see with my own eyes a pod route successfully binding, reading and applying a revit doc."
+
+Pod scope added to the slices: slice 7's falsifier also requires a Pod to plan and apply a parameter write to a Revit document through the sheet slot; slice 8's falsifier also requires a Pod to fill the picture slot with scope and marks from the closed set. Both falsifiers are the Pod author's red tests.
+
+File moves and renames are greenlit for every writer when they cut a measure (fewer directories touched per route, a route's code in one place, a name that says what survives). kaitpw: "pls explicitly greenlight and encourage file moves/renames too if it helps measures." Use `git mv` so history follows.
+
 ## Deletion criteria
 
 - A slice lands only when its falsifier turns green at the landed SHA and every file in its Deletes column is gone.
@@ -62,3 +70,4 @@ A real PDF and real cells; no mock witness. Pea stages a cited value as a Pea St
 - 2026-11-10, kaitpw: Q8 to Q14 yes (dark period, dock tabs as the dock head, storage landing, one notice feed, consent in two places, the tray's job, the ducts inbox is the goal slot).
 - 2026-11-10, root thread: order is legacy delete, storage root, journal services, run islands, SubjectRef, chrome, sheet, picture, findings.
 - 2026-11-10, implementor exception upheld by the root thread: no route is on the legacy kernel, so nothing goes dark at slice 1; slice 10 moves the eight non-exemplar routes onto slots. Plan docs on `crusade/kernel` at 0e0e6e69.
+- 2026-11-10, kaitpw: two author witnesses on one frozen hydronic spec, Pod and builtin; Pod Revit apply joins slice 7 and Pod picture joins slice 8; the hydronic Pod ships as the first example Pod; file moves and renames greenlit.
