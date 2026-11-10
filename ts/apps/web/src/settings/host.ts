@@ -1,6 +1,6 @@
 import { resources } from "../../../host/src/builtin-read-handles.ts";
 
-import { read } from "@pe/host/read-graph";
+import { read } from "../../../host/src/reads/evaluator.ts";
 import { settingsArgs, settingsValue } from "@pe/agent-contracts";
 
 export const reads = {

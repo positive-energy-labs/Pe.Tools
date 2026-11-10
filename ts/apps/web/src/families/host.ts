@@ -7,7 +7,7 @@ import {
   familiesViewArgs,
   familiesViewData,
 } from "../../../../packages/agent-contracts/src/families-read.ts";
-import { read, workScope } from "@pe/host/read-graph";
+import { read, workScope } from "../../../host/src/reads/evaluator.ts";
 import { documentMark } from "../../../host/src/reads/inputs.ts";
 import { applyOutcome, applyTally } from "./families-outcome.ts";
 import { matrixModel, buildPivot } from "./families-matrix.ts";

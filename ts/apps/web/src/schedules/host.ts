@@ -13,7 +13,7 @@ import {
   schedulesViewArgs,
   schedulesViewData,
 } from "../../../../packages/agent-contracts/src/schedules-read.ts";
-import { read } from "@pe/host/read-graph";
+import { read } from "../../../host/src/reads/evaluator.ts";
 import { documentMark } from "../../../host/src/reads/inputs.ts";
 import { scheduleOutcome } from "./schedule-outcome.ts";
 

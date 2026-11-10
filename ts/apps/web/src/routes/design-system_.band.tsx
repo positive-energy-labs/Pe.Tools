@@ -63,7 +63,7 @@ function BandRoute() {
       <header className="sticky z-sticky">
         <div className="flex items-center justify-between py-2.5">
           <div className="flex min-w-0 items-baseline gap-3">
-            <Link to="/design-system">← design system</Link>
+            <Link to="/$route" params={{ route: "design-system" }}>← design system</Link>
             <span>band</span>
             <span>approve and deny are the cell&apos;s own transitions, at every scale</span>
             <FactChip

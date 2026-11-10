@@ -1,7 +1,7 @@
-import { createFileRoute, notFound, type SearchSchemaInput } from "@tanstack/react-router";
-import { workFingerprintSchema } from "@pe/agent-contracts";
+import { createFileRoute, notFound } from "@tanstack/react-router";
+import { workFingerprintSchema, type RouteKey } from "@pe/agent-contracts";
 import { routeAt } from "../route/registry";
-import type { routeSearch } from "../shell/owner";
+import { routeFile } from "../shell/route-file";
 import { TypedShell } from "../shell/typed-shell";
 
 /**
@@ -10,9 +10,7 @@ import { TypedShell } from "../shell/typed-shell";
  * (`design-system_.swatch`) outrank this segment, so satellites keep their own files.
  */
 export const Route = createFileRoute("/$route")({
-  // Exception to no casts: as routeFile, router search is projected; the typed mount decodes the Page.
-  validateSearch: (search: SearchSchemaInput & Record<string, unknown>) =>
-    search as unknown as ReturnType<typeof routeSearch> & Record<string, unknown>,
+  ...routeFile<RouteKey>(),
   beforeLoad: ({ params }) => {
     if (!routeAt(`/${params.route}`)) throw notFound();
   },

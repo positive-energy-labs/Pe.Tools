@@ -19,7 +19,7 @@ import { createViewOwner } from "../route/view-owner";
 
 /**
  * `createFileRoute(path)({ ...routeFile(route), component })`: the address is the search. Its
- * input is `SearchSchemaInput`, which is what lets a `<Link to="/settings">` omit every key.
+ * input is `SearchSchemaInput`, which is what lets a `<Link to="/$route" params={{ route: "settings" }}>` omit every key.
  */
 export {routeFile} from "./route-file";
 

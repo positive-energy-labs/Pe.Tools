@@ -1,4 +1,4 @@
-import { read } from "@pe/host/read-graph";
+import { read } from "../../../host/src/reads/evaluator.ts";
 import { capturesArgs, capturesValue } from "@pe/agent-contracts";
 import { captures } from "../../../host/src/builtin-read-handles.ts";
 export const reads = {

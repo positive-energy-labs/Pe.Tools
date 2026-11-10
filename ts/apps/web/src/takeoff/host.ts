@@ -13,7 +13,7 @@ import {
 import { adoptionArgs, adoptionData, viewCatalogueArgs, viewCatalogueData } from "@pe/agent-contracts/takeoff-read";
 import { adoptDrafts } from "@pe/agent-contracts/takeoff-adoption";
 import { leaf, read } from "../../../host/src/reads/evaluator.ts";
-import { projectTakeoffViews } from "@pe/mcps/takeoff-ops";
+import { projectTakeoffViews } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
 import { workRead, workBinding, documentMark, nativeRead } from "../../../host/src/reads/inputs.ts";
 const captured = leaf("resource", readingRequestSchema, takeoffCaptureSchema.nullable());
 export const takeoffSnapshotInput = z.object({

@@ -928,7 +928,7 @@ test("N-03 typed Fans retains a newly explicit pin when its resolved target is u
       "http://place.invalid",
     ).searchParams.get("target"),
   ).toBe(pin);
-  await act(() => router.navigate({ to: "/pea" }));
+  await act(() => router.navigate({ to: "/$route", params: { route: "pea" } }));
   fireEvent.click(screen.getByRole("button", { name: "Expand tools" }));
   fireEvent.click(screen.getByRole("button", { name: "Fans" }));
   await waitFor(() => expect(router.state.location.pathname).toBe("/fans"));
