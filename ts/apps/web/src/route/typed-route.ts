@@ -44,9 +44,16 @@ export const field = <S extends z.ZodType, const R extends Field["role"]>(
   role: R,
   url: Field["url"] = "replace",
 ) => ({ schema, initial, role, url });
-/** The keys of a subject set whose kind carries a text key (system name, workspace id). */
+/** The text keys of a subject set of plain refs (system name, workspace id); a tuple key, placement or sub is not a name and throws. */
 export const namesOf = (value: Many<SubjectRefCode>): string[] | "all" =>
-  value.kind === "all" ? "all" : value.ids.map((id) => String(subjectOf(id).key));
+  value.kind === "all"
+    ? "all"
+    : value.ids.map((id) => {
+        const { key, placement, sub } = subjectOf(id);
+        if (typeof key !== "string" || placement !== undefined || sub !== undefined)
+          throw Error(`namesOf: ${id} is not a plain text-keyed subject`);
+        return key;
+      });
 export { subjectSchema };
 export type Fields = Readonly<Record<string, Field>>;
 type FieldValues<F extends Fields> = {

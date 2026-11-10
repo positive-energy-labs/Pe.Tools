@@ -21,6 +21,7 @@ declare const uniqueId: unique symbol;
 /** A Revit UniqueId; an integer-only ElementId is refused, it is session-local and never identity. */
 export type UniqueId = string & { readonly [uniqueId]: true };
 declare const documentKey: unique symbol;
+/** The stable document address key (lowercased, backslashed path); session state such as an openId is never part of it. */
 export type DocumentKey = string & { readonly [documentKey]: true };
 
 export const SUBJECT_KEY_KINDS = [
@@ -38,12 +39,13 @@ export const uniqueIdSchema = z.custom<UniqueId>(
   (v) => typeof v === "string" && v.length > 0 && !/^[+-]?\d+$/.test(v),
   { message: "a UniqueId is a non-empty string and never an ElementId" },
 );
+/** The one door for `DocumentKey`; it refuses the `doc:<session>/<openId>` capability row (session state, not identity). */
 export const documentKeySchema = z.custom<DocumentKey>(
-  (v) => typeof v === "string" && v.length > 0,
-  {
-    message: "a document key is a non-empty string",
-  },
+  (v) => typeof v === "string" && v.length > 0 && !/^doc:[^/]*\/./.test(v),
+  { message: "a document key is the stable address key, never a session `doc:<session>/<openId>` row" },
 );
+/** Mints a `DocumentKey` from trusted address text; a refusal is a programming error. */
+export const documentKeyOf = (text: string): DocumentKey => documentKeySchema.parse(text);
 const placementSchema = z.strictObject({
   host: documentKeySchema,
   links: z.array(uniqueIdSchema).min(1).readonly(),
