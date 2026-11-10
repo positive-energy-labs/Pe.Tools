@@ -163,6 +163,15 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 ## Owed
 
 - Kernel crusade slices 1 to 10 are in [MAP.md](MAP.md); each lands with its red falsifier. Rebuild this ledger as current truth at slice 1, because it is longer than two screens and its wave 2 lines predate ADR 0035.
+- Slice 10 slot plan for the eight non-exemplar routes, implementor default 2026-11-10, re-openable. Each is a typed `route()` today (`apps/web/src/<route>/route.ts`) and moves onto slots in this order:
+  - chat (`/pea`): `subject` the thread (keyKind `workspace`); `layout` threads pane plus chat pane; `title(ctx)` puts the thread name in the chat pane head; no sheet, picture or goal.
+  - pods: `subject` the Pod member (keyKind `name`, tuple pod and path); `sheet` the member Work as `local` bindings; `goal` the member's unresolved run inputs; `query` `runs` and `mode`.
+  - settings: no subject; `query` `section`; the per-user setting fields have no binding kind (ADR 0035 rule 3 is closed), so the sheet slot stays empty until a kind is ruled.
+  - index (`/`, `home/route.ts`): no subject; `query` the thread search and sort fields; `layout` one pane. `apps/web/src/index/graph.ts` is an old `RouteGraph` with no route file; delete it with the slice if nothing imports it.
+  - ops: `subject` the op (keyKind `name`); `sheet` the op input as `local` bindings; `query` `op` and `actionId`.
+  - bind: `subject` the page (keyKind `name`); `query` `query` and `fragment`; no sheet.
+  - family: `subject` the family (keyKind `name`, tuple with the type); `sheet` `parameter` and `local` bindings; `picture` the anatomy marks; `goal` the doc-lab acceptance closers; findings from the cut sheet.
+  - rooms: `subject` the room (keyKind `UniqueId`); `picture` the plan; `sheet` `store` bindings for zone assignment; `goal` the partition inbox.
 - The Mod+K pane navigator listing was not found in source (`shell/mount-chrome.tsx:37` calls `adapters.navigate(pane, false)`); name its registry or delete the binding.
 - A person-resolver closer in a route's Goal bridging into the notice feed; wait until two routes return Goals.
 - Whether `route-document-store.ts` keeps a per-Work undo journal (ADR 0030 rule 9); findings (slice 9) needs it.
