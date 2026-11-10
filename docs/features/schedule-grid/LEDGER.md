@@ -18,6 +18,8 @@
 - 2026-08-16 — A kiln "T" badge for type parameters: a taxonomy hue carrying a fact; dropped to a note.
 
 ## Owed
+
+- Fix the two pre-existing effect-edge lint errors at `schedule-test-fixture.ts:81/:101`. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:533`.
 - Units at human surfaces: built 2026-09-22 (design-system ledger). Revit-backed proof owed: `pe-revit test --project dotnet/Pe.Revit.Tests --filter Schedule_cell_binding_display_unit_is_the_unit_the_column_renders` and `--filter Typed_text_is_read_by_the_document_and_answered_in_the_unit_the_surface_renders`, then one real schedule: type "300 L/s" in a CFM column and read back Revit's answer.
 - pin as test: an empty-string commit is REFUSED — blank is not zero and blank is not a stageable value (the old code refused it silently; the refusal is now spoken, and nothing asserts it).
 - pin as test: typing over a pea proposal SEVERS it and the severed proposal is DELETED, not retired — this route has no proposal ledger, and deleting is honest (nothing renders a false history) even though it is lossy.

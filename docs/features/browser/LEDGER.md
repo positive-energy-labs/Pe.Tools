@@ -32,6 +32,8 @@
 
 ## Owed
 
+- Repair acceptance instrumentation for disabled-control tooltip inspection and validate absolute restore trace arguments before launch; the gate hit null URL, shifted arguments and an unintended fresh profile. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/drive/gate-4b6bfec7/DEFECTS.md:13`.
+
 - Move the last `playwright-core` consumers to `@pe/browser`, then drop the dependency from `ts/apps/host/package.json` and `ts/packages/kit/package.json`. `ts/apps/host/tests/demo-lane.scenario.browser.test.ts` was ported and passed 7/7 on `0b40c293` (`16813184` on `port/browser-cutover-owed` before its rebase), but main then rewrote its `/family` and `/families` journeys for shared Apply, so it must be redone on main's tests. Keep the port's lessons: one browser context per test, side-effect-free reads, `fill` by focus (as Playwright did, no hit test), and the pane-title fold exit. `ts/packages/kit/tests/browser.mjs` needs a Revit-backed hosted Page (downloads, offline `file://` blocking); the branch draft is `c1a71a85`.
 - Attack the page capture with hostile popup, iframe, redirect and failed-font pages (`page-capture.browser.test.ts` covers http, CONNECT, WebSocket and worker egress only). Keep the deliberate self-contained worker policy.
 - Prove the packaged host's browser worker (`dispatchBrowserWorker`, `--pe-browser-worker`) launches, drives and closes a page from the SEA executable. Source worker tests pass; no packaged or installed proof exists.

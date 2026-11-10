@@ -171,6 +171,9 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 
 ## Owed
 
+- kaitpw: choose native Direction, network scoring, or permanent disclosure of both as the MUAS flow-role authority; MUAS-1 element 14577391 has reversed inlet/discharge roles. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/DIAG-MUAS-PORTS-REPORT.md`.
+- Register Ducts analysis as a host registry read; delete the second read path at `pe-routes.ts:436-440` and `options.ductsAnalysis` (ADR 0033 rules 1 and 7). Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:393`.
+
 - The SD5-10/tap-std owner crossing (/fans rule row → /ducts) is proven deterministically only; the real-host recheck (FX-REDRIVE, 2026-11-04) crossed CR3-6/elbow-mitered because the isolated profile lacked the prior assignment. Re-drive on a profile that has it.
 
 - RHVAC Load Preview integration: re-enter through /rooms once the rooms split is built and 'cfm comes from equipment' has mileage. (kaitpw)

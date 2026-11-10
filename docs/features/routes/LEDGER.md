@@ -153,6 +153,20 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Owed
 
+- Measure History replay and index the O(refs * range) taking scan at `history.ts:271`; the 16,629,415-byte Fans replay took 363 s; remove the labelled 600 s allowance after proof. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:40`.
+- Measure full-web-suite setup and transform cost before tuning; the recorded run took 1389 s, with setup 1116 s and transform 574 s. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:105`.
+- Diagnose guard and live-read timeouts under `maxWorkers=2`. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:107`.
+- Move the J/JX mounted journey at `kernel-journeys.test.ts:18` from in-process Work injection and reads to real HTTP and SSE. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:376`.
+- Provide a generic owner-registered HTTP asset seam for `pe-routes.ts:465` `family.spec` and the `ducts.analysis-artifact` GET; extend the kernel route-name guard after removal. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:393`.
+- Bound or terminate admissions that never settle; each stuck admission currently pins its tombstone indefinitely. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:386`.
+- Delete the admitted/legacy branches at `runtime/route-view-store.ts:3/:128/:215` if no builtin uses a legacy view codec. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:468`.
+- Add runtime refusal coverage for a Pea Page patch on Bind if `route-address.test.ts:222` covers discovery only. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:490`.
+- Restrict `retainActionCaller` imports to `action-journal.ts`. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:504`.
+- Add a positive surface witness that a Page-door action survives retirement of its request caller. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:504`.
+- Resolve repeated History entries saying Unavailable: Ambiguous pane at this point beside valid After write and Synced rows. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/drive/gate-4b6bfec7/DEFECTS.md:10`.
+- kaitpw: push main after the local kernel landing at `ec3a13a8`. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:614`.
+- kaitpw: choose model reversal through native undo, an inverse Plan through consent, or no reversal; honest post-apply refusal has landed. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/DIAGNOSE-UNDO-AFTER-APPLY-REPORT.md`.
+
 - Wave 4, typed-shell cutover: remaining routes still need `admitted-mount.ts`, `admitted-readings.ts`, `admitted-work.ts`, body/codec/verb slots and `fixture-lane.ts` seed selection (Pods also uses foreign Work seeds). Keep them until their consumers migrate. Typed Ducts still submits mixed claim patches; its version-2 Work definition remains domain-owned. The measured integration and kernel targets remain open; see the wave 3 S report before claiming the cutover reduced the kernel.
 
 - Phase8: migrate the canonical source provenance schema and its header consumers together to native Effect; its [owning TODO](../../../ts/packages/agent-contracts/src/input-lane.ts) retains the boundary rather than adding a second decoder contract.
