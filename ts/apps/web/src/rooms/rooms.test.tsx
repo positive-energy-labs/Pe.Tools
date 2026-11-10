@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { roomEditKey, roomsRouteState, stagedRoomWrites } from "@pe/agent-contracts";
+import { decode, roomEditKey, roomsRouteState, stagedRoomWrites } from "@pe/agent-contracts";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
 import { DEMO_PLAN, DEMO_ROOMS, DEMO_VIEW } from "./demo";
@@ -7,6 +7,16 @@ import { roomsPageSchema } from "./page";
 import { RoomsPlan } from "./plan";
 import { Pane } from "@pe/kit/lang/pane";
 import { RoomsTable, roomRows } from "./table";
+import { regionSubject } from "./subject";
+
+test("rooms attention decodes as a region with its stable carrier GUID", () => {
+  const region = DEMO_ROOMS.regions.find(region => region.role === "room")!;
+  const view = render(<RoomsTable rows={roomRows([region], ["Fixture level"])} onSelect={() => {}} empty={{ says: "empty", exit: "none" }} />);
+  try {
+    const key = view.container.querySelector("tr[data-subject]")!.getAttribute("data-subject")!;
+    expect(decode(key)).toEqual({ ok: true, value: { keyKind: "region", key: region.guid } });
+  } finally { cleanup(); }
+});
 
 test("stagedRoomWrites sends both authors staged values per guid", () => {
   const doc = roomsRouteState.schema.parse({
@@ -85,7 +95,7 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
     </>,
   );
   const path = view.container.querySelector<SVGPathElement>(
-    'path[data-subject="room:00000000-0000-4000-8000-000000000001"]',
+    `path[data-subject="${regionSubject("00000000-0000-4000-8000-000000000001")}"]`,
   )!;
   expect(path.getAttribute("data-state")).toBe("locked");
   expect(path.getAttribute("data-stale")).toBe("true");
@@ -94,14 +104,14 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
   expect(path.getAttribute("stroke")).not.toBe(path.getAttribute("fill"));
   expect(path.getAttribute("fill")).toContain(
     view.container
-      .querySelector('path[data-subject="room:00000000-0000-4000-8000-000000000002"]')!
+      .querySelector(`path[data-subject="${regionSubject("00000000-0000-4000-8000-000000000002")}"]`)!
       .getAttribute("stroke"),
   );
   const legend = view.container.querySelector('[aria-label="rooms legend"]')!.textContent!;
   expect(legend).toMatch(/locked\D*1/);
   expect(legend).toMatch(/stale\D*2/);
   expect(
-    view.container.querySelector('tr[data-subject="room:00000000-0000-4000-8000-000000000001"]')!
+    view.container.querySelector(`tr[data-subject="${regionSubject("00000000-0000-4000-8000-000000000001")}"]`)!
       .textContent,
   ).toContain("locked · stale");
   fireEvent.click(path);
