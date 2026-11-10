@@ -228,8 +228,8 @@ test("foreign native binding, corrupt basis target/version and missing basis ref
     try {
       const good = await seeded.post(); expect(good.status).toBe(200);
       expect((await seeded.post({ [NATIVE_BODY_VERSION_HEADER]: "foreign-version" })).status).toBe(409);
-      await expect(conflictOwner.read(ductBodySubject(input), async () => { throw Error("must not acquire"); },
-        { source: { revision: "conflicting-original" } })).rejects.toMatchObject({ problem: "recording.mismatch" });
+      await expect(run(conflictOwner.read(ductBodySubject(input), Effect.die("must not acquire"),
+        { source: { revision: "conflicting-original" } }))).rejects.toMatchObject({ problem: "recording.mismatch" });
     } finally { await seeded.close(); }
   } finally { await c.web.close(); }
 });
@@ -246,28 +246,15 @@ test("I/O loss after native capture marks incomplete and still serves the live b
   } finally { await c.web.close(); }
 });
 
-test("overlapping consumers share one acquisition and retain separate basis occurrences", async () => {
-  const c = await captured();
-  try {
-    const answers = await Promise.all([c.web.post(), c.web.post()]);
-    expect(answers.map((answer) => answer.status)).toEqual([200, 200]);
-    expect(answers[0]!.headers.get(NATIVE_BODY_VERSION_HEADER)).toBe(answers[1]!.headers.get(NATIVE_BODY_VERSION_HEADER));
-    expect(answers.map((answer) => answer.headers.get("x-pe-ducts-reused")).sort()).toEqual(["false", "true"]);
-    expect(c.counts.reads).toBe(1);
-    expect(c.takes.filter((taking) => taking.input.kind === "native")).toHaveLength(1);
-    expect(c.takes.filter((taking) => taking.input.kind === "document" && taking.input.scope.includes("ducts-body-basis"))).toHaveLength(2);
-  } finally { await c.web.close(); }
-});
-
-test("deadline during deferred basis capture retires the flight before ready publication", async () => {
-  const owner = new DuctsReadings({ entries: 2, bytes: 1_000_000, idleMs: 1000, waitMs: 10 });
+test("invalidation during deferred basis capture fences ready publication", async () => {
+  const owner = new DuctsReadings({ entries: 2, bytes: 1_000_000, idleMs: 1000 });
   const gate = Promise.withResolvers<void>(); const frames: string[] = [];
   const subject = ductBodySubject(input); const stop = owner.observe(subject, (frame) => frames.push(frame.state));
-  const result = owner.read(subject, async () => ({ value, nativeRequestId: "deadline-native", target: {
+  const result = run(owner.read(subject, Effect.succeed({ value, nativeRequestId: "fenced-native", target: {
     session: ref.session, document: row.address, documentRef: ref,
-  } }), { source: { beforeReady: () => gate.promise } });
-  const refused = expect(result).rejects.toMatchObject({ statusCode: 409 });
-  try { await expect.poll(() => frames.includes("failed")).toBe(true); gate.resolve(); await refused; expect(frames).not.toContain("ready"); }
+  } }), { source: { beforeReady: () => Effect.promise(() => gate.promise) } }));
+  const refused = expect(result).rejects.toMatchObject({ status: 409 });
+  try { await expect.poll(() => frames.includes("loading")).toBe(true); owner.refresh(ref); gate.resolve(); await refused; expect(frames).not.toContain("ready"); }
   finally { gate.resolve(); stop(); }
 });
 

@@ -34,7 +34,6 @@ import {
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import type { NativeReadInput } from "@pe/host-internal/native-read";
 
-import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/request-contracts";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 import { HttpRouter, type HttpServerRequest, HttpServerResponse as Response } from "effect/http";
 import { randomUUID } from "node:crypto";
@@ -71,7 +70,7 @@ import { HostDocumentMarks } from "./document-marks.ts";
 import { ductBodySubject, type DuctsBodyBasisSource } from "./ducts-body-basis.ts";
 import { DuctFiles } from "./ducts-files.ts";
 import type { DuctsReadings } from "./ducts-readings.ts";
-import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
+import { ductsReadings } from "./ducts-readings.ts";
 
 import type { FamiliesReader } from "./families-reader.ts";
 import { readFamily, type FamilyActionDependencies } from "./family-actions.ts";
@@ -269,11 +268,10 @@ function callRoutes(
       let scope: HostSessionScope = identity.scope;
       if (entry.canonicalSession && scope.bridgeSessionId && !(entry.reading && composition?.retainedRead)) {
         const bridgeForScope = yield* RevitBridge;
-        const canonicalSession = yield* Effect.tryPromise({
-          try: () => canonicalDuctsSession(bridgeForScope, scope.bridgeSessionId!),
-          catch: (error) => error,
-        });
-        scope = { ...scope, bridgeSessionId: canonicalSession };
+        const canonicalSession = yield* SdkSession.resolve(bridgeForScope, { id: scope.bridgeSessionId }).pipe(
+          Effect.mapError((error) => new BridgeError(error.message, 409, { notDispatched: true })),
+        );
+        scope = { ...scope, bridgeSessionId: canonicalSession.sessionId };
       }
       let bridgeSessionId = scope.bridgeSessionId;
       let openDocumentId: string | null | undefined = scope.openDocumentId;
@@ -1371,39 +1369,32 @@ export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
   const basis = source.basis ? yield* source.basis.prepare(input, subject) : undefined;
   const admitted = resolved ?? (yield* native.resolve(input));
   const target = { processIncarnation: admitted.processIncarnation, openDocumentLifetime: admitted.openDocumentLifetime };
-  const services = yield* Effect.context<RequestIdentityKey>();
-  // Existing phase-5 owner Promise boundary; the same captured caller runs acquisition and metadata.
-  // effect-edge: island, phase 5
-  const run = Effect.runPromiseWith(services);
-  let acquired = false;
-  const shared = yield* Effect.tryPromise({ try: () => owner.read(subject, async () => {
-    acquired = true;
-    const answer = await run(native.read(input));
+  const shared = yield* owner.read(subject, Effect.gen(function* () {
+    const answer = yield* native.read(input);
     if (canonicalRouteInput(answer.actualTarget) !== canonicalRouteInput(target))
-      throw new InvalidRead({ message: "Ducts native response changed its admitted target", status: 409, problem: "read.target" });
+      return yield* new InvalidRead({ message: "Ducts native response changed its admitted target", status: 409, problem: "read.target" });
     const actual = answer.actualTarget.openDocumentLifetime;
     // A cold historical owner reconstructs the original retained body, including its admitted
     // target metadata. A live hit did not consume another inventory row to record for this child.
     const capturedTarget = basis?.recorded?.target;
     const document = !capturedTarget && "openId" in actual
-      ? await run(source.document({ session: input.scope.bridgeSessionId!, openId: actual.openId })) : undefined;
-    const nativeTakingId = basis ? await run(basis.link(answer)) : undefined;
+      ? yield* source.document({ session: input.scope.bridgeSessionId!, openId: actual.openId }) : undefined;
+    const nativeTakingId = basis ? yield* basis.link(answer) : undefined;
     return { value: answer.value, nativeRequestId: answer.nativeRequestId, nativeTakingId,
       target: capturedTarget ?? { session: input.scope.bridgeSessionId!, document: document?.address ?? null,
         ...(document ? { documentRef: { session: document.session, openId: document.openId } } : {}) } };
-  }, { ...options, ...(basis ? { source: {
+  }), { ...options, ...(basis ? { source: {
     revision: basis.recorded?.version,
-    beforeReady: (body) => run(basis.consume(body, target)),
-  } } : {}) }), catch: retainedReadFailure }).pipe(Effect.catch((error) =>
-    basis && options.version && !acquired && error._tag === "InvalidRequest" &&
+    beforeReady: (body) => basis.consume(body, target),
+  } } : {}) }).pipe(Effect.catch((error) =>
+    basis && options.version && error._tag === "InvalidRequest" &&
       error.status === 409 && error.problem === "read.retained"
       ? basis.refuse(error) : Effect.fail(error)));
-  // Joiners/hits consume the retained dependency; they never invent another native acquisition.
-  if (basis && !acquired) yield* basis.consume(shared, target);
+  if (basis && shared.reused) yield* basis.consume(shared, target);
   yield* Effect.try({ try: () => owner.assertCurrent(subject, shared.version), catch: retainedReadFailure });
   return Response.text(shared.json, { headers: { "content-type": "application/json",
     ...resolvedTargetHeaders(shared.target), "x-pe-native-request-id": shared.nativeRequestId,
-    [NATIVE_BODY_VERSION_HEADER]: shared.version, "x-pe-ducts-reused": String(!acquired) } });
+    [NATIVE_BODY_VERSION_HEADER]: shared.version, "x-pe-ducts-reused": String(shared.reused) } });
 });
 
 // The legacy retained owner uses statusCode; the typed HTTP mapper consumes status.
