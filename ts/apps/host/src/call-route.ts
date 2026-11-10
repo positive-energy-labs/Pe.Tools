@@ -733,10 +733,8 @@ export function makeCallRoute(
       if (req.headers["x-pe-history-point"]) return Effect.succeed(Response.jsonUnsafe({ error: { code: "history.read-only", message: "needs live Revit" } }, { status: 409 }));
       const caller = currentCaller();
       return RevitBridge.use((_bridge) =>
-        Effect.tryPromise({
+        Effect.flatMap(req.json, (body) => Effect.tryPromise({
           try: async () => {
-            // effect-edge: island, phase 5
-            const body = await Effect.runPromise(req.json);
             if (!isRecord(body) || typeof body.id !== "string")
               throw Error("An original action ID is required");
             const controlled = (await owner().readFor(caller, undefined, body.id))[0];
@@ -761,7 +759,7 @@ export function makeCallRoute(
             });
           },
           catch: (error) => error,
-        }).pipe(
+        })).pipe(
           Effect.catch((error) =>
             Effect.succeed(
               error instanceof Refused
@@ -775,11 +773,9 @@ export function makeCallRoute(
   });
   const familyReadings = HttpRouter.add("*", "/family/readings", (req) =>
     RevitBridge.use((bridge) =>
-      Effect.tryPromise({
+      Effect.flatMap(req.method === "POST" ? req.json : Effect.succeed<Schema.Json>(null), (body) => Effect.tryPromise({
         try: async () => {
           if (req.method === "POST") {
-            // effect-edge: island, phase 5
-            const body = await Effect.runPromise(req.json);
             if (!isRecord(body) || typeof body.key !== "string")
               throw Error("A Family read key is required");
             return Response.jsonUnsafe(
@@ -798,7 +794,7 @@ export function makeCallRoute(
           return Response.jsonUnsafe(await observations().familyReadings(scope));
         },
         catch: (error) => error,
-      }).pipe(
+      })).pipe(
         Effect.catch((error) =>
           Effect.succeed(Response.jsonUnsafe({ error: said(error) }, { status: 409 })),
         ),
@@ -807,10 +803,8 @@ export function makeCallRoute(
   );
   const scheduleReadings = HttpRouter.add("POST", "/schedules/readings", (req) =>
     RevitBridge.use((bridge) =>
-      Effect.tryPromise({
+      Effect.flatMap(req.json, (body) => Effect.tryPromise({
         try: async () => {
-          // effect-edge: island, phase 5
-          const body = await Effect.runPromise(req.json);
           if (!isRecord(body) || typeof body.key !== "string")
             throw Error("Schedule read key required");
           return Response.jsonUnsafe(
@@ -823,7 +817,7 @@ export function makeCallRoute(
           );
         },
         catch: (error) => error,
-      }).pipe(
+      })).pipe(
         Effect.catch((error) =>
           Effect.succeed(Response.jsonUnsafe({ error: said(error) }, { status: 409 })),
         ),
