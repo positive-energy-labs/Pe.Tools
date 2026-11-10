@@ -19,21 +19,19 @@ function Resolve-ProductRuntimeRoot {
         [string]$SharedRoot = $env:PE_TOOLS_SHARED_ROOT
     )
     if (-not [IO.Path]::IsPathRooted($Root)) { throw "A $Lane runtime needs an absolute owner root." }
-    # v0.7.30 refused an installed runtime under a home override; kept unchanged.
     if ($Lane -eq 'installed' -and -not [string]::IsNullOrWhiteSpace($ProductHomeOverride)) {
         throw 'An installed runtime does not run under PE_TOOLS_PRODUCT_HOME.'
     }
-    if (-not [string]::IsNullOrWhiteSpace($ProductHomeOverride)) {
-        $homePath = [IO.Path]::GetFullPath($ProductHomeOverride.Trim())
-        if (-not [string]::IsNullOrWhiteSpace($SharedRoot)) {
-            $sharedPrefix = [IO.Path]::GetFullPath($SharedRoot.Trim()).TrimEnd([char[]]@('\', '/')) + [IO.Path]::DirectorySeparatorChar
-            if (($homePath.TrimEnd([char[]]@('\', '/')) + [IO.Path]::DirectorySeparatorChar).StartsWith($sharedPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-                throw 'Isolated PE_TOOLS_PRODUCT_HOME cannot be at or under PE_TOOLS_SHARED_ROOT.'
-            }
-        }
-        return [IO.Path]::Combine($homePath, '.local-state')
-    }
+    $stateOwner = [IO.Path]::GetFullPath($(if ([string]::IsNullOrWhiteSpace($ProductHomeOverride)) { $Root } else { $ProductHomeOverride.Trim() }))
     # Combine, not Join-Path: pure string work, like C# and TS, even for a drive that is not mounted.
-    if ($Lane -eq 'dev') { return [IO.Path]::Combine([IO.Path]::GetFullPath($Root), '.artifacts', 'pe-tools') }
-    return $Root
+    $stateRoot = if (-not [string]::IsNullOrWhiteSpace($ProductHomeOverride)) { [IO.Path]::Combine($stateOwner, '.local-state') }
+        elseif ($Lane -eq 'dev') { [IO.Path]::Combine($stateOwner, '.artifacts', 'pe-tools') } else { $Root }
+    if (-not [string]::IsNullOrWhiteSpace($SharedRoot)) {
+        $shared = [IO.Path]::GetFullPath($SharedRoot.Trim())
+        $sharedPrefix = $shared.TrimEnd([char[]]@('\', '/')) + [IO.Path]::DirectorySeparatorChar
+        if (([IO.Path]::GetFullPath($stateRoot).TrimEnd([char[]]@('\', '/')) + [IO.Path]::DirectorySeparatorChar).StartsWith($sharedPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Machine state root '$stateRoot' cannot be at or under PE_TOOLS_SHARED_ROOT '$shared'."
+        }
+    }
+    return $stateRoot
 }

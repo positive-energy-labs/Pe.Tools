@@ -41,21 +41,23 @@ export function stateRoot(
   sharedRoot?: string,
 ): string {
   if (!isAbsolute(ownerRoot)) throw Error(`A ${lane} runtime needs an absolute owner root.`);
-  // v0.7.30 refused an installed runtime under a home override; kept unchanged.
   if (lane === "installed" && productHome?.trim())
     throw Error(`An installed runtime does not run under ${productPathNames.productHomeVariable}.`);
-  if (productHome?.trim()) {
-    const home = resolve(productHome.trim());
-    if (sharedRoot?.trim()) {
-      const away = relative(resolve(sharedRoot.trim()), home);
-      if (away !== ".." && !away.startsWith(`..${sep}`) && !isAbsolute(away))
-        throw Error(
-          `Isolated ${productPathNames.productHomeVariable} cannot be at or under ${productPathNames.sharedRootVariable}.`,
-        );
-    }
-    return join(home, productPathNames.localStateDirectoryName);
+  const stateOwner = resolve(productHome?.trim() || ownerRoot);
+  const root = productHome?.trim()
+    ? join(stateOwner, productPathNames.localStateDirectoryName)
+    : lane === "dev"
+      ? join(stateOwner, ".artifacts", "pe-tools")
+      : ownerRoot;
+  if (sharedRoot?.trim()) {
+    const shared = resolve(sharedRoot.trim());
+    const away = relative(shared, root);
+    if (away !== ".." && !away.startsWith(`..${sep}`) && !isAbsolute(away))
+      throw Error(
+        `Machine state root '${root}' cannot be at or under ${productPathNames.sharedRootVariable} '${shared}'.`,
+      );
   }
-  return lane === "dev" ? join(resolve(ownerRoot), ".artifacts", "pe-tools") : ownerRoot;
+  return root;
 }
 
 /** The owner's state root. Only an override can aim dev state at the installed namespace; that refuses. */

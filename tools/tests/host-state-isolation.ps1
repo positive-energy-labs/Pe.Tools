@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../product-paths.ps1')
 # The PowerShell resolver asserts the same table as C# ProductPathing.StateRoot and TS stateRoot.
 $table = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../ts/packages/host-contracts/tests/runtime-ownership.fixture.json') -Raw | ConvertFrom-Json
+$failures = @()
 foreach ($row in $table.stateRoots) {
     $previousShared = $env:PE_TOOLS_SHARED_ROOT
     $env:PE_TOOLS_SHARED_ROOT = $row.sharedRoot
@@ -15,13 +16,19 @@ foreach ($row in $table.stateRoots) {
         $env:PE_TOOLS_SHARED_ROOT = $previousShared
     }
     # Assert outside the try, so a resolver that stops refusing cannot be caught by its own failure message.
-    if ($row.error) {
-        if ($null -eq $refused) { throw "$($row.name) expected refusal '$($row.error)', received '$actual'" }
-        if ($refused -notlike "*$($row.error)*") { throw "$($row.name) refused with '$refused'" }
-    } elseif ($null -ne $refused) { throw "$($row.name) refused unexpectedly: $refused" }
-    elseif ($actual -ne $row.stateRoot) { throw "$($row.name) expected '$($row.stateRoot)', received '$actual'" }
-    Write-Output "PASS $($row.name)"
+    try {
+        if ($row.error) {
+            if ($null -eq $refused) { throw "$($row.name) expected refusal '$($row.error)', received '$actual'" }
+            if (-not $refused.Contains($row.error)) { throw "$($row.name) refused with '$refused'" }
+        } elseif ($null -ne $refused) { throw "$($row.name) refused unexpectedly: $refused" }
+        elseif ($actual -ne $row.stateRoot) { throw "$($row.name) expected '$($row.stateRoot)', received '$actual'" }
+        Write-Output "PASS $($row.name)"
+    } catch {
+        $failures += $_.Exception.Message
+        Write-Output "FAIL $($_.Exception.Message)"
+    }
 }
+if ($failures.Count) { throw ($failures -join [Environment]::NewLine) }
 foreach ($row in $table.contentRoots) {
     $refused = $null
     $actual = $null

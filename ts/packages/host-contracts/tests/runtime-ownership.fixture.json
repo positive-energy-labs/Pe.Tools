@@ -2,6 +2,38 @@
   "$comment": "One table, three resolvers: C# ProductPathing.StateRoot (Pe.Shared.Tests RuntimeOwnershipTests), TS stateRoot (host-contracts runtime-ownership.test.ts), PowerShell Resolve-ProductRuntimeRoot (tools/tests/host-state-isolation.ps1). trayLaunches: TS trayOwnerArguments emits argv; C# Pe.Host.Tray Program.ParseOwner must accept it.",
   "stateRoots": [
     {
+      "name": "a dev owner under the shared root refuses",
+      "lane": "dev",
+      "ownerRoot": "S:\\Pe.Tools\\checkout",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "Machine state root 'S:\\Pe.Tools\\checkout\\.artifacts\\pe-tools' cannot be at or under PE_TOOLS_SHARED_ROOT 'S:\\Pe.Tools'."
+    },
+    {
+      "name": "a dev owner equal to the shared root refuses",
+      "lane": "dev",
+      "ownerRoot": "S:\\Pe.Tools",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "Machine state root 'S:\\Pe.Tools\\.artifacts\\pe-tools' cannot be at or under PE_TOOLS_SHARED_ROOT 'S:\\Pe.Tools'."
+    },
+    {
+      "name": "an installed owner under the shared root refuses",
+      "lane": "installed",
+      "ownerRoot": "S:\\Pe.Tools\\installed",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "Machine state root 'S:\\Pe.Tools\\installed' cannot be at or under PE_TOOLS_SHARED_ROOT 'S:\\Pe.Tools'."
+    },
+    {
+      "name": "an installed owner equal to the shared root refuses",
+      "lane": "installed",
+      "ownerRoot": "S:\\Pe.Tools",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "Machine state root 'S:\\Pe.Tools' cannot be at or under PE_TOOLS_SHARED_ROOT 'S:\\Pe.Tools'."
+    },
+    {
       "name": "an isolated home cannot put model copies on the shared mount",
       "lane": "dev",
       "ownerRoot": "C:\\src\\Pe.Tools",

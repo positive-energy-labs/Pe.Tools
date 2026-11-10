@@ -10,20 +10,19 @@ internal static class ProductPathing {
     public static string StateRoot(ProductLane lane, string ownerRoot, string? productHome, string? sharedRoot = null) {
         if (!Path.IsPathRooted(ownerRoot))
             throw new ArgumentException($"A {lane} runtime needs an absolute owner root.", nameof(ownerRoot));
-        // v0.7.30 refused an installed payload under a home override (its root check failed); kept unchanged.
         if (lane == ProductLane.Installed && !string.IsNullOrWhiteSpace(productHome))
             throw new ArgumentException($"An installed runtime does not run under {ProductPathNames.ProductHomeVariable}; unset it, or use a dev session.", nameof(productHome));
-        if (!string.IsNullOrWhiteSpace(productHome)) {
-            var home = Path.GetFullPath(productHome!.Trim());
-            if (!string.IsNullOrWhiteSpace(sharedRoot)) {
-                var shared = Path.GetFullPath(sharedRoot!.Trim()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-                if ((home.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar).StartsWith(shared, StringComparison.OrdinalIgnoreCase))
-                    throw new ArgumentException($"Isolated {ProductPathNames.ProductHomeVariable} cannot be at or under {ProductPathNames.SharedRootVariable}.", nameof(productHome));
-            }
-            return Path.Combine(home, ProductPathNames.LocalStateDirectoryName);
-        }
+        var stateOwner = Path.GetFullPath(string.IsNullOrWhiteSpace(productHome) ? ownerRoot : productHome!.Trim());
         // Installed is the SDK's install root verbatim: byte-identical to v0.7.30's LocalApplicationData formula.
-        return lane == ProductLane.Dev ? Path.Combine(Path.GetFullPath(ownerRoot), ".artifacts", "pe-tools") : ownerRoot;
+        var root = !string.IsNullOrWhiteSpace(productHome) ? Path.Combine(stateOwner, ProductPathNames.LocalStateDirectoryName)
+            : lane == ProductLane.Dev ? Path.Combine(stateOwner, ".artifacts", "pe-tools") : ownerRoot;
+        if (!string.IsNullOrWhiteSpace(sharedRoot)) {
+            var shared = Path.GetFullPath(sharedRoot!.Trim());
+            var sharedPrefix = shared.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if ((Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar).StartsWith(sharedPrefix, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException($"Machine state root '{root}' cannot be at or under {ProductPathNames.SharedRootVariable} '{shared}'.");
+        }
+        return root;
     }
 
     /// <summary>
