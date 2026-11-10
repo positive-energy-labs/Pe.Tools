@@ -282,7 +282,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       expect(fresh.value.version).not.toBe(original.value.version);
       if (roster) expect(fresh.value.version).toBe(roster.headers.get(NATIVE_BODY_VERSION_HEADER));
       const refresh = ductsExecutors(liveFactories.service!)["ducts.refresh"]!;
-      await refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution);
+      await run(refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution) as Effect.Effect<unknown, unknown>);
       await next("stale");
       const refreshed = recovery ? await send(live, "/pe/reads/value", readBody("fans.roster", { target: ref }))
         : await send(live, "/call", { key: "ducts.snapshot.roster", request: { selector: { kind: "roster" } } });
@@ -592,7 +592,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }) });
     await reread();
     const refresh = ductsExecutors(liveFactories.service!)["ducts.refresh"]!;
-    await refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution);
+    await run(refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution) as Effect.Effect<unknown, unknown>);
     await reread();
     await live.dispose();
     liveFactories.recorded = true;
