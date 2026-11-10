@@ -7,7 +7,7 @@ import { subjectNamer } from "./subject-text";
 import { SubjectText, subjectDocument } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { makeAtomRegistry } from "#/shell/owner";
-import { TestAttention } from "#/test-attention";
+import { TestAttention, eKey, uid } from "#/test-attention";
 import { citation } from "@pe/kit/lang/attention";
 
 afterEach(cleanup);
@@ -84,24 +84,22 @@ test("block hover lights all references; token hover/focus narrows and exit rest
   const registry = makeAtomRegistry();
   const go = vi.fn();
   const { container, unmount } = render(
-    <TestAttention registry={registry}>
-      <SubjectTextContext.Provider value={{ doc: "test", nameOf, go }}>
+    <TestAttention registry={registry} ids={[...names.keys()]}>
+      <SubjectTextContext.Provider value={{ doc: "test", nameOf, uniqueIdOf: uid, go }}>
         <SubjectText text="10368760 ends at 12317607:0 facing 12317611:0" />
       </SubjectTextContext.Provider>
     </TestAttention>,
   );
   const block = container.querySelector("[data-subject-text]")!;
   fireEvent.mouseEnter(block);
-  expect(registry.get(citation)?.refs.map((r) => Number(r.key.slice(2)))).toEqual([
-    ...names.keys(),
-  ]);
+  expect(registry.get(citation)?.refs.map((r) => r.key)).toEqual([...names.keys()].map(eKey));
   const token = screen.getByRole("button", { name: "go to 14×10 duct port 0, reference 2" });
   fireEvent.mouseEnter(token);
-  expect(registry.get(citation)?.focus?.key ?? null).toBe("e:12317607");
+  expect(registry.get(citation)?.focus?.key ?? null).toBe(eKey(12317607));
   fireEvent.mouseLeave(token);
   expect(registry.get(citation)?.focus?.key ?? null).toBeNull();
   fireEvent.focus(token);
-  expect(registry.get(citation)?.focus?.key ?? null).toBe("e:12317607");
+  expect(registry.get(citation)?.focus?.key ?? null).toBe(eKey(12317607));
   fireEvent.click(token);
   expect(go).toHaveBeenCalledExactlyOnceWith(12317607);
   fireEvent.mouseLeave(block);

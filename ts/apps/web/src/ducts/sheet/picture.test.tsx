@@ -6,6 +6,8 @@
  * sheet ever mounts its picture without them again (the 2026-10-28 defect).
  */
 import { AttentionRoot } from "#/attention";
+import { ElementIndexContext } from "#/element-index";
+import { ductElements } from "./../identity";
 import { boundsOfPoints } from "#/scene/orbit";
 import type { ModelPicture } from "#/scene/picture/model";
 import type { PictureStage } from "#/scene/stage-controller";
@@ -13,7 +15,7 @@ import { renderPicturePane } from "#/scene/picture/picture";
 import { SceneMeshes } from "#/scene/types";
 import { makeAtomRegistry } from "#/shell/owner";
 import { RegistryContext } from "@effect/atom-react";
-import { attention, elementKey, setHovered, type SubjectKey } from "@pe/kit/lang/attention";
+import { attention, setHovered, type SubjectKey } from "@pe/kit/lang/attention";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import * as Atom from "effect/reactivity/Atom";
 import { createElement, type ComponentProps } from "react";
@@ -78,6 +80,7 @@ afterEach(() => {
 
 const { snapshot } = NAVIGATION_FIXTURE;
 const [a, b, c] = snapshot.segments;
+const elements = ductElements(snapshot);
 const sheet = {
   overview: { fan: { unitId: 999_001, portIndex: 0, mark: "AHU-1" }, totals: null, blockers: [] },
   inputs: null,
@@ -120,7 +123,7 @@ function mount(
   const page = Atom.make({ selected: "", issue: "" });
   const selection = Atom.make(
     (get): ReadonlySet<SubjectKey> =>
-      new Set(get(page).selected ? [elementKey(get(page).selected)] : []),
+      new Set(get(page).selected ? [elements.keyOf(Number(get(page).selected))!] : []),
   );
   const setPage = vi.fn();
   const pageOf = () => ({
@@ -146,6 +149,7 @@ function mount(
   });
   const tree = () => (
     <RegistryContext value={registry}>
+      <ElementIndexContext value={elements}>
       <AttentionRoot doc="d">
         <SheetPicture
           props={props()}
@@ -157,6 +161,7 @@ function mount(
           renderPane={full ? renderPicturePane : (body) => body}
         />
       </AttentionRoot>
+      </ElementIndexContext>
     </RegistryContext>
   );
   const view = render(tree());
@@ -172,7 +177,7 @@ it("a pick writes the page's selection and the stage pivot follows it", () => {
   act(() => registry.set(page, { selected: String(a!.id), issue: "" }));
   rerender();
   // Registered for the document: rows elsewhere (the ledger) read the same selection.
-  expect([...registry.get(attention("d")).selected]).toEqual([elementKey(a!.id)]);
+  expect([...registry.get(attention("d")).selected]).toEqual([elements.keyOf(a!.id)]);
   expect([...seen.model!.selected]).toEqual([a!.id]);
   expect(seen.stage!.selectedBounds).toEqual(boundsOfPoints(a!.polyline));
 });
@@ -210,7 +215,7 @@ it("beyond draws only while context is, cut where the host cut it, and never on 
 
 it("hovering a context element names whose air it is and that this fan's calc leaves it out", () => {
   const { registry } = mount(beyondSheet, ["meshes", "halo", "findings"]);
-  act(() => setHovered(registry, { doc: "d", key: elementKey(c!.id) }));
+  act(() => setHovered(registry, { doc: "d", key: elements.keyOf(c!.id)! }));
   const readout = render(<>{seen.model!.readout}</>);
   expect(readout.container.textContent).toContain(
     "beyond RV-15 (its own fan); not in this fan's calc",

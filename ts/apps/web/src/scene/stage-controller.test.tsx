@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vite-plus/test";
 import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { PictureStage, useStage, stageViewport, projectBounds } from "./stage-controller";
 import { makeAtomRegistry } from "#/shell/owner";
-import { TestAttention } from "#/test-attention";
+import { TestAttention, eKey } from "#/test-attention";
 import { mention } from "@pe/kit/lang/attention";
 import { Row } from "@pe/kit/lang/row";
 import { revitTarget } from "@pe/kit/lang/revit-target";
@@ -24,7 +24,7 @@ it("plane marks and rows share native identity without route hover handlers", ()
       <Row label="region" revit={[42]} />
       <div data-testid="picture">
         <svg>
-          <path {...mention({ doc: "test", key: "e:42" })} {...revitTarget([42])} d="M0 0L1 1" />
+          <path {...mention({ doc: "test", key: eKey(42) })} {...revitTarget([42])} d="M0 0L1 1" />
         </svg>
       </div>
     </TestAttention>,

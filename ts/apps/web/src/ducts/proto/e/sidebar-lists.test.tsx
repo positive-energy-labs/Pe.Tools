@@ -8,7 +8,7 @@ const search = (keywords = "", pills: Record<string, string> = {}) =>
 import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { makeAtomRegistry } from "#/shell/owner";
-import { TestAttention } from "#/test-attention";
+import { TestAttention, eKey } from "#/test-attention";
 import { hovered } from "@pe/kit/lang/attention";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { FanResult } from "@pe/ducts-domain/losses";
@@ -175,7 +175,7 @@ test("critical context opens initially; one selected part reveals, retains nativ
   expect(document.querySelector("[data-tree-columns]")).not.toBeNull();
   expect(screen.getByRole("tree").getAttribute("aria-activedescendant")).toBe(keyed("part20").id);
   fireEvent.pointerOver(keyed("part20"));
-  expect(registry.get(hovered)).toEqual({ doc: "test", key: "e:20" });
+  expect(registry.get(hovered)).toEqual({ doc: "test", key: eKey(20) });
   fireEvent.click(within(keyed("part20")).getByRole("button", { name: "jump to its type's rule" }));
   expect(ctx.jumpToRule).toHaveBeenCalledWith("rule20");
   expect(ctx.select).not.toHaveBeenCalled();

@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { useWorkOwner, WorkContext } from "@pe/kit/lang/work";
 import type { SubjectKey } from "@pe/kit/lang/attention";
-import { TestAttention } from "#/test-attention";
+import { TestAttention, eKey } from "#/test-attention";
 import { makeAtomRegistry } from "#/shell/owner";
 import { SceneMeshes } from "../types";
 import { Picture, renderPicturePane, type PictureContent } from "./picture";
@@ -59,7 +59,7 @@ const content: PictureContent = {
       maxTriangles: 100000,
     },
   },
-  focus: { walked: ["e:7311"], near: [] },
+  focus: { walked: [eKey(7311)], near: [] },
   lines: [],
   name: () => "duct",
   kinds: {},
@@ -253,14 +253,14 @@ it("hosts globe, layers, real selected-group facts and one context box through t
     ...content,
     lines: [
       {
-        key: "e:7311",
+        key: eKey(7311),
         points: [
           [0, 0, 0],
           [1, 1, 1],
         ],
       },
     ],
-    members: new Map([["run:r1", ["e:7311"]]]),
+    members: new Map([["run:r1", [eKey(7311)]]]),
     name: (key) => (key === "run:r1" ? "Run to grille" : "Duct 7311"),
     readout: { summary: "fan ready", facts: (key) => <span data-read-facts={key}>120 cfm</span> },
     layerOptions: [
