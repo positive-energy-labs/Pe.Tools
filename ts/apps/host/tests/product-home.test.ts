@@ -35,7 +35,6 @@ test("every production resolver output follows one locally selected product envi
       "productPodsRootPath",
       "productPagesRootPath",
       "productRouteWorkPath",
-      "productRouteSettingsPath",
     ]);
     for (const [name, resolver] of Object.entries(productPaths).filter(
       ([name]) => !content.has(name),

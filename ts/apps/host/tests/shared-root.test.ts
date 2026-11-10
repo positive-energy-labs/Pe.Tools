@@ -25,7 +25,6 @@ test("shared content follows the mount while every machine path stays with its o
       "productPodsRootPath",
       "productPagesRootPath",
       "productRouteWorkPath",
-      "productRouteSettingsPath",
     ]);
     const { productPeaWorkPath, ...rest } = paths;
     for (const [name, resolver] of Object.entries({ productPeaWorkPath, ...rest })) {
@@ -34,7 +33,7 @@ test("shared content follows the mount while every machine path stays with its o
       if (!content.has(name)) expect(under(hostOwnership.rootPath, path), name).toBe(true);
     }
     expect(paths.productRouteWorkPath()).toBe(join(shared, "Work"));
-    expect(paths.productRouteSettingsPath()).toBe(join(shared, "settings", "routes"));
+    expect(paths.productRouteSettingsPath()).toBe(join(hostOwnership.rootPath, "state", "route-settings"));
     expect(under(shared, firmFilePath())).toBe(true);
     expect(under(shared, productCatalogsRootPath())).toBe(true);
     vi.stubEnv("PE_TOOLS_PRODUCT_HOME", join(shared, "isolated"));
