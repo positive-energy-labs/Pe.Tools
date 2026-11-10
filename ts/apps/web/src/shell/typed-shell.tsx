@@ -1,6 +1,7 @@
 import { refuse } from "../route/refusal";
 import * as Atom from "effect/reactivity/Atom";
 import { AttentionScope } from "../attention";
+import { elementIndex } from "../element-index";
 import { NativeObservationScope } from "../revit/observation";
 import { ValueScope } from "@pe/kit/lang/collection";
 import type { DrawContext } from "../route/typed-route";
@@ -171,7 +172,11 @@ function TypedPane({mount,id,ctx}: {mount:TypedMount;id:string;ctx:DrawContext<a
   const doc=document?`${document.session}/${document.openId}`:`${mount.spec.key}:unbound`;
   const selected=useMemo(()=>Atom.make(()=>new Set(bindings?.selected??[])),[bindings?.selected]);
   const observation=bindings?.observation??{scope:null,references:[]};
-  return <ValueScope value={ctx.value}><AttentionScope doc={doc} selected={selected} members={bindings?.members}>
+  // Bindings rebuild their references every render; the index changes only when the pairs do.
+  const refs=observation.references as readonly {elementId:number;uniqueId?:string|null}[];
+  const pairs=refs.map(r=>`${r.elementId}=${r.uniqueId??""}`).join();
+  const elements=useMemo(()=>elementIndex(refs),[pairs]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <ValueScope value={ctx.value}><AttentionScope doc={doc} selected={selected} members={bindings?.members} elements={elements}>
     <NativeObservationScope value={ctx.value.current?observation:{...observation,scope:null}}>
       {mount.spec.panes[id]!.read!==mount.spec.core&&retainedValueLabel(ctx.value)?<p role="status">{retainedValueLabel(ctx.value)}</p>:null}
       {mount.spec.panes[id]!.draw(ctx) as ReactNode}

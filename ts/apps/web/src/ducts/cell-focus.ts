@@ -1,6 +1,7 @@
 import { scopeOf } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { elementKey,type SubjectKey } from "@pe/kit/lang/attention";
+import type { SubjectKey } from "@pe/kit/lang/attention";
+import type { ElementIndex } from "../element-index";
 import { z } from "zod";
 import type { CellRef } from "./inbox-rows";
 
@@ -38,15 +39,18 @@ export function focusedElement(subject: string): number | null {
   return cellFocusOf(subject)?.id ?? (/^\d+$/.test(subject) ? Number(subject) : null);
 }
 
-export function attentionSubjects(subjects: readonly string[]): ReadonlySet<SubjectKey> {
+export function attentionSubjects(
+  subjects: readonly string[],
+  elements: ElementIndex,
+): ReadonlySet<SubjectKey> {
   return new Set(
-    subjects.map((subject): SubjectKey => {
+    subjects.flatMap((subject): SubjectKey[] => {
       const element = focusedElement(subject);
-      if (element != null) return elementKey(element);
+      if (element != null) return [elements.keyOf(element) ?? []].flat();
       const colon = subject.indexOf(":");
-      return colon < 0
-        ? `issue:${subject}`
-        : `${subject.slice(0, colon)}:${subject.slice(colon + 1)}`;
+      return [
+        colon < 0 ? `issue:${subject}` : `${subject.slice(0, colon)}:${subject.slice(colon + 1)}`,
+      ];
     }),
   );
 }

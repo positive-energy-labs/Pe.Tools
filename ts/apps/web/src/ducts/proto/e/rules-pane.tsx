@@ -1,5 +1,6 @@
 import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
-import { AttentionDocument, elementKey, useMembers, type SubjectKey } from "@pe/kit/lang/attention";
+import { AttentionDocument, useMembers, type SubjectKey } from "@pe/kit/lang/attention";
+import { useElementIndex } from "#/element-index";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList } from "@pe/kit/lang/list-view";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
@@ -137,22 +138,26 @@ export const RulesTree = memo(function RulesTree({
       if (!byFamily.has(family)) byFamily.set(family, { family, ids: new Set() });
     return [...byFamily.values()].sort((a, b) => b.ids.size - a.ids.size);
   }, [priced, groupOf, groups, wide]);
+  const elements = useElementIndex();
   const members = useMemo(
     () =>
       new Map<SubjectKey, SubjectKey[]>([
         ...roots.flatMap((n) =>
-          n.kind === "rule" ? [[ruleKey(n.key), n.ids.map(elementKey)] as const] : [],
+          n.kind === "rule" ? [[ruleKey(n.key), elements.keysOf(n.ids)] as const] : [],
         ),
-        ...unruled.map((n) => [familyKey(n), [...n.ids].map(elementKey)] as const),
+        ...unruled.map((n) => [familyKey(n), elements.keysOf(n.ids)] as const),
       ]),
-    [roots, unruled],
+    [roots, unruled, elements],
   );
   useMembers(doc, members);
   const list = useList({
     items: roots,
     subjectOf: useCallback(
-      (n: RuleNode) => ({ doc, key: n.kind === "override" ? elementKey(n.id) : ruleKey(n.key) }),
-      [doc],
+      (n: RuleNode) => {
+        const key = n.kind === "override" ? elements.keyOf(n.id) : ruleKey(n.key);
+        return key === null ? undefined : { doc, key };
+      },
+      [doc, elements],
     ),
     keyOf: (n) => n.key,
     search: (n) => {

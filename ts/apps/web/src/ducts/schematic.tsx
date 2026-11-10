@@ -1,11 +1,11 @@
 import {
   AttentionDocument,
-  elementKey,
   useMembers,
   useMention,
   type SubjectKey,
 } from "@pe/kit/lang/attention";
 import { useElementAttention } from "#/attention";
+import { useElementIndex } from "#/element-index";
 import type { Tone } from "@pe/kit/lib/token";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { SvgTip } from "@pe/kit/lang/tooltip";
@@ -153,6 +153,7 @@ export function Schematic({
 }: SchematicProps) {
   const mark = useMention();
   const { selected, lit: cited, hovered } = useElementAttention();
+  const elements = useElementIndex();
   const lit = new Set([...cited, ...(targets ?? []), ...(hovered == null ? [] : [hovered])]);
   const inset = size === "inset";
   const { snapshot } = index;
@@ -184,8 +185,8 @@ export function Schematic({
   useMembers(
     useContext(AttentionDocument) ?? "",
     useMemo(
-      () => new Map(chains.map((chain) => [chainKey(chain), chain.members.map(elementKey)])),
-      [chains],
+      () => new Map(chains.map((chain) => [chainKey(chain), elements.keysOf(chain.members)])),
+      [chains, elements],
     ),
   );
   const forest = useMemo(() => {

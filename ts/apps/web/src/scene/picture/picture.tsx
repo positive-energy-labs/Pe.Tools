@@ -10,7 +10,7 @@ import type * as Atom from "effect/reactivity/Atom";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
   AttentionDocument,
-  elementKey,
+  elementUniqueId,
   hovered as hoveredRef,
   setHovered,
   useAttentionDocument,
@@ -39,6 +39,7 @@ import {
   type RefObject,
 } from "react";
 
+import { useElementIndex, type ElementIndex } from "#/element-index";
 import { useElementAttention, useHoveredIssue, useIssueHover } from "#/attention";
 import { SelectionBoxButton } from "#/revit/element-menu";
 import { observedElements, useNativeObservation } from "#/revit/observation";
@@ -55,7 +56,6 @@ import type { Bounds, IssueTarget, Kinds, PaintOf, SceneMeshes } from "#/scene/t
 import { usePictureFloaters } from "./floaters";
 import {
   boundsOfIds,
-  idOf,
   ModelPicture,
   poseOf,
   usePictureBounds,
@@ -67,7 +67,7 @@ import {
 import { useCapture, usePictureRead } from "./read";
 import { strandFixture, strandFixtureOn } from "./strand-fixture";
 
-export { idOf, type PictureLayer, type PictureLine, type PictureOverlayFrame, type PictureStrand };
+export { type PictureLayer, type PictureLine, type PictureOverlayFrame, type PictureStrand };
 
 /** Preserve the picture's complete furniture when hosted by a kernel pane. */
 export const renderPicturePane: TeachingPaneRender = (body, furniture) => (
@@ -153,9 +153,10 @@ export function captureRequest(
   layers: readonly string[],
   radiusFt: number,
   representation: ContextRepresentation,
+  elements: ElementIndex,
   maxTriangles = 3_000_000,
 ) {
-  const ids = [...new Set([...focus.walked, ...focus.near].map(idOf))].filter((id) => id > 0);
+  const ids = [...new Set([...focus.walked, ...focus.near].map(elements.idOf))].filter((id) => id > 0);
   if (!ids.length) return null;
   return {
     ...sceneRequest(
@@ -210,10 +211,10 @@ export const markPick = (target: IssueTarget) =>
 /** What a jump to `key` selects and frames. An element frames itself, not the section a pick
  * widens it to (a footnote names the element); a group (a run, an issue, a path) selects itself
  * and frames its element leaves. */
-export function jumpSubject(key: SubjectKey, members: Members) {
-  const id = idOf(key);
+export function jumpSubject(key: SubjectKey, members: Members, elements: ElementIndex) {
+  const id = elements.idOf(key);
   if (Number.isFinite(id) && id > 0) return { selected: String(id), ids: new Set([id]) };
-  const ids = leavesOf(members, key).map(idOf);
+  const ids = leavesOf(members, key).map(elements.idOf);
   return { selected: key as string, ids: new Set(ids.filter((n) => Number.isFinite(n) && n > 0)) };
 }
 
@@ -275,9 +276,10 @@ export function Picture<L extends string, F extends string>({
   const setContextRepresentation = (representation: PictureContext) =>
     setDetailedScope(representation === "meshes" ? detailScope : null);
   const { lit: attentionLit, selected: attentionSelected } = useElementAttention();
+  const elements = useElementIndex();
   // Reverse hover answers a hovered element only, never a row's expansion into elements.
   const over = useAtomValue(hoveredRef);
-  const hoveredElement = over?.doc === doc && over.key.startsWith("e:") ? over.key : null;
+  const hoveredElement = over?.doc === doc && elementUniqueId(over.key) !== null ? over.key : null;
   const hoveredIssue = useHoveredIssue();
   const onIssueHover = useIssueHover();
   const observation = useNativeObservation();
@@ -306,6 +308,7 @@ export function Picture<L extends string, F extends string>({
         visibleLayers,
         page.contextRadiusFt,
         contextRepresentation,
+        elements,
         content.capture?.maxTriangles,
       ),
     [
@@ -313,6 +316,7 @@ export function Picture<L extends string, F extends string>({
       visibleLayers,
       page.contextRadiusFt,
       contextRepresentation,
+      elements,
       content.capture?.maxTriangles,
     ],
   );
@@ -392,20 +396,20 @@ export function Picture<L extends string, F extends string>({
       new Set(
         [...(overSubjects ?? [])]
           .flatMap((key) => leavesOf(members, key))
-          .filter((key) => key.startsWith("e:")),
+          .filter((key) => elementUniqueId(key) !== null),
       ),
     [overSubjects, members],
   );
   const coreLayer = useMemo<PictureLayer | null>(() => {
     const built = strandLayers(strands, strandLines, overKeys);
-    const overIds = new Set([...overKeys].map(idOf));
+    const overIds = new Set([...overKeys].map(elements.idOf));
     return built.length || overIds.size
       ? {
           key: "strands",
           draw: ({ meshes }) => [...built, ...(meshes ? alarmLayers(meshes, overIds) : [])],
         }
       : null;
-  }, [strands, strandLines, overKeys]);
+  }, [strands, strandLines, overKeys, elements]);
   const drawn = useMemo(
     () => [
       ...(coreLayer ? [coreLayer] : []),
@@ -427,13 +431,15 @@ export function Picture<L extends string, F extends string>({
   const pickedId = /^\d+$/.test(page.selected) ? Number(page.selected) : null;
   const pickedKey: SubjectKey | null =
     pickedId != null
-      ? elementKey(pickedId)
+      ? elements.keyOf(pickedId)
       : page.selected.includes(":")
         ? (page.selected as SubjectKey)
         : null;
   const widen = content.widen;
-  const selectionOf = (id: number) =>
-    new Set([id, ...(widen?.(elementKey(id)) ?? []).map(idOf).filter(Number.isFinite)]);
+  const selectionOf = (id: number) => {
+    const key = elements.keyOf(id);
+    return new Set([id, ...(key && widen ? widen(key) : []).map(elements.idOf).filter(Number.isFinite)]);
+  };
   // Attention is the one selection; keyed on its members so a hover elsewhere redraws nothing.
   const selectedSig = [...attentionSelected].join();
   const selected = useMemo(
@@ -451,7 +457,7 @@ export function Picture<L extends string, F extends string>({
   const lit = useMemo(
     () =>
       hoverGroup
-        ? new Set([...attentionLit, ...hoverGroup.map(idOf).filter(Number.isFinite)])
+        ? new Set([...attentionLit, ...hoverGroup.map(elements.idOf).filter(Number.isFinite)])
         : attentionLit,
     [attentionLit, hoverGroup],
   );
@@ -465,7 +471,8 @@ export function Picture<L extends string, F extends string>({
   };
   const pick = (id: number | null) => {
     setAbsent(null);
-    content.onPick?.(id == null ? null : elementKey(id));
+    const key = id == null ? null : elements.keyOf(id);
+    if (id == null || key) content.onPick?.(key);
     setPage({ selected: id == null ? "" : String(id), issue: "" }, { history: "push" });
   };
   // Escape and a click on empty picture both clear; neither pushes history when nothing is picked.
@@ -494,7 +501,7 @@ export function Picture<L extends string, F extends string>({
   const [absent, setAbsent] = useState<string | null>(null);
   const markLanding = (ids: ReadonlySet<number>, back: string) => () => {
     const host = pictureHost?.getBoundingClientRect();
-    const box = onScreen(boundsOfIds(read.meshes, content.lines, ids));
+    const box = onScreen(boundsOfIds(read.meshes, content.lines, ids, elements));
     setLanded({
       back,
       n: performance.now(),
@@ -511,13 +518,13 @@ export function Picture<L extends string, F extends string>({
   };
   const backWord = () => (pickedKey ? content.name(pickedKey) : "the previous view");
   const jumpTo = (stage: ReturnType<typeof useStage>, key: SubjectKey) => {
-    const { selected: next, ids } = jumpSubject(key, members);
+    const { selected: next, ids } = jumpSubject(key, members, elements);
     const same = next === page.selected;
-    const box = ids.size ? boundsOfIds(read.meshes, content.lines, ids) : null;
+    const box = ids.size ? boundsOfIds(read.meshes, content.lines, ids, elements) : null;
     setLanded(null);
     setAbsent(
       picture === "model" && !box
-        ? `${Number.isFinite(idOf(key)) ? idOf(key) : key} is not in this picture`
+        ? `${Number.isFinite(elements.idOf(key)) ? elements.idOf(key) : key} is not in this picture`
         : null,
     );
     const view = picture === "model" && box ? stage.poseOf(box) : null;
@@ -550,7 +557,7 @@ export function Picture<L extends string, F extends string>({
         orbit,
         bounds,
         host: pictureHost,
-        selectedBounds: boundsOfIds(read.meshes, content.lines, selected),
+        selectedBounds: boundsOfIds(read.meshes, content.lines, selected, elements),
         clearSelection: clearPick,
         onHistoryStep: () => {
           setLanded(null);

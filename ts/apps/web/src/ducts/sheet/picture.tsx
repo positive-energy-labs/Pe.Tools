@@ -7,7 +7,6 @@
 import { useElementAttention } from "#/attention";
 import { sceneRequest } from "#/scene/host";
 import {
-  idOf,
   Picture,
   type PictureContent,
   type PictureLayer,
@@ -18,7 +17,9 @@ import { useAdmittedSubject } from "#/shell/subject";
 import type { OrbitViewport, PicturePage } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { elementKey, type Members, type SubjectKey } from "@pe/kit/lang/attention";
+import type { Members, SubjectKey } from "@pe/kit/lang/attention";
+import type { ElementIndex } from "#/element-index";
+import { ductElements } from "../identity";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import type * as Atom from "effect/reactivity/Atom";
 import { useMemo, type RefObject } from "react";
@@ -61,7 +62,7 @@ const NONE: readonly never[] = [];
  * is every leg past its velocity limit; runs and sections register as groups; a picked element
  * widens to its first section, the one under the critical run.
  */
-export function worksheetPicture(ws: Detail<"worksheet"> | null) {
+export function worksheetPicture(ws: Detail<"worksheet"> | null, elements: ElementIndex) {
   const members = new Map<SubjectKey, readonly SubjectKey[]>();
   const strands: PictureStrand[] = [];
   const over = new Set<SubjectKey>();
@@ -69,7 +70,7 @@ export function worksheetPicture(ws: Detail<"worksheet"> | null) {
   if (!ws) return { members, strands, over, widen: undefined };
   const keyOf = (legId: string) => {
     const leg = ws.legs[legId];
-    return leg ? elementKey(leg.elementId) : null;
+    return leg ? elements.keyOf(leg.elementId) : null;
   };
   const keys = (legIds: readonly string[]) =>
     legIds.map(keyOf).filter((k): k is SubjectKey => k != null);
@@ -83,9 +84,10 @@ export function worksheetPicture(ws: Detail<"worksheet"> | null) {
     }
     for (const section of ws[side].sections)
       members.set(`section:${section.id}`, keys(section.legIds));
-    for (const [elementId, sections] of Object.entries(ws[side].elementSections))
-      if (sections[0] && !sectionOf.has(elementKey(Number(elementId))))
-        sectionOf.set(elementKey(Number(elementId)), `section:${sections[0]}`);
+    for (const [elementId, sections] of Object.entries(ws[side].elementSections)) {
+      const key = elements.keyOf(Number(elementId));
+      if (key && sections[0] && !sectionOf.has(key)) sectionOf.set(key, `section:${sections[0]}`);
+    }
   }
   const widen = (key: SubjectKey) => {
     const section = sectionOf.get(key);
@@ -144,6 +146,7 @@ export function SheetPicture({
   jump?: RefObject<((key: SubjectKey) => void) | null>;
 }) {
   const { page, setPage, work } = props;
+  const elements = useMemo(() => ductElements(snapshot), [snapshot]);
   const subject = useAdmittedSubject();
   const overviewFans =
     fans ??
@@ -179,26 +182,26 @@ export function SheetPicture({
   // `near` is the context past each stopping unit; the sheet exposes no candidate-box context yet.
   const focus = useMemo<PictureContent["focus"]>(
     () => ({
-      walked: [...focusIds].map((id) => elementKey(id)),
-      near: [...beyond.ids].map((id) => elementKey(id)),
+      walked: elements.keysOf(focusIds),
+      near: elements.keysOf(beyond.ids),
     }),
-    [focusIds, beyond],
+    [focusIds, beyond, elements],
   );
-  const runs = useMemo(() => worksheetPicture(sheet?.worksheet ?? null), [sheet]);
+  const runs = useMemo(() => worksheetPicture(sheet?.worksheet ?? null, elements), [sheet, elements]);
   const members = useMemo<Members>(
     () =>
       new Map<SubjectKey, readonly SubjectKey[]>([
         ...runs.members,
         ...(sheet?.worstLegs ?? []).map(
           (path) =>
-            [`path:${path.pathId}`, path.legs.map((leg) => elementKey(leg.elementId))] as const,
+            [`path:${path.pathId}`, elements.keysOf(path.legs.map((leg) => leg.elementId))] as const,
         ),
         ...blockers.map(
           (blocker) =>
-            [`issue:${blocker.id}`, blockerElements(blocker).map((id) => elementKey(id))] as const,
+            [`issue:${blocker.id}`, elements.keysOf(blockerElements(blocker))] as const,
         ),
       ]),
-    [sheet, blockers, runs],
+    [sheet, blockers, runs, elements],
   );
   const baseScene = useMemo(
     () =>
@@ -233,7 +236,7 @@ export function SheetPicture({
       nodes: baseScene.nodes.map((facts) => ({ ...facts, pressure: pressure(facts.node.id) })),
     };
   }, [baseScene, legsByElement]);
-  const lines = useMemo(() => linesOf(scene), [scene]);
+  const lines = useMemo(() => linesOf(scene, elements), [scene, elements]);
   const routePaint = useMemo(
     () => paintOfDucts(snapshot, focusIds, beyond.ids),
     [snapshot, focusIds, beyond],
@@ -402,7 +405,7 @@ export function SheetPicture({
             ? `Run to ${nameOf(runFor(key)?.end.elementId ?? NaN)}`
             : key.startsWith("section:")
               ? `Section ${key.slice(8)}`
-              : (nameOf(idOf(key)) ?? "element not in snapshot"),
+              : (nameOf(elements.idOf(key)) ?? "element not in snapshot"),
         paint,
         kinds,
         colour,
@@ -442,7 +445,7 @@ export function SheetPicture({
                   </dd>
                 </dl>
               );
-            const id = idOf(key);
+            const id = elements.idOf(key);
             const segment = baseScene.segments.find((f) => f.segment.id === id);
             const node = scene.nodes.find((f) => f.node.id === id);
             return (
@@ -499,9 +502,11 @@ export function SheetPicture({
             here={focusIds}
             opens={(system) => systemFans(system).length > 0}
             nameOf={namer}
-            onGo={({ system, id }) =>
-              id == null ? subject?.add(systemFans(system)) : jumpTo(elementKey(id))
-            }
+            onGo={({ system, id }) => {
+              const key = id == null ? null : elements.keyOf(id);
+              if (id == null) subject?.add(systemFans(system));
+              else if (key) jumpTo(key);
+            }}
           />
         ),
       }}
