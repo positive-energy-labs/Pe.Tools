@@ -10,14 +10,7 @@ import { BridgeError, type HostBridgeEvent, type RevitBridge } from "./bridge.ts
 import { InvalidRead } from "./native-reads.ts";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 
-export type NativeResult = {
-  value: unknown;
-  target: {
-    session: string;
-    document: string | null;
-    documentRef?: { session: string; openId: string };
-  };
-};
+export type NativeResult = Effect.Success<ReturnType<RevitBridge["Service"]["invoke"]>>;
 export type DuctsBody = {
   json: string;
   version: string;
@@ -40,7 +33,7 @@ type Entry = {
   used: number;
   readers: number;
 };
-const refused = (message: string) => new BridgeError(message, 409, { notDispatched: true });
+const refused = (message: string) => new InvalidRead({ message, status: 409, problem: "read.retained" });
 const identity = (request: DuctsReadingRequest) =>
   request.kind === "ducts-snapshot"
     ? { target: request.target, session: request.target.session }
@@ -193,13 +186,11 @@ export class DuctsReadings {
     if (options.refresh === entry.envelope.revision) this.invalidate(entry);
     if (options.version) {
       if (entry.body?.version !== options.version)
-        return yield* retainedFailure(refused("Ducts body version is no longer current; observe the reading again"));
+        return yield* refused("Ducts body version is no longer current; observe the reading again");
       return { ...entry.body, reused: true };
     }
     if (entry.envelope.state === "closed" || entry.envelope.state === "failed")
-      return yield* retainedFailure(refused(
-        entry.envelope.error ?? "Ducts acquisition failed; explicitly refresh to retry",
-      ));
+      return yield* refused(entry.envelope.error ?? "Ducts acquisition failed; explicitly refresh to retry");
     if (entry.body) return { ...entry.body, reused: true };
     const revision = entry.envelope.revision;
     entry.readers++;
@@ -208,35 +199,28 @@ export class DuctsReadings {
     return yield* Effect.gen({ self: this }, function* () {
         const result = yield* acquire;
         if (entry.envelope.revision !== revision)
-          return yield* retainedFailure(refused("Ducts acquisition was invalidated before it completed"));
+          return yield* refused("Ducts acquisition was invalidated before it completed");
         const actual = result.target.documentRef;
         if (
           result.target.session !== identity(request).session ||
           (request.kind === "ducts-snapshot" &&
             (actual?.session !== request.target.session || actual.openId !== request.target.openId))
         )
-          return yield* retainedFailure(refused("Ducts native response did not confirm the exact requested document"));
+          return yield* refused("Ducts native response did not confirm the exact requested document");
         const json = JSON.stringify(result.value);
         const bytes = Buffer.byteLength(json, "utf8");
         if (bytes > this.limits.bytes)
-          return yield* retainedFailure(refused(
-            "Ducts snapshot exceeds the shared reading byte budget; graph was not clipped",
-          ));
-        const body: DuctsBody = {
-          json,
-          version: revision,
-          nativeRequestId: result.nativeRequestId,
-          target: result.target,
-          ...(result.nativeTakingId ? { nativeTakingId: result.nativeTakingId } : {}),
-        };
+          return yield* refused("Ducts snapshot exceeds the shared reading byte budget; graph was not clipped");
+        const { value: _, ...native } = result;
+        const body: DuctsBody = { ...native, json, version: revision };
         yield* options.source?.beforeReady?.(entry.body ?? body) ?? Effect.void;
         // Metadata capture can await disk; a change still retires this revision.
         if (entry.envelope.revision !== revision)
-          return yield* retainedFailure(refused("Ducts acquisition was invalidated while retaining its basis"));
+          return yield* refused("Ducts acquisition was invalidated while retaining its basis");
         if (entry.body) return { ...entry.body, reused: false };
         while (this.bytes + bytes > this.limits.bytes)
           if (!this.evict(entry))
-            return yield* retainedFailure(refused("Shared Ducts reading byte budget is occupied; graph was not clipped"));
+            return yield* refused("Shared Ducts reading byte budget is occupied; graph was not clipped");
         entry.body = body;
         entry.bytes = bytes;
         this.bytes += bytes;
@@ -245,14 +229,7 @@ export class DuctsReadings {
         return { ...entry.body, reused: false };
     }).pipe(Effect.tapError((error) => Effect.sync(() => {
         if (entry.envelope.revision === revision && !entry.body) {
-          entry.envelope = {
-            ...entry.envelope,
-            state: "failed",
-            error:
-              error instanceof Error || error instanceof BridgeError
-                ? error.message
-                : String(error),
-          };
+          entry.envelope = { ...entry.envelope, state: "failed", error: retainedFailure(error).message };
           this.publish(entry);
         }
     })), Effect.ensuring(Effect.sync(() => {

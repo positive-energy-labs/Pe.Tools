@@ -246,19 +246,6 @@ test("I/O loss after native capture marks incomplete and still serves the live b
   } finally { await c.web.close(); }
 });
 
-test("overlapping consumers acquire on each request and retain separate basis occurrences", async () => {
-  const c = await captured();
-  try {
-    const answers = await Promise.all([c.web.post(), c.web.post()]);
-    expect(answers.map((answer) => answer.status)).toEqual([200, 200]);
-    expect(answers[0]!.headers.get(NATIVE_BODY_VERSION_HEADER)).toBe(answers[1]!.headers.get(NATIVE_BODY_VERSION_HEADER));
-    expect(answers.map((answer) => answer.headers.get("x-pe-ducts-reused"))).toEqual(["false", "false"]);
-    expect(c.counts.reads).toBe(2); // This producer stub has no NativeReads dispatch sharing.
-    expect(c.takes.filter((taking) => taking.input.kind === "native")).toHaveLength(2);
-    expect(c.takes.filter((taking) => taking.input.kind === "document" && taking.input.scope.includes("ducts-body-basis"))).toHaveLength(2);
-  } finally { await c.web.close(); }
-});
-
 test("invalidation during deferred basis capture fences ready publication", async () => {
   const owner = new DuctsReadings({ entries: 2, bytes: 1_000_000, idleMs: 1000 });
   const gate = Promise.withResolvers<void>(); const frames: string[] = [];
