@@ -162,7 +162,6 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - Delete the admitted/legacy branches at `runtime/route-view-store.ts:3/:128/:215` if no builtin uses a legacy view codec. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:468`.
 - Add runtime refusal coverage for a Pea Page patch on Bind if `route-address.test.ts:222` covers discovery only. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:490`.
 - Restrict `retainActionCaller` imports to `action-journal.ts`. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:504`.
-- Add a positive surface witness that a Page-door action survives retirement of its request caller. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:504`.
 - Resolve repeated History entries saying Unavailable: Ambiguous pane at this point beside valid After write and Synced rows. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/drive/gate-4b6bfec7/DEFECTS.md:10`.
 - kaitpw: push main after the local kernel landing at `ec3a13a8`. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:614`.
 - kaitpw: choose model reversal through native undo, an inverse Plan through consent, or no reversal; honest post-apply refusal has landed. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/DIAGNOSE-UNDO-AFTER-APPLY-REPORT.md`.
