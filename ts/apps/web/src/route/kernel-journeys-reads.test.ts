@@ -86,12 +86,9 @@ import {
   detachedBridge,
   sessionView,
   familiesReader,
-  testHostInputs,
-} from "../../../host/tests/effect-test";
+  testHostInputs, journalAt, callRouteOver } from "../../../host/tests/effect-test";
 import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
 import { fileRouteDocumentStore } from "../../../host/src/route-document-store";
-import { ActionJournal } from "../../../host/src/action-journal";
-import { makeCallRoute } from "../../../host/src/call-route";
 import { nativeReadRoot } from "../../../host/src/app";
 import { RevitBridge } from "../../../host/src/bridge";
 import { hostOwnership } from "../../../host/src/host-ownership";
@@ -840,9 +837,9 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
         return { target: { session: target.session, document: null }, value };
       }),
   });
-  const journal = new ActionJournal(join(dir, "actions.jsonl"), Date.now);
+  const journal = journalAt(join(dir, "actions.jsonl"), Date.now);
   const web = HttpRouter.toWebHandler(
-    makeCallRoute(
+    callRouteOver(
       journal,
       captures,
       { sdk: sdkSessions, workspace, podsRoot: dir },
@@ -1003,9 +1000,8 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
 test("JZ H19 wait beyond the browser budget, then inspect queue and conflict refusals without retry", async () => {
   const { HOST_READ_WAIT_S, NATIVE_READ_WAIT_S } = await import("./waits");
   const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
-  const { makeCallRoute } = await import("../../../host/src/call-route");
   const { BridgeError } = await import("../../../host/src/bridge");
-  const { detachedBridge, testHostInputs } = await import("../../../host/tests/effect-test");
+  const { callRouteOver, detachedBridge, testHostInputs } = await import("../../../host/tests/effect-test");
   const { serveRoutes } = await import("../../../host/tests/real-server");
   const { Effect, Layer } = await import("effect");
   const j = await journey();
@@ -1029,9 +1025,8 @@ test("JZ H19 wait beyond the browser budget, then inspect queue and conflict ref
     const f = await nativeFixture();
     try {
       let attempts = 0;
-      const { ActionJournal } = await import("../../../host/src/action-journal");
-      const queueJournal = new ActionJournal(`${j.host.dir}/queue.json`, Date.now);
-      const server = await serveRoutes(makeCallRoute(queueJournal, undefined, {}, { dispatch: () => {
+      const queueJournal = journalAt(`${j.host.dir}/queue.json`, Date.now);
+      const server = await serveRoutes(callRouteOver(queueJournal, undefined, {}, { dispatch: () => {
         attempts++;
         return Effect.fail(new BridgeError("queue refused before send", 423, { notDispatched: true, nativeOutcome: "RefusedQueueUnresponsive" }));
       } }).pipe(Layer.provide(testHostInputs)), detachedBridge());

@@ -21,7 +21,6 @@ import { HostSessionInventory } from "../../../host/src/session-inventory";
 import { DuctFiles } from "../../../host/src/ducts-files";
 import { RevitBridge, RevitBridgeLive } from "../../../host/src/bridge";
 import { SdkSession } from "../../../host/src/sdk-session";
-import { ActionJournalService } from "../../../host/src/receipt-services";
 import { ReadOwner } from "../../../host/src/builtin-inputs";
 import { makeCallRoute } from "../../../host/src/call-route";
 import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
@@ -106,7 +105,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  const inputs=await Effect.runPromise(HostInputContext.pipe(Effect.provide(HostInputContext.layer({kind:"live",captureStore}))));
  const writer=inputs.lane.kind==="live"?inputs.lane.captureStore:undefined;
  if(writer){const stop=writer.capture.stop;vi.spyOn(writer.capture,"stop").mockImplementation((at,reason,source)=>{trace.stops.push({at,reason,stack:new Error().stack});return stop(at,reason,source);});}
- const host=await bootHost({inputs,reads:{live:{marks:ambient(HostDocumentMarks),inventory:HostSessionInventory.layer.pipe(Layer.provide(Layer.mergeAll(ambient(RevitBridge),ambient(SdkSession)))),files:DuctFiles.layer(),native}},revitCompositionFactory:()=>({provider:RevitBridgeLive,routes:Layer.unwrap(Effect.gen(function*(){const reads=yield* ReadOwner;return makeCallRoute(yield* ActionJournalService,undefined,{workspace:reads.work.workspace,sdk:sdkSessions,workReads:reads.work.reads},{pointers:reads.work.pointers,retainedRead:reads.retainedCall,nativeBody:reads.nativeBody});})).pipe(Layer.provide(native))})});
+ const host=await bootHost({inputs,reads:{live:{marks:ambient(HostDocumentMarks),inventory:HostSessionInventory.layer.pipe(Layer.provide(Layer.mergeAll(ambient(RevitBridge),ambient(SdkSession)))),files:DuctFiles.layer(),native}},revitCompositionFactory:()=>({provider:RevitBridgeLive,routes:Layer.unwrap(Effect.gen(function*(){const reads=yield* ReadOwner;return yield* makeCallRoute(undefined,{workspace:reads.work.workspace,sdk:sdkSessions,workReads:reads.work.reads},{pointers:reads.work.pointers,retainedRead:reads.retainedCall,nativeBody:reads.nativeBody});})).pipe(Layer.provide(native))})});
  trace.base=host.base;
  const subscriptionChanges:any[]=[];
  const forward=async(url:any,init:any={})=>{

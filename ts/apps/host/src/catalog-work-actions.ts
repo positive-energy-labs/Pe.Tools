@@ -14,8 +14,8 @@ import {
   type CatalogWork,
   type Command,
 } from "@pe/agent-contracts";
-import { invokeBridge as invoke, type RevitBridge } from "./bridge.ts";
-import { command, refused, type CommandExecutor } from "./command-executor.ts";
+import type { RevitBridge } from "./bridge.ts";
+import { command, nativeStep, refused, type CommandExecutor } from "./command-executor.ts";
 import { projectReader, type FamilyActionDependencies } from "./family-actions.ts";
 
 type Owner = keyof typeof catalogWorks;
@@ -69,9 +69,9 @@ export function catalogWorkExecutors(
               },
             };
           },
-          run: async (_ctx, execution) => {
+          run: (_ctx, execution) => {
             const { target, request } = execution.prepared;
-            return execution.step("native", work.op, request, (id) => invoke(bridge, target, work.op, request, id), { process: execution.prepared.process });
+            return execution.step("native", work.op, request, (id) => nativeStep(bridge, target, work.op, request, id), { process: execution.prepared.process });
           },
         });
         return [key, executor];

@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { z } from "zod";
 import { win32 } from "node:path";
 import { sdkInstallationSchema, type Caller, type Consumed } from "@pe/agent-contracts";
@@ -112,15 +113,15 @@ export const bootstrapExecutor = (read = readBootstrapSdk) =>
           prepare: async () => ({ year: input.year, sdkVersion: GENERATED_FROM, installation }),
         };
       },
-      run: async (_context, execution) => {
+      run: (_context, execution) => Effect.gen(function* () {
         const { year, sdkVersion } = execution.prepared;
-        const installed = await runSdk(
+        const installed = yield* runSdk(
           execution,
           "machine.bootstrap.install",
           { argv: bootstrapInstallArgv({ year }) },
           read,
         );
-        const verified = await runSdk(
+        const verified = yield* runSdk(
           execution,
           "machine.bootstrap.verify",
           { argv: bootstrapVerifyArgv({ year }) },
@@ -139,7 +140,7 @@ export const bootstrapExecutor = (read = readBootstrapSdk) =>
           },
         );
         return { year, sdkVersion, installed, verified };
-      },
+      }),
     },
   );
 

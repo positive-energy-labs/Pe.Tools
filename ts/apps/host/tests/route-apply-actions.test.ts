@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { commands } from "@pe/agent-contracts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
@@ -28,9 +29,7 @@ test.each(writes)(
       bind: async () => {
         throw Error("must not derive foreign Work");
       },
-      run: async () => {
-        throw Error("must not dispatch foreign Work");
-      },
+      run: () => Effect.fail(Error("must not dispatch foreign Work")),
     };
     const ctx = {
       admission: {

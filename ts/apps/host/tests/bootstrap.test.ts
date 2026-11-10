@@ -1,8 +1,8 @@
+import { journalAt } from "./effect-test.ts";
 import { afterEach, expect, test } from "vite-plus/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
-import { ActionJournal } from "../src/action-journal.ts";
 import {
   alignBootstrap,
   bootstrapExecutor,
@@ -28,7 +28,7 @@ const installation = JSON.parse(replay("bootstrap-verify", {}, "missing")).resul
 async function fixture() {
   const dir = await mkdtemp(join(tmpdir(), "pe-bootstrap-"));
   folders.push(dir);
-  const owner = new ActionJournal(join(dir, "actions.json"), Date.now);
+  const owner = journalAt(join(dir, "actions.json"), Date.now);
   const base = async (args: readonly string[]) => {
     if (args[0] === "version")
       return replay(
