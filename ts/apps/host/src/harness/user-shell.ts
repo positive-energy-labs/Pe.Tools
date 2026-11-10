@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { harnessManifest } from "./manifest.ts";
 
 /**
  * The PATH a fresh PowerShell has after its standard profiles ran, read per child launch. A harness
@@ -98,8 +99,9 @@ function peaCodexProjectConfig(names: readonly string[]): string {
     "# out of Pea threads; Pea attaches its own. Edits here are overwritten.",
     "# Your Codex memories stay out too: they hold your other work, not this product home's.",
     "",
+    // The manifest's account-bound features (apps = ChatGPT connectors, plugins, memories, ...).
     "[features]",
-    "memories = false",
+    ...harnessManifest.codex.features.map((feature) => `${feature} = false`),
     "",
     "[memories]",
     "use_memories = false",

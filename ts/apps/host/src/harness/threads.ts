@@ -1,5 +1,6 @@
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
+import { claudeInit, claudeSessionMeta, undeclaredContext } from "./manifest.ts";
 import type { AdapterChild } from "./adapter.ts";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -1148,6 +1149,15 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
           ? { outcome: { outcome: "selected", optionId: option.optionId } }
           : { outcome: { outcome: "cancelled" } };
       },
+      // The child's own report of its effective context. A mismatch with the manifest refuses
+      // the harness: the error lands in the thread and the child is stopped.
+      extNotification: (method, params) => {
+        const init = claudeInit(method, params);
+        const refusal = init && undeclaredContext(init);
+        if (!refusal || t.child !== child || t.stopped) return;
+        append(t, { kind: "error", turnId: t.running, message: refusal });
+        void retire(t);
+      },
       // A form is the question card. A URL elicitation (MCP OAuth) has no place in Pea: declined.
       createElicitation: (request: CreateElicitationRequest) =>
         new Promise<CreateElicitationResponse>((resolve) => {
@@ -1189,8 +1199,8 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         elicitation: { form: {} },
       },
     });
-    // The user's own Claude settings (plugins, hooks, skills) stay out of Pea; the product home's
-    // project settings stay in. Codex's counterpart is the project config in the world root.
+    // The child sees what the harness manifest declares and nothing from the user's account
+    // (harness/manifest.ts). Codex's counterpart is the project config in the world root.
     const request = {
       cwd: options.worldRoot,
       mcpServers: [options.mcpServer(context)],
@@ -1199,7 +1209,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         ? {
             _meta: {
               systemPrompt: { append: await options.developerInstructions?.() },
-              claudeCode: { options: { settingSources: ["project", "local"] } },
+              ...claudeSessionMeta(),
             },
           }
         : {}),

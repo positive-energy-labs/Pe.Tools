@@ -46,6 +46,7 @@ import {
   type HarnessThreadsOptions,
 } from "../src/harness/threads.ts";
 import * as adapter from "../src/harness/adapter.ts";
+import { claudeSessionMeta } from "../src/harness/manifest.ts";
 import { productProvidersPath } from "../src/product-paths.ts";
 import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
 import type { Envelope } from "@pe/host-contracts/pe-revit-contract";
@@ -770,6 +771,34 @@ test("subscription children exclude inherited inference credentials without chan
     for (const name of names) expect(said(body, name)).toBe("");
   }
   for (const name of names) expect(process.env[name]).toBe("synthetic-inherited-credential");
+});
+
+test("a Claude session carries the harness manifest; the kernel still rides the system prompt", async () => {
+  const threads = await host();
+  const call = caller(threads);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  await call("POST", `/pe/threads/${created.json.id}/prompt`, { text: "meta" });
+  const body = await until(reader(threads), created.json.id, (b) => turnEnds(b).length === 1);
+  const meta = JSON.parse(said(body, "META")!);
+  expect(meta.claudeCode).toEqual(claudeSessionMeta().claudeCode);
+  expect(meta.systemPrompt.append).toBe("KERNEL: You are Pea.");
+});
+
+test("a child whose init frame has an undeclared server is refused and stopped; a clean one runs on", async () => {
+  const threads = await host();
+  const call = caller(threads);
+  const clean = await call("POST", "/pe/threads", { providerId: "claude" });
+  await call("POST", `/pe/threads/${clean.json.id}/prompt`, { text: "init-clean" });
+  const ok = await until(reader(threads), clean.json.id, (b) => said(b, "init sent") !== undefined || b.events.some((e) => e.kind === "update" && JSON.stringify(e).includes("init sent")));
+  expect(ok.events.some((e) => e.kind === "error")).toBe(false);
+  expect(ok.session).not.toBe("closed");
+  const leaked = await call("POST", "/pe/threads", { providerId: "claude" });
+  await call("POST", `/pe/threads/${leaked.json.id}/prompt`, { text: "init-leak" });
+  const refused = await until(reader(threads), leaked.json.id, (b) => b.events.some((e) => e.kind === "error"));
+  const error = refused.events.find((e) => e.kind === "error") as { message: string };
+  expect(error.message).toContain("refused to start this harness");
+  expect(error.message).toContain("claude.ai Gmail");
+  expect((await until(reader(threads), leaked.json.id, (b) => b.session === "closed")).session).toBe("closed");
 });
 
 async function envOf(threads: Host, providerId: string) {
