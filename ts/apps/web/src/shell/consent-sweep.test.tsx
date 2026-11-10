@@ -11,8 +11,9 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { TimelineHead, type JournalOwner } from "./situation-band";
 import { WorkbenchContext } from "#/workbench/provider/thread-summary";
 
+const permission = vi.hoisted(() => vi.fn(async () => ({})));
 vi.mock("#/workbench/provider/harness-client", () => ({
-  harnessClient: () => ({ permission: vi.fn(async () => ({})) }),
+  harnessClient: () => ({ permission }),
 }));
 afterEach(cleanup);
 
@@ -27,10 +28,13 @@ const files = (dir: string): string[] =>
         ? [join(dir, entry.name)]
         : [],
   );
+// The design-system route is the kit's only window (CHROME-SHAPE default 5): its specimens
+// draw every primitive, so they are not surfaces that mount consent.
 const sitesOf = (pattern: RegExp) =>
   files(SRC)
     .filter((file) => pattern.test(readFileSync(file, "utf8")))
     .map((file) => relative(SRC, file).replaceAll("\\", "/"))
+    .filter((site) => !site.startsWith("design-system/"))
     .sort();
 
 /** The two mounts the contract names: the web topbar and the tray card. */
@@ -72,7 +76,7 @@ test("red (slice 6 seam b): the Timeline head draws no consent window", () => {
     <WorkbenchContext.Provider
       value={{ runApprovals: [ask], resolveApproval: vi.fn(async () => {}) } as never}
     >
-      <TimelineHead owner={timeline} history={null} thread="t" />
+      <TimelineHead owner={timeline} history={null} />
     </WorkbenchContext.Provider>,
   );
   expect(

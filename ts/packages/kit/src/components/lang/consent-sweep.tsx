@@ -33,10 +33,10 @@ export interface ConsentWindow {
 
 export interface ConsentSweepProps {
   readonly windows: readonly ConsentWindow[];
-  /** Answers the host once per press; the row leaves when the feed drops the window. */
-  readonly onReject: (window: ConsentWindow) => void;
+  /** Answers the host once per press (a refusal shows on the button); the row leaves when the feed drops the window. */
+  readonly onReject: (window: ConsentWindow) => void | Promise<void>;
   /** Without it the row draws no Allow: the deadline or the write button settles it. */
-  readonly onAllow?: (window: ConsentWindow) => void;
+  readonly onAllow?: (window: ConsentWindow) => void | Promise<void>;
   /** `topbar` is one line; `card` is the tray's stacked card under the card's own head. */
   readonly shell: "topbar" | "card";
 }
@@ -110,7 +110,12 @@ export function ConsentSweep({ windows, onReject, onAllow, shell }: ConsentSweep
               {left === null ? (
                 <span className="text-ink-2">Auto-approve is off</span>
               ) : (
-                <span role="timer" aria-label={`${window.verb} applies in`} data-tone="caution" className={slots.timer()}>
+                <span
+                  role="timer"
+                  aria-label={`${window.verb} applies in`}
+                  data-tone="caution"
+                  className={slots.timer()}
+                >
                   {left}s
                 </span>
               )}
@@ -120,7 +125,7 @@ export function ConsentSweep({ windows, onReject, onAllow, shell }: ConsentSweep
                 kind="framed"
                 label={`Reject ${window.verb}`}
                 refusal={window.reject ? null : "This consent window offers no reject option"}
-                onClick={() => onReject(window)}
+                onPress={() => onReject(window)}
               >
                 Reject?
               </Button>
@@ -128,7 +133,7 @@ export function ConsentSweep({ windows, onReject, onAllow, shell }: ConsentSweep
                 <Button
                   kind={left === null ? "commit" : "quiet"}
                   label={left === null ? `Allow ${window.verb}` : `Allow ${window.verb} now`}
-                  onClick={() => onAllow(window)}
+                  onPress={() => onAllow(window)}
                 >
                   {left === null ? "Allow" : "Allow now"}
                 </Button>

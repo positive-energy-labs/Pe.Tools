@@ -41,7 +41,9 @@ export function followNotices(options: {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let source: ReturnType<OpenEvents> | undefined;
   const connect = () => {
-    const events = open(readingsUrl(origin, { kind: "notices", ...(options.as ? { as: options.as } : {}) }));
+    const events = open(
+      readingsUrl(origin, { kind: "notices", ...(options.as ? { as: options.as } : {}) }),
+    );
     source = events;
     events.onmessage = (message: MessageEvent<string>) => {
       const frame = JSON.parse(message.data) as ReadingFrame;
@@ -96,6 +98,7 @@ export function cardOf(row: NoticeRow): MachineNotice {
             kind: "permission" as const,
             threadId: act.threadId,
             requestId: act.requestId,
+            ...(act.deadline ? { deadline: act.deadline } : {}),
             options: [
               ...option(act.allow, "Allow", "allow_once"),
               ...option(act.reject, "Reject", "reject_once"),

@@ -126,6 +126,8 @@ test("a consent row becomes a card the native contract accepts, with its allow a
       kind: "permission",
       threadId: "t1",
       requestId: "r1",
+      // The card's sweep counts down from the host's deadline.
+      deadline: "2026-11-10T12:00:00.000Z",
       options: [
         { optionId: "allow_now", name: "Allow", kind: "allow_once" },
         { optionId: "stop_writes", name: "Reject", kind: "reject_once" },

@@ -40,7 +40,9 @@ it("D8: a sweep mounted long before a window opens counts the host's 60 s and em
 it("Reject sends the window; auto-approve off draws no sweep and offers Allow", () => {
   const onReject = vi.fn();
   const onAllow = vi.fn();
-  const ui = render(<ConsentSweep windows={[run]} onReject={onReject} onAllow={onAllow} shell="card" />);
+  const ui = render(
+    <ConsentSweep windows={[run]} onReject={onReject} onAllow={onAllow} shell="card" />,
+  );
   expect(ui.queryByRole("timer")).toBeNull();
   expect(ui.container.querySelector("[data-slot='sweep']")).toBeNull();
   expect(ui.getByText("Auto-approve is off")).toBeTruthy();
@@ -52,7 +54,9 @@ it("Reject sends the window; auto-approve off draws no sweep and offers Allow", 
 
 it("a window with no reject option says why instead of answering", () => {
   const onReject = vi.fn();
-  const ui = render(<ConsentSweep windows={[{ ...run, reject: null }]} onReject={onReject} shell="topbar" />);
+  const ui = render(
+    <ConsentSweep windows={[{ ...run, reject: null }]} onReject={onReject} shell="topbar" />,
+  );
   fireEvent.click(ui.getByRole("button", { name: "Reject Pea writes" }));
   expect(onReject).not.toHaveBeenCalled();
 });

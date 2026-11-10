@@ -4,6 +4,7 @@ import { Save } from "lucide-react";
 
 import { ArmingStrip, armingStripRecipe } from "@pe/kit/lang/arming-strip";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { ConsentSweep, type ConsentWindow } from "@pe/kit/lang/consent-sweep";
 import {
   reviewAddresses,
   ReviewRow,
@@ -133,6 +134,7 @@ export function LangWorkflowSpecimens() {
         recipe={armingStripRecipe}
         render={(props) => <ArmingSpecimen props={props} />}
       />
+      <ConsentSweepSpecimen />
       <SpecimenFrame name="ArtifactFrame" importPath="@pe/kit/lang/artifact-frame">
         <ArtifactFrame
           head={<Tag>door 421</Tag>}
@@ -182,6 +184,41 @@ function ArmingSpecimen({ props }: { props: GridVariantProps }) {
         onCancel={noop}
       />
     </div>
+  );
+}
+
+/** Fixture windows: one counting down, one waiting with auto-approve off. Reject answers nothing here. */
+function ConsentSweepSpecimen() {
+  // A fresh deadline per mount, so the bar is seen emptying downward from the host's 60 s.
+  const [deadline] = useState(() => new Date(Date.now() + 42_000).toISOString());
+  const windows: ConsentWindow[] = [
+    {
+      requestId: "fixture-1",
+      threadId: "fixture",
+      thread: "Size the riser ducts",
+      verb: "pe_do revit.ducts.resize",
+      deadline,
+      reject: { optionId: "stop_writes" },
+      allow: { optionId: "allow_now" },
+    },
+    {
+      requestId: "fixture-2",
+      threadId: "fixture",
+      thread: "Rename sheets",
+      verb: "Pea writes",
+      reject: { optionId: "stop_writes" },
+      allow: { optionId: "allow_now" },
+    },
+  ];
+  return (
+    <SpecimenFrame name="ConsentSweep - topbar, card" importPath="@pe/kit/lang/consent-sweep">
+      <div className="flex flex-col gap-4">
+        <ConsentSweep shell="topbar" windows={windows} onReject={noop} onAllow={noop} />
+        <div className="w-[24rem]">
+          <ConsentSweep shell="card" windows={windows.slice(0, 1)} onReject={noop} onAllow={noop} />
+        </div>
+      </div>
+    </SpecimenFrame>
   );
 }
 

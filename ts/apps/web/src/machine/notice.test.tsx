@@ -18,7 +18,13 @@ vi.mock("#/workbench/provider/harness-client", async (actual) => ({
   harnessClient: () => ({ permission, question, prompt, cancel }),
 }));
 
-const base = { group: "waits", revision: 1, where: "Claude", at: null, url: "/pea?thread=t1" } as const;
+const base = {
+  group: "waits",
+  revision: 1,
+  where: "Claude",
+  at: null,
+  url: "/pea?thread=t1",
+} as const;
 const asking: NoticeRow = {
   ...base,
   key: "thread:t1",
@@ -149,14 +155,30 @@ test("a permission answer goes to the thread's door; its item leaves only when t
   permission.mockRejectedValueOnce(Error("no request r1")).mockResolvedValueOnce();
   render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture={false} />);
   show(asking, revit);
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Allow" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Allow pe_do revit.ducts.resize" })));
   expect(permission).toHaveBeenCalledWith("t1", "r1", "allow");
   expect(screen.getByText(/Pea did not take this answer: Error: no request r1/)).toBeTruthy();
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Allow" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Allow pe_do revit.ducts.resize" })));
   // The other item stays: the card pages on.
   expect(screen.getByText("1/1")).toBeTruthy();
   expect(screen.getByText("revit.start · failed")).toBeTruthy();
   expect(sent("notice-hide")).toBe(false);
+});
+
+test("the card is the sweep: Reject sends the window's reject option while it counts down", async () => {
+  permission.mockResolvedValue();
+  render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture={false} />);
+  const deadline = new Date(Date.now() + 60_000).toISOString();
+  show({
+    ...asking,
+    act: { ...(asking.act as Extract<NoticeRow["act"], { kind: "consent" }>), deadline },
+  });
+  expect(screen.getByRole("timer").textContent).toMatch(/^(59|60)s$/);
+  await act(async () =>
+    fireEvent.click(screen.getByRole("button", { name: "Reject pe_do revit.ducts.resize" })),
+  );
+  expect(permission).toHaveBeenCalledExactlyOnceWith("t1", "r1", "deny");
+  expect(card()).toBeNull();
 });
 
 test("a question is answered through the thread's question door, and the last item ends the card", async () => {
@@ -172,7 +194,7 @@ test("a question is answered through the thread's question door, and the last it
 test("a fixture card refuses to answer or reply for Pea", () => {
   render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
   show(asking, finished);
-  fireEvent.click(screen.getByRole("button", { name: "Allow" }));
+  fireEvent.click(screen.getByRole("button", { name: "Allow pe_do revit.ducts.resize" }));
   expect(permission).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "next" }));
   fireEvent.change(screen.getByRole("textbox", { name: "reply to Pea" }), {
