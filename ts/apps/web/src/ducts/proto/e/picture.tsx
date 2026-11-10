@@ -46,7 +46,7 @@ import type { StageIssue } from "../../inbox-rows";
 import type { Claim, Run } from "../../legs";
 import { labelOfNode, legsOf } from "../../legs";
 import type { Split } from "../../loss-split";
-import { activeName, localId, localSubject, namesOf } from "../../identity.ts";
+import { activeName, namesOf, systemCode } from "../../identity.ts";
 import { DuctsOverlay, linesOf, useEquipment } from "../../picture-content";
 import { ProvisionalNote } from "../../provisional";
 import { indexOf, sceneOf, subjectScene } from "../../scene";
@@ -197,10 +197,10 @@ function Content({
       authored.system,
       snapshot.systems.map((row) => row.name),
     ),
-    selected: authored.selected.map((item) => localSubject(item.id)).join(","),
+    selected: authored.selected.map((item) => item.id).join(","),
   };
   const select = (selected: string) =>
-    ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
+    ctx.page.select(selected ? [{ kind: "focus", id: selected }] : []);
   const pickIssue = (selected: string) => {
     select(selected);
     ctx.page.query({ rulingSearch: emptyListSearch() });
@@ -610,7 +610,7 @@ function Content({
             opens={(system) => !page.system.includes(system)}
             nameOf={nameOf}
             onGo={({ system, id }) =>
-              id == null ? door?.add([localId("ducts-system", system)]) : jumpTo(elementKey(id))
+              id == null ? door?.add([systemCode(system)]) : jumpTo(elementKey(id))
             }
           />
         ),

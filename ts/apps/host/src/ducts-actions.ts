@@ -6,7 +6,7 @@ import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
 import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { ductsDesign, stagedDucts, workHandleSchema } from "@pe/agent-contracts";
+import { ductsDesign, stagedDucts, subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { Effect } from "effect";
@@ -194,7 +194,12 @@ export function ductsExecutors(
       prepare: async () => {
         const ductsScope = doc.writeIntent.edit?.value;
         const fanScope = fans.writeIntent.edit?.value;
-        const intent = { ...ductsScope, walk: fanScope?.walk };
+        // The Work schema decoded each group SubjectRef; the engine speaks the group's own key.
+        const intent = {
+          ...ductsScope,
+          groups: ductsScope?.groups?.map((code) => String(subjectOf(code).key)),
+          walk: fanScope?.walk,
+        };
         const { firm } = await runPods(deps, deps.files!.firm);
         const criteria = resolveCriteria(workLayer(design), null, firm);
         const nativeRead = deps.nativeRead;

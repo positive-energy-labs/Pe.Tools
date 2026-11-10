@@ -1,3 +1,4 @@
+import { stableFanKey } from "../ducts/sheet/model";
 import { join } from "node:path";
 import { Context, Layer } from "effect";
 import { HttpRouter } from "effect/http";
@@ -37,7 +38,6 @@ import { mountTypedRoute } from "../shell/typed-mount";
 import type { PlaceInput } from "../shell/typed-place";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { routeInput } from "./host";
-import { localId } from "./typed-route";
 import type { Readings } from "../host/resource-stream";
 import type { UseSource } from "../shell/source-contract";
 import type { DrawContext, TypedRoute } from "./typed-route";
@@ -349,7 +349,7 @@ async function journey(module: TypedRoute = fans) {
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => current },
     memory: () => ({
-      fan: { kind: "ids", ids: [localId("ducts-fan", `${fan.uniqueId}@${fan.portIndex}`)] },
+      fan: { kind: "ids", ids: [stableFanKey({ uniqueId: fan.uniqueId, portIndex: fan.portIndex })] },
     }),
   };
   const mounts: ReturnType<typeof mountTypedRoute>[] = [];
@@ -1093,12 +1093,12 @@ test("JZ cut two Places retain independent Page pose selection Value and inactiv
   }
   try {
     const a = place("a"); await j.settle();
-    a.m.page.pose({ contextRadiusFt: 11 }); a.m.page.select([{ kind: "focus", id: localId("audit", "a") }]);
+    a.m.page.pose({ contextRadiusFt: 11 }); a.m.page.select([{ kind: "focus", id: "audit:a" }]);
     await j.settle(); const beforeA = a.m.page.read(), valueA = a.m.value().value, urlA = address.read();
     expect(valueA).toBeDefined(); a.p.remember(beforeA); a.p.setVisible(false); a.m.release();
     active = "b"; address.write(new URLSearchParams("target=two"));
     const b = place("b"); await j.settle();
-    b.m.page.pose({ contextRadiusFt: 22 }); b.m.page.select([{ kind: "focus", id: localId("audit", "b") }]);
+    b.m.page.pose({ contextRadiusFt: 22 }); b.m.page.select([{ kind: "focus", id: "audit:b" }]);
     await j.settle(); const beforeB = b.m.page.read(), count = writes;
     a.p.address.write(new URLSearchParams("target=wrong&fixture=changed"), "replace");
     expect(writes, "Inactive callback cannot overwrite the active Place address").toBe(count);

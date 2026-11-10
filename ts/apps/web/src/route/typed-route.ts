@@ -7,12 +7,13 @@ import type {
   ReadingSnapshot,
   LayoutJson,
   InvocationToken,
-  IdentityId,
   EntryContract,
   WorkHistoryPort,
   Many,
+  SubjectRefCode,
 } from "@pe/agent-contracts";
-import { identityCodecs, subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
+import { subjectOf } from "@pe/agent-contracts";
+import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "./host-read.ts";
@@ -44,20 +45,16 @@ export const field = <S extends z.ZodType, const R extends Field["role"]>(
   role: R,
   url: Field["url"] = "replace",
 ) => ({ schema, initial, role, url });
-export const localId = (namespace: string, subject: string) => {
-  const id = identityCodecs.local.encode({ namespace, subject });
-  if (!id.ok) throw Error(id.reason);
-  return id.value;
-};
-export const namesOf = (value: Many<IdentityId<"local">>): string[] | "all" =>
-  value.kind === "all" ? "all" : value.ids.map((id) => identityCodecs.local.parts(id).subject);
+/** The keys of a subject set whose kind carries a text key (system name, workspace id). */
+export const namesOf = (value: Many<SubjectRefCode>): string[] | "all" =>
+  value.kind === "all" ? "all" : value.ids.map((id) => String(subjectOf(id).key));
 export { subjectSchema };
 export type Fields = Readonly<Record<string, Field>>;
 type FieldValues<F extends Fields> = {
   readonly [K in keyof F]: Immutable<z.output<F[K]["schema"]>>;
 };
 export type Page<F extends Fields> = FieldValues<F> & {
-  readonly selected: readonly { kind: "focus"; id: IdentityId<"local"> }[];
+  readonly selected: readonly { kind: "focus"; id: string }[];
 };
 type RoleFields<F extends Fields, R extends Field["role"]> = {
   [K in keyof F]: R extends F[K]["role"] ? K : never;
@@ -153,7 +150,7 @@ export type Specification<
     multiple?: boolean;
     pane: string;
     read?: SubjectRead;
-    options(data: Immutable<ReadData<SubjectRead>>): readonly { id: IdentityId<"local">; label: string }[];
+    options(data: Immutable<ReadData<SubjectRead>>): readonly { id: SubjectRefCode; label: string }[];
   };
   core?: HostRead & { output: z.ZodType<Publication<D>>; args(page: Page<F>): unknown };
   fields: F;
@@ -232,7 +229,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   if(spec.subject && !subjectRead) throw Error("Subject read must be declared by the route");
   if(spec.subject) fields[spec.subject.field]={...fields[spec.subject.field],role:"subject",schema:fieldSchemas[spec.subject.field]!,
     codec:spec.subject.field,initial:spec.fields[spec.subject.field]!.initial,url:"push",share:true,agent:spec.agent === false ? "none" : "set",
-    cardinality:"many",identity:"subject",picker:{reading:subjectRead!,options:"subject"}};
+    cardinality:"many",picker:{reading:subjectRead!,options:"subject"}};
   fields.selected={role:"selection",kinds:["focus"]};
   const readings: Record<string,RouteGraphJson["readings"][string]>={};
   for(const [read,id] of readIds) readings[id]={kind:"use",entry:read.key,demand:read.demand === "explicit"?"explicit":"visible",
@@ -246,7 +243,6 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   const data:RouteGraphJson={version:1,key:spec.key,address:spec.address ?? `/${spec.key}`,name:spec.name,directory:spec.directory,
     capabilities:[...(work?["work" as const]:[]),...(Object.keys(verbs).length?["native-write" as const]:[]),
       ...(["document","project","family"].includes(normalized.needs)?["geometry" as const]:[])],fields,
-    identities:{subject:{kind:"local",codec:"local"},focus:{kind:"local",codec:"local"}},
     ...(spec.subject?{subject:{field:spec.subject.field,noun:spec.subject.noun,pane:spec.subject.pane,roster:subjectRead!,detail:subjectRead!}}:{}),
     ...(work?{historyDetail:"historyDetail",work:{schema:"work",route:work.route,version:work.schemaVersion??1,}}:{}),
     workFields:Object.fromEntries(Object.entries(work?.schema.shape ?? {}).flatMap(([key,schema])=>{

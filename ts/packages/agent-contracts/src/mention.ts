@@ -13,6 +13,7 @@ import {
   type CapabilityRecent,
 } from "./capability.ts";
 import { contributionKindSchema, parseContributionKey } from "./contribution.ts";
+import type { DocumentKey } from "./subject-ref.ts";
 
 const factSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
@@ -37,8 +38,9 @@ export const mentionSchema = z
   }, "Mention kind must match its canonical contribution key");
 export type Mention = z.infer<typeof mentionSchema>;
 
-/** The key of an open Revit document as a capability row. */
-export const documentKey = (session: string, openId: string) => `doc:${session}/${openId}`;
+/** The key of an open Revit document as a capability row; this is the door that mints `DocumentKey`. */
+export const documentKey = (session: string, openId: string) =>
+  `doc:${session}/${openId}` as DocumentKey;
 
 /** `doc:<session>/<openId>` → its halves; null for any other key. */
 export function parseDocumentKey(key: string): { session: string; openId: string } | null {

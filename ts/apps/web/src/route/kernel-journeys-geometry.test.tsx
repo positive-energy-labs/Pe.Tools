@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { stableFanKey } from "../ducts/sheet/model";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { SceneMeshes } from "../scene/types";
@@ -6,7 +7,7 @@ import type { Scene3DProps } from "../scene/scene3d";
 import { TestAttention } from "../test-attention";
 import { makeAtomRegistry } from "../shell/owner";
 import { mountTypedRoute } from "../shell/typed-mount";
-import { route, localId } from "./typed-route";
+import { route } from "./typed-route";
 import { module as fans } from "../fans/route";
 import { PictureBody, RosterBody } from "../ducts/sheet/mount";
 import { SubjectDoor, typedSubjectDoor } from "../shell/subject";
@@ -106,7 +107,7 @@ function pictureJourney() {
       if (empty) { data.sheetSnapshot.nodes = []; data.sheetSnapshot.segments = []; data.open = null; data.opened = []; data.rows = []; data.fans.rows = []; }
       deliver({ kind: "complete", value: packet, revision: 1 });
     } } } });
-    mounts.push(mount); mount.subscribe(() => {}); mount.page.subject({ kind: "ids", ids: [localId("ducts-fan", "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001@2")] });
+    mounts.push(mount); mount.subscribe(() => {}); mount.page.subject({ kind: "ids", ids: [stableFanKey({ uniqueId: "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001", portIndex: 2 })] });
     return mount;
   };
   const tree = (mount: ReturnType<typeof open>) => <TestAttention registry={registry}>{mount.draw("sheet-picture", ctx => <PictureBody ctx={ctx as any} />) as React.ReactNode}</TestAttention>;
@@ -141,7 +142,7 @@ test("JM B03/B14/B18 named Fans roster and a live gesture survive typed Page pro
     expect(roster.container.textContent, "B03: readable identity never prints encoded subject ids").not.toContain("9cb9f188-28aa-4094-8b76");
     fireEvent.click(roster.getByRole("button", { name: "All fans" }));
     expect(a.page.read().fan, "B03: All remains symbolic").toEqual({ kind: "all" });
-    act(() => typedSubjectDoor(a)!.add([localId("ducts-fan", "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001@2")]));
+    act(() => typedSubjectDoor(a)!.add([stableFanKey({ uniqueId: "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001", portIndex: 2 })]));
     expect(a.page.read().fan, "B03: additive open never narrows All").toEqual({ kind: "all" });
     fireEvent.click(roster.getByRole("button", { name: "Clear fans" }));
     expect(a.page.read().fan, "B03: None remains explicit").toEqual({ kind: "ids", ids: [] });
@@ -248,7 +249,7 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    }).catch(error=>{if(!ctx.signal.aborted)deliver({kind:"failure",error});});
    return ()=>{void forward("/pe/reads/value",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...body,generation:++generation,release:true})});};
  }};
- const selected=localId("ducts-fan",`${walk.nodes.find(n=>n.id===14577391)!.uniqueId}@2`);
+ const selected=stableFanKey({ uniqueId: walk.nodes.find(n=>n.id===14577391)!.uniqueId!, portIndex: 2 });
  let search=new URLSearchParams({fan:JSON.stringify({kind:"ids",ids:[selected]})});
  const {TypedWrite}=await import("../shell/typed-shell");
  const {KeyScopeHost}=await import("@pe/kit/keys");

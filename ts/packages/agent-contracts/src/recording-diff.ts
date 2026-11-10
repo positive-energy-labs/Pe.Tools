@@ -1,18 +1,18 @@
-import type { IdentityId } from "./route-kernel-page.ts";
+import type { DocumentKey, SubjectRefCode } from "./subject-ref.ts";
 import type { GraphJsonValue } from "./route-graph.ts";
 
 export type DiffJson = GraphJsonValue;
 export interface DiffPort {
-  readonly element: IdentityId<"element">;
+  readonly element: SubjectRefCode;
   readonly index: number;
 }
 /** Section bounds survive changes to the member set. Loops have no admitted identity. */
 export type RecordingDiffKey =
-  | { readonly kind: "element"; readonly id: IdentityId<"element"> }
+  | { readonly kind: "element"; readonly id: SubjectRefCode }
   | { readonly kind: "port"; readonly port: DiffPort }
   | { readonly kind: "system"; readonly systemName: string }
   | { readonly kind: "section"; readonly bounds: readonly [DiffPort, DiffPort] }
-  | { readonly kind: "path"; readonly fan: DiffPort; readonly terminal: IdentityId<"element"> }
+  | { readonly kind: "path"; readonly fan: DiffPort; readonly terminal: SubjectRefCode }
   | { readonly kind: "loop" };
 export type RecordingDiffCoverage =
   | { readonly kind: "partial"; readonly reason: string }
@@ -34,7 +34,7 @@ export interface RecordingDiffEntry {
  * there is deliberately no second point schema or persistence authority here. */
 export interface RecordingDiffSnapshot<Point = unknown> {
   readonly point: Point;
-  readonly document: IdentityId<"document">;
+  readonly document: DocumentKey;
   readonly coverage: RecordingDiffCoverage;
   readonly entries: readonly RecordingDiffEntry[];
 }

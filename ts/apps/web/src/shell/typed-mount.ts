@@ -40,7 +40,7 @@ import { createWorkFeedClient } from "./work-feed-client";
 import { createFixtureWorkDoor } from "./fixture-work-door";
 import { publicationPose, recordedWorkDoor } from "./history";
 import { settleWork } from "./work-door-observation";
-import { freezePage } from "./page-port";
+import { freezePage } from "./freeze-page";
 import type { PlaceInput } from "./typed-place";
 import type { ReadingContext, ReadingSource } from "./source-contract";
 import type { DrawContext, EditFailure, EditHistory, TypedRoute } from "../route/typed-route";

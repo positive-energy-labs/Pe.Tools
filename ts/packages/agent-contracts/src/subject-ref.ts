@@ -198,6 +198,24 @@ export const decode = (code: string): SubjectRefResult<SubjectRef> => {
     : refuse("malformed", "not the canonical spelling");
 };
 
+/** The one Zod door for a SubjectRefCode: it admits exactly what `decode` admits. */
+export const subjectRefCodeSchema = z
+  .string()
+  .refine((v) => decode(v).ok, { message: "not a canonical SubjectRef code" })
+  .transform((v) => v as SubjectRefCode);
+/** Mints a code from refs the caller built from trusted data; a refusal is a programming error. */
+export const subjectCode = (ref: SubjectRef): SubjectRefCode => {
+  const code = encode(ref);
+  if (!code.ok) throw Error(`${code.code}: ${code.reason}`);
+  return code.value;
+};
+/** The decoded ref of a code already admitted at a door. */
+export const subjectOf = (code: SubjectRefCode): SubjectRef => {
+  const ref = decode(code);
+  if (!ref.ok) throw Error(`${ref.code}: ${ref.reason}`);
+  return ref.value;
+};
+
 /** ADR 0035 rule 3: a `parameter` binding keys by UniqueId with no sub and no placement. */
 export type ParameterSubject = Extract<SubjectRef, { keyKind: "UniqueId" }> & {
   readonly placement?: undefined;

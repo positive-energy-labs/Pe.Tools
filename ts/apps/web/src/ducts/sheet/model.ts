@@ -4,7 +4,8 @@ import type {
   DuctsSheetResponse,
   FittingPricing,
 } from "@pe/agent-contracts";
-import type { Immutable } from "@pe/agent-contracts";
+import type { Immutable, SubjectRefCode, UniqueId } from "@pe/agent-contracts";
+import { subjectCode } from "@pe/agent-contracts";
 
 export type FanPort = DuctsRosterResponse["rows"][number];
 
@@ -54,9 +55,9 @@ export const withComputed = (roster: readonly FanPort[], computed: readonly FanP
   });
 };
 
-/** Mark is a display label; only the document's UniqueId and connector identify a fan port. */
-export const stableFanKey = (fan: Pick<FanPort, "uniqueId" | "portIndex">) =>
-  `${fan.uniqueId}@${fan.portIndex}`;
+/** Mark is a display label; a fan port is the SubjectRef `UniqueId:<unit>#port:<n>` (ADR 0035 rule 2). */
+export const stableFanKey = (fan: Pick<FanPort, "uniqueId" | "portIndex">): SubjectRefCode =>
+  subjectCode({ keyKind: "UniqueId", key: fan.uniqueId as UniqueId, sub: { port: fan.portIndex } });
 
 export function selectedFans<T extends Pick<FanPort, "uniqueId" | "portIndex">>(
   keys: string[] | "all",

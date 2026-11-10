@@ -6,7 +6,7 @@ import type {
   ReceiptCursor,
   WorkFeedState,
 } from "../../../../packages/agent-contracts/src/work-journal-door";
-import { freezePage } from "./page-port";
+import { freezePage } from "./freeze-page";
 
 export interface RefusedWorkEdit {
   readonly input: import("@pe/agent-contracts").WorkWrite;

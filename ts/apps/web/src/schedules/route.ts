@@ -10,7 +10,8 @@ import {
   showCellValue,
 } from "@pe/agent-contracts";
 import { schedulesViewCapability } from "../../../../packages/agent-contracts/src/schedules-read.ts";
-import { route, field, subjectSchema, namesOf, localId } from "../route/defaults.ts";
+import { route, field, subjectSchema, namesOf } from "../route/defaults.ts";
+import { subjectCode } from "@pe/agent-contracts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 export const fields = {
@@ -74,7 +75,7 @@ export const module = route({
     read: roster,
     options: (data) =>
       (data?.catalog.schedules ?? []).flatMap((row) =>
-        row.workspaceId ? [{ id: localId("schedules", row.workspaceId), label: row.name }] : [],
+        row.workspaceId ? [{ id: subjectCode({ keyKind: "workspace", key: row.workspaceId }), label: row.name }] : [],
       ),
   },
   panes: {

@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { stableFanKey } from "../ducts/sheet/model";
+import { subjectCode } from "@pe/agent-contracts";
 import { surfaceReadiness } from "./readiness.test.fixture";
 import { useState, useSyncExternalStore } from "react";
 import { journey as takeoffJourney, Drawing as TakeoffDrawing } from "../takeoff/adoption.test.fixture";
@@ -668,7 +670,6 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
 
 test("JZ header chooser query keys preserve the current schedule until an explicit choice", async () => {
   const { TypedSubject } = await import("../shell/typed-shell");
-  const { localId } = await import("./typed-route");
   const host = await scheduleHost();
   host.addSchedule(43, "Panel 16");
   const pendingReads = new Set<Promise<void>>();
@@ -701,7 +702,7 @@ test("JZ header chooser query keys preserve the current schedule until an explic
     pendingReads.add(task); void task.finally(() => pendingReads.delete(task));
     return () => { closed = true; };
   } }) };
-  let search = new URLSearchParams({ workspaceId: JSON.stringify({ kind: "ids", ids: [localId("schedules", host.scope.work)] }) });
+  let search = new URLSearchParams({ workspaceId: JSON.stringify({ kind: "ids", ids: [subjectCode({ keyKind: "workspace", key: host.scope.work })] }) });
   const listeners = new Set<() => void>();
   // Schedules is the real route whose subject choice still belongs to the typed header.
   const mount = mounts.mountTypedRoute(schedules, {
@@ -729,13 +730,13 @@ test("JZ header chooser query keys preserve the current schedule until an explic
     }
     expect((screen.getByRole("combobox", { name: "schedule search" }) as HTMLInputElement).value).toBe("Panel 16");
     expect(screen.queryByRole("option", { name: "Panel" }), "filtered-out selected item stays open").toBeNull();
-    expect.soft(mount.page.read().workspaceId).toEqual({ kind: "ids", ids: [localId("schedules", host.scope.work)] });
+    expect.soft(mount.page.read().workspaceId).toEqual({ kind: "ids", ids: [subjectCode({ keyKind: "workspace", key: host.scope.work })] });
     expect.soft(pending, "query never starts Reading").toEqual([]);
     expect.soft(requests.length, "query never dispatches a host read").toBe(count);
     unsubscribe();
     await user.click(screen.getByRole("option", { name: "Panel 16" }));
     // The real Schedules chooser chooses one member; only the explicit choice replaces Panel.
-    await waitFor(() => expect(mount.page.read().workspaceId.ids).toEqual([localId("schedules", chosen)]));
+    await waitFor(() => expect(mount.page.read().workspaceId.ids).toEqual([subjectCode({ keyKind: "workspace", key: chosen })]));
     await waitFor(() => expect(mount.value().current).toBe(true), { timeout: 20_000 });
     expect(requests.length).toBeGreaterThan(count);
   } finally { view?.unmount(); mount.dispose(); await Promise.all(pendingReads); }
@@ -1839,7 +1840,6 @@ test.each(["Fans", "Ducts"] as const)("JZ C042 %s subject-list declaration suppr
 
 test("JZ audit named subject choices preserve all none add and toggle without raw ids", async () => {
   const { fixture, ref, path: documentPath } = await import("../../../host/tests/host-read-graph.test-support");
-  const { localId } = await import("./typed-route");
   const { typedSubjectDoor } = await import("../shell/subject");
   const host = await fixture(true), tasks = new Set<Promise<unknown>>();
   const roster = fans.spec.subject!.read!;
@@ -1848,7 +1848,7 @@ test("JZ audit named subject choices preserve all none add and toggle without ra
     panes: { detail: { title: "Subject choices", purpose: "Choose named subjects", draw: () => <p>Subject choice surface</p> } },
     layout: { kind: "pane", id: "detail" } });
   let seq = 0, search = new URLSearchParams(), moves = 0;
-  const unknown = localId("ducts-fan", "unknown-roster-audit@0");
+  const unknown = stableFanKey({ uniqueId: "unknown-roster-audit", portIndex: 0 });
   const source: UseSource = { kind: "use", open(ctx, deliver) {
     const generation = ++seq;
     const task = host.send(generation, [], undefined, `subject-${generation}`).then(value => {
