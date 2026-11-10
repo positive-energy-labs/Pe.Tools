@@ -3340,6 +3340,135 @@ export namespace HostOpsCatalog {
   }
 }
 
+/** Read this document's bounded segment catalog: each segment's UniqueId, ElementId, name, domain, kind and nominal, inner and outer diameters in Revit internal feet. Refuses segment or size overflow rather than truncating. Read-only. */
+export namespace MepSegmentSizes {
+  export namespace Req {
+    export interface Request {
+      maxSegments?: number;
+      maxSizesPerSegment?: number;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      segments: MepSegmentRow[];
+    }
+    export interface MepSegmentRow {
+      uniqueId: string;
+      elementId: number;
+      name: string;
+      domain: string;
+      kind: string;
+      sizes: MepSizeRow[];
+    }
+    export interface MepSizeRow {
+      nominalDiameterFt: number;
+      innerDiameterFt: number;
+      outerDiameterFt: number;
+    }
+  }
+}
+
+/** Read a bounded roster of this document's MEP systems (piping and duct; domain is a field) and optionally one system's members: UniqueIds and ElementIds, system type and classification, flow, size (nominal and inner diameter, or width and height; a size the domain lacks reads absent), length, segment, type, and every physical connector with its peers and the flow direction Revit reports (In, Out or Bidirectional, never inferred). Each system's source is its base equipment, Revit's base connector id and any connector Revit reports Out; no base equipment reads absent. Revit reports a base connector Bidirectional once assigned, so upstream walks from the base connector id across peers. Optional facts are value, absent or error. Lengths and sizes are Revit internal feet, flow is internal cubic feet per second. Refuses overflow rather than truncating. Read-only. */
+export namespace MepSystemMembers {
+  export namespace Req {
+    export interface Request {
+      systemUniqueId?: null | string;
+      maxSystems?: number;
+      maxElements?: number;
+    }
+  }
+  export namespace Res {
+    /**
+     * One optional fact: a value, absent (Revit has none), or the error raised reading it. Never a silent zero.
+     */
+    export type MepReadState = "Value" | "Absent" | "Error";
+
+    export interface Response {
+      systems: MepSystemRow[];
+      systemUniqueId?: null | string;
+      elements: MepMember[];
+    }
+    /**
+     * Domain is a field value ("piping", "duct"), never part of the contract's shape. Flow is Revit internal cubic feet per second.
+     */
+    export interface MepSystemRow {
+      uniqueId: string;
+      elementId: number;
+      name: string;
+      domain: string;
+      systemType: MepFactOfMepElementRef;
+      classification: string;
+      flowCubicFeetPerSecond: MepFactOfNullableDouble;
+      source: MepFactOfMepSource;
+    }
+    export interface MepFactOfMepElementRef {
+      state: MepReadState;
+      value: MepElementRef;
+      error?: null | string;
+    }
+    export interface MepElementRef {
+      uniqueId: string;
+      elementId: number;
+      name: string;
+    }
+    export interface MepFactOfNullableDouble {
+      state: MepReadState;
+      value: null | number;
+      error?: null | string;
+    }
+    export interface MepFactOfMepSource {
+      state: MepReadState;
+      value: MepSource;
+      error?: null | string;
+    }
+    /**
+     * The system's source as Revit declares it: base equipment, its base connector, and any connector Revit reports Out.
+     */
+    export interface MepSource {
+      equipment: MepElementRef;
+      baseConnectorId?: number | null;
+      outConnectorIds: number[];
+      connectors: MepPort[];
+    }
+    /**
+     * A physical connector. Direction is In, Out or Bidirectional exactly as Revit reports it; never inferred.
+     */
+    export interface MepPort {
+      connectorId: number;
+      direction: MepFactOfString;
+      peers: MepPeer[];
+    }
+    export interface MepFactOfString {
+      state: MepReadState;
+      value: string;
+      error?: null | string;
+    }
+    export interface MepPeer {
+      uniqueId: string;
+      elementId: number;
+      connectorId: number;
+    }
+    /**
+     * A system member. Lengths and sizes are Revit internal feet; a size a domain does not have reads absent.
+     */
+    export interface MepMember {
+      uniqueId: string;
+      elementId: number;
+      name: string;
+      kind: string;
+      flowCubicFeetPerSecond: MepFactOfNullableDouble;
+      nominalDiameterFt: MepFactOfNullableDouble;
+      innerDiameterFt: MepFactOfNullableDouble;
+      widthFt: MepFactOfNullableDouble;
+      heightFt: MepFactOfNullableDouble;
+      lengthFt: MepFactOfNullableDouble;
+      segment: MepFactOfMepElementRef;
+      type: MepFactOfMepElementRef;
+      connectors: MepPort[];
+    }
+  }
+}
+
 /** Signal cooperative cancellation to one in-flight bridge request, named by the requestId it was sent under. The operation stops at its next checkpoint and answers with a cancelled outcome; work already committed inside Revit is not undone, and an operation that never checks its token cannot be interrupted. */
 export namespace OpCancel {
   export namespace Req {
@@ -4866,113 +4995,6 @@ export namespace RevitCatalogParameterEvidence {
       totalCount: number;
       returnedCount: number;
       isTruncated: boolean;
-    }
-  }
-}
-
-/** Read this document's bounded pipe segment catalog with each segment's UniqueId, ElementId, name and nominal, inner and outer diameters in Revit internal feet. Refuses segment or size overflow rather than truncating. Read-only. */
-export namespace RevitCatalogPipeSizes {
-  export namespace Req {
-    export interface Request {
-      maxSegments?: number;
-      maxSizesPerSegment?: number;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      segments: PipeSegmentRow[];
-    }
-    export interface PipeSegmentRow {
-      uniqueId: string;
-      elementId: number;
-      name: string;
-      sizes: PipeSizeRow[];
-    }
-    export interface PipeSizeRow {
-      nominalDiameterFt: number;
-      innerDiameterFt: number;
-      outerDiameterFt: number;
-    }
-  }
-}
-
-/** Read a bounded roster of this document's piping systems and optionally one system's pipes, fittings and accessories. UniqueIds and ElementIds, system type and classification, flow, base equipment and its Out connector ids, sizes, length, segment, pipe type, physical connector peers and Revit-reported In/Out/Bidirectional direction. Optional facts are value, absent or error; direction is never inferred. Lengths and diameters are Revit internal feet, flow is internal cubic feet per second. Missing base equipment or Out connectors is explicit. Refuses overflow rather than truncating. Read-only. */
-export namespace RevitCatalogPipingSystems {
-  export namespace Req {
-    export interface Request {
-      systemUniqueId?: null | string;
-      maxSystems?: number;
-      maxElements?: number;
-    }
-  }
-  export namespace Res {
-    export type PipingReadState = "Value" | "Absent" | "Error";
-
-    export interface Response {
-      systems: PipingSystemRow[];
-      systemUniqueId?: null | string;
-      elements: PipingMember[];
-    }
-    export interface PipingSystemRow {
-      uniqueId: string;
-      elementId: number;
-      name: string;
-      systemType: PipingFactOfPipingElementRef;
-      classification: string;
-      flowCubicFeetPerSecond: PipingFactOfNullableDouble;
-      source: PipingFactOfPipingSource;
-    }
-    export interface PipingFactOfPipingElementRef {
-      state: PipingReadState;
-      value: PipingElementRef;
-      error?: null | string;
-    }
-    export interface PipingElementRef {
-      uniqueId: string;
-      elementId: number;
-      name: string;
-    }
-    export interface PipingFactOfNullableDouble {
-      state: PipingReadState;
-      value?: null | number;
-      error?: null | string;
-    }
-    export interface PipingFactOfPipingSource {
-      state: PipingReadState;
-      value: PipingSource;
-      error?: null | string;
-    }
-    export interface PipingSource {
-      equipment: PipingElementRef;
-      outConnectorIds: number[];
-    }
-    export interface PipingMember {
-      uniqueId: string;
-      elementId: number;
-      name: string;
-      kind: string;
-      flowCubicFeetPerSecond: PipingFactOfNullableDouble;
-      nominalDiameterFt: PipingFactOfNullableDouble;
-      innerDiameterFt: PipingFactOfNullableDouble;
-      lengthFt: PipingFactOfNullableDouble;
-      segment: PipingFactOfPipingElementRef;
-      pipeType: PipingFactOfPipingElementRef;
-      connectors: PipingPort[];
-    }
-    export interface PipingPort {
-      connectorId: number;
-      direction: PipingFactOfString;
-      peers: PipingPeer[];
-    }
-    export interface PipingFactOfString {
-      state: PipingReadState;
-      value: string;
-      error?: null | string;
-    }
-    export interface PipingPeer {
-      uniqueId: string;
-      elementId: number;
-      connectorId: number;
     }
   }
 }
@@ -11181,6 +11203,8 @@ export interface HostOps {
   "family.plan": { request: FamilyPlan.Req.Request; response: FamilyPlan.Res.Response };
   "family.temporary.acquire": { request: FamilyTemporaryAcquire.Req.Request; response: FamilyTemporaryAcquire.Res.Response };
   "host.ops.catalog": { request: HostOpsCatalog.Req.Request; response: HostOpsCatalog.Res.Response };
+  "mep.segment.sizes": { request: MepSegmentSizes.Req.Request; response: MepSegmentSizes.Res.Response };
+  "mep.system.members": { request: MepSystemMembers.Req.Request; response: MepSystemMembers.Res.Response };
   "op.cancel": { request: OpCancel.Req.Request; response: OpCancel.Res.Response };
   "pod.member.compose": { request: PodMemberCompose.Req.Request; response: PodMemberCompose.Res.Response };
   "revit.apply.command.execute": { request: RevitApplyCommandExecute.Req.Request; response: RevitApplyCommandExecute.Res.Response };
@@ -11197,8 +11221,6 @@ export interface HostOps {
   "revit.catalog.loaded-families": { request: RevitCatalogLoadedFamilies.Req.Request; response: RevitCatalogLoadedFamilies.Res.Response };
   "revit.catalog.parameter-bindings": { request: RevitCatalogParameterBindings.Req.Request; response: RevitCatalogParameterBindings.Res.Response };
   "revit.catalog.parameter-evidence": { request: RevitCatalogParameterEvidence.Req.Request; response: RevitCatalogParameterEvidence.Res.Response };
-  "revit.catalog.pipe-sizes": { request: RevitCatalogPipeSizes.Req.Request; response: RevitCatalogPipeSizes.Res.Response };
-  "revit.catalog.piping-systems": { request: RevitCatalogPipingSystems.Req.Request; response: RevitCatalogPipingSystems.Res.Response };
   "revit.catalog.project-browser": { request: RevitCatalogProjectBrowser.Req.Request; response: RevitCatalogProjectBrowser.Res.Response };
   "revit.catalog.project-index": { request: RevitCatalogProjectIndex.Req.Request; response: RevitCatalogProjectIndex.Res.Response };
   "revit.catalog.schedules": { request: RevitCatalogSchedules.Req.Request; response: RevitCatalogSchedules.Res.Response };
@@ -11285,6 +11307,8 @@ export const hostOpKeys = [
   "family.plan",
   "family.temporary.acquire",
   "host.ops.catalog",
+  "mep.segment.sizes",
+  "mep.system.members",
   "op.cancel",
   "pod.member.compose",
   "revit.apply.command.execute",
@@ -11301,8 +11325,6 @@ export const hostOpKeys = [
   "revit.catalog.loaded-families",
   "revit.catalog.parameter-bindings",
   "revit.catalog.parameter-evidence",
-  "revit.catalog.pipe-sizes",
-  "revit.catalog.piping-systems",
   "revit.catalog.project-browser",
   "revit.catalog.project-index",
   "revit.catalog.schedules",
@@ -11389,6 +11411,8 @@ export const hostOpSafety = {
   "family.plan": {"intent":"Read","costTier":"Expensive","usesTransactions":true,"subject":"FamilyDocument","touches":"Geometry","effect":"TransactRead","cardinality":"One","internal":false,"rollsBack":true},
   "family.temporary.acquire": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Metadata","effect":"SessionWrite","cardinality":"One","internal":false,"rollsBack":false},
   "host.ops.catalog": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "mep.segment.sizes": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "mep.system.members": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Topology","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "op.cancel": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"None","touches":"Metadata","effect":"SessionWrite","cardinality":"One","internal":false,"rollsBack":false},
   "pod.member.compose": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.apply.command.execute": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
@@ -11405,8 +11429,6 @@ export const hostOpSafety = {
   "revit.catalog.loaded-families": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.catalog.parameter-bindings": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.catalog.parameter-evidence": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
-  "revit.catalog.pipe-sizes": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
-  "revit.catalog.piping-systems": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Topology","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.catalog.project-browser": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.catalog.project-index": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.catalog.schedules": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
