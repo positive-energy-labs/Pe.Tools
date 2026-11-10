@@ -11,6 +11,8 @@ test("legacy shell imports decrease and their committed allowance never rises", 
   for (const commit of versions) {
     const previous = JSON.parse(git("show", `${commit}:${path}`));
     for (const kind of ["mount", "legacy", "readings"] as const)
-      expect(baseline[kind], `${kind} allowance rose above ${commit}`).toBeLessThanOrEqual(previous[kind]);
+      expect(baseline[kind], `${kind} allowance rose above ${commit}`).toBeLessThanOrEqual(
+        previous[kind],
+      );
   }
 }, 60_000);

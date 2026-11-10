@@ -12,17 +12,29 @@ export const git = (...args: string[]) =>
 // Test imports remain in the evidence census, but never spend production's allowance.
 export function shellImports() {
   const configs = new Map<string, ts.CompilerOptions>();
-  const files = [...new Set(git("ls-files", "-z", "--cached", "--others", "--exclude-standard", "ts")
-    .split("\0").filter((file) => /\.[cm]?[jt]sx?$/.test(file) &&
-      !/(?:^|\/)(?:node_modules|dist|dist-installed|generated|vendor)\//.test(file) &&
-      existsSync(resolve(REPO, file))))];
+  const files = [
+    ...new Set(
+      git("ls-files", "-z", "--cached", "--others", "--exclude-standard", "ts")
+        .split("\0")
+        .filter(
+          (file) =>
+            /\.[cm]?[jt]sx?$/.test(file) &&
+            !/(?:^|\/)(?:node_modules|dist|dist-installed|generated|vendor)\//.test(file) &&
+            existsSync(resolve(REPO, file)),
+        ),
+    ),
+  ];
   return files.flatMap((file) => {
     const absolute = resolve(REPO, file);
     const config = ts.findConfigFile(dirname(absolute), ts.sys.fileExists) ?? "";
     let options = configs.get(config);
     if (!options) {
       options = config
-        ? ts.parseJsonConfigFileContent(ts.readConfigFile(config, ts.sys.readFile).config, ts.sys, dirname(config)).options
+        ? ts.parseJsonConfigFileContent(
+            ts.readConfigFile(config, ts.sys.readFile).config,
+            ts.sys,
+            dirname(config),
+          ).options
         : { moduleResolution: ts.ModuleResolutionKind.Bundler, module: ts.ModuleKind.ESNext };
       configs.set(config, options);
     }
@@ -31,7 +43,17 @@ export function shellImports() {
       if (!resolved) return [];
       const target = relative(REPO, resolved.resolvedFileName).replaceAll("\\", "/");
       return target.startsWith("ts/apps/web/src/shell/")
-        ? [{ file, module, target, production: !/(?:^|\/)(?:tests?|__tests__|fixtures|prototypes|lab)\/|\.(?:test|spec|typecheck)\./.test(file) }]
+        ? [
+            {
+              file,
+              module,
+              target,
+              production:
+                !/(?:^|\/)(?:tests?|__tests__|fixtures|prototypes|lab)\/|\.(?:test|spec|typecheck)\./.test(
+                  file,
+                ),
+            },
+          ]
         : [];
     });
   });
