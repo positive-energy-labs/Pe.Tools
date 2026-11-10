@@ -43,7 +43,7 @@ A route's acceptance is a person's task driven through its real controls. Tests,
 Ground the terrain before writing a rule where the platform or the data is adversarial (a building model, a firm's standards, a reference calculation). A deterministic utility with no adversarial input needs only a fixture and the laws above.
 
 - Name the ground before the first edit: one real model under your own custody (a copy, never the user's live document), two named scenarios with the one that should hurt first, and a saved snapshot as the deterministic twin. Write the three in the ledger.
-- Before design, take the census `purge` defines over every case on the twin, by kind.
+- Before design, take the census `purge` defines over every case on the twin, by kind. A census behind a ruling names the commit it was taken at, because a stale census carried forward is a cascade with a file for a vector.
 - Before claiming the platform cannot do something, run the platform documentation search `execute` names, and cite the hit or say the search came back empty.
 - Answer a platform question with a spike on a copy: a rolled-back script in its own session, with a verdict table of works, accepted-but-wrong, and refused. The platform's success flag is testimony, so post-check the result and run the calculation before and after.
 - Falsify your own guess on the twin the moment the user doubts it, before anything is built on it.

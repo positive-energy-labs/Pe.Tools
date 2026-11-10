@@ -110,7 +110,7 @@ A handoff is consumed when everything worth keeping has moved into a ledger, an 
 
 - `handoffs/`, as above.
 - `runs/<lane>-<yyyymmdd>[-<slug>]/`, dated evidence output. Keep a run while any ledger claims to replay it. Before you delete one, name and meet a retention condition: keep the source identity, method, exclusions, and enough inputs for the promised replay. Keep the decisive numbers or text in the ledger or a committed research home, because git never archives a gitignored run.
-- `runs/<effort>/` also holds a `control` loop's declaration and receipts and an archivist's `RECORD.md`. Verdicts from either go to the feature ledger.
+- `runs/<effort>/` also holds a `control` loop's declaration and receipts and a record keeper's `RECORD.md` when the owner asked for one. Verdicts from either go to the feature ledger.
 - `tmp/`. Nothing may reference anything here, and anyone may delete any of it at any time.
 
 A skill that names its own workspace under `.artifacts/` (`page`, `debrief`, `recon`) owns that directory.
