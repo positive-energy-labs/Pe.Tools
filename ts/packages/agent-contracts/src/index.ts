@@ -28,7 +28,7 @@ export * from "./recording-points.ts";
 export type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
 export type { BodyBindings, WorkPatch, PaneContext, BodyContext, ReadingSnapshot } from "./route-kernel-bodies.ts";
 export type { HostRouteModule, HostAdmittedRoute, HostWorkRegistration } from "./host-route-admission.ts";
-export { jsonCodec, identityCodecs } from "./route-kernel-codecs.ts";
+export { jsonCodec } from "./route-kernel-codecs.ts";
 export { captureHostModule } from "./host-route-admission.ts";
 export type { KernelServices, ResolvedRead } from "./route-kernel-environment.ts";
 export { commandCatalogAxes } from "./command-axes.ts";
@@ -36,7 +36,7 @@ export { ductsPictureFields } from "./routes/picture.ts";
 export { ductsAddress } from "./routes/ducts.ts";
 export { threadListFields } from "./routes/shared.ts";
 
-export type { InvocationToken, IdentityId, Many } from "./route-kernel-page.ts";
+export type { InvocationToken, Many } from "./route-kernel-page.ts";
 export type { LayoutJson } from "./route-kernel-data.ts";
 export type { EntryContract, WorkHistoryPort } from "./route-kernel-bodies.ts";
 export type { WorkJournalDoor, WorkScope } from "./work-journal-door.ts";
@@ -67,3 +67,5 @@ export * from "./settings-read.ts";
 export {isRecord} from "./route-state.ts";
 
 export { blobRefSchema, blobUploadSchema, type BlobRef, type BlobUpload } from "./blob-ref.ts";
+
+export * from "./subject-ref.ts";

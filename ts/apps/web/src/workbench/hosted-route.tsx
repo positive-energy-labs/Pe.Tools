@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { publicRoutes } from "../route/route-discovery";
 import type { AdmittedAddressPort } from "../shell/typed-address";
-import { localId } from "../route/typed-route";
+import { subjectCode } from "@pe/agent-contracts";
 import type { TypedRoute } from "../route/typed-route";
 export interface HostedRouteProps {
   thread: string;
@@ -18,7 +18,7 @@ export function hostedRouteAddress(
   const listeners = new Set<() => void>();
   const retainSubject = () => {
     const subject = route.spec.subject;
-    if (work !== undefined && subject) search.set(subject.field, JSON.stringify(route.spec.fields[subject.field]!.schema.parse({kind:"ids", ids:[localId(route.spec.key, work)]})));
+    if (work !== undefined && subject) search.set(subject.field, JSON.stringify(route.spec.fields[subject.field]!.schema.parse({kind:"ids", ids:[subjectCode({ keyKind: "workspace", key: work })]})));
   };
   retainSubject();
   return {

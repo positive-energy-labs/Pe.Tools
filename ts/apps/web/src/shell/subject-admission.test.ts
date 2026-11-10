@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
+import { stableFanKey } from "../ducts/sheet/model";
+import { subjectRefCodeSchema } from "@pe/agent-contracts";
 import { test, expect, afterEach } from "vite-plus/test";
 import { waitFor } from "@testing-library/react";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { z } from "zod";
-import { identityCodecs } from "./page-port";
-import { localId } from "../ducts/identity";
 import { subjectState } from "./subject";
 import { tabTitle } from "../workbench/route-tabs";
 import { admit } from "../fans/admission.fixture";
@@ -28,9 +28,9 @@ test("admitted Fans uses its actual picker labels and decoded subject; foreign a
     .parse(mount.picker("fan"));
   expect(options.length).toBeGreaterThan(1);
   const ids = options.map((option) => {
-    const decoded = identityCodecs.local.decode(z.string().parse(option.id));
-    if (!decoded.ok) throw Error(decoded.reason);
-    return decoded.value;
+    const decoded = subjectRefCodeSchema.safeParse(option.id);
+    if (!decoded.success) throw Error(decoded.error.message);
+    return decoded.data;
   });
   const search = () => Object.fromEntries(new URLSearchParams(history.location.search));
   mount.controls.subject({ kind: "ids", ids: [ids[0]!] });
@@ -60,7 +60,7 @@ test("admitted Fans uses its actual picker labels and decoded subject; foreign a
   expect(
     mount.subjectState({
       ...search(),
-      fan: JSON.stringify({ kind: "ids", ids: [localId("ducts-fan", "unknown-unit@0")] }),
+      fan: JSON.stringify({ kind: "ids", ids: [stableFanKey({ uniqueId: "unknown-unit", portIndex: 0 })] }),
     }),
   ).toMatchObject({ ready: false, refusal: expect.stringContaining("not in this model") });
   expect(mount.subjectState({ ...search(), target: "another-model" })).toBeNull();

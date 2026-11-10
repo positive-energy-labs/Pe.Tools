@@ -34,6 +34,7 @@ const run = (
   ids.map(
     (id, k): Segment => ({
       id,
+      uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`,
       kind: "duct",
       curveKind: "line",
       shape: "round",
@@ -68,7 +69,7 @@ const group = (id: string, system: string) => ({
 const snapshot = {
   groups: [group("gS", "SA 1"), group("gF", "FA 1"), group("gR", "EX 1"), group("gE", "EX 2")],
   nodes: [
-    {
+    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(100).toString(16).padStart(8, "0")}`,
       id: 100,
       kind: "equipment",
       category: "equipment",

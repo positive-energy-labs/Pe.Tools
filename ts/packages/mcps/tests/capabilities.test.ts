@@ -512,7 +512,7 @@ test("Pea discovers the Ducts Plan owner, refuses Fans at schema decode, and pre
       f.key,
       "ducts",
       "human",
-      [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } }],
+      [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } }],
       0,
     );
     expect(ducts.ok).toBe(true);

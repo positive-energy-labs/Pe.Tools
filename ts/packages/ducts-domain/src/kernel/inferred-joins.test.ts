@@ -31,6 +31,7 @@ const conn = (index: number, point: number[], classification = "SupplyAir"): Con
 });
 const duct = (id: number, a: number[], b: number[], classification = "SupplyAir"): Segment => ({
   id,
+  uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`,
   kind: "duct",
   curveKind: "line",
   type: "Round Duct",

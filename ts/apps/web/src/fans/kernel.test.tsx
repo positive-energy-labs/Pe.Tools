@@ -1,7 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { module as fans } from "./route.ts";
 import { fansLink } from "./route.ts";
-import { localSubject } from "../ducts/identity.ts";
 import { selectedFans, stableFanKey } from "../ducts/sheet/model.ts";
 import sheet from "../ducts/sheet/sheet.fixture.json";
 
@@ -13,5 +12,5 @@ test("fan links carry the destination identity and binding without ducts Page fi
   expect([...url.searchParams.keys()].sort()).toEqual(["fan", "fixture", "target", "thread"]);
   const subject = JSON.parse(url.searchParams.get("fan") ?? "null");
   expect(fans.spec.fields.fan.schema.parse(subject)).toEqual(subject);
-  expect(selectedFans(subject.ids.map(localSubject), sheet.roster.rows)).toEqual([row]);
+  expect(selectedFans(subject.ids, sheet.roster.rows)).toEqual([row]);
 });

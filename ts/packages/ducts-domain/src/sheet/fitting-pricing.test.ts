@@ -26,9 +26,9 @@ const conn = (index: number, to: [number, number] | null, d = 8): Conn =>
     ...round(d),
   }) as Conn;
 const node = (id: number, kind: string, extra: object): Node =>
-  ({ id, kind, category: "", point: [0, 0, 0], facts: [], ...extra }) as unknown as Node;
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,  id, kind, category: "", point: [0, 0, 0], facts: [], ...extra }) as unknown as Node;
 const duct = (id: number, a: [number, number], b: [number, number]): Segment =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind: "duct",
     curveKind: "line",

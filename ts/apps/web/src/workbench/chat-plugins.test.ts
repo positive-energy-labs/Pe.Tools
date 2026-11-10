@@ -59,7 +59,7 @@ describe("chat plugin records", () => {
     );
     expect(place).toMatchObject({
       ok: true,
-      page: { workspaceId: { kind: "ids", ids: [JSON.stringify(["schedules", "schedule-42"])] } },
+      page: { workspaceId: { kind: "ids", ids: ["workspace:schedule-42"] } },
       carry: {
         work: "schedule-42",
         target: JSON.stringify({ kind: "open", ref: { session: "one", openId: "original" } }),
@@ -138,7 +138,7 @@ describe("chat plugin records", () => {
       subject: "C:/Models/Original.rvt",
       place: {
         ok: true,
-        page: { workspaceId: { kind: "ids", ids: [JSON.stringify(["schedules", "schedule-42"])] } },
+        page: { workspaceId: { kind: "ids", ids: ["workspace:schedule-42"] } },
         carry: {
           work: "schedule-42",
           target: JSON.stringify({
@@ -200,6 +200,6 @@ describe("chat plugin records", () => {
       },
       { ok: true, target: { session: "original-session", document: "C:/Models/Original.rvt" } },
     );
-    expect(record).toMatchObject({ changes: 2, place: { ok: true, page: { system: {kind:"ids",ids:[JSON.stringify(["ducts-system","AHU-1"])]} } } });
+    expect(record).toMatchObject({ changes: 2, place: { ok: true, page: { system: {kind:"ids",ids:["system-name:AHU-1"]} } } });
   });
 });

@@ -320,7 +320,7 @@ test.each(["claude", "codex"] as const)(
                 target: { document: address },
                 result: {
                   revision: 1,
-                  doc: { equipmentFlows: { "14577391": { edit: { value: { cfm: 975 } } } } },
+                  doc: { equipmentFlows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef": { edit: { value: { cfm: 975 } } } } },
                 },
               });
               const census = await routes.workspace.instances();

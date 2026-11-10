@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { GoToPopup } from "../src/components/lang/go-to";
 import { SubjectTextContext } from "../src/components/lang/reach";
-import { hovered } from "../src/components/lang/attention";
+import { elementKey, hovered } from "../src/components/lang/attention";
 import { kitRegistry } from "./attention-fixture";
 
 afterEach(cleanup);
@@ -11,6 +11,7 @@ const items = Array.from({ length: 12 }, (_, id) => ({
   key: `e${id}`,
   name: `Supply ${id}`,
   id,
+  uniqueId: `u${id}`,
   group: "Elements",
   detail: "round duct",
 }));
@@ -20,7 +21,7 @@ test("go-to builds only when opened, caps groups, searches words and previews th
   const onGo = vi.fn();
   const registry = kitRegistry();
   render(
-    <SubjectTextContext value={{ doc: "kit", nameOf: () => null }}>
+    <SubjectTextContext value={{ doc: "kit", nameOf: () => null, uniqueIdOf: () => null }}>
       <GoToPopup items={build} onGo={onGo} />
     </SubjectTextContext>,
   );
@@ -32,7 +33,7 @@ test("go-to builds only when opened, caps groups, searches words and previews th
   expect(build).toHaveBeenCalledOnce();
   expect(screen.getAllByRole("option")).toHaveLength(9); // Eight elements and the kit's more row.
   fireEvent.mouseMove(screen.getByText("Supply 3"));
-  await waitFor(() => expect(registry.get(hovered)?.key ?? null).toBe("e:3"));
+  await waitFor(() => expect(registry.get(hovered)?.key ?? null).toBe(elementKey("u3")));
   fireEvent.change(input, { target: { value: "round 11" } });
   const match = await screen.findByText("Supply 11");
   fireEvent.click(match);

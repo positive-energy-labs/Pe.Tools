@@ -25,7 +25,7 @@ export const circuitReadSchema=<R extends z.ZodType>(row:R)=>{
   const side=z.object({port:nullable,elementIds:ns,flowCfm:nullable,continuityResidualCfm:nullable,jointFlows:z.array(z.object({from:s,to:s,cfm:n})),totalPressureInWg:nullable,
     paths:z.array(z.object({terminalId:n,flowCfm:n,total:n,rows:z.array(row),balancingInWg:nullable})),backEdges:z.array(z.tuple([n,n])),reasons:z.array(reason)});
   return z.object({basis:z.literal("balanced-design-demand"),
-    graph:z.object({ports:z.array(z.object({elementId:n,uniqueId:s.nullable(),connector})),joints:z.array(z.object({a:s,b:s,reciprocal:z.boolean()})),parts:z.array(z.object({elementId:n,uniqueId:s.nullable(),ports:ns,continuity:z.enum(["component","passive","fan-boundary","unknown-equipment"])}))}),
+    graph:z.object({ports:z.array(z.object({elementId:n,uniqueId:s,connector})),joints:z.array(z.object({a:s,b:s,reciprocal:z.boolean()})),parts:z.array(z.object({elementId:n,uniqueId:s,ports:ns,continuity:z.enum(["component","passive","fan-boundary","unknown-equipment"])}))}),
     coverage:z.object({equipment:n,passiveEquipment:n,fanEquipment:n,fanCircuits:n,unassignedEquipmentPorts:n,terminals:n,admittedTerminals:n,reachedTerminals:n}),
     circuits:z.array(z.object({id:s,equipmentId:n,uniqueId:s,flowCfm:nullable,inlet:side,outlet:side,requiredExternalTotalPressureInWg:nullable,requiredExternalStaticPressureInWg:nullable,status:z.enum(["complete-for-declared-design","partial"]),reasons:z.array(reason)})),componentFlows:z.array(component),reasons:z.array(reason),
   });

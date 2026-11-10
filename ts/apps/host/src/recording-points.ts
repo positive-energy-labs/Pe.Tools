@@ -9,8 +9,10 @@ import {
   type RecordingPointId,
   type RecordingConsumer,
 } from "@pe/agent-contracts";
-import { identityCodecs } from "../../../packages/agent-contracts/src/route-kernel-codecs.ts";
-import type { IdentityId } from "../../../packages/agent-contracts/src/route-kernel-page.ts";
+import {
+  documentKeySchema,
+  type DocumentKey,
+} from "../../../packages/agent-contracts/src/subject-ref.ts";
 import { canonicalJson } from "@pe/host-internal/native-read";
 import { hostSessionScopeSchema } from "@pe/host-contracts/operation-types";
 import {
@@ -23,7 +25,7 @@ import {
 import type { ConsumerRecipe, RecordingReader } from "./native-recording.ts";
 import { InvalidRead } from "./native-reads.ts";
 
-type Document = IdentityId<"document">;
+type Document = DocumentKey;
 type ReadSets = HostInputReadSets["Service"];
 const refuse = (problem: string, message: string) =>
   new InvalidRead({ message, status: 409, problem: `recording.${problem}` });
@@ -56,9 +58,9 @@ export const recordingReadSetReferences = Effect.fn("RecordingPoints.references"
   document: Document,
   id: string,
 ) {
-  const decoded = identityCodecs.document.decode(document);
-  if (!decoded.ok) return yield* refuse("scope", "Invalid declared document identity");
-  const wanted = addressSchema.safeParse(identityCodecs.document.parts(decoded.value).document);
+  if (!documentKeySchema.safeParse(document).success)
+    return yield* refuse("scope", "Invalid declared document identity");
+  const wanted = addressSchema.safeParse(document);
   if (!wanted.success) return yield* refuse("scope", "Document has no recorded Address authority");
   const records = yield* readSetRecords(reader, id);
   const ids = new Set<string>();

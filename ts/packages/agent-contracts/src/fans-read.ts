@@ -3,6 +3,7 @@ import { publicationRequest, publicationSchema } from "./value.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { ductsDocumentSchema } from "./ducts.ts";
 import { fansDocumentSchema } from "./fans.ts";
+import { subjectRefCodeSchema } from "./subject-ref.ts";
 import { z } from "zod";
 import {
   ductsRosterResponseSchema,
@@ -31,7 +32,8 @@ export const fanSheetSchema = z.object({
 export const FAN_READ_MAX = 32;
 export const fansReadArgs = z.object({
   target: documentRefSchema,
-  fan: z.union([z.literal("all"), z.array(z.string()).max(FAN_READ_MAX)]),
+  /** Fan ports as SubjectRef `UniqueId:<unit>#port:<n>` codes, decoded at this door. */
+  fan: z.union([z.literal("all"), z.array(subjectRefCodeSchema).max(FAN_READ_MAX)]),
   sheetPath: z.string().default(""),
 });
 export const fansReadRequest = publicationRequest(fansReadArgs);

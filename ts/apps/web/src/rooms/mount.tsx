@@ -234,7 +234,7 @@ function FeedbackBody({ page, renderPane }: Body & { renderPane: PaneApi }) {
 function AttentionRoomsSketch(props: Omit<React.ComponentProps<typeof RoomsSketch>, "hovered">) {
   const doc = useContext(AttentionDocument)!;
   const { hovered } = useAttention(doc);
-  const region = props.regions.find((region) => hovered.has(elementKey(region.elementId)));
+  const region = props.regions.find((region) => hovered.has(elementKey(region.uniqueId)));
   return <RoomsSketch {...props} hovered={region?.guid ?? null} />;
 }
 

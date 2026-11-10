@@ -1,3 +1,4 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { expect, test } from "vite-plus/test";
 import { presentFan, presentLosses } from "./reviews";
 
@@ -76,8 +77,9 @@ test("each write is a cell: before from the plan, the Work cell's author, unknow
     },
     {
       readings: {
+        ducts: { value: { nodes: [{ id: 7, uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000007" }], segments: [] } },
         fansWork: {
-          value: { equipmentFlows: { "7": { edit: { value: { cfm: 925 }, by: "pea" } } } } as never,
+          value: { equipmentFlows: { [elementSubject({ uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000007" })]: { edit: { value: { cfm: 925 }, by: "pea" } } } } as never,
         },
       },
     },

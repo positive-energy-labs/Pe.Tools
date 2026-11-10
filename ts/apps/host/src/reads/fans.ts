@@ -5,6 +5,9 @@ import {
   fansSheetData,
   openFanSheetSchema,
   stagedDucts,
+  subjectCode,
+  subjectOf,
+
 } from "@pe/agent-contracts";
 import { sheetSnapshot } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import { sheetState } from "@pe/ducts-domain/sheet/state";
@@ -76,7 +79,11 @@ export const fansSheet = read("fans.sheet", {
       args.fan === "all"
         ? fans.rows
         : [...new Set(args.fan)].map((key) => {
-            const row = fans.rows.find((row) => `${row.uniqueId}@${row.portIndex}` === key);
+            const ref = subjectOf(key);
+            const port = ref.sub && "port" in ref.sub ? ref.sub.port : null;
+            const row = fans.rows.find(
+              (row) => ref.keyKind === "UniqueId" && row.uniqueId === ref.key && row.portIndex === port,
+            );
             if (!row) throw Error(`Fan '${key}' is unavailable; choose it from the roster`);
             return row;
           });
@@ -88,7 +95,7 @@ export const fansSheet = read("fans.sheet", {
     const opened = await ctx.collect(chosen, {
       read: openFan,
       batch: 1,
-      key: (fan) => `${fan.uniqueId}@${fan.portIndex}`,
+      key: (fan) => subjectCode({ keyKind: "UniqueId", key: fan.uniqueId, sub: { port: fan.portIndex } }),
       args: ([fan]) => ({
         target: args.target,
         sheetPath: args.sheetPath,

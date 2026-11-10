@@ -4,7 +4,7 @@ import { systemScope } from "./system-scope.ts";
 import type { DuctSnapshot } from "./types.ts";
 import type { LossResult } from "./losses.ts";
 
-const part = (id: number, kind: string, to: (number | null)[], systemName = "SA 1") => ({
+const part = (id: number, kind: string, to: (number | null)[], systemName = "SA 1") => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
   id,
   kind,
   groupId: "g",

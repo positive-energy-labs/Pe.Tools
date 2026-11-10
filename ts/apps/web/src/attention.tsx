@@ -1,9 +1,9 @@
 import * as Atom from "effect/reactivity/Atom";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { ElementIndexContext, elementIndex, useElementIndex, type ElementIndex } from "./element-index";
 import {
   AttentionDocument,
-  elementKey,
   hovered,
   setHovered,
   useAttention,
@@ -18,18 +18,26 @@ export function AttentionScope({
   doc,
   selected,
   members = NONE,
+  elements,
   children,
 }: {
   doc: string;
+  /** The pane's elements; ElementIds exist only through this index. */
+  elements?: ElementIndex;
   selected: Atom.Atom<ReadonlySet<SubjectKey>>;
   members?: Members;
   children: ReactNode;
 }) {
   useAttentionDocument(doc, selected);
   useMembers(doc, members);
-  return <AttentionRoot doc={doc}>{children}</AttentionRoot>;
+  return (
+    <ElementIndexContext value={elements ?? NO_INDEX}>
+      <AttentionRoot doc={doc}>{children}</AttentionRoot>
+    </ElementIndexContext>
+  );
 }
 const NONE: Members = new Map();
+const NO_INDEX = elementIndex([]);
 export function AttentionRoot({ doc, children }: { doc: string; children: ReactNode }) {
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   useAttentionScope(root);
@@ -47,18 +55,15 @@ export function useElementAttention() {
   const doc = useContext(AttentionDocument) ?? "";
   const registry = useContext(RegistryContext);
   const state = useAttention(doc);
+  const elements = useElementIndex();
   const numeric = (keys: ReadonlySet<SubjectKey>) =>
-    new Set(
-      [...keys]
-        .filter((key) => key.startsWith("e:"))
-        .map((key) => Number(key.slice(2)))
-        .filter(Number.isFinite),
-    );
+    new Set([...keys].map(elements.idOf).filter(Number.isFinite));
   const onHover = useCallback(
     (id: number | null) => {
-      if (doc) setHovered(registry, id == null ? null : { doc, key: elementKey(id) });
+      const key = id == null ? null : elements.keyOf(id);
+      if (doc) setHovered(registry, key === null ? null : { doc, key });
     },
-    [registry, doc],
+    [registry, doc, elements],
   );
   return useMemo(
     () => ({
@@ -68,7 +73,7 @@ export function useElementAttention() {
       citation: state.citation,
       onHover,
     }),
-    [state, onHover],
+    [state, onHover, elements],
   );
 }
 export function useIssueHover() {

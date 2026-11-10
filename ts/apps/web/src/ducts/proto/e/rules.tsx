@@ -1,9 +1,5 @@
 import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
-/**
- * proto: copied from losses-view.tsx (round 3, E2 Rules section). The losses item's table chips per
- * rule and its stated-drop cell are unexported there, so the minimum is copied here unchanged;
- * `StagedRules` is a reduced copy of `StagedLosses` that needs no ASHRAE grids.
- */
+/** proto: copied from losses-view.tsx (round 3, E2 Rules section). */
 import { cellPatches, type DuctsDesign, type RouteStatePatch } from "@pe/agent-contracts";
 import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { tableOf } from "@pe/ducts-domain/pricing";
@@ -25,6 +21,7 @@ const tablePatches = (doc: DuctsDesign | null, key: string, table: string): Rout
 export function DropCell({
   segment,
   id,
+  subject,
   held,
   work,
   label,
@@ -33,11 +30,12 @@ export function DropCell({
   land?: string;
   segment: "terminalDrops" | "componentDrops";
   id: number;
+  subject: string;
   held: number | null | undefined;
   work: LossesWork;
   label: string;
 }) {
-  const key = String(id);
+  const key = subject;
   const cell = work.doc?.[segment][key] ?? {};
   const authored = cell.edit?.value;
   return (
@@ -77,7 +75,6 @@ export function Chips({
   const edit = priced.edit.rules[ruleKey]?.table.toUpperCase();
   if (rule.options.length === 1) return <span className="face-mono">{rule.options[0]}</span>;
   // The pressed chip is the table every instance is looked up under now; a edit one also wears
-  // caution. Picking the edit table again takes it back (`tablePatches`). Chips wrap, never clip.
   return (
     <span
       role="group"
@@ -112,11 +109,7 @@ export function Chips({
     </span>
   );
 }
-/**
- * proto: copied from losses-view.tsx (`StagedLosses`, reduced): each edit rule as applied → edit,
- * the edit drops and unit statics with the fan they move, and discard. The fan-out per rule needs
- * the ASHRAE grids, which the variants are not handed, so it is left out.
- */
+/** proto: copied from losses-view.tsx (`StagedLosses`, reduced): each edit rule as applied → edit, the edit drops and unit statics with the fan they move, and discard. */
 export function StagedRules({
   priced,
   groups,

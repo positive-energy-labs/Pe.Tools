@@ -35,7 +35,7 @@ const conn = (index: number, point: number[], facing: number[], connectedTo = nu
   connectedTo,
   areaFt2: 1,
 });
-const duct = (id: number, a: number[], b: number[], connectors: unknown[]) => ({
+const duct = (id: number, a: number[], b: number[], connectors: unknown[]) => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
   id,
   kind: "duct",
   curveKind: "line",

@@ -8,6 +8,7 @@ import { neutralFansWork } from "@pe/agent-contracts";
 import { designOf } from "@pe/ducts-domain/test-design";
 import { stagedDucts } from "@pe/agent-contracts";
 import { expect, it } from "vite-plus/test";
+import { nativeResponseDefinitionSchema } from "@pe/host-contracts/decoders";
 
 import { bin } from "@pe/ducts-domain/bins";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
@@ -55,7 +56,7 @@ const conn = (
     ...size,
   }) as Conn;
 const node = (id: number, kind: string, extra: object): DuctSnapshot["nodes"][number] =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind,
     category: "",
@@ -71,7 +72,7 @@ const duct = (
   polyline: number[][],
   connectors: Conn[],
 ) =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind: "duct",
     curveKind: "line",
@@ -260,8 +261,9 @@ it.each(rootAttached.cases)(
   "resolves the exact root attachment of retained fitting $fitting.id",
   (captured) => {
     for (const reverse of [false, true]) {
-      const fitting = structuredClone(captured.fitting) as DuctSnapshot["nodes"][number];
-      const equipment = structuredClone(captured.equipment) as DuctSnapshot["nodes"][number];
+      const nativeNode = nativeResponseDefinitionSchema<DuctSnapshot["nodes"][number]>("ducts.snapshot.walk", "DuctNode");
+      const fitting = nativeNode.parse(structuredClone(captured.fitting));
+      const equipment = nativeNode.parse(structuredClone(captured.equipment));
       const terminalId = 900000001;
       fitting.groupId = "root-regression";
       const outlet = fitting.connectors.find((port) => port.index === captured.outletIndex)!;
@@ -328,12 +330,9 @@ it.each(rootAttached.cases)(
       const result = computeLosses(snap, grids);
       const row = result.paths[terminalId]!.rows.find((row) => row.id === fitting.id)!;
       if (fitting.id === 12398836) {
-        expect(row.error).toContain("measured included angle");
-        // Explicit manual test angle overlays the retained geometry; it is not a native observation.
-        fitting.facts.push({ key: "angle", value: 45, unit: "deg", provenance: "designer-stated" });
-        const physical = computeLosses(snap, grids).paths[terminalId]!.rows.find(
-          (r) => r.id === fitting.id,
-        )!;
+        // The native re-capture (2026-11-10) observes the angle: the type's Angle parameter, 45 deg, provenance "geometry".
+        expect(fitting.facts.find((f) => f.key === "angle")).toMatchObject({ value: 45, unit: "deg", provenance: "geometry" });
+        const physical = row;
         expect(physical.error).toBeUndefined();
         expect(physical.table).toBe("SD4-2");
         expect(physical.inputs?.y).toBeCloseTo((Math.PI * 100) / 576, 12);

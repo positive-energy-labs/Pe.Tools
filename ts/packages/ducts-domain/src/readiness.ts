@@ -54,7 +54,7 @@ export function readiness(
   snapshot: DuctSnapshot,
   work: DuctsDesign | null,
 ): Record<string, GroupReadiness> {
-  const doc = withStoredRulings(work, snapshot.store);
+  const doc = withStoredRulings(work, snapshot.store, snapshot);
   const { issues, nodes, segments } = snapshotById(snapshot);
   const verdict = (issue: DuctIssue) => {
     const value = edit(doc, issue.id);

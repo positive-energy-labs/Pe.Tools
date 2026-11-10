@@ -1,3 +1,5 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { snapshot as workSnapshot } from "../ducts/test-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type {} from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
 import type {
@@ -55,7 +57,7 @@ test("the host refuses cross-route patches and the declared Work owner observes 
     ductKey,
     "ducts",
     "human",
-    [{ path: ["flows", "4"], value: {} }],
+    [{ path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!)], value: {} }],
     0,
   );
   expect(badDuct.ok).toBe(false);

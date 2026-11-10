@@ -1,32 +1,21 @@
 import type { RouteGraphJson } from "./route-kernel-data.ts";
-import type { RouteBindings } from "./route-bodies.ts";
+import { decode } from "./subject-ref.ts";
 
-/** A local identity's decoded subject is the host workspace id. Encoded identity bytes
- * remain Page/selection transport and never become persisted Work keys. */
+/** A workspace SubjectRef's key is the host workspace id. Encoded codes remain Page/selection
+ * transport and never become persisted Work keys. */
 export function routeWorkSubject(
   data: RouteGraphJson,
-  bindings: Pick<RouteBindings, "identities">,
   page: Readonly<Record<string, unknown>>,
 ): string | undefined {
   if (!data.workSubject) return undefined;
   const field = data.fields[data.workSubject];
-  if (
-    field?.role !== "subject" ||
-    field.cardinality !== "one" ||
-    typeof field.identity !== "string"
-  )
-    throw Error("workSubject requires one local subject identity");
-  const identity = data.identities[field.identity];
-  const codec = identity && bindings.identities[identity.codec];
-  if (identity?.kind !== "local" || codec?.kind !== "local")
-    throw Error("workSubject identity codec must decode to a local Work key");
+  if (field?.role !== "subject" || field.cardinality !== "one")
+    throw Error("workSubject requires one subject field");
   const value = page[data.workSubject];
   if (value == null) return "default";
   if (typeof value !== "string") throw Error("Invalid Work subject identity");
-  const decoded = codec.decode(value) as { ok: boolean; value?: unknown; reason?: string };
-  if (!decoded.ok) throw Error(decoded.reason ?? "Invalid Work subject identity");
-  const parts = codec.parts(decoded.value) as { subject?: unknown };
-  if (typeof parts?.subject !== "string" || !parts.subject.trim())
-    throw Error("workSubject codec did not decode a Work key");
-  return parts.subject;
+  const ref = decode(value);
+  if (!ref.ok) throw Error(ref.reason);
+  if (ref.value.keyKind !== "workspace") throw Error("workSubject must name a workspace SubjectRef");
+  return ref.value.key;
 }

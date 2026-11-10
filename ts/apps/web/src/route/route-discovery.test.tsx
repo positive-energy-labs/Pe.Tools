@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { localId } from "./typed-route";
+import { subjectCode } from "@pe/agent-contracts";
 import { beforeAll, expect, test, vi } from "vite-plus/test";
 import { builtinRouteKeys } from "./builtin-inventory";
 import { publicRoutes, publicRoutesReady } from "./builtin-routes";
@@ -68,6 +68,6 @@ test("Schedules' hosted workspace uses its typed subject codec without changing 
     work: "schedule-42",
     visible: true,
   });
-  expect(JSON.parse(address.read().get("workspaceId")!)).toEqual({kind:"ids",ids:[localId("schedules", "schedule-42")]});
+  expect(JSON.parse(address.read().get("workspaceId")!)).toEqual({kind:"ids",ids:[subjectCode({ keyKind: "workspace", key: "schedule-42" })]});
   expect(address.read().get("work")).toBe("schedule-42");
 });

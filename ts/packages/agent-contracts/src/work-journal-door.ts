@@ -3,13 +3,8 @@ import { workFingerprintSchema, type RouteFingerprint } from "./route-kernel-adm
 import type { CommandRefusal } from "./command.ts";
 import type { AdmittedRoute } from "./route-kernel-admission.ts";
 import type { JournalCommandHandle } from "./route-kernel-environment.ts";
-import type {
-  IdentityId,
-  IdentityKind,
-  InvocationBasis,
-  Many,
-  ScopeIdentity,
-} from "./route-kernel-page.ts";
+import type { InvocationBasis, Many, ScopeIdentity } from "./route-kernel-page.ts";
+import type { SubjectRefCode } from "./subject-ref.ts";
 import type { RouteStateWriteResult, WorkKey, WorkWrite, WorkWriteAck } from "./route-state.ts";
 import type { ActionAdmission } from "./semantic-actions.ts";
 import type { ActionStatus } from "./action-receipts.ts";
@@ -27,7 +22,7 @@ export interface WorkScope {
   readonly reading?: string;
   readonly key: WorkKey;
   readonly target: ScopeIdentity["target"];
-  readonly subject: IdentityId<IdentityKind> | Many<IdentityId<IdentityKind>> | null;
+  readonly subject: SubjectRefCode | Many<SubjectRefCode> | null;
 }
 
 export type Unsubscribe = () => void;

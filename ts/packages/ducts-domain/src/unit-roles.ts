@@ -1,18 +1,5 @@
-/**
- * Every unit's role, `fan` or `passive`, with why (pressure-drop ledger, 2026-10-21, multi-fan
- * spike). A ruling wins: a role the model's store holds (`ruled`) or one Work stages (`edit`).
- * Without one the role is proposed, automatically and never edit, from Revit's own state first
- * (Pe manages Revit state):
- * 1. a unit that is the base equipment of a Revit system its own groups carry is a `fan`
- *    ("base equipment of SA 19");
- * 2. else a unit that states a design flow (`equipmentFlows`: edit, else the FanFlow slot) is a
- *    `fan` ("airflow in <slot>");
- * 3. else `passive` when PASSIVE_MIN_PORTS or more duct ports all carry one classification: a
- *    through-flow device (filter chassis, silencer; "air passes straight through (all ports Return
- *    Air)"), which then passes air through (`pass-through.ts`);
- * 4. else a `fan` ("mixed port classes: moves air"): air handlers, dehumidifiers, ERVs, and a
- *    one-port unit. Passive needs a positive signal, so a model with no airflow data still prices.
- */
+/** Every unit's role, `fan` or `passive`, with why (pressure-drop ledger, 2026-10-21, multi-fan spike). */
+import { elementSubject } from "./work-subject.ts";
 import type { DuctUnitRole } from "@pe/agent-contracts";
 
 import type { EquipmentFlow } from "./terminal-flows.ts";
@@ -61,7 +48,8 @@ export function unitRoles(
       baseOf.set(sys.baseEquipmentId, [...(baseOf.get(sys.baseEquipmentId) ?? []), sys.name]);
   const out = new Map<number, UnitRole>();
   for (const id of [...served.keys()].sort((a, b) => a - b)) {
-    const ruling = edit[String(id)]?.role;
+    const node = nodes.get(id);
+    const ruling = node ? edit[elementSubject(node)]?.role : undefined;
     if (ruling) {
       const stored = snapshot.store?.roles?.[String(id)]?.role;
       out.set(
@@ -114,11 +102,7 @@ export function unitRoles(
   return out;
 }
 
-/**
- * A through-flow unit proposed passive stays a fan when nothing else moves air in the network its
- * ports join (an inline fan has one class on both ports, like a filter): proposing it passive would
- * leave that network with no fan, and a suggestion never makes the route price less than before.
- */
+/** A through-flow unit proposed passive stays a fan when nothing else moves air in the network its ports join (an inline fan has one class on both ports, like a filter): proposing it passive would leave that network with no fan, and a suggestion never makes the route price less than before. */
 function keepTheOnlyMover(groups: DuctSnapshot["groups"], out: Map<number, UnitRole>) {
   const proposedPassive = (id: number) =>
     out.get(id)?.role === "passive" && out.get(id)?.why === "proposed";

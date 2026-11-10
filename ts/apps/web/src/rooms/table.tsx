@@ -98,11 +98,11 @@ export function RoomsTable({
   const attention = useAttention(doc);
   const selected = new Set(
     rows
-      .filter((row) => attention.selected.has(elementKey(row.region.elementId)))
+      .filter((row) => attention.selected.has(elementKey(row.region.uniqueId)))
       .map((row) => row.region.guid),
   );
   const hovered =
-    rows.find((row) => attention.hovered.has(elementKey(row.region.elementId)))?.region.guid ??
+    rows.find((row) => attention.hovered.has(elementKey(row.region.uniqueId)))?.region.guid ??
     null;
   const columns = useMemo<Column<RoomRow>[]>(() => {
     const zoneLabels = new Map(

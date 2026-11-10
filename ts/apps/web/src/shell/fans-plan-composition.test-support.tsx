@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { stableFanKey } from "../ducts/sheet/model";
 import { surfaceReadiness } from "../route/readiness.test.fixture";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { Context, Effect, Layer, Queue, Option } from "effect";
@@ -28,7 +29,6 @@ import { bootHost } from "../../../host/tests/real-server";
 import { connectTestBridge } from "../../../host/tests/bridge-fixture";
 import { admittedReceiptStamps } from "../../../host/src/receipt-export";
 import { canonicalRouteInput, workFingerprintSchema, actionStatusSchema } from "@pe/agent-contracts";
-import { localId } from "../route/typed-route";
 import "../ducts/sheet/mount";
 import { TypedShell } from "./typed-shell";
 import { module as fans } from "../fans/route";
@@ -145,7 +145,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  const unbind=bindActionReadings();
  const dirties:any[]=[];const originalDirty=peReadings.dirty.bind(peReadings);
  peReadings.dirty=(request:any,scope?:"connection"|"subject")=>{dirties.push({request,scope});originalDirty(request,scope);};
- let search=new URLSearchParams({target:JSON.stringify({kind:"open",ref:trace.target}),thread:"f05-probe",fan:JSON.stringify({kind:"ids",ids:[localId("ducts-fan",`${walk.nodes.find(n=>n.id===14577391)!.uniqueId}@2`)]})});
+ let search=new URLSearchParams({target:JSON.stringify({kind:"open",ref:trace.target}),thread:"f05-probe",fan:JSON.stringify({kind:"ids",ids:[stableFanKey({ uniqueId: walk.nodes.find(n=>n.id===14577391)!.uniqueId!, portIndex: 2 })]})});
  const listeners=new Set<()=>void>();
  const address={read:()=>new URLSearchParams(search),write:(next:URLSearchParams)=>{search=new URLSearchParams(next);listeners.forEach(f=>f());},subscribe:(f:()=>void)=>{listeners.add(f);return()=>{listeners.delete(f);};}};
  const root=createRootRoute({validateSearch:(s:Record<string,unknown>)=>s,component:()=> <TypedShell module={fans} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtins.fans.closure.fingerprint}`)} address={address}/>});

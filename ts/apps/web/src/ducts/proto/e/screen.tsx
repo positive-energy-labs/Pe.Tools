@@ -8,7 +8,7 @@ import { useRouteSearchSlice } from "#/route/activity";
 import { fansLink } from "../../../fans/route.ts";
 import { useHoveredIssue } from "#/attention";
 import { PointerCite } from "#/shell/pointer-list";
-import { pointerRefs } from "../../pointer-refs";
+import { ductElements, pointerRefs } from "../../identity.ts";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { LoadingContext } from "#/route/loading-context";
@@ -18,6 +18,7 @@ import {
   DUCT_UNIT_KINDS,
   neutralFansWork,
   stagedDucts,
+  subjectCode,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 import { catalogLinkKey } from "@pe/ducts-domain/catalog";
@@ -34,7 +35,7 @@ import { scopeOf, sectionsOf, systemScope } from "@pe/ducts-domain/system-scope"
 import { systemSearch } from "@pe/ducts-domain/system-search";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { groupLabels } from "@pe/ducts-domain/words";
-import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
+import type { SubjectKey } from "@pe/kit/lang/attention";
 import { Button } from "@pe/kit/lang/button";
 import { emptyListState, useList, useValue, type ValueHandle, type ListOptions } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
@@ -65,7 +66,7 @@ import {
   type InboxItem,
 } from "../../inbox-rows";
 import { claimsOf, type Claim } from "../../legs";
-import { activeName, localId, localSubject, namesOf } from "../../identity.ts";
+import { activeName, namesOf, systemCode } from "../../identity.ts";
 import { DuctsOwner, commands } from "../../pane-context";
 import { DUCTS_MULTI } from "../../selection";
 import type { EditMeta } from "../../sheet/input-history.neutral";
@@ -99,7 +100,7 @@ function useNetworkData(ctx: NetworkContext) {
     page.system,
     (roster?.systems ?? []).map((row) => row.name),
   );
-  const selected = page.selected.map((item) => localSubject(item.id)).join(",");
+  const selected = page.selected.map((item) => item.id).join(",");
   const doc = target?.kind === "document" ? target.ref : null;
   const networkRead=ctx.read(networkSource);
   // The existing drawing views accept mutable arrays; decoded Values stay immutable.
@@ -113,11 +114,11 @@ function useNetworkData(ctx: NetworkContext) {
   const seen = ctx.value.value?.effectiveDesign ?? null;
   const attentionDoc = doc ? `${doc.session}/${doc.openId}` : "ducts:unbound";
   const selection = useMemo(
-    () => Atom.make(attentionSubjects(page.selected.map(({ id }) => localSubject(id)))),
-    [page.selected],
+    () => Atom.make(attentionSubjects(page.selected.map(({ id }) => id), ductElements(snapshot))),
+    [page.selected, snapshot],
   );
   const select = (selected: string) =>
-    ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
+    ctx.page.select(selected ? [{ kind: "focus", id: selected }] : []);
   const write = useCallback(
     async (patches: RouteStatePatch[], history?: EditMeta) => {
       return ctx.cells.patch(patches, history);
@@ -163,17 +164,18 @@ function useNetworkData(ctx: NetworkContext) {
     systemId?: number;
   }) => {
     if (!snapshot) return;
+    const group = (key: string) => subjectCode({ keyKind: "group", key });
     let intent: { groups: string[] } | { fan: { unitId: number; systemId: number } } | null = null;
     if (row.kind === "price") {
       const groups = active ? systemScope(snapshot, active).groups : [];
-      if (groups.length) intent = { groups: [...groups] };
+      if (groups.length) intent = { groups: groups.map(group) };
     } else if (
       row.kind === "heal" &&
       row.group &&
       active &&
       systemScope(snapshot, active).groups.includes(row.group)
     ) {
-      intent = { groups: [row.group] };
+      intent = { groups: [group(row.group)] };
     } else if (
       row.kind === "assign-fan" &&
       row.unitId != null &&
@@ -224,7 +226,7 @@ function useNetworkData(ctx: NetworkContext) {
     captureSource: networkRead.current && doc && version ? { document: doc, version } : null,
     scopeCommand,
     fanRoster: ctx.value.value?.fanRows ?? [],
-    edit: pendingCount(workDoc ?? null, snapshot?.store),
+    edit: pendingCount(workDoc ?? null, snapshot?.store, snapshot ?? { nodes: [], segments: [] }),
     coverage: coverage
       ? { ...coverage, reading: networkRead.status === "pending" ? systems : [] }
       : null,
@@ -258,6 +260,7 @@ function NetworkFrame({
 }) {
   const subjectProps = useRevitSubjectProps();
   const nameOf = useMemo(() => subjectNamer(data.snapshot), [data.snapshot]);
+  const elements = useMemo(() => ductElements(data.snapshot), [data.snapshot]);
   return (
     <DuctsOwner
       value={{
@@ -280,8 +283,11 @@ function NetworkFrame({
             value={{
               doc: data.attentionDoc,
               nameOf,
-              go: (id: number) =>
-                jump?.current ? jump.current(elementKey(id)) : data.selectElement(id),
+              uniqueIdOf: elements.uniqueIdOf,
+              go: (id: number) => {
+                const key = elements.keyOf(id);
+                return jump?.current && key ? jump.current(key) : data.selectElement(id);
+              },
               refProps: subjectProps,
             }}
           >
@@ -578,12 +584,14 @@ export function PictureBody({ ctx }: { ctx: DuctsDrawContext }) {
   const issues = useMemo(() => (inbox ? stageIssues(inbox) : []), [inbox]);
   const membership = useMemo(() => {
     const members = new Map<SubjectKey, readonly SubjectKey[]>();
-    for (const issue of issues) members.set(`issue:${issue.key}`, issue.ids.map(elementKey));
+    const elements = ductElements(snapshot);
+    const keys = elements.keysOf;
+    for (const issue of issues) members.set(`issue:${issue.key}`, keys(issue.ids));
     const walk = (node: TreeNode): number[] => {
       const ids = [
         ...new Set([...(node.id == null ? [] : [node.id]), ...node.children.flatMap(walk)]),
       ];
-      if (node.kind !== "element") members.set(`${node.kind}:${node.key}`, ids.map(elementKey));
+      if (node.kind !== "element") members.set(`${node.kind}:${node.key}`, keys(ids));
       return ids;
     };
     trees.forEach(walk);
@@ -838,7 +846,7 @@ const SystemsList = memo(function SystemsList({
   coverage: Coverage;
 }) {
   const door = useAdmittedSubject();
-  const systemId = (name: string) => localId("ducts-system", name);
+  const systemId = (name: string) => systemCode(name);
   const searchable = useMemo(() => (drawn ? systemSearch(drawn) : null), [drawn]);
   const search = useCallback(
     (system: ReturnType<typeof systemList>[number]) => ({
@@ -915,7 +923,6 @@ const SystemsList = memo(function SystemsList({
     if (systemListView.target && systemListView.rows.some((row) => row.key === active))
       systemListView.reveal(active);
     // The active system is revealed when its pane mounts; filtering never replaces the query.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, systemListView.target]);
   return (
     <ListView

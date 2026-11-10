@@ -135,7 +135,7 @@ export function survey(
   roomFlows?: RoomFlows,
 ): Survey {
   // The model's stored rulings are the base under Work's pending ones (`rulings.ts`).
-  work = withStoredRulings(work, snapshot.store);
+  work = withStoredRulings(work, snapshot.store, snapshot);
   const hit = last.get(snapshot);
   if (!roomFlows && hit && hit.work === work) return hit.survey;
   const t = tolerated(snapshot, work);
@@ -151,8 +151,6 @@ export function survey(
   const flows = terminalFlows(m, edit.flows, roomFlows);
   const noFan = noFanFindings(m, passive);
   // A fan that states no flow takes the sum of the terminal flows it serves in each group (nearest
-  // port wins, `groupFans`), shown as derived and never written. The solve prices each group from
-  // that group's own sum; this per-unit reading is the largest over the groups it roots.
   const nodeOf = new Map(m.nodes.map((n) => [n.id, n]));
   const nameOf = (id: number) => markOf(nodeOf.get(id)) ?? String(id);
   const derived = new Map(units);
@@ -182,7 +180,6 @@ export function survey(
       if (f.served && f.cfm! > (derived.get(f.unit)?.cfm ?? 0))
         derived.set(f.unit, { cfm: f.cfm, source: "derived", grilles: f.served.length });
     // Several fans price per fan (`fan-sections.ts`) and never block: a Diagnostics line names the
-    // split in this group's own flows; a fan whose flow is unknown is the unit flow Set row's, not a Fix.
     if (fans.length < 2) continue;
     const word = (f: (typeof fans)[number]) =>
       f.cfm == null

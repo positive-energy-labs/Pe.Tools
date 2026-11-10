@@ -38,8 +38,7 @@ import {
   useChatSituation,
 } from "#/chat/composer-head";
 import { GraphLayoutView } from "../../../../packages/kit/src/components/lang/graph-layout";
-import { chatLayout, threadIdentity } from "./route";
-import { identityCodecs } from "@pe/agent-contracts";
+import { chatLayout } from "./route";
 import { PagePaletteButton } from "#/route/situation-marks";
 import { PrimaryRouteControls, usePublishPagePalette } from "#/navigation/route-controls";
 import { useSurfaceHost } from "#/navigation/surface-host";
@@ -317,12 +316,11 @@ function ChatSurface({ target, docked = false, handle }: ChatShellProps & { hand
       {mode === "threads" ? (
         <ThreadsSidebar
           selected={(() => {
-            return handle.selection
-              .read()
-              .map((item) => identityCodecs.local.parts(item.id).subject);
+            // A thread is a route attention place: its id is the place (ADR 0035 rule 9).
+            return handle.selection.read().map((item) => item.id);
           })()}
           onSelection={(selected) =>
-            handle.selection.set(selected.map((id) => ({ kind: "focus", id: threadIdentity(id) })))
+            handle.selection.set(selected.map((id) => ({ kind: "focus", id })))
           }
           primary
           reading={!rosterRead}

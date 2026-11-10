@@ -1,16 +1,4 @@
-/**
- * The rulings that remain after healing (pressure-drop ledger, 2026-10-20): an `ignore` verdict
- * (leave an open end out, object to an inferred join, keep a default) and a unit's role, `fan` or
- * `passive` (a ruling over the role proposed from its design flow, `unit-roles.ts`).
- * They persist in the model's `_PE_DuctLosses` store (v2 `verdicts`, `roles`), so two people on
- * one model see the same network; Work holds only pending deltas over them. A edit value is a
- * delta, and a edit `{ delete: true }` on an assumption takes a stored verdict back.
- *
- * `withStoredRulings` is the one view every reader prices and triages: the stored rulings as
- * edit cells under Work's own, delete rungs gone. `pendingRulings` names what a write would
- * change in the store; `storeRulings` is the whole ruling set the write sends; `rulingRung` is
- * what a person's choice stages.
- */
+/** The rulings that remain after healing (pressure-drop ledger, 2026-10-20): an `ignore` verdict (leave an open end out, object to an inferred join, keep a default) and a unit's role, `fan` or `passive` (a ruling over the role proposed from its design flow, `unit-roles.ts`). */
 import {
   ductsDesign,
   neutralFansWork,
@@ -18,23 +6,11 @@ import {
   type DuctsDesign,
 } from "@pe/agent-contracts";
 
+import { elementSubject, workElementId } from "./work-subject.ts";
 import type { DuctSnapshot } from "./types.ts";
-import type { RosterRuling } from "./roster.ts";
 
 type Store = DuctSnapshot["store"];
 export type RulingSegment = "assumptions" | "roles";
-export type StoreRulingSegment = RulingSegment | "roster";
-
-/** Store shape only; the C# writer does not persist roster rulings yet. Keys are unitId:portIndex. */
-export type RosterStore = { roster: Record<string, RosterRuling> };
-export type StoreRulingDelta =
-  | RulingDelta
-  | {
-      segment: "roster";
-      key: string;
-      from: RosterRuling | null;
-      to: RosterRuling | null;
-    };
 
 /** One change a write makes to the store's rulings; null is no ruling (an unruled end, a proposed role). */
 export interface RulingDelta {
@@ -58,20 +34,25 @@ export const storedRuling = (store: Store, segment: RulingSegment, key: string) 
   (segment === "assumptions" ? store?.verdicts?.[key]?.verdict : store?.roles?.[key]?.role) ?? null;
 
 const EMPTY = ductsDesign(null, neutralFansWork);
-const memo = new WeakMap<object, WeakMap<object, DuctsDesign>>();
+const memo = new WeakMap<object, WeakMap<object, WeakMap<object, DuctsDesign>>>();
 const NO_STORE = {};
 
 /** The Work as every reader sees it: stored rulings under Work's own deltas. Identity-stable. */
 export function withStoredRulings(
   doc: DuctsDesign | null,
   store: Store,
+  snapshot: Pick<DuctSnapshot, "nodes" | "segments">,
 ): DuctsDesign | null {
   const verdicts = Object.entries(store?.verdicts ?? {});
-  const roles = Object.entries(store?.roles ?? {});
+  const roles = Object.entries(store?.roles ?? {}).flatMap(([id, value]) => {
+    const node = snapshot.nodes.find(n => n.id === Number(id));
+    return node ? [[elementSubject(node), value] as const] : [];
+  });
   const deletes = Object.values(doc?.assumptions ?? {}).some((cell) => cell.edit?.delete);
   if (!verdicts.length && !roles.length && !deletes) return doc;
   const base = doc ?? EMPTY;
-  const byStore = memo.get(base) ?? memo.set(base, new WeakMap()).get(base)!;
+  const bySnapshot = memo.get(base) ?? memo.set(base, new WeakMap()).get(base)!;
+  const byStore = bySnapshot.get(snapshot) ?? bySnapshot.set(snapshot, new WeakMap()).get(snapshot)!;
   const hit = byStore.get(store ?? NO_STORE);
   if (hit) return hit;
   const assumptions = Object.fromEntries(
@@ -96,7 +77,7 @@ export function withStoredRulings(
 }
 
 /** What a write would change in the store's rulings: Work's edit deltas that differ from it. */
-export function pendingRulings(doc: DuctsDesign | null, store: Store): RulingDelta[] {
+export function pendingRulings(doc: DuctsDesign | null, store: Store, snapshot: Pick<DuctSnapshot, "nodes" | "segments">): RulingDelta[] {
   const out: RulingDelta[] = [];
   for (const [key, cell] of Object.entries(doc?.assumptions ?? {})) {
     if (!cell.edit) continue;
@@ -114,18 +95,14 @@ export function pendingRulings(doc: DuctsDesign | null, store: Store): RulingDel
   }
   for (const [key, cell] of Object.entries(doc?.roles ?? {})) {
     if (!cell.edit) continue;
-    const from = roleOf(storedRuling(store, "roles", key));
+    const from = roleOf(storedRuling(store, "roles", String(workElementId(snapshot, key))));
     const to = roleOf(cell.edit.value.role);
     if (to !== from) out.push({ segment: "roles", key, from, to });
   }
   return out.sort((a, b) => a.segment.localeCompare(b.segment) || a.key.localeCompare(b.key));
 }
 
-/**
- * The store's whole ruling set after a write, from the edit cells of the Work as read
- * (`withStoredRulings`): every `ignore` verdict and every role, stamped `at` unless the store
- * already holds that same ruling, which keeps its own time.
- */
+/** The store's whole ruling set after a write, from the edit cells of the Work as read (`withStoredRulings`): every `ignore` verdict and every role, stamped `at` unless the store already holds that same ruling, which keeps its own time. */
 export function storeRulings(
   edit: {
     assumptions: Record<string, DuctAssumption>;
@@ -133,6 +110,7 @@ export function storeRulings(
   },
   store: Store,
   at: string,
+  snapshot: Pick<DuctSnapshot, "nodes" | "segments">,
 ) {
   const verdicts = Object.fromEntries(
     Object.entries(edit.assumptions).flatMap(([key, value]) =>
@@ -153,7 +131,7 @@ export function storeRulings(
     ),
   );
   const roles = Object.fromEntries(
-    Object.entries(edit.roles).flatMap(([id, { role }]) =>
+    Object.entries(edit.roles).map(([key, value]) => [String(workElementId(snapshot, key)), value] as const).flatMap(([id, { role }]) =>
       isRole(role)
         ? [
             [
@@ -170,12 +148,7 @@ export function storeRulings(
   return { verdicts, roles };
 }
 
-/**
- * The rung a person's choice stages on a ruling cell, against the store: choosing what the store
- * holds clears the delta (`null`); taking a stored ruling back stages a delete on an assumption;
- * a role is always a choice (`fan` or `passive`), so ruling the proposed one keeps it as a ruling;
- * `unstage` clears a pending ruling the store never held.
- */
+/** The rung a person's choice stages on a ruling cell, against the store: choosing what the store holds clears the delta (`null`); taking a stored ruling back stages a delete on an assumption; a role is always a choice (`fan` or `passive`), so ruling the proposed one keeps it as a ruling; `unstage` clears a pending ruling the store never held. */
 export function rulingRung(
   store: Store,
   segment: RulingSegment,

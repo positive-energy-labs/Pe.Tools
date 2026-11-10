@@ -15,11 +15,7 @@
     "ts/apps/web/src/schedules/neutral.ts#localId:z.custom",
     "ts/apps/web/src/shell/admitted-geometry.ts#createAdmittedGeometry/read/resolution/output:z.custom",
     "ts/apps/web/src/shell/admitted-sources.ts#source:z.custom",
-    "ts/apps/web/src/shell/legacy-environment-bridge.ts#createSubmissionJournal/parentSchema:z.custom",
-    "ts/apps/web/src/shell/page-port.ts#originSchema/lease:z.custom",
-    "ts/apps/web/src/shell/page-port.ts#originSchema/token:z.custom",
-    "ts/apps/web/src/shell/page-port.ts#originSchema/token:z.custom",
-    "ts/apps/web/src/shell/page-port.ts#originSchema/token:z.custom"
+    "ts/apps/web/src/shell/legacy-environment-bridge.ts#createSubmissionJournal/parentSchema:z.custom"
   ],
   "readWrites": [],
   "peaRows": [],

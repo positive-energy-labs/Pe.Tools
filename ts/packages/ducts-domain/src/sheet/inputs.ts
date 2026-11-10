@@ -1,3 +1,4 @@
+import { elementSubject } from "../work-subject.ts";
 import { resolveValue, type ValueLayers, type ValueSource } from "@pe/agent-contracts";
 /** Duct-specific acquisition feeds the shared Work resolver; observed parameters and catalogs belong to the model layer. */
 import type {
@@ -93,12 +94,7 @@ export const EDIT_SEGMENTS = {
   assignments: "ruleAssignments",
 } as const;
 
-/**
- * The Work cells a sheet's `edits` touches, as document paths: one per record key, the one
- * `criteria` cell, and the `assumptions` cell of each join, end and proposed-path drop. The host
- * writes exactly these (`editPatches`); the page snapshots them before an edit so undo restores
- * the cells as they were, a cleared cell's absence included.
- */
+/** The Work cells a sheet's `edits` touches, as document paths: one per record key, the one `criteria` cell, and the `assumptions` cell of each join, end and proposed-path drop. */
 export function editCells(edits: DuctsSheetEdits): string[][] {
   const cells: string[][] = [];
   for (const [field, segment] of Object.entries(EDIT_SEGMENTS) as [
@@ -114,12 +110,7 @@ export function editCells(edits: DuctsSheetEdits): string[][] {
   return cells;
 }
 
-/**
- * A drop parameter identical on every instance of a family (two or more) is the family's
- * placeholder, not a design value: Chadds' 302 volume dampers all carry 1.0 in-wg (2026-10-28).
- * ponytail: counts only the read's elements; C#'s document-wide census (health no-component-drop)
- * supersedes this when the snapshot carries it.
- */
+/** A drop parameter identical on every instance of a family (two or more) is the family's placeholder, not a design value: Chadds' 302 volume dampers all carry 1.0 in-wg (2026-10-28). */
 function familyPlaceholders(snapshot: SheetSnapshot) {
   const values = new Map<string, (number | null)[]>();
   for (const n of snapshot.nodes)
@@ -232,21 +223,21 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
   const components: DuctsInputs["components"] = {};
   const placeholders = familyPlaceholders(snapshot);
   for (const n of snapshot.nodes) {
-    const id = String(n.id);
+    const id = String(n.id), key = elementSubject(n);
     if (n.kind === "terminal") {
-      const typed = work.flows?.[id]?.cfm;
+      const typed = work.flows?.[key]?.cfm;
       const stored = store.terminalFlows?.[id]?.cfm;
       const revit = slotFlowOf(n, flowSlot).cfm;
       const cfm = pick(
         {
-          run: { value: run.flows?.[id]?.cfm },
+          run: { value: run.flows?.[key]?.cfm },
           Work: { value: typed },
           "model-store": { value: stored, ref: STORE },
           model: { value: positive(revit), ref: flowSlot },
         },
         "cfm",
       );
-      const typedDrop = work.terminalDrops?.[id]?.inWg;
+      const typedDrop = work.terminalDrops?.[key]?.inWg;
       const storedDrop = store.terminals?.[id]?.inWg;
       const catalog =
         catalogs && Object.keys(catalogs).length
@@ -255,7 +246,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       const parameter = positive(n.terminalDrop?.catalogDropInWg);
       const drop = pick(
         {
-          run: { value: run.terminalDrops?.[id]?.inWg ?? run.criteria?.terminalDropInWg },
+          run: { value: run.terminalDrops?.[key]?.inWg ?? run.criteria?.terminalDropInWg },
           Work: { value: typedDrop ?? work.criteria?.terminalDropInWg },
           "model-store": { value: storedDrop ?? store.criteria?.terminalDropInWg, ref: STORE },
           model: { value: catalog?.dp ?? parameter, ref: catalog?.table },
@@ -279,8 +270,8 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       ) as Resolved<DuctUnitKind>;
       const role = pick<"fan" | "passive">(
         {
-          run: { value: run.roles?.[id]?.role },
-          Work: { value: work.roles?.[id]?.role },
+          run: { value: run.roles?.[key]?.role },
+          Work: { value: work.roles?.[key]?.role },
           "model-store": { value: store.roles?.[id]?.role as "fan" | "passive", ref: STORE },
           default: { value: suggestRole(n, kind.value), ref: "name" },
         },
@@ -288,15 +279,14 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         isRole,
       ) as Resolved<"fan" | "passive">;
       // Revit categorizes inline heaters and silencers as equipment. They need a part drop,
-      // not fan sizing; recognized unit kinds and explicit fan rulings retain their unit inputs.
       if (kind.value === "other" && role.value === "passive" && n.connectors.length === 2) {
         components[id] = {
           drop: pick(
             {
-              run: { value: run.componentDrops?.[id]?.inWg },
+              run: { value: run.componentDrops?.[key]?.inWg },
               Work: {
                 value:
-                  work.componentDrops?.[id]?.inWg ??
+                  work.componentDrops?.[key]?.inWg ??
                   (n.family ? work.assumptions?.[`component-drop:${n.family}`]?.inWg : undefined),
               },
               model: { value: positive(factOf(n, "pressureDrop")), ref: slots.componentDrop },
@@ -306,12 +296,12 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         };
         continue;
       }
-      const typedCfm = work.equipmentFlows?.[id]?.cfm;
+      const typedCfm = work.equipmentFlows?.[key]?.cfm;
       const storedCfm = store.equipmentFlows?.[id]?.cfm;
       const revitCfm = positive(factOf(n, "fanFlow"));
       const cfm = pick(
         {
-          run: { value: run.equipmentFlows?.[id]?.cfm },
+          run: { value: run.equipmentFlows?.[key]?.cfm },
           Work: { value: typedCfm },
           "model-store": { value: storedCfm, ref: STORE },
           model: { value: revitCfm, ref: slots.fanFlow ?? "fanFlow" },
@@ -320,8 +310,8 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       );
       const esp = pick(
         {
-          run: { value: run.esp?.[id]?.inWg },
-          Work: { value: work.esp?.[id]?.inWg },
+          run: { value: run.esp?.[key]?.inWg },
+          Work: { value: work.esp?.[key]?.inWg },
           model: {
             value: positive(factOf(n, "externalStatic")),
             ref: slots.fanStatic ?? "fanStatic",
@@ -330,18 +320,17 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         "in-wg",
       );
       units[id] = { kind, role, cfm, esp };
-      const typedDrop = work.componentDrops?.[id]?.inWg;
-      if (typedDrop != null || run.componentDrops?.[id])
+      const typedDrop = work.componentDrops?.[key]?.inWg;
+      if (typedDrop != null || run.componentDrops?.[key])
         components[id] = {
           drop: pick(
-            { run: { value: run.componentDrops?.[id]?.inWg }, Work: { value: typedDrop } },
+            { run: { value: run.componentDrops?.[key]?.inWg }, Work: { value: typedDrop } },
             "in-wg",
           ),
         };
     } else {
       // Accessories, fittings and caps: a drop only where something states one, or where a stated
-      // one is the family's placeholder (recorded as none, so the census can say why).
-      const typed = work.componentDrops?.[id]?.inWg;
+      const typed = work.componentDrops?.[key]?.inWg;
       const family = n.family ? work.assumptions?.[`component-drop:${n.family}`]?.inWg : undefined;
       const stated = n.kind === "accessory" ? positive(factOf(n, "pressureDrop")) : null;
       const placeholder = n.family && stated != null ? placeholders.get(n.family) : undefined;
@@ -350,11 +339,11 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         family != null ||
         stated != null ||
         placeholder ||
-        run.componentDrops?.[id]
+        run.componentDrops?.[key]
       ) {
         const resolved = pick(
           {
-            run: { value: run.componentDrops?.[id]?.inWg },
+            run: { value: run.componentDrops?.[key]?.inWg },
             Work: { value: typed ?? family },
             model: {
               value: placeholder ? null : stated,
@@ -379,11 +368,11 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
 
   // A duct priced by hand: a typed drop replaces its friction (segments carry no other drop source).
   for (const seg of snapshot.segments) {
-    const typed = work.componentDrops?.[String(seg.id)]?.inWg;
-    if (typed != null || run.componentDrops?.[String(seg.id)])
+    const typed = work.componentDrops?.[elementSubject(seg)]?.inWg;
+    if (typed != null || run.componentDrops?.[elementSubject(seg)])
       components[String(seg.id)] = {
         drop: pick(
-          { run: { value: run.componentDrops?.[String(seg.id)]?.inWg }, Work: { value: typed } },
+          { run: { value: run.componentDrops?.[elementSubject(seg)]?.inWg }, Work: { value: typed } },
           "in-wg",
         ),
       };
@@ -491,15 +480,7 @@ const isRole = (v: string | undefined): v is "fan" | "passive" => v === "fan" ||
 export const terminalCfmOf = (inputs: DuctsInputs, elementId: number): number | null =>
   inputs.terminals[String(elementId)]?.cfm.value ?? null;
 
-/**
- * The inputs one sheet answers to: element-keyed values (terminals, units, components) and join or
- * end rulings only where the sheet reaches (`ids`: its walked elements, the fan, the elements its
- * blockers stand on). The resolver runs over the whole acquisition, which follows accepted joins
- * and returns the C# read's candidates, so it resolves units this fan never prices: MUAS-1 listed
- * UH-3 7939081 and FC-23 the louver's ERVs as "unnamed element" with their controls locked, and
- * FC-23 the louver join it never crosses (UI5, 2026-10-29). Document-wide inputs (criteria, rule
- * tables, family assignments, proposed-path drops) are kept whole.
- */
+/** The inputs one sheet answers to: element-keyed values (terminals, units, components) and join or end rulings only where the sheet reaches (`ids`: its walked elements, the fan, the elements its blockers stand on). */
 export function scopeInputs(inputs: DuctsInputs, ids: ReadonlySet<number>): DuctsInputs {
   const within = <T>(record: Readonly<Record<string, T>>) =>
     Object.fromEntries(Object.entries(record).filter(([id]) => ids.has(Number(id))));
