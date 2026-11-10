@@ -1014,10 +1014,10 @@ test("an endpoint provider is checked before save, and every thread carries its 
   // measured 2026-11-02. The cost is the Spawner closing a live leader, not this test.
 }, 90_000);
 
-test("both harnesses retain journal-safe modes", async () => {
+test("both harnesses run in their ungated shell mode (ADR 0034)", async () => {
   const threads = await host();
-  expect(said(await envOf(threads, "claude"), "MODE")).toBe("default");
-  expect(said(await envOf(threads, "codex"), "MODE")).toBe("read-only");
+  expect(said(await envOf(threads, "claude"), "MODE")).toBe("bypassPermissions");
+  expect(said(await envOf(threads, "codex"), "MODE")).toBe("agent-full-access");
 });
 
 // A 1x1 PNG, the same fixture the Mastra-era attachment test used.
@@ -1288,55 +1288,6 @@ test("one huge tool result is kept bounded in the record, the log and every read
 });
 
 for (const harness of ["claude", "codex"] as const) {
-  test.each([undefined, "other", "switch_mode"] as const)(
-    `${harness}: an unclassified native approval (%s) cannot authorize an effect`,
-    async (kind) => {
-      const realOpen = adapter.openAdapter;
-      const launched = vi.spyOn(adapter, "openAdapter").mockImplementation((...args) => {
-        const createClient = args[3];
-        args[3] = (connection) => {
-          const client = createClient(connection);
-          return {
-            ...client,
-            requestPermission: (request) =>
-              client.requestPermission({ ...request, toolCall: { ...request.toolCall, kind } }),
-          };
-        };
-        return realOpen(...args);
-      });
-      const h = await host(),
-        call = caller(h),
-        read = reader(h);
-      try {
-        const id = (await call("POST", "/pe/threads", { providerId: harness })).json.id as string;
-        await until(read, id, (body) => body.models.length > 0);
-        await call("POST", `/pe/threads/${id}/prompt`, { text: "permission" });
-        const body = await until(read, id, (body) => !body.running && turnEnds(body).length === 1);
-        expect(openAsks(body)).toHaveLength(0);
-        expect(body.events.some((event) => event.kind === "permission_request")).toBe(false);
-        expect(
-          body.events.some(
-            (event) =>
-              event.kind === "update" &&
-              event.update.sessionUpdate === "tool_call_update" &&
-              event.update.status === "failed" &&
-              String(event.update.title).includes("host semantic or causal CLI commands"),
-          ),
-        ).toBe(true);
-        expect(
-          body.events.some(
-            (event) =>
-              event.kind === "update" &&
-              event.update.sessionUpdate === "agent_message_chunk" &&
-              String((event.update.content as { text?: string })?.text).includes("chose no"),
-          ),
-        ).toBe(true);
-      } finally {
-        launched.mockRestore();
-        await h.close();
-      }
-    },
-  );
   test(`${harness}: delayed invocation and CLI child retain immutable old run across the next turn`, async () => {
     const calls: { token: string; harness: string }[] = [];
     const realOpen = adapter.openAdapter;
@@ -1433,7 +1384,7 @@ for (const harness of ["claude", "codex"] as const) {
       await h.close();
     }
   });
-  test(`${harness}: a native write approval is refused with the host-command boundary`, async () => {
+  test(`${harness}: a native write approval is allowed with no card (ADR 0034)`, async () => {
     const h = await host(),
       call = caller(h),
       read = reader(h);
@@ -1447,24 +1398,18 @@ for (const harness of ["claude", "codex"] as const) {
         body.events.some(
           (event) =>
             event.kind === "update" &&
-            String(event.update.title).includes("Native unjournaled writes are unsupported"),
-        ),
-      ).toBe(true);
-      expect(
-        body.events.some(
-          (event) =>
-            event.kind === "update" &&
             event.update.sessionUpdate === "agent_message_chunk" &&
-            String((event.update.content as { text?: string })?.text).includes("chose no"),
+            String((event.update.content as { text?: string })?.text).includes("chose yes"),
         ),
       ).toBe(true);
+      expect(JSON.stringify(body.events)).not.toContain("unsupported");
     } finally {
       await h.close();
     }
   });
 }
 
-test("Codex correlated Pea approval uses recorded identity and still refuses native shell/edit", async () => {
+test("Codex native shell and edit approvals are allowed with no card (ADR 0034)", async () => {
   const h = await host(),
     call = caller(h),
     read = reader(h);
@@ -1485,10 +1430,8 @@ test("Codex correlated Pea approval uses recorded identity and still refuses nat
       const turn = turnEnds(body).at(-1)!.turnId;
       const events = body.events.filter((event) => "turnId" in event && event.turnId === turn);
       expect(openAsks(body)).toHaveLength(0);
-      expect(JSON.stringify(events)).toContain(index === 0 ? "chose yes" : "chose no");
-      expect(JSON.stringify(events).includes("Native unjournaled writes are unsupported")).toBe(
-        index !== 0,
-      );
+      expect(JSON.stringify(events)).toContain("chose yes");
+      expect(JSON.stringify(events)).not.toContain("chose no");
     }
   } finally {
     await h.close();
