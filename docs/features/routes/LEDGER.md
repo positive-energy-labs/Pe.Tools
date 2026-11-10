@@ -77,7 +77,7 @@ The route kernel and every web route's shared shape ([ADR 0026](../../adr/0026-o
   - bind: `subject` the page (keyKind `name`); `query` `query` and `fragment`; no sheet.
   - family: `subject` the family (keyKind `name`, tuple with the type); `sheet` `parameter` and `local` bindings; `picture` the anatomy marks; `goal` the doc-lab acceptance closers; findings from the cut sheet.
   - rooms: `subject` the room (keyKind `UniqueId`); `picture` the plan; `sheet` `store` bindings for zone assignment; `goal` the partition inbox.
-- The Mod+K pane navigator listing was not found in source (`navigatorKeys` in `ts/apps/web/src/shell/mount-chrome.tsx`, a slice 1 file; `route/situation-marks.tsx` binds Mod+K as well); name its registry or delete the binding.
+- The Mod+K pane navigator listing was not found in source (`navigatorKeys` died with `shell/mount-chrome.tsx` at slice 1, 1293c022; `route/situation-marks.tsx` still binds Mod+K); name its registry or delete the binding.
 - A person-resolver closer in a route's Goal bridging into the notice feed; wait until two routes return Goals.
 - Whether `route-document-store.ts` keeps a per-Work undo journal (ADR 0030 rule 9); findings (slice 9) needs it.
 - Whether the fans scene capture carries a UniqueId per port; the 3D finding mark (slice 9) needs it.
