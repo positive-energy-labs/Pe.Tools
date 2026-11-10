@@ -47,7 +47,7 @@ export interface NoticeSources {
 const INTERRUPTED_FOR_MS = 24 * 3_600_000;
 
 /** A waiting thread's open ask, in its own words, and the door that answers it. */
-export function openAsk(
+function openAsk(
   threadId: string,
   events: readonly HarnessEvent[],
 ): { verb: string; says: string; act: NoticeAct } | null {

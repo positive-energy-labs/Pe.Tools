@@ -166,7 +166,7 @@ export type MachineUpdate = z.infer<typeof machineUpdateSchema>;
 export type MachineShare = z.infer<typeof machineShareSchema>;
 export type MachineProvider = z.infer<typeof machineProviderSchema>;
 export type Machine = z.infer<typeof machineSchema>;
-/** A tray projection of one receipt revision; the native adapter owns its wire contract. */
+/** The tray card's drawing input, built in the browser from a `NoticeRow`; the native adapter owns its wire contract. */
 export type MachineNotice = NativeNotice;
 
 /** Resolver view of the host's evidence; an unread or failed leg never proves absence. */

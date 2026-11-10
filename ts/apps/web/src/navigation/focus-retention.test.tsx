@@ -20,13 +20,13 @@ vi.mock("#/host/pe-client", () => ({ peClient: { call: ports.call } }));
 vi.mock("#/machine/use-machine", () => ({ useMachine: () => ({ reading: { state: "absent" } }) }));
 vi.mock("#/route/pod-routes", () => ({ usePodRoutes: () => null }));
 vi.mock("./surface-host", () => ({ useSurfaceHost: () => ({ surface: "web" }) }));
-vi.mock("#/workbench/provider/harness-client", () => ({
-  harnessClient: () => ({
-    summaries: (accept: (value: unknown[]) => void) => {
-      accept([]);
-      return () => {};
-    },
-  }),
+// The ledger reads the host's notice feed; focus never re-reads it from the browser.
+vi.mock("#/host/resource-state", async (actual) => ({
+  ...(await actual<typeof import("#/host/resource-state")>()),
+  useReading: (request: { kind: string } | null) =>
+    request?.kind === "notices"
+      ? { state: "ready", observation: { id: 1, tray: false, rows: [] } }
+      : { state: "absent" },
 }));
 afterEach(() => {
   cleanup();
@@ -42,7 +42,6 @@ test("blur-only focus refresh keeps navigation, ledger readiness, mounted contex
     truncated: false,
   };
   let answerNavigation!: (value: typeof snapshot) => void;
-  let answerReceipts!: (value: unknown[]) => void;
   ports.read
     .mockReset()
     .mockResolvedValueOnce(snapshot)
@@ -52,15 +51,7 @@ test("blur-only focus refresh keeps navigation, ledger readiness, mounted contex
           answerNavigation = resolve;
         }),
     );
-  ports.call
-    .mockReset()
-    .mockResolvedValueOnce([])
-    .mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          answerReceipts = resolve;
-        }),
-    );
+  ports.call.mockReset();
   const mounted = vi.fn();
   const unmounted = vi.fn();
   let seen: ReturnType<typeof useNavigation> | undefined;
@@ -101,8 +92,7 @@ test("blur-only focus refresh keeps navigation, ledger readiness, mounted contex
     fireEvent.blur(window);
     fireEvent.focus(window);
     await waitFor(() => expect(ports.read).toHaveBeenCalledTimes(2));
-    expect(ports.call).toHaveBeenCalledTimes(2);
-    expect(ports.call).toHaveBeenLastCalledWith("actions.read", {});
+    expect(ports.call).not.toHaveBeenCalled();
     expect(seen?.loading).toBe(false); // Revalidation retains ready content, including its status.
     expect(seen?.snapshot).toBe(snapshot);
     expect(view.getByTestId("context")).toBe(context);
@@ -113,7 +103,6 @@ test("blur-only focus refresh keeps navigation, ledger readiness, mounted contex
     expect(visibility).not.toHaveBeenCalled();
     await act(async () => {
       answerNavigation(snapshot);
-      answerReceipts([]);
     });
     expect(seen?.loading).toBe(false);
     expect(view.container.querySelector("[data-working]")).toBeNull();
