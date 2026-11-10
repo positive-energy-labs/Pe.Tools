@@ -199,10 +199,13 @@ export const decode = (code: string): SubjectRefResult<SubjectRef> => {
 };
 
 /** The one Zod door for a SubjectRefCode: it admits exactly what `decode` admits. */
+// The brand is type-only: a transform would make every Work schema unrepresentable in JSON Schema.
 export const subjectRefCodeSchema = z
   .string()
-  .refine((v) => decode(v).ok, { message: "not a canonical SubjectRef code" })
-  .transform((v) => v as SubjectRefCode);
+  .refine((v) => decode(v).ok, { message: "not a canonical SubjectRef code" }) as unknown as z.ZodType<
+  SubjectRefCode,
+  string
+>;
 /** Mints a code from refs the caller built from trusted data; a refusal is a programming error. */
 export const subjectCode = (ref: SubjectRef): SubjectRefCode => {
   const code = encode(ref);
