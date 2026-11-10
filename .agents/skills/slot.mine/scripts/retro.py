@@ -1,6 +1,6 @@
 """Retro metrics for named T3 threads: what each main thread paid, and where its context came from.
 
-python .agents/skills/slot.mine/scripts/retro.py [--tree] [--branch B --base COMMIT] --out <run-dir> <t3-thread-id-prefix>...
+python .agents/skills/slot.mine/scripts/retro.py [--tree] [--branch B --base COMMIT] [--cycles <thread-id-prefix>]... --out <run-dir> <t3-thread-id-prefix>...
 
 Resolves each T3 thread to its native Claude session or Codex rollout through T3's own state db, then writes
 <run-dir>/retro.json (per thread: span hours and active run hours, owner turns, API calls, compactions, max context, tokens by model, cost, tool calls,
@@ -23,7 +23,12 @@ A commit's slice is the slice in the title of the thread named by its `T3-Thread
 With --tree, retro.json also holds everything swimlanes.py draws: `window`, `lanes` (per lane: runs with trigger text and bar kind, gaps with causes, messages received; the per-thread activity segments `ivs`, keepalive wakes, cold calls, model changes sit in `threads`), `rollup`, and the `commands`;
 retro.py then calls swimlanes.render, so one command writes retro.json, retro.html and swimlanes.html. `swimlanes.py <run-dir>` redraws the page from retro.json and never measures.
 Per thread `admits` ({t, kind, verdict, free_gib} from tool results with an `ADMIT|HOLD|REFUSE <kind>: free x of y GiB` line, once per result) and `admit_counts` (kind -> verdict -> n); `turn_ends` (a background command still running when its run completed: {thread, t_run_end, t_cmd_end, command, ran_on_h, idle_until_next_run_h}) and `turn_end_idle_h`. Claude sessions only for turn_ends. tree_total sums both.
-retro.json is {threads, commands, landmark}. Owner turns are human turns: createdBy=user AND creationSource web|mobile (server-sourced user rows are agent text). Prints aggregates only, never session text.
+--cycles <thread> (repeatable) measures a standing partner thread's work cycles: a cycle starts when a message from another thread X wakes it (the gap cause `message from X`) and ends at its next outbound
+`t3_thread_send` to X (read from its native session: Claude tool_use, Codex function_call). Per thread `cycles` ({start, end, minutes, for_tid, for_title, ack, families (minutes by model/test/build/guard/git/poll/browser/other/idle), first_browser_min})
+and `cycle_summary` (n, acks, unanswered, median_min and longest_min over the non-acknowledgement cycles, covered_h, outside_run_h, setup_min, hours and shares by family over the union of the cycles, every moment once). A moment is `idle` when no run of the thread is in flight,
+else the family of a foreground tool call in flight (browser > test > build > guard > git > other > poll), else `model`; background commands are not foreground calls. A --cycles thread outside the tree is measured like a root with no descendants
+(top-level `partners` in retro.json, its own PARTNERS lane); one already in the tree keeps its place. The landmark's window is the tree's; the page's `window` also holds the partners' runs.
+retro.json is {threads, partners, commands, landmark, window, lanes, rollup}. Owner turns are human turns: createdBy=user AND creationSource web|mobile (server-sourced user rows are agent text). Prints aggregates only, never session text.
 """
 import argparse, collections, datetime, functools, glob, html, json, math, os, re, sqlite3, statistics, subprocess, sys
 
@@ -153,7 +158,7 @@ def share(w):
 def new_metrics(label, title, selected):
     return dict(thread=label, title=title, sessions=[], compactions=0, max_ctx=0, curve=[], inflows=[], models=collections.Counter(), selected=selected,
                 usage=collections.Counter(), usage_by_model=collections.defaultdict(collections.Counter), tool_calls=collections.Counter(),
-                tool_output=collections.Counter(), tool_wall=collections.Counter(), calls=[], wakes=[], ivs=[], commands={}, model_pts=[], admits=[], bgs=[])
+                tool_output=collections.Counter(), tool_wall=collections.Counter(), calls=[], wakes=[], ivs=[], commands={}, model_pts=[], admits=[], bgs=[], sends=[])
 
 
 def resolve(db, prefix):
@@ -220,6 +225,7 @@ def claude(path, m):
                     if n == "Agent": n += ":" + str((x.get("input") or {}).get("model") or "default")
                     names[x.get("id")] = n; m["tool_calls"][n] += 1; inp = x.get("input") or {}
                     starts[x.get("id")] = (e.get("timestamp"), kind(x.get("name"), inp), x.get("name"), inp.get("command") or "", bool(inp.get("run_in_background")))
+                    if n.endswith("t3_thread_send") and e.get("timestamp"): m["sends"].append((e["timestamp"], inp.get("threadId")))  # an outbound message to another thread
             u = msg.get("usage") or {}; rid = e.get("requestId") or e.get("uuid")
             if u and rid not in seen:
                 seen.add(rid)
@@ -248,6 +254,11 @@ def codex_cmd(x):
     except ValueError: return x[1:-1]
 
 
+def codex_args(x):
+    try: return json.loads(x) if isinstance(x, str) else dict(x or {})
+    except (ValueError, TypeError): return {}
+
+
 def codex(path, m):
     names = {}; starts = {}; prev = collections.Counter(); last = None; cur_model = m.get("selected") or "?"  # tokens before the first turn_context belong to the selected model, not "?"
     for line in open(path, encoding="utf-8", errors="replace"):
@@ -271,6 +282,7 @@ def codex(path, m):
             m["curve"].append([when, ctx]); m["max_ctx"] = max(m["max_ctx"], ctx)
         elif t == "response_item" and p.get("type") in ("function_call", "custom_tool_call"):
             names[p.get("call_id")] = p.get("name", "?"); m["tool_calls"][p.get("name", "?")] += 1
+            if str(p.get("name")).endswith("t3_thread_send") and when: m["sends"].append((when, codex_args(p.get("arguments") or p.get("input")).get("threadId")))
             raw = str(p.get("input") or p.get("arguments") or ""); cmd = "\n".join(codex_cmd(x) for x in re.findall(r'cmd["\']?\s*:\s*("(?:[^"\\]|\\.)*"|`[^`]*`)', raw))  # no cmd: a non-shell exec cell (apply_patch)
             starts[p.get("call_id")] = (when, "exec:" + classify(cmd), p.get("name", "?"), cmd)
         elif t == "response_item" and p.get("type") in ("function_call_output", "custom_tool_call_output"):
@@ -361,6 +373,83 @@ def waits(gs):
     w = collections.Counter()
     for g in gs: w[g["cause"]] += g["hours"]
     return {k: round(v, 2) for k, v in w.most_common()}
+
+
+FAM_PRI = ("browser", "test", "build", "guard", "git", "other", "poll")  # which family names a moment when foreground calls overlap: real work outranks waiting
+
+
+def split_cycle(a, b, runs, ivs):
+    """Seconds in [a, b] by label, every moment exactly one: `idle` when no run of the thread is in flight, else the highest-priority family (FAM_PRI) of a foreground call in flight, else `model`.
+    runs: (start, end) datetimes; ivs: (start, end, family) datetimes of foreground calls."""
+    clip = lambda t: min(max(t, a), b); cuts = {a, b}
+    for s, e in runs: cuts |= {clip(s), clip(e)}
+    for s, e, _ in ivs: cuts |= {clip(s), clip(e)}
+    pts = sorted(cuts); out = collections.Counter()
+    for x, y in zip(pts, pts[1:]):
+        mid = x + (y - x) / 2
+        if not any(s <= mid < e for s, e in runs): out["idle"] += (y - x).total_seconds(); continue
+        fams = {f for s, e, f in ivs if s <= mid < e}; out[next((f for f in FAM_PRI if f in fams), "model")] += (y - x).total_seconds()
+    return out
+
+
+def wake_runs(db, tid, names):
+    """(requested_at, sender thread id) of every run of `tid` that a message from another thread started (the gap cause `message from <thread>`; a keepalive or a command notification is not one)."""
+    out = []
+    for (ra,) in db.execute("select requested_at from orchestration_v2_projection_runs where thread_id=? order by requested_at", (tid,)).fetchall():
+        r = db.execute("select payload_json from orchestration_v2_projection_messages where thread_id=? and role='user' and created_at=? limit 1", (tid, ra)).fetchone(); p = json.loads(r[0]) if r else {}
+        if cause(p, names)[0].startswith("message from"): out.append((ra, p["senderThreadId"]))
+    return out
+
+
+def work_cycles(runs, wakes, sends, ivs, names):
+    """Work cycles of a partner thread: a cycle starts when a message from thread X woke it and ends at its next outbound message to X (`sends`: (time, target thread) from its `t3_thread_send` calls).
+    Two wakes from X answered by the same send are one cycle, from the first. A wake never answered is counted, not drawn. A cycle with no tool call before the send is an acknowledgement (`ack`).
+    Each cycle's minutes are split by split_cycle() over the thread's runs and foreground calls (ivs: [start, end, family, background]); first_browser_min = minutes to its first browser-family call.
+    Cycles for different senders overlap (a reply to the owner stays open while the implementor is served), so the thread-level split is taken over the union of the cycles, every moment once.
+    runs: (requested, completed|None) ISO; wakes: (run requested, sender id). -> (cycles, unanswered, minutes by family over the union of the cycles)"""
+    R = [(ts(a), ts(b)) for a, b in runs if b]; F = [(ts(s), ts(e), f) for s, e, f, bg in ivs if not bg]; calls = [ts(s) for s, e, f, bg in ivs]
+    S = sorted((ts(t), x) for t, x in sends if t); out = []; un = 0; ends = set()
+    for ra, x in sorted(wakes):
+        a = ts(ra); b = next((t for t, tgt in S if tgt == x and t >= a), None)
+        if b is None: un += 1; continue
+        if (x, b) in ends: continue
+        ends.add((x, b)); sp = split_cycle(a, b, R, [i for i in F if i[1] > a and i[0] < b]); br = [s for s, e, f in F if f == "browser" and a <= s < b]
+        out.append(dict(start=ra, end=utc(b), minutes=round((b - a).total_seconds() / 60, 1), for_tid=x, for_title=names.get(x) or x[:8], ack=not any(a <= c < b for c in calls),
+                        families={k: round(v / 60, 1) for k, v in sp.most_common()}, first_browser_min=round((min(br) - a).total_seconds() / 60, 1) if br else None))
+    union = []
+    for a, b in sorted((ts(c["start"]), ts(c["end"])) for c in out):
+        if union and a <= union[-1][1]: union[-1][1] = max(union[-1][1], b)
+        else: union.append([a, b])
+    tot = collections.Counter()
+    for a, b in union: tot.update(split_cycle(a, b, R, [i for i in F if i[1] > a and i[0] < b]))
+    return out, un, {k: round(v / 60, 1) for k, v in tot.most_common()}
+
+
+def cycle_summary(cs, unanswered, fam, run_h):
+    """Per thread: cycles (acknowledgements counted apart and left out of the median and longest), the family split over the union of the cycles (`fam`, minutes) as hours and shares, covered_h (the union),
+    outside_run_h (hours the thread was running outside every cycle: `run_h`, all its completed run hours, minus the running hours inside them), and setup_min (median first_browser_min over the cycles that have one)."""
+    real = [c for c in cs if not c["ack"]]; tot = collections.Counter(fam); fb = [c["first_browser_min"] for c in real if c["first_browser_min"] is not None]
+    all_ = sum(tot.values()) or 1
+    return dict(n=len(real), acks=len(cs) - len(real), unanswered=unanswered, median_min=round(statistics.median(c["minutes"] for c in real), 1) if real else None,
+                longest_min=max((c["minutes"] for c in real), default=None), covered_h=round(sum(tot.values()) / 60, 2), outside_run_h=round(run_h - (sum(tot.values()) - tot["idle"]) / 60, 2), setup_min=round(statistics.median(fb), 1) if fb else None,
+                hours={k: round(v / 60, 2) for k, v in tot.most_common()}, shares={k: round(v / all_, 3) for k, v in tot.most_common()})
+
+
+def cycle_table(m):
+    """Console table of one thread's work cycles: start, minutes, who it was for, its two biggest families, minutes to the first browser call."""
+    s = m["cycle_summary"]; rows = [f"cycles of {m['title'][:50]}: {s['n']} (+{s['acks']} acknowledgements, {s['unanswered']} wakes never answered), median {s['median_min']} min, longest {s['longest_min']} min, setup {s['setup_min']} min; {s['covered_h']}h covered ({s['outside_run_h']}h of running outside every cycle), by family {s['hours']}"]
+    for c in m["cycles"]:
+        top = ", ".join(f"{k} {v}" for k, v in list(c["families"].items())[:2])
+        rows.append(f"  {c['start'][11:16]}Z {c['minutes']:>6} min  for {c['for_title'][:28]:<28} {top:<28} browser at {c['first_browser_min']}{'  (ack)' if c['ack'] else ''}")
+    return "\n".join(rows)
+
+
+def cycle_head(c):
+    """One clause of the headline: `<label>: N cycles, median M min, of which setup S min; X% model, Y% waiting (poll and idle), Z% browser`. c: a cycle_summary with a label."""
+    if not c["n"]: return None
+    sh = c["shares"]
+    return (f"{c['label']}: {c['n']} cycles" + (f" (+{c['acks']} acknowledgements)" if c["acks"] else "") + f", median {c['median_min']:.0f} min" + (f", of which setup {c['setup_min']:.0f} min" if c["setup_min"] is not None else "")
+            + f"; {sh.get('model', 0):.0%} model, {sh.get('poll', 0) + sh.get('idle', 0):.0%} waiting, {sh.get('browser', 0):.0%} browser")
 
 
 norm = lambda p: os.path.normcase(os.path.normpath(p))
@@ -621,9 +710,10 @@ def run_kind(trig, wakes, ra, rb):
     return "ka" if not w else "ka-hit" if w["hit"] else "ka-miss"
 
 
-def lane_specs(db, roots):
-    """Lanes in page order: every named root first, then each root's descendants that have runs, grouped by the slice in the title (numbered, lettered after their number) and the rest last. -> [dict(tid, title, model, group, slice, root)]"""
-    sp = []
+def lane_specs(db, roots, partners=()):
+    """Lanes in page order: every named root first, then the partner threads (named by --cycles, outside the tree: one lane each, group PARTNERS, no descendants), then each root's descendants that have runs,
+    grouped by the slice in the title (numbered, lettered after their number) and the rest last. -> [dict(tid, title, model, group, slice, root)]"""
+    sp = [((0, (1, "")), dict(tid=p["tid"], title=p["title"], model=p.get("selected"), group="PARTNERS", slice=None, root=True)) for p in partners]
     for r in roots:
         sp.append(((0, (0, "")), dict(tid=r["tid"], title=r["title"], model=r.get("selected"), group="ROOTS", slice=None, root=True)))
         for t, title, p in descendants_of(db, r["tid"]):
@@ -656,6 +746,7 @@ def measures_line(lm, ro):
     # idle after the command finished is the stall; idle while it still ran is the thread waiting on its own command, which its completion ends
     late = sum(max(x["idle_until_next_run_h"] - x["ran_on_h"], 0) for x in ro["turn_ends"] if x["idle_until_next_run_h"] is not None)
     p.append(f"{len(ro['turn_ends'])} turns ended with a command still running ({ro['turn_end_idle_h']:.1f}h idle until the next run, {late:.1f}h of it after the command had finished)")
+    p += [h for c in ro.get("cycles", []) if (h := cycle_head(c))]
     return " · ".join(p)
 
 
@@ -712,7 +803,7 @@ def window(db, tids):
 
 
 def main():
-    a = argparse.ArgumentParser(); a.add_argument("--out", required=True); a.add_argument("--tree", action="store_true"); a.add_argument("--branch"); a.add_argument("--base")
+    a = argparse.ArgumentParser(); a.add_argument("--out", required=True); a.add_argument("--tree", action="store_true"); a.add_argument("--branch"); a.add_argument("--base"); a.add_argument("--cycles", action="append", default=[])
     a.add_argument("threads", nargs="+"); a = a.parse_args()
     if a.branch and not a.base: a.error("--branch needs --base")
     os.makedirs(a.out, exist_ok=True)
@@ -720,24 +811,34 @@ def main():
     rates = pricing.load_rates(T3)
     seen = set(); out = [m for m in (tree(db, rates, p, seen, a.tree) for p in a.threads) if m]
     allm = [x for m in out for x in [m] + m.get("descendants", [])]
-    cmds = merge_commands(allm); lm = None; names = thread_names(db); ro = rollup(allm)
-    specs = lane_specs(db, out) if a.tree else []  # the lanes' threads, with or without a native session, set the window
-    win = window(db, [s["tid"] for s in specs] or [x["tid"] for x in allm]) if allm else None
+    cmds = merge_commands(allm); lm = None; names = thread_names(db); byid = {x["tid"]: x for x in allm}; partners = []
+    for p in a.cycles:  # a partner thread: measured like a root with no descendants if it is not already in the tree, then its work cycles
+        tid = resolve(db, p)[0]; m = byid.get(tid) or (tree(db, rates, p, seen, False) if tid else None)
+        if not m: print(f"{p}: --cycles names no thread with a native session (UNPROVEN)"); continue
+        if tid not in byid: byid[tid] = m; partners.append(m)
+        runs = db.execute(RUNS, (tid,)).fetchall(); cs, un, fam = work_cycles(runs, wake_runs(db, tid, names), m["sends"], m["ivs"], names); m["cycles"] = cs; m["cycle_summary"] = cycle_summary(cs, un, fam, sum((ts(b) - ts(a)).total_seconds() for a, b in runs if b) / 3600)
+    for x in allm + partners: x.pop("sends", None)
+    ro = rollup(allm); ro["cycles"] = [dict(label=(m["title"] or m["tid"]).split(":")[0], **m["cycle_summary"]) for m in byid.values() if "cycle_summary" in m]
+    specs = lane_specs(db, out, partners) if a.tree else []  # the lanes' threads, with or without a native session
+    win = window(db, [s["tid"] for s in specs if s["group"] != "PARTNERS"] or [x["tid"] for x in allm]) if allm else None  # the landmark's window is the tree's; partners may run past it
+    pwin = window(db, [s["tid"] for s in specs]) if specs else win  # the page's window holds every lane
     if a.branch and allm:
         commits, unmerged, authors = commit_log(db, a.branch, a.base, [m["tid"] for m in out])
         commits = attribute(commits, names, branch_slices(a.branch, a.base) if any(not c["thread"] for c in commits) else {})
         lm = landmark(commits, *gates_and_marks(a.branch, a.base, *win), *win, desc_runs(db, [m["tid"] for m in out]))
         lm["unmerged"] = unmerged; lm["lost_writers"] = lost_writers(allm, authors)
-    fill_lanes(db, specs, {x["tid"]: x for x in allm}, names, win[1]) if specs else None
-    json.dump(dict(threads=out, commands=cmds, landmark=lm, window=[t.isoformat() for t in win] if win else None, lanes=specs, rollup=ro), open(f"{a.out}/retro.json", "w"), indent=1, default=dict)
+    fill_lanes(db, specs, byid, names, pwin[1]) if specs else None
+    json.dump(dict(threads=out, partners=partners, commands=cmds, landmark=lm, window=[t.isoformat() for t in pwin] if pwin else None, lanes=specs, rollup=ro), open(f"{a.out}/retro.json", "w"), indent=1, default=dict)
     print(" | ".join(COLS + EXTRA + ["tool calls", "tool output MB", "top inflow"]))
-    rows = [x for m in out for x in [m] + ([m["tree_total"]] if "tree_total" in m else [])]
+    rows = [x for m in out for x in [m] + ([m["tree_total"]] if "tree_total" in m else [])] + partners
     for m in rows:
         top = m["tool_output"].most_common(1)
         print(" | ".join(map(str, cells(m) + [sum(m["tool_calls"].values()), round(sum(m["tool_output"].values()) / 1e6, 2), top[0][0] if top else "-"])))
     floors = [m["thread"] for m in out if m["cost_is_floor"] and "tree_total" not in m]
     if floors: print(f"cost is a main-thread FLOOR for {len(floors)} thread(s) with unpriced descendants: {', '.join(floors)}. Tree totals: rerun with --tree, or `census`.")
     print(measures_line(lm, ro))
+    for m in byid.values():
+        if "cycle_summary" in m: print(cycle_table(m))
     if lm: u = lm["unattributed"]; print(commits_line(lm)); print(f"commits detail: {lm['by_branch']} attributed by the branch-name fallback; {u['commits']} with no slice, churn {u['churn']} ({u['no_trailer']} no trailer, {u['no_slice_title']} thread title names no slice)")
     if lm: print(landmark_line(lm));[print(f"  slice {x['n']}: {x['commits']} commits, churn {x['churn']}, first {x['first'][11:16]}Z (+{x['start_lag_h']}h), 80% {x['t80'][11:16]}Z, gate {(x['gate'] or 'open')[11:16]}, tail {x['tail_h']}h{' (open)' if x['open'] else ''}: {x['tail_commits']} commits, test/prod/docs churn {x['tail_churn']['test']}/{x['tail_churn']['prod']}/{x['tail_churn']['docs']}, active {x['tail_active_h']}h quiet {x['tail_quiet_h']}h") for x in lm["slices"]]
     print("top commands (hours, calls, secondary): " + "; ".join(f"{k} {v['hours']}h {v['calls']} +{v['secondary']}" for k, v in list(cmds.items())[:10]))

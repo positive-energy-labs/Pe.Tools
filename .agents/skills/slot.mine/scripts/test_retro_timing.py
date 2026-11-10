@@ -167,4 +167,44 @@ assert retro.gate_slices("Merge crusade/kernel-s4: slice 4 work") == set()
 # a thread that ran git commit and has no commit anywhere is named; one with a commit, or with no git commit, is not
 ms = [dict(tid="a", title="A", commands={"git commit": dict(calls=0, hours=0, secondary=2)}), dict(tid="b", title="B", commands={"git commit": [1, 0.0, 0]}), dict(tid="c", title="C", commands={})]
 assert retro.lost_writers(ms, {"b"}) == ["A"]
+
+# work cycles. split_cycle: every moment of [a, b] gets one label; idle = no run in flight, a foreground call names its family (browser outranks poll), the rest of a run is model time
+sc = retro.split_cycle(D(0, 0), D(1, 0), [(D(0, 0), D(0, 30)), (D(0, 40), D(1, 0))], [(D(0, 10), D(0, 20), "poll"), (D(0, 15), D(0, 25), "browser"), (D(0, 20), D(0, 50), "test")])
+assert {k: v / 60 for k, v in sc.items()} == {"model": 20.0, "poll": 5.0, "browser": 10.0, "test": 15.0, "idle": 10.0} and sum(sc.values()) == 3600, dict(sc)
+# wake_runs: a message from another thread starts a run; a keepalive, an owner message and a command notification do not
+db2 = sqlite3.connect(":memory:")
+db2.execute("create table orchestration_v2_projection_runs (thread_id, requested_at, completed_at)")
+db2.execute("create table orchestration_v2_projection_messages (thread_id, role, created_at, payload_json)")
+for h, p in [(0, dict(senderThreadId="x", text="hello")), (2, dict(text="keepalive: nothing", senderThreadId="x")), (4, dict(createdBy="user", creationSource="web")), (6, dict(senderThreadId="y", text="again"))]:
+    db2.execute("insert into orchestration_v2_projection_runs values ('d', ?, ?)", (I(h), I(h + 1))); db2.execute("insert into orchestration_v2_projection_messages values ('d', 'user', ?, ?)", (I(h), json.dumps(p)))
+assert retro.wake_runs(db2, "d", {}) == [(I(0), "x"), (I(6), "y")]
+# a cycle runs from the wake from X to its next send to X. Runs 0-1h and 2-3h; a foreground browser call at 0:10-0:20, a poll at 2:00-2:30; send to X at 2:40
+names = {"x": "Impl", "y": "Owner"}; runs = [(I(0), I(1)), (I(2), I(3))]
+ivs = [[I(0, 10), I(0, 20), "browser", False], [I(2, 0), I(2, 30), "poll", False], [I(0, 5), I(2, 50), "test", True]]  # the background test is not a foreground call, so it names nothing
+cy, un, fam = retro.work_cycles(runs, [(I(0), "x"), (I(0, 30), "x"), (I(2, 50), "y")], [(I(2, 40), "x"), (I(2, 41), "z")], ivs, names)
+assert un == 1 and len(cy) == 1 and fam == {"model": 60.0, "idle": 60.0, "browser": 10.0, "poll": 30.0}, (cy, un, fam)  # the second wake from x shares the send; the wake from y was never answered
+c = cy[0]; assert (c["start"], c["minutes"], c["for_tid"], c["for_title"], c["ack"], c["first_browser_min"]) == (I(0), 160.0, "x", "Impl", False, 10.0), c
+assert c["families"] == {"model": 60.0, "idle": 60.0, "browser": 10.0, "poll": 30.0}, c["families"]
+assert sum(c["families"].values()) == 160.0
+# cycles for two senders overlap: each keeps its own split, the thread-level split counts the overlap once
+ov, _, fam2 = retro.work_cycles([(I(0), I(1))], [(I(0), "x"), (I(0, 20), "y")], [(I(0, 40), "x"), (I(1), "y")], [], names)
+assert [c["minutes"] for c in ov] == [40.0, 40.0] and fam2 == {"model": 60.0}, (ov, fam2)
+# a wake answered with no other tool call is an acknowledgement
+ack, _, _ = retro.work_cycles([(I(5), I(6))], [(I(5), "x")], [(I(5, 2), "x")], [[I(5, 2), I(5, 3), "other", False]], names)
+assert [(a["ack"], a["minutes"], a["first_browser_min"]) for a in ack] == [(True, 2.0, None)]
+# summary: acks counted apart; median and longest over the real cycles; shares over all cycle minutes; setup = median first browser call
+cs = [dict(minutes=10.0, ack=False, families={"model": 6.0, "browser": 4.0}, first_browser_min=2.0), dict(minutes=30.0, ack=False, families={"idle": 30.0}, first_browser_min=None), dict(minutes=50.0, ack=False, families={"poll": 50.0}, first_browser_min=6.0), dict(minutes=1.0, ack=True, families={"model": 1.0}, first_browser_min=None)]
+sm = retro.cycle_summary(cs, 2, {"model": 7.0, "browser": 4.0, "idle": 30.0, "poll": 50.0}, 2.0)  # 61 running minutes inside the cycles of 2.0 running hours
+assert (sm["n"], sm["acks"], sm["unanswered"], sm["median_min"], sm["longest_min"], sm["setup_min"]) == (3, 1, 2, 30.0, 50.0, 4.0) and sm["hours"]["poll"] == round(50 / 60, 2) and sm["shares"]["idle"] == round(30 / 91, 3) and sm["covered_h"] == round(91 / 60, 2) and sm["outside_run_h"] == round(2.0 - 61 / 60, 2), sm
+assert retro.cycle_head(dict(label="Driver", **sm)) == "Driver: 3 cycles (+1 acknowledgements), median 30 min, of which setup 4 min; 8% model, 88% waiting, 4% browser", retro.cycle_head(dict(label="Driver", **sm))
+assert retro.cycle_head(dict(label="X", **retro.cycle_summary([], 0, {}, 0))) is None and "Driver: 3 cycles" in retro.measures_line(None, dict(retro.rollup([dict(admits=[], turn_ends=[])]), cycles=[dict(label="Driver", **sm)]))
+# the outbound message of a Claude session is read from its t3_thread_send tool call, with its target
+with tempfile.TemporaryDirectory() as d:
+    path = os.path.join(d, "s.jsonl")
+    open(path, "w").write(json.dumps(dict(type="assistant", timestamp=I(1), requestId="r", message=dict(model="m", usage={}, content=[{"type": "tool_use", "id": "s1", "name": "mcp__t3-code__t3_thread_send", "input": {"threadId": "x", "message": "m"}}]))))
+    m = retro.new_metrics("t", "t", None); retro.claude(path, m)
+assert m["sends"] == [(I(1), "x")] and retro.codex_args('{"threadId": "x"}') == {"threadId": "x"} and retro.codex_args("not json") == {}
+# a --cycles thread outside the tree gets its own PARTNERS lane after the roots and before the slices
+sp = retro.lane_specs(db, [dict(tid="root", title="Root", selected="m")], [dict(tid="p1", title="Driver", selected="m")])
+assert [(l["tid"], l["group"], l["root"]) for l in sp][:3] == [("root", "ROOTS", True), ("p1", "PARTNERS", True), ("k3", "SLICE 2", False)]
 print("ok")

@@ -8,7 +8,7 @@ Lanes (retro.json `lanes`): roots first, then descendants with runs grouped by t
 Layers (each a checkbox on the page): gap rails (the wait before a run, colored by the cause of the next run's trigger), arrows (a cross-thread message from its sender's lane to
 the receiver's; an owner message is a diamond), activity (inside a run bar the tool time by command family, background commands as a strip at their real duration; the bar's own color is
 model time), cache (a tick per cold API call; keepalive bars are green on a cache HIT, red on a MISS), model marks (each change of the assistant model, each compaction), child lanes,
-a "writers" strip under the time axis (slices with a commit and child threads with a run in flight, per 30 minutes), HOLD/REFUSE marks on the lane that got them plus a free-GiB dot strip, and a mark where a turn ended with a background command still running.
+a "writers" strip under the time axis (slices with a commit and child threads with a run in flight, per 30 minutes), HOLD/REFUSE marks on the lane that got them plus a free-GiB dot strip, a mark where a turn ended with a background command still running, and a bracket with its minutes above the lane of a --cycles thread for each work cycle (a dashed bracket is an acknowledgement).
 With a landmark: merges and gate lines, per slice the 80%-of-churn to gate tail with a mini churn curve under the slice header, the unstarted stretch before its first commit (muted bar) and the tail split into active and quiet time (strip under the curve).
 Hover text carries times and at most the first 140 chars of a message.
 """
@@ -20,23 +20,23 @@ from retro import ts
 
 W, LH, LX, MH = 1200, 24, 330, 40
 GCLS = {"owner": "owner", "own command": "cmd", "child completion": "child", "keepalive": "kal", "system": "unk", "unknown": "unk"}  # anything else is "message from ..."
-LAYERS = [("arrows", "arrows"), ("gaps", "gap rails"), ("acts", "activity segments"), ("cache", "cache ticks"), ("models", "model marks"), ("child", "child lanes"), ("writers", "writers strip"), ("admit", "machine admission"), ("turnend", "turn ended mid-command")]
+LAYERS = [("arrows", "arrows"), ("gaps", "gap rails"), ("acts", "activity segments"), ("cache", "cache ticks"), ("models", "model marks"), ("child", "child lanes"), ("writers", "writers strip"), ("admit", "machine admission"), ("turnend", "turn ended mid-command"), ("cycles", "work cycles")]
 LEGEND = ([("run", "model time"), ("f-test", "test"), ("f-build", "build"), ("f-guard", "guard/lint"), ("f-git", "git"), ("f-poll", "poll/sleep"), ("f-browser", "browser"), ("f-other", "other tool")]
           + [("g-owner", "wait: owner"), ("g-msg", "wait: message"), ("g-cmd", "wait: own command"), ("g-child", "wait: child done"), ("g-kal", "wait: keepalive"), ("g-unk", "wait: unknown"),
              ("ok", "keepalive HIT / gate"), ("bad", "keepalive MISS / REFUSE"), ("warn", "cold call / 80% churn / HOLD"),
-             ("w-sl", "writers: slices with a commit"), ("run", "writers: threads running"), ("mut", "not yet started / quiet tail"), ("f-test", "active tail"), ("g-cmd", "turn ended, command still running")])
+             ("w-sl", "writers: slices with a commit"), ("run", "writers: threads running"), ("mut", "not yet started / quiet tail"), ("f-test", "active tail"), ("g-cmd", "turn ended, command still running"), ("cyc", "work cycle (minutes; dashed: acknowledgement)")])
 CSS = """:root{--run:var(--chart-1,#3f6fb5);--f-test:var(--chart-3,#d9822b);--f-build:var(--chart-4,#8a63c7);--f-guard:var(--chart-5,#3aa6a0);--f-git:var(--chart-6,#b5527a);--f-poll:var(--muted-foreground,#999);--f-browser:var(--chart-2,#58a55c);--f-other:var(--muted-foreground,#999);
 --g-owner:var(--chart-2,#58a55c);--g-msg:var(--chart-4,#8a63c7);--g-cmd:var(--chart-3,#d9822b);--g-child:var(--chart-5,#3aa6a0);--g-kal:var(--chart-6,#b5527a);--g-unk:var(--muted-foreground,#999);
---w-sl:var(--chart-4,#8a63c7);--ok:var(--success,#2f8a4a);--bad:var(--destructive,#d0472f);--warn:var(--warning,#d9a02b);--rail:var(--border,#e5e5e5);--mut:var(--muted-foreground,#888);--fg:var(--foreground,#222)}
+--w-sl:var(--chart-4,#8a63c7);--cyc:var(--chart-5,#3aa6a0);--ok:var(--success,#2f8a4a);--bad:var(--destructive,#d0472f);--warn:var(--warning,#d9a02b);--rail:var(--border,#e5e5e5);--mut:var(--muted-foreground,#888);--fg:var(--foreground,#222)}
 body{font:13px/1.4 var(--font-sans,system-ui)} #wrap{--fs:14px;overflow-x:auto} #wrap.wide{--fs:8px} p{max-width:900px} .ctl label{margin-right:14px}
 .l{font-size:var(--fs);fill:var(--fg)} .g{font-size:var(--fs);font-weight:700;fill:var(--mut);letter-spacing:.06em} .t,.gt,.mt{font-size:calc(var(--fs)*.85);fill:var(--mut)} .gt{fill:var(--ok)} .mt{fill:var(--fg)}
 .run{fill:var(--run)} .ka{fill:var(--mut)} .ka-hit{fill:var(--ok)} .ka-miss{fill:var(--bad)} .rail,.tick{stroke:var(--rail)} .merge{stroke:var(--mut);stroke-dasharray:2 3} .gate{stroke:var(--ok);stroke-width:2}
 .f-test{fill:var(--f-test)} .f-build{fill:var(--f-build)} .f-guard{fill:var(--f-guard)} .f-git{fill:var(--f-git)} .f-poll{fill:var(--f-poll)} .f-browser{fill:var(--f-browser)} .f-other{fill:var(--f-other);fill-opacity:.4}
 .g-owner{fill:var(--g-owner)} .g-msg{fill:var(--g-msg)} .g-cmd{fill:var(--g-cmd)} .g-child{fill:var(--g-child)} .g-kal{fill:var(--g-kal)} .g-unk{fill:var(--g-unk)}
 .cold{stroke:var(--warn);stroke-width:2} .mm{stroke:var(--fg)} .cp{fill:var(--fg)} .ar{stroke:var(--fg);stroke-opacity:.4} .ah{fill:var(--fg);fill-opacity:.55} .ow{fill:var(--g-owner);stroke:var(--fg)}
-.ws{fill:var(--w-sl)} .wt{fill:var(--run)} .unst{fill:var(--mut);fill-opacity:.2} .tq{fill:var(--mut);fill-opacity:.35} .ta{fill:var(--f-test)} .da{fill:var(--mut)} .dh{fill:var(--warn)} .dr{fill:var(--bad)} .hm{fill:var(--warn);stroke:var(--fg)} .rm{fill:var(--bad);stroke:var(--fg)} .tec{stroke:var(--g-cmd);stroke-width:2;stroke-dasharray:3 2} .tem{fill:var(--g-cmd);stroke:var(--fg)}
+.cyc{stroke:var(--cyc);stroke-width:2;fill:none} .cyk{stroke-dasharray:3 2} .cyt{font-size:calc(var(--fs)*.8);fill:var(--cyc);text-anchor:middle} .ws{fill:var(--w-sl)} .wt{fill:var(--run)} .unst{fill:var(--mut);fill-opacity:.2} .tq{fill:var(--mut);fill-opacity:.35} .ta{fill:var(--f-test)} .da{fill:var(--mut)} .dh{fill:var(--warn)} .dr{fill:var(--bad)} .hm{fill:var(--warn);stroke:var(--fg)} .rm{fill:var(--bad);stroke:var(--fg)} .tec{stroke:var(--g-cmd);stroke-width:2;stroke-dasharray:3 2} .tem{fill:var(--g-cmd);stroke:var(--fg)}
 .cv{fill:none;stroke:var(--run);stroke-width:1.5} .c80{fill:var(--warn)} .cg{stroke:var(--ok);stroke-width:2}
-line,path.cv{vector-effect:non-scaling-stroke} .hide-arrows .arrows,.hide-gaps .gaps,.hide-acts .acts,.hide-cache .cache,.hide-models .models,.hide-child .child,.hide-child .ch,.hide-writers .writers,.hide-admit .admit,.hide-turnend .turnend{display:none}
+line,path.cv{vector-effect:non-scaling-stroke} .hide-arrows .arrows,.hide-gaps .gaps,.hide-acts .acts,.hide-cache .cache,.hide-models .models,.hide-child .child,.hide-child .ch,.hide-writers .writers,.hide-admit .admit,.hide-turnend .turnend,.hide-cycles .cycles{display:none}
 .k span{display:inline-block;width:10px;height:10px;margin:0 4px 0 12px;vertical-align:middle}""" + retro.BARS_CSS
 JS = """const w=document.getElementById("wrap"),s=document.getElementById("s");
 function sync(){for(const c of document.querySelectorAll("[data-layer]"))w.classList.toggle("hide-"+c.dataset.layer,!c.checked);
@@ -60,7 +60,7 @@ def load(run_dir):
 
 def render(run_dir):
     J = load(run_dir); lanes = J["lanes"]; lm = J["landmark"]; ro = J["rollup"]; M = {}
-    for r in J["threads"]:
+    for r in J["threads"] + J.get("partners", []):
         for x in [r] + r.get("descendants", []): M[x["tid"]] = x
     T0, T1 = (ts(t) for t in J["window"]); by = {l["tid"]: l for l in lanes}
     x = lambda t: LX + max(0, min(1, ((ts(t) if isinstance(t, str) else t) - T0).total_seconds() / (T1 - T0).total_seconds())) * (W - LX - 10)
@@ -97,7 +97,8 @@ def render(run_dir):
                             + (f'<line x1="{x(sl["gate"]):.1f}" x2="{x(sl["gate"]):.1f}" y1="{y+2}" y2="{yb}" class="cg"><title>gated {sl["gate"][11:16]}Z</title></line>' if sl["gate"] else ""))
                 y += MH
             rows.append("</g>")
-        ypos[tid] = y; m = M.get(tid) or {}
+        m = M.get(tid) or {}; y += 10 if m.get("cycles") else 0  # room above the lane for its cycle brackets
+        ypos[tid] = y
         lab = name[:27] + (f" · {m['test_share']:.0%} test" if m.get("test_share") is not None else "")
         r = [f'<g class="{cls}"><text x="4" y="{y+17}" class="l">{html.escape(lab)}</text><line x1="{LX}" x2="{W-10}" y1="{y+12}" y2="{y+12}" class="rail"/>']
         r += ['<g class="gaps">'] + [f'<rect x="{x(gp["start"]):.1f}" y="{y+10}" width="{max(1, x(gp["end"]) - x(gp["start"])):.1f}" height="4" class="g-{GCLS.get(gp["cause"], "msg")}">'
@@ -113,6 +114,10 @@ def render(run_dir):
         r.append('</g><g class="models">' + "".join(f'<line x1="{x(c["at"]):.1f}" x2="{x(c["at"]):.1f}" y1="{y}" y2="{y+LH-2}" class="mm"><title>{c["at"][11:16]}Z model {short(c["frm"])} to {short(c["to"])}</title></line>'
                                                  f'<text x="{x(c["at"])+2:.1f}" y="{y+8}" class="mt">{html.escape(short(c["to"]))}</text>' for c in m.get("model_changes", []))
                  + "".join(f'<path d="M{x(c)-4:.1f},{y} h8 l-4,7 z" class="cp"><title>compaction {c[11:16]}Z</title></path>' for c in m.get("compact_at", [])) + "</g>")
+        r.append('<g class="cycles">' + "".join(
+            f'<path d="M{x(c["start"]):.1f},{y-2} v-4 H{x(c["end"]):.1f} v4" class="cyc{" cyk" if c["ack"] else ""}"><title>{c["start"][11:16]}Z {c["minutes"]} min for {html.escape(c["for_title"][:40])}'
+            f'{" (acknowledgement)" if c["ack"] else ""}: {html.escape(", ".join(f"{k} {v}" for k, v in c["families"].items()))}; first browser call {c["first_browser_min"]} min in</title></path>'
+            f'<text x="{(x(c["start"]) + x(c["end"])) / 2:.1f}" y="{y-8}" class="cyt">{c["minutes"]:.0f}m</text>' for c in m.get("cycles", [])) + "</g>")
         r.append('<g class="admit">' + "".join(
             (f'<rect x="{x(a["t"])-3:.1f}" y="{y+LH-9}" width="6" height="6" class="hm">' if a["verdict"] == "HOLD" else f'<circle cx="{x(a["t"]):.1f}" cy="{y+LH-6}" r="3.5" class="rm">')
             + f'<title>{a["t"][11:16]}Z {a["verdict"]} {a["kind"]}: free {a["free_gib"]} GiB</title>' + ("</rect>" if a["verdict"] == "HOLD" else "</circle>")
