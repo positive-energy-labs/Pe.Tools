@@ -3,8 +3,8 @@ import type { AppSurface, Machine, Reading } from "@pe/agent-contracts";
 import { Accordion, type AccordionGroup } from "@pe/kit/lang/accordion";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { useDiagnostics, type DiagnosticsState } from "#/host/diagnostics";
+import { attention } from "@pe/agent-contracts";
 import {
-  attention,
   autoOpen,
   disconnected,
   hhmm,

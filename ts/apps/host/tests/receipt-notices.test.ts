@@ -1,224 +1,253 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+/**
+ * The one notice feed (ADR 0035 rule 7) over the host's own stores: the rows and their words, the
+ * revisions people's followers key on, and the Reading that serves them. The receipt-to-card
+ * projection this file used to test is deleted; receipts reach a person as feed rows.
+ */
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import type {
-  ActionReceipt,
-  MachineNotice,
-  Receipt,
-  ReadingFrame,
-  ReadingRequest,
+import {
+  harnessEventSchema,
+  noticeFeedSchema,
+  type ActionReceipt,
+  type HarnessEvent,
+  type NoticeFeed,
+  type ReadingFrame,
 } from "@pe/agent-contracts";
-import { receiptSchema } from "@pe/agent-contracts";
-import { HostLog } from "../src/host-log.ts";
-import { createNotices, type NoticeContext } from "../src/notices.ts";
+import { createNoticeFeed, noticeRows, type NoticeSources } from "../src/notice-feed.ts";
 
-const T0 = Date.parse("2026-10-13T12:00:00Z");
-const at = (offsetMs = 0) => new Date(T0 + offsetMs).toISOString();
-const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-const THREAD = uid(900);
-const ASK = uid(901);
-const QUESTION = uid(902);
-const TURN = uid(903);
-const LEVELS = { type: "object", properties: { level: { type: "string" } } };
-const context: NoticeContext = {
-  thread: (opaque) => (opaque === THREAD ? { id: "t1", title: "Wiring" } : undefined),
-  asked: (r) =>
-    r.join.requestId === ASK
-      ? {
-          threadId: "t1",
-          body: "Delete the schedule",
-          act: {
-            kind: "permission",
-            threadId: "t1",
-            requestId: "perm-text-id",
-            options: [{ optionId: "yes", name: "Allow", kind: "allow_once" }],
-          },
-        }
-      : r.join.requestId === QUESTION
-        ? {
-            threadId: "t1",
-            body: "Which level?",
-            act: {
-              kind: "question",
-              threadId: "t1",
-              requestId: "q-text-id",
-              message: "Which level?",
-              requestedSchema: LEVELS,
-            },
-          }
-        : undefined,
-  said: (r) => (r.join.turnId === TURN ? "Retagged **41 of 43**." : undefined),
-};
-/** Every fixture is a real receipt: the schema, not a cast, says it is one. */
-const make = (id: string, revision: number, join: object, body: object, atMs = 0): Receipt =>
-  receiptSchema.parse({ schema: 1, id, revision, at: at(atMs), stamp: null, join, body });
-const lifecycle = (
-  state: "running" | "succeeded" | "failed",
-  id = uid(1),
-  revision = 1,
-  key = "instances.start",
-): Receipt =>
+const NOW = Date.parse("2026-11-10T12:00:00Z");
+const at = "2026-11-10T11:59:00.000Z";
+const events = (...raw: object[]): HarnessEvent[] =>
+  raw.map((e, i) => harnessEventSchema.parse({ seq: i + 1, at, turnId: "u1", ...e }));
+/** Only the summary fields the feed reads; the thread store's summary carries more. */
+const thread = (
+  id: string,
+  activity: { state: "idle" | "running" | "waiting" | "failed"; message?: string },
+  log: HarnessEvent[] = [],
+  readSeq = log.length,
+) =>
   ({
-    ...make(id, revision, { requestId: uid(10) }, { kind: "diagnostic", code: "host.failed" }),
-    body: {
-      kind: "action",
-      value: {
-        key,
-        state,
-        ...(state === "failed" ? { error: "Revit never answered" } : {}),
-      } as unknown as ActionReceipt,
-    },
-  }) as Receipt;
-const turn = (phase: "started" | "finished" | "failed", id = uid(2), revision = 1): Receipt =>
-  make(id, revision, { requestId: uid(11), threadId: THREAD }, { kind: "turn", phase });
-const permission = (phase: "asked" | "resolved", id = uid(3), revision = 1): Receipt =>
-  make(
     id,
-    revision,
-    { requestId: ASK, threadId: THREAD },
-    { kind: "permission", phase, localRef: { threadId: "t1", eventId: "e1" } },
-  );
-const question = (phase: "asked" | "resolved", id = uid(8), revision = 1): Receipt =>
-  make(
+    title: `thread ${id}`,
+    providerName: "Claude",
+    updatedAt: at,
+    lastSeq: log.length,
+    activity: { pending: 0, lastSeq: log.length, message: null, ...activity },
+    lifecycle: { status: "active", explicitUnread: false, readSeq },
+    events: log,
+  }) as unknown as NoticeSources["threads"][number];
+const receipt = (id: string, state: string, revision = 1, error?: string) => ({
+  revision,
+  action: {
     id,
-    revision,
-    { requestId: QUESTION, threadId: THREAD },
-    { kind: "question", phase, localRef: { threadId: "t1", eventId: "e2" } },
-  );
+    key: "revit.ducts.resize",
+    state,
+    caller: { kind: "pea" },
+    startedAt: at,
+    ...(error ? { error } : {}),
+  } as unknown as ActionReceipt,
+});
+const none: NoticeSources = { threads: [], receipts: [], works: [], machine: null };
 
-const dirs: string[] = [];
-afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
-
-function harness(bufferMs = 0, noticeContext = context) {
-  const dir = mkdtempSync(join(tmpdir(), "notices-"));
-  dirs.push(dir);
-  const log = new HostLog(dir, Date.now);
-  const consumers = new Set<(r: Receipt) => void>();
-  const source = {
-    subscribe: (_query: unknown, consume: (r: Receipt) => void) => {
-      consumers.add(consume);
-      return () => consumers.delete(consume);
+test("every source speaks in its own words, grouped waits, working, interrupted, failed, unread", () => {
+  const rows = noticeRows(
+    {
+      ...none,
+      threads: [
+        thread(
+          "ask",
+          { state: "waiting" },
+          events(
+            { kind: "prompt", text: "write" },
+            {
+              kind: "permission_request",
+              requestId: "r1",
+              toolCall: { toolCallId: "w", title: "First write: Office.rvt" },
+              options: [
+                { optionId: "allow_now", name: "Allow", kind: "allow_once" },
+                { optionId: "stop_writes", name: "Reject", kind: "reject_once" },
+              ],
+              deadline: "2026-11-10T12:01:00.000Z",
+              scope: "run",
+            },
+          ),
+        ),
+        thread(
+          "q",
+          { state: "waiting" },
+          events({
+            kind: "question_request",
+            requestId: "q1",
+            message: "Which level?",
+            requestedSchema: { type: "object" },
+          }),
+        ),
+        thread("run", { state: "running" }, events({ kind: "prompt", text: "go" })),
+        thread("cut", { state: "failed", message: "host restarted during this turn" }, events({ kind: "prompt", text: "go" })),
+        thread(
+          "died",
+          { state: "failed", message: "The claude harness exited (code 3)." },
+          events(
+            { kind: "prompt", text: "go" },
+            {
+              kind: "error",
+              message: "The claude harness exited (code 3).",
+              failure: { kind: "other", message: "The claude harness exited (code 3).", raw: "[session/create] durationMs=79" },
+            },
+          ),
+        ),
+        thread(
+          "done",
+          { state: "idle" },
+          events(
+            { kind: "prompt", text: "resize" },
+            { kind: "update", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Resized 41 of 43." } } },
+            { kind: "turn_end", stopReason: "end_turn" },
+          ),
+          0,
+        ),
+      ],
+      receipts: [
+        receipt("a1", "failed", 3, "Revit never answered"),
+        receipt("a2", "unknown"),
+        receipt("a3", "succeeded"),
+      ],
     },
-  };
-  const notices = createNotices({ source, context: noticeContext, log, bufferMs });
-  /** A follower: the frames it is handed, as the stream would carry them. */
-  function follow(after: number | null = null, request: ReadingRequest = { kind: "notices" }) {
+    NOW,
+  );
+  const by = Object.fromEntries(rows.map((row) => [row.key, row]));
+  expect(rows.map((row) => row.group)).toEqual([
+    "waits", "waits", "waits", "working", "interrupted", "failed", "failed", "unread",
+  ]);
+  expect(by["thread:ask"]).toMatchObject({
+    verb: "approve",
+    says: "First write: Office.rvt",
+    revision: 2,
+    act: {
+      kind: "consent",
+      threadId: "ask",
+      requestId: "r1",
+      deadline: "2026-11-10T12:01:00.000Z",
+      reject: { optionId: "stop_writes" },
+      allow: { optionId: "allow_now" },
+    },
+  });
+  expect(by["thread:q"]).toMatchObject({
+    verb: "asks",
+    says: "Which level?",
+    act: { kind: "question", requestId: "q1", requestedSchema: { type: "object" } },
+  });
+  expect(by["thread:cut"]?.act).toEqual({ kind: "resume", threadId: "cut" });
+  // A harness death says one sentence; its stderr is the detail to copy.
+  expect(by["thread:died"]).toMatchObject({ verb: "failed", detail: "[session/create] durationMs=79" });
+  expect(by["thread:done"]).toMatchObject({
+    verb: "done",
+    says: "Resized 41 of 43.",
+    act: { kind: "reply", threadId: "done" },
+  });
+  expect(by["action:a1"]).toMatchObject({ group: "failed", revision: 3, where: "Pea" });
+  expect(by["action:a2"]).toMatchObject({ group: "waits", verb: "unknown" });
+  expect(by["action:a3"]).toBeUndefined();
+  // Every row is the contract's.
+  noticeFeedSchema.parse({ id: 0, tray: false, rows });
+});
+
+test("an answered ask is no longer one: the waiting thread asks in its own message", () => {
+  const [row] = noticeRows(
+    {
+      ...none,
+      threads: [
+        thread(
+          "t",
+          { state: "waiting", message: "Waiting on a tool" },
+          events(
+            { kind: "question_request", requestId: "q1", message: "Which level?", requestedSchema: {} },
+            { kind: "question_resolved", requestId: "q1", by: "user", action: "decline" },
+          ),
+        ),
+      ],
+    },
+    NOW,
+  );
+  expect(row).toMatchObject({ verb: "asks", says: "Waiting on a tool" });
+  expect(row?.act).toBeUndefined();
+});
+
+afterEach(() => vi.useRealTimers());
+
+function reading(sources: () => NoticeSources) {
+  let changed: (() => void) | undefined;
+  let subscriptions = 0;
+  const feed = createNoticeFeed({
+    build: () => ({ id: 41, rows: noticeRows(sources(), NOW) }),
+    subscribe: (fire) => {
+      subscriptions++;
+      changed = fire;
+      return () => (changed = undefined);
+    },
+  });
+  const follow = (as?: "tray") => {
     const frames: ReadingFrame[] = [];
-    const release = notices.observe(request, (frame) => frames.push(frame), after);
-    const items = () =>
-      frames.flatMap((f) => (f.kind === "event" ? [f.value as MachineNotice] : []));
-    return {
-      frames,
-      items,
-      ids: () => items().map((n) => `${n.id}:${n.revision}`),
-      cursor: () =>
-        frames.flatMap((f) => ("id" in f && f.id !== undefined ? [f.id] : [])).at(-1) ?? null,
-      release: release ?? (() => {}),
-    };
-  }
-  return {
-    follow,
-    beat: notices.beat,
-    log,
-    // The journal commits a receipt into the log and to its subscribers alike.
-    deliver: (r: Receipt) => {
-      log.append({ kind: "receipt", receipt: r });
-      consumers.forEach((consume) => consume(r));
-    },
-    consumers,
-    close: () => notices.close(),
+    const release = feed.observe({ kind: "notices", ...(as ? { as } : {}) }, (f) => frames.push(f))!;
+    const feeds = () => frames.map((f) => (f as { value: NoticeFeed }).value);
+    return { frames, feeds, release };
   };
+  return { feed, follow, change: () => changed?.(), watching: () => changed !== undefined, subscriptions: () => subscriptions };
 }
 
-test("an ask flushes the waiting response and a response for its thread never waits behind it", () => {
+test("a burst of source changes is one frame; a rebuild that changes nothing sends none", () => {
   vi.useFakeTimers();
-  const h = harness(30_000);
-  try {
-    const reader = h.follow();
-    h.deliver(turn("finished"));
-    expect(reader.items()).toEqual([]);
-    h.deliver(question("asked"));
-    expect(reader.ids()).toEqual([`${uid(8)}:1`, `${uid(2)}:1`]);
-    h.deliver(turn("finished", uid(9)));
-    expect(reader.ids()).toEqual([`${uid(8)}:1`, `${uid(2)}:1`, `${uid(9)}:1`]);
-    vi.advanceTimersByTime(30_000);
-    expect(reader.items()).toHaveLength(3);
-    h.deliver(question("resolved", uid(8), 2));
-    h.deliver(turn("finished", uid(10)));
-    expect(reader.items()).toHaveLength(3);
-    vi.advanceTimersByTime(30_000);
-    expect(reader.items()).toHaveLength(4);
-  } finally {
-    h.close();
-    vi.useRealTimers();
-  }
+  let now = thread("t", { state: "running" }, events({ kind: "prompt", text: "go" }));
+  const h = reading(() => ({ ...none, threads: [now] }));
+  const web = h.follow();
+  expect(web.feeds()).toHaveLength(1);
+  expect(web.feeds()[0]).toMatchObject({ id: 41, tray: false, rows: [{ key: "thread:t", group: "working", revision: 1 }] });
+  // The turn ends: its events land, then the summary, then a receipt; one feed comes of them.
+  now = thread("t", { state: "idle" }, events({ kind: "prompt", text: "go" }, { kind: "turn_end", stopReason: "end_turn" }), 1);
+  h.change();
+  h.change();
+  h.change();
+  vi.advanceTimersByTime(100);
+  expect(web.feeds()).toHaveLength(2);
+  expect(web.feeds()[1]?.rows[0]).toMatchObject({ group: "unread", revision: 2 });
+  h.change();
+  vi.advanceTimersByTime(100);
+  expect(web.feeds()).toHaveLength(2);
+  web.release();
+  h.feed.close();
 });
 
-test("a follower that was away for three notices is handed each once, in order, from its cursor", () => {
-  const h = harness();
-  const first = h.follow();
-  h.deliver(lifecycle("succeeded", uid(1)));
-  const cursor = first.cursor();
-  expect(first.ids()).toEqual([`${uid(1)}:1`]);
-  first.release();
-  // The follower is offline for these three.
-  h.deliver(turn("finished", uid(2)));
-  h.deliver(lifecycle("failed", uid(4)));
-  h.deliver(permission("asked", uid(3)));
-  const back = h.follow(cursor);
-  expect(back.ids()).toEqual([`${uid(2)}:1`, `${uid(4)}:1`, `${uid(3)}:1`]);
-  // Following on from where it got to replays nothing; the next notice arrives live, once.
-  const again = h.follow(back.cursor());
-  expect(again.items()).toEqual([]);
-  h.deliver(lifecycle("succeeded", uid(5)));
-  expect(again.ids()).toEqual([`${uid(5)}:1`]);
-  expect(back.ids()).toHaveLength(4);
-  h.close();
+test("revisions are the sources' own: a restarted host builds the same revisions", () => {
+  const sources = { ...none, threads: [thread("t", { state: "running" }, events({ kind: "prompt", text: "go" }))], receipts: [receipt("a", "failed", 5, "x")] };
+  const first = reading(() => sources).follow().feeds()[0]!;
+  const again = reading(() => sources).follow().feeds()[0]!;
+  expect(again.rows.map((r) => r.revision)).toEqual(first.rows.map((r) => r.revision));
+  expect(first.rows.map((r) => r.revision)).toEqual([1, 5]);
 });
 
-test("an ask answered while the follower was away is not replayed", () => {
-  const h = harness();
-  const cursor = h.follow().cursor() ?? h.log.last;
-  h.deliver(permission("asked"));
-  h.deliver(turn("finished"));
-  h.deliver(permission("resolved", uid(3), 2));
-  expect(h.follow(cursor).ids()).toEqual([`${uid(2)}:1`]);
-  h.close();
+test("a tray follower says tray to everyone, and only its rows carry attended", () => {
+  const h = reading(() => ({ ...none, threads: [thread("t", { state: "running" }, events({ kind: "prompt", text: "go" }))] }));
+  const web = h.follow();
+  const tray = h.follow("tray");
+  expect(web.feeds().at(-1)?.tray).toBe(true);
+  h.feed.beat("tab-1", { thread: "t", visible: true, focused: true });
+  expect(tray.feeds().at(-1)?.rows[0]?.attended).toBe(true);
+  expect(web.feeds().at(-1)?.rows[0]?.attended).toBeUndefined();
+  h.feed.beat("tab-1", { thread: "t", visible: false, focused: false });
+  expect(tray.feeds().at(-1)?.rows[0]?.attended).toBeUndefined();
+  tray.release();
+  expect(web.feeds().at(-1)?.tray).toBe(false);
+  web.release();
 });
 
-test("turn completion links exact shared Work and reports accepted commands still running", () => {
-  const h = harness(0, {
-    ...context,
-    completed: () => ({
-      completed: 2,
-      running: 1,
-      unresolved: 1,
-      failed: 1,
-      cancelled: 1,
-      work: [
-        { title: "Ducts ? Office", href: "/ducts?target=C%3A%2FOffice.rvt&thread=t1" },
-        { title: "Family ? Door", href: "/family?target=C%3A%2FDoor.rfa&thread=t1" },
-      ],
-    }),
-  });
-  try {
-    const reader = h.follow();
-    h.deliver(turn("started"));
-    expect(reader.items()).toHaveLength(0);
-    h.deliver(turn("finished"));
-    const [notice] = reader.items();
-    expect(notice?.body).toContain("2 commands completed.");
-    expect(notice?.body).toContain("1 command is still running; writes have not finished.");
-    expect(notice?.body).toContain("1 command needs recovery; effects are incomplete or unknown.");
-    expect(notice?.body).toContain("1 command failed.");
-    expect(notice?.body).toContain("1 command was cancelled.");
-    expect(notice?.body).toContain("[Ducts ? Office](/ducts?target=C%3A%2FOffice.rvt&thread=t1)");
-    expect(notice?.body).toContain("[Family ? Door](/family?target=C%3A%2FDoor.rfa&thread=t1)");
-    expect(notice?.href).toBe("/ducts?target=C%3A%2FOffice.rvt&thread=t1");
-    h.deliver(turn("finished"));
-    expect(reader.items()).toHaveLength(1);
-  } finally {
-    h.close();
-  }
+test("the sources are watched only while someone follows", () => {
+  const h = reading(() => none);
+  expect(h.watching()).toBe(false);
+  const a = h.follow();
+  const b = h.follow();
+  expect(h.subscriptions()).toBe(1);
+  a.release();
+  expect(h.watching()).toBe(true);
+  b.release();
+  expect(h.watching()).toBe(false);
+  expect(h.feed.observe({ kind: "threads" }, () => {})).toBeUndefined();
 });

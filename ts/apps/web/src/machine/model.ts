@@ -5,8 +5,7 @@ import { SETTINGS_SECTIONS } from "../../../../packages/agent-contracts/src/sett
  * critical state. Runtime ownership comes from the host's enforced connections; stale readings
  * never certify a current match.
  */
-import type { Machine, MachineSession, Reading } from "@pe/agent-contracts";
-import type { UpdateBlocker, UpdatePlan, UpdateRevit } from "@pe/host-contracts/pe-revit-contract";
+import { planWaits, receiptRunning, type Machine, type MachineSession, type Reading } from "@pe/agent-contracts";
 
 import { unsavedOf } from "./session";
 
@@ -29,9 +28,6 @@ export const machineOf = (reading: Reading<Machine>): Machine | null =>
 export const disconnected = (reading: Reading<Machine>) =>
   reading.state === "stale" && reading.reason === "disconnected";
 
-const SETTLED = new Set(["ok", "failed", "refused"]);
-export const receiptRunning = (machine: Machine) =>
-  machine.update.receipt !== null && !SETTLED.has(machine.update.receipt.state);
 
 /** What the install scrim says: the version going in, the current leg in words, and the baseline host. */
 export interface Installing {
@@ -86,16 +82,6 @@ export function installing(reading: Reading<Machine>, accepting: boolean): Insta
   };
 }
 
-/** A plan that waits on this person: available, not yet admitted, nothing applying. */
-export const planWaits = (machine: Machine): UpdatePlan | null => {
-  const plan = machine.update.plan;
-  return plan?.available &&
-    plan.latest &&
-    machine.update.admittedPlanId !== plan.planId &&
-    !receiptRunning(machine)
-    ? plan
-    : null;
-};
 
 export function runtimeIdentity(reading: Reading<Machine>, fixture = false) {
   const host = machineOf(reading)?.host;
@@ -152,49 +138,8 @@ export function chipText(reading: Reading<Machine>, fixture = false): string {
   return identity.text + (waiting ? ` · ${waiting.latest} ready` : "");
 }
 
-/** `UpdateBlocker` has no pid: the Revit is the `plan.revits[]` row holding the same blocker. */
-export function blockersOf(
-  plan: UpdatePlan,
-): { blocker: UpdateBlocker; revit: UpdateRevit | null }[] {
-  const same = (a: UpdateBlocker, b: UpdateBlocker) => a.code === b.code && a.detail === b.detail;
-  const held = plan.revits.flatMap((revit) =>
-    revit.blockers.map((blocker) => ({ blocker, revit })),
-  );
-  const loose = plan.blockers
-    .filter((blocker) => !held.some((row) => same(row.blocker, blocker)))
-    .map((blocker) => ({ blocker, revit: null }));
-  return [...held, ...loose];
-}
 
-const blockedBy = (plan: UpdatePlan) => {
-  const first = blockersOf(plan)[0];
-  return (
-    first?.revit?.documents.find((document) => document.isModified)?.title ??
-    (first?.revit ? `Revit ${first.revit.year}` : (first?.blocker.code ?? "a blocker"))
-  );
-};
 
-/** What waits on the person, in sentences. Providers never light it. */
-export function attention(machine: Machine): string[] {
-  const out: string[] = [];
-  const plan = planWaits(machine);
-  if (plan && plan.blockers.length) out.push(`Update ${plan.latest} blocked by ${blockedBy(plan)}`);
-  else if (plan) out.push(`Update ${plan.latest} waits for you`);
-  else if (
-    machine.update.receipt?.state === "failed" ||
-    machine.update.receipt?.state === "refused"
-  )
-    out.push(`Update ${machine.update.receipt.state}`);
-  for (const session of machine.revit.sessions ?? [])
-    if (session.row.case === "controlled-active" && session.row.dialogs)
-      out.push(`Revit ${session.row.year} shows a dialog`);
-  const share = machine.share;
-  if (share?.state === "on" && share.refused.length)
-    out.push(
-      `${share.refused.length} share request${share.refused.length === 1 ? "" : "s"} refused`,
-    );
-  return out;
-}
 
 /** The group that opens by itself: Update while a plan waits or a receipt runs (ruling). */
 export function autoOpen(machine: Machine | null): GroupKey | null {

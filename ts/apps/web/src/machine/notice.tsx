@@ -1,11 +1,11 @@
 /**
- * The tray's notice card, mounted only in the card shell. The host projects receipt
- * revisions onto the `notices` Reading (the host log) and holds each burst ~30 s; the tray shim hands every item to
- * a native `notice` event once this card says `notice-ready`, and shows its separate window without
- * taking focus. One card pages every pending item: a new notice appends to the open card, a
- * draining timer walks passive items and ends after the last; pending asks hold the queue, hover
- * pauses it and typing stops it for good. Card messages ride the tray's string-JSON `type` protocol
- * (`notice-ready`/`notice-card`/`notice-hide`/`notice-panel`); opening an href is the surface's own
+ * The tray's notice card, mounted only in the card shell. It follows the host's notice feed as the
+ * tray (`notice-follow.ts`, ADR 0035 rule 7) and raises each row whose revision moved; saying
+ * `notice-card` with its height shows the tray's separate window without taking focus. One card
+ * pages every pending item: a new notice appends to the open card, a draining timer walks passive
+ * items and ends after the last; pending asks hold the queue, hover pauses it and typing stops it
+ * for good. Card messages ride the tray's string-JSON `type` protocol (`notice-ready`/
+ * `notice-card`/`notice-hide`/`notice-panel`; a native `notice: null` ends the card); opening an href is the surface's own
  * `open-window`. The card settles nothing: every answer goes to the thread's own door, which stays
  * the authority, and an item leaves only when that door accepts.
  */
@@ -36,12 +36,14 @@ import {
   admit,
   currentView,
   loadLedger,
+  loadSeen,
   saveLedger,
+  saveSeen,
   snooze,
   wake,
   type NoticeLedger,
-  type NoticeView,
 } from "./notice-policy";
+import { cardOf, followNotices } from "./notice-follow";
 import { AutomaticUpdates } from "./update";
 import { NoticePreview } from "./notice-preview";
 
@@ -58,6 +60,8 @@ const tray = (message: TrayMessage) => postRendererMessage(window.chrome?.webvie
 const NOTICE_DRAIN_MS = 8_000;
 const TICK_MS = 100;
 const FIXTURE = "Fixture: nothing here reaches a host.";
+/** The card's record of the last feed it saw. */
+const SEEN = "pe.notices.card-seen";
 /** How often snoozed items are checked for their hour being up. */
 const WAKE_MS = 30_000;
 
@@ -93,7 +97,8 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   };
   useEffect(() => {
     const webview = window.chrome?.webview;
-    const take = (next: MachineNotice, view: NoticeView = currentView()) => {
+    const take = (next: MachineNotice) => {
+      const view = currentView();
       record((l) => l);
       const verdict = admit(ledger.current!, next, view, Date.now());
       // Looking at that thread is seeing it: no card, and it will not come back.
@@ -113,12 +118,18 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
     const receive = ({ data }: NativeMessageEvent) => {
       const parsed = nativeMessageSchema.safeParse(data);
       if (!parsed.success || parsed.data.type !== "notice") return;
-      const next = parsed.data.notice;
-      if (!next) return end();
-      take(next, parsed.data.view);
+      // The tray hid the card window; the feed, not the tray, is where rows come from.
+      if (!parsed.data.notice) end();
     };
     webview?.addEventListener("message", receive);
     tray({ type: "notice-ready" });
+    const stop = followNotices({
+      origin: resolveWorkbenchConfig().origin,
+      as: "tray",
+      seen: loadSeen(window.localStorage, SEEN),
+      onRow: (row) => take(cardOf(row)),
+      onSeen: (seen) => saveSeen(window.localStorage, SEEN, seen),
+    });
     // A snoozed item whose hour is up comes back through the same door as a new one.
     const timer = setInterval(() => {
       record((l) => l);
@@ -128,6 +139,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
       woken.due.forEach((notice) => take(notice));
     }, WAKE_MS);
     return () => {
+      stop();
       webview?.removeEventListener("message", receive);
       clearInterval(timer);
     };

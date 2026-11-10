@@ -2,6 +2,7 @@ import { z } from "zod";
 import { sdkSchema } from "@pe/host-contracts/decoders";
 import { DOCUMENT_IDENTITY_AUTHORITY } from "@pe/host-contracts/contracts";
 import type { NativeNotice } from "@pe/host-contracts/native-adapter";
+import type { UpdateBlocker, UpdatePlan, UpdateRevit } from "@pe/host-contracts/pe-revit-contract";
 import type { DiscoveryMachine } from "./discovery-machine.ts";
 import { providerSchema } from "./provider.ts";
 import { addressSchema, documentRefSchema, type TargetInventory } from "./target.ts";
@@ -208,4 +209,66 @@ export function machineInventory(machine: Machine | DiscoveryMachine | undefined
       }),
     ),
   };
+}
+
+/* What waits on the person in the Machine, in words: the notice feed's machine rows (host) and the
+   Settings body (web) say the same sentences. */
+
+const SETTLED = new Set(["ok", "failed", "refused"]);
+export const receiptRunning = (machine: Machine) =>
+  machine.update.receipt !== null && !SETTLED.has(machine.update.receipt.state);
+
+/** A plan that waits on this person: available, not yet admitted, nothing applying. */
+export const planWaits = (machine: Machine): UpdatePlan | null => {
+  const plan = machine.update.plan;
+  return plan?.available &&
+    plan.latest &&
+    machine.update.admittedPlanId !== plan.planId &&
+    !receiptRunning(machine)
+    ? plan
+    : null;
+};
+
+/** `UpdateBlocker` has no pid: the Revit is the `plan.revits[]` row holding the same blocker. */
+export function blockersOf(
+  plan: UpdatePlan,
+): { blocker: UpdateBlocker; revit: UpdateRevit | null }[] {
+  const same = (a: UpdateBlocker, b: UpdateBlocker) => a.code === b.code && a.detail === b.detail;
+  const held = plan.revits.flatMap((revit) =>
+    revit.blockers.map((blocker) => ({ blocker, revit })),
+  );
+  const loose = plan.blockers
+    .filter((blocker) => !held.some((row) => same(row.blocker, blocker)))
+    .map((blocker) => ({ blocker, revit: null }));
+  return [...held, ...loose];
+}
+
+const blockedBy = (plan: UpdatePlan) => {
+  const first = blockersOf(plan)[0];
+  return (
+    first?.revit?.documents.find((document) => document.isModified)?.title ??
+    (first?.revit ? `Revit ${first.revit.year}` : (first?.blocker.code ?? "a blocker"))
+  );
+};
+
+/** What waits on the person, in sentences. Providers never light it. */
+export function attention(machine: Machine): string[] {
+  const out: string[] = [];
+  const plan = planWaits(machine);
+  if (plan && plan.blockers.length) out.push(`Update ${plan.latest} blocked by ${blockedBy(plan)}`);
+  else if (plan) out.push(`Update ${plan.latest} waits for you`);
+  else if (
+    machine.update.receipt?.state === "failed" ||
+    machine.update.receipt?.state === "refused"
+  )
+    out.push(`Update ${machine.update.receipt.state}`);
+  for (const session of machine.revit.sessions ?? [])
+    if (session.row.case === "controlled-active" && session.row.dialogs)
+      out.push(`Revit ${session.row.year} shows a dialog`);
+  const share = machine.share;
+  if (share?.state === "on" && share.refused.length)
+    out.push(
+      `${share.refused.length} share request${share.refused.length === 1 ? "" : "s"} refused`,
+    );
+  return out;
 }

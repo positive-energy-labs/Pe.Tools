@@ -1,7 +1,8 @@
 import { expect, test } from "vite-plus/test";
-import { readingFrameSchema, type MachineNotice } from "@pe/agent-contracts";
+import { machineNoticeSchema } from "@pe/host-contracts/native-adapter";
+import { readingFrameSchema, type NoticeRow } from "@pe/agent-contracts";
 
-import { followNotices } from "./notice-follow";
+import { cardOf, followNotices, type NoticeSeen } from "./notice-follow";
 
 type Fake = {
   url: string;
@@ -9,22 +10,37 @@ type Fake = {
   onerror: (() => void) | null;
   close: () => void;
 };
-const item = (id: string): MachineNotice => ({ id, revision: 1, title: id, body: "" });
-/** Every frame is a real Reading frame: the contract says so before the follower sees it. */
-const frame = (value: unknown) =>
-  ({ data: JSON.stringify(readingFrameSchema.parse(value)) }) as MessageEvent<string>;
-const event = (id: number, value: unknown) => frame({ kind: "event", key: "k", value, id });
+const row = (key: string, revision = 1, extra: Partial<NoticeRow> = {}): NoticeRow => ({
+  key,
+  group: "failed",
+  revision,
+  verb: "failed",
+  what: key,
+  where: "Pea",
+  says: null,
+  at: null,
+  url: null,
+  ...extra,
+});
+/** Every frame is a real Reading frame carrying a real feed. */
+const feed = (rows: NoticeRow[], tray = false) =>
+  ({
+    data: JSON.stringify(
+      readingFrameSchema.parse({ kind: "snapshot", key: "k", value: { id: 9, tray, rows } }),
+    ),
+  }) as MessageEvent<string>;
 
-function harness(cursor: number | null) {
+function harness(seen: NoticeSeen | null, as?: "tray") {
   const streams: Fake[] = [];
-  const items: string[] = [];
-  const cursors: number[] = [];
+  const raised: string[] = [];
+  const records: NoticeSeen[] = [];
   const trays: boolean[] = [];
   const stop = followNotices({
     origin: "http://host",
-    cursor,
-    onNotice: (n) => items.push(n.id),
-    onCursor: (id) => cursors.push(id),
+    as,
+    seen,
+    onRow: (r) => raised.push(`${r.key}:${r.revision}`),
+    onSeen: (s) => records.push(s),
     onTray: (present) => trays.push(present),
     retryMs: 0,
     open: (url) => {
@@ -35,42 +51,85 @@ function harness(cursor: number | null) {
       >;
     },
   });
-  return { streams, items, cursors, trays, stop };
+  return { streams, raised, records, trays, stop };
 }
 
-test("a surface that was away resumes after its cursor and handles each item once", async () => {
-  const h = harness(4);
-  expect(new URL(h.streams[0]!.url).searchParams.get("after")).toBe("4");
-  h.streams[0]!.onmessage!(event(5, item("a")));
-  h.streams[0]!.onmessage!(event(5, item("a")));
-  h.streams[0]!.onmessage!(event(3, item("old")));
-  h.streams[0]!.onmessage!(event(6, item("b")));
-  expect(h.items).toEqual(["a", "b"]);
-  expect(h.cursors).toEqual([5, 6]);
-  // The stream drops: the next one resumes after the last id handled.
+test("a first follow records the feed and owes nothing earlier", () => {
+  const h = harness(null);
+  h.streams[0]!.onmessage!(feed([row("a"), row("b")]));
+  expect(h.raised).toEqual([]);
+  expect(h.records.at(-1)).toEqual({ a: 1, b: 1 });
+  h.streams[0]!.onmessage!(feed([row("a"), row("b", 2), row("c")]));
+  expect(h.raised).toEqual(["b:2", "c:1"]);
+  h.stop();
+});
+
+test("a row raises once per revision; working rows and staged Work never raise", () => {
+  const h = harness({});
+  const working = row("w", 1, { group: "working", verb: "running" });
+  const review = row("r", 1, { group: "waits", verb: "review" });
+  h.streams[0]!.onmessage!(feed([row("a"), working, review]));
+  h.streams[0]!.onmessage!(feed([row("a"), working, review]));
+  expect(h.raised).toEqual(["a:1"]);
+  h.stop();
+});
+
+test("a dropped stream reopens and raises exactly what moved while it was away", async () => {
+  const h = harness({}, "tray");
+  expect(new URL(h.streams[0]!.url).searchParams.get("keys")).toBe(
+    JSON.stringify([{ kind: "notices", as: "tray" }]),
+  );
+  h.streams[0]!.onmessage!(feed([row("a"), row("b")]));
   h.streams[0]!.onerror!();
   await new Promise((r) => setTimeout(r, 5));
-  expect(new URL(h.streams[1]!.url).searchParams.get("after")).toBe("6");
+  h.streams[1]!.onmessage!(feed([row("a"), row("b", 3)], true));
+  expect(h.raised).toEqual(["a:1", "b:1", "b:3"]);
+  expect(h.trays).toEqual([false, true]);
   h.stop();
 });
 
-test("a first follow has no cursor and a gap sets it without raising an item", () => {
-  const h = harness(null);
-  expect(new URL(h.streams[0]!.url).searchParams.has("after")).toBe(false);
-  h.streams[0]!.onmessage!(frame({ kind: "gap", key: "k", dropped: null, id: 12 }));
-  expect(h.items).toEqual([]);
-  expect(h.cursors).toEqual([12]);
-  h.streams[0]!.onmessage!(event(13, item("a")));
-  expect(h.items).toEqual(["a"]);
+test("a malformed feed moves nothing", () => {
+  const h = harness({});
+  h.streams[0]!.onmessage!({
+    data: JSON.stringify({ kind: "snapshot", key: "k", value: { tray: true } }),
+  } as MessageEvent<string>);
+  expect(h.raised).toEqual([]);
+  expect(h.records).toEqual([]);
   h.stop();
 });
 
-test("tray presence arrives as a snapshot and a malformed item moves the cursor but not the card", () => {
-  const h = harness(0);
-  h.streams[0]!.onmessage!(frame({ kind: "snapshot", key: "k", value: { tray: true } }));
-  h.streams[0]!.onmessage!(event(1, { nope: true }));
-  expect(h.trays).toEqual([true]);
-  expect(h.items).toEqual([]);
-  expect(h.cursors).toEqual([1]);
-  h.stop();
+test("a consent row becomes a card the native contract accepts, with its allow and reject doors", () => {
+  const card = cardOf(
+    row("thread:t1", 4, {
+      group: "waits",
+      verb: "approve",
+      what: "Wiring",
+      says: "Delete the schedule",
+      url: "/pea?thread=t1",
+      act: {
+        kind: "consent",
+        threadId: "t1",
+        requestId: "r1",
+        deadline: "2026-11-10T12:00:00.000Z",
+        allow: { optionId: "allow_now" },
+        reject: { optionId: "stop_writes" },
+      },
+    }),
+  );
+  expect(machineNoticeSchema.parse(card)).toEqual({
+    id: "thread:t1",
+    revision: 4,
+    title: "Reject? Pea will write · Wiring",
+    body: "Delete the schedule",
+    href: "/pea?thread=t1",
+    act: {
+      kind: "permission",
+      threadId: "t1",
+      requestId: "r1",
+      options: [
+        { optionId: "allow_now", name: "Allow", kind: "allow_once" },
+        { optionId: "stop_writes", name: "Reject", kind: "reject_once" },
+      ],
+    },
+  });
 });
