@@ -5,7 +5,7 @@ import type {
   CommandBinding,
   CommandExecutor,
 } from "./command-executor.ts";
-import { CommandRejected, StepFailure, refused } from "./command-executor.ts";
+import { CommandRejected, StepFailure, io, refused } from "./command-executor.ts";
 import { readJournalSnapshot } from "./journal-snapshot.ts";
 import { nativeEffect, validateNativeInput } from "./native-input.ts";
 import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
@@ -14,6 +14,16 @@ import { renameReplacing } from "./rename-retry.ts";
 import { dirname, join, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
+import { Cause, Effect, Exit, FiberMap, type Fiber } from "effect";
+import type { HttpClient } from "effect/http";
+import type { FileSystem, Path } from "effect";
+import type { CausalParentId } from "../../../packages/agent-contracts/src/route-kernel-page.ts";
+import type {
+  RequestIdentity as IdentityKey,
+  RequestIdentityData,
+  ValidatedOwner,
+} from "@pe/host-internal/request-contracts";
+import { RequestIdentity, admittedRequestIdentity } from "./request-services.ts";
 import { z } from "zod";
 import {
   canonicalRouteInput,
@@ -25,7 +35,7 @@ import {
   type Consumed,
   type Claim,
   type NativeProcess,
-  type Effect,
+  type Effect as RouteEffect,
   type WorkKey,
   type RouteStatePatch,
   type RouteStateWriteResult,
@@ -73,6 +83,8 @@ import {
 export type Crossing = {
   readonly caller: Caller;
   readonly basis: Basis | null;
+  /** The submitting request's id: the owned attempt's causal parent, never its context. */
+  readonly parent?: string;
 };
 
 const messageOf = (error: unknown) =>
@@ -207,28 +219,65 @@ export type StepOptions<A> = {
     result: A,
   ): { action: string; claim: Claim }[] | Promise<{ action: string; claim: Claim }[]>;
 };
+/** The services the journal Layer holds once for every attempt it owns. */
+export type AttemptHost = FileSystem.FileSystem | Path.Path | HttpClient.HttpClient;
+/** An attempt reads its journal-owned identity, never its submitter's request context. */
+export type AttemptServices = AttemptHost | IdentityKey;
+/** A step of an owned attempt: the error channel carries what the step threw, typed or not. */
+export type Step<A> = Effect.Effect<A, unknown, AttemptServices>;
 export type ActionExecution = {
   step<A>(
     kind: ActionStep["kind"],
     key: string,
     input: unknown,
-    execute: (requestId: string) => Promise<A>,
+    execute: (requestId: string) => Step<A>,
     options?: StepOptions<A>,
-  ): Promise<A>;
-  effect(effect: Effect): Promise<void>;
+  ): Step<A>;
+  effect(effect: RouteEffect): Step<void>;
   publishWork(
     key: WorkKey,
     route: string,
     patches: readonly RouteStatePatch[],
-  ): Promise<Extract<RouteStateWriteResult, { ok: true }>>;
+  ): Step<Extract<RouteStateWriteResult, { ok: true }>>;
   retireWork(
     key: WorkKey,
     route: string,
     paths: readonly WorkPath[],
-  ): Promise<{ retired: WorkPath[]; revision: number }>;
+  ): Step<{ retired: WorkPath[]; revision: number }>;
   readonly prepared: unknown;
   recorded(kind: ActionStep["kind"], key: string): ActionStep | undefined;
-  retire(id: string, reason: string): Promise<ActionStep>;
+  retire(id: string, reason: string): Step<ActionStep>;
+};
+/** Fibers by key in the journal Layer's scope; a fork under a running key joins it, never replaces it. */
+export type FiberOwner = {
+  readonly map: FiberMap.FiberMap<string, unknown, unknown>;
+  readonly fork: (
+    key: string,
+    effect: Effect.Effect<unknown, unknown, AttemptHost>,
+  ) => Fiber.Fiber<unknown, unknown>;
+};
+/** Attempts by action id and op.cancel sends by step id: never one map, so neither key reaches the other. */
+export type Attempts = { readonly attempts: FiberOwner; readonly cancels: FiberOwner };
+const joined = (fiber: Fiber.Fiber<unknown, unknown>) =>
+  new Promise<Exit.Exit<unknown, unknown>>((resolve) => fiber.addObserver(resolve));
+/** Rule 14: the journal owns the attempt; the submitting request is only its causal parent. */
+const ownerIdentity = (row: ActionReceipt, parent?: string): RequestIdentityData => {
+  const identity = admittedRequestIdentity(
+    row.caller,
+    row.target.kind === "document"
+      ? { bridgeSessionId: row.target.ref.session, openDocumentId: row.target.ref.openId }
+      : row.target.kind === "session"
+        ? { bridgeSessionId: row.target.session }
+        : {},
+  );
+  return Object.freeze({
+    ...identity,
+    ownership: Object.freeze({
+      ...identity.ownership,
+      owner: row.id as ValidatedOwner,
+      causalParent: parent as CausalParentId | undefined,
+    }),
+  });
 };
 /** The bridge answers a cancelled request 499 (BridgeOperationExceptions.CancelledStatusCode). */
 const CANCELLED_STATUS = 499;
@@ -464,7 +513,6 @@ export class ActionJournal implements ReceiptReader {
   private readonly subscribers = new Set<(receipt: Receipt) => void>();
   private loaded?: Promise<void>;
   private tail: Promise<unknown> = Promise.resolve();
-  private readonly pending = new Map<string, Promise<ActionReceipt>>();
   /** `closing` refuses admission; `flushed` refuses every write after the final flush. */
   private closing = false;
   private flushed = false;
@@ -485,6 +533,8 @@ export class ActionJournal implements ReceiptReader {
     private readonly now: () => number,
     private readonly stamp: () => ReceiptStamp | null = () => null,
     private readonly retain = RETAIN_RECEIPTS,
+    /** Absent only on a read-side journal (a restart reader); such a journal admits nothing. */
+    private readonly owners?: Attempts,
   ) {}
   /** Bound once when the host/demo/test runtime acquires its exact bridge and Work owner. */
   bindCommands(environment: CommandEnvironment): void {
@@ -735,8 +785,9 @@ export class ActionJournal implements ReceiptReader {
   }
   async wait(id: string): Promise<ActionReceipt> {
     await this.loadOnce();
-    const pending = this.pending.get(id);
-    if (pending) await pending;
+    const attempt = this.owners && FiberMap.getUnsafe(this.owners.attempts.map, id);
+    const exit = attempt?._tag === "Some" ? await joined(attempt.value) : undefined;
+    if (exit && Exit.isFailure(exit)) throw Cause.squash(exit.cause);
     const row = (await this.list(undefined, id))[0];
     if (!row) throw Error(`Action '${id}' has no admitted receipt`);
     return row;
@@ -1122,6 +1173,8 @@ export class ActionJournal implements ReceiptReader {
   ): Promise<ActionReceipt> {
     const inputRefusal = this.inputContext?.check({ kind: "command", key: raw.key });
     if (inputRefusal) throw inputRefusal;
+    const attempts = this.owners?.attempts;
+    if (!attempts) throw Error("This journal has no attempt owner; it admits nothing");
     const admission = actionAdmissionSchema.parse(structuredClone(raw));
     const portable = commands[admission.key as keyof typeof commands];
     if (portable)
@@ -1284,7 +1337,7 @@ export class ActionJournal implements ReceiptReader {
             !original ||
             original.id === row.id ||
             original.prepared.state !== "ready" ||
-            this.pending.has(original.id) ||
+            (this.owners && FiberMap.hasUnsafe(this.owners.attempts.map, original.id)) ||
             original.state === "running" ||
             original.state === "waiting" ||
             original.steps.some((step) => step.state === "unknown" || step.state === "running")
@@ -1358,6 +1411,7 @@ export class ActionJournal implements ReceiptReader {
         });
       const releaseDispatch: (() => void)[] = [];
       let cursor = 0;
+      const journal = this;
       const execution: ActionExecution = {
         get prepared() {
           return row.prepared.state === "ready" ? structuredClone(row.prepared.value) : undefined;
@@ -1365,24 +1419,24 @@ export class ActionJournal implements ReceiptReader {
         recorded: (kind, key) =>
           structuredClone(row.steps.findLast((step) => step.kind === kind && step.key === key)),
         effect: (effect) =>
-          save((current) => ({
+          io(() => save((current) => ({
             ...current,
             effects: current.effects.some(
               (held) => canonicalRouteInput(held) === canonicalRouteInput(effect),
             )
               ? current.effects
               : [...current.effects, structuredClone(effect)],
-          })),
+          }))),
         publishWork: (key, route, patches) =>
-          execution.step("publication", "work.publish", { work: key, route, patches }, async () => {
+          execution.step("publication", "work.publish", { work: key, route, patches }, () => io(async () => {
             const work = this.environment?.work;
             const current = await this.workReads(row)?.view(key, route);
             if (!work || !current) throw Error("Work publication is unavailable");
             const result = await work.publish(key, route, [...patches], current.revision);
             if (!result.ok) throw new ActionIncomplete("Work publication did not land", result);
             return result;
-          }),
-        retireWork: async (key, route, paths) => {
+          })),
+        retireWork: (key, route, paths) => Effect.suspend(() => {
           const priorPublications = row.steps.filter(
             (step) =>
               step.state === "succeeded" &&
@@ -1409,19 +1463,20 @@ export class ActionJournal implements ReceiptReader {
                 (requested) => canonicalRouteInput(requested) === canonicalRouteInput(path),
               ),
             );
-          if (!outstanding.length) {
-            const current = await this.workReads(row)?.view(key, route);
-            if (!current) throw Error("Work retirement is unavailable");
-            return { retired: alreadyRetired, revision: current.revision };
-          }
+          if (!outstanding.length)
+            return io(async () => {
+              const current = await this.workReads(row)?.view(key, route);
+              if (!current) throw Error("Work retirement is unavailable");
+              return { retired: alreadyRetired, revision: current.revision };
+            });
           const continuation = cursor;
           cursor = row.steps.length;
-          try {
-            const result = await execution.step(
+          return execution
+            .step(
               "publication",
               "work.retire",
               { work: key, route, paths: outstanding },
-              async () => {
+              () => io(async () => {
                 if (
                   !row.effects.length ||
                   !row.steps.some(
@@ -1477,14 +1532,17 @@ export class ActionJournal implements ReceiptReader {
                   };
                 }
                 return { retired, revision: current.revision, patches, fulfilled: outstanding };
-              },
+              }),
+            )
+            .pipe(
+              Effect.map((result) => ({
+                retired: [...alreadyRetired, ...result.retired],
+                revision: result.revision,
+              })),
+              Effect.ensuring(Effect.sync(() => void (cursor = continuation))),
             );
-            return { retired: [...alreadyRetired, ...result.retired], revision: result.revision };
-          } finally {
-            cursor = continuation;
-          }
-        },
-        retire: async (id, reason) => {
+        }),
+        retire: (id, reason) => io(async () => {
           const ended = row.steps.find((step) => step.id === id);
           if (!resume || ended?.state !== "succeeded")
             throw Error("Only a resumed attempt retires a succeeded step");
@@ -1502,177 +1560,194 @@ export class ActionJournal implements ReceiptReader {
             steps: current.steps.map((step) => (step.id === id ? retired : step)),
           }));
           return structuredClone(retired);
-        },
-        step: async (kind, key, input, effect, options) => {
-          const process = options?.process;
-          if (kind === "native") validateNativeInput(key, input);
-          while (cursor < row.steps.length) {
-            const previous = row.steps[cursor++]!;
-            if (
-              previous.state === "succeeded" &&
-              previous.kind === "publication" &&
-              previous.key === "work.retire" &&
-              key !== "work.retire"
-            )
-              continue;
-            if (resume && previous.state === "failed") {
-              if (previous.notDispatched || previous.retired) continue;
-              throw Error(
-                "A dispatched failed effect needs explicit reconciliation before it can repeat",
-              );
-            }
-            if (
-              previous.kind !== kind ||
-              previous.key !== key ||
-              canonicalRouteInput(previous.input) !== canonicalRouteInput(input) ||
-              (process && canonicalRouteInput(previous.process) !== canonicalRouteInput(process))
-            )
-              throw Error(
-                "Original continuation differs from its recorded effect input or process",
-              );
-            if (previous.state === "succeeded") {
-              const result = structuredClone(previous.result) as never;
-              options?.check?.(result);
-              return result;
-            }
-            throw Error("An uncertain effect cannot be replayed");
-          }
-          if (retirementOnly && (kind !== "publication" || key !== "work.retire"))
-            throw new ActionIncomplete(
-              "Recovered effects require explicit resume before new external work",
-              null,
-            );
-          const incarnation = row.consumes.find(
-            (dependency) =>
-              dependency.kind === "incarnation" &&
-              canonicalRouteInput(dependency.probe.target) === canonicalRouteInput(row.target),
-          );
-          const exactProcess =
-            process ??
-            (incarnation?.kind === "incarnation" ? incarnation.probe.process : undefined);
-          const step: ActionStep = {
-            // Opaque caller ids cannot serve as the SDK's native request UUID.
-            id:
-              kind === "native" &&
-              !row.steps.some((step) => step.kind === "native") &&
-              z.uuid().safeParse(row.id).success
-                ? row.id
-                : randomUUID(),
-            kind,
-            key,
-            ...(kind === "native" && nativeEffect(key) ? { effect: nativeEffect(key) } : {}),
-            input: structuredClone(input),
-            ...(kind === "native" && exactProcess
-              ? { process: structuredClone(exactProcess) }
-              : {}),
-            state: "running",
-          };
-          await save((current) => ({ ...current, steps: [...current.steps, step] }));
-          cursor = row.steps.length;
-          if (kind === "native")
-            releaseDispatch.push(
-              bindActionDispatch(step.id, {
-                refusal: () => this.dispatchRefusal(step.id),
-                validate: () => this.validateDispatch(step.id),
-                dispatched: () => this.markDispatched(step.id),
-              }),
-            );
-          let result: Awaited<ReturnType<typeof effect>>;
-          let returned = false;
-          let entered = false;
-          try {
-            await this.export(row.id, `steps/${step.id}.json`, step).catch((error) => {
-              throw refused(`Step input export failed: ${String(error)}`, "step.export");
-            });
-            row = this.rows.get(row.id) ?? row;
-            const postcondition =
-              kind === "publication" &&
-              key === "work.retire" &&
-              row.steps.some(
-                (held) =>
-                  held.state === "succeeded" &&
-                  (held.kind === "file" || (held.kind === "native" && held.dispatchedAt)),
-              );
-            await gate(row, "step", postcondition);
-            entered = true;
-            result = await effect(step.id);
-            returned = true;
-            options?.check?.(result);
-          } catch (error) {
-            await save((current) => ({
-              ...current,
-              ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
-              steps: current.steps.map((held) => {
-                if (held.id !== step.id) return held;
-                const outcome: DispatchFailure = !entered
-                  ? {
-                      state:
-                        error instanceof StepFailure && error.status === 499
-                          ? "cancelled"
-                          : "failed",
-                      error: messageOf(error),
-                      status: error instanceof StepFailure ? error.status : 409,
-                      notDispatched: true,
-                    }
-                  : returned
-                    ? error instanceof StepFailure && error.outcome !== "refused"
-                      ? failure(error)
-                      : {
-                          state: "failed",
-                          error: messageOf(error),
-                          status: 409,
-                          evidence: { result: structuredClone(result) },
-                        }
-                    : entered && error instanceof CommandRejected
-                      ? { state: "unknown", error: error.message, status: 503 }
-                      : failure(error);
-                // A domain refusal cannot erase the journal's durable dispatch evidence.
-                if (held.dispatchedAt && "notDispatched" in outcome && outcome.notDispatched) {
-                  const { notDispatched: _, ...uncertain } = outcome;
-                  return { ...held, ...uncertain, state: "unknown" };
+        }),
+        step: (kind, key, input, effect, options) =>
+          Effect.gen(function* () {
+            const begun = yield* io(async (): Promise<{ replayed: unknown } | { step: ActionStep }> => {
+              const process = options?.process;
+              if (kind === "native") validateNativeInput(key, input);
+              while (cursor < row.steps.length) {
+                const previous = row.steps[cursor++]!;
+                if (
+                  previous.state === "succeeded" &&
+                  previous.kind === "publication" &&
+                  previous.key === "work.retire" &&
+                  key !== "work.retire"
+                )
+                  continue;
+                if (resume && previous.state === "failed") {
+                  if (previous.notDispatched || previous.retired) continue;
+                  throw Error(
+                    "A dispatched failed effect needs explicit reconciliation before it can repeat",
+                  );
                 }
-                return { ...held, ...outcome };
+                if (
+                  previous.kind !== kind ||
+                  previous.key !== key ||
+                  canonicalRouteInput(previous.input) !== canonicalRouteInput(input) ||
+                  (process && canonicalRouteInput(previous.process) !== canonicalRouteInput(process))
+                )
+                  throw Error(
+                    "Original continuation differs from its recorded effect input or process",
+                  );
+                if (previous.state === "succeeded") {
+                  const result = structuredClone(previous.result) as never;
+                  options?.check?.(result);
+                  return { replayed: result };
+                }
+                throw Error("An uncertain effect cannot be replayed");
+              }
+              if (retirementOnly && (kind !== "publication" || key !== "work.retire"))
+                throw new ActionIncomplete(
+                  "Recovered effects require explicit resume before new external work",
+                  null,
+                );
+              const incarnation = row.consumes.find(
+                (dependency) =>
+                  dependency.kind === "incarnation" &&
+                  canonicalRouteInput(dependency.probe.target) === canonicalRouteInput(row.target),
+              );
+              const exactProcess =
+                process ??
+                (incarnation?.kind === "incarnation" ? incarnation.probe.process : undefined);
+              const step: ActionStep = {
+                // Opaque caller ids cannot serve as the SDK's native request UUID.
+                id:
+                  kind === "native" &&
+                  !row.steps.some((step) => step.kind === "native") &&
+                  z.uuid().safeParse(row.id).success
+                    ? row.id
+                    : randomUUID(),
+                kind,
+                key,
+                ...(kind === "native" && nativeEffect(key) ? { effect: nativeEffect(key) } : {}),
+                input: structuredClone(input),
+                ...(kind === "native" && exactProcess
+                  ? { process: structuredClone(exactProcess) }
+                  : {}),
+                state: "running",
+              };
+              await save((current) => ({ ...current, steps: [...current.steps, step] }));
+              cursor = row.steps.length;
+              if (kind === "native")
+                releaseDispatch.push(
+                  bindActionDispatch(step.id, {
+                    refusal: () => journal.dispatchRefusal(step.id),
+                    validate: () => journal.validateDispatch(step.id),
+                    dispatched: () => journal.markDispatched(step.id),
+                  }),
+                );
+              return { step };
+            });
+            if ("replayed" in begun) return begun.replayed as never;
+            const { step } = begun;
+            let result: unknown;
+            let returned = false;
+            let entered = false;
+            // The native step runs on this owned attempt fiber; only its own exit settles it.
+            const attempt = yield* Effect.exit(
+              Effect.gen(function* () {
+                yield* io(async () => {
+                  await journal.export(row.id, `steps/${step.id}.json`, step).catch((error) => {
+                    throw refused(`Step input export failed: ${String(error)}`, "step.export");
+                  });
+                  row = journal.rows.get(row.id) ?? row;
+                  const postcondition =
+                    kind === "publication" &&
+                    key === "work.retire" &&
+                    row.steps.some(
+                      (held) =>
+                        held.state === "succeeded" &&
+                        (held.kind === "file" || (held.kind === "native" && held.dispatchedAt)),
+                    );
+                  await gate(row, "step", postcondition);
+                });
+                entered = true;
+                result = yield* effect(step.id);
+                returned = true;
+                options?.check?.(result as never);
               }),
-            }));
-            throw error;
-          }
-          // Persistence is outside the effect catch: a missing receipt never proves no dispatch.
-          const releases = (await options?.releases?.(result)) ?? [];
-          const dispatched = this.rows
-            .get(row.id)
-            ?.steps.find((held) => held.id === step.id)?.dispatchedAt;
-          if (
-            releases.length &&
-            (kind !== "native" ||
-              !dispatched ||
-              releases.some(
-                (release) =>
-                  release.claim.kind !== "session-slot" ||
-                  !this.rows
-                    .get(release.action)
-                    ?.claims.some(
-                      (claim) => canonicalRouteInput(claim) === canonicalRouteInput(release.claim),
-                    ),
-              ))
-          )
-            throw Error(
-              "A logical session claim releases only with a matching dispatched native outcome",
             );
-          await save((current) => ({
-            ...current,
-            steps: current.steps.map((held) =>
-              held.id === step.id
-                ? {
-                    ...held,
-                    state: "succeeded",
-                    result: structuredClone(result ?? null),
-                    ...(releases.length ? { releases: structuredClone(releases) } : {}),
-                  }
-                : held,
-            ),
-          }));
-          return result;
-        },
+            if (Exit.isFailure(attempt)) {
+              const error = Cause.squash(attempt.cause);
+              yield* io(() =>
+                save((current) => ({
+                  ...current,
+                  ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
+                  steps: current.steps.map((held) => {
+                    if (held.id !== step.id) return held;
+                    const outcome: DispatchFailure = !entered
+                      ? {
+                          state:
+                            error instanceof StepFailure && error.status === 499
+                              ? "cancelled"
+                              : "failed",
+                          error: messageOf(error),
+                          status: error instanceof StepFailure ? error.status : 409,
+                          notDispatched: true,
+                        }
+                      : returned
+                        ? error instanceof StepFailure && error.outcome !== "refused"
+                          ? failure(error)
+                          : {
+                              state: "failed",
+                              error: messageOf(error),
+                              status: 409,
+                              evidence: { result: structuredClone(result) },
+                            }
+                        : entered && error instanceof CommandRejected
+                          ? { state: "unknown", error: error.message, status: 503 }
+                          : failure(error);
+                    // A domain refusal cannot erase the journal's durable dispatch evidence.
+                    if (held.dispatchedAt && "notDispatched" in outcome && outcome.notDispatched) {
+                      const { notDispatched: _, ...uncertain } = outcome;
+                      return { ...held, ...uncertain, state: "unknown" };
+                    }
+                    return { ...held, ...outcome };
+                  }),
+                })),
+              );
+              return yield* Effect.failCause(attempt.cause);
+            }
+            yield* io(async () => {
+              // Persistence is outside the effect catch: a missing receipt never proves no dispatch.
+              const releases = (await options?.releases?.(result as never)) ?? [];
+              const dispatched = journal.rows
+                .get(row.id)
+                ?.steps.find((held) => held.id === step.id)?.dispatchedAt;
+              if (
+                releases.length &&
+                (kind !== "native" ||
+                  !dispatched ||
+                  releases.some(
+                    (release) =>
+                      release.claim.kind !== "session-slot" ||
+                      !journal.rows
+                        .get(release.action)
+                        ?.claims.some(
+                          (claim) => canonicalRouteInput(claim) === canonicalRouteInput(release.claim),
+                        ),
+                  ))
+              )
+                throw Error(
+                  "A logical session claim releases only with a matching dispatched native outcome",
+                );
+              await save((current) => ({
+                ...current,
+                steps: current.steps.map((held) =>
+                  held.id === step.id
+                    ? {
+                        ...held,
+                        state: "succeeded",
+                        result: structuredClone(result ?? null),
+                        ...(releases.length ? { releases: structuredClone(releases) } : {}),
+                      }
+                    : held,
+                ),
+              }));
+            });
+            return result as never;
+          }),
       };
       let validated = row.prepared.state === "ready";
       const persistenceFailed = (error: unknown) => {
@@ -1704,8 +1779,7 @@ export class ActionJournal implements ReceiptReader {
           );
         }
       });
-      const completion = Promise.resolve()
-        .then(async () => {
+      const authorized = async () => {
           if (!prior)
             await this.export(row.id, "admission.json", {
               ...admission,
@@ -1745,19 +1819,20 @@ export class ActionJournal implements ReceiptReader {
           }
           validated = true;
           await gate(row, "prepared");
-          const result = await executor.run(context, execution);
-          return definition.result ? definition.result.parse(result) : result;
-        })
-        .then(
-          (result) => settle(true, row.steps, { kind: "returned", result }),
-          (error) => ({
-            ...settle(validated, row.steps, { kind: "threw", error })!,
-            ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
-          }),
-        )
-        .then((settled) => ({ ...unsettled(row), ...settled }) as ActionReceipt)
-        .then((finished) =>
-          this.serial(async () => {
+      };
+      // Rule 2g: settle inside the Exit, so every exit (interruption included) commits once.
+      const settleExit = (exit: Exit.Exit<unknown, unknown>) => {
+        const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+        const finished = {
+          ...unsettled(row),
+          ...(Exit.isSuccess(exit)
+            ? settle(true, row.steps, { kind: "returned", result: exit.value })
+            : {
+                ...settle(validated, row.steps, { kind: "threw", error })!,
+                ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
+              }),
+        } as ActionReceipt;
+        return this.serial(async () => {
             const next = actionReceiptSchema.parse({
               ...finished,
               steps: interruptedSteps(finished.steps),
@@ -1773,7 +1848,6 @@ export class ActionJournal implements ReceiptReader {
                 status: 503,
               });
               this.notify();
-              this.pending.delete(row.id);
               throw error;
             } finally {
               this.activeCallers.delete(row.id);
@@ -1781,15 +1855,28 @@ export class ActionJournal implements ReceiptReader {
               releaseDispatch.forEach((release) => release());
             }
             this.notify();
-            this.pending.delete(row.id);
             return structuredClone(next);
-          }),
-        );
-      this.pending.set(row.id, completion);
-      void completion.catch((error) => {
-        console.error("action-journal: asynchronous operation failed", error);
-        return undefined;
-      });
+          });
+      };
+      // Rule 10, durable command: the attempt is forked into the journal's scope under the
+      // journal's identity. The submitting request is its causal parent and cannot reach it.
+      attempts.fork(
+        row.id,
+        Effect.uninterruptibleMask((restore) =>
+          restore(
+            io(authorized).pipe(
+              Effect.andThen(() => executor.run(context, execution)),
+              Effect.map((result) => (definition.result ? definition.result.parse(result) : result)),
+            ),
+          ).pipe(
+            Effect.exit,
+            Effect.flatMap((exit) => io(() => settleExit(exit))),
+            Effect.tapCause((cause) =>
+              Effect.sync(() => console.error("action-journal: completion failed", Cause.pretty(cause))),
+            ),
+          ),
+        ).pipe(Effect.provideService(RequestIdentity, ownerIdentity(row, crossing.parent))),
+      );
       return structuredClone(row);
     });
     return admitted ?? this.invoke(raw, crossing, resume);
@@ -1813,8 +1900,11 @@ export class ActionJournal implements ReceiptReader {
     const step = row.steps.find((step) => step.state === "running" && step.kind === "native");
     if (step) {
       const cancel = this.environment?.resolve(row.key).cancel;
-      if (!cancel) throw Error("Native cancellation is unavailable");
-      await cancel(step.id);
+      if (!cancel || !this.owners) throw Error("Native cancellation is unavailable");
+      // op.cancel to Revit, owned by the journal like the attempt (rule 11: never an interrupt). A
+      // concurrent Stop on this step joins the send already running and sends nothing new.
+      const exit = await joined(this.owners.cancels.fork(step.id, cancel(step.id)));
+      if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
     }
     return (await this.list(undefined, id))[0] ?? row;
   }
@@ -1951,7 +2041,10 @@ export class ActionJournal implements ReceiptReader {
     // Idempotent: a runtime's scope finalizer may follow an explicit close.
     if (this.flushed) return;
     this.closing = true;
-    while (this.pending.size) await Promise.allSettled([...this.pending.values()]);
+    // Join, never interrupt: an admitted command settles from its own evidence (rule 10).
+    const open = () => this.owners ? [...this.owners.attempts.map, ...this.owners.cancels.map] : [];
+    for (let fibers = open(); fibers.length; fibers = open())
+      await Promise.all(fibers.map(([, fiber]) => joined(fiber)));
     await this.serial(async () => {
       this.flushed = true;
     });

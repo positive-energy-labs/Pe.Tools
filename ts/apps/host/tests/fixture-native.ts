@@ -6,9 +6,9 @@ import { createFixtureHost } from "../../../packages/host-contracts/src/fixture-
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
-import { settle } from "./effect-test.ts";
+import { settle, callRouteOver } from "./effect-test.ts";
+import type { makeCallRoute } from "../src/call-route.ts";
 import { gatewayNativeLeaves } from "../src/gateway-actions.ts";
-import { makeCallRoute } from "../src/call-route.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
@@ -101,7 +101,7 @@ export async function fixtureNative(
       selected = { responses: { ...selected.responses, ...next.responses }, sources: { ...selected.sources, ...next.sources } };
       transport = makeTransport();
     },
-    actions(deps: Parameters<typeof makeCallRoute>[2] = {}, captures?: Parameters<typeof makeCallRoute>[1], composition: Parameters<typeof makeCallRoute>[3] = {}, routes: Layer.Layer<never, any, any> = Layer.empty) {
+    actions(deps: Parameters<typeof makeCallRoute>[1] = {}, captures?: Parameters<typeof makeCallRoute>[0], composition: Parameters<typeof makeCallRoute>[2] = {}, routes: Layer.Layer<never, any, any> = Layer.empty) {
       const readSdk = deps.sdk ?? sdkSessions;
       const dependencies = { ...deps, sdk: async (args: readonly string[]) => {
         const reply = args[0] === "op" && args[1] === "result" ? recoveryReplies.get(args[2]!) : undefined;
@@ -116,7 +116,7 @@ export async function fixtureNative(
         envelope.result.response = reply.value;
         return JSON.stringify(envelope);
       } };
-      const web = serveRoutes(Layer.mergeAll(routes, makeCallRoute(journal, captures, dependencies, composition)).pipe(
+      const web = serveRoutes(Layer.mergeAll(routes, callRouteOver(journal, captures, dependencies, composition)).pipe(
         Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
         Layer.provideMerge(PictureCaptureStore.layer(join(directory, "pictures"))),
       ), bridge, Layer.succeed(SdkDriver, args => Effect.promise(() => dependencies.sdk(args))));

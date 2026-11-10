@@ -1,4 +1,4 @@
-import { pictureCaptures } from "./effect-test.ts";
+import { pictureCaptures, journalAt } from "./effect-test.ts";
 import { testConsents } from "./effect-test.ts";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,7 +10,6 @@ import { createHash } from "node:crypto";
 import { Layer, Context, Effect } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { PictureCaptures, PictureCaptureStore, capturesRoute } from "../src/captures-route.ts";
-import { ActionJournal } from "../src/action-journal.ts";
 import { bindControl } from "../src/control.ts";
 import {
   commitPagePublication,
@@ -33,7 +32,7 @@ async function fixture(caller: Caller = human) {
   await writeFile(join(root, "flow", "index.html"), "old");
   await writeFile(join(root, "flow", ".state", "binding.json"), "binding retained");
   const captures = pictureCaptures(join(home, "captures"));
-  const journal = new ActionJournal(join(home, "actions.json"), Date.now);
+  const journal = journalAt(join(home, "actions.json"), Date.now);
   const executor = pagePublicationExecutor(root, "http://fixture", pageLibrary, captures);
   journal.bindCommands({
     resolve: () => executor,

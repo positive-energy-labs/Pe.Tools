@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { command, StepFailure } from "./command-executor.ts";
+import { command, io, StepFailure } from "./command-executor.ts";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { lstat, readdir, readFile } from "node:fs/promises";
@@ -453,13 +453,13 @@ export const pagePublicationExecutor = (
           }),
         };
       },
-      async run(_context, execution) {
+      run(_context, execution) {
         const frozen = execution.prepared;
         return execution.step(
           "publication",
           "page.publish",
           { slug: frozen.publication.input.slug },
-          () => commitPagePublication(root, frozen.publication, frozen.version),
+          () => io(() => commitPagePublication(root, frozen.publication, frozen.version)),
         );
       },
     },

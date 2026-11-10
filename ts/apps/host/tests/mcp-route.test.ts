@@ -1,3 +1,4 @@
+import { journalAt } from "./effect-test.ts";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -7,7 +8,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PostHog } from "posthog-node";
-import { ActionJournal } from "../src/action-journal.ts";
 import { createReceiptExport, type ReceiptExporter } from "../src/receipt-export.ts";
 import { HttpRouter } from "effect/http";
 import { buildCapabilities } from "@pe/mcps";
@@ -104,7 +104,7 @@ async function fixture(telemetry?: ReceiptExporter) {
   if (!telemetry) {
     const root = mkdtempSync(join(tmpdir(), "pe-mcp-local-"));
     telemetry = createReceiptExport({
-      journal: new ActionJournal(join(root, "journal.json"), Date.now),
+      journal: journalAt(join(root, "journal.json"), Date.now),
       root,
       stamps: { host: null, web: null },
     });
@@ -365,7 +365,7 @@ test("an MCP session cannot borrow another thread's context on the same local pr
 
 test("real HTTP MCP schemas/results match off/on; the adapter never sends directly or exports sentinel content", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-mcp-analytics-"));
-  const journal = new ActionJournal(join(dir, "journal.json"), Date.now);
+  const journal = journalAt(join(dir, "journal.json"), Date.now);
   const sent: { properties: Record<string, unknown>; event: string }[] = [];
   const client = new PostHog("test-ingest", {
     flushInterval: 0,

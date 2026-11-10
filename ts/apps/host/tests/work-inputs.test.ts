@@ -1,3 +1,4 @@
+import { journalAt } from "./effect-test.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -653,7 +654,7 @@ test("command Work reads carry context through binding and revalidation", async 
     store: memory(),
     capture: capturedWorkReads(writer, run),
   });
-  const journal = new ActionJournal(join(dir, "journal.json"), Date.now);
+  const journal = journalAt(join(dir, "journal.json"), Date.now);
   const request = await consumer({ kind: "live", captureStore: writer });
   journal.bindCommands({
     work: workspace,
@@ -669,7 +670,7 @@ test("command Work reads carry context through binding and revalidation", async 
         await ctx.selectWork(tools.ducts.work, { key: commandWorkKey, revision: 0 });
         return { prepare: async () => null, effects: [] };
       },
-      run: async () => ({
+      run: () => Effect.succeed({
         previewOnly: true,
         derivedRequest: {},
         seal: {

@@ -372,7 +372,6 @@ test("JP4 save rendered settings through delayed HTTP and inspect a pane fault d
 });
 
 import { createRequire } from "node:module";
-import { ActionJournal } from "../../../host/src/action-journal";
 import { createReceiptExport } from "../../../host/src/receipt-export";
 import { receiptGoldenEnvelope } from "../../../../packages/agent-contracts/tests/receipt-fixture";
 import { withInvocationContext } from "@pe/runtime/context";
@@ -380,7 +379,7 @@ import { withInvocationContext } from "@pe/runtime/context";
 async function sendFeedbackWhileDeliveryWaits() {
   const dir = await mkdtemp(resolve(tmpdir(), "jp-feedback-"));
   const stamp = receiptGoldenEnvelope.stamp!;
-  const journal = new ActionJournal(resolve(dir, "journal.json"), Date.now, () => stamp);
+  const journal = journalAt(resolve(dir, "journal.json"), Date.now, () => stamp);
   const request = Promise.withResolvers<Response>();
   let sends = 0;
   // Load the host's actual SDK dependency; the only recorded boundary is its network transport.
@@ -621,6 +620,7 @@ import { machineFixture } from "../../../../packages/agent-contracts/tests/machi
 import { hostResourceObserver } from "../../../host/src/resource-adapters";
 import { resourceSnapshot } from "@pe/runtime";
 import { readingKey } from "@pe/agent-contracts";
+import { journalAt } from "../../../host/tests/effect-test";
 import { module as openRoute } from "../open/route";
 import { OpenBody } from "../open/mount";
 const openNavigation = vi.hoisted(() => ({ bypass: false }));

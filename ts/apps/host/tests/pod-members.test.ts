@@ -1,4 +1,4 @@
-import { detachedBridge, captureStore } from "./effect-test.ts";
+import { detachedBridge, captureStore, journalAt } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { Effect, FileSystem, PlatformError } from "effect";
 import { NodeServices } from "@effect/platform-node";
@@ -8,7 +8,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memberWork, settingsRouteState } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
-import { ActionJournal } from "../src/action-journal.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import { writeFileStringAtomic } from "../src/files/index.ts";
@@ -189,16 +188,14 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
     observed.revision,
   );
   if (!authored.ok) throw Error("Expected accepted authored Work");
-  const owner = new ActionJournal(join(root, "journal.json"), Date.now);
+  const owner = journalAt(join(root, "journal.json"), Date.now);
   const bridge = detachedBridge();
   bindCommandRuntime(
     owner,
     bridge,
     captureStore(join(root, "captures")),
     { workspace: work, podsRoot: root },
-    async () => {
-      throw Error("settings.write owns its writer");
-    },
+    () => Effect.fail(Error("settings.write owns its writer")),
   );
   const admit = (id: string, input: Record<string, unknown>, revision: number) =>
     owner

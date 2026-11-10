@@ -1,4 +1,4 @@
-import { testConsents } from "./effect-test.ts";
+import { testConsents, journalAt } from "./effect-test.ts";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -9,7 +9,6 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "vite-plus/test";
 import { type HarnessEvent, type Receipt } from "@pe/agent-contracts";
-import { ActionJournal } from "../src/action-journal.ts";
 import {
   projectReceipt,
   createReceiptExport,
@@ -60,7 +59,7 @@ test("export command codes match concrete Pe.App command classes and build admis
 });
 function fixture() {
   const dir = mkdtempSync(join(tmpdir(), "pe-export-"));
-  const journal = new ActionJournal(join(dir, "journal.json"), Date.now, () => stamp);
+  const journal = journalAt(join(dir, "journal.json"), Date.now, () => stamp);
   const sent: unknown[] = [];
   const exporter = createReceiptExport({
     journal,
@@ -133,7 +132,7 @@ test("the actual PostHog client wire carries the original receipt timestamp and 
       return new Response("{}", { status: 200 });
     },
   });
-  const journal = new ActionJournal(join(dir, "journal.json"), Date.now);
+  const journal = journalAt(join(dir, "journal.json"), Date.now);
   const exporter = createReceiptExport({
     journal,
     root: dir,
@@ -499,7 +498,7 @@ test("a send past its deadline is aborted on the wire, one at a time, and frees 
         });
       }),
   );
-  const journal = new ActionJournal(join(dir, "journal.json"), Date.now);
+  const journal = journalAt(join(dir, "journal.json"), Date.now);
   const exporter = createReceiptExport({
     journal,
     root: dir,
@@ -523,7 +522,7 @@ test("a send past its deadline is aborted on the wire, one at a time, and frees 
 
 test("feedback never reports failed, or offers a second send, while its first send is still in flight", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-feedback-flight-"));
-  const journal = new ActionJournal(join(dir, "journal.json"), Date.now, () => stamp);
+  const journal = journalAt(join(dir, "journal.json"), Date.now, () => stamp);
   const requests: unknown[] = [];
   let release: (status: number) => void = () => {};
   const client = new PostHog("explicit-test-key", {

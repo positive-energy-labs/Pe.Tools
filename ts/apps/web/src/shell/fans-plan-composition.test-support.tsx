@@ -21,7 +21,6 @@ import { HostSessionInventory } from "../../../host/src/session-inventory";
 import { DuctFiles } from "../../../host/src/ducts-files";
 import { RevitBridge, RevitBridgeLive } from "../../../host/src/bridge";
 import { SdkSession } from "../../../host/src/sdk-session";
-import { ActionJournalService } from "../../../host/src/receipt-services";
 import { ReadOwner } from "../../../host/src/builtin-inputs";
 import { makeCallRoute } from "../../../host/src/call-route";
 import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
@@ -41,13 +40,12 @@ const trace = vi.hoisted(()=>({gates:[] as any[],tokens:[] as any[],samples:[] a
 vi.mock("../../../host/src/installed-pods",async actual=>({
  ...await actual<typeof import("../../../host/src/installed-pods")>(),importShippedPods:async()=>({shippedRoot:null,outcomes:[]}),
 }));
-vi.mock("../../../host/src/bridge",async actual=>{
- const real=await actual<typeof import("../../../host/src/bridge")>();
- return {...real,invokeBridge:async(...args:Parameters<typeof real.invokeBridge>)=>{
-   const answer=await real.invokeBridge(...args);
-   if(args[2]==="ducts.apply.plan") await trace.holdPlan();
-   return answer;
- }};
+// Command steps reach Revit through `nativeStep`; hold Plan after its native answer settles.
+vi.mock("../../../host/src/command-executor",async actual=>{
+ const real=await actual<typeof import("../../../host/src/command-executor")>();
+ const {Effect}=await import("effect");
+ return {...real,nativeStep:(...args:Parameters<typeof real.nativeStep>)=>real.nativeStep(...args).pipe(
+   Effect.tap(()=>args[2]==="ducts.apply.plan"?Effect.promise(()=>trace.holdPlan()):Effect.void))};
 });
 vi.mock("../host/runtime",()=>({hostFetch:trace.fetch,runtimeStreamUrl:(url:string)=>new URL(url,trace.base).toString()}));
 vi.mock("../../../host/src/session-route",async actual=>{const real=await actual<any>();const {Effect}=await import("effect");const {sdkSessions}=await import("../../../host/tests/native-receipt-fixture");return {...real,runPeRevitCli:(args:any)=>Effect.promise(()=>sdkSessions(args))};});
@@ -106,7 +104,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  const inputs=await Effect.runPromise(HostInputContext.pipe(Effect.provide(HostInputContext.layer({kind:"live",captureStore}))));
  const writer=inputs.lane.kind==="live"?inputs.lane.captureStore:undefined;
  if(writer){const stop=writer.capture.stop;vi.spyOn(writer.capture,"stop").mockImplementation((at,reason,source)=>{trace.stops.push({at,reason,stack:new Error().stack});return stop(at,reason,source);});}
- const host=await bootHost({inputs,reads:{live:{marks:ambient(HostDocumentMarks),inventory:HostSessionInventory.layer.pipe(Layer.provide(Layer.mergeAll(ambient(RevitBridge),ambient(SdkSession)))),files:DuctFiles.layer(),native}},revitCompositionFactory:()=>({provider:RevitBridgeLive,routes:Layer.unwrap(Effect.gen(function*(){const reads=yield* ReadOwner;return makeCallRoute(yield* ActionJournalService,undefined,{workspace:reads.work.workspace,sdk:sdkSessions,workReads:reads.work.reads},{pointers:reads.work.pointers,retainedRead:reads.retainedCall,nativeBody:reads.nativeBody});})).pipe(Layer.provide(native))})});
+ const host=await bootHost({inputs,reads:{live:{marks:ambient(HostDocumentMarks),inventory:HostSessionInventory.layer.pipe(Layer.provide(Layer.mergeAll(ambient(RevitBridge),ambient(SdkSession)))),files:DuctFiles.layer(),native}},revitCompositionFactory:()=>({provider:RevitBridgeLive,routes:Layer.unwrap(Effect.gen(function*(){const reads=yield* ReadOwner;return yield* makeCallRoute(undefined,{workspace:reads.work.workspace,sdk:sdkSessions,workReads:reads.work.reads},{pointers:reads.work.pointers,retainedRead:reads.retainedCall,nativeBody:reads.nativeBody});})).pipe(Layer.provide(native))})});
  trace.base=host.base;
  const subscriptionChanges:any[]=[];
  const forward=async(url:any,init:any={})=>{

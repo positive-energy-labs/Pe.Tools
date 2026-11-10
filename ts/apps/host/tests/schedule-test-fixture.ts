@@ -1,4 +1,4 @@
-import { testDocumentMarks } from "./effect-test.ts";
+import { testDocumentMarks, journalAt, callRouteOver } from "./effect-test.ts";
 import { graphRoute } from "../src/reads/routes.ts";
 import { Publications } from "../src/reads/evaluator.ts";
 import { inputPort } from "../src/reads/inputs.ts";
@@ -22,11 +22,9 @@ import {
   type ActionAdmission,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
-import { ActionJournal } from "../src/action-journal.ts";
 import { BridgeError, type HostBridgeEvent } from "../src/bridge.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
 
-import { makeCallRoute } from "../src/call-route.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { sdkSessions, originalProcess } from "./native-receipt-fixture.ts";
 import { markDispatched } from "../src/action-dispatch.ts";
@@ -106,7 +104,7 @@ export async function setup(options: { cold?: boolean } = {}) {
     ],
   });
   const work = app.workspace;
-  let owner = new ActionJournal(join(dir, "actions.json"), Date.now);
+  let owner = journalAt(join(dir, "actions.json"), Date.now);
   const a = { session: "A", openId: "open-A" },
     b = { session: "B", openId: "open-B" };
   const document = address(join(dir, "Same.rvt"));
@@ -247,7 +245,7 @@ export async function setup(options: { cold?: boolean } = {}) {
   );
   const mount = () =>
     serveRoutes(
-      Layer.mergeAll(pe, makeCallRoute(owner, captures, { workspace: work, sdk }).pipe(Layer.provide(DuctFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(marks))))),
+      Layer.mergeAll(pe, callRouteOver(owner, captures, { workspace: work, sdk }).pipe(Layer.provide(DuctFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(marks))))),
       bridge,
     );
   let server = await mount();
@@ -411,7 +409,7 @@ export async function setup(options: { cold?: boolean } = {}) {
     release: () => release(),
     restart: async () => {
       await server.close();
-      owner = new ActionJournal(join(dir, "actions.json"), Date.now);
+      owner = journalAt(join(dir, "actions.json"), Date.now);
       server = await mount();
       capabilities = catalogSource();
     },

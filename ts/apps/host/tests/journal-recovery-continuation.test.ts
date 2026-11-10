@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -7,12 +8,12 @@ import { Context, Exit, Layer, Scope } from "effect";
 import { expect, test } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
 import { memberWork, settingsRouteState, type Caller, type WorkKey } from "@pe/agent-contracts";
-import { ActionJournal } from "../src/action-journal.ts";
+import { type ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import { bindControl } from "../src/control.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { captureStore, settle, testConsents } from "./effect-test.ts";
+import { captureStore, settle, testConsents, journalAt } from "./effect-test.ts";
 
 test.each([
   { later: null, pea: false, crash: true },
@@ -48,7 +49,7 @@ test.each([
       target: null,
       work: memberWork(member),
     };
-    const owner = new ActionJournal(path, Date.now);
+    const owner = journalAt(path, Date.now);
     let restarted: ActionJournal | undefined;
     try {
       await mkdir(join(directory, "design"));
@@ -91,9 +92,7 @@ test.each([
         bridge,
         captures,
         { workspace: work, podsRoot: directory },
-        async () => {
-          throw Error("settings.write owns its writer");
-        },
+        () => Effect.fail(Error("settings.write owns its writer")),
       );
       let crashBytes: Buffer | undefined;
       let workBytes: Array<readonly [string, Buffer]> = [];
@@ -147,15 +146,13 @@ test.each([
         if (!edited.ok) throw Error(JSON.stringify(edited));
       }
       runs.closeAll();
-      restarted = new ActionJournal(path, Date.now);
+      restarted = journalAt(path, Date.now);
       bindCommandRuntime(
         restarted,
         bridge,
         captures,
         { workspace: restoredWork, podsRoot: directory },
-        async () => {
-          throw Error("settings.write owns its writer");
-        },
+        () => Effect.fail(Error("settings.write owns its writer")),
       );
       expect((await restarted.list(undefined, "once"))[0]!.state).toBe(
         crash ? "incomplete" : "succeeded",
@@ -198,7 +195,7 @@ test.each([
       expect(originalSnapshot).toMatchObject({ address: key, workRevision: staged.revision });
       expect(settled.snapshots).toEqual([originalSnapshot]);
       expect(settled.outcome?.snapshots).toEqual([originalSnapshot.id]);
-      const durable = new ActionJournal(path, Date.now);
+      const durable = journalAt(path, Date.now);
       const reopened = (await durable.list(undefined, "once"))[0]!;
       expect(reopened.snapshots).toEqual([originalSnapshot]);
       expect(reopened.outcome?.snapshots).toEqual([originalSnapshot.id]);

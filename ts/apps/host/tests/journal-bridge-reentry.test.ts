@@ -1,10 +1,10 @@
+import { journalAt } from "./effect-test.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordingRequest, nativeRecordings } from "./native-recordings.ts";
-import { ActionJournal } from "../src/action-journal.ts";
 
 test("cold native command admission and its recorded outcome cross the real bridge and survive journal reconstruction", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-journal-bridge-recorded-"));
@@ -20,7 +20,7 @@ test("cold native command admission and its recorded outcome cross the real brid
     expect(native.calls.map(call => call.key)).toEqual(["host.ops.catalog", "revit.context.lens"]);
     expect(native.calls.every(call => call.action === "revit.context.lens")).toBe(true);
     await native.journal.close();
-    const restored = new ActionJournal(join(dir, "partition-operations.json"), Date.now);
+    const restored = journalAt(join(dir, "partition-operations.json"), Date.now);
     try { expect(await restored.wait("lens")).toEqual(result); }
     finally { await restored.close(); }
   } finally { await native.close(); await rm(dir, { recursive: true, force: true }); }

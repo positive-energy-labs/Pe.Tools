@@ -1,4 +1,4 @@
-import { testHostInputs } from "./effect-test.ts";
+import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,9 +6,7 @@ import { Context, Effect, Exit, Layer, Scope } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { expect, test } from "vite-plus/test";
 import { BridgeError as DispatchBridgeError } from "@pe/host-internal/dispatch";
-import { ActionJournal } from "../src/action-journal.ts";
 import { BridgeError, RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
-import { makeCallRoute } from "../src/call-route.ts";
 import { StepFailure } from "../src/command-executor.ts";
 import { serveRoutes } from "./real-server.ts";
 import { settle } from "./effect-test.ts";
@@ -23,8 +21,8 @@ async function failedCall(error: unknown) {
       Layer.buildWithScope(RevitBridgeLive.pipe(Layer.provide(NodeServices.layer)), scope),
     );
     const server = await serveRoutes(
-      makeCallRoute(
-        new ActionJournal(join(root, "journal.jsonl"), Date.now),
+      callRouteOver(
+        journalAt(join(root, "journal.jsonl"), Date.now),
         undefined,
         {},
         {
