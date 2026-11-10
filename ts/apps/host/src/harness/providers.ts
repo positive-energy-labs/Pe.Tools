@@ -58,7 +58,7 @@ const log = {
 const flatten = (option: SessionConfigOption & { type: "select" }) =>
   option.options.flatMap((o) => ("options" in o ? o.options : [o]));
 
-/** Mode follows the journal-safe harness policy; collaboration/plan mode is not a user trait. */
+/** The host picks the harness mode (ungated shell, ADR 0034); collaboration/plan mode is not a user trait. */
 const notTraits = new Set(["model", "mode", "collaboration_mode"]);
 
 function traitsOf(configOptions: readonly SessionConfigOption[]): TraitOption[] {

@@ -77,6 +77,7 @@ const session = (sessionId) => ({
     availableModes: [
       { id: "default", name: "Default" },
       { id: "read-only", name: "Read-only" },
+      { id: "agent-full-access", name: "Full access" },
       { id: "auto", name: "Auto" },
       { id: "bypassPermissions", name: "Bypass permissions" },
     ],

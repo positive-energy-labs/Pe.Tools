@@ -1,5 +1,4 @@
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
-import { peaProductTools } from "@pe/mcps";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
 import type { AdapterChild } from "./adapter.ts";
 import { createHash, randomUUID } from "node:crypto";
@@ -124,30 +123,6 @@ import {
   rememberTarget,
   type ObserveDocument,
 } from "../thread-work-context.ts";
-
-function isPeaTool(
-  call: RequestPermissionRequest["toolCall"],
-  events: HarnessEvent[],
-  turn: string | null,
-): boolean {
-  // Codex's correlated approval omits identity; its preceding tool_call owns that identity.
-  const recorded = events.findLast(
-    (event) =>
-      event.kind === "update" &&
-      event.turnId === turn &&
-      event.update.sessionUpdate === "tool_call" &&
-      event.update.toolCallId === call.toolCallId,
-  );
-  const tool = { ...(recorded?.kind === "update" ? recorded.update : {}), ...call };
-  if (tool.kind === "edit" || tool.kind === "delete" || tool.kind === "move") return false;
-  const input = tool.rawInput as { server?: unknown; tool?: unknown } | null | undefined;
-  const claude = tool._meta?.claudeCode as { toolName?: unknown } | undefined;
-  return Object.keys(peaProductTools).some(
-    (name) =>
-      (input?.server === "pea" && input.tool === name) ||
-      claude?.toolName === `mcp__pea__${name}`,
-  );
-}
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
@@ -1161,31 +1136,14 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         }
         scheduleIdle(t);
       },
-      // No per-call card (ADR 0027 rule 11). Reads, search, fetch, think and Pea's own MCP tools are
-      // answered here: Pea's tools cross the journal themselves (pe_do runs host commands under run
-      // consent). Adapter display titles are not tool identities. Every other kind has no host
-      // command or footprint and would bypass the journal: refused.
+      // The harness's own tools (shell, files, edits) are ungated (ADR 0034): this host answers every
+      // per-call approval with allow and shows no card. Revit and product state still change only
+      // through Pea's host commands (pe_do, run consent, the ActionJournal); the harness has no Revit door.
       requestPermission: async (request: RequestPermissionRequest) => {
         if (t.child !== child || t.stopped) return { outcome: { outcome: "cancelled" } };
-        const allowed =
-          isPeaTool(request.toolCall, t.events, t.running) ||
-          ["read", "search", "fetch", "think"].includes(request.toolCall.kind ?? "");
-        const pick = (prefix: "allow" | "reject") =>
-          request.options.find((option) => option.kind === `${prefix}_once`) ??
-          request.options.find((option) => option.kind.startsWith(prefix));
-        if (!allowed)
-          append(t, {
-            kind: "update",
-            turnId: t.running,
-            update: {
-              sessionUpdate: "tool_call_update",
-              toolCallId: request.toolCall.toolCallId,
-              status: "failed",
-              title:
-                "Native unjournaled writes are unsupported. Only read, search, fetch, think and Pea's own tools use this door; use Pea host semantic or causal CLI commands.",
-            },
-          });
-        const option = pick(allowed ? "allow" : "reject");
+        const option =
+          request.options.find((option) => option.kind === "allow_once") ??
+          request.options.find((option) => option.kind.startsWith("allow"));
         return option
           ? { outcome: { outcome: "selected", optionId: option.optionId } }
           : { outcome: { outcome: "cancelled" } };
@@ -1321,14 +1279,14 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     for (const [id, value] of Object.entries(wantTraits))
       if (t.meta.traits.find((trait) => trait.id === id)?.current !== value)
         await setTrait(t, live, id, value).catch(notReapplied(`${id} ${String(value)}`));
-    // Product writes cross the journal; requestPermission answers only reads and Pea's tools.
+    // The harness's normal ungated shell (ADR 0034): bypass for Claude (default answers every ask
+    // allow in requestPermission, so it is the same shell when the adapter withholds bypass), full
+    // access for Codex, whose read-only sandbox would block the shell itself.
     const offered = new Set(session.modes?.availableModes.map((m) => m.id));
-    const required = harness === "codex" ? ["read-only"] : ["default"];
-    const mode = required.find((candidate) => offered.has(candidate));
+    const wanted = harness === "codex" ? ["agent-full-access"] : ["bypassPermissions", "default"];
+    const mode = wanted.find((candidate) => offered.has(candidate));
     if (!mode)
-      throw Error(
-        `Harness ${harness} offers no journal-safe ${required.join("/")} mode; unjournaled writes are unsupported`,
-      );
+      throw Error(`Harness ${harness} offers none of the ungated modes ${wanted.join("/")}`);
     if (mode !== session.modes?.currentModeId)
       await live.conn.setSessionMode({ sessionId: live.sessionId, modeId: mode });
     return live;
