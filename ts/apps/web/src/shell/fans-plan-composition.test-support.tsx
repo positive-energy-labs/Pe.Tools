@@ -32,7 +32,7 @@ import { canonicalRouteInput, workFingerprintSchema, actionStatusSchema } from "
 import "../ducts/sheet/mount";
 import { TypedShell } from "./typed-shell";
 import { module as fans } from "../fans/route";
-import { builtins } from "../route/builtins.neutral";
+import { builtinRouteStamp } from "../route/builtin-inventory";
 import { peReadings, bindActionReadings } from "../host/resource-stream";
 
 const trace = vi.hoisted(()=>({gates:[] as any[],tokens:[] as any[],samples:[] as any[],stops:[] as any[],mounts:[] as any[],submit:vi.fn(),http:[] as any[],fetch:vi.fn(),base:"",target:null as any,holdPlan:()=>Promise.resolve()}));
@@ -148,7 +148,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  let search=new URLSearchParams({target:JSON.stringify({kind:"open",ref:trace.target}),thread:"f05-probe",fan:JSON.stringify({kind:"ids",ids:[stableFanKey({ uniqueId: walk.nodes.find(n=>n.id===14577391)!.uniqueId!, portIndex: 2 })]})});
  const listeners=new Set<()=>void>();
  const address={read:()=>new URLSearchParams(search),write:(next:URLSearchParams)=>{search=new URLSearchParams(next);listeners.forEach(f=>f());},subscribe:(f:()=>void)=>{listeners.add(f);return()=>{listeners.delete(f);};}};
- const root=createRootRoute({validateSearch:(s:Record<string,unknown>)=>s,component:()=> <TypedShell module={fans} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtins.fans.closure.fingerprint}`)} address={address}/>});
+ const root=createRootRoute({validateSearch:(s:Record<string,unknown>)=>s,component:()=> <TypedShell module={fans} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("fans")}`)} address={address}/>});
  const router=createRouter({routeTree:root,history:createMemoryHistory({initialEntries:["/?thread=f05-probe"]})});
  let before:any,after:any,firstSettlement:any;
  const sample=()=>{const {gate,options}=trace.gates.at(-1);const state=gate.read();const mount=trace.mounts.at(-1);return {pageEpoch:state.pageEpoch,pageRevision:state.pageRevision,workRevision:state.work?.revision??null,dependencies:options.dependencies(),workSignature:canonicalRouteInput(Object.keys(mount.spec.edits.owners).map(id=>{const o=mount.owner(id);return[id,o.ready,o.handle];}))};};

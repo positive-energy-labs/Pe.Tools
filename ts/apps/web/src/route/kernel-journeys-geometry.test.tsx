@@ -176,7 +176,7 @@ import { bootHost } from "../../../host/tests/real-server";
 import { connectTestBridge } from "../../../host/tests/bridge-fixture";
 import { admittedReceiptStamps } from "../../../host/src/receipt-export";
 import "../ducts/sheet/mount";
-import { builtins } from "../route/builtins.neutral";
+import { builtinRouteStamp } from "../route/builtin-inventory";
 import { bindActionReadings } from "../host/resource-stream";
 
 const trace = vi.hoisted(()=>({submit:vi.fn(),fetch:vi.fn(),base:"",target:null as any,results:[] as any[]}));
@@ -256,7 +256,7 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    target:{kind:"document",ref:trace.target},fixture:null,work:{address:workAddress("C:/model.rvt"),open:trace.target},
    address:{read:()=>new URLSearchParams(search),write:next=>{search=new URLSearchParams(next);},subscribe:()=>()=>{}},
    custody:{current:()=>true},memory:()=>({}),
- },workFingerprintSchema.parse(`builtin-closure:${builtins.fans.closure.fingerprint}`),{sources:{"fans.sheet":source}});
+ },workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("fans")}`),{sources:{"fans.sheet":source}});
  const React=await import("react");
  const {InputsBody}=await import("../ducts/sheet/mount");
  const registry=makeAtomRegistry();

@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { createMemoryHistory } from "@tanstack/react-router";
 import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
-import { Route as ductLossRoute } from "../routes/duct-loss";
-import { Route as ductsRoute } from "../routes/ducts";
+import { Route as builtinRoute } from "../routes/$route";
 import { getRouter } from "../router";
 
 vi.mock("../routes/__root", async () => {
@@ -23,7 +22,7 @@ test.each([
   const router = getRouter();
   router.update({ history: createMemoryHistory({ initialEntries: [`/duct-loss${query}`] }) });
   await router.load();
-  const match = router.state.matches.find((entry) => entry.routeId === "/duct-loss");
+  const match = router.state.matches.find((entry) => entry.routeId === "/$route");
   expect(match?.status).toBe("success");
   expect(
     Object.fromEntries(
@@ -32,10 +31,10 @@ test.each([
       ),
     ),
   ).toEqual(expected);
-  expect(router.routesByPath["/duct-loss"]).toBe(ductLossRoute);
-  expect(router.routesByPath["/ducts"]).toBe(ductsRoute);
+  expect(match?.params).toEqual({ route: "duct-loss" });
+  expect(router.routesByPath["/$route"]).toBe(builtinRoute);
   expect(router.routesByPath["/tool/$key"]).toBeDefined();
-  expect(router.buildLocation({ to: "/duct-loss", search: { work: "W" } }).pathname).toBe(
+  expect(router.buildLocation({ to: "/$route", params: { route: "duct-loss" }, search: { work: "W" } }).pathname).toBe(
     "/duct-loss",
   );
   expect(Reflect.get(router.routesByPath, "/shell-probe")).toBeUndefined();

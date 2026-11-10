@@ -23,6 +23,7 @@ export function renderRouteRegistry(rows: readonly RouteRegistryInput[]): string
   const imports = [
     `import type { RouteRegistry } from "./route-registry.ts";`,
     `import { closureSchema } from "../../web/src/route/builtin-closure.ts";`,
+    ...(rows.some((row) => row.work) ? [`import { z } from "zod";`] : []),
   ];
   const entries = rows.map((row, index) => {
     if (keys.has(row.key)) throw Error(`Duplicate route key ${row.key}`);
@@ -34,13 +35,15 @@ export function renderRouteRegistry(rows: readonly RouteRegistryInput[]): string
       imports.push(`import * as h${index} from "${web}/${row.host.slice(2)}";`);
     }
     if (row.work) imports.push(`import { ${row.work.stateExport} as w${index} } from "${row.work.file}";`);
+    // The projected properties name `data` and `work`; default parameters bind them per row.
     const module = [
-      `data: r${index}.envelope.data`,
-      row.work ? row.work.properties.replace(/\bwork\b/g, `w${index}`) : "schemas: {}",
-      ...(row.host ? [`reads: h${index}.reads`, `leaves: "leaves" in h${index} ? h${index}.leaves : undefined`] : []),
+      row.work
+        ? `...((data = r${index}.envelope.data, work = w${index}) => ({ data, ${row.work.properties} }))()`
+        : `data: r${index}.envelope.data, schemas: {}`,
+      ...(row.host ? [`reads: h${index}.reads`] : []),
     ].join(", ");
     return `${JSON.stringify(row.key)}: { key: ${JSON.stringify(row.key)}, folder: ${JSON.stringify(row.folder)}, address: ${JSON.stringify(row.address)}, contract: ${JSON.stringify(row.contract)}, dock: ${row.dock}, closure: r${index}, host: { ${module} } }`;
   });
   const parsed = rows.map((_row, index) => `const r${index} = closureSchema.parse(c${index});`);
-  return `${HEADER}\n${imports.join("\n")}\n${parsed.join("\n")}\nexport const routeRegistry: RouteRegistry = {\n${entries.join(",\n")}\n};\n`;
+  return `${HEADER}\n${imports.join("\n")}\n${parsed.join("\n")}\nexport const routeRegistry: RouteRegistry = {\n${entries.join(",\n")},\n};\n`;
 }

@@ -83,7 +83,7 @@ export function ActionLine({ call }: { call: ActionCall }) {
             open ›
           </Button>
         ) : (
-          <Link to="/ops" search={{ actionId: call.id }}>
+          <Link to="/$route" params={{ route: "ops" }} search={{ actionId: call.id }}>
             receipt ›
           </Link>
         )}

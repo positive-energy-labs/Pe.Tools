@@ -148,7 +148,7 @@ export function RouteDock({
                 {reconnect && (
                   <ClosedWorkBand
                     closed={reconnect}
-                    onOpen={() => void navigate({ to: "/open" })}
+                    onOpen={() => void navigate({ to: "/$route", params: { route: "open" } })}
                   />
                 )}
                 <PlaceViewsProvider value={views}><RouteRetention {...tabs} renderRoute={renderRoute} /></PlaceViewsProvider>
