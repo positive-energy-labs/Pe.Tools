@@ -37,7 +37,6 @@ function project(layout: LayoutNode, panes: GraphLayoutViewProps["panes"]) {
         id: node.id,
         label: declared.label,
         purpose: declared.purpose,
-        pane: declared.frame,
       };
     }
     const children = node.children.map(visit);

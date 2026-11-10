@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { valueRead } from "@pe/agent-contracts/value";
-import { route, read, paneLayout } from "@pe/web/route";
+import { route, read, paneLayout, scrollBody } from "@pe/web/route";
 import { hostRead } from "@pe/web/host-read";
 import { key, initial, inputs, workState, args, value } from "./schema.ts";
 export { initial };
@@ -37,10 +37,13 @@ export const module = route({
     calculation: {
       title: "Voltage drop",
       purpose: "Compare authored conductor inputs",
+      body: "scroll",
       draw: (ctx) =>
-        ctx.value.current
-          ? `Copper voltage-drop worksheet\nAuthored inputs\n${JSON.stringify(ctx.value.value, null, 2)}\nCopper K method at 75 C, unity power factor, negligible reactance. No model facts are inferred.`
-          : ctx.value.reason,
+        scrollBody(
+          ctx.value.current
+            ? `Copper voltage-drop worksheet\nAuthored inputs\n${JSON.stringify(ctx.value.value, null, 2)}\nCopper K method at 75 C, unity power factor, negligible reactance. No model facts are inferred.`
+            : ctx.value.reason,
+        ),
     },
   },
   layout: paneLayout("calculation"),

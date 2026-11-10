@@ -629,9 +629,6 @@
   + [data-annotation="moment"][data-role="assistant"] {
   margin-top: var(--space-unit);
 }
-[data-chat="surface"] [data-slot="pane-title"][data-heading="name"] {
-  font-family: var(--font-body);
-}
 /* The composer takes the transcript's column: both side columns stay clear of it too. */
 [data-chat="surface"] .dl-composer-frame {
   max-width: calc(var(--chat-measure) + var(--side-lane) * 2);

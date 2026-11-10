@@ -16,6 +16,8 @@ import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "./host-read.ts";
+import type { Body, BodyKind } from "./body.ts";
+export { scrollBody, fillBody, type Body, type BodyKind } from "./body.ts";
 
 type Field = {
   schema: z.ZodType;
@@ -132,6 +134,9 @@ type Owner = { state: RouteStateSpec<z.ZodObject>; value?: string };
 export type Owners = Readonly<Record<string, Owner>>;
 type HostRead = import("./host-read.ts").HostRead;
 export type ReadData<R extends HostRead> = NonNullable<z.output<R["output"]>["value"]>["data"];
+/** Layout is data (ADR 0035 rule 5, `route/body.ts`): a pane declares its body kind and `draw`
+ * returns that kind's branded `Body`, so the declaration and the drawing cannot disagree. */
+type PaneBody<C> = { [B in BodyKind]: { body: B; draw(ctx: C): Body<B> } }[BodyKind];
 export type Specification<
   D,
   F extends Fields,
@@ -165,14 +170,10 @@ export type Specification<
     readonly [K in keyof Reads]: {
       title: string;
       purpose: string;
-      /** Layout is data (ADR 0035 rule 5, `route/body.ts`): the kind of `Body` this pane's `draw`
-       * returns. Optional in the slice 6 scaffold; the fill requires it and types `draw` to match. */
-      body?: import("./body").BodyKind;
       subjectList?: true;
       read?: Reads[K];
       bindings?(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): PaneBindings;
-      draw(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): unknown;
-    };
+    } & PaneBody<DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>>;
   };
   edits?: {
     work: W | RouteStateSpec<W>;

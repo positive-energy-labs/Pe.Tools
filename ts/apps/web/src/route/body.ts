@@ -7,12 +7,10 @@
  * - `fill`: the body fills the pane and owns its own scrolling (a picture, a virtual list, a
  *   transcript); the pane clips.
  *
- * So a surface's scroll tracks are a count over its declaration, measured before any render:
- * /pea is two (threads, chat) and the dock is one (the tools pane). The `frame` knobs this replaces
- * (`header: false`, `refresh: false`, `scroll: "clip"`) are deleted in the fill, not kept beside it.
- *
- * Scaffold (slice 6, seam a): the kernel does not read the brand yet; `typed-shell.tsx` and
- * `route-panes.tsx` still draw `Pane` furniture by hand.
+ * So the kernel's scroll tracks are a count over the declaration, measured before any render; a
+ * fill body's own track (the thread roster, the transcript, a docked Place's panes) is the body's
+ * and is counted where that body declares its panes. The `frame` knobs this replaced (`header:
+ * false`, `scroll: "clip"`, `flush`) are deleted; `paneFrame` is the kernel's one reading of the brand.
  */
 import type { ReactNode } from "react";
 
@@ -41,8 +39,13 @@ export const isBody = (value: unknown): value is Body =>
   "node" in value &&
   ((value as Body).kind === "scroll" || (value as Body).kind === "fill");
 
-/** A pane's declared body kind; a pane with none declared is the gap this slice closes. */
-export type PaneBodyDecl = { readonly body?: BodyKind };
+/** A pane's declared body kind. */
+export type PaneBodyDecl = { readonly body: BodyKind };
+
+/** The kernel's pane furniture for a body kind: a scroll body gets the pane's padded scroll track,
+ * a fill body a clipped, flush field it fills. */
+export const paneFrame = (kind: BodyKind) =>
+  kind === "fill" ? ({ scroll: "clip", flush: true } as const) : {};
 
 /** The instrument: how many scroll tracks a surface's declaration says it has. */
 export const scrollTracks = (panes: Readonly<Record<string, PaneBodyDecl>>) =>

@@ -1,5 +1,5 @@
 import { stableFanKey } from "../ducts/sheet/model";
-import {route as declareRoute} from "../route/typed-route";
+import {route as declareRoute, scrollBody} from "../route/typed-route";
 import {module as familiesDeclaration} from "../families/route";
 import {workFingerprintSchema} from "@pe/agent-contracts";
 import { systemCode } from "../ducts/identity";
@@ -30,7 +30,7 @@ import { useRestoreTabPage } from "#/route/url";
 
 const store = createChatPageStore({
   registry: appAtomRegistry,
-  search: { mode: "threads", patch: async () => {} },
+  search: { patch: async () => {} },
 });
 const ducts: ThreadTab = {
   id: "aaaaaaaa-0000-4000-8000-000000000001",
@@ -104,7 +104,7 @@ vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 // The retention/lease witness uses the typed Page contract without acquiring native evidence or Work.
 const familiesProbe=declareRoute({
   ...familiesDeclaration.spec, needs:"browser",core:undefined,edits:undefined,commands:{},
-  panes:{probe:{title:"Probe",purpose:"Retention proof",draw:ctx=><output data-families-probe="">{ctx.page.read().focus}</output>}},
+  panes:{probe:{title:"Probe",purpose:"Retention proof",body:"scroll",draw:ctx=>scrollBody(<output data-families-probe="">{ctx.page.read().focus}</output>)}},
   layout:{kind:"pane",id:"probe"},
 });
 function FamiliesProbe() {

@@ -1,4 +1,4 @@
-import { ThreadsSidebar, ThreadPane } from "#/chat/thread-palette";
+import { ThreadsSidebar } from "#/chat/thread-palette";
 import { demoThreads } from "#/chat/thread-navigation";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import {
@@ -15,6 +15,7 @@ import { Ladder } from "#/route/ladder";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
+import { Pane } from "@pe/kit/lang/pane";
 import { SpecimenFrame } from "./recipe-grid";
 
 /** The composer's picker: provider › model › effort › fast, one rung each. */
@@ -69,7 +70,7 @@ export function LangChatSpecimens() {
       </SpecimenFrame>
       <SpecimenFrame name="Thread list" importPath="@pe/kit/lang/list-view">
         <div className="h-80 w-80">
-          <ThreadPane mode="threads" count={9} setMode={() => {}} onNew={() => {}}>
+          <Pane title="Threads" ground="artifact" scroll="clip" flush>
             <ThreadsSidebar
               threads={
                 demoThreads({
@@ -87,7 +88,7 @@ export function LangChatSpecimens() {
               onUpdate={async () => true}
               onNewTarget={() => {}}
             />
-          </ThreadPane>
+          </Pane>
         </div>
       </SpecimenFrame>
       <SpecimenFrame name="Conversation" importPath="#/components/lang/conversation">

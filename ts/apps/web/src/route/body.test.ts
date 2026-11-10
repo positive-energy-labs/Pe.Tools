@@ -1,8 +1,9 @@
 /**
- * Slice 6 falsifier, layout as data (ADR 0035 rule 5): /pea measures 2 scroll tracks and the dock
- * 1, counted over the declaration before any render. The driver's browser twin counts elements
- * whose computed `overflow-y` is `auto` or `scroll` on the real /pea and the real dock
- * (CHROME-SHAPE.md, seam a); this is the unit that must agree with it.
+ * Slice 6 falsifier, layout as data (ADR 0035 rule 5): every /pea and dock pane declares its body,
+ * counted over the declaration before any render. A fill body owns its track: the thread roster's
+ * Scroll, the transcript's scroller, a docked Place's own panes. The driver's browser twin counts
+ * elements whose computed `overflow-y` is `auto` or `scroll` and can scroll (CHROME-SHAPE.md, seam
+ * a): /pea is 2 (the roster and the transcript) and the dock's tools pane is the Place's own.
  */
 import { expect, test } from "vite-plus/test";
 import { module as chat } from "../chat/route";
@@ -16,17 +17,16 @@ test("the brand is the only way to make a Body", () => {
   expect(isBody("a")).toBe(false);
 });
 
-test("red (slice 6 seam a): /pea declares two scroll bodies, threads and chat", () => {
-  const panes = chat.spec.panes as Readonly<Record<string, { body?: "scroll" | "fill" }>>;
-  expect(
-    scrollTracks(panes),
-    `slice 6 gap: /pea's panes declare no body kind (${Object.keys(panes).join(", ")}); the chat route is still one pane whose drawing nests its own GraphLayoutView`,
-  ).toBe(2);
+test("/pea declares two fill bodies, threads and chat, each owning its track", () => {
+  const panes = chat.spec.panes;
+  expect(Object.fromEntries(Object.entries(panes).map(([id, pane]) => [id, pane.body]))).toEqual({
+    threads: "fill",
+    chat: "fill",
+  });
+  expect(scrollTracks(panes), "the kernel draws no scroll track around a body that owns one").toBe(0);
 });
 
-test("red (slice 6 seam a): the dock declares one scroll body, the tools pane", () => {
-  expect(
-    scrollTracks(DOCK_PANES),
-    "slice 6 gap: the dock's panes declare no body kind; RouteDock still hands GraphLayoutView its bodies by hand",
-  ).toBe(1);
+test("the dock hosts two route surfaces, so neither dock pane adds a track", () => {
+  expect(DOCK_PANES).toEqual({ pea: { body: "fill" }, tools: { body: "fill" } });
+  expect(scrollTracks(DOCK_PANES)).toBe(0);
 });
