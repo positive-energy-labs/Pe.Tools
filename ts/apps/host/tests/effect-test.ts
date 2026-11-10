@@ -3,6 +3,7 @@ import { PictureCaptureStore } from "../src/captures-route.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { ActionJournalService, makeActionJournal } from "../src/receipt-services.ts";
+import { makeCallRoute } from "../src/call-route.ts";
 import * as adapter from "../src/harness/adapter.ts";
 import { Spawner } from "../src/harness/spawner.ts";
 import { NodeCrypto, NodeServices } from "@effect/platform-node";
@@ -270,6 +271,11 @@ export async function testAdapter(...args: Parameters<typeof adapter.openAdapter
 
 export const testDocumentMarks = (bridge: RevitBridge["Service"]) =>
   Context.get(testScoped(HostDocumentMarks.layer.pipe(Layer.provide(Layer.succeed(RevitBridge, bridge)))), HostDocumentMarks);
+/** `makeCallRoute` over one test journal: the routes yield the service, this test provides it. */
+export const callRouteOver = (
+  journal: ActionJournalService["Service"],
+  ...args: Parameters<typeof makeCallRoute>
+) => Layer.unwrap(makeCallRoute(...args)).pipe(Layer.provide(Layer.succeed(ActionJournalService, journal)));
 export const testJournal = () => Context.get(testScoped(ActionJournalService.live(null)), ActionJournalService);
 /**
  * A journal over `path` whose attempts are fibers in the running test's scope. Closing that scope

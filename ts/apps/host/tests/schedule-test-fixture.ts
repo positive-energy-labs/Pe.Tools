@@ -1,4 +1,4 @@
-import { testDocumentMarks, journalAt } from "./effect-test.ts";
+import { testDocumentMarks, journalAt, callRouteOver } from "./effect-test.ts";
 import { graphRoute } from "../src/reads/routes.ts";
 import { Publications } from "../src/reads/evaluator.ts";
 import { inputPort } from "../src/reads/inputs.ts";
@@ -25,7 +25,6 @@ import {
 import { BridgeError, type HostBridgeEvent } from "../src/bridge.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
 
-import { makeCallRoute } from "../src/call-route.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { sdkSessions, originalProcess } from "./native-receipt-fixture.ts";
 import { markDispatched } from "../src/action-dispatch.ts";
@@ -246,7 +245,7 @@ export async function setup(options: { cold?: boolean } = {}) {
   );
   const mount = () =>
     serveRoutes(
-      Layer.mergeAll(pe, makeCallRoute(owner, captures, { workspace: work, sdk }).pipe(Layer.provide(DuctFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(marks))))),
+      Layer.mergeAll(pe, callRouteOver(owner, captures, { workspace: work, sdk }).pipe(Layer.provide(DuctFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(marks))))),
       bridge,
     );
   let server = await mount();

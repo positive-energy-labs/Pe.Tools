@@ -1185,7 +1185,7 @@ function* hostPeRoutes(
     });
   // Every provider is probed once in the background; the list says `unknown` until then.
   const providers = createProviders({ shellPath, spawner: yield* Spawner });
-  const stopOperationHooks = observePluginOperations(telemetry.journal, content.lifecycle.emit);
+  const stopOperationHooks = observePluginOperations(journal, content.lifecycle.emit);
   const receiptThreads = createThreadReceiptAdapter(
     telemetry,
     () => threads.receiptSnapshot(),
@@ -1248,15 +1248,15 @@ function* hostPeRoutes(
   const stopWorkContext = bridge?.subscribe(() => threads.refreshWorkContexts());
   const scheduler = createScheduledTasks({
     path: join(hostOwnership.rootPath, "state", hostOwnership.serviceName, "scheduled-tasks.json"),
-    receipts: telemetry.journal,
+    receipts: journal,
     evidence: (since, before) =>
       new Set(eligibleThreads(threads.historySnapshot(), since, before).map((t) => t.id)),
     launch: threads.launchScheduled,
   });
   const readHistory = threadHistory({
     snapshot: threads.historySnapshot,
-    receipts: telemetry.journal,
-    threadJoin: (id) => telemetry.journal.opaqueId("thread", id),
+    receipts: journal,
+    threadJoin: (id) => journal.opaqueId("thread", id),
   });
   const tasks = {
     fetch: (request: Request) =>
@@ -1270,7 +1270,7 @@ function* hostPeRoutes(
     .hydrate()
     .catch((error: unknown) => console.warn("Receipt thread context failed to hydrate", error));
   const notices = createNotices({
-    source: { subscribe: (q, consume) => telemetry.journal.subscribe(q, consume) },
+    source: { subscribe: (q, consume) => journal.subscribe(q, consume) },
     context: receiptThreads.context,
     log: hostLog,
   });

@@ -1,4 +1,3 @@
-import { makeCallRoute } from "../src/call-route.ts";
 import { RevitBridgeLive } from "../src/bridge.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
@@ -6,7 +5,7 @@ import { NodeServices, NodeHttpClient } from "@effect/platform-node";
 import { CaptureStore } from "../src/takeoff-captures.ts";
 import type { NativeReadInput } from "@pe/host-internal/native-read";
 import type { BridgeSessionsListData } from "@pe/host-contracts/operation-types";
-import { unavailableFieldOptions, journalAt } from "./effect-test.ts";
+import { unavailableFieldOptions, journalAt, callRouteOver } from "./effect-test.ts";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -109,7 +108,7 @@ export async function fixture(
     const routes = createPeRoutes({ inputs, workspace: reads.work.workspace, registrations: reads.work.registrations,
       observeHostResource: recorded.resourceObserver ?? hostResourceObserver(undefined, () => journal, () => captures) });
     return Layer.mergeAll(peCoreRoutes(routes, reads.invocation, inputs), historyRoutes(reads.history),
-      recorded.actions ? makeCallRoute(journal, undefined, {workspace: reads.work.workspace, workReads: reads.work.reads}).pipe(
+      recorded.actions ? callRouteOver(journal, undefined, {workspace: reads.work.workspace, workReads: reads.work.reads}).pipe(
         nativeReadRoot(), Layer.provide(RevitBridgeLive),
         Layer.provideMerge(PictureCaptureStore.layer(join(dir, "pictures"))),
         HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, RevitBridgeLive)),

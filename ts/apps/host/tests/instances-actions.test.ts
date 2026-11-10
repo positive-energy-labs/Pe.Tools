@@ -1,4 +1,4 @@
-import { testHostInputs, journalAt } from "./effect-test.ts";
+import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
 import { Layer, Effect } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
 import { existsSync } from "node:fs";
@@ -8,7 +8,6 @@ import { dirname, join } from "node:path";
 import { instancesSessionSelection } from "@pe/agent-contracts";
 import { HOST_CONTEXT_HEADER, HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
-import { makeCallRoute } from "../src/call-route.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { replayAnswer } from "./sdk-replay.ts";
 import { machineAcquisition, machineSessionAcquisition, unavailableShare } from "../src/machine.ts";
@@ -1115,7 +1114,7 @@ test("R4d: after recovery over HTTP, cleanup closes and stops the Revit that sur
   const { f, world, row, input } = await crashWorld();
   world.crash = "open";
   const server = await serveRoutes(
-    makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(Layer.provide(testHostInputs)),
+    callRouteOver(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(Layer.provide(testHostInputs)),
     sdkOnlyBridge,
   );
   cleanup.push(() => server.close());
@@ -1332,7 +1331,7 @@ test("/actions/cancel stops a running Instances step through the SDK op cancel, 
     return { result: { state: "cancelled" } };
   });
   const server = await serveRoutes(
-    makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(Layer.provide(testHostInputs)),
+    callRouteOver(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(Layer.provide(testHostInputs)),
     sdkOnlyBridge,
   );
   cleanup.push(async () => {
@@ -1389,7 +1388,7 @@ test.each([
       result: { id: "dev", state: "ok", phase: verb === "reset" ? "ready" : "stopped" },
     }));
     const server = await serveRoutes(
-      makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), { sdk: f.deps.sdk }).pipe(Layer.provide(testHostInputs)),
+      callRouteOver(f.owner, captureStore(join(f.dir, "captures")), { sdk: f.deps.sdk }).pipe(Layer.provide(testHostInputs)),
       sdkOnlyBridge,
     );
     cleanup.push(() => server.close());

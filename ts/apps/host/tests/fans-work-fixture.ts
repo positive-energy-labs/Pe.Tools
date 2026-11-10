@@ -2,7 +2,7 @@ import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { NativeReads } from "../src/native-reads.ts";
 import type { RequestIdentityData } from "@pe/host-internal/request-contracts";
-import { testHostInputs, journalAt } from "./effect-test.ts";
+import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
 import { testDuctFiles } from "./effect-test.ts";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -24,7 +24,6 @@ import { settle } from "./effect-test.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { RevitBridge, RevitBridgeLive, BridgeError } from "../src/bridge.ts";
-import { makeCallRoute } from "../src/call-route.ts";
 import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
 import { RunConsents, runConsentsPromise, type ConsentEvent } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
@@ -106,7 +105,7 @@ export async function nativeFixture(
     const rootReads: { native?: HostNativeRead["Service"]; shared?: NativeReads["Service"] } = {};
     const sdkInput = { read: sdkSessions };
     const web = HttpRouter.toWebHandler(
-      Layer.mergeAll(makeCallRoute(
+      Layer.mergeAll(callRouteOver(
         journal,
         Context.get(context, CaptureStore),
         { sdk: sdkSessions, workspace: saved },

@@ -1,5 +1,5 @@
 import { fixtureNative } from "./fixture-native.ts";
-import { testHostInputs } from "./effect-test.ts";
+import { testHostInputs, callRouteOver } from "./effect-test.ts";
 import { pictureCaptures } from "./effect-test.ts";
 /**
  * Host-local pod reads and archive transport over the production `/call` route. No Revit: the
@@ -17,7 +17,6 @@ import { mintContext } from "../src/control.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 
 const homeVariable = productPathNames.productHomeVariable;
-import { makeCallRoute } from "../src/call-route.ts";
 import type { PictureCaptures } from "../src/captures-route.ts";
 import { listPackages } from "../src/packages.ts";
 import { exportPod, importPod, writeZip } from "../src/pod-transfer.ts";
@@ -41,7 +40,7 @@ beforeEach(async () => {
     "x-pe-context": mintContext({ kind: "human", via: "cli" }),
   };
   web = await serveRoutes(
-    makeCallRoute(
+    callRouteOver(
       native.journal,
       captureStore(join(root, "captures")),
     ).pipe(Layer.provide(testHostInputs)),

@@ -54,6 +54,7 @@ import {
 } from "./captures-route.ts";
 import { CommandRejected, StepFailure } from "./command-executor.ts";
 import { bindCommandRuntime } from "./command-registry.ts";
+import { ActionJournalService } from "./receipt-services.ts";
 import type { AttemptHost } from "./action-journal.ts";
 import type { GatewayLocal } from "./gateway-actions.ts";
 import {
@@ -146,7 +147,14 @@ export type CallRouteDispatch = (
   Effect.Services<ReturnType<typeof dispatchTsOnlyOperation>>
 >;
 
-export function makeCallRoute(
+/** The `/call` and `/actions` routes over the runtime's one journal service. */
+export const makeCallRoute = Effect.fn("makeCallRoute")(function* (
+  ...args: Parameters<typeof callRoutes> extends [unknown, ...infer Rest] ? Rest : never
+) {
+  return callRoutes(yield* ActionJournalService, ...args);
+});
+
+function callRoutes(
   operations: ActionJournal,
   captures?: TakeoffCaptures,
   actionDeps: FamilyActionDependencies & InstancesActionDependencies & {

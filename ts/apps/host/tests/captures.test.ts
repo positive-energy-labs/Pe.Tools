@@ -6,7 +6,7 @@ import { bindWork, type Caller } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { bindControl } from "../src/control.ts";
-import { testConsents, journalAt } from "./effect-test.ts";
+import { testConsents, journalAt, callRouteOver } from "./effect-test.ts";
 import type { ConsentEvent } from "../src/run-consent.ts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { pictureCaptures } from "./effect-test.ts";
@@ -17,7 +17,6 @@ import { nativeReadRoot } from "../src/app.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import { RevitBridge } from "../src/bridge.ts";
-import { makeCallRoute } from "../src/call-route.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
@@ -71,7 +70,7 @@ test.skipIf(!existsSync((nativeRecordings("retained-view-image").responses["revi
   let store!: PictureCaptureStore["Service"];
   const web = HttpRouter.toWebHandler(
     Layer.mergeAll(
-      makeCallRoute(journal, undefined, { sdk: sdkSessions }),
+      callRouteOver(journal, undefined, { sdk: sdkSessions }),
       Layer.effectDiscard(
         Effect.map(PictureCaptureStore, (value) => {
           store = value;
@@ -145,7 +144,7 @@ test("Work start validates seeds, waits for consent, and cannot overwrite a winn
   const journal = journalAt(join(dir, "journal.jsonl"), Date.now, () => null, 1);
   const key = bindWork("sample", null, "one");
   const web = HttpRouter.toWebHandler(
-    makeCallRoute(journal, undefined, { workspace, sdk: sdkSessions }).pipe(
+    callRouteOver(journal, undefined, { workspace, sdk: sdkSessions }).pipe(
       nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
       Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
       Layer.provideMerge(PictureCaptureStore.layer(join(dir, "pictures"))),
