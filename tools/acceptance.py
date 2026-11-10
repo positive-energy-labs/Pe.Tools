@@ -58,6 +58,25 @@ def pod_build_skip(pods: Path):
     return skip
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        while chunk := f.read(1 << 20):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def copy_hashed(source: Path, target: Path) -> str:
+    """Copy source to target and return the source's sha256, from one read of the source."""
+    digest = hashlib.sha256()
+    with source.open("rb") as r, target.open("wb") as w:
+        while chunk := r.read(1 << 20):
+            digest.update(chunk)
+            w.write(chunk)
+    shutil.copystat(source, target)
+    return digest.hexdigest()
+
+
 def main_checkout() -> Path:
     return Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")).parent
 
@@ -306,9 +325,8 @@ def setup(run: str, args: list[str]) -> None:
         if installed and (not target.resolve().is_relative_to((root / "docs").resolve()) or target.exists()):
             sys.exit(f"Model destination must be a fresh file under {root / 'docs'}: {target}")
         source = Path(model[0]).resolve()
-        source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
-        shutil.copy2(source, target)
-        target_hash = hashlib.sha256(target.read_bytes()).hexdigest()
+        source_hash = copy_hashed(source, target)
+        target_hash = sha256_file(target)  # the written bytes, read back: the copy proof stays independent
         if source_hash != target_hash:
             sys.exit(f"Model copy bytes differ from source: {source} -> {target}")
         model_copies.append({"source": str(source), "copy": str(target),

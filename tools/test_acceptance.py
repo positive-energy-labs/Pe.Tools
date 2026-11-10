@@ -1,6 +1,6 @@
 """Plain-assert checks for the setup logic in acceptance.py: python tools/test_acceptance.py. No Revit, no host."""
 
-import json, os, shutil, subprocess, sys, tempfile
+import hashlib, json, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -33,6 +33,18 @@ def test_pick_models(tmp: Path) -> None:
         assert "--model" in str(e) and str(fixture) in str(e) and "\n" not in str(e), e
     touch(fixture)
     assert a.pick_models([], fixture) == [[str(fixture), "A.rvt"]]
+
+
+def test_copy_hashed(tmp: Path) -> None:
+    for size in (0, 1, 1 << 20, (5 << 19) + 1):  # empty, tiny, exactly one chunk, a bit over two
+        source = tmp / f"s{size}.bin"
+        source.write_bytes(os.urandom(size))
+        target = tmp / f"t{size}.bin"
+        expected = hashlib.sha256(source.read_bytes()).hexdigest()
+        assert a.copy_hashed(source, target) == expected
+        assert target.read_bytes() == source.read_bytes()
+        assert a.sha256_file(target) == expected
+        assert target.stat().st_mtime_ns == source.stat().st_mtime_ns  # copy2's metadata survives
 
 
 def test_host_wait(tmp: Path) -> None:
@@ -77,6 +89,6 @@ def test_host_wait(tmp: Path) -> None:
 
 
 with tempfile.TemporaryDirectory() as t:
-    for test in (test_pod_build_skip, test_pick_models, test_host_wait):
+    for test in (test_pod_build_skip, test_pick_models, test_copy_hashed, test_host_wait):
         test(Path(tempfile.mkdtemp(dir=t)))
 print("ok")
