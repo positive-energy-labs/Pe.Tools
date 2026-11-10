@@ -16,8 +16,12 @@ cold_calls (API calls writing over 50k cache tokens and more than they read). Ke
 Waits: each gap between consecutive runs is attributed to the trigger of the next run (owner, message from <thread>, own command, child completion, keepalive, system, unknown); per thread `gaps` and `waits` (hours by cause).
 commands: every Bash/PowerShell command and Codex exec cmd split on && ; | and newlines, cd/export/echo/VAR= segments dropped, timeout/npx/pnpm exec/--filter/-C stripped, keyed program + first subcommand (loops: `poll loop`); a call's whole wall (a background command's runs to its completion notification) goes to its heaviest segment (test > build > guard > other).
 --branch/--base add `landmark`: per slice N, 80% of final churn, the first `Slice N gated`/`Wave ... gated` first-parent commit, and gate tail = gate - 80% (open slices run to the window end); headline median tail and gated slices per 10 wall hours.
-Per slice also `first` (first commit) and `start_lag_h` (first commit minus window start), the tail (commits after the 80% commit) as `tail_commits`, `tail_churn` {test, prod, docs}, `tail_active_h` (gaps between consecutive tail commits, each capped at 30 minutes, from the 80% commit on) and `tail_quiet_h` (the rest of the tail), `tail_segs` (the active spans);
-run-level `blocked` (longest stretch with a slice not yet started while a lower slice was past 80%), `writers` (per 30-minute bucket: slices with a commit, descendant threads with a run in flight), `tail_test_share`, `tail_quiet_share`. The slice list is the slice branches only.
+Per slice also `first` (first commit) and `start_lag_h` (first commit minus window start), the tail (commits after the 80% commit) as `tail_commits`, `tail_churn` {test, prod, docs}, `tail_test_share`, `tail_active_h` (gaps between consecutive tail commits, each capped at 30 minutes, from the 80% commit on) and `tail_quiet_h` (the rest of the tail), `tail_segs` (the active spans);
+run-level `blocked` (longest stretch with a slice not yet started while a lower slice was past 80%), `writers` (per 30-minute bucket: slices with a commit, descendant threads with a run in flight), `tail_test_share`, `tail_quiet_share`, `trough`, `marks` (gate and merge commits on the integration branch), `commits_read`, `by_branch`, `unattributed`.
+A commit's slice is the slice in the title of the thread named by its `T3-Thread` trailer (slice_key, the one title parser, also groups the lanes); commits come from every local branch since --base, kept when they are on the integration branch or written by a thread of the tree (`unmerged` counts those not on it yet, `lost_writers` names threads that ran git commit and left none); a commit whose thread names no slice, or that has no trailer
+(then the `<branch>-sN` branch-name fallback, counted in by_branch), is left out of every slice and counted in `unattributed`. Lettered slices (2b, 5a) are their own slices (see landmark()). The slice list is whatever the commits name.
+With --tree, retro.json also holds everything swimlanes.py draws: `window`, `lanes` (per lane: runs with trigger text and bar kind, gaps with causes, messages received; the per-thread activity segments `ivs`, keepalive wakes, cold calls, model changes sit in `threads`), `rollup`, and the `commands`;
+retro.py then calls swimlanes.render, so one command writes retro.json, retro.html and swimlanes.html. `swimlanes.py <run-dir>` redraws the page from retro.json and never measures.
 Per thread `admits` ({t, kind, verdict, free_gib} from tool results with an `ADMIT|HOLD|REFUSE <kind>: free x of y GiB` line, once per result) and `admit_counts` (kind -> verdict -> n); `turn_ends` (a background command still running when its run completed: {thread, t_run_end, t_cmd_end, command, ran_on_h, idle_until_next_run_h}) and `turn_end_idle_h`. Claude sessions only for turn_ends. tree_total sums both.
 retro.json is {threads, commands, landmark}. Owner turns are human turns: createdBy=user AND creationSource web|mobile (server-sourced user rows are agent text). Prints aggregates only, never session text.
 """
@@ -436,6 +440,17 @@ def covers(s):
     return n
 
 
+def slice_key(title):
+    """The slice a thread title names, as a label: `Slice 5`, `s5` -> "5"; `slice 5a`, `s2b` -> "5a", "2b"; None when it names none. The one parser the lanes and the landmark share."""
+    m = re.search(r"\b[Ss](?:lice )?(\d+)([a-z])?(?![a-z0-9])", title or "")
+    return m[1] + (m[2] or "") if m else None
+
+
+def skey(n):
+    """Sort key of a slice label: 2 < 2b < 3."""
+    return int(re.match(r"\d+", n)[0]), n.lstrip("0123456789")
+
+
 def bucket(path):
     """test, docs or prod for a changed path; None for the .json and generated paths the landmark skips."""
     if path.endswith(".json") or "generated" in path: return None
@@ -455,7 +470,7 @@ def blocked(slices):
     slices: dicts with n, first, t80 (ISO). -> dict(h, frm, to, slices)"""
     iv = []
     for m in slices:
-        lo = [ts(s["t80"]) for s in slices if s["n"] < m["n"] and ts(s["t80"]) < ts(m["first"])]
+        lo = [ts(s["t80"]) for s in slices if skey(s["n"]) < skey(m["n"]) and ts(s["t80"]) < ts(m["first"])]
         if lo: iv.append([min(lo), ts(m["first"]), [m["n"]]])
     iv.sort(key=lambda i: i[0]); out = []
     for i in iv:
@@ -495,38 +510,137 @@ def desc_runs(db, tids):
     return out
 
 
-def landmark(branch, base, t0, t1, runs=()):
-    """Tail per slice N: time from 80% of its final churn to its marker commit, `Slice N gated|merged` or `Wave ... gated|merged: slices ...`. A slice with no marker is open and runs to t1.
-    Slice N's commits: no-merge commits on `<branch>-sN*` / `t3/<branch>-sN*` since base, each to the lowest slice that contains it. The slice list is these branches only.
-    ponytail: a letter after the digits (s2b) is excluded; such a branch is cut late from a kernel that already holds later slices, so the lowest-slice rule would hand it their commits."""
-    pat = re.compile(rf"(?:t3/)?{re.escape(branch)}-s(\d+)(?![a-z0-9]).*"); own = {}
-    for n, r in sorted((int(m[1]), r) for r in git("for-each-ref", "--format=%(refname:short)", "refs/heads").split() if (m := pat.fullmatch(r))):
-        cur = None
-        for line in git("log", "--no-merges", "--numstat", "--format=@%H %cI", f"{base}..{r}").splitlines():
-            if line.startswith("@"):
-                h, c = line[1:].split(); cur = None if h in own else own.setdefault(h, [n, ts(c), 0, collections.Counter()])
-            elif cur and line.count("\t") == 2:
-                a, b, path = line.split("\t"); k = bucket(path)
-                if k: d = (int(a) if a.isdigit() else 0) + (int(b) if b.isdigit() else 0); cur[2] += d; cur[3][k] += d
-    gates = {}
-    for line in git("log", "--first-parent", "--reverse", "--format=%cI\t%s", f"{base}..{branch}").splitlines():
-        c, subj = line.split("\t", 1)
-        if mm := re.search(r"\b[Ss]lice (\d+) (?:gated|merged)", subj): ns = {int(mm[1])}  # search: the subject may lead with a file name
-        else: ns = covers(subj) if re.match(r"Wave\b.*\b(?:gated|merged)", subj) else set()
-        for n in ns: gates.setdefault(n, ts(c))
-    utc = lambda t: t.astimezone(datetime.timezone.utc).isoformat(); out = []
-    for n in sorted({v[0] for v in own.values()}):
-        cs = sorted((v[1:] for v in own.values() if v[0] == n), key=lambda c: c[0]); tot = sum(c[1] for c in cs); cum = 0; curve = []
-        for c in cs: cum += c[1]; curve.append([utc(c[0]), cum])
-        i80 = next(i for i, cm in enumerate(curve) if cm[1] >= 0.8 * tot); t80 = cs[i80][0]; tail = cs[i80 + 1:]
-        spans, act, quiet = tail_split([c[0] for c in cs[i80:]], gates.get(n) or t1)
-        out.append(dict(n=n, commits=len(cs), churn=tot, t80=utc(t80), gate=utc(gates[n]) if n in gates else None, first=utc(cs[0][0]), start_lag_h=round((cs[0][0] - t0).total_seconds() / 3600, 2),
+def utc(t):
+    return t.astimezone(datetime.timezone.utc).isoformat()
+
+
+def parse_log(text):
+    """`git log --no-merges --numstat --format=@%H|%cI|<T3-Thread trailer>` -> [dict(h, t, thread, churn, parts)]. Churn skips the .json and generated paths (bucket() is None)."""
+    out = []
+    for line in text.splitlines():
+        if line.startswith("@"):
+            h, c, th = (line[1:].split("|", 2) + [""])[:3]; out.append(dict(h=h, t=ts(c), thread=th.split(",")[0] or None, churn=0, parts=collections.Counter()))
+        elif out and line.count("\t") == 2:
+            a, b, path = line.split("\t"); k = bucket(path)
+            if k: d = (int(a) if a.isdigit() else 0) + (int(b) if b.isdigit() else 0); out[-1]["churn"] += d; out[-1]["parts"][k] += d
+    return out
+
+
+def attribute(commits, names, fallback):
+    """Set slice, via and why on each commit. A commit with a `T3-Thread` trailer belongs to the slice in that thread's title (None when the title names none); a commit with no trailer
+    takes `fallback[hash]` (the branch-name slice) if it has one. via is trailer|branch|None."""
+    for c in commits:
+        if c["thread"]: c["slice"] = slice_key(names.get(c["thread"])); c["via"] = "trailer"; c["why"] = None if c["slice"] else "thread title names no slice"
+        elif c["h"] in fallback: c["slice"] = fallback[c["h"]]; c["via"] = "branch"; c["why"] = None
+        else: c["slice"] = None; c["via"] = None; c["why"] = "no trailer"
+    return commits
+
+
+def branch_slices(branch, base):
+    """Fallback for trailerless commits only: slice of the lowest `<branch>-sN[a]*` / `t3/<branch>-sN[a]*` branch that holds the commit. -> {hash: label}"""
+    pat = re.compile(rf"(?:t3/)?{re.escape(branch)}-s(\d+[a-z]?)(?![a-z0-9]).*"); out = {}
+    for n, r in sorted(((m[1], r) for r in git("for-each-ref", "--format=%(refname:short)", "refs/heads").split() if (m := pat.fullmatch(r))), key=lambda x: skey(x[0])):
+        for h in git("log", "--no-merges", "--format=%H", f"^{base}", r).split(): out.setdefault(h, n)
+    return out
+
+
+def commit_log(db, branch, base, roots):
+    """Non-merge commits since `base` on any local branch, kept when they are on the integration branch or their `T3-Thread` trailer names a thread of the run tree.
+    No branch name is trusted: T3 keeps a thread's old branch name after a rename, and the trailer already says who wrote the commit. A commit whose branch was deleted before it merged is
+    unreachable and cannot be read; lost_writers() names the threads that happened to. -> (commits kept, how many of them are not on the integration branch yet, ids of every thread with a commit, merges included)"""
+    tree_ids = set(roots) | {t for r in roots for t, _, _ in descendants_of(db, r)}
+    merged = set(git("log", "--no-merges", "--format=%H", f"^{base}", branch).split())
+    kept = [c for c in parse_log(git("log", "--branches", "--no-merges", "--numstat", "--format=@%H|%cI|%(trailers:key=T3-Thread,valueonly,separator=%x2C)", f"^{base}")) if c["h"] in merged or c["thread"] in tree_ids]
+    authors = set(git("log", "--branches", "--format=%(trailers:key=T3-Thread,valueonly,separator=%x2C)", f"^{base}").replace(",", " ").split())
+    return kept, sum(c["h"] not in merged for c in kept), authors
+
+
+def lost_writers(ms, authors):
+    """Titles of threads that ran `git commit` and have no commit of theirs on any local branch: the sign of a branch deleted before it merged (or of commits that all failed). ms: thread metrics; authors: ids of threads with any commit, merges included."""
+    wrote = set(authors); n = lambda v: (v["calls"] + v["secondary"]) if isinstance(v, dict) else (v[0] + v[2]) if v else 0
+    return sorted(m["title"] or m["tid"] for m in ms if m["tid"] not in wrote and n((m.get("commands") or {}).get("git commit")))
+
+
+def gate_slices(subj):
+    """Slice labels a first-parent subject gates: `Slice N gated|merged` or `Wave ... gated|merged: slices ...`. A label may carry a letter (`Slice 2b gated`, `slices 5a, 6-7`); a range is digits only."""
+    if mm := re.search(r"\b[Ss]lice (\d+[a-z]?) (?:gated|merged)", subj): return {mm[1]}  # search: the subject may lead with a file name
+    if not re.match(r"Wave\b.*\b(?:gated|merged)", subj): return set()
+    part = re.search(r"[Ss]lices? ((?:\d+[a-z]?|[,\s&\u2013-])+)", subj); out = set()
+    for a, letter, b in re.findall(r"(\d+)([a-z])?(?:\s*[\u2013-]\s*(\d+))?", part[1] if part else ""):
+        out.update([a + letter] if letter else map(str, range(int(a), int(b or a) + 1)))
+    return out
+
+
+def gates_and_marks(branch, base, t0, t1):
+    """First-parent walk of the integration branch: the first gating commit per slice, and the gate/merge commits inside [t0, t1] for the page. -> ({label: time}, [dict(t, h, subject, kind)])"""
+    gates, marks = {}, []
+    for line in git("log", "--first-parent", "--reverse", "--format=%H\t%cI\t%s", f"{base}..{branch}").splitlines():
+        h, c, subj = line.split("\t", 2)
+        for n in gate_slices(subj): gates.setdefault(n, ts(c))
+        kind = "gate" if "gated" in subj else "merge" if subj.startswith("Merge") else None
+        if kind and t0 <= ts(c) <= t1: marks.append(dict(t=utc(ts(c)), h=h[:8], subject=subj, kind=kind))
+    return gates, marks
+
+
+def landmark(commits, gates, marks, t0, t1, runs=()):
+    """Tail per slice: time from 80% of its final churn to its marker commit (`gates`, see gates_and_marks). A slice with no marker is open and runs to t1.
+    A slice is the set of commits whose writing thread (the `T3-Thread` trailer) has that slice in its title; see attribute(). The slice list is whatever the commits name, so a slice needs no branch.
+    Lettered slices (2b, 5a) are their own slices, ordered after their number (2 < 2b < 3): their work is cut later than the numbered slice's gate, so folding it in would stretch that slice's
+    start, 80% mark and tail with commits made hours after it gated. A lettered slice gates on its own label (`Slice 2b gated`).No branch-name rule is needed for trailered commits:
+    a commit has one writing thread, so it has one slice and no 'lowest slice that contains it' tie-break, and a late-cut branch (the old s2b exclusion) cannot hand a slice another's commits.
+    Commits with no slice are counted, not hidden: `unattributed` {commits, churn, no_trailer, no_slice_title}; `by_branch` counts commits attributed by the branch-name fallback."""
+    own = collections.defaultdict(list)
+    for c in commits:
+        if c["slice"]: own[c["slice"]].append(c)
+    un = [c for c in commits if not c["slice"]]; out = []
+    for n in sorted(own, key=skey):
+        cs = sorted(own[n], key=lambda c: c["t"]); tot = sum(c["churn"] for c in cs); cum = 0; curve = []
+        for c in cs: cum += c["churn"]; curve.append([utc(c["t"]), cum])
+        i80 = next(i for i, cm in enumerate(curve) if cm[1] >= 0.8 * tot); t80 = cs[i80]["t"]; tail = cs[i80 + 1:]
+        spans, act, quiet = tail_split([c["t"] for c in cs[i80:]], gates.get(n) or t1)
+        out.append(dict(n=n, commits=len(cs), churn=tot, t80=utc(t80), gate=utc(gates[n]) if n in gates else None, first=utc(cs[0]["t"]), start_lag_h=round((cs[0]["t"] - t0).total_seconds() / 3600, 2),
                         tail_h=round(((gates.get(n) or t1) - t80).total_seconds() / 3600, 2), open=n not in gates, curve=curve, tail_commits=len(tail),
-                        tail_churn={k: sum(c[2][k] for c in tail) for k in ("test", "prod", "docs")}, tail_active_h=round(act, 2), tail_quiet_h=round(quiet, 2), tail_segs=[[utc(a), utc(b)] for a, b in spans]))
+                        tail_churn=(tcn := {k: sum(c["parts"][k] for c in tail) for k in ("test", "prod", "docs")}), tail_test_share=round(tcn["test"] / sum(tcn.values()), 3) if sum(tcn.values()) else None, tail_active_h=round(act, 2), tail_quiet_h=round(quiet, 2), tail_segs=[[utc(a), utc(b)] for a, b in spans]))
     wall = (t1 - t0).total_seconds() / 3600; g = sum(not x["open"] for x in out); tc = sum(sum(x["tail_churn"].values()) for x in out); th = sum(x["tail_active_h"] + x["tail_quiet_h"] for x in out)
-    return dict(slices=out, median_tail_h=round(statistics.median(x["tail_h"] for x in out), 2) if out else None, open_slices=[x["n"] for x in out if x["open"]],
+    # The median is over gated slices only: an open slice's 80% mark is 80% of what it has written so far, so a slice begun an hour ago would pull the headline down.
+    done = [x["tail_h"] for x in out if not x["open"]]
+    return dict(slices=out, median_tail_h=round(statistics.median(done), 2) if done else None, open_slices=[x["n"] for x in out if x["open"]], open_max_tail_h=max((x["tail_h"] for x in out if x["open"]), default=None),
                 gated=g, wall_h=round(wall, 1), gated_per_10h=round(g / wall * 10, 2) if wall else None, blocked=blocked(out), writers=(w := writers(out, runs, t0, t1) if out else []), trough=trough(w),
-                tail_test_share=round(sum(x["tail_churn"]["test"] for x in out) / tc, 3) if tc else None, tail_quiet_share=round(sum(x["tail_quiet_h"] for x in out) / th, 3) if th else None)
+                tail_test_share=round(sum(x["tail_churn"]["test"] for x in out) / tc, 3) if tc else None, tail_quiet_share=round(sum(x["tail_quiet_h"] for x in out) / th, 3) if th else None,
+                marks=marks, commits_read=len(commits), by_branch=sum(c["via"] == "branch" for c in commits),
+                unattributed=dict(commits=len(un), churn=sum(c["churn"] for c in un), no_trailer=sum(c["why"] == "no trailer" for c in un), no_slice_title=sum(c["why"] == "thread title names no slice" for c in un)))
+
+
+RUNS = "select requested_at, completed_at from orchestration_v2_projection_runs where thread_id=? order by requested_at"
+
+
+def run_kind(trig, wakes, ra, rb):
+    """Bar class of one run: `run`, or for a keepalive-triggered run `ka` (no wake record), `ka-hit` or `ka-miss` by the wake whose next call hit or missed the cache."""
+    if not trig.startswith("keepalive"): return "run"
+    w = next((w for w in wakes if -60 <= (ts(w["at"]) - ts(ra)).total_seconds() <= (ts(rb) - ts(ra)).total_seconds() + 60), None)
+    return "ka" if not w else "ka-hit" if w["hit"] else "ka-miss"
+
+
+def lane_specs(db, roots):
+    """Lanes in page order: every named root first, then each root's descendants that have runs, grouped by the slice in the title (numbered, lettered after their number) and the rest last. -> [dict(tid, title, model, group, slice, root)]"""
+    sp = []
+    for r in roots:
+        sp.append(((0, (0, "")), dict(tid=r["tid"], title=r["title"], model=r.get("selected"), group="ROOTS", slice=None, root=True)))
+        for t, title, p in descendants_of(db, r["tid"]):
+            if not db.execute("select 1 from orchestration_v2_projection_runs where thread_id=? limit 1", (t,)).fetchone(): continue
+            n = slice_key(title); sp.append(((1, skey(n)) if n else (2, (0, "")), dict(tid=t, title=title, model=(p.get("modelSelection") or {}).get("model"), group=f"SLICE {n}" if n else "OTHER", slice=n, root=False)))
+    return [s for _, s in sorted(sp, key=lambda x: x[0])]
+
+
+def fill_lanes(db, specs, M, names, t1):
+    """Add to each lane what the page draws from the state db: runs [requested, completed|None, trigger text, kind], gaps and their causes, and the messages it received (with sender)."""
+    for sp in specs:
+        m = M.get(sp["tid"]) or {}; trig = {}; msgs = []
+        for (pj,) in db.execute("select payload_json from orchestration_v2_projection_messages where thread_id=? and role='user'", (sp["tid"],)):
+            p = json.loads(pj); txt = (p.get("text") or "")[:140]; snd = p.get("senderThreadId"); trig[p.get("createdAt")] = txt
+            msgs.append(dict(t=p.get("createdAt"), frm=snd, frm_name=(names.get(snd) or snd) if snd else None, owner=p.get("createdBy") == "user" and p.get("creationSource") in ("web", "mobile"), text=txt))
+        sp["runs"] = [[ra, rb, trig.get(ra) or "", run_kind(trig.get(ra) or "", m.get("keepalive", []), ra, rb or t1.isoformat())] for ra, rb in db.execute(RUNS, (sp["tid"],))]
+        sp["gaps"] = m["gaps"] if m else gaps(db, sp["tid"], names); sp["msgs"] = msgs
 
 
 def measures_line(lm, ro):
@@ -545,10 +659,18 @@ def measures_line(lm, ro):
     return " · ".join(p)
 
 
+def commits_line(lm):
+    """What the slice numbers leave out, in one line for the console and the page."""
+    u = lm["unattributed"]; lost = lm.get("lost_writers") or []
+    return (f"{lm['commits_read']} commits read, {lm.get('unmerged', 0)} not merged yet \u00b7 {u['commits']} belong to no slice (churn {u['churn']}: their thread's title names none)"
+            + (f" \u00b7 {len(lost)} threads ran git commit and left no commit on any branch: {', '.join(t[:30] for t in lost[:4])}" if lost else ""))
+
+
 def landmark_line(lm):
-    if not lm or lm["median_tail_h"] is None: return "Gate tail: no slice branches found."
-    return (f"Gate tail (80% of a slice's churn to its gate): median {lm['median_tail_h']:.2f}h over {len(lm['slices'])} slices"
-            f" ({len(lm['open_slices'])} open, counted at their current value) \u00b7 {lm['gated']} gated in {lm['wall_h']}h = {lm['gated_per_10h']} per 10 wall hours.")
+    if not lm or not lm["slices"]: return "Gate tail: no slice commits found."
+    med = f"median {lm['median_tail_h']:.2f}h over {lm['gated']} gated slices" if lm["median_tail_h"] is not None else "no slice gated yet"
+    opn = f" \u00b7 {len(lm['open_slices'])} open, the longest {lm['open_max_tail_h']:.1f}h past its 80% so far" if lm["open_slices"] else ""
+    return f"Gate tail (80% of a slice's churn to its gate): {med}{opn} \u00b7 {lm['gated']} gated in {lm['wall_h']}h = {lm['gated_per_10h']} per 10 wall hours."
 
 
 BARS_CSS = (".bar{display:grid;grid-template-columns:11em 1fr 16em;gap:8px;align-items:center;font-size:12px;max-width:900px}.bar i{display:block;height:10px;background:var(--chart-1,#3f6fb5)}"
@@ -598,10 +720,16 @@ def main():
     rates = pricing.load_rates(T3)
     seen = set(); out = [m for m in (tree(db, rates, p, seen, a.tree) for p in a.threads) if m]
     allm = [x for m in out for x in [m] + m.get("descendants", [])]
-    cmds = merge_commands(allm); lm = None
-    if a.branch and allm: lm = landmark(a.branch, a.base, *window(db, [x["tid"] for x in allm]), desc_runs(db, [m["tid"] for m in out]))
-    for x in allm: x.pop("ivs", None)  # lane intervals are for swimlanes.py, not the json
-    json.dump(dict(threads=out, commands=cmds, landmark=lm), open(f"{a.out}/retro.json", "w"), indent=1, default=dict)
+    cmds = merge_commands(allm); lm = None; names = thread_names(db); ro = rollup(allm)
+    specs = lane_specs(db, out) if a.tree else []  # the lanes' threads, with or without a native session, set the window
+    win = window(db, [s["tid"] for s in specs] or [x["tid"] for x in allm]) if allm else None
+    if a.branch and allm:
+        commits, unmerged, authors = commit_log(db, a.branch, a.base, [m["tid"] for m in out])
+        commits = attribute(commits, names, branch_slices(a.branch, a.base) if any(not c["thread"] for c in commits) else {})
+        lm = landmark(commits, *gates_and_marks(a.branch, a.base, *win), *win, desc_runs(db, [m["tid"] for m in out]))
+        lm["unmerged"] = unmerged; lm["lost_writers"] = lost_writers(allm, authors)
+    fill_lanes(db, specs, {x["tid"]: x for x in allm}, names, win[1]) if specs else None
+    json.dump(dict(threads=out, commands=cmds, landmark=lm, window=[t.isoformat() for t in win] if win else None, lanes=specs, rollup=ro), open(f"{a.out}/retro.json", "w"), indent=1, default=dict)
     print(" | ".join(COLS + EXTRA + ["tool calls", "tool output MB", "top inflow"]))
     rows = [x for m in out for x in [m] + ([m["tree_total"]] if "tree_total" in m else [])]
     for m in rows:
@@ -609,8 +737,9 @@ def main():
         print(" | ".join(map(str, cells(m) + [sum(m["tool_calls"].values()), round(sum(m["tool_output"].values()) / 1e6, 2), top[0][0] if top else "-"])))
     floors = [m["thread"] for m in out if m["cost_is_floor"] and "tree_total" not in m]
     if floors: print(f"cost is a main-thread FLOOR for {len(floors)} thread(s) with unpriced descendants: {', '.join(floors)}. Tree totals: rerun with --tree, or `census`.")
-    ro = rollup(allm); print(measures_line(lm, ro))
-    if lm: print(landmark_line(lm)); [print(f"  slice {x['n']}: {x['commits']} commits, churn {x['churn']}, first {x['first'][11:16]}Z (+{x['start_lag_h']}h), 80% {x['t80'][11:16]}Z, gate {(x['gate'] or 'open')[11:16]}, tail {x['tail_h']}h{' (open)' if x['open'] else ''}: {x['tail_commits']} commits, test/prod/docs churn {x['tail_churn']['test']}/{x['tail_churn']['prod']}/{x['tail_churn']['docs']}, active {x['tail_active_h']}h quiet {x['tail_quiet_h']}h") for x in lm["slices"]]
+    print(measures_line(lm, ro))
+    if lm: u = lm["unattributed"]; print(commits_line(lm)); print(f"commits detail: {lm['by_branch']} attributed by the branch-name fallback; {u['commits']} with no slice, churn {u['churn']} ({u['no_trailer']} no trailer, {u['no_slice_title']} thread title names no slice)")
+    if lm: print(landmark_line(lm));[print(f"  slice {x['n']}: {x['commits']} commits, churn {x['churn']}, first {x['first'][11:16]}Z (+{x['start_lag_h']}h), 80% {x['t80'][11:16]}Z, gate {(x['gate'] or 'open')[11:16]}, tail {x['tail_h']}h{' (open)' if x['open'] else ''}: {x['tail_commits']} commits, test/prod/docs churn {x['tail_churn']['test']}/{x['tail_churn']['prod']}/{x['tail_churn']['docs']}, active {x['tail_active_h']}h quiet {x['tail_quiet_h']}h") for x in lm["slices"]]
     print("top commands (hours, calls, secondary): " + "; ".join(f"{k} {v['hours']}h {v['calls']} +{v['secondary']}" for k, v in list(cmds.items())[:10]))
     th = lambda cs: "".join(f"<th>{c}</th>" for c in cs)
     body = "".join("<tr>" + "".join(f"<td>{html.escape(str(v))}</td>" for v in cells(m)) + "</tr>" for m in rows)
@@ -624,6 +753,7 @@ def main():
         f"<table><tr>{th(COLS + EXTRA)}</tr>{body}</table><h3>Tool wall hours by kind (top 8)</h3><table>{wall}</table>"
         f"<h3>Command prefixes (top 25 by hours; background commands at their real duration; +n = counted as a lighter segment of another command)</h3>{bars(cmds)}"
         f"<h3>Waits between runs, by cause of the next run (hours)</h3><table>{wt}</table>{curves}")
+    if a.tree: import swimlanes; swimlanes.render(a.out)  # the page only draws retro.json; `swimlanes.py <run-dir>` redraws it without remeasuring
 
 
 if __name__ == "__main__":
