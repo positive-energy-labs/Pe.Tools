@@ -23,7 +23,7 @@ import { linkableIds } from "./prose";
 import { harnessClient } from "./provider/harness-client";
 
 /** A linked id: the exact document it resolved in (an attention doc) and its number in the turn. */
-export type TurnSubject = NumberedElement & { doc: string };
+export type TurnSubject = NumberedElement & { doc: string; uniqueId: string };
 export type TurnSubjects = ReadonlyMap<number, TurnSubject>;
 const NONE: TurnSubjects = new Map();
 
@@ -41,7 +41,7 @@ function linkedSubjects(observation: TurnElementNamesObservation, text: string) 
     if (!entry || subjects.has(id)) continue;
     // The attention doc every route scopes a document by: `session/openId`.
     const doc = `${entry.target.session}/${entry.target.openId}`;
-    subjects.set(id, { id, name: entry.name, number: subjects.size + 1, doc });
+    subjects.set(id, { id, name: entry.name, number: subjects.size + 1, doc, uniqueId: entry.uniqueId });
   }
   return subjects;
 }
@@ -115,7 +115,7 @@ export function TurnSubjectText({
 }) {
   const part = { ...subject, connector };
   return (
-    <SubjectTextContext value={{ doc: subject.doc, nameOf: () => subject.name }}>
+    <SubjectTextContext value={{ doc: subject.doc, nameOf: () => subject.name, uniqueIdOf: () => subject.uniqueId }}>
       <SubjectText document={{ parts: [part], references: [subject] }} />
     </SubjectTextContext>
   );
