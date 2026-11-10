@@ -197,6 +197,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       ? new History(lane.recordingStore, run)
       : undefined;
   if (history) {
+    // Optional: the recording lane's inputs are built before host-program opens the journal.
     const journal = yield* Effect.serviceOption(ActionJournalService);
     const stop = Option.isSome(journal)
       ? journal.value.subscribe({ kinds: ["action"] }, (receipt) => {
