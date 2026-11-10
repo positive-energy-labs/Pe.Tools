@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import type { RequestIdentityData } from "@pe/host-internal/request-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
@@ -22,7 +22,6 @@ async function fixture() {
     await settle(Layer.buildWithScope(ActionJournalService.live(null, dir), host)),
     ActionJournalService,
   );
-  const entered = Deferred.makeUnsafe<string>();
   const native = Deferred.makeUnsafe<unknown, StepFailure>();
   const calls: { key: string; requestId: string }[] = [];
   const seen: { identity?: RequestIdentityData; interrupted: boolean } = { interrupted: false };
@@ -39,37 +38,36 @@ async function fixture() {
               Effect.gen(function* () {
                 seen.identity = yield* RequestIdentity;
                 calls.push({ key: "test.hold", requestId });
-                Deferred.doneUnsafe(entered, Effect.succeed(requestId));
                 return yield* Deferred.await(native);
               }).pipe(Effect.onInterrupt(() => Effect.sync(() => void (seen.interrupted = true)))),
             ),
-          // The mock native door: what the registry's `op.cancel` sends to Revit.
+          // The mock native door: what the registry's `op.cancel` sends to Revit, answered late.
           cancel: (requestId) =>
-            Effect.sync(() => {
-              calls.push({ key: CANCEL_OPERATION_KEY, requestId });
-              return { cancelled: true };
-            }),
+            Effect.sync(() => calls.push({ key: CANCEL_OPERATION_KEY, requestId })).pipe(
+              Effect.andThen(Effect.sleep("300 millis")),
+              Effect.as({ cancelled: true }),
+            ),
         },
       ),
   });
   const submitter = admittedRequestIdentity(human, {});
-  // The /actions admission fiber: it journals the row, then is aborted with its request.
-  const submit = (id: string) =>
-    settle(
-      Effect.gen(function* () {
-        const admission = yield* Effect.forkChild(
-          Effect.tryPromise(() =>
-            journal.invoke(
-              { id, key: "test.hold", target: { kind: "host" }, input: {} },
-              { caller: human, basis: null, parent: submitter.requestId },
-            ),
-          ).pipe(Effect.andThen(Effect.never), Effect.provideService(RequestIdentity, submitter)),
-        );
-        const stepId = yield* Deferred.await(entered);
-        yield* Fiber.interrupt(admission);
-        return stepId;
-      }),
+  const holds = () => calls.filter((call) => call.key === "test.hold");
+  // The /actions admission fiber: it journals the row, then is aborted with its request once the
+  // attempt's native step has entered. Returns that step's id.
+  const submit = async (id: string) => {
+    const before = holds().length;
+    const admission = Effect.runFork(
+      Effect.tryPromise(() =>
+        journal.invoke(
+          { id, key: "test.hold", target: { kind: "host" }, input: {} },
+          { caller: human, basis: null, parent: submitter.requestId },
+        ),
+      ).pipe(Effect.andThen(Effect.never), Effect.provideService(RequestIdentity, submitter)),
     );
+    await vi.waitFor(() => expect(holds()).toHaveLength(before + 1));
+    await settle(Fiber.interrupt(admission));
+    return holds()[before]!.requestId;
+  };
   return {
     journal,
     calls,
@@ -80,6 +78,8 @@ async function fixture() {
     closeHost: () => settle(Scope.close(host, Exit.void)),
     reopen: () => new ActionJournal(join(dir, "partition-operations.json"), Date.now),
     async dispose() {
+      // A failed assertion leaves the step held; release it so the scope's join can finish.
+      Deferred.doneUnsafe(native, Effect.succeed(null));
       await settle(Scope.close(host, Exit.void));
       await rm(dir, { recursive: true, force: true });
     },
@@ -126,6 +126,37 @@ test("cancel sends op.cancel with the step id and never interrupts the dispatche
     f.answer(Effect.fail(new StepFailure("Revit cancelled the request", 499, "cancelled")));
     expect(await f.journal.wait("cancelled")).toMatchObject({ state: "cancelled" });
     expect(f.seen.interrupted).toBe(false);
+  } finally {
+    await f.dispose();
+  }
+});
+
+test("two concurrent Stops on one running step both settle; one op.cancel is sent", async () => {
+  const f = await fixture();
+  try {
+    const stepId = await f.submit("stopped-twice");
+    const stops = await Promise.allSettled([f.journal.cancel("stopped-twice"), f.journal.cancel("stopped-twice")]);
+    expect(stops.map((stop) => stop.status)).toEqual(["fulfilled", "fulfilled"]);
+    expect(f.calls.filter((call) => call.key === CANCEL_OPERATION_KEY)).toEqual([{ key: CANCEL_OPERATION_KEY, requestId: stepId }]);
+    expect(f.seen.interrupted).toBe(false);
+    f.answer(Effect.fail(new StepFailure("Revit cancelled the request", 499, "cancelled")));
+    expect(await f.journal.wait("stopped-twice")).toMatchObject({ state: "cancelled" });
+  } finally {
+    await f.dispose();
+  }
+});
+
+test("a fork under a running attempt's key never interrupts it, even a cancel under a caller-chosen id", async () => {
+  const f = await fixture();
+  try {
+    const stepId = await f.submit("cancelled-other");
+    // Action ids are the caller's: this one spells the cancel key of the other action's step.
+    await f.submit(`cancel:${stepId}`);
+    await f.journal.cancel("cancelled-other");
+    f.answer(Effect.succeed({ ok: true }));
+    expect(await f.journal.wait(`cancel:${stepId}`)).toMatchObject({ state: "succeeded" });
+    expect(f.seen.interrupted).toBe(false);
+    expect(f.calls.filter((call) => call.key === "test.hold")).toHaveLength(2);
   } finally {
     await f.dispose();
   }
