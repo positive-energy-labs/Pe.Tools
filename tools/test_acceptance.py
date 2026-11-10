@@ -23,6 +23,19 @@ def test_pod_build_skip(tmp: Path) -> None:
     assert kept == ["default/src/a.cs", "default/src/output/keep.txt", "other/Pod.json"], kept
 
 
+def test_pick_models(tmp: Path) -> None:
+    fixture = tmp / "fixture.rvt"
+    assert a.pick_models(["--model", "x.rvt=B.rvt"], fixture) == [["x.rvt", "B.rvt"]]  # flag wins, no disk look
+    try:
+        a.pick_models([], fixture)
+        raise AssertionError("expected refusal")
+    except SystemExit as e:
+        assert "--model" in str(e) and str(fixture) in str(e) and "\n" not in str(e), e
+    touch(fixture)
+    assert a.pick_models([], fixture) == [[str(fixture), "A.rvt"]]
+
+
 with tempfile.TemporaryDirectory() as t:
     test_pod_build_skip(Path(t))
+    test_pick_models(Path(t))
 print("ok")

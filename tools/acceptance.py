@@ -7,6 +7,7 @@
     python tools/acceptance.py teardown <run>
 
 Everything lives under <checkout>/.artifacts/accept/<run>/ (run.json is the custody record).
+Without --model, setup copies the Chadds model from the main checkout's .artifacts/revit/detached, or refuses.
 Dev copies the product home. Installed uses the actual MSI and product home; its writes are censused.
 `who` is cli (this host's human/cli context), anon, or ctx:<token>. Teardown stops only the
 session ids and host this run recorded; anything else it finds is printed as residue.
@@ -16,7 +17,8 @@ import hashlib, json, os, re, shutil, subprocess, sys, time, urllib.error, urlli
 from pathlib import Path
 
 CHECKOUT = Path(__file__).resolve().parents[1]
-SAMPLE = Path(r"C:\Program Files\Autodesk\Revit 2025\Samples\Snowdon Towers Sample HVAC.rvt")
+# Local fixture in the main checkout's ignored artifacts; never searched for. Without it, --model is required.
+DEFAULT_MODEL = Path(".artifacts/revit/detached/MEP_YoramLePairArchitects_ChaddsFord_R25_standalone_20261019.rvt")
 COPIED = ["Pods", "Pages", ".agents", ".claude", ".codex", ".pea", "settings", "preferences.json", "AGENTS.md"]
 LOCAL = Path(os.environ["LOCALAPPDATA"]) / "Positive Energy" / "Pe.Tools"
 
@@ -54,6 +56,19 @@ def pod_build_skip(pods: Path):
         pod_dir = Path(directory).parent == pods
         return {n for n in names if n in ("obj", "bin") or (pod_dir and n == "output")}
     return skip
+
+
+def main_checkout() -> Path:
+    return Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")).parent
+
+
+def pick_models(args: list[str], default: Path) -> list[list[str]]:
+    given = [m.split("=", 1) for m in value_list(args, "--model")]
+    if given:
+        return given
+    if default.is_file():
+        return [[str(default), "A.rvt"]]
+    sys.exit(f"No --model given and no default model at {default}; pass --model PATH[=NAME]")
 
 
 def owner_files(roots: list[str]) -> dict:
@@ -260,6 +275,7 @@ def setup(run: str, args: list[str]) -> None:
     root = run_dir(run)
     if root.exists():
         sys.exit(f"{root} exists; pick a new run name or tear it down and delete it")
+    models = pick_models(args, main_checkout() / DEFAULT_MODEL)  # refuse before anything is created
     (root / "ev").mkdir(parents=True)
     (root / "docs").mkdir()
     owner = owner_home()
@@ -276,7 +292,6 @@ def setup(run: str, args: list[str]) -> None:
                             ignore=pod_build_skip(source) if name == "Pods" else None)
         elif source.is_file():
             shutil.copy2(source, destination)
-    models = [a.split("=", 1) for a in value_list(args, "--model")] or [[str(SAMPLE), "A.rvt"]]
     docs = []
     model_copies = []
     for model in models:
