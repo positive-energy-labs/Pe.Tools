@@ -6,6 +6,7 @@ import { Link } from "@tanstack/react-router";
 import type { ActionReceipt } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { previousOf, useReading } from "#/host/resource-state";
 import {
   actionRoute,
@@ -91,13 +92,11 @@ export function ActionLine({
           </Button>
         ) : (
           // Why there is no `open ›` is the link's hint, not a second toned line under it.
-          <Link
-            to="/ops"
-            search={{ actionId: call.id }}
-            title={place && !place.ok ? place.refusal : undefined}
-          >
-            receipt ›
-          </Link>
+          <TooltipHint content={place && !place.ok ? place.refusal : undefined}>
+            <Link to="/ops" search={{ actionId: call.id }}>
+              receipt ›
+            </Link>
+          </TooltipHint>
         )}
       </div>
       {row?.state === "succeeded" ? <NativeReadingReferences receipt={row} /> : null}
