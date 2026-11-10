@@ -31,19 +31,17 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
   };
   if (!cells.length) return <p>Nothing staged yet.</p>;
   return (
-    <table aria-label="Sheet" className="w-full">
-      <tbody>
-        {cells.map((cell) => (
-          <tr key={`${cell.binding}:${cell.subject ?? ""}`} data-source={cell.source} data-drift={cell.drift || undefined}>
-            <th scope="row" className="text-left font-normal">{cell.binding}{cell.subject ? ` ${cell.subject}` : ""}</th>
-            <td>
-              <input aria-label={cell.binding} className="w-24" defaultValue={cell.value == null ? "" : String(cell.value)}
-                onBlur={(e) => stage(cell, e.currentTarget.value)} />
-            </td>
-            <td className="t-small text-ink-2">{cell.drift ? <s>{cell.model == null ? "unread" : String(cell.model)}</s> : cell.source}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <dl aria-label="Sheet" className="grid grid-cols-[minmax(0,1fr)_minmax(0,8rem)_auto] items-center gap-x-3">
+      {cells.map((cell) => (
+        <div key={`${cell.binding}:${cell.subject ?? ""}`} className="contents" data-source={cell.source} data-drift={cell.drift || undefined}>
+          <dt className="min-w-0 truncate">{cell.binding}{cell.subject ? ` ${cell.subject}` : ""}</dt>
+          <dd>
+            <input aria-label={cell.binding} className="w-full" defaultValue={cell.value == null ? "" : String(cell.value)}
+              onBlur={(e) => stage(cell, e.currentTarget.value)} />
+          </dd>
+          <dd className="t-small text-ink-2">{cell.drift ? <s>{cell.model == null ? "unread" : String(cell.model)}</s> : cell.source}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

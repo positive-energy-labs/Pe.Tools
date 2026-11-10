@@ -143,6 +143,8 @@ export function healedCellPaths(
     : [];
 }
 
+/** Each kind's sealed plan entry: the losses plan is the sheet pair's (slice 7). */
+const PLAN_OF = { losses: "sheet.plan", heal: "ducts.plan-heal", "assign-fan": "ducts.plan-assign-fan" } as const;
 /** Work is the only authored input. Plan, rehearsal and apply share the same derivation and journal. */
 export function ductsExecutors(
   bridge: RevitBridge["Service"],
@@ -180,7 +182,7 @@ export function ductsExecutors(
       .receipts()
       .filter(
         (r) =>
-          r.key === (kind === "losses" ? "sheet.plan" : `ducts.plan-${kind}`) &&
+          r.key === PLAN_OF[kind] &&
           r.state === "succeeded" &&
           canonicalRouteInput(r.target) === canonicalRouteInput(ctx.admission.target),
       )
