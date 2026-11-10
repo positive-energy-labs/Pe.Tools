@@ -1044,7 +1044,7 @@ test("JZ H19 wait beyond the browser budget, then inspect queue and conflict ref
         expect(attempts).toBe(1);
       } finally { await server.close(); await queueJournal.close(); }
       const work = { key: f.key, revision: 0 };
-      const changed = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } }], 0);
+      const changed = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } }], 0);
       expect(changed.ok).toBe(true);
       const response = await f.post("/actions", { id: "jz-conflict", key: "ducts.apply-losses", target: f.target, input: { work } });
       expect(response.ok).toBe(true);

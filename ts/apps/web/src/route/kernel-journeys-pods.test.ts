@@ -453,7 +453,7 @@ test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", 
       expect(await response.json()).toMatchObject({ notDispatched: true });
     }
     const staged = await f.saved.apply(f.key, "ducts", "human", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
     ], 0);
     expect(staged.ok).toBe(true);
     if (!staged.ok) throw Error("Stage refused");
@@ -474,7 +474,7 @@ test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", 
       input: { work, seal: { forged: true }, reviewTicket: "invented" } }, pea("forger"));
     expect(forged.status, "H29: strict admission rejects invented seal and ticket fields").toBe(409);
     const changed = await f.saved.apply(f.key, "ducts", "human", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["g2"] } } },
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g2"] } } },
     ], staged.revision);
     expect(changed.ok).toBe(true);
     const stale = await f.post("/actions", { id: "jz-stale", key: "ducts.apply-losses", target: f.target, input: { work } });
@@ -711,7 +711,7 @@ test("JZ route-neutral Plan refusal preserves the reason and holds Apply through
     ], 0);
     if (!fans.ok) throw Error(JSON.stringify(fans));
     const staged = await f.saved.apply(f.key, "ducts", "human", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
     ], 0);
     if (!staged.ok) throw Error(JSON.stringify(staged));
     const input = { work: { key: f.key, revision: staged.revision } };
@@ -768,7 +768,7 @@ test("JZ cold HTTP action inspection discards old journal rows without conversio
   let bytes: string;
   try {
     const staged = await first.saved.apply(first.key, "ducts", "human", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
     ], 0);
     if (!staged.ok) throw Error(JSON.stringify(staged));
     await first.post("/actions", { id: "jz-old-row", key: "ducts.plan-losses", target: first.target, input: { work: { key: first.key, revision: staged.revision } } });

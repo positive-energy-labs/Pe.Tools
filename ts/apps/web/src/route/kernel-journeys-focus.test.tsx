@@ -641,7 +641,7 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
   const view = render(<JournalButtons owner={mount} />);
   try {
     const staged = await stage("ducts", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
     ], "Choose fan walk");
     await stage("fans", [
       { path: ["flows", "4", "edit"], value: { value: { cfm: 250 } } },

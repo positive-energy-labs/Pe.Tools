@@ -38,7 +38,7 @@ async function stage(f: Awaited<ReturnType<typeof nativeFixture>>) {
     0,
   );
   if (!staged.ok) throw Error(JSON.stringify(staged));
-  const ducts = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g8718801"] } } }], 0,
+  const ducts = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g8718801"] } } }], 0,
   );
   if (!ducts.ok) throw Error(JSON.stringify(ducts));
   return { key: f.key, revision: ducts.revision };

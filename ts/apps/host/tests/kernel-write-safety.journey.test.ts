@@ -198,7 +198,7 @@ test("R5 a real native rehearsal receipt cannot substitute for the declared Plan
   try {
     f.select("fresh-ducts.heal.preview", "fresh-ducts.heal");
     expect(await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [{ path: ["flows", "8718801", "edit"], value: { value: { cfm: 250 } } }], 0)).toMatchObject({ ok: true });
-    const staged = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g8718801"] } } }], 0);
+    const staged = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g8718801"] } } }], 0);
     if (!staged.ok) throw Error(JSON.stringify(staged));
     const input = { work: { key: f.key, revision: staged.revision } };
     for (const [id, key] of [["rehearsal", "ducts.rehearse-heal"], ["apply", "ducts.apply-heal"]]) {

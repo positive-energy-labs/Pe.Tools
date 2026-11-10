@@ -18,7 +18,7 @@
  *   census, and the route leaves out every element that does not exist in it (`phases.ts`).
  * `ducts.apply` writes the edited rules, rulings and the fans Work's drops, flows, esp and slots to Revit.
  */
-import { subjectOf, subjectRefCodeSchema } from "./subject-ref.ts";
+import { decode, subjectOf, subjectRefCodeSchema } from "./subject-ref.ts";
 import { z } from "zod";
 import { DUCT_UNIT_KINDS, ductsCriteriaLayerSchema } from "./ducts-sheet.ts";
 
@@ -323,7 +323,7 @@ export const ductsDocumentSchema = z
         /** Network groups as SubjectRef `group:<id>` codes (ADR 0035 rule 2), decoded at this door. */
         groups: z
           .array(
-            subjectRefCodeSchema.refine((code) => subjectOf(code).keyKind === "group", {
+            subjectRefCodeSchema.refine((code) => decode(code).ok && subjectOf(code).keyKind === "group", {
               message: "a write-scope group is a group:<id> SubjectRef",
             }),
           )
