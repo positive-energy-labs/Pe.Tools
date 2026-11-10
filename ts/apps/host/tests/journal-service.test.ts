@@ -1,10 +1,11 @@
-import { Context, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ActionJournal } from "../src/action-journal.ts";
-import { RevitBridgeLive, RevitProcessAlive } from "../src/bridge.ts";
+import { RevitBridge, RevitBridgeLive, RevitProcessAlive } from "../src/bridge.ts";
+import { launchOverJournal, openJournal } from "../src/host-program.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { ReceiptExport } from "../src/receipt-export.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
@@ -37,12 +38,21 @@ effectTest("the journal Layer closes the journal after the bridge releases, and 
   Effect.gen(function* () {
     const dir = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-journal-order-")));
     yield* Effect.addFinalizer(() => Effect.promise(() => rm(dir, { recursive: true, force: true })));
-    const scope = yield* Scope.make();
-    const context = yield* Layer.buildWithScope(
-      RevitBridgeLive.pipe(Layer.provideMerge(ActionJournalService.live(null, dir))),
-      scope,
-    ).pipe(Effect.provideService(RevitProcessAlive, () => true));
-    const journal = Context.get(context, ActionJournalService);
+    // The production composition (host-program): the journal in the program scope, the bridge in
+    // the launch scope nested inside it. Closing the program scope once is the whole shutdown.
+    const program = yield* Scope.make();
+    const receipts = yield* openJournal(null, dir).pipe(Scope.provide(program));
+    const up = yield* Deferred.make<RevitBridge["Service"]>();
+    const probe = Layer.effectDiscard(RevitBridge.pipe(Effect.flatMap((bridge) => Deferred.succeed(up, bridge)))).pipe(
+      Layer.provide(RevitBridgeLive),
+    );
+    yield* Effect.forkIn(
+      launchOverJournal(receipts, probe).pipe(Effect.provideService(RevitProcessAlive, () => true)),
+      program,
+    );
+    // Only the bridge crosses out: the launch scope's own context must not become the fixture's.
+    const context = Context.make(RevitBridge, yield* Deferred.await(up));
+    const journal = Context.get(receipts, ActionJournalService);
     const { bridge, target, outgoing, incoming } = yield* connectTestBridge().pipe(Effect.provide(context));
     const call = yield* Effect.forkScoped(
       bridge.invoke("test.a", {}, target.session, target.openId),
@@ -68,7 +78,7 @@ effectTest("the journal Layer closes the journal after the bridge releases, and 
           },
         }),
       );
-    const closing = yield* Effect.forkScoped(Scope.close(scope, Exit.void));
+    const closing = yield* Effect.forkScoped(Scope.close(program, Exit.void));
     // Closing the bridge cancels the running op out of band and waits for Revit's answers.
     yield* answer((yield* Queue.take(outgoing)).request!.requestId);
     yield* answer(running.request!.requestId);
