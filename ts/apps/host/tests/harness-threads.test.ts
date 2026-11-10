@@ -1688,6 +1688,25 @@ test("host shutdown settles a running turn and a queued prompt durably, even whe
   ]);
 }, 30_000);
 
+test("a harness that exits mid-turn writes one terminal: a short sentence, stderr folded as raw detail", async () => {
+  const h = await host();
+  const call = caller(h);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const turn = randomUUID();
+  await call("POST", `/pe/threads/${id}/prompt`, { id: turn, text: "die" });
+  await until(reader(h), id, (b) => !b.running && b.events.some((e) => e.kind === "error"));
+  await h.close(); // shutdown must not write a second terminal for the dead turn
+  const ends = (await readFile(join(root, id, "events.jsonl"), "utf8"))
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+    .filter((e) => e.turnId === turn && (e.kind === "turn_end" || e.kind === "error"));
+  expect(ends).toHaveLength(1);
+  expect(ends[0]).toMatchObject({ kind: "error", message: "The claude harness exited (code 3)." });
+  // The 2000-char tail starts mid-line; the raw detail starts at the first whole one.
+  expect(ends[0].failure.raw).toMatch(/^\[session\/create\] .*\n[\s\S]*durationMs=79$/);
+}, 30_000);
+
 test("Stop with a failing consent persist still cancels, then kills a child that ignores cancel, recording unknown", async () => {
   const consents = consentService();
   let failed = false;

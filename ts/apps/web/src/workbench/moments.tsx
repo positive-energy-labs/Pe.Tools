@@ -439,7 +439,7 @@ const ToolGroup = memo(
   (prev, next) => deepEqual(prev.run, next.run),
 );
 
-/** Latest activity stays readable while the sequence grows; failures never disappear in a count. */
+/** Latest activity stays readable while the sequence grows; a failure is counted and named once. */
 function ToolRunFold({
   calls,
   thoughts,
@@ -466,10 +466,10 @@ function ToolRunFold({
     const timer = setTimeout(() => setNewCall(false), 1400);
     return () => clearTimeout(timer);
   }, [latest.id]);
-  // One outcome, one voice: the glyph alone wears the alarm tone; the count says "1 failed" in the
-  // row's own ink, and the label names the failed call once (the latest while the run works).
+  // One outcome, one voice: only the glyph is toned; the count says how many failed, and the label
+  // names the first failed call once the run settles (the latest while it works).
   const Glyph = working ? LoaderCircle : failed ? CircleAlert : Wrench;
-  const named = !working && failures[0] ? failures[0] : latest;
+  const named = (!working && failures[0]) || latest;
   const summary = toolDetail(named)?.text ?? toolTitle(named.title);
   return (
     <details

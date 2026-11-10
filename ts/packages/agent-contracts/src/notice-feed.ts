@@ -4,8 +4,8 @@
  * tray card, the OS notification) and pull (home Activity, tray Activity, the Mod+Shift+K empty
  * state) read the same rows; nothing in the browser joins threads, receipts and Works again.
  *
- * Scaffold (slice 6, seam c): the schema is the contract; `apps/host/src/notice-feed.ts` serves it
- * and `apps/web/src/navigation/notice-feed.ts` reads it.
+ * `apps/host/src/notice-feed.ts` builds and serves it; `apps/web/src/navigation/notice-feed.ts`
+ * reads it for pull, and `apps/web/src/machine/notice-follow.ts` follows it for push.
  */
 import { z } from "zod";
 
@@ -24,8 +24,16 @@ export const noticeActSchema = z.discriminatedUnion("kind", [
     /** ISO instant the host auto-approves at; absent while auto-approve is off. */
     deadline: z.string().optional(),
     reject: z.strictObject({ optionId: z.string().min(1) }).optional(),
+    /** The ask's allow option: the tray card answers in place while auto-approve is off. */
+    allow: z.strictObject({ optionId: z.string().min(1) }).optional(),
   }),
-  z.strictObject({ kind: z.literal("question"), threadId: z.string().min(1), requestId: z.string().min(1) }),
+  z.strictObject({
+    kind: z.literal("question"),
+    threadId: z.string().min(1),
+    requestId: z.string().min(1),
+    /** The form the answer fills; the row's `says` is the question. */
+    requestedSchema: z.record(z.string(), z.unknown()),
+  }),
   z.strictObject({ kind: z.literal("reply"), threadId: z.string().min(1) }),
   /** A host-restart death: Resume re-sends the turn the restart cut off. */
   z.strictObject({ kind: z.literal("resume"), threadId: z.string().min(1) }),
@@ -52,13 +60,15 @@ export const noticeRowSchema = z.strictObject({
   /** The raw failure text `says` folds; the row offers it to copy. */
   detail: z.string().optional(),
   act: noticeActSchema.optional(),
+  /** Only in the tray follower's feed: a person is looking at this row's thread now, so no card. */
+  attended: z.literal(true).optional(),
 });
 export type NoticeRow = z.infer<typeof noticeRowSchema>;
 
 /**
- * The `notices` Reading's snapshot. Rows arrive sorted group order first, newest first inside a
- * group. `id` is the host log id the snapshot was built at: a follower that raised cards up to it
- * raises nothing again, and a `gap` below it owes nothing earlier.
+ * The `notices` Reading's snapshot, the whole feed in every frame. Rows arrive sorted group order
+ * first, newest first inside a group. `id` is the host log id it was built at. Push followers key
+ * on each row's `revision` (its source's durable counter), never on `id`.
  */
 export const noticeFeedSchema = z.strictObject({
   id: z.int().min(0),

@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { readingFrameSchema } from "@pe/agent-contracts";
-import { machineNoticeSchema } from "@pe/host-contracts/native-adapter";
+import { readingFrameSchema, type NoticeRow } from "@pe/agent-contracts";
 
 import { OsNotices, setOsNotices, useThreadPresence } from "./os-notices";
 /** Presence beats as the host sees them: the PUT bodies, through the real client and hostFetch. */
@@ -54,18 +53,30 @@ const send = (frame: unknown) =>
       data: JSON.stringify(readingFrameSchema.parse(frame)),
     } as MessageEvent<string>),
   );
-const notice = (id: string, revision = 1) =>
-  machineNoticeSchema.parse({
-    id,
-    revision,
-    title: "Pea finished · ducts",
-    body: "Resized 41 of 43.",
-    href: "/pea?thread=t1",
-    act: { kind: "reply", threadId: "t1" },
-  });
-let logId = 0;
-const item = (id: string) => send({ kind: "event", key: "k", value: notice(id), id: ++logId });
-const tray = (present: boolean) => send({ kind: "snapshot", key: "k", value: { tray: present } });
+const row = (key: string): NoticeRow => ({
+  key,
+  group: "unread",
+  revision: 1,
+  verb: "done",
+  what: "ducts",
+  where: "Claude",
+  says: "Resized 41 of 43.",
+  at: null,
+  url: "/pea?thread=t1",
+  act: { kind: "reply", threadId: "t1" },
+});
+/** The feed so far: each frame carries all of it, as the host sends it. */
+let rows: NoticeRow[] = [];
+let present = false;
+const snapshot = () => ({ kind: "snapshot", key: "k", value: { id: 1, tray: present, rows } });
+const item = (key: string) => {
+  rows = [...rows, row(key)];
+  send(snapshot());
+};
+const tray = (on: boolean) => {
+  present = on;
+  send(snapshot());
+};
 
 const raised: { title: string; options: NotificationOptions }[] = [];
 let permission: NotificationPermission;
@@ -73,9 +84,11 @@ let permission: NotificationPermission;
 beforeEach(() => {
   streams.length = 0;
   raised.length = 0;
-  logId = 0;
+  rows = [];
+  present = false;
   permission = "granted";
-  const store = new Map<string, string>();
+  // A surface that followed before: its first feed raises what moved, not a baseline.
+  const store = new Map<string, string>([["pe.notices.os-seen", "{}"]]);
   Object.defineProperty(window, "localStorage", {
     configurable: true,
     value: {
@@ -130,7 +143,7 @@ test("nothing follows until the person opts in, and denial leaves it off", async
   );
 });
 
-test("a card item becomes an OS notification only while no tray follows, once", async () => {
+test("a moved feed row becomes an OS notification only while no tray follows, once", async () => {
   render(<OsNotices />);
   await act(async () => void (await setOsNotices(true)));
   tray(true);
@@ -140,11 +153,11 @@ test("a card item becomes an OS notification only while no tray follows, once", 
   item("n2");
   expect(raised).toHaveLength(1);
   expect(raised[0]).toMatchObject({
-    title: "Pea finished · ducts",
+    title: "ducts",
     options: { body: "Resized 41 of 43.", tag: "n2" },
   });
-  // The same revision again (a replay past the cursor) is already acknowledged.
-  send({ kind: "event", key: "k", value: notice("n2"), id: ++logId });
+  // The same feed again (a reconnect, a rebuild) raises nothing: no row moved.
+  send(snapshot());
   expect(raised).toHaveLength(1);
 });
 
@@ -180,18 +193,18 @@ test("two windows serialize delivery and reread the shared acknowledgement", asy
       for (const stream of streams)
         stream.onmessage?.(
           new MessageEvent("message", {
-            data: JSON.stringify({ kind: "event", key: "k", value: notice("same-turn"), id: 1 }),
+            data: JSON.stringify({ ...snapshot(), value: { id: 1, tray: false, rows: [row("same-turn")] } }),
           }),
         );
       await Promise.all(queues.values());
     });
     expect(raised).toHaveLength(1);
-    // Reconnect deliveries and another local subscriber cannot announce that revision again.
+    // A later feed and another local subscriber cannot announce that revision again.
     await act(async () => {
       for (const stream of streams)
         stream.onmessage?.(
           new MessageEvent("message", {
-            data: JSON.stringify({ kind: "event", key: "k", value: notice("same-turn"), id: 2 }),
+            data: JSON.stringify({ ...snapshot(), value: { id: 2, tray: false, rows: [row("same-turn")] } }),
           }),
         );
       await Promise.all(queues.values());

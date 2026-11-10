@@ -52,8 +52,7 @@ export function ActionLine({
   told,
 }: {
   call: ActionCall;
-  /** The call itself failed, so its run's row already voiced the failure: the state reads in the
-   *  line's own ink. A receipt that fails after a completed call is this line's alone to tone. */
+  /** The call itself failed and its run's row already said so: the state takes the line's ink. */
   told: boolean;
 }) {
   const { store } = useWorkbench();
@@ -91,8 +90,7 @@ export function ActionLine({
             open ›
           </Button>
         ) : (
-          // Why there is no `open ›` is the link's hint, not a second toned sentence under the
-          // line: the receipt is the way in either way.
+          // Why there is no `open ›` is the link's hint, not a second toned line under it.
           <Link
             to="/ops"
             search={{ actionId: call.id }}

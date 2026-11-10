@@ -221,10 +221,8 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
    * `NoticeFeed`, every row grouped waits, working, interrupted, failed, unread, built at the host
    * log id it carries. Push (the tray card, the OS notification) raises the rows whose revision
    * moved past the follower's cursor; pull (home Activity, tray Activity, Mod+Shift+K) draws the
-   * rows as they are. `as: "tray"` marks the one follower that is the tray itself.
-   *
-   * Scaffold (slice 6): the host still serves the card items (`MachineNotice`) as `event` frames
-   * from `notices.ts`; `apps/host/src/notice-feed.ts` replaces that projection.
+   * rows as they are. `as: "tray"` marks a follower that is the tray itself: its rows carry
+   * `attended`, and while one follows, every feed says `tray: true`.
    */
   z.strictObject({ kind: z.literal("notices"), as: z.literal("tray").optional() }),
   z.strictObject({ kind: z.literal("takeoff-reading"), target: documentRefSchema }),

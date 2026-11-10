@@ -11,7 +11,7 @@ import { consentThread } from "./situation-band";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 import { projectTimeline, type TimelineEntry } from "./timeline";
-import { secondsLeft } from "./countdown";
+import { secondsLeft } from "@pe/kit/lang/consent-sweep";
 
 const catalogSnapshot = z.object({ doc: z.unknown(), handle: workHandleSchema });
 const catalogClient: CatalogWorkClient = {
