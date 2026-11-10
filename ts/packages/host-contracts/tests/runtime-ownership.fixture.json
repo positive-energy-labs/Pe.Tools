@@ -2,6 +2,14 @@
   "$comment": "One table, three resolvers: C# ProductPathing.StateRoot (Pe.Shared.Tests RuntimeOwnershipTests), TS stateRoot (host-contracts runtime-ownership.test.ts), PowerShell Resolve-ProductRuntimeRoot (tools/tests/host-state-isolation.ps1). trayLaunches: TS trayOwnerArguments emits argv; C# Pe.Host.Tray Program.ParseOwner must accept it.",
   "stateRoots": [
     {
+      "name": "a shared content mount never moves machine state",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "stateRoot": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools"
+    },
+    {
       "name": "installed keeps the SDK install root verbatim",
       "lane": "installed",
       "ownerRoot": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools",
@@ -56,6 +64,32 @@
       "ownerRoot": "src\\Pe.Tools",
       "productHome": null,
       "error": "absolute owner root"
+    }
+  ],
+  "contentRoots": [
+    {
+      "name": "isolated home wins",
+      "productHome": " D:\\isolated ",
+      "sharedRoot": "S:\\Pe.Tools",
+      "contentRoot": "D:\\isolated"
+    },
+    {
+      "name": "shared mount supplies content",
+      "productHome": null,
+      "sharedRoot": " S:\\Pe.Tools ",
+      "contentRoot": "S:\\Pe.Tools"
+    },
+    {
+      "name": "blank home falls through to shared mount",
+      "productHome": "  ",
+      "sharedRoot": "S:\\Pe.Tools",
+      "contentRoot": "S:\\Pe.Tools"
+    },
+    {
+      "name": "unconfigured content refuses",
+      "productHome": null,
+      "sharedRoot": null,
+      "error": "PE_TOOLS_SHARED_ROOT"
     }
   ],
   "trayLaunches": [

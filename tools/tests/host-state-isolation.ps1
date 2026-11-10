@@ -3,12 +3,16 @@ $ErrorActionPreference = 'Stop'
 # The PowerShell resolver asserts the same table as C# ProductPathing.StateRoot and TS stateRoot.
 $table = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../ts/packages/host-contracts/tests/runtime-ownership.fixture.json') -Raw | ConvertFrom-Json
 foreach ($row in $table.stateRoots) {
+    $previousShared = $env:PE_TOOLS_SHARED_ROOT
+    $env:PE_TOOLS_SHARED_ROOT = $row.sharedRoot
     $refused = $null
     $actual = $null
     try {
         $actual = Resolve-ProductRuntimeRoot -Lane $row.lane -Root $row.ownerRoot -ProductHomeOverride $row.productHome
     } catch {
         $refused = $_.Exception.Message
+    } finally {
+        $env:PE_TOOLS_SHARED_ROOT = $previousShared
     }
     # Assert outside the try, so a resolver that stops refusing cannot be caught by its own failure message.
     if ($row.error) {
@@ -16,6 +20,16 @@ foreach ($row in $table.stateRoots) {
         if ($refused -notlike "*$($row.error)*") { throw "$($row.name) refused with '$refused'" }
     } elseif ($null -ne $refused) { throw "$($row.name) refused unexpectedly: $refused" }
     elseif ($actual -ne $row.stateRoot) { throw "$($row.name) expected '$($row.stateRoot)', received '$actual'" }
+    Write-Output "PASS $($row.name)"
+}
+foreach ($row in $table.contentRoots) {
+    $refused = $null
+    $actual = $null
+    try { $actual = Resolve-ProductContentRoot -ProductHomeOverride $row.productHome -SharedRoot $row.sharedRoot }
+    catch { $refused = $_.Exception.Message }
+    if ($row.error) {
+        if ($null -eq $refused -or $refused -notlike "*$($row.error)*") { throw "$($row.name): expected '$($row.error)', received '$actual' / '$refused'" }
+    } elseif ($null -ne $refused -or $actual -ne $row.contentRoot) { throw "$($row.name): expected '$($row.contentRoot)', received '$actual' / '$refused'" }
     Write-Output "PASS $($row.name)"
 }
 # A caller that names no lane is refused rather than defaulted to installed.

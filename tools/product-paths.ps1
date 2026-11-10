@@ -1,6 +1,16 @@
 # The PowerShell form of the one state-root rule (C# ProductPathing.StateRoot, TS stateRoot); all three
 # assert ts/packages/host-contracts/tests/runtime-ownership.fixture.json. The caller names its lane and
 # owner root (a checkout, or the SDK install root); nothing defaults. Callers own directory creation.
+function Resolve-ProductContentRoot {
+    param(
+        [string]$ProductHomeOverride = $env:PE_TOOLS_PRODUCT_HOME,
+        [string]$SharedRoot = $env:PE_TOOLS_SHARED_ROOT
+    )
+    $content = if ([string]::IsNullOrWhiteSpace($ProductHomeOverride)) { $SharedRoot } else { $ProductHomeOverride }
+    if ([string]::IsNullOrWhiteSpace($content)) { throw 'Set PE_TOOLS_SHARED_ROOT to the shared content mount.' }
+    return [IO.Path]::GetFullPath($content.Trim())
+}
+
 function Resolve-ProductRuntimeRoot {
     param(
         [Parameter(Mandatory)][ValidateSet('dev', 'installed')][string]$Lane,
