@@ -352,7 +352,8 @@ describe("PSC1 decode", () => {
   });
 });
 
-// Native C# output from u2-gate-0475a118/browser3/browser-overview.psc1.
+// Native C# output: the Chadds SA 7 fan overview (revit.detail.space-scene, overview, padding 0, 6 focus ids), first captured in
+// u2-gate-0475a118/browser3, re-captured unedited at f47a7d7c so its space-scene-v5 link UniqueIds are real. Never hand-edit it.
 it("decodes and prepares every bounds box in the real Chadds overview", () => {
   const bytes = readFileSync(new URL("./fixtures/browser-overview.psc1", import.meta.url));
   const { meshes } = decodeScene(
