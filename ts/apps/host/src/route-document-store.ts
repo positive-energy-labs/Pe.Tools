@@ -49,12 +49,19 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
         if (reason) console.warn(`Discarded stored Work '${path}': ${reason.replace(/\s+/g, " ")}`);
         return;
       }
+      // A random name keeps two writers from tearing one temp file; a failed write removes its own,
+      // because on the shared mount nothing else would.
       const temporary = `${path}.${randomUUID()}.tmp`;
-      writeFileSync(
-        temporary,
-        JSON.stringify({ format: "route-state-record-v2", targetKey, route, value }),
-      );
-      renameSync(temporary, path);
+      try {
+        writeFileSync(
+          temporary,
+          JSON.stringify({ format: "route-state-record-v2", targetKey, route, value }),
+        );
+        renameSync(temporary, path);
+      } catch (error) {
+        rmSync(temporary, { force: true });
+        throw error;
+      }
     },
     listState: async () => {
       const files = (await readdir(dir)).filter((file) => /^[a-f0-9]{64}\.json$/.test(file)).sort();

@@ -94,7 +94,7 @@ import {
 import { DuctFiles } from "./ducts-files.ts";
 import { runPods } from "./family-actions.ts";
 import { familySpecAsset } from "./family-spec.ts";
-import { HostReceipts } from "./gateway-owner.ts";
+import { ActionJournalService, HostLogService } from "./receipt-services.ts";
 import { peaMcpServer } from "./harness/adapter.ts";
 import { createProviders } from "./harness/providers.ts";
 import { Spawner } from "./harness/spawner.ts";
@@ -196,7 +196,7 @@ export interface PeRoutesOptions {
   telemetry?: ReceiptExporter;
   /** The running turn and harness behind a thread, for an agent report's stamps. */
   reportContext?: (thread: string) => AgentReportContext | null;
-  /** The log from the composing HostReceipts service. */
+  /** The log from the composing HostLogService. */
   log?: HostLog;
   ductsAnalysis?: Omit<DuctsAnalysisSources, "readWork">;
   readGraph?: (request: unknown) => Promise<unknown>;
@@ -1139,7 +1139,8 @@ function* hostPeRoutes(
   telemetry: ReceiptExporter = missingTelemetry(),
 ) {
   const runtime = yield* Effect.context<never>();
-  const receipts = yield* HostReceipts;
+  const journal = yield* ActionJournalService;
+  const hostLog = yield* HostLogService;
   const marks = yield* HostDocumentMarks;
   const pictures = yield* PictureCaptureStore;
   const files = yield* DuctFiles;
@@ -1207,7 +1208,7 @@ function* hostPeRoutes(
     providers,
     updatePending: update.automaticPending,
     root: productHarnessThreadsPath(),
-    log: receipts.log,
+    log: hostLog,
     worldRoot,
     // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
     developerInstructions: async () => peaAgentInstructions,
@@ -1271,11 +1272,11 @@ function* hostPeRoutes(
   const notices = createNotices({
     source: { subscribe: (q, consume) => telemetry.journal.subscribe(q, consume) },
     context: receiptThreads.context,
-    log: receipts.log,
+    log: hostLog,
   });
   // The owner itself is built by the caller's scope (`MachineOwner.layer`); routes reach it late-bound.
   const machineSpec = {
-    sources: machineSources(receipts, bridge, providers, update, share, threads.heads),
+    sources: machineSources(journal, bridge, providers, update, share, threads.heads),
     options: {
       fault: (fault) =>
         telemetry.track(
@@ -1305,7 +1306,7 @@ function* hostPeRoutes(
   invalidateCatalog = () => catalog.invalidate();
   const hostObserve = hostResourceObserver(
     bridge,
-    () => receipts.journal,
+    () => journal,
     captures ? () => captures : undefined,
     hostBaseUrl,
     undefined,
@@ -1406,7 +1407,7 @@ function* hostPeRoutes(
       hostObserve(request, publish, after),
     markReadings: markReadings(marks, (ref, key, at) => ref ? runPods({}, Effect.provide(marks.readFrame(ref, key, at), runtime)) : Promise.resolve(null)),
     telemetry,
-    log: receipts.log,
+    log: hostLog,
     reportContext: threads.reportContext,
   });
   const podRoutes = createPodRoutes(content.lifecycle, { workspace: routes.workspace, bridge });
@@ -1526,7 +1527,7 @@ export const peRoutesLayer = (
         acquired: machineAcquisition,
         acquiredSession: machineSessionAcquisition,
       });
-      const unbindRevoke = bridge ? bindRevoke((yield* HostReceipts).journal, bridge) : undefined;
+      const unbindRevoke = bridge ? bindRevoke(yield* ActionJournalService, bridge) : undefined;
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           unbindRevoke?.();

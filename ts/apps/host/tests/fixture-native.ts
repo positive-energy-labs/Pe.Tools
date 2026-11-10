@@ -4,7 +4,7 @@ import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { createFixtureHost } from "../../../packages/host-contracts/src/fixture-host.ts";
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
-import { HostReceipts } from "../src/gateway-owner.ts";
+import { ActionJournalService } from "../src/receipt-services.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { settle } from "./effect-test.ts";
 import { gatewayNativeLeaves } from "../src/gateway-actions.ts";
@@ -45,7 +45,7 @@ export async function fixtureNative(
   let transport = makeTransport();
   const scope = Scope.makeUnsafe();
   const context = await settle(Layer.buildWithScope(
-    RevitBridgeLive.pipe(Layer.provideMerge(HostReceipts.layer(null, directory))), scope,
+    RevitBridgeLive.pipe(Layer.provideMerge(ActionJournalService.live(null, directory))), scope,
   ));
   const actualBridge = Context.get(context, RevitBridge);
   let nextInventory: (() => Promise<void>) | undefined;
@@ -53,7 +53,7 @@ export async function fixtureNative(
     const pause = nextInventory; nextInventory = undefined;
     return pause ? Effect.promise(pause).pipe(Effect.andThen(actualBridge.list)) : actualBridge.list;
   }) };
-  const journal = Context.get(context, HostReceipts).journal;
+  const journal = Context.get(context, ActionJournalService);
   let beforeReply: (key: string) => Promise<void> = async () => {};
   let emitDocumentChange: (() => Promise<void>) | undefined;
   let loseReply: string | undefined;
@@ -64,7 +64,7 @@ export async function fixtureNative(
   const tokens = new Map<string, string>();
   const handlers: Promise<{ close(): Promise<void> }>[] = [];
   return {
-    bridge, journal, calls, receipts: Context.get(context, HostReceipts),
+    bridge, journal, calls,
     onRequest(listener: (key: string) => Promise<void>) { beforeReply = listener; },
     loseNextReply(operation: string) { loseReply = operation; },
     refuseNextDeliveredReply(operation: string) { refuseDeliveredReply = operation; },

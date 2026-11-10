@@ -1,5 +1,5 @@
 import { testInputContext } from "./effect-test.ts";
-import { HostReceipts } from "../src/gateway-owner.ts";
+import { ActionJournalService } from "../src/receipt-services.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -105,7 +105,7 @@ export async function bootHost(options: Pick<Partial<import("../src/app.ts").Htt
           port: 0,
           lifecycle: { latch, handle },
           webRoot: options.webRoot === undefined ? webDir : options.webRoot,
-        }).pipe(Layer.provide(HostReceipts.layer(null)),
+        }).pipe(Layer.provide(ActionJournalService.live(null)),
           Layer.provide(options.clock === undefined ? Layer.empty :
             Layer.effectDiscard(TestClock.setTime(options.clock)).pipe(Layer.provideMerge(TestClock.layer()))));
         yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch));

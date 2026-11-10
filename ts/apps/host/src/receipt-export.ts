@@ -24,8 +24,8 @@ import {
 import { analyticsConfig, readOrCreateInstallId, writeFatalEvidence } from "@pe/runtime";
 import { isAnyOperationKey, isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import { ActionJournal } from "./action-journal.ts";
-import { HostReceipts } from "./gateway-owner.ts";
-import { hostOwnership } from "./host-ownership.ts";
+import { ActionJournalService } from "./receipt-services.ts";
+import { hostOwnership, hostStateDir } from "./host-ownership.ts";
 import { subscribeReceiptProducers, type NativeReceiptProducer } from "./bridge.ts";
 import { originOf } from "./control.ts";
 import type { NoticeContext } from "./notices.ts";
@@ -809,7 +809,7 @@ export class ReceiptExport extends Context.Service<ReceiptExport, ReceiptExporte
       ReceiptExport,
       Effect.acquireRelease(
         Effect.gen(function* () {
-          const { journal } = yield* HostReceipts;
+          const journal = yield* ActionJournalService;
           const config = stamps.host ? analyticsConfig(hostOwnership.lane) : null;
           const client = config
             ? new PostHog(config.apiKey, {
@@ -825,7 +825,7 @@ export class ReceiptExport extends Context.Service<ReceiptExport, ReceiptExporte
             journal,
             stamps,
             client,
-            root: join(hostOwnership.rootPath, "state", "host", hostOwnership.serviceName),
+            root: hostStateDir(),
           });
           if (!stamps.host)
             exporter.track(exporter.record({ kind: "diagnostic", code: "identity.unavailable" }));
@@ -835,7 +835,6 @@ export class ReceiptExport extends Context.Service<ReceiptExport, ReceiptExporte
         }),
         ({ exporter, unbindNative }) =>
           Effect.promise(async () => {
-            await exporter.journal.close();
             unbindNative();
             if (receiptProducerPort === exporter) receiptProducerPort = undefined;
             await exporter.close();

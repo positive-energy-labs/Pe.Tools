@@ -1,5 +1,5 @@
 import { testInputContext } from "./effect-test.ts";
-import { HostReceipts } from "../src/gateway-owner.ts";
+import { ActionJournalService } from "../src/receipt-services.ts";
 /** Real isolated-host browser proof: draft retention and durable-thread recovery. */
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
@@ -57,7 +57,7 @@ beforeAll(async () => {
             port: 0,
             webRoot: null,
             webUrl,
-          }).pipe(Layer.provide(HostReceipts.layer(null))),
+          }).pipe(Layer.provide(ActionJournalService.live(null))),
         ),
         Deferred.await(latch),
       );
