@@ -10,8 +10,8 @@ import {
 
 const unique = (s: string) => s as UniqueId;
 const doc = (s: string) => s as DocumentKey;
-const host = doc("doc:s1/open-7");
-const linked = doc("doc:s1/open-9");
+const host = doc("c:\projects\host.rvt");
+const linked = doc("c:\projects\linked.rvt");
 const roundTrip = (ref: SubjectRef) => {
   const code = encode(ref);
   if (!code.ok) throw Error(`${code.code}: ${code.reason}`);
@@ -42,7 +42,7 @@ test("one codec round-trips every key kind, placement and sub (ADR 0035 rule 2)"
       source: linked,
       placement: { host, links: [unique("link-a"), unique("link-b")] },
     }),
-  ).toBe("UniqueId:aaaa-1~doc%3as1%2fopen-9@doc%3as1%2fopen-7/link-a/link-b");
+  ).toBe("UniqueId:aaaa-1~c%3a\projects\linked.rvt@c%3a\projects\host.rvt/link-a/link-b");
   expect(roundTrip({ keyKind: "UniqueId", key: unique("aaaa-1"), sub: { port: 2 } })).toBe(
     "UniqueId:aaaa-1#port:2",
   );
@@ -76,6 +76,15 @@ test("every door refuses a document mark, a free-string sub, an unknown kind and
   expect(
     encode({ keyKind: "UniqueId", key: unique("aaaa-1"), source: mark } as never),
   ).toMatchObject({ ok: false, code: "document-mark" });
+  // a session capability row (`doc:<session>/<openId>`) is not a document address key
+  const row = "doc:s1/open-7" as DocumentKey;
+  expect(encode({ keyKind: "UniqueId", key: unique("aaaa-1"), source: row })).toMatchObject({
+    ok: false,
+    code: "bad-source",
+  });
+  expect(
+    encode({ keyKind: "UniqueId", key: unique("aaaa-1"), placement: { host: row, links: [unique("l")] } }),
+  ).toMatchObject({ ok: false, code: "bad-placement" });
   expect(
     encode({ keyKind: "UniqueId", key: unique("aaaa-1"), sub: "port 2" } as never),
   ).toMatchObject({ ok: false, code: "bad-sub" });

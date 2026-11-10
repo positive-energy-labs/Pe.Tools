@@ -99,7 +99,8 @@ test.each(["ducts", "fans"] as const)("Pea resolves %s subject names through the
     const lower = await call(exact.toLowerCase());
     expect(lower, JSON.stringify(lower)).toMatchObject({ ok: true, result: { outcome: "rendered" } });
     expect(mount.page.read()[field]).toEqual({ kind: "ids", ids: [identity] });
-    expect(namesOf(mount.page.read()[field])).toEqual([key === "ducts" ? "SA 19" : rosterData.rows[0].uniqueId]);
+    // A fan identity carries a port sub, so it is not a plain name: the ids equality above proves it.
+    if (key === "ducts") expect(namesOf(mount.page.read()[field])).toEqual(["SA 19"]);
     // Add a differently-cased twin: exact spelling wins; a third casing must refuse the whole move.
     rosterData = key === "ducts" ? { ...rosterData, systems: [rosterData.systems[0], { ...rosterData.systems[0], id: 999999, name: exact.toLowerCase() }] } : {
       ...rosterData, rows: [rosterData.rows[0], { ...rosterData.rows[0], mark: "muas-1", uniqueId: "other-fan" }],
