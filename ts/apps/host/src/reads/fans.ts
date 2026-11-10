@@ -5,7 +5,9 @@ import {
   fansSheetData,
   openFanSheetSchema,
   stagedDucts,
+  subjectCode,
   subjectOf,
+  type UniqueId,
 } from "@pe/agent-contracts";
 import { sheetSnapshot } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import { sheetState } from "@pe/ducts-domain/sheet/state";
@@ -93,7 +95,7 @@ export const fansSheet = read("fans.sheet", {
     const opened = await ctx.collect(chosen, {
       read: openFan,
       batch: 1,
-      key: (fan) => `${fan.uniqueId}@${fan.portIndex}`,
+      key: (fan) => subjectCode({ keyKind: "UniqueId", key: fan.uniqueId as UniqueId, sub: { port: fan.portIndex } }),
       args: ([fan]) => ({
         target: args.target,
         sheetPath: args.sheetPath,

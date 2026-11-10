@@ -689,7 +689,7 @@ test("a Pea open of a new tool keeps its first lease instance, and a set against
       commandId: "55555555-5555-4555-8555-555555555555",
       revision: 1,
       patch: {
-        focus: routeAddress("families").agent.write({focus:"[\"Family\",\"Type\",\"Name\"]"}).focus!,
+        focus: routeAddress("families").agent.write({focus:'name:["Family","Type"]#field:Name'}).focus!,
       },
     }),
   );
