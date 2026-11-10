@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { contentHomes, sharedRoot, userRoot } from "@pe/host-contracts/product-paths";
@@ -11,7 +11,7 @@ import { listPackages, readPackage } from "../src/packages.ts";
 import { scratchPageDescriptors, scratchPageDirectory } from "../src/page-libraries.ts";
 import { readDuctCatalogs } from "../src/duct-catalogs.ts";
 import { listRuns, readMember, saveMember, writeMember, writeRun } from "../src/settings.ts";
-import { sourceRunOutput } from "../src/family-actions.ts";
+import { claimRunOutput, sourceRunOutput } from "../src/family-actions.ts";
 import { peaMcpServer } from "../src/harness/adapter.ts";
 
 // ADR 0035 rule 11 (amended): the user root always, an optional shared root after it.
@@ -135,10 +135,21 @@ test("a Catalog in both homes resolves to the user's copy", async () => {
   ]);
 });
 
+test("declaring a run of a shared-only Pod writes nothing: rejected, the user root holds no copy", async () => {
+  pod(shared, "theirs", "theirs", "shared");
+  const before = tree(shared);
+  // Every Pod-run command's bind declares this effect before consent (ADR 0027); rejection never prepares.
+  expect(await sourceRunOutput("theirs", {})).toBe(join(user, "Pods", "theirs", "output"));
+  expect(existsSync(join(user, "Pods"))).toBe(false);
+  expect(tree(shared)).toEqual(before);
+});
+
 test("running a Pod that exists only on the shared root writes its output to the user root", async () => {
   pod(shared, "theirs", "theirs", "shared");
   const before = tree(shared);
-  expect(await sourceRunOutput("theirs", {})).toBe(join(user, "Pods", "theirs", "output"));
+  // Consented: prepare claims the output, copying the Pod so the C# writer finds its user folder.
+  expect(await claimRunOutput("theirs", {})).toBe(join(user, "Pods", "theirs", "output"));
+  expect(existsSync(join(user, "Pods", "theirs", "pod.json"))).toBe(true);
   expect(await run(writeRun("theirs", "run-1", { "receipt.json": "{}" }))).toBe("output/run-1");
   expect(readFileSync(join(user, "Pods", "theirs", "output", "run-1", "receipt.json"), "utf8")).toBe("{}");
   expect((await run(listRuns({ pod: "theirs" }))).runs.map((r) => r.runId)).toEqual(["run-1"]);
