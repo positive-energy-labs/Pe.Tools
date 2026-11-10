@@ -17,6 +17,7 @@ public sealed class PipingReadsTests {
     private Document _document = null!;
     private PipingSystem _system = null!;
     private FamilyInstance _equipment = null!;
+    private PipingSystem _loose = null!;
 
     [OneTimeSetUp]
     public void BuildHydronicModel(UIApplication uiApplication) {
@@ -31,7 +32,11 @@ public sealed class PipingReadsTests {
         var level = new FilteredElementCollector(_document).OfClass(typeof(Level)).FirstElementId();
         var pipeType = new FilteredElementCollector(_document).OfClass(typeof(PipeType)).FirstElementId();
         _equipment = _document.Create.NewFamilyInstance(XYZ.Zero, symbol, (Level)_document.GetElement(level), StructuralType.NonStructural);
+        // A second unit and pipe whose system never gets base equipment: Source must read Absent, never a guessed root.
+        var other = _document.Create.NewFamilyInstance(new XYZ(40, 0, 0), symbol, (Level)_document.GetElement(level), StructuralType.NonStructural);
         _document.Regenerate();
+        var otherOut = Ports(other).Single(port => port.Direction == FlowDirectionType.Out);
+        _loose = (PipingSystem)Pipe.Create(_document, pipeType, level, otherOut, otherOut.Origin + otherOut.CoordinateSystem.BasisZ * 6).MEPSystem;
         var supply = Ports(_equipment).Single(port => port.Direction == FlowDirectionType.Out);
         var first = Pipe.Create(_document, pipeType, level, supply, supply.Origin + supply.CoordinateSystem.BasisZ * 6);
         _document.Regenerate();
@@ -91,7 +96,9 @@ public sealed class PipingReadsTests {
     private static void Connect(Document family, PlanarFace face, PipeSystemType type, FlowDirectionType direction) {
         var connector = ConnectorElement.CreatePipeConnector(family, type, face.Reference);
         connector.get_Parameter(BuiltInParameter.CONNECTOR_DIAMETER).Set(0.1);
-        connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_DIRECTION_PARAM).Set((int)direction);
+        var flow = connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_DIRECTION_PARAM);
+        if (flow is null || flow.IsReadOnly || !flow.Set((int)direction) || flow.AsInteger() != (int)direction)
+            throw new InvalidOperationException($"Fixture: connector flow direction param {(flow is null ? "missing" : $"readonly={flow.IsReadOnly} value={flow.AsInteger()}")} for {direction}.");
     }
 
     [Test]
@@ -108,9 +115,13 @@ public sealed class PipingReadsTests {
             Assert.That(roster.Systems.Select(row => row.UniqueId), Does.Contain(native.UniqueId));
             Assert.That(system.Source.State, Is.EqualTo(PipingReadState.Value));
             Assert.That(system.Source.Value!.Equipment.UniqueId, Is.EqualTo(native.BaseEquipment.UniqueId));
-            Assert.That(pipes, Has.Count.EqualTo(2));
+            Assert.That(pipes, Has.Length.EqualTo(2));
             Assert.That(result.Elements.Count(row => row.Kind == "fitting"), Is.EqualTo(1));
-            Assert.That(system.Source.Value!.OutConnectorIds, Has.Count.EqualTo(1));
+            // Revit reports the base connector Bidirectional once it is the base; the read says so and infers no Out.
+            Assert.That(system.Source.Value!.BaseConnectorId, Is.EqualTo(native.BaseEquipmentConnector.Id));
+            Assert.That(system.Source.Value.Connectors.Single(port => port.ConnectorId == native.BaseEquipmentConnector.Id).Direction.Value,
+                Is.EqualTo(native.BaseEquipmentConnector.Direction.ToString()));
+            Assert.That(roster.Systems.Single(row => row.UniqueId == _loose.UniqueId).Source.State, Is.EqualTo(PipingReadState.Absent));
             Assert.That(pipes.SelectMany(pipe => pipe.Connectors).SelectMany(port => port.Peers)
                 .Any(peer => peer.UniqueId == _equipment.UniqueId), Is.True, "a pipe end names the equipment as its peer");
             Assert.That(pipes.SelectMany(pipe => pipe.Connectors).Any(port => port.Direction.State == PipingReadState.Value &&
@@ -133,7 +144,7 @@ public sealed class PipingReadsTests {
         }
         var outIds = native.BaseEquipment.MEPModel.ConnectorManager.Connectors.Cast<Connector>()
             .Where(port => port.Domain == Domain.DomainPiping && port.ConnectorType is ConnectorType.End or ConnectorType.Curve &&
-                port.MEPSystem?.Id == native.Id && port.Direction == FlowDirectionType.Out).Select(port => port.Id);
+                (port.MEPSystem?.Id == native.Id || port.Id == native.BaseEquipmentConnector?.Id) && port.Direction == FlowDirectionType.Out).Select(port => port.Id);
         Assert.That(system.Source.Value!.OutConnectorIds, Is.EquivalentTo(outIds));
         Assert.Throws<ArgumentException>(() => PipingReads.Systems(_document, new(native.UniqueId, MaxElements: 1)));
         Assert.Throws<ArgumentException>(() => PipingReads.Systems(_document, new("missing")));

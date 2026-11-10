@@ -9,7 +9,7 @@ public sealed record PipingFact<T>(PipingReadState State,
 public sealed record PipingElementRef(string UniqueId, long ElementId, string Name);
 public sealed record PipingPeer(string UniqueId, long ElementId, int ConnectorId);
 public sealed record PipingPort(int ConnectorId, PipingFact<string> Direction, IReadOnlyList<PipingPeer> Peers);
-public sealed record PipingSource(PipingElementRef Equipment, IReadOnlyList<int> OutConnectorIds, IReadOnlyList<PipingPort> Connectors);
+public sealed record PipingSource(PipingElementRef Equipment, int? BaseConnectorId, IReadOnlyList<int> OutConnectorIds, IReadOnlyList<PipingPort> Connectors);
 public sealed record PipingSystemRow(string UniqueId, long ElementId, string Name,
     PipingFact<PipingElementRef> SystemType, string Classification, PipingFact<double?> FlowCubicFeetPerSecond,
     PipingFact<PipingSource> Source);

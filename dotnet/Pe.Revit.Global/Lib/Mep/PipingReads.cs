@@ -23,9 +23,11 @@ public static class PipingReads {
                     var equipment = system.BaseEquipment;
                     if (equipment is null) return null;
                     // Direction is reported by Revit. Empty means no source connector reported Out, never a guessed root.
+                    // A base connector leaves the system's members (Revit's own rule), so it is named by BaseEquipmentConnector.
+                    var baseId = system.BaseEquipmentConnector?.Id;
                     var ports = MepConnectors.Physical(equipment, Domain.DomainPiping)
-                        .Where(port => port.MEPSystem?.Id == system.Id).Select(Port).ToArray();
-                    return new PipingSource(Ref(equipment), ports.Where(port => port.Direction.Value == "Out").Select(port => port.ConnectorId).ToArray(), ports);
+                        .Where(port => port.MEPSystem?.Id == system.Id || port.Id == baseId).Select(Port).ToArray();
+                    return new PipingSource(Ref(equipment), baseId, ports.Where(port => port.Direction.Value == "Out").Select(port => port.ConnectorId).ToArray(), ports);
                 }))).ToArray(), request.SystemUniqueId, members.Select(Member).ToArray());
     }
 
