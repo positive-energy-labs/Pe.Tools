@@ -4,9 +4,9 @@ namespace Pe.Revit.Global.Lib;
 
 /// <summary>
 ///     One hidden, non-user-modifiable shared Text parameter on Project Information that holds a model-owned JSON blob
-///     (parameter-links profile, duct loss store). Identity is the GUID; the binding is created on first write.
+///     (parameter-links profile, duct loss store, AutoTag settings). Identity is the GUID; the binding is created on first write.
 /// </summary>
-internal sealed record ProjectInfoText(Guid Guid, string Name, string Description) {
+public sealed record ProjectInfoText(Guid Guid, string Name, string Description) {
     public string? Read(Document document) =>
         document.ProjectInformation?.get_Parameter(this.Guid)?.AsString() is { } text && !string.IsNullOrWhiteSpace(text) ? text : null;
 

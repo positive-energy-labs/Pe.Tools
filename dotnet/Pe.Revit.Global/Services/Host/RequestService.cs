@@ -1,3 +1,4 @@
+using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Operations;
 using Pe.Revit.SettingsRuntime.Json;
@@ -39,10 +40,9 @@ public class RequestService {
         CancellationToken cancellationToken
     ) {
         var context = request.Context ?? [];
-        // TODO: Bind this throttle key to document identity before recording closes.
-        // Runtime falsifier: within 350 ms, read the same domain/context in two documents with disjoint
-        // options, including overlapping calls; each answer must contain only its document's candidates.
-        var throttleKey = $"field-options:{request.Key}:" + string.Join(
+        // The document is in the key: two documents asking for one domain must never share an answer.
+        var throttleKey = $"field-options:{document.Value.GetDocumentKey()}:{request.Key}:" + string.Join(
+
             "&",
             context.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => $"{pair.Key}={pair.Value}")
         );
