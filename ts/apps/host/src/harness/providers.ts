@@ -31,7 +31,9 @@ import { mergePath } from "./user-shell.ts";
  * Providers: one harness with one auth source. A subscription provider (the harness's own login)
  * exists for every harness with id = harness id; endpoint providers are user-added and live in
  * `providers.json` under product state with their key, which never leaves this module except as
- * child env. Readiness, models and traits retain their probe timestamp; endpoint use revalidates
+ * child env. An empty key is the quick shared path (ADR 0035 rule 11, kaitpw): it names the
+ * provider id's entry in the shared root's keys.json, and the user's own key always wins over it.
+ * Readiness, models and traits retain their probe timestamp; endpoint use revalidates
  * an observation older than one minute. Reading machine state never makes an inference request.
  */
 

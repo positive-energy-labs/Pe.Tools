@@ -6,12 +6,13 @@ import {
   type Resolved,
 } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { snapshot as networkSnapshot } from "../test-fixture";
 import {
   InputsSurface,
+  ENGINE_DEFAULT_NO_SHARED_ROOT,
   NO_SHARED_ROOT,
   inputFields,
   protocolPickers,
@@ -292,26 +293,30 @@ it("labels the undoable row action Revert and records the same History name", ()
   );
 });
 
-it("disables the criteria still on the firm layer when the firm read refused for no shared root", () => {
+it("no shared root: only the firm line refuses; a criterion on the seed stays editable Work", async () => {
   const ctx = context();
   ctx.firm = { refused: "no-shared-root" };
   ctx.sheet = { overview: { fan: null }, inputs: null };
-  ctx.inputs!.criteria.autoJoinGapIn = { value: 4, source: "Work", units: null, version: null, status: "valid" };
-  const rows = inputFields(ctx).criteria;
-  expect(rows.find((r) => r.key === "velocityLimitFpm:supply")!.refusal).toBe(NO_SHARED_ROOT);
-  expect(rows.find((r) => r.key === "splitPolicy")!.refusal).toBe(NO_SHARED_ROOT);
-  // A Work value is the user's own: it stays editable over the refused firm layer.
-  expect(rows.find((r) => r.key === "autoJoinGapIn")!.refusal).toBeUndefined();
+  const supply = inputFields(ctx).criteria.find((r) => r.key === "velocityLimitFpm:supply")!;
+  expect(supply).toMatchObject({ value: 900, source: ENGINE_DEFAULT_NO_SHARED_ROOT });
+  const apply = vi.fn();
   const view = render(
     createElement(InputsSurface, {
-      ctx, busy: false, elementName: null, onSlot: vi.fn(), apply: vi.fn(), nameOf: String,
+      ctx, busy: false, elementName: null, onSlot: vi.fn(), apply, nameOf: String,
       history: { undoLabel: null, redoLabel: null, last: null, cleared: null,
         undo: vi.fn(), redo: vi.fn(), restore: vi.fn() },
     }),
   );
   expect(view.container.querySelector("[data-inputs-firm-refused='no-shared-root']")?.textContent).toBe(NO_SHARED_ROOT);
-  const locked = (key: string) =>
-    view.container.querySelector(`[data-input-field='${key}'] [data-body='locked']`) !== null;
-  expect(locked("velocityLimitFpm:supply")).toBe(true);
-  expect(locked("autoJoinGapIn")).toBe(false);
+  const field = view.container.querySelector("[data-input-field='velocityLimitFpm:supply']")!;
+  expect(field.querySelector("[data-body='locked']")).toBeNull();
+  expect(field.textContent).toContain(ENGINE_DEFAULT_NO_SHARED_ROOT);
+  const input = field.querySelector("input")!;
+  await act(async () => input.focus());
+  fireEvent.change(input, { target: { value: "800" } });
+  await act(async () => fireEvent.keyDown(input, { key: "Enter", code: "Enter" }));
+  expect(apply).toHaveBeenCalledWith(
+    { criteria: { velocityLimitFpm: { supply: 800 } } },
+    expect.objectContaining({ rowKey: "velocityLimitFpm:supply" }),
+  );
 });

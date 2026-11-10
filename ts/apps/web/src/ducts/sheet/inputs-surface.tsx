@@ -56,8 +56,6 @@ type Criterion = {
   label: string;
   source: string;
   cell?: WorkCell;
-  /** Why the cell cannot be edited: a value resting on a refused firm layer (ADR 0035 rule 11). */
-  refusal?: string;
 } & (
   | {
       kind: "number";
@@ -75,6 +73,8 @@ type Criterion = {
 );
 /** The firm file lives only on the shared root; this names what would replace the seed. */
 export const NO_SHARED_ROOT = "No shared root: set PE_TOOLS_SHARED_ROOT to read Firm/ducts.json";
+/** A criterion's provenance when the firm layer is absent: the host resolved it on the engine seed. */
+export const ENGINE_DEFAULT_NO_SHARED_ROOT = "Engine default: no shared root, so Firm/ducts.json is not read";
 
 /** The settings rows come only from resolved inputs; Work identifies pending join/end rulings. */
 export function inputFields(ctx: InputContext): { criteria: Criterion[]; rows: InputRow[] } {
@@ -85,9 +85,11 @@ export function inputFields(ctx: InputContext): { criteria: Criterion[]; rows: I
   const inputs = ctx.inputs;
   const c = inputs.criteria;
   const staged = ctx.doc?.criteria?.edit;
-  // A criterion still on the firm layer is a shared setting: with no shared root it is disabled.
-  const onFirm = (value: { source: string }) =>
-    ctx.firm && "refused" in ctx.firm && value.source === "firm" ? { refusal: NO_SHARED_ROOT } : {};
+  // ADR 0035 rule 11 disables the shared firm layer, never the Work above it: with no shared root a
+  // criterion still on that layer is the engine seed, says so, and stays editable Work.
+  const noFirm = ctx.firm !== null && "refused" in ctx.firm;
+  const chip = (value: Resolved<unknown>) =>
+    noFirm && value.source === "firm" ? ENGINE_DEFAULT_NO_SHARED_ROOT : sourceChip(value);
   const criterionCell = (key: string, side?: "supply" | "return"): WorkCell => {
     const record = staged?.value as Record<string, unknown> | undefined;
     const value = side
@@ -103,8 +105,7 @@ export function inputFields(ctx: InputContext): { criteria: Criterion[]; rows: I
         kind: "number",
         unit,
         value: c[key][side].value,
-        source: sourceChip(c[key][side]),
-        ...onFirm(c[key][side]),
+        source: chip(c[key][side]),
         cell: criterionCell(key, side),
         positive: key === "velocityLimitFpm",
         // The edited side only: the other keeps its own source (typed, stored or firm).
@@ -123,8 +124,7 @@ export function inputFields(ctx: InputContext): { criteria: Criterion[]; rows: I
       kind: "number",
       unit,
       value: c[key].value,
-      source: sourceChip(c[key]),
-      ...onFirm(c[key]),
+      source: chip(c[key]),
       cell: criterionCell(key),
       edit: (value) => ({ criteria: { [key]: value } }),
     });
@@ -133,8 +133,7 @@ export function inputFields(ctx: InputContext): { criteria: Criterion[]; rows: I
     label: criterionLabel("splitPolicy"),
     kind: "split",
     value: c.splitPolicy.value,
-    source: sourceChip(c.splitPolicy),
-    ...onFirm(c.splitPolicy),
+    source: chip(c.splitPolicy),
     edit: (splitPolicy) => ({ criteria: { splitPolicy } }),
   });
   sided("allowanceInWg", "in-wg");
@@ -568,7 +567,7 @@ export function InputsSurface({
                   digits={3}
                   source={`${row.source}${FROM_DUCTS}`}
                   cell={row.cell}
-                  refusal={criteriaRefusal ?? row.refusal ?? null}
+                  refusal={criteriaRefusal}
                   positive={row.positive}
                   clearable={row.cell?.edit != null}
                   onValue={(value) =>
@@ -594,7 +593,7 @@ export function InputsSurface({
                     cell={row.cell}
                     path={null}
                     show={(v) => String(v ?? "—")}
-                    refusal={criteriaRefusal ?? row.refusal ?? null}
+                    refusal={criteriaRefusal}
                     pick={(key) => {
                       if (key !== row.value)
                         void apply(row.edit(key as "even" | "proportional"), {
