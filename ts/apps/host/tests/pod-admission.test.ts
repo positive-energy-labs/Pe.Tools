@@ -492,7 +492,8 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
       rows()
         .filter((each) => each.key.startsWith(`route:${route}.`))
         .map((each) => each.key),
-    ).toEqual([`route:${route}.view`, `route:${route}.set-view`]);
+    // V3 (slice 7): the admitted Pod's Work is a Pea door beside its view lease.
+    ).toEqual([`route:${route}.edit`, `route:${route}.history`, `route:${route}.view`, `route:${route}.set-view`]);
 
     // Explicit open: the host links the registered address; the call waits for the matching rendered command.
     const opening = pe(`route:${route}.set-view`, { system: "owner-text" });

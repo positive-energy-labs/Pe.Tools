@@ -493,7 +493,7 @@ async function withHead<T>(head: Head, body: () => Promise<T>): Promise<T> {
 const run = (tool: ExecutableTool, input: unknown, head = turn) =>
   withHead(head, () => tool.execute!(input as never, { agent: { toolCallId: "call-1" } } as never));
 
-test("Pea discovers the Ducts Plan owner, refuses Fans at schema decode, and previews Ducts", async () => {
+test("Pea discovers the sheet plan, decodes any route's handle, and previews Ducts", async () => {
   fakeRuntimeHost("http://127.0.0.1:19999");
   const f = await nativeFixture();
   try {
@@ -539,28 +539,9 @@ test("Pea discovers the Ducts Plan owner, refuses Fans at schema decode, and pre
       matches: Array<{ key: string; description: string; input: unknown }>;
     };
     const row = discovery.matches.find((row) => row.key === "op:sheet.plan")!;
-    expect(row.description).toContain("route:ducts Work handle");
-    const schema = row.input as {
-      properties: {
-        work: {
-          properties: { key: { oneOf: Array<{ properties: { route: { const: string } } }> } };
-        };
-      };
-    };
-    expect(
-      schema.properties.work.properties.key.oneOf.map((branch) => branch.properties.route.const),
-    ).toEqual(["ducts", "ducts", "ducts", "ducts"]);
-    expect(commands["sheet.plan"].input.safeParse({ work: fans }).success).toBe(false);
-    const before = paths.length;
-    const refused = await run(
-      peDo,
-      { key: row.key, input: { work: fans }, timeoutSeconds: 5 },
-      head,
-    );
-    expect(refused).toMatchObject({ ok: false, content: expect.stringContaining("route:ducts Work handle") });
-    expect(JSON.stringify(refused)).toContain("work");
-    expect(paths.slice(before)).not.toContain("/pe/route-state/ducts");
-    expect(await f.journal.list()).toHaveLength(0);
+    // Slice 7: the sheet pair is every route's door; the handle names the route, so a Fans handle decodes too.
+    expect(row.description).toContain("Work handle");
+    expect(commands["sheet.plan"].input.safeParse({ work: fans }).success).toBe(true);
     const preview = await run(peDo, { key: row.key, input: { work }, timeoutSeconds: 5 }, head);
     expect(preview, JSON.stringify(preview)).toMatchObject({
       ok: true,

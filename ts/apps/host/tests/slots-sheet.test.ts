@@ -40,8 +40,11 @@ test("ctx.work with a document ref reads that document's Work for the owner", as
   });
   const value = await evaluate(probe, {}, port);
   expect(value.data).toEqual({ doc: { chosen: {} }, revision: 3 });
-  expect(taken).toEqual([
+  const expected = [
     ["work-scope", { session: "s", openId: "o" }],
     ["work", { owner: "pod.hydronic.sizing", scope: { binding: "host", route: "pod.hydronic.sizing", target: null } }],
-  ]);
+  ];
+  // The document's key first, then its Work under the owner; final validation takes the same leaves again.
+  expect(taken.slice(0, 2)).toEqual(expected);
+  for (const take of taken) expect(expected).toContainEqual(take);
 });

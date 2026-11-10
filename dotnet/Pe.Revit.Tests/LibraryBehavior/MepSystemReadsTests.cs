@@ -3,7 +3,9 @@ using Autodesk.Revit.DB.Structure;
 using Pe.Revit.Extensions.FamDocument;
 using Newtonsoft.Json;
 using Pe.Revit.Global.Lib.Mep;
+using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Mep;
+using Pe.Revit.DocumentData.Parameters;
 
 namespace Pe.Revit.Tests;
 
@@ -171,5 +173,41 @@ public sealed class MepSystemReadsTests {
         }
         Assert.Throws<ArgumentException>(() => MepSystemReads.SegmentSizes(_document, new(MaxSizesPerSegment: 1)));
         Assert.Throws<ArgumentOutOfRangeException>(() => MepSystemReads.SegmentSizes(_document, new(MaxSegments: 0)));
+    }
+
+    /// <summary>
+    ///     Slice 7's Revit leg of the sheet pair, as <c>sheet.plan</c> and <c>sheet.apply</c> derive it from a Pod's
+    ///     <c>parameter("Diameter", ..., "Millimeters")</c> binding: plan by UniqueId and parameter name (no transaction),
+    ///     then apply with the plan's Current as Expected. The pipe's Diameter is the chosen catalog size afterwards.
+    /// </summary>
+    [Test]
+    public void Sheet_pair_plans_by_unique_id_then_writes_the_chosen_diameter() {
+        var pipe = new FilteredElementCollector(_document).OfClass(typeof(Pipe)).Cast<Pipe>().First(p => p.MEPSystem?.Id == _system.Id);
+        var segment = (PipeSegment)_document.GetElement(pipe.get_Parameter(BuiltInParameter.RBS_PIPE_SEGMENT_PARAM).AsElementId());
+        var size = segment.GetSizes().First(s => Math.Abs(s.NominalDiameter - pipe.Diameter) > 1e-6);
+        var mm = UnitUtils.ConvertFromInternalUnits(size.NominalDiameter, UnitTypeId.Millimeters);
+        var edit = new ParameterValueEdit(0, ParameterName: "Diameter",
+            Value: mm.ToString("R", System.Globalization.CultureInfo.InvariantCulture), Unit: "Millimeters", UniqueId: pipe.UniqueId);
+        var before = pipe.Diameter;
+
+        var plan = ParameterValueApplier.Apply(_document, new ParameterValueApplyRequest([edit], DryRun: true));
+        TestContext.WriteLine(JsonConvert.SerializeObject(plan));
+        Assert.That(plan.Results.Single().Ok, Is.True, plan.Results.Single().Error);
+        Assert.That(pipe.Diameter, Is.EqualTo(before), "the plan writes nothing");
+        var current = plan.Results.Single().Current!;
+        Assert.That(current.UniqueId, Is.EqualTo(pipe.UniqueId));
+
+        var applied = ParameterValueApplier.Apply(_document, new ParameterValueApplyRequest([
+            edit with { ElementId = current.ElementId, ParameterId = current.ParameterId, Expected = current },
+        ]));
+        TestContext.WriteLine(JsonConvert.SerializeObject(applied));
+        Assert.That(applied.Applied, Is.EqualTo(1), applied.Results.Single().Error);
+        Assert.That(((Pipe)_document.GetElement(pipe.UniqueId)).Diameter, Is.EqualTo(size.NominalDiameter).Within(1e-9));
+
+        // A second apply with the stale plan refuses: the value moved since that plan read it.
+        var stale = ParameterValueApplier.Apply(_document, new ParameterValueApplyRequest([
+            edit with { ElementId = current.ElementId, ParameterId = current.ParameterId, Expected = current },
+        ]));
+        Assert.That(stale.Applied, Is.EqualTo(0));
     }
 }

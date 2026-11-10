@@ -182,11 +182,15 @@ export async function runCapability(
       : host.call(key as never, (Object.keys(input).length ? input : undefined) as never);
   }
   // Prerequisites are checked before submission, so an unscoped probe is not a journal attempt. Mirrors the
-  // host derive (ducts-actions.ts lossSnapshot): the ducts handle, with the fan walk read from fans Work at the
-  // same key (or readWorks.fans), or writeIntent.groups in ducts Work.
-  if (key === "sheet.plan") {
-    const handle = workHandleSchema.parse(input.work);
-    const fansHandle = z.object({ fans: workHandleSchema.optional() }).optional().parse(input.readWorks)?.fans;
+  // host derive (ducts-actions.ts): the ducts and fans Work at one document, either one asking, the other from
+  // readWorks or the same key; a fan walk in fans Work or writeIntent.groups in ducts Work.
+  // The sheet pair serves every route (slice 7); only /ducts and /fans carry this losses preflight. Either may ask.
+  const asked = key === "sheet.plan" ? workHandleSchema.safeParse(input.work) : null;
+  if (asked?.success && (asked.data.key.route === "ducts" || asked.data.key.route === "fans")) {
+    const siblings = z.object({ ducts: workHandleSchema.optional(), fans: workHandleSchema.optional() }).optional().parse(input.readWorks);
+    const handle = asked.data.key.route === "ducts" ? asked.data : siblings?.ducts;
+    const fansHandle = asked.data.key.route === "fans" ? asked.data : siblings?.fans;
+    const ductsKey = handle?.key ?? { ...asked.data.key, route: "ducts" };
     const read = async (key: WorkHandle["key"]) => {
       const response = await createPeClient(context.hostBaseUrl, fetch).response("work.get", {
         params: { route: key.route },
@@ -202,9 +206,9 @@ export async function runCapability(
       return { doc: view.doc, handle: workHandleSchema.parse(view.handle) };
     };
     // Fans Work at the same document is a sibling key; its handle comes back from the read.
-    const [ducts, fans] = await Promise.all([read(handle.key), read(fansHandle?.key ?? { ...handle.key, route: "fans" })]);
+    const [ducts, fans] = await Promise.all([read(ductsKey), read(fansHandle?.key ?? { ...ductsKey, route: "fans" })]);
     const same = (a: WorkHandle, b: WorkHandle) => workKey(a.key) === workKey(b.key) && a.revision === b.revision;
-    if (!same(ducts.handle, handle)) throw Error("Ducts Work changed; read its current revision before preview");
+    if (handle && !same(ducts.handle, handle)) throw Error("Ducts Work changed; read its current revision before preview");
     if (fansHandle && !same(fans.handle, fansHandle)) throw Error("Fans Work changed; read its current revision before preview");
     const walk = fansDocumentSchema.parse(fans.doc).writeIntent.edit?.value?.walk;
     if (!walk && !ductsDocumentSchema.parse(ducts.doc).writeIntent.edit?.value?.groups?.length)
