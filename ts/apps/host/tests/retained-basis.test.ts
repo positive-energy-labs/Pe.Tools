@@ -82,7 +82,35 @@ const bindings = async (takes: Taking[]) => {
   return map;
 };
 
-effectTest("joined native readers link only the taking appended by their own retained read set", () => Effect.gen(function* () {
+effectTest("an overlapping acquisition keeps its own body after its peer publishes; later readers retain the winner", () => Effect.gen(function* () {
+  const owner = new DuctsReadings();
+  const subject = ductBodySubject(input);
+  const secondReady = yield* Deferred.make<void>();
+  const secondEntered = yield* Deferred.make<void>();
+  const acquired = (id: string) => ({ value, nativeRequestId: "joined-native", nativeTakingId: id,
+    target: { session: ref.session, document: row.address, documentRef: ref } });
+  const consumed: string[] = [];
+  const second = yield* owner.read(subject, Deferred.succeed(secondEntered, undefined).pipe(
+    Effect.andThen(Deferred.await(secondReady)), Effect.as(acquired("second"))), {
+    source: { beforeReady: (body) => Effect.sync(() => { consumed.push(body.nativeTakingId!); }) },
+  }).pipe(Effect.forkScoped);
+  yield* Deferred.await(secondEntered);
+  const first = yield* owner.read(subject, Effect.succeed(acquired("first")));
+  expect(first.nativeTakingId).toBe("first");
+  yield* Deferred.succeed(secondReady, undefined);
+  const late = yield* Fiber.join(second);
+  expect(consumed).toEqual(["second"]);
+  expect(late.nativeTakingId).toBe("second");
+  expect(late.reused).toBe(false);
+  const retained = yield* owner.read(subject, Effect.die("A retained hit must not acquire"));
+  expect(retained).toMatchObject({ nativeTakingId: "first", version: first.version, reused: true });
+  owner.changed({ kind: "event", sessionId: ref.session, eventName: "document-changed",
+    payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }) });
+  const stale = yield* owner.read(subject, Effect.die("A stale version must not acquire"), { version: first.version }).pipe(Effect.result);
+  expect(Result.isFailure(stale)).toBe(true);
+}));
+
+effectTest("overlapping HTTP retained readers share one dispatch and link only their own taking", () => Effect.gen(function* () {
   const dir = yield* Effect.promise(temp);
   const writer = yield* openRecordingWriter(dir, identity, bounds);
   const lane = { kind: "live", captureStore: writer } as const;
@@ -103,7 +131,8 @@ effectTest("joined native readers link only the taking appended by their own ret
     ...actualTarget, freshnessGeneration: "g1", representation: "overview", responseSchemaVersion: "1" },
     { selector: { kind: "roster" } }, Schema.Json, Schema.Json);
   const live = Layer.succeed(HostNativeRead, {
-    resolve: () => Effect.die("This witness enters at prepared native admission"),
+    resolve: () => Effect.succeed({ operationKey: input.key, ...actualTarget,
+      normalizedInput: canonicalJson(JSON.parse(JSON.stringify(input.input))), freshnessGeneration: "g1", representation: "overview" as const }),
     read: () => reads.join(prepared, ref.session),
   });
   // Both exact takings must be indexed before either link: choosing first/latest cannot pass.
@@ -115,8 +144,6 @@ effectTest("joined native readers link only the taking appended by their own ret
     if (ownTakings.size === 2) yield* Deferred.succeed(indexed, undefined);
     yield* Deferred.await(indexed);
   })));
-  const nativeServices = yield* Layer.build(hostNativeReadFor(lane, live, observed));
-  const native = Context.get(nativeServices, HostNativeRead);
   const sets = Context.get(yield* Layer.build(HostInputReadSets.layer(lane)), HostInputReadSets);
   const root = yield* sets.open({ key: "joined-retained", input: {}, scope: canonicalJson(scope) }, null);
   yield* Effect.addFinalizer(() => root.close);
@@ -125,15 +152,22 @@ effectTest("joined native readers link only the taking appended by their own ret
     if (Result.isFailure(child)) throw child.failure;
     return child.success;
   });
-  const reader = (consumer: InputConsumption) => Effect.gen(function* () {
-    const dependency = yield* basis.prepare(input, ductBodySubject(input));
-    const answer = yield* native.read(input);
-    const taking = yield* dependency.link(answer);
-    yield* dependency.consume({ json: JSON.stringify(answer.value), version: "joined-version", nativeRequestId: answer.nativeRequestId,
-      nativeTakingId: taking, target: { session: ref.session, document: row.address, documentRef: ref } }, answer.actualTarget);
-    return { reader: consumer.id, taking, request: answer.nativeRequestId };
-  }).pipe(Effect.provideService(CurrentInputConsumption, consumer), Effect.provideService(RequestIdentity,
-    admittedRequestIdentity({ kind: "human", via: "local" }, scope)));
+  const owner = new DuctsReadings();
+  const web = HttpRouter.toWebHandler(HttpRouter.add("POST", "/call", (req) => {
+    const consumer = children.find((child) => child.id === req.headers["x-test-reader"])!;
+    return retainedDuctsRead(owner, input, {}, { document: () => Effect.succeed(row), basis }).pipe(
+      Effect.provideService(CurrentInputConsumption, consumer));
+  }).pipe(Layer.provide(httpProblems), HttpRouter.provideRequest(hostNativeReadFor(lane, live, observed))), { disableLogger: true });
+  yield* Effect.addFinalizer(() => Effect.promise(web.dispose));
+  const reader = (consumer: InputConsumption) => Effect.promise(() => web.handler(new Request("http://host/call", {
+    method: "POST", headers: { "x-test-reader": consumer.id },
+  }), Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, scope)))).pipe(
+    Effect.flatMap((response) => Effect.promise(async () => {
+      expect(response.status, await response.clone().text()).toBe(200);
+      expect(response.headers.get("x-pe-ducts-reused")).toBe("false");
+      expect(await response.json()).toEqual(value);
+      return { reader: consumer.id, request: response.headers.get("x-pe-native-request-id") };
+    })));
   const pending = yield* Effect.all(children.map(reader), { concurrency: "unbounded" }).pipe(Effect.forkScoped);
   while ((yield* reads.retained).joiners !== 2 || dispatches === 0) yield* Effect.yieldNow;
   expect(dispatches).toBe(1);
@@ -142,15 +176,16 @@ effectTest("joined native readers link only the taking appended by their own ret
   expect(writer.capture.truncated()).toBeNull();
   expect(ownTakings.size).toBe(2);
   expect(new Set(results.map((entry) => entry.request)).size).toBe(1);
-  expect(new Set(results.map((entry) => entry.taking)).size).toBe(2);
-  for (const entry of results) expect(entry.taking).toBe(ownTakings.get(entry.reader));
   yield* root.seal;
   const recorded = yield* openRecordingReader(dir, identity, bounds);
   for (const entry of results) {
     const stored = yield* recorded.readSets.get(entry.reader);
     expect(stored.state).toBe("complete");
-    expect(stored.takingLinks.native).toBe(entry.taking);
-    expect(stored.inputs.filter((item) => item.input.kind === "native").map((item) => item.takingId)).toEqual([entry.taking]);
+    const own = ownTakings.get(entry.reader);
+    expect(stored.takingLinks.native).toBe(own);
+    expect(stored.inputs.filter((item) => item.input.kind === "native").map((item) => item.takingId)).toEqual([own]);
+    const basisTaking = stored.inputs.find((item) => item.input.kind === "document" && item.input.scope.includes("ducts-body-basis"))!;
+    expect(yield* recorded.observation(recorded.taking(basisTaking.takingId)!)).toMatchObject({ nativeTakingId: own });
   }
 }));
 
