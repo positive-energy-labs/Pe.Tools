@@ -1,4 +1,5 @@
 import { RegistryContext } from "@effect/atom-react";
+import { regionSubject } from "./subject";
 import {
   AttentionDocument,
   elementKey,
@@ -184,7 +185,7 @@ export function RoomsPlan({
       .map((row) => row.region.guid),
   );
   const onHover = (guid: string | null) =>
-    setHovered(registry, guid == null ? null : { doc, key: `room:${guid}` });
+    setHovered(registry, guid == null ? null : { doc, key: regionSubject(guid) });
   const bounds = useMemo(() => {
     const points: Point2[] = rows.flatMap((row) => loopOf(row.region.outer));
     if (plan) points.push(...planCorners(plan));
@@ -531,7 +532,7 @@ export function RoomsPlan({
                           strokeWidth: `calc(var(--sw) * ${width}px)`,
                           cursor: "pointer",
                         }}
-                        {...mention({ doc, key: `room:${region.guid}` })}
+                        {...mention({ doc, key: regionSubject(region.guid) })}
                         onClick={(event) => {
                           event.stopPropagation();
                           if (dragDist.current < CLICK_PX) onSelect(region.guid, event.shiftKey);
@@ -577,7 +578,7 @@ export function RoomsPlan({
                         ])}
                         data-callout={callout.label}
                         style={{ pointerEvents: "auto", cursor: "pointer" }}
-                        {...mention({ doc, key: `room:${callout.guid}` })}
+                        {...mention({ doc, key: regionSubject(callout.guid) })}
                         onClick={(event) => {
                           event.stopPropagation();
                           if (dragDist.current < CLICK_PX) onSelect(callout.guid, event.shiftKey);
