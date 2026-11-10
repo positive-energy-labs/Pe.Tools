@@ -44,10 +44,11 @@ async function fixture() {
               }).pipe(Effect.onInterrupt(() => Effect.sync(() => void (seen.interrupted = true)))),
             ),
           // The mock native door: what the registry's `op.cancel` sends to Revit.
-          cancel: async (requestId) => {
-            calls.push({ key: CANCEL_OPERATION_KEY, requestId });
-            return { cancelled: true };
-          },
+          cancel: (requestId) =>
+            Effect.sync(() => {
+              calls.push({ key: CANCEL_OPERATION_KEY, requestId });
+              return { cancelled: true };
+            }),
         },
       ),
   });

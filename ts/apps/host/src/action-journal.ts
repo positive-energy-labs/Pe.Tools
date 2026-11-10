@@ -250,14 +250,14 @@ export type ActionExecution = {
 };
 /** The journal's attempt owner: one fiber per admitted action, in the journal Layer's scope. */
 export type Attempts = {
-  readonly map: FiberMap.FiberMap<string, ActionReceipt, unknown>;
+  readonly map: FiberMap.FiberMap<string, unknown, unknown>;
   readonly fork: (
     id: string,
-    attempt: Effect.Effect<ActionReceipt, unknown, AttemptHost>,
-  ) => Fiber.Fiber<ActionReceipt, unknown>;
+    attempt: Effect.Effect<unknown, unknown, AttemptHost>,
+  ) => Fiber.Fiber<unknown, unknown>;
 };
-const joined = (fiber: Fiber.Fiber<ActionReceipt, unknown>) =>
-  new Promise<Exit.Exit<ActionReceipt, unknown>>((resolve) => fiber.addObserver(resolve));
+const joined = (fiber: Fiber.Fiber<unknown, unknown>) =>
+  new Promise<Exit.Exit<unknown, unknown>>((resolve) => fiber.addObserver(resolve));
 /** Rule 14: the journal owns the attempt; the submitting request is only its causal parent. */
 const ownerIdentity = (row: ActionReceipt, parent?: string): RequestIdentityData => {
   const identity = admittedRequestIdentity(
@@ -1897,8 +1897,10 @@ export class ActionJournal implements ReceiptReader {
     const step = row.steps.find((step) => step.state === "running" && step.kind === "native");
     if (step) {
       const cancel = this.environment?.resolve(row.key).cancel;
-      if (!cancel) throw Error("Native cancellation is unavailable");
-      await cancel(step.id);
+      if (!cancel || !this.attempts) throw Error("Native cancellation is unavailable");
+      // op.cancel to Revit, owned by the journal like the attempt (rule 11: never an interrupt).
+      const exit = await joined(this.attempts.fork(`cancel:${step.id}`, cancel(step.id)));
+      if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
     }
     return (await this.list(undefined, id))[0] ?? row;
   }

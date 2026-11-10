@@ -157,7 +157,8 @@ export interface CommandExecutor {
   boundary?: "work";
   /** Receipt-confirmed cells retired by the shared Work write boundary. */
   retires?(result: unknown): readonly WorkPath[];
-  cancel?(requestId: string): Promise<unknown>;
+  /** `op.cancel` for a dispatched native step; the journal forks it into its own scope. */
+  cancel?(requestId: string): Effect.Effect<unknown, unknown>;
 }
 export type CommandRegistry = (key: string) => CommandExecutor;
 /** Resource I/O only. Control hooks belong to the stable registry entries. */

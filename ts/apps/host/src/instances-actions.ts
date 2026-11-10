@@ -887,7 +887,7 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
   };
   const controls = {
     recover: (step: ActionStep) => recoverSdkStep(step, read),
-    cancel: (id: string) => cancelSdkStep(id, read),
+    cancel: (id: string) => io(() => cancelSdkStep(id, read)),
   };
   for (const entry of Object.values(entries)) Object.assign(entry, controls);
   return entries;

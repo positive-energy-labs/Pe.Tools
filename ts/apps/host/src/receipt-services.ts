@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { Clock, Context, Effect, FiberMap, Layer } from "effect";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
-import { receiptStampSchema, type ActionReceipt, type ReceiptStamp } from "@pe/agent-contracts";
+import { receiptStampSchema, type ReceiptStamp } from "@pe/agent-contracts";
 import { ActionJournal, type AttemptHost } from "./action-journal.ts";
 import { HostLog } from "./host-log.ts";
 import { hostStateDir } from "./host-ownership.ts";
@@ -29,7 +29,7 @@ export const makeActionJournal = Effect.fn("ActionJournal.make")(function* (
   stamp?: () => ReceiptStamp | null,
   retain?: number,
 ) {
-  const map = yield* FiberMap.make<string, ActionReceipt, unknown>();
+  const map = yield* FiberMap.make<string, unknown, unknown>();
   const fork = yield* FiberMap.runtime(map)<AttemptHost>();
   return new ActionJournal(path, now, stamp, retain, { map, fork });
 });

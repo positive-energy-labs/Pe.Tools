@@ -71,13 +71,13 @@ export function commandRegistry(
     if (!step.process) throw Error("No exact native process was captured for this step");
     return readNativeReceipt(step, step.process, deps.sdk);
   };
-  const cancel = async (requestId: string) => {
-    // effect-edge: island, phase 5
-    const answer = await Effect.runPromise(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }));
-    const result = answer.value as { cancelled?: boolean; message?: string } | null;
-    if (result?.cancelled === false) throw Error(result.message ?? "Native request is not running");
-    return result;
-  };
+  const cancel = (requestId: string) =>
+    Effect.flatMap(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }), ({ value }) => {
+      const result = value as { cancelled?: boolean; message?: string } | null;
+      return result?.cancelled === false
+        ? Effect.fail(Error(result.message ?? "Native request is not running"))
+        : Effect.succeed(result);
+    });
   const complete = (entry: CommandExecutor, key?: string): CommandExecutor => {
     const definition = entry.definition;
     return {
