@@ -1,7 +1,7 @@
 {
   "src": {
     "apps/host/src/bridge.ts": 1,
-    "apps/host/src/call-route.ts": 4,
+    "apps/host/src/call-route.ts": 3,
     "apps/host/src/cloud-version.ts": 1,
     "apps/host/src/command-reads.ts": 4,
     "apps/host/src/demo-owner.ts": 1,

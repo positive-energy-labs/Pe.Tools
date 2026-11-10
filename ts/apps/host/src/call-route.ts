@@ -407,64 +407,54 @@ function callRoutes(
             target: null,
           }
         : entry.snapshot
-          ? yield* Effect.tryPromise({
-              try: async () => {
-                const target = documentRefSchema.parse({
-                  session: bridgeSessionId,
-                  openId: openDocumentId,
-                });
-                const selected = async () => {
-                  const resolve = SdkSession.resolve(bridge, { session: target.session });
-                  // effect-edge: island, phase 5
-                  const session = await Effect.runPromise(resolve);
-                  return session.state?.openDocuments.find((doc) => doc.openId === target.openId);
-                };
-                const document = await selected();
-                if (!document?.address)
-                  throw new BridgeError("Snapshot requires an exact open saved document", 409);
-                const at = addressSchema.parse(document.address);
-                const published = await observations().refresh(
-                  target,
-                  async () => {
-                    const [result, index] = await Promise.all([
-                      // effect-edge: island, phase 5
-                      Effect.runPromise(
-                        bridge.invoke(key, request ?? {}, target.session, target.openId, requestId),
-                      ),
-                      // effect-edge: island, phase 5
-                      Effect.runPromise(
-                        bridge.invoke(
-                          "revit.catalog.project-index",
-                          takeoffProjectIndexRequest,
-                          target.session,
-                          target.openId,
-                        ),
-                      ),
-                    ]);
-                    const snapshot = projectTakeoffSnapshot(
-                      result.value as OpResponseOf<"takeoffs.snapshot">,
-                      document.title,
-                      projectTakeoffViews(
-                        index.value as OpResponseOf<"revit.catalog.project-index">,
-                      ),
-                    );
-                    if (!sameAddress(snapshot.reading.at, at))
-                      throw new BridgeError("Snapshot returned a different document", 409);
-                    return { result, snapshot };
-                  },
-                  async () => {
-                    const current = await selected();
-                    return (
-                      !!current?.address && sameAddress(addressSchema.parse(current.address), at)
-                    );
-                  },
-                );
-                captureId = published.capture.id;
-                return published.result;
-              },
-              catch: (error) =>
-                error instanceof BridgeError ? error : new BridgeError(String(error), 409),
-            })
+          ? yield* Effect.gen(function* () {
+              const target = documentRefSchema.parse({
+                session: bridgeSessionId,
+                openId: openDocumentId,
+              });
+              const sessions = yield* SdkSession;
+              const readScope = { ...scope, bridgeSessionId: target.session, openDocumentId: target.openId };
+              const selected = Effect.map(sessions.resolve(readScope), (session) =>
+                session.state?.openDocuments.find((doc) => doc.openId === target.openId),
+              );
+              const document = yield* selected;
+              if (!document?.address)
+                return yield* new BridgeError("Snapshot requires an exact open saved document", 409);
+              const at = addressSchema.parse(document.address);
+              const native = yield* HostNativeRead;
+              // Both natives are per-caller admitted and joined by NativeReads: a peer fetch shares them.
+              const published = yield* observations().refresh(
+                target,
+                Effect.gen(function* () {
+                  const [result, index] = yield* Effect.all(
+                    [
+                      native.read({ key, input: request ?? {}, scope: readScope }),
+                      native.read({ key: "revit.catalog.project-index", input: takeoffProjectIndexRequest, scope: readScope }),
+                    ],
+                    { concurrency: "unbounded" },
+                  );
+                  const snapshot = projectTakeoffSnapshot(
+                    result.value as unknown as OpResponseOf<"takeoffs.snapshot">,
+                    document.title,
+                    projectTakeoffViews(index.value as unknown as OpResponseOf<"revit.catalog.project-index">),
+                  );
+                  if (!sameAddress(snapshot.reading.at, at))
+                    return yield* new BridgeError("Snapshot returned a different document", 409);
+                  return { result, snapshot };
+                }),
+                Effect.map(selected, (now) => !!now?.address && sameAddress(addressSchema.parse(now.address), at)),
+              );
+              captureId = published.capture.id;
+              return {
+                value: published.result.value,
+                nativeRequestId: published.result.nativeRequestId,
+                target: { session: target.session, document: document.address, documentRef: target },
+              };
+            }).pipe(
+              Effect.mapError((error) =>
+                isDoorFailure(error) || error instanceof BridgeError ? error : new BridgeError(String(error), 409),
+              ),
+            )
           : intent === "Read" && !entry.script
             ? yield* Effect.gen(function* () {
                 if (!resolvedSession || !bridgeSessionId)

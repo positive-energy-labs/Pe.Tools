@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { captureStore } from "./effect-test.ts";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -52,9 +53,10 @@ export async function partitionFixture(dir: string, target: DocumentRef) {
     loops: [],
   };
   const captures = captureStore(join(dir, "captures"));
-  const { capture } = await captures.refresh(
+  // effect-edge: test-runner
+  const { capture } = await Effect.runPromise(captures.refresh(
     target,
-    async () => ({
+    Effect.succeed({
       result: {},
       snapshot: {
         reading: { at, version: "reviewed", observedAt: "2026-09-09T18:00:00.000Z" },
@@ -64,8 +66,8 @@ export async function partitionFixture(dir: string, target: DocumentRef) {
         regionsByZone: {},
       },
     }),
-    async () => true,
-  );
+    Effect.succeed(true),
+  ));
   return {
     workspace,
     captures,
