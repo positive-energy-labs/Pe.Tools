@@ -1,7 +1,7 @@
-import { resources } from "../builtin-read-handles.ts";
+import { resources } from "../../../host/src/builtin-read-handles.ts";
 
 import { executionTargetSchema } from "@pe/agent-contracts";
-import { read } from "./evaluator.ts";
+import { read } from "../../../host/src/reads/evaluator.ts";
 import { opsArgs, opsData } from "@pe/agent-contracts";
 export const reads = {
   workspace: read("ops.workspace", {

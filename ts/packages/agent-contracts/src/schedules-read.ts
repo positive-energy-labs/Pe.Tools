@@ -2,7 +2,6 @@ import { z } from "zod";
 import { documentReadTargetSchema } from "./target.ts";
 import { scheduleReadingSchema } from "./schedule-actions.ts";
 import { scheduleCatalogSchema, scheduleGridRouteState } from "./schedule-grid-data.ts";
-import { valueRead } from "./value.ts";
 export const schedulesViewArgs = z.object({
   target: documentReadTargetSchema,
   workspaceId: z.string().min(1).nullable(),
@@ -20,8 +19,3 @@ export const schedulesViewData = z.object({
   }),
   editRefusal: z.string().nullable(),
 });
-export const schedulesViewCapability = valueRead(
-  "schedules.view",
-  schedulesViewArgs.omit({ target: true }),
-  schedulesViewData,
-);

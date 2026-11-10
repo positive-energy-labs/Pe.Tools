@@ -1,4 +1,4 @@
-import { resources } from "../builtin-read-handles.ts";
+import { resources } from "../../../host/src/builtin-read-handles.ts";
 
 import { read } from "@pe/host/read-graph";
 import { settingsArgs, settingsValue } from "@pe/agent-contracts";

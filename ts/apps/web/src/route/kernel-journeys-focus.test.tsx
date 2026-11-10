@@ -745,7 +745,7 @@ test("JZ header chooser query keys preserve the current schedule until an explic
 });
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
 import { evaluate } from "../../../host/src/reads/evaluator";
-import { reads as familyReads } from "../../../host/src/reads/family";
+import { reads as familyReads } from "../family/host";
 import { FAMILY_MODEL_SCHEMA } from "../family/page";
 import { leaks } from "../shell/visible-text";
 

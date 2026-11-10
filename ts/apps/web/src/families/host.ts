@@ -1,6 +1,6 @@
-import { workRead } from "./inputs.ts";
-import { nativeRead } from "./inputs.ts";
-import { familyObservation, familyReceipts } from "../builtin-read-handles.ts";
+import { workRead } from "../../../host/src/reads/inputs.ts";
+import { nativeRead } from "../../../host/src/reads/inputs.ts";
+import { familyObservation, familyReceipts } from "../../../host/src/builtin-read-handles.ts";
 import { z } from "zod";
 import { familiesRouteState, canonicalRouteInput, actionReceiptSchema } from "@pe/agent-contracts";
 import {
@@ -8,7 +8,7 @@ import {
   familiesViewData,
 } from "../../../../packages/agent-contracts/src/families-read.ts";
 import { read, workScope } from "@pe/host/read-graph";
-import { documentMark } from "./inputs.ts";
+import { documentMark } from "../../../host/src/reads/inputs.ts";
 import { applyOutcome, applyTally } from "./families-outcome.ts";
 import { matrixModel, buildPivot } from "./families-matrix.ts";
 

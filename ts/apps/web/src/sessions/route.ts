@@ -8,7 +8,6 @@ export const module = route({
   key: "session-admin",
   name: "Sessions",
   needs: "host",
-  host: "../../../host/src/reads/open.ts",
   directory: {
     ...open.spec.directory,
     label: "Sessions",

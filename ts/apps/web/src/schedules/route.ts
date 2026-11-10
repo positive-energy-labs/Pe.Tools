@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { command, sessionCommand } from "../route/typed-actions.ts";
 import { bindings } from "./bindings";
 import { read } from "../route/defaults";
@@ -9,7 +10,7 @@ import {
   splitScheduleCellKey,
   showCellValue,
 } from "@pe/agent-contracts";
-import { schedulesViewCapability } from "../../../../packages/agent-contracts/src/schedules-read.ts";
+import { reads } from "./reads.ts";
 import { route, field, subjectSchema, namesOf } from "../route/defaults.ts";
 import { subjectCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 import { hostRead } from "../route/host-read.ts";
@@ -33,24 +34,24 @@ const workspace = (page: { workspaceId: Parameters<typeof namesOf>[0] }) => {
   return ids[0] ?? null;
 };
 export const view = read(
-  hostRead(schedulesViewCapability),
+  hostRead(reads.view),
   (page: { workspaceId: Parameters<typeof namesOf>[0] }) => ({
     workspaceId: workspace(page),
   }),
 );
-const roster = read(hostRead(schedulesViewCapability), () => ({ workspaceId: null }));
+const roster = read(hostRead(reads.view), () => ({ workspaceId: null }));
 export const edit = z
   .array(routeStatePatchSchema)
   .refine(
     (patches) => patches.every((p) => p.path[0] === "cells" && p.path.length > 1),
     "Edit individual schedule cells",
   );
-export type { Context as SchedulesDrawContext } from "./context.generated";
+export type SchedulesDrawContext = ContextOf<typeof fields, typeof view, typeof import("@pe/agent-contracts").scheduleGridRouteState, typeof edit>;
 export const module = route({
   key: "schedules",
   name: "Schedules",
   needs: "project",
-  host: "../../../host/src/reads/schedules.ts",
+  host: "./host.ts",
   directory: {
     group: "Coordinate model data",
     summary: "Inspect document schedules",

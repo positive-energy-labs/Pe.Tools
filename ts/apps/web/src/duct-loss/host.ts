@@ -1,5 +1,5 @@
 import { executionTargetSchema } from "@pe/agent-contracts";
-import { read } from "./evaluator.ts";
+import { read } from "../../../host/src/reads/evaluator.ts";
 import { ductLossArgs, ductLossData } from "@pe/agent-contracts";
 import { ductInputError, solve } from "@pe/ducts-domain/duct-loss-math";
 export const reads = {

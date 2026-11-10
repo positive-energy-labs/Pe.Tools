@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import type { RevitContextViewImage } from "@pe/host-contracts/generated";
-import { planOf } from "../src/reads/rooms-plan.ts";
+import { planOf } from "../../web/src/rooms/rooms-plan.ts";
 test("a plan draws only a paired URL and finite two-dimensional native registration", () => {
   const response: RevitContextViewImage.Res.Response = {
     view: { kind: "View", documentKey: "rooms", label: "Fixture level plan" },

@@ -54,7 +54,6 @@
     "./family-actions": "./src/family-actions.ts",
     "./family-spec": "./src/family-spec.ts",
     "./read-graph": "./src/reads/evaluator.ts",
-    "./reads/evaluator": "./src/reads/evaluator.ts",
-    "./reads/family": "./src/reads/family.ts"
+    "./reads/evaluator": "./src/reads/evaluator.ts"
   }
 }

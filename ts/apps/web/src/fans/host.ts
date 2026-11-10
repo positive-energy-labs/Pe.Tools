@@ -12,10 +12,10 @@ import {
 import { sheetSnapshot } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import { sheetState } from "@pe/ducts-domain/sheet/state";
 import { z } from "zod";
-import { designLayers } from "./ducts-design.ts";
-import { nativeRead } from "./inputs.ts";
+import { designLayers } from "../ducts/ducts-design.ts";
+import { nativeRead } from "../../../host/src/reads/inputs.ts";
 
-import { read } from "./evaluator.ts";
+import { read } from "../../../host/src/reads/evaluator.ts";
 import {
   ductSheet,
   fanElements,
@@ -25,7 +25,7 @@ import {
   fanRoster,
   fanWorksheet,
   espOptions,
-} from "./fan-sheet.ts";
+} from "../ducts/fan-sheet.ts";
 const openFan = read("fans.open", {
   input: fansReadArgs
     .pick({ target: true, sheetPath: true })

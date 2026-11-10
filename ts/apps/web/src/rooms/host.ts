@@ -1,11 +1,11 @@
 import { z } from "zod";
-import type { Read } from "./evaluator.ts";
-import { workRead } from "./inputs.ts";
-import { nativeRead } from "./inputs.ts";
+import type { Read } from "../../../host/src/reads/evaluator.ts";
+import { workRead } from "../../../host/src/reads/inputs.ts";
+import { nativeRead } from "../../../host/src/reads/inputs.ts";
 
 import { executionTargetSchema, roomsRouteState } from "@pe/agent-contracts";
-import { read, workScope } from "./evaluator.ts";
-import { documentMark } from "./inputs.ts";
+import { read, workScope } from "../../../host/src/reads/evaluator.ts";
+import { documentMark } from "../../../host/src/reads/inputs.ts";
 import { roomsArgs, roomsData } from "@pe/agent-contracts";
 import { planOf } from "./rooms-plan.ts";
 const workspaceArgs = roomsArgs.extend({ target: executionTargetSchema });

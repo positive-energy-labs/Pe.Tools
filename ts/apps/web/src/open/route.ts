@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { sessionCommand } from "../route/typed-actions.ts";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
@@ -33,12 +34,12 @@ export const fields = {
   ),
 };
 export const loaded = read(hostRead(valueRead("open.documents", z.object({}), openData)));
-export type { Context as OpenContext } from "./context.generated";
+export type OpenContext = ContextOf<typeof fields, typeof loaded, never, never>;
 export const module = route({
   key: "open",
   name: "Open document",
   needs: "host",
-  host: "../../../host/src/reads/open.ts",
+  host: "./host.ts",
   directory: {
     label: "Open document",
     exposure: "Main",

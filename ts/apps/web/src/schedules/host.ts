@@ -1,12 +1,12 @@
 import { z } from "zod";
-import type { Read } from "./evaluator.ts";
-import { workRead } from "./inputs.ts";
+import type { Read } from "../../../host/src/reads/evaluator.ts";
+import { workRead } from "../../../host/src/reads/inputs.ts";
 import {
   scheduleCatalog,
   scheduleRetained,
   scheduleSaved,
   scheduleReceipts,
-} from "../builtin-read-handles.ts";
+} from "../../../host/src/builtin-read-handles.ts";
 
 import { scheduleGridRouteState, canonicalRouteInput } from "@pe/agent-contracts";
 import {
@@ -14,7 +14,7 @@ import {
   schedulesViewData,
 } from "../../../../packages/agent-contracts/src/schedules-read.ts";
 import { read } from "@pe/host/read-graph";
-import { documentMark } from "./inputs.ts";
+import { documentMark } from "../../../host/src/reads/inputs.ts";
 import { scheduleOutcome } from "./schedule-outcome.ts";
 
 /** One selected schedule owns one workspace Work, independently of its native capture. */

@@ -29,12 +29,12 @@ import type { Chain, Sheet, SheetPath } from "@pe/ducts-domain/sheet/types";
 import { worksheet } from "@pe/ducts-domain/sheet/worksheet";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
-import { workLayer } from "../ducts-inputs.ts";
-import { followAcceptedJoins, mergeSnapshots } from "../ducts-walk.ts";
+import { workLayer } from "../../../host/src/ducts-inputs.ts";
+import { followAcceptedJoins, mergeSnapshots } from "../../../host/src/ducts-walk.ts";
 import { designLayers } from "./ducts-design.ts";
-import { nativeRead } from "./inputs.ts";
-import { catalogs } from "../builtin-read-handles.ts";
-import { fingerprint, read } from "./evaluator.ts";
+import { nativeRead } from "../../../host/src/reads/inputs.ts";
+import { catalogs } from "../../../host/src/builtin-read-handles.ts";
+import { fingerprint, read } from "../../../host/src/reads/evaluator.ts";
 const snapshotSchema = nativeResponseSchema("ducts.snapshot.walk");
 export const espOptions = read("fans.esp-options", {
   input: z.object({ target: ductsRosterRequestSchema.shape.target, units: z.array(z.string()) }),
@@ -383,7 +383,7 @@ function overview(entry: SheetModel): DuctsSheetOverview {
   };
 }
 
-async function current(ctx: import("./evaluator.ts").ReadContext, request: DuctsSheetRequest) {
+async function current(ctx: import("../../../host/src/reads/evaluator.ts").ReadContext, request: DuctsSheetRequest) {
   const entry = await ctx.read(sheetModel, subject(request));
   if (request.basis && entry.value.basis !== request.basis)
     throw Error("Stale sheet basis; read a new overview before using detail handles");

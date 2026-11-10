@@ -1,4 +1,3 @@
-import type { ExecutionTarget } from "./target.ts";
 import { publicationRequest, publicationSchema } from "./value.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { ductsDocumentSchema } from "./ducts.ts";
@@ -61,12 +60,3 @@ export const fansSheetData = fanSheetSchema.extend({
 });
 export const fansReadResponse = publicationSchema(fansSheetData);
 
-/** Both clients reference this host read's contract; no browser composition adapter owns it. */
-export const fansSheetCapability = {
-  key: "fans.sheet" as const,
-  endpoint: "reads.value" as const,
-  request: (args: object, target?: ExecutionTarget) => ({ read: "fans.sheet", args: { ...args, target: target?.kind === "document" ? target.ref : target } }),
-  input: fansReadArgs.omit({ target: true }),
-  output: fansReadResponse,
-  axes: { subject: "Document", touches: ["Metadata"], effect: "Read", cost: "Cheap", cardinality: "One" } as const,
-};

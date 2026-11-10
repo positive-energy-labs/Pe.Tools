@@ -1,6 +1,6 @@
 import { read } from "@pe/host/read-graph";
 import { capturesArgs, capturesValue } from "@pe/agent-contracts";
-import { captures } from "../builtin-read-handles.ts";
+import { captures } from "../../../host/src/builtin-read-handles.ts";
 export const reads = {
   browse: read("captures.browse", {
     input: capturesArgs,

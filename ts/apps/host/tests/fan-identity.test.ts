@@ -1,6 +1,6 @@
 import { testDuctFiles, settle } from "./effect-test.ts";
 import { expect, test } from "vite-plus/test";
-import { fanRoster } from "../src/reads/fan-sheet.ts";
+import { fanRoster } from "../../web/src/ducts/fan-sheet.ts";
 import { evaluate } from "../src/reads/evaluator.ts";
 import { sheetPort } from "./ducts-read.fixture.ts";
 import { RouteWorkspace } from "@pe/runtime";

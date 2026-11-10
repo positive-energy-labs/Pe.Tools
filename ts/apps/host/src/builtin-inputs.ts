@@ -1,7 +1,7 @@
 import { admitNativeCaller } from "./native-read-policy.ts";
 import { captureInput, replayInput, nativeInputIdentity, type RecordedInput } from "./native-recording.ts";
 import { CaptureStore } from "./takeoff-captures.ts";
-import { takeoffSnapshotInput } from "./reads/takeoffs.ts";
+import { takeoffSnapshotInput } from "../../web/src/takeoff/host.ts";
 import { projectTakeoffSnapshot } from "@pe/mcps/takeoff-ops";
 import { readLocal } from "./local-inputs.ts";
 import { readFamilySpec } from "./family-file-input.ts";

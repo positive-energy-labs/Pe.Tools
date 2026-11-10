@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
@@ -9,7 +10,7 @@ import { draw } from "../route/draw.tsx";
 import { chatArgs, chatValue } from "../../../../packages/agent-contracts/src/chat-read.ts";
 export const loaded = read(hostRead(valueRead("chat.context", chatArgs, chatValue)));
 export const fields = { mode: field(z.enum(["threads", "world"]), "threads", "query") };
-export type { Context as ChatHandle } from "./context.generated";
+export type ChatHandle = ContextOf<typeof fields, typeof loaded, never, never>;
 export const chatLayout = {
   kind: "split",
   axis: "h",
@@ -29,7 +30,7 @@ export const module = route({
   address: "/pea",
   name: "Pea",
   needs: "host",
-  host: "../../../host/src/reads/chat.ts",
+  host: "./host.ts",
   directory: {
     group: "Ask / automate",
     summary: "The Pea agent workbench and context world inspector.",
