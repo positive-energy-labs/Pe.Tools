@@ -1,6 +1,18 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { documentRefSchema, workKeySchema, canonicalRouteInput as canonicalJson } from "@pe/agent-contracts";
+import {
+  documentRefSchema,
+  executionTargetSchema,
+  workKeySchema,
+  canonicalRouteInput as canonicalJson,
+  nativeOutputSchema,
+  nativeOutputAssets,
+  type NativeReadOutput,
+} from "@pe/agent-contracts";
+import { nativeRequestSchema } from "@pe/host-contracts/decoders";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import type { hostOpSafety } from "@pe/host-contracts/generated";
+import type { HostOperationKey, OpRequestOf } from "@pe/host-contracts/operation-types";
 
 export const fingerprint = (data: unknown) =>
   createHash("sha256")
@@ -126,6 +138,10 @@ const inputLabel = (name: string, args: unknown) => `${name} ${canonicalJson(arg
 export interface ReadContext {
   read<I, O>(read: Read<I, O> | Leaf<I, O>, args: I): Promise<O>;
   work(owner: string, scope: unknown): Promise<unknown>;
+  /** The one native door: any catalog Read, typed and decoded by the host's generated catalog. */
+  native<K extends CatalogReadKey>(key: K, args: NativeArgs<K>): Promise<NativeValue<K>>;
+  /** The firm file layer (ADR 0026): `Firm/<owner>.json` decoded by `schema`, else `seed` with why. */
+  firm<T>(owner: string, schema: z.ZodType<T>, seed: T): Promise<FirmValue<T>>;
   collect<K, I, O>(
     keys: readonly K[],
     options: {
@@ -137,6 +153,121 @@ export interface ReadContext {
     },
   ): Promise<readonly O[]>;
   compute<I, O>(schema: z.ZodType<O>, inputs: I, pure: (inputs: I) => O): O;
+}
+export const documentMark = {
+  ...leaf(
+    "document-mark",
+    documentRefSchema,
+    z.object({
+      observedSince: z.number(),
+      changedAt: z.number().nullable(),
+      generation: z.number().int().nonnegative(),
+    }),
+  ),
+  fence: true,
+};
+export const assetFile = leaf(
+  "file:capture",
+  z.string().regex(/^[0-9a-f]{64}$/),
+  z.string().regex(/^[0-9a-f]{64}$/),
+  false,
+);
+type Safety = typeof hostOpSafety;
+/** Read intent, and Read effect or a rolled-back TransactRead: the keys a read may take. */
+export type CatalogReadKey = {
+  [K in keyof Safety]: Safety[K] extends { intent: "Read" } & (
+    | { effect: "Read" }
+    | { effect: "TransactRead"; rollsBack: true }
+  )
+    ? K
+    : never;
+}[keyof Safety] &
+  HostOperationKey;
+const role = z.enum(["acquire", "validate", "join", "beyond", "none"]);
+export const nativeArgs = z.object({
+  key: z.string(),
+  request: z.unknown(),
+  target: executionTargetSchema,
+  version: z.string().optional(),
+  // Retained ducts bodies name their role; every other read leaves it out.
+  role: role.optional(),
+});
+export type NativeArgs<K extends HostOperationKey> = {
+  request: OpRequestOf<K>;
+  target: z.output<typeof executionTargetSchema>;
+  version?: string;
+  role?: z.output<typeof role>;
+};
+export type NativeValue<K extends HostOperationKey> = {
+  body: NativeReadOutput<K>;
+  version: string | null;
+};
+const nativeLeaf = leaf(
+  "native",
+  nativeArgs,
+  z.object({ body: z.unknown(), version: z.string().nullable() }),
+  false,
+);
+const natives = new Map<string, unknown>();
+/** Refuses every key that is not a catalog Read, at the door and again at the port's native take. */
+export function nativeRead<K extends HostOperationKey>(
+  key: K,
+): Read<NativeArgs<K>, NativeValue<K>> {
+  if (natives.has(key)) return natives.get(key) as Read<NativeArgs<K>, NativeValue<K>>;
+  const operation = hostOpCatalog.find((op) => op.key === key);
+  if (
+    !operation ||
+    operation.intent !== "Read" ||
+    !(operation.effect === "Read" || (operation.effect === "TransactRead" && operation.rollsBack))
+  )
+    throw Error(`Input is not a catalog Read/Read: ${key}`);
+  const input = nativeArgs.omit({ key: true }).extend({ request: nativeRequestSchema(key) });
+  const output = z.object({ body: nativeOutputSchema(key), version: z.string().nullable() });
+  const handle = read(`input.native.${key}`, {
+    input,
+    output,
+    async run(ctx, args) {
+      const target = args.target;
+      if (target.kind === "document") await ctx.read(documentMark, target.ref);
+      const value = output.parse(await ctx.read(nativeLeaf, { ...args, key }));
+      for (const sha of nativeOutputAssets(key, value.body)) await ctx.read(assetFile, sha);
+      return value;
+    },
+  });
+  natives.set(key, handle);
+  return handle as Read<NativeArgs<K>, NativeValue<K>>;
+}
+/** A firm owner names one file under the firm root; no separators, so no path escapes it. */
+export const firmOwner = z.string().regex(/^[a-z0-9][a-z0-9.-]*$/i);
+/** The file as read: absent (no json), unreadable or malformed (error), or its parsed JSON. */
+export const firmFileSchema = z.strictObject({
+  path: z.string(),
+  json: z.unknown().optional(),
+  error: z.string().optional(),
+});
+export type FirmFile = z.output<typeof firmFileSchema>;
+export interface FirmValue<T> {
+  firm: T;
+  path: string;
+  /** False when the seed stands in; `error` says why when the file exists and was not used. */
+  present: boolean;
+  error?: string;
+}
+const firmFile = leaf("file:firm", firmOwner, firmFileSchema);
+/** Each value carries its source: the firm file when it decodes, else the engine default (seed). */
+export function resolveFirm<T>(file: FirmFile, schema: z.ZodType<T>, seed: T): FirmValue<T> {
+  const fallback = (error?: string) => ({
+    firm: seed,
+    path: file.path,
+    present: false,
+    ...(error === undefined ? {} : { error }),
+  });
+  if (file.error !== undefined) return fallback(file.error);
+  if (!("json" in file)) return fallback();
+  const parsed = schema.safeParse(file.json);
+  return parsed.success
+    ? { firm: parsed.data, path: file.path, present: true }
+    : fallback(parsed.error.message);
 }
 export const workInput = leaf(
   "work",
@@ -206,6 +337,9 @@ export async function evaluate<I, O>(
       return pending;
     },
     work: (owner, scope) => ctx.read(workInput, { owner, scope }),
+    native: (key, args) => ctx.read(nativeRead(key), args),
+    firm: async (owner, schema, seed) =>
+      resolveFirm(await ctx.read(firmFile, firmOwner.parse(owner)), schema, seed),
     collect: async (keys, options) => {
       if (!Number.isSafeInteger(options.batch) || options.batch < 1)
         throw Error("Batch must be a positive integer");

@@ -70,7 +70,7 @@ export async function fixture(
   const native = recorded.read && recorded.inventory ? { read: recorded.read, inventory: recorded.inventory } : undefined;
   const dir = await mkdtemp(join(tmpdir(), "host-read-spike-"));
   await mkdir(join(dir, "catalogs"));
-  await writeFile(join(dir, "firm.json"), JSON.stringify(FIRM_SEED));
+  await mkdir(join(dir, "Firm"), { recursive: true }); await writeFile(join(dir, "Firm", "ducts.json"), JSON.stringify(FIRM_SEED));
   let workspace!: RouteWorkspace;
   let mark = 10,
     generation = 0,
@@ -127,7 +127,7 @@ export async function fixture(
       },
       live: {
         owner,
-        files: DuctFiles.layer({ firm: join(dir, "firm.json"), catalogs: join(dir, "catalogs") }),
+        files: DuctFiles.layer({ firm: join(dir, "Firm"), catalogs: join(dir, "catalogs") }),
         marks: Layer.succeed(HostDocumentMarks, {
           ...marks,
           snapshot: (doc) =>

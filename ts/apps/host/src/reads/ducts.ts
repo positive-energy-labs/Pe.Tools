@@ -14,7 +14,6 @@ import { toGrids } from "@pe/ducts-domain/loss-grid";
 import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { pricingResult } from "@pe/ducts-domain/pricing-result";
 import { designLayers } from "./ducts-design.ts";
-import { nativeRead } from "./inputs.ts";
 import { catalogs } from "../builtin-read-handles.ts";
 import { read } from "./evaluator.ts";
 import { systemList } from "@pe/ducts-domain/system-list";
@@ -28,7 +27,7 @@ export const ductsRoster = read("ducts.roster", {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const staged = stagedDucts(design, design);
-    const response = await ctx.read(nativeRead("ducts.snapshot.roster"), {
+    const response = await ctx.native("ducts.snapshot.roster", {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
@@ -49,7 +48,7 @@ const systems = read("ducts.systems", {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const staged = stagedDucts(design, design);
-    const response = await ctx.read(nativeRead("ducts.snapshot.walk"), {
+    const response = await ctx.native("ducts.snapshot.walk", {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
@@ -127,7 +126,7 @@ export const ductsPricing = read("ducts.pricing", {
     const network = await ctx.read(ductsNetwork, args);
     const layers = await ctx.read(designLayers, args.target),
       catalog = await ctx.read(catalogs, null);
-    const tables = await ctx.read(nativeRead("ducts.tables"), {
+    const tables = await ctx.native("ducts.tables", {
       role: "acquire",
       target: { kind: "document", ref: args.target },
       request: { ids: [...TABLE_IDS] },
