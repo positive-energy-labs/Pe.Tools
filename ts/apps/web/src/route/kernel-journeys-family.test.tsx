@@ -49,7 +49,7 @@ async function mounted(cells: FamilyDraft["cells"], reading = raw) {
   const first = Promise.withResolvers<void>();
   // The mount applies Work acks itself, so what the host read must publish is the mount's own accepted Work.
   const writes: unknown[] = [];
-  const work: WorkJournalDoor = { ...door, submitWork: (scope, write) => { writes.push(write); return door.submitWork(scope, write); }, open: (scope) => ({ subscribe(deliver, end) {
+  const work: WorkJournalDoor = { ...door, submitWork: (...args) => { writes.push(args[1]); return door.submitWork(...args); }, open: (scope) => ({ subscribe(deliver, end) {
     return door.open(scope).subscribe((state) => {
       if (state.kind === "ready") {
         accepted = { key: state.snapshot.handle.key, revision: state.snapshot.revision, doc: state.snapshot.value };
