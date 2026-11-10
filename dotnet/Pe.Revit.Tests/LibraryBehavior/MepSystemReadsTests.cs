@@ -3,7 +3,7 @@ using Autodesk.Revit.DB.Structure;
 using Pe.Revit.Extensions.FamDocument;
 using Newtonsoft.Json;
 using Pe.Revit.Global.Lib.Mep;
-using Pe.Shared.RevitData.Piping;
+using Pe.Shared.RevitData.Mep;
 
 namespace Pe.Revit.Tests;
 
@@ -13,7 +13,7 @@ namespace Pe.Revit.Tests;
 ///     (Out) and a Return (In) pipe connector feeds two pipes joined by an elbow fitting; nothing is saved.
 /// </summary>
 [TestFixture, NonParallelizable]
-public sealed class PipingReadsTests {
+public sealed class MepSystemReadsTests {
     private Document _document = null!;
     private PipingSystem _system = null!;
     private FamilyInstance _equipment = null!;
@@ -102,18 +102,23 @@ public sealed class PipingReadsTests {
     }
 
     [Test]
-    public void Systems_read_reports_hydronic_members_directions_source_and_bounds() {
-        var roster = PipingReads.Systems(_document, new());
+    public void Members_read_reports_hydronic_members_directions_source_and_bounds() {
+        var roster = MepSystemReads.Members(_document, new());
         var native = _system;
         Assert.That(native.BaseEquipment?.Id, Is.EqualTo(_equipment.Id), "fixture: the equipment is the system's base equipment");
-        var result = PipingReads.Systems(_document, new(native.UniqueId));
+        var result = MepSystemReads.Members(_document, new(native.UniqueId));
         TestContext.WriteLine(JsonConvert.SerializeObject(result));
         var system = result.Systems.Single(row => row.UniqueId == native.UniqueId);
-        var pipes = result.Elements.Where(row => row.Kind == "pipe").ToArray();
+        var pipes = result.Elements.Where(row => row.Kind == "curve").ToArray();
         Assert.Multiple(() => {
             Assert.That(roster.Elements, Is.Empty, "roster must not eagerly walk networks");
             Assert.That(roster.Systems.Select(row => row.UniqueId), Does.Contain(native.UniqueId));
-            Assert.That(system.Source.State, Is.EqualTo(PipingReadState.Value));
+            Assert.That(system.Domain, Is.EqualTo("piping"));
+            Assert.That(system.Classification, Is.EqualTo(native.SystemType.ToString()));
+            Assert.That(pipes.All(pipe => pipe.WidthFt.State == MepReadState.Absent && pipe.HeightFt.State == MepReadState.Absent), Is.True,
+                "a round pipe has no width or height: absent, never zero");
+            Assert.That(pipes.All(pipe => pipe.InnerDiameterFt.State == MepReadState.Value && pipe.Segment.State == MepReadState.Value), Is.True);
+            Assert.That(system.Source.State, Is.EqualTo(MepReadState.Value));
             Assert.That(system.Source.Value!.Equipment.UniqueId, Is.EqualTo(native.BaseEquipment.UniqueId));
             Assert.That(pipes, Has.Length.EqualTo(2));
             Assert.That(result.Elements.Count(row => row.Kind == "fitting"), Is.EqualTo(1));
@@ -121,10 +126,10 @@ public sealed class PipingReadsTests {
             Assert.That(system.Source.Value!.BaseConnectorId, Is.EqualTo(native.BaseEquipmentConnector.Id));
             Assert.That(system.Source.Value.Connectors.Single(port => port.ConnectorId == native.BaseEquipmentConnector.Id).Direction.Value,
                 Is.EqualTo(native.BaseEquipmentConnector.Direction.ToString()));
-            Assert.That(roster.Systems.Single(row => row.UniqueId == _loose.UniqueId).Source.State, Is.EqualTo(PipingReadState.Absent));
+            Assert.That(roster.Systems.Single(row => row.UniqueId == _loose.UniqueId).Source.State, Is.EqualTo(MepReadState.Absent));
             Assert.That(pipes.SelectMany(pipe => pipe.Connectors).SelectMany(port => port.Peers)
                 .Any(peer => peer.UniqueId == _equipment.UniqueId), Is.True, "a pipe end names the equipment as its peer");
-            Assert.That(pipes.SelectMany(pipe => pipe.Connectors).Any(port => port.Direction.State == PipingReadState.Value &&
+            Assert.That(pipes.SelectMany(pipe => pipe.Connectors).Any(port => port.Direction.State == MepReadState.Value &&
                 port.Direction.Value is "In" or "Out" or "Bidirectional"), Is.True);
             Assert.That(pipes.SelectMany(pipe => pipe.Connectors).SelectMany(port => port.Peers), Is.Not.Empty);
         });
@@ -132,13 +137,13 @@ public sealed class PipingReadsTests {
             var actual = (Pipe)_document.GetElement(pipe.UniqueId);
             Assert.That(pipe.NominalDiameterFt.Value, Is.EqualTo(actual.Diameter));
             Assert.That(pipe.LengthFt.Value, Is.EqualTo(actual.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH).AsDouble()));
-            Assert.That(pipe.PipeType.Value!.UniqueId, Is.EqualTo(_document.GetElement(actual.GetTypeId()).UniqueId));
+            Assert.That(pipe.Type.Value!.UniqueId, Is.EqualTo(_document.GetElement(actual.GetTypeId()).UniqueId));
             foreach (Connector connector in actual.ConnectorManager.Connectors) {
                 var port = pipe.Connectors.Single(row => row.ConnectorId == connector.Id);
                 Assert.That(port.Direction.Value, Is.EqualTo(connector.Direction.ToString()));
                 var peers = connector.AllRefs.Cast<Connector>().Where(peer => peer.Domain == Domain.DomainPiping &&
                     peer.ConnectorType is ConnectorType.End or ConnectorType.Curve && peer.Owner.Id != connector.Owner.Id)
-                    .Select(peer => new PipingPeer(peer.Owner.UniqueId, peer.Owner.Id.Value(), peer.Id)).Distinct();
+                    .Select(peer => new MepPeer(peer.Owner.UniqueId, peer.Owner.Id.Value(), peer.Id)).Distinct();
                 Assert.That(port.Peers, Is.EquivalentTo(peers));
             }
         }
@@ -146,24 +151,25 @@ public sealed class PipingReadsTests {
             .Where(port => port.Domain == Domain.DomainPiping && port.ConnectorType is ConnectorType.End or ConnectorType.Curve &&
                 (port.MEPSystem?.Id == native.Id || port.Id == native.BaseEquipmentConnector?.Id) && port.Direction == FlowDirectionType.Out).Select(port => port.Id);
         Assert.That(system.Source.Value!.OutConnectorIds, Is.EquivalentTo(outIds));
-        Assert.Throws<ArgumentException>(() => PipingReads.Systems(_document, new(native.UniqueId, MaxElements: 1)));
-        Assert.Throws<ArgumentException>(() => PipingReads.Systems(_document, new("missing")));
-        Assert.Throws<ArgumentOutOfRangeException>(() => PipingReads.Systems(_document, new(MaxSystems: 0)));
+        Assert.Throws<ArgumentException>(() => MepSystemReads.Members(_document, new(native.UniqueId, MaxElements: 1)));
+        Assert.Throws<ArgumentException>(() => MepSystemReads.Members(_document, new("missing")));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MepSystemReads.Members(_document, new(MaxSystems: 0)));
     }
 
     [Test]
-    public void Size_catalog_preserves_every_native_segment_and_all_three_diameters() {
-        var result = PipingReads.Sizes(_document, new());
+    public void Segment_sizes_preserve_every_native_segment_and_all_three_diameters() {
+        var result = MepSystemReads.SegmentSizes(_document, new());
         var native = new FilteredElementCollector(_document).OfClass(typeof(PipeSegment)).Cast<PipeSegment>().ToArray();
         TestContext.WriteLine(JsonConvert.SerializeObject(result));
         Assert.That(result.Segments.Select(row => row.UniqueId), Is.EquivalentTo(native.Select(segment => segment.UniqueId)));
         Assert.That(result.Segments.SelectMany(row => row.Sizes), Is.Not.Empty);
+        Assert.That(result.Segments.All(row => row.Domain == "piping" && row.Kind == "pipe-segment"), Is.True);
         foreach (var segment in native) {
             var row = result.Segments.Single(candidate => candidate.UniqueId == segment.UniqueId);
             Assert.That(row.Sizes, Is.EqualTo(segment.GetSizes().Select(size =>
-                new PipeSizeRow(size.NominalDiameter, size.InnerDiameter, size.OuterDiameter))));
+                new MepSizeRow(size.NominalDiameter, size.InnerDiameter, size.OuterDiameter))));
         }
-        Assert.Throws<ArgumentException>(() => PipingReads.Sizes(_document, new(MaxSizesPerSegment: 1)));
-        Assert.Throws<ArgumentOutOfRangeException>(() => PipingReads.Sizes(_document, new(MaxSegments: 0)));
+        Assert.Throws<ArgumentException>(() => MepSystemReads.SegmentSizes(_document, new(MaxSizesPerSegment: 1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MepSystemReads.SegmentSizes(_document, new(MaxSegments: 0)));
     }
 }
