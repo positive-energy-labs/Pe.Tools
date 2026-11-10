@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { executionTargetSchema, subjectCode, uniqueIdSchema } from "@pe/agent-contracts";
-import { workScope, type ReadContext } from "@pe/host/read-graph";
+import { executionTargetSchema } from "@pe/agent-contracts/target";
+import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
+import type { ReadContext } from "@pe/host/read-graph";
 import { fromRevit, size } from "./size.ts";
 import { args, firmLimits, key, sizing as sized, value, work } from "./schema.ts";
 
@@ -15,8 +16,7 @@ export const sizing = {
   async run(ctx: ReadContext, { system, target }: z.output<typeof input>) {
     if (target.kind !== "document") throw Error("Choose a project document");
     // The target document's Work, the firm file's limit, and two generic catalog reads: no Pod-owned native op.
-    const scope = { ...(await ctx.read(workScope, target.ref)), route: key };
-    const doc = stored.parse(await ctx.work(key, scope))?.doc ?? work.parse({});
+    const doc = stored.parse(await ctx.work(key, target.ref))?.doc ?? work.parse({});
     const firm = await ctx.firm("hydronic", firmLimits, { maxFriction: 400 });
     const roster = (await ctx.native("mep.system.members", { request: {}, target })).body;
     const chosenSystem = system || roster.systems.find((s) => s.domain === "piping")?.uniqueId;

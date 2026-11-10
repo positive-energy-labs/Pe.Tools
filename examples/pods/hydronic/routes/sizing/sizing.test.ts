@@ -93,19 +93,15 @@ describe("kernel gaps", () => {
   test("kernel door: pod-native-read-door (2)", async () => {
     expect(await hostDoors()).toContain("nativeRead");
   });
-  // Closed by slice 7: the read binds the target document's Work (workScope), takes the firm layer
-  // (ctx.firm) and both generic MEP reads (ctx.native). Run against a recording ReadContext.
+  // Closed by slice 7: the read binds the target document's Work (ctx.work with the document ref; the
+  // evaluator resolves its key, host tests/slots-sheet.test.ts), takes the firm layer (ctx.firm) and both
+  // generic MEP reads (ctx.native). A Pod host imports no read-graph value. Run against a recording ReadContext.
   test("kernel doors: pod-document-work (4) and firm-file-layer (3)", async () => {
-    const { workScope } = await import("@pe/host/read-graph");
     const calls: string[] = [];
     const target = { kind: "document" as const, ref: { session: "s", openId: "o" } };
     const ctx = {
-      read: async (leaf: unknown, args: unknown) => {
-        calls.push(`read:${leaf === workScope ? "workScope" : "other"}:${JSON.stringify(args)}`);
-        return { binding: "address", route: "x", target: "C:/job.rvt" };
-      },
-      work: async (owner: string, scope: { route: string; binding: string }) => {
-        calls.push(`work:${owner}:${scope.binding}:${scope.route}`);
+      work: async (owner: string, scope: unknown) => {
+        calls.push(`work:${owner}:${JSON.stringify(scope)}`);
         return { doc: work.parse({ maxVelocity: 2 }), revision: 1 };
       },
       firm: async (owner: string, _schema: unknown, seed: { maxFriction: number }) => {
@@ -122,8 +118,7 @@ describe("kernel gaps", () => {
     };
     const out = await sizing.run(ctx as never, { system: "", target });
     expect(calls).toEqual([
-      `read:workScope:${JSON.stringify(target.ref)}`,
-      `work:${key}:address:${key}`,
+      `work:${key}:${JSON.stringify(target.ref)}`,
       "firm:hydronic",
       "native:mep.system.members:",
       "native:mep.system.members:sys",

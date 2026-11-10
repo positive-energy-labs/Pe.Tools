@@ -17,8 +17,17 @@ import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "./host-read.ts";
 import { sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
-import { command } from "./typed-actions.ts";
-import { draw } from "./draw.tsx";
+
+/*
+ * The sheet pair's contracts, inline: importing `typed-actions` would pull the whole semantic catalog into
+ * every Pod bundle. The axes equal `commandCatalogAxes` for the pair; the host decodes the real input.
+ */
+const sheetContract = (effect: "Read" | "ModelWrite") => ({
+  input: z.looseObject({}), output: z.unknown(),
+  axes: { subject: "Elements", touches: ["Metadata"], effect, cost: "Mutation", cardinality: "One" } as const,
+});
+const sheetCommand = { entry: SHEET_COMMANDS.apply, plan: SHEET_COMMANDS.plan,
+  contract: sheetContract("ModelWrite"), planContract: sheetContract("Read") };
 
 type Field = {
   schema: z.ZodType;
@@ -235,19 +244,17 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   // the one sheet pair as the route's `sheet` verb. A route that declares either itself keeps its own.
   const declaredCommands = spec.commands ?? {};
   const sheetVerb = sheet && writesRevit(sheet) && !Object.values(declaredCommands).some((c) => c.entry === SHEET_COMMANDS.apply)
-    ? { sheet: { ...command(SHEET_COMMANDS.apply), label: "Write to Revit",
+    ? { sheet: { ...sheetCommand, label: "Write to Revit",
         present: (result: unknown) => {
           const writes = (result as { writes?: readonly unknown[] }).writes?.length ?? 0;
           return `Write ${writes} parameter value${writes === 1 ? "" : "s"} to Revit`;
         } } }
     : {};
+  // The shell draws a kernel pane (`typed-shell.tsx`, `kernel`): a route module, and a Pod bundle, carries no React.
   const kernelPanes = {
-    ...(spec.sheet && !("sheet" in spec.panes) ? { sheet: { title: "Sheet", purpose: "Edit the bound cells",
-      draw: ((drawn) => (ctx: DrawContext<unknown, F, z.output<W>, z.output<Edit>>) => drawn({ draw: ctx as never, slot: spec.sheet!, field: spec.subject?.field }))(
-        draw(() => import("./slots/sheet/pane.tsx"), "SheetPane")) } } : {}),
+    ...(spec.sheet && !("sheet" in spec.panes) ? { sheet: { title: "Sheet", purpose: "Edit the bound cells", kernel: "sheet", draw: () => null } } : {}),
     ...(spec.goal && !("goal" in spec.panes) ? { goal: { title: "Unresolved", purpose: "What is left before the answer", read: spec.goal,
-      draw: ((drawn) => (ctx: DrawContext<Goal, F, z.output<W>, z.output<Edit>>) => drawn({ goal: ctx.value.value as Goal | undefined }))(
-        draw(() => import("./slots/goal/pane.tsx"), "GoalPane")) } } : {}),
+      kernel: "goal", draw: () => null } } : {}),
   } as unknown as Specification<D, F, W, Edit, Reads, SubjectRead>["panes"];
   const normalized = { ...spec, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb } as NonNullable<typeof spec.commands>,
     panes: { ...spec.panes, ...kernelPanes }, edits: work && edits ? {...edits,work,owners} : undefined };

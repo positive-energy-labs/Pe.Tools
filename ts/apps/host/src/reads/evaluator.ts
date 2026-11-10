@@ -137,6 +137,7 @@ export class RefusedPartition extends Error {}
 const inputLabel = (name: string, args: unknown) => `${name} ${canonicalJson(args)}`;
 export interface ReadContext {
   read<I, O>(read: Read<I, O> | Leaf<I, O>, args: I): Promise<O>;
+  /** Work by key, or a target document's Work for `owner` given its document ref (a Pod's door: no module import). */
   work(owner: string, scope: unknown): Promise<unknown>;
   /** The one native door: any catalog Read, typed and decoded by the host's generated catalog. */
   native<K extends CatalogReadKey>(key: K, args: NativeArgs<K>): Promise<NativeValue<K>>;
@@ -336,7 +337,11 @@ export async function evaluate<I, O>(
       memo.set(recipe, pending);
       return pending;
     },
-    work: (owner, scope) => ctx.read(workInput, { owner, scope }),
+    work: async (owner, scope) => {
+      const document = documentRefSchema.safeParse(scope);
+      const key = document.success ? { ...(await ctx.read(workScope, document.data)), route: owner } : scope;
+      return ctx.read(workInput, { owner, scope: key });
+    },
     native: (key, args) => ctx.read(nativeRead(key), args),
     firm: async (owner, schema, seed) =>
       resolveFirm(await ctx.read(firmFile, firmOwner.parse(owner)), schema, seed),

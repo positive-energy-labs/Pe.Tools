@@ -296,7 +296,7 @@
       "captures": [
         "value"
       ],
-      "entry": "ducts.apply-losses",
+      "entry": "sheet.apply",
       "intent": "losses"
     }
   },

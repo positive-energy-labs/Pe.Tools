@@ -28,7 +28,8 @@ const handAxes = {
     touches: ["Metadata"],
     effect: "ModelWrite",
     cost: "Mutation",
-    cardinality: "Many",
+    // One, like the losses pair it replaces: the route-wide control doors (actions.admit) bound every write at One.
+    cardinality: "One",
   },
   "settings.observe": {
     subject: "None",
