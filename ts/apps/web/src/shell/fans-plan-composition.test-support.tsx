@@ -40,13 +40,12 @@ const trace = vi.hoisted(()=>({gates:[] as any[],tokens:[] as any[],samples:[] a
 vi.mock("../../../host/src/installed-pods",async actual=>({
  ...await actual<typeof import("../../../host/src/installed-pods")>(),importShippedPods:async()=>({shippedRoot:null,outcomes:[]}),
 }));
-vi.mock("../../../host/src/bridge",async actual=>{
- const real=await actual<typeof import("../../../host/src/bridge")>();
- return {...real,invokeBridge:async(...args:Parameters<typeof real.invokeBridge>)=>{
-   const answer=await real.invokeBridge(...args);
-   if(args[2]==="ducts.apply.plan") await trace.holdPlan();
-   return answer;
- }};
+// Command steps reach Revit through `nativeStep`; hold Plan after its native answer settles.
+vi.mock("../../../host/src/command-executor",async actual=>{
+ const real=await actual<typeof import("../../../host/src/command-executor")>();
+ const {Effect}=await import("effect");
+ return {...real,nativeStep:(...args:Parameters<typeof real.nativeStep>)=>real.nativeStep(...args).pipe(
+   Effect.tap(()=>args[2]==="ducts.apply.plan"?Effect.promise(()=>trace.holdPlan()):Effect.void))};
 });
 vi.mock("../host/runtime",()=>({hostFetch:trace.fetch,runtimeStreamUrl:(url:string)=>new URL(url,trace.base).toString()}));
 vi.mock("../../../host/src/session-route",async actual=>{const real=await actual<any>();const {Effect}=await import("effect");const {sdkSessions}=await import("../../../host/tests/native-receipt-fixture");return {...real,runPeRevitCli:(args:any)=>Effect.promise(()=>sdkSessions(args))};});
