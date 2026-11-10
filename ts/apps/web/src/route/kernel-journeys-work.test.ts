@@ -870,11 +870,11 @@ test("JZ a null Place target refuses Work before dispatch but still permits clie
     await j.start();
     const unbound = j.mount(false, { target: null });
     await vi.waitFor(() => expect(unbound.owner()?.ready).toBe(true));
-    await vi.waitFor(() => expect(unbound.value().current).toBe(true));
+    expect(unbound.value().current, "A targetless Page cannot borrow document Value authority").toBe(false);
     const before = structuredClone(unbound.owner()!.doc), revision = unbound.owner()!.handle!.revision;
     const count = j.writes.length;
     const cells = unbound.draw("sheet-inputs", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"];
-    expect(await cells.at(["flows", terminalA]).stage({ cfm: 330 }), "No target means no write authority").toMatchObject({ code: "refused" });
+    expect(await cells.at(["flows", terminalA]).stage({ cfm: 330 }), "No target means no write authority").toMatchObject({ code: "unavailable" });
     expect(j.writes).toHaveLength(count);
     expect(unbound.owner()!.doc).toEqual(before);
     expect(unbound.owner()!.handle!.revision).toBe(revision);

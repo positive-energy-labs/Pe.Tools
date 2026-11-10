@@ -62,7 +62,7 @@ import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
 import { Effect } from "effect";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { ductsPricingData, valueReadResponse } from "@pe/agent-contracts";
+import { ductsPricingData, ductsNetworkData, ductsRosterData, valueReadResponse } from "@pe/agent-contracts";
 import { InvalidRead } from "../../../host/src/native-reads";
 import { registeredReads } from "../../../host/src/reads/routes";
 import { ductsPricing, ductsNetwork, ductsRoster } from "../../../host/src/reads/ducts";
@@ -622,11 +622,16 @@ async function compareSystemAnswers() {
       "H23: requested system coverage is explicit",
     ).toEqual([]);
     mount.page.subject({ kind: "ids", ids: [] });
-    await vi.waitFor(() => expect(mount.value().current).toBe(true), { timeout: 20_000 });
-    const unread = ductsPricingData.parse(mount.value().value);
-    expect(unread.network.systemReads.completed, "H23: none reads no systems").toEqual([]);
+    await vi.waitFor(() => expect(mount.value(ducts.spec.reads!.network).current).toBe(true), { timeout: 20_000 });
+    const unread = ductsNetworkData.parse(mount.value(ducts.spec.reads!.network).value);
+    expect(unread.systemReads.completed, "H23: none reads no systems").toEqual([]);
+    // SubjectRef Work outside this acquisition cannot become current pricing or complete zeros.
+    await vi.waitFor(() => expect(mount.value()).toMatchObject({
+      current: false, status: "unavailable", reason: expect.stringContaining("Work subject is absent from the acquisition"),
+    }));
+    const unpriced = ductsRosterData.parse(mount.value(ducts.spec.reads!.roster).value);
     expect(
-      unread.analysis.systems.every((row) => row.total === null),
+      unpriced.rows.every((row) => row.total === null),
       "H23: unread systems retain unknown pressure, never complete zeros",
     ).toBe(true);
   } finally {

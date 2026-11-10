@@ -8,7 +8,7 @@
   "coordinateEncoding": "native-double",
   "levels": [
     {
-      "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
+      "id": 100,
       "name": "Level 1",
       "elevationFt": 0.0
     }
@@ -523,7 +523,7 @@
   "layers": [],
   "systems": [
     {
-      "id": 500, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000001f4",
+      "id": 500,
       "name": "SA 1",
       "classification": "SupplyAir",
       "isWellConnected": true,
