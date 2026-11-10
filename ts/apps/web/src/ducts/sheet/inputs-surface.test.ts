@@ -12,6 +12,7 @@ import { afterEach, expect, it, vi } from "vite-plus/test";
 import { snapshot as networkSnapshot } from "../test-fixture";
 import {
   InputsSurface,
+  NO_SHARED_ROOT,
   inputFields,
   protocolPickers,
   type InputContext,
@@ -289,4 +290,28 @@ it("labels the undoable row action Revert and records the same History name", ()
     expect.anything(),
     expect.objectContaining({ label: expect.stringMatching(/^Revert /), clear: true }),
   );
+});
+
+it("disables the criteria still on the firm layer when the firm read refused for no shared root", () => {
+  const ctx = context();
+  ctx.firm = { refused: "no-shared-root" };
+  ctx.sheet = { overview: { fan: null }, inputs: null };
+  ctx.inputs!.criteria.autoJoinGapIn = { value: 4, source: "Work", units: null, version: null, status: "valid" };
+  const rows = inputFields(ctx).criteria;
+  expect(rows.find((r) => r.key === "velocityLimitFpm:supply")!.refusal).toBe(NO_SHARED_ROOT);
+  expect(rows.find((r) => r.key === "splitPolicy")!.refusal).toBe(NO_SHARED_ROOT);
+  // A Work value is the user's own: it stays editable over the refused firm layer.
+  expect(rows.find((r) => r.key === "autoJoinGapIn")!.refusal).toBeUndefined();
+  const view = render(
+    createElement(InputsSurface, {
+      ctx, busy: false, elementName: null, onSlot: vi.fn(), apply: vi.fn(), nameOf: String,
+      history: { undoLabel: null, redoLabel: null, last: null, cleared: null,
+        undo: vi.fn(), redo: vi.fn(), restore: vi.fn() },
+    }),
+  );
+  expect(view.container.querySelector("[data-inputs-firm-refused='no-shared-root']")?.textContent).toBe(NO_SHARED_ROOT);
+  const locked = (key: string) =>
+    view.container.querySelector(`[data-input-field='${key}'] [data-body='locked']`) !== null;
+  expect(locked("velocityLimitFpm:supply")).toBe(true);
+  expect(locked("autoJoinGapIn")).toBe(false);
 });
