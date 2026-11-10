@@ -278,112 +278,6 @@ function paneFixture(source: ts.SourceFile, node: ts.Node): boolean {
     }
   return false;
 }
-/** Temporary legacy inventory. Source exports follow the same graph.ts convention as
- * codegen:routes; executable declarations, mount calls and registrations share one ratchet. */
-export function legacyInventory(input?: Record<string, string>) {
-  const sources = new Map(
-    Object.entries(
-      input ??
-        Object.fromEntries(
-          files("ts/apps/web/src")
-            .filter((p) => /\.tsx?$/.test(p) && !/(?:\.test\.|\.gen\.)/.test(p))
-            .map((p) => [p, read(p)]),
-        ),
-    ).map(([p, text]) => [p, syntax(text, p)]),
-  );
-  const doors = new Map([
-    [`${WEB}shell/mount.tsx#mountRoute`, "legacyMounts"],
-    [`${WEB}shell/mount.tsx#routeFromGraph`, "legacyRouterMounts"],
-    [`${WEB}shell/legacy-route-door.ts#registerLegacyGraph`, "legacyRegistrations"],
-    [`${WEB}shell/legacy-route-door.ts#registerLegacyModule`, "legacyPodLoaders"],
-    [`${WEB}shell/legacy-route-door.ts#registerLegacyRegistration`, "legacyRegistrations"],
-    [`${WEB}route/pod-view.tsx#makePodRoute`, "legacyPodLoaders"],
-  ]);
-  const bindings = new Map<string, Map<string, string>>();
-  const aliases = new Map<string, Map<string, ts.Expression>>();
-  const graphs: { file: string; symbol: string }[] = [];
-  const sites: OffenderSets = Object.fromEntries(
-    [...new Set([...doors.values(), "legacyGraphs"])].map((rule) => [rule, []]),
-  );
-  for (const [file, source] of sources) {
-    const names = new Map<string, string>();
-    bindings.set(file, names);
-    const locals = new Map<string, ts.Expression>();
-    aliases.set(file, locals);
-    walk(source, (node) => {
-      if (ts.isVariableDeclaration(node) && node.initializer && ts.isIdentifier(node.name))
-        locals.set(node.name.text, node.initializer);
-    });
-    for (const statement of source.statements) {
-      if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
-        const specifier = statement.moduleSpecifier.text;
-        const target =
-          [...sources.keys()].find((p) => p === specifier) ?? resolveModule(file, specifier);
-        const named = statement.importClause?.namedBindings;
-        if (target && named) {
-          if (ts.isNamedImports(named))
-            for (const element of named.elements)
-              names.set(
-                element.name.text,
-                `${target}#${(element.propertyName ?? element.name).text}`,
-              );
-          else names.set(named.name.text, `${target}#*`);
-        }
-      }
-      // Exported *Graph declarations are the canonical builtin module inventory used by codegen.
-      // Admitted JSON re-exports have no executable declaration and leave this list on migration.
-      if (
-        file.endsWith("/graph.ts") &&
-        ts.canHaveModifiers(statement) &&
-        ts.getModifiers(statement)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
-      ) {
-        const declarations = ts.isVariableStatement(statement)
-          ? [...statement.declarationList.declarations]
-          : ts.isFunctionDeclaration(statement)
-            ? [statement]
-            : [];
-        for (const declaration of declarations)
-          if (declaration.name && declaration.name.getText().endsWith("Graph")) {
-            const symbol = declaration.name.getText();
-            graphs.push({ file, symbol });
-            sites.legacyGraphs!.push(`${file}#${symbol}`);
-          }
-      }
-    }
-  }
-  function resolved(file: string, expression: ts.Expression, seen = new Set<string>()): string {
-    const text = expression.getText();
-    const key = `${file}#${text}`;
-    if (seen.has(key)) return key;
-    seen.add(key);
-    const names = bindings.get(file)!;
-    const imported = names.get(text);
-    if (imported) return imported;
-    if (ts.isPropertyAccessExpression(expression)) {
-      const namespace = names.get(expression.expression.getText());
-      if (namespace?.endsWith("#*")) return namespace.slice(0, -1) + expression.name.text;
-    }
-    const alias = aliases.get(file)?.get(text);
-    return alias && (ts.isIdentifier(alias) || ts.isPropertyAccessExpression(alias))
-      ? resolved(file, alias, seen)
-      : key;
-  }
-  for (const [file, source] of sources)
-    walk(source, (node) => {
-      if (!ts.isCallExpression(node)) return;
-      const rule = doors.get(resolved(file, node.expression));
-      if (rule) {
-        const argument = node.arguments[0]?.getText() ?? "missing";
-        const site = `${file}#${scope(node)}:${resolved(file, node.expression)}[${argument}]`;
-        sites[rule]!.push(site);
-      }
-    });
-  return {
-    graphs: graphs.sort((a, b) => a.file.localeCompare(b.file)),
-    sites: Object.fromEntries(Object.entries(sites).map(([rule, ids]) => [rule, [...ids].sort()])),
-  };
-}
-
 export function boundaryCensus(input?: Record<string, string>): OffenderSets {
   const sources = new Map(
     Object.entries(
@@ -400,7 +294,6 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
     ).map(([p, text]) => [p, syntax(text, p)]),
   );
   const result: OffenderSets = {
-    ...legacyInventory(input).sites,
     rawPageImports: [],
     fixtureMode: [],
     uncheckedRegistry: [],
@@ -540,7 +433,7 @@ if (
   const next = Object.fromEntries(
     Object.entries(prior).map(([law, sites]) => [
       law,
-      law === "legacyBuiltinRoutes" ? sites : sites.filter((site) => actual[law]?.includes(site)),
+      sites.filter((site) => actual[law]?.includes(site)),
     ]),
   );
   writeFileSync(resolve(root, baselinePath), `${JSON.stringify(next, null, 2)}\n`);

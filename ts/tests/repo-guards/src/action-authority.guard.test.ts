@@ -8,11 +8,24 @@ const src = resolve(import.meta.dirname, "../../../packages/mcps/src");
 
 test("raw Work reads stay inside route-workspace internals", () => {
   const root = resolve(import.meta.dirname, "../../..");
-  const paths = execFileSync("git", ["ls-files", "-co", "--exclude-standard", "--", "apps", "packages"], {cwd: root, encoding:"utf8"}).trim().split(/\r?\n/);
-  const offenders = paths.flatMap(path => {
-    if (!/\.tsx?$/.test(path) || /\.test[.-]|\/tests\//.test(path) || path === "packages/runtime/src/route-workspace.ts") return [];
+  const paths = execFileSync(
+    "git",
+    ["ls-files", "-co", "--exclude-standard", "--", "apps", "packages"],
+    { cwd: root, encoding: "utf8" },
+  )
+    .trim()
+    .split(/\r?\n/);
+  const offenders = paths.flatMap((path) => {
+    if (
+      !/\.tsx?$/.test(path) ||
+      /\.test[.-]|\/tests\//.test(path) ||
+      path === "packages/runtime/src/route-workspace.ts"
+    )
+      return [];
     const source = readFileSync(resolve(root, path), "utf8");
-    return [...source.matchAll(/\.\s*readRaw\s*\(/g)].map(match => `${path}:${source.slice(0, match.index).split("\n").length}`);
+    return [...source.matchAll(/\.\s*readRaw\s*\(/g)].map(
+      (match) => `${path}:${source.slice(0, match.index).split("\n").length}`,
+    );
   });
   expect(offenders).toEqual([]);
 });
@@ -30,28 +43,62 @@ test("Pea has one capability admission door", () => {
 
 test("production workspace acquisitions carry context", () => {
   const root = resolve(import.meta.dirname, "../../..");
-  const paths = execFileSync("git", ["ls-files", "-co", "--exclude-standard", "--", "apps", "packages"], { cwd: root, encoding: "utf8" }).trim().split(/\r?\n/)
-    .filter(path => /\.tsx?$/.test(path) && !/\.test[.-]|\/tests\//.test(path) && path !== "packages/runtime/src/route-workspace.ts");
-  const candidates = paths.filter(path => /\.\s*(?:view|read|subscribe)\s*\(/.test(readFileSync(resolve(root, path), "utf8")));
-  const program = ts.createProgram(candidates.map(path => resolve(root, path)), {
-    target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext,
-    allowImportingTsExtensions: true, skipLibCheck: true, noEmit: true, strict: true, jsx: ts.JsxEmit.ReactJSX,
-  });
-  const checker = program.getTypeChecker(), offenders: string[] = [];
+  const paths = execFileSync(
+    "git",
+    ["ls-files", "-co", "--exclude-standard", "--", "apps", "packages"],
+    { cwd: root, encoding: "utf8" },
+  )
+    .trim()
+    .split(/\r?\n/)
+    .filter(
+      (path) =>
+        /\.tsx?$/.test(path) &&
+        !/\.test[.-]|\/tests\//.test(path) &&
+        path !== "packages/runtime/src/route-workspace.ts",
+    );
+  const candidates = paths.filter((path) =>
+    /\.\s*(?:view|read|subscribe)\s*\(/.test(readFileSync(resolve(root, path), "utf8")),
+  );
+  const program = ts.createProgram(
+    candidates.map((path) => resolve(root, path)),
+    {
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      allowImportingTsExtensions: true,
+      skipLibCheck: true,
+      noEmit: true,
+      strict: true,
+      jsx: ts.JsxEmit.ReactJSX,
+    },
+  );
+  const checker = program.getTypeChecker(),
+    offenders: string[] = [];
   for (const path of candidates) {
     const source = program.getSourceFile(resolve(root, path))!;
     const visit = (node: ts.Node) => {
-      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      // Name first, type second: getTypeAtLocation is the cost (20 s over every property-access call),
+      // so only a call named like a Work acquisition is ever typed.
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        ["view", "read", "subscribe"].includes(node.expression.name.text)
+      ) {
         const method = node.expression.name.text;
-        const type = checker.getNonNullableType(checker.getTypeAtLocation(node.expression.expression));
-        if (type.getSymbol()?.name === "RouteWorkspace" && ["view", "read", "subscribe"].includes(method)) {
+        const type = checker.getNonNullableType(
+          checker.getTypeAtLocation(node.expression.expression),
+        );
+        if (type.getSymbol()?.name === "RouteWorkspace") {
           const required = method === "subscribe" ? 2 : 3;
           const context = node.arguments[required - 1];
           const contextType = context && checker.getTypeAtLocation(context);
           const maybeAbsent = (type: ts.Type): boolean =>
-            !!(type.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null)) || (type.isUnion() && type.types.some(maybeAbsent));
+            !!(type.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null)) ||
+            (type.isUnion() && type.types.some(maybeAbsent));
           if (!contextType || maybeAbsent(contextType))
-            offenders.push(`${path}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1} ${method}`);
+            offenders.push(
+              `${path}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1} ${method}`,
+            );
         }
       }
       ts.forEachChild(node, visit);
@@ -59,4 +106,8 @@ test("production workspace acquisitions carry context", () => {
     visit(source);
   }
   expect(offenders).toEqual([]);
-}, 30_000);
+  // Measured budget, not a guess: createProgram ~5 s plus lazy type resolution of 416 name-matched
+  // receivers ~7-10 s (6 are RouteWorkspace; a few Effect-typed sites cost 1-2 s each and are irreducible
+  // without changing verdicts). Test wall: 15-19 s quiet (6 runs), 29 s with sibling writers running
+  // (observed worst). 90 s = 3x that worst, the 3-4x slowdown this machine shows when busy.
+}, 90_000);

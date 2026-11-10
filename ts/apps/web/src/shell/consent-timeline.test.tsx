@@ -1,19 +1,21 @@
 // @vitest-environment jsdom
 import { test, expect, vi } from "vite-plus/test";
 import { act, fireEvent, render, cleanup } from "@testing-library/react";
-import { TimelineHead } from "./situation-band";
+import { TimelineHead, type JournalOwner } from "./situation-band";
 import { createRouteTimeline } from "./timeline";
 const permission = vi.hoisted(() => vi.fn(async () => ({})));
 vi.mock("#/workbench/provider/harness-client", () => ({ harnessClient: () => ({ permission }) }));
+const journalOwner = (timeline: ReturnType<typeof createRouteTimeline>): JournalOwner => ({
+  timeline: () => timeline.read(), journal: () => null,
+  subscribe: (notify) => timeline.subscribe(notify), revision: timeline.version,
+  journalRefusal: () => null, restoreWork: vi.fn(), stopCommand: vi.fn(),
+});
 
 test("D8: a head mounted long before a window opens counts the host's 60 s, and a resolved window leaves at once", () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   try {
     const timeline = createRouteTimeline();
-    const owner = {
-      timeline, fixture: null, verbs: {}, subscribe: () => () => {}, version: () => 0,
-      snapshot: () => ({}), journals: new Map(),
-    } as never;
+    const owner = journalOwner(timeline);
     const ui = render(<TimelineHead owner={owner} history={null} thread="t" />);
     // Minutes pass with no window open, so no interval ever ran (a throttled tab).
     vi.setSystemTime(Date.now() + 133_000);
@@ -43,9 +45,8 @@ test("History records a write receipt and caller once rather than echoing its in
   timeline.append({ kind: "invocation", at: Date.now(), press: "p1", verb: "apply", outcome });
   timeline.append({ kind: "receipt", at: Date.now(), press: "p1", verb: "apply", outcome,
     basis: { receipt: { id: "write-1", caller: { kind: "pea", thread: "t1" } } } });
-  const owner = { timeline, verbs: { apply: { label: "Write to Revit" } },
-    subscribe: () => () => {}, version: () => 0, snapshot: () => ({}), journals: new Map() } as never;
-  const ui = render(<GraphHistory owner={owner} />);
+  const owner = journalOwner(timeline);
+  const ui = render(<GraphHistory owner={owner} verbs={{ apply: { label: "Write to Revit" } }} />);
   expect(ui.getAllByRole("option")).toHaveLength(1);
   expect(ui.getByRole("option").textContent).toContain("Pea");
   expect(ui.getByRole("option").textContent).toContain("cancelled");

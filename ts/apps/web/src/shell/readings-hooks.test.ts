@@ -1,5 +1,5 @@
 // Step 5 R: a shell hook subject (route target, host status, provider) runs the same source-attempt
-// lifecycle as admitted route readings (`openSourceReading`), never a second reading engine.
+// lifecycle as admitted route readings, never a second reading engine.
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { Reading } from "@pe/agent-contracts";

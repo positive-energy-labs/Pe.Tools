@@ -121,7 +121,7 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
   const {createFixtureWorkDoor}=await import("../shell/fixture-work-door");
   const {retainedValueLabel}=await import("../shell/typed-shell");
   const {workFingerprintSchema}=await import("@pe/agent-contracts");
-  const frames:Parameters<Extract<import("../shell/source-contract").ReadingSource,{kind:"use"|"feed"}>["open"]>[1][]=[];
+  const frames:Parameters<import("../shell/source-contract").UseSource["open"]>[1][]=[];
   let search=new URLSearchParams();
   const mount=mountTypedRoute({...module,spec:{...module.spec,panes:{main:{...module.spec.panes.main,draw:(ctx:unknown)=>ctx}}}},
     {address:{read:()=>search,write:next=>{search=next;},subscribe:()=>()=>{}},fixture:null,target:{kind:"document",ref:{session:"retained",openId:"rooms"}},
