@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { crc32, deflateRawSync } from "node:zlib";
 import { PNG } from "pngjs";
 import { expect, test } from "vite-plus/test";
 import { runReadDocument } from "../src/shared/read-document.ts";
@@ -77,6 +78,86 @@ test("read_document refuses a missing file and an unsupported one with a clear m
     const odd = join(dir, "notes.bin");
     writeFileSync(odd, "x");
     await expect(runReadDocument({ path: odd })).rejects.toThrow(/read_document: .*unsupported/i);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/** A zip with one deflated entry per file, enough for the Office parts these tests need. */
+function zip(files: Record<string, string>): Buffer {
+  const locals: Buffer[] = [];
+  const central: Buffer[] = [];
+  let offset = 0;
+  for (const [name, text] of Object.entries(files)) {
+    const data = deflateRawSync(Buffer.from(text));
+    const n = Buffer.from(name);
+    const crc = crc32(text);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(text.length, 22);
+    local.writeUInt16LE(n.length, 26);
+    const head = Buffer.alloc(46);
+    head.writeUInt32LE(0x02014b50, 0);
+    head.writeUInt16LE(8, 10);
+    head.writeUInt32LE(crc, 16);
+    head.writeUInt32LE(data.length, 20);
+    head.writeUInt32LE(text.length, 24);
+    head.writeUInt16LE(n.length, 28);
+    head.writeUInt32LE(offset, 42);
+    central.push(Buffer.concat([head, n]));
+    locals.push(local, n, data);
+    offset += 30 + n.length + data.length;
+  }
+  const dir = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(central.length, 10);
+  end.writeUInt32LE(dir.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, dir, end]);
+}
+
+test("read_document reads an xlsx and a docx from their XML, with cell refs and review comments", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "read-document-test-"));
+  try {
+    const xlsx = join(dir, "schedule.xlsx");
+    writeFileSync(
+      xlsx,
+      zip({
+        "xl/workbook.xml":
+          '<workbook><sheets><sheet name="ERV &amp; FCU" sheetId="1" r:id="rId1"/></sheets></workbook>',
+        "xl/_rels/workbook.xml.rels":
+          '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+        "xl/sharedStrings.xml":
+          "<sst><si><t>Tag</t></si><si><r><t>ERV</t></r><r><t>-1</t></r></si></sst>",
+        "xl/worksheets/sheet1.xml":
+          '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="inlineStr"><is><t>CFM</t></is></c></row><row r="2"><c r="A2" t="s"><v>1</v></c><c r="B2"><v>1200</v></c><c r="C2" s="1"/></row></sheetData></worksheet>',
+      }),
+    );
+    const sheet = (await runReadDocument({ path: xlsx })).text;
+    expect(sheet).toContain('--- sheet "ERV & FCU" ---');
+    expect(sheet).toContain("A1=Tag | B1=CFM");
+    expect(sheet).toContain("A2=ERV-1 | B2=1200");
+
+    const docx = join(dir, "notes.docx");
+    writeFileSync(
+      docx,
+      zip({
+        "word/document.xml":
+          '<w:document><w:body><w:p><w:r><w:t>Fresh air </w:t></w:r><w:commentRangeStart w:id="0"/><w:r><w:t>taps the return</w:t></w:r><w:commentRangeEnd w:id="0"/></w:p><w:p/><w:tbl><w:tr><w:tc><w:p><w:r><w:t>Unit</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>ERV-1</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>',
+        "word/comments.xml":
+          '<w:comments><w:comment w:id="0" w:author="Hap" w:date="2026-11-03"><w:p><w:r><w:t>Tapping into the return air</w:t></w:r></w:p></w:comment></w:comments>',
+      }),
+    );
+    const doc = (await runReadDocument({ path: docx })).text;
+    expect(doc).toContain("Fresh air taps the return");
+    expect(doc).toContain("Unit | ERV-1");
+    expect(doc).toContain(
+      '[comment 0] Hap 2026-11-03 on "taps the return": Tapping into the return air',
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

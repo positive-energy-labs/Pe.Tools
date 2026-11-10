@@ -5,6 +5,7 @@ import { PNG } from "pngjs";
 import { productScratchPath } from "@pe/host-contracts/service-identity";
 import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import z from "zod";
+import { officeExtensions, readOfficeText } from "./read-office.ts";
 import { createTool } from "./tool.ts";
 
 /** Fraction of the page cut away from each side, top-left origin: LiteParse's own `cropBox`. */
@@ -22,7 +23,7 @@ const inputSchema = z.object({
     .string()
     .min(1)
     .describe(
-      "Absolute local path to a document: .pdf, an image (.png .jpg .tiff, read by OCR), or an office file (.docx .xlsx .pptx; needs LibreOffice).",
+      "Absolute local path to a document: .pdf, an image (.png .jpg .tiff, read by OCR), .xlsx (cell grid with refs) or .docx (text, tables, review comments), read directly. Other office types are not supported. For office files pages, image and crop are ignored.",
     ),
   pages: z
     .string()
@@ -90,6 +91,21 @@ export async function runReadDocument(raw: ReadDocumentInput): Promise<ReadDocum
   const stats = await fs.stat(file).catch(() => undefined);
   if (!stats?.isFile()) throw new Error(`read_document: not a file: ${file}`);
 
+  const extension = path.extname(file).toLowerCase();
+  if (officeExtensions.includes(extension)) {
+    const full = readOfficeText(extension, await fs.readFile(file));
+    const cut =
+      full.length > MAX_TEXT_CHARS
+        ? ` Text was cut at ${MAX_TEXT_CHARS} of ${full.length} characters.`
+        : "";
+    return {
+      text: `${file}: ${extension.slice(1)} read from its XML.${cut}
+
+${full.slice(0, MAX_TEXT_CHARS)}`,
+      images: [],
+    };
+  }
+
   const { LiteParse } = await liteparse;
   const parser = new LiteParse({
     outputFormat: "text",
@@ -141,7 +157,7 @@ export async function runReadDocument(raw: ReadDocumentInput): Promise<ReadDocum
 export const readDocument = createTool({
   id: "read_document",
   description: [
-    "Read a project document on disk (PDF spec sheet, schedule, submittal, drawing set; images by OCR; office files with LibreOffice installed). Local and read-only; the file is never modified and renders go to a product scratch folder named in the result.",
+    "Read a project document on disk (PDF spec sheet, schedule, submittal, drawing set; images by OCR; .xlsx and .docx directly, including docx review comments). Local and read-only; the file is never modified and renders go to a product scratch folder named in the result.",
     "Method: take the text first to LOCATE the value (spatial text keeps table columns aligned), then pass image: true with the same pages, and crop when you only need one schedule or chart, to READ it. The text layer loses red strike-throughs, revision clouds, symbols and chart lines, so a number read from text alone is not verified until you have seen the page.",
     "Not for Revit model facts; use pe_find for those.",
   ].join("\n"),
