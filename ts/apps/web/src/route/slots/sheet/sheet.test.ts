@@ -35,11 +35,11 @@ test("slice 7: the sheet slot draws a binding's StateCells, and a ModelWrite bin
     rows: [a, b],
     work: { chosen: { [a]: 25 }, maxVelocity: 1.5 },
     model: [
-      { binding: "chosen", subject: a, value: 20, freshness: "fresh" },
-      { binding: "chosen", subject: b, value: 32, freshness: "fresh" },
+      { binding: "chosen", row: a, value: 20, freshness: "fresh" },
+      { binding: "chosen", row: b, value: 32, freshness: "fresh" },
     ],
   });
-  expect(cells.map((c) => [c.binding, c.subject ?? "route", c.value, c.model, c.drift, c.source])).toEqual([
+  expect(cells.map((c) => [c.binding, c.row ?? "route", c.value, c.model, c.drift, c.source])).toEqual([
     ["chosen", a, 25, 20, true, "work"],
     ["chosen", b, 32, 32, false, "model"],
     ["maxVelocity", "route", 1.5, null, false, "work"],
@@ -65,7 +65,7 @@ test("slice 7: a draft slot draws each Work cell's staged value with its author,
   const cells = sheetCells(slot, {
     rows: [a, b],
     work: { designFriction: { edit: { value: 0.1, by: "pea", at: "2026-11-10T00:00:00Z" } }, roles: { [a]: { edit: { value: { role: "fan" }, by: "human" } }, [b]: {} } },
-    model: [{ binding: "roles", subject: b, value: { role: "passive" }, freshness: "fresh" }],
+    model: [{ binding: "roles", row: b, value: { role: "passive" }, freshness: "fresh" }],
   });
   expect(cells.map((c) => [c.binding, c.value, c.source, c.pending?.by ?? null])).toEqual([
     ["designFriction", 0.1, "work", "pea"],
