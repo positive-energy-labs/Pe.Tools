@@ -213,11 +213,12 @@ export class DuctsReadings {
           return yield* refused("Ducts snapshot exceeds the shared reading byte budget; graph was not clipped");
         const { value: _, ...native } = result;
         const body: DuctsBody = { ...native, json, version: revision };
-        yield* options.source?.beforeReady?.(entry.body ?? body) ?? Effect.void;
+        // Acquisition readers keep their own taking; only cache hits above reuse a peer's body.
+        yield* options.source?.beforeReady?.(body) ?? Effect.void;
         // Metadata capture can await disk; a change still retires this revision.
         if (entry.envelope.revision !== revision)
           return yield* refused("Ducts acquisition was invalidated while retaining its basis");
-        if (entry.body) return { ...entry.body, reused: false };
+        if (entry.body) return { ...body, reused: false };
         while (this.bytes + bytes > this.limits.bytes)
           if (!this.evict(entry))
             return yield* refused("Shared Ducts reading byte budget is occupied; graph was not clipped");
@@ -226,7 +227,7 @@ export class DuctsReadings {
         this.bytes += bytes;
         entry.envelope = { ...entry.envelope, state: "ready", version: revision };
         this.publish(entry);
-        return { ...entry.body, reused: false };
+        return { ...body, reused: false };
     }).pipe(Effect.tapError((error) => Effect.sync(() => {
         if (entry.envelope.revision === revision && !entry.body) {
           entry.envelope = { ...entry.envelope, state: "failed", error: retainedFailure(error).message };
