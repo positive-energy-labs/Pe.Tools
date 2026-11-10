@@ -52,6 +52,9 @@ The route kernel and every web route's shared shape ([ADR 0026](../../adr/0026-o
 - 2026-09-15, Chat's send is a Situation verb, not a button of its own (kaitpw: "it uses primitives the way i want, keep it that way"); its look is not liked. Threads and World are view modes of Chat, not stages.
 - 2026-09-12, a route needs no Revit unless an operation does; each operation gates its own requirements. Show only what helps the current goal.
 
+- 2026-11-10, kaitpw: slice 5a, after SubjectRef: one generated route registry replaces the four web and two host registries; per-route TanStack files, per-route contract stubs and in-directory generated files are deleted; `admitted-builtin-keys` derives; a route's host read lives in its own directory behind a browser/host build guard; the capability type is inferred from that read; the icon is any Lucide name checked against the library. "agree on all especially 3." Restated: a route is one directory plus its C# op. See [MAP](MAP.md) row 5a.
+- 2026-11-10, kaitpw: the MEP system read is generic, one `mep.system.members` catalog Read plus a segment-size read in `dotnet/Pe.Revit.Global/Lib/Mep`; the kernel learns no MEP words. "id prefer generic shape obviously". The Pod doors and the goal slot land inside slice 7.
+
 ## Tried & rejected
 
 - 2026-11-04, dynamic `new URL` for nested Pod artifact paths excludes the nested file from Vite's emitted lookup and requests `undefined`; use literal bundled asset URLs. [Artifact law](../../../ts/apps/web/src/route/pod-fixtures.test.ts). (FIXTURE0)
@@ -68,6 +71,7 @@ The route kernel and every web route's shared shape ([ADR 0026](../../adr/0026-o
 ## Owed
 
 - Kernel crusade slices 1 to 10 are in [MAP.md](MAP.md); each lands with its red falsifier.
+- Move ducts off `ducts.snapshot.walk` onto the generic `mep.system.members` read (kaitpw 2026-11-10: owed, not in the kernel crusade).
 - Slice 10 slot plan for the eight non-exemplar routes, implementor default 2026-11-10, re-openable. Each is a typed `route()` today (`apps/web/src/<route>/route.ts`) and moves onto slots in this order:
   - chat (`/pea`): `subject` the thread (keyKind `workspace`); `layout` threads pane plus chat pane; `title(ctx)` puts the thread name in the chat pane head; no sheet, picture or goal.
   - pods: `subject` the Pod member (keyKind `name`, tuple pod and path); `sheet` the member Work as `local` bindings; `goal` the member's unresolved run inputs; `query` `runs` and `mode`.
