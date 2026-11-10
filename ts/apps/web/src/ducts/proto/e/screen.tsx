@@ -25,7 +25,6 @@ import { catalogLinkKey } from "@pe/ducts-domain/catalog";
 import { suggestKind } from "@pe/ducts-domain/roster";
 import { StateCell } from "@pe/kit/lang/cell";
 import { kindMeaning, kindDisabledReason } from "../../sheet/kind-meaning.ts";
-import { claimsForGroup } from "@pe/ducts-domain/claims";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { neighboursOf, type Neighbour } from "@pe/ducts-domain/neighbours";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
@@ -57,7 +56,6 @@ import type { DuctsDrawContext } from "../../route.ts";
 import { roster as rosterRead, network as networkSource } from "../../route.ts";
 import { airflowOptions } from "../../airflow";
 import { attentionSubjects, cellFocusOf, cellFocusSubject, focusedElement } from "../../cell-focus";
-import { verdictPatches } from "../../claims";
 import {
   annotatedFindings,
   focusRow,
@@ -65,7 +63,6 @@ import {
   stageIssues,
   type InboxItem,
 } from "../../inbox-rows";
-import { claimsOf, type Claim } from "../../legs";
 import { activeName, namesOf, systemCode } from "../../identity.ts";
 import { DuctsOwner, commands } from "../../pane-context";
 import { DUCTS_MULTI } from "../../selection";
@@ -125,27 +122,7 @@ function useNetworkData(ctx: NetworkContext) {
     },
     [ctx],
   );
-  const onVerdict = useCallback(
-    (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => {
-      void write(verdictPatches(workDoc, claim, verdict));
-    },
-    [workDoc, write],
-  );
-  const claimCells = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(workDoc?.claims ?? {}).flatMap(([id, cell]) => {
-          const value = cell.edit?.value;
-          return value ? [[id, value]] : [];
-        }),
-      ),
-    [workDoc],
-  );
   const scope = useMemo(() => (snapshot ? scopeOf(snapshot, systems) : null), [snapshot, systems]);
-  const claims = useMemo(
-    () => claimsOf(scope ? claimsForGroup(claimCells, [...scope.members]) : claimCells),
-    [scope, claimCells],
-  );
   const subjectIds = scope?.groups
     .map((group) => edit.subject[group] ?? workDoc?.subject[group]?.edit?.value)
     .find((ids) => ids != null);
@@ -215,9 +192,7 @@ function useNetworkData(ctx: NetworkContext) {
     pricingRead: pricing,
     priced: priced?.priced ?? null,
     analysis: priced?.analysis ?? null,
-    claims,
-    onVerdict,
-    subject: subjectIds ? { ids: subjectIds, claims, work: workDoc, onVerdict } : null,
+    subject: subjectIds ? { ids: subjectIds, work: workDoc } : null,
     work: {
       doc: seen,
       revision: ctx.cells.basis?.workRevision ?? null,
@@ -506,9 +481,7 @@ export function InboxBody({ ctx }: { ctx: DuctsDrawContext }) {
     systems,
     work,
     captureSource,
-    claims,
     edit,
-    onVerdict,
     selected,
     select,
     selectElement,
@@ -519,7 +492,6 @@ export function InboxBody({ ctx }: { ctx: DuctsDrawContext }) {
     priced,
     work.doc,
     projection,
-    claims,
     edit,
     data.analysis,
   );
@@ -543,7 +515,6 @@ export function InboxBody({ ctx }: { ctx: DuctsDrawContext }) {
           groups={inbox}
           work={inboxWork}
           nameOf={projection.nameOf}
-          onVerdict={onVerdict}
           onSelect={selectElement}
           onFocusCell={(cell) => select(cellFocusSubject(snapshot, systems, cell))}
           write={{ control: commands({ kind: "price" }), row: inbox.write }}
@@ -566,7 +537,7 @@ export function InboxBody({ ctx }: { ctx: DuctsDrawContext }) {
 }
 export function PictureBody({ ctx }: { ctx: DuctsDrawContext }) {
   const data = useNetworkData(ctx);
-  const { snapshot, priced, page, systems, active, work, claims, edit, analysis, coverage } = data;
+  const { snapshot, priced, page, systems, active, work, edit, analysis, coverage } = data;
   const projection = useTreeProjection(snapshot, priced, work.doc, systems);
   const { drawn, scope, groups, trees, nameOf } = projection;
   const { heal, inbox } = useInboxProjection(
@@ -574,7 +545,6 @@ export function PictureBody({ ctx }: { ctx: DuctsDrawContext }) {
     priced,
     work.doc,
     projection,
-    claims,
     edit,
     data.analysis,
   );
@@ -657,8 +627,6 @@ export function PictureBody({ ctx }: { ctx: DuctsDrawContext }) {
             captureSource={data.captureSource}
             doc={data.document}
             subject={data.subject}
-            claims={claims}
-            onVerdict={data.onVerdict}
             work={work}
             selection={data.selection}
             renderPane={(body, furniture) => (
@@ -713,7 +681,6 @@ function useInboxProjection(
   priced: NetworkData["priced"],
   doc: NetworkData["work"]["doc"],
   projection: ReturnType<typeof useTreeProjection>,
-  claims: NetworkData["claims"],
   edit: number,
   analysis: NetworkData["analysis"],
 ) {
@@ -765,11 +732,10 @@ function useInboxProjection(
       airflow: airflowOptions(surveyed.snapshot, scope),
       unitAirflow: airflowOptions(surveyed.snapshot, scope, "unit"),
       roles: surveyed.roles,
-      claims,
       write: { edit, esp: stagedEsp(doc) },
     });
     return { heal, inbox: { ...base, diagnostics: [...base.diagnostics, ...noRuns] } };
-  }, [snapshot, priced, doc, projection, claims, edit, analysis]);
+  }, [snapshot, priced, doc, projection, edit, analysis]);
 }
 export function RulesBody({ ctx, wide = false }: { ctx: DuctsDrawContext; wide?: boolean }) {
   const data = useNetworkData(ctx);

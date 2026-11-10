@@ -2,7 +2,7 @@ import { useContext, useMemo } from "react";
 import { AttentionDocument, useMembers, type SubjectKey } from "@pe/kit/lang/attention";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 /**
- * The feedback inbox (V6 calm): one row per mark or note on the view, in `CARD_STATES` order. A
+ * The feedback inbox (V6 calm): one row per mark on the view, in `CARD_STATES` order. A
  * row points (hover pairs its region, click pins its card on the plan); verbs live on the card,
  * never the row, and each names its transition. State is `inboxCards`', derived on read.
  */
@@ -240,10 +240,10 @@ export function RoomsInbox({
           list={list}
           aria-label="Feedback"
           empty={{
-            message: cards.length ? "No card in this state" : "No marks or notes on this view",
+            message: cards.length ? "No card in this state" : "No marks on this view",
             exit: cards.length
               ? "Choose all in the filter"
-              : "Draw a mark or a note on the plan, or ask Pea",
+              : "Draw a mark on the plan, or ask Pea",
           }}
           row={(card) => ({
             lead: (
@@ -269,7 +269,7 @@ export function RoomsInbox({
           <Button
             label="copy markdown"
             kind="framed"
-            reason="Copies every mark and note on this document as markdown, for Claude or Pea"
+            reason="Copies every mark on this document as markdown, for Claude or Pea"
             onClick={() =>
               void navigator.clipboard.writeText(markdown()).then(
                 () => say("copied"),

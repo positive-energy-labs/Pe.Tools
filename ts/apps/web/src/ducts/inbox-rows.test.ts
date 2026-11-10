@@ -12,7 +12,6 @@ import {
   inboxRows,
   type TriageInput,
 } from "./inbox-rows";
-import type { Claim } from "./legs";
 
 const node = (id: number, kind: string, groupId: string | null) =>
   ({
@@ -91,7 +90,6 @@ const base = {
   ]),
   equipmentFlows: new Map<number, { cfm: number | null }>([[1, { cfm: null }]]),
   doc: null,
-  claims: [] as Claim[],
   write: { edit: 0, esp: 0 },
 };
 

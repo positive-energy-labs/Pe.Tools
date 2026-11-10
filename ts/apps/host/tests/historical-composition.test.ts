@@ -191,7 +191,7 @@ test("journal, Work and pointer owners refuse before storage or executor access"
   let mutations = 0; const pointers = threadPointerPort(inputs);
   pointers.bind({ read: () => ({ threadId: "t1", pointers: [] }), point: () => { mutations++; return { threadId: "t1", pointers: [] }; }, dismiss: () => { mutations++; return { threadId: "t1", pointers: [] }; } });
   expect(() => pointers.dismiss("t1", "p1")).toThrow();
-  expect(() => pointers.point("t1", { route: "/fans", label: "fan", place: {} })).toThrow();
+  expect(() => pointers.point("t1", { route: "/fans", label: "fan", target: {} })).toThrow();
   expect(storage).toBe(0); expect(mutations).toBe(0);
   expect(await readdir(dir)).not.toContain("forbidden-journal.jsonl");
 });

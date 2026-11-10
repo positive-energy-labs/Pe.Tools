@@ -1,5 +1,5 @@
 /** Ordered subject cuts. Snapshot connectivity owns omissions; tolerated connectivity owns inferences. */
-import type { DuctClaim, DuctInferenceGrade, DuctsDesign } from "@pe/agent-contracts";
+import type { DuctInferenceGrade, DuctsDesign } from "@pe/agent-contracts";
 import { subjectName } from "@pe/ducts-domain/words";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import { verdictOf } from "@pe/ducts-domain/proximity";
@@ -12,15 +12,8 @@ type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
 type Element = Node | Segment;
 
-export type Claim = Omit<DuctClaim, "ids"> & { id: string; at: number[] };
-
-export const claimsOf = (cells: Readonly<Record<string, DuctClaim>>): Claim[] =>
-  Object.entries(cells).map(([id, { ids, ...rest }]) => ({ id, at: [...ids], ...rest }));
-
 export interface Run {
   ids: readonly number[];
-  claims: readonly Claim[];
-  onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
   /** The Work whose edit ignore verdicts the cut's proximity inferences honor; null honors none. */
   work?: DuctsDesign | null;
 }

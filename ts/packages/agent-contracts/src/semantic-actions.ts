@@ -354,7 +354,6 @@ export const tools = {
         ["catalogs", "*"],
         ["ruleAssignments", "*"],
         ["subject", "*"],
-        ["claims", "*"],
         ["labelParameter"],
         ["workingPhase"],
         ["systemColours"],

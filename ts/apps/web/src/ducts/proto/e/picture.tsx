@@ -43,7 +43,7 @@ import { coloursOf } from "../../colours";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import type { StageIssue } from "../../inbox-rows";
-import type { Claim, Run } from "../../legs";
+import type { Run } from "../../legs";
 import { labelOfNode, legsOf } from "../../legs";
 import type { Split } from "../../loss-split";
 import { activeName, namesOf, systemCode } from "../../identity.ts";
@@ -75,8 +75,6 @@ interface DuctsPictureProps {
   priced: Priced | null;
   analysis: import("@pe/agent-contracts").DuctsPricingData["analysis"] | null;
   subject: Run | null;
-  claims: readonly Claim[];
-  onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
   work: LossesWork;
   selection: Atom.Atom<ReadonlySet<SubjectKey>>;
   onPose?: (pose: OrbitViewport | null) => void;
@@ -141,7 +139,7 @@ export const ductsFocus = (
 
 function rulingIssue(r: Ruling, issues: readonly StageIssue[]) {
   const finding =
-    r.kind === "claim" ? `claim:${r.claim.id}` : r.kind === "issue" ? r.issue.id : r.finding.id;
+    r.kind === "issue" ? r.issue.id : r.finding.id;
   return issues.find((issue) => issue.findings.includes(finding))?.key ?? finding;
 }
 
@@ -170,8 +168,6 @@ function Content({
   analysis,
   ctx,
   subject,
-  claims,
-  onVerdict,
   work,
   issueScope,
   annotated,
@@ -281,7 +277,6 @@ function Content({
     snapshot,
     priced,
     scene,
-    claims,
     work,
     issueScope,
     annotated,
@@ -430,7 +425,7 @@ function Content({
     const run = priced && scope ? runOf(priced, scope.groups, readId) : null;
     return (
       <>
-        {ruled && ruled.at === readId ? <RulingBody r={ruled} onVerdict={onVerdict} /> : null}
+        {ruled && ruled.at === readId ? <RulingBody r={ruled} /> : null}
         {run ? (
           <RunDetail
             run={run}

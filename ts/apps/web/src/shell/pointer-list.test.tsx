@@ -38,6 +38,10 @@ test("a fan place maps to the snapshot unit's real element key; foreign text map
   ]);
   expect(pointerRefs({ fan: JSON.stringify({ kind: "ids", ids: [stableFanKey({ uniqueId: "u-9", portIndex: 0 })] }) }, snapshot, "s/o", () => null)).toEqual([]);
   expect(() => pointerRefs({ fan: "not json" }, snapshot, "s/o", () => null)).toThrow();
+  // A pointer whose target is a SubjectRef names the same element without a place.
+  expect(pointerRefs(stableFanKey({ uniqueId: "u-7", portIndex: 0 }), snapshot, "s/o", () => "FC-1")).toEqual([
+    { doc: "s/o", key: elementKey("u-7"), name: "FC-1", number: 1 },
+  ]);
 });
 
 test("Pea's pointer is listed and cited inside the route; dismiss clears both; selection and URL never move", async () => {
@@ -45,7 +49,7 @@ test("Pea's pointer is listed and cited inside the route; dismiss clears both; s
     {
       id: "p1",
       route: "fans",
-      place: { fan: JSON.stringify({ kind: "ids", ids: [stableFanKey({ uniqueId: "u-7", portIndex: 0 })] }) },
+      target: { fan: JSON.stringify({ kind: "ids", ids: [stableFanKey({ uniqueId: "u-7", portIndex: 0 })] }) },
       label: "FC-1 fan flow",
       at: "2026-11-05T00:00:00Z",
     },

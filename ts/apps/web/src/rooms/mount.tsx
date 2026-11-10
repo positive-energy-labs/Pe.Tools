@@ -1,7 +1,7 @@
 import { roomSelection } from "./selection";
 import { useContext } from "react";
 import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attention";
-import { type Mark, type RoomsNote } from "@pe/agent-contracts";
+import { type Mark } from "@pe/agent-contracts";
 import { Ladder } from "#/route/ladder";
 import type { RoomsContext } from "./route";
 import { Button } from "@pe/kit/lang/button";
@@ -15,7 +15,6 @@ import { RoomsSketch, type Drop } from "./sketch";
 import { snapPlan } from "./snap";
 import { RoomsPlan } from "./plan";
 import { RoomsTable } from "./table";
-import type { Point2 } from "#/lib/affine-frame";
 
 import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
 
@@ -122,21 +121,6 @@ function PlanBody({ ctx, page, verbs, renderPane }: Body & { renderPane: PaneApi
     if (!refusal) setPinned(id);
     return refusal?.message ?? null;
   };
-  const onNote = async ([x, y]: Point2, text: string) => {
-    const note: RoomsNote = {
-      anchor: { view, level, polygon: [[x, y]] },
-      text,
-      by: "person",
-      at: new Date().toISOString(),
-    };
-    return (
-      (
-        await ctx.cells.patch([{ path: ["notes", `n${crypto.randomUUID()}`], value: note }], {
-          label: "Add room note",
-        })
-      )?.message ?? null
-    );
-  };
   const card = (item: Card, live: boolean) => (
     <FeedbackCard
       card={item}
@@ -198,7 +182,6 @@ function PlanBody({ ctx, page, verbs, renderPane }: Body & { renderPane: PaneApi
                 onClear={() => setPage({ selected: [] })}
                 card={card}
                 onDrop={onDrop}
-                onNote={onNote}
               />
             )
           : undefined
@@ -256,16 +239,7 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
     ctx,
     page,
     verbs: (row: { kind?: string; id?: string }) =>
-      row.kind === "note" && row.id ? (
-        <Button
-          label="Delete room note"
-          onClick={() =>
-            void ctx.cells.patch([{ path: ["notes", row.id!] }], { label: "Delete room note" })
-          }
-        >
-          Delete note
-        </Button>
-      ) : row.kind === "merge" && row.id ? (
+      row.kind === "merge" && row.id ? (
         <Button
           label="Stage marked room merge"
           onClick={() => {

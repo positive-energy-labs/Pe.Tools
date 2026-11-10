@@ -105,7 +105,7 @@ const pointersSchema = z.array(
   z.object({
     id: z.string(),
     route: z.string(),
-    place: z.record(z.string(), z.string()),
+    target: z.union([z.string(), z.record(z.string(), z.string())]),
     label: z.string(),
     at: z.string(),
   }),

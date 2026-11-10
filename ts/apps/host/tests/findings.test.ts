@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { bindWork, workHandle } from "@pe/agent-contracts";
+import { bindWork, keepPointer, workHandle } from "@pe/agent-contracts";
 import { findingsWork, type FindingInput } from "@pe/agent-contracts/slots";
 import { RouteWorkspace } from "@pe/runtime";
 import { subjectCode, uniqueIdSchema, type SubjectRefCode } from "../../../packages/agent-contracts/src/subject-ref.ts";
@@ -27,4 +27,13 @@ test("findings.write lands in the document's findings Work with the host's autho
   const undone = await workspace.step(key, "findings", "pea", "undo", (await handle()).revision, true);
   expect(undone.ok).toBe(true);
   expect((await findingsList(workspace, key)).map((f) => f.id)).toEqual(["h1"]);
+});
+
+test("the keep verb turns a pointer on a subject into a finding; a pointer on a place has no subject to keep", () => {
+  const pointer = { id: "pt-1", route: "fans", target: port, label: "FC-1 port 1 looks undersized", at: "2026-11-10T12:00:00.000Z" };
+  expect(keepPointer(pointer, { kind: "claim", verdict: "yes" })).toEqual({
+    id: "pt-1", subject: port, kind: "claim", verdict: "yes", text: "FC-1 port 1 looks undersized", place: {},
+  });
+  expect(() => keepPointer(pointer, { kind: "note", verdict: "yes" })).toThrow(/verdict/);
+  expect(() => keepPointer({ ...pointer, target: { selected: "[]" } }, { kind: "note" })).toThrow(/subject/);
 });

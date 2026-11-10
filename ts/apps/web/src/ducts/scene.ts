@@ -4,7 +4,7 @@
  * annotations, its centrelines layer and the schematic draw.
  */
 import type { DuctNode, EncodingFacts, Issue, Segment, SegmentFacts } from "./encoding";
-import type { Claim, Leg, Place, SubjectCut } from "./legs";
+import type { Leg, Place, SubjectCut } from "./legs";
 import type { LossResult } from "@pe/ducts-domain/losses";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -24,7 +24,7 @@ export interface Scene {
   nodes: readonly NodeFacts[];
   /** Issues with a point; each is one marker. */
   issues: readonly Issue[];
-  /** The subject scene's cut and claims (`subjectScene`); absent for a group scene. */
+  /** The subject scene's cut (`subjectScene`); absent for a group scene. */
   subject?: SubjectDrawn;
 }
 
@@ -158,7 +158,6 @@ export function sceneOf(
 /** The subject scene's authored layers, resolved against the facts, as the drawing reads them. */
 export interface SubjectDrawn {
   cut: SubjectCut;
-  claims: readonly Claim[];
   /** The leg each subject element lies on. */
   legOf: ReadonlyMap<number, Leg>;
   /** The place at an element id (the first, where a level crossing and a node share one). */
@@ -178,14 +177,13 @@ export interface SubjectDrawn {
 }
 
 /**
- * The subject scene: the ordered ids' elements from `snapshotById`, no group, with the cut and
- * claims the picture pins.
+ * The subject scene: the ordered ids' elements from `snapshotById`, no group, with the cut the
+ * picture pins.
  */
 export function subjectScene(
   index: DuctIndex,
   ids: readonly number[],
   cut: SubjectCut,
-  claims: readonly Claim[] = [],
 ): Scene {
   const { nodes: nodeById, segments: segmentById } = snapshotById(index.snapshot);
   const legOf = new Map<number, Leg>();
@@ -248,7 +246,6 @@ export function subjectScene(
     issues: [],
     subject: {
       cut,
-      claims,
       legOf,
       placeOf,
       pointOf: point,
