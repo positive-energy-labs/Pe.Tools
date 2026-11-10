@@ -311,6 +311,8 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    releasePlan.resolve();
    firstSettlement??={inspectable:!!screen.queryByRole("button",{name:"Write to Revit"}),problem:trace.mounts.at(-1)?.reviewProblem("losses"),before,after:trace.mounts.length?sample():undefined};
    if(process.env.PE_F05_EVIDENCE)writeFileSync(process.env.PE_F05_EVIDENCE,JSON.stringify({mode,workFrames,firstSettlement,settlements:(trace as any).settlements,commandReads:(trace as any).commandReads,readEvents:(trace as any).readEvents,republication:(trace as any).republication,submits:trace.submit.mock.calls.length,results:(trace as any).results,receiptBatch,dirties,subscriptionChanges,http:trace.http,before,after,samples:trace.samples,stops:trace.stops,plans:trace.tokens.map(({token,gate})=>({id:token.id,current:gate.current(token),samePageEpoch:token.pageEpoch===gate.read()?.pageEpoch})),requests,body:document.body.textContent,problem:trace.mounts.at(-1)?.reviewProblem("losses")},null,2));
-   cleanup();unbind();peReadings.dirty=originalDirty;peReadings.close();for(const stream of streams)stream.close();vi.unstubAllGlobals();await host.close();await rm(dir,{recursive:true,force:true});
+   cleanup();unbind();peReadings.dirty=originalDirty;peReadings.close();for(const stream of streams)stream.close();vi.unstubAllGlobals();await host.close();
+   // A capture write can still be landing after close; its retry keeps a cleanup error from replacing the real assertion.
+   await rm(dir,{recursive:true,force:true,maxRetries:5,retryDelay:100});
  }
 }
