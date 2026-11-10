@@ -27,8 +27,7 @@ test("shared content follows the mount while every machine path stays with its o
       "productPagesRootPath",
       "productRouteWorkPath",
     ]);
-    const { productPeaWorkPath, ...rest } = paths;
-    for (const [name, resolver] of Object.entries({ productPeaWorkPath, ...rest })) {
+    for (const [name, resolver] of Object.entries(paths)) {
       const path = resolver();
       expect(under(shared, path), `${name}: ${path}`).toBe(content.has(name));
       if (!content.has(name)) expect(under(hostOwnership.rootPath, path), name).toBe(true);
