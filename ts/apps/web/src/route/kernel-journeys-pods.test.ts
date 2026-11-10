@@ -1,3 +1,5 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { snapshot as workSnapshot } from "../ducts/test-fixture";
 // @vitest-environment jsdom
 import { cp, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -706,7 +708,7 @@ test("JZ route-neutral Plan refusal preserves the reason and holds Apply through
     const reason = "Shared type cannot scope this authored flow";
     f.planRefusal.reason = reason;
     const fans = await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [
-      { path: ["flows", "4", "edit"], value: { value: { cfm: 321 } } },
+      { path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!), "edit"], value: { value: { cfm: 321 } } },
       { path: ["parameters", "terminalFlow", "edit"], value: { value: "PE_M_Grd_AirFlow" } },
     ], 0);
     if (!fans.ok) throw Error(JSON.stringify(fans));

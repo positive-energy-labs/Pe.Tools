@@ -1,3 +1,4 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 /**
  * The inputs pane kaitpw distrusted on cloud Chadds MUAS-1 (2026-10-30; reconstruction in
  * Pe.Tools/.artifacts/tmp/inputs-trust/reconstruction.md): kind rows by raw key and per instance,
@@ -174,10 +175,10 @@ it("a row stays when its value is not typed, carrying the source underneath and 
     clear: null,
   });
   const typed = rows.find((r) => r.key === "terminal:8:cfm")!;
-  expect(typed).toMatchObject({ typed: true, clear: { flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000008": null } } });
+  expect(typed).toMatchObject({ typed: true, clear: { flows: { [elementSubject(erv(8))]: null } } });
   if (typed.control.kind !== "number") throw new Error("number row");
   expect(ductsSheetEditsSchema.parse(typed.control.edit(160))).toEqual({
-    flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000008": { cfm: 160 } },
+    flows: { [elementSubject(erv(8))]: { cfm: 160 } },
   });
 });
 

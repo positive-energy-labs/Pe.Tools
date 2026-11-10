@@ -1,3 +1,5 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { snapshot as workSnapshot } from "../ducts/test-fixture";
 // @vitest-environment jsdom
 import { stableFanKey } from "../ducts/sheet/model";
 import { subjectCode } from "@pe/agent-contracts";
@@ -644,7 +646,7 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
       { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
     ], "Choose fan walk");
     await stage("fans", [
-      { path: ["flows", "4", "edit"], value: { value: { cfm: 250 } } },
+      { path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!), "edit"], value: { value: { cfm: 250 } } },
       { path: ["parameters", "terminalFlow", "edit"], value: { value: "PE_M_Grd_AirFlow" } },
     ], "Edit fan airflow");
     await screen.findByRole("button", { name: "Undo Edit fan airflow" });
@@ -1087,9 +1089,9 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
     await vi.waitFor(() => expect(f.fans.work()).not.toBeNull());
     await f.ws.apply(f.fans.workBasis()!.token.scope.identity.work!, "fans", "human", [
       { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
-      { path: ["equipmentFlows", "14577391", "edit"], value: { value: { cfm: 1000, source: "Work" } } },
+      { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: { cfm: 1000, source: "Work" } } },
     ], f.fans.work()!.revision);
-    await vi.waitFor(() => expect(f.fans.work()!.value.equipmentFlows["14577391"]?.edit?.value.cfm).toBe(1000));
+    await vi.waitFor(() => expect(f.fans.work()!.value.equipmentFlows[elementSubject(realMuas.nodes.find(node => node.id === 14577391)!)]?.edit?.value.cfm).toBe(1000));
     f.fans.refresh("value");
     for (const id of ["value", "owner:ducts"])
       await vi.waitFor(() => expect(f.fans.readingStatus(id).snapshot).toMatchObject({ current: true }));
@@ -1163,7 +1165,7 @@ test.each([false, true])(
           value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } },
         },
         {
-          path: ["equipmentFlows", "14577391", "edit"],
+          path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"],
           value: { value: { cfm: 925, source: "test" } },
         },
       ],
@@ -1271,7 +1273,7 @@ test.each([false, true])(
     expect(f.typed.action("losses").consent).not.toBeNull();
     cleanup();
     function ConsentReview(){return <PreviewAction handle={f.typed.action("losses")} label="Write to Revit">
-      {f.typed.draw("sheet-inputs",ctx=><StateCell label="Equipment flow" cell={ctx.cells.at(["equipmentFlows","14577391"],"fans",{
+      {f.typed.draw("sheet-inputs",ctx=><StateCell label="Equipment flow" cell={ctx.cells.at(["equipmentFlows",elementSubject(realMuas.nodes.find(node => node.id === 14577391)!)],"fans",{
         format:value=>typeof value==="object"&&value!==null&&"cfm" in value?String(value.cfm):String(value),
       })}/> ) as import("react").ReactNode}
     </PreviewAction>;}
@@ -1744,7 +1746,7 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
   const key = f.fans.workBasis()!.token.scope.identity.work!;
   await f.ws.apply(key, "fans", "human", [
     { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
-    { path: ["equipmentFlows", "14577391", "edit"], value: { value: { cfm: 925, source: "test" } } },
+    { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: { cfm: 925, source: "test" } } },
   ], f.fans.work()!.revision);
   f.fans.refresh("value");
   await vi.waitFor(() => expect(f.typed.value().current).toBe(true));
@@ -1791,7 +1793,7 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
     const control = rows.find(row => row.key === "unit:14577391:cfm")!.control;
     if (control.kind !== "number") throw Error("Fan airflow must have a number control");
     return <SheetCell label="MUAS-1 airflow" value={control.value} unit={{ label: "cfm" }} digits={0} source="none"
-      refusal={control.refusal ?? null} onValue={value => { attempted(value); return ctx.cells.at(["equipmentFlows", "14577391"]).stage({ cfm: value, source: "Work" }, { label: "MUAS airflow" }); }} />;
+      refusal={control.refusal ?? null} onValue={value => { attempted(value); return ctx.cells.at(["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!)]).stage({ cfm: value, source: "Work" }, { label: "MUAS airflow" }); }} />;
   }
   render(f.typed.draw("sheet-inputs", ctx => <MissingFlow ctx={ctx} />) as React.ReactElement);
   expect(document.querySelector('[data-body="locked"]'), "The missing native parameter locks the actual typed cell before Plan").not.toBeNull();
@@ -1991,7 +1993,7 @@ test("JZ Plan refusal marker holds a valid sealed ancillary-only review at the t
   await vi.waitFor(() => expect(f.fans.work()).not.toBeNull());
   await f.ws.apply(f.fans.workBasis()!.token.scope.identity.work!, "fans", "human", [
     { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
-    { path: ["equipmentFlows", "14577391", "edit"], value: { value: { cfm: 925, source: "test" } } },
+    { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: { cfm: 925, source: "test" } } },
   ], f.fans.work()!.revision);
   f.fans.refresh("value"); await vi.waitFor(() => expect(f.typed.value().current).toBe(true));
   const reason = "MUAS-1: required airflow parameter is missing; add the missing parameter";

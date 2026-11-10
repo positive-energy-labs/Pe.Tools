@@ -1,3 +1,4 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { expect, test } from "vite-plus/test";
 import { bindWork, type WorkWriteAck } from "@pe/agent-contracts";
 import { createWorkJournal } from "#/shell/journal";
@@ -22,7 +23,7 @@ test("staging the write scope is named in History and never shown in Inputs", ()
     undoable: true,
     replay: true,
   });
-  journal.accept(ack(1, ["flows", "12"], "a"));
+  journal.accept(ack(1, ["flows", elementSubject({ uniqueId: "6d52156a-3876-4d76-b641-341454252f26-0000000c" })], "a"));
   const entries = () =>
     journal.entries() as Parameters<typeof presentInputHistory>[0];
   expect(presentInputHistory(entries(), null).last?.label).not.toMatch(/\./);
@@ -40,7 +41,7 @@ test("a criteria edit is named in words, never by its key", () => {
 });
 
 test("reverting a value keeps Revert in History and its undo description", () => {
-  const label = editLabel({ componentDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000007": null } }, () => "DS-1");
+  const label = editLabel({ componentDrops: { [elementSubject({ uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000007" })]: null } }, () => "DS-1");
   expect(label).toBe("Revert part drop DS-1");
   const entries = [
     { id: "revert", press: "revert", label, by: "human", at: 1, state: "undone", detail: "none" },

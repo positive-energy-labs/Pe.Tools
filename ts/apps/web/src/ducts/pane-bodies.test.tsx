@@ -1,3 +1,4 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 // @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
 import { emptyListSearch } from "@pe/agent-contracts";
@@ -100,7 +101,7 @@ test("F6 the real Inputs pane renders an acknowledged role edit as a choice labe
   await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
   await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
   const unit = snapshot.nodes.find((node) => node.kind === "equipment")!;
-  const id = String(unit.id);
+  const id = elementSubject(unit);
   f.fans.invoke("edit", { patches: [{ path: ["roles", id], value: { edit: { value: { role: "fan" } } } }] }, f.fans.workBasis()!);
   await vi.waitFor(() => expect(f.fans.work()?.value).toMatchObject({ roles: { [id]: { edit: { value: { role: "fan" } } } } }));
   const view = render(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);

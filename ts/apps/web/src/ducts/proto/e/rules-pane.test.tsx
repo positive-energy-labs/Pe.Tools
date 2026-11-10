@@ -1,3 +1,4 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 // @vitest-environment jsdom
 import { designOf } from "@pe/ducts-domain/test-design";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -30,7 +31,7 @@ test("rule rows keep native ids and editable cells keep their arrow and Enter ke
     snapshot,
     now: result,
     next: result,
-    edit: { componentDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0000001e": {} }, ruleAssignments: {} },
+    edit: { componentDrops: { [elementSubject(snapshot.nodes.find(node => node.id === 30)!)]: {} }, ruleAssignments: {} },
   } as unknown as Priced;
   render(
     <RulesTree

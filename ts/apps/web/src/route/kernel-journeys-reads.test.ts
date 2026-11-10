@@ -1,3 +1,4 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { stableFanKey } from "../ducts/sheet/model";
 import { systemCode } from "../ducts/identity";
 import { expect, test, vi } from "vite-plus/test";
@@ -176,7 +177,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     const key = mounted.work()!.handle.key;
     const staged = await j.host.workspace.apply(key, "fans", "human", [
       { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: row.unitId, portIndex: row.portIndex } } } } },
-      { path: ["equipmentFlows", String(row.unitId), "edit"], value: { value: { cfm: 925, source: "test" } } },
+      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: { cfm: 925, source: "test" } } },
     ], mounted.work()!.revision);
     expect(staged.ok).toBe(true);
     mounted.refresh();
@@ -224,7 +225,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     expect(mounted.review("losses"), "return from a Ducts read preserves the sealed Plan").toMatchObject({ stale: false, preview: expect.anything() });
     expect(mounted.writeRefusal()).toBeNull();
     const changed = await j.host.workspace.apply(key, "fans", "human", [
-      { path: ["equipmentFlows", String(row.unitId), "edit"], value: { value: { cfm: 950, source: "test" } } },
+      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: { cfm: 950, source: "test" } } },
     ], mounted.work()!.revision);
     expect(changed.ok).toBe(true);
     mounted.refresh();
@@ -582,7 +583,7 @@ async function compareSystemAnswers() {
       "fans",
       "human",
       [30, 31].map((id, i) => ({
-        path: ["terminalDrops", String(id), "edit"],
+        path: ["terminalDrops", elementSubject(snapshot.nodes.find(node => node.id === id)!), "edit"],
         value: { value: { inWg: i ? 0.35 : 0.05 } },
       })),
       0,
