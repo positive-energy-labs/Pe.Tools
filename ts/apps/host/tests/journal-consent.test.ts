@@ -1,9 +1,9 @@
-import { detachedBridge, settle, testConsents } from "./effect-test.ts";
+import { detachedBridge, settle, testConsents, journalAt } from "./effect-test.ts";
 import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
-import { ActionJournal } from "../src/action-journal.ts";
+import { type ActionJournal } from "../src/action-journal.ts";
 import { bindControl } from "../src/control.ts";
 import type { ConsentEvent } from "../src/run-consent.ts";
 import { createPluginRuntime, type Caller, type PluginHooks } from "@pe/agent-contracts";
@@ -39,21 +39,19 @@ async function files() {
   let writes = 0,
     loseResult = false;
   const compose = (owner: ActionJournal) =>
-    bindCommandRuntime(owner, bridge, captures, { podsRoot }, async (key, input) => {
-      if (key !== "pod.member.save") throw Error(`Unexpected local operation ${key}`);
-      writes++;
-      const saved = await settle(
-        saveMember(input as PodMemberSaveRequest, { podsRoot }).pipe(
-          Effect.provide(NodeServices.layer),
-        ),
-      );
-      if (loseResult) {
-        loseResult = false;
-        throw Error("File result lost after commit");
-      }
-      return saved;
-    });
-  const journal = new ActionJournal(path, Date.now, () => null, 1);
+    bindCommandRuntime(owner, bridge, captures, { podsRoot }, (key, input) =>
+      Effect.gen(function* () {
+        if (key !== "pod.member.save") throw Error(`Unexpected local operation ${key}`);
+        writes++;
+        const saved = yield* saveMember(input as PodMemberSaveRequest, { podsRoot });
+        if (loseResult) {
+          loseResult = false;
+          return yield* Effect.fail(Error("File result lost after commit"));
+        }
+        return saved;
+      }),
+    );
+  const journal = journalAt(path, Date.now, () => null, 1);
   compose(journal);
   const runtime = createPluginRuntime<string>();
   const observed: PluginHooks["op.after"][] = [];
@@ -150,7 +148,7 @@ test("real member saves share consent, freeze input and preserve identity throug
     expect(await f.read("c.txt")).toBe("reviewed");
     for (let i = 0; i < 8; i++) await f.journal.recordFact({ kind: "turn", phase: "started" });
     f.runs.closeAll();
-    const restarted = new ActionJournal(f.path, Date.now);
+    const restarted = journalAt(f.path, Date.now);
     f.compose(restarted);
     expect((await restarted.read({ kinds: ["turn"] })).length).toBeLessThanOrEqual(2);
     expect((await restarted.list()).map((row) => row.id).sort()).toEqual(["a", "b", "uncertain"]);
@@ -205,7 +203,7 @@ test.each(["cancel", "reject", "child-completed", "stop", "restart"] as const)(
       }
       if (mode === "stop") f.runs.close(run, "stopped");
       if (mode === "restart") {
-        expect((await new ActionJournal(f.path, Date.now).list())[0]?.state).toBe("cancelled");
+        expect((await journalAt(f.path, Date.now).list())[0]?.state).toBe("cancelled");
         f.runs.closeAll();
       }
       expect((await f.journal.wait("cancelled")).state).toBe("cancelled");

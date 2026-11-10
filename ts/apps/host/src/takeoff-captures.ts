@@ -28,7 +28,7 @@ import {
   type HistoryRow,
   type WorkKey,
 } from "@pe/agent-contracts";
-import { Clock, Context, Effect, Layer } from "effect";
+import { Cause, Clock, Context, Effect, Exit, Layer } from "effect";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
@@ -198,7 +198,8 @@ export class CaptureStoreClosed extends Error {
 export class TakeoffCaptures {
   private readonly states = new Map<string, TakeoffObservation>();
   private readonly generations = new Map<string, number>();
-  private readonly pending = new Map<string, Promise<unknown>>();
+  /** Requesters inside `refresh` per document; the last one out settles a state nobody else will. */
+  private readonly refreshing = new Map<string, number>();
   private readonly reads = new OwnerReads();
   private readonly familiesSaves = new Map<string, Promise<unknown>>();
   /** Progressive reads this process is running; a stored "reading" revision outside it was interrupted. */
@@ -236,7 +237,7 @@ export class TakeoffCaptures {
     while (this.writes.size) await Promise.allSettled([...this.writes]);
     this.states.clear();
     this.generations.clear();
-    this.pending.clear();
+    this.refreshing.clear();
     this.familiesSaves.clear();
     this.liveReads.clear();
     this.listeners.clear();
@@ -355,7 +356,6 @@ export class TakeoffCaptures {
     const key = keyOf(target);
     const previous = previousOf(this.read(target));
     this.generations.set(key, (this.generations.get(key) ?? 0) + 1);
-    this.pending.delete(key);
     this.setState(key, {
       kind: "failed",
       target,
@@ -364,32 +364,49 @@ export class TakeoffCaptures {
     });
   }
 
-  async refresh<A>(
+  /**
+   * One requester's read of a document. Sharing lives below, in `NativeReads` (ADR 0029 rule 10):
+   * concurrent requesters each run `collect` and join the same native dispatches, and an abort
+   * removes only that requester. The `generations` fence bumps only in `invalidate`, so a peer
+   * refresh never fences another out; both publish the same content-addressed capture.
+   */
+  readonly refresh = Effect.fn("TakeoffCaptures.refresh")(function* <A, E, R>(
+    this: TakeoffCaptures,
     target: DocumentRef,
-    collect: () => Promise<{ result: A; snapshot: TakeoffSnapshot }>,
-    current: () => Promise<boolean>,
-  ): Promise<{ result: A; capture: TakeoffCapture }> {
+    collect: Effect.Effect<{ result: A; snapshot: TakeoffSnapshot }, E, R>,
+    current: Effect.Effect<boolean, E, R>,
+  ) {
+    const self = this;
     const key = keyOf(target);
-    const joined = this.pending.get(key);
-    if (joined) return joined as Promise<{ result: A; capture: TakeoffCapture }>;
-    const generation = (this.generations.get(key) ?? 0) + 1;
-    this.generations.set(key, generation);
+    const generation = this.generations.get(key) ?? 0;
+    const fenced = () => (self.generations.get(key) ?? 0) !== generation;
     const previous = previousOf(this.read(target));
+    this.refreshing.set(key, (this.refreshing.get(key) ?? 0) + 1);
     this.setState(key, { kind: "reading", target, ...(previous ? { previous } : {}) });
-    const run = Promise.resolve().then(async () => {
-      try {
-        const { result, snapshot } = await collect();
-        const assertCurrent = async () => {
-          if (this.generations.get(key) !== generation || !(await current()))
-            throw Error("Snapshot target or generation changed before publication.");
-        };
-        await assertCurrent();
-        const capture = await this.retain(snapshot, { kind: "live", target }, assertCurrent);
-        this.setState(key, takeoffObservationSchema.parse({ kind: "ready", target, capture }));
-        return { result, capture };
-      } catch (error) {
-        if (this.generations.get(key) === generation)
-          this.setState(key, {
+    const assertCurrent = Effect.gen(function* () {
+      if (fenced() || !(yield* current))
+        return yield* Effect.fail(new Error("Snapshot target or generation changed before publication."));
+    });
+    return yield* Effect.gen(function* () {
+      const { result, snapshot } = yield* collect;
+      yield* assertCurrent;
+      const capture = yield* Effect.tryPromise({
+        try: () => self.retain(snapshot, { kind: "live", target }),
+        catch: (error) => error,
+      });
+      yield* assertCurrent;
+      self.setState(key, takeoffObservationSchema.parse({ kind: "ready", target, capture }));
+      return { result, capture };
+    }).pipe(
+      Effect.onExit((exit) =>
+        Effect.sync(() => {
+          const left = (self.refreshing.get(key) ?? 1) - 1;
+          if (left) self.refreshing.set(key, left);
+          else self.refreshing.delete(key);
+          // A peer still reading settles the state; a newer generation already replaced it.
+          if (Exit.isSuccess(exit) || left || fenced()) return;
+          const error = Cause.hasInterrupts(exit.cause) ? Error("Snapshot read was cancelled.") : Cause.squash(exit.cause);
+          self.setState(key, {
             kind: "failed",
             target,
             error:
@@ -398,14 +415,10 @@ export class TakeoffCaptures {
                 : String(error),
             ...(previous ? { previous } : {}),
           });
-        throw error;
-      } finally {
-        if (this.generations.get(key) === generation) this.pending.delete(key);
-      }
-    });
-    this.pending.set(key, run);
-    return run;
-  }
+        }),
+      ),
+    );
+  });
 
   async saveSchedule(value: Omit<ScheduleReading, "id">): Promise<ScheduleReading> {
     const id = createHash("sha256").update(canonicalRouteInput(value)).digest("hex");

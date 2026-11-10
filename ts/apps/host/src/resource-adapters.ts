@@ -18,10 +18,10 @@ import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { ActionJournal } from "./action-journal.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { observeSdkReading } from "./session-route.ts";
-import { sdkSession } from "./sdk-session.ts";
+import { sdkSession, SdkSession } from "./sdk-session.ts";
 import type { DocumentMarks, DocumentRef } from "./document-marks.ts";
 import type { MachineOwnerPromise } from "./machine.ts";
-import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
+import { ductsReadings } from "./ducts-readings.ts";
 
 /**
  * The host's own HTTP surface, read by the host on the host's clock. A one-shot Reading gets one
@@ -239,20 +239,16 @@ export function hostResourceObserver(
           }
           let live = true;
           let release = () => {};
-          void canonicalDuctsSession(
-            bridge,
-            request.kind === "ducts-snapshot" ? request.target.session : request.session,
-          )
-            .then((session) =>
-              // effect-edge: island, phase 5
-              Effect.runPromise(
-                resolveSession(bridge, {
-                  bridgeSessionId: session,
+          // effect-edge: island, phase 5
+          void Effect.runPromise(
+            SdkSession.resolve(bridge, { id: request.kind === "ducts-snapshot" ? request.target.session : request.session }).pipe(
+              Effect.flatMap((session) => resolveSession(bridge, {
+                  bridgeSessionId: session.sessionId,
                   openDocumentId:
                     request.kind === "ducts-snapshot" ? request.target.openId : undefined,
-                }),
-              ),
-            )
+                })),
+            ),
+          )
             .then(
               (resolved) => {
                 if (!live) return;

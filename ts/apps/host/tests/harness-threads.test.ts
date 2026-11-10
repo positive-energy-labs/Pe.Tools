@@ -1,7 +1,7 @@
 import { markReadings } from "../src/resource-adapters.ts";
 import { openRecordingWriter, openRecordingReader, nativeCatalogIdentity } from "../src/native-recording.ts";
 import { fansDocumentSchema } from "@pe/agent-contracts";
-import { detachedBridge, sessionView, consentService, harnessThreads, testSpawner, settle, testHostInputs, captureStore } from "./effect-test.ts";
+import { detachedBridge, sessionView, consentService, harnessThreads, testSpawner, settle, testHostInputs, captureStore, journalAt } from "./effect-test.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { RevitBridge } from "../src/bridge.ts";
@@ -50,7 +50,6 @@ import { productProvidersPath } from "../src/product-paths.ts";
 import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
 import type { Envelope } from "@pe/host-contracts/pe-revit-contract";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
-import { ActionJournal } from "../src/action-journal.ts";
 import { commandRegistry } from "../src/command-registry.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -276,10 +275,8 @@ test.each(["claude", "codex"] as const)(
       ), readScope,
     ));
     const deps = { sdk: sdkSessions, nativeRead: Context.get(readContext, HostNativeRead), files: Context.get(readContext, DuctFiles), marks: Context.get(readContext, HostDocumentMarks) };
-    const resolve = commandRegistry(bridge, captureStore("harness-threads"), deps, async () => {
-      throw Error("No local command in this journey");
-    });
-    const journal = new ActionJournal(join(dir, "journal.jsonl"), Date.now);
+    const resolve = commandRegistry(bridge, captureStore("harness-threads"), deps, () => Effect.fail(Error("No local command in this journey")));
+    const journal = journalAt(join(dir, "journal.jsonl"), Date.now);
     journal.bindCommands({
       work: routes.workspace,
       resolve,

@@ -5,12 +5,10 @@ import { join } from "node:path";
 import { Effect, Exit, Layer, Scope } from "effect";
 import { bindWork } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
-import { ActionJournal } from "../../../apps/host/src/action-journal.ts";
 import { markDispatched } from "../../../apps/host/src/action-dispatch.ts";
 import { admittedBuiltinsLayer } from "../../../apps/host/src/admitted-builtins.ts";
 import { DuctFiles } from "../../../apps/host/src/ducts-files.ts";
 import { PictureCaptureStore } from "../../../apps/host/src/captures-route.ts";
-import { makeCallRoute } from "../../../apps/host/src/call-route.ts";
 import { hostOwnership } from "../../../apps/host/src/host-ownership.ts";
 import { fileRouteDocumentStore } from "../../../apps/host/src/route-document-store.ts";
 import { HostDocumentMarks, hostMarks } from "../../../apps/host/src/document-marks.ts";
@@ -19,6 +17,8 @@ import {
   detachedBridge,
   sessionView,
   testDocumentMarks,
+  journalAt,
+  callRouteOver,
 } from "../../../apps/host/tests/effect-test.ts";
 import { sdkSessions } from "../../../apps/host/tests/native-receipt-fixture.ts";
 import { serveRoutes } from "../../../apps/host/tests/real-server.ts";
@@ -132,9 +132,9 @@ async function fixture() {
         return { target: { session: "B", document: null }, value };
       }),
   });
-  const journal = new ActionJournal(join(dir, "actions.jsonl"), Date.now);
+  const journal = journalAt(join(dir, "actions.jsonl"), Date.now);
   const server = await serveRoutes(
-    makeCallRoute(journal, captureStore(join(dir, "captures")), {
+    callRouteOver(journal, captureStore(join(dir, "captures")), {
       sdk: sdkSessions,
       workspace,
       podsRoot: dir,

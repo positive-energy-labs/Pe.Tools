@@ -1,10 +1,10 @@
+import { journalAt } from "./effect-test.ts";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { chmod, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
 import { type Receipt, type ReceiptStamp } from "@pe/agent-contracts";
-import { ActionJournal } from "../src/action-journal.ts";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -15,7 +15,7 @@ async function fixture() {
   const dir = await mkdtemp(join(tmpdir(), "pe-spine-"));
   dirs.push(dir);
   const path = join(dir, "actions.json");
-  return { path, owner: new ActionJournal(path, Date.now, () => stamp) };
+  return { path, owner: journalAt(path, Date.now, () => stamp) };
 }
 
 test("facts publish after commit, isolate listeners, and detach caller data", async () => {
@@ -29,7 +29,7 @@ test("facts publish after commit, isolate listeners, and detach caller data", as
   });
   const body = { kind: "usage" as const, event: "app_boot" as const, counters: {} };
   const r = await owner.recordFact(body);
-  expect(await new ActionJournal(path, Date.now).read({})).toContainEqual(r);
+  expect(await journalAt(path, Date.now).read({})).toContainEqual(r);
   expect(seen).toEqual([r]);
   expect(r.stamp).toEqual(stamp);
   // A journal the host cannot append to: the commit fails and publishes nothing.

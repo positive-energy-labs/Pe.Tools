@@ -2,14 +2,13 @@ import { fixtureNative } from "./fixture-native.ts";
 import { RouteWorkspace } from "@pe/runtime";
 import { address, bindWork, tools } from "@pe/agent-contracts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { testHostInputs } from "./effect-test.ts";
+import { testHostInputs, callRouteOver } from "./effect-test.ts";
 import { Layer } from "effect";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { ActionJournal } from "../src/action-journal.ts";
-import { makeCallRoute } from "../src/call-route.ts";
 import { mintContext } from "../src/control.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { serveRoutes } from "./real-server.ts";
@@ -24,7 +23,7 @@ beforeEach(async () => {
   native = await fixtureNative(join(root, "native"));
   journal = native.journal;
   const workspace = new RouteWorkspace({ registrations: [{ spec: tools.takeoffs.work }], store: fileRouteDocumentStore(join(root, "work")) });
-  server = await serveRoutes(makeCallRoute(journal, undefined, { workspace }).pipe(Layer.provide(testHostInputs)), native.bridge);
+  server = await serveRoutes(callRouteOver(journal, undefined, { workspace }).pipe(Layer.provide(testHostInputs)), native.bridge);
   const response = await post("/actions", { id: "human-action", key: "work.start", target: { kind: "host" },
     input: { key: bindWork("takeoffs", address("C:/Models/guard.rvt")), seed: tools.takeoffs.work.schema.parse({}) } },
     { "x-pe-context": mintContext({ kind: "human", via: "cli" }) });

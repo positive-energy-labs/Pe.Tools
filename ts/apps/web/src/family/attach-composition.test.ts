@@ -25,11 +25,9 @@ import { fileRouteDocumentStore } from "../../../host/src/route-document-store.t
 import { familySpecExecutor } from "../../../host/src/family-spec.ts";
 import { commandResources } from "../../../host/src/command-reads.ts";
 import { ActionIncomplete } from "../../../host/src/action-journal.ts";
-import { ActionJournal } from "../../../host/src/action-journal.ts";
-import { makeCallRoute } from "../../../host/src/call-route.ts";
 import { SdkDriver } from "../../../host/src/sdk-session.ts";
 import { hostResourceObserver } from "../../../host/src/resource-adapters.ts";
-import { detachedBridge, testHostInputs } from "../../../host/tests/effect-test.ts";
+import { detachedBridge, testHostInputs, journalAt, callRouteOver } from "../../../host/tests/effect-test.ts";
 import { bindActionReadings, type Readings } from "../host/resource-stream";
 import { submitAction, recoverAction } from "../../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import { withInvocationContext, readOutbox } from "@pe/runtime/context";
@@ -57,7 +55,7 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
   };
   const admitted = await Effect.runPromise(Layer.buildWithScope(admittedBuiltinsLayer(work), scope));
   const fingerprint = Context.get(admitted, AdmittedBuiltins).routes.get("family")!.workFingerprint;
-  const journal = new ActionJournal(join(dir, "journal.jsonl"), Date.now);
+  const journal = journalAt(join(dir, "journal.jsonl"), Date.now);
   const bridge = detachedBridge();
   const parsed = {jobId: "small", fileName: "small.pdf", pages: [], blocks: [], images: []};
   const parsePdf = vi.fn(async () => parsed)
@@ -67,7 +65,7 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
   await writeFile(join(dir, member.pod, member.path), JSON.stringify({ family: { name: "HCB" } }));
   const pdf = join(dir, "source.pdf");
   await writeFile(pdf, "%PDF-" + "x".repeat(7 * 1024 * 1024));
-  const web = await serveRoutes(makeCallRoute(journal, undefined, { workspace: work, workReads, podsRoot: dir, parsePdf }).pipe(
+  const web = await serveRoutes(callRouteOver(journal, undefined, { workspace: work, workReads, podsRoot: dir, parsePdf }).pipe(
     Layer.provide(testHostInputs), Layer.provide(NodeServices.layer),
   ), bridge, Layer.succeed(SdkDriver, () => Effect.die("No native access")));
   const nativeFetch = globalThis.fetch;
@@ -150,15 +148,15 @@ test("resume reads prepared Family assets by digest without parsing again", asyn
   const path = join(dir, "journal.jsonl");
   let stopAfterPrepare = true;
   const open = () => {
-    const journal = new ActionJournal(path, Date.now);
+    const journal = journalAt(path, Date.now);
     journal.bindCommands({...commandResources(bridge, deps, async id => (await journal.list(undefined, id))[0]),
-      resolve: () => ({...executor, run: async (ctx, execution) => {
-        return executor.run(ctx, {...execution, step: async (...args) => {
-          const result = await execution.step(...args);
-          if (stopAfterPrepare) { stopAfterPrepare = false; throw new ActionIncomplete("Interrupted after first prepared asset", null); }
-          return result;
-        }});
-      }})});
+      resolve: () => ({...executor, run: (ctx, execution) =>
+        executor.run(ctx, {...execution, step: (kind, key, input, execute, options) =>
+          Effect.tap(execution.step(kind, key, input, execute, options), () => {
+            if (!stopAfterPrepare) return Effect.void;
+            stopAfterPrepare = false;
+            return Effect.fail(new ActionIncomplete("Interrupted after first prepared asset", null));
+          })})})});
     return journal;
   };
   let journal = open();

@@ -4,8 +4,9 @@ import { commandResources } from "./command-reads.ts";
 import { workStartExecutor } from "./work-start.ts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { workIntentBoundary, workWriteBoundary } from "./work-write-boundary.ts";
-import { catalogCommandContext } from "./catalog-command-context.ts";
+import { CatalogCommand, catalogCommandContext } from "./catalog-command-context.ts";
 import type { CommandExecutor, CommandRegistry } from "./command-executor.ts";
+import type { GatewayLocal } from "./gateway-actions.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { familyExecutors, type FamilyActionDependencies } from "./family-actions.ts";
@@ -31,7 +32,7 @@ export function commandRegistry(
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
   deps: FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] },
-  local: (key: string, input: unknown) => Promise<unknown>,
+  local: GatewayLocal,
   origin?: () => string,
 ): CommandRegistry {
   const implementations: Record<string, CommandExecutor> = {
@@ -70,13 +71,13 @@ export function commandRegistry(
     if (!step.process) throw Error("No exact native process was captured for this step");
     return readNativeReceipt(step, step.process, deps.sdk);
   };
-  const cancel = async (requestId: string) => {
-    // effect-edge: island, phase 5
-    const answer = await Effect.runPromise(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }));
-    const result = answer.value as { cancelled?: boolean; message?: string } | null;
-    if (result?.cancelled === false) throw Error(result.message ?? "Native request is not running");
-    return result;
-  };
+  const cancel = (requestId: string) =>
+    Effect.flatMap(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }), ({ value }) => {
+      const result = value as { cancelled?: boolean; message?: string } | null;
+      return result?.cancelled === false
+        ? Effect.fail(Error(result.message ?? "Native request is not running"))
+        : Effect.succeed(result);
+    });
   const complete = (entry: CommandExecutor, key?: string): CommandExecutor => {
     const definition = entry.definition;
     return {
@@ -88,7 +89,7 @@ export function commandRegistry(
         key ? catalogCommandContext.run(key, () => entry.bind(context)) : entry.bind(context),
       run: (context, execution) =>
         key
-          ? catalogCommandContext.run(key, () => entry.run(context, execution))
+          ? entry.run(context, execution).pipe(Effect.provideService(CatalogCommand, key))
           : entry.run(context, execution),
       recover: entry.recover ?? recover,
       cancel: entry.cancel ?? cancel,
@@ -154,7 +155,7 @@ export function bindCommandRuntime(
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
   deps: FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] },
-  local: (key: string, input: unknown) => Promise<unknown>,
+  local: GatewayLocal,
   origin?: () => string,
 ): void {
   owner.bindCommands({

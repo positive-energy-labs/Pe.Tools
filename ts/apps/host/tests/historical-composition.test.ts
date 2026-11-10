@@ -1,3 +1,4 @@
+import { journalAt } from "./effect-test.ts";
 import { sourceProvenanceSchema, type Caller, type WorkKey } from "@pe/agent-contracts";
 import { HOST_RUNTIME_SERVICE_HEADER, HOST_RUNTIME_SERVICE_QUERY } from "@pe/host-contracts/contracts";
 import { RouteWorkspace } from "@pe/runtime";
@@ -10,7 +11,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
-import { ActionJournal } from "../src/action-journal.ts";
 import { readInputRoutes, hostInputGraph } from "../src/app.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -174,7 +174,7 @@ test("historical mutation doors refuse without append or any live graph", async 
 test("journal, Work and pointer owners refuse before storage or executor access", async () => {
   const { dir } = await bundle(); const inputs = await Effect.runPromise(hostInputs(stamp, { kind: "recording", directory: dir, at: null }));
   const journalPath = join(dir, "forbidden-journal.jsonl");
-  const journal = new ActionJournal(journalPath, Date.now); journal.bindInputContext(inputs);
+  const journal = journalAt(journalPath, Date.now); journal.bindInputContext(inputs);
   // Policy precedes even envelope decoding: no malformed or resumed command can acquire current inputs.
   await expect(journal.invoke({ id: randomUUID(), key: "ducts.apply-losses", input: {}, target: { kind: "host" } }, { caller: human, basis: null })).rejects.toMatchObject({ problem: "recording.historical" });
   let storage = 0;

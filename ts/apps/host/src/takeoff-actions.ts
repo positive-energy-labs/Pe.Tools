@@ -2,13 +2,12 @@ import { z } from "zod";
 import { nativeRequestSchema } from "@pe/host-contracts/decoders";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { lifetime } from "./document-lifetime.ts";
-import { command, refused, type CommandContext } from "./command-executor.ts";
+import { command, io, nativeStep, refused, type CommandContext } from "./command-executor.ts";
 import { preparedTakeoffSchema } from "@pe/agent-contracts";
 import type { NativeProcess, SdkReceiptReader } from "./native-receipts.ts";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { Effect } from "effect";
-import { NodeServices } from "@effect/platform-node";
 import {
   commands,
   tools,
@@ -35,8 +34,8 @@ import type {
   RhvacSyncRequest,
   RhvacSyncResult,
 } from "@pe/host-contracts/operation-types";
-import { invokeBridge, type RevitBridge } from "./bridge.ts";
-import type { ActionExecution } from "./action-journal.ts";
+import type { RevitBridge } from "./bridge.ts";
+import type { ActionExecution, Step } from "./action-journal.ts";
 import { type TakeoffCaptures } from "./takeoff-captures.ts";
 import { rhvacOpen, rhvacSync } from "./rhvac-ops.ts";
 
@@ -106,38 +105,36 @@ const nativeFor =
       "native",
       key,
       input,
-      (id) => invokeBridge<A>(bridge, modelTarget(ctx), key, input, id),
+      (id) => nativeStep<A>(bridge, modelTarget(ctx), key, input, id),
       { process },
     );
 type Native = ReturnType<typeof nativeFor>;
 
 /** The carrier stage is bounded by native remaining work, shared by the seven concrete commands. */
-async function runCarrier(
+const runCarrier = (
   ctx: CommandContext,
   execution: ActionExecution & { readonly prepared: { process: NativeProcess } },
   captures: TakeoffCaptures,
   bridge: RevitBridge["Service"],
   stage: string,
-  perform: (native: Native) => Promise<unknown>,
-) {
+  perform: (native: Native) => Step<unknown>,
+) => {
   const target = modelTarget(ctx);
   const native = nativeFor(ctx, execution, bridge, execution.prepared.process);
-  captures.invalidate(target);
-  try {
+  return Effect.gen(function* () {
+    captures.invalidate(target);
     let remaining = Infinity;
     while (remaining > 0) {
-      const result = await native<{ remaining: string[] }>("takeoffs.initialize-carrier", {
+      const result = yield* native<{ remaining: string[] }>("takeoffs.initialize-carrier", {
         stage,
       });
       if (!Array.isArray(result.remaining) || result.remaining.length >= remaining)
         throw Error("Carrier preparation made no progress");
       remaining = result.remaining.length;
     }
-    return await perform(native);
-  } finally {
-    captures.invalidate(target);
-  }
-}
+    return yield* perform(native);
+  }).pipe(Effect.ensuring(Effect.sync(() => captures.invalidate(target))));
+};
 
 export function takeoffExecutors(
   captures: TakeoffCaptures,
@@ -170,29 +167,32 @@ export function takeoffExecutors(
       prepare: async () => ({ process }),
     };
   };
-  const value = async (ctx: CommandContext, native: Native, key: string, input: unknown) => ({
-    value: await native(key, input),
-    target: { session: modelTarget(ctx).session, document: null },
-  });
+  const value = (ctx: CommandContext, native: Native, key: string, input: unknown) =>
+    Effect.map(native(key, input), (value) => ({
+      value,
+      target: { session: modelTarget(ctx).session, document: null },
+    }));
   return {
     "takeoffs.initialize": command(commands["takeoffs.initialize"], preparedCarrierSchema, {
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, ctx.admission.input.stage, async () => ({
-          text: `wrote the shared parameters for ${ctx.admission.input.stage}`,
-        })),
+        runCarrier(ctx, execution, captures, bridge, ctx.admission.input.stage, () =>
+          Effect.succeed({ text: `wrote the shared parameters for ${ctx.admission.input.stage}` }),
+        ),
     }),
     "takeoffs.adopt": command(commands["takeoffs.adopt"], preparedCarrierSchema, {
       seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Adoption", async (native) => {
-          let adopted = 0;
-          for (const view of ctx.admission.input.views)
-            adopted += (await native<{ adopted: unknown[] }>("takeoffs.adopt", view)).adopted
-              .length;
-          return { adopted, text: `adopted ${adopted} zoning regions` };
-        }),
+        runCarrier(ctx, execution, captures, bridge, "Adoption", (native) =>
+          Effect.gen(function* () {
+            let adopted = 0;
+            for (const view of ctx.admission.input.views)
+              adopted += (yield* native<{ adopted: unknown[] }>("takeoffs.adopt", view)).adopted
+                .length;
+            return { adopted, text: `adopted ${adopted} zoning regions` };
+          }),
+        ),
     }),
     "takeoffs.partition": command(commands["takeoffs.partition"], preparedCarrierSchema, {
       seal: (p) => ({ request: { process: p.process } }),
@@ -349,7 +349,7 @@ export function takeoffExecutors(
           prepare: async () => ({ process, edits, decisions, capture }),
         };
       },
-      run: async (ctx, execution) => {
+      run: (ctx, execution) => {
         const { input } = ctx.admission;
         const admission = ctx.admission;
         const target = modelTarget(ctx);
@@ -358,8 +358,8 @@ export function takeoffExecutors(
         const submitted = { edits: frozen.edits, decisions: frozen.decisions };
         const capture = frozen.capture;
         const native = nativeFor(ctx, execution, bridge, frozen.process);
-        captures.invalidate(target);
-        try {
+        return Effect.gen(function* () {
+          captures.invalidate(target);
           const selected = new Set(input.zones);
           const zones = capture!.snapshot.world.zones.filter(
             (zone) => !selected.size || selected.has(zone.zone.guid),
@@ -397,13 +397,11 @@ export function takeoffExecutors(
           const recordedFile = execution.recorded("file", "rhvac.sync");
           const request: RhvacSyncRequest = recordedFile
             ? (recordedFile.input as { request: RhvacSyncRequest }).request
-            : await (async (): Promise<RhvacSyncRequest> => {
-                const before = await (
-                  deps.openFile ??
-                  ((path) =>
-                    // effect-edge: island, phase 5
-                    Effect.runPromise(rhvacOpen({ path }).pipe(Effect.provide(NodeServices.layer))))
-                )(input.path);
+            : yield* Effect.gen(function* () {
+                const openFile = deps.openFile;
+                const before = openFile
+                  ? yield* io(() => openFile(input.path))
+                  : yield* rhvacOpen({ path: input.path });
                 const firstRoomNumber = Math.max(0, ...before.rooms.map((room) => room.number)) + 1;
                 const bySystemName = new Map(
                   before.systems
@@ -463,21 +461,18 @@ export function takeoffExecutors(
                       .map(([name, number]) => ({ name, number })),
                   ],
                   deleteUntouchedSeedRoom: inserts.length > 0,
-                };
-              })();
-          const result = await execution.step(
+                } satisfies RhvacSyncRequest;
+              });
+          const syncFile = deps.syncFile;
+          const expectedVersion = admission.input.fileVersion as string;
+          const result = yield* execution.step(
             "file",
             "rhvac.sync",
-            { request, expectedVersion: admission.input.fileVersion as string },
+            { request, expectedVersion },
             () =>
-              (
-                deps.syncFile ??
-                ((input, expectedVersion) =>
-                  // effect-edge: island, phase 5
-                  Effect.runPromise(
-                    rhvacSync(input, expectedVersion).pipe(Effect.provide(NodeServices.layer)),
-                  ))
-              )(request, admission.input.fileVersion as string),
+              syncFile
+                ? io(() => syncFile(request, expectedVersion))
+                : rhvacSync(request, expectedVersion),
           );
           const byNumber = new Map(
             result.insertedRooms.map((room) => [room.number, room.identifier]),
@@ -499,7 +494,7 @@ export function takeoffExecutors(
           });
           if (writes.length) {
             const recordedLinks = execution.recorded("native", "takeoffs.rhvac-links");
-            await native("takeoffs.rhvac-links", recordedLinks?.input ?? { writes });
+            yield* native("takeoffs.rhvac-links", recordedLinks?.input ?? { writes });
           }
           let retirement: unknown;
           if (base) {
@@ -508,7 +503,7 @@ export function takeoffExecutors(
                 .filter((room) => edits.has(room.guid))
                 .map((room) => [room.guid, edits.get(room.guid)!]),
             );
-            retirement = await execution.retireWork(
+            retirement = yield* execution.retireWork(
               base.key,
               "takeoffs",
               [...consumed].flatMap(([roomId, edit]) =>
@@ -526,9 +521,7 @@ export function takeoffExecutors(
             file: result,
             retirement,
           };
-        } finally {
-          captures.invalidate(target);
-        }
+        }).pipe(Effect.ensuring(Effect.sync(() => captures.invalidate(target))));
       },
     }),
   };
