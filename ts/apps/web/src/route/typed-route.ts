@@ -165,6 +165,9 @@ export type Specification<
     readonly [K in keyof Reads]: {
       title: string;
       purpose: string;
+      /** Layout is data (ADR 0035 rule 5, `route/body.ts`): the kind of `Body` this pane's `draw`
+       * returns. Optional in the slice 6 scaffold; the fill requires it and types `draw` to match. */
+      body?: import("./body").BodyKind;
       subjectList?: true;
       read?: Reads[K];
       bindings?(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): PaneBindings;
