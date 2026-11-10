@@ -14,7 +14,7 @@ export function shellImports() {
   const configs = new Map<string, ts.CompilerOptions>();
   const files = [
     ...new Set(
-      git("ls-files", "-z", "--cached", "--others", "--exclude-standard", "ts")
+      git("ls-files", "-z", "--cached", "--others", "--exclude-standard")
         .split("\0")
         .filter(
           (file) =>
