@@ -323,7 +323,7 @@ export const tools = {
     name: "fans", says: fansRouteState.description,
     work: { ...fansRouteState, editable: [
       ["writeIntent"], ["calculation", "*"], ["terminalDrops", "*"], ["componentDrops", "*"],
-      ["esp", "*"], ["equipmentFlows", "*"], ["roles", "*"], ["flows", "*"], ["parameters", "*"], ["designFriction"],
+      ["esp", "*"], ["equipmentFlows", "*"], ["roles", "*"], ["flows", "*"], ["parameters", "*"],
     ] }, commands: {},
   },
   ducts: {
@@ -343,7 +343,8 @@ export const tools = {
         ["workingPhase"],
         ["systemColours"],
         ["kinds", "*"],
-        ["criteria"],
+        ["criteria", "*"],
+        ["designFriction"],
       ],
     },
     commands: {

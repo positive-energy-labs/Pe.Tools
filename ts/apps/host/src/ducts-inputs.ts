@@ -42,4 +42,4 @@ export function workLayer(design: DuctsDesign): WorkLayer {
   };
 }
 
-export { editPatches, mergeCriteria } from "@pe/ducts-domain/sheet/index";
+export { editPatches } from "@pe/ducts-domain/sheet/index";

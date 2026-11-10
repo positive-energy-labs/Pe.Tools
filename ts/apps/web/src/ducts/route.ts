@@ -147,7 +147,7 @@ export const module = route({
       fans: { state: fansRouteState, value: "fansWork" },
     },
     input: ductsSheetEditsSchema,
-    patches: (input, data) => editPatches(input, data.design),
+    patches: (input) => editPatches(input),
     history: editMetaSchema,
     describe: describeInputHistory,
   },

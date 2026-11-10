@@ -34,7 +34,7 @@ test.each([
         key,
         "fans",
         "human",
-        [{ path: ["designFriction"], value: { edit: { value: 0.09 } } }],
+        [{ path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 9, portIndex: 0 } } } } }],
         0,
       ),
     ).toMatchObject({ ok: true });
@@ -57,16 +57,16 @@ test.each([
   if (name === "fans") {
     expect(f.fans.work()).toMatchObject({
       revision: 1,
-      value: { designFriction: { edit: { value: 0.09 } } },
+      value: { writeIntent: { edit: { value: { walk: { unitId: 9, portIndex: 0 } } } } },
     });
     await waitFor(() => expect(f.fans.workBasis()).not.toBeNull());
     f.fans.invoke("edit", {
-      patches: [{ path: ["designFriction"], value: { edit: { value: 0.1 } } }],
+      patches: [{ path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 10, portIndex: 0 } } } } }],
     });
     await waitFor(() =>
       expect(f.fans.work()).toMatchObject({
         revision: 2,
-        value: { designFriction: { edit: { value: 0.1 } } },
+        value: { writeIntent: { edit: { value: { walk: { unitId: 10, portIndex: 0 } } } } },
       }),
     );
   }

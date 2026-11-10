@@ -122,7 +122,7 @@ export const module = route({
       ducts: { state: ductsRouteState, value: "ductsWork" },
     },
     input: ductsSheetEditsSchema,
-    patches: (input, data) => editPatches(input, data.design),
+    patches: (input) => editPatches(input),
     history: editMetaSchema,
     describe: describeInputHistory,
   },

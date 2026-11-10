@@ -776,12 +776,12 @@ test("JZ C718/C675/C676/C730 atomic press, isolated cell undo, root addressing a
     expect(j.m.journal().undo.slice(-3).map(s => s.transitions.length)).toEqual([1, 1, 1]);
     for (let i = 0; i < 3; i++) { expect(await j.m.history.undo()).toMatchObject({ ok: true }); await j.ready(); }
     expect(j.m.owner()!.doc).toEqual(before);
-    expect(await j.cells().at(["designFriction"]).stage(0.1)).toBeNull(); await j.ready();
+    expect(await j.cells().at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } })).toBeNull(); await j.ready();
     const rootBefore = structuredClone(j.m.owner()!.doc), rootSteps = j.m.journal().undo.length;
     expect(() => j.cells().at(["foreignRoot"])).toThrow("No owning Work");
-    expect(await j.cells().at(["designFriction"]).clear()).toBeNull(); await j.ready();
-    expect(await j.cells().at(["designFriction"]).delete()).toBeNull(); await j.ready();
-    expect(j.m.owner()!.doc.designFriction).toEqual({});
+    expect(await j.cells().at(["writeIntent"]).clear()).toBeNull(); await j.ready();
+    expect(await j.cells().at(["writeIntent"]).delete()).toBeNull(); await j.ready();
+    expect(j.m.owner()!.doc.writeIntent).toEqual({});
     expect(j.m.journal().undo).toHaveLength(rootSteps + 2);
     for (let i = 0; i < 2; i++) { expect(await j.m.history.undo()).toMatchObject({ ok: true }); await j.ready(); }
     expect(j.m.owner()!.doc).toEqual(rootBefore);
@@ -842,7 +842,7 @@ test("JZ raw Work patch paths and ambiguous operation fields refuse atomically a
       { path: ["flows", "constructor"] },
       { path: ["flows"], value: 2 },
       { path: ["flows", terminalA, "edit"], value: { value: { cfm: "wrong" } } },
-      { path: ["designFriction", "edit"], value: { value: "wrong" } },
+      { path: ["writeIntent", "edit"], value: { value: "wrong" } },
     ];
     const outcomes: Array<{ patch: unknown; accepted: boolean }> = [];
     for (const patch of patches) {

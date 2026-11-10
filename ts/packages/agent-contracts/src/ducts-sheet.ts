@@ -63,6 +63,36 @@ export const ductsCriteriaLayerSchema = z.strictObject({
   allowanceInWg: sided(nonneg.optional()).optional(),
 });
 export type DuctsCriteriaLayer = z.infer<typeof ductsCriteriaLayerSchema>;
+/**
+ * Each criterion's Work cell (ADR 0030 rule 8: one staged value per cell; ruling 2026-11-10, the /ducts
+ * design sheet draws one row per cell). A sided criterion is a cell per side; `layer` is where the
+ * cell's value sits in the criteria layer the engine resolves over the store and the firm file.
+ */
+export const DUCTS_CRITERIA_CELLS = {
+  velocitySupplyFpm: { layer: ["velocityLimitFpm", "supply"], value: num.positive(), unit: "fpm" },
+  velocityReturnFpm: { layer: ["velocityLimitFpm", "return"], value: num.positive(), unit: "fpm" },
+  terminalDropInWg: { layer: ["terminalDropInWg"], value: nonneg, unit: "in-wg" },
+  autoJoinGapIn: { layer: ["autoJoinGapIn"], value: nonneg, unit: "in" },
+  healBoxIn: { layer: ["healBoxIn"], value: nonneg, unit: "in" },
+  splitPolicy: { layer: ["splitPolicy"], value: splitPolicy, unit: undefined },
+  allowanceSupplyInWg: { layer: ["allowanceInWg", "supply"], value: nonneg, unit: "in-wg" },
+  allowanceReturnInWg: { layer: ["allowanceInWg", "return"], value: nonneg, unit: "in-wg" },
+} as const satisfies Record<string, { layer: readonly [keyof DuctsCriteriaLayer, ("supply" | "return")?]; value: z.ZodType; unit: string | undefined }>;
+export type DuctsCriteriaCell = keyof typeof DUCTS_CRITERIA_CELLS;
+/** The criteria layer the cells' staged values make; an unstaged cell leaves its criterion (or side) out. */
+export function criteriaLayer(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly edit?: { readonly value?: unknown } | null }>>>): DuctsCriteriaLayer {
+  const layer: Record<string, unknown> = {};
+  for (const [cell, { layer: [key, side] }] of Object.entries(DUCTS_CRITERIA_CELLS)) {
+    const value = cells[cell as DuctsCriteriaCell]?.edit?.value;
+    if (value === undefined) continue;
+    if (side) layer[key] = { ...(layer[key] as object | undefined), [side]: value };
+    else layer[key] = value;
+  }
+  return layer as DuctsCriteriaLayer;
+}
+/** The cell a criterion (and side) is staged in. */
+export const criteriaCellOf = (key: string, side?: string) =>
+  (Object.entries(DUCTS_CRITERIA_CELLS).find(([, c]) => c.layer[0] === key && c.layer[1] === side)?.[0] ?? null) as DuctsCriteriaCell | null;
 /** A criteria edit: a value writes that criterion or side, null removes it from the project layer. */
 export const ductsCriteriaEditsSchema = z.strictObject({
   velocityLimitFpm: sided(num.positive().nullable().optional()).optional(),
