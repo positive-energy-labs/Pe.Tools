@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { Clock, Context, Effect, FiberMap, Layer } from "effect";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
+import type { HttpClient } from "effect/http";
 import { receiptStampSchema, type ReceiptStamp } from "@pe/agent-contracts";
 import { ActionJournal, type AttemptHost } from "./action-journal.ts";
 import { HostLog } from "./host-log.ts";
@@ -44,7 +45,11 @@ export class ActionJournalService extends Context.Service<ActionJournalService, 
    * after the bridge and threads close (the log, acquired first, is released after), so a
    * successor runtime never borrows this journal.
    */
-  static layer(stamp: ReceiptStamp | null, dir: string = hostStateDir()) {
+  static layer(
+    stamp: ReceiptStamp | null,
+    dir: string = hostStateDir(),
+    http: Layer.Layer<HttpClient.HttpClient> = NodeHttpClient.layerUndici,
+  ) {
     return Layer.effect(
       ActionJournalService,
       Effect.gen(function* () {
@@ -68,10 +73,16 @@ export class ActionJournalService extends Context.Service<ActionJournalService, 
         return journal;
       }),
       // The services every owned attempt runs with, received once here (never per call).
-    ).pipe(Layer.provide(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)));
+    ).pipe(Layer.provide(Layer.mergeAll(NodeServices.layer, http)));
   }
   /** The journal with its log: both services, for a runtime that owns them. */
-  static live(stamp: ReceiptStamp | null, dir: string = hostStateDir()) {
-    return ActionJournalService.layer(stamp, dir).pipe(Layer.provideMerge(HostLogService.layer(dir)));
+  static live(
+    stamp: ReceiptStamp | null,
+    dir: string = hostStateDir(),
+    http?: Layer.Layer<HttpClient.HttpClient>,
+  ) {
+    return ActionJournalService.layer(stamp, dir, http).pipe(
+      Layer.provideMerge(HostLogService.layer(dir)),
+    );
   }
 }

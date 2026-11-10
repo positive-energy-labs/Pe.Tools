@@ -276,7 +276,9 @@ export const callRouteOver = (
   journal: ActionJournalService["Service"],
   ...args: Parameters<typeof makeCallRoute>
 ) => Layer.unwrap(makeCallRoute(...args)).pipe(Layer.provide(Layer.succeed(ActionJournalService, journal)));
-export const testJournal = () => Context.get(testScoped(ActionJournalService.live(null)), ActionJournalService);
+// testScoped builds synchronously; undici's layer is async, so test journals use fetch.
+export const testJournal = () =>
+  Context.get(testScoped(ActionJournalService.live(null, undefined, FetchHttpClient.layer)), ActionJournalService);
 /**
  * A journal over `path` whose attempts are fibers in the running test's scope. Closing that scope
  * interrupts an attempt the test left open; the service Layer joins them instead.
@@ -285,7 +287,6 @@ export const journalAt = (...args: Parameters<typeof makeActionJournal>) =>
   Context.get(
     testScoped(
       Layer.effect(ActionJournalService, makeActionJournal(...args)).pipe(
-        // testScoped builds synchronously; undici's layer is async, so these tests use fetch.
         Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
       ),
     ),

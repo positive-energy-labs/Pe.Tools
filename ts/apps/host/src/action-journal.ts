@@ -1171,6 +1171,8 @@ export class ActionJournal implements ReceiptReader {
   ): Promise<ActionReceipt> {
     const inputRefusal = this.inputContext?.check({ kind: "command", key: raw.key });
     if (inputRefusal) throw inputRefusal;
+    const attempts = this.attempts;
+    if (!attempts) throw Error("This journal has no attempt owner; it admits nothing");
     const admission = actionAdmissionSchema.parse(structuredClone(raw));
     const portable = commands[admission.key as keyof typeof commands];
     if (portable)
@@ -1854,10 +1856,9 @@ export class ActionJournal implements ReceiptReader {
             return structuredClone(next);
           });
       };
-      if (!this.attempts) throw Error("This journal has no attempt owner; it admits nothing");
       // Rule 10, durable command: the attempt is forked into the journal's scope under the
       // journal's identity. The submitting request is its causal parent and cannot reach it.
-      this.attempts.fork(
+      attempts.fork(
         row.id,
         Effect.uninterruptibleMask((restore) =>
           restore(
