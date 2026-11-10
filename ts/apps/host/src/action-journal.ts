@@ -248,14 +248,16 @@ export type ActionExecution = {
   recorded(kind: ActionStep["kind"], key: string): ActionStep | undefined;
   retire(id: string, reason: string): Step<ActionStep>;
 };
-/** The journal's attempt owner: one fiber per admitted action, in the journal Layer's scope. */
-export type Attempts = {
+/** Fibers by key in the journal Layer's scope; a fork under a running key joins it, never replaces it. */
+export type FiberOwner = {
   readonly map: FiberMap.FiberMap<string, unknown, unknown>;
   readonly fork: (
-    id: string,
-    attempt: Effect.Effect<unknown, unknown, AttemptHost>,
+    key: string,
+    effect: Effect.Effect<unknown, unknown, AttemptHost>,
   ) => Fiber.Fiber<unknown, unknown>;
 };
+/** Attempts by action id and op.cancel sends by step id: never one map, so neither key reaches the other. */
+export type Attempts = { readonly attempts: FiberOwner; readonly cancels: FiberOwner };
 const joined = (fiber: Fiber.Fiber<unknown, unknown>) =>
   new Promise<Exit.Exit<unknown, unknown>>((resolve) => fiber.addObserver(resolve));
 /** Rule 14: the journal owns the attempt; the submitting request is only its causal parent. */
@@ -532,7 +534,7 @@ export class ActionJournal implements ReceiptReader {
     private readonly stamp: () => ReceiptStamp | null = () => null,
     private readonly retain = RETAIN_RECEIPTS,
     /** Absent only on a read-side journal (a restart reader); such a journal admits nothing. */
-    private readonly attempts?: Attempts,
+    private readonly owners?: Attempts,
   ) {}
   /** Bound once when the host/demo/test runtime acquires its exact bridge and Work owner. */
   bindCommands(environment: CommandEnvironment): void {
@@ -783,7 +785,7 @@ export class ActionJournal implements ReceiptReader {
   }
   async wait(id: string): Promise<ActionReceipt> {
     await this.loadOnce();
-    const attempt = this.attempts && FiberMap.getUnsafe(this.attempts.map, id);
+    const attempt = this.owners && FiberMap.getUnsafe(this.owners.attempts.map, id);
     const exit = attempt?._tag === "Some" ? await joined(attempt.value) : undefined;
     if (exit && Exit.isFailure(exit)) throw Cause.squash(exit.cause);
     const row = (await this.list(undefined, id))[0];
@@ -1171,7 +1173,7 @@ export class ActionJournal implements ReceiptReader {
   ): Promise<ActionReceipt> {
     const inputRefusal = this.inputContext?.check({ kind: "command", key: raw.key });
     if (inputRefusal) throw inputRefusal;
-    const attempts = this.attempts;
+    const attempts = this.owners?.attempts;
     if (!attempts) throw Error("This journal has no attempt owner; it admits nothing");
     const admission = actionAdmissionSchema.parse(structuredClone(raw));
     const portable = commands[admission.key as keyof typeof commands];
@@ -1335,7 +1337,7 @@ export class ActionJournal implements ReceiptReader {
             !original ||
             original.id === row.id ||
             original.prepared.state !== "ready" ||
-            (this.attempts && FiberMap.hasUnsafe(this.attempts.map, original.id)) ||
+            (this.owners && FiberMap.hasUnsafe(this.owners.attempts.map, original.id)) ||
             original.state === "running" ||
             original.state === "waiting" ||
             original.steps.some((step) => step.state === "unknown" || step.state === "running")
@@ -1898,9 +1900,10 @@ export class ActionJournal implements ReceiptReader {
     const step = row.steps.find((step) => step.state === "running" && step.kind === "native");
     if (step) {
       const cancel = this.environment?.resolve(row.key).cancel;
-      if (!cancel || !this.attempts) throw Error("Native cancellation is unavailable");
-      // op.cancel to Revit, owned by the journal like the attempt (rule 11: never an interrupt).
-      const exit = await joined(this.attempts.fork(`cancel:${step.id}`, cancel(step.id)));
+      if (!cancel || !this.owners) throw Error("Native cancellation is unavailable");
+      // op.cancel to Revit, owned by the journal like the attempt (rule 11: never an interrupt). A
+      // concurrent Stop on this step joins the send already running and sends nothing new.
+      const exit = await joined(this.owners.cancels.fork(step.id, cancel(step.id)));
       if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
     }
     return (await this.list(undefined, id))[0] ?? row;
@@ -2039,8 +2042,9 @@ export class ActionJournal implements ReceiptReader {
     if (this.flushed) return;
     this.closing = true;
     // Join, never interrupt: an admitted command settles from its own evidence (rule 10).
-    for (let open = [...(this.attempts?.map ?? [])]; open.length; open = [...this.attempts!.map])
-      await Promise.all(open.map(([, fiber]) => joined(fiber)));
+    const open = () => this.owners ? [...this.owners.attempts.map, ...this.owners.cancels.map] : [];
+    for (let fibers = open(); fibers.length; fibers = open())
+      await Promise.all(fibers.map(([, fiber]) => joined(fiber)));
     await this.serial(async () => {
       this.flushed = true;
     });
