@@ -106,6 +106,8 @@ export const ductsNetwork = read("ducts.network", {
     };
   },
 });
+// Built once: z.json() constructs a lazy union per call, and wire visits every leaf of the pricing result.
+const jsonLeaf = z.json();
 /** The wire carries every Map entry and Set member, never JSON.stringify's empty object. */
 function wire(value: unknown): z.infer<ReturnType<typeof z.json>> {
   if (value instanceof Map)
@@ -118,7 +120,7 @@ function wire(value: unknown): z.infer<ReturnType<typeof z.json>> {
         .filter(([, item]) => item !== undefined)
         .map(([key, item]) => [key, wire(item)]),
     );
-  return z.json().parse(value);
+  return jsonLeaf.parse(value);
 }
 export const ductsPricing = read("ducts.pricing", {
   input: ductsNetworkArgs,
