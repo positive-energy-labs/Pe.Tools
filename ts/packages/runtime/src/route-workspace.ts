@@ -732,7 +732,8 @@ export class RouteWorkspace {
   }
 
   /**
-   * Undo or redo the last step of this Work's one journal, whoever wrote it (ADR 0028 noun 4).
+   * Undo or redo the last step of this Work's one journal, whoever wrote it (ADR 0028 noun 4), or
+   * with `own` the caller's own last step, leaving the other author's (findings, ADR 0035 rule 9).
    * The restore is the same write a person's Undo sends: one `restore` revision whose inverse is
    * the redo. It refuses, writing nothing, when the step's paths changed elsewhere.
    */
@@ -742,6 +743,7 @@ export class RouteWorkspace {
     by: WorkAuthor,
     direction: "undo" | "redo",
     expectedRevision: number,
+    own = false,
   ): Promise<RouteStateWriteResult> {
     this.#authorize(direction);
     const snapshot = await this.viewUncaptured(scope, route);
@@ -755,7 +757,7 @@ export class RouteWorkspace {
     const result = await journal[direction](async (write) => {
       accepted = await this.write(scope, route, by, write);
       return accepted;
-    });
+    }, undefined, own ? by : undefined);
     return result.ok && accepted
       ? accepted
       : refuse("refused", result.ok ? "Nothing restored" : result.message, "Re-read Work history.");
