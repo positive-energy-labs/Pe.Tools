@@ -258,7 +258,9 @@ export function makeCallRoute(
       let scope: HostSessionScope = identity.scope;
       if (entry.canonicalSession && scope.bridgeSessionId && !(entry.reading && composition?.retainedRead)) {
         const bridgeForScope = yield* RevitBridge;
-        const canonicalSession = yield* SdkSession.resolve(bridgeForScope, { id: scope.bridgeSessionId });
+        const canonicalSession = yield* SdkSession.resolve(bridgeForScope, { id: scope.bridgeSessionId }).pipe(
+          Effect.mapError((error) => new BridgeError(error.message, 409, { notDispatched: true })),
+        );
         scope = { ...scope, bridgeSessionId: canonicalSession.sessionId };
       }
       let bridgeSessionId = scope.bridgeSessionId;
