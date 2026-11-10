@@ -835,7 +835,6 @@ export class ReceiptExport extends Context.Service<ReceiptExport, ReceiptExporte
         }),
         ({ exporter, unbindNative }) =>
           Effect.promise(async () => {
-            await exporter.journal.close();
             unbindNative();
             if (receiptProducerPort === exporter) receiptProducerPort = undefined;
             await exporter.close();
