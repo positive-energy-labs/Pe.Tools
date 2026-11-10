@@ -48,6 +48,14 @@ def owner_home() -> Path:
     return Path(docs) / "Pe.Tools"
 
 
+def pod_build_skip(pods: Path):
+    # Old Pod build output is 1.5 GB of the 1.9 GB home and is rebuilt by the run: skip Pods/<pod>/output, obj, bin.
+    def skip(directory: str, names: list[str]) -> set[str]:
+        pod_dir = Path(directory).parent == pods
+        return {n for n in names if n in ("obj", "bin") or (pod_dir and n == "output")}
+    return skip
+
+
 def owner_files(roots: list[str]) -> dict:
     files = {}
     for root in roots:
@@ -264,7 +272,8 @@ def setup(run: str, args: list[str]) -> None:
         if os.name == "nt":
             destination = Path("\\\\?\\" + str(destination))
         if source.is_dir():
-            shutil.copytree(source, destination, symlinks=True)
+            shutil.copytree(source, destination, symlinks=True,
+                            ignore=pod_build_skip(source) if name == "Pods" else None)
         elif source.is_file():
             shutil.copy2(source, destination)
     models = [a.split("=", 1) for a in value_list(args, "--model")] or [[str(SAMPLE), "A.rvt"]]
