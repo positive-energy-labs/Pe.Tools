@@ -49,6 +49,8 @@ type CatalogEntry = HostOperationDefinition & { readonly requestSchemaJson: stri
   | { readonly key: "revit.catalog.loaded-families" }
   | { readonly key: "revit.catalog.parameter-bindings" }
   | { readonly key: "revit.catalog.parameter-evidence" }
+  | { readonly key: "revit.catalog.pipe-sizes" }
+  | { readonly key: "revit.catalog.piping-systems" }
   | { readonly key: "revit.catalog.project-browser" }
   | { readonly key: "revit.catalog.project-index" }
   | { readonly key: "revit.catalog.schedules" }
@@ -1477,6 +1479,77 @@ export const hostOpCatalog: readonly CatalogEntry[] = [
     "usesTransactions": false,
     "subject": "Document",
     "touches": "Metadata",
+    "effect": "Read",
+    "cardinality": "One",
+    "internal": false,
+    "rollsBack": false
+  },
+  {
+    "key": "revit.catalog.pipe-sizes",
+    "displayName": "Read Pipe Size Catalog",
+    "intent": "Read",
+    "costTier": "Cheap",
+    "visibility": "EscalationVisible",
+    "needs": "project-document",
+    "description": "Read this document's bounded pipe segment catalog with each segment's UniqueId, ElementId, name and nominal, inner and outer diameters in Revit internal feet. Refuses segment or size overflow rather than truncating. Read-only.",
+    "searchTerms": [
+      "piping",
+      "pipe-sizes",
+      "segments",
+      "diameter",
+      "hydronic"
+    ],
+    "requestExamples": [
+      {
+        "name": "example",
+        "description": "Example request.",
+        "json": "{ \"maxSegments\": 256, \"maxSizesPerSegment\": 512 }"
+      }
+    ],
+    "safeDefaultRequestJson": "{}",
+    "callGuidance": [],
+    "requestSchemaJson": "{\r\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\r\n  \"title\": \"PipeSizeCatalogRequest\",\r\n  \"type\": \"object\",\r\n  \"additionalProperties\": false,\r\n  \"properties\": {\r\n    \"maxSegments\": {\r\n      \"type\": \"integer\",\r\n      \"format\": \"int32\"\r\n    },\r\n    \"maxSizesPerSegment\": {\r\n      \"type\": \"integer\",\r\n      \"format\": \"int32\"\r\n    }\r\n  }\r\n}",
+    "responseSchemaJson": "{\r\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\r\n  \"title\": \"PipeSizeCatalogData\",\r\n  \"type\": \"object\",\r\n  \"additionalProperties\": false,\r\n  \"required\": [\r\n    \"segments\"\r\n  ],\r\n  \"properties\": {\r\n    \"segments\": {\r\n      \"type\": \"array\",\r\n      \"items\": {\r\n        \"$ref\": \"#/definitions/PipeSegmentRow\"\r\n      }\r\n    }\r\n  },\r\n  \"definitions\": {\r\n    \"PipeSegmentRow\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"uniqueId\",\r\n        \"elementId\",\r\n        \"name\",\r\n        \"sizes\"\r\n      ],\r\n      \"properties\": {\r\n        \"uniqueId\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"elementId\": {\r\n          \"type\": \"integer\",\r\n          \"format\": \"int64\"\r\n        },\r\n        \"name\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"sizes\": {\r\n          \"type\": \"array\",\r\n          \"items\": {\r\n            \"$ref\": \"#/definitions/PipeSizeRow\"\r\n          }\r\n        }\r\n      }\r\n    },\r\n    \"PipeSizeRow\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"nominalDiameterFt\",\r\n        \"innerDiameterFt\",\r\n        \"outerDiameterFt\"\r\n      ],\r\n      \"properties\": {\r\n        \"nominalDiameterFt\": {\r\n          \"type\": \"number\",\r\n          \"format\": \"double\"\r\n        },\r\n        \"innerDiameterFt\": {\r\n          \"type\": \"number\",\r\n          \"format\": \"double\"\r\n        },\r\n        \"outerDiameterFt\": {\r\n          \"type\": \"number\",\r\n          \"format\": \"double\"\r\n        }\r\n      }\r\n    }\r\n  }\r\n}",
+    "actor": "any",
+    "usesTransactions": false,
+    "subject": "Document",
+    "touches": "Metadata",
+    "effect": "Read",
+    "cardinality": "One",
+    "internal": false,
+    "rollsBack": false
+  },
+  {
+    "key": "revit.catalog.piping-systems",
+    "displayName": "Read Piping Systems",
+    "intent": "Read",
+    "costTier": "Cheap",
+    "visibility": "EscalationVisible",
+    "needs": "project-document",
+    "description": "Read a bounded roster of this document's piping systems and optionally one system's pipes, fittings and accessories. UniqueIds and ElementIds, system type and classification, flow, base equipment and its Out connector ids, sizes, length, segment, pipe type, physical connector peers and Revit-reported In/Out/Bidirectional direction. Optional facts are value, absent or error; direction is never inferred. Lengths and diameters are Revit internal feet, flow is internal cubic feet per second. Missing base equipment or Out connectors is explicit. Refuses overflow rather than truncating. Read-only.",
+    "searchTerms": [
+      "piping",
+      "hydronic",
+      "systems",
+      "pipes",
+      "flow",
+      "upstream"
+    ],
+    "requestExamples": [
+      {
+        "name": "example",
+        "description": "Example request.",
+        "json": "{ \"maxSystems\": 256, \"maxElements\": 4096 }"
+      }
+    ],
+    "safeDefaultRequestJson": "{}",
+    "callGuidance": [],
+    "requestSchemaJson": "{\r\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\r\n  \"title\": \"PipingSystemsRequest\",\r\n  \"type\": \"object\",\r\n  \"additionalProperties\": false,\r\n  \"properties\": {\r\n    \"systemUniqueId\": {\r\n      \"type\": [\r\n        \"null\",\r\n        \"string\"\r\n      ]\r\n    },\r\n    \"maxSystems\": {\r\n      \"type\": \"integer\",\r\n      \"format\": \"int32\"\r\n    },\r\n    \"maxElements\": {\r\n      \"type\": \"integer\",\r\n      \"format\": \"int32\"\r\n    }\r\n  }\r\n}",
+    "responseSchemaJson": "{\r\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\r\n  \"title\": \"PipingSystemsData\",\r\n  \"type\": \"object\",\r\n  \"additionalProperties\": false,\r\n  \"required\": [\r\n    \"systems\",\r\n    \"elements\"\r\n  ],\r\n  \"properties\": {\r\n    \"systems\": {\r\n      \"type\": \"array\",\r\n      \"items\": {\r\n        \"$ref\": \"#/definitions/PipingSystemRow\"\r\n      }\r\n    },\r\n    \"systemUniqueId\": {\r\n      \"type\": [\r\n        \"null\",\r\n        \"string\"\r\n      ]\r\n    },\r\n    \"elements\": {\r\n      \"type\": \"array\",\r\n      \"items\": {\r\n        \"$ref\": \"#/definitions/PipingMember\"\r\n      }\r\n    }\r\n  },\r\n  \"definitions\": {\r\n    \"PipingSystemRow\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"uniqueId\",\r\n        \"elementId\",\r\n        \"name\",\r\n        \"systemType\",\r\n        \"classification\",\r\n        \"flowCubicFeetPerSecond\",\r\n        \"source\"\r\n      ],\r\n      \"properties\": {\r\n        \"uniqueId\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"elementId\": {\r\n          \"type\": \"integer\",\r\n          \"format\": \"int64\"\r\n        },\r\n        \"name\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"systemType\": {\r\n          \"$ref\": \"#/definitions/PipingFactOfPipingElementRef\"\r\n        },\r\n        \"classification\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"flowCubicFeetPerSecond\": {\r\n          \"$ref\": \"#/definitions/PipingFactOfNullableDouble\"\r\n        },\r\n        \"source\": {\r\n          \"$ref\": \"#/definitions/PipingFactOfPipingSource\"\r\n        }\r\n      }\r\n    },\r\n    \"PipingFactOfPipingElementRef\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"state\",\r\n        \"value\"\r\n      ],\r\n      \"properties\": {\r\n        \"state\": {\r\n          \"$ref\": \"#/definitions/PipingReadState\"\r\n        },\r\n        \"value\": {\r\n          \"$ref\": \"#/definitions/PipingElementRef\"\r\n        },\r\n        \"error\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"string\"\r\n          ]\r\n        }\r\n      }\r\n    },\r\n    \"PipingReadState\": {\r\n      \"type\": \"string\",\r\n      \"description\": \"\",\r\n      \"x-enumNames\": [\r\n        \"Value\",\r\n        \"Absent\",\r\n        \"Error\"\r\n      ],\r\n      \"enum\": [\r\n        \"Value\",\r\n        \"Absent\",\r\n        \"Error\"\r\n      ]\r\n    },\r\n    \"PipingElementRef\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"uniqueId\",\r\n        \"elementId\",\r\n        \"name\"\r\n      ],\r\n      \"properties\": {\r\n        \"uniqueId\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"elementId\": {\r\n          \"type\": \"integer\",\r\n          \"format\": \"int64\"\r\n        },\r\n        \"name\": {\r\n          \"type\": \"string\"\r\n        }\r\n      }\r\n    },\r\n    \"PipingFactOfNullableDouble\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"state\"\r\n      ],\r\n      \"properties\": {\r\n        \"state\": {\r\n          \"$ref\": \"#/definitions/PipingReadState\"\r\n        },\r\n        \"value\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"number\"\r\n          ],\r\n          \"format\": \"double\"\r\n        },\r\n        \"error\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"string\"\r\n          ]\r\n        }\r\n      }\r\n    },\r\n    \"PipingFactOfPipingSource\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"state\",\r\n        \"value\"\r\n      ],\r\n      \"properties\": {\r\n        \"state\": {\r\n          \"$ref\": \"#/definitions/PipingReadState\"\r\n        },\r\n        \"value\": {\r\n          \"$ref\": \"#/definitions/PipingSource\"\r\n        },\r\n        \"error\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"string\"\r\n          ]\r\n        }\r\n      }\r\n    },\r\n    \"PipingSource\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"equipment\",\r\n        \"outConnectorIds\"\r\n      ],\r\n      \"properties\": {\r\n        \"equipment\": {\r\n          \"$ref\": \"#/definitions/PipingElementRef\"\r\n        },\r\n        \"outConnectorIds\": {\r\n          \"type\": \"array\",\r\n          \"items\": {\r\n            \"type\": \"integer\",\r\n            \"format\": \"int32\"\r\n          }\r\n        }\r\n      }\r\n    },\r\n    \"PipingMember\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"uniqueId\",\r\n        \"elementId\",\r\n        \"name\",\r\n        \"kind\",\r\n        \"flowCubicFeetPerSecond\",\r\n        \"nominalDiameterFt\",\r\n        \"innerDiameterFt\",\r\n        \"lengthFt\",\r\n        \"segment\",\r\n        \"pipeType\",\r\n        \"connectors\"\r\n      ],\r\n      \"properties\": {\r\n        \"uniqueId\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"elementId\": {\r\n          \"type\": \"integer\",\r\n          \"format\": \"int64\"\r\n        },\r\n        \"name\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"kind\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"flowCubicFeetPerSecond\": {\r\n          \"$ref\": \"#/definitions/PipingFactOfNullableDouble\"\r\n        },\r\n        \"nominalDiameterFt\": {\r\n          \"$ref\": \"#/definitions/PipingFactOfNullableDouble\"\r\n        },\r\n        \"innerDiameterFt\": {\r\n          \"$ref\": \"#/definitions/PipingFactOfNullableDouble\"\r\n        },\r\n        \"lengthFt\": {\r\n          \"$ref\": \"#/definitions/PipingFactOfNullableDouble\"\r\n        },\r\n        \"segment\": {\r\n          \"$ref\": \"#/definitions/PipingFactOfPipingElementRef\"\r\n        },\r\n        \"pipeType\": {\r\n          \"$ref\": \"#/definitions/PipingFactOfPipingElementRef\"\r\n        },\r\n        \"connectors\": {\r\n          \"type\": \"array\",\r\n          \"items\": {\r\n            \"$ref\": \"#/definitions/PipingPort\"\r\n          }\r\n        }\r\n      }\r\n    },\r\n    \"PipingPort\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"connectorId\",\r\n        \"direction\",\r\n        \"peers\"\r\n      ],\r\n      \"properties\": {\r\n        \"connectorId\": {\r\n          \"type\": \"integer\",\r\n          \"format\": \"int32\"\r\n        },\r\n        \"direction\": {\r\n          \"$ref\": \"#/definitions/PipingFactOfString\"\r\n        },\r\n        \"peers\": {\r\n          \"type\": \"array\",\r\n          \"items\": {\r\n            \"$ref\": \"#/definitions/PipingPeer\"\r\n          }\r\n        }\r\n      }\r\n    },\r\n    \"PipingFactOfString\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"state\",\r\n        \"value\"\r\n      ],\r\n      \"properties\": {\r\n        \"state\": {\r\n          \"$ref\": \"#/definitions/PipingReadState\"\r\n        },\r\n        \"value\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"error\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"string\"\r\n          ]\r\n        }\r\n      }\r\n    },\r\n    \"PipingPeer\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"uniqueId\",\r\n        \"elementId\",\r\n        \"connectorId\"\r\n      ],\r\n      \"properties\": {\r\n        \"uniqueId\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"elementId\": {\r\n          \"type\": \"integer\",\r\n          \"format\": \"int64\"\r\n        },\r\n        \"connectorId\": {\r\n          \"type\": \"integer\",\r\n          \"format\": \"int32\"\r\n        }\r\n      }\r\n    }\r\n  }\r\n}",
+    "actor": "any",
+    "usesTransactions": false,
+    "subject": "Document",
+    "touches": "Topology",
     "effect": "Read",
     "cardinality": "One",
     "internal": false,

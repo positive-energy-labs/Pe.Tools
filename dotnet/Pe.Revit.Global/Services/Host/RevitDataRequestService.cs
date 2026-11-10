@@ -31,6 +31,7 @@ using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Ducts;
+using Pe.Shared.RevitData.Piping;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.RevitData.Takeoffs;
@@ -46,6 +47,14 @@ namespace Pe.Revit.Global.Services.Host;
 ///     Bridge-backed Revit data requests for browser routes.
 /// </summary>
 internal sealed class RevitDataRequestService {
+    [Op("revit.catalog.piping-systems", OpSubject.Document, OpTouches.Topology, OpEffect.Read, Title = "Read Piping Systems", Does = "Read a bounded roster of this document's piping systems and optionally one system's pipes, fittings and accessories. UniqueIds and ElementIds, system type and classification, flow, base equipment and its Out connector ids, sizes, length, segment, pipe type, physical connector peers and Revit-reported In/Out/Bidirectional direction. Optional facts are value, absent or error; direction is never inferred. Lengths and diameters are Revit internal feet, flow is internal cubic feet per second. Missing base equipment or Out connectors is explicit. Refuses overflow rather than truncating. Read-only.", Finds = ["piping", "hydronic", "systems", "pipes", "flow", "upstream"], Cost = OpCost.Bounded, Example = "{ \"maxSystems\": 256, \"maxElements\": 4096 }")]
+    private static PipingSystemsData GetPipingSystems(PipingSystemsRequest request, ProjectDocument document) =>
+        Pe.Revit.Global.Lib.Mep.PipingReads.Systems(document.Value, request);
+
+    [Op("revit.catalog.pipe-sizes", OpSubject.Document, OpTouches.Metadata, OpEffect.Read, Title = "Read Pipe Size Catalog", Does = "Read this document's bounded pipe segment catalog with each segment's UniqueId, ElementId, name and nominal, inner and outer diameters in Revit internal feet. Refuses segment or size overflow rather than truncating. Read-only.", Finds = ["piping", "pipe-sizes", "segments", "diameter", "hydronic"], Cost = OpCost.Bounded, Example = "{ \"maxSegments\": 256, \"maxSizesPerSegment\": 512 }")]
+    private static PipeSizeCatalogData GetPipeSizes(PipeSizeCatalogRequest request, ProjectDocument document) =>
+        Pe.Revit.Global.Lib.Mep.PipingReads.Sizes(document.Value, request);
+
     [Op("takeoffs.snapshot", OpSubject.Region, OpTouches.Geometry, OpEffect.Read, Does = "Read Takeoff zones and rooms for explicit view names or zone GUIDs. Empty scope reads only model status and source identity without region geometry.", Title = "Get Takeoff Snapshot", Finds = ["takeoffs", "snapshot", "zones", "rooms", "filled-regions"], Cost = OpCost.Bounded)]
     private static TakeoffSnapshotResponse GetTakeoffSnapshotCore(TakeoffReadRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document =>

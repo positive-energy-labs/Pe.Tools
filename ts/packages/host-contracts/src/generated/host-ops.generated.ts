@@ -4870,6 +4870,113 @@ export namespace RevitCatalogParameterEvidence {
   }
 }
 
+/** Read this document's bounded pipe segment catalog with each segment's UniqueId, ElementId, name and nominal, inner and outer diameters in Revit internal feet. Refuses segment or size overflow rather than truncating. Read-only. */
+export namespace RevitCatalogPipeSizes {
+  export namespace Req {
+    export interface Request {
+      maxSegments?: number;
+      maxSizesPerSegment?: number;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      segments: PipeSegmentRow[];
+    }
+    export interface PipeSegmentRow {
+      uniqueId: string;
+      elementId: number;
+      name: string;
+      sizes: PipeSizeRow[];
+    }
+    export interface PipeSizeRow {
+      nominalDiameterFt: number;
+      innerDiameterFt: number;
+      outerDiameterFt: number;
+    }
+  }
+}
+
+/** Read a bounded roster of this document's piping systems and optionally one system's pipes, fittings and accessories. UniqueIds and ElementIds, system type and classification, flow, base equipment and its Out connector ids, sizes, length, segment, pipe type, physical connector peers and Revit-reported In/Out/Bidirectional direction. Optional facts are value, absent or error; direction is never inferred. Lengths and diameters are Revit internal feet, flow is internal cubic feet per second. Missing base equipment or Out connectors is explicit. Refuses overflow rather than truncating. Read-only. */
+export namespace RevitCatalogPipingSystems {
+  export namespace Req {
+    export interface Request {
+      systemUniqueId?: null | string;
+      maxSystems?: number;
+      maxElements?: number;
+    }
+  }
+  export namespace Res {
+    export type PipingReadState = "Value" | "Absent" | "Error";
+
+    export interface Response {
+      systems: PipingSystemRow[];
+      systemUniqueId?: null | string;
+      elements: PipingMember[];
+    }
+    export interface PipingSystemRow {
+      uniqueId: string;
+      elementId: number;
+      name: string;
+      systemType: PipingFactOfPipingElementRef;
+      classification: string;
+      flowCubicFeetPerSecond: PipingFactOfNullableDouble;
+      source: PipingFactOfPipingSource;
+    }
+    export interface PipingFactOfPipingElementRef {
+      state: PipingReadState;
+      value: PipingElementRef;
+      error?: null | string;
+    }
+    export interface PipingElementRef {
+      uniqueId: string;
+      elementId: number;
+      name: string;
+    }
+    export interface PipingFactOfNullableDouble {
+      state: PipingReadState;
+      value?: null | number;
+      error?: null | string;
+    }
+    export interface PipingFactOfPipingSource {
+      state: PipingReadState;
+      value: PipingSource;
+      error?: null | string;
+    }
+    export interface PipingSource {
+      equipment: PipingElementRef;
+      outConnectorIds: number[];
+    }
+    export interface PipingMember {
+      uniqueId: string;
+      elementId: number;
+      name: string;
+      kind: string;
+      flowCubicFeetPerSecond: PipingFactOfNullableDouble;
+      nominalDiameterFt: PipingFactOfNullableDouble;
+      innerDiameterFt: PipingFactOfNullableDouble;
+      lengthFt: PipingFactOfNullableDouble;
+      segment: PipingFactOfPipingElementRef;
+      pipeType: PipingFactOfPipingElementRef;
+      connectors: PipingPort[];
+    }
+    export interface PipingPort {
+      connectorId: number;
+      direction: PipingFactOfString;
+      peers: PipingPeer[];
+    }
+    export interface PipingFactOfString {
+      state: PipingReadState;
+      value: string;
+      error?: null | string;
+    }
+    export interface PipingPeer {
+      uniqueId: string;
+      elementId: number;
+      connectorId: number;
+    }
+  }
+}
+
 /** Read bounded Project Browser organization for views, sheets, and schedules as navigation/provenance metadata. */
 export namespace RevitCatalogProjectBrowser {
   export namespace Req {
@@ -11090,6 +11197,8 @@ export interface HostOps {
   "revit.catalog.loaded-families": { request: RevitCatalogLoadedFamilies.Req.Request; response: RevitCatalogLoadedFamilies.Res.Response };
   "revit.catalog.parameter-bindings": { request: RevitCatalogParameterBindings.Req.Request; response: RevitCatalogParameterBindings.Res.Response };
   "revit.catalog.parameter-evidence": { request: RevitCatalogParameterEvidence.Req.Request; response: RevitCatalogParameterEvidence.Res.Response };
+  "revit.catalog.pipe-sizes": { request: RevitCatalogPipeSizes.Req.Request; response: RevitCatalogPipeSizes.Res.Response };
+  "revit.catalog.piping-systems": { request: RevitCatalogPipingSystems.Req.Request; response: RevitCatalogPipingSystems.Res.Response };
   "revit.catalog.project-browser": { request: RevitCatalogProjectBrowser.Req.Request; response: RevitCatalogProjectBrowser.Res.Response };
   "revit.catalog.project-index": { request: RevitCatalogProjectIndex.Req.Request; response: RevitCatalogProjectIndex.Res.Response };
   "revit.catalog.schedules": { request: RevitCatalogSchedules.Req.Request; response: RevitCatalogSchedules.Res.Response };
@@ -11192,6 +11301,8 @@ export const hostOpKeys = [
   "revit.catalog.loaded-families",
   "revit.catalog.parameter-bindings",
   "revit.catalog.parameter-evidence",
+  "revit.catalog.pipe-sizes",
+  "revit.catalog.piping-systems",
   "revit.catalog.project-browser",
   "revit.catalog.project-index",
   "revit.catalog.schedules",
@@ -11294,6 +11405,8 @@ export const hostOpSafety = {
   "revit.catalog.loaded-families": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.catalog.parameter-bindings": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.catalog.parameter-evidence": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.catalog.pipe-sizes": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.catalog.piping-systems": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Topology","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.catalog.project-browser": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.catalog.project-index": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.catalog.schedules": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
