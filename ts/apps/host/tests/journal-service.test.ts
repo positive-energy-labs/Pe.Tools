@@ -64,7 +64,7 @@ effectTest("the journal Layer closes the journal after the bridge releases, and 
     const close = journal.close.bind(journal);
     let bridgeSettledAtClose: boolean | undefined;
     journal.close = async () => {
-      bridgeSettledAtClose = call.pollUnsafe() !== undefined;
+      bridgeSettledAtClose ??= call.pollUnsafe() !== undefined; // the first close decides
       await close();
     };
     const answer = (requestId: string) =>
