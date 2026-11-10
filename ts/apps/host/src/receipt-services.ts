@@ -1,7 +1,8 @@
 import { join } from "node:path";
-import { Clock, Context, Effect, Layer } from "effect";
-import { receiptStampSchema, type ReceiptStamp } from "@pe/agent-contracts";
-import { ActionJournal } from "./action-journal.ts";
+import { Clock, Context, Effect, FiberMap, Layer } from "effect";
+import { NodeHttpClient, NodeServices } from "@effect/platform-node";
+import { receiptStampSchema, type ActionReceipt, type ReceiptStamp } from "@pe/agent-contracts";
+import { ActionJournal, type AttemptHost } from "./action-journal.ts";
 import { HostLog } from "./host-log.ts";
 import { hostStateDir } from "./host-ownership.ts";
 
@@ -18,13 +19,28 @@ export class HostLogService extends Context.Service<HostLogService, HostLog>()("
   }
 }
 
+/**
+ * A journal whose admitted attempts are fibers in a FiberMap of the caller's scope. Closing that
+ * scope without `close()` interrupts them; the service Layer joins them first.
+ */
+export const makeActionJournal = Effect.fn("ActionJournal.make")(function* (
+  path: string,
+  now: () => number,
+  stamp?: () => ReceiptStamp | null,
+  retain?: number,
+) {
+  const map = yield* FiberMap.make<string, ActionReceipt, unknown>();
+  const fork = yield* FiberMap.runtime(map)<AttemptHost>();
+  return new ActionJournal(path, now, stamp, retain, { map, fork });
+});
+
 /** The host's one ActionJournal (the receipt journal, not the Work journal). */
 export class ActionJournalService extends Context.Service<ActionJournalService, ActionJournal>()(
   "pe/ActionJournal",
 ) {
   /**
    * Admit the stamp once, open the journal, and append every committed receipt revision to the
-   * log in commit order. Provide it outermost: its finalizer joins admitted commands and flushes
+   * log in commit order. Provide it outermost: its finalizer joins every attempt fiber and flushes
    * after the bridge and threads close (the log, acquired first, is released after), so a
    * successor runtime never borrows this journal.
    */
@@ -37,7 +53,7 @@ export class ActionJournalService extends Context.Service<ActionJournalService, 
           return yield* Effect.die(Error("The host receipt owner requires a host stamp"));
         const log = yield* HostLogService;
         const clock = yield* Clock.clockWith(Effect.succeed);
-        const journal = new ActionJournal(
+        const journal = yield* makeActionJournal(
           join(dir, "partition-operations.json"),
           () => clock.currentTimeMillisUnsafe(),
           () => admitted,
@@ -51,7 +67,8 @@ export class ActionJournalService extends Context.Service<ActionJournalService, 
         );
         return journal;
       }),
-    );
+      // The services every owned attempt runs with, received once here (never per call).
+    ).pipe(Layer.provide(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)));
   }
   /** The journal with its log: both services, for a runtime that owns them. */
   static live(stamp: ReceiptStamp | null, dir: string = hostStateDir()) {

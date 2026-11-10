@@ -14,8 +14,8 @@ import { admittedCommandReadIdentity } from "./command-read-identity.ts";
 import { RequestIdentity } from "./request-services.ts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { z } from "zod";
-import { invokeBridge, type RevitBridge } from "./bridge.ts";
-import { command, refused, type CommandContext } from "./command-executor.ts";
+import type { RevitBridge } from "./bridge.ts";
+import { command, nativeStep, refused, type CommandContext } from "./command-executor.ts";
 import type { ActionExecution } from "./action-journal.ts";
 import { lifetime } from "./document-lifetime.ts";
 import { ductsReadings } from "./ducts-readings.ts";
@@ -330,7 +330,7 @@ export function ductsExecutors(
       },
     };
   };
-  const run = async (ctx: CommandContext, execution: ActionExecution, kind: Kind, phase: Phase) => {
+  const run = (ctx: CommandContext, execution: ActionExecution, kind: Kind, phase: Phase) => Effect.gen(function* () {
     const p = prepared.parse(execution.prepared),
       target = targetOf(ctx);
     // Default slot initialization is bookkeeping, never an authored model change.
@@ -361,11 +361,11 @@ export function ductsExecutors(
     // The losses plan reads through the native Read sibling; a rehearsal calls its rolled-back TransactRead;
     // only apply reaches the ModelWrite leaf. Heal and fan plans never get here: the write boundary seals them.
     const key = phase === "apply" ? entry.key : entry.native;
-    const value = await execution.step(
+    const value = yield* execution.step(
       "native",
       key,
       p.input,
-      (id) => invokeBridge(bridge, target, key, p.input, id),
+      (id) => nativeStep(bridge, target, key, p.input, id),
       { process: p.process as import("@pe/agent-contracts").NativeProcess },
     );
     // Retain the review and its read evidence. A refusal blocks the whole intent at the write boundary;
@@ -389,26 +389,26 @@ export function ductsExecutors(
     const fanPaths = paths.filter((path) => tools.fans.work.editable.some((pattern) => pattern[0] === path[0]),
     );
     const ductPaths = paths.filter((path) => !fanPaths.includes(path));
-    const retired = ductPaths.length ? await execution.retireWork(handle.key, "ducts", ductPaths) : undefined;
-    if (fanPaths.length) await execution.retireWork({ ...handle.key, route: "fans" }, "fans", fanPaths);
+    const retired = ductPaths.length ? yield* execution.retireWork(handle.key, "ducts", ductPaths) : undefined;
+    if (fanPaths.length) yield* execution.retireWork({ ...handle.key, route: "fans" }, "fans", fanPaths);
     return {
       value,
       derivedRequest: p.input,
       target: { session: target.session, document: null },
       ...(retired ? { retired } : {}),
     };
-  };
+  });
   return {
     "ducts.refresh": command(commands["ducts.refresh"], z.null(), {
       bind: async (ctx) => {
         targetOf(ctx);
         return { effects: [] };
       },
-      run: async (ctx) => {
+      run: (ctx) => Effect.sync(() => {
         const target = targetOf(ctx);
         ductsReadings(bridge).refresh(target);
         return { target, refreshed: true };
-      },
+      }),
     }),
     // The registry wraps these at boot: `commands[key].writeBoundary` (or `workIntent` for a rehearsal) carries
     // the binding. ducts.plan-heal and ducts.plan-assign-fan have no executor: the registry binds the apply's in

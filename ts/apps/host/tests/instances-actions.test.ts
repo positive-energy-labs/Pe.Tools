@@ -1,4 +1,4 @@
-import { testHostInputs } from "./effect-test.ts";
+import { testHostInputs, journalAt } from "./effect-test.ts";
 import { Layer, Effect } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
 import { existsSync } from "node:fs";
@@ -6,7 +6,6 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { instancesSessionSelection } from "@pe/agent-contracts";
-import { ActionJournal } from "../src/action-journal.ts";
 import { HOST_CONTEXT_HEADER, HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import { makeCallRoute } from "../src/call-route.ts";
@@ -139,7 +138,7 @@ async function setup(
       resolved: reply.resolved ?? null,
     });
   };
-  const owner = new ActionJournal(join(dir, "actions.json"), Date.now);
+  const owner = journalAt(join(dir, "actions.json"), Date.now);
   cleanup.push(() => owner.close());
   const peaWork = join(dir, "pea-work");
   const deps = { sdk, peaWork };
@@ -250,9 +249,7 @@ async function setup(
         sdkOnlyBridge,
         captureStore(join(dir, "captures")),
         deps,
-        async () => {
-          throw Error("Instances must dispatch through the SDK");
-        },
+        () => Effect.fail(Error("Instances must dispatch through the SDK")),
       );
       bound = true;
     }

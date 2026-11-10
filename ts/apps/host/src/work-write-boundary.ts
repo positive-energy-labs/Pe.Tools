@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { createHash } from "node:crypto";
 import { type DocumentMarks, type DocumentRef } from "./document-marks.ts";
 import { lifetime } from "./document-lifetime.ts";
@@ -149,7 +150,7 @@ export function workIntentBoundary(
         prepare: async () => ({ input, value: executor.prepared.parse(await bound.prepare?.()) }),
       };
     },
-    run: async (ctx, execution) => {
+    run: (ctx, execution) => {
       const p = intentPrepared.parse(execution.prepared);
       return executor.run(withInput(ctx, p.input), { ...execution, prepared: p.value });
     },
@@ -303,7 +304,7 @@ export function workWriteBoundary(
         prepare,
       };
     },
-    run: async (ctx, execution) => {
+    run: (ctx, execution) => Effect.gen(function* () {
       const p = preparedSchema.parse(execution.prepared);
       if (p.previewOnly && !ownsPreview)
         return {
@@ -314,7 +315,7 @@ export function workWriteBoundary(
           authoredIntent: p.input,
           seal: p.seal,
         };
-      const result = await executor.run(withInput(ctx, p.input), {
+      const result = yield* executor.run(withInput(ctx, p.input), {
         ...execution,
         prepared: p.value,
       });
@@ -322,7 +323,7 @@ export function workWriteBoundary(
       if (!p.previewOnly && retires) {
         const paths = retires(result);
         if (paths.length)
-          await execution.retireWork((p.input.work as WorkHandle).key, route, paths);
+          yield* execution.retireWork((p.input.work as WorkHandle).key, route, paths);
       }
       return {
         ...(result as object),
@@ -330,7 +331,7 @@ export function workWriteBoundary(
         derivedRequest: project(p.value).request,
         seal: p.seal,
       };
-    },
+    }),
     recover: executor.recover
       ? (step, prepared, target) =>
           executor.recover!(step, preparedSchema.parse(prepared).value, target)

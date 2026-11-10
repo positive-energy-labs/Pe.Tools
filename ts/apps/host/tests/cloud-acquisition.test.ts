@@ -6,13 +6,12 @@ import { join } from "node:path";
 import { instancesLaunchSchema } from "@pe/agent-contracts";
 import { acquiredOpenIds, foldAcquisitions, planAcquisition } from "../src/acquisition.ts";
 import { downloadCloudVersion } from "../src/cloud-version.ts";
-import { ActionJournal } from "../src/action-journal.ts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import { Effect } from "effect";
 import { crossingOf } from "./callers.ts";
 import { replay } from "./sdk-replay.ts";
 import { unavailableShare } from "../src/machine.ts";
-import { detachedBridge, captureStore, machineOwner } from "./effect-test.ts";
+import { detachedBridge, captureStore, machineOwner, journalAt } from "./effect-test.ts";
 import { unreadLeg } from "../src/update-reader.ts";
 const folders: string[] = [];
 afterEach(async () => {
@@ -131,7 +130,7 @@ test("a changed version or model identity refuses before download and allocation
 });
 test("recorded SDK envelopes: only the downloaded local work file crosses the acquisition open boundary", async () => {
   const dir = await folder();
-  const owner = new ActionJournal(join(dir, "actions.json"), Date.now);
+  const owner = journalAt(join(dir, "actions.json"), Date.now);
   const base = JSON.parse(replay("session-list"));
   const row = base.result.sessions.find(
     (row: { case: string }) => row.case === "controlled-active",
@@ -210,9 +209,7 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
           fetch: apsResponses(),
         }),
     },
-    async () => {
-      throw Error("Instances must dispatch through the SDK");
-    },
+    () => Effect.fail(Error("Instances must dispatch through the SDK")),
   );
   const started = await owner.invoke(
     {

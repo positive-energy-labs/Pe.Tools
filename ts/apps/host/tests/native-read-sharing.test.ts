@@ -3,7 +3,7 @@ import type { HostBridgeEvent } from "../src/bridge.ts";
 import { opsCatalogRoute } from "../src/ops-catalog.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { nativeReadRoot, settingsSchemaRoute } from "../src/app.ts";
-import { testHostInputs } from "./effect-test.ts";
+import { testHostInputs, journalAt } from "./effect-test.ts";
 import { Context, Deferred, Effect, Fiber, Layer, Schema } from "effect";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { expect, test, vi } from "vite-plus/test";
@@ -409,7 +409,7 @@ test("retained /fans acquisition admits every caller and keeps miss, refresh and
       return { answer, terminal: Effect.as(answer, "native-acknowledged" as const) };
     }),
   });
-  const journal = new ActionJournal(join(dir, "journal.jsonl"), Date.now);
+  const journal = journalAt(join(dir, "journal.jsonl"), Date.now);
   const web = HttpRouter.toWebHandler(
     makeCallRoute(journal, undefined, { sdk: sdkSessions }, { captureHostOp: () => {} }).pipe(
       nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),

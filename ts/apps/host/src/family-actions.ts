@@ -77,6 +77,8 @@ import { assertFresh, type DocumentMarks } from "./document-marks.ts";
 import type { ActionExecution } from "./action-journal.ts";
 import {
   command,
+  io,
+  nativeStep,
   refused,
   StepFailure,
   type CommandContext,
@@ -418,6 +420,15 @@ const draftsSchema = z.strictObject({
 type Plan = z.infer<typeof planLeafSchema>;
 type Apply = z.infer<typeof applyLeafSchema>;
 type Plans = z.infer<typeof plansSchema>;
+type PlanCall = { key: string; input: unknown; process: NativeProcess };
+type PlanResult = {
+  plan: unknown;
+  included: Record<string, string>;
+  excluded?: unknown[];
+  orphaned?: string[];
+} & Record<string, unknown>;
+type PlanCalls = Generator<PlanCall, PlanResult, unknown>;
+type PlanRunner = (ctx: CommandContext, prepared: Plan) => PlanCalls;
 type Source = PodMemberSource | PodDraftSource;
 type DraftSource = {
   source: Source;
@@ -560,7 +571,7 @@ export function familyExecutors(
       "native",
       key,
       prepared.input,
-      (id) => invoke(bridge, targetOf(ctx), key, prepared.input, id),
+      (id) => nativeStep(bridge, targetOf(ctx), key, prepared.input, id),
       { process: prepared.process, ...(check ? { check } : {}) },
     );
   const planFamily = (
@@ -640,16 +651,14 @@ export function familyExecutors(
       },
     };
   };
-  const runFamilyPlan = async (
-    ctx: CommandContext,
-    prepared: Plan,
-    call: (key: string, input: unknown, process: NativeProcess) => Promise<unknown>,
-  ) => {
-    const result = (await call(
-        "family.plan",
-        { specJson: prepared.sealed.specJson },
-        prepared.process,
-      )) as FamilyPlan.Res.Response,
+  // A plan runs at prepare time (Promise) and as a journaled step (Effect): it yields its native
+  // calls and each driver answers them, so one algorithm serves both without a run call.
+  const runFamilyPlan = function* (ctx: CommandContext, prepared: Plan): PlanCalls {
+    const result = (yield {
+        key: "family.plan",
+        input: { specJson: prepared.sealed.specJson },
+        process: prepared.process,
+      }) as FamilyPlan.Res.Response,
       plan = result.families[0];
     if (result.diagnostics.length || result.families.length !== 1 || plan!.refusals.length)
       throw refused(
@@ -663,33 +672,29 @@ export function familyExecutors(
       included: { [String(plan!.familyId)]: plan!.planHash },
     };
   };
-  const runFamiliesPlan = async (
-    ctx: CommandContext,
-    prepared: Plan,
-    call: (key: string, input: unknown, process: NativeProcess) => Promise<unknown>,
-  ) => {
-    const catalog = (await call(
-      "revit.catalog.loaded-families",
-      familyCatalogRequest(prepared.planned.scope!),
-      prepared.process,
-    )) as RevitCatalogLoadedFamilies.Res.Response;
+  const runFamiliesPlan = function* (ctx: CommandContext, prepared: Plan): PlanCalls {
+    const catalog = (yield {
+      key: "revit.catalog.loaded-families",
+      input: familyCatalogRequest(prepared.planned.scope!),
+      process: prepared.process,
+    }) as RevitCatalogLoadedFamilies.Res.Response;
     const problem = familyCatalogProblem(catalog);
     if (problem) throw refused(problem.message);
     const resolved = [...new Set(catalog.families.map((x) => x.familyName))],
       outside = prepared.planned.familyNames?.filter((name) => !resolved.includes(name)) ?? [];
     if (outside.length)
       throw refused(`Families ${outside.join(", ")} are outside the reviewed scope`);
-    const result = (await call(
-      "families.plan",
-      {
+    const result = (yield {
+      key: "families.plan",
+      input: {
         specJson: prepared.sealed.specJson,
         ...(prepared.sealed.executionOptions
           ? { executionOptions: prepared.sealed.executionOptions }
           : {}),
         familyNames: prepared.planned.familyNames ?? resolved,
       },
-      prepared.process,
-    )) as FamiliesPlan.Res.Response;
+      process: prepared.process,
+    }) as FamiliesPlan.Res.Response;
     if (result.diagnostics.length)
       throw refused(result.diagnostics.map(diagnosticLine).join(" · "));
     const loaded = new Set(
@@ -712,7 +717,7 @@ export function familyExecutors(
   const aggregate = (
     ctx: CommandContext,
     results: {
-      plan: FfPlanEntry | FfPlanEntry[];
+      plan: unknown;
       included: Record<string, string>;
       excluded?: unknown[];
       orphaned?: string[];
@@ -726,39 +731,41 @@ export function familyExecutors(
     excluded: results.flatMap((x) => x.excluded ?? []),
     orphaned: results.flatMap((x) => x.orphaned ?? []),
   });
-  const runPreview = async (
-    ctx: CommandContext,
-    execution: ActionExecution,
-    run: (
-      ctx: CommandContext,
-      p: Plan,
-      call: (key: string, input: unknown, process: NativeProcess) => Promise<unknown>,
-    ) => Promise<any>,
-  ) => {
-    const results = [];
-    for (const item of leaves<Plan>(execution.prepared as Plans))
-      results.push(
-        await run(ctx, item, (key, input, process) =>
-          native(ctx, execution, key, { input, process }),
+  const runPreview = (ctx: CommandContext, execution: ActionExecution, run: PlanRunner) =>
+    Effect.gen(function* () {
+      const results = [];
+      for (const item of leaves<Plan>(execution.prepared as Plans)) {
+        const calls = run(ctx, item);
+        let next = calls.next();
+        while (!next.done)
+          next = calls.next(
+            yield* native(ctx, execution, next.value.key, {
+              input: next.value.input,
+              process: next.value.process,
+            }),
+          );
+        results.push(next.value);
+      }
+      return (execution.prepared as Plans).kind === "batch" ? aggregate(ctx, results) : results[0];
+    });
+  const directPlan = async (ctx: CommandContext, p: Plan, run: PlanRunner) => {
+    const calls = run(ctx, p);
+    let next = calls.next();
+    while (!next.done) {
+      const { key, input, process } = next.value;
+      await current(bridge, targetOf(ctx), p.planned.scope ? "project" : true, process);
+      next = calls.next(
+        await invoke(
+          bridge,
+          targetOf(ctx),
+          key,
+          input,
+          `${ctx.admission.id}:prepare:${digest(canonicalRouteInput(input)).slice(0, 16)}`,
         ),
       );
-    return (execution.prepared as Plans).kind === "batch" ? aggregate(ctx, results) : results[0];
+    }
+    return next.value;
   };
-  const directPlan = (
-    ctx: CommandContext,
-    p: Plan,
-    run: typeof runFamilyPlan | typeof runFamiliesPlan,
-  ) =>
-    run(ctx, p, async (key, input, process) => {
-      await current(bridge, targetOf(ctx), p.planned.scope ? "project" : true, process);
-      return invoke(
-        bridge,
-        targetOf(ctx),
-        key,
-        input,
-        `${ctx.admission.id}:prepare:${digest(canonicalRouteInput(input)).slice(0, 16)}`,
-      );
-    });
   const adopt = (ctx: CommandContext, id: string, key: string) => {
     const plan = ctx.read.receipts(id)[0];
     if (!plan || plan.key !== key || plan.state !== "succeeded" || plan.prepared.state !== "ready")
@@ -869,10 +876,10 @@ export function familyExecutors(
       ];
     });
   };
-  const runApply = async (ctx: CommandContext, execution: ActionExecution, project: boolean) => {
+  const runApply = (ctx: CommandContext, execution: ActionExecution, project: boolean) => Effect.gen(function* () {
     const results = [];
     for (const prepared of leaves<Apply>(execution.prepared as z.infer<typeof appliesSchema>)) {
-      const result = (await native(
+      const result = (yield* native(
           ctx,
           execution,
           project ? "families.apply" : "family.apply",
@@ -896,11 +903,12 @@ export function familyExecutors(
           .map((cell) => ["cells", cell]);
         if (consumed.patch && prepared.retirePatchNames?.every((name) => converged.has(name)))
           paths.push(["patch"]);
-        retired = await execution.retireWork(consumed.key, consumed.route, paths);
+        retired = yield* execution.retireWork(consumed.key, consumed.route, paths);
       }
       const readback: Record<string, unknown> = {},
         names = [...new Set(result.receipts.filter((x) => x.success).map((x) => x.familyName))];
       if (project && names.length)
+        yield* io(async () => {
         try {
           if (!prepared.readbackWork)
             throw Error("No reviewed Families reading is available for this apply");
@@ -929,6 +937,7 @@ export function familyExecutors(
         } catch (error) {
           readback.readbackError = `Families applied, but their loaded-project values could not be verified: ${error instanceof Error ? error.message : String(error)}`;
         }
+        });
       results.push({
         executionContext: targetOf(ctx),
         native: result,
@@ -937,7 +946,7 @@ export function familyExecutors(
       });
     }
     return (execution.prepared as { kind: string }).kind === "batch" ? { results } : results[0];
-  };
+  });
   const recover = async (
     step: import("@pe/agent-contracts").ActionStep,
     _prepared: unknown,
@@ -985,7 +994,7 @@ export function familyExecutors(
       return { step: unknown, evidence: { sdk: sdk.evidence, nativeRun: String(error) } };
     }
   };
-  type PlanRunner = typeof runFamilyPlan | typeof runFamiliesPlan;
+
   type Review = {
     family: true | "project";
     takenAt: string | null;
@@ -1170,13 +1179,13 @@ export function familyExecutors(
       }),
     };
   };
-  const fileCapture = async (
+  const fileCapture = (
     ctx: CommandContext,
     execution: ActionExecution,
     prepared: z.infer<typeof captureSchema>,
     operation: "family.capture" | "families.capture",
     specs: { familyId: number; content: string; unmodeled: unknown[] }[],
-  ) => {
+  ) => Effect.gen(function* () {
     const members: PodMemberWritten[] = [],
       runs = new Map<number, string>();
     for (const spec of specs) {
@@ -1187,28 +1196,27 @@ export function familyExecutors(
           `captures/${digest(ctx.admission.id).slice(0, 24)}-${spec.familyId}.json`,
         content: spec.content,
       };
-      const written = await execution.step("file", "pod.member.write", request, () =>
-        writeMemberOnce(deps, request, podsFor(ctx)),
+      const written = yield* execution.step("file", "pod.member.write", request, () => io(() => writeMemberOnce(deps, request, podsFor(ctx))),
       );
       members.push(written);
       runs.set(
         spec.familyId,
-        await writeCaptureRun(deps, podsFor(ctx), prepared.at, written, operation, {
+        yield* io(() => writeCaptureRun(deps, podsFor(ctx), prepared.at, written, operation, {
           "unmodeled.json": `${JSON.stringify(spec.unmodeled, null, 2)}\n`,
-        }),
+        })),
       );
     }
     return { members, runs };
-  };
+  });
   const familyCapture = command(commands["family.capture"], preparedFamilyCaptureSchema, {
     bind: async (ctx) => {
       if (ctx.admission.input.work)
         await ctx.selectWork(tools.family.work, ctx.admission.input.work, () => ({ cells: [] }));
       return captureBinding(ctx, true, ctx.admission.input);
     },
-    run: async (ctx, execution) => {
+    run: (ctx, execution) => Effect.gen(function* () {
       const prepared = execution.prepared,
-        captured = (await native(
+        captured = (yield* native(
           ctx,
           execution,
           "family.capture",
@@ -1227,7 +1235,7 @@ export function familyExecutors(
           capturedAt: prepared.at,
           evidence: { ...captured, origin: "capture", rfaPath: null, run: null },
         };
-      const { members, runs } = await fileCapture(ctx, execution, prepared, "family.capture", [
+      const { members, runs } = yield* fileCapture(ctx, execution, prepared, "family.capture", [
         spec,
       ]);
       return {
@@ -1235,7 +1243,7 @@ export function familyExecutors(
         member: members[0],
         evidence: { ...captured, origin: "capture", rfaPath: null, run: runs.get(0) ?? null },
       };
-    },
+    }),
     recover,
   });
   const familiesCapture = command(commands["families.capture"], preparedFamiliesCaptureSchema, {
@@ -1244,15 +1252,15 @@ export function familyExecutors(
         await ctx.selectWork(tools.families.work, ctx.admission.input.work, () => ({ cells: [] }));
       return captureBinding(ctx, "project", ctx.admission.input);
     },
-    run: async (ctx, execution) => {
+    run: (ctx, execution) => Effect.gen(function* () {
       const prepared = execution.prepared,
-        captured = (await native(
+        captured = (yield* native(
           ctx,
           execution,
           "families.capture",
           prepared,
         )) as FamiliesCapture.Res.Response;
-      const { members, runs } = await fileCapture(
+      const { members, runs } = yield* fileCapture(
         ctx,
         execution,
         prepared,
@@ -1272,7 +1280,7 @@ export function familyExecutors(
           })),
         }),
       };
-    },
+    }),
     recover,
   });
   const familyObserve = command(commands["family.observe"], observationSchema, {
@@ -1319,15 +1327,15 @@ export function familyExecutors(
         }),
       };
     },
-    run: async (ctx, execution) => {
+    run: (ctx, execution) => Effect.gen(function* () {
       const prepared = execution.prepared;
       if (!ctx.admission.input.work) return prepared;
-      await execution.publishWork(ctx.admission.input.work.key, "family", [
+      yield* execution.publishWork(ctx.admission.input.work.key, "family", [
         { path: ["reading"], value: prepared.reading },
         { path: ["takenAt"], value: prepared.takenAt },
       ]);
-      return { envelope: await ctx.work.read(ctx.admission.input.work.key, "family") };
-    },
+      return { envelope: yield* io(() => ctx.work.read(ctx.admission.input.work!.key, "family")) };
+    }),
   });
   const settingsObserve = command(commands["settings.observe"], settingsObservationSchema, {
     bind: async (ctx) => {
@@ -1365,14 +1373,14 @@ export function familyExecutors(
         }),
       };
     },
-    run: async (ctx, execution) => {
+    run: (ctx, execution) => Effect.gen(function* () {
       const handle = handleOf(ctx);
-      await execution.publishWork(handle.key, "pods", [
+      yield* execution.publishWork(handle.key, "pods", [
         { path: ["basis"], value: execution.prepared.basis },
         { path: ["fields"], value: {} },
       ]);
-      return { envelope: await ctx.work.read(handle.key, "pods") };
-    },
+      return { envelope: yield* io(() => ctx.work.read(handle.key, "pods")) };
+    }),
   });
   const settingsWrite = command(commands["settings.write"], settingsWriteSchema, {
     bind: async (ctx) => {
@@ -1402,24 +1410,24 @@ export function familyExecutors(
         }),
       };
     },
-    run: async (ctx, execution) => {
+    run: (ctx, execution) => Effect.gen(function* () {
       const p = execution.prepared,
-        written = await execution.step(
+        written = yield* execution.step(
           "file",
           "expectedSha256" in p.request ? "pod.member.save" : "pod.member.write",
           p.request,
-          () => writeMemberOnce(deps, p.request, podsFor(ctx)),
+          () => io(() => writeMemberOnce(deps, p.request, podsFor(ctx))),
         );
       if (p.destination) return { file: written };
       const handle = handleOf(ctx),
-        retired = await execution.retireWork(
+        retired = yield* execution.retireWork(
           handle.key,
           "pods",
           Object.entries(p.document.fields).flatMap(([key, cell]) =>
             cell.edit ? [["fields", key]] : [],
           ),
         );
-      const publication = await execution.publishWork(handle.key, "pods", [
+      const publication = yield* execution.publishWork(handle.key, "pods", [
         {
           path: ["basis"],
           value: {
@@ -1430,7 +1438,7 @@ export function familyExecutors(
         },
       ]);
       return { file: written, publication, retired };
-    },
+    }),
   });
   const saveDraft = command(commands["families.save-draft"], draftsSchema, {
     bind: async (ctx) => {
@@ -1445,16 +1453,15 @@ export function familyExecutors(
         prepare: async () => ({ kind: "drafts", members }),
       };
     },
-    run: async (ctx, execution) => {
+    run: (ctx, execution) => Effect.gen(function* () {
       const members = [];
       for (const member of execution.prepared.members)
         members.push(
-          await execution.step("file", "pod.member.write", member, () =>
-            writeMemberOnce(deps, member, podsFor(ctx)),
+          yield* execution.step("file", "pod.member.write", member, () => io(() => writeMemberOnce(deps, member, podsFor(ctx))),
           ),
         );
       return { saved: members.length, members };
-    },
+    }),
   });
   const build = command(commands["family.build"], buildSchema, {
     seal: (p) => ({ request: p.input }),
@@ -1484,14 +1491,14 @@ export function familyExecutors(
         }),
       };
     },
-    run: async (ctx, execution) => {
-      const result = await native(ctx, execution, "family.build", execution.prepared);
+    run: (ctx, execution) => Effect.gen(function* () {
+      const result = yield* native(ctx, execution, "family.build", execution.prepared);
       return {
         executionContext: targetOf(ctx),
         native: result,
         outputPath: (result as { outputPath?: string }).outputPath,
       };
-    },
+    }),
     recover,
   });
   return {
@@ -1539,10 +1546,10 @@ export function familyExecutors(
             }),
           };
         },
-        run: async (ctx, execution) => {
+        run: (ctx, execution) => Effect.gen(function* () {
           if (!deps.families) throw refused("Families reader is unavailable");
           const p = execution.prepared;
-          const saved = await deps.families.read({
+          const saved = yield* io(() => deps.families!.read({
             bridge,
             captures,
             readId: p.readId,
@@ -1550,20 +1557,19 @@ export function familyExecutors(
             document: p.document,
             documentTitle: p.title,
             filter: p.filter,
-          });
+          }));
           if (saved.progress && saved.progress.state !== "complete")
             throw refused(saved.progress.message ?? `Families read ${saved.progress.state}`);
-          const published = await execution.step(
+          const published = yield* execution.step(
             "publication",
             "families.bind-observation",
             { work: p.work, observation: saved.id },
-            () =>
-              ctx.work.publish(
+            () => io(() => ctx.work.publish(
                 p.work.key,
                 "families",
                 [{ path: ["takenAt"], value: saved.capturedAt }],
                 p.work.revision,
-              ),
+              )),
           );
           if (!published.ok)
             throw refused("Families Work changed during the read; read the current scope again");
@@ -1571,7 +1577,7 @@ export function familyExecutors(
             ...saved,
             envelope: { revision: published.revision },
           });
-        },
+        }),
       },
     ),
     "families.cancel-read": command(
@@ -1583,11 +1589,11 @@ export function familyExecutors(
           const prepared = { readId: ctx.admission.input.readId, document: targetOf(ctx) };
           return { effects: [], prepare: async () => prepared };
         },
-        run: async (_ctx, { prepared }) => {
+        run: (_ctx, { prepared }) => Effect.gen(function* () {
           if (!deps.families) throw refused("Families reader is unavailable");
-          await deps.families.cancel(prepared.readId, prepared.document);
+          yield* io(() => deps.families!.cancel(prepared.readId, prepared.document));
           return { cancelled: true as const };
-        },
+        }),
       },
     ),
     "families.capture": familiesCapture,

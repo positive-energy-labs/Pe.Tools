@@ -1,6 +1,5 @@
 import { blobUploadSchema } from "@pe/agent-contracts";
 import { put as putBlob } from "./action-blobs.ts";
-import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { captureReceiptSchema } from "@pe/agent-contracts";
 import { canonicalRouteInput, nativePrincipals } from "@pe/agent-contracts";
 import {
@@ -55,6 +54,8 @@ import {
 } from "./captures-route.ts";
 import { CommandRejected, StepFailure } from "./command-executor.ts";
 import { bindCommandRuntime } from "./command-registry.ts";
+import type { AttemptHost } from "./action-journal.ts";
+import type { GatewayLocal } from "./gateway-actions.ts";
 import {
   admitCrossing,
   admitScript,
@@ -156,7 +157,7 @@ export function makeCallRoute(
     readonly dispatch?: CallRouteDispatch;
     readonly origin?: () => string;
     readonly captureHostOp?: typeof recordHostOp;
-    readonly local?: (key: string, input: unknown) => Promise<unknown>;
+    readonly local?: GatewayLocal;
     /** The Families reader the host's layer built; absent where no Revit composition exists. */
     readonly families?: FamiliesReader["Service"];
     /** Thread meta's pointer surface; pointer ops refuse without it. */
@@ -183,10 +184,11 @@ export function makeCallRoute(
     return captures;
   };
   const owner = () => operations;
-  const admit = async (raw: unknown, _bridge: RevitBridge["Service"], caller: Caller) => {
+  const admit = async (raw: unknown, caller: Caller, parent: string) => {
     const input = actionAdmissionSchema.parse(raw);
     const crossing = {
       caller,
+      parent,
       basis: admitCrossing(caller, input.target, "/actions", readsOnly(input.key, input.input)),
     };
     return owner().invoke(input, crossing);
@@ -634,9 +636,10 @@ export function makeCallRoute(
       // The caller lives in AsyncLocalStorage; the Node body read resumes outside it. Read first.
       const caller = currentCaller();
       const body = yield* req.json;
-      const bridge = yield* RevitBridge;
+      // The submitting request is the command's causal parent; the journal owns the attempt.
+      const { requestId } = yield* RequestIdentity;
       const row = yield* Effect.tryPromise({
-        try: () => admit(body, bridge, caller),
+        try: () => admit(body, caller, requestId),
         catch: (error) => error,
       });
       return Response.jsonUnsafe(row, {
@@ -1295,25 +1298,16 @@ function executeGatewayLocal(
   captures: TakeoffCaptures,
   pictures: PictureCaptureStore["Service"],
   launch?: (path: string) => Promise<void>,
-): Promise<unknown> {
+): Effect.Effect<unknown, unknown, AttemptHost> {
   if (!isTsOnlyOperationKey(key))
-    throw new BridgeError("Unknown host operation", 409, { notDispatched: true });
+    return Effect.fail(new BridgeError("Unknown host operation", 409, { notDispatched: true }));
+  // The journal Layer holds the node and HTTP services; the picture store is this route's value.
   if (!linkedCatalog().entries.get(key)?.call?.shell)
-    // effect-edge: island, phase 5
-    return Effect.runPromise(
-      dispatchTsOnlyOperation(key, input, undefined, bridge, captures, {
-        caller: { kind: "anonymous" },
-      }).pipe(
-        Effect.provide(NodeServices.layer),
-        Effect.provide(NodeHttpClient.layerUndici),
-        Effect.provideService(PictureCaptureStore, pictures),
-      ),
-    );
-  // effect-edge: island, phase 5
-  return Effect.runPromise(
-    Effect.flatMap(decodeRequest("host.shell.open", input), (input) =>
-      openShellPath(input, launch),
-    ).pipe(Effect.provide(NodeServices.layer)),
+    return dispatchTsOnlyOperation(key, input, undefined, bridge, captures, {
+      caller: { kind: "anonymous" },
+    }).pipe(Effect.provideService(PictureCaptureStore, pictures));
+  return Effect.flatMap(decodeRequest("host.shell.open", input), (input) =>
+    openShellPath(input, launch),
   );
 }
 

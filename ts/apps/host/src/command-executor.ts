@@ -9,7 +9,7 @@ import type {
   Claim,
   Command,
   Consumed,
-  Effect,
+  Effect as RouteEffect,
   Footprint,
   WorkHandle,
   WorkPath,
@@ -18,7 +18,10 @@ import type {
   ActionNeed,
   CommandRefusal,
 } from "@pe/agent-contracts";
-import type { ActionExecution } from "./action-journal.ts";
+import type { ActionExecution, Step } from "./action-journal.ts";
+import type { RevitBridge } from "./bridge.ts";
+import { Effect } from "effect";
+import { catalogCommandContext } from "./catalog-command-context.ts";
 
 export class CommandRejected extends Error {
   constructor(readonly refusal: CommandRefusal) {
@@ -38,6 +41,39 @@ export const refused = (message: string, code = "domain.refused") =>
   new CommandRejected({ kind: "domain", code, message });
 
 /** An independently observed transport outcome, never a domain eligibility decision. */
+/**
+ * Promise work inside an owned attempt; a rejection stays the failure value it was. It keeps the
+ * attempt's catalog command for the bridge reads that Promise code still makes.
+ */
+export const io = <A>(work: () => Promise<A>): Effect.Effect<A, unknown> =>
+  Effect.tryPromise({
+    try: () => {
+      const command = catalogCommandContext.getStore();
+      return command ? catalogCommandContext.run(command, work) : work();
+    },
+    catch: (error) => error,
+  });
+
+/** One native step on the attempt fiber: the bridge's typed failures become the step's outcome. */
+export const nativeStep = <A = unknown>(
+  bridge: RevitBridge["Service"],
+  target: { session: string; openId?: string | null },
+  key: string,
+  input: unknown,
+  requestId?: string,
+): Effect.Effect<A, StepFailure> =>
+  bridge.invoke(key, input, target.session, target.openId ?? null, requestId).pipe(
+    Effect.map(({ value }) => value as A),
+    Effect.mapError((error) =>
+      error._tag === "BridgeError"
+        ? new StepFailure(error.message, error.statusCode, error.outcome, error.evidence.result, {
+            nativeOutcome: error.nativeOutcome,
+            issues: error.evidence.issues ? [...error.evidence.issues] : undefined,
+          })
+        : new StepFailure(error.message, 503, "refused"),
+    ),
+  );
+
 export class StepFailure extends Error {
   constructor(
     message: string,
@@ -114,7 +150,8 @@ export interface CommandExecutor {
   sealInput?: z.ZodType;
   seal?(prepared: unknown): { request: unknown; evidence?: unknown };
   bind(context: CommandContext): Promise<CommandBinding>;
-  run(context: CommandContext, execution: ActionExecution): Promise<unknown>;
+  /** Runs on the journal-owned attempt fiber (ADR 0029 rule 10). */
+  run(context: CommandContext, execution: ActionExecution): Step<unknown>;
   recover?: StepRecovery;
   /** Set only by `workWriteBoundary`: the executor derives, seals and rechecks against Work. */
   boundary?: "work";
@@ -129,7 +166,7 @@ export interface CommandResources {
   workReads?: (admission: ActionAdmission) => CommandWorkReads;
   probe(dependency: Exclude<Consumed, { kind: "work" }>): Promise<unknown>;
   target?(target: ExecutionTarget, needs: ActionNeed): Promise<void>;
-  effectPath?(effect: Extract<Effect, { kind: "member" }>): Promise<string | undefined>;
+  effectPath?(effect: Extract<RouteEffect, { kind: "member" }>): Promise<string | undefined>;
 }
 export interface CommandEnvironment extends CommandResources {
   resolve: CommandRegistry;
@@ -151,7 +188,7 @@ export function command<C extends Command, S extends z.ZodType>(
         admission: Omit<ActionAdmission, "input"> & { input: AuthoredInput<C> };
       },
       execution: Omit<ActionExecution, "prepared"> & { readonly prepared: z.output<S> },
-    ): Promise<unknown>;
+    ): Step<unknown>;
     recover?(
       step: ActionStep,
       prepared: z.output<S>,

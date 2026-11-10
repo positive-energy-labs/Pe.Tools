@@ -6,7 +6,7 @@ import { bindWork, type Caller } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { bindControl } from "../src/control.ts";
-import { testConsents } from "./effect-test.ts";
+import { testConsents, journalAt } from "./effect-test.ts";
 import type { ConsentEvent } from "../src/run-consent.ts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { pictureCaptures } from "./effect-test.ts";
@@ -17,7 +17,6 @@ import { nativeReadRoot } from "../src/app.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import { RevitBridge } from "../src/bridge.ts";
-import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
@@ -143,7 +142,7 @@ test("Work start validates seeds, waits for consent, and cannot overwrite a winn
     run,
     root: run,
   };
-  const journal = new ActionJournal(join(dir, "journal.jsonl"), Date.now, () => null, 1);
+  const journal = journalAt(join(dir, "journal.jsonl"), Date.now, () => null, 1);
   const key = bindWork("sample", null, "one");
   const web = HttpRouter.toWebHandler(
     makeCallRoute(journal, undefined, { workspace, sdk: sdkSessions }).pipe(

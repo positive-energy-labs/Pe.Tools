@@ -1,4 +1,3 @@
-import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { RevitBridgeLive } from "../src/bridge.ts";
 import { nativeReadRoot } from "../src/app.ts";
@@ -7,7 +6,7 @@ import { NodeServices, NodeHttpClient } from "@effect/platform-node";
 import { CaptureStore } from "../src/takeoff-captures.ts";
 import type { NativeReadInput } from "@pe/host-internal/native-read";
 import type { BridgeSessionsListData } from "@pe/host-contracts/operation-types";
-import { unavailableFieldOptions } from "./effect-test.ts";
+import { unavailableFieldOptions, journalAt } from "./effect-test.ts";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -102,7 +101,7 @@ export async function fixture(
       ),
     ),
   );
-  const journal = new ActionJournal(join(dir, "actions.jsonl"), Date.now);
+  const journal = journalAt(join(dir, "actions.jsonl"), Date.now);
   let reads!: Effect.Success<ReturnType<typeof makeReadOwner>>;
   const fixtureRoutes = (options: Parameters<typeof makeReadOwner>[1]) => Layer.unwrap(Effect.gen(function* () {
     reads = yield* makeReadOwner(inputs, options);

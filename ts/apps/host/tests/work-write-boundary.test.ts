@@ -10,7 +10,9 @@ import { assertSealed } from "../src/document-marks.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { RunConsents } from "../src/run-consent.ts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
-import { testDocumentMarks } from "./effect-test.ts";
+import { settle, testDocumentMarks } from "./effect-test.ts";
+// These fakes read no attempt service; the journal provides them in production.
+const runOwned = (run: Effect.Effect<unknown, unknown, unknown>) => settle(run as Effect.Effect<unknown, unknown>);
 import { detachedBridge, sessionView, effectTest } from "./effect-test.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
@@ -68,7 +70,7 @@ async function fixture() {
   const receipts: ActionReceipt[] = [];
   let request = "one";
   let evidence: unknown = { model: 1 };
-  const run = vi.fn(async () => ({ applied: true }));
+  const run = vi.fn(() => Effect.succeed({ applied: true }));
   const make = (definition: Command) => () => workWriteBoundary(
     {
       definition,
@@ -175,7 +177,7 @@ test("preview exposes a derived request without running the write; changed deriv
   const binding = await f.executor.bind(f.ctx);
   expect(binding.effects).toEqual([]);
   const prepared = await binding.prepare!();
-  const preview = await f.executor.run(f.ctx, { prepared } as ActionExecution);
+  const preview = await runOwned(f.executor.run(f.ctx, { prepared } as ActionExecution));
   expect(preview).toMatchObject({ previewOnly: true, derivedRequest: { request: "one" } });
   expect(f.run).not.toHaveBeenCalled();
   f.recordPreview("preview", preview);
@@ -193,14 +195,14 @@ test("preview exposes a derived request without running the write; changed deriv
 test("re-derived identical inputs apply; a changed dependency refuses before execution", async () => {
   const f = await fixture();
   const bound = await f.executor.bind(f.ctx);
-  const preview = await f.executor.run(f.ctx, {
+  const preview = await runOwned(f.executor.run(f.ctx, {
     prepared: await bound.prepare!(),
-  } as ActionExecution);
+  } as ActionExecution));
   f.recordPreview("preview", preview);
   f.apply();
   f.evidence({ model: 1 });
   const apply = await f.executor.bind(f.ctx);
-  await f.executor.run(f.ctx, { prepared: await apply.prepare!() } as ActionExecution);
+  await runOwned(f.executor.run(f.ctx, { prepared: await apply.prepare!() } as ActionExecution));
   expect(f.run).toHaveBeenCalledTimes(1);
   f.evidence({ model: 2 });
   await expect(apply.prepare!()).rejects.toThrow("Plan changed");
@@ -221,9 +223,9 @@ test("missing preview and foreign Work refuse before native execution", async ()
 test("a new Work revision invalidates the seal even when the request is identical", async () => {
   const f = await fixture();
   const bound = await f.executor.bind(f.ctx);
-  const preview = await f.executor.run(f.ctx, {
+  const preview = await runOwned(f.executor.run(f.ctx, {
     prepared: await bound.prepare!(),
-  } as ActionExecution);
+  } as ActionExecution));
   f.recordPreview("preview", preview);
   f.apply();
   (f.ctx.admission.input.work as { revision: number }).revision++;
@@ -238,9 +240,9 @@ test("refetching the same dependency set in a different order preserves the prev
   const b = { kind: "file" as const, probe: { path: "b" }, expected: "b1" };
   f.ctx.consumed = [a, b];
   const bound = await f.executor.bind(f.ctx);
-  const preview = await f.executor.run(f.ctx, {
+  const preview = await runOwned(f.executor.run(f.ctx, {
     prepared: await bound.prepare!(),
-  } as ActionExecution);
+  } as ActionExecution));
   f.recordPreview("preview", preview);
   f.apply();
   f.ctx.consumed = [b, a, b];
@@ -253,7 +255,7 @@ test("refetching the same dependency set in a different order preserves the prev
 test("write admission refuses a producer without a semantic projection", () => {
   expect(() => workWriteBoundary({
     definition: commands["schedule.apply"], prepared: z.unknown(),
-    bind: async () => ({ effects: [] }), run: async () => null,
+    bind: async () => ({ effects: [] }), run: () => Effect.succeed(null),
   }, detachedBridge())).toThrow("producer-owned seal projection");
 });
 
@@ -262,7 +264,7 @@ test("re-pricing a changed preview remains a successful read and never runs a wr
   for (const id of ["preview-one", "preview-two"]) {
     f.ctx.admission.id = id;
     const bound = await f.executor.bind(f.ctx);
-    const preview = await f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution);
+    const preview = await runOwned(f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution));
     expect(preview).toMatchObject({ previewOnly: true });
     f.recordPreview(id, preview);
     f.change();
@@ -276,7 +278,7 @@ test("an older preview refuses changed request and Work; a fresh preview keeps i
     const f = await fixture();
     const capture = async () => {
       const bound = await f.executor.bind(f.ctx);
-      const result = await f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution);
+      const result = await runOwned(f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution));
       f.recordPreview(f.ctx.admission.id, result);
       return result as { seal: unknown };
     };
@@ -291,14 +293,14 @@ test("an older preview refuses changed request and Work; a fresh preview keeps i
     // Capture again through the preview executor, then apply the exact same derived input.
     const fresh = await fixture();
     const bound = await fresh.executor.bind(fresh.ctx);
-    const preview = writePreviewSchema.parse(await fresh.executor.run(fresh.ctx, { prepared: await bound.prepare!() } as ActionExecution));
+    const preview = writePreviewSchema.parse(await runOwned(fresh.executor.run(fresh.ctx, { prepared: await bound.prepare!() } as ActionExecution)));
     fresh.recordPreview("fresh", preview);
     vi.setSystemTime(Date.now() + 60_000);
     fresh.apply();
     const apply = await fresh.executor.bind(fresh.ctx);
     const prepared = await apply.prepare!();
     expect(prepared).toMatchObject({ seal: preview.seal });
-    await fresh.executor.run(fresh.ctx, { prepared } as ActionExecution);
+    await runOwned(fresh.executor.run(fresh.ctx, { prepared } as ActionExecution));
     expect(fresh.run).toHaveBeenCalledOnce();
   } finally { vi.useRealTimers(); }
 });
@@ -308,7 +310,7 @@ effectTest("preview seal survives the real 60-second run-consent auto-approval",
     const f = yield* Effect.promise(fixture);
     const bound = yield* Effect.promise(() => f.executor.bind(f.ctx));
     const prepared = yield* Effect.promise(() => bound.prepare!());
-    const preview = writePreviewSchema.parse(yield* Effect.promise(() => f.executor.run(f.ctx, { prepared } as ActionExecution)));
+    const preview = writePreviewSchema.parse(yield* Effect.promise(() => runOwned(f.executor.run(f.ctx, { prepared } as ActionExecution))));
     f.recordPreview("preview", preview);
     const runs = Context.get(yield* Layer.build(RunConsents.layer.pipe(Layer.provide(NodeCrypto.layer))), RunConsents);
     runs.attach({ emit: () => {}, persist: () => {}, autoApprove: () => true });
@@ -325,7 +327,7 @@ effectTest("preview seal survives the real 60-second run-consent auto-approval",
     yield* Effect.promise(() => apply.preflight!());
     const ready = yield* Effect.promise(() => apply.prepare!());
     expect(ready).toMatchObject({ seal: preview.seal });
-    yield* Effect.promise(() => f.executor.run(f.ctx, { prepared: ready } as ActionExecution));
+    yield* Effect.promise(() => runOwned(f.executor.run(f.ctx, { prepared: ready } as ActionExecution)));
     expect(f.run).toHaveBeenCalledOnce();
   }),
 );
@@ -334,7 +336,7 @@ effectTest("preview seal survives the real 60-second run-consent auto-approval",
 async function plannedThenApply() {
   const f = await fixture();
   const bound = await f.executor.bind(f.ctx);
-  const plan = await f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution);
+  const plan = await runOwned(f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution));
   f.recordPreview("plan", plan);
   return { f, plan: plan as { seal: { documentMark: unknown } } };
 }
@@ -372,7 +374,7 @@ test("a plan that goes stale after consent is refused at the post-consent prepar
 test("a rehearsal receipt cannot arm apply: only the declared plan key seals", async () => {
   const f = await fixture();
   const bound = await f.executor.bind(f.ctx);
-  const plan = await f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution);
+  const plan = await runOwned(f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution));
   f.recordPreview("rehearsal", plan, "schedule.rehearse");
   f.apply();
   const apply = await f.executor.bind(f.ctx);
@@ -403,7 +405,7 @@ test.each(["caller", "requestHash", "work", "documentMark", "incarnation", "depe
   "prepare independently rechecks sealed %s after bind", async key => {
     const f = await fixture();
     const previewBinding = await f.executor.bind(f.ctx);
-    const preview = await f.executor.run(f.ctx, { prepared: await previewBinding.prepare!() } as ActionExecution);
+    const preview = await runOwned(f.executor.run(f.ctx, { prepared: await previewBinding.prepare!() } as ActionExecution));
     f.recordPreview("preview", preview);
     f.apply();
     const apply = await f.executor.bind(f.ctx);

@@ -16,7 +16,8 @@ import {
 import type { ActionStep } from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { command, refused, type CommandContext, type CommandBinding } from "./command-executor.ts";
+import { command, io, refused, type CommandContext, type CommandBinding } from "./command-executor.ts";
+import { Effect } from "effect";
 import { createReadStream, existsSync } from "node:fs";
 import { constants, copyFile, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, relative, resolve } from "node:path";
@@ -362,12 +363,13 @@ async function bindControl(
 }
 
 /** Adoption is the SDK's operation. Its exact response must keep the originally observed process. */
-async function controlledRequest(
+function controlledRequest(
   ctx: CommandContext,
   execution: ActionExecution,
   target: Target,
   read: SdkReceiptReader,
 ) {
+  return Effect.gen(function* () {
   const key = ctx.admission.key;
   const prior = execution.recorded("native", key);
   const adoption = execution.recorded("native", `${key}.adopt`);
@@ -381,7 +383,7 @@ async function controlledRequest(
     const input = adoption
       ? (adoption.input as StepInput)
       : { argv: sessionStartArgv({ ...selection, requestId: REQUEST_ID }) };
-    const answer = await runSdk<{ result: SessionStartResult; resolved: Resolved | null }>(
+    const answer = yield* runSdk<{ result: SessionStartResult; resolved: Resolved | null }>(
       execution,
       `${key}.adopt`,
       input,
@@ -414,36 +416,41 @@ async function controlledRequest(
   }
   if (!expectSession) throw refused("The recorded mutation has no session expectation");
   return { ...selection, requestId: REQUEST_ID, expectSession };
+});
 }
 
-async function physicalEffects(execution: ActionExecution, native: unknown) {
+function physicalEffects(execution: ActionExecution, native: unknown) {
+  return Effect.gen(function* () {
   const session = (native as { session?: { id?: string; process?: NativeProcess } }).session;
-  if (session?.id) await execution.effect({ kind: "session", session: session.id });
+  if (session?.id) yield* execution.effect({ kind: "session", session: session.id });
   if (session?.process)
-    await execution.effect({
+    yield* execution.effect({
       kind: "session",
       session: `${session.process.pid}:${session.process.processStartUtc}`,
     });
+});
 }
 
-async function controlRun(
+function controlRun(
   ctx: CommandContext,
   execution: ActionExecution,
   read: SdkReceiptReader,
-  argv: (session: Awaited<ReturnType<typeof controlledRequest>>) => readonly string[],
+  argv: (session: Effect.Success<ReturnType<typeof controlledRequest>>) => readonly string[],
   releases?: () => { action: string; claim: import("@pe/agent-contracts").Claim }[],
 ) {
+  return Effect.gen(function* () {
   const { target } = execution.prepared as z.infer<typeof controlledPreparedSchema>;
-  const session = await controlledRequest(ctx, execution, target, read);
-  const result = await runSdk(
+  const session = yield* controlledRequest(ctx, execution, target, read);
+  const result = yield* runSdk(
     execution,
     ctx.admission.key,
     { expectSession: session.expectSession, argv: argv(session) },
     read,
     { process: target.process, releases },
   );
-  await physicalEffects(execution, result);
+  yield* physicalEffects(execution, result);
   return result;
+});
 }
 
 async function prepareAcquisition(
@@ -538,25 +545,25 @@ async function bindLaunch(
   };
 }
 
-async function allocateDocument(
+function allocateDocument(
   ctx: CommandContext,
   execution: ActionExecution,
   deps: InstancesActionDependencies,
   acquisition: AcquisitionIntent | null,
 ) {
+  return Effect.gen(function* () {
   const origin = acquisition?.document?.origin;
   if (!origin || !("work" in origin)) return;
   if (origin.kind === "version-copy")
-    await execution.step(
+    yield* execution.step(
       "file",
       "acquisition.baseline",
       { to: origin.baseline, source: origin.source, version: origin.version },
-      () =>
-        (deps.downloadVersion ?? downloadCloudVersion)(
+      () => io(() => (deps.downloadVersion ?? downloadCloudVersion)(
           origin.source,
           origin.version,
           origin.baseline,
-        ),
+        )),
     );
   for (const [key, from, to] of [
     ...(origin.kind === "file-copy"
@@ -573,17 +580,19 @@ async function allocateDocument(
           ? (baseline.result as { sha256?: string }).sha256
           : undefined;
     const input = { from, to, ...(expectedSha256 ? { expectedSha256 } : {}) };
-    await execution.step("file", key, input, () => copyReserved(input));
+    yield* execution.step("file", key, input, () => io(() => copyReserved(input)));
   }
+});
 }
 
-async function startSession(
+function startSession(
   execution: ActionExecution,
   start: z.infer<typeof instancesStartSchema>,
   read: SdkReceiptReader,
   key: string,
   check?: (result: SessionStartResult) => void,
 ) {
+  return Effect.gen(function* () {
   const { target, acquisition, project } = execution.prepared as Prepared;
   if (project === undefined)
     throw refused(
@@ -593,15 +602,15 @@ async function startSession(
   let prior = execution.recorded("native", key);
   if (created && prior?.state === "succeeded") {
     const { process } = (prior.result as { session: { process: NativeProcess } }).session;
-    if (!(await readTarget(null, process, read)))
-      prior = await execution.retire(
+    if (!(yield* io(() => readTarget(null, process, read))))
+      prior = yield* execution.retire(
         prior.id,
         `Revit pid ${process.pid} started ${process.processStartUtc} is gone; resume starts a new one`,
       );
   }
   const expectSession =
     created && prior?.state === "failed"
-      ? ((await namedSdkSession(acquisitionSessionId(acquisition!.id), read))?.receipt
+      ? ((yield* io(() => namedSdkSession(acquisitionSessionId(acquisition!.id), read)))?.receipt
           .receiptPath ?? "absent")
       : prior
         ? ((prior.input as StepInput).expectSession ?? "absent")
@@ -619,12 +628,13 @@ async function startSession(
       expectSession,
     }),
   };
-  const result = await runSdk<SessionStartResult>(execution, key, input, read, {
+  const result = yield* runSdk<SessionStartResult>(execution, key, input, read, {
     process: target?.process,
     check,
   });
-  await physicalEffects(execution, result);
+  yield* physicalEffects(execution, result);
   return result;
+});
 }
 
 const temporaryFiles = (acquired: Acquisition) => {
@@ -742,9 +752,9 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
           }),
         };
       },
-      run: async (ctx, execution) => {
+      run: (ctx, execution) => Effect.gen(function* () {
         const { document, to, release } = ctx.admission.input;
-        const result = await controlRun(ctx, execution, read, (session) =>
+        const result = yield* controlRun(ctx, execution, read, (session) =>
           docSaveArgv({
             ...session,
             doc: document.openId,
@@ -755,25 +765,25 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
           }),
         );
         if (execution.prepared.artifactOf && to.kind === "save-as")
-          await execution.step(
+          yield* execution.step(
             "file",
             "acquisition.artifact",
             { acquisition: execution.prepared.artifactOf, to: to.out },
-            async () => ({ path: to.out, ...(await hashFile(to.out)) }),
+            () => io(async () => ({ path: to.out, ...(await hashFile(to.out)) })),
           );
         return result;
-      },
+      }),
     }),
     "instances.dialogs": command(commands["instances.dialogs"], controlledPreparedSchema, {
       bind: (ctx) => bindControl(ctx, read, ctx.admission.input.session),
-      run: async (ctx, execution) => {
+      run: (ctx, execution) => Effect.gen(function* () {
         const { target } = execution.prepared;
         let input = execution.recorded("native", "instances.dialogs")?.input as
           | StepInput
           | undefined;
         if (!input) {
           const args = sessionDialogsArgv({ pid: target.process.pid });
-          const { result } = await sdkEnvelope<SessionDialogsResult>(args, read);
+          const { result } = yield* io(() => sdkEnvelope<SessionDialogsResult>(args, read));
           if (
             result.state !== "ok" ||
             result.pid !== target.process.pid ||
@@ -793,8 +803,8 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
             }),
           };
         }
-        return runSdk(execution, "instances.dialogs", input, read, { process: target.process });
-      },
+        return yield* runSdk(execution, "instances.dialogs", input, read, { process: target.process });
+      }),
     }),
     "instances.start": command(commands["instances.start"], preparedInstancesSchema, {
       bind: (ctx) => bindLaunch(ctx, deps, read, ctx.admission.input, null),
@@ -810,18 +820,18 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
           "start" in ctx.admission.input.into ? ctx.admission.input.into.start : null,
           ctx.admission.input,
         ),
-      run: async (ctx, execution) => {
+      run: (ctx, execution) => Effect.gen(function* () {
         const spec = ctx.admission.input;
         const { target, acquisition } = execution.prepared;
-        await allocateDocument(ctx, execution, deps, acquisition);
+        yield* allocateDocument(ctx, execution, deps, acquisition);
         const origin = acquisition?.document?.origin;
         const opened = origin && "work" in origin ? origin.work : spec.source;
         const detached = origin && "detach" in origin ? origin.detach : spec.detach;
         let started: SessionStartResult | undefined;
-        let selected: Awaited<ReturnType<typeof controlledRequest>>;
+        let selected: Effect.Success<ReturnType<typeof controlledRequest>>;
         let process: NativeProcess;
         if ("start" in spec.into) {
-          started = await startSession(
+          started = yield* startSession(
             execution,
             spec.into.start,
             read,
@@ -844,7 +854,7 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
           process = nativeProcessSchema.parse(active.process);
         } else {
           if (!target) throw refused("Exact open destination process is unavailable");
-          selected = await controlledRequest(ctx, execution, target, read);
+          selected = yield* controlledRequest(ctx, execution, target, read);
           process = target.process;
         }
         const input = {
@@ -860,8 +870,8 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
             expectDoc: spec.reload ? spec.source : spec.template ? "new" : "absent",
           }),
         };
-        const document = await runSdk(execution, "instances.open", input, read, { process });
-        await physicalEffects(execution, document);
+        const document = yield* runSdk(execution, "instances.open", input, read, { process });
+        yield* physicalEffects(execution, document);
         return {
           acquisition: acquisition?.id ?? null,
           opened,
@@ -870,7 +880,7 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
           ...(started ? { session: started } : {}),
           document,
         };
-      },
+      }),
     }),
     "instances.handover": handoverCommand(read),
     "instances.cleanup": cleanupCommand(read),
@@ -947,7 +957,7 @@ function handoverCommand(read: SdkReceiptReader) {
         },
       };
     },
-    run: async (ctx, execution) => {
+    run: (ctx, execution) => Effect.gen(function* () {
       const { target, acquired } = execution.prepared;
       const id = ctx.admission.input.acquisition;
       const sdkOpenId = acquired.document!.sdkOpenId;
@@ -955,8 +965,7 @@ function handoverCommand(read: SdkReceiptReader) {
       const intent = acquired.intent.document!;
       const detached = "detach" in intent.origin && intent.origin.detach;
       const folder = dirname(intent.result);
-      await execution.step("file", "acquisition.result-folder", { to: folder }, () =>
-        reserveFolder(acquired.intent.root, folder),
+      yield* execution.step("file", "acquisition.result-folder", { to: folder }, () => io(() => reserveFolder(acquired.intent.root, folder)),
       );
       const save: StepInput = {
         expectSession,
@@ -971,12 +980,12 @@ function handoverCommand(read: SdkReceiptReader) {
           expectDoc: sdkOpenId,
         }),
       };
-      await runSdk(execution, "instances.handover.save", save, read, { process: target!.process });
-      return execution.step(
+      yield* runSdk(execution, "instances.handover.save", save, read, { process: target!.process });
+      return yield* execution.step(
         "file",
         "acquisition.handover",
         { to: intent.diffPlan, result: intent.result },
-        async () => {
+        () => io(async () => {
           const result = { path: intent.result, ...(await hashFile(intent.result)) };
           const baseline =
             "baseline" in intent.origin
@@ -1002,9 +1011,9 @@ function handoverCommand(read: SdkReceiptReader) {
               ? { path: intent.origin.work, ...(await hashFile(intent.origin.work)) }
               : null;
           return { result, diffPlan: intent.diffPlan, work };
-        },
+        }),
       );
-    },
+    }),
   });
 }
 
@@ -1057,7 +1066,7 @@ function cleanupCommand(read: SdkReceiptReader) {
         },
       };
     },
-    run: async (ctx, execution) => {
+    run: (ctx, execution) => Effect.gen(function* () {
       const { target, open, acquired, removals } = execution.prepared;
       const { acquisition: id, unsaved } = ctx.admission.input;
       const sdkOpenId = acquired.document?.sdkOpenId;
@@ -1080,20 +1089,19 @@ function cleanupCommand(read: SdkReceiptReader) {
             expectDoc: sdkOpenId,
           }),
         };
-        await runSdk(execution, "instances.cleanup.close", close, read, {
+        yield* runSdk(execution, "instances.cleanup.close", close, read, {
           process: target!.process,
         });
         outcome.closed = sdkOpenId!;
       }
       for (const path of removals) {
-        await execution.step("file", "acquisition.remove", { to: path }, () =>
-          removeReserved(acquired.intent.root, path),
+        yield* execution.step("file", "acquisition.remove", { to: path }, () => io(() => removeReserved(acquired.intent.root, path)),
         );
         outcome.removed.push(path);
       }
       if (acquired.process && target) {
         // Only the Revit this acquisition started, and only once nothing else is open there.
-        const left = await listDocuments(target.selection, target.process, read);
+        const left = yield* io(() => listDocuments(target.selection, target.process, read));
         if (left.length)
           throw new ActionIncomplete(
             `Kept the Revit acquisition '${id}' started: ${left.length} other document(s) are open there`,
@@ -1108,13 +1116,13 @@ function cleanupCommand(read: SdkReceiptReader) {
             expectSession,
           }),
         };
-        await runSdk(execution, "instances.cleanup.stop", stop, read, {
+        yield* runSdk(execution, "instances.cleanup.stop", stop, read, {
           process: target.process,
           releases: () => launchClaimsFor(ctx, target.process),
         });
         outcome.stopped = acquired.process;
       }
       return outcome;
-    },
+    }),
   });
 }

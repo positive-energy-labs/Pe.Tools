@@ -1,4 +1,4 @@
-import { pictureCaptures } from "./effect-test.ts";
+import { pictureCaptures, journalAt } from "./effect-test.ts";
 import { createServer } from "node:http";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,7 +8,6 @@ import { expect, it } from "vite-plus/test";
 import { publishPage } from "../src/page-publication.ts";
 import { PictureCaptures } from "../src/captures-route.ts";
 import { createPagesHandler, pageLibrary } from "../src/pages-route.ts";
-import { ActionJournal } from "../src/action-journal.ts";
 import { pagePublicationExecutor } from "../src/page-publication.ts";
 import { servePeRoute } from "@pe/agent-contracts/pe-api";
 import { asCaller, human } from "./callers.ts";
@@ -57,7 +56,7 @@ it("renders the real public Page kit and settled animation pixels below the view
   try {
     const root = join(home, "Pages");
     const captures = pictureCaptures(join(home, "captures"));
-    const journal = new ActionJournal(join(home, "commands.jsonl"), Date.now);
+    const journal = journalAt(join(home, "commands.jsonl"), Date.now);
     const executor = pagePublicationExecutor(root, "http://fixture", pageLibrary, captures);
     journal.bindCommands({ resolve: () => executor, probe: async () => null });
     const handler = asCaller(

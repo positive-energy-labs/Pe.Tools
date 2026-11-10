@@ -11,7 +11,7 @@ import {
   writePodExport,
 } from "./pod-transfer.ts";
 import { z } from "zod";
-import { refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
+import { io, nativeStep, refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
 import { productPagesRootPath } from "./product-paths.ts";
 import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
 import { freezeScript, requireScriptSuccess } from "./operation-script.ts";
@@ -36,7 +36,7 @@ import {
   tsOnlyOperationCatalog,
   tsOnlyOperationSchemas,
 } from "@pe/host-contracts/operation-types";
-import type { ActionExecution } from "./action-journal.ts";
+import type { ActionExecution, AttemptHost } from "./action-journal.ts";
 import { invokeBridge, type RevitBridge } from "./bridge.ts";
 import {
   readNativeReceipt,
@@ -190,11 +190,14 @@ const preparedGatewaySchema = z.discriminatedUnion("kind", [
 export const gatewayNativeLeaves = (key: string): readonly string[] =>
   isTsOnlyOperationKey(key) ? [] : ["host.ops.catalog", key];
 
+/** A host-leaf operation, run on the journal-owned attempt fiber with the journal's services. */
+export type GatewayLocal = (key: string, input: unknown) => Effect.Effect<unknown, unknown, AttemptHost>;
+
 /** Generated native metadata is the fallback contract; public semantic implementations are hidden. */
 export function gatewayExecutor(
   key: string,
   bridge: RevitBridge["Service"],
-  local: (key: string, input: unknown) => Promise<unknown>,
+  local: GatewayLocal,
   pictures: import("./captures-route.ts").PictureCaptures,
   sdk?: SdkReceiptReader,
 ): CommandExecutor {
@@ -467,7 +470,7 @@ export function gatewayExecutor(
         },
       };
     },
-    run: async ({ admission }: CommandContext, execution: ActionExecution) => {
+    run: ({ admission }: CommandContext, execution: ActionExecution) => Effect.suspend(() => {
       const prepared = execution.prepared as z.infer<typeof preparedGatewaySchema>;
       const capturedScript = prepared.kind === "native-leaf" ? prepared.script : undefined;
       if (
@@ -483,36 +486,37 @@ export function gatewayExecutor(
         prepared.kind === "native-leaf" ? "native" : "file",
         key,
         input,
-        async (requestId) => {
+        (requestId): Effect.Effect<unknown, unknown, AttemptHost> => {
           if (prepared.kind === "host-leaf") {
-            if (prepared.archive) {
-              const installed = await installArchive(
-                Buffer.from(prepared.archive.bytesBase64, "base64"),
-                prepared.archive.locator,
-                prepared.archive.folder,
-                { captures: pictures },
-              );
-              return prepared.promotedPage
-                ? { ...installed, key: `page:@${installed.id}/pages/${prepared.promotedPage}` }
-                : installed;
-            }
-            if (prepared.export)
-              return writePodExport(
-                prepared.export as Awaited<ReturnType<typeof preparePodExport>>,
+            const { archive, export: exported } = prepared;
+            if (archive)
+              return io(async () => {
+                const installed = await installArchive(
+                  Buffer.from(archive.bytesBase64, "base64"),
+                  archive.locator,
+                  archive.folder,
+                  { captures: pictures },
+                );
+                return prepared.promotedPage
+                  ? { ...installed, key: `page:@${installed.id}/pages/${prepared.promotedPage}` }
+                  : installed;
+              });
+            if (exported)
+              return io(() =>
+                writePodExport(exported as Awaited<ReturnType<typeof preparePodExport>>),
               );
             return local(key, input);
           }
           const target = admission.target;
           if (target.kind !== "document" && target.kind !== "session")
-            throw refused("Native target required");
-          const value = await invokeBridge(
+            return Effect.fail(refused("Native target required"));
+          return nativeStep(
             bridge,
             target.kind === "document" ? target.ref : { session: target.session },
             key,
             input,
             requestId,
           );
-          return value;
         },
         {
           process: prepared.kind === "native-leaf" ? prepared.process : undefined,
@@ -523,7 +527,7 @@ export function gatewayExecutor(
           },
         },
       );
-    },
+    }),
     recover: async (step: import("@pe/agent-contracts").ActionStep, raw: unknown) => {
       const prepared = raw as z.infer<typeof preparedGatewaySchema>;
       if (prepared.kind !== "native-leaf")

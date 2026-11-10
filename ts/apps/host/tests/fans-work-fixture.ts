@@ -2,7 +2,7 @@ import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { NativeReads } from "../src/native-reads.ts";
 import type { RequestIdentityData } from "@pe/host-internal/request-contracts";
-import { testHostInputs } from "./effect-test.ts";
+import { testHostInputs, journalAt } from "./effect-test.ts";
 import { testDuctFiles } from "./effect-test.ts";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -24,7 +24,6 @@ import { settle } from "./effect-test.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { RevitBridge, RevitBridgeLive, BridgeError } from "../src/bridge.ts";
-import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
 import { RunConsents, runConsentsPromise, type ConsentEvent } from "../src/run-consent.ts";
@@ -103,7 +102,7 @@ export async function nativeFixture(
     );
     const target = { kind: "document" as const, ref: connection.target };
     const key = bindWork("ducts", address, undefined, target.ref);
-    const journal = new ActionJournal(join(dir, "actions.jsonl"), Date.now);
+    const journal = journalAt(join(dir, "actions.jsonl"), Date.now);
     const rootReads: { native?: HostNativeRead["Service"]; shared?: NativeReads["Service"] } = {};
     const sdkInput = { read: sdkSessions };
     const web = HttpRouter.toWebHandler(
