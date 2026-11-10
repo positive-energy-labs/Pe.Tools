@@ -207,6 +207,11 @@ export const ductsSheetEditsSchema = z.strictObject({
     .optional(),
 });
 export type DuctsSheetEdits = z.infer<typeof ductsSheetEditsSchema>;
+/** /fans' edit door (ruling 2026-11-10, no cross-route write): its own cells only; /ducts' keys are refused. */
+export const fansSheetEditsSchema = ductsSheetEditsSchema.pick({
+  flows: true, terminalDrops: true, componentDrops: true, esp: true, equipmentFlows: true, roles: true,
+});
+export type FansSheetEdits = z.infer<typeof fansSheetEditsSchema>;
 /** A closure or reading the engine took on its own: shown, never parsed. */
 export const sheetNoteSchema = z.strictObject({
   kind: z.enum([

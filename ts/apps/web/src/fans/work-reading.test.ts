@@ -25,13 +25,14 @@ const settle = (write: Observation<WorkWriteOutcome>) =>
     ),
   );
 
-test("the host refuses cross-route patches and the declared Work owner observes the real owner", async () => {
+// /fans owns no /ducts Work (ruling 2026-11-10): it cannot even admit a /ducts feed, and reads the
+// /ducts design only through its own core read, which the host republishes on a /ducts edit.
+test("the host refuses cross-route patches, /fans admits no /ducts feed, and reads /ducts through its core read", async () => {
   const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.fans.readingStatus("owner:ducts").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
   const fanCalls = () => [...f.calls].filter(([key]) => key.startsWith("fans:"));
   const calls = fanCalls();
   expect(calls.length).toBeGreaterThan(0);
-  const before = f.fans.readingStatus("owner:ducts").snapshot;
   const key = f.fans.workBasis()!.token.scope.identity.work!;
   const badFan = await f.ws.apply(
     key,
@@ -46,7 +47,7 @@ test("the host refuses cross-route patches and the declared Work owner observes 
     routeKey: "fans",
     fingerprint: f.admitted.presenter.workFingerprint,
   };
-  expect(await f.ws.admitFeed(ductKey, admission)).toBeNull();
+  expect(await f.ws.admitFeed(ductKey, admission)).toMatchObject({ code: "WorkRouteMismatch" });
   expect(await f.ws.admitFeed({...ductKey,route:"rooms"}, admission)).toMatchObject({
     code: "WorkRouteMismatch",
   });
@@ -68,14 +69,6 @@ test("the host refuses cross-route patches and the declared Work owner observes 
       }) as Observation<WorkWriteOutcome>,
     ),
   ).toMatchObject({ kind: "accepted" });
-  await vi.waitFor(() =>
-    expect(f.fans.readingStatus("owner:ducts").snapshot).toMatchObject({
-      current: true,
-      value: { rules: { elbow: { edit: { value: { table: "CD3-1" } } } } },
-    }),
-  );
-  const after = f.fans.readingStatus("owner:ducts").snapshot;
-  expect(after.current && before.current && after.hash !== before.hash).toBe(true);
   expect(f.fans.work()?.revision).toBe(0);
   // The host provider republishes the sheet; the browser does not reacquire its ingredients.
   expect(fanCalls()).toEqual(calls);

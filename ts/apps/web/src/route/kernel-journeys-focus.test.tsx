@@ -1191,8 +1191,10 @@ test.each([false, true])(
     // The native mount retains handles and hash dependencies; it never serializes a Value into a token.
     expect(bytes(f.fans.workBasis())).toBeLessThan(2048);
     expect(plan).toBeTypeOf("function");
-    const input = f.inputs.get("fans:sheet.plan") as { work: unknown; readWorks: unknown };
-    expect(input.readWorks).toHaveProperty("ducts");
+    // /fans owns no /ducts Work (ruling 2026-11-10): its plan carries its own handle; the host reads /ducts.
+    const input = f.inputs.get("fans:sheet.plan") as { work: unknown; readWorks?: object };
+    expect(input.work).toMatchObject({ key: { route: "fans" } });
+    expect(Object.keys(input.readWorks ?? {})).toEqual([]);
     // H1: a plan the host refuses after invoke returned shows its reason, arms nothing, and retries clean.
     const refusedText = "Fans Work belongs to another document";
     await act(async () => plan({ id: "plan-refused", state: "refused", error: refusedText }));

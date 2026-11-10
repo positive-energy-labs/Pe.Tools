@@ -8,8 +8,7 @@ import { listFields } from "../route/defaults";
 import { fansDocumentSchema } from "../../../../packages/agent-contracts/src/fans.ts";
 import { z } from "zod";
 import {
-  ductsRouteState,
-  ductsSheetEditsSchema,
+  fansSheetEditsSchema,
   fansSheetCapability,
   ductsPictureFields,
   type Immutable,
@@ -121,10 +120,9 @@ export const module = route({
     seed: () => fansDocumentSchema.parse({}),
     work: fansDocumentSchema,
     value: "fansWork",
-    owners: {
-      ducts: { state: ductsRouteState, value: "ductsWork" },
-    },
-    input: ductsSheetEditsSchema,
+    // No cross-route write (ruling 2026-11-10): /fans owns only its Work; it reads /ducts' design in its core read.
+    owners: {},
+    input: fansSheetEditsSchema,
     patches: (input) => editPatches(input),
     history: editMetaSchema,
     describe: describeInputHistory,

@@ -7,7 +7,7 @@ import { useRouteSearchSlice } from "#/route/activity";
 import { picturePageMove } from "#/shell/picture-page";
 import { useAdmittedSubject } from "#/shell/subject";
 
-import type { DuctsSheetEdits, PicturePage } from "@pe/agent-contracts";
+import type { FansSheetEdits, PicturePage } from "@pe/agent-contracts";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { SubjectKey } from "@pe/kit/lang/attention";
@@ -19,7 +19,7 @@ import type { FansDrawContext } from "../../fans/route.ts";
 import { attentionSubjects } from "../cell-focus";
 import { ductsLink } from "../identity.ts";
 import { subjectNamer } from "../subject-text";
-import { describeCloser, type Closer } from "./closer";
+import { describeCloser, DUCTS_FIXES, type Closer, type CloserAction, type CloserLink } from "./closer";
 import { fittingGroups } from "./fitting-groups";
 import { FittingReadouts } from "./fitting-readouts";
 import { editLabel, type EditMeta } from "./input-history.neutral";
@@ -40,7 +40,7 @@ function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
   const nameOf = useMemo(() => subjectNamer(snapshot), [snapshot]);
   const selected = authored.selected.map(({ id }) => id).join(",");
   const changeInputs = async (
-    edits: DuctsSheetEdits,
+    edits: FansSheetEdits,
     history: EditMeta = { label: editLabel(edits, key => nameOf(workElementId(snapshot, key))) },
   ) => {
     return ctx.cells.edit(edits, history).then((result) => result ?? undefined);
@@ -229,25 +229,45 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
     });
     const labelled = (verb: string, action: Closer["action"]) =>
       action ? ctx.cells.label(editsFor([{ ...closer, action }]), verb) : verb;
+    // No cross-route write (ruling 2026-11-10): a fix whose Work is /ducts' is a link that opens /ducts
+    // on the blocker's element, named by what it fixes; only Fans' own fixes stage here.
+    const element = [...snapshot.nodes, ...snapshot.segments].find((e) => e.id === blocker.elementId);
+    const linkTo = (action: CloserAction | null | undefined): CloserLink | null => {
+      if (!action || !DUCTS_FIXES.has(action.kind)) return null;
+      const name = nameOf(blocker.elementId);
+      const what = action.kind === "rule" ? `join ${name}` : action.kind === "cap" ? `end ${name}`
+        : action.kind === "price" ? `assignment ${action.family}` : action.kind === "table" ? `table ${action.rule}` : `fitting ${name}`;
+      // Never a fallback to a write: an element off this walk's read goes by ElementId, which /ducts resolves.
+      return { says: `Fix in /ducts: ${what} ›`, href: ductsLink(sheetSystems(snapshot), search,
+        element ? { kind: "subject", code: elementSubject(element) } : { kind: "element", id: blocker.elementId }) };
+    };
+    const own = (link: CloserLink | null, action: CloserAction | null) => (link ? null : action);
+    const link = linkTo(closer.action) ?? linkTo(closer.choices?.[0]?.action);
     return {
       ...closer,
-      verb: labelled(closer.verb, closer.action),
-      secondary: closer.secondary && {
-        ...closer.secondary,
-        verb: labelled(closer.secondary.verb, closer.secondary.action),
-      },
-      crossing: closer.crossing && {
-        ...closer.crossing,
-        verb: labelled(closer.crossing.verb, closer.crossing.action),
-      },
-      choices: closer.choices?.map((choice) => ({
+      link,
+      action: own(link, closer.action),
+      input: link ? null : closer.input,
+      refusal: link ? null : closer.refusal,
+      verb: link ? link.says : labelled(closer.verb, closer.action),
+      secondary: closer.secondary && (() => {
+        const l = linkTo(closer.secondary.action);
+        return { ...closer.secondary, link: l, action: own(l, closer.secondary.action), refusal: l ? null : closer.secondary.refusal,
+          verb: l ? l.says : labelled(closer.secondary.verb, closer.secondary.action) };
+      })(),
+      crossing: closer.crossing && (() => {
+        const l = linkTo(closer.crossing.action);
+        return { ...closer.crossing, link: l, action: own(l, closer.crossing.action), refusal: l ? null : closer.crossing.refusal,
+          verb: l ? l.says : labelled(closer.crossing.verb, closer.crossing.action) };
+      })(),
+      choices: link ? null : closer.choices?.map((choice) => ({
         ...choice,
         verb: labelled(choice.verb, choice.action),
       })),
     };
   };
   const editsFor = (closers: readonly Closer[]) =>
-    closers.reduce<DuctsSheetEdits>((edits, closer) => {
+    closers.reduce<FansSheetEdits>((edits, closer) => {
       if (closer.refusal || !closer.action) return edits;
       const action = closer.action;
       switch (action.kind) {
@@ -274,31 +294,9 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
             ...edits,
             equipmentFlows: { ...edits.equipmentFlows, [elementSubject(nativeElement(action.unitId))]: { cfm: action.value } },
           };
-        case "rule":
-          return {
-            ...edits,
-            joins: [...(edits.joins ?? []), { pair: [...action.pair], verdict: "accept" }],
-          };
-        case "cap":
-          return {
-            ...edits,
-            ends: [...(edits.ends ?? []), { end: action.end, verdict: "capped" }],
-          };
-        case "price":
-          return {
-            ...edits,
-            assignments: { ...edits.assignments, [action.family]: { rule: action.rule } },
-            ...(action.table
-              ? { tables: { ...edits.tables, [action.rule]: { table: action.table } } }
-              : {}),
-          };
-        case "table":
-          return { ...edits, tables: { ...edits.tables, [action.rule]: { table: action.table } } };
-        case "pathDrop":
-          return {
-            ...edits,
-            fittingDrops: { ...edits.fittingDrops, [action.key]: { inWg: action.value } },
-          };
+        // /ducts' fixes never reach here: `closerOf` made each a link (DUCTS_FIXES).
+        default:
+          return edits;
       }
     }, {});
   const ownPane = (

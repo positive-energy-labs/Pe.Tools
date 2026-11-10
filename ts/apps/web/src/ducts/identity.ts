@@ -13,7 +13,9 @@ export const activeName = (value: Many<SubjectRefCode>, roster: readonly string[
   const id = openSet((id: SubjectRefCode) => id, roster.map(systemCode)).active(value);
   return id ? String(subjectOf(id).key) : "";
 };
-export type DuctsDestination = { kind: "route" } | { kind: "rule"; key: string };
+export type DuctsDestination = { kind: "route" } | { kind: "rule"; key: string } | { kind: "subject"; code: SubjectRefCode }
+  /** An element the caller cannot name by UniqueId (outside its read): /ducts resolves the ElementId on arrival. */
+  | { kind: "element"; id: number };
 export function ductsLink(
   ids: readonly string[],
   search: Readonly<Record<string, unknown>>,
@@ -26,6 +28,9 @@ export function ductsLink(
   // A rule is a route attention place, never a SubjectRef (ADR 0035 rule 9).
   if (destination.kind === "rule")
     params.set("selected", JSON.stringify([{ kind: "focus", id: `rule:${destination.key}` }]));
+  // An element SubjectRef is the attention key /ducts selects on arrival (`elementKey`).
+  if (destination.kind === "subject") params.set("selected", JSON.stringify([{ kind: "focus", id: destination.code }]));
+  if (destination.kind === "element") params.set("selected", JSON.stringify([{ kind: "focus", id: String(destination.id) }]));
   return `/ducts?${params}`;
 }
 
