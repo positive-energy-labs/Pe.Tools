@@ -1,5 +1,5 @@
 {
-  "provenance": "Exact node excerpts from retained Project A snapshot SHA cb808a82d7c48f25a487fb80de72185c8c557c2e757e29f863b7adba1d6e669c. Tests synthesize surrounding network and explicitly state a manual angle. Excerpts do not attest angle or complete Project A demand.",
+  "provenance": "Native re-capture 2026-11-10: verbatim nodes (uniqueId included) from ducts.snapshot.walk, selector systems SA 2, FA 52, RA 39, RA 59, SA 10, read on a controlled dev session over the Project A local model copy (20261028); nothing saved. The nodes replace the excerpts first taken from retained Project A snapshot cb808a82d7c48f25a487fb80de72185c8c557c2e757e29f863b7adba1d6e669c, which lacked uniqueId. Tests synthesize the surrounding network and state their own angle fact. The nodes also carry the native angle (type parameter, 45 deg) but do not attest complete Project A demand.",
   "nodes": [
     {
       "id": 12809620,
@@ -9,7 +9,11 @@
       "type": "45 Degree",
       "partType": "Transition",
       "levelId": 30,
-      "point": [279.086, 574.685, 14.789],
+      "point": [
+        279.0857,
+        574.6848,
+        14.7886
+      ],
       "groupId": "g7284997",
       "systemName": "SA 2",
       "classification": "Supply Air",
@@ -17,7 +21,11 @@
         {
           "index": 0,
           "kind": "end",
-          "point": [279.086, 574.685, 14.789],
+          "point": [
+            279.0857,
+            574.6848,
+            14.7886
+          ],
           "shape": "rectangular",
           "size": "16x16",
           "widthIn": 16,
@@ -29,12 +37,28 @@
             "elementId": 12797024,
             "connector": 0
           },
-          "areaFt2": 1.77778
+          "areaFt2": 1.77778,
+          "facing": [
+            0.707,
+            0.707,
+            0
+          ],
+          "widthAxis": [
+            -0.707,
+            0.707,
+            0
+          ],
+          "isPrimary": true,
+          "isSecondary": false
         },
         {
           "index": 1,
           "kind": "end",
-          "point": [278.85, 574.449, 14.789],
+          "point": [
+            278.85,
+            574.4491,
+            14.7886
+          ],
           "shape": "round",
           "size": "16\"\u00c3\u00b8",
           "diameterIn": 16,
@@ -45,28 +69,44 @@
             "elementId": 12809598,
             "connector": 1
           },
-          "areaFt2": 1.39626
+          "areaFt2": 1.39626,
+          "facing": [
+            -0.707,
+            -0.707,
+            0
+          ],
+          "isPrimary": false,
+          "isSecondary": true
         }
       ],
       "facts": [
         {
+          "key": "angle",
+          "value": 45,
+          "text": "type:690191; uid:74a14448-5bab-4c76-a56e-75868998bac1-000a880f; parameter:689244; name:Angle; spec:autodesk.spec.aec:angle-2.0.0; rawRadians:0.7853981633974475; builtIn:INVALID; sharedGuid:none",
+          "unit": "deg",
+          "provenance": "geometry"
+        },
+        {
           "key": "inlet",
-          "value": 0,
+          "value": 1,
           "unit": "",
           "provenance": "derived"
         },
         {
           "key": "aoOverA1",
-          "value": 0.7854,
+          "value": 1.2732395447351628,
           "unit": "",
           "provenance": "geometry"
         }
       ],
+      "uniqueId": "89523d94-604b-4fea-a2b7-b97759e1b999-00c37160",
       "loss": {
         "method": "ashrae-table",
         "serverId": "8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19",
         "fields": {}
-      }
+      },
+      "phaseCreated": "New Construction"
     },
     {
       "id": 11725687,
@@ -76,30 +116,23 @@
       "type": "45 Degree",
       "partType": "Transition",
       "levelId": 30,
-      "point": [313.452, 582.419, 25.771],
+      "point": [
+        313.4517,
+        582.4193,
+        25.7708
+      ],
       "groupId": "g6083816",
       "systemName": "FA 52",
       "classification": "Supply Air",
       "connectors": [
         {
-          "index": 2,
-          "kind": "end",
-          "point": [313.452, 582.419, 25.871],
-          "shape": "round",
-          "size": "5\"\u00c3\u00b8",
-          "diameterIn": 5,
-          "direction": "in",
-          "classification": "SupplyAir",
-          "connectedTo": {
-            "elementId": 9294160,
-            "connector": 0
-          },
-          "areaFt2": 0.13635
-        },
-        {
           "index": 1,
           "kind": "end",
-          "point": [313.452, 582.419, 25.771],
+          "point": [
+            313.4517,
+            582.4193,
+            25.7708
+          ],
           "shape": "round",
           "size": "6\"\u00c3\u00b8",
           "diameterIn": 6,
@@ -109,28 +142,58 @@
             "elementId": 9265021,
             "connector": 4
           },
-          "areaFt2": 0.19635
+          "areaFt2": 0.19635,
+          "facing": [
+            0,
+            0,
+            -1
+          ],
+          "isPrimary": true,
+          "isSecondary": false
+        },
+        {
+          "index": 2,
+          "kind": "end",
+          "point": [
+            313.4517,
+            582.4193,
+            25.8714
+          ],
+          "shape": "round",
+          "size": "5\"\u00c3\u00b8",
+          "diameterIn": 5,
+          "direction": "in",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 9294160,
+            "connector": 0
+          },
+          "areaFt2": 0.13635,
+          "facing": [
+            0,
+            0,
+            1
+          ],
+          "isPrimary": false,
+          "isSecondary": true
         }
       ],
       "facts": [
         {
-          "key": "inlet",
-          "value": 1,
-          "unit": "",
-          "provenance": "derived"
-        },
-        {
-          "key": "aoOverA1",
-          "value": 0.6944,
-          "unit": "",
+          "key": "angle",
+          "value": 45,
+          "text": "type:698498; uid:74a14448-5bab-4c76-a56e-75868998bac1-000aa882; parameter:698339; name:Angle; spec:autodesk.spec.aec:angle-2.0.0; rawRadians:0.7853981633974475; builtIn:INVALID; sharedGuid:none",
+          "unit": "deg",
           "provenance": "geometry"
         }
       ],
+      "uniqueId": "1dcea775-30fe-4b27-8e35-e9f75756d183-00b2eb77",
       "loss": {
         "method": "ashrae-table",
         "serverId": "8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19",
         "fields": {}
-      }
+      },
+      "phaseCreated": "New Construction"
     },
     {
       "id": 6497557,
@@ -140,7 +203,11 @@
       "type": "45 Degree",
       "partType": "Transition",
       "levelId": 5765339,
-      "point": [307.512, 590.045, 25.602],
+      "point": [
+        307.5118,
+        590.0446,
+        25.6024
+      ],
       "groupId": "g6497546",
       "systemName": "RA 39",
       "classification": "Return Air",
@@ -148,7 +215,11 @@
         {
           "index": 2,
           "kind": "end",
-          "point": [307.614, 589.942, 25.602],
+          "point": [
+            307.6141,
+            589.9424,
+            25.6024
+          ],
           "shape": "rectangular",
           "size": "20x21.2",
           "widthIn": 20,
@@ -160,12 +231,28 @@
             "elementId": 6497546,
             "connector": 0
           },
-          "areaFt2": 2.94278
+          "areaFt2": 2.94278,
+          "facing": [
+            0.707,
+            -0.707,
+            0
+          ],
+          "widthAxis": [
+            0.707,
+            0.707,
+            0
+          ],
+          "isPrimary": false,
+          "isSecondary": true
         },
         {
           "index": 1,
           "kind": "end",
-          "point": [307.512, 590.045, 25.602],
+          "point": [
+            307.5118,
+            590.0446,
+            25.6024
+          ],
           "shape": "rectangular",
           "size": "21.2x19.8",
           "widthIn": 21.188,
@@ -177,10 +264,31 @@
             "elementId": 6497307,
             "connector": 5
           },
-          "areaFt2": 2.90599
+          "areaFt2": 2.90599,
+          "facing": [
+            -0.707,
+            0.707,
+            0
+          ],
+          "widthAxis": [
+            -0.707,
+            -0.707,
+            0
+          ],
+          "isPrimary": true,
+          "isSecondary": false
         }
       ],
-      "facts": [],
+      "facts": [
+        {
+          "key": "angle",
+          "value": 45,
+          "text": "type:691064; uid:74a14448-5bab-4c76-a56e-75868998bac1-000a8b78; parameter:690872; name:Angle; spec:autodesk.spec.aec:angle-2.0.0; rawRadians:0.7853981633974475; builtIn:INVALID; sharedGuid:none",
+          "unit": "deg",
+          "provenance": "geometry"
+        }
+      ],
+      "uniqueId": "fda6bcc6-c863-4760-be06-e5cd05f649b2-00632515",
       "loss": {
         "method": "ashrae-table",
         "serverId": "8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19",
@@ -188,7 +296,8 @@
         "fields": {
           "ASHRAETableName": "ER4-2"
         }
-      }
+      },
+      "phaseCreated": "New Construction"
     }
   ]
 }

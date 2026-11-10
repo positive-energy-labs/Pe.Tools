@@ -330,12 +330,9 @@ it.each(rootAttached.cases)(
       const result = computeLosses(snap, grids);
       const row = result.paths[terminalId]!.rows.find((row) => row.id === fitting.id)!;
       if (fitting.id === 12398836) {
-        expect(row.error).toContain("measured included angle");
-        // Explicit manual test angle overlays the retained geometry; it is not a native observation.
-        fitting.facts.push({ key: "angle", value: 45, unit: "deg", provenance: "designer-stated" });
-        const physical = computeLosses(snap, grids).paths[terminalId]!.rows.find(
-          (r) => r.id === fitting.id,
-        )!;
+        // The native re-capture (2026-11-10) observes the angle: the type's Angle parameter, 45 deg, provenance "geometry".
+        expect(fitting.facts.find((f) => f.key === "angle")).toMatchObject({ value: 45, unit: "deg", provenance: "geometry" });
+        const physical = row;
         expect(physical.error).toBeUndefined();
         expect(physical.table).toBe("SD4-2");
         expect(physical.inputs?.y).toBeCloseTo((Math.PI * 100) / 576, 12);
