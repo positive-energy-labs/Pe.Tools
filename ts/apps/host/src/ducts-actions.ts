@@ -370,6 +370,7 @@ export function ductsExecutors(
       },
     }[kind];
     // The losses plan reads through the native Read sibling; a rehearsal calls its rolled-back TransactRead;
+    // only apply reaches the ModelWrite leaf. Heal and fan plans never get here: the write boundary seals them.
     const key = phase === "apply" ? entry.key : entry.native;
     const value = yield* execution.step(
       "native",
@@ -379,6 +380,7 @@ export function ductsExecutors(
       { process: p.process as import("@pe/agent-contracts").NativeProcess },
     );
     // Retain the review and its read evidence. A refusal blocks the whole intent at the write boundary;
+    // bookkeeping and computed losses cannot authorize Apply while an authored edit is refused.
     if (phase !== "apply") {
       const refusal = entry.refusePlan?.(value);
       if (refusal) return {
@@ -420,6 +422,8 @@ export function ductsExecutors(
       }),
     }),
     // The registry wraps these at boot: `commands[key].writeBoundary` (or `workIntent` for a rehearsal) carries
+    // the binding. ducts.plan-heal and ducts.plan-assign-fan have no executor: the registry binds the apply's in
+    // its plan phase, which seals the derived request without a native call.
     ...Object.fromEntries(
       (
         [
