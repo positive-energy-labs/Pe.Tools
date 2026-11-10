@@ -123,7 +123,7 @@ function mount(
   const page = Atom.make({ selected: "", issue: "" });
   const selection = Atom.make(
     (get): ReadonlySet<SubjectKey> =>
-      new Set(get(page).selected ? [elements.keyOf(Number(get(page).selected))!] : []),
+      new Set(/^\d+$/.test(get(page).selected) ? [elements.keyOf(Number(get(page).selected))!] : []),
   );
   const setPage = vi.fn();
   const pageOf = () => ({

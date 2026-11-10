@@ -100,7 +100,7 @@ function mount(
   const registry = makeAtomRegistry();
   const setPage = vi.fn();
   const tree = (refresh: boolean, native = true) => (
-    <TestAttention registry={registry}>
+    <TestAttention registry={registry} ids={[7311]}>
       <Owner>
         <Picture
           selection={selection}
