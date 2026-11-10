@@ -334,7 +334,6 @@
           "catalogs",
           "ruleAssignments",
           "subject",
-          "claims",
           "labelParameter",
           "workingPhase",
           "systemColours"
@@ -367,7 +366,6 @@
           "catalogs",
           "ruleAssignments",
           "subject",
-          "claims",
           "labelParameter",
           "workingPhase",
           "systemColours"
@@ -400,7 +398,6 @@
           "catalogs",
           "ruleAssignments",
           "subject",
-          "claims",
           "labelParameter",
           "workingPhase",
           "systemColours"
