@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import {
   checkoutRootFrom,
@@ -26,6 +27,8 @@ export type HostOwnership = {
 const NO_REVIT_ARGUMENT = "--no-revit";
 export const hostCapabilities = resolveHostCapabilities();
 export const hostOwnership = resolveHostOwnership();
+/** The one directory for this host runtime's journal, log and exporter files. */
+export const hostStateDir = () => join(hostOwnership.rootPath, "state", "host", hostOwnership.serviceName);
 
 function resolveHostCapabilities(argv: readonly string[] = process.argv): PeaRuntimeCapabilities {
   return { revit: !argv.includes(NO_REVIT_ARGUMENT) };

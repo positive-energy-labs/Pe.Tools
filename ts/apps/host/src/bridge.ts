@@ -19,7 +19,7 @@ import type { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { Socket } from "effect/socket";
 import { HttpServerResponse as Response } from "effect/http";
 import { dispatchRefusal, markDispatched, validateDispatch } from "./action-dispatch.ts";
-import { HostReceipts } from "./gateway-owner.ts";
+import { ActionJournalService } from "./receipt-services.ts";
 import { receiptProducerSchema, type DocumentRef, type ReceiptProducer } from "@pe/agent-contracts";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 import { hostOwnership } from "./host-ownership.ts";
@@ -297,7 +297,7 @@ export const RevitBridgeLive = Layer.effect(
   RevitBridge,
   Effect.gen(function* () {
     // Queue facts go to this runtime's journal; a bridge composed without one refuses to record them.
-    const receipts = Option.getOrUndefined(yield* Effect.serviceOption(HostReceipts));
+    const journal = Option.getOrUndefined(yield* Effect.serviceOption(ActionJournalService));
     // Session workers are forked here, so closing the host closes every line (see `serve`).
     const dispatcher = yield* makeDispatcher({
       command: () => catalogCommandContext.getStore(),
@@ -306,8 +306,8 @@ export const RevitBridgeLive = Layer.effect(
       bridgeDispatchRefusal: dispatchRefusal,
       markBridgeDispatched: markDispatched,
       recordBridgeQueue: (...args) =>
-        receipts
-          ? receipts.journal.recordQueue(...args)
+        journal
+          ? journal.recordQueue(...args)
           : Promise.reject(Error("Receipt owner has not been initialized")),
     });
     const { sessions, attached, settleLoss, endIncarnation, settleTerminal } = dispatcher;

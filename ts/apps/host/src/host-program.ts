@@ -23,7 +23,7 @@ import { makeHttpLive, resolveWebRoot } from "./app.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
 import { trayOwnerArguments } from "@pe/host-contracts/service-identity";
 import { makeInstalledUpdateReader } from "./update-route.ts";
-import { HostReceipts } from "./gateway-owner.ts";
+import { ActionJournalService } from "./receipt-services.ts";
 import { installedForeignAddins } from "./foreign-addins.ts";
 
 export type HostInputSelection =
@@ -86,14 +86,11 @@ export const hostProgram = (
       // One exporter for the launch: its scope unbinds the native producers and drains pending sends.
       const stamps = admittedReceiptStamps();
       const inputs = yield* hostInputs(stamps.host, inputSelection);
-      const receipts = Context.get(
-        yield* Layer.build(HostReceipts.layer(stamps.host)),
-        HostReceipts,
-      );
-      receipts.journal.bindInputContext(inputs);
+      const receipts = yield* Layer.build(ActionJournalService.live(stamps.host));
+      Context.get(receipts, ActionJournalService).bindInputContext(inputs);
       const telemetry = Context.get(
         yield* Layer.build(
-          ReceiptExport.layer(stamps).pipe(Layer.provide(Layer.succeed(HostReceipts, receipts))),
+          ReceiptExport.layer(stamps).pipe(Layer.provide(Layer.succeedContext(receipts))),
         ),
         ReceiptExport,
       );
@@ -190,7 +187,7 @@ export const hostProgram = (
       yield* Effect.raceFirst(
         Effect.raceFirst(
           Layer.launch(HttpLive).pipe(
-            Effect.provideService(HostReceipts, receipts),
+            Effect.provideContext(receipts),
             Effect.catchTag("ServeError", (error) => {
               const cause = error.cause;
               if (
