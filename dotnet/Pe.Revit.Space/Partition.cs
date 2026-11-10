@@ -9,11 +9,12 @@ internal sealed class Partition {
     private bool _scene;
     private int _sceneElements, _sceneTriangles;
 
-    public Partition(int source, Document doc, SourceKind kind, long? linkInstanceId, Transform transform, string? generation = null) {
+    public Partition(int source, Document doc, SourceKind kind, long? linkInstanceId, Transform transform, string? generation = null, string? linkInstanceUniqueId = null) {
         this.Source = source;
         this.Doc = doc;
         this.Kind = kind;
         this.LinkInstanceId = linkInstanceId;
+        this.LinkInstanceUniqueId = linkInstanceUniqueId;
         this.Transform = transform;
         this.DocumentKey = doc.GetDocumentKey();
         this.Bvh = Bvh.Build([]);
@@ -24,6 +25,7 @@ internal sealed class Partition {
     public Document Doc { get; }
     public SourceKind Kind { get; }
     public long? LinkInstanceId { get; }
+    public string? LinkInstanceUniqueId { get; }
     public Transform Transform { get; }
     public string DocumentKey { get; }
 
@@ -385,7 +387,7 @@ internal sealed class Partition {
 
     public Handle HandleFor(PrimRow row) => new(
         this.DocumentKey, row.ElementId, row.UniqueId, this.LinkInstanceId, row.Category, row.Kind,
-        row.Layer, row.Extrusion, row.HeightRole);
+        row.Layer, row.Extrusion, row.HeightRole, this.LinkInstanceUniqueId);
 }
 
 /// <param name="Counted">Ids inside reach before any exclusion; counting loads nothing.</param>

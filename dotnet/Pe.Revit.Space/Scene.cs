@@ -431,7 +431,7 @@ public static class Scene {
                 if (limit is not null) throw new InvalidOperationException($"Scene acquisition stopped ({limit}) before a representation could be published.");
                 throw new ArgumentException("No representation fits this scope and triangle budget.");
             }
-            return new SceneMetadata("space-scene-v4", world.StampFor(world.Partitions, Filter.Default), crop ?? writtenBounds,
+            return new SceneMetadata("space-scene-v5", world.StampFor(world.Partitions, Filter.Default), crop ?? writtenBounds,
                 triangles, elements, ids.ToList(), omitted, world.Partitions.Select(p => new SceneSource(p.DocumentKey,
                     p.LinkInstanceId, Matrix(p.Transform), SceneSourceState.Loaded, p.Doc.Title,
                     reads.TryGetValue(p, out var r) ? new SceneSourceRead(r.Reach.Counted, r.Kept, Merge(r.Reach.Excluded, classified.GetValueOrDefault(p)),

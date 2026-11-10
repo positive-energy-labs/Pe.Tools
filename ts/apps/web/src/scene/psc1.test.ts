@@ -5,6 +5,7 @@ import { decodeScene, SCENE_FORMAT, type Psc1Metadata } from "./psc1";
 import { CATEGORY_IDS } from "./categories";
 import { contextVisible } from "./context";
 import { LOOK } from "./grounds";
+import { spaceElementKey } from "@pe/agent-contracts";
 
 const BOX = { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 };
 const FRAME = {
@@ -21,6 +22,7 @@ const handle = (elementId: number, linkInstanceId: number | null = null) =>
     elementId,
     uniqueId: `u-${elementId}`,
     linkInstanceId,
+    linkInstanceUniqueId: linkInstanceId === null ? null : `link-${linkInstanceId}`,
     category: elementId === 1 ? "Ducts" : "Walls",
     // The decoder reads these fields only; the op's full Handle carries more.
   }) as Psc1Metadata["elements"][number]["handle"];
@@ -28,7 +30,7 @@ const handle = (elementId: number, linkInstanceId: number | null = null) =>
 const metadata = (patch: Partial<Psc1Metadata> = {}): Psc1Metadata =>
   ({
     format: SCENE_FORMAT,
-    stamp: { frame: "host-internal-ft" } as Psc1Metadata["stamp"],
+    stamp: { frame: "host-internal-ft", hostDocumentKey: "doc-host" } as Psc1Metadata["stamp"],
     bounds: BOX,
     triangles: 2,
     levels: {
@@ -88,7 +90,7 @@ describe("PSC1 decode", () => {
     expect(meshes.bounds.maxX).toBe(1);
     expect(meshes.instances).toEqual([
       {
-        key: JSON.stringify(["doc-a", null, "u-1"]),
+        key: spaceElementKey({ uniqueId: "u-1", hostDocumentKey: "doc-host" }),
         revitId: 1,
         documentKey: "doc-a",
         linkInstanceId: null,
@@ -100,12 +102,25 @@ describe("PSC1 decode", () => {
         vertexCount: 3,
       },
       expect.objectContaining({
-        key: JSON.stringify(["doc-a", 7, "u-2"]),
+        key: spaceElementKey({ uniqueId: "u-2", hostDocumentKey: "doc-host", linkInstanceUniqueId: "link-7" }),
         revitId: null,
         linkInstanceId: 7,
         categoryId: CATEGORY_IDS.walls,
       }),
     ]);
+  });
+  it("keys one element seen through two link instances twice, and refuses a link with no UniqueId", () => {
+    const meta = metadata();
+    meta.elements[0] = { ...meta.elements[0]!, handle: handle(2, 7) };
+    meta.elements[1] = { ...meta.elements[1]!, handle: handle(2, 8) };
+    const [one, two] = decodeScene(psc1(meta)).meshes.instances;
+    expect(one!.uniqueId).toBe(two!.uniqueId);
+    expect(one!.key).not.toBe(two!.key);
+    meta.elements[1] = {
+      ...meta.elements[1]!,
+      handle: { ...handle(2, 8), linkInstanceUniqueId: null },
+    };
+    expect(() => decodeScene(psc1(meta))).toThrow("no link UniqueId");
   });
   it("carries category identity through translated and misleading display labels", () => {
     const meta = metadata();

@@ -13,6 +13,13 @@ import {
 } from "../page-keys.ts";
 import { manyField, field, type RouteDeclaration } from "../route-field.ts";
 import { emptySpaceCut, spaceCutsSchema, spaceSceneSchema } from "../space-view.ts";
+import {
+  decode,
+  documentKeySchema,
+  subjectCode,
+  subjectRefCodeSchema,
+  uniqueIdSchema,
+} from "../subject-ref.ts";
 
 /** Lossless JSON in the address: what `schema` parses (its key order), stringified; no rounding. */
 const jsonCodec = <S extends z.ZodType>(schema: S): Codec<z.output<S>> => ({
@@ -30,38 +37,35 @@ const jsonCodec = <S extends z.ZodType>(schema: S): Codec<z.output<S>> => ({
 });
 
 /**
- * A Space element key: `JSON.stringify([documentKey, linkInstanceId ?? null, uniqueId])`, as the
- * scene's element handle names it. Structure only: whether the key's document is the scene's, and
- * whether the scene holds it, needs the loaded scene (runtime context, not this contract).
+ * A Space element key (ADR 0035 rule 2): the SubjectRef code `UniqueId:<uid>`, with `placement`
+ * the link instance's UniqueId when the scene shows it through a link. The host document key is
+ * placement's host slot and appears only for a linked element; a host element's key carries no
+ * document at all, so a document mark never changes it. Whether the scene holds the key needs the
+ * loaded scene (runtime context, not this contract).
  */
 export const spaceElementKey = (handle: {
-  documentKey: string;
-  linkInstanceId?: number | null;
   uniqueId: string;
-}) => JSON.stringify([handle.documentKey, handle.linkInstanceId ?? null, handle.uniqueId]);
+  hostDocumentKey: string;
+  linkInstanceUniqueId?: string | null;
+}) =>
+  subjectCode({
+    keyKind: "UniqueId",
+    key: uniqueIdSchema.parse(handle.uniqueId),
+    ...(handle.linkInstanceUniqueId
+      ? {
+          placement: {
+            host: documentKeySchema.parse(handle.hostDocumentKey),
+            links: [uniqueIdSchema.parse(handle.linkInstanceUniqueId)],
+          },
+        }
+      : {}),
+  });
 
-const isSpaceElementKey = (key: string) => {
-  try {
-    const value: unknown = JSON.parse(key);
-    return (
-      Array.isArray(value) &&
-      value.length === 3 &&
-      typeof value[0] === "string" &&
-      value[0] !== "" &&
-      (value[1] === null || Number.isSafeInteger(value[1])) &&
-      typeof value[2] === "string" &&
-      value[2] !== "" &&
-      spaceElementKey({ documentKey: value[0], linkInstanceId: value[1], uniqueId: value[2] }) ===
-        key
-    );
-  } catch {
-    return false;
-  }
-};
-const spaceElementKeySchema = z
-  .string()
-  .max(4096)
-  .refine(isSpaceElementKey, "an element key is JSON [documentKey, linkInstanceId|null, uniqueId]");
+/** Only an element: a UniqueId key with no sub. */
+const spaceElementKeySchema = subjectRefCodeSchema.refine((code) => {
+  const ref = decode(code);
+  return ref.ok && ref.value.keyKind === "UniqueId" && ref.value.sub === undefined;
+}, "an element key is a UniqueId SubjectRef with no sub");
 
 /** The saved view's own definitions (`space-view.ts`, version 2): the scene hash and the cuts. */
 const spaceCuts = spaceCutsSchema.default({
