@@ -47,7 +47,14 @@ export function ProposedLine({ record }: { record: ProposedRecord }) {
  * `Pea ran {action} in {Route} · {state}`: the state is the receipt's CURRENT one, read live, and
  * only `succeeded` reads as done. An action no plugin route owns keeps its receipt link.
  */
-export function ActionLine({ call }: { call: ActionCall }) {
+export function ActionLine({
+  call,
+  told,
+}: {
+  call: ActionCall;
+  /** The call itself failed and its run's row already said so: the state takes the line's ink. */
+  told: boolean;
+}) {
   const { store } = useWorkbench();
   const reading = useReading<ActionReceipt[]>({ kind: "receipts", id: call.id });
   const row = previousOf(reading)?.find((candidate) => candidate.id === call.id);
@@ -67,7 +74,7 @@ export function ActionLine({ call }: { call: ActionCall }) {
             data-tone={
               state === "succeeded"
                 ? "done"
-                : state === "running" || state === "reading"
+                : told || state === "running" || state === "reading"
                   ? undefined
                   : "caution"
             }
@@ -83,12 +90,16 @@ export function ActionLine({ call }: { call: ActionCall }) {
             open ›
           </Button>
         ) : (
-          <Link to="/ops" search={{ actionId: call.id }}>
+          // Why there is no `open ›` is the link's hint, not a second toned line under it.
+          <Link
+            to="/ops"
+            search={{ actionId: call.id }}
+            title={place && !place.ok ? place.refusal : undefined}
+          >
             receipt ›
           </Link>
         )}
       </div>
-      {place && !place.ok ? <span data-tone="caution">{place.refusal}</span> : null}
       {row?.state === "succeeded" ? <NativeReadingReferences receipt={row} /> : null}
     </div>
   );
