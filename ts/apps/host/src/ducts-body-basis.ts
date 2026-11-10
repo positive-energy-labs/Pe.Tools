@@ -1,5 +1,5 @@
 /** Original retained-owner evidence; native bytes remain in the one taking store. */
-import { Effect, Result, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { attemptFor, CurrentInputAttempt, CurrentInputConsumption } from "./input-occurrence.ts";
 import { z } from "zod";
 import { ductsReadingSchema, readingKey, type DuctsReadingRequest } from "@pe/agent-contracts";
@@ -52,11 +52,15 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
   if (lane.kind === "live" && !lane.captureStore) return undefined;
   // Provenance index only: exact observer outputs, bounded by the underlying taking store.
   // Multiple matching occurrences refuse; this index never chooses first/latest or stores bodies.
-  const native = new Map<string, Taking[]>();
-  const observer: TakingObserver = (taking) => observed(taking).pipe(Effect.andThen(Effect.sync(() => {
+  // Joined native reads share one request id, one taking per joiner: each names the read set that
+  // appended it, and a reader links only its own.
+  const native = new Map<string, { taking: Taking; readSet?: string }[]>();
+  const observer: TakingObserver = (taking) => observed(taking).pipe(Effect.andThen(Effect.gen(function* () {
     if (taking.input.kind === "native" && taking.outcome.kind === "answered") {
+      const reader = yield* Effect.serviceOption(CurrentInputConsumption);
       const ids = native.get(taking.outcome.nativeRequestId) ?? [];
-      if (!ids.some((entry) => entry.id === taking.id)) ids.push(taking);
+      if (!ids.some((entry) => entry.taking.id === taking.id))
+        ids.push({ taking, readSet: Option.isSome(reader) ? reader.value.id : undefined });
       native.set(taking.outcome.nativeRequestId, ids);
     }
   })));
@@ -125,8 +129,10 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
         : Effect.fail(error),
       link: (answer: Answer) => Effect.gen(function* () {
         if (lane.kind === "live" && lane.captureStore!.capture.truncated()) return undefined;
-        const candidates = recorded ? [recorded.nativeTakingId] :
-          (native.get(answer.nativeRequestId) ?? []).filter(matches).map((taking) => taking.id);
+        const own = consumption._tag === "Some" ? consumption.value.id : undefined;
+        const candidates = recorded ? [recorded.nativeTakingId] : (native.get(answer.nativeRequestId) ?? [])
+          .filter((entry) => matches(entry.taking) && (own === undefined || entry.readSet === own))
+          .map((entry) => entry.taking.id);
         if (candidates.length !== 1) return yield* refused("Native taking observer has no unique acquisition for this body",
           candidates.length ? "recording.ambiguous" : "recording.miss");
         const taking = checked(candidates[0]);
