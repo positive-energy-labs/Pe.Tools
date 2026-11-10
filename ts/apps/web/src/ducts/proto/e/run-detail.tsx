@@ -1,4 +1,5 @@
-import { elementKey, useMention } from "@pe/kit/lang/attention";
+import { useMention } from "@pe/kit/lang/attention";
+import { useElementIndex } from "#/element-index";
 import { useNativeObservation } from "#/revit/observation";
 import { RevitTarget, revitTarget } from "@pe/kit/lang/revit-target";
 import { useList } from "@pe/kit/lang/collection";
@@ -106,6 +107,7 @@ export function RunDetail({
 }) {
   const observation = useNativeObservation();
   const mark = useMention();
+  const elements = useElementIndex();
   const list = useList({
     items: run.parts,
     keyOf: (part) => `${part.id}:${run.parts.indexOf(part)}`,
@@ -118,7 +120,7 @@ export function RunDetail({
       {...revitTarget([run.ductId])}
       data-e-run-detail={run.ductId}
       aria-label="run detail"
-      {...mark(elementKey(run.ductId))}
+      {...mark(elements.keyOf(run.ductId))}
     >
       <dl className="grid grid-cols-[auto_1fr_auto] gap-x-3">
         <dt className="text-ink-2">length</dt>

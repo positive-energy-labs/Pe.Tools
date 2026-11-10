@@ -15,6 +15,7 @@ export const DEMO_ROOMS: RoomsSnapshot.Res.Response = {
   levels: [{ name: "Fixture level", elevation: 0, views: [DEMO_VIEW] }],
   regions: rectangles.map(([role, x, y, right, top], index) => ({
     elementId: 1001 + index,
+    uniqueId: `00000000-0000-4000-9000-${String(index).padStart(12, "0")}-${(1001 + index).toString(16).padStart(8, "0")}`,
     guid: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
     view: DEMO_VIEW,
     level: "Fixture level",

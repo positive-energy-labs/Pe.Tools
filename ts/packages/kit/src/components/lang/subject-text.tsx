@@ -30,6 +30,16 @@ const PROSE_ID = /(?<![\w.:])(?<!\d,)\d{5,}(?::\d+)?(?![\w:]|[.,]\d)/g;
 export const proseIds = (text: string) =>
   [...text.matchAll(PROSE_ID)].map((match) => Number(match[0].split(":")[0]));
 
+/** A document's references as the bus names them; a subject with no UniqueId is not cited. */
+export const citedReferences = (
+  scope: Pick<SubjectTextScope, "doc" | "uniqueIdOf">,
+  references: readonly NumberedElement[],
+) =>
+  references.flatMap(({ id, ...ref }) => {
+    const uniqueId = scope.uniqueIdOf(id);
+    return uniqueId == null ? [] : [{ ...ref, doc: scope.doc, key: elementKey(uniqueId) }];
+  });
+
 /** Structured references first; numbers in free prose resolve only when the route knows them. */
 export function subjectDocument(
   source: readonly SubjectPart[],
@@ -118,16 +128,14 @@ export function SubjectText({
     const plain = doc.parts.map((p) => (typeof p === "string" ? p : p.name)).join("");
     return revit?.length ? <span {...target}>{plain}</span> : <>{plain}</>;
   }
-  const light = (id: number | null) =>
+  const light = (id: number | null) => {
+    const focusId = id == null ? null : context.uniqueIdOf(id);
     cite(registry, {
       owner,
-      refs: doc.references.map(({ id, ...ref }) => ({
-        ...ref,
-        doc: context.doc,
-        key: elementKey(id),
-      })),
-      focus: id == null ? null : { doc: context.doc, key: elementKey(id) },
+      refs: citedReferences(context, doc.references),
+      focus: focusId == null ? null : { doc: context.doc, key: elementKey(focusId) },
     });
+  };
   const dismiss = () => {
     if (!hasContact(block.current)) leaveCitation(registry, owner);
   };
@@ -174,6 +182,7 @@ function SubjectRef({
   onLeave: () => void;
 }) {
   const target = useRevitTarget([part.id]);
+  const uniqueId = scope.uniqueIdOf(part.id);
   const reference = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
   const port = part.connector != null ? ` port ${part.connector}` : "";
@@ -196,7 +205,7 @@ function SubjectRef({
             ref={reference}
             type="button"
             {...contact}
-            {...mention({ doc: scope.doc, key: elementKey(part.id) })}
+            {...(uniqueId == null ? {} : mention({ doc: scope.doc, key: elementKey(uniqueId) }))}
             className="subject-ref"
             data-claim-element={part.id}
             {...target}

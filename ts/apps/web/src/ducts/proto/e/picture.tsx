@@ -6,13 +6,13 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
  * E's picture content: what the ducts picture is of and what it marks. Every picture behaviour
  * (capture, camera, selection, hover, readout and pane furniture) is the shared `Picture`'s; this
  * file only produces content for it.
- */ import { elementKey, type Members, type SubjectKey } from "@pe/kit/lang/attention";
+ */ import type { Members, SubjectKey } from "@pe/kit/lang/attention";
+import { ductElements } from "../../identity";
 import { useContext, useMemo, type ReactNode, type RefObject } from "react";
 
 import { VisibleRouteResource } from "#/route/activity";
 import { damageLayers } from "#/scene/damage";
 import {
-  idOf,
   Picture,
   type PictureContent,
   type PictureLayer,
@@ -134,8 +134,8 @@ export const ductsFocus = (
   const scope = scopeOf(snapshot, system);
   if (!scope) return null;
   return {
-    walked: [...new Set([...scope.members, ...drawn])].map((id) => elementKey(id)),
-    near: [...stubs].map((id) => elementKey(id)),
+    walked: [...new Set([...scope.members, ...drawn])],
+    near: [...stubs],
   };
 };
 
@@ -211,6 +211,7 @@ function Content({
   );
   const index = useMemo(() => indexOf(snapshot, priced), [snapshot, priced]);
   const door = useAdmittedSubject();
+  const elements = useMemo(() => ductElements(snapshot), [snapshot]);
   const scope = useMemo(() => scopeOf(snapshot, page.system), [snapshot, page.system]);
   const labelOf = useMemo(() => labelOfNode(snapshot), [snapshot]);
   const scene = useMemo(
@@ -263,7 +264,7 @@ function Content({
     }),
     [meshCuts],
   );
-  const lines = useMemo(() => linesOf(scene), [scene]);
+  const lines = useMemo(() => linesOf(scene, elements), [scene, elements]);
 
   const sub = scene.subject ?? null;
   const nameOfId = useMemo(() => elementNamer(snapshot, sub), [snapshot, sub]);
@@ -394,9 +395,9 @@ function Content({
   const widen = useMemo(
     () =>
       sub
-        ? (key: SubjectKey) => sub.legOf.get(idOf(key))?.ids.map((id) => elementKey(id)) ?? []
+        ? (key: SubjectKey) => elements.keysOf(sub.legOf.get(elements.idOf(key))?.ids ?? [])
         : undefined,
-    [sub],
+    [sub, elements],
   );
 
   const ruling = (r: Ruling) => {
@@ -422,7 +423,7 @@ function Content({
     ? systemNoteCount(identity.system, identity.system.note)
     : { issues: [], total: 0 };
   const facts = (key: SubjectKey) => {
-    const readId = idOf(key);
+    const readId = elements.idOf(key);
     const segFacts = scene.segments.find((f) => f.segment.id === readId);
     const nodeFacts = scene.nodes.find((f) => f.node.id === readId);
     // How Pe prices the selection's run (was the sidebar's run detail; selection lives here now).
@@ -589,7 +590,7 @@ function Content({
         widen,
         capture,
         lines,
-        name: (key) => nameOf(idOf(key)),
+        name: (key) => nameOf(elements.idOf(key)),
         paint,
         kinds,
         colour,
@@ -609,9 +610,11 @@ function Content({
             here={scope?.members ?? new Set()}
             opens={(system) => !page.system.includes(system)}
             nameOf={nameOf}
-            onGo={({ system, id }) =>
-              id == null ? door?.add([systemCode(system)]) : jumpTo(elementKey(id))
-            }
+            onGo={({ system, id }) => {
+              const key = id == null ? null : elements.keyOf(id);
+              if (id == null) door?.add([systemCode(system)]);
+              else if (key) jumpTo(key);
+            }}
           />
         ),
         furniture: {

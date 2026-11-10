@@ -8,7 +8,7 @@ import { useRouteSearchSlice } from "#/route/activity";
 import { fansLink } from "../../../fans/route.ts";
 import { useHoveredIssue } from "#/attention";
 import { PointerCite } from "#/shell/pointer-list";
-import { pointerRefs } from "../../identity.ts";
+import { ductElements, pointerRefs } from "../../identity.ts";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { LoadingContext } from "#/route/loading-context";
@@ -35,7 +35,7 @@ import { scopeOf, sectionsOf, systemScope } from "@pe/ducts-domain/system-scope"
 import { systemSearch } from "@pe/ducts-domain/system-search";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { groupLabels } from "@pe/ducts-domain/words";
-import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
+import type { SubjectKey } from "@pe/kit/lang/attention";
 import { Button } from "@pe/kit/lang/button";
 import { emptyListState, useList, useValue, type ValueHandle, type ListOptions } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
@@ -114,8 +114,8 @@ function useNetworkData(ctx: NetworkContext) {
   const seen = ctx.value.value?.effectiveDesign ?? null;
   const attentionDoc = doc ? `${doc.session}/${doc.openId}` : "ducts:unbound";
   const selection = useMemo(
-    () => Atom.make(attentionSubjects(page.selected.map(({ id }) => id))),
-    [page.selected],
+    () => Atom.make(attentionSubjects(page.selected.map(({ id }) => id), ductElements(snapshot))),
+    [page.selected, snapshot],
   );
   const select = (selected: string) =>
     ctx.page.select(selected ? [{ kind: "focus", id: selected }] : []);
@@ -260,6 +260,7 @@ function NetworkFrame({
 }) {
   const subjectProps = useRevitSubjectProps();
   const nameOf = useMemo(() => subjectNamer(data.snapshot), [data.snapshot]);
+  const elements = useMemo(() => ductElements(data.snapshot), [data.snapshot]);
   return (
     <DuctsOwner
       value={{
@@ -282,8 +283,11 @@ function NetworkFrame({
             value={{
               doc: data.attentionDoc,
               nameOf,
-              go: (id: number) =>
-                jump?.current ? jump.current(elementKey(id)) : data.selectElement(id),
+              uniqueIdOf: elements.uniqueIdOf,
+              go: (id: number) => {
+                const key = elements.keyOf(id);
+                return jump?.current && key ? jump.current(key) : data.selectElement(id);
+              },
               refProps: subjectProps,
             }}
           >
@@ -580,12 +584,14 @@ export function PictureBody({ ctx }: { ctx: DuctsDrawContext }) {
   const issues = useMemo(() => (inbox ? stageIssues(inbox) : []), [inbox]);
   const membership = useMemo(() => {
     const members = new Map<SubjectKey, readonly SubjectKey[]>();
-    for (const issue of issues) members.set(`issue:${issue.key}`, issue.ids.map(elementKey));
+    const elements = ductElements(snapshot);
+    const keys = elements.keysOf;
+    for (const issue of issues) members.set(`issue:${issue.key}`, keys(issue.ids));
     const walk = (node: TreeNode): number[] => {
       const ids = [
         ...new Set([...(node.id == null ? [] : [node.id]), ...node.children.flatMap(walk)]),
       ];
-      if (node.kind !== "element") members.set(`${node.kind}:${node.key}`, ids.map(elementKey));
+      if (node.kind !== "element") members.set(`${node.kind}:${node.key}`, keys(ids));
       return ids;
     };
     trees.forEach(walk);

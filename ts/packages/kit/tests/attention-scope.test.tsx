@@ -21,7 +21,7 @@ test("the painter enrolls only the rows a mutation adds or removes", async () =>
     const [n, setN] = useState(0);
     set = setN;
     return Array.from({ length: n }, (_, i) => (
-      <div key={i} {...mention({ doc: "kit", key: `e:${i}` })} />
+      <div key={i} {...mention({ doc: "kit", key: `UniqueId:u${i}` })} />
     ));
   }
   render(
@@ -50,19 +50,19 @@ test("a plural row lights through its declared members, and its members light th
   const release = declareMembers(
     registry,
     "kit",
-    new Map<SubjectKey, SubjectKey[]>([["card:a", ["e:1", "e:2"]]]),
+    new Map<SubjectKey, SubjectKey[]>([["card:a", ["UniqueId:u1", "UniqueId:u2"]]]),
   );
   const card = rung({ doc: "kit", key: "card:a" });
-  const one = rung({ doc: "kit", key: "e:1" });
-  const three = rung({ doc: "kit", key: "e:3" });
-  setHovered(registry, { doc: "kit", key: "e:1" });
+  const one = rung({ doc: "kit", key: "UniqueId:u1" });
+  const three = rung({ doc: "kit", key: "UniqueId:u3" });
+  setHovered(registry, { doc: "kit", key: "UniqueId:u1" });
   expect([registry.get(card), registry.get(three)]).toEqual(["hover", "rest"]);
   setHovered(registry, { doc: "kit", key: "card:a" });
   expect(registry.get(one)).toBe("hover");
   setHovered(registry, null);
   cite(registry, {
     owner: "t",
-    refs: [{ doc: "kit", key: "e:2", name: "x", number: 1 }],
+    refs: [{ doc: "kit", key: "UniqueId:u2", name: "x", number: 1 }],
     focus: null,
   });
   expect(registry.get(card)).toBe("reach");

@@ -3,7 +3,8 @@ import { subjectCode, subjectOf, type SubjectRefCode } from "../../../../package
 import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { systemScope } from "@pe/ducts-domain/system-scope";
-import { elementKey, type SubjectReference } from "@pe/kit/lang/attention";
+import type { SubjectReference } from "@pe/kit/lang/attention";
+import { elementIndex } from "../element-index.ts";
 import { openSet } from "../shell/open-set.neutral.ts";
 export { namesOf } from "../route/typed-route.ts";
 /** A duct system is the SubjectRef `system-name:<name>` (ADR 0035 rule 2). */
@@ -28,6 +29,12 @@ export function ductsLink(
   return `/ducts?${params}`;
 }
 
+/** A snapshot's elements as the attention bus knows them (ElementId <-> UniqueId). */
+type Identified = { readonly id: number; readonly uniqueId?: string | null };
+export const ductElements = (
+  snapshot: { readonly nodes: readonly Identified[]; readonly segments: readonly Identified[] } | { readonly kind: string } | null | undefined,
+) => elementIndex(snapshot && "nodes" in snapshot ? [...snapshot.nodes, ...snapshot.segments] : []);
+
 /** The elements a Pointer place names in this snapshot (ADR 0030 rule 10), numbered for the
  * citation. Each `fan`/`system` id decodes through the one codec; an unknown subject drops. */
 export function pointerRefs(
@@ -49,10 +56,14 @@ export function pointerRefs(
       ? [...systemScope(snapshot, ref.key).members]
       : [],
   );
-  return [...new Set([...fans, ...systems])].map((id, index) => ({
+  const index = ductElements(snapshot);
+  return [...new Set([...fans, ...systems])].flatMap((id, number) => {
+    const key = index.keyOf(id);
+    return key === null ? [] : [{
     doc,
-    key: elementKey(id),
+    key,
     name: nameOf(id) ?? `element ${id}`,
-    number: index + 1,
-  }));
+    number: number + 1,
+  }];
+  });
 }

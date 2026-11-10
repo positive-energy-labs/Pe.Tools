@@ -10,7 +10,6 @@ import {
   cite,
   clearCitation,
   declareMembers,
-  elementKey,
   rung,
   selection,
   setHovered,
@@ -23,6 +22,9 @@ import { makeAtomRegistry } from "#/shell/owner";
 import { inspectAtomRegistry } from "#/state/atom-inspect";
 import { AttentionScope, AttentionRoot, useElementAttention, useHoveredIssue } from "#/attention";
 import { Annotations } from "#/ducts/annotations";
+import { eKey, testElements, uid } from "#/test-attention";
+
+const ELEMENTS = testElements([1, 2, 3, 42, ...Array.from({ length: 100 }, (_, i) => i)]);
 
 afterEach(() => {
   cleanup();
@@ -37,19 +39,19 @@ vi.mock("@pe/kit/lib/token", () => ({
 it("expands runs and issues, isolates documents, reads Page selection and dedupes string rungs", () => {
   const registry = makeAtomRegistry();
   const page = Atom.make({ selected: [] as string[] });
-  const selected = Atom.make((get) => new Set<SubjectKey>(get(page).selected.map(elementKey)));
+  const selected = Atom.make((get) => new Set<SubjectKey>(get(page).selected.map((id) => eKey(Number(id)))));
   registry.set(selection("doc"), selected);
   declareMembers(
     registry,
     "doc",
     new Map([
-      ["run:7", ["e:1", "e:2"]],
-      ["issue:gap", ["e:1", "e:2"]],
+      ["run:7", [eKey(1), eKey(2)]],
+      ["issue:gap", [eKey(1), eKey(2)]],
     ]),
   );
-  const one = rung({ doc: "doc", key: "e:1" });
-  const untouched = rung({ doc: "doc", key: "e:99" });
-  expect(one).toBe(rung({ doc: "doc", key: "e:1" }));
+  const one = rung({ doc: "doc", key: eKey(1) });
+  const untouched = rung({ doc: "doc", key: eKey(99) });
+  expect(one).toBe(rung({ doc: "doc", key: eKey(1) }));
   const changes = vi.fn();
   const none = vi.fn();
   const stop = [registry.subscribe(one, changes), registry.subscribe(untouched, none)];
@@ -57,18 +59,18 @@ it("expands runs and issues, isolates documents, reads Page selection and dedupe
   registry.get(untouched);
   changes.mockClear();
   none.mockClear();
-  setHovered(registry, { doc: "other", key: "e:1" });
+  setHovered(registry, { doc: "other", key: eKey(1) });
   expect(registry.get(one)).toBe("rest");
   setHovered(registry, { doc: "doc", key: "run:7" });
-  expect(registry.get(attention("doc")).hovered).toEqual(new Set(["e:1", "e:2"]));
+  expect(registry.get(attention("doc")).hovered).toEqual(new Set([eKey(1), eKey(2)]));
   for (let i = 0; i < 30; i++) setHovered(registry, { doc: "doc", key: "issue:gap" });
   expect(registry.get(one)).toBe("hover");
   expect(changes).toHaveBeenCalledTimes(1);
   expect(none).not.toHaveBeenCalled();
   cite(registry, {
     owner: "chat",
-    refs: [{ doc: "doc", key: "e:1", name: "duct", number: 1 }],
-    focus: { doc: "doc", key: "e:1" },
+    refs: [{ doc: "doc", key: eKey(1), name: "duct", number: 1 }],
+    focus: { doc: "doc", key: eKey(1) },
   });
   expect(registry.get(one)).toBe("cited");
   registry.set(page, { selected: ["1"] });
@@ -104,11 +106,11 @@ it("measures 30 subject transitions and repeated pointer motion over 100 actual 
   function Screen() {
     screen++;
     return (
-      <AttentionScope doc="measure" selected={selected}>
-        <SubjectTextContext value={{ doc: "measure", nameOf: String }}>
+      <AttentionScope doc="measure" selected={selected} elements={ELEMENTS}>
+        <SubjectTextContext value={{ doc: "measure", nameOf: String, uniqueIdOf: uid }}>
           {Array.from({ length: 100 }, (_, i) => (
             <Profiler key={i} id={String(i)} onRender={() => rows++}>
-              <Row label={`subject ${i}`} revit={[i]} />
+              <Row label={`subject ${i}`} revit={[i]} uniqueIds={[uid(i)]} />
             </Profiler>
           ))}
           <Picture />
@@ -146,8 +148,8 @@ it("the native picture adapter lights every member of a run and nested room grou
   const registry = makeAtomRegistry();
   const selected = Atom.make<ReadonlySet<SubjectKey>>(new Set<SubjectKey>());
   const resolve = new Map<SubjectKey, SubjectKey[]>([
-    ["run:7", ["e:1", "e:2"]],
-    ["room:guid", ["e:3"]],
+    ["run:7", [eKey(1), eKey(2)]],
+    ["room:guid", [eKey(3)]],
     ["group:7", ["run:7", "room:guid"]],
   ]);
   function Picture() {
@@ -156,7 +158,7 @@ it("the native picture adapter lights every member of a run and nested room grou
   }
   const view = render(
     <RegistryContext value={registry}>
-      <AttentionScope doc="group-doc" selected={selected} members={resolve}>
+      <AttentionScope doc="group-doc" selected={selected} members={resolve} elements={ELEMENTS}>
         <Picture />
       </AttentionScope>
     </RegistryContext>,
@@ -205,7 +207,7 @@ it("SubjectText in another React root lights the ducts picture set and projected
   }
   const picture = render(
     <RegistryContext value={registry}>
-      <AttentionScope doc="same-doc" selected={selected}>
+      <AttentionScope doc="same-doc" selected={selected} elements={ELEMENTS}>
         <Picture />
       </AttentionScope>
     </RegistryContext>,
@@ -213,7 +215,7 @@ it("SubjectText in another React root lights the ducts picture set and projected
   const prose = render(
     <RegistryContext value={registry}>
       <AttentionRoot doc="same-doc">
-        <SubjectTextContext value={{ doc: "same-doc", nameOf: () => "outside duct" }}>
+        <SubjectTextContext value={{ doc: "same-doc", nameOf: () => "outside duct", uniqueIdOf: uid }}>
           <SubjectText text={[{ id: 42 }]} owner="outside" />
         </SubjectTextContext>
       </AttentionRoot>
@@ -221,14 +223,14 @@ it("SubjectText in another React root lights the ducts picture set and projected
   );
   fireEvent.mouseEnter(prose.container.querySelector("[data-subject-text]")!);
   expect(picture.getByTestId("set").textContent).toBe("42");
-  expect(picture.container.querySelector('[data-subject-badge="e:42"]')).toBeTruthy();
+  expect(picture.container.querySelector(`[data-subject-badge="${eKey(42)}"]`)).toBeTruthy();
   const badge = picture.container.querySelector(".subject-badge")!;
   fireEvent.mouseEnter(badge);
-  expect(registry.get(citation)?.focus).toEqual({ doc: "same-doc", key: "e:42" });
+  expect(registry.get(citation)?.focus).toEqual({ doc: "same-doc", key: eKey(42) });
   act(() =>
     cite(registry, {
       owner: "other-doc",
-      refs: [{ doc: "different-doc", key: "e:42", name: "different duct", number: 1 }],
+      refs: [{ doc: "different-doc", key: eKey(42), name: "different duct", number: 1 }],
       focus: null,
     }),
   );

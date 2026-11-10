@@ -7,7 +7,7 @@ import { StateCell, cellSource } from "@pe/kit/lang/cell";
 import { Button } from "@pe/kit/lang/button";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
 import { PointerCite } from "#/shell/pointer-list";
-import { pointerRefs } from "../identity.ts";
+import { ductElements, pointerRefs } from "../identity.ts";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { useRouteSearchSlice } from "#/route/activity";
 import { picturePageMove } from "#/shell/picture-page";
@@ -16,7 +16,7 @@ import { useAdmittedSubject } from "#/shell/subject";
 import type { DuctsSheetEdits, PicturePage } from "@pe/agent-contracts";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
+import type { SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import * as Atom from "effect/reactivity/Atom";
@@ -376,8 +376,8 @@ function PictureContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSn
     select,
   );
   const selection = useMemo(
-    () => Atom.make(attentionSubjects(authored.selected.map(({ id }) => id))),
-    [authored.selected],
+    () => Atom.make(attentionSubjects(authored.selected.map(({ id }) => id), ductElements(snapshot))),
+    [authored.selected, snapshot],
   );
   const pickedFans = authored.fan.kind === "all" ? "all" : authored.fan.ids;
   const nativeSnapshot = ctx.value.value?.sheetSnapshot;
@@ -597,10 +597,13 @@ function SheetFrame({
   const document = target?.kind === "document" ? target.ref : null;
   const attentionDoc = document ? `${document.session}/${document.openId}` : "fans:unbound";
   const refProps = useRevitSubjectProps();
-  const go = (id: number) =>
-    jump?.current
-      ? jump.current(elementKey(id))
+  const elements = ductElements(snapshot);
+  const go = (id: number) => {
+    const key = elements.keyOf(id);
+    return jump?.current && key
+      ? jump.current(key)
       : ctx.selection.set([{ kind: "focus", id: String(id) }]);
+  };
   return (
     <>
       {"kind" in snapshot ? null : (
@@ -609,7 +612,7 @@ function SheetFrame({
           refs={(place) => pointerRefs(place, snapshot, attentionDoc, (id) => nameOf(id))}
         />
       )}
-      <SubjectTextContext.Provider value={{ doc: attentionDoc, nameOf, go, refProps }}>
+      <SubjectTextContext.Provider value={{ doc: attentionDoc, nameOf, uniqueIdOf: elements.uniqueIdOf, go, refProps }}>
           {children}
 
       </SubjectTextContext.Provider>

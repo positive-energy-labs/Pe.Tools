@@ -10090,6 +10090,7 @@ export namespace RoomsRoster {
     }
     export interface RoomsRegion {
       elementId: number;
+      uniqueId: string;
       guid: string;
       view: string;
       level: string;
@@ -10136,6 +10137,7 @@ export namespace RoomsSnapshot {
     }
     export interface RoomsRegion {
       elementId: number;
+      uniqueId: string;
       guid: string;
       view: string;
       level: string;

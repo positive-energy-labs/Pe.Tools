@@ -180,7 +180,7 @@ export function RoomsPlan({
   const attention = useAttention(doc);
   const selected = new Set(
     rows
-      .filter((row) => attention.selected.has(elementKey(row.region.elementId)))
+      .filter((row) => attention.selected.has(elementKey(row.region.uniqueId)))
       .map((row) => row.region.guid),
   );
   const onHover = (guid: string | null) =>
@@ -508,8 +508,8 @@ export function RoomsPlan({
                     const fillInk = stale ? token(REGION_INK.stale.ink!) : ink;
                     const on = selected.has(region.guid);
                     const hot =
-                      attention.hovered.has(elementKey(region.elementId)) ||
-                      attention.lit.has(elementKey(region.elementId));
+                      attention.hovered.has(elementKey(region.uniqueId)) ||
+                      attention.lit.has(elementKey(region.uniqueId));
                     const width = on ? 3 : 2;
                     return (
                       <path
@@ -563,8 +563,8 @@ export function RoomsPlan({
                     const region = rows.find((row) => row.region.guid === callout.guid)?.region;
                     const hot =
                       !!region &&
-                      (attention.hovered.has(elementKey(region.elementId)) ||
-                        attention.lit.has(elementKey(region.elementId)));
+                      (attention.hovered.has(elementKey(region.uniqueId)) ||
+                        attention.lit.has(elementKey(region.uniqueId)));
                     const [ax, ay] = callout.anchor;
                     const [px, py] = callout.pin;
                     const textX = px + callout.pinWidth / 2 + 8;

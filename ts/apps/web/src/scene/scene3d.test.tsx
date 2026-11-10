@@ -1,5 +1,5 @@
 import { makeAtomRegistry } from "#/shell/owner";
-import { TestAttention } from "#/test-attention";
+import { TestAttention, uid } from "#/test-attention";
 // @vitest-environment jsdom
 import { act, fireEvent, render } from "@testing-library/react";
 import { expect, it, vi } from "vite-plus/test";
@@ -79,7 +79,7 @@ it("keeps camera gestures local and the viewport mounted across membership and n
       {
         key: "mesh42",
         revitId: 42,
-        uniqueId: "uid42",
+        uniqueId: uid(42),
         documentKey: "doc",
         linkInstanceId: null,
         category: "test",
@@ -112,11 +112,11 @@ it("keeps camera gestures local and the viewport mounted across membership and n
         contextMode={contextMode}
       />
       <OrbitMinimap orbit={orbit} />
-      <Row label="linked row" revit={[42]} />
+      <Row label="linked row" revit={[42]} uniqueIds={[uid(42)]} />
     </>
   );
   const registry = makeAtomRegistry();
-  const view = render(<TestAttention registry={registry}>{draw()}</TestAttention>);
+  const view = render(<TestAttention registry={registry} ids={[42]}>{draw()}</TestAttention>);
   await act(async () => {});
   expect(renderer.current.setContextMode).toHaveBeenLastCalledWith(undefined);
   expect(view.getByText("picture state")).toBeTruthy();
@@ -186,15 +186,15 @@ it("keeps camera gestures local and the viewport mounted across membership and n
   expect(setViewport).toHaveBeenCalledTimes(1);
   const beforeSelection = orbit.read();
   setViewport.mockClear();
-  view.rerender(<TestAttention registry={registry}>{draw([10, 20, 30])}</TestAttention>);
+  view.rerender(<TestAttention registry={registry} ids={[42]}>{draw([10, 20, 30])}</TestAttention>);
   expect(renderer.current.setOrbitPivot).toHaveBeenLastCalledWith([10, 20, 30]);
   expect(orbit.read()).toBe(beforeSelection);
   expect(setViewport).not.toHaveBeenCalled();
   const canvas = renderer.current.canvas;
-  view.rerender(<TestAttention registry={registry}>{draw([10, 20, 30], "lines")}</TestAttention>);
+  view.rerender(<TestAttention registry={registry} ids={[42]}>{draw([10, 20, 30], "lines")}</TestAttention>);
   expect(renderer.current.setContextMode).toHaveBeenLastCalledWith("lines");
   expect(renderer.current.canvas).toBe(canvas);
-  view.rerender(<TestAttention registry={registry}>{draw([10, 20, 30], "glass")}</TestAttention>);
+  view.rerender(<TestAttention registry={registry} ids={[42]}>{draw([10, 20, 30], "glass")}</TestAttention>);
   expect(renderer.current.setContextMode).toHaveBeenLastCalledWith("glass");
   fireEvent(canvas, new MouseEvent("pointerdown", { button: 0, clientX: 10, clientY: 10 }));
   onViewport.mockClear();
@@ -213,7 +213,7 @@ it("keeps camera gestures local and the viewport mounted across membership and n
   fireEvent.click(canvas, { button: 0, clientX: 10, clientY: 10 });
   expect(onPick).toHaveBeenCalledExactlyOnceWith(null, expect.any(MouseEvent));
   view.rerender(
-    <TestAttention registry={registry}>{draw(undefined, "glass", meshes, false)}</TestAttention>,
+    <TestAttention registry={registry} ids={[42]}>{draw(undefined, "glass", meshes, false)}</TestAttention>,
   );
   fireEvent.click(canvas, { button: 0, clientX: 10, clientY: 10 });
   expect(onPick).toHaveBeenCalledTimes(1);
@@ -234,14 +234,14 @@ it("keeps camera gestures local and the viewport mounted across membership and n
   });
   expect(onViewport).toHaveBeenCalledExactlyOnceWith(pose, "gesture");
   // A withheld pick never withholds camera gestures on the retained picture.
-  view.rerender(<TestAttention registry={registry}>{draw()}</TestAttention>);
+  view.rerender(<TestAttention registry={registry} ids={[42]}>{draw()}</TestAttention>);
   const biggerCapture = new SceneMeshes(
     meshes.positions,
     { minX: -100, minY: -100, minZ: -100, maxX: 100, maxY: 100, maxZ: 100 },
     meshes.instances,
   );
   view.rerender(
-    <TestAttention registry={registry}>{draw(undefined, "glass", biggerCapture)}</TestAttention>,
+    <TestAttention registry={registry} ids={[42]}>{draw(undefined, "glass", biggerCapture)}</TestAttention>,
   );
   await act(async () => {});
   expect(renderer.current.meshes()).toBe(biggerCapture);
@@ -249,7 +249,7 @@ it("keeps camera gestures local and the viewport mounted across membership and n
   expect(renderer.current.dispose).not.toHaveBeenCalled();
   // Cancellation/failure ownership is tested at the controller boundary; this test exercises
   // the viewport's actual gesture/retained-native-authority wiring.
-  view.rerender(<TestAttention registry={registry}>{draw()}</TestAttention>);
+  view.rerender(<TestAttention registry={registry} ids={[42]}>{draw()}</TestAttention>);
   await act(async () => {});
   expect(renderer.current.meshes()).toBe(meshes);
   view.unmount();
