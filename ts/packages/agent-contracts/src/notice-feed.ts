@@ -66,9 +66,9 @@ export const noticeRowSchema = z.strictObject({
 export type NoticeRow = z.infer<typeof noticeRowSchema>;
 
 /**
- * The `notices` Reading's snapshot. Rows arrive sorted group order first, newest first inside a
- * group. `id` is the host log id the snapshot was built at: a follower that raised cards up to it
- * raises nothing again, and a `gap` below it owes nothing earlier.
+ * The `notices` Reading's snapshot, the whole feed in every frame. Rows arrive sorted group order
+ * first, newest first inside a group. `id` is the host log id it was built at. Push followers key
+ * on each row's `revision` (its source's durable counter), never on `id`.
  */
 export const noticeFeedSchema = z.strictObject({
   id: z.int().min(0),
