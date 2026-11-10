@@ -24,9 +24,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.a
 ROSTER = os.path.join(ROOT, ".artifacts", "keepalive")
 T3 = os.path.expanduser("~/.t3/bin/t3.cmd")
 PROMPT = "keepalive: nothing is asked. If nothing changed since your last turn, reply in one line and stop."
-# A wake reads the cache at 0.1x the input price and a cold start writes it at 2x, so 20 wakes cost one cold start.
-# At one wake per 50 minutes that is about 16 hours: past it, keeping the thread warm costs more than letting it go cold.
-EXPIRE_MIN = 16 * 60
+# A wake reads the cache at 0.1x the input price and a cold return writes it at 2x, so a return caught warm saves 1.9
+# contexts and every wake spent waiting for one costs 0.1. Replayed over the silences of long-lived threads in the T3
+# history, the saving peaks at a 3 to 4 hour limit: half of all returns come inside 2.3 hours, and past 4 the wakes
+# cost more than the late returns they catch. Certain return was the old assumption (16 hours); it is not what happens.
+EXPIRE_MIN = 4 * 60
 CADENCE = 45
 STATE = (os.environ.get("T3_USERDATA") or os.path.expanduser("~/.t3/userdata")).replace(os.sep, "/") + "/statev2.sqlite"
 
@@ -77,7 +79,7 @@ def tick(dry):
         real = last_real_input(tid) or end
         unasked = (now - dt.datetime.fromisoformat(real.replace("Z", "+00:00"))).total_seconds() / 60
         if unasked > EXPIRE_MIN:
-            print(f"{tid}: no real input for {unasked:.0f} min, disarmed"); os.remove(path); continue
+            print(f"{tid}: no real input for {unasked:.0f} min, paused until someone speaks to it"); continue
         if idle < minutes:
             print(f"{tid}: idle {idle:.0f} of {minutes} min"); continue
         print(f"{tid}: idle {idle:.0f} min >= {minutes}, {'would wake' if dry else 'waking'}")
