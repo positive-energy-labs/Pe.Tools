@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 
-const interleave = vi.hoisted(() => ({ afterWrite: null as (() => void) | null }));
+const interleave = vi.hoisted(() => ({ afterWrite: null as (() => void) | null, failRename: false }));
 vi.mock("node:fs", async (load) => {
   const real = await load<typeof import("node:fs")>();
   return {
@@ -14,6 +14,10 @@ vi.mock("node:fs", async (load) => {
       const next = interleave.afterWrite;
       interleave.afterWrite = null;
       next?.();
+    },
+    renameSync: (...args: Parameters<typeof real.renameSync>) => {
+      if (interleave.failRename) throw Object.assign(new Error("EBUSY: share locked"), { code: "EBUSY" });
+      real.renameSync(...args);
     },
   };
 });
@@ -42,6 +46,19 @@ test("two interleaved Work writers publish complete records without sharing stag
     expect(await first.getState(address)).toEqual(value);
   } finally {
     interleave.afterWrite = null;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a failed Work publish removes its own staging file", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-work-failed-"));
+  try {
+    const store = fileRouteDocumentStore(dir);
+    interleave.failRename = true;
+    await expect(store.setState({ targetKey: "w", route: "fans", value: { a: 1 } })).rejects.toThrow("EBUSY");
+    expect(readdirSync(dir)).toEqual([]);
+  } finally {
+    interleave.failRename = false;
     rmSync(dir, { recursive: true, force: true });
   }
 });
