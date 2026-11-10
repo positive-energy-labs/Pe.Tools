@@ -1,10 +1,68 @@
 import { defineConfig } from "vite-plus";
 import { browserGuardianPlugin } from "@pe/browser/build";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { receiptBuildDefines } from "./src/build-stamp.ts";
 import { prepareSourceClosures } from "./src/source-closures.ts";
+import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import {
+  currentRouteStartupProjection,
+  routeStartupOwner,
+  routeStartupSourceHash,
+  type RouteStartupProjection,
+} from "@pe/host-contracts/route-startup";
 
-await prepareSourceClosures();
+const checkout = fileURLToPath(new URL("../../../", import.meta.url));
+const webSource = fileURLToPath(new URL("../web/src/", import.meta.url));
+const stampPath = join(import.meta.dirname, "node_modules", ".cache", "source-closures.json");
+const diskClosures = () =>
+  Object.fromEntries(
+    readdirSync(webSource, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .flatMap((d) => {
+        const path = join(webSource, d.name, "source-closure.generated.json");
+        try {
+          return [[path, readFileSync(path, "utf8")] as const];
+        } catch {
+          return [];
+        }
+      }),
+  );
+/** Test lane only (Vitest sets VITEST before it loads this file). The closure producer
+ * (route-graphs.ts --builtin-closure-only) took ~45 s of every host test run before Vitest started.
+ * Skip it while the disk closures are exactly the ones a stamp recorded and
+ * `currentRouteStartupProjection` (the dev host's source-hash + closure-member check) still passes;
+ * otherwise produce and stamp. Pack and source startup always produce. */
+async function prepareTestSourceClosures() {
+  try {
+    const stamp = JSON.parse(readFileSync(stampPath, "utf8")) as RouteStartupProjection;
+    const disk = diskClosures();
+    if (
+      JSON.stringify(Object.keys(disk).sort()) ===
+        JSON.stringify(Object.keys(stamp.projections).sort()) &&
+      Object.entries(stamp.projections).every(([path, text]) => disk[path] === text) &&
+      currentRouteStartupProjection(checkout, stamp)
+    )
+      return;
+  } catch {
+    // No or malformed stamp: produce.
+  }
+  const before = routeStartupSourceHash(checkout);
+  await prepareSourceClosures();
+  // The producer also rewrites tracked generated sources; stamp only a run that found them current.
+  const sourceHash = routeStartupSourceHash(checkout);
+  if (sourceHash !== before) return;
+  const stamp: RouteStartupProjection = {
+    checkout: routeStartupOwner(checkout),
+    sourceHash,
+    projections: diskClosures(),
+  };
+  mkdirSync(dirname(stampPath), { recursive: true });
+  writeFileSync(`${stampPath}.${process.pid}`, JSON.stringify(stamp));
+  renameSync(`${stampPath}.${process.pid}`, stampPath);
+}
+
+await (process.env.VITEST === "true" ? prepareTestSourceClosures() : prepareSourceClosures());
 
 const browserTestFiles = ["tests/**/*.browser.test.{ts,tsx}"];
 
