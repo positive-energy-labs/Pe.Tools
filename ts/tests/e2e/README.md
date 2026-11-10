@@ -194,6 +194,16 @@ Clicks and keys go through `@pe/browser` gestures: a disabled, covered or absent
 
 A missing precondition (no Revit bridge, no seed, wrong chips) ends as `RESULT: BLOCKED — …`, never `FAIL`.
 
+## Journeys as action lists (trial, `walk.ts` + `f1-fans.ts`)
+
+`walk.ts` plays a journey written as a list of named read actions, or a seeded random walk over the same actions. Each action is a precondition read from the page, a press by role and visible name (scoped only by a region's accessible name), and a condition with a deadline. Rules run after every action and read the page, never a remembered value. Any fan or port is drawn from what the roster lists. The seed defaults to the first 8 hex digits of HEAD.
+
+From `ts`, on an `acceptance.py setup <run> --web` drive with your own `pea browser launch` (headless, 1600x900):
+
+    CDP_PORT=… CDP_TARGET=… E2E_WEB=<frontend> E2E_SESSION=acc-<run> node tests/e2e/f1-fans.ts [--seed N] [--walk 30] [--steps open,reopenPlace,reload]
+
+Under Git Bash, set `MSYS_NO_PATHCONV=1`, or a `/regex/` argument is rewritten into a Windows path. The run writes `steps.jsonl` (action, draws, settle time in ms, rule results, notes), `errors.json`, one screenshot per failing step plus `final.png`, and a `run.log` result line that carries the seed. Every walk starts at `open`.
+
 ## Revit data per journey
 
 - **Verbs** are located by their word plus any count badge (`PLAN` matches `plan`, `plan 1`, `re-plan`) inside the Situation, never by exact text.

@@ -4,7 +4,7 @@ import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, parse } from "node:path";
 import type { CdpClient } from "./cdp.ts";
 
-/** A control by accessible role/name (optionally inside `within`, a CSS selector), or a CSS selector. */
+/** A control by accessible role/name (optionally inside the first shown `within`, a CSS selector), or a CSS selector. */
 export type GestureTarget = string | { role?: string; name: string | RegExp; within?: string };
 export interface GestureRect {
   x: number;
@@ -55,7 +55,10 @@ async function probe(spec: Wire, mode: Mode): Promise<Probe> {
   const shown = (e: Element) =>
     e.getClientRects().length > 0 &&
     e.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
-  const root = spec.within ? document.querySelector(spec.within) : document;
+  // The first shown region: a route keeps a hidden Place's DOM, whose panes share the shown one's names.
+  const root = spec.within
+    ? ([...document.querySelectorAll(spec.within)].find(shown) ?? null)
+    : document;
   if (!root) return out("absent");
   const implicit = (e: Element) => {
     const tag = e.tagName;

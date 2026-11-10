@@ -26,10 +26,13 @@
   <button id="disabled" disabled>Disabled action</button>
   <span id="under-box"><button id="under">Covered action</button><span id="overlay"></span></span>
   <label>Doubling <input id="doubling" /></label>
+  <!-- A retained hidden Place: same region name, earlier in the document than the shown one. -->
+  <section aria-label="Pane" hidden><button id="stale">Scoped action</button></section>
+  <section aria-label="Pane"><button id="scoped">Scoped action</button></section>
   <output id="log"></output>
   <script>
     const log = (word) => (document.getElementById("log").textContent += word + ";");
-    for (const id of ["enabled", "disabled", "under"])
+    for (const id of ["enabled", "disabled", "under", "scoped"])
       document.getElementById(id).addEventListener("click", () => log(id));
     // The "DDuct" bug: the first input event doubles its first character.
     const doubling = document.getElementById("doubling");
