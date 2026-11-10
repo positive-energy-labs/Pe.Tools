@@ -14,12 +14,11 @@ import {
 } from "./route-field.ts";
 import { routeAddresses } from "./routes/index.ts";
 import { threadListFields } from "./routes/shared.ts";
-import { admittedBuiltinKeys } from "./admitted-builtin-keys.ts";
 
 /**
  * A route's address, deep: `routeAddress(route)` is the one door every caller reaches a route through,
  * its typed Page, URL and link, history rule, transition and Pea's lease, all derived from the
- * fields `routes/<route>.ts` declares over the kernel in `route-field.ts`; nothing here declares a
+ * fields its address table row (`routes/table.generated.ts`) declares over the kernel in `route-field.ts`; nothing here declares a
  * key. A new capability grows as a member of `RouteAddress`, never as a loose helper beside it.
  */
 
@@ -435,14 +434,15 @@ const built = new Map<RouteKey, ReturnType<typeof build>>();
 export function routeAddress<R extends RouteKey>(route: R): RouteAddress<R> {
   let found = built.get(route);
   if (!found) built.set(route, (found = build(route)));
-  // `build` runs over untyped fields; the declaration in `routes/<route>.ts` is what types them.
+  // `build` runs over untyped fields; the address table row is what types them.
   return found as unknown as RouteAddress<R>;
 }
 
 /** An admitted Page's owner decodes its values; Places and thread context retain its encoded link. */
 export function canonicalPlace(route: string, link: string, registered?: string) {
   const builtin = routeOf(route);
-  if (builtin && !admittedBuiltinKeys.includes(builtin)) return routeAddress(builtin).tab(link);
+  // A builtin declared in a web folder owns its Page; any other route's tab is its address's.
+  if (builtin && !("module" in routeAddresses[builtin])) return routeAddress(builtin).tab(link);
   // A Pod's path is its live registration's authenticated address; an unknown name has none.
   const path = builtin ? routeAddress(builtin).path : registered;
   if (!path) return { ok: false as const, error: `${route} is not a registered route` };
