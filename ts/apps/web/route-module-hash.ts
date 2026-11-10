@@ -1,12 +1,16 @@
-import { currentRouteStartupProjection } from "@pe/host-contracts/route-startup";
+import {
+  currentRouteStartupProjection,
+  routeStartupOwner,
+  routeStartupSourceHash,
+} from "@pe/host-contracts/route-startup";
 import type { RouteStartupProjection } from "@pe/host-contracts/route-startup";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build, type Plugin } from "vite-plus";
 import { createHash } from "node:crypto";
-import { dirname, isAbsolute } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import ts from "typescript";
 import { routeFingerprint } from "../../packages/agent-contracts/src/route-module.ts";
 import type { RouteFingerprintInput } from "../../packages/agent-contracts/src/route-kernel-admission.ts";
@@ -178,6 +182,31 @@ async function runtimeRoutes() {
     maxBuffer: 16 * 1024 * 1024,
   });
   return JSON.parse(stdout) as Record<string, string>;
+}
+
+/** Test lane only (vite.config.ts `mode === "test"`). Every web test file reaches the producer through
+ * @pe/agent-contracts -> generated/route-directory.ts, and one producer run costs minutes and ~2 GiB.
+ * Keep its last answer as a dev-host style receipt and reuse it only while
+ * `currentRouteStartupProjection` (the source-hash plus closure-member check the dev host trusts for
+ * its handoff) says it is current. Any miss runs the producer, which stays the authority. */
+export async function cachedRuntimeRoutes() {
+  const root = fileURLToPath(new URL("../../../", import.meta.url));
+  const receiptPath = join(import.meta.dirname, "node_modules", ".cache", "route-projection.json");
+  try {
+    const receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as RouteStartupProjection;
+    if (currentRouteStartupProjection(root, receipt)) return receipt.projections;
+  } catch {
+    // No or malformed receipt: produce.
+  }
+  // Hash before producing: an edit during the run leaves a receipt the next check refuses.
+  const sourceHash = routeStartupSourceHash(root);
+  const projections = await runtimeRoutes();
+  const receipt: RouteStartupProjection = { checkout: routeStartupOwner(root), sourceHash, projections };
+  mkdirSync(dirname(receiptPath), { recursive: true });
+  const temp = `${receiptPath}.${process.pid}`;
+  writeFileSync(temp, JSON.stringify(receipt));
+  renameSync(temp, receiptPath);
+  return projections;
 }
 
 /** Every bundle (web, host pack, tests) serves the producer's projections from memory, never disk:
