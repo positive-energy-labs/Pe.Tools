@@ -40,6 +40,15 @@ def log(run: str, text: str) -> None:
         f.write(line + "\n")
 
 
+def owner_home() -> Path:
+    # The user root (ADR 0035 rule 11): the Documents known folder's Pe.Tools, OneDrive when it redirects.
+    docs = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", "[Environment]::GetFolderPath('MyDocuments')"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    return Path(docs) / "Pe.Tools"
+
+
 def owner_files(roots: list[str]) -> dict:
     files = {}
     for root in roots:
@@ -154,7 +163,7 @@ def sdk_ok(envelope: dict) -> bool:
 
 
 def setup_installed(run: str, state: dict, args: list[str]) -> None:
-    # Installed machine state belongs to the canonical MSI root; content uses the shared mount.
+    # Installed machine state belongs to the canonical MSI root; content uses the user root.
     # PE_TOOLS_PRODUCT_HOME would move that root and is deliberately absent in this lane.
     log(run, f"installed {state['installation']['version']}: actual home {state['home']}; writes will be recorded")
     before = sdk(run, "sessions-before", ["session", "list", "--all"])
@@ -237,10 +246,7 @@ def http(state: dict, who: str, method: str, path: str, body: bytes | None = Non
 
 
 def setup(run: str, args: list[str]) -> None:
-    shared = os.environ.get("PE_TOOLS_SHARED_ROOT", "").strip()
-    if not shared:
-        sys.exit("Set PE_TOOLS_SHARED_ROOT to the content home before acceptance setup")
-    owner = Path(shared).resolve()
+    owner = owner_home()
     installed = "--installed" in args
     if installed and "--web" in args:
         sys.exit("--web is a checkout frontend option; installed serves its packaged frontend")
