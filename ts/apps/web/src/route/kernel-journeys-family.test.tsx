@@ -82,7 +82,6 @@ async function mounted(cells: FamilyDraft["cells"], reading = raw) {
   } };
   mount = mounts.mountTypedRoute(family, {
     address: { read: () => new URLSearchParams(), write: () => {}, subscribe: () => () => {} },
-    // A fresh document target gives each test its own Work key, so the module-level edit buffer cannot leak between tests.
     target: { kind: "document", ref: { session: crypto.randomUUID(), openId: "family" } }, fixture: null, custody: { current: () => true }, memory: () => ({}),
     work: { address: null, open: null },
   }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work, sources: { "family.workspace": source } });

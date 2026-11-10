@@ -71,6 +71,7 @@ The route kernel and every web route's shared shape ([ADR 0026](../../adr/0026-o
 ## Owed
 
 - Kernel crusade slices 1 to 10 are in [MAP.md](MAP.md); each lands with its red falsifier.
+- `FamilyEditBuffer.stage` keeps `revision = Math.max(old, incoming)` (`apps/web/src/family/edit-buffer.ts`): after a Work reset under the same key (`route-workspace.ts:404`, `:1108`, an unparseable or old-schemaVersion record reloads as revision 0), an open /family tab keeps submitting a stale `expectedRevision` and the refusal sticks until reload, because a retry reuses it. Reached by a schema bump plus a host restart or HR with /family open. The family journey `afterEach` drain is the test-side workaround (purger-2, slice 1 review at aeaac4a0).
 - Pea `route:<key>.set-view` at the 12-Place window cap refuses "did not render" while the dock says "This window keeps 12 Places; close one first" (`workbench/tabs.ts`); the refusal names the cap. An empty patch refuses "patch names keys Pea may not set"; it refuses as empty.
 - The dock Timeline head status shows `resource {"kind":"machine"} changed during evaluation`; present on the 205461ae bundle too.
 - Move ducts off `ducts.snapshot.walk` onto the generic `mep.system.members` read (kaitpw 2026-11-10: owed, not in the kernel crusade).
