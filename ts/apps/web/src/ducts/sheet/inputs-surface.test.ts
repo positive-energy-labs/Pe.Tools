@@ -6,12 +6,14 @@ import {
   type Resolved,
 } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { snapshot as networkSnapshot } from "../test-fixture";
 import {
   InputsSurface,
+  ENGINE_DEFAULT_NO_SHARED_ROOT,
+  NO_SHARED_ROOT,
   inputFields,
   protocolPickers,
   type InputContext,
@@ -288,5 +290,33 @@ it("labels the undoable row action Revert and records the same History name", ()
   expect(apply).toHaveBeenCalledWith(
     expect.anything(),
     expect.objectContaining({ label: expect.stringMatching(/^Revert /), clear: true }),
+  );
+});
+
+it("no shared root: only the firm line refuses; a criterion on the seed stays editable Work", async () => {
+  const ctx = context();
+  ctx.firm = { refused: "no-shared-root" };
+  ctx.sheet = { overview: { fan: null }, inputs: null };
+  const supply = inputFields(ctx).criteria.find((r) => r.key === "velocityLimitFpm:supply")!;
+  expect(supply).toMatchObject({ value: 900, source: ENGINE_DEFAULT_NO_SHARED_ROOT });
+  const apply = vi.fn();
+  const view = render(
+    createElement(InputsSurface, {
+      ctx, busy: false, elementName: null, onSlot: vi.fn(), apply, nameOf: String,
+      history: { undoLabel: null, redoLabel: null, last: null, cleared: null,
+        undo: vi.fn(), redo: vi.fn(), restore: vi.fn() },
+    }),
+  );
+  expect(view.container.querySelector("[data-inputs-firm-refused='no-shared-root']")?.textContent).toBe(NO_SHARED_ROOT);
+  const field = view.container.querySelector("[data-input-field='velocityLimitFpm:supply']")!;
+  expect(field.querySelector("[data-body='locked']")).toBeNull();
+  expect(field.textContent).toContain(ENGINE_DEFAULT_NO_SHARED_ROOT);
+  const input = field.querySelector("input")!;
+  await act(async () => input.focus());
+  fireEvent.change(input, { target: { value: "800" } });
+  await act(async () => fireEvent.keyDown(input, { key: "Enter", code: "Enter" }));
+  expect(apply).toHaveBeenCalledWith(
+    { criteria: { velocityLimitFpm: { supply: 800 } } },
+    expect.objectContaining({ rowKey: "velocityLimitFpm:supply" }),
   );
 });

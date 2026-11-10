@@ -22,6 +22,7 @@ import { Spawner } from "./spawner.ts";
 import { MessagesReply, ModelList, ResponsesReply } from "./edge-schemas.ts";
 import { z } from "zod";
 import { productProvidersPath } from "../product-paths.ts";
+import { keyRefusalText, resolveKey, sharedKeys } from "@pe/host-contracts/shared-keys";
 import { adapterCli, adapterLogin, adapters, openAdapter, stopChild } from "./adapter.ts";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
 import { mergePath } from "./user-shell.ts";
@@ -30,7 +31,9 @@ import { mergePath } from "./user-shell.ts";
  * Providers: one harness with one auth source. A subscription provider (the harness's own login)
  * exists for every harness with id = harness id; endpoint providers are user-added and live in
  * `providers.json` under product state with their key, which never leaves this module except as
- * child env. Readiness, models and traits retain their probe timestamp; endpoint use revalidates
+ * child env. An empty key is the quick shared path (ADR 0035 rule 11, kaitpw): it names the
+ * provider id's entry in the shared root's keys.json, and the user's own key always wins over it.
+ * Readiness, models and traits retain their probe timestamp; endpoint use revalidates
  * an observation older than one minute. Reading machine state never makes an inference request.
  */
 
@@ -145,7 +148,7 @@ function authEnv(record: ProviderRecord, modelId?: string): Record<string, strin
   if (record.harness === "claude")
     return {
       ANTHROPIC_BASE_URL: auth.baseUrl,
-      ANTHROPIC_AUTH_TOKEN: auth.apiKey,
+      ANTHROPIC_AUTH_TOKEN: endpointKey(record as EndpointRecord),
       ...(modelId ? { ANTHROPIC_MODEL: modelId, ANTHROPIC_CUSTOM_MODEL_OPTION: modelId } : {}),
     };
   const provider = {
@@ -183,9 +186,23 @@ function authEnv(record: ProviderRecord, modelId?: string): Record<string, strin
         [CODEX_PROVIDER]: provider,
       },
     }),
-    PEA_ENDPOINT_API_KEY: auth.apiKey,
+    PEA_ENDPOINT_API_KEY: endpointKey(record as EndpointRecord),
   };
 }
+
+/**
+ * An endpoint's key: its own in providers.json, else the shared keys.json entry named by the
+ * provider id (ADR 0035 rule 11). A refusal is an endpoint refusal naming why, never key bytes.
+ */
+function endpointKey(record: EndpointRecord): string {
+  const key = resolveKey(record.auth.apiKey, record.id);
+  if ("refused" in key) throw new Refusal(keyRefusalText(key.refused, record.id));
+  return key.value;
+}
+const sharedKeyValues = () => {
+  const shared = sharedKeys();
+  return "keys" in shared ? Object.values(shared.keys) : [];
+};
 
 /* ── The endpoint check: the URL answers models and one tiny request ── */
 
@@ -681,9 +698,10 @@ export function createProviders(options: ProvidersOptions) {
         throw Error("Duplicate provider identity");
       for (const record of parsed.providers) {
         normalizeBaseUrl(record.harness, record.auth.baseUrl);
-        if (!record.id || !record.name || !record.auth.apiKey || /\s/.test(record.auth.apiKey))
+        // An empty key names the shared keys.json entry for this provider id.
+        if (!record.id || !record.name || /\s/.test(record.auth.apiKey))
           throw Error("Invalid provider record");
-        knownKeys.add(record.auth.apiKey);
+        if (record.auth.apiKey) knownKeys.add(record.auth.apiKey);
       }
       providerReadError = null;
       return parsed.providers;
@@ -723,7 +741,10 @@ export function createProviders(options: ProvidersOptions) {
         : {
             kind: "endpoint",
             baseUrl: record.auth.baseUrl,
-            keyLast4: record.auth.apiKey.slice(-4),
+            keyLast4: (() => {
+              const key = resolveKey(record.auth.apiKey, record.id);
+              return "refused" in key ? "" : key.value.slice(-4);
+            })(),
           },
     ...(cache.get(record.id) ?? {
       readiness: {
@@ -774,7 +795,8 @@ export function createProviders(options: ProvidersOptions) {
     }
     const secrets = [
       ...knownKeys,
-      ...(record.auth.kind === "endpoint" ? [record.auth.apiKey] : []),
+      ...(record.auth.kind === "endpoint" && record.auth.apiKey ? [record.auth.apiKey] : []),
+      ...sharedKeyValues(),
       ...Object.entries(process.env)
         .filter(([key]) => /key|token|secret|password|credential/i.test(key))
         .map(([, value]) => value)
@@ -822,6 +844,19 @@ export function createProviders(options: ProvidersOptions) {
       console: null,
     };
     const finish = (probed: Probed) => finishProbe(record, probed, detail);
+    // A key that resolves nowhere refuses at the endpoint step before any child or request.
+    if (record.auth.kind === "endpoint") {
+      const key = resolveKey(record.auth.apiKey, record.id);
+      if ("refused" in key) {
+        const message = keyRefusalText(key.refused, record.id);
+        return finish({
+          readiness: { state: "refused", step: "endpoint", message, failure: classifyEndpointFailure(message) },
+          models: [],
+          traits: [],
+          probedAt: probedAt(),
+        });
+      }
+    }
     const running = acpProbe(
       options.spawner,
       record,
@@ -856,7 +891,7 @@ export function createProviders(options: ProvidersOptions) {
         endpointModels = await checkEndpoint(
           record.harness,
           record.auth.baseUrl,
-          record.auth.apiKey,
+          endpointKey(record as EndpointRecord),
           record.auth.modelId,
           record.harness === "codex" ? probed.models : undefined,
         );
@@ -929,8 +964,10 @@ export function createProviders(options: ProvidersOptions) {
     const apiKey = input.auth.apiKey.trim();
     let baseUrl: string;
     try {
-      if (!apiKey || /\s/.test(apiKey))
-        throw new Refusal("API key is empty or contains whitespace");
+      if (/\s/.test(apiKey)) throw new Refusal("API key contains whitespace");
+      // No key of your own: the shared keys.json entry named by this provider id, or a refusal.
+      const key = resolveKey(apiKey, id);
+      if ("refused" in key) throw new Refusal(keyRefusalText(key.refused, id));
       baseUrl = normalizeBaseUrl(input.harness, input.auth.baseUrl);
     } catch (error) {
       if (!(error instanceof Refusal)) throw error;
@@ -1125,7 +1162,7 @@ export function createProviders(options: ProvidersOptions) {
           await checkEndpoint(
             record.harness,
             record.auth.baseUrl,
-            record.auth.apiKey,
+            endpointKey(record as EndpointRecord),
             modelId,
             record.harness === "codex" ? cache.get(record.id)?.models : undefined,
           );

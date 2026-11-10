@@ -23,12 +23,15 @@ import {
 } from "./native-recording.ts";
 
 // The readings' own contracts: a recorded firm or catalog decodes only if it is still that reading.
-export const firmReading = z.strictObject({
-  firm: ductsFirmSchema,
-  path: z.string(),
-  present: z.boolean(),
-  error: z.string().optional(),
-});
+export const firmReading = z.union([
+  z.strictObject({
+    firm: ductsFirmSchema,
+    path: z.string(),
+    present: z.boolean(),
+    error: z.string().optional(),
+  }),
+  z.strictObject({ refused: z.literal("no-shared-root") }),
+]);
 export const catalogReading = z.strictObject({
   tables: z.record(z.string(), catalogTableSchema),
   findings: z.array(z.string()),
@@ -51,7 +54,7 @@ export class DuctFiles extends Context.Service<
   }
 >()("pe/DuctFiles") {
   static readonly layer = (
-    roots: { readonly firm: string; readonly catalogs: string | readonly string[] } = {
+    roots: { readonly firm: string | null; readonly catalogs: string | readonly string[] } = {
       firm: firmFilePath(),
       catalogs: productCatalogsRoots(),
     },
@@ -61,7 +64,8 @@ export class DuctFiles extends Context.Service<
       ductCatalogs: Effect.promise(() => readDuctCatalogs(roots.catalogs)),
       subscribe: (changed) => {
         const stops = [
-          ["firm", roots.firm] as const,
+          // No shared root, no firm file to watch: the refusal holds until the host restarts.
+          ...(roots.firm === null ? [] : [["firm", roots.firm] as const]),
           ...[roots.catalogs].flat().map((path) => ["catalogs", path] as const),
         ].map(
           ([name, path]) => {

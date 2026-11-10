@@ -294,3 +294,58 @@ test("a probe launches its child through the injected Spawner, not a backend of 
   expect(launched).toHaveLength(1);
   await providers.close();
 });
+
+/** ADR 0035 rule 11: the endpoint key resolves user, then the shared keys.json by provider id, then refuses. */
+async function sharedKeyProbe(userKey: string, sharedKeys: Record<string, string> | null) {
+  const seen: string[] = [];
+  const server = createServer((req, res) => {
+    seen.push(String(req.headers["x-api-key"]));
+    if (req.url === "/v1/models") res.writeHead(200).end(JSON.stringify({ data: [{ id: "claude-a" }] }));
+    // The endpoint echoes the key it was sent: the refusal must still carry none of it.
+    else res.writeHead(403).end(JSON.stringify({ error: { message: `bad ${req.headers["x-api-key"]}` } }));
+  });
+  const baseUrl = await listen(server);
+  if (sharedKeys) {
+    const shared = join(root, "shared");
+    await mkdir(shared, { recursive: true });
+    await writeFile(join(shared, "keys.json"), JSON.stringify(sharedKeys));
+    vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
+  } else vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
+  const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
+  const logged = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    await mkdir(dirname(productProvidersPath()), { recursive: true });
+    await writeFile(
+      productProvidersPath(),
+      JSON.stringify({
+        providers: [{ ...add, id: "claude-synthetic", auth: { ...add.auth, apiKey: userKey, baseUrl } }],
+      }),
+    );
+    const provider = await (await providers.fetch(request("providers/claude-synthetic/probe", "POST"))).json();
+    return { seen, provider, logs: logged.mock.calls.flat().join("\n") };
+  } finally {
+    logged.mockRestore();
+    vi.unstubAllEnvs();
+    await providers.close();
+    await close(server);
+  }
+}
+
+test("a shared key is used when the user has none, and never reaches a log line or the readiness", async () => {
+  const { seen, provider, logs } = await sharedKeyProbe("", { "claude-synthetic": "shared-firm-key" });
+  expect(seen).toContain("shared-firm-key");
+  expect(provider.readiness.state).toBe("refused");
+  expect(logs + JSON.stringify(provider)).not.toContain("shared-firm-key");
+});
+
+test("the user's own key overrides the shared one", async () => {
+  const { seen } = await sharedKeyProbe("user-own-key", { "claude-synthetic": "shared-firm-key" });
+  expect(seen).toContain("user-own-key");
+  expect(seen).not.toContain("shared-firm-key");
+});
+
+test("no shared root and no user key refuses with the typed reason, before any request", async () => {
+  const { seen, provider } = await sharedKeyProbe("", null);
+  expect(seen).toEqual([]);
+  expect(provider.readiness).toMatchObject({ state: "refused", message: expect.stringContaining("no shared root") });
+});
