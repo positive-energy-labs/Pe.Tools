@@ -60,6 +60,10 @@ public static class ProductPathing {
     /// <summary>The shared keys file, <c>&lt;shared&gt;\keys.json</c>; null without a shared root.</summary>
     public static string? SharedKeysPath() => SharedRoot() is { } shared ? Path.Combine(shared, "keys.json") : null;
 
+    /// <summary>The shared firm preferences, <c>&lt;shared&gt;\preferences.json</c> (firm-level ids only); null without a shared root.</summary>
+    public static string? SharedPreferencesPath() =>
+        SharedRoot() is { } shared ? Path.Combine(shared, ProductPathNames.PreferencesFileName) : null;
+
     private static bool IsAtOrUnder(string path, string root) =>
         (Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar)
         .StartsWith(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
