@@ -166,7 +166,7 @@ export function kernelRouteInventory(requiredPaths: readonly string[] = []) {
         } else if (node.text === "open" && tag === "binding" || ["open", "captures"].includes(node.text) && tag === "kind") {
           real = false; reason = "Generic Work/document/resource discriminator";
         } else if (node.text === "open" && ts.isLiteralTypeNode(parent) && ts.isIndexedAccessTypeNode(parent.parent)) {
-          real = false; reason = "ReadingSource.open method selector";
+          real = false; reason = "UseSource.open method selector";
         } else if (ts.isCallExpression(parent) && ts.isIdentifier(parent.expression) && queryKeys.has(parent.expression.text)) {
           real = false; reason = "URLSearchParams key lookup, not a route selection";
         } else if (node.text === "open" && ts.isBinaryExpression(parent) && ts.isIdentifier(parent.left) && parent.left.text === "instance") {

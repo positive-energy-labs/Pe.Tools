@@ -12,7 +12,7 @@ import {
   actionControls,
   familiesRouteState,
   routeAddress,
-  legacyViewRoute,
+  builtinViewRoute,
   familyCatalogRequest,
   refusalSchema,
   workKeySchema,
@@ -840,8 +840,8 @@ async function dispatch(
               return { ok: true, target: { session: null, document: null }, result: opened };
             ({ instance, revision } = opened);
           }
-          const legacy = legacyViewRoute(route);
-          const spec = legacy && routeAddress(legacy).agent;
+          const builtin = builtinViewRoute(route);
+          const spec = builtin && routeAddress(builtin).agent;
           let patch = rest as Record<string, string>;
           let refused: string | null = null;
           if (spec && spec.resolve) {

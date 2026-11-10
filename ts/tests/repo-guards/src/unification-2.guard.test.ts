@@ -12,7 +12,7 @@ import {
 import baseline from "./unification-2.baseline.json" with { type: "json" };
 import "./unification-pane-bodies.law.ts";
 
-const { legacyBuiltinRoutes: _legacyBuiltinRoutes, ...offenderBaseline } = baseline;
+const offenderBaseline = baseline;
 
 describe("unification 2 offender identities", () => {
   it("rejects added identities against baseline and committed floors", () => {
