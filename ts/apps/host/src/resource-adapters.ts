@@ -298,7 +298,7 @@ export function hostResourceObserver(
         case "rhvac-file-version":
           return oneShot([ONE_SHOT[request.kind]!(request as never)], POLL_MS[request.kind]);
         case "receipts":
-          if (!journal) throw Error("Receipt readings require HostReceipts.");
+          if (!journal) throw Error("Receipt readings require ActionJournalService.");
           if (request.scope)
             return observeWorkReceipts(journal(), request.scope, (value) => accept({ value }));
           return journal().observe(request.target, request.id, (result) => {

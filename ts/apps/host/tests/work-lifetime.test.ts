@@ -28,7 +28,7 @@ import { PictureCaptureStore } from "../src/captures-route.ts";
 import { admitCrossing, bindControl } from "../src/control.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
-import { HostReceipts } from "../src/gateway-owner.ts";
+import { ActionJournalService } from "../src/receipt-services.ts";
 import { Spawner } from "../src/harness/spawner.ts";
 import { MachineOwner } from "../src/machine.ts";
 import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src/pe-routes.ts";
@@ -370,7 +370,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             },
           });
           const telemetry = createReceiptExport({
-            journal: (yield* HostReceipts).journal,
+            journal: yield* ActionJournalService,
             root: directory,
             stamps: { host: null, web: null },
           });
@@ -449,7 +449,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             });
           });
         }),
-      ).pipe(Effect.provide(HostReceipts.layer(null, directory)), Effect.provide(Spawner.live), Effect.provide(NodeServices.layer)),
+      ).pipe(Effect.provide(ActionJournalService.live(null, directory)), Effect.provide(Spawner.live), Effect.provide(NodeServices.layer)),
     );
   } finally {
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;

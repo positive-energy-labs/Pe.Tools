@@ -2,7 +2,7 @@ import { HostInputContext } from "../src/input-context.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
-import { HostReceipts } from "../src/gateway-owner.ts";
+import { ActionJournalService } from "../src/receipt-services.ts";
 import * as adapter from "../src/harness/adapter.ts";
 import { Spawner } from "../src/harness/spawner.ts";
 import { NodeCrypto, NodeServices } from "@effect/platform-node";
@@ -269,7 +269,7 @@ export async function testAdapter(...args: Parameters<typeof adapter.openAdapter
 
 export const testDocumentMarks = (bridge: RevitBridge["Service"]) =>
   Context.get(testScoped(HostDocumentMarks.layer.pipe(Layer.provide(Layer.succeed(RevitBridge, bridge)))), HostDocumentMarks);
-export const testReceipts = () => Context.get(testScoped(HostReceipts.layer(null)), HostReceipts);
+export const testJournal = () => Context.get(testScoped(ActionJournalService.live(null)), ActionJournalService);
 
 export const pictureCaptures = (root: string) => Context.get(testScoped(PictureCaptureStore.layer(root)), PictureCaptureStore);
 export const testDuctFiles = () => Context.get(testScoped(DuctFiles.layer()), DuctFiles);

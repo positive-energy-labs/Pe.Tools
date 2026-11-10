@@ -6,7 +6,9 @@ import { Effect, Exit } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, expect, test } from "vite-plus/test";
 import type { ReceiptStamp } from "@pe/agent-contracts";
-import { HostReceipts } from "../src/gateway-owner.ts";
+import { ActionJournalService, HostLogService } from "../src/receipt-services.ts";
+import type { ActionJournal } from "../src/action-journal.ts";
+import type { HostLog } from "../src/host-log.ts";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -25,15 +27,15 @@ const stamp = (component: ReceiptStamp["component"]): ReceiptStamp => ({
 const runtime = <A>(
   dir: string,
   admitted: ReceiptStamp | null,
-  use: (receipts: HostReceipts["Service"]) => Promise<A>,
+  use: (receipts: { journal: ActionJournal; log: HostLog }) => Promise<A>,
 ) =>
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const receipts = yield* HostReceipts;
+        const receipts = { journal: yield* ActionJournalService, log: yield* HostLogService };
         return { receipts, value: yield* Effect.promise(() => use(receipts)) };
       }),
-    ).pipe(Effect.provide(HostReceipts.layer(admitted, dir))),
+    ).pipe(Effect.provide(ActionJournalService.live(admitted, dir))),
   );
 
 test("each runtime scope owns its journal; the log mirrors commits in order and drains on close", async () => {
@@ -66,9 +68,9 @@ test("a non-host stamp fails runtime construction; no later stamp mutation exist
   dirs.push(dir);
   const exit = await Effect.runPromiseExit(
     Effect.scoped(Effect.gen(function* () {
-      return yield* HostReceipts;
+      return yield* ActionJournalService;
     })).pipe(
-      Effect.provide(HostReceipts.layer(stamp("web"), dir)),
+      Effect.provide(ActionJournalService.live(stamp("web"), dir)),
     ),
   );
   expect(Exit.isFailure(exit) && String(exit.cause)).toContain("requires a host stamp");
@@ -82,7 +84,8 @@ test("journal facts and their mirrored log entries take the runtime Clock; advan
   const { facts, mirrored } = await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const { journal, log } = yield* HostReceipts;
+        const journal = yield* ActionJournalService;
+        const log = yield* HostLogService;
         yield* TestClock.setTime(Date.parse(first));
         yield* Effect.promise(() => journal.recordQueue("test.a", "a", "s", "queued", 1));
         yield* TestClock.adjust("1 hour");
@@ -92,7 +95,7 @@ test("journal facts and their mirrored log entries take the runtime Clock; advan
           mirrored: log.read(0).entries.map(({ at, event }) => [at, event.kind === "receipt" && event.receipt.at]),
         };
       }),
-    ).pipe(Effect.provide(HostReceipts.layer(null, dir)), Effect.provide(TestClock.layer())),
+    ).pipe(Effect.provide(ActionJournalService.live(null, dir)), Effect.provide(TestClock.layer())),
   );
   expect(facts).toEqual([first, later]);
   expect(mirrored).toEqual([

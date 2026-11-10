@@ -33,7 +33,7 @@ import { demoRoutes } from "./demo-owner.ts";
 import { deviceRoutes } from "./device-routes.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
 import { FamiliesReader } from "./families-reader.ts";
-import { HostReceipts } from "./gateway-owner.ts";
+import { ActionJournalService } from "./receipt-services.ts";
 import { Spawner } from "./harness/spawner.ts";
 import {
   adminShutdownRoute,
@@ -169,7 +169,7 @@ function makeRevitComposition(spa: SpaFallback = () => emptyNotFound, origin?: (
           const families = yield* FamiliesReader;
           const { work, retainedCall, nativeBody } = yield* ReadOwner;
           return makeCallRoute(
-            (yield* HostReceipts).journal,
+            yield* ActionJournalService,
             undefined,
             { workspace: work.workspace, workReads: work.reads },
             { origin, families, pointers: work.pointers, retainedRead: retainedCall, nativeBody },
@@ -372,7 +372,7 @@ function liveHttpLive(options: HttpLiveOptions) {
             Effect.gen(function* () {
               const { work, retainedCall, nativeBody } = yield* ReadOwner;
               return makeCallRoute(
-                (yield* HostReceipts).journal,
+                yield* ActionJournalService,
                 undefined,
                 { workspace: work.workspace, workReads: work.reads },
                 {

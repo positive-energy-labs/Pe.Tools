@@ -1,5 +1,5 @@
 import { testInputContext } from "./effect-test.ts";
-import { HostReceipts } from "../src/gateway-owner.ts";
+import { ActionJournalService } from "../src/receipt-services.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { Deferred, Effect, Exit, Layer } from "effect";
 import { expect, test } from "vite-plus/test";
@@ -36,7 +36,7 @@ test("a host whose service claim is refused leaves the claim holder's terminal c
               handle: Effect.runSync(Deferred.make<ServiceHostHandle>()),
             },
             webRoot: null,
-          }).pipe(Layer.provide(HostReceipts.layer(null))),
+          }).pipe(Layer.provide(ActionJournalService.live(null))),
         ),
       ),
     );

@@ -12,7 +12,7 @@ import type { ConsentEvent } from "../src/run-consent.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { nativeFixture } from "./fans-native.fixture.ts";
 import { pagesRoute } from "../src/pages-route.ts";
-import { HostReceipts } from "../src/gateway-owner.ts";
+import { ActionJournalService } from "../src/receipt-services.ts";
 import { Layer } from "effect";
 
 async function fixture(withPage = false) {
@@ -32,7 +32,7 @@ async function fixture(withPage = false) {
   const caller: Caller = { kind: "pea", context: "safety", thread: run.thread, run, root: run };
   const pageRoot = join(dir, "pages");
   if (withPage) { await mkdir(join(pageRoot, "probe"), { recursive: true }); await writeFile(join(pageRoot, "probe", "index.html"), "<p>Write safety probe</p>", "utf8"); }
-  const routes = withPage ? pagesRoute(() => pageRoot, () => join(dir, "pods")).pipe(Layer.provide(Layer.succeed(HostReceipts, native.receipts))) : Layer.empty;
+  const routes = withPage ? pagesRoute(() => pageRoot, () => join(dir, "pods")).pipe(Layer.provide(Layer.succeed(ActionJournalService, native.journal))) : Layer.empty;
   let post = native.actions({ workspace }, undefined, {}, routes);
   const patch = async (value: unknown) => workspace.publish(key, "parameter-links", [{ path: ["definitions", "authored-extra"], value: { edit: { value } } }], (await workspace.read(key, "parameter-links"))?.revision ?? 0);
   await patch(definition);
