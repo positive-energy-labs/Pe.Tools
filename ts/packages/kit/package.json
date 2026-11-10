@@ -39,6 +39,7 @@
     "./lang/search-control": "./src/components/lang/search-control.tsx",
     "./lang/teach": "./src/components/lang/teach.ts",
     "./lang/teaching-layout": "./src/components/lang/teaching-layout.tsx",
+    "./lang/pane-reveal": "./src/components/lang/pane-reveal.ts",
     "./lang/list-teaching": "./src/components/lang/list-teaching.ts",
     "./lang/use-teach": "./src/components/lang/use-teach.ts",
     "./lang/theme-toggle": "./src/components/lang/theme-toggle.tsx",

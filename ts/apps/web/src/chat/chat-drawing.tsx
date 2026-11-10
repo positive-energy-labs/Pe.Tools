@@ -40,6 +40,7 @@ import { useSurfaceHost } from "#/navigation/surface-host";
 import { Ledger } from "#/navigation/ledger";
 import { LEDGER_PRESENTATIONS } from "#/navigation/ledger-model";
 import { PaneActions } from "#/shell/pane-actions";
+import { useRevealPane } from "@pe/kit/lang/pane-reveal";
 
 import type { ChatHandle } from "./owner-ports";
 import { readThreadTarget } from "#/chat/thread-navigation";
@@ -85,6 +86,7 @@ export function ThreadsDrawing({ ctx: handle }: { ctx: ChatHandle }) {
   } = useWorkbench();
   const chatId = useTranscript((state) => state.id);
   const newThread = useNewThread();
+  const reveal = useRevealPane();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const sidebarAddress = routeAddress(routeAt(pathname) ?? "pea");
@@ -114,10 +116,13 @@ export function ThreadsDrawing({ ctx: handle }: { ctx: ChatHandle }) {
     () => threads.map((thread) => readThreadTarget(thread, situation.inventory)),
     [threads, situation.inventory],
   );
-  // N3: the thread list is the one thread navigator. Its "palette" is its own search, focused in
-  // place, never a second list.
+  // N3: the thread list is the one thread navigator. Its "palette" is its own search, revealed and
+  // focused in place, never a second list.
   const [searchSerial, setSearchSerial] = useState(0);
-  const findThread = () => setSearchSerial((serial) => serial + 1);
+  const findThread = () => {
+    reveal("threads");
+    setSearchSerial((serial) => serial + 1);
+  };
   usePublishPagePalette("chat", false, (open) => open && findThread());
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -145,7 +150,10 @@ export function ThreadsDrawing({ ctx: handle }: { ctx: ChatHandle }) {
         threads={sidebarThreads}
         providers={providers.list ?? []}
         currentThreadId={currentThreadId || chatId}
-        onSelect={openThread}
+        onSelect={(id) => {
+          openThread(id);
+          reveal("chat");
+        }}
         onWork={(id, route, resumed, closed) =>
           void store.actions.openWork(id, route, resumed, closed)
         }
