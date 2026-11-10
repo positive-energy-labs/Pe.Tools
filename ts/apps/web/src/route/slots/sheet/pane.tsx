@@ -32,7 +32,7 @@ function Cell({ ctx, cell }: { ctx: Ctx; cell: SheetCell }) {
   const field = cell.field;
   const choices = cell.choices;
   return (
-    <div className="contents" data-sheet-cell={cell.label} data-source={cell.source} data-drift={cell.drift || undefined}>
+    <div className="contents" data-sheet-cell={cell.label} data-sheet-address={cell.row === undefined ? cell.binding : `${cell.binding}:${cell.row}`} data-source={cell.source} data-drift={cell.drift || undefined}>
       <span className="min-w-0 truncate">{cell.label}</span>
       <span className="block min-w-0 h-(--item-h)">
         <StateCell
@@ -42,6 +42,8 @@ function Cell({ ctx, cell }: { ctx: Ctx; cell: SheetCell }) {
           model={under}
           source={layerWord(cell)}
           scale="row"
+          {...(cell.refusal ? { capReason: cell.refusal } : {})}
+          {...(cell.note ? { note: cell.note } : {})}
           {...(cell.unit ? { unit: { label: cell.unit } } : {})}
           {...(cell.numeric || field ? { numeric: cell.numeric ?? {} } : {})}
           {...(field ? {
@@ -50,7 +52,9 @@ function Cell({ ctx, cell }: { ctx: Ctx; cell: SheetCell }) {
           } : {})}
           {...(choices ? {
             options: choices,
-            current: choices.find((c) => !c.clear && same(c.value ?? c.key, cell.value))?.key ?? null,
+            // A cell that holds nothing shows its clear choice ("None") as current.
+            current: choices.find((c) => !c.clear && same(c.value ?? c.key, cell.value))?.key
+              ?? (cell.value == null ? choices.find((c) => c.clear)?.key : undefined) ?? null,
           } : {})}
         />
       </span>
@@ -66,6 +70,12 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
   const cells = sheetCells(slot, { rows: rowsOf(slot, ctx, field), work: ctx.cells.doc, model: [], read });
   const shown = typedOnly ? typedCells(cells) : cells;
   const from = read !== undefined ? slot.from?.(read, search) : null;
+  // The read's own states come first: failed with its reason, computing, or the sheet's empty state and exit.
+  const value = ctx.value as { status?: string; reason?: string };
+  if (value.status === "failed" && read === undefined) return <p role="alert">{value.reason}</p>;
+  if (read === undefined && value.status === "pending") return <p role="status">computing</p>;
+  const empty = slot.empty?.(read ?? null);
+  if (empty) return <p className="text-ink-2">{empty}</p>;
   return (
     <section aria-label="Sheet" className="flex min-w-0 flex-col gap-1 t-small">
       {from ? <a href={from.href} className="min-w-0 truncate text-ink-2" data-sheet-from="">{from.says}</a> : null}

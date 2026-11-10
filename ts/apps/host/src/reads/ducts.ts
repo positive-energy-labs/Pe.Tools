@@ -14,6 +14,7 @@ import { toGrids } from "@pe/ducts-domain/loss-grid";
 import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { pricingResult } from "@pe/ducts-domain/pricing-result";
 import { designLayers } from "./ducts-design.ts";
+import { resolveCriteria } from "@pe/ducts-domain/sheet/index";
 import { catalogs } from "../builtin-read-handles.ts";
 import { read } from "./evaluator.ts";
 import { systemList } from "@pe/ducts-domain/system-list";
@@ -164,6 +165,8 @@ export const ductsPricing = read("ducts.pricing", {
             ductsWork: true,
             fansWork: true,
             catalogFindings: true,
+            criteria: true,
+            firm: true,
           })
           .parse(
             wire(
@@ -191,6 +194,9 @@ export const ductsPricing = read("ducts.pricing", {
           ductsWork: layers.ducts,
           fansWork: layers.fans,
           catalogFindings: catalog.findings,
+          // Under Work: the store over the firm file, so a staged criterion draws beside what it replaces.
+          criteria: resolveCriteria(null, snapshot.store as Parameters<typeof resolveCriteria>[1], layers.firm.firm),
+          firm: { version: layers.firm.firm.version, path: layers.firm.path, present: layers.firm.present },
         };
       },
     );

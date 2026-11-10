@@ -195,6 +195,8 @@ export type Specification<
       title: string;
       purpose: string;
       subjectList?: true;
+      /** A pane the shell draws from a filled slot (`typed-shell.tsx`); the route names and places it, and its `draw` is unused. */
+      kernel?: "sheet" | "goal";
       read?: Reads[K];
       bindings?(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): PaneBindings;
       draw(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): unknown;
@@ -252,7 +254,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     : {};
   // The shell draws a kernel pane (`typed-shell.tsx`, `kernel`): a route module, and a Pod bundle, carries no React.
   const kernelPanes = {
-    ...(spec.sheet && !("sheet" in spec.panes) ? { sheet: { title: "Sheet", purpose: "Edit the bound cells", kernel: "sheet", draw: () => null } } : {}),
+    ...(spec.sheet && !Object.values(spec.panes).some((p) => p.kernel === "sheet") ? { sheet: { title: "Sheet", purpose: "Edit the bound cells", kernel: "sheet", draw: () => null } } : {}),
     ...(spec.goal && !("goal" in spec.panes) ? { goal: { title: "Unresolved", purpose: "What is left before the answer", read: spec.goal,
       kernel: "goal", draw: () => null } } : {}),
   } as unknown as Specification<D, F, W, Edit, Reads, SubjectRead>["panes"];

@@ -124,7 +124,7 @@ export const fansSheet = read("fans.sheet", {
           }
         : row;
     });
-    const { ducts: ductsDoc, fans: fansDoc } = await ctx.read(designLayers, args.target);
+    const { ducts: ductsDoc, fans: fansDoc, revision: ductsRevision } = await ctx.read(designLayers, args.target);
     const design = ductsDesign(ductsDoc, fansDoc),
       staged = stagedDucts(design, design);
     const ids = [
@@ -164,6 +164,7 @@ export const fansSheet = read("fans.sheet", {
       design: fansSheetData.shape.design.parse(design),
       fans: { ...data.fans, rows: data.rows },
       ductsWork: ductsDoc,
+      ductsRevision,
       fansWork: fansDoc,
       sheetSnapshot: data.geometry
         ? {

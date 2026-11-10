@@ -51,10 +51,15 @@ test("rows per binding: a binding names its own rows from the read, apart from t
 
 test("firm layer on source: a model value the firm file supplies draws as firm with the file it came from", () => {
   const slot = { draft: true as const, bindings: {
-    velocity: local(z.number(), "route", { model: () => ({ value: 900, source: "firm" as const, ref: "v3 · ducts.json" }) }),
+    velocity: local(z.number(), "route", { unit: "ft/min", model: () => ({ value: 900, source: "firm" as const, ref: "v3 · ducts.json", unit: "fpm" }) }),
   } };
   const [cell] = sheetCells(slot, { rows: [], work: { velocity: {} }, model: [], read: {} });
-  expect([cell!.value, cell!.source, cell!.ref]).toEqual([900, "firm", "v3 · ducts.json"]);
+  // The read's own unit for the row wins over the binding's.
+  expect([cell!.value, cell!.source, cell!.ref, cell!.unit]).toEqual([900, "firm", "v3 · ducts.json", "fpm"]);
+  // The read may also lock a row and say why, or note a conflict beside its value.
+  const locked = sheetCells({ bindings: { flow: local(z.number(), "route", { model: () => ({ value: 1, refusal: "no flow parameter", note: "Conflict: walk 900" }) }) } },
+    { rows: [], work: {}, model: [], read: {} });
+  expect([locked[0]!.refusal, locked[0]!.note]).toEqual(["no flow parameter", "Conflict: walk 900"]);
 });
 
 test("typed-only filter: the sheet pane's chrome narrows to the cells Work stages, and says so when none are", () => {
@@ -70,4 +75,11 @@ test("typed-only filter: the sheet pane's chrome narrows to the cells Work stage
   fireEvent.click(screen.getByRole("button", { name: /show typed cells only/i }));
   expect(screen.queryByText("Beta")).toBeNull();
   expect(screen.getByText("Alpha")).toBeTruthy();
+});
+
+test("empty state: a sheet whose read has nothing for it says so and where to go, instead of drawing cells", () => {
+  const ctx = { cells: { doc: {}, at: () => { throw Error("no cell is drawn"); } }, page: { read: () => ({}) }, value: { status: "ready", current: true, value: { open: null } } };
+  const slot = { draft: true as const, empty: (read: { open: unknown }) => (read.open ? null : "Open a fan from the roster."), bindings: { a: local(z.number()) } };
+  render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: ctx as never, slot }} /></RegistryContext>);
+  expect(screen.getByText("Open a fan from the roster.")).toBeTruthy();
 });

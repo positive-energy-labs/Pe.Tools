@@ -252,18 +252,18 @@ test("JZ Families History offers published values and marks ambiguous publicatio
 }, 60000);
 
 test("JZ numeric cells refuse bounds and fractional integers without changing Work, then commit exactly", async () => {
-  const { InputsBody } = await import("../ducts/sheet/mount");
   const { TakeoffEditCell } = await import("../takeoff/proposals");
   const { NumberCell } = await import("@pe/kit/table/cells");
   const f = await createWitness(closes);
-  await waitFor(() => expect(f.typed.value().current).toBe(true));
-  await waitFor(() => expect(f.typed.work()).not.toBeNull());
+  // Design friction is /ducts design data (ruling 2026-11-10): its sheet draws on the /ducts mount.
+  const ducts = f.owner.native;
+  await waitFor(() => expect(ducts.work()).not.toBeNull());
   function Journey() {
-    useSyncExternalStore(f.typed.subscribe, f.typed.revision, f.typed.revision);
+    useSyncExternalStore(ducts.subscribe, ducts.revision, ducts.revision);
     const [people, setPeople] = useState(3);
     const [bounded, setBounded] = useState(1);
     return <>
-      {f.typed.draw("sheet-inputs", ctx => <InputsBody ctx={ctx as never} />) as import("react").ReactNode}
+      {f.owner.read("design") as import("react").ReactNode}
       <section aria-label="Takeoff occupants">
         <TakeoffEditCell roomId="numeric-entry-room" field="people" value={people} digits={0} integer
           cell={undefined} wire={{ segment: "edits", revision: null, write: async () => { throw Error("No transition requested"); } }}
@@ -276,23 +276,23 @@ test("JZ numeric cells refuse bounds and fractional integers without changing Wo
       </section>
     </>;
   }
-  const router = createRouter({ routeTree: createRootRoute({ component: Journey }), history: createMemoryHistory({ initialEntries: ["/fans"] }) });
+  const router = createRouter({ routeTree: createRootRoute({ component: Journey }), history: createMemoryHistory({ initialEntries: ["/ducts"] }) });
   const user = userEvent.setup();
   render(<RouterProvider router={router} />);
   const friction = await screen.findByRole("textbox", { name: "Design friction" });
-  const before = structuredClone(f.saved.get("fans"));
-  const revision = f.typed.work()!.revision;
+  const before = structuredClone(f.saved.get("ducts"));
+  const revision = ducts.work()!.revision;
   await user.click(friction);
   await user.keyboard("{Control>}a{/Control}-0.1{Enter}");
   await waitFor(() => expect(friction.closest(".dl-cell")?.getAttribute("aria-busy")).not.toBe("true"));
-  expect.soft(f.saved.get("fans")).toEqual(before);
-  expect.soft(f.typed.work()!.revision).toBe(revision);
+  expect.soft(f.saved.get("ducts")).toEqual(before);
+  expect.soft(ducts.work()!.revision).toBe(revision);
   expect.soft(friction.closest("[data-sheet-cell]")?.textContent).toContain("at least 0");
   await user.click(screen.getByRole("textbox", { name: "Design friction" }));
   await user.keyboard("{Control>}a{/Control}0.123456789{Enter}");
-  await waitFor(() => expect(f.typed.owner()?.doc.designFriction?.edit).toBeDefined());
-  expect.soft(f.typed.owner()?.doc.designFriction?.edit?.value).toBe(0.123456789);
-  expect.soft((f.saved.get("fans") as { doc: { designFriction?: { edit?: { value: number } } } }).doc.designFriction?.edit?.value).toBe(0.123456789);
+  await waitFor(() => expect(ducts.owner()?.doc.designFriction?.edit).toBeDefined());
+  expect.soft(ducts.owner()?.doc.designFriction?.edit?.value).toBe(0.123456789);
+  expect.soft((f.saved.get("ducts") as { doc: { designFriction?: { edit?: { value: number } } } }).doc.designFriction?.edit?.value).toBe(0.123456789);
   const occupants = within(screen.getByRole("region", { name: "Takeoff occupants" }));
   await user.click(occupants.getByRole("textbox"));
   await user.keyboard("{Control>}a{/Control}2.7{Enter}");
@@ -1006,8 +1006,8 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
-import { inputRows } from "../ducts/sheet/input-rows";
-import { SheetCell } from "../ducts/sheet/sheet-cell";
+import { SheetPane } from "./slots/sheet/pane.tsx";
+import { fansSheet } from "../fans/sheet.ts";
 import { PreviewAction } from "@pe/kit/lang/write-action";
 
 // Plan reviews seal model inputs, never browser pane visibility or Page pose.
@@ -1785,20 +1785,16 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
   cleanup();
   // The recorded adapter has no unit rows; prepare the native input model before rendering.
   const nativeInputs = inputsFor(capture);
-  const attempted = vi.fn();
+  const slot = { ...fansSheet, bindings: { equipmentFlows: fansSheet.bindings.equipmentFlows } };
   function MissingFlow({ ctx }: { ctx: any }) {
     const data = ctx.value.value;
     if (!data.open) throw Error("The native Fan must be open");
-    const rows = inputRows({ snapshot: data.sheetSnapshot, doc: null, fanUnitId: 14577391, inputs: nativeInputs });
-    const control = rows.find(row => row.key === "unit:14577391:cfm")!.control;
-    if (control.kind !== "number") throw Error("Fan airflow must have a number control");
-    return <SheetCell label="MUAS-1 airflow" value={control.value} unit={{ label: "cfm" }} digits={0} source="none"
-      refusal={control.refusal ?? null} onValue={value => { attempted(value); return ctx.cells.at(["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!)]).stage({ cfm: value, source: "Work" }, { label: "MUAS airflow" }); }} />;
+    const value = { ...ctx.value, value: { ...data, sheetView: { ...data.sheetView, inputs: nativeInputs } } };
+    return <SheetPane ctx={{ draw: { ...ctx, value }, slot }} />;
   }
   render(f.typed.draw("sheet-inputs", ctx => <MissingFlow ctx={ctx} />) as React.ReactElement);
   expect(document.querySelector('[data-body="locked"]'), "The missing native parameter locks the actual typed cell before Plan").not.toBeNull();
   expect(document.body.innerHTML).toContain("PE_M_Fan_AirFlowDesign");
-  expect(attempted).not.toHaveBeenCalled();
 
 });
 

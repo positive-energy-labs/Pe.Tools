@@ -8,10 +8,10 @@ import type { ModelValue, SheetChoice, SheetSlot, StateCell } from "@pe/agent-co
  *
  * Census of what Fans' borrowed `InputsBody` drew, and where each part lives now (slice 7 Delete,
  * ruling 2026-11-10: split by owner; MAP decision log). Slot features: `SheetSlot.draft`, a binding's
- * `default`/`unit`/`min`/`max`/`digits`, `model`, `choices`, `rows`, a firm `source` with `ref`, and
- * the pane's typed-only filter.
+ * `default`/`unit`/`min`/`max`/`digits`/`field`, `model`, `choices`, `rows`, a firm `source` with
+ * `ref`, a layer's `refusal` and `note`, `SheetSlot.from` and `empty`, and the pane's typed-only filter.
  *   draft cells, `{ edit: { value, by, at } }`            the slot: `SheetSlot.draft`, `pending` by author
- *   design friction (default 0.08, min 0, in-wg/100 ft)  /ducts sheet: a criteria cell, default layer and limits
+ *   design friction (default 0.08, min 0, in-wg/100 ft)  /ducts sheet: its own `designFriction` cell, default layer and limits
  *   criteria and split policy, with their firm source    /ducts sheet: `criteria` rows, firm `source` and `ref`
  *   the firm line (version, file, present)               /ducts sheet: the `ref` of every firm-sourced cell
  *   fitting tables, rule assignments                     /ducts Rules pane (its chips), already there
@@ -20,6 +20,8 @@ import type { ModelValue, SheetChoice, SheetSlot, StateCell } from "@pe/agent-co
  *   parameter slot names, ESP and protocol slot pickers  /fans sheet: `parameters` rows, model and choices from the read
  *   write scope (`writeIntent`)                          /fans sheet: choices from the open fan
  *   unit roles, drops, esp and flows                     /fans sheet: rows per binding, `field`, units, model from the read
+ *   no flow parameter (locked), model/walk flow conflict  /fans sheet: the model layer's `refusal` and `note`
+ *   "Open a fan from the roster"                          /fans sheet: `SheetSlot.empty`
  *   the /ducts design Fans prices with                   /fans sheet: the slot's read-only `from` line, linked to /ducts
  *   per-fitting loss readouts                            /fans Ledger: a result, beside the ESP it explains
  *   undo, redo, revert, restore                          kernel chrome (the Timeline) and each cell's own clear
@@ -45,6 +47,8 @@ export interface SheetCell extends StateCell {
   readonly field?: string;
   readonly choices?: readonly SheetChoice[];
   readonly ref?: string;
+  readonly refusal?: string;
+  readonly note?: string;
 }
 
 const defined = <T extends object>(o: T) =>
@@ -85,10 +89,13 @@ export function sheetCells(slot: SheetSlot, input: SheetInput): readonly SheetCe
         label: row === undefined ? (declared.label ?? binding)
           : (read !== undefined && declared.rowLabel?.(read, row)) || declared.label || binding,
         ...defined({
-          unit: declared.unit,
+          unit: (layer && "unit" in layer ? layer.unit : undefined) ?? declared.unit,
           field: declared.field,
           ref: layer && "ref" in layer ? layer.ref : undefined,
-          choices: read !== undefined ? declared.choices?.(read, row) : undefined,
+          refusal: layer && "refusal" in layer ? layer.refusal : undefined,
+          note: layer && "note" in layer ? layer.note : undefined,
+          // A row the binding offers no choice for is a typed cell.
+          choices: read !== undefined ? declared.choices?.(read, row)?.length ? declared.choices(read, row) : undefined : undefined,
         }),
         ...(Object.keys(numeric).length ? { numeric } : {}),
       };

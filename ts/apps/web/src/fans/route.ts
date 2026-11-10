@@ -23,6 +23,7 @@ import { fanLabel, stableFanKey } from "../ducts/sheet/model.ts";
 import { describeInputHistory, editMetaSchema } from "../ducts/sheet/input-history.neutral.ts";
 import { sheetValueFixtures } from "../ducts/sheet/value-fixtures.ts";
 import { presentLosses } from "../ducts/reviews.ts";
+import { fansSheet } from "./sheet.ts";
 
 const shared = ductsPictureFields;
 const fan = subjectSchema(32);
@@ -86,6 +87,7 @@ export const module = route({
   },
   core: sheet,
   reads: { roster },
+  sheet: fansSheet,
   fields,
   panes: {
     "sheet-roster": {
@@ -99,7 +101,8 @@ export const module = route({
       title: "Inputs",
       purpose: "Edit fan inputs",
       bindings,
-      draw: draw(() => import("../ducts/sheet/mount.tsx"), "InputsBody"),
+      kernel: "sheet",
+      draw: () => null,
     },
     "sheet-picture": {
       title: "Picture",

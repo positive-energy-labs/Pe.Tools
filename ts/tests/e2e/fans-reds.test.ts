@@ -308,7 +308,7 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
     const espRow = () =>
       page.evaluate(() => {
         const row = document.querySelector<HTMLElement>(
-          '[data-pane-id="sheet-inputs"] [data-input-field^="unit:"][data-input-field$=":esp"]',
+          '[data-pane-id="sheet-inputs"] [data-sheet-address^="esp:"]',
         );
         const input = row?.querySelector("input");
         if (!row || !input) return null;

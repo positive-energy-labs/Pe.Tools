@@ -32,6 +32,12 @@ export interface CellLayer {
   /** Which file, store key or version the value came from (the firm line: version and file). */
   readonly ref?: string;
   readonly freshness?: StateCell["freshness"];
+  /** This row's unit when the read knows it (a resolved criterion's `units`); else the binding's. */
+  readonly unit?: string;
+  /** The row cannot be staged now, and why (a unit with no flow parameter): the cell draws locked. */
+  readonly refusal?: string;
+  /** What the read says about this row beside its value (a model/walk flow conflict). */
+  readonly note?: string;
 }
 
 /**
@@ -83,6 +89,8 @@ export interface SheetSlot<B extends Readonly<Record<string, SheetBinding>> = Re
    * link that opens that route on it. A sheet reads across routes; it stages only its own Work.
    */
   readonly from?: (read: any, search: Readonly<Record<string, unknown>>) => { readonly says: string; readonly href: string } | null;
+  /** What the sheet says instead of its cells when its read has nothing for it, with the exit (house law 9). */
+  readonly empty?: (read: any) => string | null;
 }
 
 /** The cell's address: a binding name, and the row for a per-subject binding (a SubjectRef code, or the binding's own row key). */
