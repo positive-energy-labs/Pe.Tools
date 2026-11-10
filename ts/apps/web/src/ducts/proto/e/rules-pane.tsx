@@ -23,6 +23,7 @@ import { clearWords, ruleFanOut } from "../../inputs";
 import type { LossesWork } from "../../work";
 import { RuleAssignment } from "./rule-assignment";
 import { Chips, DropCell, StagedRules } from "./rules";
+import { elementSubject, workElementId } from "@pe/ducts-domain/work-subject";
 
 type RuleNode =
   | { kind: "rule"; key: string; ids: number[] }
@@ -47,7 +48,6 @@ export function ruleOfIds(priced: Priced | null): Map<number, string> {
 }
 
 // Memoized: a selection, a hover or a camera move never re-renders the rules (107 ms per selection
-// on Chadds SA 4 before, dev build); only its own inputs do.
 export const RulesTree = memo(function RulesTree({
   snapshot,
   priced,
@@ -88,7 +88,7 @@ export const RulesTree = memo(function RulesTree({
     if (focus && ruleByKey(focus) && !ids.has(focus)) ids.set(focus, new Set());
     const overrides = [
       ...new Set([
-        ...Object.keys(priced.edit.componentDrops).map(Number),
+        ...Object.keys(priced.edit.componentDrops).map(key => workElementId(snapshot, key)),
         ...(landing && ruleOf.has(landing.id) ? [landing.id] : []),
       ]),
     ].filter(inScope);
@@ -110,7 +110,6 @@ export const RulesTree = memo(function RulesTree({
   }, [priced, ruleOf, groupOf, groups, wide, landing, focus]);
 
   // What staging each rule's table would move, known before anything is edit: the grilles
-  // downstream of its instances and the systems they sit in, document-wide whatever `wide` says.
   const fanOuts = useMemo(() => {
     const trees = new Map();
     return new Map(
@@ -195,6 +194,7 @@ export const RulesTree = memo(function RulesTree({
                 <DropCell
                   segment="componentDrops"
                   id={n.id}
+                  subject={elementSubject(snapshot.nodes.find(x => x.id === n.id)!)}
                   land={landing?.id === n.id ? landing.key : undefined}
                   held={snapshot.nodes.find((x) => x.id === n.id)?.loss?.revitPressureDropInWg}
                   work={work}
@@ -251,6 +251,7 @@ export const RulesTree = memo(function RulesTree({
                       <DropCell
                         segment="componentDrops"
                         id={first}
+                        subject={elementSubject(snapshot.nodes.find(x => x.id === first)!)}
                         land={landing?.id === first ? landing.key : undefined}
                         held={
                           snapshot.nodes.find((x) => x.id === first)?.loss?.revitPressureDropInWg

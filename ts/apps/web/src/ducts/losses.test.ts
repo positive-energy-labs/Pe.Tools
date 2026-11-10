@@ -8,6 +8,7 @@ import { neutralFansWork } from "@pe/agent-contracts";
 import { designOf } from "@pe/ducts-domain/test-design";
 import { stagedDucts } from "@pe/agent-contracts";
 import { expect, it } from "vite-plus/test";
+import { nativeResponseDefinitionSchema } from "@pe/host-contracts/decoders";
 
 import { bin } from "@pe/ducts-domain/bins";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
@@ -55,7 +56,7 @@ const conn = (
     ...size,
   }) as Conn;
 const node = (id: number, kind: string, extra: object): DuctSnapshot["nodes"][number] =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind,
     category: "",
@@ -71,7 +72,7 @@ const duct = (
   polyline: number[][],
   connectors: Conn[],
 ) =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind: "duct",
     curveKind: "line",
@@ -260,8 +261,9 @@ it.each(rootAttached.cases)(
   "resolves the exact root attachment of retained fitting $fitting.id",
   (captured) => {
     for (const reverse of [false, true]) {
-      const fitting = structuredClone(captured.fitting) as DuctSnapshot["nodes"][number];
-      const equipment = structuredClone(captured.equipment) as DuctSnapshot["nodes"][number];
+      const nativeNode = nativeResponseDefinitionSchema<DuctSnapshot["nodes"][number]>("ducts.snapshot.walk", "DuctNode");
+      const fitting = nativeNode.parse(structuredClone(captured.fitting));
+      const equipment = nativeNode.parse(structuredClone(captured.equipment));
       const terminalId = 900000001;
       fitting.groupId = "root-regression";
       const outlet = fitting.connectors.find((port) => port.index === captured.outletIndex)!;

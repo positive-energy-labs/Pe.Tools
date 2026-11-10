@@ -1,3 +1,4 @@
+import { workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { commands, tools, canonicalRouteInput, workKey, type DuctsApplyInput ,
@@ -33,6 +34,8 @@ const prepared = z.object({
   input: z.record(z.string(), z.unknown()),
   dependencies: z.unknown(),
   nothingToWrite: z.boolean().optional(),
+  subjects: z.record(z.string(), z.string()).default({}),
+  cells: z.array(z.tuple([z.string(), z.string()])).default([]),
   labels: z.record(z.string(), z.string()).optional(),
 });
 const targetOf = (ctx: CommandContext) => {
@@ -92,6 +95,7 @@ export async function lossSnapshot(
 export function unwrittenCells(
   request: Pick<DuctsApplyInput, "terminals" | "components" | "equipment" | "terminalFlows" | "equipmentFlows">,
   cells: readonly (readonly [string, string])[],
+  snapshot: Pick<DuctSnapshot, "nodes" | "segments">,
 ): (readonly [string, string])[] {
   const written: Record<string, readonly { id: number }[]> = {
     terminalDrops: request.terminals,
@@ -100,7 +104,7 @@ export function unwrittenCells(
     flows: request.terminalFlows,
     equipmentFlows: request.equipmentFlows,
   };
-  return cells.filter(([segment, key]) => written[segment] && !written[segment]!.some((row) => String(row.id) === key),
+  return cells.filter(([segment, key]) => written[segment] && !written[segment]!.some((row) => row.id === workElementId(snapshot, key)),
   );
 }
 
@@ -288,8 +292,8 @@ export function ductsExecutors(
             const cells = fanScope?.walk
               ? [...(ductsScope?.cells ?? []), ...fanWriteCells(fans, snapshot)]
               : ductsScope?.cells;
-            const scoped = scopeApplyRequest(request, snapshot.store, cells);
-            const unwritten = unwrittenCells(scoped, cells ?? []);
+            const scoped = scopeApplyRequest(request, snapshot.store, cells, snapshot);
+            const unwritten = unwrittenCells(scoped, cells ?? [], snapshot);
             if (unwritten.length)
               throw refused(
                 `These requested cells derive no write in this scope: ${unwritten
@@ -301,8 +305,10 @@ export function ductsExecutors(
               );
             const label = elementLabeler(snapshot, { unique: true });
             return {
+              cells: cells ?? [],
+              subjects: Object.fromEntries((cells ?? []).filter(([s]) => ["terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows", "roles"].includes(s)).map(([, k]) => [k, String(workElementId(snapshot, k))])),
               input: scoped as unknown as Record<string, unknown>,
-              nothingToWrite: pendingCount(design, snapshot.store) === 0,
+              nothingToWrite: pendingCount(design, snapshot.store, snapshot) === 0,
               labels: Object.fromEntries(snapshot.nodes.map((n) => [String(n.id), label(n.id)])),
               dependencies: {
                 snapshot: ductWriteEvidence(snapshot),
@@ -351,7 +357,7 @@ export function ductsExecutors(
         native: "ducts.apply.plan",
         refusePlan: (value: unknown) => lossPlanRefusal((value as DuctsApply.Res.Response).writes),
         retires: (input: Record<string, unknown>, value: unknown) =>
-          appliedCellPaths(input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response),
+          appliedCellPaths(input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response, p.subjects, p.cells),
       },
       heal: {
         key: "ducts.heal",
@@ -364,7 +370,6 @@ export function ductsExecutors(
       },
     }[kind];
     // The losses plan reads through the native Read sibling; a rehearsal calls its rolled-back TransactRead;
-    // only apply reaches the ModelWrite leaf. Heal and fan plans never get here: the write boundary seals them.
     const key = phase === "apply" ? entry.key : entry.native;
     const value = await execution.step(
       "native",
@@ -374,7 +379,6 @@ export function ductsExecutors(
       { process: p.process as import("@pe/agent-contracts").NativeProcess },
     );
     // Retain the review and its read evidence. A refusal blocks the whole intent at the write boundary;
-    // bookkeeping and computed losses cannot authorize Apply while an authored edit is refused.
     if (phase !== "apply") {
       const refusal = entry.refusePlan?.(value);
       if (refusal) return {
@@ -416,8 +420,6 @@ export function ductsExecutors(
       },
     }),
     // The registry wraps these at boot: `commands[key].writeBoundary` (or `workIntent` for a rehearsal) carries
-    // the binding. ducts.plan-heal and ducts.plan-assign-fan have no executor: the registry binds the apply's in
-    // its plan phase, which seals the derived request without a native call.
     ...Object.fromEntries(
       (
         [

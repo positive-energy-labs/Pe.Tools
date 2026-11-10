@@ -672,10 +672,10 @@ public static class DuctSnapshots {
             Text(e, BuiltInParameter.RBS_SYSTEM_CLASSIFICATION_PARAM),
             HvacConnectors(e).Select(c => Connector(c, network, metadataOnly)).ToList(),
             facts.Where(f => f.Value is not null || f.Text is not null).ToList(),
+            e.UniqueId,
             kind is DuctNodeKind.Fitting or DuctNodeKind.Accessory ? Loss(e, schemas) : null,
             kind == DuctNodeKind.Terminal ? Terminal(e, slots) : null,
             Label(e, labelParameter),
-            e.UniqueId,
             FlowParameter: flowParameter);
     }
 

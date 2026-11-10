@@ -226,7 +226,7 @@ function useNetworkData(ctx: NetworkContext) {
     captureSource: networkRead.current && doc && version ? { document: doc, version } : null,
     scopeCommand,
     fanRoster: ctx.value.value?.fanRows ?? [],
-    edit: pendingCount(workDoc ?? null, snapshot?.store),
+    edit: pendingCount(workDoc ?? null, snapshot?.store, snapshot ?? { nodes: [], segments: [] }),
     coverage: coverage
       ? { ...coverage, reading: networkRead.status === "pending" ? systems : [] }
       : null,
@@ -917,7 +917,6 @@ const SystemsList = memo(function SystemsList({
     if (systemListView.target && systemListView.rows.some((row) => row.key === active))
       systemListView.reveal(active);
     // The active system is revealed when its pane mounts; filtering never replaces the query.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, systemListView.target]);
   return (
     <ListView

@@ -140,7 +140,7 @@ export async function createWitness(
                     fansWork,
                     design: ductsDesign(ductsWork, fansWork),
                     effectiveDesign:
-                      withStoredRulings(ductsDesign(ductsWork, fansWork), snapshot.store) ??
+                      withStoredRulings(ductsDesign(ductsWork, fansWork), snapshot.store, snapshot) ??
                       ductsDesign(ductsWork, fansWork),
                     catalogFindings: [],espOptions:null,espOptionsError:"Fixture has no native parameter options",
                   };

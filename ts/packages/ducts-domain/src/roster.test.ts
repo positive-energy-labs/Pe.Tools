@@ -27,7 +27,7 @@ const unit = (
   id: number,
   family: string,
   connectors = [port(1, "out", "SupplyAir"), port(2, "in", "ReturnAir")],
-): Node => ({
+): Node => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
   id,
   family,
   type: "Standard",

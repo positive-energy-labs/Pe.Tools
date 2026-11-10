@@ -41,8 +41,6 @@ export interface ComponentFlow {
 }
 const portKey = (id: number, index: number) => `${id}:${index}`;
 // For n rounded operations, gamma(n)=n*u/(1-n*u), u=EPSILON/2. A leg projection
-// uses <64 scalar operations (subtract/dot/norm/clamp/reconstruct); include cumulative legs.
-// Scaling by absolute world coordinates bounds cancellation. This is numerical error, not a physical merge tolerance.
 export const ductArithmeticError = (points: number[][], legs: number) => {
   const n = 64 * (legs + 1),
     u = Number.EPSILON / 2;
@@ -244,7 +242,6 @@ export function componentFlows(g: Graph): ComponentFlow[] {
         if (total - station.at <= errorFt) station.at = total;
       }
       // A shared station needs one line point inside every port's numerical error ball,
-      // not merely a transitive chain of close pairs.
       if (
         stations.some((station) => {
           const point = polyline[0]!.map(
@@ -410,7 +407,7 @@ export function componentFlows(g: Graph): ComponentFlow[] {
             connectedTo: p.connectedTo
               ? {
                   id: p.connectedTo.elementId,
-                  uniqueId: g.elements.get(p.connectedTo.elementId)?.uniqueId ?? null,
+                  uniqueId: g.elements.get(p.connectedTo.elementId)?.uniqueId ?? "",
                   connector: p.connectedTo.connector,
                 }
               : null,
@@ -457,7 +454,6 @@ export function componentFlows(g: Graph): ComponentFlow[] {
             fromComponentId: null,
           };
           // Exterior exchange balances the admitted fan face, without adding a physical joint.
-          // A zero net residual here never certifies an unknown crossing flow.
           injection.set(k, 0);
           localExterior.push({ boundary, sign: fan.sign, other: fan.other });
         } else {

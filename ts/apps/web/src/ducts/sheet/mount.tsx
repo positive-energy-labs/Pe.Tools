@@ -1,4 +1,5 @@
 import { fanWriteCells } from "@pe/ducts-domain/staged";
+import { workElementId } from "@pe/ducts-domain/work-subject";
 import { renderPicturePane } from "#/scene/picture/picture";
 import { EspParameter } from "./esp-parameter";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
@@ -14,6 +15,7 @@ import { useAdmittedSubject } from "#/shell/subject";
 
 import type { DuctsSheetEdits, PicturePage } from "@pe/agent-contracts";
 import { systemScope } from "@pe/ducts-domain/system-scope";
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
@@ -47,7 +49,7 @@ function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
   const selected = authored.selected.map(({ id }) => id).join(",");
   const changeInputs = async (
     edits: DuctsSheetEdits,
-    history: EditMeta = { label: editLabel(edits, nameOf) },
+    history: EditMeta = { label: editLabel(edits, key => nameOf(workElementId(snapshot, key))) },
   ) => {
     return ctx.cells.edit(edits, history).then((result) => result ?? undefined);
   };
@@ -65,11 +67,7 @@ function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
     busy: reading.status === "pending",
   };
 }
-/**
- * The person's explicit fan write scope, required by the host losses command. Offered from the host
- * sheet's open fan. Current staged cells in that walk are projected by the host; the walk is staged only on a pick,
- * never from the Page or a plan. Another fan's standing scope is shown, not replaced on navigation.
- */
+/** The person's explicit fan write scope, required by the host losses command. */
 function WriteScope({
   ctx,
   snapshot,
@@ -290,7 +288,7 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
         {snapshot.nodes
           .filter((node) => node.kind === "equipment")
           .map((node) => {
-            const key = String(node.id);
+            const key = elementSubject(node);
             const cell = ctx.cells.doc?.roles[key] ?? {};
             const label = `Unit role ${nameOf(node.id)}`;
             return (
@@ -434,6 +432,11 @@ export function LedgerBody({ ctx }: { ctx: SheetContext }) {
   );
 }
 function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSnapshot }) {
+  const nativeElement = (id: number) => {
+    const e = [...snapshot.nodes, ...snapshot.segments].find(e => e.id === id);
+    if (!e) throw Error(`Element ${id} is unavailable`);
+    return e;
+  };
   const { reading, sheet, roster, nameOf, selected, changeInputs, busy } = useSheetData(
     ctx,
     snapshot,
@@ -500,22 +503,22 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
                 ...edits,
                 terminalDrops: {
                   ...edits.terminalDrops,
-                  [action.elementId]: { inWg: action.value },
+                  [elementSubject(nativeElement(action.elementId))]: { inWg: action.value },
                 },
               }
             : {
                 ...edits,
                 componentDrops: {
                   ...edits.componentDrops,
-                  [action.elementId]: { inWg: action.value },
+                  [elementSubject(nativeElement(action.elementId))]: { inWg: action.value },
                 },
               };
         case "cfm":
-          return { ...edits, flows: { ...edits.flows, [action.elementId]: { cfm: action.value } } };
+          return { ...edits, flows: { ...edits.flows, [elementSubject(nativeElement(action.elementId))]: { cfm: action.value } } };
         case "unitCfm":
           return {
             ...edits,
-            equipmentFlows: { ...edits.equipmentFlows, [action.unitId]: { cfm: action.value } },
+            equipmentFlows: { ...edits.equipmentFlows, [elementSubject(nativeElement(action.unitId))]: { cfm: action.value } },
           };
         case "rule":
           return {

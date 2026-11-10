@@ -1,23 +1,12 @@
-/**
- * /fans Work (FANSPLIT, routes LEDGER 2026-11-03): the fan-side cells, split out of the ducts Work.
- * Every segment is a family of cells with one staged edit each:
- * - `terminalDrops` (terminal id) and `componentDrops` (fitting or accessory id): a stated drop in
- *   in-wg and where it came from.
- * - `esp` (air mover id): the external static Pe writes to a unit, in in-wg.
- * - `equipmentFlows` (air mover id): a stated design flow in cfm for the unit, written to its FanFlow slot.
- * - `roles` (air mover id): whether the unit is a `fan` or a `passive` part. Without a ruling the
- *   route proposes one (ducts-domain `unit-roles.ts`); a ruling is kept in the model's store (v2
- *   `roles`) and Work holds only the pending delta.
- * - `flows` (terminal id): a stated design flow in cfm that beats every other source.
- * - `parameters`: which Revit parameter carries each slot.
- * - `calculation`: calculation-only witnesses (`ductCalculationSchema`), never native apply.
- * - `designFriction`: the design friction rate in in-wg per 100 ft.
- */
+/** /fans Work (FANSPLIT, routes LEDGER 2026-11-03): the fan-side cells, split out of the ducts Work. */
 import { z } from "zod";
-import { subjectRefCodeSchema } from "./subject-ref.ts";
+import { decode, subjectRefCodeSchema } from "./subject-ref.ts";
 import type { Immutable } from "./route-kernel-data.ts";
 import { DUCT_PARAMETER_KEYS, ductCalculationSchema } from "./ducts.ts";
 import { draftCellSchema } from "./draft.ts";
+const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(code => {
+  const ref = decode(code); return ref.ok && ref.value.keyKind === "UniqueId";
+});
 
 const dropSchema = z.strictObject({
   inWg: z.number().nonnegative(),
@@ -43,14 +32,14 @@ export const fansDocumentSchema = z.strictObject({
     }),
   ).default({}),
   calculation: z.record(z.string().min(1), draftCellSchema(ductCalculationSchema)).default({}),
-  terminalDrops: z.record(subjectRefCodeSchema, draftCellSchema(dropSchema)).default({}),
-  componentDrops: z.record(subjectRefCodeSchema, draftCellSchema(dropSchema)).default({}),
-  esp: z.record(subjectRefCodeSchema, draftCellSchema(espSchema)).default({}),
+  terminalDrops: z.record(elementSubjectSchema, draftCellSchema(dropSchema)).default({}),
+  componentDrops: z.record(elementSubjectSchema, draftCellSchema(dropSchema)).default({}),
+  esp: z.record(elementSubjectSchema, draftCellSchema(espSchema)).default({}),
   /** A unit's design flow (air mover id), written to the FanFlow slot; beats Revit's fanFlow fact. */
-  equipmentFlows: z.record(subjectRefCodeSchema, draftCellSchema(flowSchema)).default({}),
+  equipmentFlows: z.record(elementSubjectSchema, draftCellSchema(flowSchema)).default({}),
   /** Whether an air mover is a fan or a passive part; keyed by the unit's UniqueId SubjectRef. */
-  roles: z.record(subjectRefCodeSchema, draftCellSchema(roleSchema)).default({}),
-  flows: z.record(subjectRefCodeSchema, draftCellSchema(flowSchema)).default({}),
+  roles: z.record(elementSubjectSchema, draftCellSchema(roleSchema)).default({}),
+  flows: z.record(elementSubjectSchema, draftCellSchema(flowSchema)).default({}),
   parameters: z
     .partialRecord(z.enum(DUCT_PARAMETER_KEYS), draftCellSchema(z.string().min(1)))
     .default({}),

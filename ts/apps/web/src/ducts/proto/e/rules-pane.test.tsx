@@ -15,7 +15,7 @@ afterEach(cleanup);
 
 test("rule rows keep native ids and editable cells keep their arrow and Enter keys", () => {
   const onFocus = vi.fn();
-  const snapshot = { nodes: [], segments: [], groups: [] } as unknown as DuctSnapshot;
+  const snapshot = { nodes: [20, 30, 40].map(id => ({ id, uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`, connectors: [] })), segments: [], groups: [] } as unknown as DuctSnapshot;
   const result = {
     paths: {
       20: {
@@ -30,7 +30,7 @@ test("rule rows keep native ids and editable cells keep their arrow and Enter ke
     snapshot,
     now: result,
     next: result,
-    edit: { componentDrops: { 30: {} }, ruleAssignments: {} },
+    edit: { componentDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0000001e": {} }, ruleAssignments: {} },
   } as unknown as Priced;
   render(
     <RulesTree

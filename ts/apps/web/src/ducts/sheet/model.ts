@@ -5,16 +5,13 @@ import type {
   FittingPricing,
 } from "@pe/agent-contracts";
 import type { Immutable } from "@pe/agent-contracts";
-import { subjectCode, type SubjectRefCode, type UniqueId } from "../../../../../packages/agent-contracts/src/subject-ref.ts";
+import { subjectCode, uniqueIdSchema, type SubjectRefCode } from "../../../../../packages/agent-contracts/src/subject-ref.ts";
 
 export type FanPort = DuctsRosterResponse["rows"][number];
 
 export type Detail<K extends DuctsSheetResponse["kind"]> = Immutable<
   Extract<DuctsSheetResponse, { kind: K }>
 >;
-
-export const fanKey = (fan: Pick<FanPort, "unitId" | "portIndex">) =>
-  `${fan.unitId}:${fan.portIndex}`;
 
 export const pressure = (value: number | null | undefined) =>
   value == null ? "—" : value.toFixed(4);
@@ -39,10 +36,10 @@ export const rosterOrder = (rows: readonly FanPort[]) =>
  */
 export const withComputed = (roster: readonly FanPort[], computed: readonly FanPort[]) => {
   const priced = new Map(
-    computed.filter((row) => row.complete !== undefined).map((row) => [fanKey(row), row]),
+    computed.filter((row) => row.complete !== undefined).map((row) => [stableFanKey(row), row]),
   );
   return roster.map((row) => {
-    const sheet = priced.get(fanKey(row));
+    const sheet = priced.get(stableFanKey(row));
     return sheet
       ? {
           ...row,
@@ -56,10 +53,10 @@ export const withComputed = (roster: readonly FanPort[], computed: readonly FanP
 };
 
 /** Mark is a display label; a fan port is the SubjectRef `UniqueId:<unit>#port:<n>` (ADR 0035 rule 2). */
-export const stableFanKey = (fan: Pick<FanPort, "uniqueId" | "portIndex">): SubjectRefCode =>
-  subjectCode({ keyKind: "UniqueId", key: fan.uniqueId as UniqueId, sub: { port: fan.portIndex } });
+export const stableFanKey = (fan: { uniqueId: string; portIndex: number }): SubjectRefCode =>
+  subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse(fan.uniqueId), sub: { port: fan.portIndex } });
 
-export function selectedFans<T extends Pick<FanPort, "uniqueId" | "portIndex">>(
+export function selectedFans<T extends { uniqueId: string; portIndex: number }>(
   keys: string[] | "all",
   rows: readonly T[],
 ): T[] {
@@ -73,7 +70,7 @@ export function selectedFans<T extends Pick<FanPort, "uniqueId" | "portIndex">>(
   });
 }
 
-type Labelled = Pick<FanPort, "mark" | "uniqueId" | "portIndex"> &
+type Labelled = { mark: string; uniqueId: string; portIndex: number } &
   Partial<Pick<FanPort, "level" | "system">>;
 /** A duplicate mark is told apart by where it is (level, then system), else by its order; never by its key. */
 export const fanLabel = (fan: Labelled, rows: readonly Labelled[]) => {

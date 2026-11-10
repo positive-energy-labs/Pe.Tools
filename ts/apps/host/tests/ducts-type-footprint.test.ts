@@ -23,7 +23,7 @@ test("a loss plan the native owner refuses for type scope arms nothing and names
 test("a refused apply retires no staged cell: the fan static stays staged", () => {
   const input = { terminals: [], components: [], equipment: [{ id: 14577391, externalStaticInWg: 2.6581 }], terminalFlows: [], equipmentFlows: [], fittings: [] ,
   };
-  expect(appliedCellPaths(input as never, { previewOnly: false, writes: unscoped } as never),
+  expect(appliedCellPaths(input as never, { previewOnly: false, writes: unscoped } as never, {}, []),
   ).toEqual([]);
 });
 

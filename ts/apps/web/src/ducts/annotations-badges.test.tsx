@@ -121,7 +121,7 @@ it("a footnote badge sits on a drawn subject (mesh, else ghosted centreline, els
 });
 
 it("one gap repair has one row, two named subjects, two pins and one evidence sentence", () => {
-  const segments = [10, 11].map((id, i) => ({
+  const segments = [10, 11].map((id, i) => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind: "duct",
     groupId: `g${id}`,

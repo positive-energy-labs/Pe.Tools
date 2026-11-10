@@ -56,7 +56,7 @@ it("prices rectangular radius elbows with CR3-1 Cp and its angle factor, and rou
   const { roundSection } = await import("./loss-physics.ts");
   const inlet = { index: 0, shape: "rectangular", widthIn: 10, heightIn: 10 };
   const outlet = { ...inlet, index: 1 };
-  const node = {
+  const node = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,
     id: 1,
     kind: "fitting",
     family: "Rectangular Elbow - Radius",
@@ -133,7 +133,7 @@ it("maps a plain round tee to SD5-9 with distinct branch and straight Pv; branch
     [1, 0, 0],
     [0, 1, 0],
   ].map((facing, index) => ({ index, facing, shape: "round", diameterIn: 8 }));
-  const node = {
+  const node = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(2).toString(16).padStart(8, "0")}`,
     id: 2,
     kind: "fitting",
     family: "Round Tee",
@@ -216,7 +216,7 @@ const rectPort = (index: number, widthIn: number, heightIn: number) => ({
 });
 /** A takeoff collar of `w` x `h` on the 32x11 return trunk (mainArea 2.4444 ft2 read at the tap). */
 const rectTap = (w: number, h: number) =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(13971115).toString(16).padStart(8, "0")}`,
     id: 13971115,
     kind: "fitting",
     family: "Rectangular Takeoff",
@@ -319,7 +319,7 @@ it("a junction past ED5-3's edge is refused, never charged an extrapolated coeff
   // Live FC-23 (2026-10-29): the proposed tap from 13771256:0, a 20x20 collar, onto the 6 in round
   // duct 13973156, carrying 50 cfm one way (Qb = Qc). Ab/Ac 14.2 clamps to ED5-3's 1; Cb there is
   // -262998, and charging it on the collar's 18 fpm multiplied it by 200 to about -5.3e7.
-  const tap = {
+  const tap = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(13771256).toString(16).padStart(8, "0")}`,
     id: 13771256,
     kind: "fitting",
     family: "proposed tap",
@@ -384,7 +384,7 @@ it("a round junction where air joins prices on ED5-3 by Dc, Ab/Ac and As/Ac: a t
   const { fittingFacts } = await import("./kernel/fitting-facts.ts");
   const { priceLeg } = await import("./kernel/price-leg.ts");
   const { friction, roundSection } = await import("./loss-physics.ts");
-  const tap = {
+  const tap = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(5).toString(16).padStart(8, "0")}`,
     id: 5,
     kind: "fitting",
     family: "Round Takeoff",
@@ -420,7 +420,7 @@ it("a round junction where air joins prices on ED5-3 by Dc, Ab/Ac and As/Ac: a t
     { index: 1, facing: [1, 0, 0], shape: "round", diameterIn: 8 },
     { index: 2, facing: [0, 1, 0], shape: "round", diameterIn: 6 },
   ];
-  const tee = {
+  const tee = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(7).toString(16).padStart(8, "0")}`,
     id: 7,
     kind: "fitting",
     family: "Round Tee",
@@ -472,7 +472,7 @@ it("a bullhead (entered from its branch, the main bringing air both ways) prices
   expect(rect.source?.kind === "rule" && rect.source.notes[0]).toBe("Ab1/Ac clamped at 1");
 
   // The round bullhead: a 6 in collar on an 8 in main, ED5-4 at Ab1/Ac = Ab2/Ac 1.78 (clamped at 1).
-  const round = {
+  const round = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(9).toString(16).padStart(8, "0")}`,
     id: 9,
     kind: "fitting",
     family: "Round Takeoff",
@@ -495,7 +495,7 @@ it("a bullhead (entered from its branch, the main bringing air both ways) prices
 
 it("a supply bullhead (collar air dividing both ways along a round main) reads SD5-18 Cb1 per path, never SD5-9", async () => {
   // MUAS-1 takeoff 14806947: 115 cfm up a 6 in collar dividing 50 / 65 along an 8 in main.
-  const round = {
+  const round = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(9).toString(16).padStart(8, "0")}`,
     id: 9,
     kind: "fitting",
     family: "Round Takeoff",
@@ -533,7 +533,7 @@ it("a round elbow read with centerRadius but no rOverD still finds its rule (liv
     diameterIn: 10,
     point: [0, 0, 0],
   });
-  const elbow = {
+  const elbow = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(14606857).toString(16).padStart(8, "0")}`,
     id: 14606857,
     kind: "fitting",
     family: "Round Elbow",

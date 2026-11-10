@@ -1,11 +1,6 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { SheetInputs } from "./model";
-/**
- * Every input this fan's walk reads, as rows that never vanish (kaitpw 2026-10-30: "whys that even
- * called an override"). A row is a value with its source: typed is a state of the row, not a list
- * of its own. Clearing a typed value returns the row to what lies under it (revit, firm,
- * suggested, none), so the person still sees what they would be redoing. A unit kind is one row
- * per [family, type], naming the units it covers (it was one raw-key row per instance).
- */
+/** Every input this fan's walk reads, as rows that never vanish (kaitpw 2026-10-30: "whys that even called an override"). */
 import {
   DUCT_UNIT_KINDS,
   type DuctUnitKind,
@@ -67,7 +62,7 @@ export type InputRow = {
 };
 
 export interface RowContext {
-  snapshot: Pick<DuctSnapshot, "nodes"> & Partial<Pick<DuctSnapshot, "slots">>;
+  snapshot: Pick<DuctSnapshot, "nodes"> & Partial<Pick<DuctSnapshot, "slots" | "segments">>;
   doc: DuctsDesign | null;
   inputs: SheetInputs | null;
   /** The open fan's unit: its ESP is an input of this sheet; another unit's is not. */
@@ -161,7 +156,7 @@ export function inputRows(ctx: RowContext): InputRow[] {
     });
   }
   for (const [id, unit] of Object.entries(inputs.units)) {
-    const n = Number(id);
+    const n = Number(id), key = elementSubject(nodes.get(n)!);
     number(
       `unit:${id}:cfm`,
       "units",
@@ -170,9 +165,9 @@ export function inputRows(ctx: RowContext): InputRow[] {
       unit.cfm,
       "cfm",
       0,
-      ctx.doc?.equipmentFlows[id],
-      (cfm) => ({ equipmentFlows: { [id]: { cfm } } }),
-      { equipmentFlows: { [id]: null } },
+      ctx.doc?.equipmentFlows[key],
+      (cfm) => ({ equipmentFlows: { [key]: { cfm } } }),
+      { equipmentFlows: { [key]: null } },
     );
     const node = nodes.get(n);
     const flowControl = rows[rows.length - 1]!.control;
@@ -189,9 +184,9 @@ export function inputRows(ctx: RowContext): InputRow[] {
         unit.esp,
         "in-wg",
         4,
-        ctx.doc?.esp[id],
-        (inWg) => ({ esp: { [id]: { inWg } } }),
-        { esp: { [id]: null } },
+        ctx.doc?.esp[key],
+        (inWg) => ({ esp: { [key]: { inWg } } }),
+        { esp: { [key]: null } },
       );
     if (unit.role.source === "Work")
       rows.push({
@@ -203,10 +198,11 @@ export function inputRows(ctx: RowContext): InputRow[] {
         source: sourceChip(unit.role),
         typed: true,
         control: { kind: "text", value: unit.role.value },
-        clear: { roles: { [id]: null } },
+        clear: { roles: { [key]: null } },
       });
   }
   for (const [id, t] of Object.entries(inputs.terminals)) {
+    const key = elementSubject(nodes.get(Number(id))!);
     number(
       `terminal:${id}:cfm`,
       "terminals",
@@ -215,9 +211,9 @@ export function inputRows(ctx: RowContext): InputRow[] {
       t.cfm,
       "cfm",
       0,
-      ctx.doc?.flows[id],
-      (cfm) => ({ flows: { [id]: { cfm } } }),
-      { flows: { [id]: null } },
+      ctx.doc?.flows[key],
+      (cfm) => ({ flows: { [key]: { cfm } } }),
+      { flows: { [key]: null } },
     );
     number(
       `terminal:${id}:drop`,
@@ -227,12 +223,13 @@ export function inputRows(ctx: RowContext): InputRow[] {
       t.drop,
       "in-wg",
       4,
-      ctx.doc?.terminalDrops[id],
-      (inWg) => ({ terminalDrops: { [id]: { inWg } } }),
-      { terminalDrops: { [id]: null } },
+      ctx.doc?.terminalDrops[key],
+      (inWg) => ({ terminalDrops: { [key]: { inWg } } }),
+      { terminalDrops: { [key]: null } },
     );
   }
-  for (const [id, c] of Object.entries(inputs.components))
+  for (const [id, c] of Object.entries(inputs.components)) {
+    const key = elementSubject(nodes.get(Number(id)) ?? ctx.snapshot.segments?.find(e => e.id === Number(id))!);
     number(
       `component:${id}:drop`,
       "parts",
@@ -241,10 +238,11 @@ export function inputRows(ctx: RowContext): InputRow[] {
       c.drop,
       "in-wg",
       4,
-      ctx.doc?.componentDrops[id],
-      (inWg) => ({ componentDrops: { [id]: { inWg } } }),
-      { componentDrops: { [id]: null } },
+      ctx.doc?.componentDrops[key],
+      (inWg) => ({ componentDrops: { [key]: { inWg } } }),
+      { componentDrops: { [key]: null } },
     );
+  }
   for (const [key, drop] of Object.entries(inputs.fittingDrops)) {
     const subject = ctx.pathSubject?.(key) ?? [key];
     rows.push({

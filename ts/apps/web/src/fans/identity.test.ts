@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createWitness } from "./cutover.test-support";
 import { admit } from "./admission.fixture";
 import { stableFanKey } from "../ducts/sheet/model";
+import { decode, uniqueIdSchema } from "../../../../packages/agent-contracts/src/subject-ref";
 import { workFeedFailureMessage } from "../../../../packages/agent-contracts/src/work-journal-door";
 import fixture from "../ducts/sheet/sheet.fixture.json";
 const closes: (() => void)[] = [];
@@ -14,6 +15,24 @@ afterEach(() =>
 const picked = (keys: string[]) => ({
   kind: "ids" as const,
   ids: keys,
+});
+
+test("two ports of one unit have distinct SubjectRef picker keys", async () => {
+  const unit = { ...fixture.roster.rows[0]!, uniqueId: uniqueIdSchema.parse(fixture.roster.rows[0]!.uniqueId) };
+  const ports = [{ ...unit, portIndex: 0 }, { ...unit, portIndex: 1 }];
+  expect(new Set(ports.map(stableFanKey)).size).toBe(2);
+  expect(ports.map(row => decode(stableFanKey(row)))).toEqual(ports.map(row => ({
+    ok: true, value: { keyKind: "UniqueId", key: unit.uniqueId, sub: { port: row.portIndex } },
+  })));
+  const added = { ...fixture.roster.rows[0]!, portIndex: 97 };
+  fixture.roster.rows.push(added);
+  try {
+    const f = await createWitness(closes);
+    await vi.waitFor(() => expect(f.fans.picker("fan")).toBeDefined());
+    const keys = (f.fans.picker("fan") as readonly { id: string }[]).map(row => row.id);
+    expect(keys).toContain(stableFanKey(fixture.roster.rows[0]!));
+    expect(keys).toContain(stableFanKey(added));
+  } finally { fixture.roster.rows.pop(); }
 });
 test("P06/P08: MUAS-1 restores from a direct URL and duplicate FC-23 ports have distinct picker labels", async () => {
   const f = await createWitness(closes);

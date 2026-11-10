@@ -109,12 +109,12 @@ export function rememberHealPlan(
   work: DuctsDesign | null,
   plan: HealPlan,
 ) {
-  plans.set(snapshot, { key: topologyRulingsKey(withStoredRulings(work, snapshot.store)), plan });
+  plans.set(snapshot, { key: topologyRulingsKey(withStoredRulings(work, snapshot.store, snapshot)), plan });
 }
 
 /** Only edit topology verdicts affect healing; a unit-flow edit cannot rebuild it. */
 export function healPlan(snapshot: DuctSnapshot, work: DuctsDesign | null = null): HealPlan {
-  const key = topologyRulingsKey(withStoredRulings(work, snapshot.store));
+  const key = topologyRulingsKey(withStoredRulings(work, snapshot.store, snapshot));
   const hit = plans.get(snapshot);
   if (hit?.key === key) return hit.plan;
   const plan = build(snapshot, work);
@@ -124,7 +124,7 @@ export function healPlan(snapshot: DuctSnapshot, work: DuctsDesign | null = null
 
 function build(snapshot: DuctSnapshot, raw: DuctsDesign | null): HealPlan {
   // A stored ruling (an end left out) holds like a edit one (`rulings.ts`).
-  const work = withStoredRulings(raw, snapshot.store);
+  const work = withStoredRulings(raw, snapshot.store, snapshot);
   const tolerated = tolerate(snapshot, work);
   const groupOf = new Map(
     [...tolerated.snapshot.nodes, ...tolerated.snapshot.segments].map((e) => [
@@ -133,7 +133,6 @@ function build(snapshot: DuctSnapshot, raw: DuctsDesign | null): HealPlan {
     ]),
   );
   // C# measures each open end against the whole document (DuctHealth `near`), so a partner outside a
-  // bounded read is still known: an end it marks auto-join faces a vacant port within autoJoinGapIn.
   const facingOf = new Map(
     snapshot.issues.flatMap((i) => {
       const port =
@@ -170,7 +169,6 @@ function build(snapshot: DuctSnapshot, raw: DuctsDesign | null): HealPlan {
   const ruled = (x: End) => x.issue != null && verdictOf(work, x.issue) === "ignore";
   const live = ends.filter((x) => !ruled(x));
   // Two ends Revit already connects through the network (a stub and a riser around a bend) never
-  // face each other: joining them closes a loop. Each is its own dangling end.
   const matches = (x: End, y: End) =>
     x.e.id !== y.e.id &&
     (x.e.groupId == null || x.e.groupId !== y.e.groupId) &&
@@ -201,7 +199,6 @@ function build(snapshot: DuctSnapshot, raw: DuctsDesign | null): HealPlan {
     }
     const near = nearest(x);
     // Air passes an end Revit gives a flow: it is where the system's air leaves or enters, never a cap
-    // (Chadds EX 1 11620957:1, EF-7's 444 cfm out; ducts LEDGER 2026-10-30). Its own words await kaitpw.
     const flow = x.c.flowCfm ?? 0;
     const facing = facingOf.get(x.k);
     if (!near && facing) {

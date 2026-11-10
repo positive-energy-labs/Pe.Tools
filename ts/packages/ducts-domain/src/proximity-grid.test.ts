@@ -74,6 +74,7 @@ function random(seed: number): DuctSnapshot {
     const ends = [conn(1, a, round, cls), conn(2, b, round, cls)];
     segments.push({
       id,
+      uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`,
       kind: "duct",
       curveKind: "line",
       type: "Duct",
@@ -111,6 +112,7 @@ function random(seed: number): DuctSnapshot {
           : [conn(1, near(), round, cls), conn(2, near(), round, cls)];
     nodes.push({
       id,
+      uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`,
       kind,
       category: kind,
       family: kind,

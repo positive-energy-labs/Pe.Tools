@@ -30,8 +30,8 @@ test("two systems sharing a fan retain their own pressure and breakdown terminal
     if ([12, 22, 31].includes(e.id)) e.systemName = "SA 2";
   const cell = (inWg: number) => ({ edit: { value: { inWg } } });
   const work = designOf({
-    terminalDrops: { 30: cell(0.05), 31: cell(0.35) },
-    componentDrops: { 21: cell(0.01), 22: cell(0.01) },
+    terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0000001e": cell(0.05), "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0000001f": cell(0.35) },
+    componentDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000015": cell(0.01), "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000016": cell(0.01) },
   });
   const priced = price(snapshot, {}, work, (work) ?? neutralFansWork);
   const rows = systemList(priced.snapshot, priced);

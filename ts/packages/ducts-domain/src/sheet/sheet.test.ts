@@ -44,7 +44,7 @@ const conn = (
     ...size,
   }) as Conn;
 const node = (id: number, kind: string, extra: object): Node =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind,
     category: "",
@@ -60,7 +60,7 @@ const duct = (
   polyline: number[][],
   connectors: Conn[],
 ): Segment =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind: "duct",
     curveKind: "line",

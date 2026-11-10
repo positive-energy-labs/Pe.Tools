@@ -1361,10 +1361,10 @@ export namespace DuctsSnapshotRoster {
       classification?: null | string;
       connectors: DuctConnector[];
       facts: DuctFact[];
+      uniqueId: string;
       loss?: null | DuctLoss;
       terminalDrop?: null | DuctTerminalDrop;
       label?: null | string;
-      uniqueId?: null | string;
       phaseCreated?: null | string;
       phaseDemolished?: null | string;
       flowParameter?: null | string;
@@ -1473,7 +1473,7 @@ export namespace DuctsSnapshotRoster {
       roughness: DuctRoughness;
       revit: DuctRevitValues;
       connectors: DuctConnector[];
-      uniqueId?: null | string;
+      uniqueId: string;
       phaseCreated?: null | string;
       phaseDemolished?: null | string;
       reason?: null | string;
@@ -1987,10 +1987,10 @@ export namespace DuctsSnapshotWalk {
       classification?: null | string;
       connectors: DuctConnector[];
       facts: DuctFact[];
+      uniqueId: string;
       loss?: null | DuctLoss;
       terminalDrop?: null | DuctTerminalDrop;
       label?: null | string;
-      uniqueId?: null | string;
       phaseCreated?: null | string;
       phaseDemolished?: null | string;
       flowParameter?: null | string;
@@ -2099,7 +2099,7 @@ export namespace DuctsSnapshotWalk {
       roughness: DuctRoughness;
       revit: DuctRevitValues;
       connectors: DuctConnector[];
-      uniqueId?: null | string;
+      uniqueId: string;
       phaseCreated?: null | string;
       phaseDemolished?: null | string;
       reason?: null | string;

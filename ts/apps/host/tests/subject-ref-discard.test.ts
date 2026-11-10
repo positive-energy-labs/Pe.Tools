@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
-import { bindWork, familiesRouteState, fansRouteState, workKey } from "@pe/agent-contracts";
+import { bindWork, ductsDocumentSchema, familiesRouteState, fansRouteState, workKey } from "@pe/agent-contracts";
 import { decode, subjectCode, uniqueIdSchema } from "../../../packages/agent-contracts/src/subject-ref.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
@@ -34,6 +34,12 @@ test("stored Families Work in the old [family,type,parameter] spelling is discar
     await writeFile(path, stored('name:["F","T"]#field:P'));
     expect(await open()).toMatchObject({ revision: 7, doc: { cells: { 'name:["F","T"]#field:P': cell } } });
   } finally { log.mockRestore(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("the Work groups door refuses the old bare group spelling", () => {
+  const scope = (groups: string[]) => ({ writeIntent: { edit: { value: { groups } } } });
+  expect(ductsDocumentSchema.safeParse(scope(["g8718801"])).success).toBe(false);
+  expect(ductsDocumentSchema.safeParse(scope(["group:g8718801"])).success).toBe(true);
 });
 
 test("stored fans Work with an ElementId cell is discarded; UniqueId port cells round-trip", async () => {

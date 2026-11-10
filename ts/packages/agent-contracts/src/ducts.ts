@@ -162,7 +162,7 @@ export const ductComponentWitnessSchema = z.array(
         connectedTo: z
           .strictObject({
             id: z.number().int(),
-            uniqueId: z.string().nullable(),
+            uniqueId: z.string(),
             connector: z.number().int(),
           })
           .nullable(),

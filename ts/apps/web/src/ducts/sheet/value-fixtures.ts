@@ -1,4 +1,5 @@
 import {
+  ductsRosterResponseSchema,
   ductsDesign,
   ductsDocumentSchema,
   fansDocumentSchema,
@@ -15,7 +16,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 /** Providers answer the same semantic read; selection changes never reuse a per-route seed. */
 const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly string[] }) => {
-  const rows = fixture.roster.rows.filter((row) =>
+  const rows = ductsRosterResponseSchema.parse(fixture.roster).rows.filter((row) =>
     snapshot.nodes.some((node) => node.id === row.unitId),
   );
   const requested =
