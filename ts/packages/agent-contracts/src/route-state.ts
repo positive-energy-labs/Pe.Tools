@@ -256,6 +256,17 @@ export function parseRouteDoc<TSchema extends z.ZodType>(
 }
 
 export function message(error: unknown): string {
+  // A ZodError's own message is its issue list as pretty JSON, which a catalog `sources` line then repeats on every call.
+  if (error instanceof z.ZodError)
+    return error.issues
+      .map((issue) => {
+        const at = issue.path.length ? issue.path.join(".") : "(root)";
+        if (issue.code === "unrecognized_keys") return `${at} has unknown field ${issue.keys.join(", ")}`;
+        return issue.code === "invalid_type" && /received undefined/.test(issue.message)
+          ? `${at} is missing`
+          : `${at}: ${issue.message}`;
+      })
+      .join("; ");
   return error instanceof Error ? error.message : String(error);
 }
 

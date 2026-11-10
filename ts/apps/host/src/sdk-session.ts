@@ -183,6 +183,10 @@ const resolveSdkCore = Effect.fn("SdkSession.sdk")(function* (
 });
 
 /** I removes these legacy callable faces with their L/R consumers. Converted reads use the scoped service below. */
+// One cache for every promise-face call. A fresh Map per call (the old shape) made each admission step
+// spawn `pe-revit doc list --pid`, twice per action. A hit is still checked against the live bridge
+// socket (same session, pid and start) and the process, so a restarted or gone Revit never answers from it.
+const sharedResolutions: ResolutionCache = new Map();
 const resolveSdk = (
   bridge: Pick<RevitBridge["Service"], "list">,
   scope: HostSessionScope = {},
@@ -192,7 +196,13 @@ const resolveSdk = (
     bridge,
     scope,
     (args) => Effect.tryPromise({ try: () => read(args), catch: (error) => error }),
-    new Map(),
+    sharedResolutions,
+  ).pipe(
+    Effect.tap(() =>
+      Effect.sync(() => {
+        while (sharedResolutions.size > 64) sharedResolutions.delete(sharedResolutions.keys().next().value!);
+      }),
+    ),
   );
 export type SdkSession = Effect.Success<ReturnType<typeof resolveSdkCore>>;
 export const sdkSession = resolveSdk;

@@ -43,6 +43,7 @@ import {
   findCapabilities,
   mentionOf,
   message,
+  bridgeSessionFor,
   parseContributionKey,
   parseRouteKey,
   scheduleGridRouteState,
@@ -398,12 +399,34 @@ export const peDo = createTool({
   },
 });
 
+/**
+ * Op results print the SDK session id (`pe.app-25`); the inventory keys the bridge id. A document target
+ * that names the SDK id of one connected attachment is rewritten to that attachment's bridge id.
+ */
+async function bridgeTarget(target: RunInput["target"]): Promise<RunInput["target"]> {
+  if (!target || !("kind" in target)) return target;
+  try {
+    const { sessions } = await new HostRpcCaller({ hostBaseUrl: base(), timeoutMs: 30_000 }).call(
+      "bridge.sessions.list",
+    );
+    const session = bridgeSessionFor(target.ref.session, sessions);
+    return session === target.ref.session ? target : { kind: "open", ref: { ...target.ref, session } };
+  } catch (error) {
+    // The unrewritten target still reaches the resolver, which refuses it in its own words.
+    console.error("capability-tools: session list unavailable for target", error);
+    return target;
+  }
+}
+
 async function executeTool(
   input: RunInput,
   context: unknown,
   gate: (row: Capability) => string | null,
   replayOperations = false,
 ): Promise<Record<string, unknown>> {
+  // A replay or recovery reads an original receipt whose target is already resolved: no discovery.
+  const target = replayOperations || input.actionId ? input.target : await bridgeTarget(input.target);
+  if (target !== input.target) input = { ...input, target };
   const contribution = parseContributionKey(input.key);
   const requestId = input.actionId ?? requestIdentity(context);
   if (input.key.startsWith("op:")) {

@@ -115,6 +115,7 @@ import type { MachineShareAdapter } from "./machine.ts";
 import {
   MachineOwner,
   hostMachineFace,
+  machineForRead,
   type MachineOptions,
   machineAcquisition,
   machineSessionAcquisition,
@@ -1081,18 +1082,21 @@ export function createContributionContent(options: {
       skills: publication.skills,
       pages,
       diagnostics,
-      sourceDiagnostics: [
-        ...(bootstrapProblem ? [bootstrapProblem] : []),
-        ...publication.notices,
-        ...listing.unreadable.map((d) => `${d.folder}: ${d.message}`),
-        ...listing.packages.flatMap((p) =>
-          p.diagnostics.map((d) => `${p.id}/${d.path}: ${d.message}`),
-        ),
-        ...lifecycle
-          .inventory()
-          .filter((p) => p.status !== "active")
-          .map((p) => `${p.id}: ${p.status}${p.error ? `: ${p.error}` : ""}`),
-      ],
+      // Pod problems answer for `packages`; only the skill publication's own notices answer for `skills`.
+      sourceDiagnostics: {
+        packages: [
+          ...(bootstrapProblem ? [bootstrapProblem] : []),
+          ...listing.unreadable.map((d) => `${d.folder}: ${d.message}`),
+          ...listing.packages.flatMap((p) =>
+            p.diagnostics.map((d) => `${p.id}/${d.path}: ${d.message}`),
+          ),
+          ...lifecycle
+            .inventory()
+            .filter((p) => p.status !== "active")
+            .map((p) => `${p.id}: ${p.status}${p.error ? `: ${p.error}` : ""}`),
+        ],
+        skills: [...publication.notices],
+      },
     };
   }
   return {
@@ -1294,7 +1298,9 @@ function* hostPeRoutes(
   const catalog = createCapabilityCatalogSource({
     hostBaseUrl,
     registrations,
-    machine: () => hostMachineFace.refresh(),
+    // A catalog read used to start a census pass of its own (`session list --all` plus holdings per
+    // session: 1 to 3 s here, far more with a big cloud model) although the poll already ran one.
+    machine: () => machineForRead(hostMachineFace.current(), () => hostMachineFace.refresh()),
     content: async () => {
       await podRoutes.list();
       return content.read();

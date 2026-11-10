@@ -4,10 +4,11 @@ import { withInvocationContext, type InvocationContext } from "@pe/runtime/conte
 import { McpServer, type CallToolResult, type ServerContext } from "@modelcontextprotocol/server";
 import { peaProductTools } from "./pea/index.ts";
 import { peaAgentInstructions } from "./pea/instructions.ts";
+import { capResultText } from "./shared/spill.ts";
 import type { McpTool } from "./shared/tool.ts";
 
 /** A tool result as MCP content: model output parts when the tool shapes them, else JSON text. */
-function toContent(tool: McpTool, result: unknown): CallToolResult {
+export function toContent(tool: McpTool, result: unknown): CallToolResult {
   const modelOutput = tool.toModelOutput?.(result) as
     | {
         type: "content";
@@ -25,16 +26,14 @@ function toContent(tool: McpTool, result: unknown): CallToolResult {
   const record = result as { isError?: unknown; text?: unknown; content?: unknown } | null;
   if (record?.isError === true) {
     const message = record.text ?? record.content;
+    const text = typeof message === "string" ? message : JSON.stringify(result);
     return {
       isError: true,
-      content: [
-        { type: "text", text: typeof message === "string" ? message : JSON.stringify(result) },
-      ],
+      content: [{ type: "text", text: capResultText(tool.id, message ?? result, text) }],
     };
   }
-  return {
-    content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result) }],
-  };
+  const text = typeof result === "string" ? result : JSON.stringify(result);
+  return { content: [{ type: "text", text: capResultText(tool.id, result, text) }] };
 }
 
 export async function createPeaMcpServer(context: InvocationContext): Promise<McpServer> {

@@ -1095,7 +1095,7 @@ export class ActionJournal implements ReceiptReader {
         );
         if (ownWrite) continue;
         if (!this.environment) throw Error("Command resource probes are unavailable");
-        const current = await this.environment.probe(dependency);
+        const current = await this.environment.probe(dependency, moment);
         if (canonicalRouteInput(current) !== canonicalRouteInput(dependency.expected))
           throw new CommandRejected({ kind: "stale", consumed: [dependency] });
       }

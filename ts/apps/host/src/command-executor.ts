@@ -127,7 +127,8 @@ export type CommandRegistry = (key: string) => CommandExecutor;
 export interface CommandResources {
   work?: RouteWorkspace;
   workReads?: (admission: ActionAdmission) => CommandWorkReads;
-  probe(dependency: Exclude<Consumed, { kind: "work" }>): Promise<unknown>;
+  /** `moment` is the gate that asks; absent means the strongest reading. */
+  probe(dependency: Exclude<Consumed, { kind: "work" }>, moment?: string): Promise<unknown>;
   target?(target: ExecutionTarget, needs: ActionNeed): Promise<void>;
   effectPath?(effect: Extract<Effect, { kind: "member" }>): Promise<string | undefined>;
 }
