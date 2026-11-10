@@ -1,4 +1,3 @@
-import { SdkSession } from "./sdk-session.ts";
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import {
@@ -9,6 +8,7 @@ import {
 } from "@pe/agent-contracts";
 import { BridgeError, type HostBridgeEvent, type RevitBridge } from "./bridge.ts";
 import { InvalidRead } from "./native-reads.ts";
+import type { DoorFailure } from "@pe/host-internal/request-contracts";
 
 export type NativeResult = {
   value: unknown;
@@ -29,7 +29,7 @@ export type DuctsReadOptions = {
   version?: string;
   refresh?: string;
   /** Decoded host source evidence, never an HTTP version header. */
-  source?: { readonly revision?: string; readonly beforeReady?: (body: DuctsBody) => Promise<void> };
+  source?: { readonly revision?: string; readonly beforeReady?: (body: DuctsBody) => Effect.Effect<void, DoorFailure> };
 };
 type Entry = {
   request: DuctsReadingRequest;
@@ -38,8 +38,7 @@ type Entry = {
   body?: DuctsBody;
   bytes: number;
   used: number;
-  flight?: Promise<DuctsBody>;
-  flightRevision?: string;
+  readers: number;
 };
 const refused = (message: string) => new BridgeError(message, 409, { notDispatched: true });
 const identity = (request: DuctsReadingRequest) =>
@@ -58,7 +57,7 @@ export class DuctsReadings {
   private readonly entries = new Map<string, Entry>();
   private bytes = 0;
   constructor(
-    private readonly limits: { entries: number; bytes: number; idleMs: number; waitMs?: number } = {
+    private readonly limits: { entries: number; bytes: number; idleMs: number } = {
       entries: 16,
       bytes: 256 * 1024 * 1024,
       idleMs: 900_000,
@@ -74,7 +73,7 @@ export class DuctsReadings {
       return existing;
     }
     for (const [key, entry] of this.entries)
-      if (!entry.listeners.size && !entry.flight && Date.now() - entry.used > this.limits.idleMs)
+      if (!entry.listeners.size && !entry.readers && Date.now() - entry.used > this.limits.idleMs)
         this.drop(key, entry);
     while (this.entries.size >= this.limits.entries)
       if (!this.evict())
@@ -85,6 +84,7 @@ export class DuctsReadings {
       listeners: new Set(),
       bytes: 0,
       used: Date.now(),
+      readers: 0,
     };
     this.entries.set(key, entry);
     return entry;
@@ -95,7 +95,7 @@ export class DuctsReadings {
   }
   private evict(except?: Entry): boolean {
     const candidate = [...this.entries]
-      .filter(([, entry]) => entry !== except && !entry.flight && !entry.listeners.size)
+      .filter(([, entry]) => entry !== except && !entry.readers && !entry.listeners.size)
       .sort((a, b) => a[1].used - b[1].used)[0];
     if (!candidate) return false;
     this.drop(...candidate);
@@ -175,72 +175,53 @@ export class DuctsReadings {
         this.invalidate(entry);
     }
   }
-  async read(
+  read = Effect.fn("DuctsReadings.read")(function* <E, R>(this: DuctsReadings,
     request: DuctsReadingRequest,
-    acquire: () => Promise<NativeResult & { nativeRequestId: string; nativeTakingId?: string }>,
+    acquire: Effect.Effect<NativeResult & { nativeRequestId: string; nativeTakingId?: string }, E, R>,
     options: DuctsReadOptions = {},
-  ): Promise<DuctsBody> {
-    const entry = this.entry(request);
+  ) {
+    const entry = yield* Effect.try({ try: () => this.entry(request), catch: retainedFailure });
     const original = options.source?.revision;
     if (original !== undefined) {
       if (options.refresh !== undefined)
-        throw new InvalidRead({ message: "A recorded Ducts body cannot refresh live inputs", status: 409, problem: "recording.historical" });
+        return yield* new InvalidRead({ message: "A recorded Ducts body cannot refresh live inputs", status: 409, problem: "recording.historical" });
       if (!original || (entry.envelope.revision !== original &&
-          (entry.body || entry.flight || entry.envelope.state !== "idle")))
-        throw new InvalidRead({ message: "Recorded Ducts version conflicts with the retained acquisition", status: 409, problem: "recording.mismatch" });
+          (entry.body || entry.envelope.state !== "idle")))
+        return yield* new InvalidRead({ message: "Recorded Ducts version conflicts with the retained acquisition", status: 409, problem: "recording.mismatch" });
       entry.envelope = { ...entry.envelope, revision: original };
     }
     if (options.refresh === entry.envelope.revision) this.invalidate(entry);
     if (options.version) {
       if (entry.body?.version !== options.version)
-        throw refused("Ducts body version is no longer current; observe the reading again");
-      return entry.body;
+        return yield* retainedFailure(refused("Ducts body version is no longer current; observe the reading again"));
+      return { ...entry.body, reused: true };
     }
-    if (entry.envelope.state === "closed" || (entry.envelope.state === "failed" && !entry.flight))
-      throw refused(
+    if (entry.envelope.state === "closed" || entry.envelope.state === "failed")
+      return yield* retainedFailure(refused(
         entry.envelope.error ?? "Ducts acquisition failed; explicitly refresh to retry",
-      );
-    if (entry.body) return entry.body;
-    if (entry.flight) {
-      const revision = entry.flightRevision;
-      try {
-        return await entry.flight;
-      } catch (error) {
-        if (revision === entry.envelope.revision) throw error;
-        return this.read(request, acquire, options);
-      }
-    }
+      ));
+    if (entry.body) return { ...entry.body, reused: true };
     const revision = entry.envelope.revision;
-    entry.flightRevision = revision;
+    entry.readers++;
     entry.envelope = { ...entry.envelope, state: "loading" };
-    // A timed-out native operation may still be running. Fence its answer, but retain its flight
-    // until it settles so refresh cannot dispatch a second operation behind an unanswered first.
-    const deadline = setTimeout(() => {
-      if (entry.envelope.revision === revision)
-        this.invalidate(
-          entry,
-          "failed",
-          "Ducts acquisition sent no answer in 120 s; refresh after the native read settles",
-        );
-    }, this.limits.waitMs ?? 120_000);
-    const flight = Promise.resolve().then(async () => {
-      try {
-        const result = await acquire();
+    this.publish(entry);
+    return yield* Effect.gen({ self: this }, function* () {
+        const result = yield* acquire;
         if (entry.envelope.revision !== revision)
-          throw refused("Ducts acquisition was invalidated before it completed");
+          return yield* retainedFailure(refused("Ducts acquisition was invalidated before it completed"));
         const actual = result.target.documentRef;
         if (
           result.target.session !== identity(request).session ||
           (request.kind === "ducts-snapshot" &&
             (actual?.session !== request.target.session || actual.openId !== request.target.openId))
         )
-          throw refused("Ducts native response did not confirm the exact requested document");
+          return yield* retainedFailure(refused("Ducts native response did not confirm the exact requested document"));
         const json = JSON.stringify(result.value);
         const bytes = Buffer.byteLength(json, "utf8");
         if (bytes > this.limits.bytes)
-          throw refused(
+          return yield* retainedFailure(refused(
             "Ducts snapshot exceeds the shared reading byte budget; graph was not clipped",
-          );
+          ));
         const body: DuctsBody = {
           json,
           version: revision,
@@ -248,21 +229,22 @@ export class DuctsReadings {
           target: result.target,
           ...(result.nativeTakingId ? { nativeTakingId: result.nativeTakingId } : {}),
         };
-        await options.source?.beforeReady?.(body);
-        // Metadata capture can await disk; a change/deadline still retires this acquisition.
+        yield* options.source?.beforeReady?.(entry.body ?? body) ?? Effect.void;
+        // Metadata capture can await disk; a change still retires this revision.
         if (entry.envelope.revision !== revision)
-          throw refused("Ducts acquisition was invalidated while retaining its basis");
+          return yield* retainedFailure(refused("Ducts acquisition was invalidated while retaining its basis"));
+        if (entry.body) return { ...entry.body, reused: false };
         while (this.bytes + bytes > this.limits.bytes)
           if (!this.evict(entry))
-            throw refused("Shared Ducts reading byte budget is occupied; graph was not clipped");
+            return yield* retainedFailure(refused("Shared Ducts reading byte budget is occupied; graph was not clipped"));
         entry.body = body;
         entry.bytes = bytes;
         this.bytes += bytes;
         entry.envelope = { ...entry.envelope, state: "ready", version: revision };
         this.publish(entry);
-        return entry.body;
-      } catch (error) {
-        if (entry.envelope.revision === revision) {
+        return { ...entry.body, reused: false };
+    }).pipe(Effect.tapError((error) => Effect.sync(() => {
+        if (entry.envelope.revision === revision && !entry.body) {
           entry.envelope = {
             ...entry.envelope,
             state: "failed",
@@ -273,16 +255,14 @@ export class DuctsReadings {
           };
           this.publish(entry);
         }
-        throw error;
-      } finally {
-        clearTimeout(deadline);
-        if (entry.flight === flight) entry.flight = undefined;
+    })), Effect.ensuring(Effect.sync(() => {
+      entry.readers--;
+      if (!entry.readers && entry.envelope.revision === revision && entry.envelope.state === "loading") {
+        entry.envelope = { ...entry.envelope, state: "idle" };
+        this.publish(entry);
       }
-    });
-    entry.flight = flight;
-    this.publish(entry);
-    return flight;
-  }
+    })));
+  });
 
   assertCurrent(request: DuctsReadingRequest, version: string): void {
     if (this.entry(request).body?.version !== version)
@@ -301,14 +281,8 @@ export function ductsReadings(bridge: RevitBridge["Service"]): DuctsReadings {
   return owner;
 }
 
-/** SDK session aliases and bridge ids must enter the same exact owner, never a second cache. */
-export async function canonicalDuctsSession(
-  bridge: RevitBridge["Service"],
-  id: string,
-): Promise<string> {
-  // effect-edge: island, phase 5
-  const session = await Effect.runPromise(
-    SdkSession.resolve(bridge, { id }).pipe(Effect.mapError((error) => refused(error.message))),
-  );
-  return session.sessionId;
-}
+const retainedFailure = (error: unknown) => new InvalidRead({
+  message: error instanceof Error || error instanceof BridgeError ? error.message : String(error),
+  status: error instanceof BridgeError ? error.statusCode : 409,
+  problem: "read.retained",
+});

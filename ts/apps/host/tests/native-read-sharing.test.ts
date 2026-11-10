@@ -439,7 +439,7 @@ test("retained /fans acquisition admits every caller and keeps miss, refresh and
       expect(joined.status, await joined.clone().text()).toBe(200);
       expect(joined.headers.get("x-pe-native-request-id")).toBe(first.headers.get("x-pe-native-request-id"));
       expect(joined.headers.get(NATIVE_BODY_VERSION_HEADER)).toBe(first.headers.get(NATIVE_BODY_VERSION_HEADER));
-      expect([first, joined].map((response) => response.headers.get("x-pe-ducts-reused")).sort()).toEqual(["false", "true"]);
+      expect([first, joined].map((response) => response.headers.get("x-pe-ducts-reused"))).toEqual(["false", "false"]);
       wait = Promise.resolve();
       expect(first.status, await first.clone().text()).toBe(200);
       expect(first.headers.get("x-pe-ducts-reused")).toBe("false");
