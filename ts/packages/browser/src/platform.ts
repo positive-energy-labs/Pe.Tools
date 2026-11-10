@@ -42,7 +42,9 @@ export async function chromeExecutable(explicit?: string): Promise<string> {
     try {
       await access(candidate);
       return resolve(candidate);
-    } catch (error) { console.error("platform: asynchronous operation failed", error); }
+    } catch (error) {
+      console.error("platform: asynchronous operation failed", error);
+    }
   }
   throw new BrowserError(
     "ExecutableNotFound",
@@ -110,7 +112,9 @@ export async function assertProfileAvailable(profile: string): Promise<void> {
       if (/^\d+$/.test(pid)) {
         try {
           commands.push((await readFile(`/proc/${pid}/cmdline`, "utf8")).replaceAll("\0", " "));
-        } catch (error) { console.error("platform: asynchronous operation failed", error); }
+        } catch (error) {
+          console.error("platform: asynchronous operation failed", error);
+        }
       }
   } else {
     try {
@@ -135,6 +139,39 @@ export async function assertProfileAvailable(profile: string): Promise<void> {
 
 const quoteWindows = (arg: string) =>
   `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`;
+/** Start a Windows process outside every job of this process; returns its pid. See Guardian.cs. */
+export async function createOutsideJob(
+  directory: string,
+  command: string,
+  args: string[],
+): Promise<number> {
+  const guardian = await windowsGuardianExecutable(directory);
+  const line = [command, ...args].map(quoteWindows).join(" ");
+  return new Promise<number>((accept, reject) => {
+    const child = spawn(guardian, ["--create-outside-job", process.cwd(), line], {
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    child.stdout.on("data", (chunk) => (output += String(chunk)));
+    child.stderr.on("data", (chunk) => (output += String(chunk)));
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      const pid = Number(output.trim());
+      if (code === 0 && Number.isInteger(pid) && pid > 0) accept(pid);
+      else
+        reject(
+          new BrowserError(
+            "LaunchFailed",
+            `Keeper could not start outside the caller job: ${output}`,
+            {
+              outcome: "not-sent",
+            },
+          ),
+        );
+    });
+  });
+}
 export interface Guardian {
   process: ChildProcess;
   pid: number;

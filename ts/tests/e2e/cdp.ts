@@ -58,12 +58,8 @@ export async function connect(
     return r.result.value as T;
   };
   try {
-    await send("Emulation.setDeviceMetricsOverride", {
-      width: 1400,
-      height: 900,
-      deviceScaleFactor: 1,
-      mobile: false,
-    });
+    // No viewport override: `pea browser launch --viewport` holds it, and an override set here would
+    // lift when this client detaches, relayouting the page on every connect.
     await send("Runtime.enable");
     await send("Page.enable");
     // Each dev launch serves deps from a fresh temp dir; a cached module graph points at the old one.
@@ -125,7 +121,8 @@ export async function connect(
     url: () => read<string>("location.href"),
     async open(url: string) {
       const before = loadSerial;
-      const navigation = await send("Page.navigate", { url });
+      // Leaving a loaded Revit route can hold the old page past the 30 s command default (/fans: >30 s).
+      const navigation: any = await transport.sendRaw("Page.navigate", { url }, { timeoutMs: NAVIGATE_MS });
       if (navigation.errorText) throw new Error(`Page.navigate: ${navigation.errorText}`);
       await page.until(
         async () =>
@@ -137,7 +134,7 @@ export async function connect(
     },
     async reload() {
       const before = loadSerial;
-      await send("Page.reload", {});
+      await transport.sendRaw("Page.reload", {}, { timeoutMs: NAVIGATE_MS });
       await page.until(
         async () =>
           loadSerial > before && (await read<boolean>("document.readyState === 'complete'")),
@@ -269,6 +266,8 @@ export async function connect(
   };
   return page;
 }
+
+const NAVIGATE_MS = 120_000;
 
 /**
  * Budget for a Revit matrix to render its rows. project-a /families with 3 Price LBP15A families

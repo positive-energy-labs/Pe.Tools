@@ -74,13 +74,13 @@ vp run --no-cache journey:routes -- --attached --source C:/path/to/served/Pe.Too
 Always pass `--no-cache`: a cached task verdict cannot prove a browser journey.
 It borrows one explicitly named CDP page. The owned launcher uses `@pe/browser`; no Python runtime is required.
 It starts no browser, server, host, Revit session, or inference turn. Stop only the instance and
-server you launched after the run. Keep the tab visible and serve a stable tree: editing the
+server you launched after the run. Serve a stable tree: editing the
 served checkout invalidates a run.
 
 ```powershell
 # Runtime owner: start this checkout's server separately using the repo's vp tooling.
 # Launch owns a disposable profile and returns JSON identity; keep this session id for cleanup.
-$browser = pnpm exec pe-browser launch --visible -- --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows | ConvertFrom-Json
+$browser = pnpm exec pe-browser launch | ConvertFrom-Json
 $env:CDP_PORT = ([uri]$browser.endpoint).Port.ToString()
 # CDP target metadata is not an application-state oracle. Pick the full id of your own page.
 $pages = pnpm exec pe-browser targets $browser.id | ConvertFrom-Json
@@ -193,6 +193,16 @@ Run: `chrome-agent launch --headless --port 924x` (your own instance), then `CDP
 Clicks and keys go through `@pe/browser` gestures: a disabled, covered or absent control is retried, never pressed, and the timeout names the last refusal. `E2E_TRACE=<file>.jsonl` records every gesture. `tsc --project tests/e2e/tsconfig.journeys.json` (from `ts`) typechecks `cdp.ts` and the node journeys.
 
 A missing precondition (no Revit bridge, no seed, wrong chips) ends as `RESULT: BLOCKED — …`, never `FAIL`.
+
+## Journeys as action lists (trial, `walk.ts` + `f1-fans.ts`)
+
+`walk.ts` plays a journey written as a list of named read actions, or a seeded random walk over the same actions. Each action is a precondition read from the page, a press by role and visible name (scoped only by a region's accessible name), and a condition with a deadline. Rules run after every action and read the page, never a remembered value. Any fan or port is drawn from what the roster lists. The seed defaults to the first 8 hex digits of HEAD.
+
+From `ts`, on an `acceptance.py setup <run> --web` drive with your own `pea browser launch` (headless, 1600x900):
+
+    CDP_PORT=… CDP_TARGET=… E2E_WEB=<frontend> E2E_SESSION=acc-<run> node tests/e2e/f1-fans.ts [--seed N] [--walk 30] [--steps open,reopenPlace,reload]
+
+Under Git Bash, set `MSYS_NO_PATHCONV=1`, or a `/regex/` argument is rewritten into a Windows path. The run writes `steps.jsonl` (action, draws, settle time in ms, rule results, notes), `errors.json`, one screenshot per failing step plus `final.png`, and a `run.log` result line that carries the seed. Every walk starts at `open`.
 
 ## Revit data per journey
 

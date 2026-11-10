@@ -99,7 +99,7 @@ Run pea scripts, host operations, or `pea --prompt` only after the SDK session i
 - A scripted `element.click()`, a dispatched event, a store call or an endpoint never stands in for a UI step.
 - The harness preview and T3 preview tools only show the user a page. Their timeouts are tool limits, not product findings. Computer Use is banned on this machine.
 - A repeatable journey is a typed program under `ts/tests/e2e/` (`journey()` from `cdp.ts`, beside `j1` to `j5`). Run one from `ts` with `node tests/e2e/<j>.ts`. One-off checks use the CLI verbs (`pea browser SESSION click|type|press|shot`). Inspect console, network and visible state. If no browser can be driven, stamp the browser claim UNPROVEN and prove only the lower lane.
-- A measured browser claim (hover timing, layout shift, long tasks) needs a visible, unthrottled tab: `pea browser launch --visible --unthrottled`. A background tab pauses animation frames and throttles timers, so popovers never open and no shift or long task is recorded.
+- Drive and measure in the default headless launch (hover timing, layout shift, long tasks included). It has no OS window, so the owner's screen cannot cover or stall it, and it draws frames at full rate. `--visible` is for a person watching; minimizing any window stops its frames.
 - Keep one observer connection for the whole run and write captured bodies to a file, because a CLI spawn per call costs seconds. `delegate` sequences edits around a measuring run.
 
 ## Worktrees and Herdr
