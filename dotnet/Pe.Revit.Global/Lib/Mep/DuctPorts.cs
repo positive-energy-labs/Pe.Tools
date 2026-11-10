@@ -64,9 +64,7 @@ public static class DuctPorts {
             throw new InvalidOperationException($"Element {ownerId} connector {port.Id}: shape dimension is not finite and positive.");
         var connected = Require("IsConnected", () => port.IsConnected);
         // Every physical peer, where DuctSnapshots keeps only the first.
-        var peers = Require("AllRefs", () => port.AllRefs.Cast<Connector>()
-            .Where(other => other.Domain == Domain.DomainHvac &&
-                            other.ConnectorType is ConnectorType.End or ConnectorType.Curve && other.Owner.Id != port.Owner.Id)
+        var peers = Require("AllRefs", () => MepConnectors.Peers(port, Domain.DomainHvac)
             .Select(other => new DuctRef(other.Owner.Id.Value(), other.Id))
             .Distinct().OrderBy(peer => peer.ElementId).ThenBy(peer => peer.Connector).ToArray());
         return new DuctPhysicalPort(port.Id, port.ConnectorType == ConnectorType.Curve ? "curve" : "end",

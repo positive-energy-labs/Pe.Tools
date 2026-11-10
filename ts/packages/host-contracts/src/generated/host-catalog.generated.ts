@@ -33,6 +33,8 @@ type CatalogEntry = HostOperationDefinition & { readonly requestSchemaJson: stri
   | { readonly key: "family.plan" }
   | { readonly key: "family.temporary.acquire" }
   | { readonly key: "host.ops.catalog" }
+  | { readonly key: "mep.segment.sizes" }
+  | { readonly key: "mep.system.members" }
   | { readonly key: "op.cancel" }
   | { readonly key: "pod.member.compose" }
   | { readonly key: "revit.apply.command.execute" }
@@ -927,6 +929,78 @@ export const hostOpCatalog: readonly CatalogEntry[] = [
     "usesTransactions": false,
     "subject": "None",
     "touches": "Metadata",
+    "effect": "Read",
+    "cardinality": "One",
+    "internal": false,
+    "rollsBack": false
+  },
+  {
+    "key": "mep.segment.sizes",
+    "displayName": "Read Segment Size Catalog",
+    "intent": "Read",
+    "costTier": "Bounded",
+    "visibility": "EscalationVisible",
+    "needs": "project-document",
+    "description": "Read this document's bounded segment catalog: each segment's UniqueId, ElementId, name, domain, kind and nominal, inner and outer diameters in Revit internal feet. Refuses segment or size overflow rather than truncating. Read-only.",
+    "searchTerms": [
+      "mep",
+      "segments",
+      "sizes",
+      "diameter",
+      "catalog"
+    ],
+    "requestExamples": [
+      {
+        "name": "example",
+        "description": "Example request.",
+        "json": "{ \"maxSegments\": 256, \"maxSizesPerSegment\": 512 }"
+      }
+    ],
+    "safeDefaultRequestJson": "{}",
+    "callGuidance": [],
+    "requestSchemaJson": "{\r\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\r\n  \"title\": \"MepSegmentSizesRequest\",\r\n  \"type\": \"object\",\r\n  \"additionalProperties\": false,\r\n  \"properties\": {\r\n    \"maxSegments\": {\r\n      \"type\": \"integer\",\r\n      \"format\": \"int32\"\r\n    },\r\n    \"maxSizesPerSegment\": {\r\n      \"type\": \"integer\",\r\n      \"format\": \"int32\"\r\n    }\r\n  }\r\n}",
+    "responseSchemaJson": "{\r\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\r\n  \"title\": \"MepSegmentSizesData\",\r\n  \"type\": \"object\",\r\n  \"additionalProperties\": false,\r\n  \"required\": [\r\n    \"segments\"\r\n  ],\r\n  \"properties\": {\r\n    \"segments\": {\r\n      \"type\": \"array\",\r\n      \"items\": {\r\n        \"$ref\": \"#/definitions/MepSegmentRow\"\r\n      }\r\n    }\r\n  },\r\n  \"definitions\": {\r\n    \"MepSegmentRow\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"uniqueId\",\r\n        \"elementId\",\r\n        \"name\",\r\n        \"domain\",\r\n        \"kind\",\r\n        \"sizes\"\r\n      ],\r\n      \"properties\": {\r\n        \"uniqueId\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"elementId\": {\r\n          \"type\": \"integer\",\r\n          \"format\": \"int64\"\r\n        },\r\n        \"name\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"domain\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"kind\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"sizes\": {\r\n          \"type\": \"array\",\r\n          \"items\": {\r\n            \"$ref\": \"#/definitions/MepSizeRow\"\r\n          }\r\n        }\r\n      }\r\n    },\r\n    \"MepSizeRow\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"nominalDiameterFt\",\r\n        \"innerDiameterFt\",\r\n        \"outerDiameterFt\"\r\n      ],\r\n      \"properties\": {\r\n        \"nominalDiameterFt\": {\r\n          \"type\": \"number\",\r\n          \"format\": \"double\"\r\n        },\r\n        \"innerDiameterFt\": {\r\n          \"type\": \"number\",\r\n          \"format\": \"double\"\r\n        },\r\n        \"outerDiameterFt\": {\r\n          \"type\": \"number\",\r\n          \"format\": \"double\"\r\n        }\r\n      }\r\n    }\r\n  }\r\n}",
+    "actor": "any",
+    "usesTransactions": false,
+    "subject": "Document",
+    "touches": "Metadata",
+    "effect": "Read",
+    "cardinality": "One",
+    "internal": false,
+    "rollsBack": false
+  },
+  {
+    "key": "mep.system.members",
+    "displayName": "Read MEP System Members",
+    "intent": "Read",
+    "costTier": "Bounded",
+    "visibility": "EscalationVisible",
+    "needs": "project-document",
+    "description": "Read a bounded roster of this document's MEP systems (piping and duct; domain is a field) and optionally one system's members: UniqueIds and ElementIds, system type and classification, flow, size (nominal and inner diameter, or width and height; a size the domain lacks reads absent), length, segment, type, and every physical connector with its peers and the flow direction Revit reports (In, Out or Bidirectional, never inferred). Each system's source is its base equipment, Revit's base connector id and any connector Revit reports Out; no base equipment reads absent. Revit reports a base connector Bidirectional once assigned, so upstream walks from the base connector id across peers. Optional facts are value, absent or error. Lengths and sizes are Revit internal feet, flow is internal cubic feet per second. Refuses overflow rather than truncating. Read-only.",
+    "searchTerms": [
+      "mep",
+      "systems",
+      "members",
+      "flow",
+      "connectors",
+      "upstream",
+      "source"
+    ],
+    "requestExamples": [
+      {
+        "name": "example",
+        "description": "Example request.",
+        "json": "{ \"systemUniqueId\": \"<UniqueId from the roster>\", \"maxSystems\": 256, \"maxElements\": 4096 }"
+      }
+    ],
+    "safeDefaultRequestJson": "{}",
+    "callGuidance": [],
+    "requestSchemaJson": "{\r\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\r\n  \"title\": \"MepSystemMembersRequest\",\r\n  \"type\": \"object\",\r\n  \"additionalProperties\": false,\r\n  \"properties\": {\r\n    \"systemUniqueId\": {\r\n      \"type\": [\r\n        \"null\",\r\n        \"string\"\r\n      ]\r\n    },\r\n    \"maxSystems\": {\r\n      \"type\": \"integer\",\r\n      \"format\": \"int32\"\r\n    },\r\n    \"maxElements\": {\r\n      \"type\": \"integer\",\r\n      \"format\": \"int32\"\r\n    }\r\n  }\r\n}",
+    "responseSchemaJson": "{\r\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\r\n  \"title\": \"MepSystemMembersData\",\r\n  \"type\": \"object\",\r\n  \"additionalProperties\": false,\r\n  \"required\": [\r\n    \"systems\",\r\n    \"elements\"\r\n  ],\r\n  \"properties\": {\r\n    \"systems\": {\r\n      \"type\": \"array\",\r\n      \"items\": {\r\n        \"$ref\": \"#/definitions/MepSystemRow\"\r\n      }\r\n    },\r\n    \"systemUniqueId\": {\r\n      \"type\": [\r\n        \"null\",\r\n        \"string\"\r\n      ]\r\n    },\r\n    \"elements\": {\r\n      \"type\": \"array\",\r\n      \"items\": {\r\n        \"$ref\": \"#/definitions/MepMember\"\r\n      }\r\n    }\r\n  },\r\n  \"definitions\": {\r\n    \"MepSystemRow\": {\r\n      \"type\": \"object\",\r\n      \"description\": \"Domain is a field value (\\\"piping\\\", \\\"duct\\\"), never part of the contract's shape. Flow is Revit internal cubic feet per second.\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"uniqueId\",\r\n        \"elementId\",\r\n        \"name\",\r\n        \"domain\",\r\n        \"systemType\",\r\n        \"classification\",\r\n        \"flowCubicFeetPerSecond\",\r\n        \"source\"\r\n      ],\r\n      \"properties\": {\r\n        \"uniqueId\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"elementId\": {\r\n          \"type\": \"integer\",\r\n          \"format\": \"int64\"\r\n        },\r\n        \"name\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"domain\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"systemType\": {\r\n          \"$ref\": \"#/definitions/MepFactOfMepElementRef\"\r\n        },\r\n        \"classification\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"flowCubicFeetPerSecond\": {\r\n          \"$ref\": \"#/definitions/MepFactOfNullableDouble\"\r\n        },\r\n        \"source\": {\r\n          \"$ref\": \"#/definitions/MepFactOfMepSource\"\r\n        }\r\n      }\r\n    },\r\n    \"MepFactOfMepElementRef\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"value\",\r\n        \"state\"\r\n      ],\r\n      \"properties\": {\r\n        \"state\": {\r\n          \"$ref\": \"#/definitions/MepReadState\"\r\n        },\r\n        \"value\": {\r\n          \"$ref\": \"#/definitions/MepElementRef\"\r\n        },\r\n        \"error\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"string\"\r\n          ]\r\n        }\r\n      }\r\n    },\r\n    \"MepReadState\": {\r\n      \"type\": \"string\",\r\n      \"description\": \"One optional fact: a value, absent (Revit has none), or the error raised reading it. Never a silent zero.\",\r\n      \"x-enumNames\": [\r\n        \"Value\",\r\n        \"Absent\",\r\n        \"Error\"\r\n      ],\r\n      \"enum\": [\r\n        \"Value\",\r\n        \"Absent\",\r\n        \"Error\"\r\n      ]\r\n    },\r\n    \"MepElementRef\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"uniqueId\",\r\n        \"elementId\",\r\n        \"name\"\r\n      ],\r\n      \"properties\": {\r\n        \"uniqueId\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"elementId\": {\r\n          \"type\": \"integer\",\r\n          \"format\": \"int64\"\r\n        },\r\n        \"name\": {\r\n          \"type\": \"string\"\r\n        }\r\n      }\r\n    },\r\n    \"MepFactOfNullableDouble\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"value\",\r\n        \"state\"\r\n      ],\r\n      \"properties\": {\r\n        \"state\": {\r\n          \"$ref\": \"#/definitions/MepReadState\"\r\n        },\r\n        \"value\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"number\"\r\n          ],\r\n          \"format\": \"double\"\r\n        },\r\n        \"error\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"string\"\r\n          ]\r\n        }\r\n      }\r\n    },\r\n    \"MepFactOfMepSource\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"value\",\r\n        \"state\"\r\n      ],\r\n      \"properties\": {\r\n        \"state\": {\r\n          \"$ref\": \"#/definitions/MepReadState\"\r\n        },\r\n        \"value\": {\r\n          \"$ref\": \"#/definitions/MepSource\"\r\n        },\r\n        \"error\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"string\"\r\n          ]\r\n        }\r\n      }\r\n    },\r\n    \"MepSource\": {\r\n      \"type\": \"object\",\r\n      \"description\": \"The system's source as Revit declares it: base equipment, its base connector, and any connector Revit reports Out.\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"equipment\",\r\n        \"outConnectorIds\",\r\n        \"connectors\"\r\n      ],\r\n      \"properties\": {\r\n        \"equipment\": {\r\n          \"$ref\": \"#/definitions/MepElementRef\"\r\n        },\r\n        \"baseConnectorId\": {\r\n          \"type\": [\r\n            \"integer\",\r\n            \"null\"\r\n          ],\r\n          \"format\": \"int32\"\r\n        },\r\n        \"outConnectorIds\": {\r\n          \"type\": \"array\",\r\n          \"items\": {\r\n            \"type\": \"integer\",\r\n            \"format\": \"int32\"\r\n          }\r\n        },\r\n        \"connectors\": {\r\n          \"type\": \"array\",\r\n          \"items\": {\r\n            \"$ref\": \"#/definitions/MepPort\"\r\n          }\r\n        }\r\n      }\r\n    },\r\n    \"MepPort\": {\r\n      \"type\": \"object\",\r\n      \"description\": \"A physical connector. Direction is In, Out or Bidirectional exactly as Revit reports it; never inferred.\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"connectorId\",\r\n        \"direction\",\r\n        \"peers\"\r\n      ],\r\n      \"properties\": {\r\n        \"connectorId\": {\r\n          \"type\": \"integer\",\r\n          \"format\": \"int32\"\r\n        },\r\n        \"direction\": {\r\n          \"$ref\": \"#/definitions/MepFactOfString\"\r\n        },\r\n        \"peers\": {\r\n          \"type\": \"array\",\r\n          \"items\": {\r\n            \"$ref\": \"#/definitions/MepPeer\"\r\n          }\r\n        }\r\n      }\r\n    },\r\n    \"MepFactOfString\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"value\",\r\n        \"state\"\r\n      ],\r\n      \"properties\": {\r\n        \"state\": {\r\n          \"$ref\": \"#/definitions/MepReadState\"\r\n        },\r\n        \"value\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"error\": {\r\n          \"type\": [\r\n            \"null\",\r\n            \"string\"\r\n          ]\r\n        }\r\n      }\r\n    },\r\n    \"MepPeer\": {\r\n      \"type\": \"object\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"uniqueId\",\r\n        \"elementId\",\r\n        \"connectorId\"\r\n      ],\r\n      \"properties\": {\r\n        \"uniqueId\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"elementId\": {\r\n          \"type\": \"integer\",\r\n          \"format\": \"int64\"\r\n        },\r\n        \"connectorId\": {\r\n          \"type\": \"integer\",\r\n          \"format\": \"int32\"\r\n        }\r\n      }\r\n    },\r\n    \"MepMember\": {\r\n      \"type\": \"object\",\r\n      \"description\": \"A system member. Lengths and sizes are Revit internal feet; a size a domain does not have reads absent.\",\r\n      \"additionalProperties\": false,\r\n      \"required\": [\r\n        \"uniqueId\",\r\n        \"elementId\",\r\n        \"name\",\r\n        \"kind\",\r\n        \"flowCubicFeetPerSecond\",\r\n        \"nominalDiameterFt\",\r\n        \"innerDiameterFt\",\r\n        \"widthFt\",\r\n        \"heightFt\",\r\n        \"lengthFt\",\r\n        \"segment\",\r\n        \"type\",\r\n        \"connectors\"\r\n      ],\r\n      \"properties\": {\r\n        \"uniqueId\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"elementId\": {\r\n          \"type\": \"integer\",\r\n          \"format\": \"int64\"\r\n        },\r\n        \"name\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"kind\": {\r\n          \"type\": \"string\"\r\n        },\r\n        \"flowCubicFeetPerSecond\": {\r\n          \"$ref\": \"#/definitions/MepFactOfNullableDouble\"\r\n        },\r\n        \"nominalDiameterFt\": {\r\n          \"$ref\": \"#/definitions/MepFactOfNullableDouble\"\r\n        },\r\n        \"innerDiameterFt\": {\r\n          \"$ref\": \"#/definitions/MepFactOfNullableDouble\"\r\n        },\r\n        \"widthFt\": {\r\n          \"$ref\": \"#/definitions/MepFactOfNullableDouble\"\r\n        },\r\n        \"heightFt\": {\r\n          \"$ref\": \"#/definitions/MepFactOfNullableDouble\"\r\n        },\r\n        \"lengthFt\": {\r\n          \"$ref\": \"#/definitions/MepFactOfNullableDouble\"\r\n        },\r\n        \"segment\": {\r\n          \"$ref\": \"#/definitions/MepFactOfMepElementRef\"\r\n        },\r\n        \"type\": {\r\n          \"$ref\": \"#/definitions/MepFactOfMepElementRef\"\r\n        },\r\n        \"connectors\": {\r\n          \"type\": \"array\",\r\n          \"items\": {\r\n            \"$ref\": \"#/definitions/MepPort\"\r\n          }\r\n        }\r\n      }\r\n    }\r\n  }\r\n}",
+    "actor": "any",
+    "usesTransactions": false,
+    "subject": "Document",
+    "touches": "Topology",
     "effect": "Read",
     "cardinality": "One",
     "internal": false,
