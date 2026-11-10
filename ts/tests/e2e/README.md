@@ -1,4 +1,4 @@
-# e2e lane: one test per acceptance journey (E2E-J1..J6)
+# e2e lane: browser journeys against the real product
 
 ## Required product-browser journeys
 
@@ -183,7 +183,7 @@ Rules (rulings-1640 §1): act only through real controls with trusted input, ass
 
 ## Before any Pea step (user note, 2026-09-18)
 
-- **Preconditions:** the Chat Model chip names an OpenAI model and the Access chip reads `Trusted`. `requirePea()` reads both chips and fails as `BLOCKED` if either is wrong. Fix the setting; it is not a product defect. A new thread starts on Pea's default model, so J1, J2 and J5 first run `setPea()`: setup (lead-approved), not an assertion. It picks `E2E_MODEL` (default `gpt-5.6-terra`) and `Trusted` through the real pickers with trusted clicks, and `requirePea()` then reads both chips back from the DOM.
+- **Preconditions:** the Chat Model chip names an OpenAI model and the Access chip reads `Trusted`. `requirePea()` reads both chips and fails as `BLOCKED` if either is wrong. Fix the setting; it is not a product defect. A new thread starts on Pea's default model, so a journey that asks Pea first runs `setPea()`: setup (lead-approved), not an assertion. It picks `E2E_MODEL` (default `gpt-5.6-terra`) and `Trusted` through the real pickers with trusted clicks, and `requirePea()` then reads both chips back from the DOM.
 - **Sending:** a send is refused while a turn runs, by design. `sendChat()` waits for the turn to settle, else cancels through the real `cancel` control, then sends and waits for the turn to settle. Only J5 sends over a parked ask on purpose.
 - **Cost:** each Pea turn spends the user's OpenAI credit. Run a journey once, when it is ready. Never loop a Pea turn to debug a selector; debug selectors on a non-Pea route.
 - **Failures:** a turn that fails for credit or model reasons reports `BLOCKED: <exact status message>`, not a product failure.
@@ -207,11 +207,8 @@ Under Git Bash, set `MSYS_NO_PATHCONV=1`, or a `/regex/` argument is rewritten i
 ## Revit data per journey
 
 - **Verbs** are located by their word plus any count badge (`PLAN` matches `plan`, `plan 1`, `re-plan`) inside the Situation, never by exact text.
-- **Draft execution (J3, J4):** staged cells plan and apply without selecting a pod. Plan files nothing. A saved-member scenario may still choose a pod because that scenario manages the member itself.
 - **`E2E_ROWS`:** pick types that carry `E2E_PARAM`. A blank cell means the type lacks the parameter and renders no editor; `setCell`/`clickCell` then stop as `PRECONDITION: <row> has no <param>` (J3 on 666a58e lost a run to Balancing Damper this way).
-- **J3 `E2E_ROWS`:** two rows whose apply is natively clean for a plain text write. Not Mechanical Damper (F-J3-2: its connector reconciliation fails a plain text write), and `E2E_PARAM` is not a Yes/No parameter. The stale-refusal check reads the proposals band row: the Revit value struck, then `→ {edited}`.
 - **J6-fans (`j6-fans-write.ts`):** a fan whose type is shared (`E2E_FAN`, default `MUAS-1`; `E2E_VALUE` is the ESP in. wg). Pea stages, the human plans, Write runs once, and the re-plan must refuse with `no staged edit`. `E2E_CHAOS=leave-return` leaves and re-enters /fans by links before Plan. UNPROVEN: never run.
-- **J4:** one row whose `E2E_PARAM` is a non-empty text parameter. The band row must say `by you`; no visible grid or band control may say delete/remove.
 
 ## Seeding J6 (old-shape Work)
 

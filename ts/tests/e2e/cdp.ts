@@ -305,7 +305,7 @@ const cellOf = (row: string[], column: string) => `(() => {
 })()`;
 
 /**
- * Run one journey: `E2E_LABEL=green|red node tests/e2e/j5.ts`. Writes steps, the failing
+ * Run one journey: `E2E_LABEL=green|red node tests/e2e/j6-fans-write.ts`. Writes steps, the failing
  * assertion (if any), and DOM dumps under `.artifacts/proof/interaction/<id>-<tip7>/<label>/`.
  */
 export async function journey(
@@ -352,7 +352,7 @@ export function expectText(actual: string, want: string | RegExp, label: string,
 }
 
 /**
- * Revit journeys (J1-J4, J6) name their data by env, set by whoever holds the slot:
+ * Revit journeys name their data by env, set by whoever holds the slot:
  * E2E_TARGET (document Address), E2E_ROWS (JSON [[family, type], …]), E2E_PARAM, E2E_VALUE.
  */
 export const revit = {
@@ -515,22 +515,4 @@ export async function sendChat(page: Page, text: string, ms = 300_000) {
         : `ASSERT the turn completes: FAILED — ${detail || "(no status detail)"}`,
     );
   }
-}
-
-/**
- * Draft-first: staged cells plan only once the Situation names the pod the run is filed in. Pick
- * E2E_POD through the real ladder ("choose a pod" → the pod). Plan files nothing in the pod; the
- * pod only holds the run.
- */
-export async function choosePod(page: Page) {
-  const pod = process.env.E2E_POD;
-  if (!pod) throw new Error("PRECONDITION: E2E_POD (the pod the run is filed in) is unset");
-  // The ladder's word is the chosen pod's name, or "choose a pod" while none is chosen.
-  if (await page.has(pod, SITUATION)) return;
-  if (!(await page.has("choose a pod", SITUATION)))
-    throw new Error(`PRECONDITION: another pod is chosen; pick ${pod} or reload the route`);
-  await page.click("choose a pod", SITUATION);
-  const name = pod.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  await page.click(new RegExp(`^${name}(\\s|$)`));
-  await page.until(() => page.has(pod, SITUATION), `the Situation to file in pod ${pod}`, 10_000);
 }
