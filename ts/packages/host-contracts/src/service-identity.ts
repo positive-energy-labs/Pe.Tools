@@ -4,7 +4,7 @@
 // root and the lane→name mapping.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { isSea } from "node:sea";
 import {
   hostProcessIdentity,
@@ -34,13 +34,27 @@ export type RuntimeOwner = {
  * checkout's `.artifacts/pe-tools`, else the install root itself. The C# twin is
  * `ProductPathing.StateRoot`; both suites assert `runtime-ownership.fixture.json`.
  */
-export function stateRoot(lane: HostLane, ownerRoot: string, productHome?: string): string {
+export function stateRoot(
+  lane: HostLane,
+  ownerRoot: string,
+  productHome?: string,
+  sharedRoot?: string,
+): string {
   if (!isAbsolute(ownerRoot)) throw Error(`A ${lane} runtime needs an absolute owner root.`);
   // v0.7.30 refused an installed runtime under a home override; kept unchanged.
   if (lane === "installed" && productHome?.trim())
     throw Error(`An installed runtime does not run under ${productPathNames.productHomeVariable}.`);
-  if (productHome?.trim())
-    return join(resolve(productHome.trim()), productPathNames.localStateDirectoryName);
+  if (productHome?.trim()) {
+    const home = resolve(productHome.trim());
+    if (sharedRoot?.trim()) {
+      const away = relative(resolve(sharedRoot.trim()), home);
+      if (away !== ".." && !away.startsWith(`..${sep}`) && !isAbsolute(away))
+        throw Error(
+          `Isolated ${productPathNames.productHomeVariable} cannot be at or under ${productPathNames.sharedRootVariable}.`,
+        );
+    }
+    return join(home, productPathNames.localStateDirectoryName);
+  }
   return lane === "dev" ? join(resolve(ownerRoot), ".artifacts", "pe-tools") : ownerRoot;
 }
 
@@ -48,7 +62,12 @@ export function stateRoot(lane: HostLane, ownerRoot: string, productHome?: strin
 export function productRoot(owner: RuntimeOwner): string {
   const ownerRoot = owner.lane === "dev" ? owner.sourceRoot : owner.installedRoot;
   if (!ownerRoot) throw Error(`A ${owner.lane} runtime was not told its owner root.`);
-  const root = stateRoot(owner.lane, ownerRoot, process.env[productPathNames.productHomeVariable]);
+  const root = stateRoot(
+    owner.lane,
+    ownerRoot,
+    process.env[productPathNames.productHomeVariable],
+    process.env[productPathNames.sharedRootVariable],
+  );
   const away = relative(osUserProductRoot(), root);
   if (owner.lane === "dev" && (away === "" || (!away.startsWith("..") && !isAbsolute(away))))
     throw Error(`Dev host cannot use installed product state '${root}'.`);

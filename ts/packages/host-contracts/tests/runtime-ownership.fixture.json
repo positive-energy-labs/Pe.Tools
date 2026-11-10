@@ -2,6 +2,38 @@
   "$comment": "One table, three resolvers: C# ProductPathing.StateRoot (Pe.Shared.Tests RuntimeOwnershipTests), TS stateRoot (host-contracts runtime-ownership.test.ts), PowerShell Resolve-ProductRuntimeRoot (tools/tests/host-state-isolation.ps1). trayLaunches: TS trayOwnerArguments emits argv; C# Pe.Host.Tray Program.ParseOwner must accept it.",
   "stateRoots": [
     {
+      "name": "an isolated home cannot put model copies on the shared mount",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": "S:\\Pe.Tools\\isolated",
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "PE_TOOLS_SHARED_ROOT"
+    },
+    {
+      "name": "the shared mount itself cannot be an isolated home",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": "S:\\Pe.Tools",
+      "sharedRoot": "S:\\Pe.Tools\\",
+      "error": "PE_TOOLS_SHARED_ROOT"
+    },
+    {
+      "name": "shared containment ignores casing and whitespace and includes dot-prefixed children",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": " s:\\PE.TOOLS\\..isolated ",
+      "sharedRoot": " S:\\Pe.Tools ",
+      "error": "PE_TOOLS_SHARED_ROOT"
+    },
+    {
+      "name": "a sibling with the same prefix is not on the shared content root",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": "S:\\Pe.Tools-local",
+      "sharedRoot": "S:\\Pe.Tools",
+      "stateRoot": "S:\\Pe.Tools-local\\.local-state"
+    },
+    {
       "name": "a shared content mount never moves machine state",
       "lane": "dev",
       "ownerRoot": "C:\\src\\Pe.Tools",

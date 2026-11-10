@@ -99,6 +99,7 @@ public sealed class DeploymentRuntimeContractTests {
     public void Shared_root_names_content_without_changing_machine_state() {
         const string sharedVariable = "PE_TOOLS_SHARED_ROOT";
         var shared = Path.Combine(Path.GetTempPath(), $"pe-shared-{Guid.NewGuid():N}");
+        var isolated = Path.Combine(Path.GetTempPath(), $"pe-isolated-{Guid.NewGuid():N}");
         var previousHome = Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable);
         var previousShared = Environment.GetEnvironmentVariable(sharedVariable);
         Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, null);
@@ -110,8 +111,9 @@ public sealed class DeploymentRuntimeContractTests {
             Assert.That(content.Scripting.RootPath, Is.EqualTo(Path.Combine(shared, "Pods")));
             var runtime = ProductRuntimeLayout.For(ProductLane.Dev, @"C:\src\Pe.Tools", null);
             Assert.That(runtime.RootPath, Is.EqualTo(@"C:\src\Pe.Tools\.artifacts\pe-tools"));
-            Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, Path.Combine(shared, "isolated"));
-            Assert.That(ProductUserContentLayout.ForCurrentUser().RootPath, Is.EqualTo(Path.Combine(shared, "isolated")));
+            Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, isolated);
+            Assert.That(ProductUserContentLayout.ForCurrentUser().RootPath, Is.EqualTo(isolated));
+            Assert.That(ProductRuntimeLayout.For(ProductLane.Dev, @"C:\src\Pe.Tools", isolated).RootPath, Is.EqualTo(Path.Combine(isolated, ".local-state")));
             Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, null);
             Environment.SetEnvironmentVariable(sharedVariable, null);
             Assert.That(() => ProductUserContentLayout.ForCurrentUser(), Throws.InvalidOperationException.With.Message.Contains(sharedVariable));

@@ -40,7 +40,8 @@ test.each(fixture.stateRoots)("state root: $name", (row) => {
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", row.sharedRoot ?? undefined);
   vi.stubEnv("PE_TEST_HOME_ROOT", "");
   const resolvers = [
-    () => stateRoot(row.lane, row.ownerRoot, row.productHome ?? undefined),
+    () =>
+      stateRoot(row.lane, row.ownerRoot, row.productHome ?? undefined, row.sharedRoot ?? undefined),
     () => productRoot({ lane: row.lane, sourceRoot: row.ownerRoot, installedRoot: row.ownerRoot }),
   ];
   for (const resolve of resolvers) {

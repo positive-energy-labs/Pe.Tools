@@ -17,6 +17,7 @@ const under = (root: string, path: string) => {
 
 test("shared content follows the mount while every machine path stays with its owner", () => {
   const shared = mkdtempSync(join(tmpdir(), "pe-shared-"));
+  const isolated = mkdtempSync(join(tmpdir(), "pe-isolated-"));
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", "");
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
   try {
@@ -33,13 +34,16 @@ test("shared content follows the mount while every machine path stays with its o
       if (!content.has(name)) expect(under(hostOwnership.rootPath, path), name).toBe(true);
     }
     expect(paths.productRouteWorkPath()).toBe(join(shared, "Work"));
-    expect(paths.productRouteSettingsPath()).toBe(join(hostOwnership.rootPath, "state", "route-settings"));
+    expect(paths.productRouteSettingsPath()).toBe(
+      join(hostOwnership.rootPath, "state", "route-settings"),
+    );
     expect(under(shared, firmFilePath())).toBe(true);
     expect(under(shared, productCatalogsRootPath())).toBe(true);
-    vi.stubEnv("PE_TOOLS_PRODUCT_HOME", join(shared, "isolated"));
-    expect(productHomePath()).toBe(join(shared, "isolated"));
+    vi.stubEnv("PE_TOOLS_PRODUCT_HOME", isolated);
+    expect(productHomePath()).toBe(isolated);
   } finally {
     rmSync(shared, { recursive: true, force: true });
+    rmSync(isolated, { recursive: true, force: true });
   }
 });
 

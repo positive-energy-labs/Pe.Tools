@@ -43,9 +43,12 @@ namespace Pe.Revit.Tests {
             Environment.SetEnvironmentVariable(ProductPathNames.SharedRootVariable, shared);
             try {
                 if (error is not null)
-                    Assert.That(() => ProductPathing.StateRoot(lane, owner, home), Throws.ArgumentException.With.Message.Contains(error));
+                {
+                    Assert.That(() => ProductPathing.StateRoot(lane, owner, home, shared), Throws.ArgumentException.With.Message.Contains(error));
+                    Assert.That(() => ProductRuntimeLayout.For(lane, owner, home), Throws.ArgumentException.With.Message.Contains(error));
+                }
                 else {
-                    Assert.That(ProductPathing.StateRoot(lane, owner, home), Is.EqualTo(expected));
+                    Assert.That(ProductPathing.StateRoot(lane, owner, home, shared), Is.EqualTo(expected));
                     Assert.That(ProductRuntimeLayout.For(lane, owner, home).RootPath, Is.EqualTo(expected));
                 }
             } finally { Environment.SetEnvironmentVariable(ProductPathNames.SharedRootVariable, previous); }
