@@ -28,7 +28,7 @@ test.each(["ducts", "fans"] as const)("Pea resolves %s subject names through the
   fakeRuntimeHost("http://127.0.0.1:19999");
   vi.stubEnv("PE_CONTEXT", "casing-context");
   // Retain the production fields and subject options. Native roster delivery is the only data adapter.
-  const options = { edits: undefined, commands: {}, reads: {}, panes: {}, layout: { kind: "pane", id: "unused" } } as const;
+  const options = { edits: undefined, commands: {}, reads: {}, panes: {}, picture: undefined, title: undefined, layout: { kind: "pane", id: "unused" } } as const;
   const module: TypedRoute = key === "ducts"
     ? route({ ...ducts.spec, ...options, core: ducts.spec.subject!.read! })
     : route({ ...fans.spec, ...options, core: fans.spec.subject!.read! });

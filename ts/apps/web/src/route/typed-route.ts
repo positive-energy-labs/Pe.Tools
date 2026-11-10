@@ -16,6 +16,7 @@ import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "./host-read.ts";
+import type { Goal, PictureSlot, SheetSlot } from "@pe/agent-contracts/slots";
 
 type Field = {
   schema: z.ZodType;
@@ -159,6 +160,23 @@ export type Specification<
     options(data: Immutable<ReadData<SubjectRead>>): readonly { id: SubjectRefCode; label: string }[];
   };
   core?: HostRead & { output: z.ZodType<Publication<D>>; args(page: Page<F>): unknown };
+  /*
+   * ADR 0035 rule 1: the five slots are `subject` (above), `sheet`, `picture`, `goal` and `layout`
+   * (below), plus `query` and `title(ctx)`. Types are inferred from the declaration, never
+   * generated (rule 4). The kernel seams that fill each slot live in `./slots/<slot>/`; until a
+   * slice lands, a seam throws `not implemented: slice N`. `fields` stands until slice 10 moves the
+   * subject into `subject`, the pose into `picture` and the rest into `query`.
+   */
+  /** Slice 7: bindings by cell name, three closed kinds; the kernel draws a StateCell per binding per row. */
+  sheet?: SheetSlot;
+  /** Slice 8: a scope (SubjectRef set, box, or prism with a frame) and marks from the closed set. */
+  picture?: PictureSlot<DrawContext<NoInfer<D>, NoInfer<F>, z.output<W>, z.output<Edit>>>;
+  /** Slice 7: one host Read whose data is the Goal; the kernel draws its unresolved list first. */
+  goal?: HostRead & { output: z.ZodType<Publication<Goal>>; args(page: Page<NoInfer<F>>): unknown };
+  /** Route-owned Page fields no slot holds; folded into `fields` for projection until slice 10 retires `fields`. */
+  query?: Readonly<Record<string, Field & { role: "query" }>>;
+  /** The pane head's title; chrome derives from filled slots (ADR 0035 rule 5). */
+  title?(ctx: DrawContext<NoInfer<D>, NoInfer<F>, z.output<W>, z.output<Edit>>): string;
   fields: F;
   reads?: Readonly<Record<string, HostRead & { args(page: Page<F>): unknown }>>;
   panes: {
@@ -219,7 +237,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   }
   const fields: Record<string,RouteGraphJson["fields"][string]> = {};
   const fieldSchemas: Record<string,string> = {};
-  for (const [key,field] of Object.entries(spec.fields)) {
+  for (const [key,field] of Object.entries({ ...spec.query, ...spec.fields } as Fields)) {
     let schema=key;
     while(Object.hasOwn(schemas,schema)) schema=`page:${schema}`;
     fieldSchemas[key]=schema;
@@ -229,6 +247,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   }
   const readIds = new Map<HostRead,string>();
   if(spec.core) readIds.set(spec.core,"value");
+  if(spec.goal && !readIds.has(spec.goal)) readIds.set(spec.goal,"goal");
   for(const [id,read] of Object.entries(spec.reads ?? {})) if(!readIds.has(read)) readIds.set(read,id);
   for(const [id,pane] of Object.entries(spec.panes)) if(pane.read&&!readIds.has(pane.read)) readIds.set(pane.read,id);
   const subjectRead=spec.subject ? readIds.get(spec.subject.read ?? spec.core!) : undefined;

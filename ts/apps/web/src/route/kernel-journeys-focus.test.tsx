@@ -973,7 +973,7 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
     const owner = live(...args); owners.push(owner); return owner;
   });
   const make = (key: string) => route({ ...fans.spec, key, name: key, needs: "browser", core: undefined,
-    subject: undefined, reads: {}, edits: undefined, commands: {}, fields: {},
+    subject: undefined, reads: {}, edits: undefined, commands: {}, fields: {}, picture: undefined, title: undefined,
     panes: { main: { title: key, purpose: "Focus ownership", draw: () => <><button>{key} focus</button><textarea aria-label={`${key} text`} />{createPortal(<button>{key} portal</button>, document.body)}</> } },
     layout: { kind: "pane", id: "main" } });
   const a = make("jz-a"), b = make("jz-b");
@@ -1709,7 +1709,7 @@ test("JZ E8-12 close Home clears a capacity refusal and permits another Place", 
   const store = createChatPageStore({ registry: appAtomRegistry, search: { mode: "threads", patch: async () => {} } });
   conversation.value = { store, threads: [] };
   const module = route({ ...family.spec, key: "home", address: "/", name: "Home", needs: "browser", core: undefined,
-    subject: undefined, reads: {}, edits: undefined, commands: {}, fields: {},
+    subject: undefined, reads: {}, edits: undefined, commands: {}, fields: {}, picture: undefined, title: undefined,
     panes: { main: { title: "Home", purpose: "Place capacity", draw: () => <p>Home body</p> } }, layout: { kind: "pane", id: "main" } });
   const root = createRootRoute({ component: () => <RegistryContext.Provider value={appAtomRegistry}>
     <RouteDock renderRoute={body => body}>{null}</RouteDock>
@@ -1906,7 +1906,7 @@ test("JZ audit optional document pins retain exact source authority and retire r
   const created: mounts.TypedMount[] = [];
   const original = mounts.mountTypedRoute;
   const factory = vi.spyOn(mounts, "mountTypedRoute").mockImplementation((...args) => { const m = original(...args); created.push(m); return m; });
-  const module = route({ ...family.spec, needs: "host", optionalTarget: "document", edits: undefined, core: undefined, reads: {}, commands: {}, fields: {},
+  const module = route({ ...family.spec, needs: "host", optionalTarget: "document", edits: undefined, core: undefined, reads: {}, commands: {}, fields: {}, picture: undefined, title: undefined,
     panes: { main: { title: "Optional document", purpose: "Inspect exact document authority", draw: ctx => <p>{ctx.target?.kind === "document" ? `Pinned ${ctx.target.ref.session}/${ctx.target.ref.openId}` : ctx.target?.kind === "host" ? "Host browsing" : "No authority"}</p> } }, layout: { kind: "pane", id: "main" } });
   let search = new URLSearchParams();
   const listeners = new Set<() => void>();

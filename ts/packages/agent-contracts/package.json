@@ -52,7 +52,8 @@
     },
     "./value": "./src/value.ts",
     "./takeoff-adoption": "./src/takeoff-adoption.ts",
-    "./takeoff-read": "./src/takeoff-read.ts"
+    "./takeoff-read": "./src/takeoff-read.ts",
+    "./slots": "./src/slots/index.ts"
   },
   "publishConfig": {
     "access": "public"
