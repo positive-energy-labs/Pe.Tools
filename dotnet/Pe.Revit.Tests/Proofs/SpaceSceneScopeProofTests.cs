@@ -58,6 +58,10 @@ public sealed class SpaceSceneScopeProofTests {
             Assert.That(linked.Any(e => e.Handle.ElementId == nearId), Is.True);
             Assert.That(linked.Any(e => e.Handle.ElementId == farId), Is.False);
             Assert.That(linked.All(e => !e.Focus), Is.True);
+            // ADR 0035 rule 2: a linked handle carries the REAL RevitLinkInstance.UniqueId read back from the document.
+            Assert.That(linked.All(e => e.Handle.LinkInstanceUniqueId is { Length: > 0 } unique
+                && unique == doc.GetElement(new ElementId(e.Handle.LinkInstanceId!.Value)).UniqueId), Is.True,
+                "Every linked handle's LinkInstanceUniqueId is the link instance's own non-empty UniqueId.");
             Assert.That(scene.Elements.Single(e => e.Focus).Handle.ElementId, Is.EqualTo(focus.Id.Value()));
             Assert.That(scene.Sources.Single(s => s.LinkInstanceId == link.Id.Value()).SourceToHost[13], Is.EqualTo(-98).Within(1e-8));
             using (var transaction = new Transaction(doc, "Move linked snapshot")) {

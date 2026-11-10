@@ -7479,6 +7479,7 @@ export namespace RevitDetailSpaceCensus {
       layer?: null | string;
       extrusion?: null | Extrusion;
       heightRole: HeightRole;
+      linkInstanceUniqueId?: null | string;
     }
     /**
      * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
@@ -7655,6 +7656,7 @@ export namespace RevitDetailSpaceProbe {
       layer?: null | string;
       extrusion?: null | Extrusion;
       heightRole: HeightRole;
+      linkInstanceUniqueId?: null | string;
     }
     /**
      * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
@@ -8097,6 +8099,7 @@ export namespace RevitDetailSpaceScene {
       layer?: null | string;
       extrusion?: null | Extrusion;
       heightRole: HeightRole;
+      linkInstanceUniqueId?: null | string;
     }
     /**
      * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
@@ -8445,6 +8448,7 @@ export namespace RevitDetailSpaceSlice {
       layer?: null | string;
       extrusion?: null | Extrusion;
       heightRole: HeightRole;
+      linkInstanceUniqueId?: null | string;
     }
     /**
      * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
@@ -8734,6 +8738,7 @@ export namespace RevitDetailSpaceSweep {
       layer?: null | string;
       extrusion?: null | Extrusion;
       heightRole: HeightRole;
+      linkInstanceUniqueId?: null | string;
     }
     /**
      * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the

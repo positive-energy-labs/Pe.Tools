@@ -140,7 +140,7 @@ public sealed class World {
                 continue;
             }
             var kind = linked.Title.IndexOf(".ifc", StringComparison.OrdinalIgnoreCase) >= 0 ? SourceKind.IfcLink : SourceKind.RevitLink;
-            this._partitions.Add(new Partition(source++, linked, kind, link.Id.Value(), link.GetTotalTransform(), generation));
+            this._partitions.Add(new Partition(source++, linked, kind, link.Id.Value(), link.GetTotalTransform(), generation, link.UniqueId));
         }
         // Unsaved tracker keys use the SDK open id, not GetDocumentKey's wrapper hash.
         var ledgerHost = PeDocumentIdentity.TryGetOpenId(host, out var openId)
