@@ -29,7 +29,7 @@ import { Publications, fingerprint } from "./reads/evaluator.ts";
 import { History, localHistory } from "./reads/history.ts";
 import { historyRoutes } from "./reads/history-routes.ts";
 import { historyPoseSchema, addressSchema, sameAddress } from "@pe/agent-contracts";
-import { HostReceipts } from "./gateway-owner.ts";
+import { ActionJournalService } from "./receipt-services.ts";
 import { readEvents } from "./reads/events.ts";
 import { readInvalidations } from "./reads/invalidations.ts";
 import { graphRoute, graphRouteIds, registeredReads } from "./reads/routes.ts";
@@ -197,9 +197,10 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       ? new History(lane.recordingStore, run)
       : undefined;
   if (history) {
-    const receipts = yield* Effect.serviceOption(HostReceipts);
-    const stop = Option.isSome(receipts)
-      ? receipts.value.journal.subscribe({ kinds: ["action"] }, (receipt) => {
+    // Optional: the recording lane's inputs are built before host-program opens the journal.
+    const journal = yield* Effect.serviceOption(ActionJournalService);
+    const stop = Option.isSome(journal)
+      ? journal.value.subscribe({ kinds: ["action"] }, (receipt) => {
           if (receipt.body.kind !== "action") return;
           const row = receipt.body.value;
           if (

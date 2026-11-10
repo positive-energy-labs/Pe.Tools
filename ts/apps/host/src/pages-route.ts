@@ -71,8 +71,8 @@ import {
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 import { exportPage } from "./page-export.ts";
 import { escapeHtml, withPageKey } from "./page-publication.ts";
-import { HostReceipts } from "./gateway-owner.ts";
 import type { ActionJournal } from "./action-journal.ts";
+import { ActionJournalService } from "./receipt-services.ts";
 import { PAGE_MEDIA, readJson } from "./page-artifacts.ts";
 
 /**
@@ -793,7 +793,7 @@ export function createPagesHandler(
       const input = peRoutes["page.publish"].body.safeParse(await request.json());
       if (!input.success) return problem(400, input.error.message);
       try {
-        if (!journal) throw Error("Page publication requires HostReceipts.");
+        if (!journal) throw Error("Page publication requires ActionJournalService.");
         const owner = journal;
         const id = request.headers.get("x-pe-command-id") ?? randomUUID();
         await owner.invoke(
@@ -968,7 +968,7 @@ export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPa
             body: JSON.stringify(body),
           }),
       };
-      const pages = createPagesHandler(root(), pods(), live, (yield* HostReceipts).journal);
+      const pages = createPagesHandler(root(), pods(), live, yield* ActionJournalService);
       const handler = HttpEffect.fromWebHandler((request) =>
         matchPeRoute(request.method, new URL(request.url).pathname)
           ? servePeRoute(request, pages)

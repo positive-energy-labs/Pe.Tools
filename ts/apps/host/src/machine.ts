@@ -36,7 +36,7 @@ import { hostOwnership } from "./host-ownership.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { Providers } from "./harness/providers.ts";
 import { unreadLeg, type UpdateReader } from "./update-reader.ts";
-import type { HostReceipts } from "./gateway-owner.ts";
+import type { ActionJournal } from "./action-journal.ts";
 import {
   acquiredOpenIds,
   foldAcquisitions,
@@ -879,7 +879,7 @@ const sdk = Effect.fn("machine.sdk")(function* <A>(args: string[], acceptedExitC
 const unreadable = (message: string) => new MachineReadFailed({ message });
 
 export function machineSources(
-  receipts: HostReceipts["Service"],
+  journal: ActionJournal,
   bridge: RevitBridge["Service"] | undefined,
   providers: Providers,
   update: UpdateReader["Service"],
@@ -888,7 +888,7 @@ export function machineSources(
 ): MachineSources {
   return {
     targets,
-    actions: () => receipts.journal.list(),
+    actions: () => journal.list(),
     host: Effect.fn("machine.host")(function* () {
       const file = yield* attempt(() => readServiceFile(hostOwnership.rootPath, hostOwnership.serviceName));
       if (!file || file.pid !== process.pid)

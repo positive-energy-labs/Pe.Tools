@@ -6,9 +6,8 @@ import { expect, vi } from "vite-plus/test";
 import type { BridgeFrame } from "@pe/host-contracts/contracts";
 import { CANCEL_OPERATION_KEY, RevitBridgeLive, RevitProcessAlive } from "../src/bridge.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
-import { HostReceipts } from "../src/gateway-owner.ts";
+import { ActionJournalService } from "../src/receipt-services.ts";
 import type { ActionJournal } from "../src/action-journal.ts";
-import type { HostLog } from "../src/host-log.ts";
 import { effectTest } from "./effect-test.ts";
 
 // The session line's law (ADR 0029 phase 3b; a PROVEN 7.6 GB regression class lives behind it):
@@ -328,7 +327,7 @@ effectTest(
       );
       const journal = { recordQueue: held } as unknown as ActionJournal;
       const { bridgeScope, call, outgoing } = yield* harness.pipe(
-        Effect.provideService(HostReceipts, { journal, log: {} as HostLog }),
+        Effect.provideService(ActionJournalService, journal),
       );
       const a = yield* call("test.a");
       yield* Effect.promise(() => vi.waitFor(() => expect(held).toHaveBeenCalled()));
