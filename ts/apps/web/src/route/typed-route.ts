@@ -16,7 +16,9 @@ import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "./host-read.ts";
-import type { Goal, PictureSlot, SheetSlot } from "@pe/agent-contracts/slots";
+import { sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
+import { command } from "./typed-actions.ts";
+import { draw } from "./draw.tsx";
 
 type Field = {
   schema: z.ZodType;
@@ -228,8 +230,27 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   const work = !declared ? undefined : "schema" in declared ? declared : { route: spec.key, title: spec.name,
     description: declared.description ?? spec.directory.summary, schema: declared, schemaVersion: 1, };
   const owners = work && edits ? { ...edits.owners, [work.route]: {state:work,value:edits.value} } : {};
-  const normalized = { ...spec, needs: spec.needs ?? "project", commands: spec.commands ?? {},
-    edits: work && edits ? {...edits,work,owners} : undefined };
+  const sheet = spec.sheet ? sheetSlotData(spec.sheet) : undefined;
+  // ADR 0035 rules 3 and 8: a filled sheet or goal slot is a kernel-drawn pane and, for a sheet that writes Revit,
+  // the one sheet pair as the route's `sheet` verb. A route that declares either itself keeps its own.
+  const declaredCommands = spec.commands ?? {};
+  const sheetVerb = sheet && writesRevit(sheet) && !Object.values(declaredCommands).some((c) => c.entry === SHEET_COMMANDS.apply)
+    ? { sheet: { ...command(SHEET_COMMANDS.apply), label: "Write to Revit",
+        present: (result: unknown) => {
+          const writes = (result as { writes?: readonly unknown[] }).writes?.length ?? 0;
+          return `Write ${writes} parameter value${writes === 1 ? "" : "s"} to Revit`;
+        } } }
+    : {};
+  const kernelPanes = {
+    ...(spec.sheet && !("sheet" in spec.panes) ? { sheet: { title: "Sheet", purpose: "Edit the bound cells",
+      draw: ((drawn) => (ctx: DrawContext<unknown, F, z.output<W>, z.output<Edit>>) => drawn({ draw: ctx as never, slot: spec.sheet!, field: spec.subject?.field }))(
+        draw(() => import("./slots/sheet/pane.tsx"), "SheetPane")) } } : {}),
+    ...(spec.goal && !("goal" in spec.panes) ? { goal: { title: "Unresolved", purpose: "What is left before the answer", read: spec.goal,
+      draw: ((drawn) => (ctx: DrawContext<Goal, F, z.output<W>, z.output<Edit>>) => drawn({ goal: ctx.value.value as Goal | undefined }))(
+        draw(() => import("./slots/goal/pane.tsx"), "GoalPane")) } } : {}),
+  } as unknown as Specification<D, F, W, Edit, Reads, SubjectRead>["panes"];
+  const normalized = { ...spec, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb } as NonNullable<typeof spec.commands>,
+    panes: { ...spec.panes, ...kernelPanes }, edits: work && edits ? {...edits,work,owners} : undefined };
   const schemas: Record<string,z.ZodType> = { none:z.strictObject({}) };
   if (work && edits) {
     schemas.work=work.schema;
@@ -249,7 +270,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   if(spec.core) readIds.set(spec.core,"value");
   if(spec.goal && !readIds.has(spec.goal)) readIds.set(spec.goal,"goal");
   for(const [id,read] of Object.entries(spec.reads ?? {})) if(!readIds.has(read)) readIds.set(read,id);
-  for(const [id,pane] of Object.entries(spec.panes)) if(pane.read&&!readIds.has(pane.read)) readIds.set(pane.read,id);
+  for(const [id,pane] of Object.entries(normalized.panes)) if(pane.read&&!readIds.has(pane.read)) readIds.set(pane.read,id);
   const subjectRead=spec.subject ? readIds.get(spec.subject.read ?? spec.core!) : undefined;
   if(spec.subject && !subjectRead) throw Error("Subject read must be declared by the route");
   if(spec.subject) fields[spec.subject.field]={...fields[spec.subject.field],role:"subject",schema:fieldSchemas[spec.subject.field]!,
@@ -273,10 +294,11 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     workFields:Object.fromEntries(Object.entries(work?.schema.shape ?? {}).flatMap(([key,schema])=>{
       const meta=(schema as z.ZodType).meta();
       return meta?.title ? [[key,{label:meta.title,internal:meta.internal === true}]] : [];
-    })),cells:{},panes:Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,
+    })),cells:{},panes:Object.fromEntries(Object.entries(normalized.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,
       draws:p.read?[readIds.get(p.read)!]:[],verbs:Object.keys(verbs)}])),readings,verbs,seeds:{},layout:discoveryLayout(spec.layout),
+    ...(sheet?{sheet}:{}),...(spec.goal?{goal:readIds.get(spec.goal)!}:{}),
     needs:normalized.needs === "browser" || normalized.needs === "host" ? "nothing" : normalized.needs,
-    predicates:{},observe:[],resetOnTarget:[],stageOrder:[stage],stages:{[stage]:{panes:Object.keys(spec.panes),verbs:Object.keys(verbs),word:spec.name}}};
+    predicates:{},observe:[],resetOnTarget:[],stageOrder:[stage],stages:{[stage]:{panes:Object.keys(normalized.panes),verbs:Object.keys(verbs),word:spec.name}}};
   const host:HostRouteModule={data,schemas,...(work?{workState:work,readWorks:Object.keys(owners).filter(id=>id!==work.route)}:{})};
   const entries:Record<string,EntryContract>=Object.fromEntries([...[...readIds.keys()].map(read=>[read.key,read]),
     ...Object.values(normalized.commands).flatMap(c=>[[c.entry,c.contract],...("plan" in c?[[c.plan,c.planContract]]:[])])]);

@@ -36,7 +36,7 @@ test("a numeric UniqueId row is refused without hiding the other fan rows", asyn
   ];
   const workspace = new RouteWorkspace({ registrations: [], store: { getState: async () => null, setState: async () => {} } });
   const roster = (await evaluate(fanRoster, { target }, sheetPort({
-    firm: () => settle(testDuctFiles().firm), catalogs: () => settle(testDuctFiles().ductCatalogs),
+    firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().ductCatalogs),
     workKey: async () => bindWork("ducts", null, undefined, target),
     call: async () => Response.json({ ...snapshot, nodes }),
   }, workspace))).data;

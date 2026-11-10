@@ -5,7 +5,7 @@ import { isAbsolute, join, relative } from "node:path";
 import { productHomePath } from "@pe/host-contracts/product-paths";
 import * as paths from "../src/product-paths.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { firmFilePath } from "../src/ducts-inputs.ts";
+import { firmRootPath } from "../src/ducts-files.ts";
 import { productCatalogsRootPath } from "../src/duct-catalogs.ts";
 import { peaMcpServer } from "../src/harness/adapter.ts";
 
@@ -36,7 +36,7 @@ test("shared content follows the mount while every machine path stays with its o
     expect(paths.productRouteSettingsPath()).toBe(
       join(hostOwnership.rootPath, "state", "route-settings"),
     );
-    expect(under(shared, firmFilePath())).toBe(true);
+    expect(under(shared, firmRootPath())).toBe(true);
     expect(under(shared, productCatalogsRootPath())).toBe(true);
     vi.stubEnv("PE_TOOLS_PRODUCT_HOME", isolated);
     expect(productHomePath()).toBe(isolated);

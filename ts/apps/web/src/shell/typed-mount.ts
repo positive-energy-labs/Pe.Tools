@@ -34,6 +34,7 @@ import {
   type InvocationToken,
   type RouteStateWriteResult,
 } from "@pe/agent-contracts";
+import { ANY_ROUTE } from "@pe/agent-contracts";
 import { createRouteScopeGate } from "@pe/runtime/route-scope-gate";
 import { applicationWorkRegistry, createApplicationWorkRegistry } from "./application-work-registry";
 import { createWorkFeedClient } from "./work-feed-client";
@@ -439,7 +440,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       if(!issued.ok) throw Error(issued.reason);
       token=issued.value; plans.set(id,token); reviews.delete(id);
       const contract = commands[cmd.entry as keyof typeof commands];
-      const primary = owners.get("work" in contract && contract.work ? contract.work.route : own)!.handle!;
+      // A door every route shares (the sheet pair, ANY_ROUTE) takes the asking route's own Work.
+      const primary = owners.get("work" in contract && contract.work && contract.work.route !== ANY_ROUTE ? contract.work.route : own)!.handle!;
       const proposed=cmd.input?.({page:page as never,target:input.target,work:primary,value:core.value},supplied) ?? supplied ?? {};
       const request = cmd.planContract.input.parse({ ...z.record(z.string(),z.unknown()).parse(proposed), work: primary,
         readWorks: Object.fromEntries([...owners].filter(([id]) => id !== primary.key.route).map(([id,o]) => [id,o.handle])) });

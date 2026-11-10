@@ -13,6 +13,7 @@ import {
   workHandleSchema,
   workBinding,
   tools,
+  ANY_ROUTE,
   type Tool,
   type WorkHandle,
   type WriteSeal,
@@ -85,18 +86,27 @@ const workSpec = (
   registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>,
 ) =>
   (registeredWork ?? (tools[route as keyof typeof tools] as Tool)?.work) as WorkSpec;
+type Workspace = { spec(route: string): import("@pe/agent-contracts").RouteStateSpec<z.ZodType> | undefined };
+/** A door bound to one owner has its spec at boot; `ANY_ROUTE` (the sheet pair) resolves the handle's owner. */
+const specFor = (route: string, fixed: WorkSpec | undefined, workspace?: Workspace) => (handle: WorkHandle) => {
+  if (route !== ANY_ROUTE) return fixed!;
+  const spec = workspace?.spec(handle.key.route) ?? workSpec(handle.key.route);
+  if (!spec) throw refused(`No Work is registered for route ${handle.key.route}`, "work.unavailable");
+  return spec as WorkSpec;
+};
 
 /** Primitive 1 on the host: admit the Work to its document, read the authored cells, derive the input. */
 async function deriveFromWork(
   ctx: CommandContext,
   definition: import("@pe/agent-contracts").Command,
   hooks: WorkIntentBinding,
-  spec: WorkSpec,
+  specOf: (handle: WorkHandle) => WorkSpec,
   bridge: RevitBridge["Service"],
   deps: { sdk?: SdkReceiptReader },
 ) {
   const { work, readWorks } = z.object({ work: workHandleSchema, readWorks: z.record(z.string(), workHandleSchema).optional() ,
     }).parse(definition.input.parse(ctx.admission.input));
+  const spec = specOf(work);
   if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
   const target = ctx.admission.target.ref;
   const observed = await lifetime(bridge, target, false, deps);
@@ -143,7 +153,7 @@ export function workIntentBoundary(
     boundary: "work",
     prepared: intentPrepared,
     bind: async (ctx) => {
-      const { input } = await deriveFromWork(ctx, definition, hooks, spec, bridge, deps);
+      const { input } = await deriveFromWork(ctx, definition, hooks, () => spec, bridge, deps);
       const bound = await executor.bind(withInput(ctx, input));
       return {
         ...bound,
@@ -166,7 +176,7 @@ export function workIntentBoundary(
 export function workWriteBoundary(
   executor: CommandExecutor,
   bridge: RevitBridge["Service"],
-  deps: { sdk?: SdkReceiptReader; marks?: DocumentMarks } = {},
+  deps: { sdk?: SdkReceiptReader; marks?: DocumentMarks; workspace?: Workspace } = {},
   registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>,
   /** The preview entry has its own executor (a native plan leaf); otherwise it is synthesized. */
   ownsPreview = false,
@@ -183,7 +193,7 @@ export function workWriteBoundary(
   if (!executor.seal) throw Error("Write command requires a producer-owned seal projection");
   const project = executor.seal;
   const { route } = hooks;
-  const spec = workSpec(route, registeredWork);
+  const specOf = specFor(route, route === ANY_ROUTE ? undefined : workSpec(route, registeredWork), deps.workspace);
   return {
     ...executor,
     boundary: "work",
@@ -196,7 +206,7 @@ export function workWriteBoundary(
         ctx,
         definition,
         hooks,
-        spec,
+        specOf,
         bridge,
         deps,
       );
@@ -323,7 +333,7 @@ export function workWriteBoundary(
       if (!p.previewOnly && retires) {
         const paths = retires(result);
         if (paths.length)
-          yield* execution.retireWork((p.input.work as WorkHandle).key, route, paths);
+          yield* execution.retireWork((p.input.work as WorkHandle).key, (p.input.work as WorkHandle).key.route, paths);
       }
       return {
         ...(result as object),

@@ -415,7 +415,7 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
     // A host-terminal plan without a popover outcome draws only the header's timeline chip; its
     // History names why. The quoted refusal is whatever History draws for that entry.
     if (!plan.popover && !plan.armed) {
-      await press(page, "body", "^ducts\\.plan-losses");
+      await press(page, "body", "^sheet\\.plan");
       await new Promise((done) => setTimeout(done, 3000));
       seen.history = await page.evaluate(
         () =>

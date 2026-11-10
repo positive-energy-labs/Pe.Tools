@@ -151,7 +151,12 @@ export function ductsExecutors(
 ) {
   const bind = async (ctx: CommandContext, kind: Kind, phase: Phase) => {
     const target = targetOf(ctx);
-    const raw = ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle;
+    // The sheet pair takes the asking route's own handle (/ducts or /fans); the sibling comes from readWorks or the same document.
+    const primary = ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle;
+    const siblings = z.record(z.string(), workHandleSchema).optional().parse(ctx.admission.input.readWorks);
+    const ductsView = primary.key.route === "ducts" || siblings?.ducts ? null : await ctx.work.view({ ...primary.key, route: "ducts" }, "ducts");
+    const raw = primary.key.route === "ducts" ? primary : siblings?.ducts ?? ductsView?.handle;
+    if (!raw) throw refused("Ducts Work is unavailable", "work.unavailable");
     const { process } = await lifetime(bridge, target, "project", deps);
     const doc = await ctx.selectWork(tools.ducts.work, raw, (_doc, cells) => ({
       edits: tools.ducts.work.editable,
@@ -164,7 +169,7 @@ export function ductsExecutors(
     const readWorks = z.record(z.string(), workHandleSchema).optional().parse(ctx.admission.input.readWorks);
     if (readWorks?.fans && workKey(readWorks.fans.key) !== workKey(fanView.handle.key))
       throw refused("Fans Work belongs to another document", "work.target");
-    const fans = await ctx.selectWork(tools.fans.work, readWorks?.fans ?? fanView.handle, (_doc, cells) => ({
+    const fans = await ctx.selectWork(tools.fans.work, readWorks?.fans ?? (primary.key.route === "fans" ? primary : fanView.handle), (_doc, cells) => ({
       edits: tools.fans.work.editable,
       cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
     }),
@@ -400,7 +405,8 @@ export function ductsExecutors(
             ).join("; "),
         };
     }
-    const handle = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
+    const asked = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
+    const handle = { key: { ...asked.key, route: "ducts" } };
     const paths = phase === "apply" ? entry.retires(p.input, value) : [];
     const fanPaths = paths.filter((path) => tools.fans.work.editable.some((pattern) => pattern[0] === path[0]),
     );

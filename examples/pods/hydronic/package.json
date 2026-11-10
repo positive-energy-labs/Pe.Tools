@@ -1,0 +1,19 @@
+{
+  "name": "@pe/example-hydronic",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vp test run"
+  },
+  "dependencies": {
+    "@pe/web": "workspace:*",
+    "@pe/host": "workspace:*",
+    "@pe/agent-contracts": "workspace:*",
+    "@pe/host-contracts": "workspace:*",
+    "@pe/mcps": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "vite-plus": "catalog:"
+  }
+}
