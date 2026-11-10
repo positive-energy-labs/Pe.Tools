@@ -55,13 +55,13 @@ describe("sizing", () => {
 const reads = hostOpCatalog.filter((op) => op.intent === "Read").map((op) => op.key);
 const hostDoors = async () => Object.keys(await import("@pe/host/read-graph"));
 describe("kernel gaps", () => {
-  test.fails("kernel gap: piping-system-read (1)", () => {
-    // Looked in the host catalog: no Read lists a document's piping systems, or a system's pipes
-    // with flow, diameter, length and upstream; revit.detail.elements needs ids it cannot find.
-    expect(reads).toContainEqual(expect.stringMatching(/pip/));
+  test.fails("kernel gap: mep-system-members-read (1)", () => {
+    // Looked in the host catalog: no Read lists a document's MEP systems with members' flow, size,
+    // length, connector flow direction and the system's source (MAP slice 7, kaitpw: generic read).
+    expect(reads).toContain("mep.system.members");
   });
-  test.fails("kernel gap: pipe-size-catalog-read (2)", () => {
-    expect(reads).toContainEqual(expect.stringMatching(/segment|pipe.?size/i));
+  test.fails("kernel gap: segment-size-read (2)", () => {
+    expect(reads).toContainEqual(expect.stringMatching(/segment|size/i));
   });
   test.fails("kernel gap: pod-native-read-door (2)", async () => {
     // nativeRead lives in host src/reads/inputs.ts; @pe/host/read-graph does not export it.
