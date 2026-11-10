@@ -117,6 +117,7 @@ const applyInputSchema = z
   );
 export const familyActions = {
   "families.read": {
+    native: ["revit.matrix.loaded-families"],
     says: "Audit the selected Families Work scope in the exact document, then bind its completed observation at the reviewed Work revision.",
     dirties: ["families"],
     needs: "project-document",
@@ -125,6 +126,7 @@ export const familyActions = {
     result: familiesObservationSchema,
   },
   "families.cancel-read": {
+    native: ["op.cancel"],
     says: "Cancel this exact running Families read in the selected document.",
     dirties: [],
     needs: "project-document",

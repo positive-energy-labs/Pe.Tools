@@ -1,3 +1,6 @@
+using System.IO;
+using Newtonsoft.Json;
+using Pe.Shared.RevitData.Serialization;
 using Pe.Revit.Parameters;
 using Autodesk.Revit.DB.Structure;
 using Pe.Revit.DocumentData.Parameters;
@@ -120,11 +123,16 @@ public sealed class ScheduleCellBindingProofTests {
             nameof(this.Reviewed_schedule_cells_apply_instance_and_coalesced_type_edits_and_refuse_conflicts),
             includeCombinedAndCount: true,
             (projectDocument, _, entry) => {
+                ScheduleCellApplyData Apply(ScheduleCellApplyRequest request, CancellationToken cancellation = default) {
+                    var response = projectDocument.ApplyReviewedScheduleCells(request, cancellation);
+                    RecordNative("schedule.cells.apply", request, response, projectDocument);
+                    return response;
+                }
                 var rows = BoundDataRows(entry);
                 var mark = BindingFor(entry, rows[0], "Mark");
                 var typeA = BindingFor(entry, rows[0], "Type Comments");
                 var typeB = BindingFor(entry, rows[1], "Type Comments");
-                var identical = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
+                var identical = Apply(new ScheduleCellApplyRequest(
                     entry.ScheduleId, entry.ScheduleUniqueId, [
                         new(rows[0].RowNumber, typeA.ColumnNumber, typeA, "TC-SHARED"),
                         new(rows[1].RowNumber, typeB.ColumnNumber, typeB, "TC-SHARED")
@@ -137,7 +145,7 @@ public sealed class ScheduleCellBindingProofTests {
                 var afterShared = CollectEntry(projectDocument, entry.ScheduleId);
                 var afterRows = BoundDataRows(afterShared);
                 var changedMark = BindingFor(afterShared, afterRows[0], "Mark");
-                var instance = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
+                var instance = Apply(new ScheduleCellApplyRequest(
                     entry.ScheduleId, entry.ScheduleUniqueId,
                     [new(afterRows[0].RowNumber, changedMark.ColumnNumber, changedMark, "PE-INSTANCE")]));
                 Assert.Multiple(() => {
@@ -150,7 +158,7 @@ public sealed class ScheduleCellBindingProofTests {
                 var conflictRows = BoundDataRows(conflictEntry);
                 var conflictA = BindingFor(conflictEntry, conflictRows[0], "Type Comments");
                 var conflictB = BindingFor(conflictEntry, conflictRows[1], "Type Comments");
-                var conflict = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
+                var conflict = Apply(new ScheduleCellApplyRequest(
                     entry.ScheduleId, entry.ScheduleUniqueId, [
                         new(conflictRows[0].RowNumber, conflictA.ColumnNumber, conflictA, "TC-A"),
                         new(conflictRows[1].RowNumber, conflictB.ColumnNumber, conflictB, "TC-B")
@@ -163,13 +171,13 @@ public sealed class ScheduleCellBindingProofTests {
                 });
 
                 var blocked = BindingFor(entry, rows[0], "Count");
-                var blockedResult = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
+                var blockedResult = Apply(new ScheduleCellApplyRequest(
                     entry.ScheduleId, entry.ScheduleUniqueId,
                     [new(rows[0].RowNumber, blocked.ColumnNumber, blocked, "9")]));
                 Assert.That(blockedResult.Results.Single().Error, Does.Contain("unavailable"));
 
                 var missing = mark with { Targets = [] };
-                var missingResult = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
+                var missingResult = Apply(new ScheduleCellApplyRequest(
                     entry.ScheduleId, entry.ScheduleUniqueId,
                     [new(rows[0].RowNumber, mark.ColumnNumber, missing, "NOPE")]));
                 Assert.That(missingResult.Results.Single().Error, Does.Contain("missing canonical target evidence"));
@@ -180,7 +188,7 @@ public sealed class ScheduleCellBindingProofTests {
                     ParameterId = wrongParameterId,
                     Targets = [mark.Targets.Single() with { ParameterId = wrongParameterId }]
                 };
-                var invalidIdResult = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
+                var invalidIdResult = Apply(new ScheduleCellApplyRequest(
                     entry.ScheduleId, entry.ScheduleUniqueId,
                     [new(rows[0].RowNumber, mark.ColumnNumber, invalidExactId, "NO-FUZZY-FALLBACK")]));
                 Assert.That(invalidIdResult.Results.Single().Error, Does.Contain("stale"));
@@ -190,11 +198,20 @@ public sealed class ScheduleCellBindingProofTests {
                     .get_Parameter(BuiltInParameter.ALL_MODEL_MARK)!.AsString();
                 using var cancellation = new CancellationTokenSource();
                 cancellation.Cancel();
-                Assert.Throws<OperationCanceledException>(() => projectDocument.ApplyReviewedScheduleCells(
+                Assert.Throws<OperationCanceledException>(() => Apply(
                     new ScheduleCellApplyRequest(entry.ScheduleId, entry.ScheduleUniqueId,
                         [new(rows[0].RowNumber, mark.ColumnNumber, mark, "NO-CANCEL-WRITE")]), cancellation.Token));
                 Assert.That(projectDocument.GetElement(mark.Targets.Single().ElementId.ToElementId())
                     .get_Parameter(BuiltInParameter.ALL_MODEL_MARK)!.AsString(), Is.EqualTo(beforeCancel));
+                if (Environment.GetEnvironmentVariable("PE_NATIVE_FIXTURE_OUTPUT") is not null) {
+                    using var extra = new Transaction(projectDocument, "Capture changed native catalogue");
+                    extra.Start();
+                    var added = ViewSchedule.CreateSchedule(projectDocument, BuiltInCategory.OST_MechanicalEquipment.ToElementId());
+                    added.Name = "Recorded catalogue addition";
+                    Assert.That(extra.Commit(), Is.EqualTo(TransactionStatus.Committed));
+                    RecordNative("revit.catalog.schedules", new ScheduleCatalogRequest(),
+                        ScheduleCatalogCollector.Collect(projectDocument), projectDocument);
+                }
             });
     }
 
@@ -519,19 +536,34 @@ public sealed class ScheduleCellBindingProofTests {
         return row.Bindings!.Single(binding => binding.ColumnNumber == ColumnFor(entry, fieldName).ColumnNumber);
     }
 
+    private static int recordingSequence;
+    // Optional capture of real native results for the TypeScript bridge fixture; no alternate model behavior.
+    private static void RecordNative(string operation, object request, object response, Document document) {
+        var output = Environment.GetEnvironmentVariable("PE_NATIVE_FIXTURE_OUTPUT");
+        if (output is null) return;
+        Directory.CreateDirectory(output);
+        if (string.IsNullOrEmpty(document.PathName))
+            _ = RevitFamilyFixtureHarness.SaveDocumentCopy(document, output, "native-schedule-model");
+        var settings = RevitDataJson.CreateSerializerSettings();
+        settings.DefaultValueHandling = DefaultValueHandling.Include;
+        settings.NullValueHandling = NullValueHandling.Include;
+        var file = Path.Combine(output, $"schedule-{Interlocked.Increment(ref recordingSequence):D2}-{operation}.json");
+        File.WriteAllText(file, JsonConvert.SerializeObject(new {
+            operation, request, response, modelCopy = document.PathName, date = DateTime.UtcNow.ToString("O")
+        }, Formatting.Indented, settings));
+        TestContext.WriteLine($"Native fixture: {file}");
+    }
+
     private static ScheduleRenderedScheduleEntry CollectEntry(Document projectDocument, long scheduleId, int rowBudget = 25) {
-        var data = ScheduleQueryCollector.Collect(
-            projectDocument,
-            new ScheduleQuery {
-                Kind = ScheduleQueryKind.ScheduleReferences,
-                ScheduleIds = [scheduleId],
-                Projection = new ScheduleQueryProjection {
-                    View = RevitDataResultView.Full,
-                    IncludeBindings = true
-                },
-                Budget = new RevitDataOutputBudget { MaxRowsPerEntry = rowBudget }
-            }
-        );
+        var query = new ScheduleQuery {
+            Kind = ScheduleQueryKind.ScheduleReferences,
+            ScheduleIds = [scheduleId],
+            Projection = new ScheduleQueryProjection { View = RevitDataResultView.Full, IncludeBindings = true },
+            Budget = new RevitDataOutputBudget { MaxRowsPerEntry = rowBudget }
+        };
+        var data = ScheduleQueryCollector.Collect(projectDocument, query);
+        RecordNative("revit.detail.schedules", new ScheduleQueryRequest(query), data, projectDocument);
+        RecordNative("revit.catalog.schedules", new ScheduleCatalogRequest(), ScheduleCatalogCollector.Collect(projectDocument), projectDocument);
         return data.Entries.Single();
     }
 

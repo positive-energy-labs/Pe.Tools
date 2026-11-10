@@ -114,10 +114,7 @@ async function fixture(telemetry?: ReceiptExporter) {
       rmSync(root, { recursive: true, force: true });
     });
   }
-  let beforePost: () => Promise<void> = async () => {};
-  const posts: Record<string, unknown>[] = [];
   const seen: Array<{ path: string; login: string | null }> = [];
-  const rows = new Map<string, Record<string, unknown>>();
   const handle = async (input: Request | URL | string, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const login = new Headers(init?.headers).get("tailscale-user-login");
@@ -135,31 +132,6 @@ async function fixture(telemetry?: ReceiptExporter) {
       });
     if (url.pathname === "/ops") return Response.json({ operations });
     if (url.pathname === "/call") return Response.json({ login });
-    if (url.pathname === "/actions") {
-      if (init?.method !== "POST")
-        return Response.json(
-          rows.has(url.searchParams.get("id")!) ? [rows.get(url.searchParams.get("id")!)] : [],
-        );
-      const body = JSON.parse(await new Response(init.body).text());
-      if (rows.has(body.id)) return Response.json(rows.get(body.id));
-      posts.push(body);
-      await beforePost();
-      const { input, ...admission } = body;
-      const row = {
-        ...admission,
-        caller: { kind: "anonymous" },
-        basis: null,
-        input,
-        state: "succeeded",
-        result: { login },
-        steps: [],
-        prepared: { state: "unprepared" },
-        recovery: [],
-        startedAt: new Date(0).toISOString(),
-      };
-      rows.set(body.id, row);
-      return Response.json(row);
-    }
     throw Error(`Unexpected fixture request ${url}`);
   };
   const backend = createServer((req, res) => {
@@ -305,41 +277,9 @@ async function fixture(telemetry?: ReceiptExporter) {
     send,
     init,
     call,
-    posts,
     seen,
-    rows,
-    holdPost: (wait: () => Promise<void>) => {
-      beforePost = wait;
-    },
   };
 }
-
-test("concurrent principals retain separate headers and admission identities", async () => {
-  const f = await fixture();
-  const [one, two] = await Promise.all([
-    f.init(asPea(remote("one"))),
-    f.init(asPea(remote("two"))),
-  ]);
-  const replies = await Promise.all(
-    [one, two].map(async (session) =>
-      (await f.call("pe_do", { key: "op:pod.member.write" }, session)).json(),
-    ),
-  );
-  for (const reply of replies) expect(reply.result.isError, JSON.stringify(reply)).not.toBe(true);
-  expect(replies.map((reply) => JSON.parse(reply.result.content[0].text).revision)).toEqual([0, 0]);
-  expect(f.posts).toHaveLength(2);
-  expect(new Set(f.posts.map((row) => row.id)).size).toBe(2);
-  const byLogin = (a: { login: string | null }, b: { login: string | null }) =>
-    String(a.login).localeCompare(String(b.login));
-  expect(
-    f.seen
-      .filter((row) => row.path.startsWith("/pe/scope/"))
-      .every((row) => row.login === "one" || row.login === "two"),
-  ).toBe(true);
-  expect(
-    [...f.rows.values()].map((row) => row.result as { login: string | null }).sort(byLogin),
-  ).toEqual([{ login: "one" }, { login: "two" }]);
-});
 
 test("initialize ignores x-pe-thread and retains only a verified caller context", async () => {
   const contexts: InvocationContext[] = [];

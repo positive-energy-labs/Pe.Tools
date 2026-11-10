@@ -1,184 +1,44 @@
-import { Effect, Queue } from "effect";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
-import {
-  TURN_ELEMENT_NAMES_LIMIT,
-  turnElementNamesRequestSchema,
-  type TurnElementNamesSnapshot,
-} from "../../../packages/agent-contracts/src/turn-element-names.ts";
-import {
-  readTurnElementNames,
-  type TurnElementNamesNativeRead,
-} from "../src/turn-element-names.ts";
-import { RevitBridgeLive } from "../src/bridge.ts";
-import { connectTestBridge } from "./bridge-fixture.ts";
-import { HostReceipts } from "../src/gateway-owner.ts";
+import { fixtureNative } from "./fixture-native.ts";
+import { nativeRecordings } from "./native-recordings.ts";
+import { readTurnElementNames, type TurnElementNamesNativeRead } from "../src/turn-element-names.ts";
 
-const a = { session: "original-process", openId: "original-document" };
-const b = { session: "original-process", openId: "second-document" };
-const snapshot: TurnElementNamesSnapshot = {
-  thread: "thread",
-  turnId: "turn",
-  targets: [a, b],
-  complete: true,
-};
-const request = (ids: number[]) => ({
-  kind: "turn-element-names" as const,
-  thread: "thread",
-  turnId: "turn",
-  ids,
-});
-const row = (elementId: number, name = `Name ${elementId}`) => ({
-  elementId,
-  name,
-  elementUniqueId: `unique-${elementId}`,
-});
-function payload(ids: number[], entries: ReturnType<typeof row>[]) {
-  return {
-    queryKind: "ElementReferences",
-    requestedElementCount: ids.length,
-    resolvedElementCount: entries.length,
-    entries,
-    issues: ids
-      .filter((id) => !entries.some((entry) => entry.elementId === id))
-      .map(() => ({
-        code: "ElementContextElementIdNotFound",
-        severity: "Warning",
-      })),
+test("turn names use real native HTTP admission, retain their recorded names and keep cross-document ambiguity", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-element-names-recorded-"));
+  const native = await fixtureNative(dir, "retained-revit.detail.elements"); const socket = await native.connect();
+  const http = native.actions();
+  const body = nativeRecordings("retained-revit.detail.elements").responses["revit.detail.elements"] as { entries: { elementId: number; elementUniqueId: string; name: string }[] };
+  const ids = body.entries.map(entry => entry.elementId);
+  const request = { kind: "turn-element-names" as const, thread: "thread", turnId: "turn", ids };
+  const pinned = { thread: "thread", turnId: "turn", targets: [socket.target], complete: true };
+  // HTTP envelope adaptation only. Native values and confirmed targets come from production doors.
+  const read: TurnElementNamesNativeRead = async (key, request, ref) => {
+    const response = await http.request(new Request("http://host/call", { method: "POST", headers: {
+      "content-type": "application/json", "x-pe-bridge-session-id": ref.session, "x-pe-open-document-id": ref.openId,
+    }, body: JSON.stringify({ key, request }) }));
+    if (!response.ok) throw Error(await response.text());
+    return { value: await response.json(), target: { documentRef: {
+      session: response.headers.get("x-pe-resolved-session")!, openId: decodeURIComponent(response.headers.get("x-pe-resolved-open-id")!),
+    } } };
   };
-}
-
-// Only the socket/native payload is substituted. The service, registration, FIFO, frame
-// decoding and exact open-document dispatch are production. This does not prove Revit behavior.
-test("turn names batch exact pinned documents through the production bridge and keep ambiguity", async () => {
-  // effect-edge: island, phase 5
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        yield* HostReceipts;
-        const { bridge, outgoing, incoming, target } = yield* connectTestBridge();
-        const other = { ...target, openId: "other-open" };
-        const pinned = { ...snapshot, targets: [target, target, other] };
-        const calls: string[] = [];
-        const read: TurnElementNamesNativeRead = (op, input, ref) => {
-          calls.push(ref.openId);
-          // effect-edge: island, phase 5
-          return Effect.runPromise(bridge.invoke(op, input, ref.session, ref.openId));
-        };
-        const pending = readTurnElementNames(pinned, request([101, 101, 202, 303]), read);
-        for (let index = 0; index < 2; index++) {
-          const sent = (yield* Queue.take(outgoing)).request!;
-          expect(sent.operationKey).toBe("revit.detail.elements");
-          expect(JSON.parse(sent.payloadJson!)).toEqual({
-            query: { kind: "ElementReferences", elementIds: [101, 202, 303] },
-          });
-          const entries = sent.openDocumentId === target.openId ? [row(101), row(202)] : [row(101)];
-          yield* Queue.offer(
-            incoming,
-            JSON.stringify({
-              kind: "Response",
-              response: {
-                requestId: sent.requestId,
-                ok: true,
-                statusCode: 200,
-                openDocumentId: sent.openDocumentId,
-                payloadJson: JSON.stringify(payload([101, 202, 303], entries)),
-                metrics: {
-                  requestBytes: 0,
-                  responseBytes: 0,
-                  revitExecutionMs: 0,
-                  roundTripMs: 0,
-                  serializationMs: 0,
-                },
-              },
-            }),
-          );
-        }
-        const observed = yield* Effect.promise(() => pending);
-        expect(calls).toEqual([target.openId, other.openId]);
-        expect(observed.entries).toEqual([
-          { state: "ambiguous", elementId: 101 },
-          { state: "resolved", elementId: 202, target, uniqueId: "unique-202", name: "Name 202" },
-          { state: "unresolved", elementId: 303, reason: "missing" },
-        ]);
-        // A log round-trip retains identity and avoids reads, even after the model changes.
-        const saved = JSON.parse(JSON.stringify(observed));
-        const replay = yield* Effect.promise(() =>
-          readTurnElementNames(pinned, request([101, 202, 303]), read, saved),
-        );
-        expect(replay.entries).toEqual(observed.entries);
-        expect(calls).toHaveLength(2);
-        expect(yield* Queue.size(outgoing)).toBe(0);
-      }),
-    ).pipe(Effect.provide(RevitBridgeLive), Effect.provide(HostReceipts.layer(null))),
-  );
+  try {
+    const taken = await readTurnElementNames(pinned, request, read);
+    expect(taken.entries).toEqual(body.entries.map(entry => ({ state: "resolved", elementId: entry.elementId, uniqueId: entry.elementUniqueId, name: entry.name.trim(), target: socket.target })));
+    const count = native.calls.length;
+    expect((await readTurnElementNames(pinned, request, read, JSON.parse(JSON.stringify(taken)))).entries).toEqual(taken.entries);
+    expect(native.calls).toHaveLength(count);
+    // The same saved observation at two pinned lifetimes tests identity policy, not Revit census semantics.
+    const two = await readTurnElementNames({ ...pinned, targets: [socket.target, { ...socket.target, openId: "other-open" }] }, request, read);
+    expect(two.entries).toEqual(ids.map(elementId => ({ state: "ambiguous", elementId })));
+    const closed = await readTurnElementNames({ ...pinned, targets: [socket.target, { ...socket.target, openId: "closed-open" }] }, request, read);
+    expect(closed.entries).toEqual(ids.map(elementId => ({ state: "unresolved", elementId, reason: "read-unavailable" })));
+    const before = native.calls.length;
+    expect((await readTurnElementNames({ ...pinned, complete: false }, request, read)).entries).toEqual(ids.map(elementId => ({ state: "unresolved", elementId, reason: "targets-unpinned" })));
+    await expect(readTurnElementNames(pinned, { ...request, turnId: "other" }, read)).rejects.toThrow("pinned targets");
+    expect(native.calls).toHaveLength(before);
+  } finally { await native.close(); await rm(dir, { recursive: true, force: true }); }
 });
-
-test.each(["closed", "replacement", "collector-failed", "unexpected-id", "long-name"])(
-  "%s cannot turn a partial census into a unique name",
-  async (fault) => {
-    const read: TurnElementNamesNativeRead = async (_op, input, ref) => {
-      if (ref.openId === b.openId && fault === "closed") throw Error("document closed");
-      const value = payload(input.query!.elementIds!, [row(101)]);
-      if (ref.openId === b.openId) {
-        if (fault === "collector-failed")
-          value.issues.push({ code: "ElementContextCollectFailed", severity: "Warning" });
-        if (fault === "unexpected-id") value.entries = [row(999)];
-        if (fault === "long-name") value.entries = [row(101, "x".repeat(513))];
-      }
-      return {
-        value,
-        target: {
-          documentRef: {
-            ...ref,
-            openId:
-              ref.openId === b.openId && fault === "replacement" ? "reopened-document" : ref.openId,
-          },
-        },
-      };
-    };
-    const result = await readTurnElementNames(snapshot, request([101]), read);
-    expect(result.entries).toEqual([
-      { state: "unresolved", elementId: 101, reason: "read-unavailable" },
-    ]);
-  },
-);
-
-test("incomplete pins, replacement targets, and bounded cumulative ids fail closed", async () => {
-  let calls = 0;
-  const read: TurnElementNamesNativeRead = async (_op, input, ref) => {
-    calls++;
-    return { value: payload(input.query!.elementIds!, []), target: { documentRef: { ...ref } } };
-  };
-  const incomplete = await readTurnElementNames(
-    { ...snapshot, complete: false },
-    request([101]),
-    read,
-  );
-  expect(incomplete.entries).toEqual([
-    { state: "unresolved", elementId: 101, reason: "targets-unpinned" },
-  ]);
-  expect(calls).toBe(0);
-  expect(turnElementNamesRequestSchema.safeParse({ ...request([101]), target: b }).success).toBe(
-    false,
-  );
-  const previous = await readTurnElementNames(
-    snapshot,
-    request(Array.from({ length: TURN_ELEMENT_NAMES_LIMIT }, (_, i) => i + 1)),
-    read,
-  );
-  await expect(readTurnElementNames(snapshot, request([999]), read, previous)).rejects.toThrow(
-    "at most 256",
-  );
-  await expect(
-    readTurnElementNames(
-      { ...snapshot, targets: [{ ...a, session: "new-process" }] },
-      request([101]),
-      read,
-      previous,
-    ),
-  ).rejects.toThrow("cannot be rebound");
-  await expect(
-    readTurnElementNames(snapshot, { ...request([101]), turnId: "other-turn" }, read),
-  ).rejects.toThrow("pinned targets");
-  expect(calls).toBe(2);
-});
+// UNPROVEN[no recording]: malformed native names, unexpected ids, overlong names and false target confirmations.

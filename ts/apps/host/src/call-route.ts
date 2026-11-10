@@ -77,6 +77,7 @@ import { FamilyPdfParser } from "./family-spec.ts";
 import { operationDefinition, gatewayTarget, requireEligibleCaller } from "./gateway-actions.ts";
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
 import { HostInputContext } from "./input-context.ts";
+import type { InstancesActionDependencies } from "./instances-actions.ts";
 import { LocalOpError, localOpHttpStatus } from "./local-error.ts";
 import {
   getBridgeSessionSummary,
@@ -147,7 +148,7 @@ export type CallRouteDispatch = (
 export function makeCallRoute(
   operations: ActionJournal,
   captures?: TakeoffCaptures,
-  actionDeps: FamilyActionDependencies & {
+  actionDeps: FamilyActionDependencies & InstancesActionDependencies & {
     launchShell?: (path: string) => Promise<void>;
   } = {},
   composition?: {

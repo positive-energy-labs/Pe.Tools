@@ -77,17 +77,23 @@ export function commandRegistry(
     if (result?.cancelled === false) throw Error(result.message ?? "Native request is not running");
     return result;
   };
-  const complete = (entry: CommandExecutor, key?: string): CommandExecutor => ({
-    ...entry,
-    bind: (context) =>
-      key ? catalogCommandContext.run(key, () => entry.bind(context)) : entry.bind(context),
-    run: (context, execution) =>
-      key
-        ? catalogCommandContext.run(key, () => entry.run(context, execution))
-        : entry.run(context, execution),
-    recover: entry.recover ?? recover,
-    cancel: entry.cancel ?? cancel,
-  });
+  const complete = (entry: CommandExecutor, key?: string): CommandExecutor => {
+    const definition = entry.definition;
+    return {
+      ...entry,
+      definition: key && typeof definition === "function"
+        ? context => catalogCommandContext.run(key, () => definition(context))
+        : definition,
+      bind: (context) =>
+        key ? catalogCommandContext.run(key, () => entry.bind(context)) : entry.bind(context),
+      run: (context, execution) =>
+        key
+          ? catalogCommandContext.run(key, () => entry.run(context, execution))
+          : entry.run(context, execution),
+      recover: entry.recover ?? recover,
+      cancel: entry.cancel ?? cancel,
+    };
+  };
   // A preview entry with no executor of its own is the write's executor bound in its preview phase:
   // it runs the same bind/prepare and returns the sealed request without calling the write leaf.
   const ownExecutors = new Set(Object.keys(implementations));
@@ -138,7 +144,7 @@ export function commandRegistry(
   return (key) => {
     if (key.startsWith("pod.") && !isAnyOperationKey(key))
       throw Error(`Pod command unavailable: ${key}`);
-    return (implementations[key] ??= complete(gatewayExecutor(key, bridge, local, deps.pictures!, deps.sdk)));
+    return (implementations[key] ??= complete(gatewayExecutor(key, bridge, local, deps.pictures!, deps.sdk), key));
   };
 }
 

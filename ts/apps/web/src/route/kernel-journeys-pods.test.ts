@@ -443,7 +443,7 @@ async function openRecordedGuidanceAfterRefusal() {
 }
 // H29 exercises the surviving sealed-Plan authority through the real HTTP action handler.
 test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
+  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
   const { pea } = await import("../../../host/tests/callers");
   const f = await nativeFixture();
   try {
@@ -700,7 +700,7 @@ test("JZ Open machine census: sampling drift lists documents; content conflict n
 
 
 test("JZ route-neutral Plan refusal preserves the reason and holds Apply through HTTP", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
+  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
   const f = await nativeFixture();
   try {
     const reason = "Shared type cannot scope this authored flow";
@@ -731,7 +731,7 @@ test("JZ route-neutral Plan refusal preserves the reason and holds Apply through
 
 
 test("JZ upload retains BlobRef before command admission and rejects inline intent", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
+  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
   const { bindWork } = await import("@pe/agent-contracts");
   const f = await nativeFixture();
   try {
@@ -761,7 +761,7 @@ test("JZ upload retains BlobRef before command admission and rejects inline inte
 
 
 test("JZ cold HTTP action inspection discards old journal rows without conversion", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
+  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
   const { readFile, writeFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
   const first = await nativeFixture();

@@ -599,7 +599,7 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 test("JZ Fans undo after apply: public write journey leaves an honest toolbar refusal", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
+  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
   const { observeResources } = await import("@pe/runtime");
   const { JournalButtons } = await import("../shell/situation-band");
   const { withInvocationContext } = await import("@pe/runtime/context");

@@ -1,0 +1,26 @@
+{
+  "query": {
+    "kind": "ScheduleReferences",
+    "scheduleIds": [
+      1236186
+    ],
+    "scheduleUniqueIds": null,
+    "scheduleNames": null,
+    "projection": {
+      "view": "Full",
+      "includeColumns": false,
+      "includeSubjects": false,
+      "includeCellValues": false,
+      "includeRows": false,
+      "includeOnlyRowsWithIssues": false,
+      "includeBindings": true,
+      "requiredFieldAudit": null
+    },
+    "budget": {
+      "maxEntries": null,
+      "maxRowsPerEntry": 25,
+      "maxSamplesPerEntry": null,
+      "includeDiagnostics": true
+    }
+  }
+}

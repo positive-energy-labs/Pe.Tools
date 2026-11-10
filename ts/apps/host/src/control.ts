@@ -637,6 +637,16 @@ const pageDoors = new WeakMap<
   Caller,
   { slot: PageChoice; door: string; readConsent: DocumentRef | null }
 >();
+
+/** An action owns a distinct weak capability; retiring its request still revokes direct reads. */
+export function retainActionCaller(caller: Caller): Caller {
+  const door = caller.kind === "page" ? pageDoors.get(caller) : undefined;
+  if (!door) return caller; // Unminted Page callers still fail the normal admission guard.
+  const retained = Object.freeze({ ...caller });
+  pageDoors.set(retained, door);
+  return retained;
+}
+
 export function mintPageDoor(
   page: string,
   slot: PageChoice,
@@ -655,6 +665,7 @@ export function mintPageDoor(
   return {
     token,
     retire: () => {
+      // Only the command journal may retain a separate action capability; this request ends now.
       pageDoors.delete(caller);
       retireContext(token);
     },

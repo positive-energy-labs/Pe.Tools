@@ -1,14 +1,14 @@
-import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
-import { readSessionScope } from "../src/sdk-session.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { nativeReadRoot } from "../src/app.ts";
-import { testHostInputs } from "./effect-test.ts";
 import { test, expect, vi } from "vite-plus/test";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
-import { RevitBridge, type BridgeSessionView } from "../src/bridge.ts";
-import { detachedBridge } from "./effect-test.ts";
+import { RevitBridge } from "../src/bridge.ts";
+import { fixtureNative } from "./fixture-native.ts";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { opsCatalogRoute } from "../src/ops-catalog.ts";
 import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -19,12 +19,9 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
   const sdk = vi.fn(async () => {
     throw new Error("SDK discovery should not run without a bridge attachment");
   });
-  const invoke = vi.fn(() => Effect.die("native catalog should not run"));
-  let attachments: BridgeSessionView[] = [];
-  const bridge = detachedBridge({
-    list: Effect.sync(() => attachments),
-    invoke,
-  });
+  const dir = await mkdtemp(join(tmpdir(), "consumer-discovery-"));
+  const native = await fixtureNative(dir);
+  const bridge = native.bridge;
   const web = HttpRouter.toWebHandler(
     opsCatalogRoute(() => Effect.die("not navigation")).pipe(nativeReadRoot(Layer.succeed(SdkDriver, () => Effect.tryPromise({ try: () => sdk(), catch: (error) => error })))).pipe(
       Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
@@ -43,7 +40,7 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
       bridgeCatalogError: "No Revit session is connected to the bridge.",
     });
     expect(sdk).not.toHaveBeenCalled();
-    expect(invoke).not.toHaveBeenCalled();
+    expect(native.calls).toEqual([]);
     // Discovery retains schemas, explicit effects and shared product capabilities without a bridge.
     vi.stubGlobal("fetch", async (input: string | URL | Request) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
@@ -77,7 +74,8 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
       expect(body.operations.filter((row: { key: string }) => row.key === op.key)).toEqual([op]);
 
     // A nonempty attachment inventory enters SDK resolution. Its ambiguity is not catalog absence.
-    attachments = [{ connected: true, sessionId: "one" }, { connected: true, sessionId: "two" }];
+    await native.connect();
+    await native.connect({}, 43);
     sdk.mockRejectedValueOnce(Error("Several Revit sessions match; select one."));
     source.invalidate();
     const ambiguous = await source.read();
@@ -85,9 +83,11 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
     expect(ambiguous.capabilities).toEqual(catalog.capabilities);
     expect(ambiguous.bridgeSessionId).toBeUndefined();
     expect(sdk).toHaveBeenCalledTimes(1);
-    expect(invoke).not.toHaveBeenCalled();
+    expect(native.calls).toEqual([]);
   } finally {
     vi.unstubAllGlobals();
     await web.dispose();
+    await native.close();
+    await rm(dir, { recursive: true, force: true });
   }
 });

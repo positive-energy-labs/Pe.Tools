@@ -10,6 +10,7 @@ import {
   CatalogWorkRefused,
   catalogWorkCommands,
   catalogWorks,
+  nativeProcessSchema,
   type CatalogWork,
   type Command,
 } from "@pe/agent-contracts";
@@ -20,6 +21,7 @@ import { projectReader, type FamilyActionDependencies } from "./family-actions.t
 type Owner = keyof typeof catalogWorks;
 
 const prepared = z.object({
+  process: nativeProcessSchema,
   target: z.object({ session: z.string(), openId: z.string() }),
   request: z.unknown(),
   before: z.unknown(),
@@ -59,7 +61,7 @@ export function catalogWorkExecutors(
                   const reader = await projectReader(bridge, target, deps);
                   const before = work.base.project(await reader.read(work.base.op, work.base.input(doc)), doc);
                   const { request, touched } = work.derive(doc, before);
-                  return { target, request, before, touched: [...touched] };
+                  return { target, process: reader.process, request, before, touched: [...touched] };
                 } catch (error) {
                   if (error instanceof CatalogWorkRefused) throw refused(error.message, "catalog.refused");
                   throw error;
@@ -69,7 +71,7 @@ export function catalogWorkExecutors(
           },
           run: async (_ctx, execution) => {
             const { target, request } = execution.prepared;
-            return execution.step("native", work.op, request, (id) => invoke(bridge, target, work.op, request, id));
+            return execution.step("native", work.op, request, (id) => invoke(bridge, target, work.op, request, id), { process: execution.prepared.process });
           },
         });
         return [key, executor];

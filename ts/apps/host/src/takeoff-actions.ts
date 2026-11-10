@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { nativeRequestSchema } from "@pe/host-contracts/decoders";
+import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { lifetime } from "./document-lifetime.ts";
 import { command, refused, type CommandContext } from "./command-executor.ts";
 import { preparedTakeoffSchema } from "@pe/agent-contracts";
@@ -143,6 +145,17 @@ export function takeoffExecutors(
   deps: TakeoffActionDependencies = {},
 ) {
   const bindCarrier = async (ctx: CommandContext, select?: () => Promise<void>) => {
+    // Validate the final leaf before carrier preparation can make its first model write.
+    const action = ctx.admission.key.replace(/\.preview$/, "");
+    const { work: _work, ...input } = ctx.admission.input;
+    const leaf = action === "takeoffs.initialize" ? "takeoffs.initialize-carrier" : action;
+    const requests = action === "takeoffs.adopt" ? z.array(z.unknown()).parse(input.views) : [
+      action.endsWith(".partition") ? { ...input, runId: ctx.admission.id } : input,
+    ];
+    for (const request of requests) {
+      const checked = nativeRequestSchema(leaf as HostOperationKey).safeParse(request);
+      if (!checked.success) throw refused(`Invalid native input for '${leaf}': ${checked.error.message}`, "native.input");
+    }
     const { target, process } = await bindModel(ctx, bridge, deps);
     await select?.();
     return {

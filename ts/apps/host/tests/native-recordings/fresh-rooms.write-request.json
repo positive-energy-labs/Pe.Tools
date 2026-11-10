@@ -1,0 +1,28 @@
+{
+  "regions": [
+    {
+      "guid": "f8d99992-423e-453d-99be-934a98ec8bf4",
+      "name": "Office - recorded",
+      "type": null,
+      "ceilingFt": null,
+      "people": null,
+      "lightingW": null,
+      "equipSensible": null,
+      "equipLatent": null,
+      "ventilationCfm": null,
+      "role": null
+    },
+    {
+      "guid": "21b58397-cd33-4609-8548-d08424a09b60",
+      "name": "Lobby - recorded",
+      "type": null,
+      "ceilingFt": null,
+      "people": null,
+      "lightingW": null,
+      "equipSensible": null,
+      "equipLatent": null,
+      "ventilationCfm": null,
+      "role": null
+    }
+  ]
+}

@@ -2,33 +2,20 @@ import { join } from "node:path";
 import { Context, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 // Host-only dependency: this HTTP journey lives beside web route journeys.
-import {
-  NodeHttpClient,
-  NodeServices,
-} from "../../../host/node_modules/@effect/platform-node/dist/index.js";
+import { NodeHttpClient, NodeServices } from "../../../host/node_modules/@effect/platform-node/dist/index.js";
 import { expect, test, vi } from "vite-plus/test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { Effect } from "effect";
 import { RouteWorkspace } from "@pe/runtime";
-import { commands, tools, roomEditKey, takeoffObservationSchema } from "@pe/agent-contracts";
+import { address, commands, tools, roomEditKey, takeoffObservationSchema } from "@pe/agent-contracts";
 import { takeoffSeeds } from "../takeoff/seeds";
 import { fileVersion } from "../../../host/src/takeoff-actions";
-import { detachedBridge, sessionView, captureStore, testDuctFiles, testDocumentMarks } from "../../../host/tests/effect-test";
+import { captureStore, testDuctFiles, testDocumentMarks } from "../../../host/tests/effect-test";
 import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
-import { hostOwnership } from "../../../host/src/host-ownership";
 import { bindCommandRuntime } from "../../../host/src/command-registry";
-import { commandLeafRefusal } from "../../../host/src/bridge";
-import { catalogCommandContext } from "../../../host/src/catalog-command-context";
-import { markDispatched } from "../../../host/src/action-dispatch";
-import {
-  actionReceiptSchema,
-  workFingerprintSchema,
-  type Caller,
-  type WorkKey,
-  type WorkWrite,
-  type RouteStateWriteResult,
-} from "@pe/agent-contracts";
+import { fixtureNative } from "../../../host/tests/fixture-native";
+import { nativeRecordingRequest } from "../../../host/tests/native-recordings";
+import { actionReceiptSchema, workFingerprintSchema, type Caller, type WorkKey, type WorkWrite, type RouteStateWriteResult } from "@pe/agent-contracts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { withInvocationContext } from "@pe/runtime/context";
 import { fixture, ref, path, who, gate } from "../../../host/tests/host-read-graph.test-support";
@@ -36,7 +23,7 @@ import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
 import { ActionJournal } from "../../../host/src/action-journal";
 import { makeCallRoute } from "../../../host/src/call-route";
 import { nativeReadRoot } from "../../../host/src/app";
-import { RevitBridgeLive, RevitBridge } from "../../../host/src/bridge";
+import { RevitBridgeLive } from "../../../host/src/bridge";
 import { DuctFiles } from "../../../host/src/ducts-files";
 import { HostDocumentMarks } from "../../../host/src/document-marks";
 import { PictureCaptureStore } from "../../../host/src/captures-route";
@@ -55,43 +42,96 @@ import type { Readings } from "../host/resource-stream";
 import type { UseSource } from "../shell/source-contract";
 import type { DrawContext, TypedRoute } from "./typed-route";
 
+const recordedInput = (name: string) => Object.fromEntries(Object.entries(nativeRecordingRequest(name)).filter(([, value]) => value !== null));
+const recordedRoomWrites = nativeRecordingRequest("fresh-rooms.write").regions as { guid: string; name: string }[];
+test("JZ Initialize declaration must also pass the recording transport leaf admission", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "jz-initialize-transport-"));
+  const native = await fixtureNative(dir, "fresh-takeoffs.initialize-carrier");
+  try {
+    const response = await native.transport.fetch(new Request("http://fixture/call", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+        action: "takeoffs.initialize", key: "takeoffs.initialize-carrier", request: { stage: "Rooms" },
+      }),
+    }));
+    expect(response.status, await response.clone().text()).toBe(200);
+  } finally { await native.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("JZ fixture HTTP boundary refuses uncataloged, undeclared and invalid native requests", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "jz-fixture-admission-"));
+  const native = await fixtureNative(dir, "fresh-schedule-02-revit.catalog.schedules");
+  const post = (body: unknown) => native.transport.fetch(new Request("http://fixture/call", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  }));
+  try {
+    const key = "revit.catalog.schedules";
+    expect((await post({ key, action: `native:${key}`, request: {} })).status).toBe(200);
+    const undeclared = await post({ key, action: "schedule.grid.read", request: {} });
+    expect(undeclared.status).toBe(409);
+    expect(await undeclared.text()).toContain("does not declare native leaf");
+    const uncataloged = await post({ key: "fixture.unknown", action: "takeoffs.initialize", request: {} });
+    expect(uncataloged.status).toBe(409);
+    expect(await uncataloged.text()).toContain("not in the generated catalog");
+    const invalid = await post({ key, action: `native:${key}`, request: { budget: { maxEntries: "invalid" } } });
+    expect(invalid.status).toBe(409);
+    expect(await invalid.text()).toContain("maxEntries");
+  } finally { await native.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("JZ recorded bridge rejects obsolete native DTOs behind actual Adopt admission", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "jz-recording-schema-"));
+  const native = await fixtureNative(join(dir, "native"), "fresh-takeoffs.initialize-carrier", "manuella-adopt");
+  const socket = await native.connect();
+  let state: unknown;
+  const workspace = new RouteWorkspace({ registrations: [{ spec: tools.takeoffs.work }], store: {
+    getState: async () => state, setState: async ({ value }) => { state = structuredClone(value); },
+  } });
+  const key = { binding: "address" as const, route: "takeoffs", target: address("C:/model.rvt") };
+  const post = native.actions({ workspace, marks: testDocumentMarks(native.bridge) });
+  try {
+    await workspace.publish(key, "takeoffs", [{ path: ["writeIntent", "takeoffs.adopt"], value: { edit: { value: { views: [recordedInput("fresh-takeoffs.adopt")] } } } }], 0);
+    const input = { work: { key, revision: 1 } };
+    for (const [id, command] of [["preview", "takeoffs.adopt.preview"], ["apply", "takeoffs.adopt"]]) {
+      const response = await post({ id, key: command, target: { kind: "document", ref: socket.target }, input });
+      expect(response.status, await response.clone().text()).toBeLessThan(400);
+      const receipt = await native.journal.wait(id!);
+      if (id === "preview") expect(receipt.state).toBe("succeeded");
+      else {
+        expect(receipt.state).toBe("incomplete");
+        expect(JSON.stringify(receipt)).toContain('adopted');
+        expect(JSON.stringify(receipt)).toContain("array");
+      }
+    }
+    expect(native.calls.map(call => call.key)).toEqual(["takeoffs.initialize-carrier", "takeoffs.adopt"]);
+  } finally { await native.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
 test.each([
-  ["takeoffs.initialize", { stage: "Adoption" }],
-  ["takeoffs.adopt", { views: [{ view: "Zoning plan", items: [{ elementId: 21, name: "Office", systemTag: "SA1" }] }] }],
-  ["takeoffs.partition", { zoneRegion: 21, view: "Zoning plan", zoneName: "Office", zoneGuid: "zone-a" }],
-  ["rooms.partition", { view: "Zoning plan" }],
-  ["rooms.draw", { view: "Zoning plan", loops: [[[0, 0], [10, 0], [10, 10]]] }],
+  ["takeoffs.initialize", recordedInput("fresh-takeoffs.initialize-carrier")],
+  ["takeoffs.adopt", { views: [recordedInput("fresh-takeoffs.adopt")] }],
+  ["takeoffs.partition", recordedInput("fresh-takeoffs.partition")],
+  ["rooms.partition", recordedInput("fresh-rooms.partition")],
+  ["rooms.draw", recordedInput("fresh-rooms.draw")],
   ["rooms.write", {}],
-  ["rooms.merge", { view: "Zoning plan", guids: ["room-a", "room-b"] }],
+  ["rooms.merge", recordedInput("fresh-rooms.merge")],
   ["takeoffs.sync", {}],
 ] as const)("JZ carrier commands run real declarations and guarded native dispatch: %s", async (commandKey, intent) => {
   const dir = await mkdtemp(join(tmpdir(), "jz-takeoffs-leaf-"));
   const route = commandKey.startsWith("rooms.") ? "rooms" : "takeoffs";
-  const key = { binding: "address" as const, target: path, route };
+  const key = { binding: "address" as const, target: address("C:/model.rvt"), route };
   let saved: unknown;
   const workspace = new RouteWorkspace({ registrations: [{ spec: tools[route].work }], store: {
     getState: async () => saved, setState: async ({ value }) => { saved = structuredClone(value); },
   } });
-  const calls: { key: string; input: unknown; command: string | undefined }[] = [];
-  const bridge = detachedBridge({
-    list: Effect.succeed([sessionView({ sessionId: ref.session, connected: true, processId: 42,
-      processStartUtcUnixMs: 1000, lane: hostOwnership.lane, sourceRoot: hostOwnership.sourceRoot,
-      serviceName: hostOwnership.serviceName,
-      state: { openDocuments: [{ ...ref, address: path, isActive: true, isFamilyDocument: false }] },
-    })]),
-    // Recorded native transport only. Run the production guard with the registry's actual
-    // AsyncLocalStorage command, before recording any dispatch or returning native data.
-    invoke: (leaf, input, session, document, id) => Effect.promise(async () => {
-      const command = catalogCommandContext.getStore();
-      const refusal = commandLeafRefusal(leaf, command);
-      if (refusal) throw Error(refusal);
-      await markDispatched(id!);
-      calls.push({ key: leaf, input, command });
-      return { target: { session: session!, document: document ?? null },
-        value: leaf === "takeoffs.initialize-carrier" ? { remaining: [] } : { adopted: [21], written: 1 } };
-    }),
-  });
-  const journal = new ActionJournal(join(dir, "actions.jsonl"), Date.now);
+  const native = await fixtureNative(join(dir, "native"),
+    "fresh-takeoffs.initialize-carrier", "fresh-takeoffs.adopt", "fresh-takeoffs.partition",
+    "fresh-rooms.partition", "fresh-rooms.draw", "fresh-rooms.write", "fresh-rooms.merge", "fresh-takeoffs.rhvac-links",
+  );
+  const socket = await native.connect();
+  const { calls } = native;
+  const ref = socket.target;
+  const path = address("C:/model.rvt");
+  const { bridge, journal } = native;
   const runs = testConsents(() => {});
   bindControl({ runs, acquired: () => null });
   const captures = captureStore(dir);
@@ -108,22 +148,10 @@ test.each([
         assemblyFallbacks: [], roomsBefore: 0, roomsAfter: input.inserts?.length ?? 0, log: "recorded adapter" };
     },
   };
-  const web = HttpRouter.toWebHandler(
-    makeCallRoute(journal, captures, deps).pipe(
-      nativeReadRoot(),
-      Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
-      Layer.provideMerge(PictureCaptureStore.layer(join(dir, "pictures"))),
-      HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
-      Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
-    ), { disableLogger: true },
-  );
+  const post = native.actions(deps, captures);
   const invoke = async (key: string, input: Record<string, unknown>) => {
     const id = `${key}-${(await journal.list()).length}`;
-    const response = await withInvocationContext({ caller: who }, () => web.handler(
-      new Request("http://host/actions", { method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id, key, target: { kind: "document", ref }, input }) }),
-      Context.make(RequestIdentity, admittedRequestIdentity(who, {})),
-    ));
+    const response = await post({ id, key, target: { kind: "document", ref }, input });
     expect([200, 202], await response.clone().text()).toContain(response.status);
     const receipt = await journal.wait(id);
     expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
@@ -147,7 +175,9 @@ test.each([
       await writeFile(file, "recorded RHVAC transport input", "utf8");
       authored = { path: file, captureId: retained.capture.id, fileVersion: await fileVersion(file), zones: [zone.zone.guid] };
     }
-    const edits = commandKey === "rooms.write" ? [{ path: ["edits", roomEditKey("room-a", "name")], value: { edit: { value: "Office" } } }] : [];
+    const edits = commandKey === "rooms.write" ? recordedRoomWrites.map(room => ({
+      path: ["edits", roomEditKey(room.guid, "name")], value: { edit: { value: room.name } },
+    })) : [];
     await workspace.publish(key, route, [
       { path: ["writeIntent", commandKey], value: { edit: { value: authored } } }, ...edits,
     ], 0);
@@ -161,19 +191,23 @@ test.each([
     await invoke(commandKey, { work });
     if (commandKey === "takeoffs.sync") {
       expect(synced).toBe(true);
-      expect(calls).toEqual([{ key: "takeoffs.rhvac-links", command: commandKey,
+      expect(calls).toEqual([{ key: "takeoffs.rhvac-links", action: commandKey,
         input: { writes: [{ elementId: 21, link: expect.objectContaining({ identifier: 101, fileIdentity: "recorded.r10#recorded" }) }] } }]);
       return;
     }
     expect(calls[0]).toEqual({ key: "takeoffs.initialize-carrier", input: {
-      stage: commandKey === "takeoffs.partition" ? "Materialization" : commandKey.startsWith("rooms.") ? "Rooms" : "Adoption",
-    }, command: commandKey });
+      stage: commandKey === "takeoffs.initialize" ? intent.stage : commandKey === "takeoffs.partition" ? "Materialization" : commandKey.startsWith("rooms.") ? "Rooms" : "Adoption",
+    }, action: commandKey });
     expect(calls.map(row => row.key)).toEqual(commandKey === "takeoffs.initialize"
       ? ["takeoffs.initialize-carrier"] : ["takeoffs.initialize-carrier", commandKey]);
-    expect(calls.every(row => row.command === commandKey)).toBe(true);
-    expect(commandLeafRefusal("takeoffs.initialize-carrier", "page.publish"), "Unrelated commands still cannot invoke the Internal leaf").toContain("does not declare");
+    if (commandKey === "rooms.write") {
+      expect(calls[1]).toEqual({ key: "rooms.write", action: commandKey, input: { regions: recordedRoomWrites.map(({ guid, name }) => ({ guid, name })) } });
+      expect((await workspace.read(key, route))!.doc).toMatchObject({ edits: {
+        [roomEditKey(recordedRoomWrites[1]!.guid, "name")]: { edit: { value: recordedRoomWrites[1]!.name } },
+      } });
+    }
   } finally {
-    await web.dispose();
+    await native.close();
     runs.closeAll(); bindControl({ runs: undefined });
     await rm(dir, { recursive: true, force: true });
   }
