@@ -132,7 +132,7 @@ effectTest("overlapping HTTP retained readers share one dispatch and link only t
     { selector: { kind: "roster" } }, Schema.Json, Schema.Json);
   const live = Layer.succeed(HostNativeRead, {
     resolve: () => Effect.succeed({ operationKey: input.key, ...actualTarget,
-      normalizedInput: canonicalJson(input.input), freshnessGeneration: "g1", representation: "overview" as const }),
+      normalizedInput: canonicalJson(JSON.parse(JSON.stringify(input.input))), freshnessGeneration: "g1", representation: "overview" as const }),
     read: () => reads.join(prepared, ref.session),
   });
   // Both exact takings must be indexed before either link: choosing first/latest cannot pass.
