@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { stableFanKey } from "../ducts/sheet/model";
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { surfaceReadiness } from "../route/readiness.test.fixture";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { Context, Effect, Layer, Queue, Option } from "effect";
@@ -75,6 +76,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  let bridge:any;
  const roster=nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
  const walk=nativeResponseSchema("ducts.snapshot.walk").parse(walkCapture);
+ const muas=elementSubject({uniqueId:walk.nodes.find(n=>n.id===14577391)!.uniqueId!});
  const tables=nativeResponseSchema("ducts.tables").parse({folder:"fixture",tables:{},missing:[],unsupported:{}});
  const native=Layer.effect(HostNativeRead,Effect.gen(function*(){
    bridge=yield* connectTestBridge(); trace.target=bridge.target;
@@ -164,7 +166,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
          kind:"apply",expectedRevision:0,press:"outside-mount",label:"Stage fan from outside the page",
          patches:[
            {path:["writeIntent","edit"],value:{value:{walk:{unitId:14577391,portIndex:2}}}},
-           {path:["equipmentFlows","14577391"],value:{edit:{value:{cfm:925}}}},
+           {path:["equipmentFlows",muas],value:{edit:{value:{cfm:925}}}},
          ],
        }),
      }));
@@ -230,7 +232,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    fireEvent.click(await screen.findByRole("option",{name:/MUAS-1.*0 staged/}));
    expect((await surfaceReadiness()).getAttribute("data-readiness")).toBe("ready");
    await act(async()=>{
-     const failure=await mount.draw("sheet-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{"14577391":{cfm:925}}},{label:"Stage MUAS-1 airflow"}));
+     const failure=await mount.draw("sheet-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{[muas]:{cfm:925}}},{label:"Stage MUAS-1 airflow"}));
      if(failure) throw Error(failure.message);
    });
    fireEvent.click(await screen.findByRole("button",{name:"Refresh Fans"}));
