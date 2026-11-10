@@ -1,3 +1,5 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import capturedWalk from "./native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
 import { unavailableFieldOptions } from "./effect-test.ts";
 import { readFileSync, existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
@@ -44,6 +46,8 @@ import { mintBrowserContext, mintContext } from "../src/control.ts";
 import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
 import { hostOwnership } from "../src/host-ownership.ts";
+
+const terminalSubject = elementSubject(capturedWalk.nodes.find(node => node.id === 8718801)!);
 
 // Proof receipts are opt-in: a fresh checkout has no run folder, so receipts are written only where PE_FANS_PROOF_DIR names one.
 // The receipt text is still built either way, so skipping a write never skips a read the test performs.
@@ -195,7 +199,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
           schema: z.object({ count: z.number().default(0) }).prefault({}) } });
         if (isCold) return;
         for (const [revision, cfm] of [[0, 250], [1, 300]] as const)
-          expect(await owner.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm } } }], revision)).toMatchObject({ ok: true });
+          expect(await owner.apply(key("fans"), "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm } } }], revision)).toMatchObject({ ok: true });
         expect(await owner.apply(key("ducts"), "ducts", "human", [], 0)).toMatchObject({ ok: true });
       },
     } });
@@ -543,7 +547,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     const workUrl = "/pe/route-state/fans?open=captured-chadds/chadds-open";
     const humanRead = capture(workUrl);
     await Promise.race([entered.promise, new Promise<never>((_, reject) => setTimeout(() => reject(Error("Work runner lost the actual human request context")), 10000))]);
-    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm: 400 } } }], 2)).toMatchObject({ ok: true });
+    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 400 } } }], 2)).toMatchObject({ ok: true });
     const pea: Caller = { kind: "pea", context: "occurrence-test", thread: "thread", run: { thread: "thread", turn: "1" }, root: { thread: "thread", turn: "1" } };
     const peaView = await capture(workUrl, undefined, false, pea);
     releaseHuman.resolve();
@@ -768,7 +772,7 @@ test.each(["on", "off", "full", "io"] as const)("inventory consumers %s", async 
     expect(listeners.size).toBe(1);
     title = "survivor"; for (const notify of listeners) notify({ kind: "state-sync", sessionId: ref.session });
     expect(await second.next()).toEqual({ kind: "snapshot", key: readingKey(inventoryReading), value: await expected() });
-    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm: 400 } } }], 0)).toMatchObject({ ok: true });
+    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 400 } } }], 0)).toMatchObject({ ok: true });
     expect(await first.next()).toMatchObject({ kind: "snapshot", key: readingKey(work), value: { revision: 1 } });
     await first.close(); first = undefined; await second.close(); second = undefined;
     expect(listeners.size).toBe(0);

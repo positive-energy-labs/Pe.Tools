@@ -1,3 +1,5 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import capturedWalk from "./native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { address, canonicalRouteInput, type Caller } from "@pe/agent-contracts";
 import { Deferred, Effect } from "effect";
@@ -16,6 +18,8 @@ import { nativeFixture } from "./fans-native.fixture.ts";
 
 
 
+const terminalSubject = elementSubject(capturedWalk.nodes.find(node => node.id === 8718801)!);
+
 const closes: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const close of closes.splice(0).reverse()) await close();
@@ -31,7 +35,7 @@ async function stage(f: Awaited<ReturnType<typeof nativeFixture>>) {
     "fans",
     "human",
     [
-      { path: ["flows", "8718801", "edit"], value: { value: { cfm: 250 } } },
+      { path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 250 } } },
       { path: ["parameters", "terminalFlow", "edit"], value: { value: "revit:Flow" } },
 
     ],
@@ -216,7 +220,7 @@ test("a stale Fans revision refuses sealed apply before native dispatch", async 
   const fans = await f.saved.view(fansKey, "fans");
   if (!fans) throw Error("Fans Work missing");
   const changed = await f.saved.apply(fansKey, "fans", "human", [
-    { path: ["flows", "8718801", "edit"], value: { value: { cfm: 300 } } }], fans.revision,
+    { path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 300 } } }], fans.revision,
   );
   expect(changed.ok).toBe(true);
   await f.post("/actions", { id: "stale-fans", key: "ducts.apply-losses", target: f.target,
