@@ -1,6 +1,6 @@
 import path from "node:path";
 import { browserSkillName, renderBrowserGuide } from "@pe/browser/guide";
-import { productHomePath } from "@pe/host-contracts/product-paths";
+import { userRoot } from "@pe/host-contracts/product-paths";
 import { renderDuctsSkill } from "./ducts-skill.ts";
 import { renderSchedulesSkill } from "./schedules-skill.ts";
 import { renderFamiliesSkill } from "./families-skill.ts";
@@ -458,7 +458,7 @@ export interface PeaProductHomeOptions {
 }
 
 export function resolvePeaProductHomePath(options: PeaProductHomeOptions = {}): string {
-  return path.resolve(readEnvPath(options.productHomePath) ?? productHomePath());
+  return path.resolve(readEnvPath(options.productHomePath) ?? userRoot());
 }
 
 export function resolvePeaStandardSkillsRoot(options: PeaProductHomeOptions = {}): string {

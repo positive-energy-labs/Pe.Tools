@@ -12,7 +12,7 @@ import {
   productInstallLayout,
   productPathNames,
 } from "./contracts/product.ts";
-import { insideTestRoot } from "./product-paths.ts";
+import { documentsUserRoot, insideTestRoot } from "./product-paths.ts";
 export {
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
@@ -31,14 +31,16 @@ export type RuntimeOwner = {
 
 /**
  * Pure state root for a told owner: `<home>\.local-state` under a product home override, else the dev
- * checkout's `.artifacts/pe-tools`, else the install root itself. The C# twin is
- * `ProductPathing.StateRoot`; both suites assert `runtime-ownership.fixture.json`.
+ * checkout's `.artifacts/pe-tools`, else the install root itself. Machine state never lands at or
+ * under a content home's share: the shared root, or (without an override) the Documents user root.
+ * The C# twin is `ProductPathing.StateRoot`; both suites assert `runtime-ownership.fixture.json`.
  */
 export function stateRoot(
   lane: HostLane,
   ownerRoot: string,
   productHome?: string,
   sharedRoot?: string,
+  userRoot?: string,
 ): string {
   if (!isAbsolute(ownerRoot)) throw Error(`A ${lane} runtime needs an absolute owner root.`);
   if (lane === "installed" && productHome?.trim())
@@ -49,13 +51,17 @@ export function stateRoot(
     : lane === "dev"
       ? join(stateOwner, ".artifacts", "pe-tools")
       : ownerRoot;
-  if (sharedRoot?.trim()) {
-    const shared = resolve(sharedRoot.trim());
-    const away = relative(shared, root);
+  const fences = [
+    [sharedRoot, productPathNames.sharedRootVariable],
+    // An override's `.local-state` sits in its own home by design (an isolated run); only the default user root is a share.
+    [productHome?.trim() ? undefined : userRoot, "the user content root"],
+  ] as const;
+  for (const [fence, name] of fences) {
+    if (!fence?.trim()) continue;
+    const home = resolve(fence.trim());
+    const away = relative(home, root);
     if (away !== ".." && !away.startsWith(`..${sep}`) && !isAbsolute(away))
-      throw Error(
-        `Machine state root '${root}' cannot be at or under ${productPathNames.sharedRootVariable} '${shared}'.`,
-      );
+      throw Error(`Machine state root '${root}' cannot be at or under ${name} '${home}'.`);
   }
   return root;
 }
@@ -69,6 +75,7 @@ export function productRoot(owner: RuntimeOwner): string {
     ownerRoot,
     process.env[productPathNames.productHomeVariable],
     process.env[productPathNames.sharedRootVariable],
+    process.env[productPathNames.productHomeVariable]?.trim() ? undefined : documentsUserRoot(),
   );
   const away = relative(osUserProductRoot(), root);
   if (owner.lane === "dev" && (away === "" || (!away.startsWith("..") && !isAbsolute(away))))

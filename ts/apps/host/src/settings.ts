@@ -24,10 +24,16 @@ import type {
   SettingsValidate,
 } from "@pe/host-contracts/generated";
 import type { PodDraftSource, PodMemberSource } from "@pe/agent-contracts";
-import { isPackageMember, listPackages, readPackage, resolvePackageIdentity } from "./packages.ts";
+import {
+  isPackageMember,
+  listPackages,
+  productPodsRoots,
+  readPackage,
+  resolvePackageIdentity,
+} from "./packages.ts";
 import { requirePackageEnabled, activePackages } from "./package-lifecycle.ts";
 import { LocalOpError } from "./local-error.ts";
-import { productPodsRootPath } from "./product-paths.ts";
+import { requireUserWritable } from "./content-homes.ts";
 import {
   localOpFileError,
   makeDirectory,
@@ -51,7 +57,7 @@ const writeLock = Semaphore.makeUnsafe(1);
 const schemaCache = new Map<string, ValidateFunction | string>();
 
 export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
-  const root = ctx.podsRoot ?? productPodsRootPath();
+  const root = ctx.podsRoot ?? productPodsRoots();
   const found = yield* Effect.tryPromise({
     try: () => listPackages(root),
     catch: (error) => new LocalOpError("pod.list", errorMessage(error), 400),
@@ -75,7 +81,7 @@ export const resolvePodIdentity = Effect.fnUntraced(function* (
   folder: string,
   ctx: PodContext = {},
 ) {
-  const root = ctx.podsRoot ?? productPodsRootPath();
+  const root = ctx.podsRoot ?? productPodsRoots();
   return yield* Effect.tryPromise({
     try: async () => {
       const identity = await resolvePackageIdentity(folder, root);
@@ -233,7 +239,7 @@ export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: P
     catch: (error) => new LocalOpError("pod.member.read", errorMessage(error), 403),
   });
   const admitted = yield* Effect.tryPromise({
-    try: () => readPackage(member.pod, ctx.podsRoot ?? productPodsRootPath()),
+    try: () => readPackage(member.pod, ctx.podsRoot ?? productPodsRoots()),
     catch: (error) =>
       new LocalOpError(
         "pod.member.read",
@@ -274,7 +280,7 @@ export const writeRun = (
   writeLock.withPermit(
     Effect.gen(function* () {
       const key = "pod.run.write";
-      const folder = join(yield* podFolder(pod, ctx), "output", runId);
+      const folder = yield* userWritable(join(yield* podFolder(pod, ctx), "output", runId), key);
       yield* makeDirectory(folder, key);
       for (const [name, content] of Object.entries(files))
         yield* writeFileStringAtomic(join(folder, name), content, key);
@@ -320,12 +326,19 @@ export const saveMember = (request: PodMemberSaveRequest, ctx: PodContext = {}) 
     }),
   );
 
+/** A shared Pod is read-only here: every write goes to the user root (ADR 0035 rule 11). */
+const userWritable = (path: string, key: string) =>
+  Effect.try({
+    try: () => requireUserWritable(path),
+    catch: (error) => new LocalOpError(key, errorMessage(error), 409),
+  });
+
 const writablePath = Effect.fnUntraced(function* (
   request: PodMember & { content: string },
   ctx: PodContext,
   key: string,
 ) {
-  const path = yield* memberFile(request, ctx, key);
+  const path = yield* userWritable(yield* memberFile(request, ctx, key), key);
   if (/^(output\/|pod\.json$)/i.test(normalizeMemberPath(request.path)))
     return yield* Effect.fail(
       new LocalOpError(key, "Runs and the manifest are not writable members.", 400),
@@ -516,7 +529,7 @@ export const composedSpec = Effect.fnUntraced(function* (
 });
 
 export const podFolder = Effect.fnUntraced(function* (podId: string, ctx: PodContext = {}) {
-  const root = ctx.podsRoot ?? productPodsRootPath();
+  const root = ctx.podsRoot ?? productPodsRoots();
   yield* Effect.tryPromise({
     try: () => requirePackageEnabled(podId, root),
     catch: (error) => new LocalOpError("pod.resolve", errorMessage(error), 403),

@@ -10,6 +10,7 @@ import { z } from "zod";
 import { command, io, refused, type CommandExecutor } from "./command-executor.ts";
 import { runPods, type PodDependencies } from "./family-actions.ts";
 import { podFolder } from "./settings.ts";
+import { requireUserWritable } from "./content-homes.ts";
 /** The app owns the parser address; commands never infer a frontend from a port or file. */
 export class FamilyPdfParser extends Context.Service<FamilyPdfParser, {
   parse(file: File): Promise<unknown>;
@@ -69,7 +70,10 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
         cells: [],
         facts: [["reading"], ["spec"]],
       }));
-      const root = await runPods(deps, podFolder(member.pod, { podsRoot: deps.podsRoot }));
+      // Attaching writes the spec and its assets into the Pod: a shared Pod refuses.
+      const root = requireUserWritable(
+        await runPods(deps, podFolder(member.pod, { podsRoot: deps.podsRoot })),
+      );
       if (!member.path.startsWith("settings/family/") || !member.path.endsWith(".json"))
         throw Error("Attach to a captured member in settings/family/");
       const memberBytes = await readFile(safePath(root, member.path));
