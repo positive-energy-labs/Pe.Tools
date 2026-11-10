@@ -1,4 +1,7 @@
-import { testSpawner } from "./effect-test.ts";
+import { consentService, harnessThreads, testSpawner } from "./effect-test.ts";
+import { asCaller, human } from "./callers.ts";
+import { HostLog } from "../src/host-log.ts";
+import { emptyThreadLifecycle } from "@pe/agent-contracts";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { createServer, type Server } from "node:http";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -348,4 +351,52 @@ test("no shared root and no user key refuses with the typed reason, before any r
   const { seen, provider } = await sharedKeyProbe("", null);
   expect(seen).toEqual([]);
   expect(provider.readiness).toMatchObject({ state: "refused", message: expect.stringContaining("no shared root") });
+});
+
+test("witness: a thread event and meta echoing a shared key are written redacted", async () => {
+  const shared = join(root, "shared");
+  await mkdir(shared, { recursive: true });
+  await writeFile(join(shared, "keys.json"), JSON.stringify({ "claude-synthetic": "shared-firm-key" }));
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
+  await mkdir(dirname(productProvidersPath()), { recursive: true });
+  await writeFile(
+    productProvidersPath(),
+    JSON.stringify({ providers: [{ ...add, id: "claude-synthetic", auth: { ...add.auth, apiKey: "" } }] }),
+  );
+  const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
+  const threadsRoot = join(root, "threads");
+  await mkdir(join(threadsRoot, "thread"), { recursive: true });
+  await writeFile(
+    join(threadsRoot, "thread", "meta.json"),
+    JSON.stringify({
+      id: "thread", harness: "claude", providerId: "claude", providerName: "Claude", title: "Original",
+      createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z", modelId: null,
+      acpSessionId: null, models: [], traits: [], traitValues: {}, head: { targets: [], revision: 0 },
+      lifecycle: emptyThreadLifecycle(), forkOf: null,
+    }),
+  );
+  await writeFile(join(threadsRoot, "thread", "events.jsonl"), "");
+  const threads = await harnessThreads({
+    root: threadsRoot, log: new HostLog(join(threadsRoot, ".log"), Date.now), worldRoot: threadsRoot,
+    mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }), providers,
+    runs: consentService(),
+  });
+  try {
+    const put = await asCaller(human, threads.fetch)(
+      new Request("http://host/pe/threads/thread", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "echo shared-firm-key" }),
+      }),
+    );
+    expect(put.status).toBe(200);
+    const events = await readFile(join(threadsRoot, "thread", "events.jsonl"), "utf8");
+    expect(events).toContain("title_changed");
+    expect(events).toContain("…-key");
+    expect(events + (await readFile(join(threadsRoot, "thread", "meta.json"), "utf8"))).not.toContain("shared-firm-key");
+  } finally {
+    await threads.close();
+    vi.unstubAllEnvs();
+    await providers.close();
+  }
 });
