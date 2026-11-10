@@ -33,15 +33,18 @@ internal static class ProductPathing {
 
     /// <summary>
     ///     The product home: an explicit path, else <see cref="ProductPathNames.ProductHomeVariable" />,
-    ///     else <c>Documents\Pe.Tools</c>. The host's <c>productHomePath</c> resolves the same way.
+    ///     else <see cref="ProductPathNames.SharedRootVariable" />. The host resolves the same way.
     /// </summary>
     public static string ResolveProductHome(string? productHomePath) {
         var explicitHome = string.IsNullOrWhiteSpace(productHomePath)
             ? Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable)
             : productHomePath;
-        return string.IsNullOrWhiteSpace(explicitHome)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), ProductIdentity.ProductName)
-            : Path.GetFullPath(explicitHome.Trim());
+        var root = string.IsNullOrWhiteSpace(explicitHome)
+            ? Environment.GetEnvironmentVariable(ProductPathNames.SharedRootVariable)
+            : explicitHome;
+        if (string.IsNullOrWhiteSpace(root))
+            throw new InvalidOperationException($"Set {ProductPathNames.SharedRootVariable} to the shared content mount.");
+        return Path.GetFullPath(root!.Trim());
     }
 
     public static string ResolveSafeSubDirectoryPath(string rootPath, string? subdirectory, string paramName) {

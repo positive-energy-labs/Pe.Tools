@@ -372,6 +372,7 @@ export function peaMcpServer(
   const ts = sourceRoot ? join(sourceRoot, checkoutLayout.ts) : null;
   const mcp = ["mcp", "--host", hostBaseUrl];
   const productHome = process.env.PE_TOOLS_PRODUCT_HOME?.trim();
+  const sharedRoot = process.env.PE_TOOLS_SHARED_ROOT?.trim();
   return {
     name: "pea",
     command: ts
@@ -396,6 +397,7 @@ export function peaMcpServer(
       // Carry verified ownership through the MCP server's declared environment.
       { name: "PE_LANE", value: hostOwnership.lane },
       ...(productHome ? [{ name: "PE_TOOLS_PRODUCT_HOME", value: productHome }] : []),
+      ...(sharedRoot ? [{ name: "PE_TOOLS_SHARED_ROOT", value: sharedRoot }] : []),
       { name: hostProcessIdentity.serviceNameVariable, value: hostOwnership.serviceName },
       ...(sourceRoot ? [{ name: sourceRootVariable, value: sourceRoot }] : []),
     ],
