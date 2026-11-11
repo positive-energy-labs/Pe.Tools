@@ -64,7 +64,7 @@ async function doors() {
   const revision = async () => (await workspace.view(key, "findings"))?.revision ?? 0;
   const peaCaller = approvedPea("findings-doors");
   const post = native.actions({ workspace });
-  const routes = createPeRoutes({ workspace });
+  const routes = createPeRoutes({ workspace, registrations: [{ spec: findingsWork }] });
   return {
     peaCaller,
     revision,
