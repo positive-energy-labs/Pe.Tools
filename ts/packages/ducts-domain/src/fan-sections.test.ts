@@ -12,39 +12,35 @@ import { computeLosses, worstRun } from "./losses.ts";
 import { price } from "./pricing.ts";
 import { survey, unitFlowIn, unitFlowsIn } from "./survey.ts";
 
-import type { DuctSnapshot } from "./types.ts";
+import {
+  connOf,
+  ductOf,
+  factOf,
+  groupOf,
+  nodeOf,
+  round,
+  snapshotOf,
+  type Connector,
+  type Fact,
+  type Node,
+} from "./test-snapshot.ts";
 
-type Node = DuctSnapshot["nodes"][number];
-type Segment = DuctSnapshot["segments"][number];
-type Connector = Node["connectors"][number];
-type Fact = Node["facts"][number];
-
-const port = (index: number, to: number | null, connector = 1): Connector =>
-  ({
-    index,
-    kind: "end",
+const port = (index: number, to: number | null, connector = 1) =>
+  connOf(index, to == null ? null : [to, connector], {
+    ...round(12),
     point: [0, 0, 9],
-    shape: "round",
-    size: '12"ø',
-    diameterIn: 12,
-    direction: "bidirectional",
     classification: "SupplyAir",
-    connectedTo: to == null ? null : { elementId: to, connector },
     areaFt2: 0.7854,
-  }) as Connector;
-const fact = (key: string, value: number | null, text?: string) =>
-  ({ key, value, text, unit: "", provenance: "revit" }) as unknown as Fact;
+  });
+const fact = (key: string, value: number | null, text?: string) => factOf(key, value, { text });
 const node = (
   id: number,
-  kind: string,
+  kind: Node["kind"],
   groupId: string | null,
   connectors: Connector[],
   facts: Fact[] = [],
 ) =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-    id,
-    kind,
-    category: kind,
+  nodeOf(id, kind, {
     family: kind,
     type: "Standard",
     partType: kind === "fitting" ? "Tee" : null,
@@ -55,16 +51,11 @@ const node = (
     classification: "Supply Air",
     connectors,
     facts,
-  }) as unknown as Node;
-const duct = (id: number, ends: [number, number]): Segment =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-    id,
-    kind: "duct",
-    curveKind: "line",
+  });
+const duct = (id: number, ends: [number, number]) =>
+  ductOf(id, {
     type: "Round Duct",
-    shape: "round",
-    size: '12"ø',
-    diameterIn: 12,
+    ...round(12),
     lengthFt: 10,
     polyline: [
       [0, 0, 9],
@@ -74,10 +65,8 @@ const duct = (id: number, ends: [number, number]): Segment =>
     groupId: "g10",
     systemName: "SA",
     classification: "Supply Air",
-    roughness: { valueFt: 0.0003, provenance: "revit-default" },
-    revit: {},
     connectors: [port(1, ends[0]), port(2, ends[1])],
-  }) as unknown as Segment;
+  });
 
 /**
  * Air handler 1 (800 cfm) feeds duct 10 into tee 50: duct 11 to grille 30, duct 13 to tee 51.
@@ -86,21 +75,15 @@ const duct = (id: number, ends: [number, number]): Segment =>
  * duct 16 off tee 50 and states no flow.
  */
 const snapshot = (flows: { ahu?: number; dh?: number } = { ahu: 800, dh: 100 }) =>
-  ({
-    document: { title: "t", readAt: "", elapsedMs: 0, networkBasedCalculations: true },
-    coordinateEncoding: "native-double",
-    levels: [],
+  snapshotOf({
     groups: [
-      {
-        id: "g10",
+      groupOf("g10", {
         rootIds: [1, 2, 3],
         classifications: ["Supply Air"],
         systemNames: ["SA"],
         terminalCount: 2,
         elementCount: 10,
-        loops: 0,
-        issueIds: [],
-      },
+      }),
     ],
     nodes: [
       node(
@@ -131,12 +114,7 @@ const snapshot = (flows: { ahu?: number; dh?: number } = { ahu: 800, dh: 100 }) 
       duct(15, [51, 2]),
       duct(16, [50, 3]),
     ],
-    flows: [],
-    issues: [],
-    layers: [],
-    systems: [],
-    slots: {},
-  }) as unknown as DuctSnapshot;
+  });
 
 describe("several fans", () => {
   it("derives a flowless fan's flow from this group's grilles, never another group's (SA 19, DH-21)", () => {
@@ -160,7 +138,7 @@ describe("several fans", () => {
         node(33, "terminal", "g20", [port(1, 20, 2)], [fact("flow", 900)]),
       ],
       segments: [...base.segments, { ...duct(20, [2, 33]), groupId: "g20" }],
-    } as unknown as DuctSnapshot;
+    };
     const priced = price(s, {}, null, neutralFansWork);
     // The per-unit reading is the largest over its groups; g10 is priced from g10's own grilles.
     expect(priced.equipmentFlows.get(2)).toEqual({ cfm: 900, source: "derived", grilles: 1 });
@@ -219,7 +197,7 @@ describe("fanSections", () => {
     const s = {
       ...base,
       segments: base.segments.map((x) => (x.id === 15 ? { ...x, lengthFt: 200 } : x)),
-    } as DuctSnapshot;
+    };
     const result = computeLosses(
       s,
       {},
@@ -278,13 +256,13 @@ describe("passThrough", () => {
       elementCount: 2,
       issueIds: [],
     };
-    const d17 = { ...duct(17, [3, 32]), groupId: "g17" } as Segment;
+    const d17 = { ...duct(17, [3, 32]), groupId: "g17" };
     return {
       ...s,
       groups: [...s.groups, g17],
       nodes: [...s.nodes, node(32, "terminal", "g17", [port(1, 17, 2)], [fact("flow", 150)])],
       segments: [...s.segments, d17],
-    } as DuctSnapshot;
+    };
   };
 
   it("merges the groups a passive unit's ports reach and prices through it under the fan", () => {

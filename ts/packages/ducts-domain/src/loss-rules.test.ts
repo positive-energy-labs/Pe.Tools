@@ -5,6 +5,7 @@ import { lookupGrid, toGrids } from "./loss-grid.ts";
 import { LOSS_RULES, type FittingFacts } from "./loss-rules.ts";
 import type { LossResult } from "./losses.ts";
 import { catalogFindings } from "./pricing.ts";
+import { connOf, ductOf, factOf, nodeOf, type Node, type Segment } from "./test-snapshot.ts";
 
 const accessory = (family: string | null): FittingFacts => ({
   kind: "accessory",
@@ -54,19 +55,17 @@ it("prices rectangular radius elbows with CR3-1 Cp and its angle factor, and rou
   const { priceLeg } = await import("./kernel/price-leg.ts");
   const { fittingFacts } = await import("./kernel/fitting-facts.ts");
   const { roundSection } = await import("./loss-physics.ts");
-  const inlet = { index: 0, shape: "rectangular", widthIn: 10, heightIn: 10 };
+  const inlet = connOf(0, null, { shape: "rectangular", widthIn: 10, heightIn: 10 });
   const outlet = { ...inlet, index: 1 };
-  const node = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,
-    id: 1,
-    kind: "fitting",
+  const node = nodeOf(1, "fitting", {
     family: "Rectangular Elbow - Radius",
     partType: "Elbow",
     connectors: [inlet, outlet],
     facts: [
-      { key: "centerRadius", value: 10 },
-      { key: "angle", value: 45 },
+      factOf("centerRadius", 10),
+      factOf("angle", 45),
     ],
-  } as unknown as import("./types.ts").DuctSnapshot["nodes"][number];
+  });
   const facts = fittingFacts({
     fitting: node,
     inlet: node.connectors[0],
@@ -132,15 +131,13 @@ it("maps a plain round tee to SD5-9 with distinct branch and straight Pv; branch
     [-1, 0, 0],
     [1, 0, 0],
     [0, 1, 0],
-  ].map((facing, index) => ({ index, facing, shape: "round", diameterIn: 8 }));
-  const node = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(2).toString(16).padStart(8, "0")}`,
-    id: 2,
-    kind: "fitting",
+  ].map((facing, index) => connOf(index, null, { facing, shape: "round", diameterIn: 8 }));
+  const node = nodeOf(2, "fitting", {
     family: "Round Tee",
     partType: "Tee",
     connectors: ports,
     facts: [],
-  } as unknown as import("./types.ts").DuctSnapshot["nodes"][number];
+  });
   for (const [out, res, cfm, coefficient] of [
     [1, "Cs", 200, 0.13],
     [2, "Cb", 100, 0.65],
@@ -207,36 +204,24 @@ it("small 1.5D round elbows use retained CD3-1 at 90 degrees and CD3-3 at 45 deg
 
 // Revit's converging tables as the live `ducts.tables` op served them (2026-10-28, probe-sheet).
 const CONVERGING = toGrids({ tables: convergingTables });
-type Snap = import("./types.ts").DuctSnapshot;
-const rectPort = (index: number, widthIn: number, heightIn: number) => ({
-  index,
-  shape: "rectangular",
-  widthIn,
-  heightIn,
-});
+const rectPort = (index: number, widthIn: number, heightIn: number) =>
+  connOf(index, null, { shape: "rectangular", widthIn, heightIn });
 /** A takeoff collar of `w` x `h` on the 32x11 return trunk (mainArea 2.4444 ft2 read at the tap). */
 const rectTap = (w: number, h: number) =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(13971115).toString(16).padStart(8, "0")}`,
-    id: 13971115,
-    kind: "fitting",
+  nodeOf(13971115, "fitting", {
     family: "Rectangular Takeoff",
     partType: "TapAdjustable",
     connectors: [rectPort(0, w, h), rectPort(1, w, h)],
     facts: [
-      { key: "takeoff", value: 1 },
-      { key: "mainArea", value: (32 * 11) / 144 },
-      { key: "abOverAc", value: (w * h) / (32 * 11) },
+      factOf("takeoff", 1),
+      factOf("mainArea", (32 * 11) / 144),
+      factOf("abOverAc", (w * h) / (32 * 11)),
     ],
-  }) as unknown as Snap["nodes"][number];
-const trunk = {
-  id: 13770924,
-  shape: "rectangular",
-  widthIn: 32,
-  heightIn: 11,
-} as unknown as Snap["segments"][number];
+  });
+const trunk = ductOf(13770924, { shape: "rectangular", widthIn: 32, heightIn: 11 });
 const tapFacts = async (
-  tap: Snap["nodes"][number],
-  main: Snap["segments"][number],
+  tap: Node,
+  main: Segment,
   extra: { converging?: boolean; bullhead?: boolean } = { converging: true },
 ) =>
   (await import("./kernel/fitting-facts.ts")).fittingFacts({
@@ -319,19 +304,13 @@ it("a junction past ED5-3's edge is refused, never charged an extrapolated coeff
   // Live FC-23 (2026-10-29): the proposed tap from 13771256:0, a 20x20 collar, onto the 6 in round
   // duct 13973156, carrying 50 cfm one way (Qb = Qc). Ab/Ac 14.2 clamps to ED5-3's 1; Cb there is
   // -262998, and charging it on the collar's 18 fpm multiplied it by 200 to about -5.3e7.
-  const tap = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(13771256).toString(16).padStart(8, "0")}`,
-    id: 13771256,
-    kind: "fitting",
+  const tap = nodeOf(13771256, "fitting", {
     family: "proposed tap",
     partType: "Tap",
     connectors: [rectPort(0, 20, 20)],
-    facts: [{ key: "takeoff", value: 1 }],
-  } as unknown as Snap["nodes"][number];
-  const main = {
-    id: 13973156,
-    shape: "round",
-    diameterIn: 6,
-  } as unknown as Snap["segments"][number];
+    facts: [factOf("takeoff", 1)],
+  });
+  const main = ductOf(13973156, { shape: "round", diameterIn: 6 });
   const p = priceLeg(
     {
       kind: "fitting",
@@ -384,20 +363,18 @@ it("a round junction where air joins prices on ED5-3 by Dc, Ab/Ac and As/Ac: a t
   const { fittingFacts } = await import("./kernel/fitting-facts.ts");
   const { priceLeg } = await import("./kernel/price-leg.ts");
   const { friction, roundSection } = await import("./loss-physics.ts");
-  const tap = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(5).toString(16).padStart(8, "0")}`,
-    id: 5,
-    kind: "fitting",
+  const tap = nodeOf(5, "fitting", {
     family: "Round Takeoff",
     partType: "Tap",
-    connectors: [{ index: 0, shape: "round", diameterIn: 6 }],
-    facts: [{ key: "takeoff", value: 1 }],
-  } as unknown as Snap["nodes"][number];
+    connectors: [connOf(0, null, { shape: "round", diameterIn: 6 })],
+    facts: [factOf("takeoff", 1)],
+  });
   const flows = { through: 100, branch: 100, upstreamMain: 300, downstreamMain: 200 };
   for (const [d, res] of [
     [10, "Cb"],
     [12, "Cb#2"],
   ] as const) {
-    const main = { id: 6, shape: "round", diameterIn: d } as unknown as Snap["segments"][number];
+    const main = ductOf(6, { shape: "round", diameterIn: d });
     const p = priceLeg(
       { kind: "fitting", fitting: tap, facts: await tapFacts(tap, main), flows, leg: "Cb" },
       CONVERGING,
@@ -416,18 +393,16 @@ it("a round junction where air joins prices on ED5-3 by Dc, Ab/Ac and As/Ac: a t
   // A converging tee, walked in at its run port toward the fan (connector 0, the common): the leg
   // is the port the path leaves by, Cb on the 6 in branch, Cs on the 8 in straight.
   const ports = [
-    { index: 0, facing: [-1, 0, 0], shape: "round", diameterIn: 10 },
-    { index: 1, facing: [1, 0, 0], shape: "round", diameterIn: 8 },
-    { index: 2, facing: [0, 1, 0], shape: "round", diameterIn: 6 },
+    connOf(0, null, { facing: [-1, 0, 0], shape: "round", diameterIn: 10 }),
+    connOf(1, null, { facing: [1, 0, 0], shape: "round", diameterIn: 8 }),
+    connOf(2, null, { facing: [0, 1, 0], shape: "round", diameterIn: 6 }),
   ];
-  const tee = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(7).toString(16).padStart(8, "0")}`,
-    id: 7,
-    kind: "fitting",
+  const tee = nodeOf(7, "fitting", {
     family: "Round Tee",
     partType: "Tee",
     connectors: ports,
     facts: [],
-  } as unknown as Snap["nodes"][number];
+  });
   for (const [out, res, cfm, section] of [
     [2, "Cb", 100, 6],
     [1, "Cs", 200, 8],
@@ -472,15 +447,13 @@ it("a bullhead (entered from its branch, the main bringing air both ways) prices
   expect(rect.source?.kind === "rule" && rect.source.notes[0]).toBe("Ab1/Ac clamped at 1");
 
   // The round bullhead: a 6 in collar on an 8 in main, ED5-4 at Ab1/Ac = Ab2/Ac 1.78 (clamped at 1).
-  const round = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(9).toString(16).padStart(8, "0")}`,
-    id: 9,
-    kind: "fitting",
+  const round = nodeOf(9, "fitting", {
     family: "Round Takeoff",
     partType: "Tap",
-    connectors: [{ index: 0, shape: "round", diameterIn: 6 }],
-    facts: [{ key: "takeoff", value: 1 }],
-  } as unknown as Snap["nodes"][number];
-  const main = { id: 10, shape: "round", diameterIn: 8 } as unknown as Snap["segments"][number];
+    connectors: [connOf(0, null, { shape: "round", diameterIn: 6 })],
+    facts: [factOf("takeoff", 1)],
+  });
+  const main = ductOf(10, { shape: "round", diameterIn: 8 });
   const rf = await tapFacts(round, main, { converging: true, bullhead: true });
   const r = priceLeg({ kind: "fitting", fitting: round, facts: rf, flows, leg: "Cb" }, CONVERGING);
   const v = lookupGrid(CONVERGING["ED5-4"]!.Cb1!, 0.75, 1, 1).value;
@@ -495,15 +468,13 @@ it("a bullhead (entered from its branch, the main bringing air both ways) prices
 
 it("a supply bullhead (collar air dividing both ways along a round main) reads SD5-18 Cb1 per path, never SD5-9", async () => {
   // MUAS-1 takeoff 14806947: 115 cfm up a 6 in collar dividing 50 / 65 along an 8 in main.
-  const round = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(9).toString(16).padStart(8, "0")}`,
-    id: 9,
-    kind: "fitting",
+  const round = nodeOf(9, "fitting", {
     family: "Round Takeoff",
     partType: "Tap",
-    connectors: [{ index: 0, shape: "round", diameterIn: 6 }],
-    facts: [{ key: "takeoff", value: 1 }],
-  } as unknown as Snap["nodes"][number];
-  const main = { id: 10, shape: "round", diameterIn: 8 } as unknown as Snap["segments"][number];
+    connectors: [connOf(0, null, { shape: "round", diameterIn: 6 })],
+    facts: [factOf("takeoff", 1)],
+  });
+  const main = ductOf(10, { shape: "round", diameterIn: 8 });
   const rf = await tapFacts(round, main, { converging: false, bullhead: true });
   const flows = { q: 115, qb: 65, qc: 115, qs: 50 };
   const matched = LOSS_RULES.filter((rule) => rule.when(rf, flows));
@@ -541,8 +512,8 @@ it("a round elbow read with centerRadius but no rOverD still finds its rule (liv
     partType: "Elbow",
     connectors: [port(0), port(1)],
     facts: [
-      { key: "angle", value: 90 },
-      { key: "centerRadius", value: 7.5 },
+      factOf("angle", 90),
+      factOf("centerRadius", 7.5),
     ],
   } as never;
   const facts = fittingFacts({

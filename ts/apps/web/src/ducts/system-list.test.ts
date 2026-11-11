@@ -4,14 +4,13 @@ import { designOf } from "@pe/ducts-domain/test-design";
 import { expect, test } from "vite-plus/test";
 import { price } from "@pe/ducts-domain/pricing";
 import { systemScope } from "@pe/ducts-domain/system-scope";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import saved from "./fixtures/synthetic-snapshot.json";
+import { syntheticSnapshot } from "./test-fixture";
 import { systemList } from "./system-list";
 import { fanFacts } from "./proto/e/fan-sections";
 import { buildTree } from "./proto/b/model";
 
 test("F16 metadata-only roster exposes system information before network pricing", () => {
-  const snapshot = structuredClone(saved) as DuctSnapshot;
+  const snapshot = syntheticSnapshot();
   snapshot.groups = [];
   snapshot.segments = [];
   snapshot.systems[0]!.baseEquipmentId = snapshot.nodes.find((node) => node.kind === "equipment")!.id;
@@ -24,7 +23,7 @@ test("F16 metadata-only roster exposes system information before network pricing
 });
 
 test("two systems sharing a fan retain their own pressure and breakdown terminal", () => {
-  const snapshot = structuredClone(saved) as DuctSnapshot;
+  const snapshot = syntheticSnapshot();
   snapshot.groups[0]!.systemNames.push("SA 2");
   snapshot.systems.push({ ...snapshot.systems[0]!, id: 501, name: "SA 2" });
   for (const e of [...snapshot.nodes, ...snapshot.segments])

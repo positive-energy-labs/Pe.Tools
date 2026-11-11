@@ -8,7 +8,14 @@ import { expect, it } from "vite-plus/test";
 
 import type { Grids } from "../loss-grid.ts";
 import { grids as tableGrids } from "../sheet/tables.fixture.ts";
-import type { DuctSnapshot } from "../types.ts";
+import {
+  connOf,
+  ductOf,
+  nodeOf,
+  rect,
+  type Connector as Conn,
+  type Node,
+} from "../test-snapshot.ts";
 import { fittingFacts, splitTappedDuct, tapDistance } from "./fitting-facts.ts";
 import { equivalentFeet, priceLeg, type PricedLeg } from "./price-leg.ts";
 
@@ -18,60 +25,25 @@ const grids: Grids = {
   "SR4-3": tableGrids["SR4-3"]!,
 };
 
-type Node = DuctSnapshot["nodes"][number];
-type Segment = DuctSnapshot["segments"][number];
-type Conn = Node["connectors"][number];
-const round = (d: number) => ({ shape: "round" as const, size: `${d}`, diameterIn: d });
-const rect = (w: number, h: number) => ({
-  shape: "rectangular" as const,
-  size: `${w}x${h}`,
-  widthIn: w,
-  heightIn: h,
-});
+// This file's sizes read as bare numbers ("8"), not the shared `round`'s `8"ø`.
+type Size = Pick<Conn, "shape" | "size" | "diameterIn" | "widthIn" | "heightIn">;
+const round = (d: number): Size => ({ shape: "round", size: `${d}`, diameterIn: d });
 const conn = (
   index: number,
   to: [number, number] | null,
-  size: object,
+  size: Size,
   kind = "end",
   point = [0, 0, 0],
-): Conn =>
-  ({
-    index,
-    kind,
-    point,
-    direction: "out",
-    connectedTo: to ? { elementId: to[0], connector: to[1] } : null,
-    ...size,
-  }) as Conn;
-const node = (id: number, kind: string, extra: object): Node =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-    id,
-    kind,
-    category: "",
-    point: [0, 0, 0],
-    groupId: "g1",
-    facts: [],
-    ...extra,
-  }) as unknown as Node;
+) => connOf(index, to, { kind, point, direction: "out", ...size });
+const node = (id: number, kind: Node["kind"], extra: Partial<Node>) =>
+  nodeOf(id, kind, { category: "", point: [0, 0, 0], groupId: "g1", ...extra });
 const duct = (
   id: number,
   lengthFt: number,
-  size: object,
+  size: Size,
   polyline: number[][],
   connectors: Conn[],
-): Segment =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-    id,
-    kind: "duct",
-    curveKind: "line",
-    ...size,
-    lengthFt,
-    polyline,
-    groupId: "g1",
-    roughness: { valueFt: 0.0003, provenance: "revit-default" },
-    revit: {},
-    connectors,
-  }) as unknown as Segment;
+) => ductOf(id, { ...size, lengthFt, polyline, groupId: "g1", connectors });
 
 const elbow = node(2, "fitting", {
   partType: "Elbow",

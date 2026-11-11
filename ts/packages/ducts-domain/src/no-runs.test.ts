@@ -1,24 +1,19 @@
 import { expect, it } from "vite-plus/test";
 import { noRunBranches } from "./no-runs.ts";
 import { systemScope } from "./system-scope.ts";
-import type { DuctSnapshot } from "./types.ts";
+import { connOf, groupOf, nodeOf, snapshotOf, type Node } from "./test-snapshot.ts";
 import type { LossResult } from "./losses.ts";
 
-const part = (id: number, kind: string, to: (number | null)[], systemName = "SA 1") => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-  id,
-  kind,
-  groupId: "g",
-  systemName,
-  point: [id, 0, 0],
-  facts: [],
-  connectors: to.map((elementId, index) => ({
-    index,
-    kind: "end",
+const part = (id: number, kind: Node["kind"], to: (number | null)[], systemName = "SA 1") =>
+  nodeOf(id, kind, {
+    groupId: "g",
+    systemName,
     point: [id, 0, 0],
-    connectedTo: elementId == null ? null : { elementId, connector: 0 },
-  })),
-});
-const snapshot = {
+    connectors: to.map((elementId, index) =>
+      connOf(index, elementId == null ? null : [elementId, 0], { point: [id, 0, 0] }),
+    ),
+  });
+const snapshot = snapshotOf({
   nodes: [
     part(1, "equipment", [2]),
     part(2, "fitting", [1, 3, 4, 7]),
@@ -28,12 +23,8 @@ const snapshot = {
     part(7, "fitting", [2, 8]),
     part(8, "cap", [7]),
   ],
-  segments: [],
-  flows: [],
-  issues: [],
-  systems: [],
-  groups: [{ id: "g", rootIds: [1], systemNames: ["SA 1"], issueIds: [] }],
-} as unknown as DuctSnapshot;
+  groups: [groupOf("g", { rootIds: [1], systemNames: ["SA 1"] })],
+});
 const solved = {
   paths: { 3: { path: [2, 3] } },
   byGroup: {},

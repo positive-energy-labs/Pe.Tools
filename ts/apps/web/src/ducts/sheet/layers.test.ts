@@ -4,7 +4,13 @@
  */
 import * as THREE from "three";
 import { expect, it, vi } from "vite-plus/test";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import {
+  connOf,
+  ductOf,
+  issueOf,
+  snapshotOf,
+  type Connector,
+} from "@pe/ducts-domain/test-snapshot";
 import type { DuctsSheetOverview } from "@pe/agent-contracts";
 import type { Detail } from "./model";
 import {
@@ -19,43 +25,43 @@ import { detailOf, type SheetBlocker } from "./tiers";
 vi.mock("#/scene/ink", () => ({ inkOf: () => new THREE.Color(0xffffff) }));
 
 const IN = 1 / 12;
-const conn = (index: number, point: number[], facing: number[], connectedTo = null as unknown) => ({
-  index,
-  kind: "end",
-  point,
-  facing,
-  widthAxis: [0, 1, 0],
-  shape: "rectangular",
-  size: "12x12",
-  widthIn: 12,
-  heightIn: 12,
-  diameterIn: null,
-  direction: "bidirectional",
-  classification: "SupplyAir",
-  connectedTo,
-  areaFt2: 1,
-});
-const duct = (id: number, a: number[], b: number[], connectors: unknown[]) => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-  id,
-  kind: "duct",
-  curveKind: "line",
-  type: "Rect",
-  shape: "rectangular",
-  size: "12x12",
-  widthIn: 12,
-  heightIn: 12,
-  diameterIn: null,
-  lengthFt: Math.hypot(...a.map((v, k) => v - b[k]!)),
-  polyline: [a, b],
-  levelId: 1,
-  groupId: "g",
-  systemName: "SA 1",
-  classification: "Supply Air",
-  connectors,
-});
+const conn = (
+  index: number,
+  point: number[],
+  facing: number[],
+  connectedTo: Connector["connectedTo"] = null,
+) =>
+  connOf(index, null, {
+    point,
+    facing,
+    widthAxis: [0, 1, 0],
+    shape: "rectangular",
+    size: "12x12",
+    widthIn: 12,
+    heightIn: 12,
+    diameterIn: null,
+    classification: "SupplyAir",
+    connectedTo,
+    areaFt2: 1,
+  });
+const duct = (id: number, a: number[], b: number[], connectors: Connector[]) =>
+  ductOf(id, {
+    type: "Rect",
+    shape: "rectangular",
+    size: "12x12",
+    widthIn: 12,
+    heightIn: 12,
+    diameterIn: null,
+    lengthFt: Math.hypot(...a.map((v, k) => v - b[k]!)),
+    polyline: [a, b],
+    levelId: 1,
+    groupId: "g",
+    systemName: "SA 1",
+    classification: "Supply Air",
+    connectors,
+  });
 const gap = 0.5 * IN;
-const snapshot = {
-  nodes: [],
+const snapshot = snapshotOf({
   segments: [
     duct(
       1,
@@ -82,13 +88,7 @@ const snapshot = {
       [conn(0, [30, 0, 0], [-1, 0, 0]), conn(1, [40, 0, 0], [1, 0, 0])],
     ),
   ],
-  issues: [],
-  groups: [],
-  flows: [],
-  levels: [],
-  layers: [],
-  systems: [],
-} as unknown as DuctSnapshot;
+});
 
 const pair: [string, string] = ["1:1", "2:0"];
 const join: SheetBlocker = {
@@ -164,7 +164,7 @@ it("an inferred-join blocker keeps only the faces on its own pair", () => {
 });
 
 /** The capped round open end `finding-layers.test` proves draws a cylinder heal volume. */
-const round = {
+const round = snapshotOf({
   ...snapshot,
   segments: [
     {
@@ -190,8 +190,8 @@ const round = {
       diameterIn: 12,
     },
   ],
-  issues: [{ id: "open-end:1:1", kind: "open-end", elementId: 1, connector: 1, note: "" }],
-} as unknown as DuctSnapshot;
+  issues: [issueOf("open-end:1:1", "open-end", 1, { connector: 1 })],
+});
 const capPair: [string, string] = ["1:1", "cap"];
 const openEnd: SheetBlocker = {
   id: "open-end:1:1",

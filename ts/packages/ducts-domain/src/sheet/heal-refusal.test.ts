@@ -24,6 +24,7 @@ const OTHER_FC23 = 13760867;
 it.skipIf(!existsSync(CHADDS))(
   "FC-23 on Chadds: no tee or tap onto another roster fan's network; assumed-only blockers cite their cause",
   () => {
+    // Kept: an untyped file boundary (a retained host capture outside git), not a constructed shape.
     const snap = (
       JSON.parse(readFileSync(CHADDS, "utf8").replace(/^\uFEFF/, "")) as { result: DuctSnapshot }
     ).result;
