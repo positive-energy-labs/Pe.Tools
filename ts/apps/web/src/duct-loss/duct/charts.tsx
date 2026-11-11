@@ -28,6 +28,8 @@ const W = 420;
 const H = 300;
 const M = { l: 40, r: 36, t: 10, b: 28 };
 
+const LABEL = 7.5;
+
 /** A log-log plot. Children of the law: curves, one marker, a crosshair, direct labels. */
 function LogLog({
   title,
@@ -88,6 +90,19 @@ function LogLog({
     if (!inside.length) return null;
     return inside[s.labelAt === "mid" ? Math.floor(inside.length / 2) : inside.length - 1];
   };
+
+  // A direct label that would overprint one already placed is dropped, first series first (L3: words
+  // never overlap; I6: a word sits by its mark). ponytail: mono width estimate (0.6em per glyph);
+  // measure with getBBox if the chart face changes.
+  const labels: { key: string; label: string; x: number; y: number; w: number }[] = [];
+  for (const s of series) {
+    const e = endLabel(s);
+    if (!e) continue;
+    const box = { key: s.key, label: s.label, x: sx(e[0]) + 3, y: sy(e[1]) - 2, w: s.label.length * LABEL * 0.6 };
+    if (labels.some((l) => box.x < l.x + l.w && l.x < box.x + box.w && Math.abs(l.y - box.y) < LABEL))
+      continue;
+    labels.push(box);
+  }
 
   return (
     <figure className="flex min-w-0 flex-col gap-1">
@@ -183,17 +198,12 @@ function LogLog({
             />
           ))}
         </g>
-        <g fontSize={7.5} fill={INK2}>
-          {series.map((s) => {
-            const e = endLabel(s);
-            return (
-              e && (
-                <text key={s.key} x={sx(e[0]) + 3} y={sy(e[1]) - 2}>
-                  {s.label}
-                </text>
-              )
-            );
-          })}
+        <g fontSize={LABEL} fill={INK2}>
+          {labels.map((l) => (
+            <text key={l.key} x={l.x} y={l.y}>
+              {l.label}
+            </text>
+          ))}
         </g>
         {hover && (
           <g pointerEvents="none">
