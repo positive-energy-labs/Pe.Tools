@@ -1,6 +1,6 @@
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
-import { claudeInit, claudeSessionMeta, gatewayServers, undeclaredContext } from "./manifest.ts";
+import { claudeInit, claudeSessionMeta, undeclaredContext } from "./manifest.ts";
 import type { AdapterChild } from "./adapter.ts";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -1160,24 +1160,11 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         append(t, { kind: "error", turnId: t.running, message: refusal });
         void retire(t);
       },
-      // A form is the question card. A URL elicitation is the MCP gateway's OAuth sign-in: Claude
-      // owns the localhost callback, so Pea only shows the link and accepts; the adapter polls until
-      // the server connects.
+      // A form is the question card; every other elicitation mode is declined.
       createElicitation: (request: CreateElicitationRequest) =>
         new Promise<CreateElicitationResponse>((resolve) => {
           if (t.child !== child || t.stopped) return resolve({ action: "decline" });
           clearIdle(t);
-          if (request.mode === "url") {
-            append(t, {
-              kind: "update",
-              turnId: t.running,
-              update: {
-                sessionUpdate: "agent_message_chunk",
-                content: { type: "text", text: `\n\n${request.message}: [sign in](${request.url})\n\n` },
-              },
-            });
-            return resolve({ action: "accept" });
-          }
           if (request.mode !== "form") return resolve({ action: "decline" });
           const requestId = randomUUID();
           const turnId = t.running;
@@ -1219,14 +1206,14 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       protocolVersion: PROTOCOL_VERSION,
       clientCapabilities: {
         fs: { readTextFile: false, writeTextFile: false },
-        elicitation: { form: {}, url: {} },
+        elicitation: { form: {} },
       },
     });
     // The child sees what the harness manifest declares and nothing from the user's account
     // (harness/manifest.ts). Codex's counterpart is the project config in the world root.
     const request = {
       cwd: options.worldRoot,
-      mcpServers: [options.mcpServer(context), ...gatewayServers()],
+      mcpServers: [options.mcpServer(context)],
       // Claude Code truncates MCP server instructions; the whole kernel rides the system prompt.
       ...(harness === "claude"
         ? {

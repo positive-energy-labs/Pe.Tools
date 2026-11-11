@@ -4,7 +4,8 @@
  * from the user's own account: no claude.ai connectors (Gmail, Drive, Docs), no cron or worktree
  * tools, no attribution reminder, no Codex apps/plugins/memories. Pea's own MCP is the only
  * declared server; it stays local and direct because it carries Revit authority over loopback.
- * A future remote MCP gateway adds ONE entry to `mcpServers` here, never a connector per service.
+ * No remote MCP gateway is declared: an outside service's send tools need a door that returns
+ * "held" first (ADR 0038 consequences).
  *
  * Capability is not gated by default: the tool list cuts only account-leaked and irrelevant tools.
  */
@@ -41,8 +42,8 @@ const CLAUDE_TOOLS = [
 ] as const;
 
 export const harnessManifest = {
-  /** MCP server names a child may have: Pea's own, and the user's gateway when one is set. */
-  mcpServers: ["pea", "gateway"],
+  /** MCP server names a child may have: Pea's own, and nothing else. */
+  mcpServers: ["pea"],
   claude: {
     tools: CLAUDE_TOOLS,
     /** Inline `settings`: highest-precedence tier short of managed policy; user settings cannot undo it. */
@@ -66,16 +67,6 @@ export const harnessManifest = {
 } as const;
 
 export type HarnessManifest = typeof harnessManifest;
-
-/**
- * The user's remote MCP gateway, the one door for outside services. ponytail: read from
- * PEA_MCP_GATEWAY_URL per launch; a settings home for it is owed once the installed product needs it.
- * OAuth runs through the adapter's URL elicitation (threads.ts createElicitation).
- */
-export function gatewayServers(env: NodeJS.ProcessEnv = process.env) {
-  const url = env.PEA_MCP_GATEWAY_URL?.trim();
-  return url ? [{ type: "http" as const, name: "gateway", url, headers: [] }] : [];
-}
 
 /** `_meta` for Claude `session/new|resume|fork`: the manifest as adapter options. */
 export function claudeSessionMeta(manifest: HarnessManifest = harnessManifest) {
