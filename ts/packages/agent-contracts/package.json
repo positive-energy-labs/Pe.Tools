@@ -58,7 +58,8 @@
     "./takeoff-adoption": "./src/takeoff-adoption.ts",
     "./takeoff-read": "./src/takeoff-read.ts",
     "./slots": "./src/slots/index.ts",
-    "./target": "./src/target.ts"
+    "./target": "./src/target.ts",
+    "./native-output-read": "./src/native-output-read.ts"
   },
   "publishConfig": {
     "access": "public"

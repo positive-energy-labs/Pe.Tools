@@ -1,7 +1,8 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { NATIVE_BODY_VERSION_HEADER } from "@pe/agent-contracts";
-import { evaluate, type ReadContext } from "@pe/host/read-graph";
+import type { ReadContext } from "@pe/host/read-graph";
+import { evaluate } from "@pe/host/reads/evaluator";
 import { inputPort, type ReadSources } from "../src/reads/inputs.ts";
 import { hostMarks } from "../src/document-marks.ts";
 import { settle } from "./effect-test.ts";

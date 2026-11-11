@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { generatedJsonSchema, nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { generatedJsonSchema, nativeResponseSchema } from "@pe/host-contracts/native-schemas";
 import type { HostOperationKey, OpResponseOf } from "@pe/host-contracts/operation-types";
 import { captureReceiptSchema, type CaptureReceipt } from "./capture.ts";
 
