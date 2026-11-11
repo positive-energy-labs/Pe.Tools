@@ -352,7 +352,7 @@ export function StateCell(input: StateCellProps | HandleCellProps) {
               anchor="trigger"
               trigger={
                 read.unsettled != null ? (
-                  <span className={slots.unsettled()} data-state={read.unsettled}>
+                  <span className={slots.unsettled({ className: "min-w-0 truncate" })} data-state={read.unsettled}>
                     {shown}
                   </span>
                 ) : (
