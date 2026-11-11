@@ -1,6 +1,5 @@
 import type { ContextOf } from "../route/defaults";
 import { command } from "../route/typed-actions.ts";
-import { poseFields } from "../route/defaults";
 import { bindings } from "./bindings";
 import { read } from "../route/defaults";
 import { stageField } from "../route/defaults";
@@ -9,7 +8,6 @@ import { fansDocumentSchema, fansRouteState } from "../../../../packages/agent-c
 import { z } from "zod";
 import {
   fansSheetEditsSchema,
-  ductsPictureFields,
   routeAddress,
   type Immutable,
   type SubjectRefCode,
@@ -18,6 +16,7 @@ import { reads } from "./reads.ts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
 import { field, route, subjectSchema, split } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
+import { picturePose } from "../route/slots/picture/pose.ts";
 import { draw } from "../route/draw.tsx";
 import { scrollBody } from "../route/body.ts";
 import { fanLabel, stableFanKey } from "../ducts/sheet/model.ts";
@@ -26,19 +25,10 @@ import { sheetValueFixtures } from "../ducts/sheet/value-fixtures.ts";
 import { presentLosses } from "../ducts/reviews.ts";
 import { fansSheet } from "./sheet.ts";
 
-const shared = ductsPictureFields;
 const fan = subjectSchema(32);
 
 export const fields = {
-  ...poseFields(shared, [
-    "contextRadiusFt",
-    "contextStyle",
-    "encoding",
-    "layers",
-    "picture",
-    "sceneView",
-    "viewport",
-  ]),
+  ...picturePose,
   fan: field(fan, { kind: "ids", ids: [] }, "subject", "push"),
   stage: stageField(["sheet"]),
   ...listFields("input"),

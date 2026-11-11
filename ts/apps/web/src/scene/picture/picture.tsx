@@ -102,8 +102,8 @@ export interface PictureContent<L extends string = string, F extends string = st
   kinds: Kinds;
   colour: ColourMode;
   layers?: readonly PictureLayer[];
-  /** The layer strip, in order. `meshes`, `context` and `halo` are the scene's own keys. */
-  layerOptions: readonly { key: L; label: string; chord?: Chord; says?: string }[];
+  /** The layer strip, in order; `off` layers are not in the picture's default set. Context is the pose's `context`, never a layer. */
+  layerOptions: readonly LayerOption<L>[];
   /** DOM drawn over the picture at the released frame. */
   overlay?: (frame: PictureOverlayFrame) => ReactNode;
   readout: {
@@ -139,12 +139,16 @@ export const CONTEXT_DEFAULT = "overview" satisfies PictureContext;
 
 type DocRef = { session: string; openId: string };
 type Move = { history: "push" | "replace" };
-const CONTEXT_KEYS = ["context", "halo"];
+export type LayerOption<L extends string = string> = { key: L; label: string; chord?: Chord; says?: string; off?: true };
+
+/** The layer keys on: the page's list, or the options' default set. */
+export const layersOn = <L extends string>(layers: PicturePage["layers"], options: readonly LayerOption<L>[]): L[] =>
+  options.filter((o) => (layers === "default" ? !o.off : layers.includes(o.key))).map((o) => o.key);
 
 /** The capture request a focus asks for; null when nothing is walked or near. */
 export function captureRequest(
   focus: PictureContent["focus"],
-  layers: readonly string[],
+  context: boolean,
   radiusFt: number,
   representation: ContextRepresentation,
   maxTriangles = 3_000_000,
@@ -154,7 +158,7 @@ export function captureRequest(
   return {
     ...sceneRequest(
       ids.sort((a, b) => a - b),
-      representation !== "meshes" && !CONTEXT_KEYS.some((key) => layers.includes(key)),
+      representation !== "meshes" && !context,
       representation === "meshes" ? Math.max(5, radiusFt) : radiusFt,
       representation,
     ),
@@ -250,10 +254,7 @@ export function Picture<L extends string, F extends string>({
   // No document = selection and member registration silently do nothing (the fan sheet's 10-28
   // defect), so a Picture outside an `AttentionRoot` fails loudly instead.
   const visibleLayers = useMemo(
-    () =>
-      content.layerOptions
-        .filter((layer) => page.layers === "all" || page.layers.includes(layer.key))
-        .map((layer) => layer.key),
+    () => layersOn(page.layers, content.layerOptions),
     [page.layers, content.layerOptions],
   );
   const doc = useContext(AttentionDocument);
@@ -298,14 +299,14 @@ export function Picture<L extends string, F extends string>({
     () =>
       captureRequest(
         content.focus,
-        visibleLayers,
+        page.context !== "off",
         page.contextRadiusFt,
         contextRepresentation,
         content.capture?.maxTriangles,
       ),
     [
       content.focus,
-      visibleLayers,
+      page.context,
       page.contextRadiusFt,
       contextRepresentation,
       content.capture?.maxTriangles,
@@ -594,22 +595,9 @@ export function Picture<L extends string, F extends string>({
           <ModelPicture
             sceneView={page.sceneView}
             paint={content.paint}
-            contextMode={
-              // Layer visibility changes drawing only; detailed acquisition stays explicit.
-              CONTEXT_KEYS.some((key) => layers.has(key)) ? page.contextStyle : "off"
-            }
-            onContextMode={(mode) =>
-              setPage(
-                {
-                  ...(mode === "off" ? {} : { contextStyle: mode }),
-                  layers:
-                    mode === "off"
-                      ? visibleLayers.filter((key) => !CONTEXT_KEYS.includes(key))
-                      : [...new Set([...visibleLayers, "context" as L])],
-                },
-                { history: "push" },
-              )
-            }
+            // How context draws changes drawing only; detailed acquisition stays explicit.
+            contextMode={page.context}
+            onContextMode={(context) => setPage({ context }, { history: "push" })}
             kinds={content.kinds}
             colour={content.colour}
             contextRadiusFt={page.contextRadiusFt}
@@ -714,10 +702,7 @@ export function Picture<L extends string, F extends string>({
               : undefined,
             layers: {
               value: visibleLayers,
-              options: content.layerOptions.map((option) => ({
-                ...option,
-                busy: CONTEXT_KEYS.includes(option.key) && read.pending,
-              })),
+              options: content.layerOptions,
               onToggle: (key) =>
                 setPage(
                   {

@@ -57,8 +57,7 @@ test("JZ H04 typed Fans picture demands exact elements and reach, refuses docume
     await waitFor(() => expect(io.call.mock.calls.some(([, req]) => req.contextRepresentation === "meshes")).toBe(true));
     const detail = io.call.mock.calls.find(([, req]) => req.contextRepresentation === "meshes")!;
     const sheet = (a.value().value as any).open;
-    const layers = a.page.read().layers;
-    const context = layers === "all" || layers.includes("context") || layers.includes("halo");
+    const context = a.page.read().context !== "off";
     const expected = [...new Set<number>([sheet.overview.fan.unitId, ...sheet.elements.walkedElementIds,
       ...(context ? sheet.elements.beyond.flatMap((unit: { elementIds: number[] }) => unit.elementIds) : []),
     ])].sort((x, y) => x - y);

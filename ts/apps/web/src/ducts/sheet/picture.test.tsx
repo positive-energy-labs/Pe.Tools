@@ -91,7 +91,7 @@ const sheet = {
 
 function mount(
   open: OpenSheet | null = sheet,
-  layers = ["meshes", "halo", "findings"],
+  layers = ["meshes", "findings"],
   fans?: FanPort[],
   full = false,
 ) {
@@ -132,7 +132,7 @@ function mount(
     layers,
     sceneView: { preset: "all" as const, section: null },
     contextRadiusFt: 10,
-    contextStyle: "glass" as const,
+    context: "glass" as const,
     picture: "model" as const,
     encoding: "health",
   });
@@ -214,7 +214,7 @@ it("beyond draws only while context is, cut where the host cut it, and never on 
 });
 
 it("hovering a context element names whose air it is and that this fan's calc leaves it out", () => {
-  const { registry } = mount(beyondSheet, ["meshes", "halo", "findings"]);
+  const { registry } = mount(beyondSheet, ["meshes", "findings"]);
   act(() => setHovered(registry, { doc: "d", key: elements.keyOf(c!.id)! }));
   const readout = render(<>{seen.model!.readout}</>);
   expect(readout.container.textContent).toContain(

@@ -6,6 +6,7 @@
  */
 import { useElementAttention } from "#/attention";
 import {
+  layersOn,
   Picture,
   type PictureContent,
   type PictureLayer,
@@ -173,7 +174,8 @@ export function SheetPicture({
       ]),
     [sheet, opened, fans, blockers, worstPathIds],
   );
-  const contextOn = page.layers.includes("context") || page.layers.includes("halo");
+  const on = layersOn(page.layers, DUCTS_LAYER_OPTIONS);
+  const contextOn = page.context !== "off";
   const beyond = useMemo(
     () => beyondPicture(sheet?.elements?.beyond ?? NO_BEYOND, focusIds, contextOn),
     [sheet, focusIds, contextOn],
@@ -241,7 +243,7 @@ export function SheetPicture({
     [snapshot, focusIds, beyond],
   );
   const kinds = coloursOf(work.doc);
-  const colour = page.layers.includes("system-colours") ? "firm" : "mono";
+  const colour = on.includes("system-colours") ? "firm" : "mono";
   const { paint, ports } = useEquipment(scene, routePaint, kinds, colour);
   const layers = useMemo<PictureLayer[]>(
     () => [
@@ -300,7 +302,7 @@ export function SheetPicture({
     const line = byId.segments.get(id)?.polyline;
     return line ? (line[Math.floor((line.length - 1) / 2)] ?? null) : null;
   };
-  const marksOn = new Set<string>(page.layers);
+  const marksOn = new Set<string>(on);
   const labels = scene.nodes.flatMap(({ node }) =>
     node.point
       ? [
@@ -472,7 +474,7 @@ export function SheetPicture({
               value={encoding.key}
               onPick={(encoding) =>
                 setPage(
-                  { encoding, layers: [...new Set([...page.layers, "centrelines"])] },
+                  { encoding, layers: [...new Set([...on, "centrelines" as const])] },
                   { history: "push" },
                 )
               }

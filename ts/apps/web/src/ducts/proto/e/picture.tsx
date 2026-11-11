@@ -12,6 +12,7 @@ import { useContext, useMemo, type ReactNode, type RefObject } from "react";
 import { VisibleRouteResource } from "#/route/activity";
 import { damageLayers } from "#/scene/damage";
 import {
+  layersOn,
   Picture,
   type PictureLayer,
   type PictureOverlayFrame,
@@ -233,7 +234,8 @@ function Content({
       },
     [snapshot, page.system, members, stubs],
   );
-  const systemColours = page.layers.includes("system-colours");
+  const on = layersOn(page.layers, DUCTS_LAYER_OPTIONS);
+  const systemColours = on.includes("system-colours");
   const colours = coloursOf(work.doc);
   const routePaint = useMemo(
     () => paintOfDucts(snapshot, opened, stubs),
@@ -535,7 +537,7 @@ function Content({
         </span>
       </TooltipHint>
     );
-  const marksOn = new Set<string>(page.layers);
+  const marksOn = new Set<string>(on);
   const overlay = (frame: PictureOverlayFrame) => (
     <DuctsOverlay
       frame={frame}

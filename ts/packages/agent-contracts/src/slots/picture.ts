@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { subjectRefCodeSchema, type SubjectRefCode } from "../subject-ref.ts";
+import { viewportKey, viewportSchema } from "../page-keys.ts";
+import { sceneViewSchema } from "../scene-view.ts";
 
 /*
  * The picture slot (ADR 0035 rules 1 and 2). A scope is a SubjectRef set, a box or a prism with a
@@ -85,3 +87,20 @@ export const pictureSlotData = (slot: PictureSlot<never>): PictureSlotData => ({
   scope: slot.scope === "subject" ? "subject" : "derived",
   marks: slot.marks ? MARK_KINDS : [],
 });
+
+/** How context around the scope draws: off, as lines, or as glass surfaces. One key; no layer aliases it. */
+export const PICTURE_CONTEXT = ["off", "lines", "glass"] as const;
+/**
+ * The pose the kernel owns for every picture: the camera, the section, the context reach and how it
+ * draws, the layers on, the encoding and the picture mode. `layers: "default"` is the picture's own
+ * default set (its layer options not marked off); `encoding: ""` is its own default encoding.
+ */
+export const picturePoseSchemas = {
+  contextRadiusFt: z.number().min(0).max(64).default(10),
+  sceneView: sceneViewSchema.default({ preset: "all", section: null }),
+  viewport: viewportKey(viewportSchema),
+  context: z.enum(PICTURE_CONTEXT).default("glass"),
+  layers: z.union([z.array(z.string().min(1).max(200)).max(64), z.literal("default")]).default("default"),
+  encoding: z.string().max(200).default(""),
+  picture: z.string().min(1).max(200).default("model"),
+};
