@@ -10,6 +10,8 @@ import { decode } from "@pe/agent-contracts/subject-ref";
 import { readFile } from "node:fs/promises";
 import manifest from "../../pod.json" with { type: "json" };
 import { admitPodArtifact } from "../../../../../ts/apps/host/src/pod-artifact.ts";
+import { buildRouteArtifact } from "../../../../../ts/apps/web/route-module-hash.ts";
+import { fileURLToPath } from "node:url";
 
 // Copper-ish nominal/inner pairs, mm. The real catalog is the model's pipe segment (see gaps).
 const catalogs = { s: [{ nominal: 15, inner: 13.6 }, { nominal: 20, inner: 19.9 }, { nominal: 25, inner: 26 }, { nominal: 32, inner: 32.1 }] };
@@ -86,20 +88,24 @@ describe("sizing", () => {
 // test.fails keeps the suite green while the gap is open and fails the day the kernel closes it:
 // then make it a plain test and use the capability.
 const reads = hostOpCatalog.filter((op) => op.intent === "Read").map((op) => op.key);
-const hostDoors = async () => Object.keys(await import("@pe/host/read-graph"));
+// A Pod reaches a door only if its artifact bundles: the builder refuses an unpinned shared runtime.
+const bundles = (source: string) => buildRouteArtifact({ entry: fileURLToPath(new URL("./probe.ts", import.meta.url)),
+  source, data: module.data, contracts: [{ id: "probe", bytes: new Uint8Array([0]) }] });
 describe("kernel gaps", () => {
   test.fails("kernel gap: pod-native-read-door (2)", async () => {
     // nativeRead lives in host src/reads/inputs.ts; @pe/host/read-graph does not export it.
-    expect(await hostDoors()).toContain("nativeRead");
-  });
+    await bundles(`import { nativeRead } from "@pe/host/read-graph"; export const read = nativeRead("mep.system.members");`);
+  }, 60_000);
   test.fails("kernel gap: pod-document-work (4)", async () => {
-    // workBinding resolves a document's Work key; private to the host, so the Pod reads host-wide Work.
-    expect(await hostDoors()).toContain("workBinding");
-  });
+    // workScope (document ref to Work key) is exported, but @pe/host/read-graph imports the
+    // @pe/agent-contracts barrel, which pulls effect; the Pod host artifact refuses it.
+    await bundles(`import { workScope } from "@pe/host/read-graph"; export const scope = workScope;`);
+  }, 60_000);
   test.fails("kernel gap: firm-file-layer (3)", async () => {
-    // The firm file is a resolution layer (ADR 0035 d3); its leaf is host-private builtin-read-handles.
-    expect(await hostDoors()).toContain("firm");
-  });
+    // The firm file is a resolution layer (ADR 0035 d3), on the share only since slice 2b; its leaf
+    // is host-private builtin-read-handles, so max friction defaults to 400.
+    await bundles(`import { firm } from "@pe/host/read-graph"; export const layer = firm;`);
+  }, 60_000);
   test.fails("kernel gap: sheet-slot (3)", () => {
     // A Pod pane returns text; the kernel draws no StateCell for maxVelocity, maxFriction or chosen.
     expect(module.data).toHaveProperty("sheet");
