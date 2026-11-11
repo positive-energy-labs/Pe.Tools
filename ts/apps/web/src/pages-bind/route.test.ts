@@ -14,11 +14,20 @@ test("slice 10 bind: the Page is a name SubjectRef subject from the Page roster;
   const { data, spec } = module;
   expect(data.subject).toMatchObject({ field: "page", noun: "Page", pane: "main" });
   expect(Object.fromEntries(Object.entries(data.fields).map(([k, f]) => [k, f.role]))).toEqual({
-    query: "query", fragment: "query", page: "subject", view: "pose", selected: "selection",
+    query: "query",
+    fragment: "query",
+    page: "subject",
+    view: "pose",
+    selected: "selection",
   });
   expect(spec.sheet).toBeUndefined();
   const options = spec.subject!.options({
-    threads: [], inventory: [] as never, pages: [{ slug: "chadds-duct-readiness", title: "Duct readiness" }, { slug: "todo", title: "" }],
+    threads: [],
+    inventory: [] as never,
+    pages: [
+      { slug: "chadds-duct-readiness", title: "Duct readiness" },
+      { slug: "todo", title: "" },
+    ],
   });
   expect(options).toEqual([
     { id: oneName("chadds-duct-readiness").ids[0], label: "Duct readiness" },
@@ -28,9 +37,14 @@ test("slice 10 bind: the Page is a name SubjectRef subject from the Page roster;
   const page = { page: oneName("todo"), view: false, query: {}, fragment: "", selected: [] };
   const bind = spec.commands.bind as { input(c: object, s: unknown): unknown };
   const read = spec.commands.read as { input(c: object): unknown };
-  expect(bind.input({ page }, { kind: "unbind" })).toEqual({ slug: "todo", binding: { kind: "unbind" } });
+  expect(bind.input({ page }, { kind: "unbind" })).toEqual({
+    slug: "todo",
+    binding: { kind: "unbind" },
+  });
   expect(read.input({ page })).toEqual({ slug: "todo" });
   expect(nameOf(oneName(""))).toBe("");
   // One capability, one choice path: the body draws no slug input beside the kernel's Page picker.
-  expect(readFileSync(new URL("mount.tsx", import.meta.url), "utf8")).not.toMatch(/<Input|query\(\{ page/);
+  expect(readFileSync(new URL("mount.tsx", import.meta.url), "utf8")).not.toMatch(
+    /<Input|query\(\{ page/,
+  );
 });

@@ -25,7 +25,10 @@ test("slice 10 ops: the op is a name SubjectRef subject, actionId is query, and 
     receipt: [],
   });
   expect(options).toEqual([{ id: opRef("revit.context.summary"), label: "Context" }]);
-  expect(decode(options[0]!.id)).toEqual({ ok: true, value: { keyKind: "name", key: ["revit.context.summary"] } });
+  expect(decode(options[0]!.id)).toEqual({
+    ok: true,
+    value: { keyKind: "name", key: ["revit.context.summary"] },
+  });
   expect(nameOf(oneName("revit.context.summary"))).toBe("revit.context.summary");
   expect(nameOf(oneName(""))).toBe("");
   // One capability, one choice path: no route body draws its own op chooser beside the kernel's.
@@ -43,6 +46,10 @@ test("slice 10 ops: the op is a name SubjectRef subject, actionId is query, and 
  */
 test.fails("kernel gap: sheet-schema-input (ops): a local binding draws one cell per request field", () => {
   const slot = { bindings: { request: local({} as never) } };
-  const cells = sheetCells(slot, { rows: [], work: { request: { scope: { kind: "view" }, limit: 5 } }, model: [] });
+  const cells = sheetCells(slot, {
+    rows: [],
+    work: { request: { scope: { kind: "view" }, limit: 5 } },
+    model: [],
+  });
   expect(cells.map((c) => c.label)).toEqual(["request.scope.kind", "request.limit"]);
 });
