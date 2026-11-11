@@ -13,15 +13,16 @@ namespace Pe.Revit.Tests;
 
 /// <summary>
 ///     The homes slice 2 falsifier (docs/features/homes/MAP.md): on a real model every owner's blob round-trips
-///     through the one envelope, and a model that carries a blob this build cannot read opens, refuses the blob and
-///     never overwrites its bytes (ADR 0026 D4). The codec itself is proven in Pe.Shared.Tests' OwnerBlobTests.
+///     through the one envelope, and a model that carries an enveloped blob this build cannot read opens, refuses the
+///     blob and never overwrites its bytes (ADR 0026 D4). An old un-enveloped blob is not an error path: it reads as
+///     absent and the first write replaces it. The codec itself is proven in Pe.Shared.Tests' OwnerBlobTests.
 ///     Not covered here: the duct per-fitting results entity needs a fitting on the Pe loss server; its text is the
 ///     same codec, and the duct apply proofs write and read it.
 /// </summary>
 [TestFixture]
 public sealed class OwnerBlobRoundTripTests {
     private static readonly OwnerDescriptor[] ProjectOwners = [
-        AutoTagService.Owner, ParameterLinkProfile.Owner, DuctLossStore.Owner, SystemRegistry.Owner,
+        AutoTagSettings.Owner, ParameterLinkProfile.Owner, DuctLossStore.Owner, SystemRegistry.Owner,
         EnclosureDeclaration.Owner, ProjectHomePointer.Owner
     ];
 
@@ -116,9 +117,75 @@ public sealed class OwnerBlobRoundTripTests {
             owner => $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version + 998}}},"data":{"fromTheFuture":true}}""");
 
     [Test]
-    public void An_old_unenveloped_blob_opens_is_refused_and_is_never_overwritten(UIApplication uiApplication) =>
+    public void A_broken_envelope_opens_is_refused_and_is_never_overwritten(UIApplication uiApplication) =>
         RefusesAndKeeps(uiApplication.Application, OwnerBlobStatus.Invalid,
-            _ => """{"version":1,"enabled":true,"workRevision":2,"Systems":[]}""");
+            owner => $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version}}},"data":[]}""");
+
+    [Test]
+    public void An_old_unenveloped_blob_opens_reads_as_absent_and_the_first_write_overwrites_it(UIApplication uiApplication) {
+        const string old = """{"version":1,"enabled":true,"workRevision":2,"Systems":[]}""";
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        string? path = null;
+        try {
+            Assert.That(document.IsWorkshared, Is.False, "Writes require a disposable non-workshared document");
+            long regionId;
+            using (var transaction = new Transaction(document, "Plant old un-enveloped blobs")) {
+                _ = transaction.Start();
+                foreach (var owner in ProjectOwners)
+                    _ = SharedParameterBinder.EnsureProjectBinding(document, OwnerBlobStore.Spec(owner), [BuiltInCategory.OST_ProjectInformation]);
+                var region = SeedRegion(document);
+                regionId = region.Id.Value();
+                document.Regenerate();
+                foreach (var owner in ProjectOwners)
+                    Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(old), Is.True, owner.Name);
+                Assert.That(region.get_Parameter(RegionProvenance.Owner.Guid).Set(old), Is.True);
+                _ = transaction.Commit();
+            }
+
+            (document, path) = SaveCloseReopen(uiApplication.Application, document);
+            var planted = (FilledRegion)document.GetElement(regionId.ToElementId());
+            var storage = new ParameterLinksProfileStorage();
+
+            // Absent: every owner starts from its defaults, with no error.
+            Assert.Multiple(() => {
+                foreach (var owner in ProjectOwners)
+                    Assert.That(OwnerBlobStore.Read(document, owner).Status, Is.EqualTo(OwnerBlobStatus.Absent), owner.Name);
+                Assert.That(DuctApplier.ReadStore(document), Is.EqualTo(((DuctLossStore?)null, (string?)null)));
+                Assert.That(storage.Read(document), Is.EqualTo(new ProfileReadResult(null, false, null)));
+                Assert.That(TakeoffCarriers.ReadRegistry(document).Systems, Is.Empty);
+                Assert.That(TakeoffCarriers.TryReadProvenance(planted), Is.EqualTo(new OwnerValue<string>(null, null)));
+                Assert.That(EnclosureDeclaration.Read(document).Source, Does.StartWith("default:"));
+                Assert.That(AutoTagService.Instance.HasSettingsInDocument(document), Is.False);
+                Assert.That(AutoTagService.Instance.GetStatus(document).StoredSettingsRefusal, Is.Null);
+            });
+
+            // The first write through each owner's own door replaces the old bytes with an envelope.
+            var registry = new SystemRegistry();
+            _ = registry.Register("FC-8");
+            using (var transaction = new Transaction(document, "First write over the old blobs")) {
+                _ = transaction.Start();
+                Assert.That(OwnerBlobStore.Write(document, DuctLossStore.Owner, new DuctLossStore { WorkRevision = 1 }.ToData()), Is.True);
+                Assert.That(storage.Write(document, new ParameterLinkProfile { Definitions = [], Assignments = [] }), Is.True);
+                TakeoffCarriers.WriteRegistry(document, registry);
+                TakeoffCarriers.WriteProvenance(planted, new RegionProvenance(1, Guid.NewGuid(), "run-1", "R01", 100).ToJson());
+                EnclosureDeclaration.Write(document, Enclosure.Default);
+                Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, ProjectHomePointer.Create("Projects/Chadds").Pointer!.ToData()), Is.True);
+                _ = transaction.Commit();
+            }
+            AutoTagService.Instance.SaveSettingsForDocument(document, new AutoTagSettings { Enabled = false, Configurations = [] });
+
+            Assert.Multiple(() => {
+                foreach (var owner in ProjectOwners) {
+                    Assert.That(Raw(document, owner), Does.StartWith($$"""{"owner":"{{owner.Owner}}","version":{{owner.Version}},"data":{"""), owner.Name);
+                    Assert.That(OwnerBlobStore.Read(document, owner).Status, Is.EqualTo(OwnerBlobStatus.Ok), owner.Name);
+                }
+                Assert.That(Raw(planted), Does.StartWith("""{"owner":"takeoff-region","version":1,"data":{"""));
+            });
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+            if (path != null) File.Delete(path);
+        }
+    }
 
     private static void RefusesAndKeeps(Application application, OwnerBlobStatus expected, Func<OwnerDescriptor, string> plant) {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(application);
@@ -153,6 +220,12 @@ public sealed class OwnerBlobRoundTripTests {
                 Assert.That(() => TakeoffCarriers.ReadRegistry(document), Throws.InvalidOperationException);
                 Assert.That(() => TakeoffCarriers.ReadProvenance(planted), Throws.InvalidOperationException);
                 Assert.That(EnclosureDeclaration.Read(document).Source, Does.StartWith("default:").And.Contain("refused and kept"));
+                // The keep policy for reads (ADR 0039): the refusal is a value, so a listing goes on.
+                Assert.That(TakeoffCarriers.TryReadRegistry(document).Refusal, Does.Contain("refused and kept"));
+                Assert.That(TakeoffCarriers.TryReadProvenance(planted).Refusal, Does.Contain("refused and kept"));
+                Assert.That(AutoTagService.Instance.GetStatus(document).StoredSettingsRefusal, Does.Contain("refused and kept"));
+                Assert.That(() => TakeoffAtlas.Snapshot(document, new TakeoffReadRequest()).Unreadable!.Select(blob => blob.ElementId),
+                    Is.EqualTo(new long?[] { null }), "the roster read reports the registry and does not throw");
             });
 
             // Every owner's own write door, and the store under all of them, refuses.

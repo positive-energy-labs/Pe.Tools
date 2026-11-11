@@ -37,13 +37,8 @@ public static class DuctApplier {
     private static readonly ForgeTypeId Cfm = UnitTypeId.CubicFeetPerMinute;
 
     public static (DuctLossStore? Store, string? Error) ReadStore(Document doc) {
-        var read = OwnerBlobStore.Read(doc, DuctLossStore.Owner);
-        if (read.Status != OwnerBlobStatus.Ok) return (null, read.Error);
-        try {
-            return (DuctLossStore.FromData(read.Data!), null);
-        } catch (InvalidOperationException ex) {
-            return (null, ex.Message);
-        }
+        var read = DuctLossStore.Read(OwnerBlobStore.Read(doc, DuctLossStore.Owner));
+        return (read.Value, read.Refusal);
     }
 
     /// <summary>One planned target. Write runs inside the stage's transaction and returns the After text.</summary>
