@@ -1,6 +1,7 @@
 import type { LayoutNode, PaneDecl } from "@pe/agent-contracts";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { reduceLayout } from "./layout-graph";
+import { PaneReveal } from "./pane-reveal";
 import { declaredTeaching, type TeachingLayout } from "./teach";
 import { TeachingLayoutView, type TeachingPaneRender } from "./teaching-layout";
 import { TeachReference } from "./use-teach";
@@ -37,7 +38,6 @@ function project(layout: LayoutNode, panes: GraphLayoutViewProps["panes"]) {
         id: node.id,
         label: declared.label,
         purpose: declared.purpose,
-        pane: declared.frame,
       };
     }
     const children = node.children.map(visit);
@@ -79,6 +79,7 @@ export function GraphLayoutView({ layout, panes, active, bodies, state }: GraphL
   const values = state?.panes ?? local;
   const current = useRef(values);
   current.current = values;
+  const host = useRef<HTMLDivElement>(null);
   const projection = useMemo(() => {
     const reduced = reduceLayout(layout, active);
     return reduced ? project(reduced, panes) : null;
@@ -94,6 +95,25 @@ export function GraphLayoutView({ layout, panes, active, bodies, state }: GraphL
     else setLocal(next);
   };
   if (!projection) return null;
+  // The layout's one reveal verb. A side shows folded on its split (`data-pane-folded`, the same
+  // mark Teaching reads as `visibility: "folded"`). A chosen fold clears, and the split reopens the
+  // side it held folded; a fold the split made under its floor is the sibling's turn to fold.
+  const reveal = (pane: string) => {
+    const splits = [...(host.current?.querySelectorAll<HTMLElement>("[data-layout-split]") ?? [])];
+    for (const { id, start, end } of projection.bindings) {
+      const side = start === pane ? "start" : end === pane ? "end" : null;
+      if (!side || splits.find((node) => node.dataset.layoutSplit === id)?.dataset.paneFolded !== side)
+        continue;
+      const sibling = side === "start" ? end : start;
+      change((prior) =>
+        prior[pane]?.folded
+          ? { ...prior, [pane]: { ...prior[pane], folded: false } }
+          : sibling
+            ? { ...prior, [sibling]: { ...prior[sibling], folded: true } }
+            : prior,
+      );
+    }
+  };
   const folds = Object.fromEntries(
     projection.bindings.map(({ id, start, end }) => [
       id,
@@ -128,7 +148,11 @@ export function GraphLayoutView({ layout, panes, active, bodies, state }: GraphL
   );
   return (
     <TeachReference value={reference}>
-      <TeachingLayoutView layout={projection.layout} content={bodies} state={{ folds, sizes }} />
+      <PaneReveal value={reveal}>
+        <div ref={host} className="contents">
+          <TeachingLayoutView layout={projection.layout} content={bodies} state={{ folds, sizes }} />
+        </div>
+      </PaneReveal>
     </TeachReference>
   );
 }

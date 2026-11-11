@@ -17,6 +17,8 @@ import { useWorkbench } from "./provider";
 import { useRouteTabs } from "./tabs";
 import { RouteTabActions, RouteTabs, tabTitle } from "./route-tabs";
 import { RouteRetention } from "./route-retention";
+import { DOCK_PANES } from "./dock-layout";
+import { paneFrame } from "#/route/body";
 
 /** Under these a side folds to its rail: Pea reads thin, a tool needs room for its table. */
 const DOCK_FLOOR = { pea: 140, tools: 420 };
@@ -109,20 +111,8 @@ export function RouteDock({
           pane("tools"),
         )}
         panes={{
-          pea: {
-            label: "pea",
-            purpose: "Conversation",
-            draws: [],
-            verbs: [],
-            frame: { header: false, flush: true, scroll: "clip" },
-          },
-          tools: {
-            label: "tools",
-            purpose: "Retained tool routes",
-            draws: [],
-            verbs: [],
-            frame: { flush: true, scroll: "clip" },
-          },
+          pea: { label: "pea", purpose: "Conversation", draws: [], verbs: [] },
+          tools: { label: "tools", purpose: "Retained tool routes", draws: [], verbs: [] },
         }}
         active={() => true}
         state={{ panes: layout, onChange: setLayout }}
@@ -141,6 +131,8 @@ export function RouteDock({
               ) : (
                 children
               ),
+              // No head: the hosted surface's own panes carry theirs (two chrome layers).
+              { ...paneFrame(DOCK_PANES.pea.body), title: "" },
             ),
           tools: (frame) =>
             frame(
@@ -154,6 +146,7 @@ export function RouteDock({
                 <PlaceViewsProvider value={views}><RouteRetention {...tabs} renderRoute={renderRoute} /></PlaceViewsProvider>
               </>,
               {
+                ...paneFrame(DOCK_PANES.tools.body),
                 tabs: strip,
                 actions: (
                   <RouteTabActions

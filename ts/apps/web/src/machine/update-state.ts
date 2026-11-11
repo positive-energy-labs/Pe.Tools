@@ -10,7 +10,7 @@
 import type { Machine } from "@pe/agent-contracts";
 import type { UpdatePlan } from "@pe/host-contracts/pe-revit-contract";
 
-import { planWaits, receiptRunning } from "./model";
+import { planWaits, receiptRunning } from "@pe/agent-contracts";
 
 export type UpdateStatus =
   | { readonly state: "idle"; readonly current: string | null; readonly checkError: string | null }

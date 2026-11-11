@@ -1,20 +1,16 @@
 /** One Activity model and row anatomy for Home, tray and the anchored search palette. */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Copy, RotateCcw } from "lucide-react";
 import { useCopy } from "@pe/kit/lib/use-copy";
 import { useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
 import { Button } from "@pe/kit/lang/button";
-import type { HarnessThreadSummary } from "@pe/agent-contracts";
-import { currentFixture } from "../shell/fixture-name";
+import { NOTICE_GROUPS, type NoticeRow } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
-import { useMachine } from "#/machine/use-machine";
-import { attention, machineOf } from "#/machine/model";
-import { harnessClient } from "#/workbench/provider/harness-client";
-import { resolveWorkbenchConfig } from "#/workbench/config";
 import { relativeThreadAge } from "#/chat/thread-navigation";
 import { usePodRoutes } from "#/route/pod-route-context";
+import { previousOf } from "#/host/resource-state";
 import {
   destinationDetail,
   destinationLabel,
@@ -24,16 +20,8 @@ import {
 } from "./global-items";
 import { resumeRefusal } from "./model";
 import { useDestination, useNavigation } from "./state";
-import {
-  GROUP_NAME,
-  LEDGER_GROUPS,
-  ledgerRows,
-  openAsk,
-  type LedgerItem,
-  type LedgerPresentation,
-  type LedgerRow,
-  type LedgerSources,
-} from "./ledger-model";
+import { GROUP_NAME, type LedgerItem, type LedgerPresentation } from "./ledger-model";
+import { feedRows, useNoticeFeed } from "./notice-feed";
 
 const TONE: Partial<Record<string, "caution" | "alarm">> = {
   asks: "caution",
@@ -46,84 +34,20 @@ const TONE: Partial<Record<string, "caution" | "alarm">> = {
   failed: "alarm",
 };
 /** Open work stays above tools, Works and threads while a query ranks them. */
-const LEADING_GROUPS = LEDGER_GROUPS.map((group) => GROUP_NAME[group]);
+const LEADING_GROUPS = NOTICE_GROUPS.map((group) => GROUP_NAME[group]);
 
-/** The host's open work, live: thread summaries stream; receipts are read. */
+/** The host's open work, live: the notice feed's rows as the host grouped and worded them. */
 function useLedgerRows() {
-  const [threads, setThreads] = useState<readonly HarnessThreadSummary[] | null>(null);
-  const [fault, setFault] = useState<string | null>(null);
-  const [asks, setAsks] = useState<LedgerSources["asks"]>(new Map());
-  const [receipts, setReceipts] = useState<LedgerSources["receipts"]>([]);
-  const { snapshot } = useNavigation();
-  const machine = machineOf(useMachine().reading);
-  const asked = useRef(new Map<string, number>());
-  useEffect(
-    () =>
-      harnessClient(resolveWorkbenchConfig().origin).summaries(
-        (next) => {
-          setThreads(next);
-          setFault(null);
-        },
-        (error) => setFault(error.message),
-      ),
-    [],
-  );
-  useEffect(() => {
-    if (currentFixture() !== null) return;
-    // ponytail: receipts are read on focus and every 15 s; a receipts stream (wave B) replaces this.
-    const read = () =>
-      void peClient
-        .call("actions.read", {})
-        .then((value) =>
-          setReceipts(Array.isArray(value) ? (value as LedgerSources["receipts"]) : []),
-        )
-        .catch((error) => {
-          console.error("ledger: asynchronous operation failed", error);
-        });
-    read();
-    const timer = setInterval(() => { if (!document.hidden) read(); }, 15_000);
-    window.addEventListener("focus", read);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener("focus", read);
-    };
-  }, []);
-  // A waiting thread's ask is read from its log once per change of its last seq.
-  useEffect(() => {
-    for (const thread of threads ?? []) {
-      const waiting = thread.activity.state === "waiting" || thread.activity.pending > 0;
-      if (!waiting || asked.current.get(thread.id) === thread.lastSeq) continue;
-      asked.current.set(thread.id, thread.lastSeq);
-      void peClient
-        .call("thread.get", { params: { id: thread.id } })
-        .then((body) => {
-          const ask = openAsk(body.events);
-          if (ask) setAsks((prior) => new Map(prior).set(thread.id, ask));
-        })
-        .catch((error) => {
-          console.error("ledger: asynchronous operation failed", error);
-        });
-    }
-  }, [threads]);
-  const attentionLines = machine ? attention(machine) : [];
-  const rows = useMemo(
-    () =>
-      ledgerRows(
-        {
-          threads: threads ?? [],
-          asks,
-          receipts,
-          works: snapshot?.works ?? [],
-          attention: attentionLines,
-        },
-        Date.now(),
-      ),
-    [threads, asks, receipts, snapshot, attentionLines.join("\n")],
-  );
+  const reading = useNoticeFeed();
   return {
-    rows,
-    status: threads ? ("ready" as const) : fault ? ("failed" as const) : ("pending" as const),
-    fault,
+    rows: feedRows(previousOf(reading), NOTICE_GROUPS),
+    // The feed answered once: the presentation is ready, empty or not.
+    status: previousOf(reading)
+      ? ("ready" as const)
+      : reading.state === "failed"
+        ? ("failed" as const)
+        : ("pending" as const),
+    fault: reading.state === "failed" ? reading.message : null,
   };
 }
 
@@ -185,15 +109,16 @@ export function useLedgerList(
         }))
       : []),
   ];
-  const resume = (row: LedgerRow) => {
-    setResuming(row.resume!);
-    resumeThread(row.resume!)
+  const resume = (row: NoticeRow, thread: string) => {
+    setResuming(thread);
+    resumeThread(thread)
       .then(() => go(row.url!))
       .catch((cause: unknown) => setRefusal(String(cause)))
       .finally(() => setResuming(null));
   };
   /** One row shape for ledger rows, destinations and notes: verb column, what, where, fact. */
   const row = (item: Item) => {
+    const act = item.kind === "row" && item.row.act?.kind === "resume" ? item.row.act : null;
     if (item.kind === "note")
       return {
         lead: <span className="inline-block w-[11ch]" />,
@@ -231,12 +156,12 @@ export function useLedgerList(
       // The failure's raw text folds behind the row: its tooltip, and the copy press.
       title: item.kind === "row" ? item.row.detail : undefined,
       actions:
-        item.kind === "row" && item.row.resume ? (
+        item.kind === "row" && item.row.act?.kind === "resume" ? (
           <Button
             label={`Resume ${item.row.what}: re-send the turn the host restart cut off`}
             icon={RotateCcw}
-            busy={resuming === item.row.resume}
-            onClick={() => resume(item.row)}
+            busy={resuming === item.row.act.threadId}
+            onClick={() => resume(item.row, act!.threadId)}
           />
         ) : item.kind === "row" && item.row.detail ? (
           <Button
@@ -290,10 +215,10 @@ export function useLedgerList(
 }
 
 /** The tray's counter strip: one count per group, waits and working first. */
-function Counters({ rows }: { rows: readonly LedgerRow[] }) {
+function Counters({ rows }: { rows: readonly NoticeRow[] }) {
   return (
     <dl className="m-0 flex hairline-b" aria-label="Activity by group">
-      {LEDGER_GROUPS.map((group) => {
+      {NOTICE_GROUPS.map((group) => {
         const count = rows.filter((row) => row.group === group).length;
         return (
           <div key={group} className="flex min-w-0 flex-1 flex-col-reverse px-2 py-1 hairline-r">
@@ -327,7 +252,7 @@ export function Ledger({
     groups: {
       of: ledger.props.groupOf,
       order: LEADING_GROUPS,
-      collapsible: LEDGER_GROUPS.filter((group) => group !== "waits" && group !== "working").map(
+      collapsible: NOTICE_GROUPS.filter((group) => group !== "waits" && group !== "working").map(
         (group) => GROUP_NAME[group],
       ),
     },

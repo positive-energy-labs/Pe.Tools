@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { MachineNotice } from "@pe/agent-contracts";
+import { readingFrameSchema, type NoticeRow } from "@pe/agent-contracts";
 import type { NativeMessageEvent } from "@pe/host-contracts/native-adapter";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
@@ -13,51 +13,61 @@ const question =
   vi.fn<(id: string, requestId: string, action: string, content?: object) => Promise<void>>();
 const prompt = vi.fn<(id: string, input: { text: string }) => Promise<{ turnId: string }>>();
 const cancel = vi.fn<(id: string) => Promise<void>>();
-vi.mock("#/workbench/provider/harness-client", () => ({
+vi.mock("#/workbench/provider/harness-client", async (actual) => ({
+  ...(await actual<typeof import("#/workbench/provider/harness-client")>()),
   harnessClient: () => ({ permission, question, prompt, cancel }),
 }));
 
-const asking: MachineNotice = {
-  id: "10000000-0000-4000-8000-000000000001",
+const base = {
+  group: "waits",
   revision: 1,
-  title: "Pea wants approval · ducts",
-  body: "pe_do revit.ducts.resize",
-  href: "/pea?thread=t1",
+  where: "Claude",
+  at: null,
+  url: "/pea?thread=t1",
+} as const;
+const asking: NoticeRow = {
+  ...base,
+  key: "thread:t1",
+  verb: "approve",
+  what: "ducts",
+  says: "pe_do revit.ducts.resize",
   act: {
-    kind: "permission",
+    kind: "consent",
     threadId: "t1",
     requestId: "r1",
-    options: [
-      { optionId: "allow", name: "Allow once", kind: "allow_once" },
-      { optionId: "deny", name: "Deny", kind: "reject_once" },
-    ],
+    allow: { optionId: "allow" },
+    reject: { optionId: "deny" },
   },
 };
-const finished: MachineNotice = {
-  id: "10000000-0000-4000-8000-000000000002",
-  revision: 1,
-  title: "ducts",
-  body: "Resized **41 of 43** ducts.",
-  href: "/pea?thread=t1",
+const finished: NoticeRow = {
+  ...base,
+  key: "thread:t2",
+  group: "unread",
+  verb: "done",
+  what: "ducts",
+  says: "Resized **41 of 43** ducts.",
   act: { kind: "reply", threadId: "t1" },
 };
-const revit: MachineNotice = {
-  id: "10000000-0000-4000-8000-000000000003",
-  revision: 1,
-  title: "Revit start succeeded",
-  body: "Done.",
+const revit: NoticeRow = {
+  ...base,
+  key: "action:a3",
+  group: "failed",
+  verb: "failed",
+  what: "revit.start",
+  where: "Pea",
+  says: "Revit never answered",
+  url: null,
 };
-const level: MachineNotice = {
-  id: "10000000-0000-4000-8000-000000000004",
-  revision: 1,
-  title: "Pea is asking · ducts",
-  body: "Which level?",
-  href: "/pea?thread=t1",
+const level: NoticeRow = {
+  ...base,
+  key: "thread:t4",
+  verb: "asks",
+  what: "ducts",
+  says: "Which level?",
   act: {
     kind: "question",
     threadId: "t1",
     requestId: "q1",
-    message: "Which level?",
     requestedSchema: { type: "object", properties: { level: { type: "string" } } },
   },
 };
@@ -65,14 +75,15 @@ const level: MachineNotice = {
 let postMessage: ReturnType<typeof vi.fn<(message: string) => void>>;
 let listeners: Set<(event: NativeMessageEvent) => void>;
 const sent = (type: string) => postMessage.mock.calls.some(([m]) => JSON.parse(m).type === type);
-const show = (...notices: MachineNotice[]) =>
+/** The host's notice feed as the card's follower sees it: each frame is the whole feed. */
+let streams: { url: string; onmessage: ((m: MessageEvent<string>) => void) | null }[];
+const feed = (value: unknown) =>
   act(() =>
-    notices.forEach((notice) =>
-      listeners.forEach((receive) =>
-        receive(new MessageEvent("message", { data: { type: "notice", notice } })),
-      ),
-    ),
+    streams.at(-1)!.onmessage?.({
+      data: JSON.stringify(readingFrameSchema.parse({ kind: "snapshot", key: "k", value })),
+    } as MessageEvent<string>),
   );
+const show = (...rows: NoticeRow[]) => feed({ id: 1, tray: true, rows });
 const card = () => screen.queryByRole("status", { name: "notice" });
 beforeEach(() => {
   vi.stubGlobal(
@@ -80,6 +91,18 @@ beforeEach(() => {
     class {
       observe() {}
       disconnect() {}
+    },
+  );
+  streams = [];
+  vi.stubGlobal(
+    "EventSource",
+    class {
+      onmessage: ((m: MessageEvent<string>) => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(public url: string) {
+        streams.push(this);
+      }
+      close() {}
     },
   );
   postMessage = vi.fn<(message: string) => void>();
@@ -93,7 +116,8 @@ beforeEach(() => {
   };
   for (const door of [permission, question, prompt, cancel]) door.mockReset();
   // The ledger is per-page storage; each test starts with none.
-  const store = new Map<string, string>();
+  // A card that followed before: its first feed raises what moved, not a baseline.
+  const store = new Map<string, string>([["pe.notices.card-seen", "{}"]]);
   Object.defineProperty(window, "localStorage", {
     configurable: true,
     value: {
@@ -116,13 +140,12 @@ test("the card tells the tray it can take notices only once it listens", () => {
   expect(postMessage).toHaveBeenCalledWith(JSON.stringify({ type: "notice-ready" }));
 });
 
-test("malformed native notices never enter the card", () => {
+test("the card follows the feed as the tray, and a malformed feed never enters it", () => {
   render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
-  act(() =>
-    listeners.forEach((receive) =>
-      receive({ data: { type: "notice", notice: { id: "bad", revision: 1 } } }),
-    ),
+  expect(new URL(streams[0]!.url, "http://host").searchParams.get("keys")).toBe(
+    JSON.stringify([{ kind: "notices", as: "tray" }]),
   );
+  feed({ id: 1, tray: true, rows: [{ key: "bad", revision: 1 }] });
   expect(card()).toBeNull();
   show(revit);
   expect(screen.getByText("1/1")).toBeTruthy();
@@ -132,14 +155,30 @@ test("a permission answer goes to the thread's door; its item leaves only when t
   permission.mockRejectedValueOnce(Error("no request r1")).mockResolvedValueOnce();
   render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture={false} />);
   show(asking, revit);
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Allow once" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Allow pe_do revit.ducts.resize" })));
   expect(permission).toHaveBeenCalledWith("t1", "r1", "allow");
   expect(screen.getByText(/Pea did not take this answer: Error: no request r1/)).toBeTruthy();
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Allow once" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Allow pe_do revit.ducts.resize" })));
   // The other item stays: the card pages on.
   expect(screen.getByText("1/1")).toBeTruthy();
-  expect(screen.getByText("Revit start succeeded")).toBeTruthy();
+  expect(screen.getByText("revit.start · failed")).toBeTruthy();
   expect(sent("notice-hide")).toBe(false);
+});
+
+test("the card is the sweep: Reject sends the window's reject option while it counts down", async () => {
+  permission.mockResolvedValue();
+  render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture={false} />);
+  const deadline = new Date(Date.now() + 60_000).toISOString();
+  show({
+    ...asking,
+    act: { ...(asking.act as Extract<NoticeRow["act"], { kind: "consent" }>), deadline },
+  });
+  expect(screen.getByRole("timer").textContent).toMatch(/^(59|60)s$/);
+  await act(async () =>
+    fireEvent.click(screen.getByRole("button", { name: "Reject pe_do revit.ducts.resize" })),
+  );
+  expect(permission).toHaveBeenCalledExactlyOnceWith("t1", "r1", "deny");
+  expect(card()).toBeNull();
 });
 
 test("a question is answered through the thread's question door, and the last item ends the card", async () => {
@@ -155,7 +194,7 @@ test("a question is answered through the thread's question door, and the last it
 test("a fixture card refuses to answer or reply for Pea", () => {
   render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
   show(asking, finished);
-  fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+  fireEvent.click(screen.getByRole("button", { name: "Allow pe_do revit.ducts.resize" }));
   expect(permission).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "next" }));
   fireEvent.change(screen.getByRole("textbox", { name: "reply to Pea" }), {
@@ -163,6 +202,21 @@ test("a fixture card refuses to answer or reply for Pea", () => {
   });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
   expect(prompt).not.toHaveBeenCalled();
+});
+
+test("a row someone is looking at (attended) raises no card", () => {
+  render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
+  show({ ...finished, attended: true });
+  expect(card()).toBeNull();
+});
+
+test("a first follow records the feed and raises nothing earlier", () => {
+  window.localStorage.setItem("pe.notices.card-seen", "null");
+  render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
+  show(revit);
+  expect(card()).toBeNull();
+  show(revit, finished);
+  expect(screen.getByText("1/1")).toBeTruthy();
 });
 
 test("a dismissed card does not come back from a replay of the same revision", () => {

@@ -12,7 +12,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import type { UpdateThreadRequest } from "@pe/agent-contracts";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { demoThreads } from "./thread-navigation";
-import { ThreadsSidebar as Sidebar, ThreadPane } from "./thread-palette";
+import { ThreadsSidebar as Sidebar } from "./thread-palette";
 
 function ThreadsSidebar(props: ComponentProps<typeof Sidebar>) {
   const [selected, onSelection] = useState<string[]>([]);
@@ -87,27 +87,6 @@ function mount(
   return onUpdate;
 }
 const row = (title: string) => screen.getByText(title).closest<HTMLElement>('[role="option"]')!;
-
-test("thread head uses the pane title switcher and grouped labelled new action", () => {
-  const onNew = vi.fn(),
-    setMode = vi.fn();
-  const { container } = render(
-    <ThreadPane mode="threads" setMode={setMode} count={9} onNew={onNew}>
-      roster
-    </ThreadPane>,
-  );
-  const header = container.querySelector('[data-slot="pane-header"]')!;
-  const modes = screen.getByRole("group", { name: "View depth" });
-  expect(modes.closest('[data-slot="rail-lead"]')).toBeTruthy();
-  expect(header.contains(modes)).toBe(true);
-  const action = screen.getByRole("button", { name: "New thread" });
-  expect(action.textContent).toBe("new");
-  expect(action.closest('[data-slot="rail-actions"] .dl-button-group')).toBeTruthy();
-  fireEvent.click(action);
-  expect(onNew).toHaveBeenCalledOnce();
-  fireEvent.click(within(modes).getByRole("button", { name: "world" }));
-  expect(setMode).toHaveBeenCalledWith("world");
-});
 
 test("the menu on a selected row acts on every selected thread and greys what needs one", async () => {
   const onUpdate = mount();

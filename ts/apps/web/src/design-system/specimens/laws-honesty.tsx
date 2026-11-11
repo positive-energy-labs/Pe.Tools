@@ -5,6 +5,7 @@ import { StateCell } from "@pe/kit/lang/cell";
 import { FactChip } from "@pe/kit/lang/chip";
 import { Provenance } from "@pe/kit/lang/section";
 import { Button } from "@pe/kit/lang/button";
+import { ConsentSweep } from "@pe/kit/lang/consent-sweep";
 import { CounterExample, Gap, Law } from "#/design-system/exhibit";
 import { ARMING_SPECIMEN, PARAM_ROWS, cellProps } from "#/design-system/specimens-data";
 
@@ -44,6 +45,29 @@ export function HonestyLaws({ owner }: { owner: (name: string) => string }) {
       </Law>
 
       <CeremonyLaw owner={owner("ceremony scales with blast radius")} />
+
+      <Law
+        name="consent in two places"
+        owner={owner("consent in two places")}
+        ruling="Run consent is drawn by the write button that asked and by one sweep: the topbar on web, the card in the tray. The sweep goes down; caution is on its timer alone."
+      >
+        <ConsentSweep
+          shell="topbar"
+          windows={[
+            {
+              requestId: "law",
+              threadId: "fixture",
+              thread: "Size the riser ducts",
+              verb: "Pea writes",
+              reject: { optionId: "stop_writes" },
+            },
+          ]}
+          onReject={noop}
+        />
+        <CounterExample why="a third drawing of the same window: the composer card or the Timeline head">
+          <span className="t-small text-ink-2">Pea writes · Reject? 42s</span>
+        </CounterExample>
+      </Law>
     </>
   );
 }

@@ -53,17 +53,20 @@ export const module = route({
       title: "Members",
       purpose: "Browse installed Pod members",
       read: inventory,
-      draw: draw(() => import("./drawing.tsx"), "Members"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./drawing.tsx"), "Members"),
     },
     spec: {
       title: "Spec",
       purpose: "Edit saved member Work",
-      draw: draw(() => import("./drawing.tsx"), "Spec"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./drawing.tsx"), "Spec"),
     },
     runs: {
       title: "Runs",
       purpose: "Inspect member or Pod runs",
-      draw: draw(() => import("./drawing.tsx"), "Runs"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./drawing.tsx"), "Runs"),
     },
   },
   edits: {

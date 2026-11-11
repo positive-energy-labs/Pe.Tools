@@ -57,7 +57,8 @@ export const module = route({
     workspace: {
       title: "Family",
       purpose: "Review the family and its cut-sheet evidence",
-      draw: draw(() => import("./mount"), "FamilyBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./mount"), "FamilyBody"),
     },
   },
   edits: {

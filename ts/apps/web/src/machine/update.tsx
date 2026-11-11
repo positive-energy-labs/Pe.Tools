@@ -16,7 +16,8 @@ import { useAction } from "#/actions/use-action";
 import { recheckUpdate } from "#/host/install";
 import { automaticUpdatesRpc } from "../../../../packages/mcps/src/shared/rpc-client";
 
-import { blockersOf, disconnected, hhmm, legWords, machineOf } from "./model";
+import { blockersOf } from "@pe/agent-contracts";
+import { disconnected, hhmm, legWords, machineOf } from "./model";
 import { updateStatus } from "./update-state";
 import { SEED_REFUSAL, useUpdateConsent } from "./use-machine";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
