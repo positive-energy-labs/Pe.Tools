@@ -10,7 +10,7 @@ import {
   type FindingInput,
 } from "@pe/agent-contracts/slots";
 import type { RouteWorkspace } from "@pe/runtime";
-import { command, io, refused, StepFailure } from "../command-executor.ts";
+import { command, io, refused, StepFailure, type CommandWorkReads } from "../command-executor.ts";
 import { productRouteWorkPath } from "../product-paths.ts";
 
 /*
@@ -20,8 +20,9 @@ import { productRouteWorkPath } from "../product-paths.ts";
  * catalog; undo is the Work journal's per-author step (`RouteWorkspace.step` with `own`).
  */
 
-export async function findingsList(workspace: RouteWorkspace, key: WorkKey, subject?: string): Promise<readonly Finding[]> {
-  const view = await workspace.view(key, FINDINGS_OWNER);
+/** `reads` is the invocation's own Work reader (`CommandContext.work`), which carries its read context. */
+export async function findingsList(reads: Pick<CommandWorkReads, "view">, key: WorkKey, subject?: string): Promise<readonly Finding[]> {
+  const view = await reads.view(key, FINDINGS_OWNER);
   const { findings } = findingsWorkSchema.parse(view?.doc ?? {});
   return Object.values(findings).filter((f) => subject === undefined || f.subject === subject);
 }
@@ -57,8 +58,8 @@ export const findingsExecutors = (workspace: RouteWorkspace | undefined) => ({
       handleOf(input);
       return { effects: [], prepare: async () => input };
     },
-    run: (_ctx, execution) =>
-      io(async () => ({ findings: await findingsList(workspace!, handleOf(execution.prepared).key, execution.prepared.subject) })),
+    run: (ctx, execution) =>
+      io(async () => ({ findings: await findingsList(ctx.work, handleOf(execution.prepared).key, execution.prepared.subject) })),
   }),
   [FINDINGS_DOORS.write]: command(commands[FINDINGS_DOORS.write], commands[FINDINGS_DOORS.write].input, {
     async bind({ admission: { input } }) {
