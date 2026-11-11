@@ -375,7 +375,7 @@ export function SystemsPane({ ctx }: { ctx: DuctsDrawContext }) {
       </Scroll>
       <ReadCoverage coverage={coverage} />
       {(rosterState.status === "failed" ? rosterState.reason : null) ? (
-        <p role="alert" data-tone="alarm">
+        <p role="alert" data-tone="caution">
           {rosterState.status === "failed" ? rosterState.reason : null}
         </p>
       ) : null}

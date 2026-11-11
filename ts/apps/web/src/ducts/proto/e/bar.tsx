@@ -694,7 +694,7 @@ function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced
         </>
       )}
       {error ? (
-        <p role="alert" data-tone="alarm">
+        <p role="alert" data-tone="caution">
           {error}
         </p>
       ) : null}

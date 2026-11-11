@@ -1,6 +1,8 @@
 /**
  * What a verb did, after it did it: coloured mono text spending existing meaning roles (busy ink-2,
- * receipt done, refused alarm, advisory ink-2, error caution + squiggle). Never wrap a lane of
+ * receipt done, refused caution, advisory ink-2, error caution + squiggle). A refusal touched
+ * nothing, so it is not damage and never wears the one alarm (SURFACE-PHILOSOPHY I2, swatch
+ * "one alarm"); the Ban mark and the missing squiggle keep it apart from an error. Never wrap a lane of
  * these in an `ArtifactFrame`; it reports on a machine-operated object, it is not one.
  */
 import { Ban, Check, Info, LoaderCircle, TriangleAlert, type LucideIcon } from "lucide-react";
@@ -32,9 +34,9 @@ export const outcomeLineRecipe = tv({
 
 export type OutcomeKind = "busy" | "receipt" | "refused" | "advisory" | "error";
 
-const OUTCOME_TONE: Partial<Record<OutcomeKind, "done" | "alarm" | "caution">> = {
+const OUTCOME_TONE: Partial<Record<OutcomeKind, "done" | "caution">> = {
   receipt: "done",
-  refused: "alarm",
+  refused: "caution",
   error: "caution",
 };
 

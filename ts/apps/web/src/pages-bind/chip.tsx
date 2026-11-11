@@ -65,7 +65,7 @@ export function PageBindingChip({ slug }: { slug: string }) {
       )}
       <a href={routeAddress("bind").link({ page: slug }, carry)}>Bind…</a>
       {refusal && (
-        <span role="status" data-tone="alarm">
+        <span role="status" data-tone="caution">
           {refusal}
         </span>
       )}

@@ -70,7 +70,7 @@ export function updateSaid(machine: Machine, checking = false): Said {
     case "failed":
       return status.during === "check"
         ? { text: "check failed", tone: "caution" }
-        : { text: `update ${machine.update.receipt?.state ?? "failed"}`, tone: "alarm" };
+        : { text: `update ${machine.update.receipt?.state ?? "failed"}`, tone: "caution" };
     case "available":
       return { text: `${status.plan.latest} · blocked`, tone: "caution" };
     case "ready":

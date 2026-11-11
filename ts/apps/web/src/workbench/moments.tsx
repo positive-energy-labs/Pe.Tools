@@ -482,7 +482,7 @@ function ToolRunFold({
       <summary className="dl-tool-run-summary" data-new-call={newCall ? "" : undefined}>
         <Glyph
           size={13}
-          data-tone={failed ? "alarm" : undefined}
+          data-tone={failed ? "caution" : undefined}
           aria-hidden="true"
           className={working ? "animate-spin" : undefined}
         />
@@ -702,7 +702,7 @@ const ToolCallPart = memo(
                 lang="json"
                 title="out"
                 copyLabel="Copy output"
-                tone="alarm"
+                tone="caution"
                 wrap
               />
             ) : (

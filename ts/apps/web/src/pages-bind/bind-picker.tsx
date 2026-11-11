@@ -149,7 +149,7 @@ export function BindPicker({
         {outcome ? (
           <p
             className={`m-0 t-small ${outcome.ok ? "text-ink-2" : ""}`}
-            data-tone={outcome.ok ? undefined : "alarm"}
+            data-tone={outcome.ok ? undefined : "caution"}
             role="status"
           >
             {outcome.message}{" "}

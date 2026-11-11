@@ -1,7 +1,9 @@
 /* THE TOOLS TAB STRIP (Thread Places), in Pea's header while collapsed, in the tools pane's
-   header while expanded. Places give way before they overlap: a label ellipsizes, its close
-   keeps its size, and the close shows on hover or focus (it stays in the tab order). */
+   header while expanded. Places give way before they overlap: a label ellipsizes. The close
+   reserves no width at rest (L1, L3: twelve hidden closes starved every label to one glyph); it
+   floats over its own tab's end on hover or focus, so nothing shifts, and stays in the tab order. */
 [data-slot="route-tabs"] > * {
+  position: relative;
   display: flex;
   min-width: 0;
   flex-shrink: 1;
@@ -11,10 +13,15 @@
   min-width: 0;
   max-width: 100%;
 }
-[data-slot="route-tabs"] > * > :last-child button {
-  flex-shrink: 0;
+[data-slot="route-tabs"] > * > :last-child {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  display: flex;
+  align-items: center;
+  background: var(--pe-on, var(--pe-page));
   opacity: 0;
 }
-[data-slot="route-tabs"] > :is(:hover, :focus-within) > :last-child button {
+[data-slot="route-tabs"] > :is(:hover, :focus-within) > :last-child {
   opacity: 1;
 }

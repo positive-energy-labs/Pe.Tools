@@ -242,7 +242,7 @@ export function ChatSituationHead({
     kind,
     tone:
       kind === "failure"
-        ? "alarm"
+        ? "caution"
         : kind === "ready"
           ? "done"
           : kind === "busy"

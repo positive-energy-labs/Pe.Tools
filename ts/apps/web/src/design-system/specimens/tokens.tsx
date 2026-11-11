@@ -101,12 +101,12 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
       },
       {
         token: "--pe-alarm",
-        means: "THE one alarm: drift, refusal, the ghost value",
+        means: "THE one alarm: drift, the ghost value",
         modes: "the one legislated off-band token (+35% chroma), both modes",
       },
       {
         token: "--pe-caution",
-        means: "stale · unverified · unsaved · partial · error",
+        means: "stale · unverified · unsaved · partial · error · refusal",
         modes: "on-band; 2.8× the incumbent kiln's chroma",
       },
       {

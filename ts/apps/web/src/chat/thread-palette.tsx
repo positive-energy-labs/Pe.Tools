@@ -626,7 +626,7 @@ function ThreadActivityMark({
       <span
         data-slot="nav-state"
         data-tone={
-          activity === "failed" ? "alarm" : activity === "waiting" || woke ? "caution" : undefined
+          activity === "failed" || activity === "waiting" || woke ? "caution" : undefined
         }
         role={Icon ? "img" : undefined}
         aria-label={Icon ? word : undefined}

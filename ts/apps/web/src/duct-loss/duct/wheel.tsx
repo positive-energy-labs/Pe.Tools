@@ -1,7 +1,7 @@
 /**
  * The Ductulator, drawn. A fixed base plate carries the friction and velocity scales; a clear
  * disk over it carries two cfm scales and the diameter scale. Drag the disk to set the diameter
- * (read in the window at six o'clock); drag the red cursor to pick a cfm and read Δp and velocity
+ * (read in the window at six o'clock); drag the cursor to pick a cfm and read Δp and velocity
  * straight across. Geometry in `ductulator.ts`; a `Face` is one printing of the wheel.
  */
 import { useMemo, useRef, type PointerEvent, type ReactNode } from "react";
@@ -19,10 +19,14 @@ import {
   type Range,
 } from "./ductulator";
 
+// Kind picks the hue, tier picks the rung (design-system ledger, 2026-10-26): base, disk and
+// cursor are one kind, so they share ink and differ by rung. The fixed base plate recedes; the
+// disk you turn and the cursor you drag read at full ink. Solid against dashed and ring position
+// already tell them apart, so a hue here would be a second channel carrying nothing (I3).
 const INK = "var(--color-ink)";
-export const BASE = "var(--color-viz-1)";
-export const DISK = "var(--color-viz-2)";
-export const CURSOR = "var(--color-viz-3)";
+export const BASE = "var(--color-ink-2)";
+export const DISK = INK;
+export const CURSOR = INK;
 
 const fmt = (n: number, d = 2) => n.toLocaleString(undefined, { maximumFractionDigits: d });
 
