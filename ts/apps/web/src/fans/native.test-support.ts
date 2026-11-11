@@ -30,7 +30,7 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
       // A kernel picture pane too: the shell's own drawing of the slot.
       if ((mount.spec.panes[id] as { kernel?: string } | undefined)?.kernel === "picture") return mount.draw(id, (ctx) => kernelPane(mount, id, ctx));
       const body=mount.draw(id) as {props:{ctx:unknown}};
-      const Component=({"sheet-roster":RosterBody,"sheet-ledger":LedgerBody,"e-systems":networkBodies.SystemsPane,"e-sidebar":networkBodies.TreePane,"e-rules-all":networkBodies.AllRulesBody,"e-rules":networkBodies.RulesBody,"e-picture":networkBodies.PictureBody,"e-inbox":networkBodies.InboxBody} as Record<string,any>)[id];
+      const Component=({"sheet-roster":RosterBody,"sheet-ledger":LedgerBody,"e-systems":networkBodies.SystemsPane,"e-sidebar":networkBodies.TreePane,"e-rules-all":networkBodies.AllRulesBody,"e-rules":networkBodies.RulesBody,"e-inbox":networkBodies.InboxBody} as Record<string,any>)[id];
       return createElement(Component,{ctx:body.props.ctx});
     }, close: mount.dispose,
     controls: { subject: mount.page.subject, query: (key:string,value:unknown)=>mount.page.query({[key]:value}) },

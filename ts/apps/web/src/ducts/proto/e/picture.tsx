@@ -1,10 +1,9 @@
-import { picturePageMove } from "#/shell/picture-page";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 /**
- * E's picture content: what the ducts picture is of and what it marks. Every picture behaviour
- * (capture, camera, selection, hover, readout and pane furniture) is the shared `Picture`'s; this
- * file only produces content for it.
+ * E's picture content: what the ducts picture is of and what it marks, as parts for the kernel's
+ * picture pane (`route/slots/picture`). Every picture behaviour (capture, camera, selection, hover,
+ * readout and pane furniture) is the kernel's; this file mounts no picture.
  */ import type { Members, SubjectKey } from "@pe/kit/lang/attention";
 import { ductElements } from "../../identity";
 import { useContext, useMemo, type ReactNode, type RefObject } from "react";
@@ -13,7 +12,6 @@ import { VisibleRouteResource } from "#/route/activity";
 import { damageLayers } from "#/scene/damage";
 import {
   layersOn,
-  Picture,
   type PictureLayer,
   type PictureOverlayFrame,
 } from "#/scene/picture/picture";
@@ -26,14 +24,12 @@ import { snapshotById } from "@pe/ducts-domain/readiness";
 import { scopeOf, systemScope } from "@pe/ducts-domain/system-scope";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { SubjectText } from "@pe/kit/lang/subject-text";
-import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
+import type { PictureParts } from "#/route/slots/picture/overlay";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 import { useAdmittedSubject } from "#/shell/subject";
-import type { OrbitViewport, PicturePage } from "@pe/agent-contracts";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
-import type * as Atom from "effect/reactivity/Atom";
 import type { DuctsDrawContext } from "../../route.ts";
 import { network } from "../../route.ts";
 import type { Ruling } from "../../annotations";
@@ -70,14 +66,13 @@ type PictureContext = DuctsDrawContext;
 interface DuctsPictureProps {
   ctx: PictureContext;
   snapshot: DuctSnapshot | null;
-  captureSource?: { document: { session: string; openId: string }; version: string } | null;
-  doc: { session: string; openId: string } | null;
+  /** The network read's model revision and whether it is current: what the capture follows. Pricing
+   * withdraws action authority, but does not invalidate current native geometry. */
+  source: { version: string; current: boolean };
   priced: Priced | null;
   analysis: import("@pe/agent-contracts").DuctsPricingData["analysis"] | null;
   subject: Run | null;
   work: LossesWork;
-  selection: Atom.Atom<ReadonlySet<SubjectKey>>;
-  onPose?: (pose: OrbitViewport | null) => void;
 }
 
 const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
@@ -85,7 +80,8 @@ const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFi
 const hoverGroups = (group: SubjectKey) => !group.startsWith("issue:");
 
 export interface DuctsPictureExtra {
-  renderPane: TeachingPaneRender;
+  /** The kernel pane's draw: these parts over its picture. */
+  picture(parts: PictureParts): ReactNode;
   issues: readonly StageIssue[];
   /** The open systems' groups (stable, `scopeOf`); the picture draws every one. */
   groups: readonly string[];
@@ -159,10 +155,9 @@ export function DuctsPicture(props: DuctsPictureProps & DuctsPictureExtra) {
 }
 
 function Content({
-  renderPane,
+  picture,
   snapshot,
-  captureSource,
-  doc,
+  source,
   priced,
   analysis,
   ctx,
@@ -180,8 +175,6 @@ function Content({
   nameOf,
   identity,
   jump,
-  selection,
-  onPose,
 }: DuctsPictureProps & DuctsPictureExtra & { snapshot: DuctSnapshot }) {
   const authored = ctx.page.read();
   const openedSystems = namesOf(authored.system);
@@ -200,10 +193,6 @@ function Content({
     select(issueSubject(issue));
     ctx.page.query({ rulingSearch: emptyListSearch() });
   };
-  const movePicture = picturePageMove<PicturePage<string, "schematic">>(
-    (patch, intent) => ctx.page.pose(patch, intent),
-    select,
-  );
   const index = useMemo(() => indexOf(snapshot, priced), [snapshot, priced]);
   const door = useAdmittedSubject();
   const elements = useMemo(() => ductElements(snapshot), [snapshot]);
@@ -559,23 +548,10 @@ function Content({
     />
   );
 
-  return (
-    <Picture
-      selection={selection}
-      source={{
-        // Pricing withdraws action authority, but does not invalidate current native geometry.
-        native: captureSource?.document ?? null,
-        doc,
-        version: captureSource?.version ?? "",
+  return picture({
+        source,
         label: page.system.join(", "),
-        refreshing: identity.refreshing,
-      }}
-      page={{ ...page, issue: issueOf(page.selected) }}
-      setPage={movePicture}
-      renderPane={renderPane}
-      onPose={onPose}
-      jump={jump}
-      content={{
+        jump,
         focus,
         members: membership,
         hoverGroups,
@@ -628,7 +604,5 @@ function Content({
           ),
         },
         onIssuePick: (target) => pickIssue(target.key),
-      }}
-    />
-  );
+  });
 }

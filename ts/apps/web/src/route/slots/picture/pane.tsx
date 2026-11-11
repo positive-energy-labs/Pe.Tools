@@ -14,6 +14,7 @@ import type { DrawContext } from "../../typed-route.ts";
 import { findingMark } from "../findings/index.ts";
 import { elementOf, pictureSlot, type Captured } from "./index.ts";
 import { markLayer } from "./marks.ts";
+import type { picturePose } from "./pose.ts";
 import type { PictureOverlayProps, PictureParts } from "./overlay.tsx";
 
 /*
@@ -25,8 +26,9 @@ import type { PictureOverlayProps, PictureParts } from "./overlay.tsx";
  * through the slot's one `overlay` hook (`overlay.tsx`).
  */
 export interface PicturePaneContext {
-  readonly draw: DrawContext<any, any, any, any>;
-  readonly slot: PictureSlot<any> & { overlay?(props: PictureOverlayProps<any>): ReactNode };
+  /** The pane's draw context; its Page carries the kernel's pose fields (`pose.ts`). */
+  readonly draw: DrawContext<any, typeof picturePose, any, any>;
+  readonly slot: PictureSlot<any> & { overlay?(props: PictureOverlayProps<any>): unknown };
   /** The route's name: what a retained read is labelled with. */
   readonly name: string;
   /** The Page field holding the route subject, for `scope: "subject"`. */
@@ -43,7 +45,7 @@ const PLAIN: PictureParts = { lines: [], name: (key) => key, kinds: {}, colour: 
 export function PicturePane({ ctx }: { ctx: PicturePaneContext }) {
   const { draw, slot } = ctx;
   const field = ctx.subjectField
-    ? (draw.page.read() as Record<string, { kind: string; ids?: readonly SubjectRefCode[] } | undefined>)[ctx.subjectField]
+    ? (draw.page.read() as unknown as Record<string, { kind: string; ids?: readonly SubjectRefCode[] } | undefined>)[ctx.subjectField]
     : undefined;
   // ponytail: an `all` subject set holds no ids here; a route whose picture is every subject derives its scope.
   const subject = field?.kind === "ids" ? (field.ids ?? []) : [];
@@ -62,13 +64,11 @@ function capturedOf(meshes: SceneMeshes | null, lines: readonly PictureLine[], m
   });
 }
 
-type Authored = Omit<PicturePage, "selected" | "issue"> & { readonly selected: readonly { readonly id: string }[] };
-
 function KernelPicture({ ctx, scope, subject, parts }: { ctx: PicturePaneContext; scope: PictureScope; subject: readonly SubjectRefCode[]; parts: PictureParts }) {
   const { draw, slot, findings } = ctx;
   const elements = useElementIndex();
   // The pose is the kernel's Page fields (`pose.ts`); the selection holds SubjectKeys, and an issue is the place `issue:<key>`.
-  const authored = draw.page.read() as Authored;
+  const authored = draw.page.read();
   const ids = authored.selected.map(({ id }) => id);
   const selected = ids.join(",");
   const page: PicturePage = { ...authored, selected, issue: selected.startsWith("issue:") ? selected.slice(6) : "" };
