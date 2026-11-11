@@ -57,6 +57,8 @@ function Sessions({
               {machine.revit.years.map((year) => (
                 <Button
                   key={year}
+                  // The list bar's buttons are quiet; Start is the bar's one framed verb.
+                  kind="framed"
                   label={`Start Revit ${year}`}
                   onClick={() =>
                     void owner

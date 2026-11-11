@@ -15,7 +15,7 @@ import {
 } from "react";
 import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 
-import { Button } from "./button";
+import { Button, ButtonKind } from "./button";
 import {
   overscanRows,
   VIRTUAL_FROM,
@@ -219,7 +219,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
       />
       {props.header ? (
         <div data-list-bar="" data-surface="artifact">
-          {props.header}
+          <ButtonKind value="quiet">{props.header}</ButtonKind>
           {searching ? <ListBar list={list} label={label} /> : null}
         </div>
       ) : searching ? (
