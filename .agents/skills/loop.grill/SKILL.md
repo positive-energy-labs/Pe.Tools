@@ -23,7 +23,7 @@ Decisions are the user's, and facts are yours. Do not ask a question a grep coul
 - Offer an ADR only when the decision meets the ADR bar in `docs`. Otherwise it is a Decided line in the ledger.
 - Stop when no open decisions remain and the user confirms. Then name the next skill.
 
-```
-❓ **Q1** - **<title>**: <question, with choices when they exist>
-➡️ <your recommendation>
-```
+Each question is two markdown lines, not a fenced block:
+
+❓ **Q1** - **title**: the question, with choices when they exist.
+➡️ your recommendation.

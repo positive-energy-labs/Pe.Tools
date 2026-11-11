@@ -7,6 +7,7 @@
     python tools/acceptance.py teardown <run>
 
 Everything lives under <checkout>/.artifacts/accept/<run>/ (run.json is the custody record).
+Without --model, setup copies the Chadds model from the main checkout's .artifacts/revit/detached, or refuses.
 Dev copies the product home. Installed uses the actual MSI and product home; its writes are censused.
 `who` is cli (this host's human/cli context), anon, or ctx:<token>. Teardown stops only the
 session ids and host this run recorded; anything else it finds is printed as residue.
@@ -16,7 +17,8 @@ import hashlib, json, os, re, shutil, subprocess, sys, time, urllib.error, urlli
 from pathlib import Path
 
 CHECKOUT = Path(__file__).resolve().parents[1]
-SAMPLE = Path(r"C:\Program Files\Autodesk\Revit 2025\Samples\Snowdon Towers Sample HVAC.rvt")
+# Local fixture in the main checkout's ignored artifacts; never searched for. Without it, --model is required.
+DEFAULT_MODEL = Path(".artifacts/revit/detached/MEP_YoramLePairArchitects_ChaddsFord_R25_standalone_20261019.rvt")
 COPIED = ["Pods", "Pages", ".agents", ".claude", ".codex", ".pea", "settings", "preferences.json", "AGENTS.md"]
 LOCAL = Path(os.environ["LOCALAPPDATA"]) / "Positive Energy" / "Pe.Tools"
 
@@ -47,6 +49,46 @@ def owner_home() -> Path:
         capture_output=True, text=True, check=True,
     ).stdout.strip()
     return Path(docs) / "Pe.Tools"
+
+
+def pod_build_skip(pods: Path):
+    # Old Pod build output is 1.5 GB of the 1.9 GB home and is rebuilt by the run: skip Pods/<pod>/output, obj, bin.
+    def skip(directory: str, names: list[str]) -> set[str]:
+        pod_dir = Path(directory).parent == pods
+        return {n for n in names if n in ("obj", "bin") or (pod_dir and n == "output")}
+    return skip
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        while chunk := f.read(1 << 20):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def copy_hashed(source: Path, target: Path) -> str:
+    """Copy source to target and return the source's sha256, from one read of the source."""
+    digest = hashlib.sha256()
+    with source.open("rb") as r, target.open("wb") as w:
+        while chunk := r.read(1 << 20):
+            digest.update(chunk)
+            w.write(chunk)
+    shutil.copystat(source, target)
+    return digest.hexdigest()
+
+
+def main_checkout() -> Path:
+    return Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")).parent
+
+
+def pick_models(args: list[str], default: Path) -> list[list[str]]:
+    given = [m.split("=", 1) for m in value_list(args, "--model")]
+    if given:
+        return given
+    if default.is_file():
+        return [[str(default), "A.rvt"]]
+    sys.exit(f"No --model given and no default model at {default}; pass --model PATH[=NAME]")
 
 
 def owner_files(roots: list[str]) -> dict:
@@ -253,7 +295,15 @@ def setup(run: str, args: list[str]) -> None:
     installation = installed_identity() if installed else None
     root = run_dir(run)
     if root.exists():
+        prior = load(run) if (root / "run.json").exists() else {}
+        host = prior.get("host") or {}
+        if "launcher" in host and "pid" not in host and not prior["sessions"]:  # a wait that timed out
+            log(run, f"resume: adopting the host of launcher {host['launcher']}")
+            adopt_host(run, prior, host["launcher"], lambda: pid_alive(host["launcher"]))
+            dev_session(run, prior, args)
+            return
         sys.exit(f"{root} exists; pick a new run name or tear it down and delete it")
+    models = pick_models(args, main_checkout() / DEFAULT_MODEL)  # refuse before anything is created
     (root / "ev").mkdir(parents=True)
     (root / "docs").mkdir()
     home = owner if installed else root / "home" / "Pe.Tools"
@@ -265,10 +315,10 @@ def setup(run: str, args: list[str]) -> None:
         if os.name == "nt":
             destination = Path("\\\\?\\" + str(destination))
         if source.is_dir():
-            shutil.copytree(source, destination, symlinks=True)
+            shutil.copytree(source, destination, symlinks=True,
+                            ignore=pod_build_skip(source) if name == "Pods" else None)
         elif source.is_file():
             shutil.copy2(source, destination)
-    models = [a.split("=", 1) for a in value_list(args, "--model")] or [[str(SAMPLE), "A.rvt"]]
     docs = []
     model_copies = []
     for model in models:
@@ -276,9 +326,8 @@ def setup(run: str, args: list[str]) -> None:
         if installed and (not target.resolve().is_relative_to((root / "docs").resolve()) or target.exists()):
             sys.exit(f"Model destination must be a fresh file under {root / 'docs'}: {target}")
         source = Path(model[0]).resolve()
-        source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
-        shutil.copy2(source, target)
-        target_hash = hashlib.sha256(target.read_bytes()).hexdigest()
+        source_hash = copy_hashed(source, target)
+        target_hash = sha256_file(target)  # the written bytes, read back: the copy proof stays independent
         if source_hash != target_hash:
             sys.exit(f"Model copy bytes differ from source: {source} -> {target}")
         model_copies.append({"source": str(source), "copy": str(target),
@@ -314,21 +363,37 @@ def setup(run: str, args: list[str]) -> None:
         stdout=host_log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
     )
-    deadline = time.time() + 180
-    while not (svc := service(state)) and time.time() < deadline and process.poll() is None:
+    adopt_host(run, state, process.pid, lambda: process.poll() is None)
+    dev_session(run, state, args)
+
+
+def adopt_host(run: str, state: dict, launcher: int, launcher_alive, patience: int = 180) -> None:
+    """Record the launcher, wait for its host to publish a service file, record the host.
+    On timeout with the launcher alive, exit leaving run.json resumable: `setup <run>` again adopts it."""
+    root = run_dir(run)
+    web = state["web"]
+    state["host"] = {"launcher": launcher}  # before the wait: a timeout must not leave the host unrecorded
+    save(run, state)
+    deadline = time.time() + patience
+    while not (svc := service(state)) and time.time() < deadline and launcher_alive():
         time.sleep(1)
     if not svc:
-        sys.exit(f"host did not publish a service file (exit {process.poll()}); see {root / 'host.log'}")
-    state["host"] = {"launcher": process.pid, "pid": svc["pid"], "port": svc["port"], "service": svc["file"]}
-    if state["web"]:
+        why = (f"is still booting after {patience}s; run `setup {run}` again to adopt it, never start a second host"
+               if launcher_alive() else "exited without a service file")
+        sys.exit(f"host launcher {launcher} {why}; see {root / 'host.log'}")
+    state["host"] = {"launcher": launcher, "pid": svc["pid"], "port": svc["port"], "service": svc["file"]}
+    if web:
         # The registered frontend binds its checkout's own port; the attach launcher prints it.
         found = None
         while time.time() < deadline and not (found := re.search(r"Browser: (http\S+)", read_log(root))):
             time.sleep(1)
         state["web"] = found.group(1) if found else None
     save(run, state)
-    log(run, f"host pid {svc['pid']} port {svc['port']} ({script}), frontend {state['web']}")
+    log(run, f"host pid {svc['pid']} port {svc['port']} ({'attach' if web else 'start'}), frontend {state['web']}")
 
+
+def dev_session(run: str, state: dict, args: list[str]) -> None:
+    docs = state["docs"]
     session = f"acc-{run}"
     window = [] if "--foreground" in args else ["--background"]
     state["sessions"].append(session)
@@ -376,7 +441,7 @@ def teardown(run: str) -> None:
             sys.exit("Owned installed session did not stop; host preserved; inspect receipt")
     svc = service(state)
     if (svc and state["host"] and state["host"].get("owned", True)
-            and svc["pid"] == state["host"]["pid"]
+            and svc["pid"] == state["host"].get("pid")  # absent while a timed-out launcher is unadopted
             and (not state["host"].get("instanceId") or svc.get("instanceId") == state["host"]["instanceId"])):
         result = http(state, "service", "POST", "/admin/shutdown", b"{}")
         log(run, f"host shutdown {result['status']}")

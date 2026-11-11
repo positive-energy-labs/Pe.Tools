@@ -80,10 +80,29 @@ public static class PeBrowserJob {
   } catch(Exception e) { Console.Error.WriteLine(e); Environment.ExitCode=1; }
  }
 
+ // A task runner's job (vp run: KILL_ON_JOB_CLOSE, no breakaway) kills every descendant when it exits,
+ // and CREATE_BREAKAWAY_FROM_JOB is refused there. WMI creates the process from its own host instead,
+ // so the child joins no caller job and inherits no caller handle. It gets the user's default environment.
+ public static void CreateOutsideJob(string cwd,string command) {
+  try {
+   using(var startup=new System.Management.ManagementClass("Win32_ProcessStartup"))
+   using(var info=startup.CreateInstance())
+   using(var processes=new System.Management.ManagementClass("Win32_Process")) {
+    info["ShowWindow"]=(ushort)0;
+    var input=processes.GetMethodParameters("Create");
+    input["CommandLine"]=command; input["CurrentDirectory"]=cwd; input["ProcessStartupInformation"]=info;
+    var result=processes.InvokeMethod("Create",input,null);
+    uint code=(uint)result["ReturnValue"];
+    if(code!=0) { Console.Error.WriteLine("Win32_Process.Create returned "+code); Environment.ExitCode=1; return; }
+    Console.WriteLine((uint)result["ProcessId"]);
+   }
+  } catch(Exception e) { Console.Error.WriteLine(e); Environment.ExitCode=1; }
+ }
  [DllImport("kernel32")] static extern IntPtr GetStdHandle(int n);
  [DllImport("kernel32")] static extern bool ReadFile(IntPtr h,byte[] b,uint n,out uint read,IntPtr ov);
  public static void Main(string[] a) {
   if(a.Length==2 && a[0]=="--profile-available") { ProfileAvailable(a[1]); return; }
+  if(a.Length==3 && a[0]=="--create-outside-job") { CreateOutsideJob(a[1],a[2]); return; }
   Timeline=System.IO.Path.Combine(System.IO.Path.GetDirectoryName(a[6]),"guardian-timeline.jsonl");
   bool graceful=false; int budget=int.Parse(a[7]);
   try { uint pid=Start(a[0],a[1]); Console.WriteLine(pid); Console.Out.Flush(); uint read; byte[] next=new byte[1]; var command=new StringBuilder(); while(ReadFile(GetStdHandle(-10),next,1,out read,IntPtr.Zero) && read>0 && next[0]!=10 && command.Length<32) command.Append((char)next[0]); if(command.Length>1 && command[0]=='C') { graceful=true; int parsed; if(int.TryParse(command.ToString().Substring(1),out parsed)) budget=Math.Max(1,Math.Min(budget,parsed)); } }
