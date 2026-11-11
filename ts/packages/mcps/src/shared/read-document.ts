@@ -10,8 +10,8 @@ import { officeExtensions, readOfficeText } from "./read-office.ts";
 import { createTool } from "./tool.ts";
 
 // ponytail: 2026-11-11 Pea-level parser A/B. A checkout's .artifacts/tmp/parser-ab.env (gitignored) sets
-// PE_READ_DOCUMENT_PARSER and PE_AB_ENV_FILE (an env file holding the key) for threads started after it exists,
-// so the trial needs no host takeover. Delete with the knob below once kaitpw rules on the default parser.
+// PE_READ_DOCUMENT_PARSER and PE_AB_ENV_FILE (an env file holding the key). read_document runs in each thread's
+// `pea mcp` child, which reads it once at module load, so threads started after it exists use it. No host restart. Delete with the knob below once kaitpw rules on the default parser.
 {
   const ab = path.resolve(import.meta.dirname, "../../../../../.artifacts/tmp/parser-ab.env");
   try {
@@ -138,14 +138,10 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
 
   let pageTexts: Array<{ pageNum: number; text: string }>;
   let counted: string;
-  // ponytail: A/B knob for the 2026-11-11 Pea-level parser trial. PE_READ_DOCUMENT_PARSER=llamaparse makes an
-  // uncropped read that left parser at its default use LlamaParse. Delete once kaitpw rules on the default.
-  if (
-    raw.parser === undefined &&
-    !input.crop &&
-    process.env.PE_READ_DOCUMENT_PARSER === "llamaparse"
-  )
-    input.parser = "llamaparse";
+  // ponytail: A/B knob for the 2026-11-11 Pea-level parser trial. PE_READ_DOCUMENT_PARSER=llamaparse makes every
+  // uncropped read use LlamaParse; the tool layer fills the default before this runs, so an explicit liteparse is
+  // overridden too. Delete once kaitpw rules on the default.
+  if (!input.crop && process.env.PE_READ_DOCUMENT_PARSER === "llamaparse") input.parser = "llamaparse";
   if (input.parser === "llamaparse") {
     if (input.crop)
       throw new Error("read_document: crop is not available with parser: llamaparse.");
