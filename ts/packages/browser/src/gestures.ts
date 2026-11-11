@@ -52,7 +52,9 @@ async function probe(spec: Wire, mode: Mode): Promise<Probe> {
     hit: string | null = null,
     value: string | null = null,
   ) => ({ url, reason, hit, rect, value });
+  // An inert subtree takes no press even when it has a box (a retained hidden Place).
   const shown = (e: Element) =>
+    !e.closest("[inert]") &&
     e.getClientRects().length > 0 &&
     e.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
   // The first shown region: a route keeps a hidden Place's DOM, whose panes share the shown one's names.

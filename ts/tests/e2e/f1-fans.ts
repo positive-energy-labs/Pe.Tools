@@ -3,19 +3,18 @@
 // Env: CDP_PORT, CDP_TARGET (own browser), E2E_WEB, E2E_SESSION (the run's controlled session id;
 // the document picker offers only options in it).
 import { WEB, type Page } from "./cdp.ts";
+import { LAYER, marks, settled, type Marks } from "./marks.ts";
 import { run, type Action, type Rule } from "./walk.ts";
 
 /** A region by its accessible name: the scope a press may use. */
 const R = (name: string) => `[aria-label="${name}"]`;
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** What the shown /fans Place draws, read in one pass. Hidden Places keep DOM; only shown nodes count. */
-type View = {
+/** The kernel marks, and what the shown /fans Place draws. Hidden Places keep DOM; only shown nodes count. */
+type View = Marks & {
   url: string;
-  busy: boolean;
   /** The route asks for a document: settled, with nothing to read yet. */
   unbound: boolean;
-  picker: boolean;
   rows: { label: string; selected: boolean }[];
   heading: string | null;
   tab: string | null;
@@ -25,8 +24,10 @@ type View = {
   alerts: string[];
   places: number;
 };
-const view = (page: Page) =>
-  page.evaluate((): View => {
+// The marks are read first, so the drawing read after them is never older than the settledness it is paired with.
+const view = async (page: Page): Promise<View> => ({ ...(await marks(page)), ...(await drawn(page)) });
+const drawn = (page: Page) =>
+  page.evaluate((): Omit<View, keyof Marks> => {
     const shown = (e: Element) =>
       e.getClientRects().length > 0 && e.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
     const first = (sel: string) => [...document.querySelectorAll(sel)].find(shown) ?? null;
@@ -75,9 +76,8 @@ const view = (page: Page) =>
       .filter((b) => !(b.getAttribute("aria-label") ?? "").startsWith("Close "));
     return {
       url: location.href,
-      busy: /computing|Loading drawing|Reading\.\.\.|reading…|refreshing/i.test(text(tools) + text(first('[aria-label="Situation"]'))),
+      // Route-specific wait left: an unbound Place carries neither mark, so its sentence is read.
       unbound: /choose an exact document again/i.test(text(tools)),
-      picker: [...document.querySelectorAll('[role="option"]')].some((o) => shown(o) && !tools?.contains(o)),
       rows,
       heading: esp ? text(esp.querySelector("h3")) : null,
       tab: text(places.find((b) => b.getAttribute("aria-pressed") === "true") ?? null) || null,
@@ -97,7 +97,7 @@ const part = (label: string) => {
 };
 const idle = async (page: Page) => {
   const v = await view(page);
-  return !v.busy && !v.picker && (v.rows.length > 0 || v.unbound) ? v : null;
+  return settled(v) || (v.unbound && !v.busy && !v.picker) ? v : null;
 };
 /** Rules read a settled page: wait for one, with a deadline, never pass a page mid-read. */
 const quiet = (page: Page) => page.until(() => idle(page), "a settled page for the rules", 120_000);
@@ -137,11 +137,9 @@ const actions: Action[] = [
       const session = process.env.E2E_SESSION ?? "";
       // Only documents in this run's own session: the disposable copy, never the owner's.
       const docs = await page.until(async () => {
-        const all = await page.evaluate(() =>
-          [...document.querySelectorAll('[role="option"]')]
-            .filter((o) => o.getClientRects().length && !o.closest('[aria-label="tools"]'))
-            .map((o) => (o as HTMLElement).innerText.trim()),
-        );
+        const all = await page.evaluate((layer: string) =>
+          [...document.querySelectorAll(`${layer} [role="option"]`)].map((o) => (o as HTMLElement).innerText.trim()),
+        LAYER);
         const own = all.filter((t) => session && t.split("\n").includes(session));
         return own.length ? own : null;
       }, `a document in session ${session}`);
