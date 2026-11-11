@@ -6,6 +6,7 @@
  */
 import { expect, it } from "vite-plus/test";
 
+import { issueOf } from "../test-snapshot.ts";
 import type { DuctSnapshot } from "../types.ts";
 import {
   applyConnectorPairRulings,
@@ -65,9 +66,9 @@ const from = { k: "1:2", id: 1, index: 2, cls: "SupplyAir" };
 it("open-end records index the neighbourhood by connector key", () => {
   const n = near([port(2, 1, 0.4, true)]);
   const issues = [
-    { id: "open-end:1:2", kind: "open-end", elementId: 1, connector: 2, note: "", near: n },
-    { id: "stub:3", kind: "stub", elementId: 3, note: "" },
-  ] as DuctSnapshot["issues"];
+    issueOf("open-end:1:2", "open-end", 1, { connector: 2, near: n }),
+    issueOf("stub:3", "stub", 3),
+  ];
   expect(nearOf(issues).get("1:2")).toBe(n);
   expect(nearOf(issues).size).toBe(1);
 });

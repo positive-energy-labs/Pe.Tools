@@ -39,7 +39,7 @@ function makeupSnapshot(rows: Row[]): DuctSnapshot {
     const prev = rows[i - 1];
     const next = rows[i + 1];
     // The riser into the attic is a size up, so the dominant size per leg is observable.
-    const size = i >= 46 && i <= 70 ? '10"Ã¸' : '8"Ã¸';
+    const size = i >= 46 && i <= 70 ? '10"ø' : '8"ø';
     const levelId = levelAt(row.p[2]!);
     if (row.k === "duct") {
       const [a, b] = row.line as [number[], number[]];

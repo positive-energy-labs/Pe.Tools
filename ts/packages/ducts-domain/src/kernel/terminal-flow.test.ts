@@ -5,23 +5,17 @@
  */
 import { describe, expect, it } from "vite-plus/test";
 
-import type { DuctSnapshot } from "../types.ts";
+import { factOf, nodeOf } from "../test-snapshot.ts";
 import { slotFlowOf, terminalFlow } from "./terminal-flow.ts";
 
-type Node = DuctSnapshot["nodes"][number];
-const terminal = (flow: number | null, flowParameter: string | null): Node =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(40).toString(16).padStart(8, "0")}`,
-    id: 40,
-    kind: "terminal",
+const terminal = (flow: number | null, flowParameter: string | null) =>
+  nodeOf(40, "terminal", {
     category: "Air Terminals",
     point: [0, 0, 9],
-    connectors: [],
     flowParameter,
     facts:
-      flow == null
-        ? []
-        : [{ key: "flow", value: flow, unit: "cfm", provenance: "designer-stated" }],
-  }) as unknown as Node;
+      flow == null ? [] : [factOf("flow", flow, { unit: "cfm", provenance: "designer-stated" })],
+  });
 
 describe("terminalFlow", () => {
   it("takes the override, then the confirmed slot, then the room", () => {

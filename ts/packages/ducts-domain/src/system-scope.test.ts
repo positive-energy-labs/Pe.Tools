@@ -7,6 +7,7 @@
 import { expect, it } from "vite-plus/test";
 
 import { scopeOf, sectionsOf, systemScope } from "./system-scope.ts";
+import { groupOf, snapshotOf, systemOf } from "./test-snapshot.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 type Node = DuctSnapshot["nodes"][number];
@@ -63,38 +64,22 @@ const node = (
     : [],
 });
 
-const snapshot = {
+const snapshot = snapshotOf({
   groups: [
-    {
-      id: "g1",
+    groupOf("g1", {
       rootIds: [100],
       classifications: ["Supply Air", "Return Air"],
       systemNames: ["RA 1", "SA 1"],
       terminalCount: 2,
       elementCount: 6,
-      loops: 0,
-      issueIds: [],
-    },
-    {
-      id: "g6",
-      rootIds: [],
+    }),
+    groupOf("g6", {
       classifications: ["Supply Air"],
       systemNames: ["SA 1"],
       terminalCount: 1,
       elementCount: 2,
-      loops: 0,
-      issueIds: [],
-    },
-    {
-      id: "g9",
-      rootIds: [],
-      classifications: [],
-      systemNames: [],
-      terminalCount: 0,
-      elementCount: 1,
-      loops: 0,
-      issueIds: [],
-    },
+    }),
+    groupOf("g9", { elementCount: 1 }),
   ],
   nodes: [
     node(100, "equipment", null, "SA 1", [conn(0, 0, [1, 0])], "AHU-1"),
@@ -111,13 +96,10 @@ const snapshot = {
     duct(7, "g9", "", [conn(0, 20, null), conn(1, 21, null)]),
   ],
   systems: [
-    { id: 1, name: "SA 1", classification: "Supply Air", criticalPath: [], sections: [] },
-    { id: 2, name: "RA 1", classification: "Return Air", criticalPath: [], sections: [] },
+    systemOf(1, { name: "SA 1", classification: "Supply Air" }),
+    systemOf(2, { name: "RA 1", classification: "Return Air" }),
   ],
-  flows: [],
-  issues: [],
-  levels: [],
-} as unknown as DuctSnapshot;
+});
 
 it("a system spans every group it is in; a group of several systems is shared", () => {
   const sa = systemScope(snapshot, "SA 1");
