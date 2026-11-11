@@ -263,8 +263,9 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
         } } }
     : {};
   // The shell draws a kernel pane (`typed-shell.tsx`, `kernel`): a route module, and a Pod bundle, carries no React.
+  // The sheet pane reads the core, as a declared pane does by default (`defaults.ts`): its cells and empty state take that read.
   const kernelPanes = {
-    ...(spec.sheet && !Object.values(spec.panes).some((p) => p.kernel === "sheet") ? { sheet: { title: "Sheet", purpose: "Edit the bound cells", kernel: "sheet", body: "scroll", draw: () => scrollBody(null) } } : {}),
+    ...(spec.sheet && !Object.values(spec.panes).some((p) => p.kernel === "sheet") ? { sheet: { title: "Sheet", purpose: "Edit the bound cells", read: spec.core, kernel: "sheet", body: "scroll", draw: () => scrollBody(null) } } : {}),
     ...(spec.goal && !("goal" in spec.panes) ? { goal: { title: "Unresolved", purpose: "What is left before the answer", read: spec.goal,
       kernel: "goal", body: "scroll", draw: () => scrollBody(null) } } : {}),
   } as unknown as Specification<D, F, W, Edit, Reads, SubjectRead, Q>["panes"];
