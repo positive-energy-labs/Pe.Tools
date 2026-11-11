@@ -4,7 +4,8 @@ import { z } from "zod";
 import { route, field } from "../route/defaults";
 import { draw } from "../route/draw";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
-export const fields = {
+/** Home has no subject and no slot data: every Page field is route-owned `query` (ADR 0035 rule 1). */
+export const query = {
   threadSearch: field(
     threadListFields.threadSearch.schema,
     threadListFields.threadSearch.schema.parse(undefined),
@@ -20,7 +21,7 @@ export const fields = {
   sort: field(z.enum(["workflow", "name"]), "workflow", "query", "push"),
   folded: field(z.array(z.string()), [], "query"),
 };
-export type HomeContext = ContextOf<typeof fields, never, never, never>;
+export type HomeContext = ContextOf<typeof query, never, never, never>;
 export const module = route({
   key: "home",
   name: "Home",
@@ -38,7 +39,7 @@ export const module = route({
     satellites: [],
     surfaces: { web: "full", pwa: "full", tray: false },
   },
-  fields,
+  query,
   panes: {
     main: {
       title: "Home",

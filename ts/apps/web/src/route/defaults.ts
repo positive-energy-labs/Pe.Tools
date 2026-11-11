@@ -6,6 +6,7 @@ import {
   type Specification,
   type DrawContext,
   type Fields,
+  type QueryFields,
   type ReadData,
 } from "./typed-route";
 import type { HostRead } from "./host-read";
@@ -44,12 +45,13 @@ export type ContextOf<F extends Fields, R = never, W = never, E = never> = DrawC
 /** A pane draws the core Value unless it explicitly names another read. */
 export function route<
   D,
-  const F extends Fields,
-  W extends z.ZodObject,
-  Edit extends z.ZodType,
-  const Reads extends Readonly<Record<string, HostRead>>,
-  SubjectRead extends HostRead,
->(spec: Specification<D, F, W, Edit, Reads, SubjectRead>) {
+  const F extends Fields = {},
+  W extends z.ZodObject = z.ZodObject,
+  Edit extends z.ZodType = z.ZodType,
+  const Reads extends Readonly<Record<string, HostRead>> = Readonly<Record<string, HostRead>>,
+  SubjectRead extends HostRead = HostRead,
+  const Q extends QueryFields = {},
+>(spec: Specification<D, F, W, Edit, Reads, SubjectRead, Q>) {
   const panes = Object.fromEntries(
     Object.entries(spec.panes).map(([id, pane]) => [id, { ...pane, read: pane.read ?? spec.core }]),
   ) as typeof spec.panes;

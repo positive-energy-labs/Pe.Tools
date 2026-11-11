@@ -14,7 +14,6 @@ import {
   type RouteGraph,
   type VerbDecl,
 } from "../../../packages/agent-contracts/src/route-graph.ts";
-import { indexGraph } from "./index/graph";
 import { ductLossGraph as ductLoss } from "./shell/projection-graph.test.fixture";
 
 const fields = ductLoss.fields;
@@ -113,8 +112,8 @@ test("field roles supply defaults and every explicit policy wins, including fals
 
 test("singleton catalogue keys cannot become an undeclared subject picker", () => {
   const broken = {
-    ...indexGraph,
-    subjectField: { ...indexGraph.subjectField!, cardinality: "many" as const },
+    ...ductLoss,
+    subjectField: { ...ductLoss.subjectField!, cardinality: "many" as const },
   };
   expect(validateRouteGraph(broken)).toContainEqual(
     expect.objectContaining({ message: "A singleton subject requires one fixed named key" }),

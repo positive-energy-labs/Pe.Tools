@@ -485,30 +485,5 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
       "category": "Calculate loads & airflow",
       "blurb": "Adopt zoning regions from chosen views."
     }
-  },
-  {
-    "key": "index",
-    "directory": {
-      "path": "/",
-      "title": "Tools",
-      "label": "Tools",
-      "exposure": "Main",
-      "runtimeNeed": "Host navigation",
-      "icon": "LayoutGrid",
-      "category": "Explore / maintain",
-      "blurb": "Tools and saved work",
-      "aliases": [
-        "home",
-        "tools",
-        "directory"
-      ],
-      "listed": false,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      }
-    }
   }
 ];
