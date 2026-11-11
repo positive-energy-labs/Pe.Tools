@@ -544,7 +544,7 @@ export function prescribedHydraulics(g: Graph, components: ComponentFlow[]): Com
       designs.some(
         ({ design: d }) =>
           JSON.stringify(d.componentWitness.map((w) => w.element.id)) ===
-          JSON.stringify(member.elementIds),
+          JSON.stringify(member.componentWitness.map((w) => w.element.id)),
       ),
     );
     if (!relevant) return c;
