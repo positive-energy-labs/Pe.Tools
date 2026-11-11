@@ -218,13 +218,6 @@ export const findingsWork = { route: "findings", title: "Findings", description,
 Seams (`slots/findings/index.ts`; host `slots/findings.ts`):
 
 ```ts
-export interface FindingsStore {
-  read(): FindingsWork;
-  list(subject?: SubjectRefCode): readonly Finding[];
-  write(finding: Finding): void;
-  undo(by: Finding["by"]): void;     // that author's last write; the other author's findings stand
-}
-export function findingsStore(seed: FindingsWork): FindingsStore;
 export function findingMark(finding: Finding, captured: readonly Captured[]): Mark;   // its own mark, else a ring on the subject's geometry
 export function findingsList(document: DocumentRef, subject?: string): Promise<readonly Finding[]>;        // a Read
 export function findingsWrite(document: DocumentRef, finding: Finding): Promise<{ readonly revision: number }>;   // a Work write, never a ModelWrite
@@ -232,7 +225,7 @@ export function findingsWrite(document: DocumentRef, finding: Finding): Promise<
 
 Nothing on the declaration: findings is an implicit kernel module (rule 1).
 
-The falsifier writes four findings into one store (Pea and a person, each on the fan port `UniqueId:<fan>#port:1` and on the /families row `name:["Price LBP15A Return","8 X 4 D"]`), pins `list()` and `list(subject)` order, undoes Pea's last write and then the person's and checks the other's stand, refuses a `note` with `verdict: "yes"` and a `claim` with `"maybe"` at the contract, draws one ring at the port's captured point, and expects both doors in `linkedCatalog()` (the Pod author's `kernel gap: findings (7)`).
+Per-author undo is the host's Work journal: the history door passes `own` for the findings route, and `findings.write` stamps `by` from the caller. The host falsifier (`apps/host/tests/findings.test.ts`) writes through those doors, and Pea's undo leaves the person's finding. The web falsifier refuses a `note` with `verdict: "yes"` and a `claim` with `"maybe"` at the contract, draws one ring at the port's captured point, and expects both doors in `linkedCatalog()` (the Pod author's `kernel gap: findings (7)`).
 
 ### Deletes (MAP row 9), with anchors
 

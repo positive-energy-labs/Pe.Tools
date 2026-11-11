@@ -1,9 +1,16 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
-import { bindWork, keepPointer, workHandle } from "@pe/agent-contracts";
+import { address, bindWork, keepPointer, workHandle, type Caller } from "@pe/agent-contracts";
+import { withInvocationContext } from "@pe/runtime/context";
 import { findingsWork, type FindingInput } from "@pe/agent-contracts/slots";
 import { RouteWorkspace } from "@pe/runtime";
 import { subjectCode, uniqueIdSchema, type SubjectRefCode } from "../../../packages/agent-contracts/src/subject-ref.ts";
 import { findingsList, findingsWrite } from "../src/slots/findings.ts";
+import { createPeRoutes } from "../src/pe-routes.ts";
+import { approvedPea, human } from "./callers.ts";
+import { fixtureNative } from "./fixture-native.ts";
 
 const port = subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse("9e9fb89e-a9db-4d9a-8f35-b8fbc2303423-00d3da72"), sub: { port: 1 } });
 const row = subjectCode({ keyKind: "name", key: ["Price LBP15A Return", "8 X 4 D"] });
@@ -36,4 +43,54 @@ test("the keep verb turns a pointer on a subject into a finding; a pointer on a 
   });
   expect(() => keepPointer(pointer, { kind: "note", verdict: "yes" })).toThrow(/verdict/);
   expect(() => keepPointer({ ...pointer, target: { selected: "[]" } }, { kind: "note" })).toThrow(/subject/);
+});
+
+/*
+ * The production doors (wave 1 review catches 1 and 2): `findings.write` on the action door, where
+ * the host stamps `by` from the caller, and the Work history door, where the host derives `own`
+ * from the route so an author's undo is their own.
+ */
+async function doors() {
+  const dir = await mkdtemp(join(tmpdir(), "pe-findings-doors-"));
+  const native = await fixtureNative(join(dir, "native"));
+  const socket = await native.connect();
+  let saved: unknown = null;
+  const workspace = new RouteWorkspace({
+    registrations: [{ spec: findingsWork }],
+    store: { getState: async () => structuredClone(saved), setState: async ({ value }) => void (saved = structuredClone(value)) },
+  });
+  const target = address("C:/model.rvt");
+  const key = bindWork("findings", target);
+  const revision = async () => (await workspace.view(key, "findings"))?.revision ?? 0;
+  const peaCaller = approvedPea("findings-doors");
+  const post = native.actions({ workspace });
+  const routes = createPeRoutes({ workspace });
+  return {
+    peaCaller,
+    revision,
+    authors: async () => (await findingsList(workspace, key)).map((f) => [f.id, f.by]),
+    async write(id: string, finding: FindingInput, caller: Caller) {
+      const response = await post({ id, key: "findings.write", target: { kind: "document", ref: socket.target },
+        input: { work: workHandle(key, await revision()), finding } }, caller);
+      expect(response.status, await response.clone().text()).toBeLessThan(400);
+      expect(await native.journal.wait(id), id).toMatchObject({ state: "succeeded" });
+    },
+    door: (verb: "apply" | "history", body: unknown) =>
+      withInvocationContext({ caller: peaCaller }, () => routes.fetch(new Request(
+        `http://host/pe/route-state/findings/${verb}?target=${encodeURIComponent(target)}`,
+        { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
+      ))),
+    close: async () => { await native.close(); await rm(dir, { recursive: true, force: true }); },
+  };
+}
+
+test("Pea's undo through the Work history door reverts Pea's own finding; the person's newer finding stays", async () => {
+  const d = await doors();
+  try {
+    await d.write("by-pea", input("p1", port, "claim", "no"), d.peaCaller);
+    await d.write("by-person", input("h1", row, "claim", "yes"), human);
+    const undone = await d.door("history", { direction: "undo", expectedRevision: await d.revision() });
+    expect(await undone.json()).toMatchObject({ ok: true });
+    expect(await d.authors()).toEqual([["h1", "person"]]);
+  } finally { await d.close(); }
 });

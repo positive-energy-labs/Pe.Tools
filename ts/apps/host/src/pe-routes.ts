@@ -29,6 +29,7 @@ import {
   HOST_LOG_PAGE_MAX,
 } from "@pe/agent-contracts";
 import { receiptQuerySchema } from "@pe/agent-contracts";
+import { FINDINGS_OWNER } from "@pe/agent-contracts/slots";
 
 import {
   httpRoutes as peRoutes,
@@ -374,7 +375,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
       hint: "expected { direction: undo | redo, expectedRevision }",
       run: (scope: WorkKey, route: string, by: "pea" | "human", body: unknown) => {
         const { direction, expectedRevision } = body as z.infer<typeof historyBody>;
-        return work.step(scope, route, by, direction, expectedRevision);
+        // Findings undo is per author (ADR 0035 rule 9): the host derives `own` from the route, never the client.
+        return work.step(scope, route, by, direction, expectedRevision, route === FINDINGS_OWNER);
       },
     },
   } as Record<
