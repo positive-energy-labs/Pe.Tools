@@ -47,6 +47,7 @@ import {
   runPods,
   writeCaptureRun,
   writeMemberOnce,
+  claimRunOutput,
   sourceRunOutput,
   type FamilyActionDependencies,
 } from "./family-actions.ts";
@@ -474,6 +475,7 @@ export function scheduleExecutors(
           },
         ],
         prepare: async () => {
+          if (input.pod) await claimRunOutput(input.pod, deps);
           if (input.work!.key.work !== reading.workspaceId)
             throw refused("Work binding belongs to another schedule");
           if (!same(reading.target, target))
@@ -652,6 +654,7 @@ export function scheduleExecutors(
           { kind: "member", pod: input.pod, path },
         ],
         prepare: async () => {
+          await claimRunOutput(input.pod, deps);
           await runPods(deps, podFolder(input.pod, podContext(deps, bridge, target)));
           return {
             process,
@@ -712,10 +715,10 @@ export function scheduleExecutors(
           { kind: "document", ref: target },
           { kind: "directory", path: await sourceRunOutput(source.id, deps) },
         ],
-        prepare: async () => ({
-          process,
-          input: { specJson: spec, source: { root: source, dependencies } },
-        }),
+        prepare: async () => {
+          await claimRunOutput(source.id, deps);
+          return { process, input: { specJson: spec, source: { root: source, dependencies } } };
+        },
       };
     },
     run: (ctx, execution) => Effect.gen(function* () {

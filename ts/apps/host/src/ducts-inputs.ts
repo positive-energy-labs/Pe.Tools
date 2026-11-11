@@ -6,6 +6,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { sharedFirmDir } from "@pe/host-contracts/product-paths";
 import {
   ductsFirmSchema,
   stagedDucts,
@@ -13,9 +14,12 @@ import {
   type DuctsDesign,
 } from "@pe/agent-contracts";
 import { type WorkLayer } from "@pe/ducts-domain/sheet/index";
-import { productUserContentRootPath } from "./product-paths.ts";
 
-export const firmFilePath = () => join(productUserContentRootPath(), "Firm", "ducts.json");
+/** `<shared>\Firm\ducts.json`, a shared setting with no user layer (ADR 0035 rule 11); null without a shared root. */
+export const firmFilePath = (): string | null => {
+  const dir = sharedFirmDir();
+  return dir && join(dir, "ducts.json");
+};
 
 // firm-default: what a firm with no file yet runs on. Velocity limits are Manual D's rules of
 // thumb (trunk 900 supply, 700 return); 0.03 in-wg is the grille placeholder; 3 in and 36 in are
@@ -32,16 +36,24 @@ export const FIRM_SEED: DuctsFirm = {
   },
 };
 
-export interface FirmReading {
-  firm: DuctsFirm;
-  path: string;
-  present: boolean;
-  /** Why the file was not used, when it exists and does not parse. */
-  error?: string;
-}
+export type FirmReading =
+  | {
+      firm: DuctsFirm;
+      path: string;
+      present: boolean;
+      /** Why the file was not used, when it exists and does not parse. */
+      error?: string;
+    }
+  /** No shared root: the firm file has no home, so the read refuses rather than seeding silently. */
+  | { refused: "no-shared-root" };
+
+/** The firm layer a resolver runs on: the reading's firm, or the named seed when the read refused. */
+export const firmLayer = (reading: FirmReading): DuctsFirm =>
+  "refused" in reading ? FIRM_SEED : reading.firm;
 
 /** The `DuctFiles` layer body; callers read the firm through `DuctFiles`, never this. */
 export async function readFirm(path = firmFilePath()): Promise<FirmReading> {
+  if (path === null) return { refused: "no-shared-root" };
   let text: string;
   try {
     text = await readFile(path, "utf8");

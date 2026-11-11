@@ -11,7 +11,7 @@ import { existsSync, watch } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
 import { catalogTableSchema, ductsFirmSchema } from "@pe/agent-contracts";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
-import { readDuctCatalogs, productCatalogsRootPath, type CatalogReading } from "./duct-catalogs.ts";
+import { readDuctCatalogs, productCatalogsRoots, type CatalogReading } from "./duct-catalogs.ts";
 import { firmFilePath, readFirm, type FirmReading } from "./ducts-inputs.ts";
 import {
   captureInput,
@@ -23,12 +23,15 @@ import {
 } from "./native-recording.ts";
 
 // The readings' own contracts: a recorded firm or catalog decodes only if it is still that reading.
-export const firmReading = z.strictObject({
-  firm: ductsFirmSchema,
-  path: z.string(),
-  present: z.boolean(),
-  error: z.string().optional(),
-});
+export const firmReading = z.union([
+  z.strictObject({
+    firm: ductsFirmSchema,
+    path: z.string(),
+    present: z.boolean(),
+    error: z.string().optional(),
+  }),
+  z.strictObject({ refused: z.literal("no-shared-root") }),
+]);
 export const catalogReading = z.strictObject({
   tables: z.record(z.string(), catalogTableSchema),
   findings: z.array(z.string()),
@@ -51,16 +54,20 @@ export class DuctFiles extends Context.Service<
   }
 >()("pe/DuctFiles") {
   static readonly layer = (
-    roots: { readonly firm: string; readonly catalogs: string } = {
+    roots: { readonly firm: string | null; readonly catalogs: string | readonly string[] } = {
       firm: firmFilePath(),
-      catalogs: productCatalogsRootPath(),
+      catalogs: productCatalogsRoots(),
     },
   ) =>
     Layer.succeed(DuctFiles, {
       firm: Effect.promise(() => readFirm(roots.firm)),
       ductCatalogs: Effect.promise(() => readDuctCatalogs(roots.catalogs)),
       subscribe: (changed) => {
-        const stops = Object.entries({ firm: roots.firm, catalogs: roots.catalogs }).map(
+        const stops = [
+          // No shared root, no firm file to watch: the refusal holds until the host restarts.
+          ...(roots.firm === null ? [] : [["firm", roots.firm] as const]),
+          ...[roots.catalogs].flat().map((path) => ["catalogs", path] as const),
+        ].map(
           ([name, path]) => {
             // A filesystem hint (including an ancestor change) is not a changed input.
             // Compare the producer's answer so absent files and access metadata stay quiet.

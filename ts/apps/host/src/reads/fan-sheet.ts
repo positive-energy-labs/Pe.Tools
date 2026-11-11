@@ -29,7 +29,7 @@ import type { Chain, Sheet, SheetPath } from "@pe/ducts-domain/sheet/types";
 import { worksheet } from "@pe/ducts-domain/sheet/worksheet";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
-import { workLayer } from "../ducts-inputs.ts";
+import { firmLayer, workLayer } from "../ducts-inputs.ts";
 import { followAcceptedJoins, mergeSnapshots } from "../ducts-walk.ts";
 import { designLayers } from "./ducts-design.ts";
 import { nativeRead } from "./inputs.ts";
@@ -162,7 +162,7 @@ const sheetModel = read("fans.calculation", {
     const saved = await ctx.read(designLayers, request.target);
     const design = ductsDesign(saved.ducts, saved.fans),
       work = workLayer(design);
-    const criteria = resolveCriteria(work, null, saved.firm.firm);
+    const criteria = resolveCriteria(work, null, firmLayer(saved.firm));
     const tolerances = {
       autoJoinGapIn: criteria.autoJoinGapIn.value,
       candidateBoxIn: criteria.healBoxIn.value,
@@ -198,7 +198,7 @@ const sheetModel = read("fans.calculation", {
       work,
       versions: { Work: saved.revision },
       store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
-      firm: saved.firm.firm,
+      firm: firmLayer(saved.firm),
       catalogs: catalog.tables,
     });
     const first = response.body;
@@ -290,11 +290,10 @@ const sheetModel = read("fans.calculation", {
       mode: request.mode,
       value,
       inputs,
-      firm: {
-        version: saved.firm.firm.version,
-        path: saved.firm.path,
-        present: saved.firm.present,
-      },
+      firm:
+        "refused" in saved.firm
+          ? saved.firm
+          : { version: saved.firm.firm.version, path: saved.firm.path, present: saved.firm.present },
       titles: titlesOf(grids),
       beyond,
     };
@@ -519,7 +518,7 @@ export const fanRoster = read("fans.roster", {
       work: workLayer(design),
       versions: { Work: saved.revision },
       store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
-      firm: saved.firm.firm,
+      firm: firmLayer(saved.firm),
     });
     const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),
       label = elementLabeler(snapshot);

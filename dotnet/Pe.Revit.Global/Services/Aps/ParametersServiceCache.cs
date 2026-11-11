@@ -370,10 +370,9 @@ public sealed class EnrichedParameterData {
 }
 
 public sealed class CacheParametersServiceSettings : IParametersTokenProvider {
-    public string GetAccountId() => ReadPreferences().Bim360AccountId;
-    public string GetGroupId() => ReadPreferences().ParamServiceGroupId;
-    public string GetCollectionId() => ReadPreferences().ParamServiceCollectionId;
-
-    private static ProductPreferences ReadPreferences() =>
-        new LocalDiskJsonFile<ProductPreferences>(ProductUserContentLayout.ForCurrentUser().PreferencesPath).Read();
+    // Firm-level ids: user preferences.json, then the shared one, then a refusal (ADR 0035 rule 11).
+    public string GetAccountId() => ProductPreferences.FirmId(p => p.Bim360AccountId, nameof(ProductPreferences.Bim360AccountId));
+    public string GetGroupId() => ProductPreferences.FirmId(p => p.ParamServiceGroupId, nameof(ProductPreferences.ParamServiceGroupId));
+    public string GetCollectionId() =>
+        ProductPreferences.FirmId(p => p.ParamServiceCollectionId, nameof(ProductPreferences.ParamServiceCollectionId));
 }
