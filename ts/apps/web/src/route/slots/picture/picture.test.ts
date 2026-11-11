@@ -15,7 +15,8 @@ const fan = uniqueIdSchema.parse("9e9fb89e-a9db-4d9a-8f35-b8fbc2303423-00d3da72"
 const port = (link: string) =>
   subjectCode({ keyKind: "UniqueId", key: fan, placement: { host, links: [uniqueIdSchema.parse(link)] }, sub: { port: 1 } });
 
-test("slice 8: point, select and frame a linked fan port in two placements, and inspect an empty region, with no route translator", () => {
+// Slice 8's falsifier, red until the picture slot lands; slice 8 flips it back to test().
+test.fails("slice 8: point, select and frame a linked fan port in two placements, and inspect an empty region, with no route translator", () => {
   // A Pod fills the slot with scope and marks from the closed set; an open kind is refused.
   expect(pictureSlotDataSchema.parse({ scope: "subject", marks: ["ring", "label"] }).marks).toEqual(["ring", "label"]);
   expect(pictureSlotDataSchema.safeParse({ scope: "subject", marks: ["arrow"] }).success).toBe(false);
