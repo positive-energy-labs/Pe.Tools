@@ -1,5 +1,5 @@
 {
   "extends": "../../packages/browser/tsconfig.json",
   "compilerOptions": { "declaration": false },
-  "include": ["cdp.ts", "walk.ts", "marks*.ts", "f1-*.ts", "j*.ts", "sig-*.ts", "st*.ts", "snowdon-pod.ts"]
+  "include": ["cdp.ts", "walk.ts", "marks*.ts", "fan-ports*.ts", "f1-*.ts", "j*.ts", "sig-*.ts", "st*.ts", "snowdon-pod.ts"]
 }

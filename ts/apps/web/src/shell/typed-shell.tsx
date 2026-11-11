@@ -96,6 +96,10 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
       const pose = publicationPose(instance,module.spec.key,page);
       const signature = canonicalRouteInput([target.workAddress,pose]);
       window.dispatchEvent(new Event("pe:history-change"));
+      // The host admits a pose only for a Page it has published (409 before that). Until a Value
+      // lands, the read's own `historyPose` carries the pose; this fires again when one does.
+      const { spec } = mount;
+      if (![spec.core, spec.subject?.read, ...Object.values(spec.panes).map(p => p.read)].some(read => read && mount.value(read).publication)) return;
       if (lastPose.current === signature) return;
       lastPose.current = signature;
       void historyRequest("",{kind:"page",document:target.workAddress,pose}).then(() => window.dispatchEvent(new Event("pe:history-change"))).catch(() => {});
