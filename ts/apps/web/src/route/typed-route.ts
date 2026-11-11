@@ -17,6 +17,7 @@ import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "./host-read.ts";
 import { sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
+import { findingCommand } from "./slots/findings/index.ts";
 
 /*
  * The sheet pair's contracts, inline: importing `typed-actions` would pull the whole semantic catalog into
@@ -258,13 +259,15 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
           return `Write ${writes} parameter value${writes === 1 ? "" : "s"} to Revit`;
         } } }
     : {};
+  // ADR 0035 rule 9: the sheet pane draws the person's Finding verb on each subject row, over this command.
+  const findingVerb = sheet && !("finding" in declaredCommands) ? { finding: findingCommand } : {};
   // The shell draws a kernel pane (`typed-shell.tsx`, `kernel`): a route module, and a Pod bundle, carries no React.
   const kernelPanes = {
     ...(spec.sheet && !Object.values(spec.panes).some((p) => p.kernel === "sheet") ? { sheet: { title: "Sheet", purpose: "Edit the bound cells", kernel: "sheet", body: "scroll", draw: () => scrollBody(null) } } : {}),
     ...(spec.goal && !("goal" in spec.panes) ? { goal: { title: "Unresolved", purpose: "What is left before the answer", read: spec.goal,
       kernel: "goal", body: "scroll", draw: () => scrollBody(null) } } : {}),
   } as unknown as Specification<D, F, W, Edit, Reads, SubjectRead>["panes"];
-  const normalized = { ...spec, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb } as NonNullable<typeof spec.commands>,
+  const normalized = { ...spec, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb, ...findingVerb } as NonNullable<typeof spec.commands>,
     panes: { ...spec.panes, ...kernelPanes }, edits: work && edits ? {...edits,work,owners} : undefined };
   const schemas: Record<string,z.ZodType> = { none:z.strictObject({}) };
   if (work && edits) {

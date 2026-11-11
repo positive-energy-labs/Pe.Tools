@@ -10,6 +10,8 @@ import {
 } from "./typed-route";
 import type { HostRead } from "./host-read";
 export * from "./typed-route";
+/** A Pod's route gets the Finding verb on its sheet's subject rows from the kernel; this is the command under it. */
+export { findingCommand } from "./slots/findings/index.ts";
 
 /** Mechanical Page policy; names and their product meaning remain at the call site. */
 export const listFields = <const P extends string>(prefix: P) =>
