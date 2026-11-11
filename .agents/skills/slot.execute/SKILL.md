@@ -76,7 +76,7 @@ dotnet tool run pe-revit -- <command> --json
 
 Run pea scripts, host operations, or `pea --prompt` only after the SDK session is fresh, and only when product behavior is the proof target. Use Pea's own doors (`pe_find`, `pe_read`, `pe_do`, the Revit API docs) and the `pea --prompt` probe for black-box product feedback, never for reviewing repo source.
 
-- `pnpm verify` from `ts` is the whole-workspace checkpoint and the CI command. Run it before a worktree merge or a release, and after a large batch of messy changes. Do not run it after every edit. During iteration, run the affected package check, a focused reproducer, or a bounded `pea browser` or Vitest user flow that can falsify the current claim.
+- `pnpm verify` from `ts` is the whole-workspace checkpoint and the CI command. Run it on the candidate for main or release and at substantial checkpoints selected by coupling and risk under `prove`. A child-worktree merge into an integration branch does not trigger it. During iteration, run the affected package check, a focused reproducer, or a bounded `pea browser` or Vitest user flow that can falsify the current claim.
 - After a gate failure, diagnose it and rerun the failed stage. Rerun wider stages only when later changes or open failures invalidate their evidence. Keep the full output in an artifact, and bring into the conversation only the result that changes the decision.
 - Record an unrelated failure with its owner and consequence. It does not expand the current task, and it stays in any readiness claim.
 - Excuse a red as already on the base only after it fails on the current base tip. A test that runs near its timeout is a performance finding first, so profile it before you call it a flake or give it more time.

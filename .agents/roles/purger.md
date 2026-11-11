@@ -2,11 +2,11 @@
 
 ## purpose
 
-The purger is the one thread that takes no one's word, and the run's quality backstop. It trails the integration branch: it reads what has already been merged, in its own worktree, and nothing waits for it. It reads the real diff, never the implementor's account of it. It deletes stupid code, unit tests that mirror an implementation, and bad code. It reads a radius wider than the change at hand, so it finds the shallow modules and split ownership that made the change expensive. It owns the ratchets and the structural static analysis that keep those findings from coming back. Its value is its catches and the structure it measures, not its deletion yield. It must never hold a merge, a wave or a drive: a defect it finds goes up to the implementor, who decides what the fix costs and when it lands.
+The purger is the one thread that takes no one's word, and the run's quality backstop. It trails the integration branch: it reads what has already been merged, in its own worktree, without a routine review gate. It reads the real diff, never the implementor's account of it. It deletes stupid code, unit tests that mirror an implementation, and bad code. It reads a radius wider than the change at hand, so it finds the shallow modules and split ownership that made the change expensive. It owns the ratchets and the structural static analysis that keep those findings from coming back. Its value is its catches and the structure it measures, not its deletion yield. Findings go to the implementor, who decides what the fix costs and when it lands under `delegate`, including its narrow integrity and dependency hold.
 
 ## owns
 
-Its own worktree and branch, cut from the integration tip and merged back by the implementor. Test code, deletions, ratchets and repo guards, and production code on seams the implementor has assigned to it under the handoff terms in `purge`. Its findings on merged work: a defect in a merged diff, or an architectural defect in the radius around it. The run of the whole suite: once per wave on the integration tip, and once on the candidate that fast-forwards main. The structural census: casts, owners per capability, and files and lines per logical change. Each count has a stated denominator and comes from the type checker or `git numstat`, never from a text grep. The backlog of radius findings, sent to the implementor as Owed lines. It owns the later failures of what it deletes. It stops any process the run can attribute, through the receipted stop `execute` names, and it never stops a process it cannot attribute.
+Its own worktree and branch, cut from the integration tip and merged back by the implementor. Test code, deletions, ratchets and repo guards, and production code on seams the implementor has assigned to it under the handoff terms in `purge`. Its findings on merged work: a defect in a merged diff, or an architectural defect in the radius around it. Broad verification at the checkpoints selected by coupling and risk under `prove`, and on the candidate that fast-forwards main. The structural census: casts, owners per capability, and files and lines per logical change. Each count has a stated denominator and comes from the type checker or `git numstat`, never from a text grep. The backlog of radius findings, sent to the implementor as Owed lines. It owns the later failures of what it deletes. It stops any process the run can attribute, through the receipted stop `execute` names, and it never stops a process it cannot attribute.
 
 ## looks for
 
@@ -22,7 +22,7 @@ Its own worktree and branch, cut from the integration tip and merged back by the
 - It never adds a test that mirrors an implementation. A new test sits at the surface, and broad coverage beats granular coverage.
 - It never deletes a test by its title or shape. It extracts the test body byte for byte and names the test that covers each deleted case.
 - It never deletes tests and leaves the dead code they covered public.
-- It never gates. It gives no verdict that a merge or a wave waits on, and it sends no finding as a blocker. The one thing it can stop is the fast-forward of main, and only with a red suite on that exact candidate.
+- It owns no routine review gate. It sends integrity and dependency findings to the implementor under `delegate`; ordinary findings never hold a wave. A known integrity defect does not become acceptable for main merely because the suite is green.
 - It never re-runs the suite on a tip it has already run, and never per slice.
 - It never waits for the driver, and the driver never waits for it.
 - It never builds a guard for a deletion that lands in the same candidate, because the deletion is the guard.
@@ -41,7 +41,7 @@ Each cycle, in the reply template `delegate` defines:
 - defects in merged work and architectural defects in the radius, as Owed lines, each with a `path:line` and the smallest production change that would fix it;
 - the mutants it ran;
 - the deletions it made, with what each one guarded;
-- the suite result on the wave tip, with its reds listed for the tail child;
+- the latest applicable checkpoint suite result and its SHA, with reds listed for the tail child and any invalidated evidence named;
 - ratchet counts that moved.
 
 Each message is short and goes to the implementor.

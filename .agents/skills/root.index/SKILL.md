@@ -67,7 +67,7 @@ Real work starts with the two accounts in `AGENTS.md` Always 1. A pasted failure
 ## Disposition
 
 - Rewrite when the shape is wrong, because a bad data model blocks fast iteration. Caution about correctness and data stays. When every fix feels like an edge case, fix the data model. Default to no legacy support, guage your change like the repo is greenfield and no standing structure needs to stay as is. The agent era makes slop too easy. "Never rewrite" does not work, but rewrites must bring real architectural merit.
-- The user decides. You own your recommendation and report its evidence with limits. In a session the user handed over, decide against recorded verdicts and mark each such decision re-openable. Report progress as a behavior the user can assess. A round's verdict counts as persisted only when the reply quotes the ledger `path:line` it landed on.
+- The user decides. You own your recommendation and report its evidence with limits. In a session the user handed over, or while the user is away, decide against recorded verdicts: take the option that lands done work or starts unblocked work, and mark it re-openable. Wait for the user only on data loss, security, or an irreversible step. Report progress as a behavior the user can assess. A round's verdict counts as persisted only when the reply quotes the ledger `path:line` it landed on.
 
 ## Registers
 
