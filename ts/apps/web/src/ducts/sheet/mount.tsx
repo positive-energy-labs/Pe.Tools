@@ -88,6 +88,7 @@ export function RosterBody({ ctx }: { ctx: SheetContext }) {
           roster: roster,
           picked: pickedFans === "all" ? roster.map(stableFanKey) : pickedFans,
           open: open,
+          finding: (finding) => ctx.write("finding").run(finding),
           busy: busy,
           loading: ctx.value.status === "pending",
         }}

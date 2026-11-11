@@ -27,19 +27,29 @@ export async function findingsList(reads: Pick<CommandWorkReads, "view">, key: W
   return Object.values(findings).filter((f) => subject === undefined || f.subject === subject);
 }
 
+/** The findings Work at the handle's binding: a route's own handle names the same document. */
+const findingsKey = (key: WorkKey): WorkKey => ({ ...key, route: FINDINGS_OWNER });
+
 export async function findingsWrite(
   workspace: RouteWorkspace,
+  reads: Pick<CommandWorkReads, "view">,
   handle: z.output<typeof workHandleSchema>,
   input: FindingInput,
   by: Finding["by"],
 ): Promise<{ readonly revision: number }> {
   // The contract refuses a verdict the kind does not declare, before any Work changes.
   const finding = findingSchema.parse({ ...input, by, at: new Date().toISOString() });
-  const result = await workspace.write(handle.key, FINDINGS_OWNER, by === "pea" ? "pea" : "human", {
+  const key = findingsKey(handle.key);
+  // A findings handle is a compare-and-set. A route's own handle (a person's row verb on /fans or
+  // /families, whose mount binds its own Work) carries no findings revision, so the write lands on
+  // the current one: it patches only `findings[id]`, an upsert that reads no other finding.
+  const expectedRevision =
+    handle.key.route === FINDINGS_OWNER ? handle.revision : ((await reads.view(key, FINDINGS_OWNER))?.revision ?? 0);
+  const result = await workspace.write(key, FINDINGS_OWNER, by === "pea" ? "pea" : "human", {
     kind: "apply",
     press: `finding:${finding.id}`,
     label: `${finding.kind} on ${finding.subject}`,
-    expectedRevision: handle.revision,
+    expectedRevision,
     patches: [{ path: ["findings", finding.id], value: finding }],
   });
   if (!result.ok) throw new StepFailure(refusalText(result), 409, "refused", result);
@@ -59,7 +69,7 @@ export const findingsExecutors = (workspace: RouteWorkspace | undefined) => ({
       return { effects: [], prepare: async () => input };
     },
     run: (ctx, execution) =>
-      io(async () => ({ findings: await findingsList(ctx.work, handleOf(execution.prepared).key, execution.prepared.subject) })),
+      io(async () => ({ findings: await findingsList(ctx.work, findingsKey(handleOf(execution.prepared).key), execution.prepared.subject) })),
   }),
   [FINDINGS_DOORS.write]: command(commands[FINDINGS_DOORS.write], commands[FINDINGS_DOORS.write].input, {
     async bind({ admission: { input } }) {
@@ -67,11 +77,11 @@ export const findingsExecutors = (workspace: RouteWorkspace | undefined) => ({
       handleOf(input);
       return { effects: [{ kind: "directory", path: productRouteWorkPath() }], prepare: async () => input };
     },
-    run: ({ caller }, execution) =>
+    run: ({ caller, work }, execution) =>
       workspace
         ? execution.step("publication", FINDINGS_DOORS.write, execution.prepared, () =>
             io(() =>
-              findingsWrite(workspace, handleOf(execution.prepared), execution.prepared.finding, caller.kind === "pea" ? "pea" : "person"),
+              findingsWrite(workspace, work, handleOf(execution.prepared), execution.prepared.finding, caller.kind === "pea" ? "pea" : "person"),
             ),
           )
         : Effect.fail(refused("Work storage is unavailable")),

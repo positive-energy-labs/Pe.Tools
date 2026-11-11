@@ -132,7 +132,7 @@ export function TypedChrome({ mount, document, recorded, thread }: { mount: Type
   } }} />;
   const head=<SituationBand name={spec.name} context={<>{document}<TypedSubject mount={mount} />{spec.edits && mount.work()?<span>{`r${mount.work()!.revision}`}</span>:null}</>}
     alerts={<><span role="status" aria-label="Route readiness" data-readiness={readiness.kind}>{readiness.kind !== "ready" && readiness.reason !== problem ? readiness.reason : null}</span>{mount.value().value!==undefined&&!mount.value().current?<span role="status">{retainedValueLabel(mount.value())}</span>:null}{problem ? <span role="alert">{problem}</span> : null}{mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}<CatalogWorkReviews mount={mount} /></>}
-    verbs={[...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),...Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />),
+    verbs={[...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),...Object.entries(spec.commands).filter(([,c])=>!("row" in c && c.row)).map(([id])=><TypedWrite key={id} mount={mount} id={id} />),
       // An explicit-demand read is a verb the person presses; nothing else re-reads from chrome.
       ...Object.entries(spec.panes).filter(([,p])=>p.read?.demand === "explicit").map(([id,p])=><Button key={`read:${id}`} label={`Read ${p.title}`} onClick={()=>mount.refresh(p.read)}>Read</Button>)]}
     timeline={<TimelineHead owner={mount} history={<>{recorded}<GraphHistory owner={mount} /></>} />} />;

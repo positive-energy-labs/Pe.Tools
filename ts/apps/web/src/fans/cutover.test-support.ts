@@ -25,6 +25,8 @@ export async function createWitness(
   overrides: Readonly<Record<string, UseSource>> = {},
   work?: import("../shell/typed-place").PlaceInput["work"],
   receipts?: import("@pe/agent-contracts").WorkJournalDoor["receipts"],
+  /** The action door; absent, the browser's own. A witness hands in a real host journal here. */
+  submit: typeof browserWorkPorts.submit = browserWorkPorts.submit,
 ) {
   const admitted = await admit();
   const ws = new RouteWorkspace({
@@ -54,7 +56,7 @@ export async function createWitness(
     { subscribe: observe, dirty() {} },
     {
       write: (key, write) => ws.write(key, key.route, "human", write),
-      submit: async command => { const call = `fans:${command.key}`; inputs.set(call,command.input); calls.set(call,(calls.get(call)??0)+1); return browserWorkPorts.submit(command); },
+      submit: async command => { const call = `fans:${command.key}`; inputs.set(call,command.input); calls.set(call,(calls.get(call)??0)+1); return submit(command); },
     },
   );
   const feed = {

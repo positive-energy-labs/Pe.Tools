@@ -230,6 +230,8 @@ export type Specification<
           work:import("@pe/agent-contracts").WorkHandle|null;value:Immutable<D>|undefined},supplied?:any):unknown;
         present(result: unknown, data: Immutable<D>, work: Immutable<z.output<W>>): unknown;
       } | { kind: "session" | "catalog" | "query" | "rpc"; entry: string; contract: EntryContract; label: string;
+        /** A pane draws this verb on its rows, with the row's subject; the band does not. */
+        row?: true;
         invoke?: import("@pe/agent-contracts").ReadEntry["run"];
         input?(context: { page: Page<F>; target: import("@pe/agent-contracts").ExecutionTarget | null;
           work: import("@pe/agent-contracts").WorkHandle | null; value: Immutable<D> | undefined },supplied?:any): unknown }

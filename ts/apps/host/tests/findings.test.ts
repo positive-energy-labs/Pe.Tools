@@ -26,9 +26,9 @@ test("findings.write lands in the document's findings Work with the host's autho
   });
   const key = bindWork("findings", null, "doc-a");
   const handle = async () => workHandle(key, (await workspace.view(key, "findings"))!.revision);
-  await findingsWrite(workspace, await handle(), input("p1", port, "claim", "no"), "pea");
-  await findingsWrite(workspace, await handle(), input("h1", row, "claim", "yes"), "person");
-  await expect(findingsWrite(workspace, await handle(), input("n", port, "note", "yes"), "pea")).rejects.toThrow(/verdict/);
+  await findingsWrite(workspace, workspace, await handle(), input("p1", port, "claim", "no"), "pea");
+  await findingsWrite(workspace, workspace, await handle(), input("h1", row, "claim", "yes"), "person");
+  await expect(findingsWrite(workspace, workspace, await handle(), input("n", port, "note", "yes"), "pea")).rejects.toThrow(/verdict/);
   expect((await findingsList(workspace, key)).map((f) => [f.id, f.by])).toEqual([["p1", "pea"], ["h1", "person"]]);
   expect((await findingsList(workspace, key, port)).map((f) => f.id)).toEqual(["p1"]);
   const undone = await workspace.step(key, "findings", "pea", "undo", (await handle()).revision, true);
@@ -69,14 +69,16 @@ async function doors() {
     peaCaller,
     revision,
     authors: async () => (await findingsList(workspace, key)).map((f) => [f.id, f.by]),
-    async write(id: string, finding: FindingInput, caller: Caller) {
+    /** `on` is the route whose own Work handle the caller holds; a row verb on /fans holds Fans'. */
+    async write(id: string, finding: FindingInput, caller: Caller, on = "findings") {
+      const work = on === "findings" ? workHandle(key, await revision()) : workHandle({ ...key, route: on }, 7);
       const response = await post({ id, key: "findings.write", target: { kind: "document", ref: socket.target },
-        input: { work: workHandle(key, await revision()), finding } }, caller);
+        input: { work, finding } }, caller);
       expect(response.status, await response.clone().text()).toBeLessThan(400);
       expect(await native.journal.wait(id), id).toMatchObject({ state: "succeeded" });
     },
-    door: (verb: "apply" | "history", body: unknown) =>
-      withInvocationContext({ caller: peaCaller }, () => routes.fetch(new Request(
+    door: (verb: "apply" | "history", body: unknown, caller: Caller = peaCaller) =>
+      withInvocationContext({ caller }, () => routes.fetch(new Request(
         `http://host/pe/route-state/findings/${verb}?target=${encodeURIComponent(target)}`,
         { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
       ))),
@@ -107,5 +109,26 @@ test("Pea's undo through the Work history door reverts Pea's own finding; the pe
     const undone = await d.door("history", { direction: "undo", expectedRevision: await d.revision() });
     expect(await undone.json()).toMatchObject({ ok: true });
     expect(await d.authors()).toEqual([["h1", "person"]]);
+  } finally { await d.close(); }
+});
+
+test("the person's undo through the Work history door reverts the person's own finding; Pea's newer finding stays", async () => {
+  const d = await doors();
+  try {
+    await d.write("by-person", input("h1", row, "claim", "yes"), human);
+    await d.write("by-pea", input("p1", port, "claim", "no"), d.peaCaller);
+    const undone = await d.door("history", { direction: "undo", expectedRevision: await d.revision() }, human);
+    expect(await undone.json()).toMatchObject({ ok: true });
+    expect(await d.authors()).toEqual([["p1", "pea"]]);
+  } finally { await d.close(); }
+});
+
+test("a row verb's own route handle (Fans, Families) addresses the same document's findings Work", async () => {
+  const d = await doors();
+  try {
+    await d.write("by-pea", input("p1", port, "note"), d.peaCaller);
+    await d.write("fans-row", input("h1", port, "check", "fail"), human, "fans");
+    await d.write("families-row", input("h2", row, "note"), human, "families");
+    expect(await d.authors()).toEqual([["p1", "pea"], ["h1", "person"], ["h2", "person"]]);
   } finally { await d.close(); }
 });

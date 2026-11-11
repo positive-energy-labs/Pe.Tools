@@ -82,6 +82,33 @@
     }
   },
   "verbs": {
+    "finding": {
+      "kind": "command",
+      "input": "none",
+      "label": "Write finding",
+      "review": "shown",
+      "deps": {
+        "page": [],
+        "work": [
+          "writeIntent",
+          "scope",
+          "excluded",
+          "cells",
+          "patch",
+          "executionOptions",
+          "pod",
+          "takenAt"
+        ],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "findings.write",
+      "intent": "finding"
+    },
     "read": {
       "kind": "command",
       "input": "none",
@@ -172,6 +199,7 @@
         "value"
       ],
       "verbs": [
+        "finding",
         "read",
         "stop",
         "apply"
@@ -189,6 +217,7 @@
         "main"
       ],
       "verbs": [
+        "finding",
         "read",
         "stop",
         "apply"

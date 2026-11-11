@@ -63,7 +63,10 @@ export const findingsWork = {
 export const findingInputSchema = findingFields.omit({ by: true, at: true }).refine(declaredVerdict, verdictError);
 export type FindingInput = z.output<typeof findingInputSchema>;
 
-/** The two doors, each bound to the document's findings Work handle (`workCommand`). */
+/**
+ * The two doors, each bound to a Work handle at this document (`workCommand`): the findings handle,
+ * or a route's own handle, from which the host takes the binding and addresses the findings Work.
+ */
 export const findingsCommands = {
   [FINDINGS_DOORS.list]: workCommand(FINDINGS_OWNER, {
     says: "List this document's findings, oldest first, optionally only those on one subject (a SubjectRef code).",
