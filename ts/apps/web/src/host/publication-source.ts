@@ -7,7 +7,7 @@ export function publicationSource<T extends { generation: number; version: numbe
 }): UseSource<T> {
   return { kind: "use", dirties: ["snapshot"], open(ctx, deliver) {
     const publication = ctx.publication ?? { subscription: crypto.randomUUID(), generation: 0 };
-    let closed = false, refreshing = false, invalidated = false;
+    let closed = false, refreshing = false, invalidated = false, races = 0;
     let events: EventSource | undefined;
     const refresh = async () => {
       if (closed) return;
@@ -28,6 +28,15 @@ export function publicationSource<T extends { generation: number; version: numbe
           events.onerror = () => { if (!closed) deliver({ kind: "stale" }); };
         }
         if (result.state === "superseded") return;
+        // The host answers refresh-needed when an input moved under its evaluation (the machine
+        // census changing mid-read) and sends no event for it, so this source re-reads.
+        // ponytail: two re-reads for any refusal, since the host does not type a race apart from a
+        // lasting one; a typed retry flag on the publication is the upgrade.
+        if (result.state === "refresh-needed" && races < 2) {
+          await new Promise(resolve => setTimeout(resolve, 250 * ++races));
+          invalidated = true;
+          if (closed || !result.value) return;
+        } else races = 0;
         if (!result.value) return deliver({ kind: "failure", error: result.reason ?? "Refresh needed" });
         deliver({ kind: "complete", value: result, revision: result.version, sourceVersion: result.value.evaluation,
           fresh: result.state === "current" && !result.value.coverage.refused.length && !result.value.coverage.unknown.length,
