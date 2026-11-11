@@ -6,6 +6,7 @@
     "ts/apps/host/src/pe-routes.ts",
     "ts/apps/host/src/reads/bind.ts",
     "ts/apps/host/src/reads/captures.ts",
+    "ts/apps/host/src/reads/door.ts",
     "ts/apps/host/src/reads/evaluator.ts",
     "ts/apps/host/src/reads/events.ts",
     "ts/apps/host/src/reads/history-routes.ts",

@@ -17,6 +17,7 @@ export const readFileOwnership = {
   "bind.ts": { owner: "kernel", reason: "Shared thread/document binding picker" },
   "captures.ts": { owner: "kernel", reason: "Shared capture-store browsing input" },
   "evaluator.ts": { owner: "kernel", reason: "Tracked evaluation, Values and publications" },
+  "door.ts": { owner: "kernel", reason: "The effect-free read door a Pod artifact bundles (@pe/host/read-graph)" },
   "events.ts": { owner: "kernel", reason: "Publication invalidation SSE transport" },
   "history-routes.ts": { owner: "kernel", reason: "Generic History HTTP admission and dispatch" },
   "history.ts": { owner: "kernel", reason: "Durable publication History and replay" },
