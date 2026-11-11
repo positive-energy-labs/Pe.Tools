@@ -3,53 +3,12 @@ import { designOf } from "@pe/ducts-domain/test-design";
 import { act, cleanup, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { ductClaimSchema } from "@pe/agent-contracts";
-
-import { focusRow, inboxRows, type CellRef, type InboxItem } from "../../inbox-rows";
+import { focusRow, type CellRef, type InboxItem } from "../../inbox-rows";
 import { cellFocus } from "../../inbox-rows";
 import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import { Inbox } from "./inbox";
 
 afterEach(cleanup);
-
-test("D18 requires a short claim title and keeps its sentence in the Evidence hint", async () => {
-  const value = {
-    text: "The intake connects to the return plenum.",
-    ids: [1, 2],
-    state: "assumed" as const,
-  };
-  expect.soft(ductClaimSchema.safeParse(value).success).toBe(false);
-  for (const title of ["", "x".repeat(61)])
-    expect(ductClaimSchema.safeParse({ ...value, title }).success).toBe(false);
-  const claim = { ...value, title: "Unit and return", id: "c1", at: value.ids };
-  const { check } = inboxRows({
-    snapshot: { nodes: [], segments: [], groups: [] },
-    scope: null,
-    findings: [],
-    doc: null,
-    flows: new Map(),
-    equipmentFlows: new Map(),
-    claims: [claim],
-    write: { edit: 0, esp: 0 },
-  });
-  mount({ check, focused: "claim:c1" });
-  const row = document.querySelector<HTMLElement>('[data-key="claim:c1"]')!;
-  expect(within(row).getByText(claim.title)).toBeTruthy();
-  expect(screen.queryByText(value.text)).toBeNull();
-  fireEvent.click(row);
-  const detail = await waitFor(() => {
-    const node = document.querySelector<HTMLElement>('[data-inbox-detail="claim:c1"]');
-    expect(node).not.toBeNull();
-    return node!;
-  });
-  const hint = within(detail).getByRole("button", { name: "What is this?" });
-  fireEvent.pointerEnter(hint, { pointerType: "mouse" });
-  fireEvent.mouseEnter(hint);
-  fireEvent.mouseMove(hint);
-  expect(
-    within(await screen.findByRole("tooltip")).getByText(value.text, { exact: false }),
-  ).toBeTruthy();
-});
 
 const item = (over: Partial<InboxItem> & Pick<InboxItem, "key" | "group">): InboxItem => ({
   kind: "x",
@@ -140,7 +99,6 @@ function mount(
       groups={groups}
       work={{ doc: over.doc ?? null, revision: 0, write, store: over.store ?? null }}
       nameOf={String}
-      onVerdict={null}
       onSelect={() => {}}
       onFocusCell={over.onFocusCell ?? (() => {})}
       write={{

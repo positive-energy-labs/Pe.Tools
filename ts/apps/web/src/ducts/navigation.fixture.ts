@@ -1,5 +1,4 @@
 /** Explicit synthetic network for /ducts?fixture=navigation; production pricing builds every view. */
-import type { DuctClaim } from "@pe/agent-contracts";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { SCENE_FIXTURE } from "./scene.fixture";
@@ -177,14 +176,6 @@ const snapshot: DuctSnapshot = {
 export const NAVIGATION_FIXTURE = {
   snapshot,
   subject: null,
-  claims: {
-    "shared-plenum": {
-      title: "Shared plenum",
-      state: "unproven",
-      ids: [1002],
-      text: "AHU-1's shared plenum serves SA Office and SA Lab; its open fixture port needs review.",
-    },
-  } satisfies Record<string, DuctClaim>,
   // Straight branches need no coefficient grids. Unpriced fittings remain real production findings.
   grids: {} satisfies Grids,
 };

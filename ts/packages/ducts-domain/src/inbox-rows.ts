@@ -10,7 +10,6 @@ import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { slotWord, type AirflowOf, type AirflowOption } from "./airflow.ts";
-type Claim = Omit<import("@pe/agent-contracts").DuctClaim, "ids"> & { id: string; at: number[] };
 
 export const INBOX_ORDER = ["fix", "set", "check", "write", "diagnostics"] as const;
 export type InboxGroup = (typeof INBOX_ORDER)[number];
@@ -76,7 +75,6 @@ export type RowVerb =
       says: string;
     }
   | { kind: "focus"; cell: CellRef; label: string; says: string }
-  | { kind: "claim"; claim: Claim }
   | { kind: "airflow"; of?: AirflowOf; current: string; options: readonly AirflowOption[] }
   | {
       kind: "stage";
@@ -723,22 +721,10 @@ const valueWord = (segment: string, value: unknown) => {
   return v.kind === "verdict" ? String(v.verdict) : "a value";
 };
 
-function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] {
-  const { scope, findings, doc, claims } = input;
+function checks(input: TriageInput): InboxItem[] {
+  const { scope, findings, doc } = input;
   const name = (id: number) => subjectName("unnamed element", input.nameOf?.(id));
-  const items: InboxItem[] = claims
-    .filter((claim) => !claim.verdict)
-    .map((claim) => ({
-      key: `claim:${claim.id}`,
-      group: "check",
-      kind: "claim",
-      title: claim.title,
-      status: claim.state,
-      tone: "pea",
-      ids: claim.at,
-      note: claim.text,
-      verbs: [{ kind: "claim", claim }, select(claim.at)],
-    }));
+  const items: InboxItem[] = [];
   const awaiting = (
     cells: Record<string, { edit?: { value?: unknown; by?: string } | null }> | undefined,
   ) => Object.entries(cells ?? {}).filter(([, cell]) => cell.edit?.by === "pea");
@@ -896,7 +882,7 @@ export function annotatedFindings(
   return new Set(rows.fix.flatMap((r) => covers.get(r.key) ?? [r.key]));
 }
 
-export function inboxRows(input: TriageInput & { claims: readonly Claim[]; write: WriteState }) {
+export function inboxRows(input: TriageInput & { write: WriteState }) {
   const { fix, set, diagnostics } = triage(input);
   return {
     fix,

@@ -1,7 +1,7 @@
 import { writeIntentSchema } from "./write-intent.ts";
 /**
  * /rooms Work: the seven room fields plus type on each Room Region, one cell per [guid, field];
- * feedback marks as cells with one staged edit each; and notes from either author.
+ * and feedback marks as cells with one staged edit each. Notes are findings (ADR 0035 rule 9).
  * Region and op shapes are the generated host catalog's (`@pe/host-contracts/generated`).
  */
 import { z } from "zod";
@@ -50,14 +50,6 @@ export const markSchema = z.strictObject({
 });
 export type Mark = z.infer<typeof markSchema>;
 
-/** A note is not a staged cell: no rungs, writable by Pea and a person, never accepted or denied. */
-export const noteSchema = z.strictObject({
-  anchor: anchorSchema(1),
-  text: z.string(),
-  by: z.enum(["pea", "person"]),
-  at: z.iso.datetime(),
-});
-export type RoomsNote = z.infer<typeof noteSchema>;
 
 export const roomsDocumentSchema = z
   .strictObject({
@@ -71,7 +63,6 @@ export const roomsDocumentSchema = z
       )
       .default({}),
     marks: z.record(z.string(), draftCellSchema(markSchema)).default({}),
-    notes: z.record(z.string(), noteSchema).default({}).meta({ title: "room notes" }),
   })
   .superRefine((doc, ctx) => {
     for (const [key, cell] of Object.entries(doc.edits)) {

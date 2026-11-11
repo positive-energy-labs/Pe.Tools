@@ -1,36 +1,8 @@
-/** Claim verdicts and names. SubjectText owns prose references and attention. */
-import { cellPatches, type DuctsDesign, type RouteStatePatch } from "@pe/agent-contracts";
-
+/** Element names. SubjectText owns prose references and attention. A claim is a finding now (ADR 0035 rule 9). */
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { Claim, Place } from "./legs";
+import type { Place } from "./legs";
 import type { SubjectDrawn } from "./scene";
-
-export type Verdict = NonNullable<Claim["verdict"]>;
-export const VERDICTS: readonly { value: Verdict; word: string; says: string }[] = [
-  { value: "yes", word: "yes", says: "the claim holds" },
-  { value: "no", word: "no", says: "the claim is wrong" },
-  { value: "not-this", word: "not this", says: "the claim is about the wrong place" },
-];
-
-/** Edit the complete claim and verdict; the host stamps the shared change's provenance. */
-export const verdictPatches = (
-  doc: DuctsDesign | null,
-  claim: Claim,
-  verdict: Verdict,
-): RouteStatePatch[] =>
-  cellPatches(["claims"], claim.id, doc?.claims[claim.id] ?? {}, {
-    kind: "set",
-    rung: {
-      value: {
-        title: claim.title,
-        text: claim.text,
-        ids: claim.at,
-        state: claim.state,
-        verdict,
-      },
-    },
-  });
 
 const KIND_WORD: Record<DuctSnapshot["nodes"][number]["kind"], string> = {
   equipment: "equipment",

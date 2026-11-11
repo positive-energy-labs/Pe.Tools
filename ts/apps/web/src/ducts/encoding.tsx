@@ -10,12 +10,12 @@
 import { legendWord, type LegendWord } from "@pe/kit/lang/legend";
 import type { Blocks } from "@pe/ducts-domain/issues";
 import type { DuctInferenceGrade } from "@pe/agent-contracts";
-import type { DashRole, Tone } from "@pe/kit/lib/token";
+import type { DashRole } from "@pe/kit/lib/token";
 import { token } from "@pe/kit/lib/token";
 import { verdictInk } from "@pe/kit/table/cells";
 import { ISSUE_KINDS } from "./issues";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { Claim, Leg } from "./legs";
+import type { Leg } from "./legs";
 
 export type Segment = DuctSnapshot["segments"][number];
 export type DuctNode = DuctSnapshot["nodes"][number];
@@ -506,14 +506,6 @@ export const nodeInk = (encoding: Encoding, issues: readonly Issue[]) => {
   const worst = encoding.key === "health" ? worstBlocks(issues) : null;
   return worst ? blocksInk(worst) : CLEAN_INK;
 };
-
-/** A claim pin's ink by its state, through the same tones an issue wears: proven done, assumed caution, unproven alarm. */
-const CLAIM_TONE: Record<Claim["state"], Tone> = {
-  proven: "done",
-  assumed: "caution",
-  unproven: "alarm",
-};
-export const claimInk = (claim: Pick<Claim, "state">) => verdictInk(CLAIM_TONE[claim.state]);
 
 /** An inferred break's ink by its grade (`provisional.tsx` tones); a near miss or a confirmed one is plain ink. */
 export const inferredInk = ({

@@ -7,7 +7,7 @@ export const roomsPageSchema = z.object({
   layers: z.union([z.array(z.string()), z.literal("all")]).default([]),
   selected: z.union([z.array(z.string()), z.literal("all")]).default([]),
   show: z
-    .enum(["all", "proposed", "fail", "stale", "gone", "accepted", "pass", "note"])
+    .enum(["all", "proposed", "fail", "stale", "gone", "accepted", "pass"])
     .default("all"),
   viewport: planeViewportSchema.nullable().default(null),
   epoch: z.number().default(0),

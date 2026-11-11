@@ -11,20 +11,13 @@ type Region = RoomsSnapshot.Res.RoomsRegion;
 type Loop = readonly (readonly number[])[];
 type Point = readonly [number, number];
 type MarkCell = RoomsRouteDocument["marks"][string];
-type FeedbackWork = Pick<RoomsRouteDocument, "marks" | "notes">;
+type FeedbackWork = Pick<RoomsRouteDocument, "marks">;
 type MarkState = "accepted" | "pass" | "fail" | "stale" | "gone";
-/** A card's state: a mark's derived glyph, or a note, which has no rungs. */
-export type CardState = MarkState | "note";
+/** A card's state: a mark's derived glyph. Notes are findings now (ADR 0035 rule 9). */
+export type CardState = MarkState;
 
-/** Inbox order: what wants a person first; passing last among marks; notes after every mark. */
-export const CARD_STATES = [
-  "fail",
-  "stale",
-  "gone",
-  "accepted",
-  "pass",
-  "note",
-] as const satisfies readonly CardState[];
+/** Inbox order: what wants a person first; passing last. */
+export const CARD_STATES = ["fail", "stale", "gone", "accepted", "pass"] as const satisfies readonly CardState[];
 const STATE_ORDER: readonly CardState[] = CARD_STATES;
 
 /** Each state's glyph, its tone (null = plain ink) and what it means, then its next move. */
@@ -52,11 +45,6 @@ export const CARD_META: Record<
     glyph: "⊘",
     tone: null,
     says: "gone · no region of the newest run lies under it. Next: delete it.",
-  },
-  note: {
-    glyph: "✎",
-    tone: null,
-    says: "note · text on a place, never edit. Next: delete it once read.",
   },
 };
 /** The run id Revit stamps on hand-drawn regions: never a partition run. */
@@ -156,7 +144,7 @@ const centroid = (polygon: Loop) => {
 };
 const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
-/** The Work's marks and notes as markdown: one section per view, deterministic order. */
+/** The Work's marks as markdown: one section per view, deterministic order. */
 export function cardsMarkdown(doc: FeedbackWork, snapshot: Snapshot): string {
   const regions = new Map(snapshot.regions.map((region) => [region.guid, region]));
   const label = (guid: string) => {
@@ -184,16 +172,7 @@ export function cardsMarkdown(doc: FeedbackWork, snapshot: Snapshot): string {
     const rank = STATE_ORDER.indexOf(state);
     lines.push({ view: mark.anchor.view, rank, id, text: parts.join(" · ") });
   }
-  for (const [id, note] of Object.entries(doc.notes)) {
-    const parts = [
-      `✎ note ${id}`,
-      `${note.anchor.level} at ${centroid(note.anchor.polygon)} ft`,
-      `by ${note.by} ${note.at}`,
-      JSON.stringify(note.text),
-    ];
-    lines.push({ view: note.anchor.view, rank: STATE_ORDER.length, id, text: parts.join(" · ") });
-  }
-  if (!lines.length) return "# Rooms feedback\n\nNo marks or notes.\n";
+  if (!lines.length) return "# Rooms feedback\n\nNo marks.\n";
   const views = [...new Set(lines.map((line) => line.view))].sort(byText);
   const sections = views.map((view) => {
     const body = lines
@@ -207,13 +186,13 @@ export function cardsMarkdown(doc: FeedbackWork, snapshot: Snapshot): string {
   return ["# Rooms feedback", ...sections].join("\n\n") + "\n";
 }
 
-/** One inbox card: a mark or a note on one view. Its state is derived on read, never stored. */
+/** One inbox card: a mark on one view. Its state is derived on read, never stored. */
 export interface Card {
   id: string;
   state: CardState;
-  /** Pea (a mark with a suggestion rung, a note by Pea) or a person. */
+  /** Pea (a mark with a suggestion rung) or a person. */
   by: "pea" | "person";
-  kind: Mark["kind"] | "note";
+  kind: Mark["kind"];
   polygon: Loop;
   /**
    * The regions it concerns in this snapshot, found by geometry: the regions its polygon covers at
@@ -226,7 +205,7 @@ export interface Card {
   cell?: MarkCell;
 }
 
-/** The inbox for one view: its marks and notes in `CARD_STATES` order, then by id. */
+/** The inbox for one view: its marks in `CARD_STATES` order, then by id. */
 export function inboxCards(doc: FeedbackWork, snapshot: Snapshot, view: string): Card[] {
   const regions = snapshot.regions.filter((r) => r.view === view && r.role !== "zone");
   const under = ([x = 0, y = 0]: readonly number[]) =>
@@ -250,20 +229,6 @@ export function inboxCards(doc: FeedbackWork, snapshot: Snapshot, view: string):
       sqft: shoelace(polygon),
       text: mark.note ?? "",
       cell,
-    });
-  }
-  for (const [id, note] of Object.entries(doc.notes)) {
-    if (note.anchor.view !== view) continue;
-    const polygon = note.anchor.polygon;
-    cards.push({
-      id,
-      state: "note",
-      by: note.by,
-      kind: "note",
-      polygon,
-      guids: concerns(polygon),
-      sqft: polygon.length > 2 ? shoelace(polygon) : 0,
-      text: note.text,
     });
   }
   const rank = (card: Card) => STATE_ORDER.indexOf(card.state);

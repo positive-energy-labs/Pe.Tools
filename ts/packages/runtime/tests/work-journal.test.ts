@@ -355,3 +355,35 @@ test.each([
     });
   },
 );
+
+test("per-author undo per document: Pea's and a person's undo each revert only their own edit and leave the other's", async () => {
+  const f = fixture();
+  await f.edit("human", "mine", 1);
+  const pea = await f.host.write(f.key, f.key.route, "pea", {
+    kind: "apply",
+    press: "yours",
+    expectedRevision: (await f.host.view(f.key, f.key.route))!.revision,
+    patches: [{ path: ["b"], value: 2 }],
+  });
+  if (!pea.ok) throw Error(refusalText(pea));
+  // The person's step is not last; their own undo still reaches it and leaves Pea's `b`.
+  expect(await f.host.step(f.key, f.key.route, "human", "undo", pea.revision, true)).toMatchObject({
+    ok: true,
+    write: { step: "human:mine" },
+    doc: { a: 0, b: 2 },
+  });
+  f.restart();
+  const after = (await f.host.view(f.key, f.key.route))!.revision;
+  expect(await f.host.step(f.key, f.key.route, "pea", "undo", after, true)).toMatchObject({
+    ok: true,
+    write: { step: "pea:yours" },
+    doc: { a: 0, b: 0 },
+  });
+  // Nothing of the person's is left to undo; their redo brings back only their own edit.
+  const last = (await f.host.view(f.key, f.key.route))!.revision;
+  expect((await f.host.step(f.key, f.key.route, "human", "undo", last, true)).ok).toBe(false);
+  expect(await f.host.step(f.key, f.key.route, "human", "redo", last, true)).toMatchObject({
+    ok: true,
+    doc: { a: 1, b: 0 },
+  });
+});
