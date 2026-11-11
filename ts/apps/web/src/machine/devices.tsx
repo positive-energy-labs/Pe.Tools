@@ -152,7 +152,6 @@ export function DeviceSettings({
         <h2 className="font-semibold text-ink">Devices</h2>
         <div className="flex flex-wrap gap-2">
           <Button
-            kind="framed"
             label="Pair browser"
             refusal={unavailable}
             onClick={() =>
@@ -164,7 +163,6 @@ export function DeviceSettings({
             Pair browser
           </Button>
           <Button
-            kind="framed"
             label="Pair MCP client"
             refusal={unavailable}
             onClick={() =>
@@ -373,7 +371,6 @@ function DevicePairing({
         />
       </label>
       <Button
-        kind="framed"
         label="Pair device"
         refusal={
           pending

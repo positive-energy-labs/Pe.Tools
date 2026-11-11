@@ -311,7 +311,7 @@ function QueryPicker({
       searchTrail={(level) => {
         const op = level === 2 ? target(live.current?.path ?? [])?.op : undefined;
         return level < 2 || op === "~" || op === "=" ? (
-          <Button kind="framed" label="negate" pressed={not} onClick={() => setNot(!not)}>
+          <Button label="negate" pressed={not} onClick={() => setNot(!not)}>
             not
           </Button>
         ) : null;

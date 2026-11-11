@@ -110,7 +110,7 @@ export function StartupSettings({
         </>
       )}
       {prompt && !fixture && !host.native && host.surface === "web" && status !== "installed" && (
-        <Button label="Install in Edge" kind="framed" onClick={() => void install()}>
+        <Button label="Install in Edge" onClick={() => void install()}>
           Install in Edge
         </Button>
       )}

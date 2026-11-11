@@ -115,7 +115,6 @@ export function ArmingStrip({
           <p className={slots.refusal()}>{state.refusal}</p>
           <div className={slots.controls()}>
             <Button
-              kind="framed"
               label="re-plan"
               icon={RefreshCw}
               onClick={state.onReplan}
@@ -186,7 +185,6 @@ export function ArmingStrip({
           {armed ? alternatives : null}
           {armed ? (
             <Button
-              kind="framed"
               label={cancelLabel}
               onClick={onCancel}
               reason="Disarms — nothing is written"

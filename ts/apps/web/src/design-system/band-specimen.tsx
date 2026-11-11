@@ -145,7 +145,6 @@ function AskLine({ resolve }: { resolve: (verdict: Ask) => void }) {
         allow
       </Button>
       <Button
-        kind="framed"
         icon={X}
         label="refuse"
         reason="Refuse this transient tool call"
@@ -246,7 +245,6 @@ export function ChatScale({
       </ArtifactFrame>
       <div className="flex flex-wrap items-baseline gap-3 pt-2">
         <Button
-          kind="framed"
           label="end turn · SIMULATED"
           reason="Ends Pea's turn; its awaiting ask expires with it"
           refusal={ask !== "live" ? "Ends Pea's turn; its awaiting ask expires with it" : null}

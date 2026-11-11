@@ -71,7 +71,6 @@ export function BlockerRow({
   const crossingVerb = closer.crossing && (closer.crossing.link ? fixLink(closer.crossing.link) : (
     <>
       <Button
-        kind="framed"
         label={`${closer.crossing.verb} for ${blocker.kind}`}
         refusal={closer.crossing.refusal}
         onClick={() =>
@@ -195,7 +194,6 @@ export function BlockerRow({
               />
             ) : (
               <Button
-                kind="framed"
                 label={`${closer.verb} for ${blocker.kind}`}
                 refusal={closer.refusal}
                 onClick={() => run(closer)}

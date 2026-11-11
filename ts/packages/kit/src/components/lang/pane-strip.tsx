@@ -125,7 +125,6 @@ export function PaneStrip({ modes, floaters, layers }: PaneStripProps) {
   const layerButtons = layers?.options.map((o) => (
     <Button
       key={o.key}
-      kind="framed"
       label={o.label}
       reason={o.says}
       busy={o.busy}

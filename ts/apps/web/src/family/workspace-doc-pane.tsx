@@ -360,7 +360,6 @@ export function FamilyWorkspaceDocPane() {
         <Button
           label={attaching ? "attaching" : "attach PDF"}
           reason="Parse a cut sheet and save its pages and blocks beside the captured family"
-          kind="framed"
           refusal={
             attaching
               ? "Parse a cut sheet and save its pages and blocks beside the captured family"

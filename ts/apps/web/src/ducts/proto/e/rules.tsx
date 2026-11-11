@@ -86,7 +86,6 @@ export function Chips({
         return (
           <Button
             key={table}
-            kind="framed"
             label={table}
             reason={
               isStaged

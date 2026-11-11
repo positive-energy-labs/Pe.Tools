@@ -102,7 +102,6 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
           press beside it; bare words beside a box read as two kinds of thing. */}
       <ButtonGroup label="Family verbs">
         <Button
-          kind="framed"
           label="Read families"
           onClick={() => {
             const readId = crypto.randomUUID();
@@ -112,7 +111,7 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
         >
           Read families
         </Button>
-        <Button kind="framed" label="Stop family read" onClick={() => run("stop")}>
+        <Button label="Stop family read" onClick={() => run("stop")}>
           Stop
         </Button>
         <PreviewAction handle={ctx.write("apply")} label="Apply families" />

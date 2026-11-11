@@ -262,7 +262,7 @@ export function LangBaySpecimens() {
                   onCommit={() => {}}
                   onCancel={() => {}}
                   alternatives={
-                    <Button label="stop, discard edits" kind="framed" refusal="fixture: no Work">
+                    <Button label="stop, discard edits" refusal="fixture: no Work">
                       stop, discard edits
                     </Button>
                   }

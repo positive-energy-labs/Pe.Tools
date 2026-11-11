@@ -33,7 +33,6 @@ export function CatalogueActions() {
         <div className="flex flex-wrap gap-x-10 gap-y-5">
           <ActionGroup title="stays here" radius="page · document">
             <Button
-              kind="framed"
               label="refresh"
               icon={RefreshCw}
               onClick={noop}

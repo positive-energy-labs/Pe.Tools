@@ -59,7 +59,7 @@ export function WorkStanding({
           <span className="w-[9rem] t-small t-upper text-ink-mute">unresolved</span>
           <span>{unresolved.join(" · ")}</span>
           {conflict && reload ? (
-            <Button kind="framed" label="reload" onClick={reload}>
+            <Button label="reload" onClick={reload}>
               reload
             </Button>
           ) : null}
