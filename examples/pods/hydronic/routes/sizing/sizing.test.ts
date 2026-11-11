@@ -106,7 +106,7 @@ describe("kernel gaps", () => {
       },
       firm: async (owner: string, _schema: unknown, seed: { maxFriction: number }) => {
         calls.push(`firm:${owner}`);
-        return { firm: { maxFriction: 250 }, path: "Firm/hydronic.json", present: true, seed };
+        return { firm: { maxFriction: 250 }, path: "Settings/hydronic.json", present: true, seed };
       },
       native: async (key: string, args: { request: { systemUniqueId?: string } }) => {
         calls.push(`native:${key}:${args.request.systemUniqueId ?? ""}`);

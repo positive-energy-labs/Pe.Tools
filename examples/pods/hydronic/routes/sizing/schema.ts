@@ -8,7 +8,7 @@ export const address = `/tool/${encodeURIComponent("route:@hydronic/routes/sizin
 export const work = z.strictObject({
   version: z.literal(1).default(1),
   maxVelocity: z.number().positive().default(1.5).meta({ title: "Max velocity (m/s)" }),
-  // Absent: the firm file's limit (Firm/hydronic.json), else 400.
+  // Absent: the firm file's limit (Settings/hydronic.json in the firm home), else 400.
   maxFriction: z.number().positive().optional().meta({ title: "Max friction (Pa/m)" }),
   chosen: z.record(z.string(), z.number().positive()).default({}).meta({ title: "Chosen diameter" }),
 });

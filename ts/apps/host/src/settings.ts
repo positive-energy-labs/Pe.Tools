@@ -33,7 +33,9 @@ import {
 } from "./packages.ts";
 import { requirePackageEnabled, activePackages } from "./package-lifecycle.ts";
 import { LocalOpError } from "./local-error.ts";
-import { userWritable as userPath } from "./content-homes.ts";
+import { hostOwnership } from "./host-ownership.ts";
+import { stateTree } from "@pe/host-contracts/service-identity";
+import { writeHomeFile } from "@pe/host-contracts/store";
 import {
   localOpFileError,
   makeDirectory,
@@ -42,13 +44,40 @@ import {
 } from "./files/index.ts";
 
 /**
- * Pod members are host-native file I/O under `Pods/<folder>/` in the content home; a pod is found by
- * its manifest `id`, never its folder name. Structural (JSON schema) validation runs here, offline.
- * Composition and semantic validation belong to the Revit session and arrive through the bridge.
+ * Pod members are host-native file I/O under `Pods/<folder>/` in the home that holds the pod; a pod
+ * is found by its manifest `id`, never its folder name or its home. Structural (JSON schema)
+ * validation runs here, offline. Composition and semantic validation belong to the Revit session
+ * and arrive through the bridge.
  */
 export type PodContext = {
   readonly podsRoot?: string;
   readonly invokeBridge?: (key: string, payload: unknown) => Effect.Effect<unknown, unknown>;
+};
+
+/**
+ * The one write door into a home (ADR 0037 rules 5 and 7), with this machine's safety net: a
+ * compare-and-swap on the bytes the writer read (`null`: the file must not exist). The write lands
+ * where the file is, in whichever home holds it; before an overwrite the prior bytes rest under
+ * `state\Blobs` and the receipt names their hash.
+ */
+export const writeHome = (path: string, bytes: Uint8Array | string, expectSha256: string | null) =>
+  writeHomeFile(path, bytes, {
+    expectSha256,
+    blobRoot: stateTree(hostOwnership.rootPath).blobs,
+  });
+
+/**
+ * One pod's run output, `state\Runs\<pod-id>` (homes freeze shape 7); a run no pod owns goes to
+ * `_no-pod`. A run is machine state and never sits in a home. An owner that supplies its own Pods
+ * root (the demo lane, a test) keeps its runs in `Runs` beside it, outside the product's state.
+ */
+export const runsFolder = (pod: string | null | undefined, ctx: Pick<PodContext, "podsRoot"> = {}) => {
+  const tree = stateTree(hostOwnership.rootPath);
+  return pod
+    ? join(ctx.podsRoot ? join(ctx.podsRoot, "..", "Runs") : tree.runs, pod)
+    : ctx.podsRoot
+      ? join(ctx.podsRoot, "..", "Runs", "_no-pod")
+      : tree.podlessRuns;
 };
 
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
@@ -100,23 +129,22 @@ export const listRuns = Effect.fnUntraced(function* (
   request: PodRunsRequest,
   ctx: PodContext = {},
 ) {
-  const folder = yield* podFolder(request.pod, ctx);
-  const entries = yield* readDirectoryEntriesOrEmpty(join(folder, "output"), "pod.runs");
+  // The pod must exist and be enabled; its runs sit under machine state, keyed by its id.
+  yield* podFolder(request.pod, ctx);
+  const folder = runsFolder(request.pod, ctx);
+  const entries = yield* readDirectoryEntriesOrEmpty(folder, "pod.runs");
   const runs: PodRuns["runs"][number][] = [];
   /** The member each run wrote, from its `written-member.json` output (a capture's product). */
   const wrote = new Map<string, string>();
   for (const entry of entries.sort((a, b) => b.name.localeCompare(a.name))) {
     if (entry.info.type !== "Directory") continue;
-    const receiptPath = `output/${entry.name}/receipt.json`;
-    const read = yield* readText(join(folder, receiptPath), "pod.runs");
+    const receiptPath = join(folder, entry.name, "receipt.json");
+    const read = yield* readText(receiptPath, "pod.runs");
     const receipt = read === null ? null : parseReceipt(read.content);
-    const input = yield* readText(join(folder, "output", entry.name, "input.json"), "pod.runs");
+    const input = yield* readText(join(folder, entry.name, "input.json"), "pod.runs");
     const source = input === null ? undefined : parseRunSource(input.content);
     if (typeof receipt !== "string" && receipt?.outputs.includes("written-member.json")) {
-      const written = yield* readText(
-        join(folder, "output", entry.name, "written-member.json"),
-        "pod.runs",
-      );
+      const written = yield* readText(join(folder, entry.name, "written-member.json"), "pod.runs");
       const path = written === null ? undefined : writtenMemberPath(written.content);
       if (path) wrote.set(entry.name, path);
     }
@@ -268,8 +296,9 @@ export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: P
 });
 
 /**
- * A run folder in the pod (dogma law 10). Runs are not members — `writeMember` refuses `output/` —
- * so the writer that files a run says so by name. Overwrites, so a resumed action files one run.
+ * One run's folder, `state\Runs\<pod-id>\<run-id>` (dogma law 10); returns its full path. Runs are
+ * not members and never sit in a home, so the writer that files a run says so by name. Overwrites,
+ * so a resumed action files one run.
  */
 export const writeRun = (
   pod: string,
@@ -280,11 +309,12 @@ export const writeRun = (
   writeLock.withPermit(
     Effect.gen(function* () {
       const key = "pod.run.write";
-      const folder = yield* userWritable(join(yield* podFolder(pod, ctx), "output", runId), key);
+      yield* podFolder(pod, ctx);
+      const folder = join(runsFolder(pod, ctx), runId);
       yield* makeDirectory(folder, key);
       for (const [name, content] of Object.entries(files))
         yield* writeFileStringAtomic(join(folder, name), content, key);
-      return `output/${runId}`;
+      return folder;
     }),
   );
 
@@ -294,42 +324,37 @@ export const writeMember = (request: PodMemberWriteRequest, ctx: PodContext = {}
     Effect.gen(function* () {
       const key = "pod.member.write";
       const path = yield* writablePath(request, ctx, key);
-      const fs = yield* FileSystem.FileSystem;
-      yield* makeDirectory(win32.dirname(path), key);
-      const created = yield* Effect.result(
-        fs.writeFileString(path, request.content, { flag: "wx" }),
-      );
-      if (created._tag === "Failure")
+      const wrote = yield* throughDoor(key, path, request.content, null);
+      if (!wrote.ok)
         return yield* Effect.fail(
-          created.failure.reason._tag === "AlreadyExists"
-            ? new LocalOpError(key, `Member '${request.path}' already exists.`, 409)
-            : localOpFileError(key, created.failure),
+          new LocalOpError(key, `Member '${request.path}' already exists.`, 409),
         );
       return written(request);
     }),
   );
 
-/** Overwrite a member only when its current bytes are the ones the editor read. */
+/**
+ * Overwrite a member only when its current bytes are the ones the editor read. The bytes it
+ * replaces rest under `state\Blobs\sha256\<expectedSha256>`: the caller already holds that hash.
+ */
 export const saveMember = (request: PodMemberSaveRequest, ctx: PodContext = {}) =>
   writeLock.withPermit(
     Effect.gen(function* () {
       const key = "pod.member.save";
       const path = yield* writablePath(request, ctx, key);
-      // Optimistic against external writers: read/check + rename is not an atomic CAS.
-      const current = yield* readText(path, key);
-      if (current?.sha256 !== request.expectedSha256)
+      const wrote = yield* throughDoor(key, path, request.content, request.expectedSha256);
+      if (!wrote.ok)
         return yield* Effect.fail(
           new LocalOpError(key, `Member '${request.path}' changed since it was read.`, 409),
         );
-      yield* writeFileStringAtomic(path, request.content, key);
       return written(request);
     }),
   );
 
-/** Every write goes to the user root: a shared Pod is copied there on its first write (ADR 0035 rule 11). */
-const userWritable = (path: string, key: string) =>
+/** A member write lands in the pod's own home, in place, through the one door. */
+const throughDoor = (key: string, path: string, content: string, expectSha256: string | null) =>
   Effect.try({
-    try: () => userPath(path),
+    try: () => writeHome(path, content, expectSha256),
     catch: (error) => new LocalOpError(key, errorMessage(error), 500),
   });
 
@@ -351,7 +376,7 @@ const writablePath = Effect.fnUntraced(function* (
         400,
       ),
     );
-  return yield* userWritable(path, key);
+  return path;
 });
 
 const written = (request: PodMember & { content: string }): PodMemberWritten => ({

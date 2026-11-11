@@ -24,11 +24,11 @@ export function analyticsConfig(lane: "dev" | "installed"): AnalyticsConfig | nu
       }
     | undefined;
   const config = lane === "dev" ? file?.posthog : file?.telemetry?.posthog;
-  // A dev key is a key: the user's own, else the shared keys.json `posthog`; a refusal disables export.
-  // The installed lane's key ships in its manifest and is never a shared setting.
+  // A dev key is a key: the user's own, else the firm keys.json `posthog.api-key`; a refusal
+  // disables export. The installed lane's key ships in its manifest and is never a firm setting.
   const key =
     lane === "dev"
-      ? resolveKey(typeof config?.apiKey === "string" ? config.apiKey : null, "posthog")
+      ? resolveKey(typeof config?.apiKey === "string" ? config.apiKey : null, "posthog.api-key")
       : typeof config?.apiKey === "string" && config.apiKey.trim()
         ? { value: config.apiKey.trim() }
         : { refused: "no-key" as const };
