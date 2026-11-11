@@ -34,6 +34,7 @@ import {
   type InvocationToken,
   type RouteStateWriteResult,
 } from "@pe/agent-contracts";
+import { ANY_ROUTE } from "@pe/agent-contracts";
 import { createRouteScopeGate } from "@pe/runtime/route-scope-gate";
 import { applicationWorkRegistry, createApplicationWorkRegistry } from "./application-work-registry";
 import { createWorkFeedClient } from "./work-feed-client";
@@ -81,9 +82,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (input.target === null) throw Error("Place has no write target");
     if (input.readOnly || input.history) throw Error("needs live Revit");
   };
-  const decodePage = () => {
+  const decodePage = (remembered = true) => {
     const search = input.address.read();
-    const memory = z.record(z.string(),z.unknown()).parse(input.memory() ?? {});
+    const memory = remembered ? z.record(z.string(),z.unknown()).parse(input.memory() ?? {}) : {};
     return freezePage({ ...Object.fromEntries(Object.entries(spec.fields).map(([key, field]) => {
       const raw = search.get(key);
       return [key, decodeField(field, raw === null ? memory[key] ?? field.initial : raw)];
@@ -253,12 +254,13 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     for (const key of Object.keys(patch)) if (spec.fields[key]?.role !== role) throw Error(`${key} is not a ${role} field`);
     return move(patch,history);
   };
+  // The Page the address holds; an address without `selected` keeps the current selection.
+  const addressPage = (remembered = true) => { const next = decodePage(remembered); return input.address.read().has("selected") ? next : { ...next, selected: page.selected }; };
   const stopAddress = input.address.subscribe(() => {
-    const next = decodePage();
-    const selected = input.address.read().has("selected") ? next.selected : page.selected;
+    const next = addressPage();
     // An unchanged address can be the custody-return notification for released read resources.
-    if (canonicalRouteInput({ ...next, selected }) === canonicalRouteInput(page)) { syncReads(); return; }
-    page = freezePage({ ...next, selected });
+    if (canonicalRouteInput(next) === canonicalRouteInput(page)) { syncReads(); return; }
+    page = freezePage(next);
     gate.movePage(page, { kind: "human", source: "query", history: "replace" }); syncWork(); syncReads(); notify();
   });
   cleanups.push(stopAddress);
@@ -439,7 +441,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       if(!issued.ok) throw Error(issued.reason);
       token=issued.value; plans.set(id,token); reviews.delete(id);
       const contract = commands[cmd.entry as keyof typeof commands];
-      const primary = owners.get("work" in contract && contract.work ? contract.work.route : own)!.handle!;
+      // A door every route shares (the sheet pair, ANY_ROUTE) takes the asking route's own Work.
+      const primary = owners.get("work" in contract && contract.work && contract.work.route !== ANY_ROUTE ? contract.work.route : own)!.handle!;
       const proposed=cmd.input?.({page:page as never,target:input.target,work:primary,value:core.value},supplied) ?? supplied ?? {};
       const request = cmd.planContract.input.parse({ ...z.record(z.string(),z.unknown()).parse(proposed), work: primary,
         readWorks: Object.fromEntries([...owners].filter(([id]) => id !== primary.key.route).map(([id,o]) => [id,o.handle])) });
@@ -553,7 +556,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     owner: (id = own) => owners.get(id),
     page: { read: () => page, pose: (patch: any, intent?: "gesture"|"named") => moveRole("pose",patch,intent === "gesture"?"replace":intent === "named"?"push":undefined), query: (patch: any) => moveRole("query",patch), select: (selected: any) => move({selected}), subject: (subject: any) => {if(!spec.subject) throw Error("No subject declared");return move({ [spec.subject.field]: subject },"push");} },
     subscribe(listener: () => void) { released = false; listeners.add(listener); syncReads(); return () => { listeners.delete(listener); }; },
-    available: () => !disposed && input.custody.current(), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
+    available: () => !disposed && input.custody.current(),
+    /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
+     *  (slice 6.1, `data-url-settled`); a reload reads only the address. */
+    urlCurrent: () => canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
     commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions" : "kind" in spec.commands[id]! ? null : basisRefusal(),
     problem: () => edits?basisRefusal():null, writeRefusal,
     refresh: (read?:import("../route/host-read").HostRead) => {
@@ -648,7 +654,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         patch,
         edit: (edit,detail)=>patch(()=>edits!.patches(edits!.input.parse(edit),core.value),detail),
       };
-      return (render ?? pane.draw)({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
+      return (render ?? ((ctx: DrawContext<any,any,any,any>) => pane.draw(ctx).node))({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
         write:mounted.action } as any);
     },
     // Retaining hidden read connections was a Plan-identity workaround; content fingerprints

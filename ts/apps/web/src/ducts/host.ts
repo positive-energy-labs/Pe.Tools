@@ -14,7 +14,8 @@ import { toGrids } from "@pe/ducts-domain/loss-grid";
 import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { pricingResult } from "@pe/ducts-domain/pricing-result";
 import { designLayers } from "./ducts-design.ts";
-import { nativeRead } from "../../../host/src/reads/inputs.ts";
+import { firmLayer } from "../../../host/src/ducts-inputs.ts";
+import { resolveCriteria } from "@pe/ducts-domain/sheet/index";
 import { catalogs } from "../../../host/src/builtin-read-handles.ts";
 import { read } from "../../../host/src/reads/evaluator.ts";
 import { systemList } from "@pe/ducts-domain/system-list";
@@ -28,7 +29,7 @@ export const ductsRoster = read("ducts.roster", {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const staged = stagedDucts(design, design);
-    const response = await ctx.read(nativeRead("ducts.snapshot.roster"), {
+    const response = await ctx.native("ducts.snapshot.roster", {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
@@ -49,7 +50,7 @@ const systems = read("ducts.systems", {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const staged = stagedDucts(design, design);
-    const response = await ctx.read(nativeRead("ducts.snapshot.walk"), {
+    const response = await ctx.native("ducts.snapshot.walk", {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
@@ -129,7 +130,7 @@ export const ductsPricing = read("ducts.pricing", {
     const network = await ctx.read(ductsNetwork, args);
     const layers = await ctx.read(designLayers, args.target),
       catalog = await ctx.read(catalogs, null);
-    const tables = await ctx.read(nativeRead("ducts.tables"), {
+    const tables = await ctx.native("ducts.tables", {
       role: "acquire",
       target: { kind: "document", ref: args.target },
       request: { ids: [...TABLE_IDS] },
@@ -165,6 +166,8 @@ export const ductsPricing = read("ducts.pricing", {
             ductsWork: true,
             fansWork: true,
             catalogFindings: true,
+            criteria: true,
+            firm: true,
           })
           .parse(
             wire(
@@ -192,6 +195,10 @@ export const ductsPricing = read("ducts.pricing", {
           ductsWork: layers.ducts,
           fansWork: layers.fans,
           catalogFindings: catalog.findings,
+          // Under Work: the store over the firm file, so a staged criterion draws beside what it replaces.
+          criteria: resolveCriteria(null, snapshot.store as Parameters<typeof resolveCriteria>[1], firmLayer(layers.firm)),
+          firm: "refused" in layers.firm ? layers.firm
+            : { version: layers.firm.firm.version, path: layers.firm.path, present: layers.firm.present },
         };
       },
     );

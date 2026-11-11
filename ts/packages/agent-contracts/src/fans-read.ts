@@ -50,6 +50,8 @@ export const fansSheetData = fanSheetSchema.extend({
   design: z.object({ ...fansDocumentSchema.shape, ...ductsDocumentSchema.shape }),
   fans: ductsRosterResponseSchema,
   ductsWork: ductsDocumentSchema,
+  /** The /ducts Work revision this read priced with: the Fans sheet's read-only line to the design it depends on. */
+  ductsRevision: z.number().int().nonnegative(),
   fansWork: fansDocumentSchema,
   sheetSnapshot: z.union([
     nativeResponseSchema("ducts.snapshot.walk").and(

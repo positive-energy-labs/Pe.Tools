@@ -666,7 +666,7 @@ test("command Work reads carry context through binding and revalidation", async 
     }),
     probe: async () => true,
     resolve: () => ({
-      definition: commands["ducts.plan-losses"],
+      definition: commands["sheet.plan"],
       prepared: z.unknown(),
       bind: async (ctx) => {
         await ctx.selectWork(tools.ducts.work, { key: commandWorkKey, revision: 0 });
@@ -690,7 +690,7 @@ test("command Work reads carry context through binding and revalidation", async 
   await journal.invoke(
     {
       id,
-      key: "ducts.plan-losses",
+      key: "sheet.plan",
       target: { kind: "document", ref: { session: "s", openId: "open" } },
       input: { work: { key: commandWorkKey, revision: 0 } },
     },

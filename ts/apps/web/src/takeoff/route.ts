@@ -118,7 +118,8 @@ export const module = route({
     adoption: {
       title: "View adoption",
       purpose: "Choose views and stage designer region names and system tags",
-      draw: draw(() => import("./typed-adoption"), "AdoptionBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./typed-adoption"), "AdoptionBody"),
     },
   },
   layout: paneLayout("adoption"),

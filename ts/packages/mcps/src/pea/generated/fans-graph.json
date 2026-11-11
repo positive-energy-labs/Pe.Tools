@@ -267,6 +267,70 @@
       "refresh": "dependencies"
     }
   },
+  "sheet": {
+    "draft": true,
+    "bindings": {
+      "writeIntent": {
+        "kind": "local",
+        "per": "route",
+        "label": "Write scope"
+      },
+      "parameters": {
+        "kind": "local",
+        "per": "subject"
+      },
+      "roles": {
+        "kind": "store",
+        "store": "_PE_DuctLosses",
+        "per": "subject"
+      },
+      "equipmentFlows": {
+        "kind": "parameter",
+        "parameter": "fanFlow",
+        "per": "subject",
+        "unit": "cfm",
+        "min": 0,
+        "digits": 0,
+        "field": "cfm"
+      },
+      "esp": {
+        "kind": "parameter",
+        "parameter": "fanStatic",
+        "per": "subject",
+        "unit": "in-wg",
+        "min": 0,
+        "digits": 4,
+        "field": "inWg"
+      },
+      "flows": {
+        "kind": "parameter",
+        "parameter": "terminalFlow",
+        "per": "subject",
+        "unit": "cfm",
+        "min": 0,
+        "digits": 0,
+        "field": "cfm"
+      },
+      "terminalDrops": {
+        "kind": "parameter",
+        "parameter": "terminalDrop",
+        "per": "subject",
+        "unit": "in-wg",
+        "min": 0,
+        "digits": 4,
+        "field": "inWg"
+      },
+      "componentDrops": {
+        "kind": "parameter",
+        "parameter": "componentDrop",
+        "per": "subject",
+        "unit": "in-wg",
+        "min": 0,
+        "digits": 4,
+        "field": "inWg"
+      }
+    }
+  },
   "verbs": {
     "losses": {
       "kind": "command",
@@ -286,8 +350,7 @@
           "equipmentFlows",
           "roles",
           "flows",
-          "parameters",
-          "designFriction"
+          "parameters"
         ],
         "readings": [
           "value"
@@ -296,7 +359,7 @@
       "captures": [
         "value"
       ],
-      "entry": "ducts.apply-losses",
+      "entry": "sheet.apply",
       "intent": "losses"
     }
   },

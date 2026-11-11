@@ -34,13 +34,21 @@ export type CloserAction =
   /** A typed drop on one path through a proposed fitting (`inputs.fittingDrops` key). */
   | { kind: "pathDrop"; key: string; value: number };
 
+/** The fixes whose Work is /ducts' (joins, ends, assignments, tables, proposed-path drops): /fans links to them. */
+export const DUCTS_FIXES: ReadonlySet<CloserAction["kind"]> = new Set(["rule", "cap", "price", "table", "pathDrop"]);
+
 /** One table a fitting may be priced with: the verb names the table, `detail` the rule it reads under. */
 export type PriceChoice = { verb: string; detail: string; action: CloserAction };
 
 export type CloserInput = { unit: "cfm" | "in-wg"; placeholder: number | null };
 
+/** A fix another route owns (ruling 2026-11-10, no cross-route write): where to go, named by what it fixes. */
+export type CloserLink = { says: string; href: string };
+
 export type Closer = {
   blocker: SheetBlocker;
+  /** Present, the fix is /ducts' to make: the row draws this link in place of the verb. */
+  link?: CloserLink | null;
   /** The action and the value it applies, e.g. "set drop 0.03 in-wg (firm shim)". */
   verb: string;
   /** Why the verb cannot run; null when it is live. */
@@ -49,7 +57,7 @@ export type Closer = {
   input: CloserInput | null;
   action: CloserAction | null;
   /** A second, smaller verb beside the first (R-CAP: "rule capped" next to a heal); null when none. */
-  secondary: { verb: string; refusal: string | null; action: CloserAction } | null;
+  secondary: { verb: string; refusal: string | null; action: CloserAction | null; link?: CloserLink | null } | null;
   /**
    * A vacant port of another air class the person may accept instead (a second framed verb);
    * `first` when it is nearer than the same-class candidate, so the row orders it ahead.
@@ -57,7 +65,8 @@ export type Closer = {
   crossing: {
     verb: string;
     refusal: string | null;
-    action: CloserAction;
+    action: CloserAction | null;
+    link?: CloserLink | null;
     distanceIn: number;
     first: boolean;
   } | null;

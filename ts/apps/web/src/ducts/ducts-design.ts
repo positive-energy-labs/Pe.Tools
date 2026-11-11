@@ -1,8 +1,8 @@
 import { workRead } from "../../../host/src/reads/inputs.ts";
 import { z } from "zod";
-import { ductsDocumentSchema, fansDocumentSchema, documentRefSchema } from "@pe/agent-contracts";
+import { ductsDocumentSchema, ductsFirmSchema, fansDocumentSchema, documentRefSchema } from "@pe/agent-contracts";
 import { firmReading } from "../../../host/src/ducts-files.ts";
-import { firm } from "../../../host/src/builtin-read-handles.ts";
+import { FIRM_SEED } from "../../../host/src/ducts-inputs.ts";
 import { read, workScope } from "../../../host/src/reads/evaluator.ts";
 export const designLayers = read("ducts.design-layers", {
   input: documentRefSchema,
@@ -22,7 +22,7 @@ export const designLayers = read("ducts.design-layers", {
       fans: fansDocumentSchema.parse(fans?.doc ?? {}),
       revision: ducts?.revision ?? 0,
       fansRevision: fans?.revision ?? 0,
-      firm: await ctx.read(firm, null),
+      firm: await ctx.firm("ducts", ductsFirmSchema, FIRM_SEED),
     };
   },
 });

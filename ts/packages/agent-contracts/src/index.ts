@@ -67,3 +67,4 @@ export {isRecord} from "./route-state.ts";
 export { blobRefSchema, blobUploadSchema, type BlobRef, type BlobUpload } from "./blob-ref.ts";
 
 export * from "./subject-ref.ts";
+export * from "./notice-feed.ts";

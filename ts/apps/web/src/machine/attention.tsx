@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { planWaits } from "./model";
+import { planWaits } from "@pe/agent-contracts";
 import { useMachine } from "./use-machine";
 
 /** Runtime attention stays observable even while Settings is not mounted. */

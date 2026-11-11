@@ -1,5 +1,4 @@
 import { workRead } from "../../../host/src/reads/inputs.ts";
-import { nativeRead } from "../../../host/src/reads/inputs.ts";
 import { familyObservation, familyReceipts } from "../../../host/src/builtin-read-handles.ts";
 import { z } from "zod";
 import { familiesRouteState, canonicalRouteInput, actionReceiptSchema } from "@pe/agent-contracts";
@@ -7,8 +6,7 @@ import {
   familiesViewArgs,
   familiesViewData,
 } from "../../../../packages/agent-contracts/src/families-read.ts";
-import { read, workScope } from "../../../host/src/reads/evaluator.ts";
-import { documentMark } from "../../../host/src/reads/inputs.ts";
+import { read, workScope, documentMark } from "../../../host/src/reads/door.ts";
 import { applyOutcome, applyTally } from "./families-outcome.ts";
 import { matrixModel, buildPivot } from "./families-matrix.ts";
 
@@ -21,8 +19,7 @@ export const familiesView = read("families.view", {
     const scope = { ...(await ctx.read(workScope, args.target)), route: "families" };
     const view = await ctx.read(workRead("families", familiesRouteState.schema), scope);
     const work = familiesRouteState.schema.parse(view?.doc ?? {});
-    const { body: catalog } = await ctx.read(nativeRead("revit.catalog.loaded-families"), {
-      role: "none",
+    const { body: catalog } = await ctx.native("revit.catalog.loaded-families", {
       request: { filter: {}, budget: { maxEntries: 5000 } },
       target: { kind: "document", ref: args.target },
     });

@@ -10,6 +10,9 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
+    // tsc reuses its last check; the build info lives under ignored node_modules.
+    "incremental": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsc.tsbuildinfo",
     "skipLibCheck": true,
     "strict": true,
     "noUnusedLocals": true,

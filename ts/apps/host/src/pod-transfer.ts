@@ -15,7 +15,8 @@ import {
   onePackage,
   type PackageListing,
 } from "./packages.ts";
-import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
+import { productPodsRootPath } from "./product-paths.ts";
+import { scratchPageDirectory } from "./page-libraries.ts";
 import { activateImportedPackage } from "./package-lifecycle.ts";
 import { sha256Hex as sha256, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 import { StepFailure } from "./command-executor.ts";
@@ -57,7 +58,7 @@ export async function preparePodExport(
   snapshot?: PackageListing,
 ) {
   const archivePath = zipPath(request.archivePath);
-  const listing = snapshot ?? await listPackages(options.podsRoot ?? productPodsRootPath());
+  const listing = snapshot ?? await listPackages(options.podsRoot);
   const pod = unique(listing, request.pod);
   const captured = await capturePackage(pod).catch((error: unknown) => {
     throw new TransferRefused(`Pod '${request.pod}' is not exportable: ${message(error)}`);
@@ -341,7 +342,9 @@ export async function promotePage(
   const id = packageIdSchema.safeParse(request.id);
   if (!id.success)
     throw new TransferRefused(`'${request.id}' is not a valid, unreserved pod id.`, 400);
-  const source = join(options.pagesRoot ?? productPagesRootPath(), request.page);
+  const found = await scratchPageDirectory(request.page, options.pagesRoot);
+  if (!found) throw new TransferRefused(`'${request.page}' is not a scratch Page slug.`, 400);
+  const source = found.dir;
   if (!(await lstat(join(source, "index.html")).catch((error) => { console.error("pod-transfer: asynchronous operation failed", error); return null; }))?.isFile())
     throw new TransferRefused(`No scratch Page '${request.page}' (no index.html).`, 404);
   const page = await captureDirectory(source);

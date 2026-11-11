@@ -31,6 +31,7 @@ namespace Pe.Revit.Tests {
                     row.GetProperty("ownerRoot").GetString(),
                     row.GetProperty("productHome").GetString(),
                     row.TryGetProperty("sharedRoot", out var shared) ? shared.GetString() : null,
+                    row.TryGetProperty("userRoot", out var user) ? user.GetString() : null,
                     row.TryGetProperty("stateRoot", out var root) ? root.GetString() : null,
                     row.TryGetProperty("error", out var error) ? error.GetString() : null
                 ).SetName("StateRoot: " + row.GetProperty("name").GetString());
@@ -38,39 +39,42 @@ namespace Pe.Revit.Tests {
 
         // The same table TS stateRoot and PowerShell Resolve-ProductRuntimeRoot assert: the languages cannot drift.
         [TestCaseSource(nameof(StateRootRows)), NonParallelizable]
-        public void State_root_matches_the_shared_fixture(ProductLane lane, string owner, string? home, string? shared, string? expected, string? error) {
+        public void State_root_matches_the_shared_fixture(ProductLane lane, string owner, string? home, string? shared, string? user, string? expected, string? error) {
             var previous = Environment.GetEnvironmentVariable(ProductPathNames.SharedRootVariable);
             Environment.SetEnvironmentVariable(ProductPathNames.SharedRootVariable, shared);
             try {
+                // A fixture user root is not this machine's Documents: only the pure resolver can take it.
                 if (error is not null)
                 {
-                    Assert.That(() => ProductPathing.StateRoot(lane, owner, home, shared), Throws.ArgumentException.With.Message.Contains(error));
-                    Assert.That(() => ProductRuntimeLayout.For(lane, owner, home), Throws.ArgumentException.With.Message.Contains(error));
+                    Assert.That(() => ProductPathing.StateRoot(lane, owner, home, shared, user), Throws.ArgumentException.With.Message.Contains(error));
+                    if (user is null) Assert.That(() => ProductRuntimeLayout.For(lane, owner, home), Throws.ArgumentException.With.Message.Contains(error));
                 }
                 else {
-                    Assert.That(ProductPathing.StateRoot(lane, owner, home, shared), Is.EqualTo(expected));
-                    Assert.That(ProductRuntimeLayout.For(lane, owner, home).RootPath, Is.EqualTo(expected));
+                    Assert.That(ProductPathing.StateRoot(lane, owner, home, shared, user), Is.EqualTo(expected));
+                    if (user is null) Assert.That(ProductRuntimeLayout.For(lane, owner, home).RootPath, Is.EqualTo(expected));
                 }
             } finally { Environment.SetEnvironmentVariable(ProductPathNames.SharedRootVariable, previous); }
         }
 
-        private static IEnumerable<TestCaseData> ContentRootRows() {
+        private static IEnumerable<TestCaseData> ContentHomeRows() {
             using var fixture = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "runtime-ownership.fixture.json")));
-            foreach (var row in fixture.RootElement.GetProperty("contentRoots").EnumerateArray())
+            foreach (var row in fixture.RootElement.GetProperty("contentHomes").EnumerateArray())
                 yield return new TestCaseData(row.GetProperty("productHome").GetString(), row.GetProperty("sharedRoot").GetString(),
-                    row.TryGetProperty("contentRoot", out var root) ? root.GetString() : null,
-                    row.TryGetProperty("error", out var error) ? error.GetString() : null).SetName("ContentRoot: " + row.GetProperty("name").GetString());
+                    row.GetProperty("homes").EnumerateArray().Select(home => home.GetString()!).ToArray(),
+                    row.GetProperty("firm").GetString(), row.GetProperty("keys").GetString()).SetName("ContentHomes: " + row.GetProperty("name").GetString());
         }
 
-        [TestCaseSource(nameof(ContentRootRows)), NonParallelizable]
-        public void Content_root_matches_the_shared_fixture(string? home, string? shared, string? expected, string? error) {
+        [TestCaseSource(nameof(ContentHomeRows)), NonParallelizable]
+        public void Content_homes_match_the_shared_fixture(string? home, string? shared, string[] homes, string? firm, string? keys) {
             var previousHome = Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable);
             var previousShared = Environment.GetEnvironmentVariable(ProductPathNames.SharedRootVariable);
             Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, home);
             Environment.SetEnvironmentVariable(ProductPathNames.SharedRootVariable, shared);
             try {
-                if (error is not null) Assert.That(() => ProductPathing.ResolveProductHome(null), Throws.InvalidOperationException.With.Message.Contains(error));
-                else Assert.That(ProductPathing.ResolveProductHome(null), Is.EqualTo(expected));
+                var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                Assert.That(ProductPathing.ContentHomes(), Is.EqualTo(homes.Select(path => path.Replace("%DOCUMENTS%", documents)).ToArray()));
+                Assert.That(ProductPathing.SharedFirmDir(), Is.EqualTo(firm));
+                Assert.That(ProductPathing.SharedKeysPath(), Is.EqualTo(keys));
             } finally {
                 Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previousHome);
                 Environment.SetEnvironmentVariable(ProductPathNames.SharedRootVariable, previousShared);

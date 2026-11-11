@@ -4,7 +4,7 @@ import { appendFile, mkdir, open, readFile, rm, writeFile } from "node:fs/promis
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { Effect, Semaphore } from "effect";
-import type { KeeperConfig, SessionInfo, SessionReceipt } from "./browser.ts";
+import type { KeeperConfig, SessionInfo, SessionReceipt, Viewport } from "./browser.ts";
 import { connectCdp, type CdpClient } from "./cdp.ts";
 import { getBrowserEndpoint, getProtocol } from "./protocol.ts";
 import { CLOSE_BUDGET_MS, publishJson, publishSessionReceipt } from "./receipts.ts";
@@ -43,9 +43,59 @@ const ignore = (body: () => Promise<unknown>) =>
     }
   });
 
+export const defaultViewport = { width: 1600, height: 900 };
+/**
+ * Size the real window until the page viewport is exactly `want`. An Emulation override would lift
+ * whenever its CDP client detached, so every connect and disconnect would relayout the page.
+ */
+async function holdViewport(cdp: CdpClient, targetId: string, want: Viewport): Promise<void> {
+  const { sessionId } = (await cdp.sendRaw("Target.attachToTarget", {
+    targetId,
+    flatten: true,
+  })) as {
+    sessionId: string;
+  };
+  try {
+    const { windowId } = (await cdp.sendRaw("Browser.getWindowForTarget", { targetId })) as {
+      windowId: number;
+    };
+    let got: [number, number] = [0, 0];
+    for (let attempt = 0; attempt < 5; attempt++) {
+      got = (
+        (await cdp.sendRaw(
+          "Runtime.evaluate",
+          { expression: "[innerWidth, innerHeight]", returnByValue: true },
+          { sessionId },
+        )) as { result: { value: [number, number] } }
+      ).result.value;
+      if (got[0] === want.width && got[1] === want.height) return;
+      const { bounds } = (await cdp.sendRaw("Browser.getWindowBounds", { windowId })) as {
+        bounds: { width: number; height: number };
+      };
+      await cdp.sendRaw("Browser.setWindowBounds", {
+        windowId,
+        bounds: {
+          windowState: "normal",
+          width: bounds.width + want.width - got[0],
+          height: bounds.height + want.height - got[1],
+        },
+      });
+      await new Promise((done) => setTimeout(done, 100));
+    }
+    throw new BrowserError(
+      "ViewportUnavailable",
+      `Viewport ${want.width}x${want.height} not reached; the window gives ${got[0]}x${got[1]}`,
+      { outcome: "unknown" },
+    );
+  } finally {
+    await cdp.sendRaw("Target.detachFromTarget", { sessionId }).catch(() => {});
+  }
+}
+
 export async function runBrowserKeeper(configFile: string): Promise<void> {
   const config: KeeperConfig = JSON.parse(await readFile(configFile, "utf8"));
   const directory = join(config.home, config.id);
+  const viewport = config.open?.viewport ?? defaultViewport;
   const receiptFile = join(directory, "session.json");
   const trace = (phase: string, detail?: unknown) =>
     appendFile(
@@ -192,6 +242,7 @@ export async function runBrowserKeeper(configFile: string): Promise<void> {
       yield* attempt(async () => {
         if (config.open) {
           const options = config.open;
+          info.viewport = viewport;
           const executable = await chromeExecutable(options.executablePath);
           const profile = resolve(options.profile ?? join(directory, "profile"));
           allocatedProfile = profile;
@@ -244,7 +295,9 @@ export async function runBrowserKeeper(configFile: string): Promise<void> {
               "--no-default-browser-check",
               "--disable-background-timer-throttling",
               "--disable-renderer-backgrounding",
-              "--window-size=1000,760",
+              // Without it a covered or off-screen visible window stops drawing (0 frames in 2 s).
+              "--disable-backgrounding-occluded-windows",
+              `--window-size=${viewport.width},${viewport.height}`,
               ...(info.mode === "headless" ? ["--headless=new"] : []),
               ...args,
               "about:blank",
@@ -322,6 +375,13 @@ export async function runBrowserKeeper(configFile: string): Promise<void> {
           { timeoutMs: config.open?.timeoutMs ?? config.attach?.timeoutMs ?? 20000 },
         )) as { product: string };
         info.browserVersion = version.product;
+        if (config.open) {
+          const { targetInfos } = (await cdp.sendRaw("Target.getTargets")) as {
+            targetInfos: { targetId: string; type: string }[];
+          };
+          for (const target of targetInfos.filter((target) => target.type === "page"))
+            await holdViewport(cdp, target.targetId, viewport);
+        }
       });
       cdp!.subscribe((event) => {
         if (!event.sessionId) return;

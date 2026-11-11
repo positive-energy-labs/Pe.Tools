@@ -58,12 +58,8 @@ export async function connect(
     return r.result.value as T;
   };
   try {
-    await send("Emulation.setDeviceMetricsOverride", {
-      width: 1400,
-      height: 900,
-      deviceScaleFactor: 1,
-      mobile: false,
-    });
+    // No viewport override: `pea browser launch --viewport` holds it, and an override set here would
+    // lift when this client detaches, relayouting the page on every connect.
     await send("Runtime.enable");
     await send("Page.enable");
     // Each dev launch serves deps from a fresh temp dir; a cached module graph points at the old one.
@@ -125,7 +121,8 @@ export async function connect(
     url: () => read<string>("location.href"),
     async open(url: string) {
       const before = loadSerial;
-      const navigation = await send("Page.navigate", { url });
+      // Leaving a loaded Revit route can hold the old page past the 30 s command default (/fans: >30 s).
+      const navigation: any = await transport.sendRaw("Page.navigate", { url }, { timeoutMs: NAVIGATE_MS });
       if (navigation.errorText) throw new Error(`Page.navigate: ${navigation.errorText}`);
       await page.until(
         async () =>
@@ -137,7 +134,7 @@ export async function connect(
     },
     async reload() {
       const before = loadSerial;
-      await send("Page.reload", {});
+      await transport.sendRaw("Page.reload", {}, { timeoutMs: NAVIGATE_MS });
       await page.until(
         async () =>
           loadSerial > before && (await read<boolean>("document.readyState === 'complete'")),
@@ -270,6 +267,8 @@ export async function connect(
   return page;
 }
 
+const NAVIGATE_MS = 120_000;
+
 /**
  * Budget for a Revit matrix to render its rows. project-a /families with 3 Price LBP15A families
  * (89 types) drew rows ~69 s after open (exec-proof matrix-timing.json, b9c32d7); ~2x headroom.
@@ -306,7 +305,7 @@ const cellOf = (row: string[], column: string) => `(() => {
 })()`;
 
 /**
- * Run one journey: `E2E_LABEL=green|red node tests/e2e/j5.ts`. Writes steps, the failing
+ * Run one journey: `E2E_LABEL=green|red node tests/e2e/j6-fans-write.ts`. Writes steps, the failing
  * assertion (if any), and DOM dumps under `.artifacts/proof/interaction/<id>-<tip7>/<label>/`.
  */
 export async function journey(
@@ -353,7 +352,7 @@ export function expectText(actual: string, want: string | RegExp, label: string,
 }
 
 /**
- * Revit journeys (J1-J4, J6) name their data by env, set by whoever holds the slot:
+ * Revit journeys name their data by env, set by whoever holds the slot:
  * E2E_TARGET (document Address), E2E_ROWS (JSON [[family, type], …]), E2E_PARAM, E2E_VALUE.
  */
 export const revit = {
@@ -516,22 +515,4 @@ export async function sendChat(page: Page, text: string, ms = 300_000) {
         : `ASSERT the turn completes: FAILED — ${detail || "(no status detail)"}`,
     );
   }
-}
-
-/**
- * Draft-first: staged cells plan only once the Situation names the pod the run is filed in. Pick
- * E2E_POD through the real ladder ("choose a pod" → the pod). Plan files nothing in the pod; the
- * pod only holds the run.
- */
-export async function choosePod(page: Page) {
-  const pod = process.env.E2E_POD;
-  if (!pod) throw new Error("PRECONDITION: E2E_POD (the pod the run is filed in) is unset");
-  // The ladder's word is the chosen pod's name, or "choose a pod" while none is chosen.
-  if (await page.has(pod, SITUATION)) return;
-  if (!(await page.has("choose a pod", SITUATION)))
-    throw new Error(`PRECONDITION: another pod is chosen; pick ${pod} or reload the route`);
-  await page.click("choose a pod", SITUATION);
-  const name = pod.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  await page.click(new RegExp(`^${name}(\\s|$)`));
-  await page.until(() => page.has(pod, SITUATION), `the Situation to file in pod ${pod}`, 10_000);
 }

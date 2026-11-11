@@ -421,9 +421,9 @@ export function routeSearch(search: Record<string, unknown>): {
   work?: string;
   thread?: string;
 } {
-  // The router JSON-parses search values, so an exact `?target={"kind":"open",...}` arrives as an
-  // object. It is re-serialized here so `parseTarget` always reads the one string grammar; left as
-  // an object it threw in render, and the SSR stream hung on the throw instead of finishing.
+  // The app router's `searchCodec` hands `?target` over as its raw text. A router built without it
+  // (tests mount their own) JSON-parses an exact `?target={"kind":"open",...}` into an object; it is
+  // re-serialized so `parseTarget` reads one string grammar (an object threw in render and hung SSR).
   const raw = search.target;
   const target =
     typeof raw === "string"

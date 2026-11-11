@@ -1,7 +1,7 @@
 /**
  * The OS notification fallback: a web surface (browser tab or installed PWA) that is open while the
- * tray is not following raises the host's card items as operating-system notifications. It follows
- * the same `notices` Reading from its own persisted cursor and applies the same policy as the card:
+ * tray is not following raises the notice feed's moved rows as operating-system notifications. It
+ * follows the same `notices` Reading from its own persisted record and applies the card's policy:
  * quiet for the thread the person is looking at, a revision once acknowledged, and a snoozed item. With
  * the tray following, the tray's card speaks and this stays silent. It is opt-in, because the browser
  * grants notifications only on a person's gesture.
@@ -42,19 +42,21 @@ export function useThreadPresence(thread: string | null) {
   }, [thread]);
 }
 
-import { followNotices } from "./notice-follow";
+import { cardOf, followNotices } from "./notice-follow";
 import {
   acknowledge,
   admit,
   currentView,
   loadLedger,
+  loadSeen,
   saveLedger,
+  saveSeen,
   wake,
   type NoticeLedger,
 } from "./notice-policy";
 
 const ENABLED = "pe.notices.os";
-const CURSOR = "pe.notices.os-cursor";
+const SEEN = "pe.notices.os-seen";
 const WAKE_MS = 30_000;
 const BODY = 240;
 
@@ -117,12 +119,11 @@ export function OsNotices() {
         void navigator.locks.request(`pe.notice.${notice.id}`, () => deliver(notice));
       else deliver(notice);
     };
-    const stored = window.localStorage.getItem(CURSOR);
     const stop = followNotices({
       origin: resolveWorkbenchConfig().origin,
-      cursor: stored === null || !Number.isSafeInteger(Number(stored)) ? null : Number(stored),
-      onNotice: raise,
-      onCursor: (id) => window.localStorage.setItem(CURSOR, String(id)),
+      seen: loadSeen(window.localStorage, SEEN),
+      onRow: (row) => raise(cardOf(row)),
+      onSeen: (seen) => saveSeen(window.localStorage, SEEN, seen),
       onTray: (present) => (tray = present),
     });
     const timer = setInterval(() => {

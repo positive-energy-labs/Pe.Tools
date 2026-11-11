@@ -24,6 +24,7 @@ import {
 import type { Blocker, EndRuling, FanPortRef, HealProposal, PathEnd, Side } from "./types.ts";
 import { proposeHeals, rulingFor } from "./heal.ts";
 import { elementLabeler } from "../element-label.ts";
+import { elementSubject } from "../work-subject.ts";
 
 type Connector = Element["connectors"][number];
 
@@ -272,6 +273,20 @@ function nearestOf(near: Near | undefined, g: Graph, withinIn: number) {
 }
 
 /** Walk from `connector` of `unit` outward. */
+/**
+ * A blocker keyed once by kind, element and connector. Slice 5: it names its element by the codec's
+ * UniqueId SubjectRef, minted here where the walk knows it; consumers never key it by ElementId.
+ */
+export const mintBlocker = (g: Graph, b: Omit<Blocker, "id">, causedBy?: string): Blocker => {
+  const element = g.byId.get(b.elementId);
+  return {
+    id: `${b.kind}:${b.elementId}${b.connector == null ? "" : `:${b.connector}`}`,
+    ...b,
+    ...(element ? { subject: elementSubject(element) } : {}),
+    ...(causedBy ? { causedBy } : {}),
+  };
+};
+
 export function walkFrom(
   g: Graph,
   unit: Element,
@@ -295,9 +310,9 @@ export function walkFrom(
   let rejoins = 0;
 
   const block = (b: Omit<Blocker, "id">, causedBy?: string) => {
-    const id = `${b.kind}:${b.elementId}${b.connector == null ? "" : `:${b.connector}`}`;
-    if (!blockers.has(id)) blockers.set(id, { id, ...b, ...(causedBy ? { causedBy } : {}) });
-    return id;
+    const minted = mintBlocker(g, b, causedBy);
+    if (!blockers.has(minted.id)) blockers.set(minted.id, minted);
+    return minted.id;
   };
   const end = (
     state: number,

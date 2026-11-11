@@ -40,7 +40,8 @@ export const module = route({
     captures: {
       title: "Captures",
       purpose: "Inspect retained pictures",
-      draw: draw(() => import("./drawing.tsx"), "CapturesDrawing"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./drawing.tsx"), "CapturesDrawing"),
     },
   },
   layout: paneLayout("captures"),

@@ -13,7 +13,6 @@ import type { Caller } from "@pe/agent-contracts";
 import { effectTest } from "./effect-test.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
-import { FIRM_SEED } from "../src/ducts-inputs.ts";
 import { InvalidRead } from "../src/native-reads.ts";
 import {
   inputBindingKey,
@@ -40,19 +39,14 @@ const asPea = Effect.provideService(
   admittedRequestIdentity({ kind: "pea", thread: "t1" } as Caller, {}),
 );
 
-// The actual firm fallback and catalog findings, not a seed the replay could re-derive.
-const firm = {
-  firm: FIRM_SEED,
-  path: "C:\\firm\\ducts.json",
-  present: false,
-  error: "Unexpected token",
-};
+// The firm file as read (malformed) and the catalog findings, kept exactly as the owner answered.
+const firm = { path: "C:\\firm\\ducts.json", error: "Unexpected token" };
 const catalogs = {
   tables: {},
   findings: ["Duplicate catalog table t1; no table with this id is admitted"],
 };
 const liveFiles = Layer.succeed(DuctFiles, {
-  firm: Effect.succeed(firm),
+  firm: () => Effect.succeed(firm),
   ductCatalogs: Effect.succeed(catalogs),
 });
 
@@ -83,10 +77,10 @@ effectTest(
       expect(writer.coverage()).toEqual(["files"]);
       const recorded = yield* service(DuctFiles, DuctFiles.recorded(yield* reader(dir)));
       expect(yield* recorded.ductCatalogs).toEqual(catalogs);
-      expect(yield* problem(recorded.firm)).toBe("recording.miss");
-      yield* files.firm;
+      expect(yield* problem(recorded.firm("ducts"))).toBe("recording.miss");
+      yield* files.firm("ducts");
       const again = yield* service(DuctFiles, DuctFiles.recorded(yield* reader(dir)));
-      expect(yield* again.firm).toEqual(firm);
+      expect(yield* again.firm("ducts")).toEqual(firm);
     }),
 );
 
@@ -182,7 +176,7 @@ effectTest("an unrebuildable failure or a full bundle stops capture, keeps no ta
       maxTakings: 1,
     });
     const broken = Layer.succeed(DuctFiles, {
-      firm: Effect.fail(new Error("disk") as never),
+      firm: () => Effect.fail(new Error("disk") as never),
       ductCatalogs: Effect.succeed(catalogs),
     });
     const files = yield* service(
@@ -190,7 +184,7 @@ effectTest("an unrebuildable failure or a full bundle stops capture, keeps no ta
       DuctFiles.capturing(writer).pipe(Layer.provide(broken)),
     );
     // K4: the live failure is returned as it was; capture stops instead of failing the read.
-    expect((yield* Effect.flip(files.firm)) as unknown).toEqual(new Error("disk"));
+    expect((yield* Effect.flip(files.firm("ducts"))) as unknown).toEqual(new Error("disk"));
     expect(writer.capture.truncated()).toEqual({ at: 1, stoppedAt: expect.any(Number), site: "failure", op: "files.firm", reason: "unsupported" });
     expect(writer.coverage()).toEqual([]);
     const fullDir = yield* bundle;
@@ -218,19 +212,19 @@ effectTest(
           Layer.provide(liveFiles),
         ),
       );
-      yield* files.firm;
-      yield* files.firm;
+      yield* files.firm("ducts");
+      yield* files.firm("ducts");
       yield* files.ductCatalogs;
       const [first, second, catalog] = seen;
       expect(first!.id).not.toBe(second!.id);
       const open = yield* reader(dir);
       const recorded = (bindings: ReadonlyMap<string, string>) =>
         service(DuctFiles, DuctFiles.recorded(open, bindings));
-      expect(yield* problem((yield* recorded(new Map())).firm)).toBe("recording.ambiguous");
-      const key = inputBindingKey(FIRM, "{}");
-      expect(yield* (yield* recorded(new Map([[key, second!.id]]))).firm).toEqual(firm);
+      expect(yield* problem((yield* recorded(new Map())).firm("ducts"))).toBe("recording.ambiguous");
+      const key = inputBindingKey(FIRM, JSON.stringify({ owner: "ducts" }));
+      expect(yield* (yield* recorded(new Map([[key, second!.id]]))).firm("ducts")).toEqual(firm);
       // Another input's taking, another scope, another version: each refuses, none falls back.
-      expect(yield* problem((yield* recorded(new Map([[key, catalog!.id]]))).firm)).toBe(
+      expect(yield* problem((yield* recorded(new Map([[key, catalog!.id]]))).firm("ducts"))).toBe(
         "recording.mismatch",
       );
       expect(
@@ -262,8 +256,8 @@ effectTest(
           Layer.provide(liveFiles),
         ),
       );
-      yield* files.firm;
-      expect(yield* files.firm).toEqual(firm);
+      yield* files.firm("ducts");
+      expect(yield* files.firm("ducts")).toEqual(firm);
       expect(writer.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "full" });
       expect(seen).toEqual([(yield* reader(dir)).candidates(inputIdentity(FIRM))[0]!.id]);
       const broken = new InvalidRead({
@@ -276,7 +270,7 @@ effectTest(
         DuctFiles,
         DuctFiles.capturing(other, () => Effect.fail(broken)).pipe(Layer.provide(liveFiles)),
       );
-      expect(yield* refusing.firm).toEqual(firm);
+      expect(yield* refusing.firm("ducts")).toEqual(firm);
       expect(other.capture.truncated()).toEqual({ at: 1, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "observer" });
     }),
 );

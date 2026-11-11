@@ -6,7 +6,7 @@ import { admittedCommandReadIdentity } from "../src/command-read-identity.ts";
 const pea: Caller = { kind: "pea", context: "ctx", thread: "t", run: { thread: "t", turn: "1" }, root: { thread: "t", turn: "1" } };
 const plan = (target: ActionAdmission["target"]): ActionAdmission => ({
   id: "plan-7",
-  key: "ducts.plan-losses",
+  key: "sheet.plan",
   target,
   input: {},
 });

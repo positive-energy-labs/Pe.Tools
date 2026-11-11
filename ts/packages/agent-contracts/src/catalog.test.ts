@@ -84,7 +84,10 @@ describe("catalog dependency graph", () => {
     expect(byKey.get("ducts.apply.plan")).toMatchObject({ effect: "Read", rollsBack: false });
     expect(byKey.get("ducts.apply.preview")).toBeUndefined();
     // Every Ducts plan is a Read and is the apply's only seal authority; a rehearsal rolls back and arms nothing.
-    for (const kind of ["losses", "heal", "assign-fan"]) {
+    // The losses pair is the sheet pair (slice 7): one plan/apply every sheet shares.
+    expect(byKey.get("command:sheet.plan")).toMatchObject({ effect: "Read" });
+    expect(byKey.get("command:sheet.apply")).toMatchObject({ effect: "ModelWrite", previewBy: "command:sheet.plan" });
+    for (const kind of ["heal", "assign-fan"]) {
       expect(byKey.get(`command:ducts.plan-${kind}`)).toMatchObject({ effect: "Read" });
       expect(byKey.get(`command:ducts.apply-${kind}`)).toMatchObject({ effect: "ModelWrite", previewBy: `command:ducts.plan-${kind}` });
       expect(byKey.get(`command:ducts.preview-${kind}`)).toBeUndefined();

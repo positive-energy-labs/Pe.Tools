@@ -2,7 +2,7 @@
 // permission when the prompt says "permission", asks one form question on "question", hangs until
 // cancel on "hang" (and with no update at all on "silent"), ignores cancel on "stubborn" (saying
 // "ignoring cancel"), lingers on "slow", names the session on
-// "title", and echoes its env on "env". `FAKE_ACP_SHAPE=config` answers `configOptions` (model, an effort select, a fast boolean);
+// "title", writes stderr chatter then exits mid-turn on "die", and echoes its env on "env". `FAKE_ACP_SHAPE=config` answers `configOptions` (model, an effort select, a fast boolean);
 // otherwise only the unstable `models` state, so `setModel` takes `session/set_model`. Auth as the
 // real adapters report it (2026-10-08): `_auth/status_update` before the session answers, kind from
 // `FAKE_ACP_AUTH` (`account` by default, `none`), and `required` refuses `session/new`. `session/resume` picks a stored
@@ -192,6 +192,12 @@ new AgentSideConnection(
           update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: chunk } },
         });
       await say(`echo: ${text}`);
+      if (text === "die") {
+        for (let i = 0; i < 80; i++)
+          process.stderr.write(`[session/create] sessionId=s-${i} phase=init durationMs=${i}\n`);
+        setTimeout(() => process.exit(3), 50);
+        return new Promise(() => {});
+      }
       if (text === "hang") await gate("hang");
       if (text === "route-cutover-pages") {
         const base = toolEnv.PE_TOOLS_HOST_BASE_URL;

@@ -1,4 +1,4 @@
-# e2e lane: one test per acceptance journey (E2E-J1..J6)
+# e2e lane: browser journeys against the real product
 
 ## Required product-browser journeys
 
@@ -74,13 +74,13 @@ vp run --no-cache journey:routes -- --attached --source C:/path/to/served/Pe.Too
 Always pass `--no-cache`: a cached task verdict cannot prove a browser journey.
 It borrows one explicitly named CDP page. The owned launcher uses `@pe/browser`; no Python runtime is required.
 It starts no browser, server, host, Revit session, or inference turn. Stop only the instance and
-server you launched after the run. Keep the tab visible and serve a stable tree: editing the
+server you launched after the run. Serve a stable tree: editing the
 served checkout invalidates a run.
 
 ```powershell
 # Runtime owner: start this checkout's server separately using the repo's vp tooling.
 # Launch owns a disposable profile and returns JSON identity; keep this session id for cleanup.
-$browser = pnpm exec pe-browser launch --visible -- --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows | ConvertFrom-Json
+$browser = pnpm exec pe-browser launch | ConvertFrom-Json
 $env:CDP_PORT = ([uri]$browser.endpoint).Port.ToString()
 # CDP target metadata is not an application-state oracle. Pick the full id of your own page.
 $pages = pnpm exec pe-browser targets $browser.id | ConvertFrom-Json
@@ -183,7 +183,7 @@ Rules (rulings-1640 §1): act only through real controls with trusted input, ass
 
 ## Before any Pea step (user note, 2026-09-18)
 
-- **Preconditions:** the Chat Model chip names an OpenAI model and the Access chip reads `Trusted`. `requirePea()` reads both chips and fails as `BLOCKED` if either is wrong. Fix the setting; it is not a product defect. A new thread starts on Pea's default model, so J1, J2 and J5 first run `setPea()`: setup (lead-approved), not an assertion. It picks `E2E_MODEL` (default `gpt-5.6-terra`) and `Trusted` through the real pickers with trusted clicks, and `requirePea()` then reads both chips back from the DOM.
+- **Preconditions:** the Chat Model chip names an OpenAI model and the Access chip reads `Trusted`. `requirePea()` reads both chips and fails as `BLOCKED` if either is wrong. Fix the setting; it is not a product defect. A new thread starts on Pea's default model, so a journey that asks Pea first runs `setPea()`: setup (lead-approved), not an assertion. It picks `E2E_MODEL` (default `gpt-5.6-terra`) and `Trusted` through the real pickers with trusted clicks, and `requirePea()` then reads both chips back from the DOM.
 - **Sending:** a send is refused while a turn runs, by design. `sendChat()` waits for the turn to settle, else cancels through the real `cancel` control, then sends and waits for the turn to settle. Only J5 sends over a parked ask on purpose.
 - **Cost:** each Pea turn spends the user's OpenAI credit. Run a journey once, when it is ready. Never loop a Pea turn to debug a selector; debug selectors on a non-Pea route.
 - **Failures:** a turn that fails for credit or model reasons reports `BLOCKED: <exact status message>`, not a product failure.
@@ -194,14 +194,21 @@ Clicks and keys go through `@pe/browser` gestures: a disabled, covered or absent
 
 A missing precondition (no Revit bridge, no seed, wrong chips) ends as `RESULT: BLOCKED — …`, never `FAIL`.
 
+## Journeys as action lists (trial, `walk.ts` + `f1-fans.ts`)
+
+`walk.ts` plays a journey written as a list of named read actions, or a seeded random walk over the same actions. Each action is a precondition read from the page, a press by role and visible name (scoped only by a region's accessible name), and a condition with a deadline. Rules run after every action and read the page, never a remembered value. Any fan or port is drawn from what the roster lists. The seed defaults to the first 8 hex digits of HEAD.
+
+From `ts`, on an `acceptance.py setup <run> --web` drive with your own `pea browser launch` (headless, 1600x900):
+
+    CDP_PORT=… CDP_TARGET=… E2E_WEB=<frontend> E2E_SESSION=acc-<run> node tests/e2e/f1-fans.ts [--seed N] [--walk 30] [--steps open,reopenPlace,reload]
+
+Under Git Bash, set `MSYS_NO_PATHCONV=1`, or a `/regex/` argument is rewritten into a Windows path. The run writes `steps.jsonl` (action, draws, settle time in ms, rule results, notes), `errors.json`, one screenshot per failing step plus `final.png`, and a `run.log` result line that carries the seed. Every walk starts at `open`.
+
 ## Revit data per journey
 
 - **Verbs** are located by their word plus any count badge (`PLAN` matches `plan`, `plan 1`, `re-plan`) inside the Situation, never by exact text.
-- **Draft execution (J3, J4):** staged cells plan and apply without selecting a pod. Plan files nothing. A saved-member scenario may still choose a pod because that scenario manages the member itself.
 - **`E2E_ROWS`:** pick types that carry `E2E_PARAM`. A blank cell means the type lacks the parameter and renders no editor; `setCell`/`clickCell` then stop as `PRECONDITION: <row> has no <param>` (J3 on 666a58e lost a run to Balancing Damper this way).
-- **J3 `E2E_ROWS`:** two rows whose apply is natively clean for a plain text write. Not Mechanical Damper (F-J3-2: its connector reconciliation fails a plain text write), and `E2E_PARAM` is not a Yes/No parameter. The stale-refusal check reads the proposals band row: the Revit value struck, then `→ {edited}`.
 - **J6-fans (`j6-fans-write.ts`):** a fan whose type is shared (`E2E_FAN`, default `MUAS-1`; `E2E_VALUE` is the ESP in. wg). Pea stages, the human plans, Write runs once, and the re-plan must refuse with `no staged edit`. `E2E_CHAOS=leave-return` leaves and re-enters /fans by links before Plan. UNPROVEN: never run.
-- **J4:** one row whose `E2E_PARAM` is a non-empty text parameter. The band row must say `by you`; no visible grid or band control may say delete/remove.
 
 ## Seeding J6 (old-shape Work)
 

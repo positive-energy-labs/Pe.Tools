@@ -105,5 +105,48 @@ it("a shared louver keeps its authored flow empty and shows the computed consume
   expect(source.textContent).toBe("none");
   expect(source.getAttribute("data-tone")).toBe("alarm");
 
-  expect(screen.getByText(/1 run · worst known 0\.0469/)).toBeTruthy();
+  expect(screen.getByText(/1 run · 1 of 1 branches known · worst known 0\.0469/)).toBeTruthy();
+});
+
+/*
+ * F1 (2026-11-10, scripted journey on main, step2-selectFan.png): incomplete rows read TEL 0 and
+ * loss 0.0000 and the caption "worst known 0.0000". An incomplete branch draws no number, only its
+ * reason; the caption counts the known branches and names a worst only over complete ones.
+ */
+it("an incomplete branch shows no zero, and the caption names the known count", () => {
+  const leg = (id: string, flowCfm: number | null, lossInWg: number | null) => ({
+    id, elementId: Number(id.slice(1)), kind: "duct", flowCfm, flowSource: null, velocityFpm: null,
+    lossInWg, lossSource: { kind: "fitting" }, equivalentFt: lossInWg == null ? null : 40,
+  });
+  const run = (id: string, legId: string, complete: boolean, knownInWg: number) => ({
+    id, side: "supply", end: { kind: "terminal", elementId: Number(legId.slice(1)), connector: 1 },
+    legIds: [legId], sectionIds: [], cfm: complete ? 200 : null, telFt: complete ? 40 : 0,
+    knownInWg, complete, residualInWg: null, critical: false, maxFpm: null, overLegIds: [],
+  });
+  // The domain's worst is over complete branches only (worksheet.ts); the table draws what it says.
+  const side = (runs: unknown[], worst: number | null) => ({ runs, sections: [], worstKnownInWg: worst, elementSections: {} });
+  const ws = (runs: unknown[], worst: number | null = null) => ({
+    target: { session: "s", openId: "o" }, basis: "b", kind: "worksheet",
+    limits: { supplyFpm: 900, returnFpm: 700, source: "firm:seed" },
+    supply: side(runs, worst), return: side([], null),
+    legs: { l1: leg("l1", 200, 0.05), l2: leg("l2", null, null) },
+  }) as unknown as Ws;
+  const editing = { inputs: null, changeInputs: () => {}, busy: false };
+  const both = render(<Worksheet ws={ws([run("r1", "l1", true, 0.05), run("r2", "l2", false, 0)], 0.05)} editing={editing} />);
+  const incomplete = both.container.querySelector("[data-run='r2']")!;
+  const cells = [...incomplete.querySelectorAll(".face-mono.text-right")].map((c) => c.textContent);
+  // cfm, then TEL and loss: nothing drawn for either.
+  expect(cells.slice(1, 3)).toEqual(["", ""]);
+  expect(incomplete.textContent).not.toMatch(/\b0(\.0+)?\b/);
+  expect(incomplete.textContent).toContain("no flow");
+  const caption = both.container.querySelector("[data-worksheet-caption='supply']")!.textContent!;
+  expect(caption).toContain("1 of 2 branches known");
+  expect(caption).toContain("worst known 0.0500");
+  both.unmount();
+
+  // No complete branch: the caption counts and names no worst.
+  const none = render(<Worksheet ws={ws([run("r2", "l2", false, 0)])} editing={editing} />);
+  const bare = none.container.querySelector("[data-worksheet-caption='supply']")!.textContent!;
+  expect(bare).toContain("0 of 1 branches known");
+  expect(bare).not.toMatch(/worst|0\.0000/);
 });

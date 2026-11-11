@@ -40,7 +40,7 @@ import { createWorkFeedClient } from "../shell/work-feed-client";
 import { routeInput } from "./host";
 import type { Readings } from "../host/resource-stream";
 import type { UseSource } from "../shell/source-contract";
-import type { DrawContext, TypedRoute } from "./typed-route";
+import { scrollBody, type DrawContext, type TypedRoute } from "./typed-route";
 
 const terminals = workSnapshot.nodes.filter(node => node.kind === "terminal");
 const terminalA = elementSubject(terminals[0]!);
@@ -406,11 +406,10 @@ async function journey(module: TypedRoute = fans) {
     async start() {
       await ready();
       await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
-      await vi.waitFor(() => expect(m.owner("ducts")?.ready).toBe(true));
-      expect(m.owner("ducts")?.handle?.revision).toBe(0);
+      // Ruling 2026-11-10: /fans owns only its own Work; /ducts' is never staged from here.
+      expect(m.owner("ducts")).toBeUndefined();
       await m.startAction()!.run();
       await vi.waitFor(() => expect(m.owner()?.ready).toBe(true));
-      await vi.waitFor(() => expect(m.owner("ducts")?.ready).toBe(true));
       await ready();
     },
     async close() {
@@ -776,12 +775,12 @@ test("JZ C718/C675/C676/C730 atomic press, isolated cell undo, root addressing a
     expect(j.m.journal().undo.slice(-3).map(s => s.transitions.length)).toEqual([1, 1, 1]);
     for (let i = 0; i < 3; i++) { expect(await j.m.history.undo()).toMatchObject({ ok: true }); await j.ready(); }
     expect(j.m.owner()!.doc).toEqual(before);
-    expect(await j.cells().at(["designFriction"]).stage(0.1)).toBeNull(); await j.ready();
+    expect(await j.cells().at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } })).toBeNull(); await j.ready();
     const rootBefore = structuredClone(j.m.owner()!.doc), rootSteps = j.m.journal().undo.length;
     expect(() => j.cells().at(["foreignRoot"])).toThrow("No owning Work");
-    expect(await j.cells().at(["designFriction"]).clear()).toBeNull(); await j.ready();
-    expect(await j.cells().at(["designFriction"]).delete()).toBeNull(); await j.ready();
-    expect(j.m.owner()!.doc.designFriction).toEqual({});
+    expect(await j.cells().at(["writeIntent"]).clear()).toBeNull(); await j.ready();
+    expect(await j.cells().at(["writeIntent"]).delete()).toBeNull(); await j.ready();
+    expect(j.m.owner()!.doc.writeIntent).toEqual({});
     expect(j.m.journal().undo).toHaveLength(rootSteps + 2);
     for (let i = 0; i < 2; i++) { expect(await j.m.history.undo()).toMatchObject({ ok: true }); await j.ready(); }
     expect(j.m.owner()!.doc).toEqual(rootBefore);
@@ -842,7 +841,7 @@ test("JZ raw Work patch paths and ambiguous operation fields refuse atomically a
       { path: ["flows", "constructor"] },
       { path: ["flows"], value: 2 },
       { path: ["flows", terminalA, "edit"], value: { value: { cfm: "wrong" } } },
-      { path: ["designFriction", "edit"], value: { value: "wrong" } },
+      { path: ["writeIntent", "edit"], value: { value: "wrong" } },
     ];
     const outcomes: Array<{ patch: unknown; accepted: boolean }> = [];
     for (const patch of patches) {
@@ -924,7 +923,7 @@ test.each(["accepted", "refused"] as const)("JZ audit member switch keeps a late
     const module = route({ key: "fans", name: "Member Work", directory: fans.spec.directory,
       fields: { member: field(z.string(), "a", "query", "push") },
       edits: { ...fans.spec.edits!, owners: {}, value: undefined, seed: () => fans.spec.edits!.work.schema.parse({}), key: page => page.member },
-      panes: { main: { title: "Member", purpose: "Edit one member Work", draw: () => null } },
+      panes: { main: { title: "Member", purpose: "Edit one member Work", body: "scroll", draw: () => scrollBody(null) } },
       layout: { kind: "pane", id: "main" } });
     const m = j.mount(false, {}, {}, module);
     await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
@@ -962,7 +961,7 @@ test("JZ audit explicit demand refuses malformed HTTP Value data and recovers wi
   let opened = 0, corrupt = true;
   const read = { ...fans.spec.core!, demand: "explicit" as const };
   const module = route({ ...fans.spec, edits: undefined, commands: {}, subject: undefined, reads: {}, core: read,
-    panes: { main: { title: "Explicit Fan read", purpose: "Inspect a demanded Value", read, draw: () => null } },
+    panes: { main: { title: "Explicit Fan read", purpose: "Inspect a demanded Value", read, body: "scroll", draw: () => scrollBody(null) } },
     layout: { kind: "pane", id: "main" } });
   const source: UseSource = { kind: "use", open(ctx, deliver) {
     const id = ++opened;
@@ -1055,30 +1054,18 @@ test("JZ audit page Bind validates its live HTTP contract before dispatch and pe
 });
 
 
-test("JZ cut foreign owner cell keeps its label revision and inverse through concurrent editing", async () => {
+// Ruling 2026-11-10 (no cross-route write): /fans held /ducts' assumptions as a foreign-owner cell;
+// it no longer does. The foreign-owner seam lives on through /ducts' own `owners.fans`.
+test("JZ cut /fans has no foreign /ducts cell: staging one refuses and /ducts Work is untouched", async () => {
   const { JOIN_KEY } = await import("@pe/ducts-domain/sheet/inputs");
   const j = await journey();
   try {
     await j.start();
-    const cells = j.cells(), key = JOIN_KEY(["10:1", "30:1"]);
-    expect(cells.owner(["assumptions"])).toEqual({ route: "ducts", label: "from /ducts" });
-    const local = j.m.owner()!.handle, foreign = j.m.owner("ducts")!.handle!;
-    const cell = cells.at(["assumptions", key], "ducts");
-    const outcomes = await Promise.all([1, 2].map(() => cell.stage({ kind: "verdict", verdict: "connect" }, { label: "Accept join" })));
-    expect(outcomes.filter(result => result === null)).toHaveLength(1);
-    expect(outcomes.filter(result => result?.code === "refused")).toHaveLength(1);
-    await j.settle(); await j.ready();
+    const cells = j.cells(), key = JOIN_KEY(["10:1", "30:1"]), local = j.m.owner()!.handle;
+    expect(j.m.owner("ducts")).toBeUndefined();
+    expect(() => cells.at(["assumptions", key], "ducts")).toThrow("No owning Work for assumptions");
+    await j.settle();
     expect(j.m.owner()!.handle).toEqual(local);
-    expect(j.m.owner("ducts")!.handle!.revision).toBe(foreign.revision + 1);
-    expect(j.m.owner("ducts")!.doc.assumptions[key].edit.value.verdict).toBe("connect");
-    const step = j.m.journal().undo.at(-1)!;
-    expect(step.label).toContain("from /ducts");
-    expect(step.transitions[0]!.forward.map(patch => patch.path)).toEqual([["assumptions", key]]);
-    expect(await j.m.history.undo()).toMatchObject({ ok: true });
-    await j.ready(); expect(j.m.owner("ducts")!.doc.assumptions).toEqual({});
-    expect(await j.m.history.redo()).toMatchObject({ ok: true });
-    await j.ready(); expect(j.m.owner("ducts")!.doc.assumptions[key].edit.value.verdict).toBe("connect");
-    expect(await cell.stage({ kind: "verdict", verdict: "connect" })).toMatchObject({ code: "refused" });
   } finally { await j.close(); }
 }, 60_000);
 

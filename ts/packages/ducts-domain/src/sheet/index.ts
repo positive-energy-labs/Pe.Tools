@@ -24,4 +24,4 @@ export {
   type StoreLayer,
 } from "./inputs.ts";
 
-export { editPatches, mergeCriteria } from "./edits.ts";
+export { editPatches } from "./edits.ts";

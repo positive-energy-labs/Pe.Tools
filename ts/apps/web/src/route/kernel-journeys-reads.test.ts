@@ -1047,12 +1047,12 @@ test("JZ H19 wait beyond the browser budget, then inspect queue and conflict ref
       const work = { key: f.key, revision: 0 };
       const changed = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } }], 0);
       expect(changed.ok).toBe(true);
-      const response = await f.post("/actions", { id: "jz-conflict", key: "ducts.apply-losses", target: f.target, input: { work } });
+      const response = await f.post("/actions", { id: "jz-conflict", key: "sheet.apply", target: f.target, input: { work } });
       expect(response.ok).toBe(true);
       const receipt = await f.journal.wait("jz-conflict");
       expect(receipt.state, "H19: original stale revision is refused").not.toBe("succeeded");
       expect(f.dispatched, "H19: conflict cannot retry native mutation").toEqual([]);
-      expect((await f.journal.list()).filter(row => row.key === "ducts.apply-losses")).toHaveLength(1);
+      expect((await f.journal.list()).filter(row => row.key === "sheet.apply")).toHaveLength(1);
     } finally { await f.close(); }
   } finally { vi.useRealTimers(); held?.release.resolve(); await j.close(); }
 }, 60_000);

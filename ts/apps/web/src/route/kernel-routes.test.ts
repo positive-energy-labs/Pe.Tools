@@ -16,8 +16,9 @@ test.each([
     "?target=%20session-1%20&work=%20W%20&thread=%20T%20",
     { target: " session-1 ", work: " W ", thread: " T " },
   ],
-  ["?target=123&work=false&thread=%20%20", {target:123,work:false,thread:"  "}],
-  ["?target=%7B%22kind%22%3A%22open%22%7D", { target: {kind:"open"} }],
+  // `?target` is codec text (address-transport `searchCodec`): the router never JSON-parses it.
+  ["?target=123&work=false&thread=%20%20", {target:"123",work:false,thread:"  "}],
+  ["?target=%7B%22kind%22%3A%22open%22%7D", { target: '{"kind":"open"}' }],
 ])("kernel routes coexist with file routes and preserve raw search for the typed owner: %s", async (query, expected) => {
   const router = getRouter();
   router.update({ history: createMemoryHistory({ initialEntries: [`/duct-loss${query}`] }) });

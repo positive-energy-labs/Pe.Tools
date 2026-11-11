@@ -1,5 +1,5 @@
 import { stableFanKey } from "../ducts/sheet/model";
-import {route as declareRoute} from "../route/typed-route";
+import {route as declareRoute, scrollBody} from "../route/typed-route";
 import {module as familiesDeclaration} from "../families/route";
 import {workFingerprintSchema} from "@pe/agent-contracts";
 import { systemCode } from "../ducts/identity";
@@ -21,16 +21,18 @@ import {
 } from "@tanstack/react-router";
 import { address, routeAddress, type ThreadTab, type WorkKey } from "@pe/agent-contracts";
 import { RegistryContext } from "@effect/atom-react";
-import { appAtomRegistry } from "#/shell/owner";
+import { appAtomRegistry, routeSearch } from "#/shell/owner";
 import { createChatPageStore } from "./store";
 import { RouteDock } from "./route-panes";
 import { useRouteCurrent } from "#/route/activity";
 import { admittedRouterAddress } from "#/shell/typed-place-boundary";
+import { searchCodec } from "#/route/address-transport";
+import { SHOWN, urlSettled } from "#/test-journey";
 import { useRestoreTabPage } from "#/route/url";
 
 const store = createChatPageStore({
   registry: appAtomRegistry,
-  search: { mode: "threads", patch: async () => {} },
+  search: { patch: async () => {} },
 });
 const ducts: ThreadTab = {
   id: "aaaaaaaa-0000-4000-8000-000000000001",
@@ -104,7 +106,7 @@ vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 // The retention/lease witness uses the typed Page contract without acquiring native evidence or Work.
 const familiesProbe=declareRoute({
   ...familiesDeclaration.spec, needs:"browser",core:undefined,edits:undefined,commands:{},
-  panes:{probe:{title:"Probe",purpose:"Retention proof",draw:ctx=><output data-families-probe="">{ctx.page.read().focus}</output>}},
+  panes:{probe:{title:"Probe",purpose:"Retention proof",body:"scroll",draw:ctx=>scrollBody(<output data-families-probe="">{ctx.page.read().focus}</output>)}},
   layout:{kind:"pane",id:"probe"},
 });
 function FamiliesProbe() {
@@ -154,12 +156,14 @@ function Restore() {
   useRestoreTabPage();
   return null;
 }
-async function mount(entry = "/pea?thread=T", strict = false, restore = false) {
+async function mount(entry = "/pea?thread=T", strict = false, restore = false, validate = false) {
   if (entry.startsWith("/fans")) {
     const { admit } = await import("../fans/admission.fixture");
     fansRoute = (await admit()).presenter;
   }
   const root = createRootRoute({
+    // The app root's search reader (routes/__root.tsx), so router-built hrefs match the app's.
+    ...(validate ? { validateSearch: routeSearch } : {}),
     component: () => (
       <>
         {restore && <Restore />}
@@ -177,6 +181,7 @@ async function mount(entry = "/pea?thread=T", strict = false, restore = false) {
   const router = createRouter({
     routeTree: root.addChildren(routes),
     history: createMemoryHistory({ initialEntries: [entry] }),
+    ...(validate ? searchCodec : {}),
   });
   await router.load();
   const tree = (
@@ -935,4 +940,55 @@ test("N-03 typed Fans retains a newly explicit pin when its resolved target is u
   expect(
     new URL(router.history.location.href, "http://place.invalid").searchParams.get("target"),
   ).toBe(pin);
+});
+
+test("6.1 a reopened Place keeps an exact ?target, and its URL mark witnesses it", async () => {
+  sessionStorage.clear();
+  const pin = JSON.stringify({ kind: "open", ref: { session: "s1", openId: "o1" } });
+  // The app root's search reader and the app router's codec (router.tsx).
+  const router = await mount(`/fans?fixture=layout&target=${encodeURIComponent(pin)}`, false, false, true);
+  await waitFor(() => expect(places().filter((tab) => tab.route === "fans")).toHaveLength(1));
+  fireEvent.click(await screen.findByRole("button", { name: "Open another Place on this route" }));
+  await waitFor(() => expect(places().filter((tab) => tab.route === "fans")).toHaveLength(2));
+  fireEvent.click(screen.getAllByRole("button", { name: /^Close / })[0]!);
+  await waitFor(() => expect(places().filter((tab) => tab.route === "fans")).toHaveLength(1));
+  await urlSettled();
+  expect(new URLSearchParams(router.history.location.search).get("target")).toBe(pin);
+  expect(places().map((tab) => new URL(tab.link, "http://tab.invalid").searchParams.get("target"))).toEqual([pin]);
+});
+
+test("6.1 the URL mark appears only after the Place's URL write", async () => {
+  sessionStorage.clear();
+  let search = new URLSearchParams(), held: URLSearchParams | null = null;
+  const listeners = new Set<() => void>();
+  const port = { read: () => new URLSearchParams(search), write: (next: URLSearchParams) => { held = new URLSearchParams(next); },
+    subscribe: (listener: () => void) => { listeners.add(listener); return () => void listeners.delete(listener); } };
+  const flush = () => { search = held!; held = null; listeners.forEach((listener) => listener()); };
+  let pose: ((patch: { readId: string }) => unknown) | null = null;
+  const probe = declareRoute({ ...familiesProbe.spec, panes: { probe: { title: "Probe", purpose: "URL flush", body: "scroll",
+    draw: (ctx) => { pose = ctx.page.pose; return scrollBody(<output>{ctx.page.read().readId}</output>); } } } });
+  const root = createRootRoute({ component: () => <TypedShell module={probe} fingerprint={workFingerprintSchema.parse(`builtin-closure:${"0".repeat(64)}`)} address={port} /> });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/"] }) });
+  await router.load();
+  render(<RegistryContext.Provider value={appAtomRegistry}><RouterProvider router={router} /></RegistryContext.Provider>);
+  await urlSettled();
+  act(() => void pose!({ readId: "r2" }));
+  expect(held).not.toBeNull();
+  expect(document.querySelector("[data-url-settled]")).toBeNull();
+  act(flush);
+  expect((await urlSettled()).textContent).toContain("r2");
+});
+
+test("6.1 two Places, one hidden: the shown copy is the only one that answers its name", async () => {
+  sessionStorage.clear();
+  await mount("/fans?fixture=layout");
+  await waitFor(() => expect(places().filter((tab) => tab.route === "fans")).toHaveLength(1), { timeout: 10_000 });
+  fireEvent.click(await screen.findByRole("button", { name: "Open another Place on this route" }));
+  await waitFor(() => expect(places().filter((tab) => tab.route === "fans")).toHaveLength(2), { timeout: 10_000 });
+  // Count Place copies by the kernel pane's identity: a body may reuse the name (the roster's own
+  // list section is "fans", which a CSS attribute match in jsdom takes for "Fans").
+  const roster = '[data-slot="pane"][data-pane-id="sheet-roster"]';
+  await waitFor(() => expect(document.querySelectorAll(roster)).toHaveLength(2), { timeout: 10_000 });
+  expect(screen.getAllByRole("region", { name: "Fans" })).toHaveLength(1);
+  expect(document.querySelectorAll(`${roster}${SHOWN}`)).toHaveLength(1);
 });

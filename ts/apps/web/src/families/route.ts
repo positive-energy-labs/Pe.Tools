@@ -62,7 +62,8 @@ export const module = route({
     main: {
       title: "Families",
       purpose: "Audit family values",
-      draw: draw(() => import("./matrix.tsx"), "FamiliesMatrix"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./matrix.tsx"), "FamiliesMatrix"),
     },
   },
   edits: {

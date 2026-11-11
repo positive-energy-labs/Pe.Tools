@@ -1,5 +1,6 @@
 import { createElement } from "react";
-import { RosterBody, InputsBody, PictureBody, LedgerBody } from "../ducts/sheet/mount";
+import { RosterBody, PictureBody, LedgerBody } from "../ducts/sheet/mount";
+import { SheetPane } from "../route/slots/sheet/pane.tsx";
 import * as networkBodies from "../ducts/proto/e/screen";
 import type { TypedMount } from "../shell/typed-mount";
 import type { FansRouteDocument } from "@pe/agent-contracts";
@@ -22,8 +23,11 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
   };
   const adapter = {
     ...mount, native: mount, read: (id:string) => {
+      // A kernel sheet pane is slot-drawn, as the shell draws it.
+      if ((mount.spec.panes[id] as { kernel?: string } | undefined)?.kernel === "sheet")
+        return mount.draw(id, (ctx) => createElement(SheetPane, { ctx: { draw: ctx as never, slot: mount.spec.sheet!, field: mount.spec.subject?.field } }));
       const body=mount.draw(id) as {props:{ctx:unknown}};
-      const Component=({"sheet-roster":RosterBody,"sheet-inputs":InputsBody,"sheet-picture":PictureBody,"sheet-ledger":LedgerBody,"e-systems":networkBodies.SystemsPane,"e-sidebar":networkBodies.TreePane,"e-rules-all":networkBodies.AllRulesBody,"e-rules":networkBodies.RulesBody,"e-picture":networkBodies.PictureBody,"e-inbox":networkBodies.InboxBody} as Record<string,any>)[id];
+      const Component=({"sheet-roster":RosterBody,"sheet-picture":PictureBody,"sheet-ledger":LedgerBody,"e-systems":networkBodies.SystemsPane,"e-sidebar":networkBodies.TreePane,"e-rules-all":networkBodies.AllRulesBody,"e-rules":networkBodies.RulesBody,"e-picture":networkBodies.PictureBody,"e-inbox":networkBodies.InboxBody} as Record<string,any>)[id];
       return createElement(Component,{ctx:body.props.ctx});
     }, close: mount.dispose,
     controls: { subject: mount.page.subject, query: (key:string,value:unknown)=>mount.page.query({[key]:value}) },

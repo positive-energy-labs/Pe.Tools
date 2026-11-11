@@ -25,7 +25,8 @@ export const module = route({
     sessions: {
       title: "Sessions",
       purpose: "Choose a running session or start a new one",
-      draw: draw(() => import("./mount"), "SessionsBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./mount"), "SessionsBody"),
     },
   },
   layout: paneLayout("sessions"),

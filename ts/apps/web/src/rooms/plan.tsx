@@ -1,4 +1,5 @@
 import { RegistryContext } from "@effect/atom-react";
+import { regionSubject } from "./subject";
 import {
   AttentionDocument,
   elementKey,
@@ -17,7 +18,8 @@ import { PictureReadout } from "@pe/kit/lang/readout";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import { Legend, legendWord } from "@pe/kit/lang/legend";
-import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
+// The picture frame is the picture slot's render (scene/picture), not the kernel's layout (slice 8).
+import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
@@ -155,7 +157,7 @@ export function RoomsPlan({
   value,
   overlay,
 }: {
-  renderPane: PaneApi;
+  renderPane: TeachingPaneRender;
   /** A synthetic plan (`?fixture=plan`): said in the pane's meta, where the view is named. */
   fixture?: boolean;
   /** Drawn over the plan in screen px (the feedback layer), given the plan's frame. */
@@ -184,7 +186,7 @@ export function RoomsPlan({
       .map((row) => row.region.guid),
   );
   const onHover = (guid: string | null) =>
-    setHovered(registry, guid == null ? null : { doc, key: `room:${guid}` });
+    setHovered(registry, guid == null ? null : { doc, key: regionSubject(guid) });
   const bounds = useMemo(() => {
     const points: Point2[] = rows.flatMap((row) => loopOf(row.region.outer));
     if (plan) points.push(...planCorners(plan));
@@ -531,7 +533,7 @@ export function RoomsPlan({
                           strokeWidth: `calc(var(--sw) * ${width}px)`,
                           cursor: "pointer",
                         }}
-                        {...mention({ doc, key: `room:${region.guid}` })}
+                        {...mention({ doc, key: regionSubject(region.guid) })}
                         onClick={(event) => {
                           event.stopPropagation();
                           if (dragDist.current < CLICK_PX) onSelect(region.guid, event.shiftKey);
@@ -577,7 +579,7 @@ export function RoomsPlan({
                         ])}
                         data-callout={callout.label}
                         style={{ pointerEvents: "auto", cursor: "pointer" }}
-                        {...mention({ doc, key: `room:${callout.guid}` })}
+                        {...mention({ doc, key: regionSubject(callout.guid) })}
                         onClick={(event) => {
                           event.stopPropagation();
                           if (dragDist.current < CLICK_PX) onSelect(callout.guid, event.shiftKey);

@@ -13,8 +13,7 @@ import {
   schedulesViewArgs,
   schedulesViewData,
 } from "../../../../packages/agent-contracts/src/schedules-read.ts";
-import { read } from "../../../host/src/reads/evaluator.ts";
-import { documentMark } from "../../../host/src/reads/inputs.ts";
+import { read, documentMark } from "../../../host/src/reads/door.ts";
 import { scheduleOutcome } from "./schedule-outcome.ts";
 
 /** One selected schedule owns one workspace Work, independently of its native capture. */

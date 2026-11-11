@@ -1,0 +1,5 @@
+{
+  "extends": "../../../ts/apps/web/tsconfig.json",
+  "compilerOptions": { "types": [] },
+  "include": ["routes/**/*.ts"]
+}

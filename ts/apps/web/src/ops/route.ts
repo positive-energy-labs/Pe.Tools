@@ -44,7 +44,8 @@ export const module = route({
     main: {
       title: "Ops",
       purpose: "Inspect requests, read results and control original receipts",
-      draw: draw(() => import("./mount"), "OpsBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./mount"), "OpsBody"),
     },
   },
   commands: {

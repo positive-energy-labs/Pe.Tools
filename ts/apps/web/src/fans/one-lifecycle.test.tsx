@@ -3,6 +3,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { address } from "@pe/agent-contracts";
 import { historySnapshotSchema } from "../shell/history";
 import { mountTypedRoute } from "../shell/typed-mount";
+import { scrollBody } from "../route/body";
 import type { ReadingContext } from "../shell/source-contract";
 import { createWitness } from "./cutover.test-support";
 
@@ -19,11 +20,13 @@ test("typed panes share declared Values; recorded Fans and Ducts use frozen Work
     await vi.waitFor(() => expect(f.typed.owner()?.ready).toBe(true));
     const input = f.places.get("fans")!;
     for (const route of [f.admitted.presenter,f.admitted.owner]) {
-    const recordedPage = {...(route.data.key === "fans" ? f.typed : (f.owner as unknown as {native:typeof f.typed}).native).page.read(),contextRadiusFt:23};
+    const live = route.data.key === "fans" ? f.typed : (f.owner as unknown as {native:typeof f.typed}).native;
+    const recordedPage = {...live.page.read(),contextRadiusFt:23};
     const history = historySnapshotSchema.parse({
       point: { id:crypto.randomUUID(),document,at:Date.now(),takingRange:{start:0,end:0},reason:{kind:"captured"},
         history:{address:document,target:{session:"fixture",openId:"fans"},poses:[{instance:"recorded",route:route.data.key,href:`/${route.data.key}`,page:recordedPage}],publications:[]} },
-      work: Object.keys(f.typed.spec.edits!.owners).map(id => { const owner=f.typed.owner(id)!;return {handle:owner.handle,revision:owner.handle!.revision,doc:owner.doc}; }),
+      // Each route records the Work it owns (/fans owns no /ducts Work, ruling 2026-11-10).
+      work: Object.keys(live.spec.edits!.owners).map(id => { const owner=live.owner(id)!;return {handle:owner.handle,revision:owner.handle!.revision,doc:owner.doc}; }),
     });
     const recorded = mountTypedRoute(route.typed,{...input,history,readOnly:true,publicationInstance:"recorded",memory:()=>recordedPage},route.workFingerprint,{sources:Object.fromEntries([route.typed.spec.core,...Object.values(route.typed.spec.reads ?? {})].map(read=>[read!.key,{kind:"use",open}]))});
     try {
@@ -52,7 +55,7 @@ test("optional Work, explicit demand and invocation arguments share one typed sc
   const read=hostRead({...valueRead("probe.value",z.object({}),z.object({answer:z.number()})),demand:"explicit"});
   const declaration={key:"wave4-probe",address:"/",name:"Probe",needs:"host" as const,directory:reference.data.directory,
     fields:{member:field(z.string(),"","query")},core:{...read,args:()=>({})},
-    panes:{main:{title:"Probe",purpose:"Scope falsifier",read,draw:(ctx:unknown)=>ctx}},layout:{kind:"pane" as const,id:"main"}};
+    panes:{main:{title:"Probe",purpose:"Scope falsifier",read,body:"scroll" as const,draw:(ctx:any)=>scrollBody(ctx)}},layout:{kind:"pane" as const,id:"main"}};
   const calls:unknown[]=[],queries:unknown[]=[];
   const door={
     lifetime:"subscription",receipts:()=>({subscribe:()=>()=>{}}),
@@ -68,7 +71,7 @@ test("optional Work, explicit demand and invocation arguments share one typed sc
   const input={address:{read:()=>new URLSearchParams(search),write:(next:URLSearchParams)=>{search=new URLSearchParams(next);},subscribe:()=>()=>{}},
     fixture:null,target:{kind:"host" as const},work:{address:null,open:null},custody:{current:()=>true},memory:()=>({})};
   const fingerprint=workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
-  const browser=mountTypedRoute(route({...declaration,needs:"browser",core:undefined,panes:{main:{title:"Probe",purpose:"Browser",draw:(ctx:unknown)=>ctx}}}),{...input,target:null},fingerprint,{work:door});
+  const browser=mountTypedRoute(route({...declaration,needs:"browser",core:undefined,panes:{main:{title:"Probe",purpose:"Browser",body:"scroll" as const,draw:(ctx:any)=>scrollBody(ctx)}}}),{...input,target:null},fingerprint,{work:door});
   try {expect(calls).toEqual([]);expect(browser.workBasis()).toBeNull();browser.page.query({member:"local"});expect(browser.page.read().member).toBe("local");}
   finally {browser.dispose();}
   search=new URLSearchParams();
@@ -105,7 +108,7 @@ test("cell undo targets the exact owner press and leaves the other owner staged"
   const secondary={...primary,route:"undo-b",title:"B"};
   const module=route({key:primary.route,name:"Undo",needs:"host",directory:reference.data.directory,fields:{},
     edits:{work:primary,owners:{"undo-b":{state:secondary}},input:z.never(),patches:()=>[],history:z.object({label:z.string()}),describe:(detail:{label:string})=>detail},
-    panes:{main:{title:"Cells",purpose:"Undo falsifier",draw:(ctx:unknown)=>ctx}},layout:{kind:"pane",id:"main"}});
+    panes:{main:{title:"Cells",purpose:"Undo falsifier",body:"scroll" as const,draw:(ctx:any)=>scrollBody(ctx)}},layout:{kind:"pane",id:"main"}});
   const door=createFixtureWorkDoor(primary,schema.parse({}),{"undo-b":schema},{"undo-a":schema.parse({}),"undo-b":schema.parse({})},{"undo-b":"undo-b"});
   const mount=mountTypedRoute(module,{address:{read:()=>new URLSearchParams(),write:()=>{},subscribe:()=>()=>{}},fixture:null,
     target:{kind:"host"},work:{address:null,open:{session:"undo",openId:"cells"}},custody:{current:()=>true},memory:()=>({})},

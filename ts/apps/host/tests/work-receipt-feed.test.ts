@@ -242,7 +242,7 @@ test("T1: completed over-budget Plan and Apply stay in a recreated ready as boun
         kind: "action",
         value: actionReceiptSchema.parse({
           ...((row(id).body as { value: unknown }).value as object),
-          key: id === "plan" ? "ducts.plan-losses" : "ducts.apply-losses",
+          key: id === "plan" ? "sheet.plan" : "sheet.apply",
           target: { kind: "session", session: "s" },
           consumes: [consumed],
           prepared: { state: "ready", value: { writes: "x".repeat(bytes) } },

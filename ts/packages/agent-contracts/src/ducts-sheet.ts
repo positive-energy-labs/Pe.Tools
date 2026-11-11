@@ -63,6 +63,36 @@ export const ductsCriteriaLayerSchema = z.strictObject({
   allowanceInWg: sided(nonneg.optional()).optional(),
 });
 export type DuctsCriteriaLayer = z.infer<typeof ductsCriteriaLayerSchema>;
+/**
+ * Each criterion's Work cell (ADR 0030 rule 8: one staged value per cell; ruling 2026-11-10, the /ducts
+ * design sheet draws one row per cell). A sided criterion is a cell per side; `layer` is where the
+ * cell's value sits in the criteria layer the engine resolves over the store and the firm file.
+ */
+export const DUCTS_CRITERIA_CELLS = {
+  velocitySupplyFpm: { layer: ["velocityLimitFpm", "supply"], value: num.positive(), unit: "fpm" },
+  velocityReturnFpm: { layer: ["velocityLimitFpm", "return"], value: num.positive(), unit: "fpm" },
+  terminalDropInWg: { layer: ["terminalDropInWg"], value: nonneg, unit: "in-wg" },
+  autoJoinGapIn: { layer: ["autoJoinGapIn"], value: nonneg, unit: "in" },
+  healBoxIn: { layer: ["healBoxIn"], value: nonneg, unit: "in" },
+  splitPolicy: { layer: ["splitPolicy"], value: splitPolicy, unit: undefined },
+  allowanceSupplyInWg: { layer: ["allowanceInWg", "supply"], value: nonneg, unit: "in-wg" },
+  allowanceReturnInWg: { layer: ["allowanceInWg", "return"], value: nonneg, unit: "in-wg" },
+} as const satisfies Record<string, { layer: readonly [keyof DuctsCriteriaLayer, ("supply" | "return")?]; value: z.ZodType; unit: string | undefined }>;
+export type DuctsCriteriaCell = keyof typeof DUCTS_CRITERIA_CELLS;
+/** The criteria layer the cells' staged values make; an unstaged cell leaves its criterion (or side) out. */
+export function criteriaLayer(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly edit?: { readonly value?: unknown } | null }>>>): DuctsCriteriaLayer {
+  const layer: Record<string, unknown> = {};
+  for (const [cell, { layer: [key, side] }] of Object.entries(DUCTS_CRITERIA_CELLS)) {
+    const value = cells[cell as DuctsCriteriaCell]?.edit?.value;
+    if (value === undefined) continue;
+    if (side) layer[key] = { ...(layer[key] as object | undefined), [side]: value };
+    else layer[key] = value;
+  }
+  return layer as DuctsCriteriaLayer;
+}
+/** The cell a criterion (and side) is staged in. */
+export const criteriaCellOf = (key: string, side?: string) =>
+  (Object.entries(DUCTS_CRITERIA_CELLS).find(([, c]) => c.layer[0] === key && c.layer[1] === side)?.[0] ?? null) as DuctsCriteriaCell | null;
 /** A criteria edit: a value writes that criterion or side, null removes it from the project layer. */
 export const ductsCriteriaEditsSchema = z.strictObject({
   velocityLimitFpm: sided(num.positive().nullable().optional()).optional(),
@@ -177,6 +207,11 @@ export const ductsSheetEditsSchema = z.strictObject({
     .optional(),
 });
 export type DuctsSheetEdits = z.infer<typeof ductsSheetEditsSchema>;
+/** /fans' edit door (ruling 2026-11-10, no cross-route write): its own cells only; /ducts' keys are refused. */
+export const fansSheetEditsSchema = ductsSheetEditsSchema.pick({
+  flows: true, terminalDrops: true, componentDrops: true, esp: true, equipmentFlows: true, roles: true,
+});
+export type FansSheetEdits = z.infer<typeof fansSheetEditsSchema>;
 /** A closure or reading the engine took on its own: shown, never parsed. */
 export const sheetNoteSchema = z.strictObject({
   kind: z.enum([
@@ -318,6 +353,8 @@ const blocker = z.object({
     "equipment-pairing",
   ]),
   elementId,
+  /** The element's `UniqueId:` SubjectRef code; absent only for a stand-in with no element. */
+  subject: elementSubjectSchema.optional(),
   connector: portIndex.optional(),
   effectInWg: z.number().nullable(),
   closer: z.enum(["default", "heal", "ruling"]),
@@ -480,8 +517,14 @@ export const ductsSheetResponseSchema = z.discriminatedUnion("kind", [
     kind: z.literal("inputs"),
     directionOverride: z.string().nullable().optional(),
     inputs: ductsInputsSchema,
-    /** The firm layer: the file's version, or "seed" with present false when the file is absent. */
-    firm: z.strictObject({ version: z.string(), path: z.string(), present: z.boolean() }),
+    /**
+     * The firm layer: the file's version, or "seed" with present false when the file is absent;
+     * refused without a shared root, where the sheet runs on the seed and its firm fields are disabled.
+     */
+    firm: z.union([
+      z.strictObject({ version: z.string(), path: z.string(), present: z.boolean() }),
+      z.strictObject({ refused: z.literal("no-shared-root") }),
+    ]),
     ends: z.array(pathEnd),
     /** Every fitting the sheet priced, or failed to, with its rule, table and their sources. */
     fittings: z.array(fittingPricingSchema),

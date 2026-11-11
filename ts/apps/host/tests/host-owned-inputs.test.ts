@@ -9,7 +9,7 @@ import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { valueReadResponse, nativeOutputSchema, executionTargetSchema } from "@pe/agent-contracts";
 import { z } from "zod";
 import { read as hostRead } from "../src/reads/evaluator.ts";
-import { nativeRead } from "../src/reads/inputs.ts";
+import { nativeRead } from "../src/reads/evaluator.ts";
 import { registeredReads } from "../src/reads/routes.ts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { readInputRoutes } from "../src/builtin-inputs.ts";
@@ -108,7 +108,7 @@ test("recorded host-local inputs and immutable capture files replay without a li
                   resolve: () => Effect.die("No native resolution"),
                 }),
                 files: DuctFiles.layer({
-                  firm: join(dir, "firm.json"),
+                  firm: join(dir, "Firm"),
                   catalogs: join(dir, "catalogs"),
                 }),
                 marks: Layer.succeed(

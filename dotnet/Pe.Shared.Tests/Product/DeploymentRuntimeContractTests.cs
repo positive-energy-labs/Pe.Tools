@@ -92,28 +92,37 @@ public sealed class DeploymentRuntimeContractTests {
         }
     }
 
+    // ADR 0035 rule 11 (amended): no shared root starts normally on the Documents user root; a shared
+    // root reads after it, takes no writes, and never moves machine state.
     [Test, NonParallelizable]
-    public void Shared_root_names_content_without_changing_machine_state() {
+    public void Shared_root_is_a_second_home_after_the_user_root() {
         const string sharedVariable = "PE_TOOLS_SHARED_ROOT";
         var shared = Path.Combine(Path.GetTempPath(), $"pe-shared-{Guid.NewGuid():N}");
         var isolated = Path.Combine(Path.GetTempPath(), $"pe-isolated-{Guid.NewGuid():N}");
         var previousHome = Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable);
         var previousShared = Environment.GetEnvironmentVariable(sharedVariable);
+        var documents = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Pe.Tools");
         Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, null);
-        Environment.SetEnvironmentVariable(sharedVariable, shared);
+        Environment.SetEnvironmentVariable(sharedVariable, null);
         try {
             Assert.That(ProductPathNames.SharedRootVariable, Is.EqualTo(sharedVariable));
+            Assert.That(ProductUserContentLayout.ForCurrentUser().RootPath, Is.EqualTo(documents));
+            Assert.That(ProductPathing.ContentHomes(), Is.EqualTo(new[] { documents }));
+            Assert.That(ProductPathing.SharedFirmDir(), Is.Null);
+            Assert.That(ProductPathing.SharedKeysPath(), Is.Null);
+            Environment.SetEnvironmentVariable(sharedVariable, shared);
             var content = ProductUserContentLayout.ForCurrentUser();
-            Assert.That(content.RootPath, Is.EqualTo(shared));
-            Assert.That(content.Scripting.RootPath, Is.EqualTo(Path.Combine(shared, "Pods")));
-            var runtime = ProductRuntimeLayout.For(ProductLane.Dev, @"C:\src\Pe.Tools", null);
-            Assert.That(runtime.RootPath, Is.EqualTo(@"C:\src\Pe.Tools\.artifacts\pe-tools"));
+            Assert.That(content.RootPath, Is.EqualTo(documents));
+            Assert.That(content.Scripting.RootPath, Is.EqualTo(Path.Combine(documents, "Pods")));
+            Assert.That(ProductPathing.ContentHomes(), Is.EqualTo(new[] { documents, shared }));
+            Assert.That(ProductPathing.SharedFirmDir(), Is.EqualTo(Path.Combine(shared, "Firm")));
+            Assert.That(ProductPathing.SharedKeysPath(), Is.EqualTo(Path.Combine(shared, "keys.json")));
+            Assert.That(ProductRuntimeLayout.For(ProductLane.Dev, @"C:\src\Pe.Tools", null).RootPath, Is.EqualTo(@"C:\src\Pe.Tools\.artifacts\pe-tools"));
+            Assert.That(() => ProductRuntimeLayout.For(ProductLane.Dev, Path.Combine(documents, "checkout"), null),
+                Throws.ArgumentException.With.Message.Contains("the user content root"));
             Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, isolated);
             Assert.That(ProductUserContentLayout.ForCurrentUser().RootPath, Is.EqualTo(isolated));
             Assert.That(ProductRuntimeLayout.For(ProductLane.Dev, @"C:\src\Pe.Tools", isolated).RootPath, Is.EqualTo(Path.Combine(isolated, ".local-state")));
-            Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, null);
-            Environment.SetEnvironmentVariable(sharedVariable, null);
-            Assert.That(() => ProductUserContentLayout.ForCurrentUser(), Throws.InvalidOperationException.With.Message.Contains(sharedVariable));
         } finally {
             Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previousHome);
             Environment.SetEnvironmentVariable(sharedVariable, previousShared);

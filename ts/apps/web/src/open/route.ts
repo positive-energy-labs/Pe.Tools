@@ -58,7 +58,8 @@ export const module = route({
     documents: {
       title: "Documents",
       purpose: "Choose a model and destination Revit",
-      draw: draw(() => import("./mount"), "OpenBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./mount"), "OpenBody"),
     },
   },
   commands: {

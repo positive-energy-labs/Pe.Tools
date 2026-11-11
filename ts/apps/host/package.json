@@ -53,7 +53,7 @@
     "./settings": "./src/settings.ts",
     "./family-actions": "./src/family-actions.ts",
     "./family-spec": "./src/family-spec.ts",
-    "./read-graph": "./src/reads/evaluator.ts",
+    "./read-graph": "./src/reads/door.ts",
     "./reads/evaluator": "./src/reads/evaluator.ts"
   }
 }
