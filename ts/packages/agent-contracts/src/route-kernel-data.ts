@@ -133,14 +133,6 @@ const pane = z.strictObject({
   verbs: placement,
   body: ref.optional(),
   history: z.strictObject({ receipts: ref.optional() }).optional(),
-  frame: z
-    .strictObject({
-      picture: z.boolean().optional(),
-      scroll: z.enum(["auto", "clip", "visible"]).optional(),
-      flush: z.boolean().optional(),
-      header: z.literal(false).optional(),
-    })
-    .optional(),
 });
 export type LayoutJson =
   | { readonly kind: "pane"; readonly id: string }

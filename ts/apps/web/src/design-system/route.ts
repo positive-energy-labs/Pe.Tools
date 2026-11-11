@@ -25,7 +25,8 @@ export const module = route({
     main: {
       title: "Design System",
       purpose: "Browse laws and production specimens",
-      draw: draw(() => import("./mount"), "DesignSystemBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./mount"), "DesignSystemBody"),
     },
   },
   layout: paneLayout("main"),

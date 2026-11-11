@@ -40,7 +40,7 @@ import { createWorkFeedClient } from "../shell/work-feed-client";
 import { routeInput } from "./host";
 import type { Readings } from "../host/resource-stream";
 import type { UseSource } from "../shell/source-contract";
-import type { DrawContext, TypedRoute } from "./typed-route";
+import { scrollBody, type DrawContext, type TypedRoute } from "./typed-route";
 
 const terminals = workSnapshot.nodes.filter(node => node.kind === "terminal");
 const terminalA = elementSubject(terminals[0]!);
@@ -923,7 +923,7 @@ test.each(["accepted", "refused"] as const)("JZ audit member switch keeps a late
     const module = route({ key: "fans", name: "Member Work", directory: fans.spec.directory,
       fields: { member: field(z.string(), "a", "query", "push") },
       edits: { ...fans.spec.edits!, owners: {}, value: undefined, seed: () => fans.spec.edits!.work.schema.parse({}), key: page => page.member },
-      panes: { main: { title: "Member", purpose: "Edit one member Work", draw: () => null } },
+      panes: { main: { title: "Member", purpose: "Edit one member Work", body: "scroll", draw: () => scrollBody(null) } },
       layout: { kind: "pane", id: "main" } });
     const m = j.mount(false, {}, {}, module);
     await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
@@ -961,7 +961,7 @@ test("JZ audit explicit demand refuses malformed HTTP Value data and recovers wi
   let opened = 0, corrupt = true;
   const read = { ...fans.spec.core!, demand: "explicit" as const };
   const module = route({ ...fans.spec, edits: undefined, commands: {}, subject: undefined, reads: {}, core: read,
-    panes: { main: { title: "Explicit Fan read", purpose: "Inspect a demanded Value", read, draw: () => null } },
+    panes: { main: { title: "Explicit Fan read", purpose: "Inspect a demanded Value", read, body: "scroll", draw: () => scrollBody(null) } },
     layout: { kind: "pane", id: "main" } });
   const source: UseSource = { kind: "use", open(ctx, deliver) {
     const id = ++opened;

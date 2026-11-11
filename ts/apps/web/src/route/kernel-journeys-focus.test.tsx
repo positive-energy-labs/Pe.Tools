@@ -11,7 +11,7 @@ import { createPortal } from "react-dom";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
-import { route, type TypedRoute } from "./typed-route";
+import { route, scrollBody, type TypedRoute } from "./typed-route";
 import { module as fans } from "../fans/route";
 import { module as ducts } from "../ducts/route";
 import { TypedChrome, TypedShell } from "../shell/typed-shell";
@@ -34,7 +34,7 @@ import { contextFetch } from "@pe/runtime/context";
 import { routeInput } from "./host";
 import userEvent from "@testing-library/user-event";
 import { createServer } from "node:http";
-import { HistoryRail } from "../shell/history-rail";
+import { RecordedPoints } from "../shell/history-rail";
 import { historySnapshotSchema } from "../shell/history";
 import * as historyLinks from "../shell/history";
 import { ref, path } from "../../../host/tests/host-read-graph.test-support";
@@ -184,7 +184,7 @@ test("JZ Families History offers published values and marks ambiguous publicatio
     const bad = listed.points.find((point: any) => point.reason.receipt === "history-journey-write");
     expect(bad).toBeTruthy();
     expect(bad.history.publications.filter((binding: any) => binding.instance === pose.instance)).toHaveLength(2);
-    render(<HistoryRail document={path} route="families" address={address} compare={false} />);
+    render(<RecordedPoints document={path} route="families" address={address} compare={false} />);
     fireEvent.click(await screen.findByRole("button", { name: "Open History" }));
     const rows = await screen.findAllByRole("option");
     const badRow = rows.find(row => row.getAttribute("data-key") === `${bad.id}:${pose.instance}`)!;
@@ -204,7 +204,7 @@ test("JZ Families History offers published values and marks ambiguous publicatio
     expect(available.map(({ point }: any) => point.id)).toContain(good.id);
     for (const { point, pose: recordedPose } of available) {
       cleanup();
-      render(<HistoryRail document={path} route="families" address={address} compare={false} />);
+      render(<RecordedPoints document={path} route="families" address={address} compare={false} />);
       fireEvent.click(await screen.findByRole("button", { name: "Open History" }));
       const options = await screen.findAllByRole("option");
       picked = "";
@@ -924,7 +924,7 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
 test("JM H17 browse an optional host route without a pin, then refuse malformed document pins", async () => {
   const module = route({ ...family.spec, edits: undefined, core: undefined, commands: {}, reads: {},
     panes: { main: { title: "Optional document", purpose: "Inspect exact target authority",
-      draw: ctx => <p role="status">{ctx.target?.kind === "host" ? "Host browsing" : "Pinned document"}</p> } },
+      body: "scroll", draw: ctx => scrollBody(<p role="status">{ctx.target?.kind === "host" ? "Host browsing" : "Pinned document"}</p>) } },
     layout: { kind: "pane", id: "main" } });
   const stamp = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
   let search = new URLSearchParams();
@@ -974,7 +974,7 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
   });
   const make = (key: string) => route({ ...fans.spec, key, name: key, needs: "browser", core: undefined,
     subject: undefined, reads: {}, edits: undefined, commands: {}, fields: {}, picture: undefined, title: undefined,
-    panes: { main: { title: key, purpose: "Focus ownership", draw: () => <><button>{key} focus</button><textarea aria-label={`${key} text`} />{createPortal(<button>{key} portal</button>, document.body)}</> } },
+    panes: { main: { title: key, purpose: "Focus ownership", body: "scroll", draw: () => scrollBody(<><button>{key} focus</button><textarea aria-label={`${key} text`} />{createPortal(<button>{key} portal</button>, document.body)}</>) } },
     layout: { kind: "pane", id: "main" } });
   const a = make("jz-a"), b = make("jz-b");
   const stamp = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
@@ -1567,13 +1567,13 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
   vi.spyOn(await import("../navigation/surface-host"), "useSurfaceHost").mockReturnValue({ surface: "web" } as never);
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   const threads = [{ id: "jz-family-first" }, { id: "jz-family-other" }];
-  const store = createChatPageStore({ registry: appAtomRegistry, search: { mode: "threads", patch: async () => {} } });
+  const store = createChatPageStore({ registry: appAtomRegistry, search: { patch: async () => {} } });
   conversation.value = { store, threads };
   const { builtinRouteStamp } = await import("./builtin-inventory");
   const stamp = workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("family")}`);
   const declaration = route({ ...family.spec, panes: { workspace: {
     ...family.spec.panes.workspace,
-    draw: ctx => <output aria-label="Mounted Family Work">{ctx.cells.doc?.spec?.doc.fileName}</output>,
+    body: "scroll", draw: ctx => scrollBody(<output aria-label="Mounted Family Work">{ctx.cells.doc?.spec?.doc.fileName}</output>),
   } } });
   function Family() { return <TypedShell module={declaration} fingerprint={stamp} />; }
   const root = createRootRoute({ component: () => <RegistryContext.Provider value={appAtomRegistry}>
@@ -1708,11 +1708,11 @@ test("JZ E8-12 close Home clears a capacity refusal and permits another Place", 
   sessionStorage.setItem("pe.places", JSON.stringify(Array.from({ length: 12 }, (_, i) => ({
     id: `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, "0")}`, route: "home", link: "/", at: new Date().toISOString(),
   }))));
-  const store = createChatPageStore({ registry: appAtomRegistry, search: { mode: "threads", patch: async () => {} } });
+  const store = createChatPageStore({ registry: appAtomRegistry, search: { patch: async () => {} } });
   conversation.value = { store, threads: [] };
   const module = route({ ...family.spec, key: "home", address: "/", name: "Home", needs: "browser", core: undefined,
     subject: undefined, reads: {}, edits: undefined, commands: {}, fields: {}, picture: undefined, title: undefined,
-    panes: { main: { title: "Home", purpose: "Place capacity", draw: () => <p>Home body</p> } }, layout: { kind: "pane", id: "main" } });
+    panes: { main: { title: "Home", purpose: "Place capacity", body: "scroll", draw: () => scrollBody(<p>Home body</p>) } }, layout: { kind: "pane", id: "main" } });
   const root = createRootRoute({ component: () => <RegistryContext.Provider value={appAtomRegistry}>
     <RouteDock renderRoute={body => body}>{null}</RouteDock>
   </RegistryContext.Provider> });
@@ -1814,8 +1814,8 @@ test.each(["Fans", "Ducts"] as const)("JZ C042 %s subject-list declaration suppr
     const module = route({ ...fans.spec, needs: "browser", edits: undefined, commands: {}, reads: {},
       subject: { ...fans.spec.subject!, pane: "roster", read },
       panes: {
-        roster: { subjectList: declared.subjectList, title: "Fan list", purpose: "Choose the subject", read: { ...read }, draw: ctx => <Roster ctx={ctx} /> },
-        detail: { title: "Detail", purpose: "Inspect the subject", read: { ...read }, draw: () => <p>Subject detail</p> },
+        roster: { subjectList: declared.subjectList, title: "Fan list", purpose: "Choose the subject", read: { ...read }, body: "scroll", draw: ctx => scrollBody(<Roster ctx={ctx} />) },
+        detail: { title: "Detail", purpose: "Inspect the subject", read: { ...read }, body: "scroll", draw: () => scrollBody(<p>Subject detail</p>) },
       }, layout: { kind: "pane", id: pane } });
     const mount = mounts.mountTypedRoute(module, {
       target: { kind: "host" }, fixture: "layout", work: { address: null, open: null },
@@ -1845,7 +1845,7 @@ test("JZ audit named subject choices preserve all none add and toggle without ra
   const roster = fans.spec.subject!.read!;
   const module = route({ ...fans.spec, core: roster, edits: undefined, commands: {},
     subject: { ...fans.spec.subject!, pane: "detail" },
-    panes: { detail: { title: "Subject choices", purpose: "Choose named subjects", draw: () => <p>Subject choice surface</p> } },
+    panes: { detail: { title: "Subject choices", purpose: "Choose named subjects", body: "scroll", draw: () => scrollBody(<p>Subject choice surface</p>) } },
     layout: { kind: "pane", id: "detail" } });
   let seq = 0, search = new URLSearchParams(), moves = 0;
   const unknown = stableFanKey({ uniqueId: "unknown-roster-audit", portIndex: 0 });
@@ -1905,7 +1905,7 @@ test("JZ audit optional document pins retain exact source authority and retire r
   const original = mounts.mountTypedRoute;
   const factory = vi.spyOn(mounts, "mountTypedRoute").mockImplementation((...args) => { const m = original(...args); created.push(m); return m; });
   const module = route({ ...family.spec, needs: "host", optionalTarget: "document", edits: undefined, core: undefined, reads: {}, commands: {}, fields: {}, picture: undefined, title: undefined,
-    panes: { main: { title: "Optional document", purpose: "Inspect exact document authority", draw: ctx => <p>{ctx.target?.kind === "document" ? `Pinned ${ctx.target.ref.session}/${ctx.target.ref.openId}` : ctx.target?.kind === "host" ? "Host browsing" : "No authority"}</p> } }, layout: { kind: "pane", id: "main" } });
+    panes: { main: { title: "Optional document", purpose: "Inspect exact document authority", body: "scroll", draw: ctx => scrollBody(<p>{ctx.target?.kind === "document" ? `Pinned ${ctx.target.ref.session}/${ctx.target.ref.openId}` : ctx.target?.kind === "host" ? "Host browsing" : "No authority"}</p>) } }, layout: { kind: "pane", id: "main" } });
   let search = new URLSearchParams();
   const listeners = new Set<() => void>();
   const address = { read: () => new URLSearchParams(search), write(next: URLSearchParams) { search = next; listeners.forEach(f => f()); }, subscribe(f: () => void) { listeners.add(f); return () => { listeners.delete(f); }; } };
@@ -1958,7 +1958,7 @@ test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow in
   const spec = (schedules as TypedRoute).spec;
   const module = route({ key: "schedules", name: "Schedule cells", directory: spec.directory, fields: {},
     edits: { ...spec.edits!, value: undefined, seed: undefined, key: () => host.scope.work },
-    panes: { main: { title: "Schedule cells", purpose: "Review stale cells", draw: () => null } }, layout: { kind: "pane", id: "main" } });
+    panes: { main: { title: "Schedule cells", purpose: "Review stale cells", body: "scroll", draw: () => scrollBody(null) } }, layout: { kind: "pane", id: "main" } });
   const mount = mounts.mountTypedRoute(module, { target: { kind: "document", ref: host.b }, fixture: null,
     work: { address: null, open: host.b }, address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => true }, memory: () => ({}),

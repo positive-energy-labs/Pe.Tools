@@ -4,21 +4,13 @@ import type { WorkJournal } from "./journal";
  * ADR 0027 rule 3: the Situation is one line. The route's name and context lead, one primary verb
  * stands framed, the rest wait in an overflow, and the Timeline head closes the line. Layout only:
  * typed-shell.tsx renders each verb and each context control; this file owns where they sit.
- *
- * The Timeline head's Reject answers the same host consent API as Pea's composer (`thread.permission`).
- * TODO: docs/features/routes/LEDGER.md#s7-a91a2429a1 H2 — Reject dispatch and host cancellation are proven separately by fixture tests; press it against a live
- * host consent window (a route command from a Pea thread) to prove the round trip.
  */
-import { useContext, useSyncExternalStore, type ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { MoreHorizontal, Redo2, Undo2 } from "lucide-react";
 import type { VerbDecl } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
-import { harnessClient } from "#/workbench/provider/harness-client";
-import { WorkbenchContext } from "#/workbench/provider/thread-summary";
-import { resolveWorkbenchConfig } from "#/workbench/config";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { activityTime, projectTimeline, type TimelineVerbs, type TimelineEntry } from "./timeline";
-import { secondsLeft, useSecondTick } from "./countdown";
 import "./situation-band.css";
 
 export function SituationBand({
@@ -189,36 +181,23 @@ export function JournalButtons({
 
 /**
  * The Timeline's head: the latest Work edit (who made it, its state, the Work revision), unless a
- * command ran after it; else the latest entry, in one line and every open consent window as its
- * "Reject?" countdown. The full history opens beneath it; it never takes a row of its own.
+ * command ran after it; else the latest entry, in one line. Consent windows are the topbar sweep's
+ * (ADR 0035 rule 6). The full history opens beneath it; it never takes a row of its own.
  */
 export function TimelineHead({
   owner,
   history,
-  thread,
   verbs: declaredVerbs,
 }: {
   owner: JournalOwner;
   verbs?: TimelineVerbs;
   history: ReactNode;
-  thread?: string;
 }) {
   useSyncExternalStore(owner.subscribe, owner.revision, owner.revision);
   const timeline: readonly TimelineEntry[] = owner.timeline();
   const verbs = declaredVerbs ?? {};
-  // The selected thread's run consent (ADR 0027 rule 11) is the same window Pea's composer card
-  // answers; the head shows it too, so a "Reject?" countdown is never only inside the chat pane.
-  const workbench = useContext(WorkbenchContext);
-  const runAsks = workbench?.runApprovals ?? [];
-  // One host window is one countdown: a receipt stamped with a window the run ask already draws
-  // is not drawn twice. Both read the host's deadline from the clock at render (countdown.ts).
-  const asked = new Set(runAsks.map((ask) => ask.requestId));
   const journal = useWorkJournal(owner);
   const rows = projectTimeline(timeline, verbs, journal);
-  const windows = rows.filter(
-    (row) => row.kind === "consent" && !asked.has(row.outcome!.consentWindow!.requestId),
-  );
-  useSecondTick(windows.some((row) => row.consentUntil) || runAsks.some((ask) => ask.deadline));
   const last =
     rows.findLast(
       (row) =>
@@ -230,55 +209,6 @@ export function TimelineHead({
   const step = last?.kind === "journal" ? last.step : undefined;
   return (
     <span data-slot="timeline-head" role="group" aria-label="Timeline">
-      {windows.map((row) => {
-        const entry = row.entry;
-        const left = row.consentUntil ? secondsLeft(row.consentUntil) : null;
-        const window = row.outcome!.consentWindow!;
-        const consent = consentThread(entry, thread);
-        return (
-          <span key={entry.outcome?.receiptId ?? entry.press} data-slot="consent-window">
-            <span role="timer" data-tone="caution" aria-label={`${row.verb} applies in`}>
-              {row.verb} · {left === null ? "awaiting approval" : `${left}s`}
-            </span>
-            <Button
-              label={`Reject ${row.verb}`}
-              refusal={
-                owner.journalRefusal() ??
-                (consent ? null : "No thread holds this consent window")
-              }
-              onClick={() =>
-                // `stop_writes` is the host's reject option (run-consent.ts): it closes the window
-                // and stops this thread's writes until a fresh consent.
-                void harnessClient(resolveWorkbenchConfig().origin).permission(
-                  consent!,
-                  window.requestId,
-                  "stop_writes",
-                )
-              }
-            >
-              Reject?
-            </Button>
-          </span>
-        );
-      })}
-      {runAsks.map((ask) => {
-        const left = ask.deadline ? secondsLeft(ask.deadline) : null;
-        const reject = ask.options.find((option) => option.kind.startsWith("reject"));
-        return (
-          <span key={ask.requestId} data-slot="consent-window">
-            <span role="timer" data-tone="caution" aria-label="Pea's writes apply in">
-              Pea writes · {left === null ? "awaiting approval" : `${left}s`}
-            </span>
-            <Button
-              label="Reject Pea's writes in this thread"
-              refusal={reject ? null : "This consent window offers no reject option"}
-              onClick={() => void workbench!.resolveApproval(ask.requestId, reject!.optionId)}
-            >
-              Reject?
-            </Button>
-          </span>
-        );
-      })}
       <Popover>
         <PopoverTrigger aria-label="Open the Timeline" data-slot="timeline-trigger">
           {step && last?.kind === "journal" ? (

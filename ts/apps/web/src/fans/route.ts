@@ -18,6 +18,7 @@ import { editPatches } from "@pe/ducts-domain/sheet/index";
 import { field, route, subjectSchema, split } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
+import { scrollBody } from "../route/body.ts";
 import { fanLabel, stableFanKey } from "../ducts/sheet/model.ts";
 import { describeInputHistory, editMetaSchema } from "../ducts/sheet/input-history.neutral.ts";
 import { sheetValueFixtures } from "../ducts/sheet/value-fixtures.ts";
@@ -94,26 +95,31 @@ export const module = route({
       title: "Fans",
       purpose: "Open fan ports",
       bindings,
-      draw: draw(() => import("../ducts/sheet/mount.tsx"), "RosterBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("../ducts/sheet/mount.tsx"), "RosterBody"),
     },
     "sheet-inputs": {
       title: "Inputs",
       purpose: "Edit fan inputs",
       bindings,
       kernel: "sheet",
-      draw: () => null,
+      // The shell draws this pane from the filled slot; the body kind is the frame it lays out in.
+      body: "scroll",
+      draw: () => scrollBody(null),
     },
     "sheet-picture": {
       title: "Picture",
       purpose: "Inspect fan paths",
       bindings,
-      draw: draw(() => import("../ducts/sheet/mount.tsx"), "PictureBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("../ducts/sheet/mount.tsx"), "PictureBody"),
     },
     "sheet-ledger": {
       title: "Ledger",
       purpose: "Inspect ESP and provenance",
       bindings,
-      draw: draw(() => import("../ducts/sheet/mount.tsx"), "LedgerBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("../ducts/sheet/mount.tsx"), "LedgerBody"),
     },
   },
   edits: {

@@ -1218,10 +1218,18 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       t.session = "closed";
       t.live = null;
       void settleAsks(t, "expired").catch((error) => warn(String(error)));
+      // One terminal per turn: host shutdown already wrote it, or the turn's own catch did.
+      if (t.stopped || (t.running && ended(t, t.running))) return;
+      // The transcript says one sentence; stderr is the raw detail, cut to its first whole line
+      // because the adapter keeps a 2000-char tail that starts mid-token.
+      const tail = stderr().trim();
+      const raw = tail.length >= 1900 ? tail.slice(tail.indexOf("\n") + 1) : tail;
+      const message = `The ${harness} harness exited (${signal ?? `code ${code}`}).`;
       append(t, {
         kind: "error",
         turnId: t.running,
-        message: `${harness} harness exited (${signal ?? code}): ${stderr().trim().slice(-500)}`,
+        message,
+        ...(raw ? { failure: { kind: "other" as const, message, raw } } : {}),
       });
     });
     const init = await conn.initialize({
@@ -2534,7 +2542,8 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         runs.closeAll();
         for (const t of threads.values()) {
           t.stopped = true;
-          if (t.running)
+          // One terminal per turn: a harness that died first already wrote this turn's error.
+          if (t.running && !ended(t, t.running))
             append(t, {
               kind: "error",
               turnId: t.running,

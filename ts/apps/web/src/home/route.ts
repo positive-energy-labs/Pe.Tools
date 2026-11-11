@@ -42,7 +42,8 @@ export const module = route({
     main: {
       title: "Home",
       purpose: "Find tools and inspect activity",
-      draw: draw(() => import("./mount"), "HomeBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./mount"), "HomeBody"),
     },
   },
   layout: paneLayout("main"),

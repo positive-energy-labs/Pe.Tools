@@ -28,6 +28,8 @@ const sheetContract = (effect: "Read" | "ModelWrite") => ({
 });
 const sheetCommand = { entry: SHEET_COMMANDS.apply, plan: SHEET_COMMANDS.plan,
   contract: sheetContract("ModelWrite"), planContract: sheetContract("Read") };
+import { scrollBody, type Body, type BodyKind } from "./body.ts";
+export { scrollBody, fillBody, type Body, type BodyKind } from "./body.ts";
 
 type Field = {
   schema: z.ZodType;
@@ -144,6 +146,9 @@ type Owner = { state: RouteStateSpec<z.ZodObject>; value?: string };
 export type Owners = Readonly<Record<string, Owner>>;
 type HostRead = import("./host-read.ts").HostRead;
 export type ReadData<R extends HostRead> = NonNullable<z.output<R["output"]>["value"]>["data"];
+/** Layout is data (ADR 0035 rule 5, `route/body.ts`): a pane declares its body kind and `draw`
+ * returns that kind's branded `Body`, so the declaration and the drawing cannot disagree. */
+type PaneBody<C> = { [B in BodyKind]: { body: B; draw(ctx: C): Body<B> } }[BodyKind];
 export type Specification<
   D,
   F extends Fields,
@@ -199,8 +204,7 @@ export type Specification<
       kernel?: "sheet" | "goal";
       read?: Reads[K];
       bindings?(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): PaneBindings;
-      draw(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): unknown;
-    };
+    } & PaneBody<DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>>;
   };
   edits?: {
     work: W | RouteStateSpec<W>;
@@ -254,9 +258,9 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     : {};
   // The shell draws a kernel pane (`typed-shell.tsx`, `kernel`): a route module, and a Pod bundle, carries no React.
   const kernelPanes = {
-    ...(spec.sheet && !Object.values(spec.panes).some((p) => p.kernel === "sheet") ? { sheet: { title: "Sheet", purpose: "Edit the bound cells", kernel: "sheet", draw: () => null } } : {}),
+    ...(spec.sheet && !Object.values(spec.panes).some((p) => p.kernel === "sheet") ? { sheet: { title: "Sheet", purpose: "Edit the bound cells", kernel: "sheet", body: "scroll", draw: () => scrollBody(null) } } : {}),
     ...(spec.goal && !("goal" in spec.panes) ? { goal: { title: "Unresolved", purpose: "What is left before the answer", read: spec.goal,
-      kernel: "goal", draw: () => null } } : {}),
+      kernel: "goal", body: "scroll", draw: () => scrollBody(null) } } : {}),
   } as unknown as Specification<D, F, W, Edit, Reads, SubjectRead>["panes"];
   const normalized = { ...spec, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb } as NonNullable<typeof spec.commands>,
     panes: { ...spec.panes, ...kernelPanes }, edits: work && edits ? {...edits,work,owners} : undefined };

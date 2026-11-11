@@ -28,8 +28,10 @@ export function HistoryBoundary({ address, children }: {
   return children(at ? loaded!.snapshot : undefined);
 }
 
-/** Timeline's write receipts name the afterWrite rows; all point bindings remain host-owned. */
-export function HistoryRail({
+/** The recorded points of this route's document, drawn inside the Timeline popover: pick one, capture
+ * one, or compare and return to live. Write receipts name the afterWrite rows; all point bindings
+ * remain host-owned. */
+export function RecordedPoints({
   document,
   route,
   address,
@@ -101,10 +103,7 @@ export function HistoryRail({
     }));
   });
   return (
-    <aside
-      aria-label="History"
-      className="flex shrink-0 flex-wrap items-center gap-2 hairline-b px-2 py-1"
-    >
+    <div className="flex flex-wrap items-center gap-2">
       <ListPopup
         anchor="trigger"
         face="control"
@@ -169,6 +168,6 @@ export function HistoryRail({
           {problem}
         </span>
       )}
-    </aside>
+    </div>
   );
 }

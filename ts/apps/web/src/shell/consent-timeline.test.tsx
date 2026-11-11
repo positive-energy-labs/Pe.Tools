@@ -1,40 +1,14 @@
 // @vitest-environment jsdom
 import { test, expect, vi } from "vite-plus/test";
-import { act, fireEvent, render, cleanup } from "@testing-library/react";
+import { fireEvent, render, cleanup } from "@testing-library/react";
 import { TimelineHead, type JournalOwner } from "./situation-band";
 import { createRouteTimeline } from "./timeline";
-const permission = vi.hoisted(() => vi.fn(async () => ({})));
-vi.mock("#/workbench/provider/harness-client", () => ({ harnessClient: () => ({ permission }) }));
+// D8 (a head mounted long before a window opens counts the host's 60 s) moved with the window
+// into the kit's ConsentSweep test (ADR 0035 rule 6): the Timeline head draws no consent.
 const journalOwner = (timeline: ReturnType<typeof createRouteTimeline>): JournalOwner => ({
   timeline: () => timeline.read(), journal: () => null,
   subscribe: (notify) => timeline.subscribe(notify), revision: timeline.version,
   journalRefusal: () => null, restoreWork: vi.fn(), stopCommand: vi.fn(),
-});
-
-test("D8: a head mounted long before a window opens counts the host's 60 s, and a resolved window leaves at once", () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  try {
-    const timeline = createRouteTimeline();
-    const owner = journalOwner(timeline);
-    const ui = render(<TimelineHead owner={owner} history={null} thread="t" />);
-    // Minutes pass with no window open, so no interval ever ran (a throttled tab).
-    vi.setSystemTime(Date.now() + 133_000);
-    const receipt = { id: "apply-1", caller: { kind: "pea", thread: "originating-thread" } };
-    const consentWindow = { requestId: "ask-1", deadline: new Date(Date.now() + 60_000).toISOString() };
-    act(() => timeline.append({ kind: "receipt", at: Date.now(), verb: "apply", basis: { receipt },
-      outcome: { id: "apply-1", receiptId: "apply-1", state: "queued", input: {}, consentWindow } }));
-    fireEvent.click(ui.getByRole("button", { name: "Reject apply" }));
-    expect(permission).toHaveBeenCalledWith("originating-thread", "ask-1", "stop_writes");
-    expect(ui.getByRole("timer").textContent).toBe("apply · 60s");
-    // Rejected: the cancelled receipt still carries the window it was stamped with.
-    act(() => timeline.append({ kind: "receipt", at: Date.now(), verb: "apply", basis: { receipt },
-      outcome: { id: "apply-1", receiptId: "apply-1", state: "cancelled", input: {}, consentWindow } }));
-    expect(ui.queryByRole("timer")).toBeNull();
-    expect(ui.queryByRole("button", { name: "Reject apply" })).toBeNull();
-  } finally {
-    vi.useRealTimers();
-    cleanup();
-  }
 });
 
 test("History records a write receipt and caller once rather than echoing its invocation", async () => {

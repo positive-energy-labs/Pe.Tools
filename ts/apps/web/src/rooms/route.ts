@@ -49,7 +49,8 @@ export const module = route({
       title: "Rooms",
       purpose: "Choose a level and inspect its rooms",
       bindings,
-      draw: draw(() => import("./mount"), "RoomsBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./mount"), "RoomsBody"),
     },
   },
   edits: {

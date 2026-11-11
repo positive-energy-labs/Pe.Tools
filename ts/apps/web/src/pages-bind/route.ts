@@ -42,7 +42,8 @@ export const module = route({
     main: {
       title: "Bind Page",
       purpose: "Choose a Page binding",
-      draw: draw(() => import("./mount"), "BindBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./mount"), "BindBody"),
     },
   },
   commands: {

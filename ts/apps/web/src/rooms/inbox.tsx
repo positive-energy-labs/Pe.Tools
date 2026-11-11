@@ -1,5 +1,6 @@
 import { useContext, useMemo } from "react";
-import { AttentionDocument, useMembers, type SubjectKey } from "@pe/kit/lang/attention";
+import { AttentionDocument, useMembers } from "@pe/kit/lang/attention";
+import { regionSubject } from "./subject";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 /**
  * The feedback inbox (V6 calm): one row per mark or note on the view, in `CARD_STATES` order. A
@@ -12,7 +13,8 @@ import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 import { useList, emptyListState } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
-import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
+// The picture frame is the picture slot's render (scene/picture), not the kernel's layout (slice 8).
+import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { tokenRef } from "@pe/kit/lib/token";
@@ -175,7 +177,7 @@ export function RoomsInbox({
   markdown,
   snap,
 }: {
-  renderPane: PaneApi;
+  renderPane: TeachingPaneRender;
   cards: readonly Card[];
   regions: readonly Region[];
   labelOf: (guid: string) => string | undefined;
@@ -203,7 +205,7 @@ export function RoomsInbox({
         new Map(
           cards.map((card) => [
             `card:${card.id}` as const,
-            card.guids.map((guid): SubjectKey => `room:${guid}`),
+            card.guids.map(regionSubject),
           ]),
         ),
       [cards],

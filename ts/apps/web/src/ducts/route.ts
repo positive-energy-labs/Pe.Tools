@@ -25,6 +25,7 @@ import {
 } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
+import { scrollBody } from "../route/body.ts";
 import { describeInputHistory, editMetaSchema } from "./sheet/input-history.neutral.ts";
 import { ductsPricingCapability, ductsRosterCapability } from "@pe/agent-contracts";
 import { presentLosses, presentHeal, presentFan } from "./reviews.ts";
@@ -108,43 +109,50 @@ export const module = route({
       title: "Systems",
       purpose: "Choose a system to inspect",
       bindings,
-      draw: draw(() => import("./proto/e/screen.tsx"), "SystemsPane"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./proto/e/screen.tsx"), "SystemsPane"),
     },
     "e-sidebar": {
       title: "System tree",
       purpose: "Inspect the opened systems and their runs",
       bindings,
-      draw: draw(() => import("./proto/e/screen.tsx"), "TreePane"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./proto/e/screen.tsx"), "TreePane"),
     },
     "e-rules-all": {
       title: "All-systems rules",
       purpose: "Price every read fitting type",
       bindings,
-      draw: draw(() => import("./proto/e/screen.tsx"), "AllRulesBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./proto/e/screen.tsx"), "AllRulesBody"),
     },
     "e-rules": {
       title: "This system’s rules",
       purpose: "Review fitting rules for the opened systems",
       bindings,
-      draw: draw(() => import("./proto/e/screen.tsx"), "RulesBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./proto/e/screen.tsx"), "RulesBody"),
     },
     "e-picture": {
       title: "Picture",
       purpose: "Inspect the model or schematic",
       bindings,
-      draw: draw(() => import("./proto/e/screen.tsx"), "PictureBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./proto/e/screen.tsx"), "PictureBody"),
     },
     design: {
       title: "Design",
       purpose: "Stage the design criteria and friction rate over the firm file",
       kernel: "sheet",
-      draw: () => null,
+      body: "scroll",
+      draw: () => scrollBody(null),
     },
     "e-inbox": {
       title: "Rulings",
       purpose: "Review assumptions and planned writes",
       bindings,
-      draw: draw(() => import("./proto/e/screen.tsx"), "InboxBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./proto/e/screen.tsx"), "InboxBody"),
     },
   },
   edits: {

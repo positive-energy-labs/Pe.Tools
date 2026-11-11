@@ -1,4 +1,4 @@
-import type { useRouter } from "@tanstack/react-router";
+import { defaultParseSearch, defaultStringifySearch, type useRouter } from "@tanstack/react-router";
 
 type AnyRouter = ReturnType<typeof useRouter>;
 
@@ -31,4 +31,25 @@ type CommitOptions = {
   replace?: boolean;
   ignoreBlocker?: boolean;
   hash?: string;
+};
+
+/**
+ * The router's search codec: `?target` is codec text (`parseTarget`'s grammar), so the router never
+ * JSON-parses it on read nor quotes it on write. The default pair re-quoted it: the root's
+ * `routeSearch` hands a parsed target back as a string, and stringify quotes any string that parses
+ * as JSON, so router load and every `navigate({search})` wrote it twice-encoded (refused at reload).
+ */
+export const searchCodec = {
+  parseSearch: (text: string) => {
+    const target = new URLSearchParams(text).get("target");
+    return { ...defaultParseSearch(text), ...(target === null ? {} : { target }) };
+  },
+  stringifySearch: (search: Record<string, unknown>) => {
+    const parts = Object.entries(search).flatMap(([key, value]) =>
+      key === "target" && typeof value === "string"
+        ? [`target=${encodeURIComponent(value)}`]
+        : [defaultStringifySearch({ [key]: value }).slice(1)].filter(Boolean),
+    );
+    return parts.length ? `?${parts.join("&")}` : "";
+  },
 };

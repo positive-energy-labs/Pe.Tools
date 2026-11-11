@@ -1,7 +1,7 @@
 import { listOf } from "@pe/kit/lang/collection";
 // The thread's composer: fills the one `Composer` box with attachments, slash and `@` menus and
 // the pickers. Logic lives in the hooks and `useSend`.
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, GitFork, Paperclip, Square } from "lucide-react";
 import {
   capabilityCatalogSchema,
@@ -11,8 +11,7 @@ import {
 } from "@pe/agent-contracts";
 import { FirstOpenCard, ProviderRepair } from "#/chat/first-open";
 import { isReady } from "#/workbench/provider/providers";
-import { Pane } from "@pe/kit/lang/pane";
-import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
+import { KeyScope, ScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import { useTranscript, useWorkbench } from "#/workbench/provider";
 import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";
 import {
@@ -129,8 +128,10 @@ export function ThreadComposer({
   const sendCurrent = () => void (asking ? answerCurrent() : send.run());
   const SkillIcon = MENTION_KINDS.skill.icon;
 
-  const paneOwnsFocus = () =>
-    document.activeElement === form?.closest<HTMLElement>("[data-slot='pane']");
+  // The composer is a key scope inside the chat pane, not a pane: its keys bind while focus is in
+  // it, and the box itself takes focus when a press lands on inert content.
+  const scope = useRef<HTMLDivElement>(null);
+  const paneOwnsFocus = () => document.activeElement === scope.current;
   const shortcuts: ScopeKey[] = [
     {
       hotkey: "Enter",
@@ -170,7 +171,20 @@ export function ThreadComposer({
   ];
 
   return (
-    <Pane id="composer" scroll="visible" flush>
+    <KeyScope id="composer" element={scope}>
+      <div
+        ref={scope}
+        data-composer-scope=""
+        tabIndex={-1}
+        className="relative flex min-w-0 flex-col outline-none"
+        onPointerDownCapture={(event) => {
+          const focusable = (event.target as HTMLElement).closest(
+            "a,button,input,select,textarea,[contenteditable='true'],[tabindex]",
+          );
+          if (!focusable || focusable === event.currentTarget)
+            event.currentTarget.focus({ preventScroll: true });
+        }}
+      >
       <ScopeKeys keys={shortcuts} />
       <ComposerFrame>
         <Composer
@@ -378,6 +392,7 @@ export function ThreadComposer({
           }}
         />
       </ComposerFrame>
-    </Pane>
+      </div>
+    </KeyScope>
   );
 }

@@ -55,9 +55,11 @@ const RetainedPane = memo(function RetainedPane({
     <RouteActivity.Provider value={entry.scope}>
       <RouteVisibility.Provider value={visible}>
         <Activity mode={visible ? "visible" : "hidden"}>
+          {/* Slice 6.1: a hidden Place answers no accessible name, so a script's name finds the shown copy. */}
           <div
             className="size-full min-h-0 min-w-0 overflow-auto"
             data-route-tab={id ?? "enrolling"}
+            inert={!visible}
           >
             <PaneErrorBoundary>
               <Suspense fallback={<PaneLoading what="route" />}>

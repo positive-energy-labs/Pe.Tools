@@ -1,5 +1,4 @@
 import type { ChatPluginRoute } from "./chat-plugins";
-import type { PaneSide } from "@pe/kit/lang/pane";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 
@@ -9,7 +8,6 @@ import { type RouteKey, type LinkPage, type Carry } from "@pe/agent-contracts";
 
 export interface ChatSearch {
   readonly thread?: string;
-  readonly mode: string;
   readonly turn?: number;
   readonly prompt?: string;
   patch(partial: Partial<Omit<ChatSearch, "patch">>, replace?: boolean): Promise<void>;
@@ -37,7 +35,10 @@ export function createChatPageStore(deps: {
   } | null = null;
   let planGeneration = 0;
   const core = createRouteOwner("chat", deps.registry);
-  const threadFold = core.owned("widget/thread-fold", Atom.make<PaneSide | null>(null));
+  /** The tray's new-thread draft: with no thread addressed, the chat pane shows it, not Activity. */
+  const composing = core.owned("widget/composing", Atom.make(false));
+  /** Threads deleted here, so the chat pane's composer bank drops their drafts. */
+  const deletedThreads = core.owned("widget/deleted-threads", Atom.make<readonly string[]>([]));
   /** The head's commit verb, waiting for its hosted route to run it once (page state, not URL). */
   const planIntent = core.owned(
     "widget/plan-intent",
@@ -67,7 +68,8 @@ export function createChatPageStore(deps: {
     search: deps.search,
     local: deps.local ?? false,
     atoms: {
-      threadFold,
+      composing,
+      deletedThreads,
       planIntent,
       planRefusal,
       closedWork,
@@ -84,11 +86,9 @@ export function createChatPageStore(deps: {
       },
       /** A Send landed in `owner`: the current Place, if a tool is visible, is its display context. */
       sent: (owner: string) => tabs?.sent(owner),
-      setThreadFold: (side: PaneSide | null) => set("fold-threads", threadFold, side),
-      revealThreads: () =>
-        set("reveal-threads", threadFold, (side) => (side === "start" ? null : side)),
-      revealChat: () => set("reveal-chat", threadFold, (side) => (side === "end" ? null : side)),
-      setMode: (mode: string) => void deps.search.patch({ mode }),
+      compose: (draft: boolean) => set("compose", composing, draft),
+      forgetThread: (id: string) =>
+        set("delete-thread", deletedThreads, (ids) => (ids.includes(id) ? ids : [...ids, id])),
       connectTabs: (commands: NonNullable<typeof tabs>) => {
         tabs = commands;
         return () => {

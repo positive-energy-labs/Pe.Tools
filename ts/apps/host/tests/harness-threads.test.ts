@@ -1,6 +1,7 @@
 import { markReadings } from "../src/resource-adapters.ts";
 import { openRecordingWriter, openRecordingReader, nativeCatalogIdentity } from "../src/native-recording.ts";
 import { fansDocumentSchema } from "@pe/agent-contracts";
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { detachedBridge, sessionView, consentService, harnessThreads, testSpawner, settle, testHostInputs, captureStore, journalAt } from "./effect-test.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
@@ -222,6 +223,7 @@ test.each(["claude", "codex"] as const)(
       ),
     );
     const writes: unknown[] = [];
+    const equipmentSubject = elementSubject(snapshot.nodes.find((node: { id: number }) => node.id === 14577391)!);
     const invokeFixture = (op: string, input: unknown, _session?: string, _doc?: string | null, requestId?: string) =>
         Effect.promise(async () => {
           let value: unknown;
@@ -320,7 +322,7 @@ test.each(["claude", "codex"] as const)(
                 target: { document: address },
                 result: {
                   revision: 1,
-                  doc: { equipmentFlows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef": { edit: { value: { cfm: 975 } } } } },
+                  doc: { equipmentFlows: { [equipmentSubject]: { edit: { value: { cfm: 975 } } } } },
                 },
               });
               const census = await routes.workspace.instances();
@@ -358,7 +360,7 @@ test.each(["claude", "codex"] as const)(
                       press: null,
                       patches: [
                         {
-                          path: ["equipmentFlows", "14577391"],
+                          path: ["equipmentFlows", equipmentSubject],
                           value: { edit: { value: { cfm: 975, source: "chain" } } },
                         },
                         {
@@ -1684,6 +1686,25 @@ test("host shutdown settles a running turn and a queued prompt durably, even whe
   expect(terminals(queued)).toEqual([
     expect.objectContaining({ kind: "prompt_dropped", by: "expired" }),
   ]);
+}, 30_000);
+
+test("a harness that exits mid-turn writes one terminal: a short sentence, stderr folded as raw detail", async () => {
+  const h = await host();
+  const call = caller(h);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const turn = randomUUID();
+  await call("POST", `/pe/threads/${id}/prompt`, { id: turn, text: "die" });
+  await until(reader(h), id, (b) => !b.running && b.events.some((e) => e.kind === "error"));
+  await h.close(); // shutdown must not write a second terminal for the dead turn
+  const ends = (await readFile(join(root, id, "events.jsonl"), "utf8"))
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+    .filter((e) => e.turnId === turn && (e.kind === "turn_end" || e.kind === "error"));
+  expect(ends).toHaveLength(1);
+  expect(ends[0]).toMatchObject({ kind: "error", message: "The claude harness exited (code 3)." });
+  // The 2000-char tail starts mid-line; the raw detail starts at the first whole one.
+  expect(ends[0].failure.raw).toMatch(/^\[session\/create\] .*\n[\s\S]*durationMs=79$/);
 }, 30_000);
 
 test("Stop with a failing consent persist still cancels, then kills a child that ignores cancel, recording unknown", async () => {

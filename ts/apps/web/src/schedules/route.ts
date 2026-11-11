@@ -83,7 +83,8 @@ export const module = route({
       title: "Schedules",
       purpose: "Inspect and edit schedule cells",
       bindings,
-      draw: draw(() => import("./grid.tsx"), "SchedulesGrid"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./grid.tsx"), "SchedulesGrid"),
     },
   },
   edits: {
