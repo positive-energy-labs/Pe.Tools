@@ -140,8 +140,6 @@
     "ts/apps/web/src/route/index.ts#:export * from \"./url\";",
     "ts/apps/web/src/route/index.ts#:export { useRouteLease } from \"./view-bridge\";",
     "ts/apps/web/src/route/route-target.ts#:import { useOwned } from \"#/shell/owner\";",
-    "ts/apps/web/src/route/situation-grids.tsx#:import type { LogEntry } from \"#/shell/owner\";",
-    "ts/apps/web/src/route/situation-grids.tsx#:import { Label } from \"./situation-verbs\";",
     "ts/apps/web/src/route/situation-ladder.tsx#:import type { RouteHandle } from \"./handle\";",
     "ts/apps/web/src/route/situation-verbs.tsx#:import type { ActionHandle, RouteHandle } from \"./handle\";",
     "ts/apps/web/src/route/url.ts#:import type { ViewOwner } from \"./view-owner\";",
