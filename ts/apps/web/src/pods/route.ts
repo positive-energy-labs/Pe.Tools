@@ -50,6 +50,17 @@ const objectOf = (text: string | undefined): Record<string, unknown> | null => {
   }
 };
 const keyOf = (row: string) => row.slice(1).replaceAll("~1", "/").replaceAll("~0", "~");
+/**
+ * Save writes every staged edit (`settingsCandidate`), and a cell shows only a value staged at its
+ * own top-level key. The rest, staged by /family or Pea, are named: an edit beneath a key, the root
+ * edit (raw text for the whole file) and a delete. `under` keeps the ones beneath one row.
+ */
+const hidden = (read: Value, under?: string) =>
+  Object.entries(read.work?.fields ?? {})
+    .filter(([at, cell]) => cell.edit && (under === undefined
+      ? at === "" || at.indexOf("/", 1) > 0 || cell.edit.delete
+      : at.startsWith(`${under}/`)))
+    .map(([at, cell]) => at === "" ? "the whole file as raw text" : cell.edit!.delete ? `delete ${at}` : at);
 /** The member's own scope only: a read for another member is never drawn as this one's. */
 const current = (read: Value) => read.scope.pod && read.member ? read : null;
 
@@ -108,7 +119,9 @@ export const module = route({
         rowLabel: (_read: Value, row: string) => keyOf(row),
         model: (read: Value, row: string | undefined) => {
           const saved = objectOf(read.member?.content);
+          const beneath = row === undefined ? [] : hidden(read, row);
           return {
+            ...(beneath.length ? { note: `Save also writes beneath this key: ${beneath.join(", ")}` } : {}),
             value: row === undefined || !saved ? null : (saved[keyOf(row)] ?? null),
             ref: "saved file",
             ...(read.work?.basis ? {} : { refusal: "Open saved bytes before editing: this Work has no saved basis" }),
@@ -122,6 +135,10 @@ export const module = route({
       if (!ref.path.endsWith(".json")) return `${ref.path} is source, not a JSON spec; pick a .json member`;
       if (!read?.member) return `Reading ${ref.pod} · ${ref.path}`;
       return objectOf(read.draft) ? null : "The draft is not a JSON object; Pea can repair it as raw text";
+    },
+    note: (read: Value) => {
+      const edits = current(read) ? hidden(read) : [];
+      return edits.length ? `Save also writes staged edits these cells do not show: ${edits.join(", ")}` : null;
     },
     from: (read: Value, search) =>
       read.member && isSpecOf(read.schemaRef, "/schemas/settings/FamilyFoundry/models.json")

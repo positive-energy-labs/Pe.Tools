@@ -1,4 +1,4 @@
-import { commands, refusalText } from "@pe/agent-contracts";
+import { commands, hostAuthoredRefusal, refusalText } from "@pe/agent-contracts";
 
 import { command, io, refused, StepFailure } from "./command-executor.ts";
 import { Effect } from "effect";
@@ -8,6 +8,9 @@ import { productRouteWorkPath } from "./product-paths.ts";
 export const workStartExecutor=(workspace:RouteWorkspace|undefined)=>command(commands["work.start"],commands["work.start"].input,{
   async bind({admission:{input},work}) {
     if(!workspace) throw refused("Work storage is unavailable");
+    // A seed is a caller-authored doc: a host-authored Work (findings) starts only through its own command.
+    const hostAuthored=hostAuthoredRefusal(workspace.spec(input.key.route));
+    if(hostAuthored) throw refused(hostAuthored);
     workspace.validateSeed(input.key,input.seed);
     if(await work.read(input.key,input.key.route)) throw refused("Work already exists");
     return {effects:[{kind:"directory",path:productRouteWorkPath()}],prepare:async()=>input};
