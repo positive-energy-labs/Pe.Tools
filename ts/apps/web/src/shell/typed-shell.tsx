@@ -179,7 +179,7 @@ const still = () => () => {};
 const paneBusy = (mount: TypedMount, pane: TypedMount["spec"]["panes"][string]) =>
   [pane.read ?? mount.spec.core, pane.subjectList ? mount.spec.subject?.read : undefined].some(read => !!read && mount.value(read).status === "pending");
 function layout(node: TypedRoute["spec"]["layout"]): LayoutNode {
-  return node.kind==="split"?{...node,sized:node.sized??"end",minSize:node.minSize??80,minOtherSize:node.minOtherSize??80,children:node.children.map(layout)}:node.kind==="gate"?{...node,child:layout(node.child)}:node;
+  return node.kind==="split"?{...node,sized:node.sized??"end",children:node.children.map(layout)}:node.kind==="gate"?{...node,child:layout(node.child)}:node;
 }
 export function TypedShell(props: Parameters<typeof TypedRouteView>[0]) {
   return <PaneActionSlots><TypedRouteView {...props} /></PaneActionSlots>;
