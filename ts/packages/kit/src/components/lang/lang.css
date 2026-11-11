@@ -1091,7 +1091,8 @@ tr.dl-row[data-active] {
   background: var(--subject-mark-ground);
   color: var(--subject-mark-ink);
   font-family: var(--font-mono);
-  font-size: 9px;
+  /* The smallest rung (house law 6): 9px made the mark that ties prose to picture unreadable (I1). */
+  font-size: var(--type-small-size);
   font-size-adjust: none;
   font-weight: var(--weight-strong);
   font-variant-numeric: tabular-nums;
