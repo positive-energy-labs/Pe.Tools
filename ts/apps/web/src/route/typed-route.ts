@@ -71,6 +71,7 @@ export const namesOf = (value: Many<SubjectRefCode>): string[] | "all" =>
       });
 export { subjectSchema };
 export type Fields = Readonly<Record<string, Field>>;
+/** Route-owned Page fields no slot holds (ADR 0035 rule 1). */
 export type QueryFields = Readonly<Record<string, Field & { role: "query" }>>;
 type FieldValues<F extends Fields> = {
   readonly [K in keyof F]: Immutable<z.output<F[K]["schema"]>>;
@@ -171,14 +172,14 @@ export type Specification<
   /** `./host.ts`, the route directory's reads; only the generated host registry imports it. */
   host?: string;
   subject?: {
-    field: RoleFields<F,"subject"> & string;
+    field: RoleFields<F & NoInfer<Q>,"subject"> & string;
     noun: string;
     multiple?: boolean;
     pane: string;
     read?: SubjectRead;
     options(data: Immutable<ReadData<SubjectRead>>): readonly { id: SubjectRefCode; label: string }[];
   };
-  core?: HostRead & { output: z.ZodType<Publication<D>>; args(page: Page<NoInfer<F & Q>>): unknown };
+  core?: HostRead & { output: z.ZodType<Publication<D>>; args(page: Page<F & NoInfer<Q>>): unknown };
   /*
    * ADR 0035 rule 1: the five slots are `subject` (above), `sheet`, `picture`, `goal` and `layout`
    * (below), plus `query` and `title(ctx)`. Types are inferred from the declaration, never
@@ -189,16 +190,16 @@ export type Specification<
   /** Slice 7: bindings by cell name, three closed kinds; the kernel draws a StateCell per binding per row. */
   sheet?: SheetSlot;
   /** Slice 8: a scope (SubjectRef set, box, or prism with a frame) and marks from the closed set. */
-  picture?: PictureSlot<DrawContext<NoInfer<D>, NoInfer<F & Q>, z.output<W>, z.output<Edit>>>;
+  picture?: PictureSlot<DrawContext<NoInfer<D>, NoInfer<F & NoInfer<Q>>, z.output<W>, z.output<Edit>>>;
   /** Slice 7: one host Read whose data is the Goal; the kernel draws its unresolved list first. */
-  goal?: HostRead & { output: z.ZodType<Publication<Goal>>; args(page: Page<NoInfer<F & Q>>): unknown };
-  /** Route-owned Page fields no slot holds (ADR 0035 rule 1); `route()` folds them into `spec.fields`, so every reader sees one Page. */
+  goal?: HostRead & { output: z.ZodType<Publication<Goal>>; args(page: Page<NoInfer<F & NoInfer<Q>>>): unknown };
+  /** Route-owned Page fields no slot holds; folded into `fields` for projection until slice 10 retires `fields`. */
   query?: Q;
-  /** The pane head's title; chrome derives from filled slots (ADR 0035 rule 5). */
-  title?(ctx: DrawContext<NoInfer<D>, NoInfer<F & Q>, z.output<W>, z.output<Edit>>): string;
-  /** The Page fields no slot or `query` holds yet (subject, pose, stage); a route with none omits it. */
-  fields?: F;
-  reads?: Readonly<Record<string, HostRead & { args(page: Page<NoInfer<F & Q>>): unknown }>>;
+  /** The pane head's title (ADR 0035 rule 5): the kernel draws it in the head of the first pane, in layout
+   * order, that is not the subject list. Null draws nothing. */
+  title?(ctx: DrawContext<NoInfer<D>, NoInfer<F & NoInfer<Q>>, z.output<W>, z.output<Edit>>): string | null;
+  fields: F;
+  reads?: Readonly<Record<string, HostRead & { args(page: Page<F & NoInfer<Q>>): unknown }>>;
   panes: {
     readonly [K in keyof Reads]: {
       title: string;
@@ -207,13 +208,13 @@ export type Specification<
       /** A pane the shell draws from a filled slot (`typed-shell.tsx`); the route names and places it, and its `draw` is unused. */
       kernel?: "sheet" | "goal";
       read?: Reads[K];
-      bindings?(ctx: DrawContext<ReadData<Reads[K]>, NoInfer<F & Q>, z.output<W>, z.output<Edit>>): PaneBindings;
-    } & PaneBody<DrawContext<ReadData<Reads[K]>, NoInfer<F & Q>, z.output<W>, z.output<Edit>>>;
+      bindings?(ctx: DrawContext<ReadData<Reads[K]>, F & NoInfer<Q>, z.output<W>, z.output<Edit>>): PaneBindings;
+    } & PaneBody<DrawContext<ReadData<Reads[K]>, F & NoInfer<Q>, z.output<W>, z.output<Edit>>>;
   };
   edits?: {
     work: W | RouteStateSpec<W>;
-    key?(page: Page<NoInfer<F & Q>>): string | null;
-    seed?(page: Page<NoInfer<F & Q>>, target: import("@pe/agent-contracts").ExecutionTarget | null): z.output<W>;
+    key?(page: Page<F & NoInfer<Q>>): string | null;
+    seed?(page: Page<F & NoInfer<Q>>, target: import("@pe/agent-contracts").ExecutionTarget | null): z.output<W>;
     value?: keyof D & string;
     owners: Owners;
     input: Edit;
@@ -230,26 +231,22 @@ export type Specification<
         contract: EntryContract;
         planContract: EntryContract;
         label: string;
-        input?(context:{page:Page<NoInfer<F & Q>>;target:import("@pe/agent-contracts").ExecutionTarget|null;
+        input?(context:{page:Page<F & NoInfer<Q>>;target:import("@pe/agent-contracts").ExecutionTarget|null;
           work:import("@pe/agent-contracts").WorkHandle|null;value:Immutable<D>|undefined},supplied?:any):unknown;
         present(result: unknown, data: Immutable<D>, work: Immutable<z.output<W>>): unknown;
       } | { kind: "session" | "catalog" | "query" | "rpc"; entry: string; contract: EntryContract; label: string;
         /** A pane draws this verb on its rows, with the row's subject; the band does not. */
         row?: true;
         invoke?: import("@pe/agent-contracts").ReadEntry["run"];
-        input?(context: { page: Page<NoInfer<F & Q>>; target: import("@pe/agent-contracts").ExecutionTarget | null;
+        input?(context: { page: Page<F & NoInfer<Q>>; target: import("@pe/agent-contracts").ExecutionTarget | null;
           work: import("@pe/agent-contracts").WorkHandle | null; value: Immutable<D> | undefined },supplied?:any): unknown }
     >
   >;
   layout: LayoutJson;
 };
 /** The shell executes this typed module. Data is a one-way discovery/host admission projection. */
-export function route<D, const F extends Fields = {}, W extends z.ZodObject = z.ZodObject, Edit extends z.ZodType = z.ZodType,
-  const Reads extends Readonly<Record<string, HostRead>> = Readonly<Record<string, HostRead>>, SubjectRead extends HostRead = HostRead,
-  const Q extends QueryFields = {}>(input: Specification<D, F, W, Edit, Reads, SubjectRead, Q>) {
-  // One Page: `query` folds into `fields`, so the mount, the address codec and discovery read one record.
-  const { query, ...rest } = input;
-  const spec = { ...rest, fields: { ...query, ...input.fields } as F & Q };
+export function route<D, const F extends Fields, W extends z.ZodObject, Edit extends z.ZodType,
+  const Reads extends Readonly<Record<string, HostRead>>, SubjectRead extends HostRead, const Q extends QueryFields = {}>(spec: Specification<D, F, W, Edit, Reads, SubjectRead, Q>) {
   const edits = spec.edits;
   const declared = edits?.work;
   const work = !declared ? undefined : "schema" in declared ? declared : { route: spec.key, title: spec.name,
@@ -271,8 +268,9 @@ export function route<D, const F extends Fields = {}, W extends z.ZodObject = z.
     ...(spec.sheet && !Object.values(spec.panes).some((p) => p.kernel === "sheet") ? { sheet: { title: "Sheet", purpose: "Edit the bound cells", kernel: "sheet", body: "scroll", draw: () => scrollBody(null) } } : {}),
     ...(spec.goal && !("goal" in spec.panes) ? { goal: { title: "Unresolved", purpose: "What is left before the answer", read: spec.goal,
       kernel: "goal", body: "scroll", draw: () => scrollBody(null) } } : {}),
-  } as unknown as Specification<D, F & Q, W, Edit, Reads, SubjectRead>["panes"];
-  const normalized = { ...spec, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb } as NonNullable<typeof spec.commands>,
+  } as unknown as Specification<D, F, W, Edit, Reads, SubjectRead, Q>["panes"];
+  // `query` fields mount as Page fields: the shell reads one field table (rule 1: `query` holds what no slot does).
+  const normalized = { ...spec, fields: { ...spec.query, ...spec.fields } as F & Q, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb } as NonNullable<typeof spec.commands>,
     panes: { ...spec.panes, ...kernelPanes }, edits: work && edits ? {...edits,work,owners} : undefined };
   const schemas: Record<string,z.ZodType> = { none:z.strictObject({}) };
   if (work && edits) {
@@ -281,7 +279,7 @@ export function route<D, const F extends Fields = {}, W extends z.ZodObject = z.
   }
   const fields: Record<string,RouteGraphJson["fields"][string]> = {};
   const fieldSchemas: Record<string,string> = {};
-  for (const [key,field] of Object.entries(spec.fields as Fields)) {
+  for (const [key,field] of Object.entries({ ...spec.query, ...spec.fields } as Fields)) {
     let schema=key;
     while(Object.hasOwn(schemas,schema)) schema=`page:${schema}`;
     fieldSchemas[key]=schema;
@@ -308,7 +306,7 @@ export function route<D, const F extends Fields = {}, W extends z.ZodObject = z.
     deps:{page:spec.subject?[spec.subject.field]:[],work:work?Object.keys(work.schema.shape):[],readings:spec.core?[readIds.get(spec.core)!]:[]},
     captures:spec.core?[readIds.get(spec.core)!]:[],intent:id,
   }]));
-  const stage=String(Object.values(spec.fields as Fields).find(f=>f.role === "stage")?.initial ?? "main");
+  const stage=String(Object.values(spec.fields).find(f=>f.role === "stage")?.initial ?? "main");
   const data:RouteGraphJson={version:1,key:spec.key,address:spec.address ?? `/${spec.key}`,name:spec.name,directory:spec.directory,
     capabilities:[...(work?["work" as const]:[]),...(Object.keys(verbs).length?["native-write" as const]:[]),
       ...(["document","project","family"].includes(normalized.needs)?["geometry" as const]:[])],fields,
@@ -327,7 +325,7 @@ export function route<D, const F extends Fields = {}, W extends z.ZodObject = z.
     ...Object.values(normalized.commands).flatMap(c=>[[c.entry,c.contract],...("plan" in c?[[c.plan,c.planContract]]:[])])]);
   return {spec:normalized,data,host,entries};
 }
-export type TypedRoute = ReturnType<typeof route<any, Fields, z.ZodObject, z.ZodType, Record<string, HostRead>, HostRead, {}>>;
+export type TypedRoute = ReturnType<typeof route<any, Fields, z.ZodObject, z.ZodType, Record<string, HostRead>, HostRead>>;
 
 /** Data discovery has no executable predicate slots; the native shell owns subject gates. */
 function discoveryLayout(node: LayoutJson): LayoutJson {

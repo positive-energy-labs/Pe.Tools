@@ -407,7 +407,7 @@ public class CmdScheduleManager : IExternalCommand {
             "Schedule Manager");
     }
 
-    /// <summary>The same `/pods?pod=&amp;path=` deep link both Family Foundry palettes carry (w4-revit claim 15).</summary>
+    /// <summary>The same `/pods?member=` deep link both Family Foundry palettes carry (w4-revit claim 15).</summary>
     private static PaletteAction<ISchedulePaletteItem> OpenInPods() => new() {
         Name = "Open in Pods",
         Execute = item => {

@@ -159,7 +159,8 @@ export function TurnPeek({
       EDGE + ghost("above"),
       Math.min(lane.clientHeight - h - EDGE - ghost("below"), top),
     );
-    card.style.top = `${placed}px`;
+    // A transform, not `top`: the glide moves no layout (L3) and composites off the main thread.
+    card.style.transform = `translateY(${placed}px)`;
     box.current = { top: placed, bottom: placed + h };
     const turn = turns[peek.index];
     const band = turn && dial.querySelector<HTMLElement>(`[data-key="${CSS.escape(turn.first)}"]`);
@@ -167,7 +168,7 @@ export function TurnPeek({
     band.dataset.peeked = "";
     const origin = lane.getBoundingClientRect();
     const b = band.getBoundingClientRect();
-    const x0 = card.getBoundingClientRect().right - origin.left; // x never animates; only top does
+    const x0 = card.getBoundingClientRect().right - origin.left; // x never animates; only the y translate does
     const x1 = b.left - origin.left;
     funnel.setAttribute(
       "points",

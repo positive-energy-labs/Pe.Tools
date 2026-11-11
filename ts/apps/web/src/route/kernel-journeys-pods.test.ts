@@ -601,7 +601,7 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
         expect.soft(kept.diagnostics.find(d => d.code === "ShippedExampleUpdateKept"), "H16: retained stale example has a named refusal").toMatchObject({ message: expect.stringContaining("authored members differ") });
         view.unmount(); cleanup();
         view = render(createElement(Members, { ctx: {
-          page: { read: () => ({ pod: manifest.id }), query() {} },
+          page: { read: () => ({ member: { kind: "ids", ids: [] }, runs: "member" }), query() {} },
           value: { current: true, value: { pods: [kept] } },
         } as unknown as Parameters<typeof Members>[0]["ctx"] }));
         const refusal = screen.getAllByRole("alert").map(node => node.textContent).join(" ");

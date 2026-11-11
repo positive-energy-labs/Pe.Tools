@@ -121,6 +121,17 @@ def prune(dry):
     return stop([p["pid"] for p in sorted(victims, key=lambda p: -p["gib"])])
 
 
+def safe_admit(kind, as_json):
+    # A failed reading is a HOLD, never a crash: a caller that misses the exit code must not start unadmitted.
+    # The process dump can be cut short when a process exits mid-enumeration (JSONDecodeError seen 2026-11-10).
+    try:
+        return admit(kind, as_json)
+    except Exception as e:
+        msg = f"HOLD {kind}: reading failed ({type(e).__name__}: {e}); retry admit in a minute"
+        print(json.dumps({"verdict": "HOLD", "kind": kind, "error": msg}) if as_json else msg)
+        return 3
+
+
 def admit(kind, as_json, pruned=False):
     if kind not in FLOORS_GIB:
         print(f"unknown kind {kind}; kinds: {', '.join(FLOORS_GIB)}")
@@ -227,7 +238,7 @@ def main():
     args = [a for a in argv if not a.startswith("--")]
     verb = args[0] if args else "admit"
     if verb == "admit":
-        return admit(args[1] if len(args) > 1 else "suite", as_json)
+        return safe_admit(args[1] if len(args) > 1 else "suite", as_json)
     if verb == "who":
         return who(show_all, as_json)
     if verb == "stop":
@@ -248,7 +259,7 @@ def main():
         print("ok")
         return 0
     if verb in FLOORS_GIB:
-        return admit(verb, as_json)
+        return safe_admit(verb, as_json)
     print(__doc__)
     return 2
 

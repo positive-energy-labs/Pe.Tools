@@ -170,41 +170,75 @@ assert retro.lost_writers(ms, {"b"}) == ["A"]
 
 # work cycles. split_cycle: every moment of [a, b] gets one label; idle = no run in flight, a foreground call names its family (browser outranks poll), the rest of a run is model time
 sc = retro.split_cycle(D(0, 0), D(1, 0), [(D(0, 0), D(0, 30)), (D(0, 40), D(1, 0))], [(D(0, 10), D(0, 20), "poll"), (D(0, 15), D(0, 25), "browser"), (D(0, 20), D(0, 50), "test")])
-assert {k: v / 60 for k, v in sc.items()} == {"model": 20.0, "poll": 5.0, "browser": 10.0, "test": 15.0, "idle": 10.0} and sum(sc.values()) == 3600, dict(sc)
+assert {k: v / 60 for k, v in sc.items()} == {"run_remainder": 20.0, "poll": 5.0, "browser": 10.0, "test": 15.0, "idle": 10.0} and sum(sc.values()) == 3600, dict(sc)
 # wake_runs: a message from another thread starts a run; a keepalive, an owner message and a command notification do not
 db2 = sqlite3.connect(":memory:")
 db2.execute("create table orchestration_v2_projection_runs (thread_id, requested_at, completed_at)")
 db2.execute("create table orchestration_v2_projection_messages (thread_id, role, created_at, payload_json)")
 for h, p in [(0, dict(senderThreadId="x", text="hello")), (2, dict(text="keepalive: nothing", senderThreadId="x")), (4, dict(createdBy="user", creationSource="web")), (6, dict(senderThreadId="y", text="again"))]:
     db2.execute("insert into orchestration_v2_projection_runs values ('d', ?, ?)", (I(h), I(h + 1))); db2.execute("insert into orchestration_v2_projection_messages values ('d', 'user', ?, ?)", (I(h), json.dumps(p)))
-assert retro.wake_runs(db2, "d", {}) == [(I(0), "x"), (I(6), "y")]
+assert retro.wake_runs(db2, "d", {}) == [(I(0), "x", None), (I(6), "y", None)]
 # a cycle runs from the wake from X to its next send to X. Runs 0-1h and 2-3h; a foreground browser call at 0:10-0:20, a poll at 2:00-2:30; send to X at 2:40
 names = {"x": "Impl", "y": "Owner"}; runs = [(I(0), I(1)), (I(2), I(3))]
 ivs = [[I(0, 10), I(0, 20), "browser", False], [I(2, 0), I(2, 30), "poll", False], [I(0, 5), I(2, 50), "test", True]]  # the background test is not a foreground call, so it names nothing
 cy, un, fam = retro.work_cycles(runs, [(I(0), "x"), (I(0, 30), "x"), (I(2, 50), "y")], [(I(2, 40), "x"), (I(2, 41), "z")], ivs, names)
-assert un == 1 and len(cy) == 1 and fam == {"model": 60.0, "idle": 60.0, "browser": 10.0, "poll": 30.0}, (cy, un, fam)  # the second wake from x shares the send; the wake from y was never answered
-c = cy[0]; assert (c["start"], c["minutes"], c["for_tid"], c["for_title"], c["ack"], c["first_browser_min"]) == (I(0), 160.0, "x", "Impl", False, 10.0), c
-assert c["families"] == {"model": 60.0, "idle": 60.0, "browser": 10.0, "poll": 30.0}, c["families"]
+assert un == 1 and len(cy) == 1 and fam == {"run_remainder": 60.0, "idle": 60.0, "browser": 10.0, "poll": 30.0}, (cy, un, fam)  # the second wake from x shares the send; the wake from y was never answered
+c = cy[0]; assert (c["start"], c["minutes"], c["for_tid"], c["for_title"], c["completion"], c["first_browser_min"]) == (I(0), 160.0, "x", "Impl", "unknown", 10.0), c
+assert c["families"] == {"run_remainder": 60.0, "idle": 60.0, "browser": 10.0, "poll": 30.0}, c["families"]
 assert sum(c["families"].values()) == 160.0
 # cycles for two senders overlap: each keeps its own split, the thread-level split counts the overlap once
 ov, _, fam2 = retro.work_cycles([(I(0), I(1))], [(I(0), "x"), (I(0, 20), "y")], [(I(0, 40), "x"), (I(1), "y")], [], names)
-assert [c["minutes"] for c in ov] == [40.0, 40.0] and fam2 == {"model": 60.0}, (ov, fam2)
-# a wake answered with no other tool call is an acknowledgement
+assert [c["minutes"] for c in ov] == [40.0, 40.0] and fam2 == {"run_remainder": 60.0}, (ov, fam2)
+# No tool activity can establish that a free-text reply completes work.
 ack, _, _ = retro.work_cycles([(I(5), I(6))], [(I(5), "x")], [(I(5, 2), "x")], [[I(5, 2), I(5, 3), "other", False]], names)
-assert [(a["ack"], a["minutes"], a["first_browser_min"]) for a in ack] == [(True, 2.0, None)]
-# summary: acks counted apart; median and longest over the real cycles; shares over all cycle minutes; setup = median first browser call
-cs = [dict(minutes=10.0, ack=False, families={"model": 6.0, "browser": 4.0}, first_browser_min=2.0), dict(minutes=30.0, ack=False, families={"idle": 30.0}, first_browser_min=None), dict(minutes=50.0, ack=False, families={"poll": 50.0}, first_browser_min=6.0), dict(minutes=1.0, ack=True, families={"model": 1.0}, first_browser_min=None)]
-sm = retro.cycle_summary(cs, 2, {"model": 7.0, "browser": 4.0, "idle": 30.0, "poll": 50.0}, 2.0)  # 61 running minutes inside the cycles of 2.0 running hours
-assert (sm["n"], sm["acks"], sm["unanswered"], sm["median_min"], sm["longest_min"], sm["setup_min"]) == (3, 1, 2, 30.0, 50.0, 4.0) and sm["hours"]["poll"] == round(50 / 60, 2) and sm["shares"]["idle"] == round(30 / 91, 3) and sm["covered_h"] == round(91 / 60, 2) and sm["outside_run_h"] == round(2.0 - 61 / 60, 2), sm
-assert retro.cycle_head(dict(label="Driver", **sm)) == "Driver: 3 cycles (+1 acknowledgements), median 30 min, of which setup 4 min; 8% model, 88% waiting, 4% browser", retro.cycle_head(dict(label="Driver", **sm))
-assert retro.cycle_head(dict(label="X", **retro.cycle_summary([], 0, {}, 0))) is None and "Driver: 3 cycles" in retro.measures_line(None, dict(retro.rollup([dict(admits=[], turn_ends=[])]), cycles=[dict(label="Driver", **sm)]))
+assert [(a["completion"], a["minutes"], a["first_browser_min"]) for a in ack] == [("unknown", 2.0, None)]
+# Regression: git before an ack, then a 43-minute browser run and verdict, is
+# a one-minute REPLY only. The free-text verdict establishes no completion.
+reply, _, _ = retro.work_cycles([(I(0), I(1))], [(I(0), "x")], [(I(0, 1), "x"), (I(0, 50), "x")],
+                               [[I(0), I(0, 1), "git", False], [I(0, 2), I(0, 45), "browser", False]], names)
+assert reply[0]["reply_min"] == 1.0 and reply[0]["work_minutes"] is None and reply[0]["completion"] == "unknown", reply
+assert reply[0]["measurement"] == "message_reply_latency" and reply[0]["first_browser_min"] is None
+# Opt-in milestones correlate exact work id, candidate SHA and recipient.
+sha = "a" * 40
+E = lambda phase, work="w", sha=sha: retro.work_event(dict(type="work_event", phase=phase, work_id=work, sha=sha))
+assert retro.work_event('GREEN: done') is None and retro.work_event(dict(type="work_event", work_id="w", sha="abc", phase="accepted")) is None
+assert retro.work_event(json.dumps(dict(type="work_event", work_id="w", sha=sha, phase="accepted"))) == E("accepted")
+sends = [(I(0, 1), "x", None), (I(0, 2), "x", E("runnable")), (I(0, 3), "x", E("accepted", "other")),
+         (I(0, 4), "x", E("accepted", sha="b" * 40)), (I(0, 5), "y", E("accepted")),
+         (I(0, 45), "x", E("useful_feedback")), (I(0, 50), "x", E("accepted"))]
+complete, _, _ = retro.work_cycles([(I(0), I(1))], [(I(0), "x", E("requested"))], sends, [], names)
+c = complete[0]
+assert (c["reply_min"], c["work_minutes"], c["minutes"], c["completion"], c["runnable_to_feedback_min"], c["feedback_to_accepted_min"]) == (1.0, 50.0, 50.0, "reported_accepted", 43.0, 5.0), c
+assert (c["runnable_at"], c["useful_feedback_at"], c["accepted_at"]) == (I(0, 2), I(0, 45), I(0, 50))
+pending, _, _ = retro.work_cycles([(I(0), I(1))], [(I(0), "x", E("requested"))], sends[:5], [], names)
+assert pending[0]["completion"] == "unknown" and pending[0]["work_minutes"] is None and pending[0]["minutes"] == 60.0, pending
+# Missing or reversed milestones have unknown stage durations, not negative time.
+bad, _, _ = retro.work_cycles([(I(0), I(1))], [(I(0), "x", E("requested"))], [(I(0, 1), "x", E("useful_feedback")), (I(0, 2), "x", E("runnable"))], [], names)
+assert bad[0]["runnable_to_feedback_min"] is None and bad[0]["feedback_to_accepted_min"] is None
+sm = retro.cycle_summary(reply + complete, 2, {"run_remainder": 7.0, "browser": 4.0, "idle": 30.0, "poll": 50.0}, 2.0)
+assert (sm["n"], sm["reported_accepted"], sm["completion_unknown"], sm["unanswered"], sm["median_reply_min"], sm["median_reported_work_min"]) == (2, 1, 1, 2, 1.0, 50.0), sm
+assert sm["hours"]["poll"] == round(50 / 60, 2) and sm["shares"]["idle"] == round(30 / 91, 3) and sm["covered_h"] == round(91 / 60, 2) and sm["outside_run_h"] == round(2.0 - 61 / 60, 2), sm
+assert retro.cycle_head(dict(label="Driver", **sm)) == "Driver: 2 message intervals, median first reply 1.0 min; 1 reported accepted, 1 completion unknown"
+assert retro.cycle_head(dict(label="X", **retro.cycle_summary([], 0, {}, 0))) is None and "Driver: 2 message intervals" in retro.measures_line(None, dict(retro.rollup([dict(admits=[], turn_ends=[])]), cycles=[dict(label="Driver", **sm)]))
 # the outbound message of a Claude session is read from its t3_thread_send tool call, with its target
 with tempfile.TemporaryDirectory() as d:
     path = os.path.join(d, "s.jsonl")
     open(path, "w").write(json.dumps(dict(type="assistant", timestamp=I(1), requestId="r", message=dict(model="m", usage={}, content=[{"type": "tool_use", "id": "s1", "name": "mcp__t3-code__t3_thread_send", "input": {"threadId": "x", "message": "m"}}]))))
     m = retro.new_metrics("t", "t", None); retro.claude(path, m)
-assert m["sends"] == [(I(1), "x")] and retro.codex_args('{"threadId": "x"}') == {"threadId": "x"} and retro.codex_args("not json") == {}
+assert m["sends"] == [(I(1), "x", None)] and retro.codex_args('{"threadId": "x"}') == {"threadId": "x"} and retro.codex_args("not json") == {}
 # a --cycles thread outside the tree gets its own PARTNERS lane after the roots and before the slices
 sp = retro.lane_specs(db, [dict(tid="root", title="Root", selected="m")], [dict(tid="p1", title="Driver", selected="m")])
 assert [(l["tid"], l["group"], l["root"]) for l in sp][:3] == [("root", "ROOTS", True), ("p1", "PARTNERS", True), ("k3", "SLICE 2", False)]
+# Renderer contract with synthetic events only: completion unknown stays dashed,
+# explicit milestones and commit-density caveats survive into the HTML.
+with tempfile.TemporaryDirectory() as d:
+    metric = dict(tid="x", title="Driver", cycles=reply + complete, waits={})
+    lane = dict(tid="x", title="Driver", model="m", root=True, group="ROOTS", slice=None, runs=[], gaps=[], msgs=[])
+    json.dump(dict(window=[I(0), I(1)], lanes=[lane], threads=[metric], partners=[], landmark=None,
+                   rollup=retro.rollup([dict(admits=[], turn_ends=[])]), commands={}), open(os.path.join(d, "retro.json"), "w"))
+    swimlanes.render(d)
+    page = open(os.path.join(d, "swimlanes.html"), encoding="utf-8").read()
+    assert 'class="cyc cyk"' in page and 'completion unknown' in page and 'completion reported_accepted' in page
+    assert 'first reply send attempt 1.0 min' in page and 'runnable to useful feedback 43.0 min' in page
+    assert 'not percent complete' in page and 'not measured inference' in page and 'acknowledgement' not in page
 print("ok")

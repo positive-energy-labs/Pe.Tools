@@ -113,3 +113,29 @@ test("a cell named from elsewhere takes focus; one the query hides is said, not 
   rerender(draw("one", { query: "Beta" }));
   expect(hidden).toHaveBeenCalledWith("its row is hidden by the query");
 });
+
+test("a virtual grid's spacer spans the drawn columns, so a fixed layout keeps every column", () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  const rows = Array.from({ length: 100 }, (_, i) => ({ id: `r${i}`, note: "n" }));
+  const { container } = render(
+    <Table
+      rows={rows}
+      rowKey={(row) => row.id}
+      label="Long table"
+      columns={[
+        { key: "id", label: "ID", cell: (row) => row.id },
+        { key: "note", label: "Note", cell: (row) => row.note },
+      ]}
+    />,
+  );
+  const spacers = [...container.querySelectorAll<HTMLTableCellElement>("[data-master-spacer] td")];
+  expect(spacers.length).toBeGreaterThan(0);
+  expect(spacers.map((td) => td.colSpan)).toEqual(spacers.map(() => 2));
+});

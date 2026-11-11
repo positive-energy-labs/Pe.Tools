@@ -7,9 +7,9 @@ and lays it out. A missing retro.json, or one written without --tree, exits non-
 Lanes (retro.json `lanes`): roots first, then descendants with runs grouped by the slice in the title (numbered, lettered after their number), else OTHER.
 Layers (each a checkbox on the page): gap rails (the wait before a run, colored by the cause of the next run's trigger), arrows (a cross-thread message from its sender's lane to
 the receiver's; an owner message is a diamond), activity (inside a run bar the tool time by command family, background commands as a strip at their real duration; the bar's own color is
-model time), cache (a tick per cold API call; keepalive bars are green on a cache HIT, red on a MISS), model marks (each change of the assistant model, each compaction), child lanes,
-a "writers" strip under the time axis (slices with a commit and child threads with a run in flight, per 30 minutes), HOLD/REFUSE marks on the lane that got them plus a free-GiB dot strip, a mark where a turn ended with a background command still running, and a bracket with its minutes above the lane of a --cycles thread for each work cycle (a dashed bracket is an acknowledgement).
-With a landmark: merges and gate lines, per slice the 80%-of-churn to gate tail with a mini churn curve under the slice header, the unstarted stretch before its first commit (muted bar) and the tail split into active and quiet time (strip under the curve).
+unclassified run remainder), cache (a tick per cold API call; keepalive bars are green on a cache HIT, red on a MISS), model marks (each change of the assistant model, each compaction), child lanes,
+a "writers" strip under the time axis (slices with a commit and child threads with a run in flight, per 30 minutes), HOLD/REFUSE marks plus free-GiB readings, turns ending during a background command, and message-interval brackets (dashed means completion unknown).
+With a landmark: gate-labelled commits, the observed-churn tail (not percent complete), time before the first attributed commit, and commit-proximity proxies (not measured work or idle).
 Hover text carries times and at most the first 140 chars of a message.
 """
 import argparse, datetime as dt, html, json, math, os, re, sys
@@ -20,11 +20,11 @@ from retro import ts
 
 W, LH, LX, MH = 1200, 24, 330, 40
 GCLS = {"owner": "owner", "own command": "cmd", "child completion": "child", "keepalive": "kal", "system": "unk", "unknown": "unk"}  # anything else is "message from ..."
-LAYERS = [("arrows", "arrows"), ("gaps", "gap rails"), ("acts", "activity segments"), ("cache", "cache ticks"), ("models", "model marks"), ("child", "child lanes"), ("writers", "writers strip"), ("admit", "machine admission"), ("turnend", "turn ended mid-command"), ("cycles", "work cycles")]
-LEGEND = ([("run", "model time"), ("f-test", "test"), ("f-build", "build"), ("f-guard", "guard/lint"), ("f-git", "git"), ("f-poll", "poll/sleep"), ("f-browser", "browser"), ("f-other", "other tool")]
+LAYERS = [("arrows", "arrows"), ("gaps", "gap rails"), ("acts", "activity segments"), ("cache", "cache ticks"), ("models", "model marks"), ("child", "child lanes"), ("writers", "writers strip"), ("admit", "machine admission"), ("turnend", "turn ended mid-command"), ("cycles", "message intervals")]
+LEGEND = ([("run", "run remainder (not measured inference)"), ("f-test", "test"), ("f-build", "build"), ("f-guard", "guard/lint"), ("f-git", "git"), ("f-poll", "poll/sleep"), ("f-browser", "browser"), ("f-other", "other tool")]
           + [("g-owner", "wait: owner"), ("g-msg", "wait: message"), ("g-cmd", "wait: own command"), ("g-child", "wait: child done"), ("g-kal", "wait: keepalive"), ("g-unk", "wait: unknown"),
              ("ok", "keepalive HIT / gate"), ("bad", "keepalive MISS / REFUSE"), ("warn", "cold call / 80% churn / HOLD"),
-             ("w-sl", "writers: slices with a commit"), ("run", "writers: threads running"), ("mut", "not yet started / quiet tail"), ("f-test", "active tail"), ("g-cmd", "turn ended, command still running"), ("cyc", "work cycle (minutes; dashed: acknowledgement)")])
+             ("w-sl", "writers: slices with a commit"), ("run", "writers: threads running"), ("mut", "no commit yet / sparse-commit proxy"), ("f-test", "near-commit proxy"), ("g-cmd", "turn ended, command still running"), ("cyc", "message interval (dashed: completion unknown)")])
 CSS = """:root{--run:var(--chart-1,#3f6fb5);--f-test:var(--chart-3,#d9822b);--f-build:var(--chart-4,#8a63c7);--f-guard:var(--chart-5,#3aa6a0);--f-git:var(--chart-6,#b5527a);--f-poll:var(--muted-foreground,#999);--f-browser:var(--chart-2,#58a55c);--f-other:var(--muted-foreground,#999);
 --g-owner:var(--chart-2,#58a55c);--g-msg:var(--chart-4,#8a63c7);--g-cmd:var(--chart-3,#d9822b);--g-child:var(--chart-5,#3aa6a0);--g-kal:var(--chart-6,#b5527a);--g-unk:var(--muted-foreground,#999);
 --w-sl:var(--chart-4,#8a63c7);--cyc:var(--chart-5,#3aa6a0);--ok:var(--success,#2f8a4a);--bad:var(--destructive,#d0472f);--warn:var(--warning,#d9a02b);--rail:var(--border,#e5e5e5);--mut:var(--muted-foreground,#888);--fg:var(--foreground,#222)}
@@ -88,8 +88,8 @@ def render(run_dir):
             rows.append(f'<g class="{cls}"><text x="4" y="{y+17}" class="g">{g}{tail}{tip}</text>'); y += LH; last = g
             if sl:  # mini churn curve: cumulative churn by time, with its 80% mark and its gate
                 yb, tot = y + MH - 10, sl["churn"] or 1; pts = sl["curve"]; yy = lambda c: yb - (MH - 16) * c / tot; te = sl["gate"] or T1
-                if ts(sl["first"]) > T0: rows.append(f'<rect x="{x(T0):.1f}" y="{y+2}" width="{x(sl["first"]) - x(T0):.1f}" height="{yb - y - 2}" class="unst"><title>not started: first commit {sl["first"][11:16]}Z, {sl["start_lag_h"]}h after the window start</title></rect>')
-                rows.append(f'<rect x="{x(sl["t80"]):.1f}" y="{y+MH-8}" width="{max(1, x(te) - x(sl["t80"])):.1f}" height="6" class="tq"><title>tail {sl["tail_h"]}h: {sl["tail_active_h"]}h active (commits within 30m), {sl["tail_quiet_h"]}h quiet; {sl["tail_commits"]} commits, churn test/prod/docs {sl["tail_churn"]["test"]}/{sl["tail_churn"]["prod"]}/{sl["tail_churn"]["docs"]}</title></rect>'
+                if ts(sl["first"]) > T0: rows.append(f'<rect x="{x(T0):.1f}" y="{y+2}" width="{x(sl["first"]) - x(T0):.1f}" height="{yb - y - 2}" class="unst"><title>no attributed commit yet: first commit {sl["first"][11:16]}Z, {sl["start_lag_h"]}h after the window start; work may already be underway</title></rect>')
+                rows.append(f'<rect x="{x(sl["t80"]):.1f}" y="{y+MH-8}" width="{max(1, x(te) - x(sl["t80"])):.1f}" height="6" class="tq"><title>churn tail {sl["tail_h"]}h: {sl["tail_active_h"]}h near-commit proxy (gaps capped at 30m), {sl["tail_quiet_h"]}h remainder; neither measures work or waiting; {sl["tail_commits"]} commits, churn test/prod/docs {sl["tail_churn"]["test"]}/{sl["tail_churn"]["prod"]}/{sl["tail_churn"]["docs"]}</title></rect>'
                             + "".join(f'<rect x="{x(a):.1f}" y="{y+MH-8}" width="{max(1, x(b) - x(a)):.1f}" height="6" class="ta"/>' for a, b in sl["tail_segs"]))
                 path = f"M{x(pts[0][0]):.1f},{yb} " + " ".join(f"H{x(t):.1f} V{yy(c):.1f}" for t, c in pts) + f" H{x(sl['gate'] or T1):.1f}"
                 rows.append(f'<line x1="{LX}" x2="{W-10}" y1="{yb}" y2="{yb}" class="rail"/><path d="{path}" class="cv"><title>{sl["commits"]} commits, churn {sl["churn"]}</title></path>'
@@ -115,8 +115,8 @@ def render(run_dir):
                                                  f'<text x="{x(c["at"])+2:.1f}" y="{y+8}" class="mt">{html.escape(short(c["to"]))}</text>' for c in m.get("model_changes", []))
                  + "".join(f'<path d="M{x(c)-4:.1f},{y} h8 l-4,7 z" class="cp"><title>compaction {c[11:16]}Z</title></path>' for c in m.get("compact_at", [])) + "</g>")
         r.append('<g class="cycles">' + "".join(
-            f'<path d="M{x(c["start"]):.1f},{y-2} v-4 H{x(c["end"]):.1f} v4" class="cyc{" cyk" if c["ack"] else ""}"><title>{c["start"][11:16]}Z {c["minutes"]} min for {html.escape(c["for_title"][:40])}'
-            f'{" (acknowledgement)" if c["ack"] else ""}: {html.escape(", ".join(f"{k} {v}" for k, v in c["families"].items()))}; first browser call {c["first_browser_min"]} min in</title></path>'
+            f'<path d="M{x(c["start"]):.1f},{y-2} v-4 H{x(c["end"]):.1f} v4" class="cyc{" cyk" if c["completion"] == "unknown" else ""}"><title>{c["start"][11:16]}Z {c["minutes"]} min for {html.escape(c["for_title"][:40])}'
+            f' ({c["measurement"]}; completion {c["completion"]}): {html.escape(", ".join(f"{k} {v}" for k, v in c["families"].items()))}; first reply send attempt {c["reply_min"]} min; first browser call {c["first_browser_min"]} min in (not a setup measurement); runnable to useful feedback {c["runnable_to_feedback_min"]} min; useful feedback to reported acceptance {c["feedback_to_accepted_min"]} min</title></path>'
             f'<text x="{(x(c["start"]) + x(c["end"])) / 2:.1f}" y="{y-8}" class="cyt">{c["minutes"]:.0f}m</text>' for c in m.get("cycles", [])) + "</g>")
         r.append('<g class="admit">' + "".join(
             (f'<rect x="{x(a["t"])-3:.1f}" y="{y+LH-9}" width="6" height="6" class="hm">' if a["verdict"] == "HOLD" else f'<circle cx="{x(a["t"]):.1f}" cy="{y+LH-6}" r="3.5" class="rm">')
@@ -154,7 +154,7 @@ def render(run_dir):
     doc = f"""<!doctype html><html><head><meta charset="utf-8"><title>Run swimlanes</title><style>{CSS}</style></head><body>
 <p>{html.escape(retro.landmark_line(lm)) if lm else ""}<br>{html.escape(retro.measures_line(lm, ro))}{"<br>" + html.escape(retro.commits_line(lm)) if lm else ""}</p>
 <p class="ctl">{ctl}</p>
-<p class="k">Bars are agent runs (hover for the message that started each one); the thin rail between bars is the wait, colored by what started the next run. {key}</p>
+<p class="k">Bars are agent runs (hover for the message that started each one); the thin rail shows time between runs, colored by the next trigger. Churn is code movement, not percent complete. Commit proximity does not measure active work or waiting. Message reply latency is not work completion. Operational milestones require explicit work-id and candidate-SHA events and remain reported evidence. {key}</p>
 <div id="wrap"><svg id="s" viewBox="0 0 {W} {H}" data-h="{H}" data-rh="{rh}" style="width:100%">{ticks}{''.join(marks)}{''.join(rows)}{''.join(arrows)}</svg></div>
 <h3>Command prefixes, top 25 by hours (background commands at their real duration; +n = lighter segment of another command)</h3>{retro.bars(J["commands"])}
 <script>{JS}</script></body></html>"""

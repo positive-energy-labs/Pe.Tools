@@ -428,7 +428,15 @@ function PopupTrigger({
         children
       ) : (
         <>
-          <span className="flex min-w-0 flex-1 items-center gap-1 truncate">{children}</span>
+          <span className="flex min-w-0 flex-1 items-center gap-1">
+            {/* Text in a flex box never ellipsizes, so a plain label gets its own truncating box
+                (L3: the word sheds before the chevron is reached). */}
+            {typeof children === "string" || typeof children === "number" ? (
+              <span className="min-w-0 truncate">{children}</span>
+            ) : (
+              children
+            )}
+          </span>
           <ChevronDown aria-hidden className="size-3 shrink-0 text-ink-2" />
         </>
       )}

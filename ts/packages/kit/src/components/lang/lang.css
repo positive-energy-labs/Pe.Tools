@@ -1091,7 +1091,8 @@ tr.dl-row[data-active] {
   background: var(--subject-mark-ground);
   color: var(--subject-mark-ink);
   font-family: var(--font-mono);
-  font-size: 9px;
+  /* The smallest rung (house law 6): 9px made the mark that ties prose to picture unreadable (I1). */
+  font-size: var(--type-small-size);
   font-size-adjust: none;
   font-weight: var(--weight-strong);
   font-variant-numeric: tabular-nums;
@@ -1156,7 +1157,11 @@ tr.dl-row[data-active] {
 [data-scroll]::-webkit-scrollbar {
   display: none;
 }
+/* A column, so the field grows to the scroller's foot and the sticky x host after it rests on the
+   bottom edge even when the content is short (an empty table drew its track mid-frame; L3). */
 [data-scroll][data-axis="both"] {
+  display: flex;
+  flex-direction: column;
   padding-block-end: var(--scrollbar-w);
 }
 [data-scrollbar-host] {

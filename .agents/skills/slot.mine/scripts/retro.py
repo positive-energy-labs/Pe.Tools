@@ -16,17 +16,15 @@ cold_calls (API calls writing over 50k cache tokens and more than they read). Ke
 Waits: each gap between consecutive runs is attributed to the trigger of the next run (owner, message from <thread>, own command, child completion, keepalive, system, unknown); per thread `gaps` and `waits` (hours by cause).
 commands: every Bash/PowerShell command and Codex exec cmd split on && ; | and newlines, cd/export/echo/VAR= segments dropped, timeout/npx/pnpm exec/--filter/-C stripped, keyed program + first subcommand (loops: `poll loop`); a call's whole wall (a background command's runs to its completion notification) goes to its heaviest segment (test > build > guard > other).
 --branch/--base add `landmark`: per slice N, 80% of final churn, the first `Slice N gated`/`Wave ... gated` first-parent commit, and gate tail = gate - 80% (open slices run to the window end); headline median tail and gated slices per 10 wall hours.
-Per slice also `first` (first commit) and `start_lag_h` (first commit minus window start), the tail (commits after the 80% commit) as `tail_commits`, `tail_churn` {test, prod, docs}, `tail_test_share`, `tail_active_h` (gaps between consecutive tail commits, each capped at 30 minutes, from the 80% commit on) and `tail_quiet_h` (the rest of the tail), `tail_segs` (the active spans);
-run-level `blocked` (longest stretch with a slice not yet started while a lower slice was past 80%), `writers` (per 30-minute bucket: slices with a commit, descendant threads with a run in flight), `tail_test_share`, `tail_quiet_share`, `trough`, `marks` (gate and merge commits on the integration branch), `commits_read`, `by_branch`, `unattributed`.
+Per slice also `first` (first attributed commit, not work start) and `start_lag_h` (first commit minus window start), the churn tail as `tail_commits`, `tail_churn` {test, prod, docs}, `tail_test_share`, `tail_active_h` (commit-proximity proxy: gaps between consecutive tail commits capped at 30 minutes) and `tail_quiet_h` (the rest), `tail_segs` (proxy spans). Neither proxy measures active work or waiting, and churn never measures percent complete.
+Run-level `blocked` is a commit-ordering proxy (longest stretch with no attributed commit while a lower slice passed 80% of observed churn), not measured blocking. `writers` counts slices with a commit and descendant threads with a run in flight per 30-minute bucket.
 A commit's slice is the slice in the title of the thread named by its `T3-Thread` trailer (slice_key, the one title parser, also groups the lanes); commits come from every local branch since --base, kept when they are on the integration branch or written by a thread of the tree (`unmerged` counts those not on it yet, `lost_writers` names threads that ran git commit and left none); a commit whose thread names no slice, or that has no trailer
 (then the `<branch>-sN` branch-name fallback, counted in by_branch), is left out of every slice and counted in `unattributed`. Lettered slices (2b, 5a) are their own slices (see landmark()). The slice list is whatever the commits name.
 With --tree, retro.json also holds everything swimlanes.py draws: `window`, `lanes` (per lane: runs with trigger text and bar kind, gaps with causes, messages received; the per-thread activity segments `ivs`, keepalive wakes, cold calls, model changes sit in `threads`), `rollup`, and the `commands`;
 retro.py then calls swimlanes.render, so one command writes retro.json, retro.html and swimlanes.html. `swimlanes.py <run-dir>` redraws the page from retro.json and never measures.
 Per thread `admits` ({t, kind, verdict, free_gib} from tool results with an `ADMIT|HOLD|REFUSE <kind>: free x of y GiB` line, once per result) and `admit_counts` (kind -> verdict -> n); `turn_ends` (a background command still running when its run completed: {thread, t_run_end, t_cmd_end, command, ran_on_h, idle_until_next_run_h}) and `turn_end_idle_h`. Claude sessions only for turn_ends. tree_total sums both.
---cycles <thread> (repeatable) measures a standing partner thread's work cycles: a cycle starts when a message from another thread X wakes it (the gap cause `message from X`) and ends at its next outbound
-`t3_thread_send` to X (read from its native session: Claude tool_use, Codex function_call). Per thread `cycles` ({start, end, minutes, for_tid, for_title, ack, families (minutes by model/test/build/guard/git/poll/browser/other/idle), first_browser_min})
-and `cycle_summary` (n, acks, unanswered, median_min and longest_min over the non-acknowledgement cycles, covered_h, outside_run_h, setup_min, hours and shares by family over the union of the cycles, every moment once). A moment is `idle` when no run of the thread is in flight,
-else the family of a foreground tool call in flight (browser > test > build > guard > git > other > poll), else `model`; background commands are not foreground calls. A --cycles thread outside the tree is measured like a root with no descendants
+--cycles <thread> (repeatable) measures message reply intervals. Free text ends at the first outbound `t3_thread_send` attempt to the sender: reply latency only, completion unknown. Explicit JSON work_event messages (see work_event()) correlate a work_id and full candidate SHA across requested, runnable, useful_feedback and accepted phases; these remain reported evidence. `cycles` stores reply_min separately from work_minutes and milestone timestamps/durations; `cycle_summary` separates median_reply_min from median_reported_work_min and counts unknown completion.
+Each interval's families partition foreground tool families, `idle` (no run in flight), and `run_remainder` (run time not covered by a foreground call, not measured model time). first_browser_min is time to a browser call, never measured setup or useful feedback. Background commands are not foreground calls. A --cycles thread outside the tree is measured like a root with no descendants
 (top-level `partners` in retro.json, its own PARTNERS lane); one already in the tree keeps its place. The landmark's window is the tree's; the page's `window` also holds the partners' runs.
 retro.json is {threads, partners, commands, landmark, window, lanes, rollup}. Owner turns are human turns: createdBy=user AND creationSource web|mobile (server-sourced user rows are agent text). Prints aggregates only, never session text.
 """
@@ -225,7 +223,7 @@ def claude(path, m):
                     if n == "Agent": n += ":" + str((x.get("input") or {}).get("model") or "default")
                     names[x.get("id")] = n; m["tool_calls"][n] += 1; inp = x.get("input") or {}
                     starts[x.get("id")] = (e.get("timestamp"), kind(x.get("name"), inp), x.get("name"), inp.get("command") or "", bool(inp.get("run_in_background")))
-                    if n.endswith("t3_thread_send") and e.get("timestamp"): m["sends"].append((e["timestamp"], inp.get("threadId")))  # an outbound message to another thread
+                    if n.endswith("t3_thread_send") and e.get("timestamp"): m["sends"].append((e["timestamp"], inp.get("threadId"), work_event(inp.get("message"))))
             u = msg.get("usage") or {}; rid = e.get("requestId") or e.get("uuid")
             if u and rid not in seen:
                 seen.add(rid)
@@ -282,7 +280,8 @@ def codex(path, m):
             m["curve"].append([when, ctx]); m["max_ctx"] = max(m["max_ctx"], ctx)
         elif t == "response_item" and p.get("type") in ("function_call", "custom_tool_call"):
             names[p.get("call_id")] = p.get("name", "?"); m["tool_calls"][p.get("name", "?")] += 1
-            if str(p.get("name")).endswith("t3_thread_send") and when: m["sends"].append((when, codex_args(p.get("arguments") or p.get("input")).get("threadId")))
+            if str(p.get("name")).endswith("t3_thread_send") and when:
+                inp = codex_args(p.get("arguments") or p.get("input")); m["sends"].append((when, inp.get("threadId"), work_event(inp.get("message"))))
             raw = str(p.get("input") or p.get("arguments") or ""); cmd = "\n".join(codex_cmd(x) for x in re.findall(r'cmd["\']?\s*:\s*("(?:[^"\\]|\\.)*"|`[^`]*`)', raw))  # no cmd: a non-shell exec cell (apply_patch)
             starts[p.get("call_id")] = (when, "exec:" + classify(cmd), p.get("name", "?"), cmd)
         elif t == "response_item" and p.get("type") in ("function_call_output", "custom_tool_call_output"):
@@ -328,7 +327,7 @@ def finish(m):
     m["test_share"] = share(m["tool_wall"])
     act = collections.Counter()
     for s, e, fam, bg in m["ivs"]: act[fam] += (ts(e) - ts(s)).total_seconds() / 3600
-    m["activity"] = {k: round(v, 3) for k, v in act.most_common()}  # tool hours by family, background commands at their real duration; model time is the rest of the run
+    m["activity"] = {k: round(v, 3) for k, v in act.most_common()}  # tool hours by family; uncovered run time is not measured inference time
     pts = sorted(m.pop("model_pts")); m["model_changes"] = [dict(at=b[0], frm=a[1], to=b[1]) for a, b in zip(pts, pts[1:]) if a[1] != b[1]]
     m["compact_at"] = [c[0] for c in m["curve"] if len(c) == 3]
     m["admit_counts"] = admit_counts(m["admits"])
@@ -379,7 +378,7 @@ FAM_PRI = ("browser", "test", "build", "guard", "git", "other", "poll")  # which
 
 
 def split_cycle(a, b, runs, ivs):
-    """Seconds in [a, b] by label, every moment exactly one: `idle` when no run of the thread is in flight, else the highest-priority family (FAM_PRI) of a foreground call in flight, else `model`.
+    """Seconds in [a, b]: idle means no run in flight; otherwise a foreground tool family or run_remainder (not measured inference time).
     runs: (start, end) datetimes; ivs: (start, end, family) datetimes of foreground calls."""
     clip = lambda t: min(max(t, a), b); cuts = {a, b}
     for s, e in runs: cuts |= {clip(s), clip(e)}
@@ -388,8 +387,24 @@ def split_cycle(a, b, runs, ivs):
     for x, y in zip(pts, pts[1:]):
         mid = x + (y - x) / 2
         if not any(s <= mid < e for s, e in runs): out["idle"] += (y - x).total_seconds(); continue
-        fams = {f for s, e, f in ivs if s <= mid < e}; out[next((f for f in FAM_PRI if f in fams), "model")] += (y - x).total_seconds()
+        fams = {f for s, e, f in ivs if s <= mid < e}; out[next((f for f in FAM_PRI if f in fams), "run_remainder")] += (y - x).total_seconds()
     return out
+
+
+def work_event(message):
+    """An opt-in operational milestone, never inferred from prose or tool activity.
+
+    A message may be a JSON object with type=work_event, work_id, a full git SHA,
+    and phase=requested|runnable|useful_feedback|accepted. These are reported
+    milestones, not independent proof of runnable behavior or acceptance.
+    """
+    try: p = json.loads(message) if isinstance(message, str) else message
+    except (ValueError, TypeError): return None
+    if not isinstance(p, dict) or p.get("type") != "work_event": return None
+    if not isinstance(p.get("work_id"), str) or not p["work_id"].strip(): return None
+    if not isinstance(p.get("sha"), str) or not re.fullmatch(r"[0-9a-fA-F]{40}", p["sha"]): return None
+    if p.get("phase") not in ("requested", "runnable", "useful_feedback", "accepted"): return None
+    return dict(work_id=p["work_id"], sha=p["sha"].lower(), phase=p["phase"])
 
 
 def wake_runs(db, tid, names):
@@ -397,25 +412,46 @@ def wake_runs(db, tid, names):
     out = []
     for (ra,) in db.execute("select requested_at from orchestration_v2_projection_runs where thread_id=? order by requested_at", (tid,)).fetchall():
         r = db.execute("select payload_json from orchestration_v2_projection_messages where thread_id=? and role='user' and created_at=? limit 1", (tid, ra)).fetchone(); p = json.loads(r[0]) if r else {}
-        if cause(p, names)[0].startswith("message from"): out.append((ra, p["senderThreadId"]))
+        if cause(p, names)[0].startswith("message from"): out.append((ra, p["senderThreadId"], work_event(p.get("text"))))
     return out
 
 
 def work_cycles(runs, wakes, sends, ivs, names):
-    """Work cycles of a partner thread: a cycle starts when a message from thread X woke it and ends at its next outbound message to X (`sends`: (time, target thread) from its `t3_thread_send` calls).
-    Two wakes from X answered by the same send are one cycle, from the first. A wake never answered is counted, not drawn. A cycle with no tool call before the send is an acknowledgement (`ack`).
-    Each cycle's minutes are split by split_cycle() over the thread's runs and foreground calls (ivs: [start, end, family, background]); first_browser_min = minutes to its first browser-family call.
-    Cycles for different senders overlap (a reply to the owner stays open while the implementor is served), so the thread-level split is taken over the union of the cycles, every moment once.
-    runs: (requested, completed|None) ISO; wakes: (run requested, sender id). -> (cycles, unanswered, minutes by family over the union of the cycles)"""
-    R = [(ts(a), ts(b)) for a, b in runs if b]; F = [(ts(s), ts(e), f) for s, e, f, bg in ivs if not bg]; calls = [ts(s) for s, e, f, bg in ivs]
-    S = sorted((ts(t), x) for t, x in sends if t); out = []; un = 0; ends = set()
-    for ra, x in sorted(wakes):
-        a = ts(ra); b = next((t for t, tgt in S if tgt == x and t >= a), None)
-        if b is None: un += 1; continue
-        if (x, b) in ends: continue
-        ends.add((x, b)); sp = split_cycle(a, b, R, [i for i in F if i[1] > a and i[0] < b]); br = [s for s, e, f in F if f == "browser" and a <= s < b]
-        out.append(dict(start=ra, end=utc(b), minutes=round((b - a).total_seconds() / 60, 1), for_tid=x, for_title=names.get(x) or x[:8], ack=not any(a <= c < b for c in calls),
-                        families={k: round(v / 60, 1) for k, v in sp.most_common()}, first_browser_min=round((min(br) - a).total_seconds() / 60, 1) if br else None))
+    """Message reply intervals, with optional explicitly correlated work milestones.
+
+    Free-text requests end at the first send attempt to their sender. This measures
+    reply latency only: a git check before an acknowledgement cannot imply work
+    completion. Structured requested events match the sender, work_id and full SHA;
+    status messages and other work never complete them. Unaccepted structured work
+    is drawn through the observed run horizon and has no completion duration.
+    Tool families describe the interval, not setup or useful progress.
+    """
+    R = [(ts(a), ts(b)) for a, b in runs if b]; F = [(ts(s), ts(e), f) for s, e, f, bg in ivs if not bg]
+    S = sorted(((ts(s[0]), s[1], s[2] if len(s) > 2 else None) for s in sends if s[0]), key=lambda s: s[0]); out = []; un = 0; ends = set()
+    for wake in sorted(wakes, key=lambda w: w[0]):
+        ra, x = wake[:2]; ev = wake[2] if len(wake) > 2 else None; a = ts(ra)
+        replies = [(t, e) for t, tgt, e in S if tgt == x and t >= a]
+        reply = replies[0][0] if replies else None
+        if reply is None: un += 1
+        request = ev if ev and ev["phase"] == "requested" else None
+        milestones = {}
+        if request:
+            for t, e in replies:
+                if e and e["work_id"] == request["work_id"] and e["sha"] == request["sha"] and e["phase"] != "requested": milestones.setdefault(e["phase"], t)
+        accepted = milestones.get("accepted")
+        b = accepted or (max([a] + [e for _, e in R]) if request else reply)
+        if b is None: continue
+        key = (x, request["work_id"], request["sha"]) if request else (x, b)
+        if key in ends: continue
+        ends.add(key); sp = split_cycle(a, b, R, [i for i in F if i[1] > a and i[0] < b]); br = [s for s, e, f in F if f == "browser" and a <= s < b]
+        runnable, feedback = milestones.get("runnable"), milestones.get("useful_feedback")
+        delta = lambda s, e: round((e - s).total_seconds() / 60, 1) if s is not None and e is not None and e >= s else None
+        out.append(dict(start=ra, end=utc(b), minutes=delta(a, b), for_tid=x, for_title=names.get(x) or x[:8],
+                        measurement="reported_work_interval" if request else "message_reply_latency", completion="reported_accepted" if accepted else "unknown",
+                        reply_min=delta(a, reply), work_minutes=delta(a, accepted), work_id=request["work_id"] if request else None, sha=request["sha"] if request else None,
+                        runnable_at=utc(runnable) if runnable else None, useful_feedback_at=utc(feedback) if feedback else None, accepted_at=utc(accepted) if accepted else None,
+                        runnable_to_feedback_min=delta(runnable, feedback), feedback_to_accepted_min=delta(feedback, accepted),
+                        families={k: round(v / 60, 1) for k, v in sp.most_common()}, first_browser_min=delta(a, min(br)) if br else None))
     union = []
     for a, b in sorted((ts(c["start"]), ts(c["end"])) for c in out):
         if union and a <= union[-1][1]: union[-1][1] = max(union[-1][1], b)
@@ -426,30 +462,30 @@ def work_cycles(runs, wakes, sends, ivs, names):
 
 
 def cycle_summary(cs, unanswered, fam, run_h):
-    """Per thread: cycles (acknowledgements counted apart and left out of the median and longest), the family split over the union of the cycles (`fam`, minutes) as hours and shares, covered_h (the union),
-    outside_run_h (hours the thread was running outside every cycle: `run_h`, all its completed run hours, minus the running hours inside them), and setup_min (median first_browser_min over the cycles that have one)."""
-    real = [c for c in cs if not c["ack"]]; tot = collections.Counter(fam); fb = [c["first_browser_min"] for c in real if c["first_browser_min"] is not None]
+    """Reply latency and reported acceptance stay separate; no completion inferred."""
+    replies = [c["reply_min"] for c in cs if c["reply_min"] is not None]; completed = [c["work_minutes"] for c in cs if c["work_minutes"] is not None]; tot = collections.Counter(fam)
     all_ = sum(tot.values()) or 1
-    return dict(n=len(real), acks=len(cs) - len(real), unanswered=unanswered, median_min=round(statistics.median(c["minutes"] for c in real), 1) if real else None,
-                longest_min=max((c["minutes"] for c in real), default=None), covered_h=round(sum(tot.values()) / 60, 2), outside_run_h=round(run_h - (sum(tot.values()) - tot["idle"]) / 60, 2), setup_min=round(statistics.median(fb), 1) if fb else None,
+    return dict(n=len(cs), unanswered=unanswered, completion_unknown=sum(c["completion"] == "unknown" for c in cs), reported_accepted=len(completed),
+                median_reply_min=round(statistics.median(replies), 1) if replies else None, longest_reply_min=max(replies, default=None),
+                median_reported_work_min=round(statistics.median(completed), 1) if completed else None,
+                covered_h=round(sum(tot.values()) / 60, 2), outside_run_h=round(run_h - (sum(tot.values()) - tot["idle"]) / 60, 2),
                 hours={k: round(v / 60, 2) for k, v in tot.most_common()}, shares={k: round(v / all_, 3) for k, v in tot.most_common()})
 
 
 def cycle_table(m):
-    """Console table of one thread's work cycles: start, minutes, who it was for, its two biggest families, minutes to the first browser call."""
-    s = m["cycle_summary"]; rows = [f"cycles of {m['title'][:50]}: {s['n']} (+{s['acks']} acknowledgements, {s['unanswered']} wakes never answered), median {s['median_min']} min, longest {s['longest_min']} min, setup {s['setup_min']} min; {s['covered_h']}h covered ({s['outside_run_h']}h of running outside every cycle), by family {s['hours']}"]
+    """Reply intervals and explicitly reported milestones, with foreground tool-family splits."""
+    s = m["cycle_summary"]; rows = [f"message intervals of {m['title'][:50]}: {s['n']}, {s['unanswered']} wakes without a reply; median first reply {s['median_reply_min']} min; {s['reported_accepted']} reported accepted, {s['completion_unknown']} completion unknown; {s['covered_h']}h covered ({s['outside_run_h']}h running outside these intervals), by family {s['hours']}"]
     for c in m["cycles"]:
         top = ", ".join(f"{k} {v}" for k, v in list(c["families"].items())[:2])
-        rows.append(f"  {c['start'][11:16]}Z {c['minutes']:>6} min  for {c['for_title'][:28]:<28} {top:<28} browser at {c['first_browser_min']}{'  (ack)' if c['ack'] else ''}")
+        rows.append(f"  {c['start'][11:16]}Z {c['minutes']:>6} min  for {c['for_title'][:28]:<28} {top:<28} first reply {c['reply_min']}; completion {c['completion']}; first browser call {c['first_browser_min']}")
     return "\n".join(rows)
 
 
 def cycle_head(c):
-    """One clause of the headline: `<label>: N cycles, median M min, of which setup S min; X% model, Y% waiting (poll and idle), Z% browser`. c: a cycle_summary with a label."""
+    """Reply latency and known/unknown reported acceptance, never inferred setup or completion."""
     if not c["n"]: return None
-    sh = c["shares"]
-    return (f"{c['label']}: {c['n']} cycles" + (f" (+{c['acks']} acknowledgements)" if c["acks"] else "") + f", median {c['median_min']:.0f} min" + (f", of which setup {c['setup_min']:.0f} min" if c["setup_min"] is not None else "")
-            + f"; {sh.get('model', 0):.0%} model, {sh.get('poll', 0) + sh.get('idle', 0):.0%} waiting, {sh.get('browser', 0):.0%} browser")
+    return (f"{c['label']}: {c['n']} message intervals, median first reply {c['median_reply_min']} min; "
+            f"{c['reported_accepted']} reported accepted, {c['completion_unknown']} completion unknown")
 
 
 norm = lambda p: os.path.normcase(os.path.normpath(p))
@@ -548,7 +584,9 @@ def bucket(path):
 
 
 def tail_split(pts, end, cap=1800):
-    """pts: commit times from the 80% commit on. Active spans = each gap between consecutive points capped at `cap` seconds; the tail runs to `end` (or the last point if later); quiet = the rest. -> (spans, active_h, quiet_h)"""
+    """Commit-proximity proxy: gaps capped at `cap`, then the remainder to end.
+    Legacy active/quiet output keys do not measure work, inference or waiting.
+    """
     spans = [(a, a + datetime.timedelta(seconds=min((b - a).total_seconds(), cap))) for a, b in zip(pts, pts[1:])]
     act = sum((b - a).total_seconds() for a, b in spans); tot = (max(end, pts[-1]) - pts[0]).total_seconds()
     return spans, act / 3600, (tot - act) / 3600
@@ -737,10 +775,10 @@ def measures_line(lm, ro):
     """The headline numbers of the four measurements, one compact line beside the landmark line. ro: rollup()."""
     p = []
     if lm and lm["slices"]:
-        p.append(f"slices not yet started while an earlier one was past 80%: {lm['blocked']['h']:.1f}h longest" + (f" (slices {', '.join(map(str, lm['blocked']['slices']))})" if lm["blocked"]["slices"] else ""))
+        p.append(f"slices with no attributed commit while an earlier one was past 80% of observed churn: {lm['blocked']['h']:.1f}h longest" + (f" (slices {', '.join(map(str, lm['blocked']['slices']))})" if lm["blocked"]["slices"] else ""))
         if (tr := lm.get("trough")) and tr["h"]: p.append(f"fewer than half the peak of {tr['peak']} child threads ran for {tr['h']:.1f}h ({tr['frm'][11:16]}Z to {tr['to'][11:16]}Z)")
         if lm["tail_test_share"] is not None: p.append(f"{lm['tail_test_share']:.0%} of tail churn is test code")
-        if lm["tail_quiet_share"] is not None: p.append(f"{lm['tail_quiet_share']:.0%} of tail hours quiet")
+        if lm["tail_quiet_share"] is not None: p.append(f"{lm['tail_quiet_share']:.0%} of churn-tail hours outside the 30-minute commit-proximity proxy (not measured idle)")
     v = collections.Counter(r["verdict"] for r in ro["admits"]); d = sum(r["verdict"] == "HOLD" and r["kind"] == "revit-drive" for r in ro["admits"])
     p.append(f"{len(ro['admits'])} admission readings: {v['HOLD']} HOLD ({d} revit-drive), {v['REFUSE']} REFUSE")
     # idle after the command finished is the stall; idle while it still ran is the thread waiting on its own command, which its completion ends
@@ -761,7 +799,7 @@ def landmark_line(lm):
     if not lm or not lm["slices"]: return "Gate tail: no slice commits found."
     med = f"median {lm['median_tail_h']:.2f}h over {lm['gated']} gated slices" if lm["median_tail_h"] is not None else "no slice gated yet"
     opn = f" \u00b7 {len(lm['open_slices'])} open, the longest {lm['open_max_tail_h']:.1f}h past its 80% so far" if lm["open_slices"] else ""
-    return f"Gate tail (80% of a slice's churn to its gate): {med}{opn} \u00b7 {lm['gated']} gated in {lm['wall_h']}h = {lm['gated_per_10h']} per 10 wall hours."
+    return f"Churn tail (80% of observed code movement to a gate-labelled commit, not 80% complete): {med}{opn} \u00b7 {lm['gated']} gate-labelled in {lm['wall_h']}h = {lm['gated_per_10h']} per 10 wall hours."
 
 
 BARS_CSS = (".bar{display:grid;grid-template-columns:11em 1fr 16em;gap:8px;align-items:center;font-size:12px;max-width:900px}.bar i{display:block;height:10px;background:var(--chart-1,#3f6fb5)}"
@@ -812,7 +850,7 @@ def main():
     seen = set(); out = [m for m in (tree(db, rates, p, seen, a.tree) for p in a.threads) if m]
     allm = [x for m in out for x in [m] + m.get("descendants", [])]
     cmds = merge_commands(allm); lm = None; names = thread_names(db); byid = {x["tid"]: x for x in allm}; partners = []
-    for p in a.cycles:  # a partner thread: measured like a root with no descendants if it is not already in the tree, then its work cycles
+    for p in a.cycles:  # a partner measured like a root without descendants, then its message intervals
         tid = resolve(db, p)[0]; m = byid.get(tid) or (tree(db, rates, p, seen, False) if tid else None)
         if not m: print(f"{p}: --cycles names no thread with a native session (UNPROVEN)"); continue
         if tid not in byid: byid[tid] = m; partners.append(m)
@@ -840,7 +878,7 @@ def main():
     for m in byid.values():
         if "cycle_summary" in m: print(cycle_table(m))
     if lm: u = lm["unattributed"]; print(commits_line(lm)); print(f"commits detail: {lm['by_branch']} attributed by the branch-name fallback; {u['commits']} with no slice, churn {u['churn']} ({u['no_trailer']} no trailer, {u['no_slice_title']} thread title names no slice)")
-    if lm: print(landmark_line(lm));[print(f"  slice {x['n']}: {x['commits']} commits, churn {x['churn']}, first {x['first'][11:16]}Z (+{x['start_lag_h']}h), 80% {x['t80'][11:16]}Z, gate {(x['gate'] or 'open')[11:16]}, tail {x['tail_h']}h{' (open)' if x['open'] else ''}: {x['tail_commits']} commits, test/prod/docs churn {x['tail_churn']['test']}/{x['tail_churn']['prod']}/{x['tail_churn']['docs']}, active {x['tail_active_h']}h quiet {x['tail_quiet_h']}h") for x in lm["slices"]]
+    if lm: print(landmark_line(lm));[print(f"  slice {x['n']}: {x['commits']} commits, churn {x['churn']}, first attributed commit {x['first'][11:16]}Z (+{x['start_lag_h']}h), 80% observed churn {x['t80'][11:16]}Z, gate-labelled commit {(x['gate'] or 'open')[11:16]}, churn tail {x['tail_h']}h{' (open)' if x['open'] else ''}: {x['tail_commits']} commits, test/prod/docs churn {x['tail_churn']['test']}/{x['tail_churn']['prod']}/{x['tail_churn']['docs']}, commit-proximity proxy {x['tail_active_h']}h remainder {x['tail_quiet_h']}h") for x in lm["slices"]]
     print("top commands (hours, calls, secondary): " + "; ".join(f"{k} {v['hours']}h {v['calls']} +{v['secondary']}" for k, v in list(cmds.items())[:10]))
     th = lambda cs: "".join(f"<th>{c}</th>" for c in cs)
     body = "".join("<tr>" + "".join(f"<td>{html.escape(str(v))}</td>" for v in cells(m)) + "</tr>" for m in rows)

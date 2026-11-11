@@ -15,6 +15,7 @@ test("F3/F4 the roster always exposes search and forwards all/clear as one subje
     toggle: vi.fn(),
     add: vi.fn(),
     remove: vi.fn(),
+    select: vi.fn(),
     setActive: vi.fn(),
   };
   render(

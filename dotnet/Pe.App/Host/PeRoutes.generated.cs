@@ -210,10 +210,8 @@ internal static class PeRoutes {
         internal static class Keys {
             public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
-            public const string Pod = "pod";
-            public const string Path = "path";
             public const string Runs = "runs";
-            public const string Mode = "mode";
+            public const string Member = "member";
             public const string Selected = "selected";
         }
     }

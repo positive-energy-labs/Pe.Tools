@@ -39,6 +39,8 @@ export const module = route({
     satellites: [],
     surfaces: { web: "full", pwa: "full", tray: false },
   },
+  // 10a's declaration keeps `fields` required; home has none, every field is `query`.
+  fields: {},
   query,
   panes: {
     main: {

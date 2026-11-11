@@ -3,7 +3,7 @@ import { module, query } from "./route";
 
 /*
  * Slice 10 (MAP row 10), index: home sits on the slot declaration alone. No subject, no sheet,
- * picture or goal; every Page field is route-owned `query` (ADR 0035 rule 1), so `fields` is gone,
+ * picture or goal; every Page field is route-owned `query` (ADR 0035 rule 1), so `fields` is empty,
  * and the layout is one pane. The old `index/graph.ts` RouteGraph went with it.
  */
 test("slice 10 index: home declares only query and one pane, no subject and no slot data", () => {

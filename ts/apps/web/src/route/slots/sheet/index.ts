@@ -45,6 +45,7 @@ export interface SheetCell extends StateCell {
   readonly unit?: string;
   readonly numeric?: { readonly min?: number; readonly max?: number; readonly digits?: number };
   readonly field?: string;
+  readonly json?: true;
   readonly choices?: readonly SheetChoice[];
   readonly ref?: string;
   readonly refusal?: string;
@@ -91,6 +92,7 @@ export function sheetCells(slot: SheetSlot, input: SheetInput): readonly SheetCe
         ...defined({
           unit: (layer && "unit" in layer ? layer.unit : undefined) ?? declared.unit,
           field: declared.field,
+          json: declared.json,
           ref: layer && "ref" in layer ? layer.ref : undefined,
           refusal: layer && "refusal" in layer ? layer.refusal : undefined,
           note: layer && "note" in layer ? layer.note : undefined,
