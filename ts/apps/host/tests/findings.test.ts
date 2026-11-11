@@ -47,8 +47,8 @@ test("the keep verb turns a pointer on a subject into a finding; a pointer on a 
 
 /*
  * The production doors (wave 1 review catches 1 and 2): `findings.write` on the action door, where
- * the host stamps `by` from the caller, and the Work history door, where the host derives `own`
- * from the route so an author's undo is their own.
+ * the host stamps `by` from the caller (S9-M6), and the Work history door, where the host derives
+ * `own` from the route so an author's undo is their own. The generic apply door refuses findings.
  */
 async function doors() {
   const dir = await mkdtemp(join(tmpdir(), "pe-findings-doors-"));
@@ -83,6 +83,21 @@ async function doors() {
     close: async () => { await native.close(); await rm(dir, { recursive: true, force: true }); },
   };
 }
+
+test("findings.write through the action door: the host stamps each caller's author; the generic apply door refuses a Pea finding marked by a person", async () => {
+  const d = await doors();
+  try {
+    await d.write("by-person", input("h1", row, "claim", "yes"), human);
+    await d.write("by-pea", input("p1", port, "claim", "no"), d.peaCaller);
+    expect(await d.authors()).toEqual([["h1", "person"], ["p1", "pea"]]);
+    const forged = { ...input("p2", port, "note"), by: "person", at: new Date().toISOString() };
+    const before = await d.revision();
+    const refused = await d.door("apply", { patches: [{ path: ["findings", "p2"], value: forged }], expectedRevision: before, press: "forge" });
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ ok: false, error: expect.stringContaining("findings.write") });
+    expect(await d.revision()).toBe(before);
+  } finally { await d.close(); }
+});
 
 test("Pea's undo through the Work history door reverts Pea's own finding; the person's newer finding stays", async () => {
   const d = await doors();

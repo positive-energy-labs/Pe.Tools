@@ -225,7 +225,7 @@ export function findingsWrite(document: DocumentRef, finding: Finding): Promise<
 
 Nothing on the declaration: findings is an implicit kernel module (rule 1).
 
-Per-author undo is the host's Work journal: the history door passes `own` for the findings route, and `findings.write` stamps `by` from the caller. The host falsifier (`apps/host/tests/findings.test.ts`) writes through those doors, and Pea's undo leaves the person's finding. The web falsifier refuses a `note` with `verdict: "yes"` and a `claim` with `"maybe"` at the contract, draws one ring at the port's captured point, and expects both doors in `linkedCatalog()` (the Pod author's `kernel gap: findings (7)`).
+Per-author undo is the host's Work journal: the history door passes `own` for the findings route, and `findings.write` stamps `by` from the caller (the generic apply door refuses findings). The host falsifier (`apps/host/tests/findings.test.ts`) writes through those doors, and Pea's undo leaves the person's finding. The web falsifier refuses a `note` with `verdict: "yes"` and a `claim` with `"maybe"` at the contract, draws one ring at the port's captured point, and expects both doors in `linkedCatalog()` (the Pod author's `kernel gap: findings (7)`).
 
 ### Deletes (MAP row 9), with anchors
 

@@ -367,6 +367,9 @@ export function createPeRoutes(options: PeRoutesOptions) {
       schema: applyBody,
       hint: "expected { patches, expectedRevision, press, kind? }",
       run: (scope: WorkKey, route: string, by: "pea" | "human", body: unknown) => {
+        // A finding's author is host-owned (ADR 0035 rule 9): only findings.write stamps `by` from the caller.
+        if (route === FINDINGS_OWNER)
+          throw Error("Findings are written through the findings.write command, which stamps the author from the caller");
         return work.write(scope, route, by, body as z.infer<typeof applyBody>);
       },
     },
