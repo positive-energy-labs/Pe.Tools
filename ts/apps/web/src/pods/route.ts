@@ -198,7 +198,10 @@ export const module = route({
   },
   layout: split(
     "h",
-    ["members", split("v", ["sheet", split("h", ["goal", "runs"], { id: "pods-results", size: 320, sized: "start" })], { id: "pods-detail", size: 240, sized: "end" })],
+    ["members", split("v", ["sheet",
+      // The house split rule (kit PaneSplit): each side holds a floor, and a column too narrow for
+      // both floors stacks them instead of crushing one to a sliver (Runs drew 80px, one word a line).
+      split("h", ["goal", "runs"], { id: "pods-results", size: 320, sized: "start", minSize: 220, minOtherSize: 220 })], { id: "pods-detail", size: 240, sized: "end" })],
     { id: "pods-main", size: 300, sized: "start" },
   ),
 });

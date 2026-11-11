@@ -14,13 +14,12 @@ const fmt = (n: number, d = 2) => n.toLocaleString("en-US", { maximumFractionDig
 
 function Field({ label, unit, children }: { label: string; unit?: string; children: ReactNode }) {
   return (
-    // L3: decoration sheds before the value. The label lane is capped and the unit lane exists only
-    // when there is a unit, so a 300px Inputs pane leaves the value room for "Rectangular" and
-    // "galvanized steel" instead of reserving 8rem + 3rem around them.
-    <label className="grid grid-cols-[minmax(0,6rem)_minmax(0,1fr)_auto] items-center gap-2">
+    // L3: decoration sheds before the value. The label lane is capped; the unit lane is one fixed
+    // track (the widest unit, lb/ft³) drawn on every row, so every control ends on one edge.
+    <label className="grid grid-cols-[minmax(0,6rem)_minmax(0,1fr)_3rem] items-center gap-2">
       <span className="truncate text-ink-2">{label}</span>
       {children}
-      {unit ? <span className="face-mono text-ink-2">{unit}</span> : null}
+      <span className="face-mono truncate text-ink-2">{unit}</span>
     </label>
   );
 }

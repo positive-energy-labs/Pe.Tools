@@ -98,7 +98,7 @@ export function InstallGate({
               <Button label="reload" kind="framed" onClick={reload}>
                 reload
               </Button>
-              <Button label="dismiss" onClick={() => setDismissed(true)}>
+              <Button kind="quiet" label="dismiss" onClick={() => setDismissed(true)}>
                 dismiss
               </Button>
             </span>

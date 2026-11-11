@@ -29,7 +29,7 @@ export function PageControl({
         {label}
         <SearchControl
           chips={search.data.pills.map((pill, index) => (
-            <Button
+            <Button kind="quiet"
               key={index}
               label={`Remove ${pill.field} filter`}
               refusal={!enabled ? "This route is inactive" : null}

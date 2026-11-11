@@ -207,6 +207,8 @@ export type Specification<
       subjectList?: true;
       /** A pane the shell draws from a filled slot (`typed-shell.tsx`); the route names and places it, and its `draw` is unused. */
       kernel?: "sheet" | "goal";
+      /** The pane's ground (kit `Pane`): `artifact` lets support heads inside it recede (L4). */
+      ground?: "artifact";
       read?: Reads[K];
       bindings?(ctx: DrawContext<ReadData<Reads[K]>, F & NoInfer<Q>, z.output<W>, z.output<Edit>>): PaneBindings;
     } & PaneBody<DrawContext<ReadData<Reads[K]>, F & NoInfer<Q>, z.output<W>, z.output<Edit>>>;

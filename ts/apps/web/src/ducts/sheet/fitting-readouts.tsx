@@ -20,7 +20,7 @@ function Group({ group, ductsHref }: { group: FittingGroup; ductsHref: string })
       <span className="face-mono text-right">{inWg(group.lossInWg)} in-wg</span>
       <a href={ductsHref} className="t-small text-ink-2">{group.table ?? "unpriced"} · on /ducts</a>
       <span className="col-span-3 flex min-w-0 items-center gap-2 t-small">
-        <Button label={`${open ? "Hide" : "Show"} the ${group.members.length} fittings`} onPress={() => setOpen(!open)}>
+        <Button kind="quiet" label={`${open ? "Hide" : "Show"} the ${group.members.length} fittings`} onPress={() => setOpen(!open)}>
           {open ? "Hide" : "Show"} {group.members.length} on this fan
         </Button>
         <span className="min-w-0 truncate text-ink-2">{group.source} / {group.tableMeaning ?? group.reach}</span>

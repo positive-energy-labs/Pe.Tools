@@ -138,7 +138,7 @@ export function RecordedPoints({
             {compare ? "Now · comparing to" : "Recorded"}{" "}
             {new Date(snapshot.point.at).toLocaleString()}
           </span>
-          <Button
+          <Button kind="quiet"
             label="Compare to now"
             pressed={compare}
             onClick={() => {
@@ -150,12 +150,12 @@ export function RecordedPoints({
           >
             Compare to now
           </Button>
-          <Button label="Return to live" onClick={live}>
+          <Button kind="quiet" label="Return to live" onClick={live}>
             Live
           </Button>
         </>
       ) : (
-        <Button
+        <Button kind="quiet"
           label="Capture point"
           refusal={document ? null : "Choose a document"}
           onClick={() => void capture()}

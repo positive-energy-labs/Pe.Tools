@@ -165,7 +165,7 @@ export function Ladder({
         <>
           {levels[level]?.extra}
           {levels[level]?.multi && level < levels.length - 1 ? (
-            <Button
+            <Button kind="quiet"
               label={`show ${levels[level + 1]?.key}`}
               onClick={() => collection.current?.backTo(level + 1)}
             >
@@ -191,7 +191,7 @@ export function Ladder({
         ) : undefined,
         label: hit.label,
         meta: rungOf(hit).only ? (
-          <Button
+          <Button kind="quiet"
             label={`Only ${hit.label}`}
             onClick={(event) => {
               event.stopPropagation();

@@ -147,7 +147,7 @@ function SurfaceOutlet({ children }: { children?: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-3 p-3">
       <p>{appRouteByPath(pathname)?.label ?? "This tool"} opens in a full window.</p>
-      <Button label="Open in full window" onClick={() => host.openFullWindow(window.location.href)}>
+      <Button kind="quiet" label="Open in full window" onClick={() => host.openFullWindow(window.location.href)}>
         Open in full window
       </Button>
     </div>

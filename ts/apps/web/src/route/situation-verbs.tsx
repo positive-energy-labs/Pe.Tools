@@ -204,7 +204,7 @@ export function ActionBoard({
   >;
   const head = (
     <span className="w-[9rem]">
-      <Button
+      <Button kind="quiet"
         label="verbs"
         aria-expanded={open}
         reason={

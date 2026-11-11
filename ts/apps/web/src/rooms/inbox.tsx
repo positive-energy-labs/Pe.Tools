@@ -151,7 +151,7 @@ export function FeedbackCard({
           <span className="flex flex-wrap items-center gap-1">
             {verbs}
             {onClose ? (
-              <Button label="unpin" reason="unpin (Esc)" onClick={onClose}>
+              <Button kind="quiet" label="unpin" reason="unpin (Esc)" onClick={onClose}>
                 ×
               </Button>
             ) : null}

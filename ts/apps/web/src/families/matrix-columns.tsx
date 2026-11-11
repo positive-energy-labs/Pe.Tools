@@ -273,7 +273,7 @@ function YesNoCell({
           data-tone="caution"
           data-wash=""
         >
-          <Button
+          <Button kind="quiet"
             label={refused}
             reason={`${refused} — click to dismiss`}
             onMouseDown={(event) => event.preventDefault()}

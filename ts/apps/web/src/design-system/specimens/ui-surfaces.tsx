@@ -27,12 +27,12 @@ export function UiSurfaceSpecimens() {
           <Rail
             ground="recess"
             lead={<span className="t-small t-upper">lead and trail</span>}
-            trail={<Button label="open">open</Button>}
+            trail={<Button kind="quiet" label="open">open</Button>}
           />
           <Rail
-            lead={<Button label="Menu">Menu</Button>}
+            lead={<Button kind="quiet" label="Menu">Menu</Button>}
             center={<span className="t-small">Centered title</span>}
-            trail={<Button label="Action">Action</Button>}
+            trail={<Button kind="quiet" label="Action">Action</Button>}
           />
         </div>
       </SpecimenFrame>
@@ -59,7 +59,7 @@ function DialogSpecimen() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button label="open dialog" onClick={() => setOpen(true)}>
+      <Button kind="quiet" label="open dialog" onClick={() => setOpen(true)}>
         open dialog
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>

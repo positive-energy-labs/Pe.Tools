@@ -97,7 +97,7 @@ export function AssetReel({
     <div className="dl-asset-reel" role="group" aria-label="Assets in this thread">
       <div className="dl-asset-filters">
         {FILTERS.map((f) => (
-          <Button
+          <Button kind="quiet"
             key={f.word}
             label={`${assets.filter(f.test).length} ${f.word}`}
             pressed={filter === f.word}

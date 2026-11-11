@@ -11,7 +11,7 @@ export function ThemeToggle({ labelled = false }: { labelled?: boolean }) {
   const Icon = ICON[mode];
   const label = `Theme: ${LABEL[mode]}${mode === "auto" ? " (system)" : ""}. Click to change.`;
   return (
-    <Button
+    <Button kind="quiet"
       onClick={() => writeTheme(NEXT[mode])}
       label={label}
       icon={<Icon strokeWidth={1.5} aria-hidden />}

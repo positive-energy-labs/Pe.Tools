@@ -94,7 +94,7 @@ export function PageLog({
         {/* On the title line: the head is a fixed height, so a line under the rows would be clipped. */}
         <span className="ml-auto flex items-center gap-1">
           {open && shown.length > CAP ? (
-            <Button
+            <Button kind="quiet"
               label={all ? "newest 7 ▴" : `${shown.length - CAP} more ▸`}
               onClick={() => setAll(!all)}
             >
@@ -106,7 +106,7 @@ export function PageLog({
             </Button>
           ) : null}
           {collapsible && open ? (
-            <Button
+            <Button kind="quiet"
               label="hide ▴"
               onClick={() => {
                 setOpen(false);

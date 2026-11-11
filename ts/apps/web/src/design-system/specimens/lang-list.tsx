@@ -203,7 +203,7 @@ function PaletteSpecimen() {
   ];
   return (
     <div className="flex items-center gap-3">
-      <Button label="Open shared command palette" onClick={() => setOpen(true)}>
+      <Button kind="quiet" label="Open shared command palette" onClick={() => setOpen(true)}>
         Open palette
       </Button>
       <span className="text-ink-2">Chosen fixture: {picked}</span>

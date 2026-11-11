@@ -101,7 +101,7 @@ export function StructureLaws({ owner }: { owner: (name: string) => string }) {
       >
         <Tag>live proof · RealTable below</Tag>
         <CounterExample why="visible-only options shrink while the person is trying to widen scope">
-          <Button label="visible states only" pressed>
+          <Button kind="quiet" label="visible states only" pressed>
             visible states only
           </Button>
         </CounterExample>

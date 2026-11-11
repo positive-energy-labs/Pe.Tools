@@ -76,7 +76,7 @@ export function Lineup({ dataset }: { dataset: string }) {
           onPick={(item) => setState({ ...state, ...item.state })}
           row={(item) => ({ label: item.label, meta: item.says })}
         />
-        <Button
+        <Button kind="quiet"
           label="reset view"
           refusal={
             state.query || state.sorts.length ? null : "Nothing is narrowing or ordering the table."

@@ -150,7 +150,7 @@ export function JournalButtons({
   };
   return (
     <>
-      <Button
+      <Button kind="quiet"
         icon={Undo2}
         label={undo ? `Undo ${undo.label}` : "Undo"}
         refusal={
@@ -163,7 +163,7 @@ export function JournalButtons({
       >
         {words ? "undo" : undefined}
       </Button>
-      <Button
+      <Button kind="quiet"
         icon={Redo2}
         label={redo ? `Redo ${redo.label}` : "Redo"}
         refusal={

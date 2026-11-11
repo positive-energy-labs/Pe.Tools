@@ -133,7 +133,7 @@ export function ThreadsDrawing({ ctx: handle }: { ctx: ChatHandle }) {
       )}
       <PaneActions pane="threads">
         <small className="t-small text-ink-mute">{rosterRead ? threads.length : "…"}</small>
-        <Button label="New thread" onClick={() => void newThread()}>
+        <Button kind="quiet" label="New thread" onClick={() => void newThread()}>
           new
         </Button>
       </PaneActions>
@@ -294,7 +294,7 @@ function ChatSurface({ target, docked = false, handle }: ChatShellProps & { hand
           presentation={LEDGER_PRESENTATIONS.tray}
           head={
             <p className="m-0 flex justify-end px-2 py-1 hairline-b">
-              <Button label="Start a new Pea thread" onClick={() => void newThread()}>
+              <Button kind="quiet" label="Start a new Pea thread" onClick={() => void newThread()}>
                 New thread
               </Button>
             </p>

@@ -46,6 +46,8 @@ test("a failed Work read draws one caution failure line in the core pane, not a 
     await waitFor(() => expect(mount.failure()).toContain("frame limit"));
     const line = await screen.findByText("Reading failed");
     expect(line.closest("[data-slot='pane']"), "the failure line sits in a pane").not.toBeNull();
+    // The route's declared ground reaches the kit Pane through the slot API (design ledger default 6).
+    expect(line.closest("[data-slot='pane']")!.getAttribute("data-surface")).toBe("artifact");
     expect(within(line.closest("[data-slot='pane']") as HTMLElement).getByText(/frame limit/)).toBeTruthy();
     const outside = screen.queryAllByRole("alert").filter((el) => /frame limit/.test(el.textContent ?? "") && !el.closest("[data-slot='pane']"));
     expect(outside, "no band alert sentence outside the panes").toEqual([]);

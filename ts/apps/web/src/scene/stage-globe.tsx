@@ -23,7 +23,7 @@ export function StageGlobe({
       {stage.projection}
       {stage.wiggle && (
         <span data-wiggle="">
-          <Button
+          <Button kind="quiet"
             label="wiggle"
             reason="Circle the camera briefly for depth, then return to this exact view · W"
             onClick={stage.wiggle}

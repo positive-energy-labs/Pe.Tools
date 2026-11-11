@@ -134,7 +134,7 @@ function PaneStripWidths() {
           onClear={() => setSelected(undefined)}
         >
           {selected ? "stand-in selection facts" : "stand-in system facts"}
-          <Button label="Toggle re-read" onClick={() => setPending(!pending)}>
+          <Button kind="quiet" label="Toggle re-read" onClick={() => setPending(!pending)}>
             toggle re-read
           </Button>
           <button
@@ -247,7 +247,7 @@ export function PaneStripSpecimen() {
                       }))}
                     />
                     <span data-wiggle="">
-                      <Button
+                      <Button kind="quiet"
                         label="wiggle"
                         onClick={() => wiggle(camera, { deg: 6, loopMs: 1200, loops: 2 })}
                       >

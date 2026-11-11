@@ -45,7 +45,7 @@ export function OpsBody({ ctx }: { ctx: OpsContext }) {
             <Code code={stringify(receipt)} lang="json" />
             {(["action.read", "action.recover", "action.resume", "action.cancel"] as const).map(
               (key) => (
-                <Button
+                <Button kind="quiet"
                   key={key}
                   label={key}
                   onClick={() =>

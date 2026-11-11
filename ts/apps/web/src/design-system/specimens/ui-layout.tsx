@@ -29,7 +29,7 @@ export function UiLayoutSpecimens() {
       <SpecimenFrame name="Pane work and local outcomes" importPath="@pe/kit/lang/pane">
         <div className="h-32 w-80">
           <Pane title="capture">
-            <Button
+            <Button kind="quiet"
               label="capture meshes"
               onPress={async () => {
                 await new Promise((resolve) => setTimeout(resolve, 1200));

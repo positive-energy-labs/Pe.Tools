@@ -365,7 +365,7 @@ export function ListBar<T, Sort extends string>({
                     data-list-pill=""
                     data-tone={list.refusal ? "caution" : undefined}
                   >
-                    <Button
+                    <Button kind="quiet"
                       label={title}
                       icon={Filter}
                       onClick={() => begin(pill.field, false, valueLabel(pill.field, pill.value))}
@@ -412,7 +412,7 @@ export function ListBar<T, Sort extends string>({
             ) : null}
             {list.filtering ? <Button icon={X} label="Clear search" onClick={clear} /> : null}
             {list.facets.length ? (
-              <Button
+              <Button kind="quiet"
                 label={`Filter ${label}`}
                 icon={Filter}
                 onClick={() => {

@@ -417,7 +417,7 @@ export function ComposerWork({ situation }: { situation: ChatSituation }) {
       <ComposerPending questions={questions} answerQuestion={answerQuestion} />
       <ProposalHead asks={[]} works={works} />
       {currentThreadId && (
-        <Button label="Revoke writes" onClick={() => void cancel()}>
+        <Button kind="quiet" label="Revoke writes" onClick={() => void cancel()}>
           Revoke writes
         </Button>
       )}

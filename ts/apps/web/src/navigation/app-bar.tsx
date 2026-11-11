@@ -392,7 +392,7 @@ export function AppBar() {
               onClick={() => host.setPinned(!host.pinned)}
             />
             <span className="flex-1" />
-            <Button
+            <Button kind="quiet"
               icon={ExternalLink}
               reason="Open this page in a window"
               label="Open in window"

@@ -126,7 +126,7 @@ function OwnAppDoor({ host }: { host: string }) {
           <div className="flex items-center gap-2">
             <span>{snippet.app}</span>
             <span className="text-ink-2">{snippet.where}</span>
-            <Button
+            <Button kind="quiet"
               label={copied === snippet.app ? "copied" : "copy"}
               onClick={() => {
                 void navigator.clipboard?.writeText(snippet.text);

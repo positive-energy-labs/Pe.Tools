@@ -16,7 +16,7 @@ export function SettingsActions({ close }: { close?: () => void }) {
       <RouteControlsOutlet slot="inspector" className="pe-settings-row" />
       {!inspector && (
         <span className="pe-settings-row">
-          <Button label="Inspector" icon={Gauge} refusal="This page exposes no route inspector">
+          <Button kind="quiet" label="Inspector" icon={Gauge} refusal="This page exposes no route inspector">
             Inspector
           </Button>
         </span>
