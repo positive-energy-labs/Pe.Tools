@@ -150,6 +150,8 @@ export interface AdmittedSubject {
   toggle(id: unknown): void;
   add(ids: readonly unknown[]): void;
   remove(id: unknown): void;
+  /** Replace the open set with exactly these ids. */
+  select(ids: readonly unknown[]): void;
   setActive(id: unknown): void;
 }
 export const SubjectDoor = createContext<AdmittedSubject | null>(null);
@@ -166,7 +168,7 @@ export function typedSubjectDoor(mount: import("./typed-mount").TypedMount) {
       mount.page.subject(op(set,mount.page.read()[subjectSpec.field]));
     };
     return { toggle:(id:unknown)=>update((set,value)=>set.toggle(value,id)), add:(ids:readonly unknown[])=>update((set,value)=>set.add(value,ids)),
-      remove:(id:unknown)=>update((set,value)=>set.remove(value,id)),setActive:(id:unknown)=>update((set,value)=>set.setActive(value,id)),
+      remove:(id:unknown)=>update((set,value)=>set.remove(value,id)),select:(ids:readonly unknown[])=>update((set,value)=>set.select(value,ids)),setActive:(id:unknown)=>update((set,value)=>set.setActive(value,id)),
       all:()=>mount.page.subject({kind:"all"}),clear:()=>mount.page.subject({kind:"ids",ids:[]}) };
 
 }

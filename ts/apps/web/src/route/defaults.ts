@@ -4,6 +4,7 @@ import {
   field,
   route as declareRoute,
   type Specification,
+  type QueryFields,
   type DrawContext,
   type Fields,
   type ReadData,
@@ -49,7 +50,8 @@ export function route<
   Edit extends z.ZodType,
   const Reads extends Readonly<Record<string, HostRead>>,
   SubjectRead extends HostRead,
->(spec: Specification<D, F, W, Edit, Reads, SubjectRead>) {
+  const Q extends QueryFields = {},
+>(spec: Specification<D, F, W, Edit, Reads, SubjectRead, Q>) {
   const panes = Object.fromEntries(
     Object.entries(spec.panes).map(([id, pane]) => [id, { ...pane, read: pane.read ?? spec.core }]),
   ) as typeof spec.panes;

@@ -26,24 +26,6 @@
     "satellites": []
   },
   "fields": {
-    "pod": {
-      "role": "query",
-      "schema": "pod",
-      "codec": "pod",
-      "initial": "",
-      "url": "push",
-      "share": true,
-      "agent": "set"
-    },
-    "path": {
-      "role": "query",
-      "schema": "path",
-      "codec": "path",
-      "initial": "",
-      "url": "push",
-      "share": true,
-      "agent": "set"
-    },
     "runs": {
       "role": "query",
       "schema": "runs",
@@ -53,14 +35,22 @@
       "share": true,
       "agent": "set"
     },
-    "mode": {
-      "role": "pose",
-      "schema": "mode",
-      "codec": "mode",
-      "initial": "form",
-      "url": "replace",
+    "member": {
+      "role": "subject",
+      "schema": "member",
+      "codec": "member",
+      "initial": {
+        "kind": "ids",
+        "ids": []
+      },
+      "url": "push",
       "share": true,
-      "agent": "set"
+      "agent": "set",
+      "cardinality": "many",
+      "picker": {
+        "reading": "inventory",
+        "options": "subject"
+      }
     },
     "selected": {
       "role": "selection",
@@ -68,6 +58,13 @@
         "focus"
       ]
     }
+  },
+  "subject": {
+    "field": "member",
+    "noun": "member",
+    "roster": "inventory",
+    "detail": "inventory",
+    "pane": "members"
   },
   "historyDetail": "historyDetail",
   "work": {
@@ -81,10 +78,8 @@
       "entry": "pods.author",
       "deps": {
         "page": [
-          "pod",
-          "path",
           "runs",
-          "mode",
+          "member",
           "selected"
         ],
         "work": [],
@@ -102,10 +97,8 @@
       "entry": "pods.roster",
       "deps": {
         "page": [
-          "pod",
-          "path",
           "runs",
-          "mode",
+          "member",
           "selected"
         ],
         "work": [],
@@ -119,6 +112,17 @@
       "refresh": "dependencies"
     }
   },
+  "sheet": {
+    "draft": true,
+    "bindings": {
+      "fields": {
+        "kind": "local",
+        "per": "subject",
+        "json": true
+      }
+    }
+  },
+  "goal": "value",
   "verbs": {
     "open": {
       "kind": "command",
@@ -126,7 +130,9 @@
       "label": "Open saved bytes",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "member"
+        ],
         "work": [
           "basis",
           "fields"
@@ -147,7 +153,9 @@
       "label": "Adopt disk bytes and replace edits",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "member"
+        ],
         "work": [
           "basis",
           "fields"
@@ -168,7 +176,9 @@
       "label": "Save staged member",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "member"
+        ],
         "work": [
           "basis",
           "fields"
@@ -189,7 +199,9 @@
       "label": "Save as new member",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "member"
+        ],
         "work": [
           "basis",
           "fields"
@@ -219,9 +231,9 @@
         "saveNew"
       ]
     },
-    "spec": {
-      "label": "Spec",
-      "purpose": "Edit saved member Work",
+    "runs": {
+      "label": "Runs",
+      "purpose": "Inspect member or Pod runs",
       "draws": [
         "value"
       ],
@@ -232,9 +244,20 @@
         "saveNew"
       ]
     },
-    "runs": {
-      "label": "Runs",
-      "purpose": "Inspect member or Pod runs",
+    "sheet": {
+      "label": "Sheet",
+      "purpose": "Edit the bound cells",
+      "draws": [],
+      "verbs": [
+        "open",
+        "adopt",
+        "save",
+        "saveNew"
+      ]
+    },
+    "goal": {
+      "label": "Unresolved",
+      "purpose": "What is left before the answer",
       "draws": [
         "value"
       ],
@@ -264,11 +287,24 @@
         "children": [
           {
             "kind": "pane",
-            "id": "spec"
+            "id": "sheet"
           },
           {
-            "kind": "pane",
-            "id": "runs"
+            "kind": "split",
+            "id": "pods-results",
+            "axis": "h",
+            "size": 320,
+            "children": [
+              {
+                "kind": "pane",
+                "id": "goal"
+              },
+              {
+                "kind": "pane",
+                "id": "runs"
+              }
+            ],
+            "sized": "start"
           }
         ],
         "sized": "end"
@@ -281,8 +317,9 @@
       "word": "Pods",
       "panes": [
         "members",
-        "spec",
-        "runs"
+        "runs",
+        "sheet",
+        "goal"
       ],
       "verbs": [
         "open",
