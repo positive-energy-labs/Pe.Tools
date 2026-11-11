@@ -13,24 +13,29 @@ namespace Pe.Shared.RevitData.Serialization;
 public sealed record OwnerDescriptor(string Owner, int Version, Guid Guid, string Name, string Description);
 
 public enum OwnerBlobStatus {
-    /// <summary>No blob is stored. A write may create one.</summary>
+    /// <summary>
+    ///     No envelope is stored: the parameter is empty, or it holds an old un-enveloped shape (valid JSON with no
+    ///     <c>owner</c> key). The owner starts from its defaults and the next write replaces what is there.
+    /// </summary>
     Absent,
     Ok,
-    /// <summary>Stored text that is not this owner's envelope. It is refused and its bytes are kept.</summary>
+    /// <summary>An envelope that is broken or another owner's, or text that is not JSON. It is refused and its bytes are kept.</summary>
     Invalid,
     /// <summary>This owner's envelope at a version this build does not read. It is refused and its bytes are kept.</summary>
     UnknownVersion
 }
 
-/// <summary>A strict read of one stored blob. <see cref="Raw" /> is the stored text, unchanged, for every status but Absent.</summary>
-public sealed record OwnerBlobRead(OwnerBlobStatus Status, JObject? Data, string? Raw, string? Error) {
+/// <summary>A strict read of one stored blob. <see cref="Raw" /> is the stored text, unchanged; it is null only when nothing is stored.</summary>
+public sealed record OwnerBlobRead(OwnerDescriptor Owner, OwnerBlobStatus Status, JObject? Data, string? Raw, string? Error) {
     /// <summary>ADR 0026 D4: only an absent blob or one this build read may be written over.</summary>
     public bool MayOverwrite => this.Status is OwnerBlobStatus.Absent or OwnerBlobStatus.Ok;
 }
 
 /// <summary>
 ///     The one codec for every Pe blob stored in a model: <c>{"owner":"…","version":N,"data":{…}}</c>. There is no
-///     migration: any other shape, owner or version is refused, and the caller keeps the stored bytes.
+///     migration. An enveloped blob at an unknown version, a broken envelope and another owner's envelope are refused,
+///     and the caller keeps the stored bytes. An old un-enveloped shape is not an error path: it reads as absent
+///     (kaitpw, 2026-11-11: no client model carries one).
 /// </summary>
 public static class OwnerBlob {
     /// <summary>ADR 0032 storage amendment, rule 3. Provisional until it is measured on real models.</summary>
@@ -40,10 +45,10 @@ public static class OwnerBlob {
 
     public static OwnerBlobRead Decode(OwnerDescriptor owner, string? raw) {
         if (string.IsNullOrWhiteSpace(raw))
-            return new OwnerBlobRead(OwnerBlobStatus.Absent, null, null, null);
+            return new OwnerBlobRead(owner, OwnerBlobStatus.Absent, null, null, null);
 
         OwnerBlobRead Refused(OwnerBlobStatus status, string why) =>
-            new(status, null, raw, $"the stored {owner.Name} blob {why}; it is refused and kept as it is");
+            new(owner, status, null, raw, $"the stored {owner.Name} blob {why}; it is refused and kept as it is");
 
         JToken root;
         try {
@@ -57,6 +62,10 @@ public static class OwnerBlob {
             return Refused(OwnerBlobStatus.Invalid, $"is not strict JSON ({ex.Message})");
         }
 
+        // No envelope at all: an old shape. Unparseable text is not provably old, so it was refused above.
+        if (root is not JObject candidate || !candidate.ContainsKey("owner"))
+            return new OwnerBlobRead(owner, OwnerBlobStatus.Absent, null, raw, null);
+
         if (root is not JObject envelope
             || envelope.Count != 3
             || envelope["owner"] is not JValue { Type: JTokenType.String } storedOwner
@@ -67,7 +76,7 @@ public static class OwnerBlob {
             return Refused(OwnerBlobStatus.Invalid, $"belongs to owner '{(string?)storedOwner}', not '{owner.Owner}'");
         if (storedVersion.Value is not long version || version != owner.Version)
             return Refused(OwnerBlobStatus.UnknownVersion, $"is version {storedVersion}; this build reads version {owner.Version}");
-        return new OwnerBlobRead(OwnerBlobStatus.Ok, data, raw, null);
+        return new OwnerBlobRead(owner, OwnerBlobStatus.Ok, data, raw, null);
     }
 
     /// <summary>The stored text for the data. Throws when it is over the cap or would not decode back to the same data.</summary>
@@ -82,9 +91,31 @@ public static class OwnerBlob {
         return text;
     }
 
-    /// <summary>The data of a stored blob, for an owner that fails closed. Null when absent; throws when refused.</summary>
-    public static JObject? DataOrThrow(this OwnerBlobRead read) =>
-        read.Status is OwnerBlobStatus.Absent or OwnerBlobStatus.Ok ? read.Data : throw new InvalidOperationException(read.Error);
+    /// <summary>
+    ///     The keep policy for a read (ADR 0039): an owner's value, or the reason it cannot be read. A refused envelope
+    ///     and data the owner cannot parse both come back as a refusal value, never an exception, so one bad blob
+    ///     cannot stop a listing, a read or the host. The stored bytes are untouched either way.
+    /// </summary>
+    public static OwnerValue<T> Parse<T>(this OwnerBlobRead read, Func<JObject, T?> parse) where T : class {
+        if (read.Status == OwnerBlobStatus.Absent) return new OwnerValue<T>(null, null);
+        if (read.Status != OwnerBlobStatus.Ok) return new OwnerValue<T>(null, read.Error);
+        try {
+            return parse(read.Data!) is { } value
+                ? new OwnerValue<T>(value, null)
+                : new OwnerValue<T>(null, $"the stored {read.Owner.Name} data is empty; it is refused and kept as it is");
+        } catch (Exception ex) when (ex is InvalidOperationException or JsonException) {
+            return new OwnerValue<T>(null, $"the stored {read.Owner.Name} data cannot be read ({ex.Message}); it is refused and kept as it is");
+        }
+    }
+}
+
+/// <summary>
+///     What an owner read gives back. Both null: nothing is stored. <see cref="Refusal" /> set: the stored blob is
+///     "can't read, kept" for this reason, defaults stay in force, and no write may go over it.
+/// </summary>
+public sealed record OwnerValue<T>(T? Value, string? Refusal) where T : class {
+    /// <summary>For a write door only: a write over a blob that cannot be read is refused by throwing its reason.</summary>
+    public T? OrThrow() => this.Refusal is null ? this.Value : throw new InvalidOperationException(this.Refusal);
 }
 
 /// <summary>
@@ -115,6 +146,9 @@ public sealed record ProjectHomePointer {
         }
         return (new ProjectHomePointer(path), null);
     }
+
+    public static OwnerValue<ProjectHomePointer> Read(OwnerBlobRead read) =>
+        read.Parse(data => FromData(data) is { Pointer: { } pointer } ? pointer : throw new InvalidOperationException(FromData(data).Error));
 
     public static (ProjectHomePointer? Pointer, string? Error) FromData(JObject data) =>
         data.Count == 1 && data["path"] is JValue { Type: JTokenType.String } path

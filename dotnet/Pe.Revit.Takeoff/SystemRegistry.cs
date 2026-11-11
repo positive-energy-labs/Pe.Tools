@@ -55,6 +55,9 @@ public sealed class SystemRegistry
         return registry;
     }
 
+    /// <summary>The model's registry, or the reason it is "can't read, kept".</summary>
+    public static OwnerValue<SystemRegistry> Read(OwnerBlobRead read) => read.Parse(FromData);
+
     /// <summary>The stored text: the owner envelope around <see cref="ToData" />.</summary>
     public string Serialize() => OwnerBlob.Encode(Owner, ToData());
 

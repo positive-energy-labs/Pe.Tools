@@ -47,7 +47,30 @@ public sealed record ParameterLinkProfile {
     public static readonly Serialization.OwnerDescriptor Owner = new("parameter-links", CurrentFormatVersion,
         new Guid("ceb230bf-9e1b-485a-a05e-0cda66558efd"), "_PE_ParameterLinksProfile", "Versioned Pe.Tools parameter-link profile.");
 
+    private const string VersionKey = "formatVersion";
+
     public int FormatVersion { get; init; } = CurrentFormatVersion;
+
+    public Newtonsoft.Json.Linq.JObject ToData() {
+        var data = Newtonsoft.Json.Linq.JObject.FromObject(this, StoredSerializer());
+        _ = data.Remove(VersionKey);
+        return data;
+    }
+
+    /// <summary>The model's profile, or the reason it is "can't read, kept".</summary>
+    public static Serialization.OwnerValue<ParameterLinkProfile> Read(Serialization.OwnerBlobRead read) =>
+        Serialization.OwnerBlob.Parse(read, data => data.ContainsKey(VersionKey)
+            ? throw new JsonSerializationException("the version belongs to the envelope")
+            : data.ToObject<ParameterLinkProfile>(StoredSerializer()));
+
+    // An unknown key is a read error, not a key to drop on the next write (ADR 0032 storage amendment, rule 2).
+    private static JsonSerializer StoredSerializer() {
+        var settings = Serialization.RevitDataJson.CreateSerializerSettings();
+        settings.DefaultValueHandling = DefaultValueHandling.Include;
+        settings.NullValueHandling = NullValueHandling.Include;
+        settings.MissingMemberHandling = MissingMemberHandling.Error;
+        return JsonSerializer.Create(settings);
+    }
     [JsonProperty(Required = Required.Always)]
     public List<ParameterLinkDefinition> Definitions { get; init; } = [];
     [JsonProperty(Required = Required.Always)]

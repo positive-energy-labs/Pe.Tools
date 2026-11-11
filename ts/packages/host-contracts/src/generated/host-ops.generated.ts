@@ -253,7 +253,7 @@ export namespace DuctsApply {
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
      * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
      * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-     * edits. Any other stored version or shape is refused and kept: there is no migration.
+     * edits. An envelope at any other version is refused and kept; an old un-enveloped store reads as absent.
      *
      */
     export interface DuctLossStore {
@@ -530,7 +530,7 @@ export namespace DuctsApplyPlan {
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
      * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
      * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-     * edits. Any other stored version or shape is refused and kept: there is no migration.
+     * edits. An envelope at any other version is refused and kept; an old un-enveloped store reads as absent.
      *
      */
     export interface DuctLossStore {
@@ -1643,7 +1643,7 @@ export namespace DuctsSnapshotRoster {
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
      * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
      * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-     * edits. Any other stored version or shape is refused and kept: there is no migration.
+     * edits. An envelope at any other version is refused and kept; an old un-enveloped store reads as absent.
      *
      */
     export interface DuctLossStore {
@@ -2272,7 +2272,7 @@ export namespace DuctsSnapshotWalk {
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
      * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
      * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-     * edits. Any other stored version or shape is refused and kept: there is no migration.
+     * edits. An envelope at any other version is refused and kept; an old un-enveloped store reads as absent.
      *
      */
     export interface DuctLossStore {
@@ -10318,6 +10318,7 @@ export namespace RoomsRoster {
     export interface Response {
       levels: RoomsLevel[];
       regions: RoomsRegion[];
+      unreadable?: TakeoffUnreadableBlob[] | null;
     }
     export interface RoomsLevel {
       name: string;
@@ -10350,6 +10351,17 @@ export namespace RoomsRoster {
       touched: boolean;
       locked: boolean;
       stale: boolean;
+    }
+    /**
+     * A stored takeoff blob this build can't read; it is kept as it is (ADR 0039 keep). ElementId is the region that
+     * holds it, or null for the System registry on Project Information. A listing reports these and goes on: the
+     * region is left out of what it lists, and no write goes over the blob.
+     *
+     */
+    export interface TakeoffUnreadableBlob {
+      elementId?: number | null;
+      parameter: string;
+      reason: string;
     }
   }
 }
@@ -10365,6 +10377,7 @@ export namespace RoomsSnapshot {
     export interface Response {
       levels: RoomsLevel[];
       regions: RoomsRegion[];
+      unreadable?: TakeoffUnreadableBlob[] | null;
     }
     export interface RoomsLevel {
       name: string;
@@ -10397,6 +10410,17 @@ export namespace RoomsSnapshot {
       touched: boolean;
       locked: boolean;
       stale: boolean;
+    }
+    /**
+     * A stored takeoff blob this build can't read; it is kept as it is (ADR 0039 keep). ElementId is the region that
+     * holds it, or null for the System registry on Project Information. A listing reports these and goes on: the
+     * region is left out of what it lists, and no write goes over the blob.
+     *
+     */
+    export interface TakeoffUnreadableBlob {
+      elementId?: number | null;
+      parameter: string;
+      reason: string;
     }
   }
 }
@@ -10988,6 +11012,7 @@ export namespace TakeoffsCandidates {
       blob: string;
       loops: number[][][];
       ownerCrop?: null | RevitCropCoverage;
+      unreadable?: null | string;
     }
   }
 }
@@ -11174,6 +11199,7 @@ export namespace TakeoffsSnapshot {
       regionsByZone: {
         [k: string]: TakeoffLiveRegion[];
       };
+      unreadable?: TakeoffUnreadableBlob[] | null;
     }
     export interface TakeoffModelStatus {
       systems: TakeoffRegistrySystem[];
@@ -11199,6 +11225,7 @@ export namespace TakeoffsSnapshot {
       blob: string;
       loops: number[][][];
       ownerCrop?: null | RevitCropCoverage;
+      unreadable?: null | string;
     }
     export interface TakeoffLiveRegion {
       elementId: number;
@@ -11220,6 +11247,17 @@ export namespace TakeoffsSnapshot {
       floorZ?: null | number;
       ceilingZ?: null | number;
       hold?: null | string;
+    }
+    /**
+     * A stored takeoff blob this build can't read; it is kept as it is (ADR 0039 keep). ElementId is the region that
+     * holds it, or null for the System registry on Project Information. A listing reports these and goes on: the
+     * region is left out of what it lists, and no write goes over the blob.
+     *
+     */
+    export interface TakeoffUnreadableBlob {
+      elementId?: number | null;
+      parameter: string;
+      reason: string;
     }
   }
 }

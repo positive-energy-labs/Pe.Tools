@@ -117,6 +117,10 @@ public class CmdAutoTag : IExternalCommand {
 
     private static string BuildStatusSummary(AutoTagStatus status) {
         var sb = new StringBuilder();
+        if (status.StoredSettingsRefusal is { } refusal) {
+            _ = sb.AppendLine($"Stored settings: can't read, kept. {refusal}");
+            _ = sb.AppendLine();
+        }
         _ = sb.AppendLine(
             $"Configurations: {status.ConfigurationCount} total, {status.EnabledConfigurationCount} active");
 

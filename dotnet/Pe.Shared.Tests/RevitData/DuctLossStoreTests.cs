@@ -74,10 +74,10 @@ public sealed class DuctLossStoreTests {
 
     [TestCase("""{"owner":"duct-losses","version":3,"data":{"workRevision":1}}""", "version 3")]
     [TestCase("""{"owner":"duct-losses","version":1,"data":{"workRevision":1}}""", "version 1")]
-    [TestCase("""{"version":2,"workRevision":1}""", "envelope")]
+    [TestCase("""{"version":2,"workRevision":1}""", "empty", Description = "an old un-enveloped store is absent, so there is no store to parse")]
     [TestCase("""{"owner":"duct-losses","version":2,"data":{"version":2,"workRevision":1}}""", "belongs to the envelope")]
     [TestCase("""{"owner":"duct-losses","version":2,""", "not strict JSON")]
-    [TestCase("null", "envelope")]
+    [TestCase("null", "empty")]
     public void Fails_closed(string json, string message) =>
         Assert.That(() => DuctLossStore.FromJson(json), Throws.InvalidOperationException.With.Message.Contains(message));
 
