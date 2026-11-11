@@ -83,7 +83,7 @@ export function Roster({ props }: { props: RosterProps }) {
     ),
     revit: [fan.unitId],
     title: `Open ${labelOf(fan)}`,
-    actions: <FindingVerb subject={stableFanKey(fan)} name={labelOf(fan)} write={props.finding} />,
+    actions: <FindingVerb subject={stableFanKey(fan)} name={labelOf(fan)} action={props.finding} />,
   });
   // The roster pane clips; the list scrolls in its own Scroll, as the /ducts systems pane does.
   return (

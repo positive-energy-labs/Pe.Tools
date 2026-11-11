@@ -135,3 +135,34 @@ test("the person undoes their own finding from its History row; Pea's newer find
     await rm(dir, { recursive: true, force: true });
   }
 }, 90_000);
+
+/*
+ * gate-ef940d36 FALSIFIED: on /fans before Start, Write was enabled with no reason; the press reached
+ * no host and said nothing. The row verb now refuses with the Work's own reason, as the cells do.
+ */
+test("before the Work is started, the row's Write is refused with the Work's reason and no press reaches the host", async () => {
+  const submitted: unknown[] = [];
+  const closes: (() => void)[] = [];
+  try {
+    // No Fans Work in the store: the route reads it absent, as before Start.
+    const f = await createWitness(closes, new Map<string, unknown>([["fans", undefined]]), {}, undefined, undefined,
+      async (command) => { submitted.push(command); throw Error("no host call expected"); });
+    await waitFor(() => expect(f.typed.owner()?.problem).toBe("Start this Work to edit"));
+    render(<>{f.typed.draw("sheet-roster", (ctx) => <RosterBody ctx={ctx as never} />) as React.ReactNode}</>);
+    const trigger = (await screen.findAllByRole("button", { name: /^Write a finding on / }))[0]!;
+    const name = trigger.getAttribute("aria-label")!.replace("Write a finding on ", "");
+    fireEvent.click(trigger);
+    const pop = await screen.findByLabelText(`Finding on ${name}`);
+    fireEvent.change(within(pop).getByLabelText("finding text"), { target: { value: "unstarted note" } });
+    const write = within(pop).getByRole("button", { name: `Write note on ${name}` });
+    expect(write.getAttribute("aria-disabled")).toBe("true");
+    expect(write.getAttribute("aria-description")).toBe("Start this Work to edit");
+    fireEvent.click(write);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(submitted).toEqual([]);
+    // The press kept the person's text: nothing was dropped.
+    expect((within(pop).getByLabelText("finding text") as HTMLInputElement).value).toBe("unstarted note");
+  } finally {
+    closes.reverse().forEach((close) => close());
+  }
+}, 60_000);

@@ -88,7 +88,7 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
     const subject = subjectRow(cell.row);
     if (!subject || verbed.has(subject)) return null;
     verbed.add(subject);
-    return <FindingVerb subject={subject} name={cell.label} write={(finding) => ctx.write("finding").run(finding)} />;
+    return <FindingVerb subject={subject} name={cell.label} action={ctx.write("finding")} />;
   };
   if (empty) return <p className="text-ink-2">{empty}</p>;
   return (

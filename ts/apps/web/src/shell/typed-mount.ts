@@ -568,7 +568,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
      *  (slice 6.1, `data-url-settled`); a reload reads only the address. */
     urlCurrent: () => canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
-    commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions" : "kind" in spec.commands[id]! ? null : basisRefusal(),
+    // A row verb runs on this route's own Work handle: before the Work is ready it refuses with the Work's own
+    // reason ("Start this Work to edit"), as the cells do, instead of failing a press nobody sees.
+    commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions"
+      : "kind" in spec.commands[id]! ? ("row" in spec.commands[id]! && spec.commands[id]!.row && !owners.get(own)?.ready ? owners.get(own)?.problem ?? "Reading Work..." : null) : basisRefusal(),
     problem: () => edits?basisRefusal():null, writeRefusal,
     refresh: (read?:import("../route/host-read").HostRead) => {
       requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true);
