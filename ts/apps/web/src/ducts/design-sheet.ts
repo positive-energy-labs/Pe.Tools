@@ -13,8 +13,13 @@ import { criterionLabel } from "./sheet/criterion-words.neutral.ts";
 type Resolved = { readonly value: unknown; readonly source: string; readonly units: string | null };
 type DesignRead = {
   readonly criteria?: Readonly<Record<string, Resolved | Readonly<Record<"supply" | "return", Resolved>>>>;
-  readonly firm?: { readonly version: string; readonly path: string; readonly present: boolean };
+  readonly firm?: { readonly version: string; readonly path: string; readonly present: boolean } | { readonly refused: "no-shared-root" };
 } | null;
+
+/** Slice 2b (moved from the deleted inputs surface): the firm file lives only on the shared root. */
+export const NO_SHARED_ROOT = "No shared root: set PE_TOOLS_SHARED_ROOT to read Firm/ducts.json";
+/** A criterion's provenance when the firm layer is refused: the host resolved it on the engine seed. */
+export const ENGINE_DEFAULT_NO_SHARED_ROOT = "Engine default: no shared root, so Firm/ducts.json is not read";
 
 const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { "model-store": "model-store", model: "model", firm: "firm", default: "default" };
 const resolvedOf = (read: DesignRead, cell: DuctsCriteriaCell) => {
@@ -24,7 +29,7 @@ const resolvedOf = (read: DesignRead, cell: DuctsCriteriaCell) => {
 };
 /** The firm line: which file the firm layer is, and whether it is there or the seed stands in for it. */
 export const firmRef = (firm: NonNullable<DesignRead>["firm"]) =>
-  firm ? `${firm.version} · ${firm.path.split(/[\/]/).at(-1)}${firm.present ? "" : " (missing, on the seed)"}` : undefined;
+  firm && "refused" in firm ? NO_SHARED_ROOT : firm ? `${firm.version} · ${firm.path.split(/[\/]/).at(-1)}${firm.present ? "" : " (missing, on the seed)"}` : undefined;
 
 export const designSheet = {
   draft: true,
@@ -39,6 +44,11 @@ export const designSheet = {
       model: (read: DesignRead, row) => {
         const resolved = resolvedOf(read, row as DuctsCriteriaCell);
         if (!resolved || resolved.value == null) return null;
+        // ADR 0035 rule 11 disables the shared firm layer, never the Work above it: a criterion on that
+        // layer with no shared root is the engine seed, says so, and stays an editable cell.
+        if (resolved.source === "firm" && read?.firm && "refused" in read.firm)
+          return { value: resolved.value, source: "default", ref: ENGINE_DEFAULT_NO_SHARED_ROOT,
+            ...(resolved.units ? { unit: resolved.units } : {}) };
         const source = SOURCES[resolved.source] ?? "model";
         return { value: resolved.value, source, ...(source === "firm" ? { ref: firmRef(read?.firm) } : {}),
           ...(resolved.units ? { unit: resolved.units } : {}) };

@@ -12,9 +12,9 @@ import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { catalogTableSchema, ductsFirmSchema } from "@pe/agent-contracts";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
-import { readDuctCatalogs, productCatalogsRootPath, type CatalogReading } from "./duct-catalogs.ts";
+import { sharedFirmDir } from "@pe/host-contracts/product-paths";
+import { readDuctCatalogs, productCatalogsRoots, type CatalogReading } from "./duct-catalogs.ts";
 import { firmFileSchema, firmOwner, type FirmFile } from "./reads/evaluator.ts";
-import { productUserContentRootPath } from "./product-paths.ts";
 import {
   captureInput,
   inputBindingKey,
@@ -24,9 +24,15 @@ import {
   type TakingObserver,
 } from "./native-recording.ts";
 
-export const firmRootPath = () => join(productUserContentRootPath(), "Firm");
+/**
+ * Slice 2b (ADR 0035 rule 11): firm files are a shared setting with no user layer, at
+ * `<shared>/Firm/<owner>.json` (ducts' is `<shared>/Firm/ducts.json`); null without a shared root.
+ */
+export const firmRootPath = (): string | null => sharedFirmDir();
 /** One owner's firm file as read; malformed JSON is a visible error, never a thrown defect. */
-async function readFirmFile(root: string, owner: string): Promise<FirmFile> {
+async function readFirmFile(root: string | null, owner: string): Promise<FirmFile> {
+  // No shared root: the file has no home, so the read refuses rather than seeding silently.
+  if (root === null) return { refused: "no-shared-root" };
   const path = join(root, `${firmOwner.parse(owner)}.json`);
   let text: string;
   try {
@@ -41,19 +47,23 @@ async function readFirmFile(root: string, owner: string): Promise<FirmFile> {
     return { path, error: String(error) };
   }
 }
-const readFirmRoot = async (root: string) => {
+const readFirmRoot = async (root: string | null) => {
+  if (root === null) return [];
   const names = await readdir(root).catch(() => [] as string[]);
   const owners = names.filter((name) => name.endsWith(".json")).map((name) => name.slice(0, -5));
   return Promise.all(owners.filter((owner) => firmOwner.safeParse(owner).success).map((owner) => readFirmFile(root, owner)));
 };
 
 // The decoded ducts layer, and the catalogs' own contract: a recorded input decodes only if it is still that input.
-export const firmReading = z.strictObject({
-  firm: ductsFirmSchema,
-  path: z.string(),
-  present: z.boolean(),
-  error: z.string().optional(),
-});
+export const firmReading = z.union([
+  z.strictObject({
+    firm: ductsFirmSchema,
+    path: z.string(),
+    present: z.boolean(),
+    error: z.string().optional(),
+  }),
+  z.strictObject({ refused: z.literal("no-shared-root") }),
+]);
 export const catalogReading = z.strictObject({
   tables: z.record(z.string(), catalogTableSchema),
   findings: z.array(z.string()),
@@ -77,16 +87,20 @@ export class DuctFiles extends Context.Service<
   }
 >()("pe/DuctFiles") {
   static readonly layer = (
-    roots: { readonly firm: string; readonly catalogs: string } = {
+    roots: { readonly firm: string | null; readonly catalogs: string | readonly string[] } = {
       firm: firmRootPath(),
-      catalogs: productCatalogsRootPath(),
+      catalogs: productCatalogsRoots(),
     },
   ) =>
     Layer.succeed(DuctFiles, {
       firm: (owner) => Effect.promise(() => readFirmFile(roots.firm, owner)),
       ductCatalogs: Effect.promise(() => readDuctCatalogs(roots.catalogs)),
       subscribe: (changed) => {
-        const stops = Object.entries({ firm: roots.firm, catalogs: roots.catalogs }).map(
+        const stops = [
+          // No shared root, no firm file to watch: the refusal holds until the host restarts.
+          ...(roots.firm === null ? [] : [["firm", roots.firm] as const]),
+          ...[roots.catalogs].flat().map((path) => ["catalogs", path] as const),
+        ].map(
           ([name, path]) => {
             // A filesystem hint (including an ancestor change) is not a changed input.
             // Compare the producer's answer so absent files and access metadata stay quiet.

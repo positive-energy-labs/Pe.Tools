@@ -383,7 +383,8 @@ test.each(["claude", "codex"] as const)(
             await journal.invoke(
               {
                 id: phase,
-                key: `ducts.${phase === "preview" ? "plan" : "apply"}-losses`,
+                // Slice 7: the sheet pair replaced the ducts losses pair (sheet.plan / sheet.apply).
+                key: `sheet.${phase === "preview" ? "plan" : "apply"}`,
                 target: { kind: "document", ref: target },
                 input: { work },
               },

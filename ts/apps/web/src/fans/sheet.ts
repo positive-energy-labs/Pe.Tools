@@ -96,7 +96,10 @@ export const fansSheet = {
     const firm = read.sheetView.firm;
     const snapshot = snapshotOf(read);
     return {
-      says: `Priced with the /ducts design, Work r${read.ductsRevision}${firm ? ` over firm ${firm.version} · ${firm.path.split(/[\\/]/).at(-1)}` : ""}`,
+      // Slice 2b: without a shared root the firm layer is refused and the design runs on the engine seed.
+      says: `Priced with the /ducts design, Work r${read.ductsRevision}${!firm ? "" : "refused" in firm
+        ? " on the engine default (no shared root, so Firm/ducts.json is not read)"
+        : ` over firm ${firm.version} · ${firm.path.split(/[\\/]/).at(-1)}`}`,
       href: ductsLink(snapshot ? sheetSystems(snapshot) : [], search),
     };
   },

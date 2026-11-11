@@ -24,7 +24,7 @@ import { runPods } from "./family-actions.ts";
 import { buildSheet, resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
 import { accessoryWrites } from "@pe/ducts-domain/sheet/accessory-writes";
 import { suggestRoster } from "@pe/ducts-domain/roster";
-import { FIRM_SEED, workLayer } from "./ducts-inputs.ts";
+import { FIRM_SEED, firmLayer, workLayer } from "./ducts-inputs.ts";
 import { resolveFirm } from "./reads/evaluator.ts";
 import { followAcceptedJoins } from "./ducts-walk.ts";
 import { scopeApplyRequest, appliedCellPaths, pendingCount, fanWriteCells } from "@pe/ducts-domain/staged";
@@ -212,11 +212,8 @@ export function ductsExecutors(
           groups: ductsScope?.groups?.map((code) => String(subjectOf(code).key)),
           walk: fanScope?.walk,
         };
-        const { firm } = resolveFirm(
-          await runPods(deps, deps.files!.firm("ducts")),
-          ductsFirmSchema,
-          FIRM_SEED,
-        );
+        // 2b's refusal-aware layer over the owner-keyed firm file (the Pod firm door reads the same file).
+        const firm = firmLayer(resolveFirm(await runPods(deps, deps.files!.firm("ducts")), ductsFirmSchema, FIRM_SEED));
         const criteria = resolveCriteria(workLayer(design), null, firm);
         const nativeRead = deps.nativeRead;
         if (!nativeRead) throw refused("Ducts preparation requires the root native Read capability", "read.unavailable",

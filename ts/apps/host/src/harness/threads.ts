@@ -520,7 +520,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       runs.restore(id, meta.runConsent);
       // Backfill only observed context. Work documents and native admission stay untouched.
       if (before !== JSON.stringify(meta.workContext))
-        writeJson(join(options.root, id, "meta.json"), meta);
+        writeJson(join(options.root, id, "meta.json"), redactKeys(meta, options.providers.keys()));
     } catch (error) {
       startup.skipped.push(
         `harness thread ${join(options.root, id)} skipped: it does not parse (${String(error)})`,
@@ -617,7 +617,9 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     return t;
   }
 
-  const writeMeta = (t: Thread) => writeJson(join(options.root, t.meta.id, "meta.json"), t.meta);
+  // meta.json is a door too: a harness's session title can echo a key, so it takes the one redaction set.
+  const writeMeta = (t: Thread) =>
+    writeJson(join(options.root, t.meta.id, "meta.json"), redactKeys(t.meta, options.providers.keys()));
 
   function append(t: Thread, event: Append): HarnessEvent {
     const keys = options.providers.keys();

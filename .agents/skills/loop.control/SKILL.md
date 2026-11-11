@@ -36,6 +36,7 @@ LEDGER      where receipts and verdicts persist
 - Every actuator has a timeout, a branch, and two attempts. A move that cannot land gives up and says why, and the next attempt reads why. The operator sees a blocked signature as a stop.
 - A brief carries the evidence and why the last attempt failed, never the number.
 - An actuator stops at its timeout and leaves its work on its branch. The controller never extends a timeout mid-move.
+- Where the run has a standing driver, the driver is the observer and writes every receipt the sensor reads. The controller commissions no reader of its own.
 - An integration thread lands moves, and the controller never merges. A move lands as one receipt someone can open: a green branch, a report file, or a ledger line.
 - A signature is done when the sensor's next reading no longer sees it, never when the controller judges a predicate true.
 - A dismissed signature stays dismissed until its evidence grows. A landed one re-arms only if a later sample still shows it.

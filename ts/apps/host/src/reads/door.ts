@@ -129,24 +129,33 @@ export function nativeRead<K extends HostOperationKey>(
 }
 /** A firm owner names one file under the firm root; no separators, so no path escapes it. */
 export const firmOwner = z.string().regex(/^[a-z0-9][a-z0-9.-]*$/i);
-/** The file as read: absent (no json), unreadable or malformed (error), or its parsed JSON. */
-export const firmFileSchema = z.strictObject({
-  path: z.string(),
-  json: z.unknown().optional(),
-  error: z.string().optional(),
-});
+/** No shared root (slice 2b, ADR 0035 rule 11): the firm file has no home, so its read refuses. */
+const noSharedRoot = z.strictObject({ refused: z.literal("no-shared-root") });
+/** The file as read: absent (no json), unreadable or malformed (error), its parsed JSON, or refused. */
+export const firmFileSchema = z.union([
+  z.strictObject({
+    path: z.string(),
+    json: z.unknown().optional(),
+    error: z.string().optional(),
+  }),
+  noSharedRoot,
+]);
 export type FirmFile = z.output<typeof firmFileSchema>;
-export interface FirmValue<T> {
-  firm: T;
-  path: string;
-  /** False when the seed stands in; `error` says why when the file exists and was not used. */
-  present: boolean;
-  error?: string;
-}
+/** The decoded layer, or the refusal: a reader that runs anyway runs on its named seed and says so. */
+export type FirmValue<T> =
+  | {
+      firm: T;
+      path: string;
+      /** False when the seed stands in; `error` says why when the file exists and was not used. */
+      present: boolean;
+      error?: string;
+    }
+  | z.output<typeof noSharedRoot>;
 /** The firm file layer (ADR 0026): `Firm/<owner>.json` as read, before `resolveFirm` decodes it. */
 export const firm = leaf("file:firm", firmOwner, firmFileSchema);
 /** Each value carries its source: the firm file when it decodes, else the engine default (seed). */
 export function resolveFirm<T>(file: FirmFile, schema: z.ZodType<T>, seed: T): FirmValue<T> {
+  if ("refused" in file) return file;
   const fallback = (error?: string) => ({
     firm: seed,
     path: file.path,

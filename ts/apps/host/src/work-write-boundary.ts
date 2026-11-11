@@ -106,7 +106,6 @@ async function deriveFromWork(
 ) {
   const { work, readWorks } = z.object({ work: workHandleSchema, readWorks: z.record(z.string(), workHandleSchema).optional() ,
     }).parse(definition.input.parse(ctx.admission.input));
-  const spec = specOf(work);
   if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
   const target = ctx.admission.target.ref;
   const observed = await lifetime(bridge, target, false, deps);
@@ -115,6 +114,8 @@ async function deriveFromWork(
   )?.address;
   if (!workBinding(work.key).admits(target, address, hooks.workspace))
     throw refused("Work belongs to another document", "work.target");
+  // Foreign Work refuses before any owner lookup (an ANY_ROUTE door resolves its owner's spec here).
+  const spec = specOf(work);
   // Each owner also resolves the native incarnation. The address check uses that same bound dependency below.
   const doc = (await ctx.selectWork(spec, work, (_doc, cells) => ({
     cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),

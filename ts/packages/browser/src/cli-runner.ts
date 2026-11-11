@@ -54,7 +54,7 @@ export async function runBrowserCli(
       output({
         commands: [
           "guide (plain Markdown; other commands emit JSON)",
-          "launch|open [--visible] [--unthrottled] [--profile DIR] [--executable PATH]",
+          "launch|open [--visible] [--viewport WxH (default 1600x900)] [--profile DIR] [--executable PATH]",
           "attach --endpoint URL|PORT | --auto-connect --profile CHROME_USER_DATA_ROOT",
           "list|status [SESSION]",
           "targets SESSION",
@@ -76,23 +76,21 @@ export async function runBrowserCli(
       if (visible && headless) throw new Error("Choose --visible or --headless");
       const profile = option("--profile");
       const executablePath = option("--executable");
-      const unthrottled = flag("--unthrottled");
+      const viewportText = option("--viewport");
+      const size = viewportText?.match(/^(\d+)x(\d+)$/);
+      if (viewportText && !size) throw new Error("--viewport must be WIDTHxHEIGHT, e.g. 1600x900");
+      if (flag("--unthrottled"))
+        throw new Error("--unthrottled is gone: every launch keeps rendering when covered");
       const extra = args[0] === "--" ? args.slice(1) : args;
       const session = await openBrowser({
         home,
         mode: visible ? "visible" : "headless",
+        ...(size ? { viewport: { width: Number(size[1]), height: Number(size[2]) } } : {}),
         profile,
         executablePath,
         timeoutMs,
         lifetime: "session",
-        args: unthrottled
-          ? [
-              "--disable-background-timer-throttling",
-              "--disable-renderer-backgrounding",
-              "--disable-backgrounding-occluded-windows",
-              ...extra,
-            ]
-          : extra,
+        args: extra,
       });
       output(session.info);
       await session.disconnect();

@@ -517,8 +517,14 @@ export const ductsSheetResponseSchema = z.discriminatedUnion("kind", [
     kind: z.literal("inputs"),
     directionOverride: z.string().nullable().optional(),
     inputs: ductsInputsSchema,
-    /** The firm layer: the file's version, or "seed" with present false when the file is absent. */
-    firm: z.strictObject({ version: z.string(), path: z.string(), present: z.boolean() }),
+    /**
+     * The firm layer: the file's version, or "seed" with present false when the file is absent;
+     * refused without a shared root, where the sheet runs on the seed and its firm fields are disabled.
+     */
+    firm: z.union([
+      z.strictObject({ version: z.string(), path: z.string(), present: z.boolean() }),
+      z.strictObject({ refused: z.literal("no-shared-root") }),
+    ]),
     ends: z.array(pathEnd),
     /** Every fitting the sheet priced, or failed to, with its rule, table and their sources. */
     fittings: z.array(fittingPricingSchema),

@@ -137,8 +137,9 @@ import {
   type AdmittedPackage,
 } from "./packages.ts";
 import {
-  packagePageDescriptors,
+  pageDescriptors,
   pageFolderCollisions,
+  productPagesRoots,
   scratchPageDescriptors,
   type PageDescriptor,
 } from "./page-libraries.ts";
@@ -868,6 +869,8 @@ function workKey(url: URL, route: string, shape: "read" | "write"): WorkKey | Re
  */
 export function createContributionContent(options: {
   worldRoot: string;
+  /** Scratch Pages in read order; the world root's `Pages` when omitted (an isolated test world). */
+  pagesRoots?: readonly string[];
   packages?: typeof listPackages;
   pages?: (packages: readonly AdmittedPackage[]) => Promise<readonly PageDescriptor[]>;
   bootstrap?: () => Promise<unknown>;
@@ -875,6 +878,7 @@ export function createContributionContent(options: {
   decisionsPath?: string;
   changed?: () => void;
 }) {
+  const pagesRoots = options.pagesRoots ?? [join(options.worldRoot, "Pages")];
   const revisions = new Map<string, Map<string, unknown>>();
   const latest = new Map<string, unknown>();
   let snapshot: Promise<CapabilityContent> | undefined;
@@ -950,10 +954,7 @@ export function createContributionContent(options: {
     admitted = lifecycle.packages();
     const allDescriptors = options.pages
       ? await options.pages(admitted)
-      : [
-          ...(await scratchPageDescriptors(join(options.worldRoot, "Pages"))),
-          ...packagePageDescriptors(admitted),
-        ];
+      : await pageDescriptors(admitted, pagesRoots);
     const descriptors = allDescriptors.filter((p) => p.key !== null && p.openUrl !== null);
     const scratch = allDescriptors.filter((p) => p.pod === null).map((p) => p.slug);
     const collisions = pageFolderCollisions(scratch);
@@ -1095,7 +1096,7 @@ export function createContributionContent(options: {
     pages: async () => {
       const descriptors = options.pages
         ? await options.pages(admitted)
-        : await scratchPageDescriptors(join(options.worldRoot, "Pages"));
+        : await scratchPageDescriptors(pagesRoots);
       return pageRows(descriptors);
     },
     member: (key: string, sha256?: string) =>
@@ -1133,6 +1134,7 @@ function* hostPeRoutes(
   let invalidateCatalog = () => {};
   const content = createContributionContent({
     worldRoot,
+    pagesRoots: productPagesRoots(),
     bootstrapInBackground: true,
     changed: () => invalidateCatalog(),
     bootstrap: async () => {

@@ -157,7 +157,11 @@ export const ductsPricingData = z.object({
   /** The design criteria as they stand under Work (the store over the firm file), each with its source: the /ducts design sheet's model layer. */
   criteria: ductsInputsSchema.shape.criteria,
   /** The firm file the criteria fall back to: the firm line (version, file, present). */
-  firm: z.strictObject({ version: z.string(), path: z.string(), present: z.boolean() }),
+  /** The firm line, or refused without a shared root (slice 2b): criteria then resolve on the seed. */
+  firm: z.union([
+    z.strictObject({ version: z.string(), path: z.string(), present: z.boolean() }),
+    z.strictObject({ refused: z.literal("no-shared-root") }),
+  ]),
   priced: z.object({
     snapshot: nativeResponseSchema("ducts.snapshot.walk"),
     flows: record(flow),

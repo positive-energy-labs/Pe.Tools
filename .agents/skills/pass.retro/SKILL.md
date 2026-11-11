@@ -14,7 +14,7 @@ prevents: "the repeated cost: a costly session pattern paid again because nobody
 
 - Freeze the threads first: ids, window, and which run is good and which bad, by the owner's word.
 - The owner names what felt bad, and the instruments say what it cost. A finding needs both. Treat a feeling with no measurement as a lead, and a measurement with no feeling as a gauge.
-- Measure with `mine`'s retro verb. Per thread, report hours, owner turns, API calls, compactions, max context, cost, tool calls, tool output by tool, and inflows over 20k characters. Put the context curve with its compaction marks on a page.
+- Measure with `mine`'s retro verb. Per thread, report hours, owner turns, API calls, compactions, max context, cost, tool calls, tool output by tool, inflows over 20k characters, tool wall time by kind with its test share, idle gaps, and keepalive hits. A run with child threads is measured as a tree and drawn as swimlanes, because the critical path lives in the waits between threads. Put the context curve with its compaction marks on a page.
 - Compare against a good run the owner named, because a finding without a comparison only describes.
 - Each finding carries its mechanism, its cost in the measured unit, an anchor (thread id plus turn time or item id), its severity, and its level on `index`'s strength ladder.
 - Rank findings by that level: a fix above the line beats a guard, and a guard beats prose. Send a skill edit to `reflect`, a verdict to `docs`, and a tool defect to its owner's ledger.
@@ -25,5 +25,5 @@ prevents: "the repeated cost: a costly session pattern paid again because nobody
 ## This repo [scope: repo]
 
 - For a project-wide retro over a window, run `mine`'s `corpus` verb, then label roles in a separate loop. Shard `<run-dir>/shards` into batches for cheap subagents briefed with `corpus/label_brief.md`, run `corpus/merge_labels.py` on their JSONL, run `corpus/render.py --run <run-dir> --roles roles.json`, and hand the owner the `retro.html` path with the findings in chat.
-- `roles.json` labels for standing roles use the charter names in `.agents/roles/`: implementor, purger, driver, archivist.
+- `roles.json` labels for standing roles use the charter names in `.agents/roles/`: implementor, purger, driver, and archivist for runs before 2026-11-10.
 - Group a retro's role findings by charter version, which is the commit the charter was at when the thread ran. Compare a role's outcome metric, as its charter defines it, across versions.

@@ -7,6 +7,7 @@
  */
 import { stagedDucts, type DuctsFirm, type DuctsDesign } from "@pe/agent-contracts";
 import { type WorkLayer } from "@pe/ducts-domain/sheet/index";
+import type { FirmValue } from "./reads/door.ts";
 
 // firm-default: what a firm with no file yet runs on. Velocity limits are Manual D's rules of
 // thumb (trunk 900 supply, 700 return); 0.03 in-wg is the grille placeholder; 3 in and 36 in are
@@ -22,6 +23,13 @@ export const FIRM_SEED: DuctsFirm = {
     allowanceInWg: { supply: 0, return: 0 },
   },
 };
+
+/** The ducts firm layer as read through `ctx.firm("ducts", …)` / `DuctFiles.firm("ducts")`, or refused without a shared root. */
+export type FirmReading = FirmValue<DuctsFirm>;
+
+/** The firm layer a resolver runs on: the reading's firm, or the named seed when the read refused (slice 2b). */
+export const firmLayer = (reading: FirmReading): DuctsFirm =>
+  "refused" in reading ? FIRM_SEED : reading.firm;
 
 /** Work's staged edits as the resolver reads them. */
 export function workLayer(design: DuctsDesign): WorkLayer {

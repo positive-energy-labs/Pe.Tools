@@ -23,11 +23,12 @@ const pod = {
       // @ts-expect-error a Pod read never writes: a ModelWrite leaf is not a catalog Read
       await ctx.native("ducts.apply", { request: {}, target });
     const firm = await ctx.firm("hydronic.sizing", limits, {});
-    const maxFriction = firm.firm.maxFriction ?? 400;
+    // Slice 2b: no shared root refuses the firm file; the read runs on its named default.
+    const stated = "refused" in firm ? undefined : firm.firm.maxFriction;
     return {
       status: body.status,
-      maxFriction,
-      source: firm.firm.maxFriction === undefined ? "default" : "firm",
+      maxFriction: stated ?? 400,
+      source: stated === undefined ? "default" : "firm",
     };
   },
 };

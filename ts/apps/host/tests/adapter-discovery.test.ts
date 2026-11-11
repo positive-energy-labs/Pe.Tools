@@ -132,3 +132,40 @@ function file(path: string) {
   writeFileSync(path, "lookup only, never executed");
   return path;
 }
+
+test("witness: a shared key in a console tail is redacted (kills B4)", async () => {
+  const env = home();
+  for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+  const shared = join(env.USERPROFILE, "shared");
+  mkdirSync(shared, { recursive: true });
+  writeFileSync(join(shared, "keys.json"), JSON.stringify({ "codex-firm": "shared-console-key" }));
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
+  vi.stubEnv("PE_HARNESS_ADAPTER_CODEX", join(import.meta.dirname, "fake-acp-agent.mjs"));
+  vi.stubEnv("FAKE_ACP_AUTH", "none");
+  const logPath = join(env.LOCALAPPDATA, "console.log");
+  const providers = createProviders({
+    spawner: testSpawner(),
+    probeOnStart: false,
+    openConsole: async (_command, _env, opened) => {
+      opened();
+      mkdirSync(dirname(logPath), { recursive: true });
+      writeFileSync(logPath, "installer failure shared-console-key");
+      return { exitCode: 0, commandExitCode: 17, logPath };
+    },
+  });
+  const request = (verb: string) =>
+    new Request(`http://host/pe/providers/codex/${verb}`, { method: "POST" });
+  try {
+    await providers.fetch(request("probe"));
+    await providers.fetch(request("open-login"));
+    await expect
+      .poll(() => providers.readiness().find((p) => p.id === "codex")?.readiness)
+      .toMatchObject({ state: "refused", detail: { console: { commandExitCode: 17 } } });
+    const readiness = providers.readiness().find((p) => p.id === "codex")!.readiness;
+    if (readiness.state !== "refused") throw new Error("Expected a refusal");
+    expect(readiness.detail!.console!.outputTail).toContain("installer failure [redacted]");
+    expect(JSON.stringify(readiness)).not.toContain("shared-console-key");
+  } finally {
+    await providers.close();
+  }
+});

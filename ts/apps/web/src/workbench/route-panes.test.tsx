@@ -985,7 +985,10 @@ test("6.1 two Places, one hidden: the shown copy is the only one that answers it
   await waitFor(() => expect(places().filter((tab) => tab.route === "fans")).toHaveLength(1), { timeout: 10_000 });
   fireEvent.click(await screen.findByRole("button", { name: "Open another Place on this route" }));
   await waitFor(() => expect(places().filter((tab) => tab.route === "fans")).toHaveLength(2), { timeout: 10_000 });
-  await waitFor(() => expect(document.querySelectorAll('section[aria-label="Fans"]')).toHaveLength(2), { timeout: 10_000 });
+  // Count Place copies by the kernel pane's identity: a body may reuse the name (the roster's own
+  // list section is "fans", which a CSS attribute match in jsdom takes for "Fans").
+  const roster = '[data-slot="pane"][data-pane-id="sheet-roster"]';
+  await waitFor(() => expect(document.querySelectorAll(roster)).toHaveLength(2), { timeout: 10_000 });
   expect(screen.getAllByRole("region", { name: "Fans" })).toHaveLength(1);
-  expect(document.querySelectorAll(`section[aria-label="Fans"]${SHOWN}`)).toHaveLength(1);
+  expect(document.querySelectorAll(`${roster}${SHOWN}`)).toHaveLength(1);
 });

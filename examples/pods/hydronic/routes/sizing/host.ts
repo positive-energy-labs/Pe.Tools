@@ -24,7 +24,8 @@ export const sizing = {
     const members = (await ctx.native("mep.system.members", { request: { systemUniqueId: chosenSystem }, target })).body;
     const segments = (await ctx.native("mep.segment.sizes", { request: {}, target })).body;
     const { pipes, catalogs, rooted } = fromRevit(members, segments);
-    const limits = { maxVelocity: doc.maxVelocity, maxFriction: doc.maxFriction ?? firm.firm.maxFriction };
+    // No shared root refuses the firm file (slice 2b): the limit runs on its named default, 400.
+    const limits = { maxVelocity: doc.maxVelocity, maxFriction: doc.maxFriction ?? ("refused" in firm ? 400 : firm.firm.maxFriction) };
     return ctx.compute(value, { limits, chosen: doc.chosen }, (inputs) => {
       const result = { limits: inputs.limits, ...size(pipes, catalogs, inputs.limits, inputs.chosen, rooted) };
       const unresolved = result.unresolved.map((u) => ({

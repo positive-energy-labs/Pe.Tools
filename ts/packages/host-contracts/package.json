@@ -17,6 +17,11 @@
       "import": "./src/failure-summary.ts",
       "default": "./src/failure-summary.ts"
     },
+    "./shared-keys": {
+      "types": "./src/shared-keys.ts",
+      "import": "./src/shared-keys.ts",
+      "default": "./src/shared-keys.ts"
+    },
     "./product-paths": {
       "types": "./src/product-paths.ts",
       "import": "./src/product-paths.ts",
