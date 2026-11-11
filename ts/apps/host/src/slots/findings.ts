@@ -69,7 +69,7 @@ const handleOf = (input: { work?: z.output<typeof workHandleSchema> }) => {
  * one exact open document, so there is nothing ambiguous to resolve. A handle still wins.
  */
 async function bound<I extends { work?: z.output<typeof workHandleSchema> }>(
-  workspace: RouteWorkspace,
+  reads: Pick<CommandWorkReads, "view">,
   bridge: RevitBridge["Service"],
   { target, input }: { target: ActionAdmission["target"]; input: I },
 ): Promise<I> {
@@ -78,23 +78,23 @@ async function bound<I extends { work?: z.output<typeof workHandleSchema> }>(
   const session = await currentDocument(bridge, target.ref, "project");
   const doc = session.state!.openDocuments.find((d) => d.openId === target.ref.openId)!;
   const key = bindWork(FINDINGS_OWNER, doc.address ? address(doc.address) : null, undefined, target.ref);
-  return { ...input, work: workHandle(key, (await workspace.view(key, FINDINGS_OWNER))?.revision ?? 0) };
+  return { ...input, work: workHandle(key, (await reads.view(key, FINDINGS_OWNER))?.revision ?? 0) };
 }
 
 export const findingsExecutors = (workspace: RouteWorkspace | undefined, bridge: RevitBridge["Service"]) => ({
   [FINDINGS_DOORS.list]: command(commands[FINDINGS_DOORS.list], commands[FINDINGS_DOORS.list].input, {
-    async bind({ admission }) {
+    async bind({ admission, work }) {
       if (!workspace) throw refused("Work storage is unavailable");
-      const input = await bound(workspace, bridge, admission);
+      const input = await bound(work, bridge, admission);
       return { effects: [], prepare: async () => input };
     },
     run: (ctx, execution) =>
       io(async () => ({ findings: await findingsList(ctx.work, findingsKey(handleOf(execution.prepared).key), execution.prepared.subject) })),
   }),
   [FINDINGS_DOORS.write]: command(commands[FINDINGS_DOORS.write], commands[FINDINGS_DOORS.write].input, {
-    async bind({ admission }) {
+    async bind({ admission, work }) {
       if (!workspace) throw refused("Work storage is unavailable");
-      const input = await bound(workspace, bridge, admission);
+      const input = await bound(work, bridge, admission);
       return { effects: [{ kind: "directory", path: productRouteWorkPath() }], prepare: async () => input };
     },
     run: ({ caller, work }, execution) =>
