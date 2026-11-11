@@ -332,6 +332,36 @@
     }
   },
   "verbs": {
+    "finding": {
+      "kind": "command",
+      "input": "none",
+      "label": "Write finding",
+      "review": "shown",
+      "deps": {
+        "page": [
+          "fan"
+        ],
+        "work": [
+          "writeIntent",
+          "calculation",
+          "terminalDrops",
+          "componentDrops",
+          "esp",
+          "equipmentFlows",
+          "roles",
+          "flows",
+          "parameters"
+        ],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "findings.write",
+      "intent": "finding"
+    },
     "losses": {
       "kind": "command",
       "input": "none",
@@ -371,6 +401,7 @@
         "value"
       ],
       "verbs": [
+        "finding",
         "losses"
       ]
     },
@@ -381,6 +412,7 @@
         "value"
       ],
       "verbs": [
+        "finding",
         "losses"
       ]
     },
@@ -391,6 +423,7 @@
         "value"
       ],
       "verbs": [
+        "finding",
         "losses"
       ]
     },
@@ -401,6 +434,7 @@
         "value"
       ],
       "verbs": [
+        "finding",
         "losses"
       ]
     }
@@ -465,6 +499,7 @@
         "sheet-ledger"
       ],
       "verbs": [
+        "finding",
         "losses"
       ]
     }

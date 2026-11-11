@@ -25,6 +25,7 @@ test("F3/F4 the roster always exposes search and forwards all/clear as one subje
           picked: [],
           nameOf: String,
           open: vi.fn(),
+          finding: vi.fn(),
           busy: false,
           loading: false,
         }}
@@ -47,6 +48,7 @@ test("F3 keyboard selection still opens a fan through the roster's subject door"
         picked: [],
         nameOf: String,
         open,
+        finding: vi.fn(),
         busy: false,
         loading: false,
       }}

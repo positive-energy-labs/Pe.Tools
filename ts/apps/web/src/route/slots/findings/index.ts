@@ -1,4 +1,5 @@
-import type { Finding, Mark } from "@pe/agent-contracts/slots";
+import { FINDINGS_DOORS, type Finding, type Mark } from "@pe/agent-contracts/slots";
+import { catalogAction } from "../../typed-actions.ts";
 import type { Captured } from "../picture/index.ts";
 
 /*
@@ -16,3 +17,14 @@ export function findingMark(finding: Finding, captured: readonly Captured[]): Ma
   // Not drawn until a real scene capture carries the subject: today's fans capture has no ref per port.
   throw Error("not implemented: needs slice 8 Captured SubjectRef per port");
 }
+
+/**
+ * The route command a person's row verb (`FindingVerb`) runs: `findings.write` with the row's
+ * finding. The mount binds the route's own Work handle; the host takes its binding to address the
+ * same document's findings Work and stamps the author from the caller.
+ */
+export const findingCommand = {
+  ...catalogAction(FINDINGS_DOORS.write),
+  label: "Write finding",
+  input: (_context: unknown, supplied: unknown) => ({ finding: supplied }),
+};
