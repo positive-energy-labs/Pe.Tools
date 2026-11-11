@@ -304,7 +304,9 @@
                 "id": "runs"
               }
             ],
-            "sized": "start"
+            "sized": "start",
+            "minSize": 220,
+            "minOtherSize": 220
           }
         ],
         "sized": "end"
