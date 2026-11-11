@@ -97,10 +97,10 @@ export function Roster({ props }: { props: RosterProps }) {
               {props.roster.length} fan ports / {props.picked?.length ?? 0} open
             </span>
             <span className="flex gap-1">
-              <Button kind="quiet" label="All fans" onPress={() => subject?.all()}>
+              <Button label="All fans" onPress={() => subject?.all()}>
                 All
               </Button>
-              <Button kind="quiet" label="Clear fans" onPress={() => subject?.clear()}>
+              <Button label="Clear fans" onPress={() => subject?.clear()}>
                 Clear
               </Button>
             </span>
