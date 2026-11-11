@@ -216,6 +216,8 @@ export function systemIssues(s: {
   provisional: Provisional;
   /** A Fix row holds the system's ESP (`systemsNeedingFix`, the inbox's own rule). */
   needsFix?: boolean;
+  /** The system's walked networks; none means it is not walked yet. */
+  groups?: readonly unknown[];
 }): SystemIssue[] {
   const load = fanLoad(s.total, s.rating);
   return [
@@ -228,7 +230,10 @@ export function systemIssues(s: {
         word: "fix",
         says: "needs a fix: a Fix row holds its ESP back",
       },
+    // Not walked yet is calm, not a problem (SURFACE-PHILOSOPHY I2): only a walked network with no
+    // fan-to-terminal run wears caution.
     s.total == null &&
+      (s.groups?.length ?? 1) > 0 &&
       !s.fanless &&
       !s.blocked && {
         tone: "caution",
@@ -389,7 +394,7 @@ export function systemRowParts(
             <span className="relative block h-1.5 min-w-8 flex-1" aria-hidden data-e-minibar="" />
           )}
           <span className="face-mono shrink-0" data-tone={over ? "alarm" : undefined}>
-            {fmt(s.total)}
+            {s.total == null && s.groups.length === 0 ? <span className="text-ink-2">not walked</span> : fmt(s.total)}
             {load.state === "rated" ? ` / ${fmt(load.available, 2)}` : ""}
           </span>
           <SystemMark issues={issues} total={total} open={open} />

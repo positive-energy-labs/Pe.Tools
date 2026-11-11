@@ -74,7 +74,8 @@ function Scale({
           y={-(r + s * 15)}
           dy={out ? 0 : 6}
           textAnchor="end"
-          fontSize={6}
+          // The face's one text rung (its tick labels): a 6-unit name sat below every other word.
+          fontSize={8}
           letterSpacing={0.8}
           stroke="none"
           opacity={0.8}

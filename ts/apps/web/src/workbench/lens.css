@@ -194,8 +194,9 @@
   position: absolute;
   left: 0;
   right: 0;
+  top: 0;
   pointer-events: auto;
-  transition: top var(--peek-glide) ease-out;
+  transition: transform var(--peek-glide) ease-out;
 }
 [data-annotation="peek"]::before {
   content: "";
@@ -203,7 +204,8 @@
   inset: calc(var(--gutter) * -1) 0 calc(var(--gutter) * -1) calc(var(--gutter) * -1);
 }
 [data-annotation="lane"] {
-  --peek-glide: 140ms;
+  /* The one motion rung (base.css --motion-control); a bespoke 140ms had no token. */
+  --peek-glide: var(--motion-control);
 }
 /* The new card enters from the side the pointer moved toward: stepping down it rises from below,
    stepping up it drops from above; opening it settles in place. */

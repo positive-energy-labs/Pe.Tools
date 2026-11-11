@@ -121,7 +121,8 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
 export function TypedChrome({ mount, document, recorded, thread }: { mount: TypedMount; document: ReactNode; recorded?: ReactNode; thread?: string }) {
   useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);
   const { spec }=mount;
-  const readiness = mount.readiness(), problem = mount.problem();
+  // A failure is a pane failure line (TypedPane), not a sentence in the Situation band (I2, 2026-11-11 caution).
+  const readiness = mount.readiness(), failure = mount.failure(), problem = failure ? null : mount.problem();
   const visible=useContext(RouteVisibility), portal=useHasGlobalNavigation();
   const [panes,setPanes]=useState<GraphLayoutState>(()=>readLayoutState(`route:${spec.key}`));
   const slot=usePaneActionSlot();
@@ -135,7 +136,7 @@ export function TypedChrome({ mount, document, recorded, thread }: { mount: Type
     mount.move(patch as Record<string,unknown>,"push"); return {ok:true,moved:true,receipt:{current:()=>visible,rendered:page=>canonicalRouteInput(page)===canonicalRouteInput(mount.page.read())}};
   } }} />;
   const head=<SituationBand name={spec.name} context={<>{document}<TypedSubject mount={mount} />{spec.edits && mount.work()?<span>{`r${mount.work()!.revision}`}</span>:null}</>}
-    alerts={<><span role="status" aria-label="Route readiness" data-readiness={readiness.kind}>{readiness.kind !== "ready" && readiness.reason !== problem ? readiness.reason : null}</span>{mount.value().value!==undefined&&!mount.value().current?<span role="status">{retainedValueLabel(mount.value())}</span>:null}{problem ? <span role="alert">{problem}</span> : null}{mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}<CatalogWorkReviews mount={mount} /></>}
+    alerts={<><span role="status" aria-label="Route readiness" data-readiness={readiness.kind}>{readiness.kind !== "ready" && readiness.reason !== problem && readiness.reason !== failure ? readiness.reason : null}</span>{mount.value().value!==undefined&&!mount.value().current?<span role="status">{retainedValueLabel(mount.value())}</span>:null}{problem ? <span role="alert">{problem}</span> : null}{mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}<CatalogWorkReviews mount={mount} /></>}
     verbs={[...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),...Object.entries(spec.commands).filter(([,c])=>!("row" in c && c.row)).map(([id])=><TypedWrite key={id} mount={mount} id={id} />),
       // An explicit-demand read is a verb the person presses; nothing else re-reads from chrome.
       ...Object.entries(spec.panes).filter(([,p])=>p.read?.demand === "explicit").map(([id,p])=><Button key={`read:${id}`} label={`Read ${p.title}`} onClick={()=>mount.refresh(p.read)}>Read</Button>)]}
@@ -202,6 +203,7 @@ function TypedPane({mount,id,ctx}: {mount:TypedMount;id:string;ctx:DrawContext<a
     <NativeObservationScope value={ctx.value.current?observation:{...observation,scope:null}}>
       {mount.spec.panes[id]!.read!==mount.spec.core&&retainedValueLabel(ctx.value)?<p role="status">{retainedValueLabel(ctx.value)}</p>:null}
       {titlePane(mount.spec) === id ? <PaneTitle text={mount.spec.title!(ctx)} pane={id} /> : null}
+      {(mount.spec.panes[id]!.read ?? mount.spec.core)===mount.spec.core&&mount.failure()?<OutcomeLine kind="error" label="Reading failed" says={mount.failure()!} />:null}
       {kernelPane(mount, id, ctx) ?? mount.spec.panes[id]!.draw(ctx).node}
     </NativeObservationScope>
   </AttentionScope></ValueScope>;
