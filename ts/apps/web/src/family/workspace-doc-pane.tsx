@@ -379,10 +379,10 @@ export function FamilyWorkspaceDocPane() {
         >
           <TooltipHint content="The same staged Work cells as the table. Keep adopts Pea's value and citations; Revert clears the stage. Pin holds the evidence while hover previews another citation.">
             <div className="mb-1 flex items-baseline gap-2">
-              <span className="t-small t-upper" data-tone="pea">
-                pea
+              <span className="t-small" data-tone="pea">
+                Pea
               </span>
-              <span className="t-small t-upper text-ink-2">Work proposals</span>
+              <span className="t-small text-ink-2">Work proposals</span>
             </div>
           </TooltipHint>
           {world.proposals.length === 0 ? (
