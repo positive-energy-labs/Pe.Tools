@@ -10,7 +10,7 @@ import type { SheetInputs } from "./model";
  * one design value edited where it bites (ducts LEDGER 2026-10-29): the cell writes Work `flows`
  * and shows the resolved source; the host recomputes.
  */
-import type { DuctsSheetEdits } from "@pe/agent-contracts";
+import type { SheetEdits } from "@pe/agent-contracts";
 import { delivers } from "@pe/ducts-domain/sheet/worksheet";
 import { AttentionDocument, mention, useAttention } from "@pe/kit/lang/attention";
 import { SubjectText } from "@pe/kit/lang/subject-text";
@@ -41,7 +41,7 @@ export function branchesKnown(runs: readonly Pick<Run, "end" | "complete">[]): s
 /** What the table needs to edit a design value: the resolved inputs and the one write. */
 export interface WorksheetEditing {
   inputs: SheetInputs | null;
-  changeInputs: (edits: DuctsSheetEdits) => void;
+  changeInputs: (edits: SheetEdits) => void;
   busy: boolean;
 }
 

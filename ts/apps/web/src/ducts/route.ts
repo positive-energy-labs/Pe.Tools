@@ -8,7 +8,6 @@ import { ductsRouteState } from "../../../../packages/agent-contracts/src/ducts.
 import { z } from "zod";
 import {
   listSearchSchema,
-  fansRouteState,
   ductsSheetEditsSchema,
   DUCTS_SYSTEM_MAX,
 } from "@pe/agent-contracts";
@@ -148,9 +147,8 @@ export const module = route({
     seed: () => ductsRouteState.schema.parse({}),
     work: ductsRouteState,
     value: "ductsWork",
-    owners: {
-      fans: { state: fansRouteState, value: "fansWork" },
-    },
+    // No cross-route write (ruling 2026-11-10): /ducts owns only its Work; the host reads Fans Work into its core read.
+    owners: {},
     input: ductsSheetEditsSchema,
     patches: (input) => editPatches(input),
     history: editMetaSchema,

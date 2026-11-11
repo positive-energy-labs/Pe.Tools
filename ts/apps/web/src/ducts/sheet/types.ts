@@ -1,4 +1,4 @@
-import type { DuctsSheetEdits } from "@pe/agent-contracts";
+import type { SheetEdits } from "@pe/agent-contracts";
 import type { ValueHandle, ListPersist } from "@pe/kit/lang/collection";
 import { openFanSheetSchema } from "@pe/agent-contracts";
 import type { Immutable } from "@pe/agent-contracts";
@@ -35,7 +35,7 @@ export interface LedgerProps {
   busy: boolean;
   loading: boolean;
   error: string | null;
-  changeInputs: (edits: DuctsSheetEdits) => void;
+  changeInputs: (edits: SheetEdits) => void;
   closerOf: (blocker: SheetBlocker, typed: number | null) => Closer;
   close: (closer: Closer) => void;
   closeMany: (closers: readonly Closer[]) => void;

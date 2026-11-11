@@ -8,7 +8,7 @@ import type { SheetFitting, SheetInputs } from "./model";
  * so it can still be seen, cleared and restored. Each option says what it means (the ASHRAE
  * fitting the table describes), never the mechanism.
  */
-import type { DuctsSheetEdits } from "@pe/agent-contracts";
+import type { SheetEdits } from "@pe/agent-contracts";
 import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import type { SubjectPart } from "@pe/kit/lang/subject-text";
 
@@ -31,7 +31,7 @@ export type GroupChoice = {
   /** What picking it means: the ASHRAE fitting, and how far the choice reaches. */
   sub: string;
   /** What it writes; null for the current choice. */
-  edits: DuctsSheetEdits | null;
+  edits: SheetEdits | null;
   current: boolean;
 };
 
@@ -56,7 +56,7 @@ export type FittingGroup = {
   source: string;
   choices: GroupChoice[];
   /** What clearing the person's choice writes; null when nothing is chosen. */
-  clear: DuctsSheetEdits | null;
+  clear: SheetEdits | null;
   members: GroupMember[];
   lossInWg: number | null;
   unpriced: number;

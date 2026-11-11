@@ -7,7 +7,7 @@ import type {
   DuctsCriteriaValues,
   DuctsFirm,
   DuctsInputs,
-  DuctsSheetEdits,
+  SheetEdits,
   Resolved,
 } from "@pe/agent-contracts";
 import { catalogLinkKey, catalogLoss, type Catalogs } from "../catalog.ts";
@@ -95,7 +95,7 @@ export const EDIT_SEGMENTS = {
 } as const;
 
 /** The Work cells a sheet's `edits` touches, as document paths: one per record key, the one `criteria` cell, and the `assumptions` cell of each join, end and proposed-path drop. */
-export function editCells(edits: DuctsSheetEdits): string[][] {
+export function editCells(edits: SheetEdits): string[][] {
   const cells: string[][] = [];
   for (const [field, segment] of Object.entries(EDIT_SEGMENTS) as [
     keyof typeof EDIT_SEGMENTS,
