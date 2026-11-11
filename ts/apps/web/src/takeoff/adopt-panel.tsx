@@ -59,7 +59,9 @@ export function AdoptRegions({ store }: { store: AdoptionStore }) {
     store.actions.patchAdopt(view, elementId, patch);
 
   return (
-    <section aria-label="Adopt zoning regions" className="p-2 whitespace-normal">
+    // The Pane declares the 8px inset once and no child pads (design ledger 2026-10-12, L3): prose,
+    // rows, empty states and the chip all start on the pane's own edge.
+    <section aria-label="Adopt zoning regions" className="py-2 whitespace-normal">
       <p>
         tick the designer-drawn regions that are zones. adoption stamps them in place (role, guid,
         name, system tag) — re-adopt to edit. legends are ignored.
@@ -67,7 +69,7 @@ export function AdoptRegions({ store }: { store: AdoptionStore }) {
       <div className="mt-2 max-h-96 overflow-y-auto">
         {(listed ?? []).map((r) => (
           <Fragment key={`${r.view}:${r.region.elementId}`}>
-            <div className="flex items-center gap-2 px-2 py-1">
+            <div className="flex items-center gap-2 py-1">
               <Input
                 type="checkbox"
                 aria-label={`Select ${r.name} in ${r.view}`}
@@ -110,7 +112,7 @@ export function AdoptRegions({ store }: { store: AdoptionStore }) {
               )}
             </div>
             {/* Pea's proposed choice for this candidate, in the band grammar. */}
-            <div className="px-2">
+            <div>
               <TakeoffProposalRows
                 cells={store.cells.adopt}
                 wire={store.wires.adopt}
@@ -122,13 +124,13 @@ export function AdoptRegions({ store }: { store: AdoptionStore }) {
           </Fragment>
         ))}
         {!views.length ? (
-          <div className="px-2 py-3">
+          <div className="py-3">
             <EmptyState story="scope" exit="choose views in the sentence above">
               no views chosen — candidates are read per plan view
             </EmptyState>
           </div>
         ) : store.candidatesIssue ? (
-          <div className="px-2 py-3">
+          <div className="py-3">
             <OutcomeLine
               kind="error"
               label="candidates unread"
@@ -136,11 +138,11 @@ export function AdoptRegions({ store }: { store: AdoptionStore }) {
             />
           </div>
         ) : store.candidatesReading || listed === null ? (
-          <div className="px-2 py-3">
+          <div className="py-3">
             <OutcomeLine kind="busy" label="reading candidates" says={views.join(", ")} />
           </div>
         ) : listed.length === 0 ? (
-          <div className="px-2 py-3">
+          <div className="py-3">
             <EmptyState story="scope" exit="or bind other views">
               no filled regions on this plan: initialize the zoning plan in Revit
             </EmptyState>
