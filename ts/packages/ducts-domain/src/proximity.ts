@@ -1048,7 +1048,9 @@ export function tolerate(
     const rest: Segment = {
       ...main,
       id,
-      uniqueId: main.uniqueId,
+      // Its own identity, like the inferred tap's: a copy of the host's UniqueId made the graph
+      // report duplicate identities and applied the host's Work cells to both halves.
+      uniqueId: `inference:${x.id}:far`,
       polyline: [add(a, u, resume), b],
       lengthFt: (main.lengthFt * (len - resume)) / len,
       connectors: [...far, end(add(a, u, resume), x.ports[1])],

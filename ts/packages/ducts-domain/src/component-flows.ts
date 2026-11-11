@@ -1,5 +1,5 @@
 import type { HydraulicClosure } from "./hydraulic-closure.ts";
-import type { DuctComponentWitness } from "@pe/agent-contracts";
+import { ductComponentWitnessSchema, type DuctComponentWitness } from "@pe/agent-contracts";
 import { terminalCfm } from "./topology.ts";
 import type { physicalGraph, CircuitReason } from "./physical-graph.ts";
 
@@ -39,6 +39,7 @@ export interface ComponentFlow {
   }[];
   reasons: CircuitReason[];
 }
+const witnessEntry = ductComponentWitnessSchema.element;
 const portKey = (id: number, index: number) => `${id}:${index}`;
 // For n rounded operations, gamma(n)=n*u/(1-n*u), u=EPSILON/2. A leg projection
 export const ductArithmeticError = (points: number[][], legs: number) => {
@@ -366,7 +367,14 @@ export function componentFlows(g: Graph): ComponentFlow[] {
       reasons.push(
         issue("flow-nonreciprocal-joint", null, "Component contains nonreciprocal joint evidence"),
       );
-    const witness: DuctComponentWitness = elementIds.map((id) => {
+    // The witness names only real Revit elements. A virtual one (an inferred tap, the far half of a
+    // duct split around an inline part: id <= 0, proximity.ts `tolerate`) is dropped, not folded into
+    // its host: folded, the two cut ends would share one connector index under the host's id while
+    // the graph keys the far one under the virtual id, so a pin naming it would resolve to the wrong
+    // port. The real peers' ports still name the virtual peer by its `inference:` UniqueId, so the
+    // witness changes when the inference does. Its loss still prices; that is not this file's.
+    const witness: DuctComponentWitness = elementIds.flatMap((id) => {
+      if (id <= 0) return [];
       const e = g.elements.get(id)!;
       const rolePartitions = [...g.passives.values()]
         .filter((p) => p.element.id === id)
@@ -383,7 +391,7 @@ export function componentFlows(g: Graph): ComponentFlow[] {
         );
       const terminal = g.terminals.get(id);
       if (terminal) rolePartitions.push(`terminal:${terminal.port.index}:${terminal.role}`);
-      return {
+      const entry: DuctComponentWitness[number] = {
         element: { id, uniqueId: e.uniqueId ?? "" },
         coordinateEncoding: g.coordinateEncoding,
         curveKind: "curveKind" in e ? (e.curveKind ?? null) : null,
@@ -416,6 +424,16 @@ export function componentFlows(g: Graph): ComponentFlow[] {
         lengthFt: "lengthFt" in e ? e.lengthFt : null,
         rolePartitions: rolePartitions.sort(),
       };
+      // One element whose content fails the contract is left out and marked; the rest still prices.
+      if (witnessEntry.safeParse(entry).success) return [entry];
+      reasons.push(
+        issue(
+          "flow-witness-invalid",
+          id,
+          "Element content fails the witness contract; it is left out of the component witness",
+        ),
+      );
+      return [];
     });
     const ce = [...memberEdges].sort((a, b) => a - b).map((i) => edges[i]!);
     const boundaries: ComponentFlow["boundaries"] = [];
@@ -499,7 +517,7 @@ export function componentFlows(g: Graph): ComponentFlow[] {
         d.kind === "component-flow" &&
         (d.constraints.some((c) => members.has(portKey(c.element.id, c.port.index))) ||
           JSON.stringify(d.componentWitness.map((w) => w.element.id)) ===
-            JSON.stringify(elementIds)),
+            JSON.stringify(witness.map((w) => w.element.id))),
     );
     let contradictory = touched.length > 1;
     if (touched.length > 1)

@@ -10,7 +10,9 @@
  * exists, and the web falls back to the roster's rows (screen.tsx `analysis?.systems ?? roster.rows`),
  * which carry no groups and no baseEquipmentId, so no unit.
  *
- * Both are `test.fails`: they pass while the cause stands. Flip to `test` when the owner's fix lands.
+ * Fixed on crusade/kernel-ducts-taps (implementor default, re-openable by kaitpw): the witness
+ * drops virtual elements, one bad witness entry is left out and marked instead of failing the
+ * read, and a roster row that was never walked says "fan not read yet".
  * The fixture is a minimal stand-in (equipment, 2 ducts, 2 grilles, one inferred tap); the Chadds
  * snapshot itself was not captured whole, so that SA 11 holds an inferred tap or inline part is UNPROVEN.
  */
@@ -191,7 +193,7 @@ function wire(value: unknown): unknown {
 // DEFECT 2. Producer: proximity.ts `tolerate` mints `id = -(i + 1)` for the tap; losses.ts:666
 // `designCircuits(snapshot...)` runs on that tolerated snapshot; component-flows.ts:369-385 copies
 // `element: { id }`; agent-contracts/src/ducts.ts:79-82 `elementIdentity.id` is `.positive()`.
-test.fails("every component witness element id the pricing emits is a positive Revit id", () => {
+test("every component witness element id the pricing emits is a positive Revit id", () => {
   const priced = price(snapshot(), {}, null, neutralFansWork);
   const ids = priced.next.design.componentFlows.flatMap((c) =>
     c.componentWitness.map((w) => w.element.id),
@@ -225,7 +227,7 @@ const hostParse = (raw: DuctSnapshot) =>
 const rowOf = (raw: DuctSnapshot) =>
   hostParse(raw).analysis.systems.find((row) => row.key === "SA 11")?.sub;
 
-test.fails("a walked system with a root unit prices and its row names the unit, not 'no fan'", () => {
+test("a walked system with a root unit prices and its row names the unit, not 'no fan'", () => {
   expect(rowOf(snapshot())).toContain("FC-11");
 });
 
@@ -235,10 +237,34 @@ test("control: with no inferred tap the same network passes the contract and nam
   expect(rowOf(snapshot(3))).toContain("FC-11");
 });
 
-// The roster half of defect 1, green: the roster fallback row has no way to name a unit.
-test("the roster-only row (no groups, no baseEquipmentId) says no fan, the walked row says FC-11", () => {
+// The roster half of defect 1: a roster-only row has no way to name a unit, and it has not looked.
+// "no fan" is a finding, so only a walk that found no air mover may say it.
+test("a roster-only row says 'fan not read yet'; only a walked system with no unit says 'no fan'", () => {
   const raw = snapshot();
+  const subOf = (s: DuctSnapshot) => systemList(s, null).find((r) => r.key === "SA 11")?.sub;
   const roster = { ...raw, groups: [], segments: [], issues: [] } as DuctSnapshot;
-  expect(systemList(roster, null).find((r) => r.key === "SA 11")?.sub).toContain("no fan");
-  expect(systemList(raw, null).find((r) => r.key === "SA 11")?.sub).toContain("FC-11");
+  expect(subOf(roster)).toContain("fan not read yet");
+  expect(subOf(roster)).not.toContain("no fan");
+  expect(subOf(raw)).toContain("FC-11");
+  const unitless = { ...raw, groups: raw.groups.map((g) => ({ ...g, rootIds: [] })) } as DuctSnapshot;
+  expect(subOf(unitless)).toContain("no fan");
+  expect(subOf(unitless)).not.toContain("not read");
+});
+
+// One real element the witness contract refuses (no stable UniqueId) used to fail the whole
+// `ducts.pricing` value. Now that entry is left out and its component is marked.
+test("one bad witness entry degrades its component; the read still parses and prices", () => {
+  const raw = snapshot();
+  (raw.segments[1] as { uniqueId: string }).uniqueId = "";
+  expect(rowOf(raw)).toContain("FC-11");
+  const priced = price(raw, {}, null, neutralFansWork);
+  const marked = priced.next.design.componentFlows.filter((c) =>
+    c.reasons.some((r) => r.code === "flow-witness-invalid" && r.elementId === 11),
+  );
+  expect(marked).toHaveLength(1);
+  expect(marked[0]!.status).not.toBe("unique");
+  expect(marked[0]!.componentWitness.map((w) => w.element.id)).not.toContain(11);
+  expect(marked[0]!.componentWitness.length).toBeGreaterThan(0);
+  // The fan-to-terminal loss is not the witness's: both terminals still price.
+  expect(Object.values(priced.next.paths).filter((path) => path.rows.length)).toHaveLength(2);
 });
