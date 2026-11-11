@@ -86,7 +86,7 @@ export const entryCaller = (entry: TimelineEntry) =>
     : "you";
 
 /** The Work journal behind the owner's current scope: the one history of authored edits. */
-export type JournalOwner = Pick<TypedMount, "subscribe" | "revision" | "restoreWork" | "stopCommand"> & { spec?: Pick<TypedMount["spec"], "commands">; discardIntent?(id:string):void; journalRefusal(): string | null; journal(): ReturnType<WorkJournal["read"]> | null; timeline(): readonly TimelineEntry[] };
+export type JournalOwner = Pick<TypedMount, "subscribe" | "revision" | "restoreWork" | "stopCommand"> & Partial<Pick<TypedMount, "undoFinding">> & { spec?: Pick<TypedMount["spec"], "commands">; discardIntent?(id:string):void; journalRefusal(): string | null; journal(): ReturnType<WorkJournal["read"]> | null; timeline(): readonly TimelineEntry[] };
 export function useWorkJournal(owner: JournalOwner) {
   useSyncExternalStore(owner.subscribe, owner.revision, owner.revision);
   return owner.journal();

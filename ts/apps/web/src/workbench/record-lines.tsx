@@ -9,7 +9,7 @@ import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { previousOf, useReading } from "#/host/resource-state";
 import {
-  actionRoute,
+  receiptRoute,
   actionPlace,
   actionWord,
   chatPluginTitle,
@@ -61,14 +61,14 @@ export function ActionLine({
   const row = previousOf(reading)?.find((candidate) => candidate.id === call.id);
   // A control (`action.resume`) names the original receipt; its key is the action's own.
   const key = row?.key ?? call.key;
-  const route = actionRoute(key);
+  const route = receiptRoute(key, row);
   const place = route ? actionPlace(route, row) : null;
   const state = row?.state ?? (reading.state === "failed" ? "receipt unread" : "reading");
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <div className={line} data-action={call.id}>
         <span className="truncate">
-          Pea ran {actionWord(key)}
+          Pea ran {route ? actionWord(key) : key}
           {route ? ` in ${chatPluginTitle(route)}` : ""} ·{" "}
           <span
             className="face-mono"

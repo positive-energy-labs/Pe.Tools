@@ -147,6 +147,8 @@ export function Button({
       aria-label={named}
       aria-pressed={pressed}
       aria-disabled={inert || undefined}
+      // A refused verb says why without a hover: the reason is the control's own description.
+      aria-description={refusal ?? undefined}
       aria-busy={busy || undefined}
       onClick={press}
       {...(!tipped && id ? { id } : {})}

@@ -1,14 +1,14 @@
 import { workRead } from "@pe/host/reads/inputs";
 import { familyObservation, familyReceipts } from "@pe/host/builtin-read-handles";
 import { z } from "zod";
-import { familiesRouteState, canonicalRouteInput, actionReceiptSchema } from "@pe/agent-contracts";
+import { familiesRouteState, canonicalRouteInput, actionReceiptSchema, type FamiliesObservation } from "@pe/agent-contracts";
 import {
   familiesViewArgs,
   familiesViewData,
 } from "../../../../packages/agent-contracts/src/families-read.ts";
 import { read, workScope, documentMark } from "@pe/host/read-graph";
 import { applyOutcome, applyTally } from "./families-outcome.ts";
-import { matrixModel, buildPivot } from "./families-matrix.ts";
+import { matrixModel, buildPivot, splitRows } from "./families-matrix.ts";
 
 /** Immutable native evidence, Work and matrix calculation meet only on the host. */
 export const familiesView = read("families.view", {
@@ -35,63 +35,72 @@ export const familiesView = read("families.view", {
     return ctx.compute(
       familiesViewData,
       { work, catalog, observation, receipts },
-      ({ work, catalog, observation, receipts }) => {
-        const families = observation?.result.families ?? [];
-        const { rows, params } = matrixModel(families);
-        const pivot = buildPivot(rows, params, families);
-        return {
-          familiesWork: work,
-          catalog: {
-            ...catalog,
-            families: catalog.families.filter(
-              (f) =>
-                !work.scope.edit?.value.categoryNames.length ||
-                work.scope.edit.value.categoryNames.includes(f.categoryName ?? ""),
-            ),
-          },
-          observation,
-          rows,
-          params,
-          ...pivot,
-          outcomes: receipts
-            .filter((r) => r.key === "families.apply")
-            .map((r) => {
-              const outcome = applyOutcome(
-                actionReceiptSchema.parse(r),
-                work.scope.edit?.value.familyNames ?? [],
-              );
-              const tally =
-                r.state === "succeeded" ? applyTally(actionReceiptSchema.parse(r)) : null;
-              return {
-                id: r.id,
-                kind: outcome ? ("error" as const) : ("advisory" as const),
-                message: outcome?.message ?? `${tally?.converged ?? 0} families converged`,
-              };
-            }),
-          activeReadId: (() => {
-            const running = receipts
-              .filter((r) => r.key === "families.read" && ["running", "waiting"].includes(r.state))
-              .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
-            const input = z.object({ readId: z.uuid() }).safeParse(running?.input);
-            return input.success
-              ? input.data.readId
-              : observation?.progress?.state === "reading"
-                ? observation.progress.runId
-                : null;
-          })(),
-          categories: [
-            ...new Set(catalog.families.flatMap((f) => (f.categoryName ? [f.categoryName] : []))),
-          ].sort(),
-          editRefusal:
-            !observation ||
-            observation.capturedAt !== work.takenAt ||
-            (observation.progress && observation.progress.state !== "complete")
-              ? "Read these families before editing"
-              : null,
-        };
-      },
+      familiesValue,
     );
   },
 });
+
+type ViewInputs = {
+  work: z.output<typeof familiesRouteState.schema>;
+  catalog: z.output<typeof familiesViewData>["catalog"];
+  observation: FamiliesObservation | null;
+  receipts: readonly z.output<typeof actionReceiptSchema>[];
+};
+/** The value `families.view` publishes, from its inputs: one frame on the reading stream. */
+export function familiesValue({ work, catalog, observation, receipts }: ViewInputs) {
+  const families = observation?.result.families ?? [];
+  const { rows, params } = matrixModel(families);
+  const pivot = buildPivot(rows, params, families);
+  return {
+    familiesWork: work,
+    catalog: {
+      ...catalog,
+      families: catalog.families.filter(
+        (f) =>
+          !work.scope.edit?.value.categoryNames.length ||
+          work.scope.edit.value.categoryNames.includes(f.categoryName ?? ""),
+      ),
+    },
+    observation: observation && (({ result: _result, ...rest }) => rest)(observation),
+    ...splitRows(rows),
+    params,
+    ...pivot,
+    outcomes: receipts
+      .filter((r) => r.key === "families.apply")
+      .map((r) => {
+        const outcome = applyOutcome(
+          actionReceiptSchema.parse(r),
+          work.scope.edit?.value.familyNames ?? [],
+        );
+        const tally =
+          r.state === "succeeded" ? applyTally(actionReceiptSchema.parse(r)) : null;
+        return {
+          id: r.id,
+          kind: outcome ? ("error" as const) : ("advisory" as const),
+          message: outcome?.message ?? `${tally?.converged ?? 0} families converged`,
+        };
+      }),
+    activeReadId: (() => {
+      const running = receipts
+        .filter((r) => r.key === "families.read" && ["running", "waiting"].includes(r.state))
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+      const input = z.object({ readId: z.uuid() }).safeParse(running?.input);
+      return input.success
+        ? input.data.readId
+        : observation?.progress?.state === "reading"
+          ? observation.progress.runId
+          : null;
+    })(),
+    categories: [
+      ...new Set(catalog.families.flatMap((f) => (f.categoryName ? [f.categoryName] : []))),
+    ].sort(),
+    editRefusal:
+      !observation ||
+      observation.capturedAt !== work.takenAt ||
+      (observation.progress && observation.progress.state !== "complete")
+        ? "Read these families before editing"
+        : null,
+  };
+}
 
 export const reads = { view: familiesView };

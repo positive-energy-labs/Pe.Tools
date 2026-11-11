@@ -101,12 +101,14 @@ export function createRouteDiscovery() {
     entries,
     keys: () => [...registered.keys()],
     get: (key: string) => registered.get(key),
+    /** The one route that declares this action; a kernel action several routes carry (findings.write) names none. */
     actionRoute(key: string) {
-      return entries().find(({ typed }) =>
+      const owners = entries().filter(({ typed }) =>
         Object.values(typed.spec.commands).some((verb) =>
           verb.entry === key || ("plan" in verb && verb.plan === key),
         ),
-      )?.manifest.key ?? null;
+      );
+      return owners.length === 1 ? owners[0]!.manifest.key : null;
     },
   });
 }

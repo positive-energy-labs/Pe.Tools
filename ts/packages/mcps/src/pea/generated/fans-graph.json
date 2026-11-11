@@ -332,36 +332,6 @@
     }
   },
   "verbs": {
-    "finding": {
-      "kind": "command",
-      "input": "none",
-      "label": "Write finding",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "fan"
-        ],
-        "work": [
-          "writeIntent",
-          "calculation",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "flows",
-          "parameters"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "findings.write",
-      "intent": "finding"
-    },
     "losses": {
       "kind": "command",
       "input": "none",
@@ -391,6 +361,36 @@
       ],
       "entry": "sheet.apply",
       "intent": "losses"
+    },
+    "finding": {
+      "kind": "command",
+      "input": "none",
+      "label": "Write finding",
+      "review": "shown",
+      "deps": {
+        "page": [
+          "fan"
+        ],
+        "work": [
+          "writeIntent",
+          "calculation",
+          "terminalDrops",
+          "componentDrops",
+          "esp",
+          "equipmentFlows",
+          "roles",
+          "flows",
+          "parameters"
+        ],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "findings.write",
+      "intent": "finding"
     }
   },
   "panes": {
@@ -401,8 +401,8 @@
         "value"
       ],
       "verbs": [
-        "finding",
-        "losses"
+        "losses",
+        "finding"
       ]
     },
     "sheet-inputs": {
@@ -412,8 +412,8 @@
         "value"
       ],
       "verbs": [
-        "finding",
-        "losses"
+        "losses",
+        "finding"
       ]
     },
     "sheet-picture": {
@@ -423,8 +423,8 @@
         "value"
       ],
       "verbs": [
-        "finding",
-        "losses"
+        "losses",
+        "finding"
       ]
     },
     "sheet-ledger": {
@@ -434,8 +434,8 @@
         "value"
       ],
       "verbs": [
-        "finding",
-        "losses"
+        "losses",
+        "finding"
       ]
     }
   },
@@ -499,8 +499,8 @@
         "sheet-ledger"
       ],
       "verbs": [
-        "finding",
-        "losses"
+        "losses",
+        "finding"
       ]
     }
   },

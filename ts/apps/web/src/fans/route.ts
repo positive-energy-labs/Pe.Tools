@@ -25,7 +25,6 @@ import { describeInputHistory, editMetaSchema } from "../ducts/sheet/input-histo
 import { sheetValueFixtures } from "../ducts/sheet/value-fixtures.ts";
 import { presentLosses } from "../ducts/reviews.ts";
 import { fansSheet } from "./sheet.ts";
-import { findingCommand } from "../route/slots/findings/index.ts";
 
 const shared = ductsPictureFields;
 const fan = subjectSchema(32);
@@ -135,7 +134,6 @@ export const module = route({
     describe: describeInputHistory,
   },
   commands: {
-    finding: findingCommand,
     losses: {
       ...command("sheet.apply"),
       label: "Write to Revit",

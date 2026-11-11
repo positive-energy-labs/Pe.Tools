@@ -1430,7 +1430,7 @@ async function pendingFamiliesChoice() {
   const packet = families.spec.core!.output.parse({
     key: "b03-families", generation: 1, version: 1, state: "current", value: {
       data: { familiesWork: doc, catalog: catalogue, categories: ["Air Terminal Tags"], observation: null,
-        rows: [], params: [], pivotRows: [], pivotFamilies: [], outcomes: [], activeReadId: null, editRefusal: "Read these families before editing" },
+        rows: [], facts: {}, params: [], pivotRows: [], pivotFamilies: [], outcomes: [], activeReadId: null, editRefusal: "Read these families before editing" },
       evaluation: "b03-families", inputs: "b03-families", coverage: { requested: [], covered: [], unknown: [], refused: [] },
       origin: { kind: "fixture", name: "post-start-families" }, trace: [], freshness: "current",
     },
