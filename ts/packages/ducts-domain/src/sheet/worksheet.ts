@@ -51,6 +51,7 @@ export interface WorksheetRun {
 export interface WorksheetSide {
   runs: WorksheetRun[];
   sections: WorksheetSection[];
+  /** The worst complete delivering run's loss; null while no branch on the side is complete (F1). */
   worstKnownInWg: number | null;
   /**
    * The sections each walked element sits in, the critical run's first (ducts LEDGER 2026-10-29, C):
@@ -147,7 +148,9 @@ export function worksheet(sheet: Sheet, limits: WorksheetLimits): Worksheet {
     const complete = (p: SheetPath) =>
       p.complete && p.legIds.every((id) => leg(id).lossInWg != null && leg(id).flowCfm != null);
     const certified = delivering.length > 0 && delivering.every(complete);
-    const worst = delivering.length ? Math.max(...delivering.map((p) => p.knownInWg)) : null;
+    // F1 (2026-11-10): the worst is over complete branches only; a partial sum is no known loss.
+    const known = delivering.filter(complete);
+    const worst = known.length ? Math.max(...known.map((p) => p.knownInWg)) : null;
     const runs = paths.map((p, i): WorksheetRun => {
       const legs = p.legIds.map(leg);
       const carries = delivers(p.end);

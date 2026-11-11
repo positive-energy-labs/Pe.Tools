@@ -8,8 +8,7 @@ import { listFields } from "../route/defaults";
 import { fansDocumentSchema } from "../../../../packages/agent-contracts/src/fans.ts";
 import { z } from "zod";
 import {
-  ductsRouteState,
-  ductsSheetEditsSchema,
+  fansSheetEditsSchema,
   fansSheetCapability,
   ductsPictureFields,
   type Immutable,
@@ -19,10 +18,12 @@ import { editPatches } from "@pe/ducts-domain/sheet/index";
 import { field, route, subjectSchema, split } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
+import { scrollBody } from "../route/body.ts";
 import { fanLabel, stableFanKey } from "../ducts/sheet/model.ts";
 import { describeInputHistory, editMetaSchema } from "../ducts/sheet/input-history.neutral.ts";
 import { sheetValueFixtures } from "../ducts/sheet/value-fixtures.ts";
 import { presentLosses } from "../ducts/reviews.ts";
+import { fansSheet } from "./sheet.ts";
 
 const shared = ductsPictureFields;
 const fan = subjectSchema(32);
@@ -86,6 +87,7 @@ export const module = route({
   },
   core: sheet,
   reads: { roster },
+  sheet: fansSheet,
   fields,
   panes: {
     "sheet-roster": {
@@ -93,42 +95,47 @@ export const module = route({
       title: "Fans",
       purpose: "Open fan ports",
       bindings,
-      draw: draw(() => import("../ducts/sheet/mount.tsx"), "RosterBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("../ducts/sheet/mount.tsx"), "RosterBody"),
     },
     "sheet-inputs": {
       title: "Inputs",
       purpose: "Edit fan inputs",
       bindings,
-      draw: draw(() => import("../ducts/sheet/mount.tsx"), "InputsBody"),
+      kernel: "sheet",
+      // The shell draws this pane from the filled slot; the body kind is the frame it lays out in.
+      body: "scroll",
+      draw: () => scrollBody(null),
     },
     "sheet-picture": {
       title: "Picture",
       purpose: "Inspect fan paths",
       bindings,
-      draw: draw(() => import("../ducts/sheet/mount.tsx"), "PictureBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("../ducts/sheet/mount.tsx"), "PictureBody"),
     },
     "sheet-ledger": {
       title: "Ledger",
       purpose: "Inspect ESP and provenance",
       bindings,
-      draw: draw(() => import("../ducts/sheet/mount.tsx"), "LedgerBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("../ducts/sheet/mount.tsx"), "LedgerBody"),
     },
   },
   edits: {
     seed: () => fansDocumentSchema.parse({}),
     work: fansDocumentSchema,
     value: "fansWork",
-    owners: {
-      ducts: { state: ductsRouteState, value: "ductsWork" },
-    },
-    input: ductsSheetEditsSchema,
-    patches: (input, data) => editPatches(input, data.design),
+    // No cross-route write (ruling 2026-11-10): /fans owns only its Work; it reads /ducts' design in its core read.
+    owners: {},
+    input: fansSheetEditsSchema,
+    patches: (input) => editPatches(input),
     history: editMetaSchema,
     describe: describeInputHistory,
   },
   commands: {
     losses: {
-      ...command("ducts.apply-losses"),
+      ...command("sheet.apply"),
       label: "Write to Revit",
       present: (result, data, work) =>
         presentLosses(result, {

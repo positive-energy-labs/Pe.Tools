@@ -1,1 +1,0 @@
-{"schemaVersion":2,"id":"pipes","name":"Pipes","version":"0.1.0","routes":[{"sourcePath":"routes/pipes/index.js","name":"Pipes","description":"Inspect piping systems and stage pipe parameter edits"}]}

@@ -156,8 +156,8 @@ test("historical mutation doors refuse without append or any live graph", async 
       ["/call", { key: "revit.matrix.loaded-families", request: {} }],
       [nativeReadResolveEndpoint.path, { operationKey: "revit.matrix.loaded-families", input: {} }],
       ["/actions", { key: "families.apply.preview" }],
-      ["/actions", { key: "ducts.apply-losses" }],
-      ["/actions", { key: "ducts.plan-losses" }],
+      ["/actions", { key: "sheet.apply" }],
+      ["/actions", { key: "sheet.plan" }],
       ["/pe/route-state/fans/apply", { kind: "apply" }], ["/pe/route-state/fans/history", { direction: "undo" }],
       ["/call", { key: "pointers.point", request: {} }],
       ["/call", { key: "pointers.dismiss", request: {} }],
@@ -176,7 +176,7 @@ test("journal, Work and pointer owners refuse before storage or executor access"
   const journalPath = join(dir, "forbidden-journal.jsonl");
   const journal = journalAt(journalPath, Date.now); journal.bindInputContext(inputs);
   // Policy precedes even envelope decoding: no malformed or resumed command can acquire current inputs.
-  await expect(journal.invoke({ id: randomUUID(), key: "ducts.apply-losses", input: {}, target: { kind: "host" } }, { caller: human, basis: null })).rejects.toMatchObject({ problem: "recording.historical" });
+  await expect(journal.invoke({ id: randomUUID(), key: "sheet.apply", input: {}, target: { kind: "host" } }, { caller: human, basis: null })).rejects.toMatchObject({ problem: "recording.historical" });
   let storage = 0;
   const workspace = new RouteWorkspace({ registrations: [], store: { getState: async () => { storage++; return null; }, setState: async () => { storage++; } },
     authorizeMutation: (verb) => { const denied = inputs.check({ kind: "work", verb }); if (denied) throw denied; },

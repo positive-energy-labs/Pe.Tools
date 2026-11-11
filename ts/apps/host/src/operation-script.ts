@@ -1,5 +1,3 @@
-import { join } from "node:path";
-import { productPathNames } from "@pe/host-contracts/contracts";
 import {
   scriptPodMemberBounds,
   scriptPodSourceBounds,
@@ -12,7 +10,6 @@ import {
   isPackageMember,
   listPackages,
 } from "./packages.ts";
-import { productUserContentRootPath } from "./product-paths.ts";
 import { StepFailure } from "./command-executor.ts";
 import { requirePackageEnabled } from "./package-lifecycle.ts";
 
@@ -107,9 +104,8 @@ export async function freezeScript(
   if (input.workspaceKey != null && typeof input.workspaceKey !== "string")
     throw Error("Invalid Pod workspace identity");
   const workspace = (input.workspaceKey as string | undefined) || "default";
-  const root = join(productUserContentRootPath(), productPathNames.podsDirectoryName);
-  const listing = await listPackages(root);
+  const listing = await listPackages();
   const pod = listing.packages.find((pod) => pod.folder === workspace);
   if (!pod) throw Error(`No admitted Pod in workspace '${workspace}'.`);
-  return freezeScript({ ...input, sourceBundle: (await capturePackage(pod, root)).sourceBundle });
+  return freezeScript({ ...input, sourceBundle: (await capturePackage(pod)).sourceBundle });
 }

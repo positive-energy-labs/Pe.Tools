@@ -1,6 +1,6 @@
 import path from "node:path";
 import { browserSkillName, renderBrowserGuide } from "@pe/browser/guide";
-import { productHomePath } from "@pe/host-contracts/product-paths";
+import { userRoot } from "@pe/host-contracts/product-paths";
 import { renderDuctsSkill } from "./ducts-skill.ts";
 import { renderSchedulesSkill } from "./schedules-skill.ts";
 import { renderFamiliesSkill } from "./families-skill.ts";
@@ -250,7 +250,7 @@ For a Pod with Revit script entrypoints, pe_find must first establish an exact c
 
 ## What a Pod is
 
-A Pod is one folder under Pods/<folder>/ in the content home holding pod.json and authored source, guides, settings, assets, Pages and skills. The host admits one bounded membership set; runtime/build debris and binding authority never travel. pod.json holds schemaVersion, id, name, version, description, and optional script entrypoints; nothing else. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest. A folder without pod.json is not a Pod.
+A Pod is one folder under Pods/<folder>/ in a content home holding pod.json and authored source, guides, settings, assets, Pages and skills. The host admits one bounded membership set; runtime/build debris and binding authority never travel. pod.json holds schemaVersion, id, name, version, description, and optional script entrypoints; nothing else. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest. A folder without pod.json is not a Pod.
 
 ## Identity: three facts
 
@@ -268,7 +268,7 @@ Publishing vendors: every foreign fragment a member consumes is copied to settin
 
 Pod preparation gates only pod.json and entrypoint source. Members validate one at a time when used; one bad member never hides its siblings.
 
-The content home holds preferences.json for user preferences and Pods/<folder>/ for pods. Do not recreate the old module settings hierarchy or migrate user files implicitly. Cache, credentials, installation, and transient runtime state are resolved separately from user content.
+There are two content homes: the user's (preferences.json, its own Pods/<folder>/, every write) and an optional shared one the firm keeps. Pods, Pages and Catalogs come from both, and a copy in the user's home wins over the shared one. Writes always land in the user's home; a shared Pod is read-only. Do not recreate the old module settings hierarchy or migrate user files implicitly. Cache, credentials, installation, and transient runtime state are resolved separately from user content.
 
 A member's $schema URL is the only thing that says what it is for: /schemas/settings/<library>/<root>.json selects the library schema and semantic validator. Filenames and folders select nothing. JSON without $schema is plain data; the consuming operation still owns validation before applying it. Structural schema checks run offline in the host; composition previews and semantic checks need a Revit session and report that reason when none is attached.
 
@@ -458,7 +458,7 @@ export interface PeaProductHomeOptions {
 }
 
 export function resolvePeaProductHomePath(options: PeaProductHomeOptions = {}): string {
-  return path.resolve(readEnvPath(options.productHomePath) ?? productHomePath());
+  return path.resolve(readEnvPath(options.productHomePath) ?? userRoot());
 }
 
 export function resolvePeaStandardSkillsRoot(options: PeaProductHomeOptions = {}): string {

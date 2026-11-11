@@ -25,6 +25,19 @@ type Section = Ws["supply"]["sections"][number];
 
 const ft = (v: number) => v.toFixed(0);
 
+/** Why a stretch has no total, or null when every leg is flowed and priced (F1: never a partial sum). */
+const missing = (ws: Ws, legIds: readonly string[]) => {
+  const legs = legIds.map((id) => ws.legs[id]);
+  if (legs.some((l) => l?.flowCfm == null)) return "no flow";
+  return legs.some((l) => l?.lossInWg == null) ? "unpriced" : null;
+};
+
+/** "N of M branches known" over delivering runs (F1); never a total built from incomplete ones. */
+export function branchesKnown(runs: readonly Pick<Run, "end" | "complete">[]): string {
+  const branches = runs.filter((r) => delivers(r.end));
+  return `${branches.filter((r) => r.complete).length} of ${branches.length} branches known`;
+}
+
 /** What the table needs to edit a design value: the resolved inputs and the one write. */
 export interface WorksheetEditing {
   inputs: SheetInputs | null;
@@ -156,12 +169,15 @@ function EndName({ run }: { run: Run }) {
 function SectionRows({ ws, run, side, doc }: { ws: Ws; run: Run; side: Side; doc: string }) {
   const byId = new Map(ws[side].sections.map((s) => [s.id, s]));
   let cumulative = 0;
+  let whole = true;
 
   return (
     <>
       {run.sectionIds.map((id) => {
         const s = byId.get(id) as Section;
+        const complete = missing(ws, s.legIds) == null;
         cumulative += s.knownInWg;
+        whole &&= complete;
         const first = ws.legs[s.legIds[0]!]!;
         return (
           <div
@@ -182,9 +198,9 @@ function SectionRows({ ws, run, side, doc }: { ws: Ws; run: Run; side: Side; doc
               </span>
             </span>
             <span className={CFM}>{s.cfm ?? "—"}</span>
-            <span className="face-mono text-right">{ft(s.telFt)}</span>
-            <span className="face-mono text-right">{pressure(s.knownInWg)}</span>
-            <span className="face-mono text-right text-ink-2">{pressure(cumulative)}</span>
+            <span className="face-mono text-right">{complete ? ft(s.telFt) : ""}</span>
+            <span className="face-mono text-right">{complete ? pressure(s.knownInWg) : ""}</span>
+            <span className="face-mono text-right text-ink-2">{whole ? pressure(cumulative) : ""}</span>
             <span
               className="face-mono text-right"
               data-tone={s.overLegIds.length ? "alarm" : undefined}
@@ -232,7 +248,8 @@ function SideTable({
       <header className="flex items-baseline gap-3">
         <h3 className="t-head">{side}</h3>
         <span className="t-small face-mono text-ink-2" data-worksheet-caption={side}>
-          {sideCaption(runs)} · worst known {pressure(worstKnownInWg)} in-wg · over {limit} fpm (
+          {sideCaption(runs)} · {branchesKnown(runs)}
+          {worstKnownInWg != null && ` · worst known ${pressure(worstKnownInWg)} in-wg`} · over {limit} fpm (
           {ws.limits.source})
         </span>
       </header>
@@ -273,11 +290,13 @@ function SideTable({
                   </span>
                   <span className={NAME}>
                     <EndName run={run} />
-                    {!run.complete && <span className="t-small text-ink-2"> · incomplete</span>}
+                    {!run.complete && (
+                      <span className="t-small text-ink-2"> · {missing(ws, run.legIds) ?? "incomplete"}</span>
+                    )}
                   </span>
                   <CfmCell run={run} ws={ws} editing={editing} />
-                  <span className="face-mono text-right">{ft(run.telFt)}</span>
-                  <span className="face-mono text-right">{pressure(run.knownInWg)}</span>
+                  <span className="face-mono text-right">{run.complete ? ft(run.telFt) : ""}</span>
+                  <span className="face-mono text-right">{run.complete ? pressure(run.knownInWg) : ""}</span>
                   <span className="face-mono text-right">
                     {run.residualInWg == null ? "" : pressure(run.residualInWg)}
                   </span>

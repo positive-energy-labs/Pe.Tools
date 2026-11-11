@@ -59,6 +59,7 @@ const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly strin
     sheetSnapshot: snapshot,
     sheetView: sheetState(open),
     ductsWork,
+    ductsRevision: 0,
     fansWork,
     design: ductsDesign(ductsWork, fansWork),
   });

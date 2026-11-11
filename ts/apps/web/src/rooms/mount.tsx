@@ -16,7 +16,8 @@ import { snapPlan } from "./snap";
 import { RoomsPlan } from "./plan";
 import { RoomsTable } from "./table";
 
-import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
+// The picture frame is the picture slot's render (scene/picture), not the kernel's layout (slice 8).
+import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 
 type Body = {
   ctx: RoomsContext;
@@ -91,7 +92,7 @@ function RegionsBody({ ctx }: Body) {
   );
 }
 
-function PlanBody({ ctx, page, verbs, renderPane }: Body & { renderPane: PaneApi }) {
+function PlanBody({ ctx, page, verbs, renderPane }: Body & { renderPane: TeachingPaneRender }) {
   const { onView, regions, snapshot, empty, cards, labels, view, plan, planError, trace, setPage } =
     useRoomsWorkspace();
   const selected = new Set(
@@ -190,7 +191,7 @@ function PlanBody({ ctx, page, verbs, renderPane }: Body & { renderPane: PaneApi
   );
 }
 
-function FeedbackBody({ page, renderPane }: Body & { renderPane: PaneApi }) {
+function FeedbackBody({ page, renderPane }: Body & { renderPane: TeachingPaneRender }) {
   const { work, snapshot, cards, regions, labels, view, setPage } = useRoomsWorkspace();
   return (
     <RoomsInbox
@@ -260,7 +261,7 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
         </Button>
       ) : null,
   } satisfies Body;
-  const frame: PaneApi = (content) => <div className="flex min-h-0 flex-1 flex-col">{content}</div>;
+  const frame: TeachingPaneRender = (content) => <div className="flex min-h-0 flex-1 flex-col">{content}</div>;
   const stage = async (key: string, input: unknown) =>
     ctx.cells.patch([{ path: ["writeIntent", key], value: { edit: { value: input } } }], {
       label: `Choose ${key} scope`,

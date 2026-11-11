@@ -1,5 +1,5 @@
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
-import type { DocumentRef } from "@pe/agent-contracts";
+import type { DocumentRef, Receipt } from "@pe/agent-contracts";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import {
   addressSchema,
@@ -128,7 +128,7 @@ import {
   resumeWork,
   type NavigationSources,
 } from "./navigation.ts";
-import { createNotices } from "./notices.ts";
+import { createNoticeFeed, noticeRows, type NoticeSources } from "./notice-feed.ts";
 import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
 import {
   captureDirectory,
@@ -137,8 +137,9 @@ import {
   type AdmittedPackage,
 } from "./packages.ts";
 import {
-  packagePageDescriptors,
+  pageDescriptors,
   pageFolderCollisions,
+  productPagesRoots,
   scratchPageDescriptors,
   type PageDescriptor,
 } from "./page-libraries.ts";
@@ -824,23 +825,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
     workspace: work,
     observe,
     fetch: handle,
-    completedWork: async (threadId: string) => {
-      const snapshot = await readThreadWork(work, options.navigation);
-      const pending =
-        snapshot.threads
-          .find((thread) => thread.threadId === threadId)
-          ?.works.filter((entry) => entry.unfinished > 0) ?? [];
-      return (
-        await Promise.all(
-          pending.map(async (entry) => {
-            const resumed = await resumeWork(work, entry.id, options.navigation);
-            return resumed?.url
-              ? { title: `${entry.route}: ${entry.intent}`, href: resumed.url }
-              : null;
-          }),
-        )
-      ).filter((entry) => entry !== null);
-    },
   };
 }
 
@@ -885,6 +869,8 @@ function workKey(url: URL, route: string, shape: "read" | "write"): WorkKey | Re
  */
 export function createContributionContent(options: {
   worldRoot: string;
+  /** Scratch Pages in read order; the world root's `Pages` when omitted (an isolated test world). */
+  pagesRoots?: readonly string[];
   packages?: typeof listPackages;
   pages?: (packages: readonly AdmittedPackage[]) => Promise<readonly PageDescriptor[]>;
   bootstrap?: () => Promise<unknown>;
@@ -892,6 +878,7 @@ export function createContributionContent(options: {
   decisionsPath?: string;
   changed?: () => void;
 }) {
+  const pagesRoots = options.pagesRoots ?? [join(options.worldRoot, "Pages")];
   const revisions = new Map<string, Map<string, unknown>>();
   const latest = new Map<string, unknown>();
   let snapshot: Promise<CapabilityContent> | undefined;
@@ -967,10 +954,7 @@ export function createContributionContent(options: {
     admitted = lifecycle.packages();
     const allDescriptors = options.pages
       ? await options.pages(admitted)
-      : [
-          ...(await scratchPageDescriptors(join(options.worldRoot, "Pages"))),
-          ...packagePageDescriptors(admitted),
-        ];
+      : await pageDescriptors(admitted, pagesRoots);
     const descriptors = allDescriptors.filter((p) => p.key !== null && p.openUrl !== null);
     const scratch = allDescriptors.filter((p) => p.pod === null).map((p) => p.slug);
     const collisions = pageFolderCollisions(scratch);
@@ -1112,7 +1096,7 @@ export function createContributionContent(options: {
     pages: async () => {
       const descriptors = options.pages
         ? await options.pages(admitted)
-        : await scratchPageDescriptors(join(options.worldRoot, "Pages"));
+        : await scratchPageDescriptors(pagesRoots);
       return pageRows(descriptors);
     },
     member: (key: string, sha256?: string) =>
@@ -1150,6 +1134,7 @@ function* hostPeRoutes(
   let invalidateCatalog = () => {};
   const content = createContributionContent({
     worldRoot,
+    pagesRoots: productPagesRoots(),
     bootstrapInBackground: true,
     changed: () => invalidateCatalog(),
     bootstrap: async () => {
@@ -1186,11 +1171,7 @@ function* hostPeRoutes(
   // Every provider is probed once in the background; the list says `unknown` until then.
   const providers = createProviders({ shellPath, spawner: yield* Spawner });
   const stopOperationHooks = observePluginOperations(journal, content.lifecycle.emit);
-  const receiptThreads = createThreadReceiptAdapter(
-    telemetry,
-    () => threads.receiptSnapshot(),
-    (threadId) => routes.completedWork(threadId),
-  );
+  const receiptThreads = createThreadReceiptAdapter(telemetry, () => threads.receiptSnapshot());
   const routeSettings = createRouteSettings(productRouteSettingsPath());
   const threads = yield* makeHarnessThreads({
     admittedRoutes: () => routes.workspace.admittedRoutes(),
@@ -1269,10 +1250,105 @@ function* hostPeRoutes(
   receiptThreads
     .hydrate()
     .catch((error: unknown) => console.warn("Receipt thread context failed to hydrate", error));
-  const notices = createNotices({
-    source: { subscribe: (q, consume) => journal.subscribe(q, consume) },
-    context: receiptThreads.context,
-    log: hostLog,
+  const navigationSources: NavigationSources = {
+    contexts: threads.workContexts,
+    subscribe: (notify) => {
+      const releaseThreads = threads.observe({ kind: "threads" }, () => notify());
+      const releaseBridge = bridge?.subscribe(() => notify());
+      return () => {
+        releaseThreads?.();
+        releaseBridge?.();
+      };
+    },
+    routes: async () =>
+      Object.fromEntries(
+        (await podRoutes.list())
+          .filter((route) => route.trusted)
+          .map((route) => [route.workRoute, `/tool/${encodeURIComponent(route.key)}`]),
+      ),
+    threads: async () => {
+      const response = await threads.fetch(
+        new Request(peRouteUrl("threads.list", {}, hostBaseUrl)),
+      );
+      if (!response.ok) throw new Error(`Thread summaries unavailable (${response.status})`);
+      return response.json();
+    },
+    documents: async () => {
+      if (!bridge) throw new Error("No Revit bridge metadata is available");
+      // effect-edge: island, phase 5
+      const sessions = await Effect.runPromise(bridge.list);
+      return sessions.flatMap((session) =>
+        session.connected && session.sessionId
+          ? (session.state?.openDocuments ?? []).map((document) => ({
+              session: session.sessionId!,
+              openId: document.openId,
+              address: document.address ?? null,
+            }))
+          : [],
+      );
+    },
+  };
+  // The notice feed watches its sources only while someone follows it (the tray always does on
+  // the installed lane); it rebuilds once per change, from caches its subscription keeps.
+  const noticeCache: {
+    receipts: Map<string, NoticeSources["receipts"][number]>;
+    works: NoticeSources["works"];
+  } = { receipts: new Map(), works: [] };
+  const notices = createNoticeFeed({
+    build: () => {
+      let machine: NoticeSources["machine"] = null;
+      try {
+        machine = hostMachineFace.current();
+      } catch {
+        // No Machine owner yet (boot) or any more (shutdown): no machine rows, never a guess.
+      }
+      return {
+        id: hostLog.last,
+        rows: noticeRows(
+          {
+            threads: threads.historySnapshot(),
+            receipts: [...noticeCache.receipts.values()],
+            works: noticeCache.works,
+            machine,
+          },
+          Date.now(),
+        ),
+      };
+    },
+    subscribe: (changed) => {
+      const receipt = (r: Receipt) => {
+        if (r.body.kind !== "action") return;
+        noticeCache.receipts.set(r.body.value.id, { revision: r.revision, action: r.body.value });
+        changed();
+      };
+      const readWorks = () =>
+        void readNavigation(routes.workspace, navigationSources)
+          .then((snapshot) => {
+            noticeCache.works = snapshot.works;
+            changed();
+          })
+          .catch((error) => console.warn("Notice feed: Works unread", error));
+      const releases = [
+        journal.subscribe({ kinds: ["action"] }, receipt),
+        threads.observe({ kind: "threads" }, changed) ?? (() => {}),
+        routes.workspace.subscribeUncaptured(readWorks),
+        bridge?.subscribe(readWorks) ?? (() => {}),
+      ];
+      try {
+        releases.push(hostMachineFace.observe(() => changed()));
+      } catch {
+        // The Machine owner is built after these routes; a follower before it sees no machine rows.
+      }
+      void journal
+        .read({ kinds: ["action"] })
+        .then((rows) => rows.forEach(receipt))
+        .catch((error) => console.warn("Notice feed: receipts unread", error));
+      readWorks();
+      return () => {
+        releases.forEach((release) => release());
+        noticeCache.receipts.clear();
+      };
+    },
   });
   // The owner itself is built by the caller's scope (`MachineOwner.layer`); routes reach it late-bound.
   const machineSpec = {
@@ -1356,44 +1432,7 @@ function* hostPeRoutes(
         // effect-edge: island, phase 5
         return Effect.runPromise(bridge.invoke(operation, input, ref.session, ref.openId));
       }),
-    navigation: {
-      contexts: threads.workContexts,
-      subscribe: (notify) => {
-        const releaseThreads = threads.observe({ kind: "threads" }, () => notify());
-        const releaseBridge = bridge?.subscribe(() => notify());
-        return () => {
-          releaseThreads?.();
-          releaseBridge?.();
-        };
-      },
-      routes: async () =>
-        Object.fromEntries(
-          (await podRoutes.list())
-            .filter((route) => route.trusted)
-            .map((route) => [route.workRoute, `/tool/${encodeURIComponent(route.key)}`]),
-        ),
-      threads: async () => {
-        const response = await threads.fetch(
-          new Request(peRouteUrl("threads.list", {}, hostBaseUrl)),
-        );
-        if (!response.ok) throw new Error(`Thread summaries unavailable (${response.status})`);
-        return response.json();
-      },
-      documents: async () => {
-        if (!bridge) throw new Error("No Revit bridge metadata is available");
-        // effect-edge: island, phase 5
-        const sessions = await Effect.runPromise(bridge.list);
-        return sessions.flatMap((session) =>
-          session.connected && session.sessionId
-            ? (session.state?.openDocuments ?? []).map((document) => ({
-                session: session.sessionId!,
-                openId: document.openId,
-                address: document.address ?? null,
-              }))
-            : [],
-        );
-      },
-    },
+    navigation: navigationSources,
     capabilityCatalog: catalog,
     contributionRead: async (key, hash) => {
       await content.read();

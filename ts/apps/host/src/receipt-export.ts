@@ -18,8 +18,6 @@ import {
   type ReceiptStamp,
   type ReceiptJoin,
   type HarnessEvent,
-  commandCounts,
-  type CommandCounts,
 } from "@pe/agent-contracts";
 import { analyticsConfig, readOrCreateInstallId, writeFatalEvidence } from "@pe/runtime";
 import { isAnyOperationKey, isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
@@ -27,8 +25,6 @@ import { ActionJournal } from "./action-journal.ts";
 import { ActionJournalService } from "./receipt-services.ts";
 import { hostOwnership, hostStateDir } from "./host-ownership.ts";
 import { subscribeReceiptProducers, type NativeReceiptProducer } from "./bridge.ts";
-import { originOf } from "./control.ts";
-import type { NoticeContext } from "./notices.ts";
 import type { UpdateFact } from "./update-reader.ts";
 
 const mcpFields = [
@@ -894,85 +890,12 @@ type ThreadSnapshot = { id: string; title: string; events: readonly HarnessEvent
 export function createThreadReceiptAdapter(
   exporter: ReceiptExporter,
   snapshot: () => readonly ThreadSnapshot[],
-  workReady?: (threadId: string) => Promise<readonly { title: string; href: string }[]>,
 ) {
-  const localIds = new Map<string, string>();
-  const localTurns = new Map<string, { threadId: string; turnId: string }>();
-  const completions = new Map<
-    string,
-    CommandCounts & { work: readonly { title: string; href: string }[] }
-  >();
   let tail = Promise.resolve();
   const peaStamp = exporter.stamps.host
     ? receiptStampSchema.parse({ ...exporter.stamps.host, component: "pea" })
     : null;
-  const threadJoin = async (id: string) => {
-    const opaque = await exporter.journal.opaqueId("thread", id);
-    localIds.set(opaque, id);
-    return opaque;
-  };
-  const eventOf = (ref: { threadId: string; eventId: string }) =>
-    snapshot()
-      .find((t) => t.id === ref.threadId)
-      ?.events.find((e) => String(e.seq) === ref.eventId);
-  const context: NoticeContext = {
-    completed: (receipt) =>
-      receipt.join.turnId ? completions.get(receipt.join.turnId) : undefined,
-    thread(opaque) {
-      const thread = snapshot().find((t) => t.id === localIds.get(opaque));
-      return thread ? { id: thread.id, title: thread.title } : undefined;
-    },
-    asked(r) {
-      if (r.body.kind !== "permission" && r.body.kind !== "question") return undefined;
-      const threadId = r.body.localRef.threadId;
-      const e = eventOf(r.body.localRef);
-      if (e?.kind === "permission_request")
-        return {
-          threadId,
-          body: [
-            e.toolCall.title ?? "A tool call is waiting.",
-            e.scope !== "run"
-              ? ""
-              : e.deadline
-                ? `At ${e.deadline}, Pea writes across tools and documents for this thread until Stop, including delegated work. Reject to refuse.`
-                : "Auto-approve is off: Pea's writes in this thread wait until you allow them.",
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
-          act: { kind: "permission", threadId, requestId: e.requestId, options: e.options },
-          ...(e.deadline ? { deadline: e.deadline } : {}),
-        };
-      if (e?.kind === "question_request")
-        return {
-          threadId,
-          body: e.message,
-          act: {
-            kind: "question",
-            threadId,
-            requestId: e.requestId,
-            message: e.message,
-            requestedSchema: e.requestedSchema,
-          },
-        };
-      return undefined;
-    },
-    said(r) {
-      const turn = r.join.turnId ? localTurns.get(r.join.turnId) : undefined;
-      const text = snapshot()
-        .find((t) => t.id === turn?.threadId)
-        ?.events.flatMap((e) =>
-          e.kind === "update" &&
-          e.turnId === turn?.turnId &&
-          e.update.sessionUpdate === "agent_message_chunk"
-            ? [(e.update as { content?: { type?: string; text?: string } }).content]
-            : [],
-        )
-        .map((content) => (content?.type === "text" ? (content.text ?? "") : ""))
-        .join("")
-        .trim();
-      return text || undefined;
-    },
-  };
+  const threadJoin = (id: string) => exporter.journal.opaqueId("thread", id);
   const ASKS = {
     permission_request: ["permission", "asked"],
     permission_resolved: ["permission", "resolved"],
@@ -1020,8 +943,6 @@ export function createThreadReceiptAdapter(
           "turnId" in event && event.turnId
             ? await exporter.journal.opaqueId("turn", `${id}:${event.turnId}`)
             : undefined;
-        if (turnId && "turnId" in event && event.turnId)
-          localTurns.set(turnId, { threadId: id, turnId: event.turnId });
         const ask = event.kind in ASKS ? ASKS[event.kind as keyof typeof ASKS] : undefined;
         const requestId = await exporter.journal.opaqueId(
           "request",
@@ -1047,19 +968,6 @@ export function createThreadReceiptAdapter(
                 : {}),
               ...span,
             };
-        if (ended?.turnId && turnId) {
-          const actions = (await exporter.journal.list()).filter((action) => {
-            const origin = originOf(action.caller);
-            return (
-              (origin.root?.thread === id && origin.root.turn === ended.turnId) ||
-              (origin.run?.thread === id && origin.run.turn === ended.turnId)
-            );
-          });
-          completions.set(turnId, {
-            ...commandCounts(actions),
-            work: (await workReady?.(id)) ?? [],
-          });
-        }
         const sourceId = await exporter.journal.opaqueId("request", `${id}:event:${event.seq}`);
         await exporter.record(
           body,
@@ -1071,7 +979,7 @@ export function createThreadReceiptAdapter(
       .catch((error) => console.warn("Thread receipt persistence failed", error));
     exporter.track(tail);
   };
-  return { accept, context, hydrate: () => Promise.all(snapshot().map((t) => threadJoin(t.id))) };
+  return { accept, hydrate: () => Promise.all(snapshot().map((t) => threadJoin(t.id))) };
 }
 
 export function recordUpdateFact(exporter: ReceiptExporter, fact: UpdateFact) {

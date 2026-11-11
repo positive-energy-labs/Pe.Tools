@@ -59,11 +59,14 @@ export const writeCommandResultSchema = <R extends z.ZodType = z.ZodObject<{}, z
  * `authoredInput` schema the web stages into Work. It carries no preview and no seal.
  */
 export interface WorkIntentBinding {
+  /** The Work owner, or `ANY_ROUTE` for a door every route shares (the sheet pair): the handle names the route. */
   route: string;
   key: string;
   workspace: boolean;
   derive(work: unknown): unknown;
 }
+/** A write door bound to no one owner: its input takes any route's Work handle (ADR 0035 rule 3, the sheet pair). */
+export const ANY_ROUTE = "*";
 
 /**
  * A ModelWrite is two catalog entries: a plan (a Read, or a TransactRead rehearsal that rolls back;
@@ -85,7 +88,7 @@ interface WorkIntentOptions {
 
 const workWriteInputSchema = (route: string) =>
   z.strictObject({
-    work: workHandleForRoute(route),
+    work: route === ANY_ROUTE ? workHandleSchema : workHandleForRoute(route),
     readWorks: z.record(z.string(), workHandleSchema).optional(),
   });
 

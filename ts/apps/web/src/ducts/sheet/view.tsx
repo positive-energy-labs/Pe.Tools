@@ -25,7 +25,7 @@ import {
   type Tier,
 } from "./tiers";
 import type { LedgerProps, RosterProps } from "./types";
-import { Worksheet } from "./worksheet-table";
+import { branchesKnown, Worksheet } from "./worksheet-table";
 
 const rosterState = (row: FanPort) =>
   row.complete
@@ -114,6 +114,7 @@ function Sides({ props }: { props: LedgerProps }) {
   if (!fan || !totals)
     return props.busy || props.loading ? null : <p className="t-small text-ink-2">No fan open.</p>;
   const currentEsp = props.inputs?.units[String(fan.unitId)]?.esp;
+  const ws = props.sheet?.worksheet;
   // One aligned overview: the required ESP line, then a side per row with fixed numeric columns,
   return (
     <section aria-label="Required ESP" className="flex flex-col gap-1" data-sheet-esp="">
@@ -138,7 +139,7 @@ function Sides({ props }: { props: LedgerProps }) {
           {pressure(currentEsp ? currentEsp.value : fan.ratedEspInWg)}
         </span>
       </div>
-      <div className="t-small grid grid-cols-[4rem_5.5rem_repeat(2,minmax(0,6rem))] gap-x-3">
+      <div className="t-small grid grid-cols-[4rem_auto_repeat(2,minmax(0,6rem))] gap-x-3">
         <span className="contents">
           <span />
           <span />
@@ -148,10 +149,13 @@ function Sides({ props }: { props: LedgerProps }) {
         {(["supply", "return"] as const).map((side) => (
           <span key={side} className="contents" data-side={side}>
             <span>{side}</span>
+            {/* F1: a side counts its known branches and names a worst only over complete ones. */}
             <span className={totals[side].complete ? "" : "text-ink-2"}>
-              {totals[side].complete ? "complete" : "incomplete"}
+              {ws ? branchesKnown(ws[side].runs) : totals[side].complete ? "complete" : "incomplete"}
             </span>
-            <span className="face-mono text-right">{pressure(totals[side].worstPath)}</span>
+            <span className="face-mono text-right">
+              {pressure(totals[side].worstPath ?? ws?.[side].worstKnownInWg)}
+            </span>
             <span className="face-mono text-right">{pressure(totals[side].allowanceInWg)}</span>
           </span>
         ))}

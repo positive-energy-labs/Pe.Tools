@@ -29,12 +29,11 @@ import type { Chain, Sheet, SheetPath } from "@pe/ducts-domain/sheet/types";
 import { worksheet } from "@pe/ducts-domain/sheet/worksheet";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
-import { workLayer } from "../ducts-inputs.ts";
+import { firmLayer, workLayer } from "../ducts-inputs.ts";
 import { followAcceptedJoins, mergeSnapshots } from "../ducts-walk.ts";
 import { designLayers } from "./ducts-design.ts";
-import { nativeRead } from "./inputs.ts";
 import { catalogs } from "../builtin-read-handles.ts";
-import { fingerprint, read } from "./evaluator.ts";
+import { fingerprint, nativeRead, read } from "./evaluator.ts";
 const snapshotSchema = nativeResponseSchema("ducts.snapshot.walk");
 export const espOptions = read("fans.esp-options", {
   input: z.object({ target: ductsRosterRequestSchema.shape.target, units: z.array(z.string()) }),
@@ -46,8 +45,7 @@ export const espOptions = read("fans.esp-options", {
     if (!units.length)
       return { espOptions: null, espOptionsError: "No unit identities in this fan scope" };
     try {
-      const response = await ctx.read(nativeRead("revit.catalog.field-options"), {
-        role: "none",
+      const response = await ctx.native("revit.catalog.field-options", {
         target: { kind: "document", ref: target },
         request: {
           key: "parameter-identities",
@@ -147,7 +145,7 @@ const walk = read("fans.walk", {
       throw Error("Fan walk requires a seed");
     return {
       seed: args.request.selector.unitId,
-      snapshot: (await ctx.read(nativeRead("ducts.snapshot.walk"), args)).body,
+      snapshot: (await ctx.native("ducts.snapshot.walk", args)).body,
     };
   },
 });
@@ -162,7 +160,7 @@ const sheetModel = read("fans.calculation", {
     const saved = await ctx.read(designLayers, request.target);
     const design = ductsDesign(saved.ducts, saved.fans),
       work = workLayer(design);
-    const criteria = resolveCriteria(work, null, saved.firm.firm);
+    const criteria = resolveCriteria(work, null, firmLayer(saved.firm));
     const tolerances = {
       autoJoinGapIn: criteria.autoJoinGapIn.value,
       candidateBoxIn: criteria.healBoxIn.value,
@@ -180,12 +178,12 @@ const sheetModel = read("fans.calculation", {
               ...tolerances,
             },
     };
-    const response = await ctx.read(nativeRead("ducts.snapshot.walk"), {
+    const response = await ctx.native("ducts.snapshot.walk", {
       role: "acquire",
       request: acquisition,
       target: { kind: "document", ref: request.target },
     });
-    const tables = await ctx.read(nativeRead("ducts.tables"), {
+    const tables = await ctx.native("ducts.tables", {
       role: "acquire",
       request: tableRequest,
       target: { kind: "document", ref: request.target },
@@ -198,7 +196,7 @@ const sheetModel = read("fans.calculation", {
       work,
       versions: { Work: saved.revision },
       store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
-      firm: saved.firm.firm,
+      firm: firmLayer(saved.firm),
       catalogs: catalog.tables,
     });
     const first = response.body;
@@ -290,11 +288,10 @@ const sheetModel = read("fans.calculation", {
       mode: request.mode,
       value,
       inputs,
-      firm: {
-        version: saved.firm.firm.version,
-        path: saved.firm.path,
-        present: saved.firm.present,
-      },
+      firm:
+        "refused" in saved.firm
+          ? saved.firm
+          : { version: saved.firm.firm.version, path: saved.firm.path, present: saved.firm.present },
       titles: titlesOf(grids),
       beyond,
     };
@@ -311,6 +308,7 @@ const compact = (value: Sheet["blockers"][number]) => ({
   id: value.id,
   kind: value.kind,
   elementId: value.elementId,
+  ...(value.subject ? { subject: value.subject } : {}),
   ...(value.connector === undefined ? {} : { connector: value.connector }),
   effectInWg: value.effectInWg,
   closer: value.closer.kind,
@@ -507,7 +505,7 @@ export const fanRoster = read("fans.roster", {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const slots = stagedDucts(design, design).parameters;
-    const response = await ctx.read(nativeRead("ducts.snapshot.roster"), {
+    const response = await ctx.native("ducts.snapshot.roster", {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: { ...(Object.keys(slots).length ? { slots } : {}), selector: { kind: "roster" } },
@@ -519,7 +517,7 @@ export const fanRoster = read("fans.roster", {
       work: workLayer(design),
       versions: { Work: saved.revision },
       store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
-      firm: saved.firm.firm,
+      firm: firmLayer(saved.firm),
     });
     const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),
       label = elementLabeler(snapshot);

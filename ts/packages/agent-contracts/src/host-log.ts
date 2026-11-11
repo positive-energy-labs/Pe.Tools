@@ -20,8 +20,8 @@ export const hostEventSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("thread"), thread: z.string(), event: harnessEventSchema }),
   z.strictObject({ kind: z.literal("receipt"), receipt: receiptSchema }),
   /**
-   * One card item the host decided to announce (`notices.ts`). `request` is the opaque request
-   * join of a permission or question, so a replay can drop an ask that was answered after it.
+   * A card item from the retired receipt-to-card projection (deleted in slice 6: the notice feed
+   * replaces it and appends nothing). Kept so retained log segments still decode.
    */
   z.strictObject({
     kind: z.literal("notice"),

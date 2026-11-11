@@ -750,17 +750,7 @@ public static class DuctSnapshots {
         ];
     }
 
-    internal static IEnumerable<Connector> HvacConnectors(Element e) {
-        var manager = e switch {
-            MEPCurve c => c.ConnectorManager,
-            FamilyInstance fi => fi.MEPModel?.ConnectorManager,
-            _ => null
-        };
-        if (manager is null) yield break;
-        foreach (Connector c in manager.Connectors)
-            if (c.Domain == Domain.DomainHvac && c.ConnectorType is ConnectorType.End or ConnectorType.Curve)
-                yield return c;
-    }
+    internal static IEnumerable<Connector> HvacConnectors(Element e) => MepConnectors.Physical(e, Domain.DomainHvac);
 
     private static DuctConnector Connector(Connector c, bool network, bool metadataOnly = false) {
         var shape = c.Shape switch {

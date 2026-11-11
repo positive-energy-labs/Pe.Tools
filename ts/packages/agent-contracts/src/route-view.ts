@@ -31,9 +31,11 @@ export interface AdmittedView {
   title: string;
   address: string;
   fields: AdmittedFields;
+  /** The admitted route's Work: Pea's Work doors list it like any builtin's (ADR 0030 rule 1, V3). */
+  work?: import("./route-state.ts").RouteStateSpec<import("zod").ZodType>;
 }
 /** A route that leases a view, as Pea discovers, opens and sets it. `builtin` names the builtin address. */
-export interface ViewRoute extends Omit<AdmittedView, "fields"> {
+export interface ViewRoute extends Omit<AdmittedView, "fields" | "work"> {
   fields: AdmittedFields | null;
   builtin: RouteViewRoute | null;
 }

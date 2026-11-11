@@ -759,9 +759,10 @@ export function RulesBody({ ctx, wide = false }: { ctx: DuctsDrawContext; wide?:
           landing={landing}
           nameOf={nameOf}
         />
-      ) : (
+      ) : ctx.value.status === "pending" ? (
+        // Loading only while pending; a settled refusal (nothing to price) is the frame's reason line.
         <p className="text-ink-2 p-2">Loading rules</p>
-      )}
+      ) : null}
     </>
   );
   return (

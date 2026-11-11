@@ -120,9 +120,11 @@ public static class ParameterValueApplier {
         Document document, ParameterValueEdit edit, bool dryRun
     ) {
         try {
-            var element = document.GetElement(edit.ElementId.ToElementId());
+            var element = string.IsNullOrEmpty(edit.UniqueId)
+                ? document.GetElement(edit.ElementId.ToElementId())
+                : document.GetElement(edit.UniqueId);
             if (element == null)
-                return (null, null, $"Element {edit.ElementId} was not found in the active document.");
+                return (null, null, $"Element {(string.IsNullOrEmpty(edit.UniqueId) ? edit.ElementId : edit.UniqueId)} was not found in the active document.");
 
             Parameter? parameter;
             if (edit.ParameterId is { } parameterId)

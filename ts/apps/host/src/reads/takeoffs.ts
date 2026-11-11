@@ -12,9 +12,9 @@ import {
 } from "@pe/agent-contracts";
 import { adoptionArgs, adoptionData, viewCatalogueArgs, viewCatalogueData } from "@pe/agent-contracts/takeoff-read";
 import { adoptDrafts } from "@pe/agent-contracts/takeoff-adoption";
-import { leaf, read } from "./evaluator.ts";
+import { leaf, read, documentMark } from "./evaluator.ts";
 import { projectTakeoffViews } from "@pe/mcps/takeoff-ops";
-import { workRead, workBinding, documentMark, nativeRead } from "./inputs.ts";
+import { workRead, workBinding } from "./inputs.ts";
 const captured = leaf("resource", readingRequestSchema, takeoffCaptureSchema.nullable());
 export const takeoffSnapshotInput = z.object({
   target: documentRefSchema,
@@ -38,8 +38,8 @@ const viewCatalogue = read("takeoffs.views", {
         capturedViews: [],
       };
     }
-    const index = (await ctx.read(nativeRead("revit.catalog.project-index"), {
-      target, role: "none", request: {
+    const index = (await ctx.native("revit.catalog.project-index", {
+      target, request: {
         sections: ["Views"], includeUnplacedViews: true, projection: { view: "Handles" },
       },
     })).body;
@@ -79,9 +79,8 @@ export const reads = {
             target: target.ref,
             views: catalogue.capturedViews,
             snapshot: (
-              await ctx.read(nativeRead("takeoffs.snapshot"), {
+              await ctx.native("takeoffs.snapshot", {
                 target,
-                role: "none",
                 request: { views: zones.length ? [] : views, zoneGuids: zones },
               })
             ).body,
@@ -93,9 +92,8 @@ export const reads = {
         : (
             await Promise.all(
               views.map((view) =>
-                ctx.read(nativeRead("takeoffs.candidates"), {
+                ctx.native("takeoffs.candidates", {
                   target,
-                  role: "none",
                   request: { view },
                 }),
               ),

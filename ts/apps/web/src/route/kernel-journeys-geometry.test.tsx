@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { stableFanKey } from "../ducts/sheet/model";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -258,9 +259,9 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    custody:{current:()=>true},memory:()=>({}),
  },workFingerprintSchema.parse(`builtin-closure:${builtins.fans.closure.fingerprint}`),{sources:{"fans.sheet":source}});
  const React=await import("react");
- const {InputsBody}=await import("../ducts/sheet/mount");
+ const {SheetPane}=await import("./slots/sheet/pane.tsx");
  const registry=makeAtomRegistry();
- function Journey(){const [,set]=React.useState(0);React.useEffect(()=>mount.subscribe(()=>set(n=>n+1)),[]);return <TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(mount)}><KeyScopeHost id="scope-revert"><TypedWrite mount={mount} id="losses"/>{mount.draw("sheet-inputs",ctx=><InputsBody ctx={ctx as any}/>) as React.ReactNode}</KeyScopeHost></SubjectDoor></TestAttention>;}
+ function Journey(){const [,set]=React.useState(0);React.useEffect(()=>mount.subscribe(()=>set(n=>n+1)),[]);return <TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(mount)}><KeyScopeHost id="scope-revert"><TypedWrite mount={mount} id="losses"/>{mount.draw("sheet-inputs",ctx=><SheetPane ctx={{draw:ctx as any,slot:mount.spec.sheet!,field:mount.spec.subject?.field}}/>) as React.ReactNode}</KeyScopeHost></SubjectDoor></TestAttention>;}
  const router=createRouter({routeTree:createRootRoute({component:Journey}),history:createMemoryHistory({initialEntries:["/fans"]})});
  const phase=(at:string)=>{if(process.env.PE_FANS_SCOPE_EVIDENCE)writeFileSync(process.env.PE_FANS_SCOPE_EVIDENCE,JSON.stringify({at,revision:mount.owner()?.handle?.revision,problem:mount.reviewProblem("losses"),results:(trace as any).results,requests},null,2));};
  try{
@@ -291,7 +292,8 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    await screen.findByRole("button",{name:"None"},{timeout:20000});
    const user=userEvent.setup();
    const edit=async(id:string,value:string)=>{
-     const row=await vi.waitFor(()=>{const row=document.querySelector(`[data-input-field="component:${id}:drop"]`);expect(row, JSON.stringify({fields:[...document.querySelectorAll("[data-input-field]")].map(e=>e.getAttribute("data-input-field")),text:document.body.textContent?.slice(-3500),value:mount.value().status})).toBeTruthy();return row!;});
+     const subject=elementSubject((walk.nodes.find((n:any)=>n.id===Number(id)) ?? walk.segments.find((n:any)=>n.id===Number(id)))!);
+     const row=await vi.waitFor(()=>{const row=document.querySelector(`[data-sheet-address="componentDrops:${subject}"]`);expect(row, JSON.stringify({cells:[...document.querySelectorAll("[data-sheet-address]")].map(e=>e.getAttribute("data-sheet-address")),text:document.body.textContent?.slice(-3500),value:mount.value().status})).toBeTruthy();return row!;});
      const input=within(row as HTMLElement).getByRole("textbox");
      await user.clear(input);await user.type(input,`${value}{Enter}`);
    };
@@ -306,7 +308,9 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    phase("r3");
    act(()=>mount.refresh());
    await vi.waitFor(()=>expect(mount.value().current).toBe(true),{timeout:20000});
-   fireEvent.click(screen.getByRole("button",{name:/Revert.*DS.?1/i}));
+   // A staged cell's own clear verb returns it to the source underneath (the old row's Revert).
+   const ds1=elementSubject((walk.nodes.find((n:any)=>n.id===14577394) ?? walk.segments.find((n:any)=>n.id===14577394))!);
+   fireEvent.click(within(document.querySelector(`[data-sheet-address="componentDrops:${ds1}"]`) as HTMLElement).getByRole("button",{name:/clear/i}));
    await vi.waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(4),{timeout:20000});
    phase("r4");
    act(()=>mount.refresh());

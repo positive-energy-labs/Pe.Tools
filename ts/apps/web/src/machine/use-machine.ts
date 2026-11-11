@@ -13,7 +13,8 @@ import { dirty } from "#/host/resource-stream";
 import { useAction } from "#/actions/use-action";
 
 import { setAccepting } from "./accepting";
-import { machineOf, planWaits } from "./model";
+import { planWaits } from "@pe/agent-contracts";
+import { machineOf } from "./model";
 
 export const SEED_REFUSAL = "Fixture: nothing on this page reaches a host.";
 

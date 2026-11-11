@@ -25,6 +25,15 @@ const handAxes = {
   // Slice 9 (findings): a Read of the findings Work and a Work write; neither touches Revit.
   "findings.list": { subject: "None", touches: ["Metadata"], effect: "Read", cost: "Mutation", cardinality: "One" },
   "findings.write": { subject: "None", touches: ["Metadata"], effect: "SessionWrite", cost: "Mutation", cardinality: "One" },
+  // Slice 7: the sheet pair's write; its plan derives Read from its first native leaf.
+  "sheet.apply": {
+    subject: "Elements",
+    touches: ["Metadata"],
+    effect: "ModelWrite",
+    cost: "Mutation",
+    // One, like the losses pair it replaces: the route-wide control doors (actions.admit) bound every write at One.
+    cardinality: "One",
+  },
   "settings.observe": {
     subject: "None",
     touches: ["Metadata"],
@@ -220,13 +229,6 @@ const handAxes = {
     subject: "Elements",
     touches: ["Metadata"],
     effect: "Read",
-    cost: "Mutation",
-    cardinality: "One",
-  },
-  "ducts.apply-losses": {
-    subject: "Elements",
-    touches: ["Geometry"],
-    effect: "ModelWrite",
     cost: "Mutation",
     cardinality: "One",
   },

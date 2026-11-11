@@ -49,8 +49,9 @@ test("slice 9: Pea and a person each write a finding on a fan port and a /famili
   );
 });
 
-// Red until slice 8: the fans scene capture carries no SubjectRef per port, so nothing real feeds `captured`.
-test("slice 9: one mark draws on the port's geometry (needs slice 8 Captured SubjectRef per port)", () => {
+// Red until slice 8: the fans scene capture carries no SubjectRef per port, so nothing real feeds
+// `captured` and `findingMark` throws. Slice 8 (the picture slot) flips this back to test().
+test.fails("slice 9: one mark draws on the port's geometry (needs slice 8 Captured SubjectRef per port)", () => {
   const pea = finding("p1", port, "pea", "claim", "no");
   expect(findingMark(pea, [{ ref: port, point: [448.6, 738.7, 1.8] }])).toEqual({
     kind: "ring",

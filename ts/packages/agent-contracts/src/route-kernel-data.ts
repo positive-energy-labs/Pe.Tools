@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sheetSlotDataSchema } from "./slots/sheet.ts";
 
 export type Immutable<T> = T extends string | number | boolean | bigint | symbol | null | undefined
   ? T
@@ -132,14 +133,6 @@ const pane = z.strictObject({
   verbs: placement,
   body: ref.optional(),
   history: z.strictObject({ receipts: ref.optional() }).optional(),
-  frame: z
-    .strictObject({
-      picture: z.boolean().optional(),
-      scroll: z.enum(["auto", "clip", "visible"]).optional(),
-      flush: z.boolean().optional(),
-      header: z.literal(false).optional(),
-    })
-    .optional(),
 });
 export type LayoutJson =
   | { readonly kind: "pane"; readonly id: string }
@@ -241,6 +234,10 @@ export const RouteGraphJson = z.strictObject({
     })
     .optional(),
   readings: z.record(ref, routeReadingJsonSchema),
+  /** ADR 0035 rule 3: the sheet slot's bindings; `sheet.plan` derives Revit writes from them. */
+  sheet: sheetSlotDataSchema.optional(),
+  /** ADR 0035 rule 8: the reading whose data is the Goal; the kernel draws its unresolved list first. */
+  goal: ref.optional(),
   verbs: z.record(ref, routeVerbJsonSchema),
   panes: z.record(ref, pane),
   layout,

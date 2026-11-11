@@ -6,5 +6,6 @@ type Panes = {"e-systems": ContextOf<typeof import("./route.ts").fields, typeof 
 "e-rules-all": ContextOf<typeof import("./route.ts").fields, typeof import("./route.ts").pricing, typeof import("../../../../packages/agent-contracts/src/ducts.ts").ductsRouteState, typeof import("@pe/agent-contracts").ductsSheetEditsSchema>;
 "e-rules": ContextOf<typeof import("./route.ts").fields, typeof import("./route.ts").pricing, typeof import("../../../../packages/agent-contracts/src/ducts.ts").ductsRouteState, typeof import("@pe/agent-contracts").ductsSheetEditsSchema>;
 "e-picture": ContextOf<typeof import("./route.ts").fields, typeof import("./route.ts").pricing, typeof import("../../../../packages/agent-contracts/src/ducts.ts").ductsRouteState, typeof import("@pe/agent-contracts").ductsSheetEditsSchema>;
+design: ContextOf<typeof import("./route.ts").fields, typeof import("./route.ts").pricing, typeof import("../../../../packages/agent-contracts/src/ducts.ts").ductsRouteState, typeof import("@pe/agent-contracts").ductsSheetEditsSchema>;
 "e-inbox": ContextOf<typeof import("./route.ts").fields, typeof import("./route.ts").pricing, typeof import("../../../../packages/agent-contracts/src/ducts.ts").ductsRouteState, typeof import("@pe/agent-contracts").ductsSheetEditsSchema>};
 export type PaneContext<P extends keyof Panes> = Panes[P];

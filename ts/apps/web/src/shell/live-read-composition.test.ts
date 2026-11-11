@@ -24,7 +24,8 @@ import { tmpdir } from "node:os";
 import { HostInputContext } from "../../../host/src/input-context.ts";
 import { openRecordingWriter } from "../../../host/src/native-recording.ts";
 import { dirname, join } from "node:path";
-import { firmFilePath, FIRM_SEED } from "../../../host/src/ducts-inputs.ts";
+import { FIRM_SEED } from "../../../host/src/ducts-inputs.ts";
+import { firmRootPath } from "../../../host/src/ducts-files.ts";
 
 // Forward the services already owned by makeHttpLive; optional lookup keeps these test layers closed.
 const ambient = <S, I>(tag: Context.Key<S, I>) =>
@@ -39,7 +40,9 @@ async function liveHost(
   let disconnectBridge: () => Promise<void> = async () => {
     throw Error("Test bridge has not connected");
   };
-  const inputRoot = dirname(dirname(firmFilePath()));
+  // The firm file is a shared setting (ADR 0035 rule 11): give this host a shared root to watch.
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", await mkdtemp(join(tmpdir(), "pe-shared-")));
+  const inputRoot = dirname(firmRootPath()!);
   const roster = nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
   const inputs =
     isolated ??

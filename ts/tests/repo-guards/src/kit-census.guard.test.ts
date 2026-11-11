@@ -298,7 +298,6 @@ const RULES: Rule[] = [
     roots: [K + "**/*.css", W + "**/*.css"], select: "focus-css", allow: [
       { glob: K + "base.css", reason: "The one focus ring owner." },
       { glob: K + "components/lang/pane.css", reason: "The active-pane halo marks scope, not a focused control." },
-      { glob: W + "chat/chat-shell.css", reason: "Hides the pane halo where the composer box already rings." },
     ], cannotSee: "Nested CSS, inline styles and outline set from script." },
   // Keyboard focus beats every state mark: the ring is layered, so an unlayered static `outline` on a row,
   // cell or damage mark would cover it. State marks paint edges with box-shadow; only a transient

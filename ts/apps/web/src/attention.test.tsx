@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import * as Atom from "effect/reactivity/Atom";
+import { subjectCode } from "@pe/agent-contracts";
 import { RegistryContext } from "@effect/atom-react";
 import { Profiler } from "react";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
@@ -146,11 +147,12 @@ it("measures 30 subject transitions and repeated pointer motion over 100 actual 
 
 it("the native picture adapter lights every member of a run and nested room group", () => {
   const registry = makeAtomRegistry();
+  const region = subjectCode({ keyKind: "region", key: "guid" }) as SubjectKey;
   const selected = Atom.make<ReadonlySet<SubjectKey>>(new Set<SubjectKey>());
   const resolve = new Map<SubjectKey, SubjectKey[]>([
     ["run:7", [eKey(1), eKey(2)]],
-    ["room:guid", [eKey(3)]],
-    ["group:7", ["run:7", "room:guid"]],
+    [region, [eKey(3)]],
+    ["group:7", ["run:7", region]],
   ]);
   function Picture() {
     const state = useElementAttention();

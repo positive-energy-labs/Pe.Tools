@@ -32,6 +32,10 @@
       "types": "./src/route-kernel-codecs.ts",
       "import": "./src/route-kernel-codecs.ts"
     },
+    "./subject-ref": {
+      "types": "./src/subject-ref.ts",
+      "import": "./src/subject-ref.ts"
+    },
     "./route-state": {
       "types": "./src/route-state.ts",
       "import": "./src/route-state.ts"
@@ -53,7 +57,9 @@
     "./value": "./src/value.ts",
     "./takeoff-adoption": "./src/takeoff-adoption.ts",
     "./takeoff-read": "./src/takeoff-read.ts",
-    "./slots": "./src/slots/index.ts"
+    "./slots": "./src/slots/index.ts",
+    "./target": "./src/target.ts",
+    "./native-output-read": "./src/native-output-read.ts"
   },
   "publishConfig": {
     "access": "public"

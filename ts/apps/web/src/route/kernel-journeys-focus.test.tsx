@@ -11,7 +11,7 @@ import { createPortal } from "react-dom";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
-import { route, type TypedRoute } from "./typed-route";
+import { route, scrollBody, type TypedRoute } from "./typed-route";
 import { module as fans } from "../fans/route";
 import { module as ducts } from "../ducts/route";
 import { TypedChrome, TypedShell } from "../shell/typed-shell";
@@ -34,7 +34,7 @@ import { contextFetch } from "@pe/runtime/context";
 import { routeInput } from "./host";
 import userEvent from "@testing-library/user-event";
 import { createServer } from "node:http";
-import { HistoryRail } from "../shell/history-rail";
+import { RecordedPoints } from "../shell/history-rail";
 import { historySnapshotSchema } from "../shell/history";
 import * as historyLinks from "../shell/history";
 import { ref, path } from "../../../host/tests/host-read-graph.test-support";
@@ -184,7 +184,7 @@ test("JZ Families History offers published values and marks ambiguous publicatio
     const bad = listed.points.find((point: any) => point.reason.receipt === "history-journey-write");
     expect(bad).toBeTruthy();
     expect(bad.history.publications.filter((binding: any) => binding.instance === pose.instance)).toHaveLength(2);
-    render(<HistoryRail document={path} route="families" address={address} compare={false} />);
+    render(<RecordedPoints document={path} route="families" address={address} compare={false} />);
     fireEvent.click(await screen.findByRole("button", { name: "Open History" }));
     const rows = await screen.findAllByRole("option");
     const badRow = rows.find(row => row.getAttribute("data-key") === `${bad.id}:${pose.instance}`)!;
@@ -204,7 +204,7 @@ test("JZ Families History offers published values and marks ambiguous publicatio
     expect(available.map(({ point }: any) => point.id)).toContain(good.id);
     for (const { point, pose: recordedPose } of available) {
       cleanup();
-      render(<HistoryRail document={path} route="families" address={address} compare={false} />);
+      render(<RecordedPoints document={path} route="families" address={address} compare={false} />);
       fireEvent.click(await screen.findByRole("button", { name: "Open History" }));
       const options = await screen.findAllByRole("option");
       picked = "";
@@ -252,18 +252,18 @@ test("JZ Families History offers published values and marks ambiguous publicatio
 }, 60000);
 
 test("JZ numeric cells refuse bounds and fractional integers without changing Work, then commit exactly", async () => {
-  const { InputsBody } = await import("../ducts/sheet/mount");
   const { TakeoffEditCell } = await import("../takeoff/proposals");
   const { NumberCell } = await import("@pe/kit/table/cells");
   const f = await createWitness(closes);
-  await waitFor(() => expect(f.typed.value().current).toBe(true));
-  await waitFor(() => expect(f.typed.work()).not.toBeNull());
+  // Design friction is /ducts design data (ruling 2026-11-10): its sheet draws on the /ducts mount.
+  const ducts = f.owner.native;
+  await waitFor(() => expect(ducts.work()).not.toBeNull());
   function Journey() {
-    useSyncExternalStore(f.typed.subscribe, f.typed.revision, f.typed.revision);
+    useSyncExternalStore(ducts.subscribe, ducts.revision, ducts.revision);
     const [people, setPeople] = useState(3);
     const [bounded, setBounded] = useState(1);
     return <>
-      {f.typed.draw("sheet-inputs", ctx => <InputsBody ctx={ctx as never} />) as import("react").ReactNode}
+      {f.owner.read("design") as import("react").ReactNode}
       <section aria-label="Takeoff occupants">
         <TakeoffEditCell roomId="numeric-entry-room" field="people" value={people} digits={0} integer
           cell={undefined} wire={{ segment: "edits", revision: null, write: async () => { throw Error("No transition requested"); } }}
@@ -276,23 +276,23 @@ test("JZ numeric cells refuse bounds and fractional integers without changing Wo
       </section>
     </>;
   }
-  const router = createRouter({ routeTree: createRootRoute({ component: Journey }), history: createMemoryHistory({ initialEntries: ["/fans"] }) });
+  const router = createRouter({ routeTree: createRootRoute({ component: Journey }), history: createMemoryHistory({ initialEntries: ["/ducts"] }) });
   const user = userEvent.setup();
   render(<RouterProvider router={router} />);
   const friction = await screen.findByRole("textbox", { name: "Design friction" });
-  const before = structuredClone(f.saved.get("fans"));
-  const revision = f.typed.work()!.revision;
+  const before = structuredClone(f.saved.get("ducts"));
+  const revision = ducts.work()!.revision;
   await user.click(friction);
   await user.keyboard("{Control>}a{/Control}-0.1{Enter}");
   await waitFor(() => expect(friction.closest(".dl-cell")?.getAttribute("aria-busy")).not.toBe("true"));
-  expect.soft(f.saved.get("fans")).toEqual(before);
-  expect.soft(f.typed.work()!.revision).toBe(revision);
+  expect.soft(f.saved.get("ducts")).toEqual(before);
+  expect.soft(ducts.work()!.revision).toBe(revision);
   expect.soft(friction.closest("[data-sheet-cell]")?.textContent).toContain("at least 0");
   await user.click(screen.getByRole("textbox", { name: "Design friction" }));
   await user.keyboard("{Control>}a{/Control}0.123456789{Enter}");
-  await waitFor(() => expect(f.typed.owner()?.doc.designFriction?.edit).toBeDefined());
-  expect.soft(f.typed.owner()?.doc.designFriction?.edit?.value).toBe(0.123456789);
-  expect.soft((f.saved.get("fans") as { doc: { designFriction?: { edit?: { value: number } } } }).doc.designFriction?.edit?.value).toBe(0.123456789);
+  await waitFor(() => expect(ducts.owner()?.doc.designFriction?.edit).toBeDefined());
+  expect.soft(ducts.owner()?.doc.designFriction?.edit?.value).toBe(0.123456789);
+  expect.soft((f.saved.get("ducts") as { doc: { designFriction?: { edit?: { value: number } } } }).doc.designFriction?.edit?.value).toBe(0.123456789);
   const occupants = within(screen.getByRole("region", { name: "Takeoff occupants" }));
   await user.click(occupants.getByRole("textbox"));
   await user.keyboard("{Control>}a{/Control}2.7{Enter}");
@@ -656,8 +656,8 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
       expect(response.ok, await response.clone().text()).toBe(true);
       expect(await f.journal.wait(id)).toMatchObject({ state: "succeeded" });
     };
-    await command("undo-plan", "ducts.plan-losses");
-    await command("undo-apply", "ducts.apply-losses");
+    await command("undo-plan", "sheet.plan");
+    await command("undo-apply", "sheet.apply");
     expect(f.native.get(4)).toBe(250);
     await waitFor(() => expect(screen.getByRole("button", { name: "Undo Edit fan airflow" }).getAttribute("aria-disabled")).toBe("true"));
     const undo = screen.getByRole("button", { name: "Undo Edit fan airflow" });
@@ -924,7 +924,7 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
 test("JM H17 browse an optional host route without a pin, then refuse malformed document pins", async () => {
   const module = route({ ...family.spec, edits: undefined, core: undefined, commands: {}, reads: {},
     panes: { main: { title: "Optional document", purpose: "Inspect exact target authority",
-      draw: ctx => <p role="status">{ctx.target?.kind === "host" ? "Host browsing" : "Pinned document"}</p> } },
+      body: "scroll", draw: ctx => scrollBody(<p role="status">{ctx.target?.kind === "host" ? "Host browsing" : "Pinned document"}</p>) } },
     layout: { kind: "pane", id: "main" } });
   const stamp = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
   let search = new URLSearchParams();
@@ -974,7 +974,7 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
   });
   const make = (key: string) => route({ ...fans.spec, key, name: key, needs: "browser", core: undefined,
     subject: undefined, reads: {}, edits: undefined, commands: {}, fields: {}, picture: undefined, title: undefined,
-    panes: { main: { title: key, purpose: "Focus ownership", draw: () => <><button>{key} focus</button><textarea aria-label={`${key} text`} />{createPortal(<button>{key} portal</button>, document.body)}</> } },
+    panes: { main: { title: key, purpose: "Focus ownership", body: "scroll", draw: () => scrollBody(<><button>{key} focus</button><textarea aria-label={`${key} text`} />{createPortal(<button>{key} portal</button>, document.body)}</>) } },
     layout: { kind: "pane", id: "main" } });
   const a = make("jz-a"), b = make("jz-b");
   const stamp = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
@@ -1006,8 +1006,8 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
-import { inputRows } from "../ducts/sheet/input-rows";
-import { SheetCell } from "../ducts/sheet/sheet-cell";
+import { SheetPane } from "./slots/sheet/pane.tsx";
+import { fansSheet } from "../fans/sheet.ts";
 import { PreviewAction } from "@pe/kit/lang/write-action";
 
 // Plan reviews seal model inputs, never browser pane visibility or Page pose.
@@ -1042,7 +1042,7 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
   for (const unreadable of [false, true]) {
     const capture = structuredClone(realMuas);
     native.submit.mockImplementation(async () => {
-      const input = f.inputs.get("fans:ducts.plan-losses") as { work: unknown };
+      const input = f.inputs.get("fans:sheet.plan") as { work: unknown };
       return ({
       id: "native-before-plan", state: "succeeded",
       result: {
@@ -1093,7 +1093,7 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
     ], f.fans.work()!.revision);
     await vi.waitFor(() => expect(f.fans.work()!.value.equipmentFlows[elementSubject(realMuas.nodes.find(node => node.id === 14577391)!)]?.edit?.value.cfm).toBe(1000));
     f.fans.refresh("value");
-    for (const id of ["value", "owner:ducts"])
+    for (const id of ["value"])
       await vi.waitFor(() => expect(f.fans.readingStatus(id).snapshot).toMatchObject({ current: true }));
     function WriteReview() {
       const [, changed] = useReducer(n => n + 1, 0);
@@ -1173,7 +1173,7 @@ test.each([false, true])(
     );
     await vi.waitFor(() => expect(f.fans.work()!.value.writeIntent).toBeTruthy());
     f.fans.refresh("value");
-    for (const id of ["value", "owner:ducts"])
+    for (const id of ["value"])
       await vi.waitFor(() => {
         const snapshot = f.fans.readingStatus(id).snapshot;
         if (snapshot.status === "failed") throw Error(`${id}: ${snapshot.reason}`);
@@ -1191,8 +1191,10 @@ test.each([false, true])(
     // The native mount retains handles and hash dependencies; it never serializes a Value into a token.
     expect(bytes(f.fans.workBasis())).toBeLessThan(2048);
     expect(plan).toBeTypeOf("function");
-    const input = f.inputs.get("fans:ducts.plan-losses") as { work: unknown; readWorks: unknown };
-    expect(input.readWorks).toHaveProperty("fans");
+    // /fans owns no /ducts Work (ruling 2026-11-10): its plan carries its own handle; the host reads /ducts.
+    const input = f.inputs.get("fans:sheet.plan") as { work: unknown; readWorks?: object };
+    expect(input.work).toMatchObject({ key: { route: "fans" } });
+    expect(Object.keys(input.readWorks ?? {})).toEqual([]);
     // H1: a plan the host refuses after invoke returned shows its reason, arms nothing, and retries clean.
     const refusedText = "Fans Work belongs to another document";
     await act(async () => plan({ id: "plan-refused", state: "refused", error: refusedText }));
@@ -1266,7 +1268,7 @@ test.each([false, true])(
     expect(f.fans.work()!.revision).toBe(stagedRevision);
     // Broad route-surface witness: the real typed action consumes its receipt feed, and the
     // consent review contains the exact owned Work cell rather than a parallel fake handle.
-    const receipt=actionStatusSchema.parse({id:"consent-review",key:"ducts.apply-losses",state:"waiting",
+    const receipt=actionStatusSchema.parse({id:"consent-review",key:"sheet.apply",state:"waiting",
       caller:{kind:"pea",thread:"consent-thread",context:"surface-test"},basis:null,target:{kind:"host"},input:{},startedAt:new Date().toISOString(),
       consentWindow:{requestId:"consent-request",deadline:new Date(Date.now()+60_000).toISOString()}});
     act(()=>{for(const deliver of receiptSubscribers)deliver({kind:"ready",receipts:{rows:[receipt],from:0 as ReceiptCursor,through:1 as ReceiptCursor}});});
@@ -1565,13 +1567,13 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
   vi.spyOn(await import("../navigation/surface-host"), "useSurfaceHost").mockReturnValue({ surface: "web" } as never);
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   const threads = [{ id: "jz-family-first" }, { id: "jz-family-other" }];
-  const store = createChatPageStore({ registry: appAtomRegistry, search: { mode: "threads", patch: async () => {} } });
+  const store = createChatPageStore({ registry: appAtomRegistry, search: { patch: async () => {} } });
   conversation.value = { store, threads };
   const { builtinRouteStamp } = await import("./builtin-inventory");
   const stamp = workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("family")}`);
   const declaration = route({ ...family.spec, panes: { workspace: {
     ...family.spec.panes.workspace,
-    draw: ctx => <output aria-label="Mounted Family Work">{ctx.cells.doc?.spec?.doc.fileName}</output>,
+    body: "scroll", draw: ctx => scrollBody(<output aria-label="Mounted Family Work">{ctx.cells.doc?.spec?.doc.fileName}</output>),
   } } });
   function Family() { return <TypedShell module={declaration} fingerprint={stamp} />; }
   const root = createRootRoute({ component: () => <RegistryContext.Provider value={appAtomRegistry}>
@@ -1706,11 +1708,11 @@ test("JZ E8-12 close Home clears a capacity refusal and permits another Place", 
   sessionStorage.setItem("pe.places", JSON.stringify(Array.from({ length: 12 }, (_, i) => ({
     id: `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, "0")}`, route: "home", link: "/", at: new Date().toISOString(),
   }))));
-  const store = createChatPageStore({ registry: appAtomRegistry, search: { mode: "threads", patch: async () => {} } });
+  const store = createChatPageStore({ registry: appAtomRegistry, search: { patch: async () => {} } });
   conversation.value = { store, threads: [] };
   const module = route({ ...family.spec, key: "home", address: "/", name: "Home", needs: "browser", core: undefined,
     subject: undefined, reads: {}, edits: undefined, commands: {}, fields: {}, picture: undefined, title: undefined,
-    panes: { main: { title: "Home", purpose: "Place capacity", draw: () => <p>Home body</p> } }, layout: { kind: "pane", id: "main" } });
+    panes: { main: { title: "Home", purpose: "Place capacity", body: "scroll", draw: () => scrollBody(<p>Home body</p>) } }, layout: { kind: "pane", id: "main" } });
   const root = createRootRoute({ component: () => <RegistryContext.Provider value={appAtomRegistry}>
     <RouteDock renderRoute={body => body}>{null}</RouteDock>
   </RegistryContext.Provider> });
@@ -1753,7 +1755,7 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
   const reason = "MUAS-1: missing PE_M_Fan_AirFlowDesign; add the missing parameter";
   native.submit.mockImplementation(async () => ({ id: "atomic-hold", state: "succeeded", result: {
     previewOnly: true, planRefusal: reason,
-    seal: { caller: { kind: "human", via: "local" }, requestHash: "atomic-hold", work: { handle: (f.inputs.get("fans:ducts.plan-losses") as { work: unknown }).work },
+    seal: { caller: { kind: "human", via: "local" }, requestHash: "atomic-hold", work: { handle: (f.inputs.get("fans:sheet.plan") as { work: unknown }).work },
       documentMark: { session: "fixture", openId: "fans", observedSince: null, changedAt: null },
       incarnation: null, dependencies: "exact" },
     value: { writes: [
@@ -1785,20 +1787,16 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
   cleanup();
   // The recorded adapter has no unit rows; prepare the native input model before rendering.
   const nativeInputs = inputsFor(capture);
-  const attempted = vi.fn();
+  const slot = { ...fansSheet, bindings: { equipmentFlows: fansSheet.bindings.equipmentFlows } };
   function MissingFlow({ ctx }: { ctx: any }) {
     const data = ctx.value.value;
     if (!data.open) throw Error("The native Fan must be open");
-    const rows = inputRows({ snapshot: data.sheetSnapshot, doc: null, fanUnitId: 14577391, inputs: nativeInputs });
-    const control = rows.find(row => row.key === "unit:14577391:cfm")!.control;
-    if (control.kind !== "number") throw Error("Fan airflow must have a number control");
-    return <SheetCell label="MUAS-1 airflow" value={control.value} unit={{ label: "cfm" }} digits={0} source="none"
-      refusal={control.refusal ?? null} onValue={value => { attempted(value); return ctx.cells.at(["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!)]).stage({ cfm: value, source: "Work" }, { label: "MUAS airflow" }); }} />;
+    const value = { ...ctx.value, value: { ...data, sheetView: { ...data.sheetView, inputs: nativeInputs } } };
+    return <SheetPane ctx={{ draw: { ...ctx, value }, slot }} />;
   }
   render(f.typed.draw("sheet-inputs", ctx => <MissingFlow ctx={ctx} />) as React.ReactElement);
   expect(document.querySelector('[data-body="locked"]'), "The missing native parameter locks the actual typed cell before Plan").not.toBeNull();
   expect(document.body.innerHTML).toContain("PE_M_Fan_AirFlowDesign");
-  expect(attempted).not.toHaveBeenCalled();
 
 });
 
@@ -1816,8 +1814,8 @@ test.each(["Fans", "Ducts"] as const)("JZ C042 %s subject-list declaration suppr
     const module = route({ ...fans.spec, needs: "browser", edits: undefined, commands: {}, reads: {},
       subject: { ...fans.spec.subject!, pane: "roster", read },
       panes: {
-        roster: { subjectList: declared.subjectList, title: "Fan list", purpose: "Choose the subject", read: { ...read }, draw: ctx => <Roster ctx={ctx} /> },
-        detail: { title: "Detail", purpose: "Inspect the subject", read: { ...read }, draw: () => <p>Subject detail</p> },
+        roster: { subjectList: declared.subjectList, title: "Fan list", purpose: "Choose the subject", read: { ...read }, body: "scroll", draw: ctx => scrollBody(<Roster ctx={ctx} />) },
+        detail: { title: "Detail", purpose: "Inspect the subject", read: { ...read }, body: "scroll", draw: () => scrollBody(<p>Subject detail</p>) },
       }, layout: { kind: "pane", id: pane } });
     const mount = mounts.mountTypedRoute(module, {
       target: { kind: "host" }, fixture: "layout", work: { address: null, open: null },
@@ -1847,7 +1845,7 @@ test("JZ audit named subject choices preserve all none add and toggle without ra
   const roster = fans.spec.subject!.read!;
   const module = route({ ...fans.spec, core: roster, edits: undefined, commands: {},
     subject: { ...fans.spec.subject!, pane: "detail" },
-    panes: { detail: { title: "Subject choices", purpose: "Choose named subjects", draw: () => <p>Subject choice surface</p> } },
+    panes: { detail: { title: "Subject choices", purpose: "Choose named subjects", body: "scroll", draw: () => scrollBody(<p>Subject choice surface</p>) } },
     layout: { kind: "pane", id: "detail" } });
   let seq = 0, search = new URLSearchParams(), moves = 0;
   const unknown = stableFanKey({ uniqueId: "unknown-roster-audit", portIndex: 0 });
@@ -1907,7 +1905,7 @@ test("JZ audit optional document pins retain exact source authority and retire r
   const original = mounts.mountTypedRoute;
   const factory = vi.spyOn(mounts, "mountTypedRoute").mockImplementation((...args) => { const m = original(...args); created.push(m); return m; });
   const module = route({ ...family.spec, needs: "host", optionalTarget: "document", edits: undefined, core: undefined, reads: {}, commands: {}, fields: {}, picture: undefined, title: undefined,
-    panes: { main: { title: "Optional document", purpose: "Inspect exact document authority", draw: ctx => <p>{ctx.target?.kind === "document" ? `Pinned ${ctx.target.ref.session}/${ctx.target.ref.openId}` : ctx.target?.kind === "host" ? "Host browsing" : "No authority"}</p> } }, layout: { kind: "pane", id: "main" } });
+    panes: { main: { title: "Optional document", purpose: "Inspect exact document authority", body: "scroll", draw: ctx => scrollBody(<p>{ctx.target?.kind === "document" ? `Pinned ${ctx.target.ref.session}/${ctx.target.ref.openId}` : ctx.target?.kind === "host" ? "Host browsing" : "No authority"}</p>) } }, layout: { kind: "pane", id: "main" } });
   let search = new URLSearchParams();
   const listeners = new Set<() => void>();
   const address = { read: () => new URLSearchParams(search), write(next: URLSearchParams) { search = next; listeners.forEach(f => f()); }, subscribe(f: () => void) { listeners.add(f); return () => { listeners.delete(f); }; } };
@@ -1960,7 +1958,7 @@ test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow in
   const spec = (schedules as TypedRoute).spec;
   const module = route({ key: "schedules", name: "Schedule cells", directory: spec.directory, fields: {},
     edits: { ...spec.edits!, value: undefined, seed: undefined, key: () => host.scope.work },
-    panes: { main: { title: "Schedule cells", purpose: "Review stale cells", draw: () => null } }, layout: { kind: "pane", id: "main" } });
+    panes: { main: { title: "Schedule cells", purpose: "Review stale cells", body: "scroll", draw: () => scrollBody(null) } }, layout: { kind: "pane", id: "main" } });
   const mount = mounts.mountTypedRoute(module, { target: { kind: "document", ref: host.b }, fixture: null,
     work: { address: null, open: host.b }, address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => true }, memory: () => ({}),
@@ -2001,7 +1999,7 @@ test("JZ Plan refusal marker holds a valid sealed ancillary-only review at the t
   native.submit.mockImplementation(async () => ({ id: "marker-only-plan", state: "succeeded", result: {
     previewOnly: true, planRefusal: reason,
     seal: { caller: { kind: "human", via: "local" }, requestHash: "marker-only-plan",
-      work: { handle: (f.inputs.get("fans:ducts.plan-losses") as { work: unknown }).work },
+      work: { handle: (f.inputs.get("fans:sheet.plan") as { work: unknown }).work },
       documentMark: { session: "fixture", openId: "fans", observedSince: null, changedAt: null }, incarnation: null, dependencies: "exact" },
     // No refused native row can accidentally supply the shell's refusal. Only the Plan marker holds Apply.
     value: { writes: [{ kind: "store", outcome: "planned", before: "absent", after: "revision 1" }],

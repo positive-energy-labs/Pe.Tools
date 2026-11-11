@@ -36,14 +36,12 @@ const listControls = (label: string) => [
 const DUCTS_REGIONS = {
   systems: {
     id: "e-systems",
-    pane: { scroll: "clip", flush: true },
     label: "Systems",
     purpose: "Choose a system to inspect its tree and Inputs.",
     controls: listControls("systems"),
   },
   rules: {
     id: "e-rules-all",
-    pane: { scroll: "auto", flush: true },
     label: "All-systems rules",
     purpose:
       "A rule is a fitting type (family : type) plus a geometry condition. Its table is the one choice a person makes; Pe re-looks-up every instance under it. A fitting with a stated drop is an override under its type.",
@@ -54,7 +52,6 @@ const DUCTS_REGIONS = {
     label: "System tree",
     available: "system",
     mount: "tree",
-    pane: { scroll: "clip", flush: true, header: false },
     purpose: "Inspect the opened systems, their runs and components.",
     controls: listControls("system tree"),
   },
@@ -63,7 +60,6 @@ const DUCTS_REGIONS = {
     label: "Inputs",
     available: "system",
     mount: "system",
-    pane: { scroll: "auto", flush: true },
     purpose:
       "Each unit and grille of this system, named, with the cells you can type into. A typed value stages as an override and reprices.",
     controls: listControls("inputs"),
@@ -72,13 +68,11 @@ const DUCTS_REGIONS = {
     id: "e-rules",
     label: "This system's rules",
     available: "system",
-    pane: { scroll: "auto", flush: true },
     purpose: "Review fitting rules for the opened systems.",
     controls: listControls("this system's rules"),
   },
   picture: {
     id: "e-picture",
-    pane: { scroll: "clip", flush: true, picture: true },
     label: "Picture",
     purpose: "Inspect the model or schematic; selecting a system changes the scope.",
     controls: [
@@ -89,7 +83,6 @@ const DUCTS_REGIONS = {
   },
   rulings: {
     id: "e-inbox",
-    pane: { flush: true },
     label: "Rulings",
     purpose: "Review the rows that need a person's ruling before writing changes.",
     controls: listControls("rulings"),
