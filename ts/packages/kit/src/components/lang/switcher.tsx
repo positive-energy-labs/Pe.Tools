@@ -9,8 +9,11 @@ import { teachText, useTeach } from "./use-teach";
 
 export const switcherRecipe = tv({
   slots: {
-    base: "dl-control inline-flex shrink-0 items-stretch overflow-hidden",
-    option: "veil cursor-pointer border-0 bg-transparent px-(--control-pad-x) t-small text-ink-2 ",
+    base: "dl-control inline-flex max-w-full shrink-0 items-stretch overflow-hidden",
+    // A squeezed switcher ellipsizes its options; the frame's overflow-hidden alone clipped
+    // "Rectangular" to "Rectang" with no mark of the cut (L3).
+    option:
+      "veil min-w-0 cursor-pointer truncate border-0 bg-transparent px-(--control-pad-x) t-small text-ink-2",
   },
   variants: {
     state: {
