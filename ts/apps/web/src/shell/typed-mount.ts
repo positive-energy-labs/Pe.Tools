@@ -1,4 +1,5 @@
-import { ownFindingsLeft, undoOwnFinding } from "../route/host";
+import { ownFindingsLeft, readFindings, undoOwnFinding } from "../route/host";
+import { FINDINGS_DOORS, FINDINGS_OWNER, type Finding } from "@pe/agent-contracts/slots";
 import { kernelCommands } from "../route/slots/kernel-commands.ts";
 import { hostReadSource } from "./host-read-source.ts";
 import { writeReject } from "./catalog-work-reviews";
@@ -406,6 +407,15 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     } catch { return refused(`${spec.subject?.noun ?? "Subject"} is malformed`); }
   };
   const findingMoves: import("./timeline").TimelineEntry[] = [];
+  // The document's findings Work (ADR 0035 rule 9), for the kernel's picture pane: read on first ask, after this
+  // Place's own finding write or undo, and on refresh. It is the bound document's, whatever the route's own Work is.
+  // ponytail: Pea's write shows on the next of those; subscribe the findings Work's acks if it must show at once.
+  let findings: readonly Finding[] = [], findingsAsked = false;
+  const loadFindings = () => {
+    if (input.fixture !== null || input.history || !(input.work.address || input.work.open)) return;
+    void readFindings(bindWork(FINDINGS_OWNER, input.work.address, undefined, input.work.open ?? undefined), ports.findings)
+      .then((read) => { if (read && !disposed) { findings = read; notify(); } }).catch(() => {});
+  };
   const results = new Map<string,unknown>();
   const pending = new Set<string>();
   const run = async (id: string, apply = false, supplied?:unknown) => {
@@ -433,7 +443,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         } else result=await cmd.invoke!(request,{target:input.target ?? {kind:"host"},work:handle});
         if (queryPage && (disposed || !input.custody.current() || gate.read()?.pageEpoch !== queryPage))
           throw Error("This read finished for an earlier Page; run it again");
-        results.set(id,result); syncReads(true); return result;
+        results.set(id,result); syncReads(true);
+        if (cmd.entry === FINDINGS_DOORS.write && findingsAsked) loadFindings();
+        return result;
       } catch(error) {problems.set(id,error instanceof Error?error.message:String(error));throw error;}
       finally {notify();}
     }
@@ -541,9 +553,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       if (!key) return { message: "Wait for this route's Work before undoing a finding" };
       const refused = await undoOwnFinding(key, ports.findings);
       // ponytail: the History entry lives for this Place; a durable one needs the findings Work's own moves here.
-      if (!refused) { findingMoves.push({ kind: "feed", at: new Date().toISOString(), verb: "findings.undo", subject: { message: "you undid your last finding" } }); notify(); }
+      if (!refused) { findingMoves.push({ kind: "feed", at: new Date().toISOString(), verb: "findings.undo", subject: { message: "you undid your last finding" } }); if (findingsAsked) loadFindings(); notify(); }
       return refused;
     },
+    findings: () => { if (!findingsAsked) { findingsAsked = true; loadFindings(); } return findings; },
     ownFindingsLeft: () => { const key = owners.get(own)?.handle?.key; return key ? ownFindingsLeft(key, ports.findings) : Promise.resolve(null); },
     restoreWork: restore, journalRefusal: () => input.readOnly || input.history ? "needs live Revit" : [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
@@ -600,7 +613,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       return core?.status === "failed" ? core.reason ?? "Reading failed" : null;
     },
     refresh: (read?:import("../route/host-read").HostRead) => {
-      requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true);
+      requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true); if (findingsAsked) loadFindings();
     }, run, result:(id:string)=>results.get(id),
     review: (id: string) => { const r=reviews.get(id)??consentReviews.get(id); if(!r) return null;
       const stale = !reviewCurrent(id, r.token, r.signature);
