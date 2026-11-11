@@ -2,8 +2,12 @@
 
 export const LLAMA_CLOUD_KEY_VAR = "LLAMA_CLOUD_API_KEY";
 
-/** Tier is LlamaParse's "thinking level": fast < cost_effective < agentic < agentic_plus. */
-export const DEFAULT_LLAMA_TIER = "agentic";
+/**
+ * LlamaParse runs at agentic_plus only (kaitpw, 2026-11-11). On a struck ASI 7 schedule, agentic markdown invented
+ * cells on every row and agentic text carried strikes only by accident; our documents are all that hard or harder,
+ * so a cheaper tier is not an option. Agent ledger, 2026-11-11 Decided line.
+ */
+export const LLAMA_TIER = "agentic_plus";
 
 export function requireLlamaCloudKey(env: NodeJS.ProcessEnv = process.env): string {
   const key = env[LLAMA_CLOUD_KEY_VAR];
@@ -14,7 +18,6 @@ export function requireLlamaCloudKey(env: NodeJS.ProcessEnv = process.env): stri
 export interface LlamaParseRequest {
   file: File;
   apiKey: string;
-  tier?: string;
   /** Comma-separated 1-based pages, "1-5" or "2,7-9" (LlamaParse `page_ranges.target_pages`). Omit for every page. */
   targetPages?: string;
   /** Result sections to return; the SDK refuses an empty list. */
@@ -33,7 +36,7 @@ export async function parseWithLlamaCloud(request: LlamaParseRequest) {
   const client = new LlamaCloud({ apiKey: request.apiKey });
   const result = await client.parsing.parse(
     {
-      tier: request.tier ?? DEFAULT_LLAMA_TIER,
+      tier: LLAMA_TIER,
       version: "latest",
       upload_file: request.file,
       expand: request.expand,

@@ -56,14 +56,12 @@ export const Route = createFileRoute("/api/pdf-audit/parse")({
           uploadFile = fetched.file;
         }
 
-        // The one LlamaParse call, shared with read_document. PE_PDF_AUDIT_TIER overrides the
-        // shared default tier; agentic_plus is the ceiling.
+        // The one LlamaParse call, shared with read_document, at its one tier (agentic_plus).
         let result;
         try {
           result = await parseWithLlamaCloud({
             file: uploadFile,
             apiKey,
-            ...(process.env.PE_PDF_AUDIT_TIER ? { tier: process.env.PE_PDF_AUDIT_TIER } : {}),
             expand: ["items", "markdown", "images_content_metadata"],
             // screenshot = full-page renders (page-lane background); embedded/layout =
             // extracted figures and layout crops shown in the images lane.

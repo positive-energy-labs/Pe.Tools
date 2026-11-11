@@ -188,7 +188,7 @@ test("parser llamaparse refuses without the key, then returns LlamaCloud's per-p
         }
         return Response.json({
           job: { id: "job-1", project_id: "p", status: "COMPLETED" },
-          text: { pages: [{ page_number: 1, text: "TAG AHU-1 SUPPLY 6000 CFM" }] },
+          markdown: { pages: [{ page_number: 1, success: true, markdown: "TAG AHU-1 SUPPLY 6000 CFM" }] },
         });
       }),
     );
@@ -207,11 +207,11 @@ test("parser llamaparse refuses without the key, then returns LlamaCloud's per-p
     const lite = await runReadDocument({ path: file, pages: "1" });
     const llama = await runReadDocument({ path: file, pages: "1", parser: "llamaparse" });
     expect(calls.some((call) => call.startsWith("POST /api/v2/parse/upload"))).toBe(true);
-    expect(calls.some((call) => call.includes("expand=text"))).toBe(true);
+    expect(calls.some((call) => call.includes("expand=markdown"))).toBe(true);
     // Same page block shape, so two runs diff line for line.
     expect(llama.text).toContain("--- page 1 ---\nTAG AHU-1 SUPPLY 6000 CFM");
     expect(lite.text).toContain("--- page 1 ---");
-    expect(llama.text).toContain("parsed by LlamaParse (agentic), read 1.");
+    expect(llama.text).toContain("parsed by LlamaParse (agentic_plus, markdown), read 1.");
     expect(sentKey).toBe(true);
     expect(llama.text).not.toContain(secret);
     expect(llama.images).toEqual([]);

@@ -5,7 +5,7 @@ import { PNG } from "pngjs";
 import { productScratchPath } from "@pe/host-contracts/service-identity";
 import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import z from "zod";
-import { DEFAULT_LLAMA_TIER, parseWithLlamaCloud, requireLlamaCloudKey } from "./llama-parse.ts";
+import { LLAMA_TIER, parseWithLlamaCloud, requireLlamaCloudKey } from "./llama-parse.ts";
 import { officeExtensions, readOfficeText } from "./read-office.ts";
 import { createTool } from "./tool.ts";
 
@@ -152,7 +152,6 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
     } catch (error) {
       throw new Error(`read_document: parser llamaparse refused: ${(error as Error).message}`);
     }
-    const tier = process.env.PE_LLAMAPARSE_TIER ?? DEFAULT_LLAMA_TIER;
     const bytes = await fs.readFile(file);
     const upload = new File([new Uint8Array(bytes)], path.basename(file), {
       type: extension === ".pdf" ? "application/pdf" : "",
@@ -160,19 +159,19 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
     const result = await parseWithLlamaCloud({
       file: upload,
       apiKey,
-      tier,
       targetPages: input.pages,
-      expand: ["text"],
+      // Markdown, not text: agentic_plus marks a struck cell <s> in its HTML tables; its text mode drops the strike.
+      expand: ["markdown"],
     }).catch((error: unknown) => {
       throw new Error(
         `read_document: LlamaParse failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     });
-    pageTexts = (result.text?.pages ?? []).map((page) => ({
+    pageTexts = (result.markdown?.pages ?? []).map((page) => ({
       pageNum: page.page_number,
-      text: page.text,
+      text: "markdown" in page ? page.markdown : "",
     }));
-    counted = `parsed by LlamaParse (${tier}), read`;
+    counted = `parsed by LlamaParse (${LLAMA_TIER}, markdown), read`;
   } else {
     // LiteParse's own failures (LibreOffice missing, file not a document, bad page range) already name the fix.
     const parsed = await (await makeParser()).parse(file).catch((error: unknown) => {
