@@ -492,7 +492,7 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
       label: "loss group",
       cell: (row) => (
         <>
-          <Button
+          <Button kind="quiet"
             label={row.key === "other" ? row.label : `Edit rule for ${row.label}`}
             onClick={() => choose(row)}
           >
@@ -585,7 +585,7 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
           />
         </LeaderDiagram>
         {expanded && small.length > 1 ? (
-          <Button
+          <Button kind="quiet"
             label="Collapse small loss groups"
             onClick={() => {
               setExpanded(false);

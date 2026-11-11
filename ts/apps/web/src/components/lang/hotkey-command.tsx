@@ -103,6 +103,7 @@ function Face({
   return (
     <span className="dl-hotkey-command" data-command-face={face}>
       <Button
+        kind="quiet"
         {...button}
         icon={Icon ? <Icon strokeWidth={1.75} aria-hidden data-tone={tone} /> : undefined}
         aria-keyshortcuts={chordLabel(hotkey)

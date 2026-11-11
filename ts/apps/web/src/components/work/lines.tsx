@@ -192,7 +192,7 @@ function lineParts(
         <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
           {line.cells.slice(0, CHIPS).map((cell) =>
             cell.locate ? (
-              <Button
+              <Button kind="quiet"
                 key={cell.key}
                 label={`${cell.row} · ${line.column}`}
                 reason={`${cell.row} · ${line.column}: ${cell.value} — show this cell in the grid`}

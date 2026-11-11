@@ -899,10 +899,10 @@ const SystemsList = memo(function SystemsList({
         <>
           {header}
           <div className="flex gap-1 px-1">
-            <Button label="All systems" onPress={() => door?.all()}>
+            <Button kind="quiet" label="All systems" onPress={() => door?.all()}>
               All
             </Button>
-            <Button label="Clear systems" onPress={() => door?.clear()}>
+            <Button kind="quiet" label="Clear systems" onPress={() => door?.clear()}>
               Clear
             </Button>
           </div>
@@ -964,7 +964,7 @@ export function AllRulesBody({ ctx }: { ctx: DuctsDrawContext }) {
 
               />
               {cell.value.edit && (
-                <Button
+                <Button kind="quiet"
                   label="Clear unit kind"
                   onClick={() =>
                     void cell.clear({ label: `Clear unit kind ${label}` })

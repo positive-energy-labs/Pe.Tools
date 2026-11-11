@@ -32,7 +32,7 @@ export function ProposedLine({ record }: { record: ProposedRecord }) {
         {chatPluginTitle(record.route)}
         {record.subject ? ` · ${record.subject}` : ""}
       </span>
-      <Button
+      <Button kind="quiet"
         label="open ›"
         refusal={place.ok ? null : place.refusal}
         onClick={() => place.ok && void store.actions.openTab(place.route, place.page, place.carry)}
@@ -84,7 +84,7 @@ export function ActionLine({
           </span>
         </span>
         {place?.ok ? (
-          <Button
+          <Button kind="quiet"
             label="open ›"
             onClick={() => void store.actions.openTab(place.route, place.page, place.carry)}
           >

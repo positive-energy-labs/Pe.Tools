@@ -100,7 +100,7 @@ export function SessionStrip({
               ]}
             />
 
-            <Button
+            <Button kind="quiet"
               label="Highlight what changed"
               pressed={diff}
               onClick={() => setWorld((previous) => ({ ...previous, diff: !previous.diff }))}
@@ -165,7 +165,7 @@ export function SessionStrip({
           const blast = blastOf(layer.rank);
           return (
             <div key={layer.id} className="hairline-b-faint [&>button]:w-full">
-              <Button label={layer.label} pressed={changed} onClick={() => toggle(layer.id)}>
+              <Button kind="quiet" label={layer.label} pressed={changed} onClick={() => toggle(layer.id)}>
                 <span
                   className={cn(
                     WORLD_ROW,

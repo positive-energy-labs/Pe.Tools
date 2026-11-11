@@ -109,10 +109,10 @@ export function SubjectPicker({ mount, data, single = false }: { mount: SubjectM
       />
       {many && !single && (
         <>
-          <Button label={`All ${noun}`} onClick={() => mount.controls.subject({ kind: "all" })}>
+          <Button kind="quiet" label={`All ${noun}`} onClick={() => mount.controls.subject({ kind: "all" })}>
             All
           </Button>
-          <Button label={`No ${noun}`} onClick={subject.clear}>
+          <Button kind="quiet" label={`No ${noun}`} onClick={subject.clear}>
             None
           </Button>
         </>

@@ -251,7 +251,7 @@ export function ProposalCard({
             : "Citation unavailable"}
         </Button>
         {suggestion.param && (
-          <Button label={`Pin ${suggestion.param} evidence`} pressed={pinned} onClick={onPin}>
+          <Button kind="quiet" label={`Pin ${suggestion.param} evidence`} pressed={pinned} onClick={onPin}>
             {pinned ? "Unpin" : "Pin"}
           </Button>
         )}

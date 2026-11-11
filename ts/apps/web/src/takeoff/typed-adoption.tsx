@@ -164,7 +164,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
                 row={(row) => ({ label: `${row.name} / ${row.zone.lane.label} / ${row.zone.declaredSqft} sf / ${row.stage}` })}
               />}
           </section>}
-          <Button label="live" onClick={() => ctx.page.query({ work: "" })}>
+          <Button kind="quiet" label="live" onClick={() => ctx.page.query({ work: "" })}>
             live
           </Button>
         </>

@@ -75,7 +75,7 @@ export function ColourLaws({ owner }: { owner: (name: string) => string }) {
         owner={owner("selection is a fill")}
         ruling="Selection, focus, and hover use neutral fills. They never buy a meaning hue."
       >
-        <Button label="selected row" pressed>
+        <Button kind="quiet" label="selected row" pressed>
           selected row
         </Button>
         {/* The pick mark: the feedback picker's target, veil plus ink outline over any content. */}

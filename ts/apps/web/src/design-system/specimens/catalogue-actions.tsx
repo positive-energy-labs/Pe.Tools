@@ -22,10 +22,10 @@ export function CatalogueActions() {
         spec="Button is the one control. label is required (its name, and its tooltip when it draws only a glyph); reason says what pressing does; refusal keeps it focusable and says why it will not. kind: quiet (veil only), framed (the control frame), commit (the one filled blue), nav (with its direction's arrow). ActionGroup says blast radius without minting another hue."
       >
         <div className="flex flex-wrap items-center gap-3">
-          <Button label="secondary view" onClick={noop}>
+          <Button kind="quiet" label="secondary view" onClick={noop}>
             secondary view
           </Button>
-          <Button label="selected" pressed onClick={noop}>
+          <Button kind="quiet" label="selected" pressed onClick={noop}>
             selected
           </Button>
           <Button label="Refresh this view" icon={RefreshCw} onClick={noop} />
@@ -101,7 +101,7 @@ export function CatalogueActions() {
           </ActionGroup>
         </div>
         <CounterExample why="a Button without a refusal stays live; an unavailable action must say why">
-          <Button label="sync to .r10" onClick={noop}>
+          <Button kind="quiet" label="sync to .r10" onClick={noop}>
             sync to .r10
           </Button>
         </CounterExample>

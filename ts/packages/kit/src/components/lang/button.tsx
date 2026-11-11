@@ -55,7 +55,7 @@ export function Button({
   reason,
   pressed,
   icon,
-  kind = "quiet",
+  kind: kindProp,
   direction,
   children,
   type,
@@ -69,6 +69,9 @@ export function Button({
     icon ??= compactIcon;
     children = undefined;
   }
+  // The plain action button is framed (design ledger 2026-10-12: hairline, no fill); an icon-only
+  // press stays quiet. A link, tab, menu item or row affordance says `kind="quiet"`.
+  const kind = kindProp ?? (children == null || children === false ? "quiet" : "framed");
   const [pending, setPending] = useState(false);
   const [outcome, setOutcome] = useState<OutcomeLineProps | null>(null);
   const shownOutcome = useContext(ButtonOutcome) ?? outcome;

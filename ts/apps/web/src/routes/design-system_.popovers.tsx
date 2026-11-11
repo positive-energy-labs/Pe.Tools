@@ -240,10 +240,10 @@ function ClickSpecimen() {
       <PopoverContent>
         <PopoverTitle>Observation options</PopoverTitle>
         <PopoverDescription>Interactive content stays open while you work.</PopoverDescription>
-        <Button label="Include archived" pressed={checked} onClick={() => setChecked(!checked)}>
+        <Button kind="quiet" label="Include archived" pressed={checked} onClick={() => setChecked(!checked)}>
           Archived: {checked ? "included" : "hidden"}
         </Button>
-        <PopoverClose render={<Button label="Close details">Close</Button>} />
+        <PopoverClose render={<Button kind="quiet" label="Close details">Close</Button>} />
       </PopoverContent>
     </Popover>
   );
@@ -254,7 +254,7 @@ function HoverSpecimen() {
       <HoverCardTrigger>Hover preview</HoverCardTrigger>
       <HoverCardContent aria-label="Preview specimen">
         <p>Hover holds this preview. Click or Enter exposes the same controls.</p>
-        <PopoverClose render={<Button label="Close preview">Close</Button>} />
+        <PopoverClose render={<Button kind="quiet" label="Close preview">Close</Button>} />
       </HoverCardContent>
     </HoverCard>
   );

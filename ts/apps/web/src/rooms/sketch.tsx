@@ -248,7 +248,7 @@ export function RoomsSketch({
               options={TOOLS}
             />
             {said ? (
-              <Button label="dismiss" reason="dismiss" onClick={() => setSaid(null)}>
+              <Button kind="quiet" label="dismiss" reason="dismiss" onClick={() => setSaid(null)}>
                 {said} ×
               </Button>
             ) : null}

@@ -63,7 +63,7 @@ export function RevitGroup({
   return (
     <div className="flex flex-col gap-2" aria-label="Revit runtime">
       <BootstrapAlignment machine={machine} refusal={refusal} />
-      <Button label="Open documents and binding" onClick={() => go("/open")}>
+      <Button kind="quiet" label="Open documents and binding" onClick={() => go("/open")}>
         Open documents and binding
       </Button>
       {sessions === null ? (

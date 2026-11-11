@@ -67,7 +67,7 @@ export function Operation({ ctx }: { ctx: OpsContext }) {
               <h2>Request</h2>
               <span className="flex gap-1">
                 {(selected.requestExamples ?? []).map((example) => (
-                  <Button
+                  <Button kind="quiet"
                     key={example.name}
                     label={example.name}
                     reason={example.description}

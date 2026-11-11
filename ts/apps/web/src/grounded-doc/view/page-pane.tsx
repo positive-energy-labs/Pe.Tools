@@ -80,7 +80,7 @@ function PageCanvas({
           const isPinned = engine.pinned?.blockId === block.id;
           const isApprox = engine.ambiguousBlockIds.has(block.id);
           return block.bboxes.map((bbox, index) => (
-            <Button
+            <Button kind="quiet"
               label={block.kind}
               key={`${block.id}-${index}`}
               data-block-id={block.id}
