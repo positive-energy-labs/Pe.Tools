@@ -252,7 +252,8 @@ export function Directory({
   };
   return (
     <Scroll className="size-full">
-      <main className="mx-auto w-full max-w-6xl p-5">
+      {/* One gutter token, not a 20px inset: a narrow column keeps its width for the rows (L3). */}
+      <main className="mx-auto w-full max-w-6xl p-(--gutter)">
         <PrimaryRouteControls route="home">
           <RouteHelpButton
             name="Tool directory"

@@ -71,7 +71,12 @@ export function Roster({ props }: { props: RosterProps }) {
     label: labelOf(fan),
     aside: fan.kind,
     meta: (
-      <span className="face-mono t-small">
+      // Incomplete is partial work with open blockers, not calm: caution's own word ("partial"),
+      // so it no longer reads like "not computed" (I2: blocking state reads on the row; I3).
+      <span
+        className="face-mono t-small"
+        data-tone={fan.complete === false || (fan.blockerCount ?? 0) > 0 ? "caution" : undefined}
+      >
         {rosterState(fan)}
         {fan.blockerCount == null ? "" : ` · ${fan.blockerCount} open`}
       </span>
@@ -141,7 +146,8 @@ function Sides({ props }: { props: LedgerProps }) {
           {pressure(currentEsp ? currentEsp.value : fan.ratedEspInWg)}
         </span>
       </div>
-      <div className="t-small grid grid-cols-[4rem_auto_repeat(2,minmax(0,6rem))] gap-x-3">
+      {/* L3: one line per cell, ellipsized at the last second; heads never break mid-word. */}
+      <div className="t-small grid grid-cols-[4rem_auto_repeat(2,minmax(0,6rem))] gap-x-3 [&_span]:truncate">
         <span className="contents">
           <span />
           <span />

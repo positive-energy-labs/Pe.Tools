@@ -6,6 +6,7 @@ import { Ladder } from "#/route/ladder";
 import type { RoomsContext } from "./route";
 import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
+import { ButtonGroup } from "@pe/kit/lang/button-group";
 import { cardsMarkdown, coverage, newestRun, type Card } from "./cards";
 import { cardLine, FeedbackCard, RoomsInbox } from "./inbox";
 import type { RoomsPage } from "./page";
@@ -261,7 +262,9 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
         </Button>
       ) : null,
   } satisfies Body;
-  const frame: TeachingPaneRender = (content) => <div className="flex min-h-0 flex-1 flex-col">{content}</div>;
+  const frame: TeachingPaneRender = (content) => (
+    <div className="flex min-h-0 flex-1 flex-col">{content}</div>
+  );
   const stage = async (key: string, input: unknown) =>
     ctx.cells.patch([{ path: ["writeIntent", key], value: { edit: { value: input } } }], {
       label: `Choose ${key} scope`,
@@ -270,45 +273,52 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
     <div className="flex min-h-0 flex-1 flex-col gap-(--gutter)">
       <div className="shrink-0 p-(--gutter)">
         <ScopeBody {...body} />
-        <Switcher
-          ariaLabel="Rooms view"
-          value={ctx.page.read().stage}
-          onChange={(stage) => ctx.page.pose({ stage })}
-          options={[
-            { value: "partition", label: "Partition", title: "Inspect and partition rooms" },
-            { value: "review", label: "Review", title: "Review anchored feedback" },
-          ]}
-        />
-        <Button
-          label="Stage partition view"
-          refusal={!page.view ? "Choose a level and plan view" : ctx.cells.refusal}
-          onClick={() => {
-            const rejected = Object.values(ctx.cells.doc?.marks ?? {}).flatMap((cell) =>
-              cell.edit?.value?.kind === "reject" && cell.edit.value.anchor.view === page.view
-                ? [cell.edit.value.anchor.polygon]
-                : [],
-            );
-            void stage("rooms.partition", {
-              view: page.view,
-              ...(rejected.length ? { rejected } : {}),
-            });
-          }}
-        >
-          Stage partition view
-        </Button>
-        <Button
-          label="Stage selected room merge"
-          refusal={selected.length < 2 ? "Select two or more rooms" : ctx.cells.refusal}
-          onClick={() => void stage("rooms.merge", { view: page.view, guids: selected })}
-        >
-          Stage room merge
-        </Button>
+        {/* One row with one gap token that truncates (L3): the bare verbs ran together. */}
+        <ButtonGroup label="Rooms verbs">
+          <Switcher
+            ariaLabel="Rooms view"
+            value={ctx.page.read().stage}
+            onChange={(stage) => ctx.page.pose({ stage })}
+            options={[
+              { value: "partition", label: "Partition", title: "Inspect and partition rooms" },
+              { value: "review", label: "Review", title: "Review anchored feedback" },
+            ]}
+          />
+          <Button
+            label="Stage partition view"
+            refusal={!page.view ? "Choose a level and plan view" : ctx.cells.refusal}
+            onClick={() => {
+              const rejected = Object.values(ctx.cells.doc?.marks ?? {}).flatMap((cell) =>
+                cell.edit?.value?.kind === "reject" && cell.edit.value.anchor.view === page.view
+                  ? [cell.edit.value.anchor.polygon]
+                  : [],
+              );
+              void stage("rooms.partition", {
+                view: page.view,
+                ...(rejected.length ? { rejected } : {}),
+              });
+            }}
+          >
+            Stage partition view
+          </Button>
+          <Button
+            label="Stage selected room merge"
+            refusal={selected.length < 2 ? "Select two or more rooms" : ctx.cells.refusal}
+            onClick={() => void stage("rooms.merge", { view: page.view, guids: selected })}
+          >
+            Stage room merge
+          </Button>
+        </ButtonGroup>
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-(--gutter) min-[1100px]:grid-cols-2">
-        <PlanBody {...body} renderPane={frame} />
-        <div className="flex min-h-0 flex-col">
-          <RegionsBody {...body} />
-          <FeedbackBody {...body} renderPane={frame} />
+      {/* The split follows the route's own width, not the viewport: docked at 1600px the route is
+          ~690px and two columns left the regions table 330px, wrapping its chips (L3). */}
+      <div className="@container flex min-h-0 flex-1 flex-col">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-(--gutter) @min-[1100px]:grid-cols-2">
+          <PlanBody {...body} renderPane={frame} />
+          <div className="flex min-h-0 flex-col">
+            <RegionsBody {...body} />
+            <FeedbackBody {...body} renderPane={frame} />
+          </div>
         </div>
       </div>
     </div>

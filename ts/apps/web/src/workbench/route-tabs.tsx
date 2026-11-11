@@ -88,9 +88,14 @@ export function RouteTabActions({
     <>
       {failure && (
         <>
-          <span role="status" data-tone="caution" className="t-small min-w-0 truncate">
-            {failure}
-          </span>
+          {/* I6, L3: the strip carries a word bound to its mark; the sentence is its hint. A full
+              sentence here claimed the rail and starved every Place name to one glyph. */}
+          <TooltipHint content={failure}>
+            <span role="status" data-tone="caution" className="t-small shrink-0">
+              <span aria-hidden>refused</span>
+              <span className="sr-only">{failure}</span>
+            </span>
+          </TooltipHint>
           <Button label="Retry saving Places" onClick={onRetry}>
             Retry
           </Button>

@@ -16,7 +16,8 @@ export const outcomeLineRecipe = tv({
     base: "grid grid-cols-[14px_minmax(0,auto)_minmax(0,1fr)] items-baseline gap-[7px] py-0.5 face-mono t-small tracking-[0.02em] [&>svg]:size-[11px] [&>svg]:self-center",
     icon: "",
     label: "",
-    says: "overflow-hidden text-ellipsis whitespace-nowrap t-small t-upper text-ink-2 italic",
+    // A sentence, not a section head (t-upper) or a locked value (italic): ADR 0004, ledger 2026-08-16.
+    says: "overflow-hidden text-ellipsis whitespace-nowrap t-small text-ink-2",
   },
   variants: {
     state: {
@@ -52,7 +53,7 @@ export interface OutcomeLineProps {
   kind: OutcomeKind;
   /** What happened, in machine terms — mono, tabular, coloured by kind. */
   label: string;
-  /** What it means, in a person's terms. Italic, secondary, clamped to one line. */
+  /** What it means, in a person's terms: secondary ink, clamped to one line. */
   says?: string;
 }
 

@@ -83,7 +83,11 @@ type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
 export function StatusLine({ children, tone }: { children: ReactNode; tone?: Tone }) {
   return (
     <div className="dl-row" role="status" data-tone={tone} data-pending={tone ? undefined : ""}>
-      <span className="dl-row-label">{children}</span>
+      {/* The label is a flex column; text-overflow reaches only a block child, so the words sit
+          in one that ellipsizes (L3: a cut status line said "the profile names no"). */}
+      <span className="dl-row-label">
+        <span className="truncate">{children}</span>
+      </span>
     </div>
   );
 }
