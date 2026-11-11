@@ -57,6 +57,7 @@ export const findingsWork = {
   schema: findingsWorkSchema,
   schemaVersion: 1,
   editable: [["findings", "*"]],
+  authoredThrough: FINDINGS_DOORS.write,
 } satisfies RouteStateSpec<typeof findingsWorkSchema>;
 
 /** What a caller sends to `findings.write`: the host stamps `by` from the caller and `at` on arrival. */

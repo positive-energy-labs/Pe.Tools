@@ -83,6 +83,11 @@ async function doors() {
       expect(response.status, await response.clone().text()).toBeLessThan(400);
       return native.journal.wait(id);
     },
+    /** The generic start door: `work.start` on the findings Work with a caller-supplied seed. */
+    start: (id: string, seed: unknown, caller: Caller) =>
+      post({ id, key: "work.start", target: { kind: "host" }, input: { key, seed } }, caller),
+    stored: () => saved,
+    settled: (id: string) => native.journal.wait(id),
     door: (verb: "apply" | "history", body: unknown, caller: Caller = peaCaller) =>
       withInvocationContext({ caller }, () => routes.fetch(new Request(
         `http://host/pe/route-state/findings/${verb}?target=${encodeURIComponent(target)}`,
@@ -104,6 +109,21 @@ test("findings.write through the action door: the host stamps each caller's auth
     expect(refused.status).toBe(403);
     expect(await refused.json()).toMatchObject({ ok: false, error: expect.stringContaining("findings.write") });
     expect(await d.revision()).toBe(before);
+  } finally { await d.close(); }
+});
+
+/* purge-2 integrity 1: the refusal sat on apply alone, so a start seed carried a forged `by` into the Work. */
+test("a generic work.start with a findings seed is refused, for Pea and a person alike, and writes no doc", async () => {
+  const d = await doors();
+  try {
+    const forged = { ...input("f1", port, "note"), by: "person", at: new Date().toISOString() };
+    for (const [id, caller] of [["forge-pea", d.peaCaller], ["forge-human", human]] as const) {
+      await d.start(id, { findings: { f1: forged } }, caller);
+      const settled = await d.settled(id);
+      expect(d.stored(), `${id} stored a findings doc`).toBeNull();
+      expect(settled).toMatchObject({ steps: [], outcome: { state: "refused", reason: expect.stringContaining("findings.write") } });
+    }
+    expect(await d.revision()).toBe(0);
   } finally { await d.close(); }
 });
 
