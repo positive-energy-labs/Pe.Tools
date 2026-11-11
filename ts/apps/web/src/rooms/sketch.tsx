@@ -15,7 +15,7 @@ import { useScopeKeys } from "@pe/kit/keys";
 import { token } from "@pe/kit/lib/token";
 import { CARD_META, CARD_STATES, inLoop, rdp, shoelace, type Card, type CardState } from "./cards";
 import { PIN_R } from "./callouts";
-import type { RoomsRegion } from "./plan";
+import type { RoomsRegion } from "./rows";
 
 /** The plan's frame as the overlay needs it: model feet to screen px and back, and the pins. */
 export interface PlanGeo {

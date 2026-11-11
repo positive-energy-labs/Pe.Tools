@@ -13,7 +13,7 @@ import { FindingVerb } from "../findings/verb.tsx";
  * through the one Work write path (`ctx.cells.at`); the write button is the route's `sheet` verb in the
  * pane head (`sheet.plan` then `sheet.apply`), so this pane never reaches Revit. A route adds no chrome.
  * A row keyed by a SubjectRef carries the person's Finding verb (rule 9), once, on its first cell,
- * over the `finding` command the mount gives every route with Work (route/slots/kernel-commands.ts).
+ * over the `finding` command the mount gives every route (shell/typed-mount.ts); without Work it is refused.
  */
 type Ctx = DrawContext<unknown, Fields, Record<string, unknown>, unknown>;
 

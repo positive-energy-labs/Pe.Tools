@@ -3,6 +3,7 @@ import { familyDraftSchema } from "./family.ts";
 import { settingsSnapshotSchema, podMemberSchema } from "./settings.ts";
 import { parsedDocViewSchema } from "./grounded-doc.ts";
 import { workHandleSchema } from "./command.ts";
+import { goalSchema } from "./slots/goal.ts";
 export const familyArgs = z.object({ member: podMemberSchema.nullable() });
 export const familyData = z.object({
   familyWork: familyDraftSchema,
@@ -24,4 +25,8 @@ export const familyData = z.object({
       ),
     }),
   ),
+  // The family's Goal (ADR 0035 rule 8): the doc-lab acceptance closers, what is left before its cells stand.
+  ...goalSchema(z.string()).shape,
+  // The family's cells are the table's; the Goal carries none of its own.
+  inputs: z.array(z.never()).readonly(),
 });

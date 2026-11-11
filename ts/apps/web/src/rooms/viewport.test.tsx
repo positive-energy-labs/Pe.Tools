@@ -6,7 +6,7 @@ import { DEMO_PLAN, DEMO_ROOMS, DEMO_VIEW } from "./demo";
 import { roomsPageSchema, type RoomsPage } from "./page";
 import { RoomsPlan } from "./plan";
 import { Pane } from "@pe/kit/lang/pane";
-import { roomRows } from "./table";
+import { roomRows } from "./rows";
 
 afterEach(() => {
   cleanup();

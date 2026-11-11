@@ -1,5 +1,6 @@
 import { RegistryContext } from "@effect/atom-react";
 import { regionSubject } from "./subject";
+import { unassigned, type RoomRow, type RoomsRegion } from "./rows";
 import {
   AttentionDocument,
   elementKey,
@@ -15,7 +16,6 @@ import type { PlaneViewport } from "@pe/agent-contracts";
 import { PictureStage } from "#/scene/stage-controller";
 import type { ValueHandle } from "@pe/kit/lang/collection";
 import { PictureReadout } from "@pe/kit/lang/readout";
-import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import { Legend, legendWord } from "@pe/kit/lang/legend";
 // The picture frame is the picture slot's render (scene/picture), not the kernel's layout (slice 8).
@@ -36,7 +36,6 @@ import { LAYER_SAYS, TraceFaces, TraceLayers, type Layer, type TraceRead } from 
 import { CALLOUT_FONT_PX, holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
 import type { PlanGeo } from "./sketch";
 
-export type RoomsRegion = RoomsSnapshot.Res.RoomsRegion;
 
 /** A wire point as model XY in feet; anything else is not a point, and says so. */
 const xy = (point: readonly number[]): Point2 => {
@@ -71,10 +70,6 @@ export const regionState = (
 /** A locked region whose walls moved since: both facts hold and both are shown. */
 export const lockedStale = (region: Pick<RoomsRegion, "locked" | "stale" | "role">) =>
   regionState(region) === "locked" && region.stale;
-
-/** A room no zone on its view contains: partition never touches it. */
-export const unassigned = (region: Pick<RoomsRegion, "role" | "zone">) =>
-  region.role === "room" && region.zone == null;
 
 /**
  * Each state's ink role, dash and what it means. A zone is a reference boundary, unfilled: scope,
@@ -116,15 +111,6 @@ export const REGION_INK: Record<
     says: "a room outside every zone, drawn in its state's ink; partition never touches it",
   },
 };
-
-/** A region's label: its name, else `R{n}` by its place in the table's order. */
-export const regionLabel = (region: RoomsRegion, index: number) => region.name || `R${index + 1}`;
-
-/** A region with its label, as the table orders and numbers it. */
-export interface RoomRow {
-  region: RoomsRegion;
-  label: string;
-}
 
 const PLAN_PX_PER_FT = 4;
 const ZOOM_PAD_PX = 48;

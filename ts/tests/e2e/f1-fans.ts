@@ -3,6 +3,7 @@
 // Env: CDP_PORT, CDP_TARGET (own browser), E2E_WEB, E2E_SESSION (the run's controlled session id;
 // the document picker offers only options in it).
 import { WEB, type Page } from "./cdp.ts";
+import { fanPortsAgree, part } from "./fan-ports.ts";
 import { LAYER, marks, settled, type Marks } from "./marks.ts";
 import { run, type Action, type Rule } from "./walk.ts";
 
@@ -90,11 +91,6 @@ const drawn = (page: Page) =>
   });
 
 const picked = (v: View) => v.rows.filter((r) => r.selected);
-/** "FC-23 · Level 1/Main Level / port 1" → { mark: "FC-23", port: "1" }; the heading draws mark · port. */
-const part = (label: string) => {
-  const m = /^(.*?)(?: · .*)? \/ port (\d+)$/.exec(label);
-  return { mark: m?.[1] ?? label, port: m?.[2] ?? "?" };
-};
 const idle = async (page: Page) => {
   const v = await view(page);
   return settled(v) || (v.unbound && !v.busy && !v.picker) ? v : null;
@@ -306,9 +302,8 @@ const rules: Rule[] = [
     async holds({ page }) {
       const v = await quiet(page);
       const sel = picked(v).map((r) => r.label);
-      const ports = v.fanIds.map((id) => /@(\d+)"?\]?$/.exec(id)?.[1] ?? "?").sort();
-      const want = sel.map((l) => part(l).port).sort();
-      if (ports.join() !== want.join()) return `URL fan ports [${ports}] vs selected [${sel}]`;
+      const fans = fanPortsAgree(v.fanIds, sel);
+      if (fans !== true) return fans;
       const target = new URL(v.url).searchParams.get("target");
       let doc: unknown = null;
       try {
