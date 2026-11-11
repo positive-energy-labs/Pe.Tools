@@ -32,6 +32,12 @@ export function GraphHistory({
   // The person's latest written finding carries their undo; the host's history door undoes their own last one.
   const ownFinding = owner.undoFinding && [...projected].reverse().find((row) =>
     receiptKey(row) === FINDINGS_DOORS.write && row.outcome?.state === "succeeded" && entryCaller(row.entry) === "you")?.key;
+  // Whether anything of the person's is left to undo is the host's findings Work's answer, asked again
+  // when their latest write changes and after each undo; null (unread) leaves the host to refuse.
+  const [ownLeft, setOwnLeft] = useState<number | null>(null);
+  useEffect(() => {
+    if (ownFinding && owner.ownFindingsLeft) void owner.ownFindingsLeft().then(setOwnLeft, () => setOwnLeft(null));
+  }, [owner, ownFinding]);
   const rows = [...(journal?.intents ?? []).map(intent => ({
     key: `intent:${intent.id}`, label: intent.label,
     sub: `${intent.status} / ${intent.owner.route} / expected r${intent.input.expectedRevision} / ${intent.reason ?? "Awaiting acknowledgement"}`,
@@ -72,7 +78,15 @@ export function GraphHistory({
             </a>
           )}
           {row.key === ownFinding && (
-            <Button label="Undo your last finding" onPress={() => owner.undoFinding!()}>
+            <Button
+              label="Undo your last finding"
+              refusal={ownLeft === 0 ? "Nothing of yours left to undo: Pea's findings are Pea's to undo" : null}
+              onPress={async () => {
+                const refused = await owner.undoFinding!();
+                setOwnLeft((await owner.ownFindingsLeft?.()) ?? null);
+                return refused;
+              }}
+            >
               Undo finding
             </Button>
           )}

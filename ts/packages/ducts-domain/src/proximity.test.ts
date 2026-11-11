@@ -8,8 +8,9 @@
  */
 import { designOf } from "./test-design.ts";
 import { expect, it } from "vite-plus/test";
-import type { DuctsDesign } from "@pe/agent-contracts";
+import { ductComponentWitnessSchema, neutralFansWork, type DuctsDesign } from "@pe/agent-contracts";
 
+import { price } from "./pricing.ts";
 import { axisOf, inferJoints, tolerate, MISSED_JOIN_MAX_IN } from "./proximity.ts";
 import { withHealth } from "./sheet/health.fixture.ts";
 import { survey } from "./survey.ts";
@@ -477,6 +478,15 @@ it("a damper C# finds inside a duct's body is spliced inline on it", () => {
       snapshot.segments.find((s) => s.id === -1)!,
     ];
     expect(cut.lengthFt + far.lengthFt).toBeCloseTo(10 - 0.06 * IN, 9);
+    // The far half has its own identity; it never copies the host's UniqueId.
+    expect(far.uniqueId).toBe(`inference:${id}:far`);
+    expect(cut.uniqueId).toBe(host.uniqueId);
+    // Neither virtual half nor its identity reaches a component witness, and the graph sees no duplicate.
+    const design = price(before, {}, null, neutralFansWork).next.design;
+    const witnessed = design.componentFlows.flatMap((c) => c.componentWitness);
+    expect(witnessed.map((w) => w.element.id).sort((a, b) => a - b)).toEqual([1, 3, 9]);
+    expect(ductComponentWitnessSchema.safeParse(witnessed).success).toBe(true);
+    expect(design.reasons.map((r) => r.code)).not.toContain("duplicate-element-identity");
     expect(cut.polyline.at(-1)![0]).toBeCloseTo(4 - 0.03 * IN, 9);
     expect(far.connectors.map((c) => [c.index, c.connectedTo])).toEqual([
       [2, { elementId: 3, connector: 1 }],

@@ -8,6 +8,7 @@ import {
 import { threadSearchDefault } from "./routes/shared.ts";
 import type { OrbitViewport } from "./page-keys.ts";
 import { canonicalPlace, routeAddress, routeAt, routeOf } from "./route-address.ts";
+import { oneName } from "./subject-ref.ts";
 
 test("an admitted Place retains its owner's JSON query bytes through thread context", () => {
   const link = '/fans?inputSort=%22%22&contextStyle=%22glass%22&fan=%7B%22kind%22%3A%22ids%22%2C%22ids%22%3A%5B%5D%7D';
@@ -210,7 +211,7 @@ describe("the thin routes adopt the contract", () => {
 
   test("history: picks push and typing replaces", () => {
     const ops = routeAddress("ops");
-    expect(ops.history({ op: "" }, { op: "revit.x" })).toBe("push");
+    expect(ops.history({ op: oneName("") }, { op: oneName("revit.x") })).toBe("push");
     expect(ops.history({ actionId: "" }, { actionId: "a1" })).toBe("push");
     const home = routeAddress("home");
     expect(home.history({ query: "" }, { query: "d" })).toBe("replace");

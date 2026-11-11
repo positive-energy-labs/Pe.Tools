@@ -4,20 +4,19 @@ import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { valueRead } from "@pe/agent-contracts";
-import { route, field } from "../route/defaults";
+import { route, field, subjectSchema, oneName } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
 import { opsArgs, opsData } from "@pe/agent-contracts";
 import { opRead, receiptControlRpc } from "./actions";
-export const fields = {
-  op: field(z.string(), "", "query", "push"),
-  actionId: field(z.string(), "", "query", "push"),
-};
+/** The op is the subject (keyKind `name`, tuple `[op key]`); the receipt in view is route-owned query. */
+export const fields = { op: field(subjectSchema(1), { kind: "ids", ids: [] }, "subject", "push") };
+export const query = { actionId: field(z.string(), "", "query", "push") };
 export const loaded = read(
   hostRead(valueRead("ops.workspace", opsArgs, opsData)),
   (page: { actionId: string }) => ({ actionId: page.actionId }),
 );
-export type OpsContext = ContextOf<typeof fields, typeof loaded, never, never>;
+export type OpsContext = ContextOf<typeof fields & typeof query, typeof loaded, never, never>;
 export const module = route({
   key: "ops",
   name: "Ops",
@@ -39,6 +38,16 @@ export const module = route({
     surfaces: { web: "full", pwa: "full", tray: false },
   },
   fields,
+  query,
+  subject: {
+    field: "op",
+    noun: "operation",
+    multiple: false,
+    pane: "main",
+    read: loaded,
+    options: (data) =>
+      (data?.catalog?.operations ?? []).map((entry) => ({ id: oneName(entry.key).ids[0]!, label: entry.displayName ?? entry.key })),
+  },
   core: loaded,
   panes: {
     main: {

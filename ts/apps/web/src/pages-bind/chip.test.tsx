@@ -51,6 +51,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
+/** The bind link carries the Page as its subject: one `name` SubjectRef, `name:["todo"]` (slice 10). */
+const PAGE = "%7B%22kind%22%3A%22ids%22%2C%22ids%22%3A%5B%22name%3A%5B%5C%22todo%5C%22%5D%22%5D%7D";
 test("ADR 0021: a thread slot that writes names its document; no clock, no revoke control", async () => {
   vi.stubGlobal("EventSource", Stream);
   mocks.read.mockResolvedValue(writes);
@@ -58,7 +60,7 @@ test("ADR 0021: a thread slot that writes names its document; no clock, no revok
   expect(await screen.findByText("MEP")).toBeTruthy();
   expect(screen.queryByRole("button")).toBeNull();
   expect(screen.getByRole("link", { name: "Bind…" }).getAttribute("href")).toBe(
-    "/bind?page=%22todo%22&target=project%3Aclinic&work=work-a",
+    `/bind?page=${PAGE}&target=project%3Aclinic&work=work-a`,
   );
 });
 test("access-061/062: a disconnected Page reading immediately stops naming its document", async () => {
@@ -66,7 +68,7 @@ test("access-061/062: a disconnected Page reading immediately stops naming its d
   mocks.read.mockResolvedValue(writes);
   await renderChip();
   await screen.findByText("MEP");
-  expect(screen.getByRole("link", { name: "Bind…" }).getAttribute("href")).toBe("/bind?page=%22todo%22");
+  expect(screen.getByRole("link", { name: "Bind…" }).getAttribute("href")).toBe(`/bind?page=${PAGE}`);
   Stream.current.onerror?.();
   await waitFor(() => expect(screen.queryByText("MEP")).toBeNull());
   expect(screen.getByText("unverified")).toBeTruthy();

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { routeAddress, type PageTargetReading } from "@pe/agent-contracts";
 import { useRouteSearch } from "#/route/activity";
+import { oneName } from "#/route/typed-route";
 import { openEventSource } from "#/host/resource-stream";
 import { peClient } from "#/host/pe-client";
 import { readPageTarget } from "./client";
@@ -63,7 +64,7 @@ export function PageBindingChip({ slug }: { slug: string }) {
           <span className="face-mono">{write?.kind ?? "unverified"}</span>
         </TooltipHint>
       )}
-      <a href={routeAddress("bind").link({ page: slug }, carry)}>Bind…</a>
+      <a href={routeAddress("bind").link({ page: oneName(slug) }, carry)}>Bind…</a>
       {refusal && (
         <span role="status" data-tone="caution">
           {refusal}

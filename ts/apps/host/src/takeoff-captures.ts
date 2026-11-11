@@ -40,6 +40,7 @@ import {
   takeoffCaptureSchema,
   takeoffObservationSchema,
   takeoffSnapshotSchema,
+  summarizeFamiliesObservation,
   type Address,
   type DocumentRef,
   type AppliedFilter,
@@ -927,13 +928,7 @@ export class TakeoffCaptures {
     const readings: FamiliesObservationSummary[] = [];
     // ponytail: scan immutable files until a measured archive size warrants a metadata index.
     for (const name of names.filter((name) => /^[a-f0-9]{64}\.json$/.test(name))) {
-      const { result, ...reading } = await this.families(name.slice(0, -5));
-      readings.push({
-        ...reading,
-        familyCount: result.families.length,
-        typeCount: result.families.reduce((count, family) => count + family.typeNames.length, 0),
-        issueCount: result.issues.length,
-      });
+      readings.push(summarizeFamiliesObservation(await this.families(name.slice(0, -5))));
     }
     return readings.sort(
       (a, b) => b.completedAt.localeCompare(a.completedAt) || b.id.localeCompare(a.id),

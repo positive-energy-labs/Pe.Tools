@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vite-plus/test";
 import { routeAddress } from "@pe/agent-contracts";
+import { oneName } from "#/route/typed-route";
 import { pageLink } from "./page-link";
 
 test("Page links use the existing viewer only for this frontend or its exact runtime owner", () => {
@@ -12,11 +13,11 @@ test("Page links use the existing viewer only for this frontend or its exact run
         expect(link?.slug).toBe(slug);
         expect(
           routeAddress("bind").read(Object.fromEntries(new URL(link!.href, front).searchParams)),
-        ).toMatchObject({ page: { page: slug, view: true }, carry: {} });
+        ).toMatchObject({ page: { page: oneName(slug), view: true }, carry: {} });
       }
     }
     expect(pageLink("/pages/report/?scope=all#airflow", front)?.page).toEqual({
-      page: "report",
+      page: oneName("report"),
       view: true,
       query: "scope=all",
       fragment: "airflow",

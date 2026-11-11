@@ -23,6 +23,7 @@ import {
 } from "@pe/host-contracts/contracts";
 import {
   routeAddress,
+  oneName,
   addressSchema,
   pageBindingSchema,
   parseContributionKey,
@@ -941,7 +942,7 @@ export function createPagesHandler(
         status: 302,
         headers: {
           location: routeAddress("bind").link(
-            { page: slug, view: true },
+            { page: oneName(slug), view: true },
             routeAddress("bind").read(Object.fromEntries(url.searchParams)).carry,
           ),
         },

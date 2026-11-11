@@ -51,7 +51,9 @@ export function systemList(snapshot: DuctSnapshot, priced: Pick<Priced,"next"|"s
       sub: [
         system.classification?.replace(/Air$/, ""),
         `${system.terminals} terminal${system.terminals === 1 ? "" : "s"}`,
-        system.units.join(", ") || "no fan",
+        // "no fan" is a finding: only a walk (the system is in a network group) can make it. A
+        // roster-only row has not looked yet, and pending is not failure.
+        system.units.join(", ") || (system.groups.length ? "no fan" : "fan not read yet"),
         system.groups.length > 1 ? `${system.groups.length} networks` : "",
       ]
         .filter(Boolean)
