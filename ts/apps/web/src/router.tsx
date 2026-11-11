@@ -7,6 +7,7 @@ import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
+import { searchCodec } from "./route/address-transport";
 const appRouteTree = routeTree;
 function NotFound() {
   return (
@@ -41,6 +42,7 @@ export function getRouter() {
     defaultPreloadStaleTime: 0,
     defaultNotFoundComponent: NotFound,
     defaultErrorComponent: RouteError,
+    ...searchCodec,
   });
 
   return router;

@@ -104,12 +104,20 @@ export function AnatomyDrawing({
     );
 
   return (
-    <div className="flex size-full min-h-0">
+    // The drawing takes what its column leaves after the table and members list, with a 12rem
+    // floor; at size-full it took the whole column and the table bar fell onto the members line.
+    // ponytail: 12rem is a first guess (M1).
+    <div className="flex min-h-48 w-full flex-[1_1_0]">
       <div className="flex min-w-0 flex-1">{views}</div>
-      <div className="hairline-l w-72 shrink-0 overflow-y-auto p-2" data-surface="page">
+      {/* The support takes a third of the anatomy, 10rem to 18rem, so the subject (the shape)
+          keeps the larger ground at every pane width (SURFACE-PHILOSOPHY L3, L4). */}
+      <div
+        className="hairline-l w-1/3 min-w-40 max-w-72 shrink-0 overflow-y-auto p-2"
+        data-surface="page"
+      >
         <div className="hairline-b -mx-2 -mt-2 mb-1.5 px-2 py-1.5">
-          <p className="t-small t-upper flex items-center gap-1 text-ink-2">
-            constituents · {typeName}
+          <p className="t-small flex items-center gap-1 text-ink-2">
+            Constituents · {typeName}
             <TooltipHint>
               The profile&rsquo;s own constituent list. Hovering one lights both the shape and the
               table rows it drives, because there is only ever ONE thing in focus. Clicking OPENS it

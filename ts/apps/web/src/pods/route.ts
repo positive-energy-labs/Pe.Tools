@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { sessionCommand } from "../route/typed-actions.ts";
 import { read } from "../route/defaults";
 import { z } from "zod";
@@ -25,14 +26,13 @@ export const fields = {
   runs: field(podsArgs.shape.runs, "member", "query"),
   mode: field(z.enum(["form", "raw"]), "form", "pose"),
 };
-export type { Context as PodsContext } from "./context.generated";
-import type { PaneContext } from "./context.generated";
-export type PodsRosterContext = PaneContext<"members">;
+export type PodsContext = ContextOf<typeof fields, typeof loaded, typeof import("@pe/agent-contracts").settingsRouteState, never>;
+export type PodsRosterContext = ContextOf<typeof fields, typeof inventory, typeof import("@pe/agent-contracts").settingsRouteState, never>;
 export const module = route({
   key: "pods",
   name: "Pods",
   needs: "host",
-  host: "../../../host/src/reads/pods.ts",
+  host: "./host.ts",
   directory: {
     group: "Ask / automate",
     summary: "Author a Pod member and inspect its runs.",
@@ -53,17 +53,20 @@ export const module = route({
       title: "Members",
       purpose: "Browse installed Pod members",
       read: inventory,
-      draw: draw(() => import("./drawing.tsx"), "Members"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./drawing.tsx"), "Members"),
     },
     spec: {
       title: "Spec",
       purpose: "Edit saved member Work",
-      draw: draw(() => import("./drawing.tsx"), "Spec"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./drawing.tsx"), "Spec"),
     },
     runs: {
       title: "Runs",
       purpose: "Inspect member or Pod runs",
-      draw: draw(() => import("./drawing.tsx"), "Runs"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./drawing.tsx"), "Runs"),
     },
   },
   edits: {

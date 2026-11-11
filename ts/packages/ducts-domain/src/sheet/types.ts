@@ -82,6 +82,8 @@ export interface Blocker {
   id: string;
   kind: BlockerKind;
   elementId: number;
+  /** The element as the codec's `UniqueId:` SubjectRef, minted with the blocker; absent for a stand-in with no element. */
+  subject?: string;
   connector?: number;
   detail: string;
   /** Effect on the total when known (an implausible leg's number, kept out of totals). */

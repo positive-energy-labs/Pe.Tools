@@ -1,4 +1,4 @@
-import { testConsents } from "./effect-test.ts";
+import { testConsents, journalAt } from "./effect-test.ts";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -9,7 +9,6 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "vite-plus/test";
 import { type HarnessEvent, type Receipt } from "@pe/agent-contracts";
-import { ActionJournal } from "../src/action-journal.ts";
 import {
   projectReceipt,
   createReceiptExport,
@@ -60,7 +59,7 @@ test("export command codes match concrete Pe.App command classes and build admis
 });
 function fixture() {
   const dir = mkdtempSync(join(tmpdir(), "pe-export-"));
-  const journal = new ActionJournal(join(dir, "journal.json"), Date.now, () => stamp);
+  const journal = journalAt(join(dir, "journal.json"), Date.now, () => stamp);
   const sent: unknown[] = [];
   const exporter = createReceiptExport({
     journal,
@@ -133,7 +132,7 @@ test("the actual PostHog client wire carries the original receipt timestamp and 
       return new Response("{}", { status: 200 });
     },
   });
-  const journal = new ActionJournal(join(dir, "journal.json"), Date.now);
+  const journal = journalAt(join(dir, "journal.json"), Date.now);
   const exporter = createReceiptExport({
     journal,
     root: dir,
@@ -271,7 +270,7 @@ test("native receipt source identity is retained, deduped, and never replaced wi
   }
 });
 
-test("the countdown notice names the first frozen footprint, deadline and whole-turn scope without exporting paths", async () => {
+test("the countdown ask names the first frozen footprint and deadline without exporting paths", async () => {
   const f = fixture();
   const events: HarnessEvent[] = [];
   const run = { thread: "private-thread", turn: "private-turn" };
@@ -299,17 +298,11 @@ test("the countdown notice names the first frozen footprint, deadline and whole-
   );
   try {
     await expect.poll(async () => (await f.journal.read({ kinds: ["permission"] })).length).toBe(1);
-    const [receipt] = await f.journal.read({ kinds: ["permission"] });
+    // The ask's words stay in the local thread log (the notice feed reads them there).
     const ask = events.find((event) => event.kind === "permission_request")!;
-    const notice = adapter.context.asked(receipt!);
-    expect(notice?.body).toContain("First write: file C:/private/design.json");
-    expect(notice?.body).toContain(ask.deadline);
-    expect(notice?.body).toContain("including delegated work");
-    expect(notice?.act).toMatchObject({
-      kind: "permission",
-      requestId: ask.requestId,
-      options: [{ optionId: "allow_now" }, { optionId: "stop_writes" }],
-    });
+    expect(ask.toolCall.title).toContain("First write: file C:/private/design.json");
+    expect(ask.deadline).toBeTruthy();
+    expect(ask.options.map((o) => o.optionId)).toEqual(["allow_now", "stop_writes"]);
     runs.decide(run.thread, ask.requestId, "allow_now");
     await approval;
     expect(JSON.stringify(f.sent)).not.toContain("C:/private");
@@ -320,7 +313,7 @@ test("the countdown notice names the first frozen footprint, deadline and whole-
   }
 });
 
-test("thread and update adapters keep opaque joins and honest endings, with notice reply custody local", async () => {
+test("thread and update adapters keep opaque joins and honest endings", async () => {
   const f = fixture();
   try {
     const id = "private-thread";
@@ -367,10 +360,6 @@ test("thread and update adapters keep opaque joins and honest endings, with noti
       .toBe(4);
     const rows = await f.journal.read({ kinds: ["turn", "permission"] });
     expect(rows[1]!.join.requestId).toBe(rows[2]!.join.requestId);
-    expect(adapter.context.asked(rows[1]!)).toMatchObject({
-      body: "local approval text",
-      act: { kind: "permission", requestId: "private-request" },
-    });
     expect(JSON.stringify(f.sent)).not.toContain("private");
     expect((f.sent.at(-1) as { properties: object }).properties).toMatchObject({
       phase: "finished",
@@ -410,7 +399,7 @@ test("thread and update adapters keep opaque joins and honest endings, with noti
   }
 });
 
-test("an open question and Pea's final words reach the notice context, never the export", async () => {
+test("an open question and Pea's final words never reach the export", async () => {
   const f = fixture();
   try {
     const id = "private-thread";
@@ -454,15 +443,6 @@ test("an open question and Pea's final words reach the notice context, never the
     await expect
       .poll(async () => (await f.journal.read({ kinds: ["turn", "question"] })).length)
       .toBe(4);
-    const rows = await f.journal.read({ kinds: ["turn", "question"] });
-    const asked = rows.find((r) => r.body.kind === "question" && r.body.phase === "asked")!;
-    expect(adapter.context.asked(asked)).toMatchObject({
-      threadId: id,
-      body: "private which level?",
-      act: { kind: "question", threadId: id, requestId: "private-question" },
-    });
-    const ended = rows.find((r) => r.body.kind === "turn" && r.body.phase === "finished")!;
-    expect(adapter.context.said(ended)).toBe("private answer");
     await f.exporter.close();
     expect(JSON.stringify(f.sent)).not.toContain("private");
   } finally {
@@ -499,7 +479,7 @@ test("a send past its deadline is aborted on the wire, one at a time, and frees 
         });
       }),
   );
-  const journal = new ActionJournal(join(dir, "journal.json"), Date.now);
+  const journal = journalAt(join(dir, "journal.json"), Date.now);
   const exporter = createReceiptExport({
     journal,
     root: dir,
@@ -523,7 +503,7 @@ test("a send past its deadline is aborted on the wire, one at a time, and frees 
 
 test("feedback never reports failed, or offers a second send, while its first send is still in flight", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-feedback-flight-"));
-  const journal = new ActionJournal(join(dir, "journal.json"), Date.now, () => stamp);
+  const journal = journalAt(join(dir, "journal.json"), Date.now, () => stamp);
   const requests: unknown[] = [];
   let release: (status: number) => void = () => {};
   const client = new PostHog("explicit-test-key", {

@@ -1,11 +1,11 @@
+import { stableFanKey } from "../ducts/sheet/model";
 import { expect, test, vi } from "vite-plus/test";
 import { observeResources } from "@pe/runtime";
 import { historyPointSchema, workFingerprintSchema } from "@pe/agent-contracts";
 import { registeredReads } from "../../../host/src/reads/routes";
-import { fansSheet } from "../../../host/src/reads/fans";
+import { fansSheet } from "../fans/host";
 import { fixture, ref, path, gate } from "../../../host/tests/host-read-graph.test-support";
 import { module as fans } from "../fans/route";
-import { localId } from "./typed-route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
@@ -86,7 +86,7 @@ async function journey() {
     );
   const fan = (mark: string) => {
     const row = first.value!.data.fans.rows.find((row) => row.mark === mark)!;
-    return { kind: "ids", ids: [localId("ducts-fan", `${row.uniqueId}@${row.portIndex}`)] };
+    return { kind: "ids", ids: [stableFanKey(row)] };
   };
   return {
     host,
@@ -125,7 +125,7 @@ test("J1 open Fans, choose a subject, carry pose through Back/Forward and share 
     await j.ready();
     j.mount.page.subject(j.fan("MUAS-1"));
     j.mount.page.pose({ contextRadiusFt: 23 });
-    j.mount.page.select([{ kind: "focus", id: localId("ducts-fan", "chosen-cell") }]);
+    j.mount.page.select([{ kind: "focus", id: "chosen-cell" }]);
     expect(
       [...j.input.address.read().keys()].sort(),
       "B01: Work contents stay out of the link",
@@ -247,7 +247,7 @@ test("J3 publish a sheet, capture History, choose another fan and reopen the old
       await host.history("", { kind: "captured", document: path }),
     );
     const row = original.value!.data.fans.rows.find((row) => row.mark === "MUAS-1")!;
-    await host.send(101, [`${row.uniqueId}@${row.portIndex}`]);
+    await host.send(101, [stableFanKey(row)]);
     const calls = host.nativeCalls;
     const restored = await host.send(102, [], undefined, "history-reader", false, point.id);
     expect(restored, "H18: History names the exact host publication").toEqual({
@@ -271,7 +271,7 @@ test("J4 refresh Fans while the document changes and inspect the retained answer
     await j.ready();
     const roster = await j.host.send(100, []);
     const row = roster.value!.data.fans.rows.find((row) => row.mark === "MUAS-1")!;
-    const selected = [`${row.uniqueId}@${row.portIndex}`];
+    const selected = [stableFanKey(row)];
     const before = await j.host.send(101, selected);
     held = j.host.holdNative();
     const refresh = j.host.send(102, selected);

@@ -6,13 +6,13 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
  * E's picture content: what the ducts picture is of and what it marks. Every picture behaviour
  * (capture, camera, selection, hover, readout and pane furniture) is the shared `Picture`'s; this
  * file only produces content for it.
- */ import { elementKey, type Members, type SubjectKey } from "@pe/kit/lang/attention";
+ */ import type { Members, SubjectKey } from "@pe/kit/lang/attention";
+import { ductElements } from "../../identity";
 import { useContext, useMemo, type ReactNode, type RefObject } from "react";
 
 import { VisibleRouteResource } from "#/route/activity";
 import { damageLayers } from "#/scene/damage";
 import {
-  idOf,
   Picture,
   type PictureContent,
   type PictureLayer,
@@ -43,10 +43,10 @@ import { coloursOf } from "../../colours";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import type { StageIssue } from "../../inbox-rows";
-import type { Claim, Run } from "../../legs";
+import type { Run } from "../../legs";
 import { labelOfNode, legsOf } from "../../legs";
 import type { Split } from "../../loss-split";
-import { activeName, localId, localSubject, namesOf } from "../../identity.ts";
+import { activeName, namesOf, systemCode } from "../../identity.ts";
 import { DuctsOverlay, linesOf, useEquipment } from "../../picture-content";
 import { ProvisionalNote } from "../../provisional";
 import { indexOf, sceneOf, subjectScene } from "../../scene";
@@ -75,8 +75,6 @@ interface DuctsPictureProps {
   priced: Priced | null;
   analysis: import("@pe/agent-contracts").DuctsPricingData["analysis"] | null;
   subject: Run | null;
-  claims: readonly Claim[];
-  onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
   work: LossesWork;
   selection: Atom.Atom<ReadonlySet<SubjectKey>>;
   onPose?: (pose: OrbitViewport | null) => void;
@@ -134,14 +132,14 @@ export const ductsFocus = (
   const scope = scopeOf(snapshot, system);
   if (!scope) return null;
   return {
-    walked: [...new Set([...scope.members, ...drawn])].map((id) => elementKey(id)),
-    near: [...stubs].map((id) => elementKey(id)),
+    walked: [...new Set([...scope.members, ...drawn])],
+    near: [...stubs],
   };
 };
 
 function rulingIssue(r: Ruling, issues: readonly StageIssue[]) {
   const finding =
-    r.kind === "claim" ? `claim:${r.claim.id}` : r.kind === "issue" ? r.issue.id : r.finding.id;
+    r.kind === "issue" ? r.issue.id : r.finding.id;
   return issues.find((issue) => issue.findings.includes(finding))?.key ?? finding;
 }
 
@@ -170,8 +168,6 @@ function Content({
   analysis,
   ctx,
   subject,
-  claims,
-  onVerdict,
   work,
   issueScope,
   annotated,
@@ -197,10 +193,10 @@ function Content({
       authored.system,
       snapshot.systems.map((row) => row.name),
     ),
-    selected: authored.selected.map((item) => localSubject(item.id)).join(","),
+    selected: authored.selected.map((item) => item.id).join(","),
   };
   const select = (selected: string) =>
-    ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
+    ctx.page.select(selected ? [{ kind: "focus", id: selected }] : []);
   const pickIssue = (selected: string) => {
     select(selected);
     ctx.page.query({ rulingSearch: emptyListSearch() });
@@ -211,6 +207,7 @@ function Content({
   );
   const index = useMemo(() => indexOf(snapshot, priced), [snapshot, priced]);
   const door = useAdmittedSubject();
+  const elements = useMemo(() => ductElements(snapshot), [snapshot]);
   const scope = useMemo(() => scopeOf(snapshot, page.system), [snapshot, page.system]);
   const labelOf = useMemo(() => labelOfNode(snapshot), [snapshot]);
   const scene = useMemo(
@@ -263,7 +260,7 @@ function Content({
     }),
     [meshCuts],
   );
-  const lines = useMemo(() => linesOf(scene), [scene]);
+  const lines = useMemo(() => linesOf(scene, elements), [scene, elements]);
 
   const sub = scene.subject ?? null;
   const nameOfId = useMemo(() => elementNamer(snapshot, sub), [snapshot, sub]);
@@ -280,7 +277,6 @@ function Content({
     snapshot,
     priced,
     scene,
-    claims,
     work,
     issueScope,
     annotated,
@@ -394,9 +390,9 @@ function Content({
   const widen = useMemo(
     () =>
       sub
-        ? (key: SubjectKey) => sub.legOf.get(idOf(key))?.ids.map((id) => elementKey(id)) ?? []
+        ? (key: SubjectKey) => elements.keysOf(sub.legOf.get(elements.idOf(key))?.ids ?? [])
         : undefined,
-    [sub],
+    [sub, elements],
   );
 
   const ruling = (r: Ruling) => {
@@ -422,14 +418,14 @@ function Content({
     ? systemNoteCount(identity.system, identity.system.note)
     : { issues: [], total: 0 };
   const facts = (key: SubjectKey) => {
-    const readId = idOf(key);
+    const readId = elements.idOf(key);
     const segFacts = scene.segments.find((f) => f.segment.id === readId);
     const nodeFacts = scene.nodes.find((f) => f.node.id === readId);
     // How Pe prices the selection's run (was the sidebar's run detail; selection lives here now).
     const run = priced && scope ? runOf(priced, scope.groups, readId) : null;
     return (
       <>
-        {ruled && ruled.at === readId ? <RulingBody r={ruled} onVerdict={onVerdict} /> : null}
+        {ruled && ruled.at === readId ? <RulingBody r={ruled} /> : null}
         {run ? (
           <RunDetail
             run={run}
@@ -589,7 +585,7 @@ function Content({
         widen,
         capture,
         lines,
-        name: (key) => nameOf(idOf(key)),
+        name: (key) => nameOf(elements.idOf(key)),
         paint,
         kinds,
         colour,
@@ -609,9 +605,11 @@ function Content({
             here={scope?.members ?? new Set()}
             opens={(system) => !page.system.includes(system)}
             nameOf={nameOf}
-            onGo={({ system, id }) =>
-              id == null ? door?.add([localId("ducts-system", system)]) : jumpTo(elementKey(id))
-            }
+            onGo={({ system, id }) => {
+              const key = id == null ? null : elements.keyOf(id);
+              if (id == null) door?.add([systemCode(system)]);
+              else if (key) jumpTo(key);
+            }}
           />
         ),
         furniture: {

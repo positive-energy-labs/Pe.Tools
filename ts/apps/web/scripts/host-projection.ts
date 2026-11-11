@@ -10,6 +10,8 @@ export async function projectWork(
   destination: string,
   exportName: string,
   load: (specifier: string) => Promise<Record<string, { schema?: unknown }>>,
+  /** A Pod entry exports the Work; the builtin registry only binds it. */
+  exported = true,
 ) {
   const code = ts.createSourceFile(
     entry,
@@ -59,6 +61,9 @@ export async function projectWork(
   const binding = imports.find((binding) => binding.local === workName);
   if (!binding)
     throw Error(`${entry}: typed route Work must reference an imported Work definition`);
+  // The host imports the Work from where the declaration does, so it must not be the declaration.
+  if (binding.specifier.startsWith(".") && /(?:^|\/)route\.tsx?$/.test(binding.specifier))
+    throw Error(`${entry}: declare Work in a neutral module beside route.ts; the host never imports route.ts`);
   const schemaImport = binding.specifier.startsWith(".")
     ? JSON.stringify(
         (() => {
@@ -75,9 +80,11 @@ export async function projectWork(
       ? resolve(dirname(entry), binding.specifier)
       : binding.specifier,
   );
+  // One registry binds every route's Work, so each wrapped schema needs its own local name.
+  const schema = exported ? "schema" : `${exportName}Schema`;
   const definition = definitions[binding.imported]!.schema
-    ? `import { ${binding.imported} as ${exportName} } from ${schemaImport};\nexport { ${exportName} };\n`
-    : `import { ${binding.imported} as schema } from ${schemaImport};\nexport const ${exportName}={route:${JSON.stringify(typed.data.key)},title:${JSON.stringify(typed.spec.name)},description:schema.description??${JSON.stringify(typed.spec.directory.summary)},schema,schemaVersion:1};\n`;
+    ? `import { ${binding.imported} as ${exportName} } from ${schemaImport};\n${exported ? `export { ${exportName} };\n` : ""}`
+    : `import { ${binding.imported} as ${schema} } from ${schemaImport};\n${exported ? "export " : ""}const ${exportName}={route:${JSON.stringify(typed.data.key)},title:${JSON.stringify(typed.spec.name)},description:${schema}.description??${JSON.stringify(typed.spec.directory.summary)},${schema === "schema" ? "schema" : `schema:${schema}`},schemaVersion:1};\n`;
   const properties = `workState:work,readWorks:${JSON.stringify(typed.host.readWorks)},schemas:{[data.work!.schema!]:work.schema,[data.historyDetail!]:z.fromJSONSchema(${JSON.stringify(z.toJSONSchema(typed.host.schemas.historyDetail!, { io: "input" }))})},`;
   return { definition, properties };
 }

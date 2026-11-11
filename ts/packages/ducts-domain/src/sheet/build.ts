@@ -61,6 +61,7 @@ import {
   legsOf,
   lineage,
   markSiblings,
+  mintBlocker,
   walkFrom,
   type End,
   type Graph,
@@ -191,11 +192,9 @@ class Pricer {
   }
 
   block = (b: Omit<Blocker, "id">) => {
-    const id = `${b.kind}:${b.elementId}${b.connector == null ? "" : `:${b.connector}`}`;
-    const causedBy = b.causedBy ?? this.cause;
-    if (!this.blockers.has(id))
-      this.blockers.set(id, { id, ...b, ...(causedBy ? { causedBy } : {}) });
-    return id;
+    const minted = mintBlocker(this.g, b, b.causedBy ?? this.cause);
+    if (!this.blockers.has(minted.id)) this.blockers.set(minted.id, minted);
+    return minted.id;
   };
 
   /** A kernel result as a leg's loss, or the blocker that withholds it. */

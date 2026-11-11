@@ -72,7 +72,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
       "path": "/pea",
       "title": "Pea",
       "category": "Ask / automate",
-      "blurb": "The Pea agent workbench and context world inspector."
+      "blurb": "The Pea agent workbench."
     }
   },
   {
@@ -260,7 +260,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     "key": "home",
     "directory": {
       "label": "Home",
-      "icon": "Home",
+      "icon": "House",
       "exposure": "Main",
       "surfaces": {
         "web": "full",

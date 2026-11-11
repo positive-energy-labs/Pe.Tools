@@ -2,7 +2,10 @@
    first (it ellipsizes); the verbs and the Timeline head keep their width. */
 [data-slot="situation-band"] {
   display: flex;
-  flex: 1 1 0;
+  /* The band owns its geometry: full width, natural height. `flex: 1 1 0` grew on the main axis,
+     so in a column parent (no global nav) it filled the page vertically. */
+  flex: 0 1 auto;
+  width: 100%;
   min-width: 0;
   align-items: center;
   gap: 0.5rem;

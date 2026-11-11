@@ -1,6 +1,10 @@
 import { z } from "zod";
+import { decode, uniqueIdSchema, subjectRefCodeSchema } from "./subject-ref.ts";
 import { documentRefSchema } from "./target.ts";
 import { VALUE_SOURCES } from "./work-value.ts";
+const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(code => {
+  const ref = decode(code); return ref.ok && ref.value.keyKind === "UniqueId";
+});
 
 const elementId = z.number().int().positive();
 const portIndex = z.number().int().nonnegative();
@@ -29,7 +33,6 @@ export type Resolved<T> = Omit<import("./work-value.ts").ValueResolution<T>, "va
 };
 const num = z.number().finite();
 const nonneg = num.nonnegative();
-const elementKey = z.string().regex(/^[1-9]\d*$/);
 const sided = <T extends z.ZodType>(value: T) => z.strictObject({ supply: value, return: value });
 const splitPolicy = z.enum(["even", "proportional"]);
 /** The design criteria a person edits (Work `criteria`) and the firm file carries; the resolver stamps sources. */
@@ -60,6 +63,36 @@ export const ductsCriteriaLayerSchema = z.strictObject({
   allowanceInWg: sided(nonneg.optional()).optional(),
 });
 export type DuctsCriteriaLayer = z.infer<typeof ductsCriteriaLayerSchema>;
+/**
+ * Each criterion's Work cell (ADR 0030 rule 8: one staged value per cell; ruling 2026-11-10, the /ducts
+ * design sheet draws one row per cell). A sided criterion is a cell per side; `layer` is where the
+ * cell's value sits in the criteria layer the engine resolves over the store and the firm file.
+ */
+export const DUCTS_CRITERIA_CELLS = {
+  velocitySupplyFpm: { layer: ["velocityLimitFpm", "supply"], value: num.positive(), unit: "fpm" },
+  velocityReturnFpm: { layer: ["velocityLimitFpm", "return"], value: num.positive(), unit: "fpm" },
+  terminalDropInWg: { layer: ["terminalDropInWg"], value: nonneg, unit: "in-wg" },
+  autoJoinGapIn: { layer: ["autoJoinGapIn"], value: nonneg, unit: "in" },
+  healBoxIn: { layer: ["healBoxIn"], value: nonneg, unit: "in" },
+  splitPolicy: { layer: ["splitPolicy"], value: splitPolicy, unit: undefined },
+  allowanceSupplyInWg: { layer: ["allowanceInWg", "supply"], value: nonneg, unit: "in-wg" },
+  allowanceReturnInWg: { layer: ["allowanceInWg", "return"], value: nonneg, unit: "in-wg" },
+} as const satisfies Record<string, { layer: readonly [keyof DuctsCriteriaLayer, ("supply" | "return")?]; value: z.ZodType; unit: string | undefined }>;
+export type DuctsCriteriaCell = keyof typeof DUCTS_CRITERIA_CELLS;
+/** The criteria layer the cells' staged values make; an unstaged cell leaves its criterion (or side) out. */
+export function criteriaLayer(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly edit?: { readonly value?: unknown } | null }>>>): DuctsCriteriaLayer {
+  const layer: Record<string, unknown> = {};
+  for (const [cell, { layer: [key, side] }] of Object.entries(DUCTS_CRITERIA_CELLS)) {
+    const value = cells[cell as DuctsCriteriaCell]?.edit?.value;
+    if (value === undefined) continue;
+    if (side) layer[key] = { ...(layer[key] as object | undefined), [side]: value };
+    else layer[key] = value;
+  }
+  return layer as DuctsCriteriaLayer;
+}
+/** The cell a criterion (and side) is staged in. */
+export const criteriaCellOf = (key: string, side?: string) =>
+  (Object.entries(DUCTS_CRITERIA_CELLS).find(([, c]) => c.layer[0] === key && c.layer[1] === side)?.[0] ?? null) as DuctsCriteriaCell | null;
 /** A criteria edit: a value writes that criterion or side, null removes it from the project layer. */
 export const ductsCriteriaEditsSchema = z.strictObject({
   velocityLimitFpm: sided(num.positive().nullable().optional()).optional(),
@@ -90,11 +123,11 @@ export const endRulingSchema = z.strictObject({
 });
 export const ductsInputsSchema = z.strictObject({
   terminals: z.record(
-    elementKey,
+    z.string(),
     z.strictObject({ cfm: resolved(nonneg.nullable()), drop: resolved(nonneg.nullable()) }),
   ),
   units: z.record(
-    elementKey,
+    z.string(),
     z.strictObject({
       kind: resolved(z.enum(DUCT_UNIT_KINDS)),
       role: resolved(unitRole),
@@ -104,7 +137,7 @@ export const ductsInputsSchema = z.strictObject({
     }),
   ),
   /** An accessory, inline equipment, or a fitting a person priced by hand; null when nothing states a drop. */
-  components: z.record(elementKey, z.strictObject({ drop: resolved(nonneg.nullable()) })),
+  components: z.record(z.string(), z.strictObject({ drop: resolved(nonneg.nullable()) })),
   rulings: z.strictObject({ joins: z.array(joinRulingSchema), ends: z.array(endRulingSchema) }),
   criteria: z.strictObject({
     velocityLimitFpm: sided(resolved(num.positive())),
@@ -139,7 +172,7 @@ export type DuctsFirm = z.infer<typeof ductsFirmSchema>;
  * What a cell or Pea writes: Work's own keys, one record per key, `null` deleting the pending edit.
  * The host applies them to document Work and recomputes; nothing here reaches Revit until apply.
  */
-const edits = <T extends z.ZodType>(value: T) => z.record(elementKey, value.nullable());
+const edits = <T extends z.ZodType>(value: T) => z.record(elementSubjectSchema, value.nullable());
 export const ductsSheetEditsSchema = z.strictObject({
   flows: edits(z.strictObject({ cfm: nonneg })).optional(),
   terminalDrops: edits(z.strictObject({ inWg: nonneg })).optional(),
@@ -174,6 +207,11 @@ export const ductsSheetEditsSchema = z.strictObject({
     .optional(),
 });
 export type DuctsSheetEdits = z.infer<typeof ductsSheetEditsSchema>;
+/** /fans' edit door (ruling 2026-11-10, no cross-route write): its own cells only; /ducts' keys are refused. */
+export const fansSheetEditsSchema = ductsSheetEditsSchema.pick({
+  flows: true, terminalDrops: true, componentDrops: true, esp: true, equipmentFlows: true, roles: true,
+});
+export type FansSheetEdits = z.infer<typeof fansSheetEditsSchema>;
 /** A closure or reading the engine took on its own: shown, never parsed. */
 export const sheetNoteSchema = z.strictObject({
   kind: z.enum([
@@ -315,6 +353,8 @@ const blocker = z.object({
     "equipment-pairing",
   ]),
   elementId,
+  /** The element's `UniqueId:` SubjectRef code; absent only for a stand-in with no element. */
+  subject: elementSubjectSchema.optional(),
   connector: portIndex.optional(),
   effectInWg: z.number().nullable(),
   closer: z.enum(["default", "heal", "ruling"]),
@@ -477,8 +517,14 @@ export const ductsSheetResponseSchema = z.discriminatedUnion("kind", [
     kind: z.literal("inputs"),
     directionOverride: z.string().nullable().optional(),
     inputs: ductsInputsSchema,
-    /** The firm layer: the file's version, or "seed" with present false when the file is absent. */
-    firm: z.strictObject({ version: z.string(), path: z.string(), present: z.boolean() }),
+    /**
+     * The firm layer: the file's version, or "seed" with present false when the file is absent;
+     * refused without a shared root, where the sheet runs on the seed and its firm fields are disabled.
+     */
+    firm: z.union([
+      z.strictObject({ version: z.string(), path: z.string(), present: z.boolean() }),
+      z.strictObject({ refused: z.literal("no-shared-root") }),
+    ]),
     ends: z.array(pathEnd),
     /** Every fitting the sheet priced, or failed to, with its rule, table and their sources. */
     fittings: z.array(fittingPricingSchema),
@@ -528,7 +574,7 @@ export const ductsRosterResponseSchema = z.object({
   rows: z.array(
     z.object({
       unitId: elementId,
-      uniqueId: z.string().min(1),
+      uniqueId: uniqueIdSchema,
       portIndex,
       mark: z.string(),
       /** Display disambiguators for a duplicate mark; the UniqueId is identity, never text. */

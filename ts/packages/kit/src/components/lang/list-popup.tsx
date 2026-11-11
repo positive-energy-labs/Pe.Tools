@@ -1,5 +1,5 @@
 import { reachProps } from "./reach";
-import { rowRevit } from "./revit-target";
+import { rowRevit, rowUniqueIds } from "./revit-target";
 import { rowDamage } from "../master-table/model";
 import type { Tone } from "../../lib/token";
 import {
@@ -83,7 +83,11 @@ type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
 export function StatusLine({ children, tone }: { children: ReactNode; tone?: Tone }) {
   return (
     <div className="dl-row" role="status" data-tone={tone} data-pending={tone ? undefined : ""}>
-      <span className="dl-row-label">{children}</span>
+      {/* The label is a flex column; text-overflow reaches only a block child, so the words sit
+          in one that ellipsizes (L3: a cut status line said "the profile names no"). */}
+      <span className="dl-row-label">
+        <span className="truncate">{children}</span>
+      </span>
     </div>
   );
 }
@@ -200,6 +204,7 @@ export function List<T>(props: ListProps<T>) {
         {...collection.rowProps(row.key)}
         {...slots}
         revit={slots.revit ?? rowRevit(row.item, row.key)}
+        uniqueIds={slots.uniqueIds ?? rowUniqueIds(row.item)}
         damage={slots.damage ?? rowDamage(row.item)}
       />
     );

@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { rpcAction, queryAction } from "../route/typed-actions.ts";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
@@ -16,14 +17,14 @@ export const fields = {
   fragment: field(z.string(), "", "pose"),
 };
 export const loaded = read(hostRead(valueRead("bind.picker", z.object({}), bindData)));
-export type { Context as BindContext } from "./context.generated";
+export type BindContext = ContextOf<typeof fields, typeof loaded, never, never>;
 export const module = route({
   key: "bind",
   name: "Bind",
   // Binding a Page is the person's press; Pea has no Page lease here.
   agent: false,
   needs: "host",
-  host: "../../../host/src/reads/bind.ts",
+  host: "./host.ts",
   directory: {
     label: "Document",
     exposure: "Main",
@@ -42,7 +43,8 @@ export const module = route({
     main: {
       title: "Bind Page",
       purpose: "Choose a Page binding",
-      draw: draw(() => import("./mount"), "BindBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./mount"), "BindBody"),
     },
   },
   commands: {

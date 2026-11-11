@@ -7,15 +7,29 @@ import type {
   ReadingSnapshot,
   LayoutJson,
   InvocationToken,
-  IdentityId,
   EntryContract,
   WorkHistoryPort,
   Many,
 } from "@pe/agent-contracts";
-import { identityCodecs, subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
+import { subjectOf, type SubjectRefCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
+import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "./host-read.ts";
+import { sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
+
+/*
+ * The sheet pair's contracts, inline: importing `typed-actions` would pull the whole semantic catalog into
+ * every Pod bundle. The axes equal `commandCatalogAxes` for the pair; the host decodes the real input.
+ */
+const sheetContract = (effect: "Read" | "ModelWrite") => ({
+  input: z.looseObject({}), output: z.unknown(),
+  axes: { subject: "Elements", touches: ["Metadata"], effect, cost: "Mutation", cardinality: "One" } as const,
+});
+const sheetCommand = { entry: SHEET_COMMANDS.apply, plan: SHEET_COMMANDS.plan,
+  contract: sheetContract("ModelWrite"), planContract: sheetContract("Read") };
+import { scrollBody, type Body, type BodyKind } from "./body.ts";
+export { scrollBody, fillBody, type Body, type BodyKind } from "./body.ts";
 
 type Field = {
   schema: z.ZodType;
@@ -44,20 +58,23 @@ export const field = <S extends z.ZodType, const R extends Field["role"]>(
   role: R,
   url: Field["url"] = "replace",
 ) => ({ schema, initial, role, url });
-export const localId = (namespace: string, subject: string) => {
-  const id = identityCodecs.local.encode({ namespace, subject });
-  if (!id.ok) throw Error(id.reason);
-  return id.value;
-};
-export const namesOf = (value: Many<IdentityId<"local">>): string[] | "all" =>
-  value.kind === "all" ? "all" : value.ids.map((id) => identityCodecs.local.parts(id).subject);
+/** The text keys of a subject set of plain refs (system name, workspace id); a tuple key, placement or sub is not a name and throws. */
+export const namesOf = (value: Many<SubjectRefCode>): string[] | "all" =>
+  value.kind === "all"
+    ? "all"
+    : value.ids.map((id) => {
+        const { key, placement, sub } = subjectOf(id);
+        if (typeof key !== "string" || placement !== undefined || sub !== undefined)
+          throw Error(`namesOf: ${id} is not a plain text-keyed subject`);
+        return key;
+      });
 export { subjectSchema };
 export type Fields = Readonly<Record<string, Field>>;
 type FieldValues<F extends Fields> = {
   readonly [K in keyof F]: Immutable<z.output<F[K]["schema"]>>;
 };
 export type Page<F extends Fields> = FieldValues<F> & {
-  readonly selected: readonly { kind: "focus"; id: IdentityId<"local"> }[];
+  readonly selected: readonly { kind: "focus"; id: string }[];
 };
 type RoleFields<F extends Fields, R extends Field["role"]> = {
   [K in keyof F]: R extends F[K]["role"] ? K : never;
@@ -129,6 +146,9 @@ type Owner = { state: RouteStateSpec<z.ZodObject>; value?: string };
 export type Owners = Readonly<Record<string, Owner>>;
 type HostRead = import("./host-read.ts").HostRead;
 export type ReadData<R extends HostRead> = NonNullable<z.output<R["output"]>["value"]>["data"];
+/** Layout is data (ADR 0035 rule 5, `route/body.ts`): a pane declares its body kind and `draw`
+ * returns that kind's branded `Body`, so the declaration and the drawing cannot disagree. */
+type PaneBody<C> = { [B in BodyKind]: { body: B; draw(ctx: C): Body<B> } }[BodyKind];
 export type Specification<
   D,
   F extends Fields,
@@ -145,7 +165,7 @@ export type Specification<
   directory: RouteGraphJson["directory"];
   needs?: "project" | "family" | "document" | "host" | "browser";
   optionalTarget?: "document" | "project" | "family" | "session";
-  /** Host-only module relative to this declaration; codegen imports it only on the host. */
+  /** `./host.ts`, the route directory's reads; only the generated host registry imports it. */
   host?: string;
   subject?: {
     field: RoleFields<F,"subject"> & string;
@@ -153,9 +173,26 @@ export type Specification<
     multiple?: boolean;
     pane: string;
     read?: SubjectRead;
-    options(data: Immutable<ReadData<SubjectRead>>): readonly { id: IdentityId<"local">; label: string }[];
+    options(data: Immutable<ReadData<SubjectRead>>): readonly { id: SubjectRefCode; label: string }[];
   };
   core?: HostRead & { output: z.ZodType<Publication<D>>; args(page: Page<F>): unknown };
+  /*
+   * ADR 0035 rule 1: the five slots are `subject` (above), `sheet`, `picture`, `goal` and `layout`
+   * (below), plus `query` and `title(ctx)`. Types are inferred from the declaration, never
+   * generated (rule 4). The kernel seams that fill each slot live in `./slots/<slot>/`; until a
+   * slice lands, a seam throws `not implemented: slice N`. `fields` stands until slice 10 moves the
+   * subject into `subject`, the pose into `picture` and the rest into `query`.
+   */
+  /** Slice 7: bindings by cell name, three closed kinds; the kernel draws a StateCell per binding per row. */
+  sheet?: SheetSlot;
+  /** Slice 8: a scope (SubjectRef set, box, or prism with a frame) and marks from the closed set. */
+  picture?: PictureSlot<DrawContext<NoInfer<D>, NoInfer<F>, z.output<W>, z.output<Edit>>>;
+  /** Slice 7: one host Read whose data is the Goal; the kernel draws its unresolved list first. */
+  goal?: HostRead & { output: z.ZodType<Publication<Goal>>; args(page: Page<NoInfer<F>>): unknown };
+  /** Route-owned Page fields no slot holds; folded into `fields` for projection until slice 10 retires `fields`. */
+  query?: Readonly<Record<string, Field & { role: "query" }>>;
+  /** The pane head's title; chrome derives from filled slots (ADR 0035 rule 5). */
+  title?(ctx: DrawContext<NoInfer<D>, NoInfer<F>, z.output<W>, z.output<Edit>>): string;
   fields: F;
   reads?: Readonly<Record<string, HostRead & { args(page: Page<F>): unknown }>>;
   panes: {
@@ -163,10 +200,11 @@ export type Specification<
       title: string;
       purpose: string;
       subjectList?: true;
+      /** A pane the shell draws from a filled slot (`typed-shell.tsx`); the route names and places it, and its `draw` is unused. */
+      kernel?: "sheet" | "goal";
       read?: Reads[K];
       bindings?(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): PaneBindings;
-      draw(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): unknown;
-    };
+    } & PaneBody<DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>>;
   };
   edits?: {
     work: W | RouteStateSpec<W>;
@@ -192,6 +230,8 @@ export type Specification<
           work:import("@pe/agent-contracts").WorkHandle|null;value:Immutable<D>|undefined},supplied?:any):unknown;
         present(result: unknown, data: Immutable<D>, work: Immutable<z.output<W>>): unknown;
       } | { kind: "session" | "catalog" | "query" | "rpc"; entry: string; contract: EntryContract; label: string;
+        /** A pane draws this verb on its rows, with the row's subject; the band does not. */
+        row?: true;
         invoke?: import("@pe/agent-contracts").ReadEntry["run"];
         input?(context: { page: Page<F>; target: import("@pe/agent-contracts").ExecutionTarget | null;
           work: import("@pe/agent-contracts").WorkHandle | null; value: Immutable<D> | undefined },supplied?:any): unknown }
@@ -207,8 +247,25 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   const work = !declared ? undefined : "schema" in declared ? declared : { route: spec.key, title: spec.name,
     description: declared.description ?? spec.directory.summary, schema: declared, schemaVersion: 1, };
   const owners = work && edits ? { ...edits.owners, [work.route]: {state:work,value:edits.value} } : {};
-  const normalized = { ...spec, needs: spec.needs ?? "project", commands: spec.commands ?? {},
-    edits: work && edits ? {...edits,work,owners} : undefined };
+  const sheet = spec.sheet ? sheetSlotData(spec.sheet) : undefined;
+  // ADR 0035 rules 3 and 8: a filled sheet or goal slot is a kernel-drawn pane and, for a sheet that writes Revit,
+  // the one sheet pair as the route's `sheet` verb. A route that declares either itself keeps its own.
+  const declaredCommands = spec.commands ?? {};
+  const sheetVerb = sheet && writesRevit(sheet) && !Object.values(declaredCommands).some((c) => c.entry === SHEET_COMMANDS.apply)
+    ? { sheet: { ...sheetCommand, label: "Write to Revit",
+        present: (result: unknown) => {
+          const writes = (result as { writes?: readonly unknown[] }).writes?.length ?? 0;
+          return `Write ${writes} parameter value${writes === 1 ? "" : "s"} to Revit`;
+        } } }
+    : {};
+  // The shell draws a kernel pane (`typed-shell.tsx`, `kernel`): a route module, and a Pod bundle, carries no React.
+  const kernelPanes = {
+    ...(spec.sheet && !Object.values(spec.panes).some((p) => p.kernel === "sheet") ? { sheet: { title: "Sheet", purpose: "Edit the bound cells", kernel: "sheet", body: "scroll", draw: () => scrollBody(null) } } : {}),
+    ...(spec.goal && !("goal" in spec.panes) ? { goal: { title: "Unresolved", purpose: "What is left before the answer", read: spec.goal,
+      kernel: "goal", body: "scroll", draw: () => scrollBody(null) } } : {}),
+  } as unknown as Specification<D, F, W, Edit, Reads, SubjectRead>["panes"];
+  const normalized = { ...spec, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb } as NonNullable<typeof spec.commands>,
+    panes: { ...spec.panes, ...kernelPanes }, edits: work && edits ? {...edits,work,owners} : undefined };
   const schemas: Record<string,z.ZodType> = { none:z.strictObject({}) };
   if (work && edits) {
     schemas.work=work.schema;
@@ -216,7 +273,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   }
   const fields: Record<string,RouteGraphJson["fields"][string]> = {};
   const fieldSchemas: Record<string,string> = {};
-  for (const [key,field] of Object.entries(spec.fields)) {
+  for (const [key,field] of Object.entries({ ...spec.query, ...spec.fields } as Fields)) {
     let schema=key;
     while(Object.hasOwn(schemas,schema)) schema=`page:${schema}`;
     fieldSchemas[key]=schema;
@@ -226,13 +283,14 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   }
   const readIds = new Map<HostRead,string>();
   if(spec.core) readIds.set(spec.core,"value");
+  if(spec.goal && !readIds.has(spec.goal)) readIds.set(spec.goal,"goal");
   for(const [id,read] of Object.entries(spec.reads ?? {})) if(!readIds.has(read)) readIds.set(read,id);
-  for(const [id,pane] of Object.entries(spec.panes)) if(pane.read&&!readIds.has(pane.read)) readIds.set(pane.read,id);
+  for(const [id,pane] of Object.entries(normalized.panes)) if(pane.read&&!readIds.has(pane.read)) readIds.set(pane.read,id);
   const subjectRead=spec.subject ? readIds.get(spec.subject.read ?? spec.core!) : undefined;
   if(spec.subject && !subjectRead) throw Error("Subject read must be declared by the route");
   if(spec.subject) fields[spec.subject.field]={...fields[spec.subject.field],role:"subject",schema:fieldSchemas[spec.subject.field]!,
     codec:spec.subject.field,initial:spec.fields[spec.subject.field]!.initial,url:"push",share:true,agent:spec.agent === false ? "none" : "set",
-    cardinality:"many",identity:"subject",picker:{reading:subjectRead!,options:"subject"}};
+    cardinality:"many",picker:{reading:subjectRead!,options:"subject"}};
   fields.selected={role:"selection",kinds:["focus"]};
   const readings: Record<string,RouteGraphJson["readings"][string]>={};
   for(const [read,id] of readIds) readings[id]={kind:"use",entry:read.key,demand:read.demand === "explicit"?"explicit":"visible",
@@ -246,16 +304,16 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   const data:RouteGraphJson={version:1,key:spec.key,address:spec.address ?? `/${spec.key}`,name:spec.name,directory:spec.directory,
     capabilities:[...(work?["work" as const]:[]),...(Object.keys(verbs).length?["native-write" as const]:[]),
       ...(["document","project","family"].includes(normalized.needs)?["geometry" as const]:[])],fields,
-    identities:{subject:{kind:"local",codec:"local"},focus:{kind:"local",codec:"local"}},
     ...(spec.subject?{subject:{field:spec.subject.field,noun:spec.subject.noun,pane:spec.subject.pane,roster:subjectRead!,detail:subjectRead!}}:{}),
     ...(work?{historyDetail:"historyDetail",work:{schema:"work",route:work.route,version:work.schemaVersion??1,}}:{}),
     workFields:Object.fromEntries(Object.entries(work?.schema.shape ?? {}).flatMap(([key,schema])=>{
       const meta=(schema as z.ZodType).meta();
       return meta?.title ? [[key,{label:meta.title,internal:meta.internal === true}]] : [];
-    })),cells:{},panes:Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,
+    })),cells:{},panes:Object.fromEntries(Object.entries(normalized.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,
       draws:p.read?[readIds.get(p.read)!]:[],verbs:Object.keys(verbs)}])),readings,verbs,seeds:{},layout:discoveryLayout(spec.layout),
+    ...(sheet?{sheet}:{}),...(spec.goal?{goal:readIds.get(spec.goal)!}:{}),
     needs:normalized.needs === "browser" || normalized.needs === "host" ? "nothing" : normalized.needs,
-    predicates:{},observe:[],resetOnTarget:[],stageOrder:[stage],stages:{[stage]:{panes:Object.keys(spec.panes),verbs:Object.keys(verbs),word:spec.name}}};
+    predicates:{},observe:[],resetOnTarget:[],stageOrder:[stage],stages:{[stage]:{panes:Object.keys(normalized.panes),verbs:Object.keys(verbs),word:spec.name}}};
   const host:HostRouteModule={data,schemas,...(work?{workState:work,readWorks:Object.keys(owners).filter(id=>id!==work.route)}:{})};
   const entries:Record<string,EntryContract>=Object.fromEntries([...[...readIds.keys()].map(read=>[read.key,read]),
     ...Object.values(normalized.commands).flatMap(c=>[[c.entry,c.contract],...("plan" in c?[[c.plan,c.planContract]]:[])])]);

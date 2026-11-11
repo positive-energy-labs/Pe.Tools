@@ -8,7 +8,7 @@
     "group": "Start / open work",
     "summary": "Find tools and resume open work",
     "label": "Home",
-    "icon": "Home",
+    "icon": "House",
     "exposure": "Main",
     "surfaces": {
       "web": "full",
@@ -90,16 +90,6 @@
       "kinds": [
         "focus"
       ]
-    }
-  },
-  "identities": {
-    "subject": {
-      "kind": "local",
-      "codec": "local"
-    },
-    "focus": {
-      "kind": "local",
-      "codec": "local"
     }
   },
   "readings": {},

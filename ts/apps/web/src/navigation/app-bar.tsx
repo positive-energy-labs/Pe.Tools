@@ -32,6 +32,32 @@ import "./app-bar.css";
 import { RecordedSourceChip } from "#/machine/devices";
 import { PageBindingChip } from "#/pages-bind/chip";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { ConsentSweep, type ConsentWindow } from "@pe/kit/lang/consent-sweep";
+import { harnessClient } from "#/workbench/provider/harness-client";
+import { resolveWorkbenchConfig } from "#/workbench/config";
+import { sweepWindows, useNoticeFeed } from "./notice-feed";
+
+/**
+ * The web topbar's consent sweep (ADR 0035 rule 6) over the notice feed's open windows. Only a
+ * ready feed draws: a stale window may already be answered, and Reject on it would be refused.
+ */
+function TopbarSweep() {
+  const feed = useNoticeFeed();
+  const answer = (ask: ConsentWindow, option: { optionId: string } | null | undefined) =>
+    option
+      ? harnessClient(resolveWorkbenchConfig().origin)
+          .permission(ask.threadId, ask.requestId, option.optionId)
+          .then(() => {})
+      : undefined;
+  return (
+    <ConsentSweep
+      shell="topbar"
+      windows={sweepWindows(feed.state === "ready" ? feed.observation : undefined)}
+      onReject={(ask) => answer(ask, ask.reject)}
+      onAllow={(ask) => answer(ask, ask.allow)}
+    />
+  );
+}
 
 type LaunchWindow = Window & {
   launchQueue?: { setConsumer: (consumer: (params: { targetURL?: string }) => void) => void };
@@ -339,6 +365,8 @@ export function AppBar() {
       {!compact && (
         <RouteControlsOutlet slot="situation" as="div" className="pe-appbar-situation" />
       )}
+      {/* Consent never folds into the drawer: the tray's card is its sweep, so the panel draws none. */}
+      {host.surface !== "tray" && <TopbarSweep />}
       <div
         className="pe-appbar-commands"
         data-compact={compact || undefined}

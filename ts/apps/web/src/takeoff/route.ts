@@ -52,7 +52,7 @@ export const module = route({
   key: "takeoffs",
   name: "View adoption",
   needs: "project",
-  host: "../../../host/src/reads/takeoffs.ts",
+  host: "./host.ts",
   directory: {
     label: "Manual J",
     exposure: "Main",
@@ -118,7 +118,8 @@ export const module = route({
     adoption: {
       title: "View adoption",
       purpose: "Choose views and stage designer region names and system tags",
-      draw: draw(() => import("./typed-adoption"), "AdoptionBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./typed-adoption"), "AdoptionBody"),
     },
   },
   layout: paneLayout("adoption"),

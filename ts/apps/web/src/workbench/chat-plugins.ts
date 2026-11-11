@@ -3,7 +3,7 @@
  */
 import {
   routeAddress,
-  identityCodecs,
+  encode,
   actionControls,
   parseContributionKey,
   routeCallOf,
@@ -112,12 +112,12 @@ export function capturedPlace(
     at.keys.filter((name) => name in input).map((name) => [name, input[name]]),
   );
   if (key === "ducts" && typeof search.system === "string" && search.system.trim()) {
-    const id = identityCodecs.local.encode({ namespace: "ducts-system", subject: search.system });
+    const id = encode({ keyKind: "system-name", key: search.system });
     if (!id.ok) return { ok: false, refusal: id.reason };
     search.system = { kind: "ids", ids: [id.value] };
   }
   if (key === "schedules" && scope.binding === "workspace") {
-    const id = identityCodecs.local.encode({ namespace: "schedules", subject: scope.work });
+    const id = encode({ keyKind: "workspace", key: scope.work });
     if (!id.ok) return { ok: false, refusal: id.reason };
     search.workspaceId = { kind: "ids", ids: [id.value] };
   }
@@ -241,6 +241,16 @@ export function actionCall(toolName: string, args: unknown, result: unknown): Ac
  * A command opens its Work owner's registered Page. A Page-less owner keeps its receipt link.
  */
 export const actionRoute = (key: string): ChatPluginRoute | null => publicRoutes.actionRoute(key);
+/**
+ * The route a receipt ran in: the route whose Work it consumed (a row verb on /fans binds Fans'),
+ * else the one route that declares the action. Work no route draws (the findings Work) names none.
+ */
+export function receiptRoute(key: string, receipt: ActionReceipt | undefined): ChatPluginRoute | null {
+  const work = receipt?.consumes.find((entry) => entry.kind === "work");
+  if (work?.kind !== "work") return actionRoute(key);
+  const route = work.probe.handle.key.route;
+  return publicRoutes.get(route) ? (route as ChatPluginRoute) : null;
+}
 
 /** `takeoffs.sync` → `sync`, `schedule.grid.push` → `grid push`. */
 export const actionWord = (key: string) => key.split(".").slice(1).join(" ") || key;

@@ -259,7 +259,7 @@ export function Table<Row extends RowData, Data = readonly Row[]>({
           />
         </table>
         {status !== "ready" && (
-          <StatusLine tone={status === "failed" ? "alarm" : undefined}>
+          <StatusLine tone={status === "failed" ? "caution" : undefined}>
             {status === "failed" ? (failure ?? "Reading failed") : "Reading…"}
           </StatusLine>
         )}

@@ -8,13 +8,13 @@ import type { ProcessIdentity, SessionObservation } from "@pe/host-contracts/pe-
 
 export type Phase = "ready" | "booting" | "no add-in" | "unresponsive" | "gone" | "failed";
 
-export const PHASE_TONE: Record<Phase, "caution" | "alarm" | undefined> = {
+export const PHASE_TONE: Record<Phase, "caution" | undefined> = {
   ready: undefined,
   booting: undefined,
   "no add-in": "caution",
   unresponsive: "caution",
   gone: undefined,
-  failed: "alarm",
+  failed: "caution",
 };
 
 export function processOf(row: SessionObservation): ProcessIdentity | null {

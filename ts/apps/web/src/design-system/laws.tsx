@@ -20,6 +20,7 @@ export const LAW_POINTERS = [
   ["who runs it, as a mark", "lang/provider-mark.tsx · ProviderMark"],
   ["provenance rides with the value", "StateCellProps.grounding"],
   ["ceremony scales with blast radius", "ArmingStrip"],
+  ["consent in two places", "ConsentSweep"],
 ] as const;
 
 export function DesignSystemLaws() {

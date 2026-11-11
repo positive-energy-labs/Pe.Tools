@@ -1,3 +1,4 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { mkdtemp, rm, writeFile, open, readFile, readdir, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,7 +6,7 @@ import { Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { takeoffSnapshotInput } from "../src/reads/takeoffs.ts";
+import { takeoffSnapshotInput } from "../../web/src/takeoff/host.ts";
 import { takeoffCaptureSchema } from "@pe/agent-contracts";
 
 
@@ -13,7 +14,7 @@ import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
 import { historyPointSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { History } from "../src/reads/history.ts";
-import { nativeRead } from "../src/reads/inputs.ts";
+import { nativeRead } from "../src/reads/evaluator.ts";
 import { registeredReads } from "../src/reads/routes.ts";
 import { familiesViewArgs } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
@@ -46,6 +47,9 @@ import {
   bounds,
   snapshot,
 } from "./host-read-graph.test-support.ts";
+import { subjectCode, type UniqueId } from "@pe/agent-contracts";
+const fanCode = (row: { uniqueId: string; portIndex: number }) =>
+  subjectCode({ keyKind: "UniqueId", key: row.uniqueId as UniqueId, sub: { port: row.portIndex } });
 
 test("JZ read subscriptions reclaim capacity through release and reject released flights", async () => {
   const hold = gate();
@@ -265,7 +269,7 @@ test("History reopens the host's exact publication after newer Values, with no l
       await f.history("", { kind: "captured", document: path }),
     );
     const fan = first.value!.data.fans.rows.find((row) => row.mark === "MUAS-1")!;
-    const next = await f.send(1, [`${fan.uniqueId}@${fan.portIndex}`]);
+    const next = await f.send(1, [fanCode(fan)]);
     expect(next.state, next.reason).toBe("current");
     expect(next.value!.evaluation).not.toBe(first.value!.evaluation);
     const calls = f.nativeCalls;
@@ -334,7 +338,7 @@ test("F1 MUAS-1 -> FC-23 -> MUAS-1 never publishes an old generation, including 
     const fan = (mark: string) => {
       const row = rows.find((row) => row.mark === mark);
       expect(row).toBeDefined();
-      return `${row!.uniqueId}@${row!.portIndex}`;
+      return fanCode(row!);
     };
     const first = f.send(1, [fan("MUAS-1")], a);
     await a.entered.promise;
@@ -380,7 +384,7 @@ test("F2 Work, same-version firm criteria and document mark changes during a mul
     try {
       const roster = await f.send(0, []);
       const row = roster.value!.data.fans.rows.find((row) => row.mark === "MUAS-1")!;
-      const selected = [`${row.uniqueId}@${row.portIndex}`];
+      const selected = [fanCode(row)];
       const before = await f.send(1, selected);
       expect(before.state, before.reason).toBe("current");
       hold = f.holdNative();
@@ -391,14 +395,14 @@ test("F2 Work, same-version firm criteria and document mark changes during a mul
           key("fans"),
           "fans",
           "human",
-          [{ path: ["flows", "4", "edit"], value: { value: { cfm: 321 } } }],
+          [{ path: ["flows", elementSubject(snapshot.nodes.find(node => node.kind === "terminal")!), "edit"], value: { value: { cfm: 321 } } }],
           0,
         );
         expect(staged.ok).toBe(true);
       }
       if (cause === "firm" || cause === "all")
         await writeFile(
-          join(f.dir, "firm.json"),
+          join(f.dir, "Firm", "ducts.json"),
           JSON.stringify({
             ...FIRM_SEED,
             criteria: { ...FIRM_SEED.criteria, terminalDropInWg: 0.4 },

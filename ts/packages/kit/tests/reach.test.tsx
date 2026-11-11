@@ -17,7 +17,7 @@ import { FactChip } from "../src/components/lang/chip";
 import { Switcher } from "../src/components/lang/switcher";
 import { PaneCrumb } from "../src/components/lang/pane-crumb";
 import { SvgTip, TooltipProvider } from "../src/components/lang/tooltip";
-import { citation, cite, rung } from "../src/components/lang/attention";
+import { citation, cite, elementKey, rung } from "../src/components/lang/attention";
 import { useAtomValue } from "@effect/atom-react";
 import { AttentionFixture, kitRegistry } from "./attention-fixture";
 
@@ -36,6 +36,7 @@ test("pressing a reference uses focus reach and its popup shares the lighting gr
       <SubjectTextContext
         value={{
           nameOf: () => "FR-2",
+          uniqueIdOf: () => "u42",
           doc: "kit",
           go,
         }}
@@ -64,7 +65,7 @@ test("pressing a reference uses focus reach and its popup shares the lighting gr
   fireEvent.mouseLeave(reference);
   fireEvent.mouseLeave(view.container.querySelector("[data-subject-text]")!);
   await act(() => vi.advanceTimersByTime(950));
-  expect(registry.get(citation)?.focus?.key ?? null).toBe("e:42");
+  expect(registry.get(citation)?.focus?.key ?? null).toBe(elementKey("u42"));
   fireEvent.mouseEnter(reference);
   fireEvent.mouseMove(reference);
   await act(() => vi.advanceTimersByTime(400));
@@ -80,13 +81,13 @@ test("pressing a reference uses focus reach and its popup shares the lighting gr
   await act(async () => screen.getByRole("button", { name: "outside" }).focus());
   await act(() => vi.advanceTimersByTime(950));
   expect(popup.isConnected).toBe(true);
-  expect(registry.get(citation)?.focus?.key ?? null).toBe("e:42");
+  expect(registry.get(citation)?.focus?.key ?? null).toBe(elementKey("u42"));
   fireEvent.mouseOut(popup, { relatedTarget: screen.getByRole("button", { name: "outside" }) });
   fireEvent.mouseOver(screen.getByRole("button", { name: "outside" }));
   fireEvent.mouseLeave(popup);
   fireEvent.mouseLeave(popup.parentElement!);
   await act(() => vi.advanceTimersByTime(HOVER_GRACE - 1));
-  expect(registry.get(citation)?.focus?.key ?? null).toBe("e:42");
+  expect(registry.get(citation)?.focus?.key ?? null).toBe(elementKey("u42"));
   await act(() => vi.advanceTimersByTime(2));
   expect(registry.get(citation)?.focus?.key ?? null).toBeNull();
 });
@@ -230,7 +231,7 @@ test("the pointer moving the cursor never scrolls; a key moving it does (N1)", (
 
 const noop = () => {};
 function Mirror() {
-  return <output data-testid="mirror">{useAtomValue(rung({ doc: "kit", key: "e:42" }))}</output>;
+  return <output data-testid="mirror">{useAtomValue(rung({ doc: "kit", key: elementKey("u42") }))}</output>;
 }
 
 test("rows and picture subscribers share reach without updating the route", () => {
@@ -239,8 +240,8 @@ test("rows and picture subscribers share reach without updating the route", () =
   function Route() {
     route();
     return (
-      <SubjectTextContext value={{ doc: "kit", nameOf: () => "duct" }}>
-        <Row label="duct" revit={[42]} />
+      <SubjectTextContext value={{ doc: "kit", nameOf: () => "duct", uniqueIdOf: () => "u42" }}>
+        <Row label="duct" revit={[42]} uniqueIds={["u42"]} />
         <Mirror />
       </SubjectTextContext>
     );
@@ -255,7 +256,7 @@ test("rows and picture subscribers share reach without updating the route", () =
   act(() =>
     cite(registry, {
       owner: "row",
-      refs: [{ doc: "kit", key: "e:42", name: "duct", number: 1 }],
+      refs: [{ doc: "kit", key: elementKey("u42"), name: "duct", number: 1 }],
       focus: null,
     }),
   );
@@ -265,8 +266,8 @@ test("rows and picture subscribers share reach without updating the route", () =
   act(() =>
     cite(registry, {
       owner: "row",
-      refs: [{ doc: "kit", key: "e:42", name: "duct", number: 1 }],
-      focus: { doc: "kit", key: "e:42" },
+      refs: [{ doc: "kit", key: elementKey("u42"), name: "duct", number: 1 }],
+      focus: { doc: "kit", key: elementKey("u42") },
     }),
   );
   // A cited footnote is not keyboard focus: the row takes the cited rung, never the ring's.

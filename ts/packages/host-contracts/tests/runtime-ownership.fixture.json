@@ -1,6 +1,110 @@
 {
-  "$comment": "One table, three resolvers: C# ProductPathing.StateRoot (Pe.Shared.Tests RuntimeOwnershipTests), TS stateRoot (host-contracts runtime-ownership.test.ts), PowerShell Resolve-ProductRuntimeRoot (tools/tests/host-state-isolation.ps1). trayLaunches: TS trayOwnerArguments emits argv; C# Pe.Host.Tray Program.ParseOwner must accept it.",
+  "$comment": "One table, three resolvers: C# ProductPathing.StateRoot (Pe.Shared.Tests RuntimeOwnershipTests), TS stateRoot (host-contracts runtime-ownership.test.ts), PowerShell Resolve-ProductRuntimeRoot (tools/tests/host-state-isolation.ps1). contentHomes: TS contentHomes/sharedFirmDir/sharedKeysPath, C# ProductPathing, PowerShell Resolve-ContentHomes; %DOCUMENTS% is the machine's Documents known folder. trayLaunches: TS trayOwnerArguments emits argv; C# Pe.Host.Tray Program.ParseOwner must accept it.",
   "stateRoots": [
+    {
+      "name": "a dev owner under the user content root refuses",
+      "lane": "dev",
+      "ownerRoot": "C:\\Users\\Alice\\OneDrive\\Documents\\Pe.Tools\\checkout",
+      "productHome": null,
+      "userRoot": "C:\\Users\\Alice\\OneDrive\\Documents\\Pe.Tools",
+      "error": "cannot be at or under the user content root"
+    },
+    {
+      "name": "an installed owner equal to the user content root refuses",
+      "lane": "installed",
+      "ownerRoot": "C:\\Users\\Alice\\OneDrive\\Documents\\Pe.Tools",
+      "productHome": null,
+      "userRoot": "C:\\Users\\Alice\\OneDrive\\Documents\\Pe.Tools",
+      "error": "cannot be at or under the user content root 'C:\\Users\\Alice\\OneDrive\\Documents\\Pe.Tools'"
+    },
+    {
+      "name": "an isolated home keeps its own local state",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": "D:\\pe-home",
+      "userRoot": "D:\\pe-home",
+      "stateRoot": "D:\\pe-home\\.local-state"
+    },
+    {
+      "name": "a sibling with the same prefix is not on the user content root",
+      "lane": "dev",
+      "ownerRoot": "C:\\Users\\Alice\\OneDrive\\Documents\\Pe.Tools-src",
+      "productHome": null,
+      "userRoot": "C:\\Users\\Alice\\OneDrive\\Documents\\Pe.Tools",
+      "stateRoot": "C:\\Users\\Alice\\OneDrive\\Documents\\Pe.Tools-src\\.artifacts\\pe-tools"
+    },
+    {
+      "name": "a dev owner under the shared root refuses",
+      "lane": "dev",
+      "ownerRoot": "S:\\Pe.Tools\\checkout",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "Machine state root 'S:\\Pe.Tools\\checkout\\.artifacts\\pe-tools' cannot be at or under PE_TOOLS_SHARED_ROOT 'S:\\Pe.Tools'."
+    },
+    {
+      "name": "a dev owner equal to the shared root refuses",
+      "lane": "dev",
+      "ownerRoot": "S:\\Pe.Tools",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "Machine state root 'S:\\Pe.Tools\\.artifacts\\pe-tools' cannot be at or under PE_TOOLS_SHARED_ROOT 'S:\\Pe.Tools'."
+    },
+    {
+      "name": "an installed owner under the shared root refuses",
+      "lane": "installed",
+      "ownerRoot": "S:\\Pe.Tools\\installed",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "Machine state root 'S:\\Pe.Tools\\installed' cannot be at or under PE_TOOLS_SHARED_ROOT 'S:\\Pe.Tools'."
+    },
+    {
+      "name": "an installed owner equal to the shared root refuses",
+      "lane": "installed",
+      "ownerRoot": "S:\\Pe.Tools",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "Machine state root 'S:\\Pe.Tools' cannot be at or under PE_TOOLS_SHARED_ROOT 'S:\\Pe.Tools'."
+    },
+    {
+      "name": "an isolated home cannot put model copies on the shared mount",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": "S:\\Pe.Tools\\isolated",
+      "sharedRoot": "S:\\Pe.Tools",
+      "error": "PE_TOOLS_SHARED_ROOT"
+    },
+    {
+      "name": "the shared mount itself cannot be an isolated home",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": "S:\\Pe.Tools",
+      "sharedRoot": "S:\\Pe.Tools\\",
+      "error": "PE_TOOLS_SHARED_ROOT"
+    },
+    {
+      "name": "shared containment ignores casing and whitespace and includes dot-prefixed children",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": " s:\\PE.TOOLS\\..isolated ",
+      "sharedRoot": " S:\\Pe.Tools ",
+      "error": "PE_TOOLS_SHARED_ROOT"
+    },
+    {
+      "name": "a sibling with the same prefix is not on the shared content root",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": "S:\\Pe.Tools-local",
+      "sharedRoot": "S:\\Pe.Tools",
+      "stateRoot": "S:\\Pe.Tools-local\\.local-state"
+    },
+    {
+      "name": "a shared content mount never moves machine state",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "stateRoot": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools"
+    },
     {
       "name": "installed keeps the SDK install root verbatim",
       "lane": "installed",
@@ -58,6 +162,50 @@
       "error": "absolute owner root"
     }
   ],
+  "contentHomes": [
+    {
+      "name": "no shared root: the user root alone, under Documents",
+      "productHome": null,
+      "sharedRoot": null,
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools"
+      ],
+      "firm": null,
+      "keys": null
+    },
+    {
+      "name": "blank values configure nothing",
+      "productHome": "  ",
+      "sharedRoot": "  ",
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools"
+      ],
+      "firm": null,
+      "keys": null
+    },
+    {
+      "name": "a shared root reads after the user root",
+      "productHome": null,
+      "sharedRoot": " S:\\Pe.Tools ",
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools",
+        "S:\\Pe.Tools"
+      ],
+      "firm": "S:\\Pe.Tools\\Firm",
+      "keys": "S:\\Pe.Tools\\keys.json"
+    },
+    {
+      "name": "an isolated home is the user root",
+      "productHome": " D:\\isolated ",
+      "sharedRoot": "S:\\Pe.Tools",
+      "homes": [
+        "D:\\isolated",
+        "S:\\Pe.Tools"
+      ],
+      "firm": "S:\\Pe.Tools\\Firm",
+      "keys": "S:\\Pe.Tools\\keys.json"
+    }
+  ],
   "trayLaunches": [
     {
       "name": "installed host spawns the tray",
@@ -94,7 +242,10 @@
         "sourceRoot": null,
         "installedRoot": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools"
       },
-      "launch": ["--launch-window", "http://127.0.0.1:5150/open"],
+      "launch": [
+        "--launch-window",
+        "http://127.0.0.1:5150/open"
+      ],
       "argv": [
         "--lane",
         "installed",
@@ -106,8 +257,15 @@
     },
     {
       "name": "dev host opens a window",
-      "owner": { "lane": "dev", "sourceRoot": "C:\\src\\Pe.Tools", "installedRoot": null },
-      "launch": ["--launch-window", "http://127.0.0.1:5175/open"],
+      "owner": {
+        "lane": "dev",
+        "sourceRoot": "C:\\src\\Pe.Tools",
+        "installedRoot": null
+      },
+      "launch": [
+        "--launch-window",
+        "http://127.0.0.1:5175/open"
+      ],
       "argv": [
         "--lane",
         "dev",
@@ -119,7 +277,11 @@
     },
     {
       "name": "dev tray supervisor spawns the tray",
-      "owner": { "lane": "dev", "sourceRoot": "C:\\src\\Pe.Tools", "installedRoot": null },
+      "owner": {
+        "lane": "dev",
+        "sourceRoot": "C:\\src\\Pe.Tools",
+        "installedRoot": null
+      },
       "launch": [
         "--dev",
         "--supervisor-file",

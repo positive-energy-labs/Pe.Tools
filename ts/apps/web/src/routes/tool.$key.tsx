@@ -58,7 +58,7 @@ function PodTool() {
         </>
       )}
       {alarm && (
-        <p role="alert" data-tone="alarm">
+        <p role="alert" data-tone="caution">
           {alarm}
         </p>
       )}

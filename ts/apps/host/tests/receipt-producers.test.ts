@@ -1,3 +1,4 @@
+import { journalAt } from "./effect-test.ts";
 import { NodeHttpServer } from "@effect/platform-node";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import { Deferred, Effect, Layer } from "effect";
@@ -10,7 +11,6 @@ import { join } from "node:path";
 import { PostHog } from "posthog-node";
 import { expect, test } from "vite-plus/test";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
-import { ActionJournal } from "../src/action-journal.ts";
 import { receiptBuildStamp } from "../src/build-stamp.ts";
 import { mintContext } from "../src/control.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
@@ -18,7 +18,7 @@ import { requestIdentityLayer } from "../src/request-identity.ts";
 
 test("real HTTP feedback retains content and caller before body; diagnostics cannot claim the exception", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-feedback-http-"));
-  const journal = new ActionJournal(join(dir, "journal.json"), Date.now, () => receiptGoldenEnvelope.stamp);
+  const journal = journalAt(join(dir, "journal.json"), Date.now, () => receiptGoldenEnvelope.stamp);
   const delivered: { properties: unknown; timestamp: string }[] = [];
   const module = await import("../src/receipt-export.ts");
   // The web stamp is the shared build stamp admitted by the host, the same one hostFetch sends as its header.
@@ -183,7 +183,7 @@ test("real HTTP feedback retains content and caller before body; diagnostics can
 
 test("real HTTP refusals, from admission and from a door, export refusal_count with only their closed code", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-refusal-http-"));
-  const journal = new ActionJournal(join(dir, "journal.json"), Date.now, () => receiptGoldenEnvelope.stamp);
+  const journal = journalAt(join(dir, "journal.json"), Date.now, () => receiptGoldenEnvelope.stamp);
   const sent: { event: string; properties: Record<string, unknown> }[] = [];
   const module = await import("../src/receipt-export.ts");
   const telemetry = module.createReceiptExport({

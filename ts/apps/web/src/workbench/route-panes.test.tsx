@@ -1,7 +1,9 @@
-import {route as declareRoute} from "../route/typed-route";
+import { stableFanKey } from "../ducts/sheet/model";
+import {route as declareRoute, scrollBody} from "../route/typed-route";
 import {module as familiesDeclaration} from "../families/route";
 import {workFingerprintSchema} from "@pe/agent-contracts";
-import {localId,localSubject} from "../ducts/identity";
+import { systemCode } from "../ducts/identity";
+import { namesOf } from "../route/typed-route";
 import type {TypedRoute} from "../route/typed-route";
 import type {RouteFingerprint} from "@pe/agent-contracts";
 import { TypedShell } from "../shell/typed-shell";
@@ -19,21 +21,23 @@ import {
 } from "@tanstack/react-router";
 import { address, routeAddress, type ThreadTab, type WorkKey } from "@pe/agent-contracts";
 import { RegistryContext } from "@effect/atom-react";
-import { appAtomRegistry } from "#/shell/owner";
+import { appAtomRegistry, routeSearch } from "#/shell/owner";
 import { createChatPageStore } from "./store";
 import { RouteDock } from "./route-panes";
 import { useRouteCurrent } from "#/route/activity";
 import { admittedRouterAddress } from "#/shell/typed-place-boundary";
+import { searchCodec } from "#/route/address-transport";
+import { SHOWN, urlSettled } from "#/test-journey";
 import { useRestoreTabPage } from "#/route/url";
 
 const store = createChatPageStore({
   registry: appAtomRegistry,
-  search: { mode: "threads", patch: async () => {} },
+  search: { patch: async () => {} },
 });
 const ducts: ThreadTab = {
   id: "aaaaaaaa-0000-4000-8000-000000000001",
   route: "ducts",
-  link: routeAddress("ducts").link({ system: {kind:"ids",ids:[localId("ducts-system","S1")]} }),
+  link: routeAddress("ducts").link({ system: {kind:"ids",ids:[systemCode("S1")]} }),
   at: "2026-10-24T00:00:00.000Z",
 };
 const TAB = routeAddress("ducts").title;
@@ -43,7 +47,7 @@ const DOC_A = address("C:/Jobs/Level A.rvt"),
 const place = (id: string, system: string, selected: string, target: unknown): ThreadTab => ({
   id,
   route: "ducts",
-  link: routeAddress("ducts").link({ system: {kind:"ids",ids:[localId("ducts-system",system)]}, selected: [{kind:"focus",id:localId("ducts-focus",selected)}] } as never, {
+  link: routeAddress("ducts").link({ system: {kind:"ids",ids:[systemCode(system)]}, selected: [{kind:"focus",id:selected}] } as never, {
     target: JSON.stringify(target),
   }),
   at: "2026-10-24T00:00:00.000Z",
@@ -102,7 +106,7 @@ vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 // The retention/lease witness uses the typed Page contract without acquiring native evidence or Work.
 const familiesProbe=declareRoute({
   ...familiesDeclaration.spec, needs:"browser",core:undefined,edits:undefined,commands:{},
-  panes:{probe:{title:"Probe",purpose:"Retention proof",draw:ctx=><output data-families-probe="">{ctx.page.read().focus}</output>}},
+  panes:{probe:{title:"Probe",purpose:"Retention proof",body:"scroll",draw:ctx=>scrollBody(<output data-families-probe="">{ctx.page.read().focus}</output>)}},
   layout:{kind:"pane",id:"probe"},
 });
 function FamiliesProbe() {
@@ -117,7 +121,7 @@ function DuctsProbe() {
   const system = useRouterState({
     select: (state) => routeAddress("ducts").read(state.location.search).page.system,
   });
-  return <output data-ducts-probe="">{system.kind === "all" ? "all" : system.ids.map(localSubject).join(" + ")}</output>;
+  return <output data-ducts-probe="">{system.kind === "all" ? "all" : (namesOf(system) as string[]).join(" + ")}</output>;
 }
 
 beforeEach(() => {
@@ -152,12 +156,14 @@ function Restore() {
   useRestoreTabPage();
   return null;
 }
-async function mount(entry = "/pea?thread=T", strict = false, restore = false) {
+async function mount(entry = "/pea?thread=T", strict = false, restore = false, validate = false) {
   if (entry.startsWith("/fans")) {
     const { admit } = await import("../fans/admission.fixture");
     fansRoute = (await admit()).presenter;
   }
   const root = createRootRoute({
+    // The app root's search reader (routes/__root.tsx), so router-built hrefs match the app's.
+    ...(validate ? { validateSearch: routeSearch } : {}),
     component: () => (
       <>
         {restore && <Restore />}
@@ -175,6 +181,7 @@ async function mount(entry = "/pea?thread=T", strict = false, restore = false) {
   const router = createRouter({
     routeTree: root.addChildren(routes),
     history: createMemoryHistory({ initialEntries: [entry] }),
+    ...(validate ? searchCodec : {}),
   });
   await router.load();
   const tree = (
@@ -192,7 +199,7 @@ test("a tab press expands the tools on that Place; a Work press restores its Pag
   sessionStorage.setItem(
     "pe.places",
     JSON.stringify([
-      { ...ducts, link: routeAddress("ducts").link({ system: {kind:"ids",ids:[localId("ducts-system","S1")]} }, { work: "w1" }) },
+      { ...ducts, link: routeAddress("ducts").link({ system: {kind:"ids",ids:[systemCode("S1")]} }, { work: "w1" }) },
     ]),
   );
   const router = await mount();
@@ -235,8 +242,8 @@ const resume = (
 });
 const shown = (router: Awaited<ReturnType<typeof mount>>) => ({
   path: router.state.location.pathname,
-  system: (()=>{const subject=routeAddress("ducts").read(router.state.location.search).page.system; return subject.kind === "all" ? "all" : subject.ids.map(localSubject).join(" + ");})(),
-  selected: routeAddress("ducts").read(router.state.location.search).page.selected.map(item=>localSubject(item.id)).join(","),
+  system: (()=>{const subject=routeAddress("ducts").read(router.state.location.search).page.system; return subject.kind === "all" ? "all" : (namesOf(subject) as string[]).join(" + ");})(),
+  selected: routeAddress("ducts").read(router.state.location.search).page.selected.map(item=>item.id).join(","),
   target: (router.state.location.search as { target?: string }).target,
   tab: (router.state.location.state as { __peRouteTab?: { id: string } }).__peRouteTab?.id ?? null,
 });
@@ -271,7 +278,7 @@ test("no Work-key match opens a new Place; Places are never guessed by route", a
     route: "ducts",
     target: address("C:/Jobs/Level C.rvt"),
   } as const;
-  await press(resume(key, routeAddress("ducts").link({system:{kind:"ids",ids:[localId("ducts-system","SC")]}})));
+  await press(resume(key, routeAddress("ducts").link({system:{kind:"ids",ids:[systemCode("SC")]}})));
   await waitFor(() => expect(shown(router)).toMatchObject({ path: "/ducts", system: "SC" }));
   expect(seeded.map((tab) => tab.id)).not.toContain(shown(router).tab);
 });
@@ -360,8 +367,7 @@ test("an admitted Place keeps its codec bytes through open, switch, bare URL res
   // Object, list, numeric, numeric-looking string, empty string, plain string and literal-percent
   // values: each one the legacy codec or TanStack's parse/stringify re-encoded (`%257B`, `"{..}"`)
   // or unquoted (`"glass"` -> `glass`) before the admitted owner could read it.
-  const { localId } = await import("../route/typed-route");
-  const fan = JSON.stringify({ kind: "ids", ids: [localId("ducts-fan","MUAS-1 50%@2"), localId("ducts-fan","8081605")] });
+  const fan = JSON.stringify({ kind: "ids", ids: [stableFanKey({ uniqueId: "MUAS-1 50%", portIndex: 2 }), stableFanKey({ uniqueId: "8081605-uid", portIndex: 0 })] });
   const rosterSearch = JSON.stringify({ keywords: "100%25 off", pills: [], v: 1 });
   const page = {
     fixture: "layout",
@@ -606,7 +612,7 @@ test("an explicit open's command id clears when the thread association changes",
 test("a saved legacy open-ref Place keeps its id under StrictMode, /pea and a cross-row Work press", async () => {
   sessionStorage.clear();
   // The bytes a writer saves (host navigation.ts resume link); a restore matches saved bytes exactly.
-  const legacy = routeAddress("ducts").link({ system: {kind:"ids",ids:[localId("ducts-system","Office retained page")]} }, {
+  const legacy = routeAddress("ducts").link({ system: {kind:"ids",ids:[systemCode("Office retained page")]} }, {
     target: JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }),
   });
   // New enrollment is exercised above through actual Fans admission. This tests saved-Place rebinding.
@@ -688,7 +694,7 @@ test("a Pea open of a new tool keeps its first lease instance, and a set against
       commandId: "55555555-5555-4555-8555-555555555555",
       revision: 1,
       patch: {
-        focus: routeAddress("families").agent.write({focus:"[\"Family\",\"Type\",\"Name\"]"}).focus!,
+        focus: routeAddress("families").agent.write({focus:'name:["Family","Type"]#field:Name'}).focus!,
       },
     }),
   );
@@ -820,46 +826,15 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
     ).toBe(commandId);
     expect(hostCalls("thread.place")).toHaveLength(1);
     expect(hostCalls("thread.place")[0]![1]).toMatchObject({ body: { route: podRoute.module.data.key } });
-    await waitFor(() =>
-      expect(hostCalls("view.publish")).toContainEqual([
-        "view.publish",
-        expect.objectContaining({
-          body: expect.objectContaining({ openCommandId: commandId, page: {} }),
-        }),
-      ]),
-    );
     const saved = places().find((tab) => tab.route === podRoute!.module.data.key)!;
     expect(saved.link).toBe(link);
     expect(screen.getByRole("button", { name: /^Circuit voltage drop/ })).toBeTruthy();
     expect(
       new URL(router.history.location.href, "http://place.invalid").searchParams.get("target"),
     ).toBe(query.get("target"));
-    const priorHref = router.history.location.href;
-    const published = hostCalls("view.publish").filter(([, input]) =>
-      (input as { body: { route: string } }).body.route === podRoute!.module.data.key,
-    ).at(-1)![1] as { body: { instance: string } };
-    act(() =>
-      hostEvents.emit({
-        type: "route-view-intent",
-        route: podRoute!.module.data.key,
-        thread: "T",
-        instance: published.body.instance,
-        revision: 1,
-        commandId: "33333333-3333-4333-8333-333333333333",
-        patch: { worksheet: "" },
-      }),
-    );
-    await waitFor(() =>
-      expect(hostCalls("view.ack")).toContainEqual([
-        "view.ack",
-        expect.objectContaining({
-          body: expect.objectContaining({ outcome: "refused", page: {} }),
-        }),
-      ]),
-    );
-    // This artifact declares no worksheet Page field; refusal leaves the leased entry untouched.
-    expect(new URL(router.history.location.href, "http://place.invalid").searchParams.get("worksheet")).toBeNull();
-    expect(router.history.location.href).toBe(priorHref);
+    // This artifact declares no agent field, so the host leases it no view (`viewRoute`: a registered
+    // route leases only with agent fields) and refuses its PUT; the browser publishes none (slice 6.1b).
+    expect(hostCalls("view.publish").filter(([, input]) => (input as { params: { route: string } }).params.route === podRoute!.module.data.key)).toEqual([]);
     await act(() => router.navigate({ to: "/fans", search: { thread: "T", fixture: "layout" } } as never));
     const priorFans = router.history.location.href;
     deliver();
@@ -927,11 +902,77 @@ test("N-03 typed Fans retains a newly explicit pin when its resolved target is u
       "http://place.invalid",
     ).searchParams.get("target"),
   ).toBe(pin);
-  await act(() => router.navigate({ to: "/pea" }));
+  await act(() => router.navigate({ to: "/$route", params: { route: "pea" } }));
   fireEvent.click(screen.getByRole("button", { name: "Expand tools" }));
   fireEvent.click(screen.getByRole("button", { name: "Fans" }));
   await waitFor(() => expect(router.state.location.pathname).toBe("/fans"));
   expect(
     new URL(router.history.location.href, "http://place.invalid").searchParams.get("target"),
   ).toBe(pin);
+});
+
+test("6.1 a reopened Place keeps an exact ?target, and its URL mark witnesses it", async () => {
+  sessionStorage.clear();
+  const pin = JSON.stringify({ kind: "open", ref: { session: "s1", openId: "o1" } });
+  // The app root's search reader and the app router's codec (router.tsx).
+  const router = await mount(`/fans?fixture=layout&target=${encodeURIComponent(pin)}`, false, false, true);
+  await waitFor(() => expect(places().filter((tab) => tab.route === "fans")).toHaveLength(1));
+  fireEvent.click(await screen.findByRole("button", { name: "Open another Place on this route" }));
+  await waitFor(() => expect(places().filter((tab) => tab.route === "fans")).toHaveLength(2));
+  fireEvent.click(screen.getAllByRole("button", { name: /^Close / })[0]!);
+  await waitFor(() => expect(places().filter((tab) => tab.route === "fans")).toHaveLength(1));
+  await urlSettled();
+  expect(new URLSearchParams(router.history.location.search).get("target")).toBe(pin);
+  expect(places().map((tab) => new URL(tab.link, "http://tab.invalid").searchParams.get("target"))).toEqual([pin]);
+});
+
+test("6.1 the URL mark appears only after the Place's URL write", async () => {
+  sessionStorage.clear();
+  let search = new URLSearchParams(), held: URLSearchParams | null = null;
+  const listeners = new Set<() => void>();
+  const port = { read: () => new URLSearchParams(search), write: (next: URLSearchParams) => { held = new URLSearchParams(next); },
+    subscribe: (listener: () => void) => { listeners.add(listener); return () => void listeners.delete(listener); } };
+  const flush = () => { search = held!; held = null; listeners.forEach((listener) => listener()); };
+  let pose: ((patch: { readId: string }) => unknown) | null = null;
+  const probe = declareRoute({ ...familiesProbe.spec, panes: { probe: { title: "Probe", purpose: "URL flush", body: "scroll",
+    draw: (ctx) => { pose = ctx.page.pose; return scrollBody(<output>{ctx.page.read().readId}</output>); } } } });
+  const root = createRootRoute({ component: () => <TypedShell module={probe} fingerprint={workFingerprintSchema.parse(`builtin-closure:${"0".repeat(64)}`)} address={port} /> });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/"] }) });
+  await router.load();
+  render(<RegistryContext.Provider value={appAtomRegistry}><RouterProvider router={router} /></RegistryContext.Provider>);
+  await urlSettled();
+  act(() => void pose!({ readId: "r2" }));
+  expect(held).not.toBeNull();
+  expect(document.querySelector("[data-url-settled]")).toBeNull();
+  act(flush);
+  expect((await urlSettled()).textContent).toContain("r2");
+});
+
+test("6.1 two Places, one hidden: the shown copy is the only one that answers its name", async () => {
+  sessionStorage.clear();
+  await mount("/fans?fixture=layout");
+  await waitFor(() => expect(places().filter((tab) => tab.route === "fans")).toHaveLength(1), { timeout: 10_000 });
+  fireEvent.click(await screen.findByRole("button", { name: "Open another Place on this route" }));
+  await waitFor(() => expect(places().filter((tab) => tab.route === "fans")).toHaveLength(2), { timeout: 10_000 });
+  // Count Place copies by the kernel pane's identity: a body may reuse the name (the roster's own
+  // list section is "fans", which a CSS attribute match in jsdom takes for "Fans").
+  const roster = '[data-slot="pane"][data-pane-id="sheet-roster"]';
+  await waitFor(() => expect(document.querySelectorAll(roster)).toHaveLength(2), { timeout: 10_000 });
+  expect(screen.getAllByRole("region", { name: "Fans" })).toHaveLength(1);
+  expect(document.querySelectorAll(`${roster}${SHOWN}`)).toHaveLength(1);
+});
+
+test("6.1b first open of /fans while the document bind is pending reads as pending, never as unavailable", async () => {
+  sessionStorage.clear();
+  let drew = false;
+  const watch = new MutationObserver(() => { drew ||= document.body.textContent?.includes("Document unavailable") ?? false; });
+  watch.observe(document.body, { subtree: true, childList: true, characterData: true });
+  try {
+    // The inventory Reading is mocked pending (`useReading`), so the bind never answers here.
+    await mount("/fans");
+    await settle();
+    expect(drew).toBe(false);
+    await screen.findByText("Finding the open document");
+    expect(document.querySelector('[aria-busy="true"]:has(> [data-kind="busy"])')).not.toBeNull();
+  } finally { watch.disconnect(); }
 });

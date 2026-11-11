@@ -1,3 +1,5 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import capturedWalk from "./native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { address, canonicalRouteInput, type Caller } from "@pe/agent-contracts";
 import { Deferred, Effect } from "effect";
@@ -16,6 +18,8 @@ import { nativeFixture } from "./fans-native.fixture.ts";
 
 
 
+const terminalSubject = elementSubject(capturedWalk.nodes.find(node => node.id === 8718801)!);
+
 const closes: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const close of closes.splice(0).reverse()) await close();
@@ -31,14 +35,14 @@ async function stage(f: Awaited<ReturnType<typeof nativeFixture>>) {
     "fans",
     "human",
     [
-      { path: ["flows", "8718801", "edit"], value: { value: { cfm: 250 } } },
+      { path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 250 } } },
       { path: ["parameters", "terminalFlow", "edit"], value: { value: "revit:Flow" } },
 
     ],
     0,
   );
   if (!staged.ok) throw Error(JSON.stringify(staged));
-  const ducts = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g8718801"] } } }], 0,
+  const ducts = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g8718801"] } } }], 0,
   );
   if (!ducts.ok) throw Error(JSON.stringify(ducts));
   return { key: f.key, revision: ducts.revision };
@@ -73,7 +77,7 @@ test.each(["human", "pea"] as const)("D03/C07: %s plan shares admitted inputs, p
   closes.push(() => settle(Deferred.succeed(held, undefined).pipe(Effect.asVoid)));
   f.readPause.key = "ducts.snapshot.walk";
   f.readPause.wait = Deferred.await(held);
-  await command(f, "preview", "ducts.plan-losses", work, caller);
+  await command(f, "preview", "sheet.plan", work, caller);
   await vi.waitFor(() => expect(f.dispatched.filter((row) => row.key === "ducts.snapshot.walk")).toHaveLength(1),
     );
   const pending = f.dispatched.find((row) => row.key === "ducts.snapshot.walk")!;
@@ -108,10 +112,10 @@ test.each(["human", "pea"] as const)("D03/C07: %s plan shares admitted inputs, p
   expect((await f.saved.view({ ...f.key, route: "fans" }, "fans"))?.handle).toEqual(fans.handle);
   // The human must review its own Plan before applying a Pea-derived scope.
   if (actor === "pea") {
-    await command(f, "human-preview", "ducts.plan-losses", work);
+    await command(f, "human-preview", "sheet.plan", work);
     expect((await f.journal.wait("human-preview")).state).toBe("succeeded");
   }
-  await command(f, "commit", "ducts.apply-losses", work);
+  await command(f, "commit", "sheet.apply", work);
   const receipt = await f.journal.wait("commit");
   expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
   expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toHaveLength(1);
@@ -125,7 +129,7 @@ test("a changed SDK incarnation between plan input reads refuses without applyin
   closes.push(() => settle(Deferred.succeed(held, undefined).pipe(Effect.asVoid)));
   f.readPause.key = "ducts.snapshot.walk";
   f.readPause.wait = Deferred.await(held);
-  await command(f, "scope-changed", "ducts.plan-losses", work);
+  await command(f, "scope-changed", "sheet.plan", work);
   await vi.waitFor(() => expect(f.dispatched.filter((row) => row.key === "ducts.snapshot.walk")).toHaveLength(1),
   );
   f.sdkInput.read = async (args = []) => (await sdkSessions(args)).replaceAll("1970-01-01T00:00:01.0000000Z", "1970-01-01T00:00:02.0000000Z",
@@ -153,9 +157,9 @@ test.each(["reject", "deadline"] as const)(
       run,
       root: run,
     };
-    await command(f, "preview", "ducts.plan-losses", work, caller);
+    await command(f, "preview", "sheet.plan", work, caller);
     expect((await f.journal.wait("preview")).state).toBe("succeeded");
-    await command(f, "pea-commit", "ducts.apply-losses", work, caller);
+    await command(f, "pea-commit", "sheet.apply", work, caller);
     await vi.waitFor(() =>
       expect(f.events.some((event) => event.kind === "permission_request")).toBe(true),
     );
@@ -179,7 +183,7 @@ test("a refused native Plan retains its review without Apply authority or model 
   const f = await fixture();
   const work = await stage(f);
   f.select("fans-accessory-missing");
-  await command(f, "refused-plan", "ducts.plan-losses", work);
+  await command(f, "refused-plan", "sheet.plan", work);
   const receipt = await f.journal.wait("refused-plan");
   expect(receipt, JSON.stringify(receipt)).toMatchObject({
     state: "succeeded",
@@ -191,7 +195,7 @@ test("a refused native Plan retains its review without Apply authority or model 
   expect(receipt).not.toHaveProperty("notDispatched");
   if (receipt.state !== "succeeded") throw Error(JSON.stringify(receipt));
   expect(receipt.result).toHaveProperty("planRefusal");
-  await command(f, "refused-plan-apply", "ducts.apply-losses", work);
+  await command(f, "refused-plan-apply", "sheet.apply", work);
   expect(await f.journal.wait("refused-plan-apply")).toMatchObject({ state: "failed", refusal: { code: "ducts.plan-refused" } });
   expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toEqual([]);
   expect((await f.saved.view(f.key, "ducts"))?.revision).toBe(work.revision);
@@ -200,7 +204,7 @@ test("a refused native Plan retains its review without Apply authority or model 
 test("a stale Fans revision refuses sealed apply before native dispatch", async () => {
   const f = await fixture();
   const work = await stage(f);
-  await command(f, "preview-two", "ducts.plan-losses", work);
+  await command(f, "preview-two", "sheet.plan", work);
   expect(await f.journal.wait("preview-two")).toMatchObject({ state: "succeeded", result: { seal: { work: {
     consumed: expect.arrayContaining(["ducts", "fans"].map((route) => expect.objectContaining({
       kind: "work", probe: expect.objectContaining({ handle: expect.objectContaining({ key: expect.objectContaining({ route }) }) ,
@@ -216,17 +220,17 @@ test("a stale Fans revision refuses sealed apply before native dispatch", async 
   const fans = await f.saved.view(fansKey, "fans");
   if (!fans) throw Error("Fans Work missing");
   const changed = await f.saved.apply(fansKey, "fans", "human", [
-    { path: ["flows", "8718801", "edit"], value: { value: { cfm: 300 } } }], fans.revision,
+    { path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 300 } } }], fans.revision,
   );
   expect(changed.ok).toBe(true);
-  await f.post("/actions", { id: "stale-fans", key: "ducts.apply-losses", target: f.target,
+  await f.post("/actions", { id: "stale-fans", key: "sheet.apply", target: f.target,
     input: { work, readWorks: { fans: { key: fansKey, revision: fans.revision } } },
   });
   const receipt = await f.journal.wait("stale-fans");
   expect(receipt).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "stale_revision" } ,
   });
   expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toEqual([]);
-  await command(f, "changed-fans", "ducts.apply-losses", work);
+  await command(f, "changed-fans", "sheet.apply", work);
   const changedSeal = await f.journal.wait("changed-fans");
   expect(changedSeal).toMatchObject({ state: "failed", notDispatched: true,
     refusal: { kind: "domain", code: "preview.stale" } ,
@@ -241,7 +245,7 @@ test("H1: a canonical Fans handle beside an Address key carrying case and Save A
   expect(work.key).toMatchObject({ binding: "address", from: expect.anything() });
   const fans = (await f.saved.view({ ...f.key, route: "fans" }, "fans"))!.handle;
   const plan = async (id: string, handle: typeof fans) => {
-    await f.post("/actions", { id, key: "ducts.plan-losses", target: f.target, input: { work, readWorks: { fans: handle } } ,
+    await f.post("/actions", { id, key: "sheet.plan", target: f.target, input: { work, readWorks: { fans: handle } } ,
     });
     return f.journal.wait(id);
   };

@@ -1,8 +1,8 @@
-import type { ExecutionTarget } from "./target.ts";
 import { publicationRequest, publicationSchema } from "./value.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { ductsDocumentSchema } from "./ducts.ts";
 import { fansDocumentSchema } from "./fans.ts";
+import { subjectRefCodeSchema } from "./subject-ref.ts";
 import { z } from "zod";
 import {
   ductsRosterResponseSchema,
@@ -31,7 +31,8 @@ export const fanSheetSchema = z.object({
 export const FAN_READ_MAX = 32;
 export const fansReadArgs = z.object({
   target: documentRefSchema,
-  fan: z.union([z.literal("all"), z.array(z.string()).max(FAN_READ_MAX)]),
+  /** Fan ports as SubjectRef `UniqueId:<unit>#port:<n>` codes, decoded at this door. */
+  fan: z.union([z.literal("all"), z.array(subjectRefCodeSchema).max(FAN_READ_MAX)]),
   sheetPath: z.string().default(""),
 });
 export const fansReadRequest = publicationRequest(fansReadArgs);
@@ -49,6 +50,8 @@ export const fansSheetData = fanSheetSchema.extend({
   design: z.object({ ...fansDocumentSchema.shape, ...ductsDocumentSchema.shape }),
   fans: ductsRosterResponseSchema,
   ductsWork: ductsDocumentSchema,
+  /** The /ducts Work revision this read priced with: the Fans sheet's read-only line to the design it depends on. */
+  ductsRevision: z.number().int().nonnegative(),
   fansWork: fansDocumentSchema,
   sheetSnapshot: z.union([
     nativeResponseSchema("ducts.snapshot.walk").and(
@@ -59,12 +62,3 @@ export const fansSheetData = fanSheetSchema.extend({
 });
 export const fansReadResponse = publicationSchema(fansSheetData);
 
-/** Both clients reference this host read's contract; no browser composition adapter owns it. */
-export const fansSheetCapability = {
-  key: "fans.sheet" as const,
-  endpoint: "reads.value" as const,
-  request: (args: object, target?: ExecutionTarget) => ({ read: "fans.sheet", args: { ...args, target: target?.kind === "document" ? target.ref : target } }),
-  input: fansReadArgs.omit({ target: true }),
-  output: fansReadResponse,
-  axes: { subject: "Document", touches: ["Metadata"], effect: "Read", cost: "Cheap", cardinality: "One" } as const,
-};

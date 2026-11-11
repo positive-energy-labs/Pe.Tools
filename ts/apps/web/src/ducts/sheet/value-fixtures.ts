@@ -1,4 +1,5 @@
 import {
+  ductsRosterResponseSchema,
   ductsDesign,
   ductsDocumentSchema,
   fansDocumentSchema,
@@ -10,17 +11,18 @@ import { COLOURS_FIXTURE } from "../colours.fixture.ts";
 import { NAVIGATION_FIXTURE } from "../navigation.fixture.ts";
 import fixture from "./sheet.fixture.json";
 import { sheetState } from "./state.ts";
+import { stableFanKey } from "./model.ts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 /** Providers answer the same semantic read; selection changes never reuse a per-route seed. */
 const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly string[] }) => {
-  const rows = fixture.roster.rows.filter((row) =>
+  const rows = ductsRosterResponseSchema.parse(fixture.roster).rows.filter((row) =>
     snapshot.nodes.some((node) => node.id === row.unitId),
   );
   const requested =
     args.fan === "all"
       ? rows
-      : rows.filter((row) => args.fan.includes(`${row.uniqueId}@${row.portIndex}`));
+      : rows.filter((row) => args.fan.includes(stableFanKey(row)));
   const candidate = openFanSheetSchema.parse({
     overview: fixture.overview,
     inputs: fixture.inputs,
@@ -45,7 +47,7 @@ const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly strin
             sheet.overview.fan.portIndex === row.portIndex,
         ),
     )
-    .map((row) => `${row.uniqueId}@${row.portIndex}`);
+    .map(stableFanKey);
   const ductsWork = ductsDocumentSchema.parse({}),
     fansWork = fansDocumentSchema.parse({});
   const data = fansSheetData.parse({espOptions:null,espOptionsError:"Fixture has no native parameter options",
@@ -57,16 +59,17 @@ const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly strin
     sheetSnapshot: snapshot,
     sheetView: sheetState(open),
     ductsWork,
+    ductsRevision: 0,
     fansWork,
     design: ductsDesign(ductsWork, fansWork),
   });
   return {
     data,
     coverage: {
-      requested: requested.map((row) => `${row.uniqueId}@${row.portIndex}`),
+      requested: requested.map(stableFanKey),
       covered: opened.map(
         (sheet) =>
-          `${rows.find((row) => row.unitId === sheet.overview.fan!.unitId)!.uniqueId}@${sheet.overview.fan!.portIndex}`,
+          stableFanKey({ uniqueId: rows.find((row) => row.unitId === sheet.overview.fan!.unitId)!.uniqueId, portIndex: sheet.overview.fan!.portIndex }),
       ),
       unknown,
       refused: [],

@@ -1,5 +1,4 @@
 /** Explicit synthetic network for /ducts?fixture=navigation; production pricing builds every view. */
-import type { DuctClaim } from "@pe/agent-contracts";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { SCENE_FIXTURE } from "./scene.fixture";
@@ -30,7 +29,7 @@ function network(base: number, names: string[], x: number, label: string) {
   const group = `g${base + 1}`;
   const point = [x, 0, 12];
   const nodes: Node[] = [
-    {
+    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(base).toString(16).padStart(8, "0")}`,
       id: base,
       kind: "equipment",
       category: "Mechanical Equipment",
@@ -41,7 +40,7 @@ function network(base: number, names: string[], x: number, label: string) {
       connectors: [connector(0, [x - 4, 0, 12], base + 1)],
       facts: [{ key: "mark", text: label, unit: "", provenance: "designer-stated" }],
     },
-    {
+    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(base + 2).toString(16).padStart(8, "0")}`,
       id: base + 2,
       kind: "fitting",
       category: "Duct Fittings",
@@ -61,7 +60,7 @@ function network(base: number, names: string[], x: number, label: string) {
     end: number[],
     a: Connector,
     b: Connector,
-  ): Segment => ({
+  ): Segment => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind: "duct",
     curveKind: "line",
@@ -93,7 +92,7 @@ function network(base: number, names: string[], x: number, label: string) {
     const port = i + 1;
     const end = [x + 10 + Math.floor(i / 8) * 8, ((i % 8) - 3.5) * 4, 12];
     nodes[1]!.connectors.push(connector(port, point, branch));
-    nodes.push({
+    nodes.push({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(terminal).toString(16).padStart(8, "0")}`,
       id: terminal,
       kind: "terminal",
       category: "Air Terminals",
@@ -160,8 +159,8 @@ const snapshot: DuctSnapshot = {
     networkBasedCalculations: false,
   },
   groups: networks.map((n) => n.group),
-  nodes: networks.flatMap((n) => n.nodes),
-  segments: networks.flatMap((n) => n.segments),
+  nodes: networks.flatMap((n) => n.nodes).map((n) => ({ ...n, uniqueId: `navigation:${n.id}` })),
+  segments: networks.flatMap((n) => n.segments).map((s) => ({ ...s, uniqueId: `navigation:${s.id}` })),
   issues: networks.map((n) => n.issue),
   flows: [],
   layers: [],
@@ -177,14 +176,6 @@ const snapshot: DuctSnapshot = {
 export const NAVIGATION_FIXTURE = {
   snapshot,
   subject: null,
-  claims: {
-    "shared-plenum": {
-      title: "Shared plenum",
-      state: "unproven",
-      ids: [1002],
-      text: "AHU-1's shared plenum serves SA Office and SA Lab; its open fixture port needs review.",
-    },
-  } satisfies Record<string, DuctClaim>,
   // Straight branches need no coefficient grids. Unpriced fittings remain real production findings.
   grids: {} satisfies Grids,
 };

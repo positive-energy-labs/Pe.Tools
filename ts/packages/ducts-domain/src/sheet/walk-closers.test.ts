@@ -19,13 +19,13 @@ const port = (index: number, x: number, facing: number[], to: [number, number] |
   }) as Connector;
 
 function fixture(gapIn: number) {
-  const root = {
+  const root = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(100).toString(16).padStart(8, "0")}`,
     id: 100,
     kind: "equipment",
     facts: [],
     connectors: [port(0, 0, [1, 0, 0], [1, 0])],
   };
-  const terminal = {
+  const terminal = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(200).toString(16).padStart(8, "0")}`,
     id: 200,
     kind: "terminal",
     facts: [],
@@ -33,6 +33,7 @@ function fixture(gapIn: number) {
   };
   const duct = (id: number, a: number, b: number, connectors: Connector[]) => ({
     id,
+    uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`,
     shape: "round",
     diameterIn: 8,
     polyline: [

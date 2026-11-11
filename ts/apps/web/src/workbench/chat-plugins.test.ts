@@ -8,7 +8,7 @@ import {
   catalogWorkSpecs,
 } from "@pe/agent-contracts";
 
-import { actionPlace, actionRoute, capturedPlace, proposedRecord } from "./chat-plugins";
+import { actionPlace, actionRoute, capturedPlace, proposedRecord, receiptRoute } from "./chat-plugins";
 
 beforeAll(async () => { await publicRoutesReady; });
 
@@ -59,7 +59,7 @@ describe("chat plugin records", () => {
     );
     expect(place).toMatchObject({
       ok: true,
-      page: { workspaceId: { kind: "ids", ids: [JSON.stringify(["schedules", "schedule-42"])] } },
+      page: { workspaceId: { kind: "ids", ids: ["workspace:schedule-42"] } },
       carry: {
         work: "schedule-42",
         target: JSON.stringify({ kind: "open", ref: { session: "one", openId: "original" } }),
@@ -95,6 +95,17 @@ describe("chat plugin records", () => {
     expect(actionRoute("schedule.nonexistent")).toBeNull();
     expect(actionRoute("pod.list")).toBeNull();
     expect(actionRoute("takeoffs")).toBeNull();
+  });
+
+  it("a findings.write names the route whose Work its receipt consumed, never the first route that declares findings (gate-1ebf1fb1: 'Pea ran write in Families' on a fan port)", () => {
+    const consumed = (route: string) => ({ consumes: [{ kind: "work", probe: { handle: { key: { binding: "address", route, target: "c:/model.rvt" }, revision: 1 } } }] }) as never;
+    // Families, Fans and Ducts all carry the findings command: the key alone names no route.
+    expect(actionRoute("findings.write")).toBeNull();
+    expect(receiptRoute("findings.write", consumed("fans"))).toBe("fans");
+    expect(receiptRoute("findings.write", consumed("families"))).toBe("families");
+    // Pea's write through the findings Work handle came from no route; the line names none.
+    expect(receiptRoute("findings.write", consumed("findings"))).toBeNull();
+    expect(receiptRoute("findings.write", undefined)).toBeNull();
   });
 
   it("host-only settings receipts retain their exact member and Work without a chat document", () => {
@@ -138,7 +149,7 @@ describe("chat plugin records", () => {
       subject: "C:/Models/Original.rvt",
       place: {
         ok: true,
-        page: { workspaceId: { kind: "ids", ids: [JSON.stringify(["schedules", "schedule-42"])] } },
+        page: { workspaceId: { kind: "ids", ids: ["workspace:schedule-42"] } },
         carry: {
           work: "schedule-42",
           target: JSON.stringify({
@@ -200,6 +211,6 @@ describe("chat plugin records", () => {
       },
       { ok: true, target: { session: "original-session", document: "C:/Models/Original.rvt" } },
     );
-    expect(record).toMatchObject({ changes: 2, place: { ok: true, page: { system: {kind:"ids",ids:[JSON.stringify(["ducts-system","AHU-1"])]} } } });
+    expect(record).toMatchObject({ changes: 2, place: { ok: true, page: { system: {kind:"ids",ids:["system-name:AHU-1"]} } } });
   });
 });

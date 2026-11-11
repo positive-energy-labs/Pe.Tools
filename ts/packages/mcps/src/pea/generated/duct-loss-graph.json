@@ -105,16 +105,6 @@
       ]
     }
   },
-  "identities": {
-    "subject": {
-      "kind": "local",
-      "codec": "local"
-    },
-    "focus": {
-      "kind": "local",
-      "codec": "local"
-    }
-  },
   "readings": {
     "value": {
       "kind": "use",

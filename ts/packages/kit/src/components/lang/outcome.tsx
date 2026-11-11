@@ -1,6 +1,8 @@
 /**
  * What a verb did, after it did it: coloured mono text spending existing meaning roles (busy ink-2,
- * receipt done, refused alarm, advisory ink-2, error caution + squiggle). Never wrap a lane of
+ * receipt done, refused caution, advisory ink-2, error caution + squiggle). A refusal touched
+ * nothing, so it is not damage and never wears the one alarm (SURFACE-PHILOSOPHY I2, swatch
+ * "one alarm"); the Ban mark and the missing squiggle keep it apart from an error. Never wrap a lane of
  * these in an `ArtifactFrame`; it reports on a machine-operated object, it is not one.
  */
 import { Ban, Check, Info, LoaderCircle, TriangleAlert, type LucideIcon } from "lucide-react";
@@ -14,7 +16,8 @@ export const outcomeLineRecipe = tv({
     base: "grid grid-cols-[14px_minmax(0,auto)_minmax(0,1fr)] items-baseline gap-[7px] py-0.5 face-mono t-small tracking-[0.02em] [&>svg]:size-[11px] [&>svg]:self-center",
     icon: "",
     label: "",
-    says: "overflow-hidden text-ellipsis whitespace-nowrap t-small t-upper text-ink-2 italic",
+    // A sentence, not a section head (t-upper) or a locked value (italic): ADR 0004, ledger 2026-08-16.
+    says: "overflow-hidden text-ellipsis whitespace-nowrap t-small text-ink-2",
   },
   variants: {
     state: {
@@ -32,9 +35,9 @@ export const outcomeLineRecipe = tv({
 
 export type OutcomeKind = "busy" | "receipt" | "refused" | "advisory" | "error";
 
-const OUTCOME_TONE: Partial<Record<OutcomeKind, "done" | "alarm" | "caution">> = {
+const OUTCOME_TONE: Partial<Record<OutcomeKind, "done" | "caution">> = {
   receipt: "done",
-  refused: "alarm",
+  refused: "caution",
   error: "caution",
 };
 
@@ -50,7 +53,7 @@ export interface OutcomeLineProps {
   kind: OutcomeKind;
   /** What happened, in machine terms — mono, tabular, coloured by kind. */
   label: string;
-  /** What it means, in a person's terms. Italic, secondary, clamped to one line. */
+  /** What it means, in a person's terms: secondary ink, clamped to one line. */
   says?: string;
 }
 

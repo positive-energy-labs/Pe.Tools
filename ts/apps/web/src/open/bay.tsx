@@ -410,7 +410,7 @@ function PatchBayBody({
       from: [plan.doc.key, "jacks"],
       to: `free:${aim}`,
       dashed: true,
-      tone: draft.target ? (plan.refusal ? "alarm" : "commit") : undefined,
+      tone: draft.target ? (plan.refusal ? "caution" : "commit") : undefined,
       title: plan.verb,
     });
 
@@ -821,7 +821,7 @@ function JobList({ jobs }: { jobs: readonly PeaJob[] }) {
         lines: 2,
         label: <span data-tone="pea">{job.thread.title}</span>,
         meta: (
-          <span data-tone={job.thread.activity.state === "failed" ? "alarm" : undefined}>
+          <span data-tone={job.thread.activity.state === "failed" ? "caution" : undefined}>
             {job.thread.activity.state === "running" ? "working" : job.thread.activity.state}
           </span>
         ),

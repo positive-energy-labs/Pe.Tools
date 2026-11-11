@@ -24,9 +24,9 @@ public sealed record ProductRuntimeLayout(ProductLane Lane, string OwnerRoot, st
         return layout;
     }
 
-    /// <summary>Pure: <paramref name="ownerRoot" /> is the dev checkout or the SDK install root.</summary>
+    /// <summary>Resolve the told owner against this machine's content homes and installed namespace.</summary>
     public static ProductRuntimeLayout For(ProductLane lane, string ownerRoot, string? productHome) {
-        var root = ProductPathing.StateRoot(lane, ownerRoot, productHome);
+        var root = ProductPathing.StateRoot(lane, ownerRoot, productHome, ProductPathing.SharedRoot(), ProductPathing.DocumentsUserRoot);
         // Only an override can aim dev state at the installed namespace; refuse it where the override is read.
         if (lane == ProductLane.Dev && (Path.GetFullPath(root) + Path.DirectorySeparatorChar).StartsWith(
                 Path.GetFullPath(ProductPathing.InstalledNamespace) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))

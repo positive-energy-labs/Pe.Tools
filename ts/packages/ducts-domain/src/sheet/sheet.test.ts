@@ -44,7 +44,7 @@ const conn = (
     ...size,
   }) as Conn;
 const node = (id: number, kind: string, extra: object): Node =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind,
     category: "",
@@ -60,7 +60,7 @@ const duct = (
   polyline: number[][],
   connectors: Conn[],
 ): Segment =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind: "duct",
     curveKind: "line",
@@ -417,6 +417,8 @@ it("an open end blocks its side; a vacant opposed port within the default gap au
   expect(supply.end).toEqual({ kind: "open-end", elementId: 51, connector: 1 });
   expect(sheet.blockers.find((b) => b.id === "open-end:51:1")).toMatchObject({
     closer: { kind: "ruling" },
+    // Slice 5: a blocker names its element by the codec's UniqueId SubjectRef, minted here.
+    subject: `UniqueId:6d52156a-3876-4d76-b641-341454252f26-${(51).toString(16).padStart(8, "0")}`,
   });
   expect(sheet.totals.supply).toMatchObject({ complete: false, worstPath: null });
   // The supply's one end carries nothing, so it carries what the return delivers.

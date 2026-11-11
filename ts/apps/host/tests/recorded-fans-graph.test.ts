@@ -1,3 +1,5 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import capturedWalk from "./native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
 import { unavailableFieldOptions } from "./effect-test.ts";
 import { readFileSync, existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
@@ -44,6 +46,8 @@ import { mintBrowserContext, mintContext } from "../src/control.ts";
 import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
 import { hostOwnership } from "../src/host-ownership.ts";
+
+const terminalSubject = elementSubject(capturedWalk.nodes.find(node => node.id === 8718801)!);
 
 // Proof receipts are opt-in: a fresh checkout has no run folder, so receipts are written only where PE_FANS_PROOF_DIR names one.
 // The receipt text is still built either way, so skipping a write never skips a read the test performs.
@@ -153,7 +157,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
   const snapshot = Schema.decodeUnknownSync(Schema.Json)(raw.result ?? raw);
   const snapshotContract = await run(readSchemas("ducts.snapshot.walk"));
   if (snapshotContract) Schema.decodeUnknownSync(snapshotContract.response)(snapshot);
-  await mkdir(join(dir, "catalogs")); await writeFile(join(dir, "firm.json"), JSON.stringify(FIRM_SEED));
+  await mkdir(join(dir, "catalogs")); await mkdir(join(dir, "Firm"), { recursive: true }); await writeFile(join(dir, "Firm", "ducts.json"), JSON.stringify(FIRM_SEED));
   const writer = await run(openRecordingWriter(join(dir, "bundle"), identity, bounds));
   const inputs = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live", ...(capturing ? { captureStore: writer } : {}) }))));
   const native = Layer.succeed(HostNativeRead, {
@@ -172,7 +176,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
   let changedAt = 300;
   const markListeners = new Set<() => void>();
   const livePorts = {
-    native, files: DuctFiles.layer({ firm: join(dir, "firm.json"), catalogs: join(dir, "catalogs") }),
+    native, files: DuctFiles.layer({ firm: join(dir, "Firm"), catalogs: join(dir, "catalogs") }),
     marks: Layer.succeed(HostDocumentMarks, hostMarks({ observedSince: 100, generation: () => changedAt, changedAt: () => changedAt, subscribe: (notify) => { markListeners.add(notify); return () => { markListeners.delete(notify); }; } })),
     inventory: Layer.succeed(HostSessionInventory, { list: () => Effect.die("inventory not requested"), subscribe: () => () => {}, document: () => Effect.succeed(row),
       session: () => Effect.succeed({ sessionId: ref.session }), attachment: () => Effect.succeed({ sessionId: ref.session }) }),
@@ -195,7 +199,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
           schema: z.object({ count: z.number().default(0) }).prefault({}) } });
         if (isCold) return;
         for (const [revision, cfm] of [[0, 250], [1, 300]] as const)
-          expect(await owner.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm } } }], revision)).toMatchObject({ ok: true });
+          expect(await owner.apply(key("fans"), "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm } } }], revision)).toMatchObject({ ok: true });
         expect(await owner.apply(key("ducts"), "ducts", "human", [], 0)).toMatchObject({ ok: true });
       },
     } });
@@ -282,7 +286,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       expect(fresh.value.version).not.toBe(original.value.version);
       if (roster) expect(fresh.value.version).toBe(roster.headers.get(NATIVE_BODY_VERSION_HEADER));
       const refresh = ductsExecutors(liveFactories.service!)["ducts.refresh"]!;
-      await refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution);
+      await run(refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution) as Effect.Effect<unknown, unknown>);
       await next("stale");
       const refreshed = recovery ? await send(live, "/pe/reads/value", readBody("fans.roster", { target: ref }))
         : await send(live, "/call", { key: "ducts.snapshot.roster", request: { selector: { kind: "roster" } } });
@@ -395,8 +399,8 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       const fingerprint = workFingerprintSchema.parse(`builtin-closure:${fans.closure.fingerprint}`);
       const scope = bindWork("fans", null, undefined, ref);
       const admission = { routeKey: "fans", fingerprint };
+      // Fans' admission reads only its own Work (ruling 2026-11-10); /ducts' feed is /ducts' to admit.
       const works: ReadingRequest[] = [{ ...scope, kind: "work", admission },
-        { ...scope, route: "ducts", kind: "work", admission },
         { kind: "work-acks", work: scope, admission }];
       const all = [...works, ...coldKeys];
       const connection = crypto.randomUUID();
@@ -427,10 +431,10 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
         expect(addAll.status).toBe(200); await ready(all);
         const beforeEdit = seen.length;
         expect(await workspace!.apply(scope, "fans", "human", [{ path: ["parameters", "fanFlow", "edit"], value: { value: "PE_M_Fan_AirFlow" } }], 0)).toMatchObject({ ok: true });
-        await ready([works[0]!, works[2]!]); expect(writer.capture.truncated(), "changed Work and ack after slot edit").toBeNull();
+        await ready([works[0]!, works[1]!]); expect(writer.capture.truncated(), "changed Work and ack after slot edit").toBeNull();
         const edits = seen.slice(beforeEdit);
         expect(edits.find((frame) => frame.key === readingKey(works[0]!))?.value).toMatchObject({ revision: 1, doc: { parameters: { fanFlow: { edit: { value: "PE_M_Fan_AirFlow" } } } } });
-        expect(edits.find((frame) => frame.key === readingKey(works[2]!))).toMatchObject({ kind: "event", value: { revision: 1 } });
+        expect(edits.find((frame) => frame.key === readingKey(works[1]!))).toMatchObject({ kind: "event", value: { revision: 1 } });
         const previous = batches.flatMap((batch) => batch.add).find((key) => key.kind === "ducts-snapshot")! as Extract<ReadingRequest, { kind: "ducts-snapshot" }>;
         const selected = { ...previous, slots: { ...previous.slots, fanFlow: "PE_M_Fan_AirFlow" } };
         const beforeSelection = nativeCalls;
@@ -531,19 +535,24 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     expect(cold.headers.get("x-pe-ducts-reused")).toBe("false");
     expect(nativeCalls).toBe(beforeHit);
     await historical.dispose(); historical = undefined;
-    const fans = builtinEnrollments.find((entry) => entry.routeKey === "fans")!;
-    const fingerprint = workFingerprintSchema.parse(`builtin-closure:${fans.closure.fingerprint}`);
+    const admission = (routeKey: string) => ({ routeKey, fingerprint: workFingerprintSchema.parse(
+      `builtin-closure:${builtinEnrollments.find((entry) => entry.routeKey === routeKey)!.closure.fingerprint}`) });
+    const workKeys = (route: string, by = route) => `/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ ...key(route), kind: "work", admission: admission(by) } satisfies ReadingRequest]))}`;
+    // Each route's own feed; the reconciliation case below replays both as recorded siblings.
     for (const route of ["fans", "ducts"]) {
-      const reading: ReadingRequest = { ...key(route), kind: "work", admission: { routeKey: "fans", fingerprint } };
-      const frame = await capture(`/pe/resources?keys=${encodeURIComponent(JSON.stringify([reading]))}`, undefined, true);
+      const frame = await capture(workKeys(route), undefined, true);
       expect(frame.kind).toBe("snapshot"); expect(frame.changed).toBe(true);
       expect(frame.value.handle.key.route).toBe(route); expect(frame.value.history).toBeDefined();
     }
+    // Ruling 2026-11-10 (no cross-route write): Fans' admission seals no /ducts Work feed.
+    const foreign = await firstFrame(await send(live, workKeys("ducts", "fans")));
+    expect(foreign.kind, JSON.stringify(foreign)).toBe("failure");
+    expect(foreign.failure.code).toBe("WorkRouteMismatch");
     holdHuman = true;
     const workUrl = "/pe/route-state/fans?open=captured-chadds/chadds-open";
     const humanRead = capture(workUrl);
     await Promise.race([entered.promise, new Promise<never>((_, reject) => setTimeout(() => reject(Error("Work runner lost the actual human request context")), 10000))]);
-    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm: 400 } } }], 2)).toMatchObject({ ok: true });
+    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 400 } } }], 2)).toMatchObject({ ok: true });
     const pea: Caller = { kind: "pea", context: "occurrence-test", thread: "thread", run: { thread: "thread", turn: "1" }, root: { thread: "thread", turn: "1" } };
     const peaView = await capture(workUrl, undefined, false, pea);
     releaseHuman.resolve();
@@ -592,7 +601,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }) });
     await reread();
     const refresh = ductsExecutors(liveFactories.service!)["ducts.refresh"]!;
-    await refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution);
+    await run(refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution) as Effect.Effect<unknown, unknown>);
     await reread();
     await live.dispose();
     liveFactories.recorded = true;
@@ -735,7 +744,7 @@ test.each(["on", "off", "full", "io"] as const)("inventory consumers %s", async 
   vi.spyOn(HostInputReadSets, "layer").mockImplementation((lane) => lowCap(lane, { ...defaultReadSetLimits, childrenPerRoot: 3, openRoots: 4 }));
   const web = HttpRouter.toWebHandler(readInputRoutes(inputs, { live: { inventory, owner: new DuctsReadings(),
     native: Layer.succeed(HostNativeRead, { resolve: () => Effect.die("unexpected native"), read: () => Effect.die("unexpected native") }),
-    files: Layer.succeed(DuctFiles, { firm: Effect.die("unexpected files"), ductCatalogs: Effect.die("unexpected files") }),
+    files: Layer.succeed(DuctFiles, { firm: () => Effect.die("unexpected files"), ductCatalogs: Effect.die("unexpected files") }),
     marks: Layer.succeed(HostDocumentMarks, hostMarks({ changedAt: () => null, subscribe: () => () => {} })) },
     store: fileRouteDocumentStore(join(dir, "work")), initialize: async (owner) => { workspace = owner; } }), { disableLogger: true });
   const send = (owner: typeof web, url: string, body?: unknown) => withInvocationContext({ caller, hostBaseUrl: "http://host" }, () => owner.handler(
@@ -768,7 +777,7 @@ test.each(["on", "off", "full", "io"] as const)("inventory consumers %s", async 
     expect(listeners.size).toBe(1);
     title = "survivor"; for (const notify of listeners) notify({ kind: "state-sync", sessionId: ref.session });
     expect(await second.next()).toEqual({ kind: "snapshot", key: readingKey(inventoryReading), value: await expected() });
-    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm: 400 } } }], 0)).toMatchObject({ ok: true });
+    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 400 } } }], 0)).toMatchObject({ ok: true });
     expect(await first.next()).toMatchObject({ kind: "snapshot", key: readingKey(work), value: { revision: 1 } });
     await first.close(); first = undefined; await second.close(); second = undefined;
     expect(listeners.size).toBe(0);

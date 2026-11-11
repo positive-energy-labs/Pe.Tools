@@ -162,6 +162,8 @@ export class RouteWorkspace {
       readings: import("@pe/agent-contracts").RouteGraphJson["readings"];
       /** The admitted graph's fields: the host's attention fence reads their agent policy, never a codec. */
       fields: import("@pe/agent-contracts").AdmittedFields;
+      /** The admitted sheet slot: `sheet.plan` derives Revit writes from it (ADR 0035 rule 3). */
+      sheet: import("@pe/agent-contracts").RouteGraphJson["sheet"];
       title: string;
       address: string;
       ready: Promise<WorkFeedFailure | null>;
@@ -279,6 +281,7 @@ export class RouteWorkspace {
       readWorks: "readWorks" in bindings ? bindings.readWorks ?? [] : [],
       readings: route.data.readings,
       fields: route.data.fields,
+      sheet: route.data.sheet,
       title: route.data.name,
       address: route.data.address,
       ready,
@@ -317,7 +320,20 @@ export class RouteWorkspace {
    * address and agent policy (ADR 0030 rule 10). Withdrawal removes the row; nothing is cached.
    */
   admittedRoutes(): import("@pe/agent-contracts").AdmittedView[] {
-    return [...this.#admissions].map(([key, { title, address, fields }]) => ({ key, title, address, fields }));
+    return [...this.#admissions].map(([key, { title, address, fields, workRoute }]) => {
+      const work = this.#registry.get(workRoute)?.spec;
+      return { key, title, address, fields, ...(work ? { work } : {}) };
+    });
+  }
+
+  /** The Work spec registered for a route: a door every route shares (the sheet pair) resolves its owner here. */
+  spec(workRoute: string): RouteStateSpec<z.ZodType> | undefined {
+    return this.#registry.get(workRoute)?.spec;
+  }
+
+  /** The sheet slot of the admitted route that owns this Work, if it declares one. */
+  sheet(workRoute: string): import("@pe/agent-contracts").RouteGraphJson["sheet"] {
+    return [...this.#admissions.values()].find((value) => value.workRoute === workRoute)?.sheet;
   }
 
   requiresAdmission(workRoute: string): boolean {
@@ -732,7 +748,8 @@ export class RouteWorkspace {
   }
 
   /**
-   * Undo or redo the last step of this Work's one journal, whoever wrote it (ADR 0028 noun 4).
+   * Undo or redo the last step of this Work's one journal, whoever wrote it (ADR 0028 noun 4), or
+   * with `own` the caller's own last step, leaving the other author's (findings, ADR 0035 rule 9).
    * The restore is the same write a person's Undo sends: one `restore` revision whose inverse is
    * the redo. It refuses, writing nothing, when the step's paths changed elsewhere.
    */
@@ -742,6 +759,7 @@ export class RouteWorkspace {
     by: WorkAuthor,
     direction: "undo" | "redo",
     expectedRevision: number,
+    own = false,
   ): Promise<RouteStateWriteResult> {
     this.#authorize(direction);
     const snapshot = await this.viewUncaptured(scope, route);
@@ -755,7 +773,7 @@ export class RouteWorkspace {
     const result = await journal[direction](async (write) => {
       accepted = await this.write(scope, route, by, write);
       return accepted;
-    });
+    }, undefined, own ? by : undefined);
     return result.ok && accepted
       ? accepted
       : refuse("refused", result.ok ? "Nothing restored" : result.message, "Re-read Work history.");

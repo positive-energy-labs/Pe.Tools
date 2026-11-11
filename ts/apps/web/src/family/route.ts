@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { command, sessionCommand, queryAction, catalogAction } from "../route/typed-actions.ts";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
@@ -31,13 +32,13 @@ export const loaded = read(
   }),
 );
 export const edits = z.array(routeStatePatchSchema);
-export type { Context as FamilyContext } from "./context.generated";
+export type FamilyContext = ContextOf<typeof fields, typeof loaded, typeof import("@pe/agent-contracts").familyDraftRouteState, typeof edits>;
 export const module = route({
   key: "family",
   name: "Family",
   needs: "host",
   optionalTarget: "document",
-  host: "../../../host/src/reads/family.ts",
+  host: "./host.ts",
   directory: {
     label: "Family Foundry",
     exposure: "Main",
@@ -57,7 +58,8 @@ export const module = route({
     workspace: {
       title: "Family",
       purpose: "Review the family and its cut-sheet evidence",
-      draw: draw(() => import("./mount"), "FamilyBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./mount"), "FamilyBody"),
     },
   },
   edits: {

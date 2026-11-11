@@ -1,8 +1,5 @@
 import { useCallback, useContext, useEffect, useSyncExternalStore } from "react";
 import { RegistryContext } from "@effect/atom-react";
-import { Button } from "@pe/kit/lang/button";
-import { useList } from "@pe/kit/lang/collection";
-import { PlainList } from "@pe/kit/lang/list-view";
 import { cite, clearCitation, type SubjectReference } from "@pe/kit/lang/attention";
 import type { Pointer } from "../../../../packages/agent-contracts/src/pointers.ts";
 import { WorkbenchContext } from "#/workbench/provider/thread-summary";
@@ -13,12 +10,12 @@ const POLL_MS = 2000;
 
 /**
  * "Pea is pointing at" (ADR 0030 rule 10): this thread's pointers on this route, until dismissed.
- * Reads and dismisses through the same host-local ops Pea calls; it never writes the page's
- * selection, attention fields, URL or camera.
+ * A body cites them through the same host-local read Pea writes with; it never writes the page's
+ * selection, attention fields, URL or camera. The person-facing list was retired unmounted
+ * (2026-11-11): a person's verb on a subject is a finding (`FindingVerb`), and dismissal is Pea's.
  */
 /*
- * One read of the host's list per thread, shared by the chrome list and every body's highlight so a
- * dismissal clears both at once. The host thread meta stays the only owner; this is its last answer.
+ * One read of the host's list per thread, shared by every body's highlight. The host thread meta stays the only owner; this is its last answer.
  */
 const reads = new Map<
   string,
@@ -65,15 +62,11 @@ function usePointers(route: string) {
     [thread],
   );
   const all = useSyncExternalStore(listen, () => reads.get(thread)?.pointers ?? EMPTY);
-  return {
-    thread,
-    pointers: all.filter((p) => p.route === route),
-    setPointers: (pointers: readonly Pointer[]) => publish(thread, pointers),
-  };
+  return { pointers: all.filter((p) => p.route === route) };
 }
 
 /**
- * The highlight, mounted INSIDE the route's AttentionRoot: the route maps each pointer's place to
+ * The highlight, mounted INSIDE the route's AttentionRoot: the route maps each pointer's target to
  * its own refs and this cites them (focus null). It writes only the citation atom, never selection,
  * the URL or the camera; dismissal, a thread change or unmount clears it.
  */
@@ -82,14 +75,14 @@ export function PointerCite({
   refs,
 }: {
   route: string;
-  refs: (place: Pointer["place"]) => readonly SubjectReference[];
+  refs: (target: Pointer["target"]) => readonly SubjectReference[];
 }) {
   const registry = useContext(RegistryContext);
   const { pointers } = usePointers(route);
   const owner = `pointers:${route}`;
   const cited = pointers.flatMap((pointer) => {
     try {
-      return refs(pointer.place);
+      return refs(pointer.target);
     } catch {
       return []; // A place that does not read as this route's codec text highlights nothing.
     }
@@ -108,38 +101,4 @@ export function PointerCite({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [registry, owner, key]);
   return null;
-}
-
-export function PointerList({ route }: { route: string }) {
-  const { thread, pointers: here, setPointers } = usePointers(route);
-  const list = useList({
-    items: here,
-    keyOf: (pointer) => pointer.id,
-    search: (pointer) => ({ text: [pointer.label] }),
-    select: "none",
-  });
-  if (!here.length) return null;
-  return (
-    <PlainList
-      list={list}
-      aria-label="Pea is pointing at"
-      empty={{ message: "No pointers", exit: "Ask Pea to point at a subject" }}
-      row={(pointer) => ({
-        label: `Pea is pointing at ${pointer.label}`,
-        meta: (
-          <Button
-            label={`Dismiss ${pointer.label}`}
-            onClick={() =>
-              void callOp({ signal: new AbortController().signal }, "pointers.dismiss", {
-                thread,
-                id: pointer.id,
-              }).then((list) => setPointers(list.pointers))
-            }
-          >
-            Dismiss
-          </Button>
-        ),
-      })}
-    />
-  );
 }

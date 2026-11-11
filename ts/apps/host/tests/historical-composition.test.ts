@@ -1,3 +1,4 @@
+import { journalAt } from "./effect-test.ts";
 import { sourceProvenanceSchema, type Caller, type WorkKey } from "@pe/agent-contracts";
 import { HOST_RUNTIME_SERVICE_HEADER, HOST_RUNTIME_SERVICE_QUERY } from "@pe/host-contracts/contracts";
 import { RouteWorkspace } from "@pe/runtime";
@@ -10,7 +11,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
-import { ActionJournal } from "../src/action-journal.ts";
 import { readInputRoutes, hostInputGraph } from "../src/app.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -156,8 +156,8 @@ test("historical mutation doors refuse without append or any live graph", async 
       ["/call", { key: "revit.matrix.loaded-families", request: {} }],
       [nativeReadResolveEndpoint.path, { operationKey: "revit.matrix.loaded-families", input: {} }],
       ["/actions", { key: "families.apply.preview" }],
-      ["/actions", { key: "ducts.apply-losses" }],
-      ["/actions", { key: "ducts.plan-losses" }],
+      ["/actions", { key: "sheet.apply" }],
+      ["/actions", { key: "sheet.plan" }],
       ["/pe/route-state/fans/apply", { kind: "apply" }], ["/pe/route-state/fans/history", { direction: "undo" }],
       ["/call", { key: "pointers.point", request: {} }],
       ["/call", { key: "pointers.dismiss", request: {} }],
@@ -174,9 +174,9 @@ test("historical mutation doors refuse without append or any live graph", async 
 test("journal, Work and pointer owners refuse before storage or executor access", async () => {
   const { dir } = await bundle(); const inputs = await Effect.runPromise(hostInputs(stamp, { kind: "recording", directory: dir, at: null }));
   const journalPath = join(dir, "forbidden-journal.jsonl");
-  const journal = new ActionJournal(journalPath, Date.now); journal.bindInputContext(inputs);
+  const journal = journalAt(journalPath, Date.now); journal.bindInputContext(inputs);
   // Policy precedes even envelope decoding: no malformed or resumed command can acquire current inputs.
-  await expect(journal.invoke({ id: randomUUID(), key: "ducts.apply-losses", input: {}, target: { kind: "host" } }, { caller: human, basis: null })).rejects.toMatchObject({ problem: "recording.historical" });
+  await expect(journal.invoke({ id: randomUUID(), key: "sheet.apply", input: {}, target: { kind: "host" } }, { caller: human, basis: null })).rejects.toMatchObject({ problem: "recording.historical" });
   let storage = 0;
   const workspace = new RouteWorkspace({ registrations: [], store: { getState: async () => { storage++; return null; }, setState: async () => { storage++; } },
     authorizeMutation: (verb) => { const denied = inputs.check({ kind: "work", verb }); if (denied) throw denied; },
@@ -191,7 +191,7 @@ test("journal, Work and pointer owners refuse before storage or executor access"
   let mutations = 0; const pointers = threadPointerPort(inputs);
   pointers.bind({ read: () => ({ threadId: "t1", pointers: [] }), point: () => { mutations++; return { threadId: "t1", pointers: [] }; }, dismiss: () => { mutations++; return { threadId: "t1", pointers: [] }; } });
   expect(() => pointers.dismiss("t1", "p1")).toThrow();
-  expect(() => pointers.point("t1", { route: "/fans", label: "fan", place: {} })).toThrow();
+  expect(() => pointers.point("t1", { route: "/fans", label: "fan", target: {} })).toThrow();
   expect(storage).toBe(0); expect(mutations).toBe(0);
   expect(await readdir(dir)).not.toContain("forbidden-journal.jsonl");
 });

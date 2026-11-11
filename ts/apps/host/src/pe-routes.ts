@@ -1,5 +1,5 @@
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
-import type { DocumentRef } from "@pe/agent-contracts";
+import type { DocumentRef, Receipt } from "@pe/agent-contracts";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import {
   addressSchema,
@@ -29,6 +29,7 @@ import {
   HOST_LOG_PAGE_MAX,
 } from "@pe/agent-contracts";
 import { receiptQuerySchema } from "@pe/agent-contracts";
+import { FINDINGS_OWNER } from "@pe/agent-contracts/slots";
 
 import {
   httpRoutes as peRoutes,
@@ -94,7 +95,7 @@ import {
 import { DuctFiles } from "./ducts-files.ts";
 import { runPods } from "./family-actions.ts";
 import { familySpecAsset } from "./family-spec.ts";
-import { HostReceipts } from "./gateway-owner.ts";
+import { ActionJournalService, HostLogService } from "./receipt-services.ts";
 import { peaMcpServer } from "./harness/adapter.ts";
 import { createProviders } from "./harness/providers.ts";
 import { Spawner } from "./harness/spawner.ts";
@@ -128,7 +129,7 @@ import {
   resumeWork,
   type NavigationSources,
 } from "./navigation.ts";
-import { createNotices } from "./notices.ts";
+import { createNoticeFeed, noticeRows, type NoticeSources } from "./notice-feed.ts";
 import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
 import {
   captureDirectory,
@@ -137,8 +138,9 @@ import {
   type AdmittedPackage,
 } from "./packages.ts";
 import {
-  packagePageDescriptors,
+  pageDescriptors,
   pageFolderCollisions,
+  productPagesRoots,
   scratchPageDescriptors,
   type PageDescriptor,
 } from "./page-libraries.ts";
@@ -196,7 +198,7 @@ export interface PeRoutesOptions {
   telemetry?: ReceiptExporter;
   /** The running turn and harness behind a thread, for an agent report's stamps. */
   reportContext?: (thread: string) => AgentReportContext | null;
-  /** The log from the composing HostReceipts service. */
+  /** The log from the composing HostLogService. */
   log?: HostLog;
   ductsAnalysis?: Omit<DuctsAnalysisSources, "readWork">;
   readGraph?: (request: unknown) => Promise<unknown>;
@@ -365,6 +367,9 @@ export function createPeRoutes(options: PeRoutesOptions) {
       schema: applyBody,
       hint: "expected { patches, expectedRevision, press, kind? }",
       run: (scope: WorkKey, route: string, by: "pea" | "human", body: unknown) => {
+        // A finding's author is host-owned (ADR 0035 rule 9): only findings.write stamps `by` from the caller.
+        if (route === FINDINGS_OWNER)
+          throw Error("Findings are written through the findings.write command, which stamps the author from the caller");
         return work.write(scope, route, by, body as z.infer<typeof applyBody>);
       },
     },
@@ -373,7 +378,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
       hint: "expected { direction: undo | redo, expectedRevision }",
       run: (scope: WorkKey, route: string, by: "pea" | "human", body: unknown) => {
         const { direction, expectedRevision } = body as z.infer<typeof historyBody>;
-        return work.step(scope, route, by, direction, expectedRevision);
+        // Findings undo is per author (ADR 0035 rule 9): the host derives `own` from the route, never the client.
+        return work.step(scope, route, by, direction, expectedRevision, route === FINDINGS_OWNER);
       },
     },
   } as Record<
@@ -824,23 +830,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
     workspace: work,
     observe,
     fetch: handle,
-    completedWork: async (threadId: string) => {
-      const snapshot = await readThreadWork(work, options.navigation);
-      const pending =
-        snapshot.threads
-          .find((thread) => thread.threadId === threadId)
-          ?.works.filter((entry) => entry.unfinished > 0) ?? [];
-      return (
-        await Promise.all(
-          pending.map(async (entry) => {
-            const resumed = await resumeWork(work, entry.id, options.navigation);
-            return resumed?.url
-              ? { title: `${entry.route}: ${entry.intent}`, href: resumed.url }
-              : null;
-          }),
-        )
-      ).filter((entry) => entry !== null);
-    },
   };
 }
 
@@ -885,6 +874,8 @@ function workKey(url: URL, route: string, shape: "read" | "write"): WorkKey | Re
  */
 export function createContributionContent(options: {
   worldRoot: string;
+  /** Scratch Pages in read order; the world root's `Pages` when omitted (an isolated test world). */
+  pagesRoots?: readonly string[];
   packages?: typeof listPackages;
   pages?: (packages: readonly AdmittedPackage[]) => Promise<readonly PageDescriptor[]>;
   bootstrap?: () => Promise<unknown>;
@@ -892,6 +883,7 @@ export function createContributionContent(options: {
   decisionsPath?: string;
   changed?: () => void;
 }) {
+  const pagesRoots = options.pagesRoots ?? [join(options.worldRoot, "Pages")];
   const revisions = new Map<string, Map<string, unknown>>();
   const latest = new Map<string, unknown>();
   let snapshot: Promise<CapabilityContent> | undefined;
@@ -967,10 +959,7 @@ export function createContributionContent(options: {
     admitted = lifecycle.packages();
     const allDescriptors = options.pages
       ? await options.pages(admitted)
-      : [
-          ...(await scratchPageDescriptors(join(options.worldRoot, "Pages"))),
-          ...packagePageDescriptors(admitted),
-        ];
+      : await pageDescriptors(admitted, pagesRoots);
     const descriptors = allDescriptors.filter((p) => p.key !== null && p.openUrl !== null);
     const scratch = allDescriptors.filter((p) => p.pod === null).map((p) => p.slug);
     const collisions = pageFolderCollisions(scratch);
@@ -1112,7 +1101,7 @@ export function createContributionContent(options: {
     pages: async () => {
       const descriptors = options.pages
         ? await options.pages(admitted)
-        : await scratchPageDescriptors(join(options.worldRoot, "Pages"));
+        : await scratchPageDescriptors(pagesRoots);
       return pageRows(descriptors);
     },
     member: (key: string, sha256?: string) =>
@@ -1139,7 +1128,8 @@ function* hostPeRoutes(
   telemetry: ReceiptExporter = missingTelemetry(),
 ) {
   const runtime = yield* Effect.context<never>();
-  const receipts = yield* HostReceipts;
+  const journal = yield* ActionJournalService;
+  const hostLog = yield* HostLogService;
   const marks = yield* HostDocumentMarks;
   const pictures = yield* PictureCaptureStore;
   const files = yield* DuctFiles;
@@ -1149,6 +1139,7 @@ function* hostPeRoutes(
   let invalidateCatalog = () => {};
   const content = createContributionContent({
     worldRoot,
+    pagesRoots: productPagesRoots(),
     bootstrapInBackground: true,
     changed: () => invalidateCatalog(),
     bootstrap: async () => {
@@ -1184,12 +1175,8 @@ function* hostPeRoutes(
     });
   // Every provider is probed once in the background; the list says `unknown` until then.
   const providers = createProviders({ shellPath, spawner: yield* Spawner });
-  const stopOperationHooks = observePluginOperations(telemetry.journal, content.lifecycle.emit);
-  const receiptThreads = createThreadReceiptAdapter(
-    telemetry,
-    () => threads.receiptSnapshot(),
-    (threadId) => routes.completedWork(threadId),
-  );
+  const stopOperationHooks = observePluginOperations(journal, content.lifecycle.emit);
+  const receiptThreads = createThreadReceiptAdapter(telemetry, () => threads.receiptSnapshot());
   const routeSettings = createRouteSettings(productRouteSettingsPath());
   const threads = yield* makeHarnessThreads({
     admittedRoutes: () => routes.workspace.admittedRoutes(),
@@ -1207,7 +1194,7 @@ function* hostPeRoutes(
     providers,
     updatePending: update.automaticPending,
     root: productHarnessThreadsPath(),
-    log: receipts.log,
+    log: hostLog,
     worldRoot,
     // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
     developerInstructions: async () => peaAgentInstructions,
@@ -1247,15 +1234,15 @@ function* hostPeRoutes(
   const stopWorkContext = bridge?.subscribe(() => threads.refreshWorkContexts());
   const scheduler = createScheduledTasks({
     path: join(hostOwnership.rootPath, "state", hostOwnership.serviceName, "scheduled-tasks.json"),
-    receipts: telemetry.journal,
+    receipts: journal,
     evidence: (since, before) =>
       new Set(eligibleThreads(threads.historySnapshot(), since, before).map((t) => t.id)),
     launch: threads.launchScheduled,
   });
   const readHistory = threadHistory({
     snapshot: threads.historySnapshot,
-    receipts: telemetry.journal,
-    threadJoin: (id) => telemetry.journal.opaqueId("thread", id),
+    receipts: journal,
+    threadJoin: (id) => journal.opaqueId("thread", id),
   });
   const tasks = {
     fetch: (request: Request) =>
@@ -1268,14 +1255,109 @@ function* hostPeRoutes(
   receiptThreads
     .hydrate()
     .catch((error: unknown) => console.warn("Receipt thread context failed to hydrate", error));
-  const notices = createNotices({
-    source: { subscribe: (q, consume) => telemetry.journal.subscribe(q, consume) },
-    context: receiptThreads.context,
-    log: receipts.log,
+  const navigationSources: NavigationSources = {
+    contexts: threads.workContexts,
+    subscribe: (notify) => {
+      const releaseThreads = threads.observe({ kind: "threads" }, () => notify());
+      const releaseBridge = bridge?.subscribe(() => notify());
+      return () => {
+        releaseThreads?.();
+        releaseBridge?.();
+      };
+    },
+    routes: async () =>
+      Object.fromEntries(
+        (await podRoutes.list())
+          .filter((route) => route.trusted)
+          .map((route) => [route.workRoute, `/tool/${encodeURIComponent(route.key)}`]),
+      ),
+    threads: async () => {
+      const response = await threads.fetch(
+        new Request(peRouteUrl("threads.list", {}, hostBaseUrl)),
+      );
+      if (!response.ok) throw new Error(`Thread summaries unavailable (${response.status})`);
+      return response.json();
+    },
+    documents: async () => {
+      if (!bridge) throw new Error("No Revit bridge metadata is available");
+      // effect-edge: island, phase 5
+      const sessions = await Effect.runPromise(bridge.list);
+      return sessions.flatMap((session) =>
+        session.connected && session.sessionId
+          ? (session.state?.openDocuments ?? []).map((document) => ({
+              session: session.sessionId!,
+              openId: document.openId,
+              address: document.address ?? null,
+            }))
+          : [],
+      );
+    },
+  };
+  // The notice feed watches its sources only while someone follows it (the tray always does on
+  // the installed lane); it rebuilds once per change, from caches its subscription keeps.
+  const noticeCache: {
+    receipts: Map<string, NoticeSources["receipts"][number]>;
+    works: NoticeSources["works"];
+  } = { receipts: new Map(), works: [] };
+  const notices = createNoticeFeed({
+    build: () => {
+      let machine: NoticeSources["machine"] = null;
+      try {
+        machine = hostMachineFace.current();
+      } catch {
+        // No Machine owner yet (boot) or any more (shutdown): no machine rows, never a guess.
+      }
+      return {
+        id: hostLog.last,
+        rows: noticeRows(
+          {
+            threads: threads.historySnapshot(),
+            receipts: [...noticeCache.receipts.values()],
+            works: noticeCache.works,
+            machine,
+          },
+          Date.now(),
+        ),
+      };
+    },
+    subscribe: (changed) => {
+      const receipt = (r: Receipt) => {
+        if (r.body.kind !== "action") return;
+        noticeCache.receipts.set(r.body.value.id, { revision: r.revision, action: r.body.value });
+        changed();
+      };
+      const readWorks = () =>
+        void readNavigation(routes.workspace, navigationSources)
+          .then((snapshot) => {
+            noticeCache.works = snapshot.works;
+            changed();
+          })
+          .catch((error) => console.warn("Notice feed: Works unread", error));
+      const releases = [
+        journal.subscribe({ kinds: ["action"] }, receipt),
+        threads.observe({ kind: "threads" }, changed) ?? (() => {}),
+        routes.workspace.subscribeUncaptured(readWorks),
+        bridge?.subscribe(readWorks) ?? (() => {}),
+      ];
+      try {
+        releases.push(hostMachineFace.observe(() => changed()));
+      } catch {
+        // The Machine owner is built after these routes; a follower before it sees no machine rows.
+      }
+      void journal
+        .read({ kinds: ["action"] })
+        .then((rows) => rows.forEach(receipt))
+        .catch((error) => console.warn("Notice feed: receipts unread", error));
+      readWorks();
+      return () => {
+        releases.forEach((release) => release());
+        noticeCache.receipts.clear();
+      };
+    },
   });
   // The owner itself is built by the caller's scope (`MachineOwner.layer`); routes reach it late-bound.
   const machineSpec = {
-    sources: machineSources(receipts, bridge, providers, update, share, threads.heads),
+    sources: machineSources(journal, bridge, providers, update, share, threads.heads),
     options: {
       fault: (fault) =>
         telemetry.track(
@@ -1305,7 +1387,7 @@ function* hostPeRoutes(
   invalidateCatalog = () => catalog.invalidate();
   const hostObserve = hostResourceObserver(
     bridge,
-    () => receipts.journal,
+    () => journal,
     captures ? () => captures : undefined,
     hostBaseUrl,
     undefined,
@@ -1355,44 +1437,7 @@ function* hostPeRoutes(
         // effect-edge: island, phase 5
         return Effect.runPromise(bridge.invoke(operation, input, ref.session, ref.openId));
       }),
-    navigation: {
-      contexts: threads.workContexts,
-      subscribe: (notify) => {
-        const releaseThreads = threads.observe({ kind: "threads" }, () => notify());
-        const releaseBridge = bridge?.subscribe(() => notify());
-        return () => {
-          releaseThreads?.();
-          releaseBridge?.();
-        };
-      },
-      routes: async () =>
-        Object.fromEntries(
-          (await podRoutes.list())
-            .filter((route) => route.trusted)
-            .map((route) => [route.workRoute, `/tool/${encodeURIComponent(route.key)}`]),
-        ),
-      threads: async () => {
-        const response = await threads.fetch(
-          new Request(peRouteUrl("threads.list", {}, hostBaseUrl)),
-        );
-        if (!response.ok) throw new Error(`Thread summaries unavailable (${response.status})`);
-        return response.json();
-      },
-      documents: async () => {
-        if (!bridge) throw new Error("No Revit bridge metadata is available");
-        // effect-edge: island, phase 5
-        const sessions = await Effect.runPromise(bridge.list);
-        return sessions.flatMap((session) =>
-          session.connected && session.sessionId
-            ? (session.state?.openDocuments ?? []).map((document) => ({
-                session: session.sessionId!,
-                openId: document.openId,
-                address: document.address ?? null,
-              }))
-            : [],
-        );
-      },
-    },
+    navigation: navigationSources,
     capabilityCatalog: catalog,
     contributionRead: async (key, hash) => {
       await content.read();
@@ -1406,7 +1451,7 @@ function* hostPeRoutes(
       hostObserve(request, publish, after),
     markReadings: markReadings(marks, (ref, key, at) => ref ? runPods({}, Effect.provide(marks.readFrame(ref, key, at), runtime)) : Promise.resolve(null)),
     telemetry,
-    log: receipts.log,
+    log: hostLog,
     reportContext: threads.reportContext,
   });
   const podRoutes = createPodRoutes(content.lifecycle, { workspace: routes.workspace, bridge });
@@ -1526,7 +1571,7 @@ export const peRoutesLayer = (
         acquired: machineAcquisition,
         acquiredSession: machineSessionAcquisition,
       });
-      const unbindRevoke = bridge ? bindRevoke((yield* HostReceipts).journal, bridge) : undefined;
+      const unbindRevoke = bridge ? bindRevoke(yield* ActionJournalService, bridge) : undefined;
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           unbindRevoke?.();

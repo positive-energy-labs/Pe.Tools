@@ -6,10 +6,10 @@ import type { DuctSnapshot } from "./types.ts";
 
 const snapshot = {
   nodes: [
-    { id: 1, kind: "equipment", family: "AHU", type: "Coil", connectors: [] },
-    { id: 20, kind: "fitting", family: "Elbow", type: "Radius", connectors: [{ size: '12"ø' }] },
-    { id: 21, kind: "fitting", family: "Elbow", type: "Radius", connectors: [{ size: '8"ø' }] },
-    { id: 30, kind: "terminal", family: "Grille", type: "G1", connectors: [] },
+    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,  id: 1, kind: "equipment", family: "AHU", type: "Coil", connectors: [] },
+    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(20).toString(16).padStart(8, "0")}`,  id: 20, kind: "fitting", family: "Elbow", type: "Radius", connectors: [{ size: '12"ø' }] },
+    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(21).toString(16).padStart(8, "0")}`,  id: 21, kind: "fitting", family: "Elbow", type: "Radius", connectors: [{ size: '8"ø' }] },
+    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(30).toString(16).padStart(8, "0")}`,  id: 30, kind: "terminal", family: "Grille", type: "G1", connectors: [] },
   ],
   segments: [
     { id: 10, kind: "duct", type: "Round Duct", size: '12"ø' },

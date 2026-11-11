@@ -14,7 +14,7 @@ import { Scroll } from "@pe/kit/lang/scroll";
 import { Fragment, useMemo, useState } from "react";
 import { BlockerRow } from "./blocker-row";
 import type { Closer } from "./closer";
-import { fanKey, fanLabel, pressure, stableFanKey, type FanPort } from "./model";
+import { fanLabel, pressure, stableFanKey, type FanPort } from "./model";
 import {
   isConsequence,
   presentIds,
@@ -25,7 +25,8 @@ import {
   type Tier,
 } from "./tiers";
 import type { LedgerProps, RosterProps } from "./types";
-import { Worksheet } from "./worksheet-table";
+import { branchesKnown, Worksheet } from "./worksheet-table";
+import { FindingVerb } from "#/route/slots/findings/verb";
 
 const rosterState = (row: FanPort) =>
   row.complete
@@ -46,19 +47,18 @@ export function Roster({ props }: { props: RosterProps }) {
     persist: props.address,
     sorts: { name: (fan: FanPort) => fan.mark },
     ...(props.value ? { value: props.value, rowsOf: () => props.roster } : { items: props.roster }),
-    keyOf: fanKey,
+    keyOf: stableFanKey,
     search: rosterSearch,
     select: "multi",
     state: {
       ...listState,
-      selected: props.roster.filter((row) => props.picked?.includes(stableFanKey(row))).map(fanKey),
+      selected: props.roster.filter((row) => props.picked?.includes(stableFanKey(row))).map(stableFanKey),
     },
     onState: (next) => setListState({ ...next, selected: [] }),
     onPick: (row) => props.open(row),
     refusalOf: () => wait,
   });
   // A blank firm tag falls back to the unit's Mark or family; a name shared by two units (Chadds
-  // has two FC-23s) is told apart by level, system or order (fanLabel), never by an id.
   const nameOf = props.nameOf;
   const unitName = (fan: FanPort) => fan.mark || nameOf(fan.unitId);
   const named = useMemo(
@@ -71,13 +71,19 @@ export function Roster({ props }: { props: RosterProps }) {
     label: labelOf(fan),
     aside: fan.kind,
     meta: (
-      <span className="face-mono t-small">
+      // Incomplete is partial work with open blockers, not calm: caution's own word ("partial"),
+      // so it no longer reads like "not computed" (I2: blocking state reads on the row; I3).
+      <span
+        className="face-mono t-small"
+        data-tone={fan.complete === false || (fan.blockerCount ?? 0) > 0 ? "caution" : undefined}
+      >
         {rosterState(fan)}
         {fan.blockerCount == null ? "" : ` · ${fan.blockerCount} open`}
       </span>
     ),
     revit: [fan.unitId],
     title: `Open ${labelOf(fan)}`,
+    actions: <FindingVerb subject={stableFanKey(fan)} name={labelOf(fan)} write={props.finding} />,
   });
   // The roster pane clips; the list scrolls in its own Scroll, as the /ducts systems pane does.
   return (
@@ -115,8 +121,8 @@ function Sides({ props }: { props: LedgerProps }) {
   if (!fan || !totals)
     return props.busy || props.loading ? null : <p className="t-small text-ink-2">No fan open.</p>;
   const currentEsp = props.inputs?.units[String(fan.unitId)]?.esp;
+  const ws = props.sheet?.worksheet;
   // One aligned overview: the required ESP line, then a side per row with fixed numeric columns,
-  // so the numbers read down a column instead of wrapping as run-on sentences.
   return (
     <section aria-label="Required ESP" className="flex flex-col gap-1" data-sheet-esp="">
       <h3 className="t-head">
@@ -140,7 +146,8 @@ function Sides({ props }: { props: LedgerProps }) {
           {pressure(currentEsp ? currentEsp.value : fan.ratedEspInWg)}
         </span>
       </div>
-      <div className="t-small grid grid-cols-[4rem_5.5rem_repeat(2,minmax(0,6rem))] gap-x-3">
+      {/* L3: one line per cell, ellipsized at the last second; heads never break mid-word. */}
+      <div className="t-small grid grid-cols-[4rem_auto_repeat(2,minmax(0,6rem))] gap-x-3 [&_span]:truncate">
         <span className="contents">
           <span />
           <span />
@@ -150,10 +157,13 @@ function Sides({ props }: { props: LedgerProps }) {
         {(["supply", "return"] as const).map((side) => (
           <span key={side} className="contents" data-side={side}>
             <span>{side}</span>
+            {/* F1: a side counts its known branches and names a worst only over complete ones. */}
             <span className={totals[side].complete ? "" : "text-ink-2"}>
-              {totals[side].complete ? "complete" : "incomplete"}
+              {ws ? branchesKnown(ws[side].runs) : totals[side].complete ? "complete" : "incomplete"}
             </span>
-            <span className="face-mono text-right">{pressure(totals[side].worstPath)}</span>
+            <span className="face-mono text-right">
+              {pressure(totals[side].worstPath ?? ws?.[side].worstKnownInWg)}
+            </span>
             <span className="face-mono text-right">{pressure(totals[side].allowanceInWg)}</span>
           </span>
         ))}
@@ -175,7 +185,6 @@ function TierGroup({
   props: LedgerProps;
 }) {
   // The batch runs each row's closer with no typed value: the firm shim for drops, the pair for
-  // joins and heals; rows that need a typed number stay refused and are left to their row.
   const closers: Closer[] = blockers.map((b) => props.closerOf(b, null));
   const live = closers.filter((c) => c.refusal == null);
   const batch =
@@ -259,7 +268,7 @@ export function Ledger({ props }: { props: LedgerProps }) {
   return (
     <div className="flex flex-col gap-3 p-2" data-sheet-ledger="">
       {props.error && (
-        <p role="alert" data-tone="alarm">
+        <p role="alert" data-tone="caution">
           {props.error}
         </p>
       )}

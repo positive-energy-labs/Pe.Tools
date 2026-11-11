@@ -1,10 +1,10 @@
 import {
   AttentionDocument,
-  elementKey,
   useMembers,
   useMention,
   type SubjectKey,
 } from "@pe/kit/lang/attention";
+import { useElementIndex } from "#/element-index";
 import type { SystemNote } from "../../system-list-search";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList, ListView, listColumns } from "@pe/kit/lang/list-view";
@@ -101,9 +101,10 @@ const splitKey = (split: Split, piece: string): SubjectKey =>
   `split:${split.rows.at(-1)?.id}/${piece}`;
 function useSplitMembers(split: Split, pieces: readonly { key: string; ids: readonly number[] }[]) {
   const doc = useContext(AttentionDocument) ?? "";
+  const elements = useElementIndex();
   const members = useMemo(
-    () => new Map(pieces.map((piece) => [splitKey(split, piece.key), piece.ids.map(elementKey)])),
-    [split, pieces],
+    () => new Map(pieces.map((piece) => [splitKey(split, piece.key), elements.keysOf(piece.ids)])),
+    [split, pieces, elements],
   );
   useMembers(doc, members);
 }
@@ -693,7 +694,7 @@ function RulePick({ row, work, priced }: { row: BarRow; work: LossesWork; priced
         </>
       )}
       {error ? (
-        <p role="alert" data-tone="alarm">
+        <p role="alert" data-tone="caution">
           {error}
         </p>
       ) : null}

@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { command } from "../route/typed-actions.ts";
 import { bindings } from "./bindings";
 import { read } from "../route/defaults";
@@ -23,12 +24,12 @@ export const loaded = read(
   (page: { view: string }) => ({ view: page.view }),
 );
 export const edits = z.array(routeStatePatchSchema);
-export type { Context as RoomsContext } from "./context.generated";
+export type RoomsContext = ContextOf<typeof fields, typeof loaded, typeof import("@pe/agent-contracts").roomsRouteState, typeof edits>;
 export const module = route({
   key: "rooms",
   name: "Rooms",
   needs: "project",
-  host: "../../../host/src/reads/rooms.ts",
+  host: "./host.ts",
   directory: {
     label: "Manual J",
     exposure: "Preview",
@@ -49,7 +50,8 @@ export const module = route({
       title: "Rooms",
       purpose: "Choose a level and inspect its rooms",
       bindings,
-      draw: draw(() => import("./mount"), "RoomsBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./mount"), "RoomsBody"),
     },
   },
   edits: {

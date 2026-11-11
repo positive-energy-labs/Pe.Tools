@@ -5,14 +5,9 @@ import {
   workKeySchema,
   bindWork,
   NATIVE_BODY_VERSION_HEADER,
-  nativeOutputSchema,
-  nativeOutputAssets,
-  type NativeReadOutput,
 } from "@pe/agent-contracts";
-import { nativeRequestSchema } from "@pe/host-contracts/decoders";
-import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import type { HostOperationKey, OpRequestOf } from "@pe/host-contracts/operation-types";
-import { leaf, read, type Read, type InputPort, RefusedPartition } from "./evaluator.ts";
+import type { HostOperationKey } from "@pe/host-contracts/operation-types";
+import { leaf, read, nativeArgs, nativeRead, type InputPort, RefusedPartition } from "./evaluator.ts";
 import type { RouteWorkspace, WorkReadContext } from "@pe/runtime";
 import type { HostMarks } from "../document-marks.ts";
 import type { WorkInputRunner } from "../work-inputs.ts";
@@ -20,78 +15,7 @@ import type { InputConsumption } from "../input-occurrence.ts";
 import { BridgeError } from "../bridge.ts";
 import { BridgeError as InputBridgeError } from "@pe/host-internal/dispatch";
 
-export const documentMark = {
-  ...leaf(
-    "document-mark",
-    documentRefSchema,
-    z.object({
-      observedSince: z.number(),
-      changedAt: z.number().nullable(),
-      generation: z.number().int().nonnegative(),
-    }),
-  ),
-  fence: true,
-};
 const targetSchema = z.union([documentRefSchema, executionTargetSchema]);
-const nativeArgs = z.object({
-  key: z.string(),
-  request: z.unknown(),
-  target: executionTargetSchema,
-  version: z.string().optional(),
-  role: z.enum(["acquire", "validate", "join", "beyond", "none"]),
-});
-const nativeLeaf = leaf(
-  "native",
-  nativeArgs,
-  z.object({ body: z.unknown(), version: z.string().nullable() }),
-  false,
-);
-const cache = new Map<string, unknown>();
-/** Handles project their request, response and admission from the checked-in C# catalog. */
-type NativeArgs<K extends HostOperationKey> = {
-  request: OpRequestOf<K>;
-  target: z.output<typeof executionTargetSchema>;
-  version?: string;
-  role: "acquire" | "validate" | "join" | "beyond" | "none";
-};
-type NativeValue<K extends HostOperationKey> = {
-  body: NativeReadOutput<K>;
-  version: string | null;
-};
-export const assetFile = leaf(
-  "file:capture",
-  z.string().regex(/^[0-9a-f]{64}$/),
-  z.string().regex(/^[0-9a-f]{64}$/),
-  false,
-);
-export function nativeRead<K extends HostOperationKey>(
-  key: K,
-): Read<NativeArgs<K>, NativeValue<K>> {
-  if (cache.has(key)) return cache.get(key) as Read<NativeArgs<K>, NativeValue<K>>;
-  const input = nativeArgs.omit({ key: true }).extend({ request: nativeRequestSchema(key) });
-  const output = z.object({ body: nativeOutputSchema(key), version: z.string().nullable() });
-  const operation = hostOpCatalog.find((op) => op.key === key);
-  if (
-    !operation ||
-    operation.intent !== "Read" ||
-    !(operation.effect === "Read" || (operation.effect === "TransactRead" && operation.rollsBack))
-  )
-    throw Error(`Input is not a catalog Read/Read: ${key}`);
-  const handle = read(`input.native.${key}`, {
-    input,
-    output,
-    async run(ctx, args) {
-      const target = args.target;
-      const ref = target.kind === "document" ? target.ref : null;
-      if (ref) await ctx.read(documentMark, ref);
-      const value = output.parse(await ctx.read(nativeLeaf, { ...args, key }));
-      for (const sha of nativeOutputAssets(key, value.body)) await ctx.read(assetFile, sha);
-      return value;
-    },
-  });
-  cache.set(key, handle);
-  return handle;
-}
 export const workBinding = leaf(
   "work-scope",
   z.object({
@@ -148,15 +72,8 @@ export function inputPort(options: {
       if (custom)
         return custom(raw, {
           ...port,
-          take: async (key, args) => {
-            if (!context) return port.take(key, args);
-            if (key === "native") {
-              const input = nativeArgs.parse(args);
-              const definition = nativeRead(input.key as HostOperationKey);
-              return context.read(definition, definition.input.parse(input));
-            }
-            return context.read(leaf(key, z.unknown(), z.unknown()), args);
-          },
+          take: async (key, args) =>
+            context ? context.read(leaf(key, z.unknown(), z.unknown()), args) : port.take(key, args),
         });
       if (name === "resource") return source.resource(raw);
       if (name.startsWith("local:")) return source.file(name, raw);
@@ -188,6 +105,8 @@ export function inputPort(options: {
       }
       if (name === "native") {
         const args = nativeArgs.parse(raw);
+        // The port is the boundary: a hand-built native leaf meets the same catalog Read check.
+        nativeRead(args.key as HostOperationKey);
         let response: Response;
         try {
           response = await source.call(
@@ -195,7 +114,7 @@ export function inputPort(options: {
             args.request,
             args.target,
             args.version,
-            args.role,
+            args.role ?? "none",
           );
         } catch (error) {
           if (

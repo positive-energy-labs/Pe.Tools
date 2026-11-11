@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vite-plus/test";
 import {
@@ -9,13 +7,12 @@ import {
   census,
   identity,
   walk,
-  root,
   syntax,
 } from "./unification-2-census.ts";
 import baseline from "./unification-2.baseline.json" with { type: "json" };
 import "./unification-pane-bodies.law.ts";
 
-const { legacyBuiltinRoutes, ...offenderBaseline } = baseline;
+const offenderBaseline = baseline;
 
 describe("unification 2 offender identities", () => {
   it("rejects added identities against baseline and committed floors", () => {
@@ -60,31 +57,4 @@ describe("unification 2 offender identities", () => {
     expect(sites("const a = 1;\nconst b = 1;")).toEqual(sites("\nconst a = 1;\n\nconst b = 1;"));
     expect(new Set(sites("const a = 1; const b = 1;")).size).toBe(2);
   });
-});
-
-it("the private legacy route roster can only shrink", () => {
-  const source = syntax(
-    readFileSync(resolve(root, "ts/apps/web/src/shell/legacy-route-door.ts"), "utf8"),
-  );
-  const declaration = source.statements
-    .filter(ts.isVariableStatement)
-    .flatMap((statement) => [...statement.declarationList.declarations])
-    .find((declaration) => declaration.name.getText(source) === "legacyBuiltinKeys");
-  expect(declaration?.initializer && ts.isArrayLiteralExpression(declaration.initializer)).toBe(
-    true,
-  );
-  if (!declaration?.initializer || !ts.isArrayLiteralExpression(declaration.initializer))
-    throw Error("Missing literal legacy route roster");
-  const keys = declaration.initializer.elements.map((element) => {
-    if (!ts.isStringLiteral(element)) throw Error("Legacy keys must be literal identities");
-    return element.text;
-  });
-  expect(new Set(keys).size).toBe(keys.length);
-  expect(keys.filter((key) => !legacyBuiltinRoutes.includes(key))).toEqual([]);
-  for (const floor of baselineFloors()) {
-    if (floor.legacyBuiltinRoutes)
-      expect(
-        legacyBuiltinRoutes.filter((key) => !floor.legacyBuiltinRoutes!.includes(key)),
-      ).toEqual([]);
-  }
 });

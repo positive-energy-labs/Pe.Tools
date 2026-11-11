@@ -117,7 +117,6 @@
       "share": true,
       "agent": "set",
       "cardinality": "many",
-      "identity": "subject",
       "picker": {
         "reading": "roster",
         "options": "subject"
@@ -203,16 +202,6 @@
       "kinds": [
         "focus"
       ]
-    }
-  },
-  "identities": {
-    "subject": {
-      "kind": "local",
-      "codec": "local"
-    },
-    "focus": {
-      "kind": "local",
-      "codec": "local"
     }
   },
   "subject": {
@@ -326,6 +315,26 @@
       "refresh": "dependencies"
     }
   },
+  "sheet": {
+    "draft": true,
+    "bindings": {
+      "criteria": {
+        "kind": "store",
+        "store": "_PE_DuctLosses",
+        "per": "subject",
+        "min": 0
+      },
+      "designFriction": {
+        "kind": "local",
+        "per": "route",
+        "label": "Design friction",
+        "unit": "in-wg/100 ft",
+        "default": 0.08,
+        "min": 0,
+        "digits": 3
+      }
+    }
+  },
   "verbs": {
     "losses": {
       "kind": "command",
@@ -338,6 +347,7 @@
         ],
         "work": [
           "criteria",
+          "designFriction",
           "kinds",
           "writeIntent",
           "assumptions",
@@ -345,7 +355,6 @@
           "catalogs",
           "ruleAssignments",
           "subject",
-          "claims",
           "labelParameter",
           "workingPhase",
           "systemColours"
@@ -357,7 +366,7 @@
       "captures": [
         "value"
       ],
-      "entry": "ducts.apply-losses",
+      "entry": "sheet.apply",
       "intent": "losses"
     },
     "heal": {
@@ -371,6 +380,7 @@
         ],
         "work": [
           "criteria",
+          "designFriction",
           "kinds",
           "writeIntent",
           "assumptions",
@@ -378,7 +388,6 @@
           "catalogs",
           "ruleAssignments",
           "subject",
-          "claims",
           "labelParameter",
           "workingPhase",
           "systemColours"
@@ -404,6 +413,7 @@
         ],
         "work": [
           "criteria",
+          "designFriction",
           "kinds",
           "writeIntent",
           "assumptions",
@@ -411,7 +421,6 @@
           "catalogs",
           "ruleAssignments",
           "subject",
-          "claims",
           "labelParameter",
           "workingPhase",
           "systemColours"
@@ -488,6 +497,18 @@
         "assign"
       ]
     },
+    "design": {
+      "label": "Design",
+      "purpose": "Stage the design criteria and friction rate over the firm file",
+      "draws": [
+        "value"
+      ],
+      "verbs": [
+        "losses",
+        "heal",
+        "assign"
+      ]
+    },
     "e-inbox": {
       "label": "Rulings",
       "purpose": "Review assumptions and planned writes",
@@ -532,20 +553,33 @@
           },
           {
             "kind": "split",
-            "id": "scope-lower",
+            "id": "design-lower",
             "axis": "v",
-            "size": 176,
+            "size": 220,
             "children": [
               {
-                "kind": "pane",
-                "id": "e-rules-all"
+                "kind": "split",
+                "id": "scope-lower",
+                "axis": "v",
+                "size": 176,
+                "children": [
+                  {
+                    "kind": "pane",
+                    "id": "e-rules-all"
+                  },
+                  {
+                    "kind": "pane",
+                    "id": "e-rules"
+                  }
+                ],
+                "sized": "start"
               },
               {
                 "kind": "pane",
-                "id": "e-rules"
+                "id": "design"
               }
             ],
-            "sized": "start"
+            "sized": "end"
           }
         ],
         "sized": "end"
@@ -595,6 +629,7 @@
         "e-rules-all",
         "e-rules",
         "e-picture",
+        "design",
         "e-inbox"
       ],
       "verbs": [

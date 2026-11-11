@@ -215,7 +215,7 @@ public static class Rooms
             bool touched = Touched(provenance, loops);
             var fields = TakeoffCarriers.ReadRoomFields(fr);
             regions.Add(new RoomsRegion(
-                fr.Id.Value(), guid, view.Name, view.GenLevel.Name,
+                fr.Id.Value(), fr.UniqueId, guid, view.Name, view.GenLevel.Name,
                 role switch
                 {
                     TakeoffCarriers.RoleZoningRegion => "zone",

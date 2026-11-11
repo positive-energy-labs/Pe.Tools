@@ -1,3 +1,5 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { journalAt } from "./effect-test.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -57,6 +59,7 @@ const admission = {
   routeKey: "fans",
   fingerprint: workFingerprintSchema.parse(`builtin-closure:${fans.closure.fingerprint}`),
 };
+const terminalSubject = elementSubject({ uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000004" });
 const key = bindWork("fans", address("C:\\Models\\A.rvt"));
 const other = bindWork("fans", address("C:\\Models\\B.rvt"));
 const identity = { build: "build-1", catalog: nativeCatalogIdentity() };
@@ -152,7 +155,7 @@ test("a recorded workspace with no store serves the delivered Work, feed and his
         key,
         "fans",
         "human",
-        [{ path: ["flows", "4", "edit"], value: { value: { cfm } } }],
+        [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm } } }],
         revision,
       ),
     ).toMatchObject({ ok: true });
@@ -200,7 +203,7 @@ test("a recorded workspace with no store serves the delivered Work, feed and his
       key,
       "fans",
       "human",
-      [{ path: ["flows", "4", "edit"], value: { value: { cfm: 1 } } }],
+      [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 1 } } }],
       2,
     ),
   ).rejects.toThrow("recorded workspace refuses Work edit");
@@ -276,7 +279,7 @@ async function instrumented(capture: import("@pe/runtime").WorkReadCapture) {
         key,
         "fans",
         "human",
-        [{ path: ["flows", "4", "edit"], value: { value: { cfm: 100 + revision } } }],
+        [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 100 + revision } } }],
         revision++,
       ),
     ).toMatchObject({ ok: true });
@@ -566,7 +569,7 @@ test("two request contexts cross the Work queue with reverse capture completion;
     key,
     "fans",
     "human",
-    [{ path: ["flows", "4", "edit"], value: { value: { cfm: 7 } } }],
+    [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 7 } } }],
     0,
   );
   expect(await live.view(key, "fans", pea.context)).toMatchObject({ revision: 1 });
@@ -653,7 +656,7 @@ test("command Work reads carry context through binding and revalidation", async 
     store: memory(),
     capture: capturedWorkReads(writer, run),
   });
-  const journal = new ActionJournal(join(dir, "journal.json"), Date.now);
+  const journal = journalAt(join(dir, "journal.json"), Date.now);
   const request = await consumer({ kind: "live", captureStore: writer });
   journal.bindCommands({
     work: workspace,
@@ -663,13 +666,13 @@ test("command Work reads carry context through binding and revalidation", async 
     }),
     probe: async () => true,
     resolve: () => ({
-      definition: commands["ducts.plan-losses"],
+      definition: commands["sheet.plan"],
       prepared: z.unknown(),
       bind: async (ctx) => {
         await ctx.selectWork(tools.ducts.work, { key: commandWorkKey, revision: 0 });
         return { prepare: async () => null, effects: [] };
       },
-      run: async () => ({
+      run: () => Effect.succeed({
         previewOnly: true,
         derivedRequest: {},
         seal: {
@@ -687,7 +690,7 @@ test("command Work reads carry context through binding and revalidation", async 
   await journal.invoke(
     {
       id,
-      key: "ducts.plan-losses",
+      key: "sheet.plan",
       target: { kind: "document", ref: { session: "s", openId: "open" } },
       input: { work: { key: commandWorkKey, revision: 0 } },
     },

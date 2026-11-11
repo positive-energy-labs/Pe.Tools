@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { createHash } from "node:crypto";
 import { type DocumentMarks, type DocumentRef } from "./document-marks.ts";
 import { lifetime } from "./document-lifetime.ts";
@@ -12,6 +13,7 @@ import {
   workHandleSchema,
   workBinding,
   tools,
+  ANY_ROUTE,
   type Tool,
   type WorkHandle,
   type WriteSeal,
@@ -84,13 +86,21 @@ const workSpec = (
   registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>,
 ) =>
   (registeredWork ?? (tools[route as keyof typeof tools] as Tool)?.work) as WorkSpec;
+type Workspace = { spec(route: string): import("@pe/agent-contracts").RouteStateSpec<z.ZodType> | undefined };
+/** A door bound to one owner has its spec at boot; `ANY_ROUTE` (the sheet pair) resolves the handle's owner. */
+const specFor = (route: string, fixed: WorkSpec | undefined, workspace?: Workspace) => (handle: WorkHandle) => {
+  if (route !== ANY_ROUTE) return fixed!;
+  const spec = workspace?.spec(handle.key.route) ?? workSpec(handle.key.route);
+  if (!spec) throw refused(`No Work is registered for route ${handle.key.route}`, "work.unavailable");
+  return spec as WorkSpec;
+};
 
 /** Primitive 1 on the host: admit the Work to its document, read the authored cells, derive the input. */
 async function deriveFromWork(
   ctx: CommandContext,
   definition: import("@pe/agent-contracts").Command,
   hooks: WorkIntentBinding,
-  spec: WorkSpec,
+  specOf: (handle: WorkHandle) => WorkSpec,
   bridge: RevitBridge["Service"],
   deps: { sdk?: SdkReceiptReader },
 ) {
@@ -104,6 +114,8 @@ async function deriveFromWork(
   )?.address;
   if (!workBinding(work.key).admits(target, address, hooks.workspace))
     throw refused("Work belongs to another document", "work.target");
+  // Foreign Work refuses before any owner lookup (an ANY_ROUTE door resolves its owner's spec here).
+  const spec = specOf(work);
   // Each owner also resolves the native incarnation. The address check uses that same bound dependency below.
   const doc = (await ctx.selectWork(spec, work, (_doc, cells) => ({
     cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
@@ -142,14 +154,14 @@ export function workIntentBoundary(
     boundary: "work",
     prepared: intentPrepared,
     bind: async (ctx) => {
-      const { input } = await deriveFromWork(ctx, definition, hooks, spec, bridge, deps);
+      const { input } = await deriveFromWork(ctx, definition, hooks, () => spec, bridge, deps);
       const bound = await executor.bind(withInput(ctx, input));
       return {
         ...bound,
         prepare: async () => ({ input, value: executor.prepared.parse(await bound.prepare?.()) }),
       };
     },
-    run: async (ctx, execution) => {
+    run: (ctx, execution) => {
       const p = intentPrepared.parse(execution.prepared);
       return executor.run(withInput(ctx, p.input), { ...execution, prepared: p.value });
     },
@@ -165,7 +177,7 @@ export function workIntentBoundary(
 export function workWriteBoundary(
   executor: CommandExecutor,
   bridge: RevitBridge["Service"],
-  deps: { sdk?: SdkReceiptReader; marks?: DocumentMarks } = {},
+  deps: { sdk?: SdkReceiptReader; marks?: DocumentMarks; workspace?: Workspace } = {},
   registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>,
   /** The preview entry has its own executor (a native plan leaf); otherwise it is synthesized. */
   ownsPreview = false,
@@ -182,7 +194,7 @@ export function workWriteBoundary(
   if (!executor.seal) throw Error("Write command requires a producer-owned seal projection");
   const project = executor.seal;
   const { route } = hooks;
-  const spec = workSpec(route, registeredWork);
+  const specOf = specFor(route, route === ANY_ROUTE ? undefined : workSpec(route, registeredWork), deps.workspace);
   return {
     ...executor,
     boundary: "work",
@@ -195,7 +207,7 @@ export function workWriteBoundary(
         ctx,
         definition,
         hooks,
-        spec,
+        specOf,
         bridge,
         deps,
       );
@@ -303,7 +315,7 @@ export function workWriteBoundary(
         prepare,
       };
     },
-    run: async (ctx, execution) => {
+    run: (ctx, execution) => Effect.gen(function* () {
       const p = preparedSchema.parse(execution.prepared);
       if (p.previewOnly && !ownsPreview)
         return {
@@ -314,7 +326,7 @@ export function workWriteBoundary(
           authoredIntent: p.input,
           seal: p.seal,
         };
-      const result = await executor.run(withInput(ctx, p.input), {
+      const result = yield* executor.run(withInput(ctx, p.input), {
         ...execution,
         prepared: p.value,
       });
@@ -322,7 +334,7 @@ export function workWriteBoundary(
       if (!p.previewOnly && retires) {
         const paths = retires(result);
         if (paths.length)
-          await execution.retireWork((p.input.work as WorkHandle).key, route, paths);
+          yield* execution.retireWork((p.input.work as WorkHandle).key, (p.input.work as WorkHandle).key.route, paths);
       }
       return {
         ...(result as object),
@@ -330,7 +342,7 @@ export function workWriteBoundary(
         derivedRequest: project(p.value).request,
         seal: p.seal,
       };
-    },
+    }),
     recover: executor.recover
       ? (step, prepared, target) =>
           executor.recover!(step, preparedSchema.parse(prepared).value, target)

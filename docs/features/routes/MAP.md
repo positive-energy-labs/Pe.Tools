@@ -1,99 +1,93 @@
-# Unification wave 2: map
+# Kernel crusade map
 
-Live frontier for wave 2 (ADR 0027, [ADR 0028](../../adr/0028-seven-nouns-two-clients-one-catalog.md), [ADR 0030](../../adr/0030-pea-first-goal-core-plan-statecell.md), [ADR 0031](../../adr/0031-recording-at-host-input-services-history-in-the-shell.md)). Delete this file when the wave closes; promote what survives into the routes ledger. The nouns and rules live in the ADRs. This file holds only the frontier: the route census, the first-fix defects, the cutover order and the open questions. Every stake is a source read at bb447ddf unless stamped otherwise. Evidence: `.artifacts/tmp/unification-2/` (wave 2 reviews and census), `.artifacts/runs/kernel-muse-20261104/` (rep evidence), `.artifacts/runs/spook-20261104/` (hub argument), `.artifacts/runs/time-travel-20261104/` (census and precedent). Rebuilt 2026-11-04 after the kernel muse; git holds the 2026-11-02 shape tables.
+Live frontier for [ADR 0035](../../adr/0035-route-slots-subjectref-one-notice-feed.md). Rebuilt 2026-11-10 from the wave 2 map; git holds that map. Delete this file when the last slice lands, and promote what survives into the routes ledger. Evidence: `.artifacts/runs/kernel-crusade-20261110/` (three direction rounds, two censuses), `.artifacts/runs/kernel-audit-20261104/` (lanes A to E), `.artifacts/runs/crusade-review-20261109/` (the hydronic specimen, `F-C2-SPIKE.md`, `NATIVE-REPORT.md`).
 
-## Route census (bb447ddf)
+## Nouns and invariants
 
-`ts/packages/agent-contracts/src/generated/route-directory.ts` held 25 route keys; the 2026-11-04 archive deleted 7 of them. `ts/packages/agent-contracts/src/admitted-builtin-keys.ts` names the 5 on the new kernel.
+- **Slot**: one of five closed kinds on the route declaration (`subject`, `sheet`, `picture`, `goal`, `layout`). The kernel owns a slot's behavior end to end; a route fills it with data and, for `goal`, one host read.
+- **SubjectRef**: `{ source?, keyKind, key, placement?, sub? }`, one branded codec, decoded at every door. A document mark is never identity.
+- **Binding kind**: `parameter`, `store`, `local`. Closed.
+- **Body**: the branded return of `draw`, `scrollBody` or `fillBody`. A pane is a Body or a split, never both.
+- **Notice feed**: the host's one `notices` Reading. Push and pull read it.
+- Invariants: a route body imports only the kernel's body contract; `fans/route.ts` imports nothing from web `ducts/`; two chrome layers; consent drawn in two places; types inferred, registries generated; only the kernel grows a closed set.
 
-| Shell | Count | Routes |
+## Ordered deletable slices
+
+| # | Slice | Deletes | Red falsifier |
+|---|---|---|---|
+| 1 | Legacy delete | the twenty `shell/mount-*` and `legacy-*` files, `shell/readings.ts`, `readings-api.ts` and its `takeoff/sources.ts` consumer, the legacy branches at `runtime/route-view-store.ts`; `typed-shell.tsx` stops importing `mount-page` and `mount-timeline` | the web app builds with zero `mount-*` imports and all 18 routes still mount (no route goes dark or is deleted; amended twice 2026-11-10) |
+| 2 | Storage root | OneDrive-bound paths in `host/src/product-paths.ts` | Work and the firm file resolve under the shared mount; route settings and `productPeaWorkPath` stay on machine state (amended 2026-11-10: the only route setting is per-user consent, `chat.autoApprove`, ADR 0026 setting role) |
+| 2b | Two content homes | the shared-only content root and its startup refusal; content reads that look in one home | a host with no `PE_TOOLS_SHARED_ROOT` starts, with the product root at OneDrive Documents\Pe.Tools; a Pod, Page or Catalog in both homes resolves to the user's copy; every write and all Work land in the user's root; a shared setting (firm file, firm preference id, shared API key) reads only from the shared root, and without one its field shows disabled and its read refuses; machine state still refused on the share |
+| 3 | Journal services | `new ActionJournal` and `new HostLog` outside a Layer (`gateway-owner.ts:29-30`) | one test provides a fake journal through a Layer |
+| 4 | Run islands | the 9 `Effect.runPromise` calls in `call-route.ts` | shared read: an abort removes only that requester, and when the last requester aborts the host sends one `op.cancel` and dispatches nothing new; `RequestIdentity` is readable at native admission (`HostNativeRead.read`); durable command: after the row is journaled, aborting the `/call` admission changes nothing, `wait(id)` reaches a terminal receipt, and only `cancel(id)` sends `op.cancel` (restated 2026-11-10 from the slice 4 shape pass) |
+| 5 | SubjectRef | `localId` prefixes, `ducts/pointer-refs.ts`, the fans `elementKey` regex, ElementId claims, keys minted outside the codec (rooms `room:<guid>`), `shell/page-port.ts` (its one live export `freezePage` moved to `shell/freeze-page.ts`) | one codec round-trips every key kind, placement and sub; stale Work discarded with no migration (ADR 0033 rule 5) |
+| 5a | Registry | the four web and two host route registries, every per-route TanStack file (`routes/<key>.tsx`), every per-route contract stub (`agent-contracts/src/routes/<key>.ts`), the in-directory `context`/`host`/`neutral` generated files; `admitted-builtin-keys` derives; the codegen check that forbids a host read in the route directory | one generated registry; the builtin author's `PLACES.md` list drops to the route directory plus the C# op; the builtin specimen's directory count is 1 with its host read in it; a guard keeps browser-only code out of the host build and the reverse; the capability type is inferred from the route's host read; the icon is any Lucide name checked against the library |
+| 6 | Chrome | `HistoryRail`, per-pane Refresh, the `frame` knobs (`header: false`, `refresh: false`, `scroll: "clip"`), the composer `ArmingStrip`, both Timeline-head consent branches, `Pane` and `GraphLayoutView` exports to routes, the browser join in `navigation/ledger.tsx`, the second projection in `notices.ts` | /pea measures 2 scroll tracks and the dock 1; one `ConsentSweep` on web and in the tray card; home Activity, tray Activity and Mod+Shift+K read the notice feed |
+| 6.1 | Journey-readable chrome | per-route journey readers that infer loading from text or timing; a Place's hidden copy answering under the shown copy's accessible name | every slot region carries `aria-busy` while its read or compute is unsettled and clears it when final; the route marks its URL write flushed; a hidden Place has no accessible name; one journey reader per slot kind drives /fans F1 with no route-specific waits |
+| 7 | Sheet slot | hydronic `mount.tsx`, fans' borrowed `InputsBody`, hand-written plan and apply registration, `ducts.apply.preview` as a false TransactRead (wave 2 V1) | the slot draws a binding's StateCells; a ModelWrite binds a plan whose effect is Read or TransactRead |
+| 8 | Picture slot | `poseFields`, `ductsPictureFields` on fans, route-authored SceneRequests, halo and context aliases, selection-string bridges, the borrowed picture body | point, select and frame a linked fan port in two placements, and inspect an empty region, with no route translator |
+| 9 | Findings | `ductClaimSchema`, rooms notes, the ducts proto inbox as a notice surface | Pea and a person each write a finding on a fan port and on a /families row; `findings.list` returns each; undo leaves the other; a `note` with a verdict is refused; one mark draws on the port's geometry |
+| 10 | Non-exemplar routes onto slots | each route's hand-authored panes, readings and codecs as it moves to slots, in the order chat, pods, settings, index, ops, bind, family, rooms; duct-loss is ported to a Pod; design-system stays | the route is driven live on a controlled document (ADR 0026 D8); /family keeps the doc-lab acceptance below |
+
+Aggregate exit, not a slice: `fans/route.ts` is about 30 lines with zero imports from web `ducts/`, and a fresh agent re-audits fans and ducts against the kernel's duties and finds nothing new.
+
+Carried from wave 2: V3 (the host filters admitted routes out of Pea's Work tools, `host/src/app.ts:263`, `mcps/src/pea/routes.ts:24-30`) lands with slice 7; V2 (the MCP preflight reads the old `groups` scope) was fixed by c1fc12d0 (2026-11-04, the loss preview preflight reads the fan walk from fans Work); slice 5 moved `writeIntent.groups` onto `group:` SubjectRefs decoded by the Work schema, so nothing of V2 remains.
+
+### /family acceptance (kaitpw, 2026-11-05, carried)
+
+A real PDF and real cells; no mock witness. Pea stages a cited value as a Pea StateCell inside the Reject window with a citation to a page, block or image region; Pin keeps the value and citation through review; `attach_spec` accepts a path, a URL and an upload; a saved member reopens without reparsing; the person keeps or reverts the same StateCell beside the highlighted evidence, with no separate Accept/Reject lane.
+
+## Author witnesses (kaitpw, 2026-11-10)
+
+Two Opus threads build one frozen product spec, hydronic pipe sizing (`.artifacts/runs/kernel-crusade-20261110/authors/SPEC-hydronic.md`), blind to the old builtin at `57721b39`: one as a Pod, one as a builtin route on slots. At every slice landing each rebuilds on the new tip and records what it still cannot express as a red `kernel gap:` test; after slices 7 and 9 each re-authors from scratch. One instrument (`authors/measure.py`) measures both: authored lines, files, directories, generated files, gap tests, `unknown` and casts. The before number at `57721b39` is 699 authored lines in 21 files across 11 directories plus 19 generated files. The driver drives both in the browser on real Revit after slices 7 and 9. The hydronic Pod lands on main as the first curated example Pod; the builtin specimen is never merged. kaitpw: "I have yet to see with my own eyes a pod route successfully binding, reading and applying a revit doc."
+
+Pod scope added to the slices: slice 7's falsifier also requires a Pod to plan and apply a parameter write to a Revit document through the sheet slot; slice 8's falsifier also requires a Pod to fill the picture slot with scope and marks from the closed set. Both falsifiers are the Pod author's red tests.
+
+Pod doors, kaitpw 2026-11-10: they land inside slice 7 with the goal slot, no separate 7a, from the Pod author's first gaps (`authors/pod/gaps.json`). Rung 1, generic: one catalog Read `mep.system.members` in the C# MEP library beside the duct code (`dotnet/Pe.Revit.Global/Lib/Mep`) returning any MEP system's members with flow, size, length, connections with each connector's flow direction, and the system's source, plus one segment-size catalog read; the kernel learns no MEP words. kaitpw: "id prefer generic shape obviously". Kernel: a Pod's typed catalog read door through `@pe/host/read-graph` (today `nativeRead` is private to `host/src/reads/inputs.ts`), and the firm file as a value layer a Pod read can resolve. The goal slot joins slice 7 because the sheet and the Goal draw from the same route core (ADR 0030 rule 3).
+
+File moves and renames are greenlit for every writer when they cut a measure (fewer directories touched per route, a route's code in one place, a name that says what survives). kaitpw: "pls explicitly greenlight and encourage file moves/renames too if it helps measures." Use `git mv` so history follows.
+
+## Deletion criteria
+
+- A slice lands only when its falsifier turns green at the landed SHA and every file in its Deletes column is gone.
+- A ratchet per law (ADR 0026 D7): the count of old-kernel imports only decreases.
+- A `mount-*` revival is a defect.
+- One writer per slice. A slice that needs a kit change sends a red `kernel gap:` test to the kit owner, never a local patch.
+
+## Risk tier per surface
+
+| Surface | Tier | Why |
 |---|---|---|
-| admitted (new kernel, `shell/admitted-*`) | 5 | captures, schedules, families, ducts, fans |
-| legacy mount (`shell/mount-*`), ruled for archive and kept for an import boundary ([ledger 2026-11-04](LEDGER.md#decided)) | 3 | takeoffs, instances, session-admin |
-| legacy mount, still to migrate | 10 | chat, design-system, duct-loss, family, index, ops, bind, pods, rooms, settings |
+| /fans, /ducts write path (slice 7) | integrity | plan seal, apply, the Work journal |
+| Storage root (slice 2) | integrity | Work and the firm file move; model copies must not sync |
+| SubjectRef (slice 5) | integrity | every door decodes it; stale Work is discarded |
+| Findings (slice 9) | integrity | new shared Work two people write |
+| Chrome (slice 6) | presentation | measured rails, no data path |
+| Legacy delete (slice 1) | presentation | two typed-shell imports re-homed; no route goes dark |
 
-`takeoff` and `schedule-specs` are named in the archive ruling but are not directory keys. Witnesses with real use (ledger 2026-11-03): /ducts with /fans, /families, /schedules; /family and /rooms are candidates. The behavior of every other legacy route is not a spec; a migration may drop it and log the loss.
+## Decision log
 
-## First fix (data integrity before anything else, ADR 0027 rule 15)
-
-Found by the hub (`.artifacts/runs/spook-20261104/ROUND2.md`) at 8c3d6158 and re-read at bb447ddf.
-
-| # | Defect | Stake at bb447ddf | Fix |
-|---|---|---|---|
-| V3 | The host filters every admitted route out of Pea's Work tools, so Pea has no Work door on /ducts or /fans. | `ts/apps/host/src/app.ts:263` drops `admittedBuiltinKeys` from `registrations`; `ts/packages/mcps/src/pea/routes.ts:24-30` skips the same keys. | Project Pea's Work tools from the catalog for every route and delete both filters (ADR 0030 rule 1). |
-| V2 | The MCP preview preflight demands the old `groups` scope and sends Pea to `route:ducts.analysis`, which the sheet guide forbids. The fan walk scope moved to fans Work at the split. | `ts/packages/mcps/src/shared/admission.ts:193-195`; `ts/packages/agent-contracts/src/ducts-sheet.ts:237`; the test pins the bug at `ts/packages/mcps/tests/admission.test.ts:387`. | The preflight reads the fans Work scope; rewrite the test. |
-| V1 | `ducts.apply.preview` declares `TransactRead, RollsBack = true` and opens no transaction. The gate and the linker forced the false declaration. | `dotnet/Pe.Revit.Global/Services/Host/RevitDataRequestService.cs:117-121`; `dotnet/Pe.Shared.HostContracts/Operations/Op.cs:514`; `ts/packages/agent-contracts/src/catalog.ts:71,84-89` (`previewBy` must be TransactRead). | The linker binds a ModelWrite to a plan whose effect is Read or TransactRead; `ducts.apply.plan` becomes a Read; the seal binds to the plan (ADR 0030 rule 4). |
-| X04 | /ducts and /fans lost browser attention at the admitted shell. | Historical exemption: `git show bb447ddf:ts/apps/web/src/fans/parity.test.ts`; current witness: `ts/apps/web/src/shell/admitted-attention.test.tsx` (delivered Pea intent and attention publication). | The admitted shell publishes attention for routes with an agent block (ADR 0030 rule 10). The test-name parity census is retired; the real Chrome witnesses own resume and join behavior. X04 holds for /ducts and /fans only; four routes publish none on purpose ([ledger 2026-10-22](LEDGER.md#decided)). |
-
-## Migration parity rule (kaitpw, 2026-11-03)
-
-A parity gap that is presentation only, with no data or write consequence, is dropped by default with one ledger line. Only integrity or write-path gaps escalate ([ledger line](LEDGER.md#decided)). The migration gate for a route is its Pea doors, its Work doors and its attention; a silent loss of one of those is an integrity gap. Price every legacy migration with a real-host drive: two routes cost U1 to U4, MOUNT-CUT and four fix units, and real drives still found nine defects.
-
-## Cutover order (ADR 0027 rule 15)
-
-Progress 2026-11-05: steps 0–6 and Step 7 service/input wiring landed on main through exact Driver GREENs; main is now `c5d09cb2`. K4 landed at `5edddbf6`. The later `3da577b4` input slice proves cold Fans overview/detail replay through the real routers over saved Chadds inputs, with exact occurrence bindings and zero live factories; its live capture-budget falsifier, host compile and package pass. These are deterministic/artifact claims, not a browser or current-Revit historical drive. Public recording selection and provenance, historical plans, epochs/History, keyed diff, recompute and cloud remain incomplete. Fresh controlled ke277 drives proved write/data and full-reload apply History; earlier chaos proof stands at `5728ab22`. The two dependency engines and empty hook Page remain Owed to the legacy route cutover. Carried presentation/performance findings remain outside the write/data merge gate.
-
-1. The first-fix table above.
-2. Plan, rehearse, apply (ADR 0030 rules 4 to 7): the linker and `OpCallGate` change; the one write button (`ts/packages/kit/src/components/lang/preview-action.tsx` is the seed) adopted by /ducts and /fans; the Timeline as a projection with invocation starts and consent windows.
-3. StateCell as the one drawing in production (`ts/packages/kit/src/components/lang/cell.tsx`); Pea stages, the suggestion lane is deleted; batch and in-place review over the same cells; Pointers as a shell list.
-4. Work identity (ADR 0030 rule 9): one handle per stored Work, every read returns it; foreign cells edited in place with the "from /owner" label; retired-into-model as a resolver layer. A census of the write ops with stable-keyed inputs gives the first route-free write set (ADR 0030 rule 2).
-5. Catalog export and the DAG linker, then Pea projection (ADR 0028); subject, selection and directory; Pod registration so Pod routes mount like builtins; one reading engine; the value resolver.
-6. Purge and fold (2026-11-02 list, where not yet done): the two reading engines, `prototypes/` behind manifest-declared variants, the hand rows and `z.custom` decodes in `capabilities.ts`, the hand dispatch in `capability-tools.ts`.
-7. Recording (ADR 0031 step order): services first, then the recording source behind a Lane union, then epochs and the History rail, then keyed diff, then recompute, then cloud.
-8. Migrate legacy routes in kaitpw's 2026-11-05 order: `/chat` (stable; no feature loss), then `/pods`, then `/settings` (kernel projections; Pods' schema and form are unstable), then `/family` (keep the untested doc-lab flow where Pea proposes with a visible citation), then `/rooms` ([ruling](LEDGER.md#decided)). The Manual D Load Driver proves each route in the browser on its controlled Chadds copy. Driver green, with no objection from kaitpw, gates a fast-forward merge to main. Test-, support- or ledger-only fast-forwards skip the Driver gate if they touch no production file and carry a deterministic stamp at their SHA. A driveable step starts the next step while that merge waits; from step 6 the Driver includes chaos runs.
-
-### Step 8 /family acceptance
-
-kaitpw, 2026-11-05: the Driver uses a real PDF and real cells on `/family`; no mock witness counts. Preserve the doc-lab flow ([ledger](LEDGER.md#decided)); source census: `purge/step-0/DOCLAB-CENSUS.md` at `23867de7`.
-
-1. Pea stages a cited value as a Pea StateCell inside the Reject window, with a citation to a page, block or image region; hovering the citation lights that evidence.
-2. Pin keeps the staged value and citation through review.
-3. `attach_spec` accepts a path, a URL and an upload.
-4. A saved member reopens without reparsing the PDF.
-5. Beside the highlighted evidence, the person keeps or reverts that same StateCell; there is no separate Accept/Reject lane (ADR 0030 rule 8).
-
-Kit has one owner thread per wave; route threads add red `kernel gap:` tests, never local kit patches. Merge main daily.
-
-## Phase 1a checkpoint (2026-11-02)
-
-- Ducts loss, heal and fan commands accept only a Work handle with `expectedRevision`. The host derives requests, returns an inspectable seal, checks the seal on apply, and keeps ActionJournal retirement conditional on captured cells and native receipts. Domain refusals keep the journal wire state `failed` with `notDispatched` and `refusal`; the typed Timeline outcome enum is a later cutover.
-- Sheet reads no longer apply edits or proposals. Data Tables Open is an explicit Work verb. Schedule binding is an explicit ActionJournal command. Pod inventory reads no longer reconcile setup or cleanup.
-- Owed: migrate the remaining family, schedule, data-table and takeoff ModelWrite contracts to Work-only inputs and plan seals; replace legacy caller-payload forwarding tests. Browser and Revit behavior of the seal remain UNPROVEN (ledger Owed `s3-native-seal`).
-
-## Exemplar lane: /ducts and /fans (kaitpw, 2026-11-06)
-
-kaitpw: "The map is not complete until both fans and ducts are the exemplars." The goal is that both routes use every kernel pattern and primitive, and that the kernel makes a bypass impossible to write. This lane runs in parallel with step 8. Everything in it is canon.
-
-Exit condition:
-1. No item in `.artifacts/runs/kernel-crusade-20261104/meta/BORROWED-BODIES.md` is open.
-2. A route body imports only `ts/apps/web/src/shell/admitted-body.ts`. The narrowest rung that holds enforces this: stop exporting the reading hooks first, and add an import rule only if that refuses.
-3. ADR 0032 is landed for the cells of both routes, including its storage amendment.
-4. No prototype names remain: `proto/e`, `proto/b`, the `e-*` pane ids, `data-e-coverage`.
-5. A fresh agent re-audits both routes against the kernel's duties, without seeing BORROWED-BODIES, and finds nothing new.
-6. The Driver drives both routes GREEN on Chadds after the last landing.
-
-| Step | Rule it enforces | Content | Depends on |
-|---|---|---|---|
-| E0 | names say what survives | Rename only, in one commit. | nothing |
-| E1 | one status source (`shell/admitted-chrome.tsx:621`); transitions through the cell door (`shell/admitted-cells.ts:197`) | Bodies stop writing their own status text. Clear uses the kernel clear. Selections are arrays. Delete the old page shape at `fans/kernel.tsx:58`. | E0 |
-| E2 | a body reaches the kernel only through the body contract | Close the door (exit 2). | E1 |
-| E3 | every value Pea can touch is a StateCell, and the field owns its domain (ADR 0030, ADR 0032) | Change these into domain cells: ESP, the flow slots, the free-text slots, unit kinds, roles and fitting tables. One fill-count domain replaces three counters. "Stub reach" and "Equipment hop" become declared route-wide cells. Placement is derived, so the pane gear is deleted. | the kernel routes option reads through the recorded door (`ts/apps/host/src/resource-adapters.ts:327`, ADR 0031 rule 1) |
-| E4 | document settings travel in the model through plan and apply (ADR 0032 storage amendment) | The owners of both routes persist their document tier. Takeoff and Partition move onto `ProjectInfoText`. The duct-loss entity gets its version. | E3 |
-| E5 | an edit across owners is one kernel verb (ADR 0030 rule 9) | Delete the split at `ducts/sheet/mount.tsx:67-85`. | kernel design |
-| E6 | proof is a drive | Run a Driver drive after each landing, then the fresh re-audit and the final drive. | E0–E5 |
-
-Already landed on `settings/adr-0032`:
-- ADR 0032 is accepted.
-- The field-options throttle key includes the document (`dotnet/Pe.Revit.Global/Services/Host/RequestService.cs:42`).
-- AutoTag no longer uses extensible storage.
-
-Owed after E5:
-- F25 in the reverse direction: setting fan inputs from /ducts without a route switch.
-- F31 and F32 are kernel chrome.
-
-## Open questions for kaitpw
-
-- Remaining split details after the archive ruling: /open (session administration), /pods (Pod administration), /schedules (definition authoring).
-- The default home of a cross-document correspondence: a Pod member or a local Work member (ADR 0031).
-- An explicit "accept baseline" verb for compare, or none (ADR 0031).
-- First-Pod authoring preference (a recipe or a text editor) is deferred; it does not change the shape.
+- 2026-11-10, kaitpw: S1 adopted, S2 rejected, S3 as method. "your set is beautifully minimal."
+- 2026-11-10, kaitpw: two chrome layers only; the thread name moves into the pane head.
+- 2026-11-10, kaitpw: delete the legacy mounts now; kernel-level routes are the UX exercise. Corrected the same day: "i do not want duct loss or design system deleted ... id prefer to port duct loss to a pod, but design system must stay".
+- 2026-11-10, kaitpw: Space is a dev playground, as a specimen on the design-system page.
+- 2026-11-10, kaitpw: storage root to a shared drive mount before cloud.
+- 2026-11-10, kaitpw: Q8 to Q14 yes (dark period, dock tabs as the dock head, storage landing, one notice feed, consent in two places, the tray's job, the ducts inbox is the goal slot).
+- 2026-11-10, root thread: order is legacy delete, storage root, journal services, run islands, SubjectRef, chrome, sheet, picture, findings.
+- 2026-11-10, implementor exception upheld by the root thread: no route is on the legacy kernel, so nothing goes dark at slice 1; slice 10 moves the eight non-exemplar routes onto slots. Plan docs on `crusade/kernel` at 0e0e6e69.
+- 2026-11-10, kaitpw: two author witnesses on one frozen hydronic spec, Pod and builtin; Pod Revit apply joins slice 7 and Pod picture joins slice 8; the hydronic Pod ships as the first example Pod; file moves and renames greenlit.
+- 2026-11-10, implementor: slice 4's falsifier restated per owner lifetime. A shared flight must not die when one requester aborts, and a journaled command outlives its request by design; `NativeReads` already is the refcounted shared flight, so the snapshot and Ducts owners delete their own sharing code.
+- 2026-11-10, implementor: Pod doors (piping reads, pipe sizes, the Pod catalog read door, the firm layer) are written in parallel and land with slice 7; the goal slot joins slice 7. Re-openable.
+- 2026-11-10, implementor (slice 2 quality pass): route settings stay on machine state, because the only route setting is Pea's per-user consent switch and a shared mount would make one person's auto-approve every machine's. Re-openable.
+- 2026-11-10, kaitpw: the goal slot and the Pod doors land inside slice 7; the MEP read is generic (`mep.system.members` plus a segment-size read), "id prefer generic shape obviously"; slice 5a (one generated registry, per-route stub files deleted, host read in the route directory, inferred capability type, any Lucide icon) follows SubjectRef, "agree on all especially 3."
+- 2026-11-10, slice 1 (legacy mount kernel deleted) gated on crusade/kernel, main pending owner: candidate aeaac4a0, driver GREEN (carried from gate-78e50ce9, web bundle equal modulo build stamps), purger MERGE-OK; all 18 routes mount, zero legacy imports.
+- 2026-11-10, slice 2 (product storage on a shared root) gated on crusade/kernel, main pending owner: candidate 21afa61b, driver GREEN (session + browser: Work under `<shared>/Work` survives a host restart; a dev owner root at or under the shared root exits 1 naming both paths), purger MERGE-OK (11/11 mutants). From this SHA a host with neither PE_TOOLS_PRODUCT_HOME nor PE_TOOLS_SHARED_ROOT set refuses to start, so each machine sets PE_TOOLS_SHARED_ROOT once before main moves.
+- 2026-11-10, slice 3 (journal services) gated on crusade/kernel, main pending owner: candidate 108c34e8, driver GREEN (session + browser + host runtime: receipt revisions append to the host log; a shutdown mid-command settles the action as `cancelled` before the journal closes), purger MERGE-OK. Owed: the ordering test rebuilds the composition instead of building `host-program.ts`'s (fix in flight).
+- 2026-11-10, slice 4 (run islands) gated on crusade/kernel, main pending owner: candidate 07b2cf28, driver GREEN (session + browser, controlled acc-s4/acc-s4b, A/B base 108c34e8: a double Stop on a running families.read settles `cancelled` with one cancel request; two views render and History grows; /fans to /ducts settles in about 5 s against 22 to 37 s at base), purger MERGE-OK. The second Stop click never leaves the UI, so the joined-cancel path is witnessed by host tests only.
+- 2026-11-10, kaitpw: slice 7, Fans' borrowed Inputs split by owner, not ported whole. A sheet binding stages only its own route's Work (no cross-route write binding). /ducts owns its design data as its own sheet: criteria, design friction, split policy, fitting tables, kinds, network rulings, and the firm line. /fans keeps Fans Work: ESP and protocol slots, parameter slot names, write scope, unit roles, drops and flows; it reads the /ducts design it depends on as read-only provenance with a link to /ducts. Per-fitting loss readouts are results and move to /fans' goal. Implementor allocation per input, re-openable; the owner asked for each input's home to be argued, since the split has needed product work.
+- 2026-11-10, kaitpw (via root, from the F1 journey trial on main): the kernel owns machine-readable settledness. Slot regions say busy, the route says its URL write is flushed, a hidden Place is not addressable; scripted journeys replace the driver's prose catalogue. Homed as slice 6.1, cut from the slice 6 candidate so it lands right after 6.
+- 2026-11-10, slice 5 (SubjectRef) gated on crusade/kernel, main pending owner: candidate 79042ced, driver GREEN (session + browser, controlled acc-s5d, base 2deb2747: selection by SubjectRef survives reload and switching on /fans and /ducts; Work stored under an ElementId key is discarded with its reason and the route opens fresh; SpaceSceneScopeProofTests 3/3; 18 of 18 routes render), purger MERGE-OK. Withdrawn twice before landing for reds the full gate sees (harness-threads at 4fb8159a; two src/shell journeys, an mcps test and a stale Snowdon artifact at 8499d288), so a candidate now reaches the driver only after the whole gate is green at its SHA.
+- 2026-11-10, kaitpw: slice 2b, two content homes (ADR 0035 rule 11 amended). User root default OneDrive Documents\Pe.Tools, shared root optional; user overrides shared on read, writes always to the user, Work user-only, shared settings (firm files, firm preference ids, a quick API-key distribution) shared-only and disabled without a shared root. Slice 2 stays gated on crusade/kernel; 2b lands before main moves, so no machine needs PE_TOOLS_SHARED_ROOT set first.
+- 2026-11-10, slice 2b (two content homes) gated on crusade/kernel, main pending owner: candidate dfaed397, driver GREEN (session + browser, controlled acc-2b-a2 without a shared root and acc-2b-b with one, base e4443854; the owner's root was only read): host and payload start with no shared root; a Pea member save into a shared-only Pod lands in the user root and leaves the share byte-identical, and a rejected one makes no copy; the firm line refuses with its reason while criteria stay editable as engine default, and a seeded firm file reads as firm; a shared key serves an endpoint with no key of its own and appears in none of 414 user-root files or the host log; Work only under the user root), purger MERGE-OK. Slice 2's "set PE_TOOLS_SHARED_ROOT before main moves" no longer applies.
+- 2026-11-11, kaitpw (via the tooling thread, about 16:30Z): finished work lands as it is ready, and a drive verdict no longer holds landing. crusade/kernel fast-forwards to the newest wave tip whose full suite is green with each timed-out file passing alone; each drive RED and each defect becomes a fix thread or a backlog line that lands with a later merge. The default when the owner is away is to land done work and start unblocked work, recorded re-openable; wait only on data loss, security, or an irreversible step.
+- 2026-11-11, wave 1 (slices 6, 6.1, 7, 5a, 9 with two polish rounds and the purger fixes) landed on crusade/kernel by fast-forward to ef940d36, main pending owner: gate at ef940d36 green (tsc 7 packages, repo guards 215, web guards 47, host 897, kit 277, agent-contracts 210, runtime 85, mcps 109, web 1246 with 4 load timeouts each passing alone; `.artifacts/runs/kernel-crusade-20261110/wave1/gate-ef940d36/`). Drives: 39b24c0f RED, 1ebf1fb1 RED, ef940d36 RED (`drive/gate-<sha>/VERDICT.md`). PROVEN live across them: 5a all 18 directory entries open and the builtin specimen at 1 directory, 0 hand-written; 6.1 busy and settled marks, no stuck busy on a hidden inert Place, no route-view PUT errors, no "Document unavailable" flash; 7 a /ducts Design edit priced by /fans with no cross-route write; 9 Pea and a person each write on FC-11, findings.list returns both, each author's undo leaves the other's, the generic door refuses and `by` is host-owned, a note with a verdict is refused, and a /families row write after a reload. Open as fix threads: slice 9's s9e (a write before Work starts is dropped silently, /families refresh overflows the 2 MiB frame, undo leaves no record, Pea's first findings call lacks the handle). Purger: wave tip CATCH 1-5 fixed with mutants red then green, fix branch CATCH (S5a-G6) fixed at 9d306a47. Authors: slices 6 and 6.1, the 6.1 writer; 7, the sheet writer; 5a, the registry writer; 9, the findings writer; fixes, the wave 1 fix writer; polish, the polish writer; merges and gate, the implementor.

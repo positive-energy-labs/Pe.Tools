@@ -1,27 +1,30 @@
+import type { ContextOf } from "../route/defaults";
 import { command } from "../route/typed-actions.ts";
 import { poseFields } from "../route/defaults";
 import { bindings } from "./bindings";
-import { routeLinks } from "../route/links.generated";
 import { read } from "../route/defaults";
 import { stageField } from "../route/defaults";
 import { listFields } from "../route/defaults";
-import { fansDocumentSchema } from "../../../../packages/agent-contracts/src/fans.ts";
+import { fansDocumentSchema, fansRouteState } from "../../../../packages/agent-contracts/src/fans.ts";
 import { z } from "zod";
 import {
-  ductsRouteState,
-  ductsSheetEditsSchema,
-  fansSheetCapability,
+  fansSheetEditsSchema,
   ductsPictureFields,
+  routeAddress,
   type Immutable,
+  type SubjectRefCode,
 } from "@pe/agent-contracts";
+import { reads } from "./reads.ts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
-import { field, route, subjectSchema, localId, namesOf, split } from "../route/defaults.ts";
+import { field, route, subjectSchema, split } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
-import { fanLabel } from "../ducts/sheet/model.ts";
+import { scrollBody } from "../route/body.ts";
+import { fanLabel, stableFanKey } from "../ducts/sheet/model.ts";
 import { describeInputHistory, editMetaSchema } from "../ducts/sheet/input-history.neutral.ts";
 import { sheetValueFixtures } from "../ducts/sheet/value-fixtures.ts";
 import { presentLosses } from "../ducts/reviews.ts";
+import { fansSheet } from "./sheet.ts";
 
 const shared = ductsPictureFields;
 const fan = subjectSchema(32);
@@ -43,21 +46,20 @@ export const fields = {
   sheetPath: field(z.string(), "", "query"),
 };
 export const sheet = read(
-  hostRead(fansSheetCapability, sheetValueFixtures),
+  hostRead(reads.sheet, sheetValueFixtures),
   (page: { fan: Immutable<z.output<typeof fan>>; sheetPath: string }) => ({
-    fan: namesOf(page.fan),
+    fan: page.fan.kind === "all" ? "all" : page.fan.ids,
     sheetPath: page.sheetPath,
   }),
 );
-const roster = read(hostRead(fansSheetCapability, sheetValueFixtures), () => ({
+const roster = read(hostRead(reads.sheet, sheetValueFixtures), () => ({
   fan: [],
   sheetPath: "",
 }));
-export type { Context as FansDrawContext } from "./context.generated";
-import type { Context as FansDrawContext } from "./context.generated";
+export type FansDrawContext = ContextOf<typeof fields, typeof sheet, typeof import("../../../../packages/agent-contracts/src/fans.ts").fansDocumentSchema, typeof import("@pe/agent-contracts").fansSheetEditsSchema>;
 export const module = route({
   key: "fans",
-  host: "../../../host/src/reads/fans.ts",
+  host: "./host.ts",
   name: "Fans",
   directory: {
     aliases: ["fan", "ESP", "pressure"],
@@ -79,12 +81,13 @@ export const module = route({
     pane: "sheet-roster",
     options: (data: FansDrawContext["value"]["value"]) =>
       (data?.rows ?? []).map((row) => ({
-        id: localId("ducts-fan", `${row.uniqueId}@${row.portIndex}`),
+        id: stableFanKey(row),
         label: fanLabel(row, data?.rows ?? []),
       })),
   },
   core: sheet,
   reads: { roster },
+  sheet: fansSheet,
   fields,
   panes: {
     "sheet-roster": {
@@ -92,42 +95,47 @@ export const module = route({
       title: "Fans",
       purpose: "Open fan ports",
       bindings,
-      draw: draw(() => import("../ducts/sheet/mount.tsx"), "RosterBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("../ducts/sheet/mount.tsx"), "RosterBody"),
     },
     "sheet-inputs": {
       title: "Inputs",
       purpose: "Edit fan inputs",
       bindings,
-      draw: draw(() => import("../ducts/sheet/mount.tsx"), "InputsBody"),
+      kernel: "sheet",
+      // The shell draws this pane from the filled slot; the body kind is the frame it lays out in.
+      body: "scroll",
+      draw: () => scrollBody(null),
     },
     "sheet-picture": {
       title: "Picture",
       purpose: "Inspect fan paths",
       bindings,
-      draw: draw(() => import("../ducts/sheet/mount.tsx"), "PictureBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("../ducts/sheet/mount.tsx"), "PictureBody"),
     },
     "sheet-ledger": {
       title: "Ledger",
       purpose: "Inspect ESP and provenance",
       bindings,
-      draw: draw(() => import("../ducts/sheet/mount.tsx"), "LedgerBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("../ducts/sheet/mount.tsx"), "LedgerBody"),
     },
   },
   edits: {
     seed: () => fansDocumentSchema.parse({}),
-    work: fansDocumentSchema,
+    work: fansRouteState,
     value: "fansWork",
-    owners: {
-      ducts: { state: ductsRouteState, value: "ductsWork" },
-    },
-    input: ductsSheetEditsSchema,
-    patches: (input, data) => editPatches(input, data.design),
+    // No cross-route write (ruling 2026-11-10): /fans owns only its Work; it reads /ducts' design in its core read.
+    owners: {},
+    input: fansSheetEditsSchema,
+    patches: (input) => editPatches(input),
     history: editMetaSchema,
     describe: describeInputHistory,
   },
   commands: {
     losses: {
-      ...command("ducts.apply-losses"),
+      ...command("sheet.apply"),
       label: "Write to Revit",
       present: (result, data, work) =>
         presentLosses(result, {
@@ -158,13 +166,13 @@ export const module = route({
 });
 export const fansData = module.data;
 export const fansHostModule = module.host;
-export function fansLink(ids: readonly string[], search: Readonly<Record<string, unknown>>) {
-  return routeLinks.fans({
+export function fansLink(ids: SubjectRefCode[], search: Readonly<Record<string, unknown>>) {
+  return routeAddress("fans").link({
     ...Object.fromEntries(
       ["target", "fixture", "thread"].flatMap((key) =>
         typeof search[key] === "string" ? [[key, search[key]]] : [],
       ),
     ),
-    fan: { kind: "ids", ids: ids.map((id) => localId("ducts-fan", id)) },
+    fan: { kind: "ids", ids },
   });
 }

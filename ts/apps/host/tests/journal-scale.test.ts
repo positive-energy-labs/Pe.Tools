@@ -1,3 +1,4 @@
+import { journalAt } from "./effect-test.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -16,7 +17,6 @@ vi.mock("node:fs/promises", async (original) => {
     };
   return { ...fs, appendFile: counted(fs.appendFile), writeFile: counted(fs.writeFile) };
 });
-import { ActionJournal } from "../src/action-journal.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -30,7 +30,7 @@ const file = () => {
 
 test("the journal stays linear at 10k receipts: the last thousand write what the first did", async () => {
   const path = file();
-  const journal = new ActionJournal(path, Date.now);
+  const journal = journalAt(path, Date.now);
   const batch = async () => {
     const before = io.bytes;
     for (let i = 0; i < 1000; i++) await journal.recordFact({ kind: "turn", phase: "started" });
@@ -42,5 +42,5 @@ test("the journal stays linear at 10k receipts: the last thousand write what the
   expect(last).toBeLessThan(first * 3);
   // One line per revision: the file grows with what was written, never with its square.
   expect((await stat(path)).size).toBeLessThan(10_000 * 1024);
-  expect((await new ActionJournal(path, Date.now).read({})).length).toBe(10_000);
+  expect((await journalAt(path, Date.now).read({})).length).toBe(10_000);
 }, 120_000);

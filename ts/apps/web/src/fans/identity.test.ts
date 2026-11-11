@@ -1,8 +1,8 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createWitness } from "./cutover.test-support";
 import { admit } from "./admission.fixture";
-import { localId } from "../ducts/identity";
 import { stableFanKey } from "../ducts/sheet/model";
+import { decode, uniqueIdSchema } from "../../../../packages/agent-contracts/src/subject-ref";
 import { workFeedFailureMessage } from "../../../../packages/agent-contracts/src/work-journal-door";
 import fixture from "../ducts/sheet/sheet.fixture.json";
 const closes: (() => void)[] = [];
@@ -14,7 +14,25 @@ afterEach(() =>
 );
 const picked = (keys: string[]) => ({
   kind: "ids" as const,
-  ids: keys.map((key) => localId("ducts-fan", key)),
+  ids: keys,
+});
+
+test("two ports of one unit have distinct SubjectRef picker keys", async () => {
+  const unit = { ...fixture.roster.rows[0]!, uniqueId: uniqueIdSchema.parse(fixture.roster.rows[0]!.uniqueId) };
+  const ports = [{ ...unit, portIndex: 0 }, { ...unit, portIndex: 1 }];
+  expect(new Set(ports.map(stableFanKey)).size).toBe(2);
+  expect(ports.map(row => decode(stableFanKey(row)))).toEqual(ports.map(row => ({
+    ok: true, value: { keyKind: "UniqueId", key: unit.uniqueId, sub: { port: row.portIndex } },
+  })));
+  const added = { ...fixture.roster.rows[0]!, portIndex: 97 };
+  fixture.roster.rows.push(added);
+  try {
+    const f = await createWitness(closes);
+    await vi.waitFor(() => expect(f.fans.picker("fan")).toBeDefined());
+    const keys = (f.fans.picker("fan") as readonly { id: string }[]).map(row => row.id);
+    expect(keys).toContain(stableFanKey(fixture.roster.rows[0]!));
+    expect(keys).toContain(stableFanKey(added));
+  } finally { fixture.roster.rows.pop(); }
 });
 test("P06/P08: MUAS-1 restores from a direct URL and duplicate FC-23 ports have distinct picker labels", async () => {
   const f = await createWitness(closes);
@@ -32,7 +50,7 @@ test("P06/P08: MUAS-1 restores from a direct URL and duplicate FC-23 ports have 
   const twins = fixture.roster.rows.filter((row) => row.mark === "FC-23");
   const options = mounted.picker("fan") as readonly { id: string; label: string }[];
   const twinOptions = options.filter((option) =>
-    twins.some((twin) => option.id === localId("ducts-fan", stableFanKey(twin))),
+    twins.some((twin) => option.id === stableFanKey(twin)),
   );
   expect(twinOptions).toHaveLength(2);
   expect(new Set(twinOptions.map((option) => option.label)).size).toBe(2);
@@ -62,7 +80,7 @@ test("P07/P12: two retained Places keep separate subject, selection, query and p
     new URLSearchParams({ fan: JSON.stringify(picked([ids[1]!])) }),
     "b",
   );
-  a.page.select([{ kind: "focus", id: localId("ducts-focus", "7") }]);
+  a.page.select([{ kind: "focus", id: "7" }]);
   a.page.pose({ contextRadiusFt: 15 }, "gesture");
   a.controls.query("inputSort", "name");
   expect(b.page.read()).toMatchObject({

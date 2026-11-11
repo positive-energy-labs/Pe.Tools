@@ -45,7 +45,9 @@ export function podCapabilities(): Capability[] {
 export function dynamicCapabilityProvider(sources: CapabilitySources): Capability[] {
   return [
     ...podCapabilities(),
-    ...sources.routes.flatMap(routeRows),
+    // V3: every admitted route's Work is a Pea door, builtin or Pod; a builtin registration already listed is not repeated.
+    ...[...sources.routes, ...(sources.admittedRoutes?.() ?? []).flatMap((view) =>
+      view.work && !sources.routes.some((spec) => spec.route === view.work!.route) ? [view.work] : [])].flatMap(routeRows),
     ...viewRoutes(sources.admittedRoutes?.() ?? []).flatMap(routeViewRows),
     ...sources.packages.flatMap(packageRows),
     ...sources.skills.map(skillRow),
@@ -83,8 +85,8 @@ export function opRow(op: OpsCatalogEntry): Capability {
 }
 
 /** A route that leases its view (`viewRoute`) gets one read and one set, both over the person's open page. */
-function routeViewRows({ key: route, title, fields: admitted, legacy: builtin }: ViewRoute): Capability[] {
-  const legacy = builtin && routeAddress(builtin).agent;
+function routeViewRows({ key: route, title, fields: admitted, builtin }: ViewRoute): Capability[] {
+  const spec = builtin && routeAddress(builtin).agent;
   // An admitted route projects its keys from the admitted graph's agent policy; the browser owner
   // holds the codecs, so each settable key is the text the view shows (ADR 0030 rule 10).
   const settable = admitted && agentFields(admitted, "set").map(([key]) => key);
@@ -94,9 +96,9 @@ function routeViewRows({ key: route, title, fields: admitted, legacy: builtin }:
         words: undefined,
         keys: agentFields(admitted!).map(([key]) => key),
         fields: z.object(Object.fromEntries(settable.map((key) => [key, z.string()]))),
-        finds: legacy ? legacy.finds : [],
+        finds: spec ? spec.finds : [],
       }
-    : legacy!; // `viewRoute` gives a route without admitted fields only for a builtin address.
+    : spec!; // `viewRoute` gives a route without admitted fields only for a builtin address.
   const sets = Object.keys(fields.shape);
   const lower = title.toLowerCase();
   return [

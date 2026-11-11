@@ -16,7 +16,6 @@ import type { StageIssue } from "./inbox-rows";
 import type { Project, Size } from "#/scene/projection";
 
 import {
-  claimInk,
   DASH_CLASS,
   issueInk,
   nodeInk,
@@ -25,16 +24,15 @@ import {
   type Encoding,
   type Issue,
 } from "./encoding";
-import type { Claim } from "./legs";
 import type { Scene } from "./scene";
 import { pathOf, SubjectLabels } from "./subject-labels";
 import { reachProps, SubjectTextContext } from "@pe/kit/lang/reach";
 import { Footnotes, useFootnotes, type FootnoteProject } from "#/scene/footnotes";
 import { useElementAttention } from "#/attention";
-import { elementKey, useMention } from "@pe/kit/lang/attention";
+import { useMention } from "@pe/kit/lang/attention";
+import { useElementIndex } from "#/element-index";
 
 export type Ruling =
-  | { kind: "claim"; n: number; at: number; claim: Claim }
   | { kind: "inferred"; n: number; at: number; finding: DuctFinding }
   | { kind: "issue"; n: number; at: number; issue: Issue };
 
@@ -118,7 +116,9 @@ export function Annotations({
   const observation = useNativeObservation();
   const subjects = useContext(SubjectTextContext);
   const { lit, citation } = useElementAttention();
-  const focus = citation?.focus?.key.startsWith("e:") ? Number(citation.focus.key.slice(2)) : null;
+  const elements = useElementIndex();
+  const focusId = citation?.focus ? elements.idOf(citation.focus.key) : NaN;
+  const focus = Number.isFinite(focusId) ? focusId : null;
   const mark = useMention();
   const target = (id: number) => {
     const t = observedElements(observation, [id]);
@@ -127,7 +127,7 @@ export function Annotations({
   const at = (e: { clientX: number; clientY: number }) => ({ x: e.clientX, y: e.clientY });
   const element = (id: number) => ({
     ...target(id),
-    ...mark(elementKey(id)),
+    ...mark(elements.keyOf(id)),
     style: HIT,
     onClick: (e: React.MouseEvent) => {
       if (e.detail < 2) onPick(id, at(e));
@@ -153,8 +153,8 @@ export function Annotations({
   const sceneSegments = new Map(scene.segments.map((f) => [f.segment.id, f.segment.polyline]));
   const sceneNodes = new Set(scene.nodes.map((f) => f.node.id));
   const footnoteProject: FootnoteProject = (ref) => {
-    if (!ref.key.startsWith("e:")) return null;
-    const id = Number(ref.key.slice(2));
+    const id = elements.idOf(ref.key);
+    if (!Number.isFinite(id)) return null;
     const drawn = !!meshed?.has(id) || layers.has("centrelines");
     const ghost = drawn ? null : sceneSegments.get(id);
     if (!drawn && !ghost && !sceneNodes.has(id)) return null;
@@ -270,19 +270,9 @@ export function Annotations({
       ) : null}
       {layers.has("findings")
         ? pins.map(({ value: r, x, y }) => {
-            const ink =
-              r.kind === "claim"
-                ? claimInk(r.claim)
-                : r.kind === "issue"
-                  ? issueInk(r.issue)
-                  : token("caution");
+            const ink = r.kind === "issue" ? issueInk(r.issue) : token("caution");
             const on = r.kind === "issue" && r.issue.id === issue;
-            const finding =
-              r.kind === "claim"
-                ? `claim:${r.claim.id}`
-                : r.kind === "issue"
-                  ? r.issue.id
-                  : r.finding.id;
+            const finding = r.kind === "issue" ? r.issue.id : r.finding.id;
             const issueTarget = {
               key: issues.find((i) => i.findings.includes(finding))?.key ?? finding,
               elementId: r.at,
@@ -302,19 +292,15 @@ export function Annotations({
                 onClick={(e) => onRuling(r, at(e))}
                 onDoubleClick={() => onFrame(r.at)}
               >
-                {r.kind === "claim" ? (
-                  <circle r={PIN} fill={ink} stroke={token(on ? "ink" : "page")} />
-                ) : (
-                  <rect
-                    x={-PIN}
-                    y={-PIN}
-                    width={PIN * 2}
-                    height={PIN * 2}
-                    fill={ink}
-                    stroke={token(on ? "ink" : "page")}
-                    strokeWidth={on ? 2.5 : 1}
-                  />
-                )}
+                <rect
+                  x={-PIN}
+                  y={-PIN}
+                  width={PIN * 2}
+                  height={PIN * 2}
+                  fill={ink}
+                  stroke={token(on ? "ink" : "page")}
+                  strokeWidth={on ? 2.5 : 1}
+                />
                 <text dy="0.35em" textAnchor="middle" fontSize={10} fill={token("page")}>
                   {r.n}
                 </text>
@@ -326,7 +312,7 @@ export function Annotations({
         project={footnoteProject}
         size={size}
         obstacles={pins}
-        onGo={(ref) => subjects?.go?.(Number(ref.key.slice(2)))}
+        onGo={(ref) => subjects?.go?.(elements.idOf(ref.key))}
       />
     </svg>
   );

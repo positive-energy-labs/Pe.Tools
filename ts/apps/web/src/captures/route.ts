@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
@@ -15,12 +16,12 @@ export const fields = {
   focus: field(z.string(), "", "pose"),
   open: field(z.array(z.string()), [], "pose"),
 };
-export type { Context as CapturesContext } from "./context.generated";
+export type CapturesContext = ContextOf<typeof fields, typeof loaded, never, never>;
 export const module = route({
   key: "captures",
   name: "Captures",
   needs: "host",
-  host: "../../../host/src/reads/captures.ts",
+  host: "./host.ts",
   directory: {
     group: "Coordinate model data",
     summary: "Inspect retained view pictures and receipts",
@@ -39,7 +40,8 @@ export const module = route({
     captures: {
       title: "Captures",
       purpose: "Inspect retained pictures",
-      draw: draw(() => import("./drawing.tsx"), "CapturesDrawing"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./drawing.tsx"), "CapturesDrawing"),
     },
   },
   layout: paneLayout("captures"),

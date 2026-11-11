@@ -1,18 +1,18 @@
 import { join } from "node:path";
 import { productPathNames } from "@pe/host-contracts/contracts";
+import { userRoot } from "@pe/host-contracts/product-paths";
 import { hostOwnership } from "./host-ownership.ts";
 
-import { productHomePath } from "@pe/host-contracts/product-paths";
+export const productUserContentRootPath = userRoot;
 
-export const productUserContentRootPath = productHomePath;
-
+/** The user's Pods folder: where imports and every Pod write land. */
 export function productPodsRootPath(): string {
-  return join(productUserContentRootPath(), productPathNames.podsDirectoryName);
+  return join(userRoot(), productPathNames.podsDirectoryName);
 }
 
-/** Pages (`pages-route.ts`): one folder per page beside Pods, outside git, no registration. */
+/** The user's Pages folder (`pages-route.ts`): one folder per page beside Pods, outside git, no registration. */
 export function productPagesRootPath(): string {
-  return join(productUserContentRootPath(), productPathNames.pagesDirectoryName);
+  return join(userRoot(), productPathNames.pagesDirectoryName);
 }
 
 /** A path under machine-local product state (`<productRoot>\state`): keys and per-machine data, not Documents. */
@@ -27,7 +27,7 @@ export const productApsTokensPath = () => productStatePath("aps-auth", "tokens.j
 export const productHarnessThreadsPath = () => productStatePath("harness-threads");
 
 /** Route Work documents (`pe-routes.ts`): one JSON file per route and Work key. */
-export const productRouteWorkPath = () => productStatePath("route-work");
+export const productRouteWorkPath = () => join(userRoot(), "Work");
 export const productRouteSettingsPath = () => productStatePath("route-settings");
 
 /** Immutable headless Ducts calculations, including their complete effective inputs. */
@@ -35,7 +35,7 @@ export const productDuctsAnalysesPath = () => productStatePath("ducts", "analyse
 
 /**
  * Pea's work folder: the copies she opens so a user's own file is never her scratch. Machine
- * state, not Documents: Documents is OneDrive-synced, and a model copy must not upload.
+ * state: model copies must not upload.
  */
 export const productPeaWorkPath = () => productStatePath("pea-work");
 

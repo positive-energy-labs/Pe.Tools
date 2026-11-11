@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { stableFanKey } from "../ducts/sheet/model";
+import { systemCode } from "../ducts/identity";
 import { useSyncExternalStore } from "react";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -6,7 +8,7 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { emptyThreadHead, workFingerprintSchema } from "@pe/agent-contracts";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 import { RouteViewStore } from "@pe/runtime";
-import { route, localId, namesOf, type TypedRoute } from "./typed-route";
+import { route, namesOf, type TypedRoute } from "./typed-route";
 import { module as ducts } from "../ducts/route";
 import { module as fans } from "../fans/route";
 import { mountTypedRoute } from "../shell/typed-mount";
@@ -26,7 +28,7 @@ test.each(["ducts", "fans"] as const)("Pea resolves %s subject names through the
   fakeRuntimeHost("http://127.0.0.1:19999");
   vi.stubEnv("PE_CONTEXT", "casing-context");
   // Retain the production fields and subject options. Native roster delivery is the only data adapter.
-  const options = { edits: undefined, commands: {}, reads: {}, panes: {}, layout: { kind: "pane", id: "unused" } } as const;
+  const options = { edits: undefined, commands: {}, reads: {}, panes: {}, picture: undefined, title: undefined, layout: { kind: "pane", id: "unused" } } as const;
   const module: TypedRoute = key === "ducts"
     ? route({ ...ducts.spec, ...options, core: ducts.spec.subject!.read! })
     : route({ ...fans.spec, ...options, core: fans.spec.subject!.read! });
@@ -40,7 +42,7 @@ test.each(["ducts", "fans"] as const)("Pea resolves %s subject names through the
   let rosterData: any = structuredClone(packet.value!.data);
   if (key === "ducts") rosterData.systems = [{ ...rosterData.systems[0], name: "SA 19" }];
   else rosterData.rows = [{ ...rosterData.rows[0], mark: "MUAS-1" }];
-  const fanIdentity = key === "fans" ? `${rosterData.rows[0].uniqueId}@${rosterData.rows[0].portIndex}` : "";
+  const fanIdentity = key === "fans" ? stableFanKey(rosterData.rows[0]) : "";
   const fanPort = key === "fans" ? rosterData.rows[0].portIndex : 0;
   const mount = mountTypedRoute(module, {
     target: null, fixture: null, work: { address: null, open: null }, memory: () => ({}), custody: { current: () => true },
@@ -93,11 +95,12 @@ test.each(["ducts", "fans"] as const)("Pea resolves %s subject names through the
     render(<RouterProvider router={router} />);
     await waitFor(() => expect(store.select("casing", key)).toHaveProperty("instance"));
     const exact = key === "ducts" ? "SA 19" : `MUAS-1 / port ${fanPort}`;
-    const identity = key === "ducts" ? localId("ducts-system", exact) : localId("ducts-fan", fanIdentity);
+    const identity = key === "ducts" ? systemCode(exact) : fanIdentity;
     const lower = await call(exact.toLowerCase());
     expect(lower, JSON.stringify(lower)).toMatchObject({ ok: true, result: { outcome: "rendered" } });
     expect(mount.page.read()[field]).toEqual({ kind: "ids", ids: [identity] });
-    expect(namesOf(mount.page.read()[field])).toEqual([key === "ducts" ? "SA 19" : fanIdentity]);
+    // A fan identity carries a port sub, so it is not a plain name: the ids equality above proves it.
+    if (key === "ducts") expect(namesOf(mount.page.read()[field])).toEqual(["SA 19"]);
     // Add a differently-cased twin: exact spelling wins; a third casing must refuse the whole move.
     rosterData = key === "ducts" ? { ...rosterData, systems: [rosterData.systems[0], { ...rosterData.systems[0], id: 999999, name: exact.toLowerCase() }] } : {
       ...rosterData, rows: [rosterData.rows[0], { ...rosterData.rows[0], mark: "muas-1", uniqueId: "other-fan" }],

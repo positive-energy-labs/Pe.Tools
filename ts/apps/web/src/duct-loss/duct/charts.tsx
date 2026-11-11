@@ -281,71 +281,76 @@ export function DuctCharts({
   }));
 
   return (
-    <div className="grid gap-(--gutter) lg:grid-cols-[2fr_1fr_1fr_1fr]">
-      <LogLog
-        title="Friction chart"
-        note={`Δp = ${C}·Q^${EXP.cfm} / D^${EXP.diameter}  ·  solid: diameter, dashed: velocity`}
-        x={{ label: "FRICTION LOSS · IN. WG / 100 FT", range: r.friction }}
-        y={{ label: "CFM", range: r.cfmFriction }}
-        series={[...constantD, ...constantV]}
-        point={[friction, cfm]}
-        readout={([dp, Q]) => {
-          const D = diameterFor(Q, dp);
-          return `${fmt(Q, 0)} cfm · ${fmt(dp, 3)} in. wg → ${fmt(D, 1)}″ · ${fmt(read(Q, D).velocity, 0)} fpm`;
-        }}
-        onPick={([dp, Q]) => onPick({ cfm: Q, diameter: diameterFor(Q, dp) })}
-      />
-      <LogLog
-        title={`Δp against diameter, ${fmt(cfm, 0)} cfm`}
-        note={`slope −${EXP.diameter}  ·  Δp = ${fmt(C * cfm ** EXP.cfm, 0)} / D^${EXP.diameter}`}
-        x={{ label: "DIAMETER · IN", range: r.diameter }}
-        y={{ label: "IN. WG / 100 FT", range: r.friction }}
-        series={[
-          {
-            key: "dp",
-            label: "",
-            color: BASE,
-            pts: logspace(r.diameter).map((D) => [D, read(cfm, D).friction] as const),
-          },
-        ]}
-        point={[diameter, friction]}
-        readout={([D]) => `${fmt(D, 1)}″ → ${fmt(read(cfm, D).friction, 3)} in. wg`}
-        onPick={([D]) => onPick({ diameter: D })}
-      />
-      <LogLog
-        title={`Δp against cfm, ${fmt(diameter, 1)}″`}
-        note={`slope ${EXP.cfm}  ·  Δp = ${(C / diameter ** EXP.diameter).toExponential(2)} · Q^${EXP.cfm}`}
-        x={{ label: "CFM", range: r.cfmFriction }}
-        y={{ label: "IN. WG / 100 FT", range: r.friction }}
-        series={[
-          {
-            key: "dp",
-            label: "",
-            color: BASE,
-            pts: logspace(r.cfmFriction).map((Q) => [Q, read(Q, diameter).friction] as const),
-          },
-        ]}
-        point={[cfm, friction]}
-        readout={([Q]) => `${fmt(Q, 0)} cfm → ${fmt(read(Q, diameter).friction, 3)} in. wg`}
-        onPick={([Q]) => onPick({ cfm: Q })}
-      />
-      <LogLog
-        title={`Velocity against diameter, ${fmt(cfm, 0)} cfm`}
-        note={`slope −${EXP.velocityDiameter}  ·  V = 576·${fmt(cfm, 0)} / (π·D²)`}
-        x={{ label: "DIAMETER · IN", range: r.diameter }}
-        y={{ label: "FPM", range: r.velocity }}
-        series={[
-          {
-            key: "v",
-            label: "",
-            color: DISK,
-            pts: logspace(r.diameter).map((D) => [D, read(cfm, D).velocity] as const),
-          },
-        ]}
-        point={[diameter, velocity]}
-        readout={([D]) => `${fmt(D, 1)}″ → ${fmt(read(cfm, D).velocity, 0)} fpm`}
-        onPick={([D]) => onPick({ diameter: D })}
-      />
+    // The four-up row follows the pane's own width, not the viewport: docked at 1600px the pane is
+    // ~690px, the lg breakpoint still held four columns, and 8-unit SVG labels drew at ~3px. One
+    // chart per row keeps them near the small type size (house law 6, L3).
+    <div className="@container">
+      <div className="grid gap-(--gutter) @min-[64rem]:grid-cols-[2fr_1fr_1fr_1fr]">
+        <LogLog
+          title="Friction chart"
+          note={`Δp = ${C}·Q^${EXP.cfm} / D^${EXP.diameter}  ·  solid: diameter, dashed: velocity`}
+          x={{ label: "FRICTION LOSS · IN. WG / 100 FT", range: r.friction }}
+          y={{ label: "CFM", range: r.cfmFriction }}
+          series={[...constantD, ...constantV]}
+          point={[friction, cfm]}
+          readout={([dp, Q]) => {
+            const D = diameterFor(Q, dp);
+            return `${fmt(Q, 0)} cfm · ${fmt(dp, 3)} in. wg → ${fmt(D, 1)}″ · ${fmt(read(Q, D).velocity, 0)} fpm`;
+          }}
+          onPick={([dp, Q]) => onPick({ cfm: Q, diameter: diameterFor(Q, dp) })}
+        />
+        <LogLog
+          title={`Δp against diameter, ${fmt(cfm, 0)} cfm`}
+          note={`slope −${EXP.diameter}  ·  Δp = ${fmt(C * cfm ** EXP.cfm, 0)} / D^${EXP.diameter}`}
+          x={{ label: "DIAMETER · IN", range: r.diameter }}
+          y={{ label: "IN. WG / 100 FT", range: r.friction }}
+          series={[
+            {
+              key: "dp",
+              label: "",
+              color: BASE,
+              pts: logspace(r.diameter).map((D) => [D, read(cfm, D).friction] as const),
+            },
+          ]}
+          point={[diameter, friction]}
+          readout={([D]) => `${fmt(D, 1)}″ → ${fmt(read(cfm, D).friction, 3)} in. wg`}
+          onPick={([D]) => onPick({ diameter: D })}
+        />
+        <LogLog
+          title={`Δp against cfm, ${fmt(diameter, 1)}″`}
+          note={`slope ${EXP.cfm}  ·  Δp = ${(C / diameter ** EXP.diameter).toExponential(2)} · Q^${EXP.cfm}`}
+          x={{ label: "CFM", range: r.cfmFriction }}
+          y={{ label: "IN. WG / 100 FT", range: r.friction }}
+          series={[
+            {
+              key: "dp",
+              label: "",
+              color: BASE,
+              pts: logspace(r.cfmFriction).map((Q) => [Q, read(Q, diameter).friction] as const),
+            },
+          ]}
+          point={[cfm, friction]}
+          readout={([Q]) => `${fmt(Q, 0)} cfm → ${fmt(read(Q, diameter).friction, 3)} in. wg`}
+          onPick={([Q]) => onPick({ cfm: Q })}
+        />
+        <LogLog
+          title={`Velocity against diameter, ${fmt(cfm, 0)} cfm`}
+          note={`slope −${EXP.velocityDiameter}  ·  V = 576·${fmt(cfm, 0)} / (π·D²)`}
+          x={{ label: "DIAMETER · IN", range: r.diameter }}
+          y={{ label: "FPM", range: r.velocity }}
+          series={[
+            {
+              key: "v",
+              label: "",
+              color: DISK,
+              pts: logspace(r.diameter).map((D) => [D, read(cfm, D).velocity] as const),
+            },
+          ]}
+          point={[diameter, velocity]}
+          readout={([D]) => `${fmt(D, 1)}″ → ${fmt(read(cfm, D).velocity, 0)} fpm`}
+          onPick={([D]) => onPick({ diameter: D })}
+        />
+      </div>
     </div>
   );
 }

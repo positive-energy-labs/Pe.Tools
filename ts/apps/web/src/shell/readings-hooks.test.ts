@@ -1,15 +1,9 @@
 // Step 5 R: a shell hook subject (route target, host status, provider) runs the same source-attempt
-// lifecycle as admitted route readings (`openSourceReading`), never a second reading engine.
+// lifecycle as admitted route readings, never a second reading engine.
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { Reading } from "@pe/agent-contracts";
 
-vi.mock("./readings", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./readings")>()),
-  createReadingGraph: () => {
-    throw Error("a shell hook subject ran a second reading engine");
-  },
-}));
 const { readingAtom, inventoryOf } = await import("../host/resource-state");
 
 afterEach(() => vi.useRealTimers());

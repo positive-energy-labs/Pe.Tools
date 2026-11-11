@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { nativeResponseDefinitionSchema } from "@pe/host-contracts/decoders";
 import type { DuctsSnapshotWalk } from "@pe/host-contracts/generated";
-import { ductComponentWitnessSchema, ductCalculationSchema, ductAssumptionSchema, ductClaimSchema } from "./ducts.ts";
+import { ductComponentWitnessSchema, ductCalculationSchema, ductAssumptionSchema } from "./ducts.ts";
 import { ductsCriteriaLayerSchema, DUCT_UNIT_KINDS } from "./ducts-sheet.ts";
 import { DUCT_INFERENCE_GRADES } from "./ducts-analysis.ts";
 const n=z.number(),s=z.string(),nullable=n.nullable(),ns=z.array(n),ss=z.array(s);
@@ -25,7 +25,7 @@ export const circuitReadSchema=<R extends z.ZodType>(row:R)=>{
   const side=z.object({port:nullable,elementIds:ns,flowCfm:nullable,continuityResidualCfm:nullable,jointFlows:z.array(z.object({from:s,to:s,cfm:n})),totalPressureInWg:nullable,
     paths:z.array(z.object({terminalId:n,flowCfm:n,total:n,rows:z.array(row),balancingInWg:nullable})),backEdges:z.array(z.tuple([n,n])),reasons:z.array(reason)});
   return z.object({basis:z.literal("balanced-design-demand"),
-    graph:z.object({ports:z.array(z.object({elementId:n,uniqueId:s.nullable(),connector})),joints:z.array(z.object({a:s,b:s,reciprocal:z.boolean()})),parts:z.array(z.object({elementId:n,uniqueId:s.nullable(),ports:ns,continuity:z.enum(["component","passive","fan-boundary","unknown-equipment"])}))}),
+    graph:z.object({ports:z.array(z.object({elementId:n,uniqueId:s,connector})),joints:z.array(z.object({a:s,b:s,reciprocal:z.boolean()})),parts:z.array(z.object({elementId:n,uniqueId:s,ports:ns,continuity:z.enum(["component","passive","fan-boundary","unknown-equipment"])}))}),
     coverage:z.object({equipment:n,passiveEquipment:n,fanEquipment:n,fanCircuits:n,unassignedEquipmentPorts:n,terminals:n,admittedTerminals:n,reachedTerminals:n}),
     circuits:z.array(z.object({id:s,equipmentId:n,uniqueId:s,flowCfm:nullable,inlet:side,outlet:side,requiredExternalTotalPressureInWg:nullable,requiredExternalStaticPressureInWg:nullable,status:z.enum(["complete-for-declared-design","partial"]),reasons:z.array(reason)})),componentFlows:z.array(component),reasons:z.array(reason),
   });
@@ -39,5 +39,5 @@ export const inferenceReadSchema=z.object({
 });
 export const overridesReadSchema=z.object({terminalCfm:record(n).optional(),terminalPs:record(n).optional(),catalogLinks:record(z.object({table:s})).optional(),componentDrop:record(n).optional(),ruleAssignment:record(s).optional(),unitRole:record(z.enum(["fan","passive"])).optional(),unitCfm:record(n).optional(),designFrictionRate:n.optional()});
 const drop=z.object({inWg:n,source:s.optional()}),flow=z.object({cfm:n,source:s.optional()});
-export const stagedDuctsReadSchema=z.object({calculation:record(ductCalculationSchema),rules:record(z.object({table:s})),criteria:ductsCriteriaLayerSchema,kinds:record(z.object({kind:z.enum(DUCT_UNIT_KINDS)})),assumptions:record(ductAssumptionSchema),catalogs:record(z.object({table:s})),ruleAssignments:record(z.object({rule:s})),terminalDrops:record(drop),componentDrops:record(drop),esp:record(z.object({inWg:n})),equipmentFlows:record(flow),roles:record(z.object({role:z.enum(["fan","passive"])})),flows:record(flow),parameters:record(s),subject:record(ns),claims:record(ductClaimSchema),labelParameter:s.nullable(),workingPhase:s.nullable(),designFriction:n.nullable()});
+export const stagedDuctsReadSchema=z.object({calculation:record(ductCalculationSchema),rules:record(z.object({table:s})),criteria:ductsCriteriaLayerSchema,kinds:record(z.object({kind:z.enum(DUCT_UNIT_KINDS)})),assumptions:record(ductAssumptionSchema),catalogs:record(z.object({table:s})),ruleAssignments:record(z.object({rule:s})),terminalDrops:record(drop),componentDrops:record(drop),esp:record(z.object({inWg:n})),equipmentFlows:record(flow),roles:record(z.object({role:z.enum(["fan","passive"])})),flows:record(flow),parameters:record(s),subject:record(ns),labelParameter:s.nullable(),workingPhase:s.nullable(),designFriction:n.nullable()});
 

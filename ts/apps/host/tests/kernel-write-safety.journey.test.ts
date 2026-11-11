@@ -1,3 +1,5 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import capturedWalk from "./native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,8 +14,10 @@ import type { ConsentEvent } from "../src/run-consent.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { nativeFixture } from "./fans-native.fixture.ts";
 import { pagesRoute } from "../src/pages-route.ts";
-import { HostReceipts } from "../src/gateway-owner.ts";
+import { ActionJournalService } from "../src/receipt-services.ts";
 import { Layer } from "effect";
+
+const terminalSubject = elementSubject(capturedWalk.nodes.find(node => node.id === 8718801)!);
 
 async function fixture(withPage = false) {
   const dir = await mkdtemp(join(tmpdir(), "pe-write-safety-"));
@@ -32,7 +36,7 @@ async function fixture(withPage = false) {
   const caller: Caller = { kind: "pea", context: "safety", thread: run.thread, run, root: run };
   const pageRoot = join(dir, "pages");
   if (withPage) { await mkdir(join(pageRoot, "probe"), { recursive: true }); await writeFile(join(pageRoot, "probe", "index.html"), "<p>Write safety probe</p>", "utf8"); }
-  const routes = withPage ? pagesRoute(() => pageRoot, () => join(dir, "pods")).pipe(Layer.provide(Layer.succeed(HostReceipts, native.receipts))) : Layer.empty;
+  const routes = withPage ? pagesRoute(() => pageRoot, () => join(dir, "pods")).pipe(Layer.provide(Layer.succeed(ActionJournalService, native.journal))) : Layer.empty;
   let post = native.actions({ workspace }, undefined, {}, routes);
   const patch = async (value: unknown) => workspace.publish(key, "parameter-links", [{ path: ["definitions", "authored-extra"], value: { edit: { value } } }], (await workspace.read(key, "parameter-links"))?.revision ?? 0);
   await patch(definition);
@@ -197,8 +201,8 @@ test("R5 a real native rehearsal receipt cannot substitute for the declared Plan
   const f = await nativeFixture("test");
   try {
     f.select("fresh-ducts.heal.preview", "fresh-ducts.heal");
-    expect(await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [{ path: ["flows", "8718801", "edit"], value: { value: { cfm: 250 } } }], 0)).toMatchObject({ ok: true });
-    const staged = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g8718801"] } } }], 0);
+    expect(await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 250 } } }], 0)).toMatchObject({ ok: true });
+    const staged = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g8718801"] } } }], 0);
     if (!staged.ok) throw Error(JSON.stringify(staged));
     const input = { work: { key: f.key, revision: staged.revision } };
     for (const [id, key] of [["rehearsal", "ducts.rehearse-heal"], ["apply", "ducts.apply-heal"]]) {

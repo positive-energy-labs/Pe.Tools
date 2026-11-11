@@ -65,12 +65,6 @@ export type TeachingLayout =
       controls?: readonly TeachDescriptor[];
       available?: string;
       mount?: string;
-      pane?: {
-        scroll?: "auto" | "clip" | "visible";
-        flush?: boolean;
-        header?: false;
-        picture?: boolean;
-      };
     }
   | {
       id: string;

@@ -1,3 +1,5 @@
+import { undoOwnFinding } from "../route/host";
+import { kernelCommands } from "../route/slots/kernel-commands.ts";
 import { hostReadSource } from "./host-read-source.ts";
 import { writeReject } from "./catalog-work-reviews";
 import { harnessClient } from "../workbench/provider/harness-client";
@@ -34,15 +36,16 @@ import {
   type InvocationToken,
   type RouteStateWriteResult,
 } from "@pe/agent-contracts";
+import { ANY_ROUTE } from "@pe/agent-contracts";
 import { createRouteScopeGate } from "@pe/runtime/route-scope-gate";
 import { applicationWorkRegistry, createApplicationWorkRegistry } from "./application-work-registry";
 import { createWorkFeedClient } from "./work-feed-client";
 import { createFixtureWorkDoor } from "./fixture-work-door";
 import { publicationPose, recordedWorkDoor } from "./history";
 import { settleWork } from "./work-door-observation";
-import { freezePage } from "./page-port";
+import { freezePage } from "./freeze-page";
 import type { PlaceInput } from "./typed-place";
-import type { ReadingContext, ReadingSource } from "./source-contract";
+import type { ReadingContext, UseSource } from "./source-contract";
 import type { DrawContext, EditFailure, EditHistory, TypedRoute } from "../route/typed-route";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";
@@ -59,10 +62,14 @@ const unavailable = (reason: string, value?: any, publication: Value["publicatio
 
 /** Typed routes execute declarations directly. No graph admission, body slots or reading scheduler. */
 export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerprint: RouteFingerprint,
-  ports: { work?: WorkJournalDoor; sources?: Record<string, ReadingSource> } = {}) {
+  ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof undoOwnFinding>[1] } = {}) {
   const cleanups: (() => void)[] = [];
   try {
-  const { spec } = module;
+  // Every route with Work carries the kernel's commands (route/slots/kernel-commands.ts); a route's own id wins.
+  // The mount adds them, not `route()`: their contracts are the catalog, and `route()` is the Pod surface.
+  const spec = module.spec.edits
+    ? { ...module.spec, commands: { ...kernelCommands, ...module.spec.commands } } as TypedRoute["spec"]
+    : module.spec;
   const edits = spec.edits;
   const own = edits?.work.route ?? spec.key;
   const ownerConfigs = edits?.owners ?? {};
@@ -81,9 +88,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (input.target === null) throw Error("Place has no write target");
     if (input.readOnly || input.history) throw Error("needs live Revit");
   };
-  const decodePage = () => {
+  const decodePage = (remembered = true) => {
     const search = input.address.read();
-    const memory = z.record(z.string(),z.unknown()).parse(input.memory() ?? {});
+    const memory = remembered ? z.record(z.string(),z.unknown()).parse(input.memory() ?? {}) : {};
     return freezePage({ ...Object.fromEntries(Object.entries(spec.fields).map(([key, field]) => {
       const raw = search.get(key);
       return [key, decodeField(field, raw === null ? memory[key] ?? field.initial : raw)];
@@ -200,7 +207,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const controller = new AbortController();
       const record: {snapshot:Value;args:string;stop():void} = { args: signature, snapshot: { ...unavailable("Reading...", previous?.value,retained),status:"pending" }, stop: () => controller.abort() };
       reads.set(read, record);
-      const deliver = (frame: Parameters<Extract<ReadingSource, { kind: "use" | "feed" }>["open"]>[1] extends (arg: infer P) => any ? P : never) => {
+      const deliver = (frame: Parameters<UseSource["open"]>[1] extends (arg: infer P) => any ? P : never) => {
         if (controller.signal.aborted || disposed || reads.get(read) !== record) return;
         if (frame.kind === "complete" || frame.kind === "part") {
           try {
@@ -224,7 +231,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           work: null, page, args, signal: controller.signal, inputs: {},
           attempt: { target: input.target!, workKey: key, generation: revision }, trigger: { kind: "demand" } };
         const source = ports.sources?.[read.key] ?? hostReadSource(read);
-        if (source.kind !== "use" && source.kind !== "feed") throw Error("Typed panes require a host Value");
         Promise.resolve(source.open(ctx, deliver)).then(stop => {
           if (controller.signal.aborted) stop?.();
           else record.stop = () => { controller.abort(); stop?.(); };
@@ -254,12 +260,13 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     for (const key of Object.keys(patch)) if (spec.fields[key]?.role !== role) throw Error(`${key} is not a ${role} field`);
     return move(patch,history);
   };
+  // The Page the address holds; an address without `selected` keeps the current selection.
+  const addressPage = (remembered = true) => { const next = decodePage(remembered); return input.address.read().has("selected") ? next : { ...next, selected: page.selected }; };
   const stopAddress = input.address.subscribe(() => {
-    const next = decodePage();
-    const selected = input.address.read().has("selected") ? next.selected : page.selected;
+    const next = addressPage();
     // An unchanged address can be the custody-return notification for released read resources.
-    if (canonicalRouteInput({ ...next, selected }) === canonicalRouteInput(page)) { syncReads(); return; }
-    page = freezePage({ ...next, selected });
+    if (canonicalRouteInput(next) === canonicalRouteInput(page)) { syncReads(); return; }
+    page = freezePage(next);
     gate.movePage(page, { kind: "human", source: "query", history: "replace" }); syncWork(); syncReads(); notify();
   });
   cleanups.push(stopAddress);
@@ -440,7 +447,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       if(!issued.ok) throw Error(issued.reason);
       token=issued.value; plans.set(id,token); reviews.delete(id);
       const contract = commands[cmd.entry as keyof typeof commands];
-      const primary = owners.get("work" in contract && contract.work ? contract.work.route : own)!.handle!;
+      // A door every route shares (the sheet pair, ANY_ROUTE) takes the asking route's own Work.
+      const primary = owners.get("work" in contract && contract.work && contract.work.route !== ANY_ROUTE ? contract.work.route : own)!.handle!;
       const proposed=cmd.input?.({page:page as never,target:input.target,work:primary,value:core.value},supplied) ?? supplied ?? {};
       const request = cmd.planContract.input.parse({ ...z.record(z.string(),z.unknown()).parse(proposed), work: primary,
         readWorks: Object.fromEntries([...owners].filter(([id]) => id !== primary.key.route).map(([id,o]) => [id,o.handle])) });
@@ -519,6 +527,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         intents:journals.flatMap(j=>j.intents), moves:journals.flatMap(j=>j.moves).sort((a,b)=>a.at-b.at), last:journals.flatMap(j=>j.last?[j.last]:[]).sort((a,b)=>a.step.at-b.step.at).at(-1)??null});
     },
     discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.journal.discardIntent(id); notify(); },
+    // The person's own findings live in the document's findings Work, not this route's: their undo is that door's.
+    undoFinding: () => { const key = owners.get(own)?.handle?.key; return key ? undoOwnFinding(key, ports.findings) : Promise.resolve({ message: "Wait for this route's Work before undoing a finding" }); },
     restoreWork: restore, journalRefusal: () => input.readOnly || input.history ? "needs live Revit" : [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
@@ -554,7 +564,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     owner: (id = own) => owners.get(id),
     page: { read: () => page, pose: (patch: any, intent?: "gesture"|"named") => moveRole("pose",patch,intent === "gesture"?"replace":intent === "named"?"push":undefined), query: (patch: any) => moveRole("query",patch), select: (selected: any) => move({selected}), subject: (subject: any) => {if(!spec.subject) throw Error("No subject declared");return move({ [spec.subject.field]: subject },"push");} },
     subscribe(listener: () => void) { released = false; listeners.add(listener); syncReads(); return () => { listeners.delete(listener); }; },
-    available: () => !disposed && input.custody.current(), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
+    available: () => !disposed && input.custody.current(),
+    /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
+     *  (slice 6.1, `data-url-settled`); a reload reads only the address. */
+    urlCurrent: () => canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
     commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions" : "kind" in spec.commands[id]! ? null : basisRefusal(),
     problem: () => edits?basisRefusal():null, writeRefusal,
     refresh: (read?:import("../route/host-read").HostRead) => {
@@ -649,7 +662,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         patch,
         edit: (edit,detail)=>patch(()=>edits!.patches(edits!.input.parse(edit),core.value),detail),
       };
-      return (render ?? pane.draw)({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
+      return (render ?? ((ctx: DrawContext<any,any,any,any>) => pane.draw(ctx).node))({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
         write:mounted.action } as any);
     },
     // Retaining hidden read connections was a Plan-identity workaround; content fingerprints

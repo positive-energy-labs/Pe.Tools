@@ -8,6 +8,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import {
+  routeAt,
+  viewRoute,
+  type RouteGraphJson,
   routeAddress,
   type RoutePage,
   type RouteView,
@@ -20,6 +23,15 @@ import { useHostEvents } from "#/host/resource-stream";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { applyPageIntent, type PageIntent } from "./view-owner";
 import { useRouteCurrent, useRouteSearchSlice } from "./activity";
+
+/**
+ * Whether the host leases this typed route's view (`RouteViewStore.leasesView`), decided the host's
+ * way: a route at a builtin's path is that builtin and leases only if its address declares `agent`
+ * (the Pea workbench, key "chat" at /pea, declares none); any other route leases by its agent
+ * fields. A route outside the channel never publishes, so it never PUTs to a door the host refuses.
+ */
+export const leasesView = (data: Pick<RouteGraphJson, "key" | "address" | "name" | "fields">) =>
+  viewRoute(routeAt(data.address) ?? data.key, { key: data.key, title: data.name, address: data.address, fields: data.fields }) !== null;
 
 type Intent = {
   type: "route-view-intent";

@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { command, sessionCommand } from "../route/typed-actions.ts";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
@@ -10,7 +11,7 @@ import {
   cellPatches,
   showFamilyCell,
 } from "@pe/agent-contracts";
-import { familiesViewCapability } from "../../../../packages/agent-contracts/src/families-read.ts";
+import { reads } from "./reads.ts";
 import { route, field } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
@@ -35,13 +36,13 @@ export const edit = z.object({
   value: familyCellValueSchema,
   current: z.string(),
 });
-export const view = read(hostRead(familiesViewCapability));
-export type { Context as FamiliesDrawContext } from "./context.generated";
+export const view = read(hostRead(reads.view));
+export type FamiliesDrawContext = ContextOf<typeof fields, typeof view, typeof import("@pe/agent-contracts").familiesRouteState, typeof edit>;
 export const module = route({
   key: "families",
   name: "Families",
   needs: "project",
-  host: "../../../host/src/reads/families.ts",
+  host: "./host.ts",
   directory: {
     group: "Build / audit families",
     summary: "Audit and reconcile loaded family parameters",
@@ -61,7 +62,8 @@ export const module = route({
     main: {
       title: "Families",
       purpose: "Audit family values",
-      draw: draw(() => import("./matrix.tsx"), "FamiliesMatrix"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./matrix.tsx"), "FamiliesMatrix"),
     },
   },
   edits: {
@@ -112,9 +114,9 @@ export const module = route({
         sentence: "Review family parameter changes",
         rows: Object.entries(work.cells).flatMap(([key, cell]) => {
           if (!cell.edit) return [];
-          const [family, type, parameter] = JSON.parse(key) as string[];
+          const { familyName, typeName, parameter } = familyCellAddress(key);
           return [
-            `${family} / ${type} / ${parameter}: observed value to ${showFamilyCell(cell.edit.value)}`,
+            `${familyName} / ${typeName} / ${parameter}: observed value to ${showFamilyCell(cell.edit.value)}`,
           ];
         }),
       }),

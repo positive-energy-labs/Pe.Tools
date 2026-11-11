@@ -122,3 +122,30 @@ _Avoid_: fixture (hand-authored seeds), cassette, replay (the act)
 **History rail**:
 The shell's list of named points for the open document. A route writes nothing for it.
 _Avoid_: history pane (per route), timeline (the projection it derives from)
+
+## Kernel crusade (ADR 0035)
+
+**Slot**:
+One of five closed kinds on the route declaration: `subject`, `sheet`, `picture`, `goal`, `layout`. The kernel owns a slot's behavior; the route fills it with data.
+_Avoid_: capability, plugin, module (for the declaration side)
+
+**SubjectRef**:
+The one identity of a subject everywhere: `{ source?, keyKind, key, placement?, sub? }`, carried as one branded codec string. A document mark is never part of it.
+_Avoid_: localId, element id, subject key (for the type)
+
+**Binding kind**:
+Where a sheet cell's value is written: `parameter`, `store` or `local`. Closed.
+_Avoid_: layer (that is value resolution), home (that is where Work is stored)
+
+**Body**:
+What `draw` returns, `scrollBody` or `fillBody`. A pane is a Body or a split, never both.
+_Avoid_: content, children
+
+**Notice feed**:
+The host's one `notices` Reading of what needs a person or tells one, in groups waits, working, interrupted, failed, unread. Push and pull read it.
+_Avoid_: activity, inbox, attention (that is Pea's view of a person's open work)
+
+**Tray**:
+The native window beside Revit that shows the notice feed, consent and compact chat. The **card** is its push window and shows the consent sweep.
+_Avoid_: tray route, flyout
+

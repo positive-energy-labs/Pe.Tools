@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { queryAction } from "../route/typed-actions.ts";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
@@ -16,7 +17,7 @@ export const loaded = read(
   hostRead(valueRead("ops.workspace", opsArgs, opsData)),
   (page: { actionId: string }) => ({ actionId: page.actionId }),
 );
-export type { Context as OpsContext } from "./context.generated";
+export type OpsContext = ContextOf<typeof fields, typeof loaded, never, never>;
 export const module = route({
   key: "ops",
   name: "Ops",
@@ -24,7 +25,7 @@ export const module = route({
   agent: false,
   needs: "host",
   optionalTarget: "session",
-  host: "../../../host/src/reads/ops.ts",
+  host: "./host.ts",
   directory: {
     label: "Host API",
     exposure: "Preview",
@@ -43,7 +44,8 @@ export const module = route({
     main: {
       title: "Ops",
       purpose: "Inspect requests, read results and control original receipts",
-      draw: draw(() => import("./mount"), "OpsBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./mount"), "OpsBody"),
     },
   },
   commands: {

@@ -1,26 +1,16 @@
 import type { TypedMount } from "./typed-mount";
-import type { WorkKey } from "@pe/agent-contracts";
 import type { WorkJournal } from "./journal";
-import type { createRouteTimeline } from "./timeline";
 /**
  * ADR 0027 rule 3: the Situation is one line. The route's name and context lead, one primary verb
  * stands framed, the rest wait in an overflow, and the Timeline head closes the line. Layout only:
- * mount-chrome.tsx renders each verb and each context control; this file owns where they sit.
- *
- * The Timeline head's Reject answers the same host consent API as Pea's composer (`thread.permission`).
- * TODO: docs/features/routes/LEDGER.md#s7-a91a2429a1 H2 — Reject dispatch and host cancellation are proven separately by fixture tests; press it against a live
- * host consent window (a route command from a Pea thread) to prove the round trip.
+ * typed-shell.tsx renders each verb and each context control; this file owns where they sit.
  */
-import { useContext, useSyncExternalStore, type ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { MoreHorizontal, Redo2, Undo2 } from "lucide-react";
-import { workKey, type VerbDecl } from "@pe/agent-contracts";
+import type { VerbDecl } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
-import { harnessClient } from "#/workbench/provider/harness-client";
-import { WorkbenchContext } from "#/workbench/provider/thread-summary";
-import { resolveWorkbenchConfig } from "#/workbench/config";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { activityTime, projectTimeline, type TimelineVerbs, type TimelineEntry } from "./timeline";
-import { secondsLeft, useSecondTick } from "./countdown";
 import "./situation-band.css";
 
 export function SituationBand({
@@ -96,26 +86,10 @@ export const entryCaller = (entry: TimelineEntry) =>
     : "you";
 
 /** The Work journal behind the owner's current scope: the one history of authored edits. */
-export type JournalOwner = Pick<TypedMount, "subscribe" | "revision" | "restoreWork" | "stopCommand"> & { spec?: Pick<TypedMount["spec"], "commands">; discardIntent?(id:string):void; journalRefusal(): string | null; journal(): ReturnType<WorkJournal["read"]> | null; timeline(): readonly TimelineEntry[] };
-export interface LegacyJournalOwner {
-  subscribe(notify: () => void): () => void;
-  version(): number;
-  snapshot(): { work: { handle: { key: WorkKey } } | null; workKey?: WorkKey; unreadable?: WorkKey };
-  journals: ReadonlyMap<string, WorkJournal>;
-  restore(direction: "undo" | "redo"): Promise<unknown>;
-  journalRefusal(): string | null;
-  commandRefusal: string | null;
-  timeline: ReturnType<typeof createRouteTimeline>;
-  verbs: TimelineVerbs;
-}
-type HistoryOwner = LegacyJournalOwner | JournalOwner;
-export function useWorkJournal(owner: HistoryOwner) {
-  const version = "restoreWork" in owner ? owner.revision : owner.version;
-  useSyncExternalStore(owner.subscribe, version, version);
-  if ("restoreWork" in owner) return owner.journal();
-  const scope = owner.snapshot();
-  const key = scope.work?.handle.key ?? scope.workKey ?? scope.unreadable;
-  return key ? (owner.journals.get(workKey(key))?.read() ?? null) : null;
+export type JournalOwner = Pick<TypedMount, "subscribe" | "revision" | "restoreWork" | "stopCommand"> & Partial<Pick<TypedMount, "undoFinding">> & { spec?: Pick<TypedMount["spec"], "commands">; discardIntent?(id:string):void; journalRefusal(): string | null; journal(): ReturnType<WorkJournal["read"]> | null; timeline(): readonly TimelineEntry[] };
+export function useWorkJournal(owner: JournalOwner) {
+  useSyncExternalStore(owner.subscribe, owner.revision, owner.revision);
+  return owner.journal();
 }
 type Journal = NonNullable<ReturnType<typeof useWorkJournal>>;
 export const stepSource = (step: Journal["undo"][number]) => (step.by === "pea" ? "Pea" : "you");
@@ -152,17 +126,15 @@ export function JournalButtons({
   owner,
   words = false,
 }: {
-  owner: HistoryOwner;
+  owner: JournalOwner;
   words?: boolean;
 }) {
   const journal = useWorkJournal(owner);
   if (!journal) return null;
   const undo = journal.undo.at(-1);
   const redo = journal.redo.at(-1);
-  const entries = "restoreWork" in owner ? owner.timeline() : owner.timeline.read();
-  const verbs = "restoreWork" in owner
-    ? Object.fromEntries(Object.entries(owner.spec?.commands ?? {}).map(([id, command]) => [id, { label: command.label, entry: command.entry }]))
-    : owner.verbs;
+  const entries = owner.timeline();
+  const verbs = Object.fromEntries(Object.entries(owner.spec?.commands ?? {}).map(([id, command]) => [id, { label: command.label, entry: command.entry }]));
   const rows = projectTimeline(entries, verbs, journal);
   const barrierRefusal = (step: typeof undo, direction: "undo" | "redo") => {
     if (!step?.barrier) return null;
@@ -172,7 +144,7 @@ export function JournalButtons({
       : `Cannot ${direction}: a later action changed this Work. Inspect History.`;
   };
   const restore = async (direction: "undo" | "redo") => {
-    const result = await ("restoreWork" in owner ? owner.restoreWork(direction) : owner.restore(direction));
+    const result = await owner.restoreWork(direction);
     return result && typeof result === "object" && "ok" in result && result.ok === false && "message" in result
       ? { message: String(result.message) } : null;
   };
@@ -209,42 +181,23 @@ export function JournalButtons({
 
 /**
  * The Timeline's head: the latest Work edit (who made it, its state, the Work revision), unless a
- * command ran after it; else the latest entry, in one line and every open consent window as its
- * "Reject?" countdown. The full history opens beneath it; it never takes a row of its own.
+ * command ran after it; else the latest entry, in one line. Consent windows are the topbar sweep's
+ * (ADR 0035 rule 6). The full history opens beneath it; it never takes a row of its own.
  */
 export function TimelineHead({
   owner,
   history,
-  thread,
   verbs: declaredVerbs,
 }: {
-  owner: HistoryOwner;
+  owner: JournalOwner;
   verbs?: TimelineVerbs;
   history: ReactNode;
-  thread?: string;
 }) {
-  const admitted = "restoreWork" in owner;
-  const version = admitted ? owner.revision : owner.timeline.version;
-  useSyncExternalStore(
-    admitted ? owner.subscribe : (notify) => owner.timeline.subscribe(notify),
-    version,
-    version,
-  );
-  const timeline: readonly TimelineEntry[] = admitted ? owner.timeline() : owner.timeline.read();
-  const verbs = declaredVerbs ?? (admitted ? {} : owner.verbs);
-  // The selected thread's run consent (ADR 0027 rule 11) is the same window Pea's composer card
-  // answers; the head shows it too, so a "Reject?" countdown is never only inside the chat pane.
-  const workbench = useContext(WorkbenchContext);
-  const runAsks = workbench?.runApprovals ?? [];
-  // One host window is one countdown: a receipt stamped with a window the run ask already draws
-  // is not drawn twice. Both read the host's deadline from the clock at render (countdown.ts).
-  const asked = new Set(runAsks.map((ask) => ask.requestId));
+  useSyncExternalStore(owner.subscribe, owner.revision, owner.revision);
+  const timeline: readonly TimelineEntry[] = owner.timeline();
+  const verbs = declaredVerbs ?? {};
   const journal = useWorkJournal(owner);
   const rows = projectTimeline(timeline, verbs, journal);
-  const windows = rows.filter(
-    (row) => row.kind === "consent" && !asked.has(row.outcome!.consentWindow!.requestId),
-  );
-  useSecondTick(windows.some((row) => row.consentUntil) || runAsks.some((ask) => ask.deadline));
   const last =
     rows.findLast(
       (row) =>
@@ -256,55 +209,6 @@ export function TimelineHead({
   const step = last?.kind === "journal" ? last.step : undefined;
   return (
     <span data-slot="timeline-head" role="group" aria-label="Timeline">
-      {windows.map((row) => {
-        const entry = row.entry;
-        const left = row.consentUntil ? secondsLeft(row.consentUntil) : null;
-        const window = row.outcome!.consentWindow!;
-        const consent = consentThread(entry, thread);
-        return (
-          <span key={entry.outcome?.receiptId ?? entry.press} data-slot="consent-window">
-            <span role="timer" data-tone="caution" aria-label={`${row.verb} applies in`}>
-              {row.verb} · {left === null ? "awaiting approval" : `${left}s`}
-            </span>
-            <Button
-              label={`Reject ${row.verb}`}
-              refusal={
-                (!admitted ? owner.commandRefusal : owner.journalRefusal()) ??
-                (consent ? null : "No thread holds this consent window")
-              }
-              onClick={() =>
-                // `stop_writes` is the host's reject option (run-consent.ts): it closes the window
-                // and stops this thread's writes until a fresh consent.
-                void harnessClient(resolveWorkbenchConfig().origin).permission(
-                  consent!,
-                  window.requestId,
-                  "stop_writes",
-                )
-              }
-            >
-              Reject?
-            </Button>
-          </span>
-        );
-      })}
-      {runAsks.map((ask) => {
-        const left = ask.deadline ? secondsLeft(ask.deadline) : null;
-        const reject = ask.options.find((option) => option.kind.startsWith("reject"));
-        return (
-          <span key={ask.requestId} data-slot="consent-window">
-            <span role="timer" data-tone="caution" aria-label="Pea's writes apply in">
-              Pea writes · {left === null ? "awaiting approval" : `${left}s`}
-            </span>
-            <Button
-              label="Reject Pea's writes in this thread"
-              refusal={reject ? null : "This consent window offers no reject option"}
-              onClick={() => void workbench!.resolveApproval(ask.requestId, reject!.optionId)}
-            >
-              Reject?
-            </Button>
-          </span>
-        );
-      })}
       <Popover>
         <PopoverTrigger aria-label="Open the Timeline" data-slot="timeline-trigger">
           {step && last?.kind === "journal" ? (

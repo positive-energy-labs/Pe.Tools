@@ -2,10 +2,12 @@ import type { ActionJournal } from "./action-journal.ts";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { commandResources } from "./command-reads.ts";
 import { workStartExecutor } from "./work-start.ts";
+import { findingsExecutors } from "./slots/findings.ts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { workIntentBoundary, workWriteBoundary } from "./work-write-boundary.ts";
-import { catalogCommandContext } from "./catalog-command-context.ts";
+import { CatalogCommand, catalogCommandContext } from "./catalog-command-context.ts";
 import type { CommandExecutor, CommandRegistry } from "./command-executor.ts";
+import type { GatewayLocal } from "./gateway-actions.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { familyExecutors, type FamilyActionDependencies } from "./family-actions.ts";
@@ -14,6 +16,7 @@ import { instancesExecutors, type InstancesActionDependencies } from "./instance
 import { takeoffExecutors } from "./takeoff-actions.ts";
 import { ductsExecutors } from "./ducts-actions.ts";
 import { catalogWorkExecutors } from "./catalog-work-actions.ts";
+import { sheetExecutors } from "./slots/sheet.ts";
 import { gatewayExecutor } from "./gateway-actions.ts";
 import { bootstrapExecutor } from "./bootstrap.ts";
 import { pagePublicationExecutor } from "./page-publication.ts";
@@ -24,6 +27,7 @@ import { Effect } from "effect";
 import { CANCEL_OPERATION_KEY } from "./bridge.ts";
 import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
 import { catalogWorkSpecs, commands, type WriteBoundaryBinding } from "@pe/agent-contracts";
+import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
 /** Composed once for this exact runtime. Invocation-local facts live only in bind/prepare. */
@@ -31,7 +35,7 @@ export function commandRegistry(
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
   deps: FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] },
-  local: (key: string, input: unknown) => Promise<unknown>,
+  local: GatewayLocal,
   origin?: () => string,
 ): CommandRegistry {
   const implementations: Record<string, CommandExecutor> = {
@@ -48,13 +52,20 @@ export function commandRegistry(
       deps.pictures!,
     ),
   };
+  // The ducts losses half of the sheet pair answers through the sheet dispatcher, not as its own entry.
+  const ducts = ductsExecutors(bridge, deps) as Record<string, CommandExecutor>;
+  const ductsWithoutSheet = Object.fromEntries(
+    Object.entries(ducts).filter(([key]) => !(Object.values(SHEET_COMMANDS) as string[]).includes(key)),
+  );
   for (const group of [
     familyExecutors(captures, bridge, deps),
     scheduleExecutors(captures, bridge, deps),
     instancesExecutors(deps),
     takeoffExecutors(captures, bridge, deps),
-    ductsExecutors(bridge, deps),
+    ductsWithoutSheet,
+    sheetExecutors(bridge, deps, ducts),
     catalogWorkExecutors(bridge, deps),
+    findingsExecutors(deps.workspace),
   ]) {
     for (const [key, factory] of Object.entries(group)) {
       if (implementations[key]) throw Error(`Command '${key}' has two executors`);
@@ -70,13 +81,13 @@ export function commandRegistry(
     if (!step.process) throw Error("No exact native process was captured for this step");
     return readNativeReceipt(step, step.process, deps.sdk);
   };
-  const cancel = async (requestId: string) => {
-    // effect-edge: island, phase 5
-    const answer = await Effect.runPromise(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }));
-    const result = answer.value as { cancelled?: boolean; message?: string } | null;
-    if (result?.cancelled === false) throw Error(result.message ?? "Native request is not running");
-    return result;
-  };
+  const cancel = (requestId: string) =>
+    Effect.flatMap(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }), ({ value }) => {
+      const result = value as { cancelled?: boolean; message?: string } | null;
+      return result?.cancelled === false
+        ? Effect.fail(Error(result.message ?? "Native request is not running"))
+        : Effect.succeed(result);
+    });
   const complete = (entry: CommandExecutor, key?: string): CommandExecutor => {
     const definition = entry.definition;
     return {
@@ -88,7 +99,7 @@ export function commandRegistry(
         key ? catalogCommandContext.run(key, () => entry.bind(context)) : entry.bind(context),
       run: (context, execution) =>
         key
-          ? catalogCommandContext.run(key, () => entry.run(context, execution))
+          ? entry.run(context, execution).pipe(Effect.provideService(CatalogCommand, key))
           : entry.run(context, execution),
       recover: entry.recover ?? recover,
       cancel: entry.cancel ?? cancel,
@@ -154,7 +165,7 @@ export function bindCommandRuntime(
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
   deps: FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] },
-  local: (key: string, input: unknown) => Promise<unknown>,
+  local: GatewayLocal,
   origin?: () => string,
 ): void {
   owner.bindCommands({

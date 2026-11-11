@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { route, field } from "../route/defaults";
@@ -19,7 +20,7 @@ export const fields = {
   sort: field(z.enum(["workflow", "name"]), "workflow", "query", "push"),
   folded: field(z.array(z.string()), [], "query"),
 };
-export type { Context as HomeContext } from "./context.generated";
+export type HomeContext = ContextOf<typeof fields, never, never, never>;
 export const module = route({
   key: "home",
   name: "Home",
@@ -29,7 +30,7 @@ export const module = route({
     label: "Home",
     exposure: "Main",
     group: "Start / open work",
-    icon: "Home",
+    icon: "House",
     runtimeNeed: "Host activity and tool directory",
     summary: "Find tools and resume open work",
     aliases: [],
@@ -42,7 +43,8 @@ export const module = route({
     main: {
       title: "Home",
       purpose: "Find tools and inspect activity",
-      draw: draw(() => import("./mount"), "HomeBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./mount"), "HomeBody"),
     },
   },
   layout: paneLayout("main"),

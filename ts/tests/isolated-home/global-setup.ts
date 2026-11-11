@@ -11,6 +11,7 @@ export default function isolateProductHome() {
   const root = mkdtempSync(join(realpathSync(tmpdir()), "pe-test-home-"));
   process.env.PE_TEST_HOME_ROOT = root;
   process.env.PE_TOOLS_PRODUCT_HOME = join(root, "product");
+  delete process.env.PE_TOOLS_SHARED_ROOT;
   process.env.LOCALAPPDATA = join(root, "local");
   // SDK known-folder discovery needs exclusive roots, not LOCALAPPDATA alone.
   process.env.PE_SESSION_REGISTRY_ROOT = join(root, "sdk", "registry");

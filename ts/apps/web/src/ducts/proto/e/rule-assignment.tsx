@@ -54,7 +54,7 @@ export function RuleAssignment({ family, work }: { family: string; work: RuleWor
         ))}
       </select>
       {error ? (
-        <span role="alert" data-tone="alarm">
+        <span role="alert" data-tone="caution">
           {error}
         </span>
       ) : null}

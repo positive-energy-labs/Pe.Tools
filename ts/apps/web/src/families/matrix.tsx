@@ -1,13 +1,18 @@
 import { PreviewAction } from "@pe/kit/lang/write-action";
 import { refuse } from "#/route/refusal";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { familyCellAddress } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
+import { ButtonGroup } from "@pe/kit/lang/button-group";
+import { List } from "@pe/kit/lang/list-popup";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import type { FamiliesDrawContext } from "./route";
 import { TypeGrid } from "./pivot-grid";
 import { useCellCollection } from "@pe/kit/lang/cell";
 import { useMeasuredParse } from "#/host/measured-parse";
+import { FindingVerb } from "#/route/slots/findings/verb";
+import { joinRows } from "./families-matrix";
+import { subjectCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
   const [failure, setFailure] = useState<string | null>(null);
   const run = async (id: string, input?: unknown) => {
@@ -22,7 +27,7 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
   const data = ctx.value.value;
   const work = ctx.cells.doc;
   const shown = data?.observation;
-  const rows = data?.rows ?? [];
+  const rows = useMemo(() => (data ? joinRows(data.rows, data.facts) : []), [data]);
   const params = data?.params ?? [];
   const pivot = { pivotRows: data?.pivotRows ?? [], pivotFamilies: data?.pivotFamilies ?? [] };
   const scope =
@@ -38,6 +43,14 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
   const scopeCell = ctx.cells.at(["scope"]);
   const catalog = data?.catalog.families ?? [];
   const categories = data?.categories ?? [];
+  const choices = [
+    ...categories.map((name) => ({ key: `c:${name}`, name, group: "Categories" as const })),
+    ...catalog.map((family) => ({
+      key: `f:${family.familyId}`,
+      name: family.familyName,
+      group: "Families" as const,
+    })),
+  ];
   const live = useCellCollection(work?.cells ?? {}, (key) => ctx.cells.at(["cells", key]));
   const focus = ctx.page.read().focus;
   let landed: { row: number; col: number; n: number } | null = null;
@@ -53,42 +66,39 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
   }
   return (
     <>
-      <div role="group" aria-label="Family scope">
-        {scopeCell.refusal && <OutcomeLine kind="refused" label="Family scope unavailable" says={scopeCell.refusal} />}
-        {categories.map((category) => (
-          <Button
-            key={category}
-            label={`Choose ${category}`}
-            refusal={scopeCell.refusal}
-            onPress={() =>
-              scopeCell.stage(
-                { ...filter, categoryNames: [category], familyNames: [] },
-                { label: "Choose families" },
-              )
-            }
-          >
-            {category}
-          </Button>
-        ))}
-        {catalog.map((family) => (
-          <Button
-            key={family.familyId}
-            label={`Choose ${family.familyName}`}
-            refusal={scopeCell.refusal}
-            onPress={() =>
-              scopeCell.stage(
-                {
-                  ...filter,
-                  categoryNames: [...filter.categoryNames],
-                  familyNames: [family.familyName],
-                },
-                { label: "Choose families" },
-              )
-            }
-          >
-            {family.familyName}
-          </Button>
-        ))}
+      <div role="group" aria-label="Family scope" className="flex flex-col">
+        {scopeCell.refusal && (
+          <OutcomeLine kind="refused" label="Family scope unavailable" says={scopeCell.refusal} />
+        )}
+        {/* One kit list, one row anatomy (P1, N3): categories then families, searchable. */}
+        <List
+          aria-label="Family scope choices"
+          items={choices}
+          keyOf={(choice) => choice.key}
+          labelOf={(choice) => choice.name}
+          groupOf={(choice) => choice.group}
+          leadingGroups={["Categories", "Families"]}
+          // ponytail: 6 rows per group is a first guess (M1); "N more" and search reach the rest.
+          groupCap={6}
+          filter="substring"
+          searchPlaceholder="search categories and families…"
+          empty="no categories or families read yet"
+          onPick={(choice) =>
+            scopeCell.stage(
+              choice.group === "Categories"
+                ? { ...filter, categoryNames: [choice.name], familyNames: [] }
+                : {
+                    ...filter,
+                    categoryNames: [...filter.categoryNames],
+                    familyNames: [choice.name],
+                  },
+              { label: "Choose families" },
+            )
+          }
+          row={(choice) => ({ label: choice.name, refusal: scopeCell.refusal })}
+        />
+      </div>
+      <ButtonGroup label="Family verbs">
         <Button
           label="Read families"
           onClick={() => {
@@ -103,7 +113,7 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
           Stop
         </Button>
         <PreviewAction handle={ctx.write("apply")} label="Apply families" />
-      </div>
+      </ButtonGroup>
       {!ctx.value.current && (
         <OutcomeLine kind="advisory" label="Family read" says={ctx.value.reason} />
       )}
@@ -135,6 +145,13 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
         families={pivot.pivotFamilies}
         scroller={scroller}
         landed={landed}
+        typeVerb={(type) => (
+          <FindingVerb
+            subject={subjectCode({ keyKind: "name", key: [type.familyName, type.typeName] })}
+            name={`${type.familyName} · ${type.typeName}`}
+            write={(finding) => ctx.write("finding").run(finding)}
+          />
+        )}
         edit={{
           live,
           params: new Map(params.map((p) => [p.key, p])),

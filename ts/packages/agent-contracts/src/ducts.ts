@@ -9,17 +9,17 @@
  * - `rules`: loss-rule key (the web's `LOSS_RULES`) -> the ASHRAE table every instance of the rule
  *   is re-looked-up under. Either author edits a type's table, never a raw coefficient.
  * - The scene (pressure-drop ledger, 2026-10-19): `subject`, keyed by group id, each cell an ORDERED
- *   element-id list (a claim shows only on the groups that hold its ids, `claimsForGroup`); `claims`, keyed by claim id, a sentence pinned to element ids with the author's state and a
- *   verdict slot; `labelParameter`, one cell naming the instance parameter whose value names
+ *   element-id list; `labelParameter`, one cell naming the instance parameter whose value names
  *   equipment for people (`ducts.snapshot` reads it into `DuctNode.label`). Either author stages
- *   all three; a verdict in the staged edit is the verdict record.
+ *   both. A claim with a verdict is a finding (ADR 0035 rule 9), not ducts Work.
  * - `workingPhase` (kaitpw 2026-10-19), one cell naming the phase the firm's views show (a name in
  *   the snapshot's `phases.order`); either author stages it from the snapshot's view
  *   census, and the route leaves out every element that does not exist in it (`phases.ts`).
  * `ducts.apply` writes the edited rules, rulings and the fans Work's drops, flows, esp and slots to Revit.
  */
+import { decode, subjectOf, subjectRefCodeSchema } from "./subject-ref.ts";
 import { z } from "zod";
-import { DUCT_UNIT_KINDS, ductsCriteriaLayerSchema } from "./ducts-sheet.ts";
+import { DUCT_UNIT_KINDS, DUCTS_CRITERIA_CELLS, criteriaLayer } from "./ducts-sheet.ts";
 
 import { draftCellSchema } from "./draft.ts";
 import type { DuctFlow, DuctUnitRole, FansDocument } from "./fans.ts";
@@ -74,25 +74,6 @@ export type DuctSystemColours = z.infer<typeof ductSystemColoursSchema>;
 
 /** One group's subject: element ids in walking order. The web cuts legs from it (`ducts/legs.ts`). */
 const subjectSchema = z.array(z.number().int()).min(1).readonly();
-export const DUCT_CLAIM_STATES = ["proven", "assumed", "unproven"] as const;
-export const DUCT_CLAIM_VERDICTS = ["yes", "no", "not-this"] as const;
-/** A short noun-phrase title on the surface, one sentence in its hint, and element ids.
- * `state` and `verdict` are authored judgments. The enclosing Change owns trusted provenance.
- * Historical verdictBy/verdictAt are retained declarations, never authenticated identities. */
-export const ductClaimSchema = z
-  .strictObject({
-    title: z.string().min(1).max(60),
-    text: z.string().min(1),
-    ids: z.array(z.number().int()).min(1).readonly(),
-    state: z.enum(DUCT_CLAIM_STATES),
-    verdict: z.enum(DUCT_CLAIM_VERDICTS).optional(),
-    verdictBy: z.string().min(1).optional(),
-    verdictAt: z.string().optional(),
-  })
-  .refine((claim) => claim.verdict !== undefined || (!claim.verdictBy && !claim.verdictAt), {
-    error: "verdictBy and verdictAt describe a verdict; give one",
-  });
-export type DuctClaim = z.infer<typeof ductClaimSchema>;
 
 /** Exact retained connector witness. A matching index alone does not establish the same port. */
 const elementIdentity = z.strictObject({
@@ -161,7 +142,7 @@ export const ductComponentWitnessSchema = z.array(
         connectedTo: z
           .strictObject({
             id: z.number().int(),
-            uniqueId: z.string().nullable(),
+            uniqueId: z.string(),
             connector: z.number().int(),
           })
           .nullable(),
@@ -310,8 +291,25 @@ export type DuctPortPin = z.infer<typeof ductPortPinSchema>;
 
 export const ductsDocumentSchema = z
   .strictObject({
-    /** The project's design criteria over the firm file (ducts LEDGER 2026-10-29): one cell, each criterion and side optional, pending until apply. */
-    criteria: draftCellSchema(ductsCriteriaLayerSchema).default({}),
+    /** The project's design criteria over the firm file (ducts LEDGER 2026-10-29): one cell per criterion and side, pending until apply. */
+    criteria: z
+      .strictObject({
+        velocitySupplyFpm: draftCellSchema(DUCTS_CRITERIA_CELLS.velocitySupplyFpm.value).optional(),
+        velocityReturnFpm: draftCellSchema(DUCTS_CRITERIA_CELLS.velocityReturnFpm.value).optional(),
+        terminalDropInWg: draftCellSchema(DUCTS_CRITERIA_CELLS.terminalDropInWg.value).optional(),
+        autoJoinGapIn: draftCellSchema(DUCTS_CRITERIA_CELLS.autoJoinGapIn.value).optional(),
+        healBoxIn: draftCellSchema(DUCTS_CRITERIA_CELLS.healBoxIn.value).optional(),
+        splitPolicy: draftCellSchema(DUCTS_CRITERIA_CELLS.splitPolicy.value).optional(),
+        allowanceSupplyInWg: draftCellSchema(DUCTS_CRITERIA_CELLS.allowanceSupplyInWg.value).optional(),
+        allowanceReturnInWg: draftCellSchema(DUCTS_CRITERIA_CELLS.allowanceReturnInWg.value).optional(),
+      })
+      .default({}),
+    /**
+     * The design friction rate, in-wg per 100 ft: the one rate a run is read against and the fallback a part
+     * with no duct on its path is read at. A firm-authored Manual D criterion (ruling 2026-11-10: /ducts owns
+     * design data); Revit never receives it.
+     */
+    designFriction: draftCellSchema(z.number().positive()).default({}),
     /** A unit kind ruled per family type, keyed JSON.stringify([family, type]); suggested from ports otherwise. */
     kinds: z
       .record(z.string().min(1), draftCellSchema(z.strictObject({ kind: z.enum(DUCT_UNIT_KINDS) })))
@@ -319,7 +317,15 @@ export const ductsDocumentSchema = z
     /** Authored scope for host-derived repair and fan commands; never a native request. */
     writeIntent: draftCellSchema(
       z.strictObject({
-        groups: z.array(z.string().min(1)).readonly().optional(),
+        /** Network groups as SubjectRef `group:<id>` codes (ADR 0035 rule 2), decoded at this door. */
+        groups: z
+          .array(
+            subjectRefCodeSchema.refine((code) => decode(code).ok && subjectOf(code).keyKind === "group", {
+              message: "a write-scope group is a group:<id> SubjectRef",
+            }),
+          )
+          .readonly()
+          .optional(),
         cells: z
           .array(z.tuple([z.literal("rules"), z.string().min(1)]).readonly())
           .min(1)
@@ -348,7 +354,6 @@ export const ductsDocumentSchema = z
       .default({}),
     /** Keyed by group id (`g<min element id>`): the ordered element ids of that group's system as intended. */
     subject: z.record(z.string().min(1), draftCellSchema(subjectSchema)).default({}),
-    claims: z.record(z.string().min(1), draftCellSchema(ductClaimSchema)).default({}),
     /** The instance parameter whose value names equipment for people; absent reads the firm tag PE_G___TagInstance. */
     labelParameter: draftCellSchema(z.string().min(1).nullable()).default({}),
     /** The phase the network is read in; null (or no cell) reads every element. */
@@ -392,7 +397,7 @@ export function stagedDucts(doc: DuctsRouteDocument | null, fans: FansDocument) 
   return {
     calculation: stagedOf(fans.calculation),
     rules: stagedOf(doc?.rules ?? {}),
-    criteria: doc?.criteria?.edit?.value ?? {},
+    criteria: criteriaLayer(doc?.criteria ?? {}),
     kinds: stagedOf(doc?.kinds ?? {}) as Record<string, { kind: (typeof DUCT_UNIT_KINDS)[number] }>,
     assumptions: stagedOf<DuctAssumption>(doc?.assumptions ?? {}),
     catalogs: stagedOf(doc?.catalogs ?? {}),
@@ -405,10 +410,9 @@ export function stagedDucts(doc: DuctsRouteDocument | null, fans: FansDocument) 
     flows: stagedOf(fans.flows) as Record<string, DuctFlow>,
     parameters: stagedOf(fans.parameters) as Partial<Record<DuctParameterKey, string>>,
     subject: stagedOf<readonly number[]>(doc?.subject ?? {}),
-    claims: stagedOf<DuctClaim>(doc?.claims ?? {}),
     labelParameter: doc?.labelParameter?.edit?.value ?? null,
     workingPhase: doc?.workingPhase?.edit?.value ?? null,
-    designFriction: fans.designFriction?.edit?.value ?? null,
+    designFriction: doc?.designFriction?.edit?.value ?? null,
   };
 }
 
@@ -420,7 +424,7 @@ export const workingPhaseOf = (doc: DuctsRouteDocument | null) =>
   doc?.workingPhase?.edit?.value ?? null;
 
 /**
- * What `ducts.plan-losses` and `ducts.apply-losses` send; the host calls the native
+ * What `sheet.plan` and `sheet.apply` send; the host calls the native
  * `ducts.apply.plan` (Read) or `ducts.apply` (ModelWrite). Mirrors the generated `DuctsApply.Req.Request` field for field (the web
  * test pins the two types to each other). Built by the web from the edited cells and Pe's own
  * lookup: one fitting row per instance of an edited rule under the rule's chosen table; the
@@ -633,7 +637,7 @@ export const ductsRouteState = {
   route: "ducts",
   title: "Ducts",
   description:
-    "Human and Pea edit shared Work at an expected revision. Duct pressure-drop Work, one shared cell per key; the fan-side cells (drops, esp, flows, equipmentFlows, roles, parameters, calculation, designFriction) are /fans Work. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore), and a proximity:<...> finding id holds ignore (break that inferred join) or connect (confirm it, or join a near miss across air classifications anyway); a near-miss or stretched join is bridged by the route and final (a diagnostic, no verdict owed); only an anomalous join (reversed connector, part through its host, cross-class) leaves a result provisional until an author edits a verdict, and a suggested verdict never makes it final, so include the evidence for a suggested ruling in the note; flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. An ignore verdict (an open end left out, an inferred join objected to) is a ruling the model keeps in its _PE_DuctLosses store once written: ducts.snapshot store.verdicts are the standing rulings, Work holds only pending changes over them, and either author removes a stored verdict with a delete edit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. ruleAssignments: a fitting family name no rule matches holds { rule }, the loss-rule key every fitting of that family is priced as (read before any rule's own match; stays in Pe, never written to Revit). catalogs: JSON.stringify([family, type]) (type \"\" = every type of the family) holds { table }, the manufacturer catalog table id; edited links beat the family TYPE Pe_Catalog parameter and stay in Work. The scene: subject is keyed by group id (the id from ducts.snapshot groups, g<lowest element id>), each cell holding the ordered element ids of that group's whole system as intended, end to end (outdoor intake or terminal through every element to the last equipment), including elements past a break; list every element in order, short stubs and transitions too, and never stop at the last connected element: the route draws breaks and omissions, so leave nothing out to avoid a gap. claims, keyed by claim id, hold { title, text, ids, state: proven | assumed | unproven }; title is a required short noun phrase (1-60 characters), text is one sentence shown only in its hint (a claim shows on the groups that hold its ids) (write element names in text; ids are fine, the route names them) and an optional authored verdict (yes, no, not-this), with provenance stamped on the enclosing Change; labelParameter is one cell naming the instance parameter whose value names equipment for people; absent it reads PE_G___TagInstance, the firm equipment tag (type counterpart PE_G___TagType), not the built-in Mark, and ducts.analysis rows expose it as `tag` (match a name like FC-23 there). workingPhase is one cell naming the phase the network is read in: suggest or edit the phase (a name in ducts.snapshot phases.order) that the snapshot's phases.views census shows in most views; the route leaves out every element that does not exist in it and warns out-of-phase where one touches the network. Fan inputs (calculation, flows, terminalDrops, componentDrops, esp, equipmentFlows, roles, parameters, designFriction) belong to /fans; edit them only there. /ducts owns rules, kinds, criteria and network rulings. Either author may edit rules, catalogs, the subject, claims and verdicts, the label parameter and the working phase; ducts.plan-losses provides optional inspection; ducts.apply-losses writes the current edits through the host.",
+    "Human and Pea edit shared Work at an expected revision. Duct pressure-drop Work, one shared cell per key; the fan-side cells (drops, esp, flows, equipmentFlows, roles, parameters, calculation) are /fans Work. criteria: one cell per criterion and side (velocitySupplyFpm, velocityReturnFpm, terminalDropInWg, autoJoinGapIn, healBoxIn, splitPolicy even | proportional, allowanceSupplyInWg, allowanceReturnInWg), each a project value over the stored and firm layers. designFriction is one cell: the design friction rate in in-wg per 100 ft (default 0.08), never written to Revit. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore), and a proximity:<...> finding id holds ignore (break that inferred join) or connect (confirm it, or join a near miss across air classifications anyway); a near-miss or stretched join is bridged by the route and final (a diagnostic, no verdict owed); only an anomalous join (reversed connector, part through its host, cross-class) leaves a result provisional until an author edits a verdict, and a suggested verdict never makes it final, so include the evidence for a suggested ruling in the note; flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. An ignore verdict (an open end left out, an inferred join objected to) is a ruling the model keeps in its _PE_DuctLosses store once written: ducts.snapshot store.verdicts are the standing rulings, Work holds only pending changes over them, and either author removes a stored verdict with a delete edit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. ruleAssignments: a fitting family name no rule matches holds { rule }, the loss-rule key every fitting of that family is priced as (read before any rule's own match; stays in Pe, never written to Revit). catalogs: JSON.stringify([family, type]) (type \"\" = every type of the family) holds { table }, the manufacturer catalog table id; edited links beat the family TYPE Pe_Catalog parameter and stay in Work. The scene: subject is keyed by group id (the id from ducts.snapshot groups, g<lowest element id>), each cell holding the ordered element ids of that group's whole system as intended, end to end (outdoor intake or terminal through every element to the last equipment), including elements past a break; list every element in order, short stubs and transitions too, and never stop at the last connected element: the route draws breaks and omissions, so leave nothing out to avoid a gap. labelParameter is one cell naming the instance parameter whose value names equipment for people; absent it reads PE_G___TagInstance, the firm equipment tag (type counterpart PE_G___TagType), not the built-in Mark, and ducts.analysis rows expose it as `tag` (match a name like FC-23 there). workingPhase is one cell naming the phase the network is read in: suggest or edit the phase (a name in ducts.snapshot phases.order) that the snapshot's phases.views census shows in most views; the route leaves out every element that does not exist in it and warns out-of-phase where one touches the network. Fan inputs (calculation, flows, terminalDrops, componentDrops, esp, equipmentFlows, roles, parameters) belong to /fans; edit them only there. /ducts owns rules, kinds, criteria, design friction and network rulings. A claim on an element, with its verdict, is a finding (findings.write), not ducts Work. Either author may edit rules, catalogs, the subject, the label parameter and the working phase; sheet.plan provides optional inspection; sheet.apply writes the current edits through the host.",
   schema: ductsDocumentSchema,
   finds: DUCTS_FINDS,
 } satisfies RouteStateSpec<typeof ductsDocumentSchema>;

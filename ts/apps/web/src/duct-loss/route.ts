@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { read } from "../route/defaults";
 import { z } from "zod";
 import { valueRead, GALVANIZED_STEEL_ROUGHNESS } from "@pe/agent-contracts";
@@ -20,12 +21,12 @@ export const loaded = read(
   (page: { [K in keyof typeof fields]: z.output<(typeof fields)[K]["schema"]> }) =>
     ductLossArgs.parse(page),
 );
-export type { Context as DuctLossContext } from "./context.generated";
+export type DuctLossContext = ContextOf<typeof fields, typeof loaded, never, never>;
 export const module = route({
   key: "duct-loss",
   name: "Duct Loss",
   needs: "host",
-  host: "../../../host/src/reads/duct-loss.ts",
+  host: "./host.ts",
   directory: {
     label: "Duct friction",
     exposure: "Main",
@@ -44,17 +45,20 @@ export const module = route({
     wheel: {
       title: "Wheel",
       purpose: "Drag diameter or airflow",
-      draw: draw(() => import("./route.tsx"), "WheelBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./route.tsx"), "WheelBody"),
     },
     inputs: {
       title: "Inputs",
       purpose: "Type a duct and read its loss",
-      draw: draw(() => import("./route.tsx"), "InputsBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./route.tsx"), "InputsBody"),
     },
     charts: {
       title: "Charts",
       purpose: "Inspect the friction law",
-      draw: draw(() => import("./route.tsx"), "ChartsBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./route.tsx"), "ChartsBody"),
     },
   },
   layout: {

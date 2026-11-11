@@ -1,6 +1,13 @@
+import { spawnSync } from "node:child_process";
 import { registerHooks } from "node:module";
-import ts from "typescript";
+import { icons } from "lucide-react";
 import { projectWork } from "./host-projection.ts";
+import { renderRouteRegistry, type RouteRegistryInput } from "./route-registry.ts";
+import {
+  HAND_ADDRESSES,
+  renderAddressTable,
+  type AddressRow,
+} from "../../../packages/agent-contracts/scripts/route-address-table.ts";
 // Receipts describe production resolution even when a dev/test launcher verifies them.
 process.env.NODE_ENV = "production";
 // Styles have no bearing on a metadata projection. No component is rendered.
@@ -14,7 +21,6 @@ registerHooks({
 /** Graph declarations own the directory and Pea projections; browser bodies never ship to MCP. */
 import { createJiti } from "jiti";
 import { readdir, mkdir, writeFile, readFile } from "node:fs/promises";
-import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { familyFixturesDir } from "../checkout-paths.ts";
 import {
@@ -90,9 +96,6 @@ async function emit(destination: URL, text: string) {
     else await writeFile(destination, text);
   }
 }
-const { admittedBuiltinKeys } = await jiti.import<
-  typeof import("../../../packages/agent-contracts/src/admitted-builtin-keys.ts")
->("../../../packages/agent-contracts/src/admitted-builtin-keys.ts");
 const root = fileURLToPath(new URL("../", import.meta.url));
 const builtinOptions = [];
 const discovered = await readdir(new URL("../src/",import.meta.url),{withFileTypes:true});
@@ -107,76 +110,19 @@ for(const dir of discovered.filter(d=>d.isDirectory())) {
     }
   }
 }
-const keys=[...new Set([...admittedBuiltinKeys,...declarations.keys()])].sort();
-const links:string[]=[],hostImports:string[]=[],hostEntries:string[]=[];
-const hostReadPaths = new Set<string>();
-const browserImports:string[]=[],browserEntries:string[]=[],typedImports:string[]=[],typedEntries:string[]=[],closureImports:string[]=[],closureEntries:string[]=[],hostReadImports:string[]=[],hostReadEntries:string[]=[];
+const keys=[...declarations.keys()].sort();
+const registryFile=new URL("../../host/src/routes.generated.ts",import.meta.url);
+const registryRows:RouteRegistryInput[]=[];
+const addressRows=new Map<string,AddressRow>(
+  Object.keys(HAND_ADDRESSES).map(key=>[key,{key}]));
 for (const key of keys) {
-  const folder=declarations.get(key)?.folder ?? key;
-  const files = await readdir(new URL(`../src/${folder}/`, import.meta.url));
-  const kernel = declarations.get(key)?.file ?? (files.includes("route.ts")
-    ? "route.ts"
-    : files.includes("kernel.ts")
-      ? "kernel.ts"
-      : "kernel.tsx");
+  const {folder,file:kernel}=declarations.get(key)!;
   const entry = fileURLToPath(new URL(`../src/${folder}/${kernel}`, import.meta.url));
   const { module, router } = await jiti.import<{ module: { data: unknown }; router?: {contract?:string; dock?:boolean} }>(entry);
-  closureImports.push(`import c${closureEntries.length} from "../${folder}/source-closure.generated.json" with {type:"json"};`);
-  closureEntries.push(`${JSON.stringify(key)}:c${closureEntries.length}`);
-  browserImports.push(`import {module as m${browserEntries.length}} from "../${folder}/${kernel}";`);
-  browserEntries.push(`${JSON.stringify(key)}:m${browserEntries.length}`);
   if ("spec" in module) {
-    const index=typedEntries.length;
-    hostImports.push(`import {host as h${index}} from "../../../web/src/${folder}/host.generated.ts";`,`import c${index} from "../../../web/src/${folder}/source-closure.generated.json" with {type:"json"};`);
-    hostEntries.push(`${JSON.stringify(key)}:{host:h${index},closure:closureSchema.parse(c${index})}`);
-    typedImports.push(`import {host as h${index}} from "../${folder}/neutral.generated.ts";`, `import c${index} from "../${folder}/source-closure.generated.json" with {type:"json"};`);
-    typedEntries.push(`${JSON.stringify(key)}:{host:h${index},closure:c${index}}`);
     const typed = module as unknown as import("../src/route/typed-route.ts").TypedRoute;
-
-    const source = await readFile(entry, "utf8");
-    const ast = ts.createSourceFile(entry, source, ts.ScriptTarget.Latest, true);
-    const spec = ast.statements.flatMap(statement => ts.isVariableStatement(statement)
-      ? statement.declarationList.declarations : []).find(d => d.name.getText(ast) === "module");
-    const call = spec && spec.initializer;
-    const object = call && ts.isCallExpression(call) && call.arguments[0];
-    if (!object || !ts.isObjectLiteralExpression(object)) throw Error(`${key}: expected route({...})`);
-    const member = (object: ts.ObjectLiteralExpression, name: string) => {
-      const property = object.properties.find(p => p.name?.getText(ast) === name);
-      return property && ts.isPropertyAssignment(property) ? property.initializer
-        : property && ts.isShorthandPropertyAssignment(property) ? property.name : undefined;
-    };
-    const typeOf = (node: ts.Node | undefined): string => {
-      if (!node) return "never";
-      const name = node.getText(ast);
-      if (name === "{}") return "{}";
-      if (name === "z.never()") return "never";
-      for (const statement of ast.statements) {
-        if (!ts.isImportDeclaration(statement)) continue;
-        const bindings = statement.importClause?.namedBindings;
-        if (!bindings || !ts.isNamedImports(bindings)) continue;
-        const binding = bindings.elements.find(b => b.name.text === name);
-        if (binding) return `typeof import(${statement.moduleSpecifier.getText(ast)}).${binding.propertyName?.text ?? name}`;
-      }
-      return `typeof import("./${kernel}").${name}`;
-    };
-    const edits = member(object, "edits");
-    const work = edits && ts.isObjectLiteralExpression(edits) ? member(edits, "work") : undefined;
-    const input = edits && ts.isObjectLiteralExpression(edits) ? member(edits, "input") : undefined;
-    const context = (read:ts.Node | undefined) => `ContextOf<${typeOf(member(object,"fields"))}, ${typeOf(read)}, ${typeOf(work)}, ${typeOf(input)}>`;
-    const panes=member(object,"panes");
-    const paneContexts=panes && ts.isObjectLiteralExpression(panes) ? panes.properties.flatMap(p => {
-      if(!ts.isPropertyAssignment(p) || !ts.isObjectLiteralExpression(p.initializer)) return [];
-      return [`${p.name.getText(ast)}: ${context(member(p.initializer,"read") ?? member(object,"core"))}`];
-    }) : [];
-    await emit(new URL(`../src/${folder}/context.generated.ts`,import.meta.url),
-      `// Generated by codegen:routes. Do not edit.\nimport type { ContextOf } from "../route/defaults";\nexport type Context = ${context(member(object,"core"))};\ntype Panes = {${paneContexts.join(";\n")}};\nexport type PaneContext<P extends keyof Panes> = Panes[P];\n`);
-    links.push(`${JSON.stringify(key)}:routeAddress(${JSON.stringify(router?.contract ?? key)}).link`);
-    const leaf = typed.data.address === "/" ? "index" : typed.data.address.slice(1);
-    if (!leaf.includes("/")) {
-      // A retained surface can author a dock-only leaf alongside its declaration.
-      await emit(new URL(`../src/routes/${leaf}.tsx`,import.meta.url),
-        `// Generated by codegen:routes. Do not edit.\nimport { createFileRoute } from "@tanstack/react-router";\nimport { routeFile } from "../shell/route-file";\n${router?.dock ? "" : `import { TypedShell } from "../shell/typed-shell";\nimport { module } from "../${folder}/${kernel}";\nimport { builtinRouteStamp } from "../route/builtin-inventory";\nimport { workFingerprintSchema } from "@pe/agent-contracts";\n`}export const Route = createFileRoute(${JSON.stringify(typed.data.address)})({\n...routeFile(${JSON.stringify(router?.contract ?? key)}),\ncomponent: () => ${router?.dock ? "null" : `<TypedShell module={module} fingerprint={workFingerprintSchema.parse(\`builtin-closure:\${builtinRouteStamp(${JSON.stringify(key)})}\`)} />`}\n});\n`);
-    }
+    if (!(typed.data.directory.icon in icons)) throw Error(`${key}: icon ${typed.data.directory.icon} is not a lucide-react icon name`);
+    const contract = router?.contract ?? key;
     const { z } = await import("zod");
     const identifier=key.replace(/[^a-zA-Z0-9_$]+([a-zA-Z0-9_$])/g,(_all,part:string)=>part.toUpperCase());
     const agent = typed.spec.agent !== false;
@@ -185,40 +131,25 @@ for (const key of keys) {
       const schema = field.role === "subject"
         ? `subjectSchema(${(json.oneOf as {properties?:{ids?:{maxItems?:number}}}[]).find(part=>part.properties?.ids)?.properties!.ids!.maxItems})`
         : `(z.fromJSONSchema(${JSON.stringify(json)}) as z.ZodType<Immutable<${schemaType(json)}>>)`;
-      return `${JSON.stringify(key)}: field(${schema}${field.initial === undefined ? ".optional()" : `.default(${JSON.stringify(field.initial)})`}, ${JSON.stringify(field.url)})`;
+      return `${JSON.stringify(key)}: ${agent ? "field" : "personField"}(${schema}${field.initial === undefined ? ".optional()" : `.default(${JSON.stringify(field.initial)})`}, ${JSON.stringify(field.url)})`;
     });
-    await emit(new URL(`../../../packages/agent-contracts/src/routes/${key}.ts`, import.meta.url),
-      `// Generated from ${key}/route.ts by codegen:routes. Do not edit.\nimport { z } from "zod";\n${fields.some(line=>line.includes("Immutable<")) ? 'import type { Immutable } from "../route-kernel-data.ts";\n' : ""}import { ${typed.spec.subject?"subjectSchema, ":""}focusSelectionSchema } from "../route-kernel-codecs.ts";\nimport { jsonCodec } from "../route-field.ts";\nconst field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, ${agent ? 'agent:"set" as const, ' : ""}codec: jsonCodec(schema) });\nexport const ${identifier}Address = { path: ${JSON.stringify(typed.data.address)} as const, title: ${JSON.stringify(typed.spec.name)}, fields: {\n${fields.length ? fields.join(",\n")+"," : ""}\nselected: {...field(focusSelectionSchema,"replace"),agent:undefined}\n}${agent ? `, agent: { policy: ${JSON.stringify(typed.spec.subject ? `Choose ${typed.spec.subject.noun} through ${typed.spec.subject.field}, using the module's local identities.` : "Use the route fields as declared.")} }` : ""} };\n`);
+    // A hand address keeps its own fields; the declaration whose key it is still marks it builtin.
+    const owner = contract === key ? { module: folder } : {};
+    addressRows.set(contract, contract in HAND_ADDRESSES ? { key: contract, ...owner } : { key: contract, ...owner,
+      body: `{ path: ${JSON.stringify(typed.data.address)} as const, title: ${JSON.stringify(typed.spec.name)}, fields: {\n${fields.length ? fields.join(",\n")+"," : ""}\nselected: {...${agent ? "field" : "personField"}(focusSelectionSchema,"replace"),agent:undefined}\n}${agent ? `, agent: { policy: ${JSON.stringify(typed.spec.subject ? `Choose ${typed.spec.subject.noun} through ${typed.spec.subject.field}, using the module's local identities.` : "Use the route fields as declared.")} }` : ""} }` });
     // Preserve the actual imported Work export, including refinements and reconciliation.
     // JSON Schema cannot carry that authority; a second handwritten host declaration would drift.
-    let workImport="",workBody="";
+    // The registry binds the Work where route.ts imports it (its own directory, or contracts), so
+    // contracts never receive a projection that imports an app.
+    let work: RouteRegistryInput["work"];
     if(typed.spec.edits) {
-    const workDestination = new URL(`../../../packages/agent-contracts/src/generated/${key}-work.ts`, import.meta.url);
-    const projected=await projectWork(entry,typed,fileURLToPath(workDestination),`${identifier}RouteState`,
-      specifier=>jiti.import<Record<string,{schema?:unknown}>>(specifier));
-    await emit(workDestination,`// Generated from ${key}/route.ts by codegen:routes. Do not edit.\n${projected.definition}`);
-    workImport=`import { ${identifier}RouteState as work } from "../../../../packages/agent-contracts/src/generated/${key}-work.ts";\n`;
-    workBody=projected.properties;
+      const name=`${identifier}Work`;
+      const projected=await projectWork(entry,typed,fileURLToPath(registryFile),name,
+        specifier=>jiti.import<Record<string,{schema?:unknown}>>(specifier),false);
+      work={name,definition:projected.definition,properties:projected.properties};
     }
-    const runtime=typed.spec.host;
-    if(runtime) {
-      const file=resolve(dirname(entry),runtime);
-      const hostRoot=fileURLToPath(new URL("../../host/",import.meta.url));
-      const inside=relative(hostRoot,file);
-      if(inside.startsWith("..") || inside.startsWith("/")) throw Error(`${key}: host read modules must live under apps/host`);
-      const directory=fileURLToPath(new URL("../../host/src/reads/",import.meta.url));
-      const path=relative(directory,file).replaceAll("\\","/");
-      if (!hostReadPaths.has(path)) {
-      hostReadPaths.add(path);
-      hostReadImports.push(`import * as m${hostReadEntries.length} from ${JSON.stringify(path.startsWith(".")?path:`./${path}`)};`);
-      hostReadEntries.push(`m${hostReadEntries.length}`);
-      }
-    }
-    await emit(new URL(`../src/${folder}/neutral.generated.ts`,import.meta.url),
-      `// Generated from route.ts by codegen:routes. Neutral projection only.\n${workImport}${typed.spec.edits?'import {z} from "zod";\n':""}import {RouteGraphJson} from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type {HostRouteModule} from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with {type:"json"};\nconst data=RouteGraphJson.parse(closure.envelope.data);\nexport const host:HostRouteModule={data,${workBody||"schemas:{},"}};\n`);
-    await emit(new URL(`../src/${folder}/host.generated.ts`,import.meta.url),
-      `// Generated from route.ts by codegen:routes. Host only.\nimport {host as neutral} from "./neutral.generated.ts";\n${runtime?`import * as runtime from ${JSON.stringify(runtime)};\n`:""}import type {HostRouteModule} from "@pe/agent-contracts";\nexport const host:HostRouteModule={...neutral,${runtime?'reads:(runtime as Pick<HostRouteModule,"reads">).reads,':""}};\n`);
-
+    registryRows.push({key,folder,address:typed.data.address,contract,dock:router?.dock === true,
+      ...(typed.spec.host ? {host:typed.spec.host} : {}),...(work ? {work} : {})});
   }
   builtinOptions.push({
     root,
@@ -237,18 +168,13 @@ for (const key of keys) {
     },
   });
 }
-await emit(new URL("../../host/src/reads/builtins.generated.ts",import.meta.url),`// Generated by web codegen:routes. Host only.\nimport {closureSchema} from "../../../web/src/route/builtin-closure.ts";\n${hostImports.join("\n")}\nexport const builtins={${hostEntries.join(",")}};\n`);
-await emit(new URL("../src/route/links.generated.ts",import.meta.url),`// Generated by codegen:routes. Do not edit.\nimport {routeAddress} from "@pe/agent-contracts";\nexport const routeLinks={${links.join(",")}};\n`);
-await emit(new URL("../src/route/builtin-closures.generated.ts",import.meta.url),`// Generated by codegen:routes. Do not edit.\n${closureImports.join("\n")}\nexport const builtinClosures={${closureEntries.join(",")}};\n`);
-await emit(new URL("../src/route/builtin-modules.generated.ts",import.meta.url),`// Generated by codegen:routes. Do not edit.\n${browserImports.join("\n")}\nexport const builtinModules={${browserEntries.join(",")}};\n`);
-await emit(new URL("../src/route/builtin-typed.generated.ts",import.meta.url),`// Generated by codegen:routes. Do not edit.\n${typedImports.join("\n")}\nexport const typedBuiltins={${typedEntries.join(",")}};\n`);
-await emit(new URL("../../../packages/agent-contracts/src/admitted-builtin-keys.ts",import.meta.url),`// Generated by codegen:routes. Do not edit.\nexport const admittedBuiltinKeys=${JSON.stringify(keys)} as readonly string[];\n`);
-await emit(new URL("../../host/src/reads/registry.generated.ts",import.meta.url),`// Generated by web codegen:routes. Do not edit.\nimport type {HostRouteModule} from "@pe/agent-contracts";\n${hostReadImports.join("\n")}\nexport const hostReadModules:readonly Pick<HostRouteModule,"reads">[]=[${hostReadEntries.join(",")}];\n`);
+await emit(new URL("../../../packages/agent-contracts/src/routes/table.generated.ts",import.meta.url),renderAddressTable([...addressRows.values()]));
+await emit(registryFile,renderRouteRegistry(registryRows));
 const closures = await buildBuiltinClosures(builtinOptions);
 const directory = [];
 for (const [key, closure] of closures) {
   await emit(
-    new URL(`../src/${declarations.get(key)?.folder ?? key}/source-closure.generated.json`, import.meta.url),
+    new URL(`../src/${declarations.get(key)!.folder}/source-closure.generated.json`, import.meta.url),
     canonicalRouteJson(closure) + "\n",
   );
   if (closureOnly) continue;
@@ -292,6 +218,13 @@ if (!closureOnly)
     `// Generated from web route graphs by codegen:routes.\nimport type { RouteDirectory } from "../route-graph.ts";\nexport const routeDirectory: readonly {key: string; directory: RouteDirectory}[] = ${JSON.stringify(directory, null, 2)};\n`,
   );
 console.log(runtime ? JSON.stringify(projections) : `Projected ${directory.length} route graphs`);
+// The C# launch rows project the address table and directory just written; a child process reads
+// them from disk (this process holds the stale modules). One step owns everything a route needs.
+if (!runtime && !closureOnly) {
+  const links = fileURLToPath(new URL("../../../packages/agent-contracts/scripts/route-links-cs.ts", import.meta.url));
+  if (spawnSync(process.execPath, [links, ...(check ? ["--check"] : [])], { stdio: "inherit" }).status !== 0)
+    stale.push("dotnet/Pe.App/Host/PeRoutes.generated.cs (route-links-cs.ts)");
+}
 
 if (stale.length)
   throw Error(`Generated route artifacts drifted; run codegen:routes:\n${stale.join("\n")}`);

@@ -36,7 +36,7 @@ const node = (
   classification = "Supply Air",
   partType: string | null = kind === "fitting" ? "Tee" : null,
 ) =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind,
     category: kind,
@@ -52,7 +52,7 @@ const node = (
     facts,
   }) as unknown as Node;
 const duct = (id: number, ends: [number, number], classification = "Supply Air"): Segment =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind: "duct",
     curveKind: "line",

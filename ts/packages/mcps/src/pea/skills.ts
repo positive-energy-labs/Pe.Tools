@@ -1,6 +1,6 @@
 import path from "node:path";
 import { browserSkillName, renderBrowserGuide } from "@pe/browser/guide";
-import { productHomePath } from "@pe/host-contracts/product-paths";
+import { userRoot } from "@pe/host-contracts/product-paths";
 import { renderDuctsSkill } from "./ducts-skill.ts";
 import { renderSchedulesSkill } from "./schedules-skill.ts";
 import { renderFamiliesSkill } from "./families-skill.ts";
@@ -25,7 +25,7 @@ description: Use for a chart, table, diagram, comparison, calculation walk, or m
 
 # Make a Page
 
-Use pe_do({kind: "page", slug, title, html}) before the final reply when a visual would explain a mechanism, comparison, or calculation. Send a complete self-contained HTML document with inline style and script. The host checks it, captures it, and writes Pages/<slug>/index.html under its product home. Its result includes the canonical Page key, absolute openUrl, and a PNG shown in the conversation. Return its openUrl with a short takeaway; the person already sees the picture. Default to a compact single view for teaching: one diagram or comparison, short labels, and only controls that clarify an assumption. Aim for about 3 KB of HTML for the first visual. Every correction or update resubmits complete HTML through the same Page call with the same slug. Keep that HTML in the turn; never locate, read, or patch Page files through a terminal or any owner or default Documents home. If the call refuses, fix the stated problem and resubmit the HTML.
+Use pe_do({kind: "page", slug, title, html}) before the final reply when a visual would explain a mechanism, comparison, or calculation. Send a complete self-contained HTML document with inline style and script. The host checks it, captures it, and writes Pages/<slug>/index.html under its product home. Its result includes the canonical Page key, absolute openUrl, and a PNG shown in the conversation. Return its openUrl with a short takeaway; the person already sees the picture. Default to a compact single view for teaching: one diagram or comparison, short labels, and only controls that clarify an assumption. Aim for about 3 KB of HTML for the first visual. Every correction or update resubmits complete HTML through the same Page call with the same slug. Keep that HTML in the turn; never locate, read, or patch Page files through a terminal or direct access to the content home. If the call refuses, fix the stated problem and resubmit the HTML.
 
 Worked example, the Snowdon duct-loss shape (page:@snowdon-ducts/pages/tour): explain the pressure budget as straight duct plus fittings plus a VAV allowance. For a teaching illustration, publish it directly with assumed inputs rather than waiting for that example's model binding:
 
@@ -250,7 +250,7 @@ For a Pod with Revit script entrypoints, pe_find must first establish an exact c
 
 ## What a Pod is
 
-A Pod is one folder under Documents/Pe.Tools/Pods/<folder>/ holding pod.json and authored source, guides, settings, assets, Pages and skills. The host admits one bounded membership set; runtime/build debris and binding authority never travel. pod.json holds schemaVersion, id, name, version, description, and optional script entrypoints; nothing else. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest. A folder without pod.json is not a Pod.
+A Pod is one folder under Pods/<folder>/ in a content home holding pod.json and authored source, guides, settings, assets, Pages and skills. The host admits one bounded membership set; runtime/build debris and binding authority never travel. pod.json holds schemaVersion, id, name, version, description, and optional script entrypoints; nothing else. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest. A folder without pod.json is not a Pod.
 
 ## Identity: three facts
 
@@ -268,7 +268,7 @@ Publishing vendors: every foreign fragment a member consumes is copied to settin
 
 Pod preparation gates only pod.json and entrypoint source. Members validate one at a time when used; one bad member never hides its siblings.
 
-The content home is Documents/Pe.Tools: preferences.json contains user preferences and Pods/<folder>/ contains pods. Do not recreate the old module settings hierarchy or migrate user files implicitly. Cache, credentials, installation, and transient runtime state belong outside Documents.
+There are two content homes: the user's (preferences.json, its own Pods/<folder>/, every write) and an optional shared one the firm keeps. Pods, Pages and Catalogs come from both, and a copy in the user's home wins over the shared one. Writes always land in the user's home; a shared Pod is read-only. Do not recreate the old module settings hierarchy or migrate user files implicitly. Cache, credentials, installation, and transient runtime state are resolved separately from user content.
 
 A member's $schema URL is the only thing that says what it is for: /schemas/settings/<library>/<root>.json selects the library schema and semantic validator. Filenames and folders select nothing. JSON without $schema is plain data; the consuming operation still owns validation before applying it. Structural schema checks run offline in the host; composition previews and semantic checks need a Revit session and report that reason when none is attached.
 
@@ -311,7 +311,7 @@ description: Edit shared tool Work and apply it through the same semantic comman
 1. Discover the tool and read route:<tool> with an exact target or workspaceId. Thread targets supply defaults only.
 2. Read the revision and schema. Call route:<tool>.edit with expectedRevision and patches to the cell's one staged edit. A patch path is an array, such as ["cells", "<key>", "edit"]. Set {value: ...}; clear with null. Host stamps the author, time and base revision. Never patch observation, basis, readback, consent or receipts.
 3. Either author may knowingly replace the current edit. A stale revision refuses; reread and submit a new explicit edit. Suggestions are optional review content, available to either author.
-4. For Families, set scope.edit with exact loaded family names before writing its cells. Keys are JSON arrays of [family, type, parameter]. The host validates those identities against Revit.
+4. For Families, set scope.edit with exact loaded family names before writing its cells. Keys are the SubjectRef name:["<familyName>","<typeName>"]#field:<parameter>. The host validates those identities against Revit.
 5. Run the semantic apply/save/push/sync command yourself when the user authorized execution. Family apply accepts {source, include: "all"}, several sources, a prior preview plan id, or the reviewed Work drafts when no source is supplied. The host plans, checks freshness, applies, reads back and retires only unchanged consumed edits. Preview is optional inspection, never an actor gate.
 6. The first consequential write in this thread opens its run consent (a 60-second Reject? notice under auto-approve, else the user allows). It covers remaining writes and explicitly delegated descendants until Stop; Reject or Stop cancels pending and unstarted mutations. Work edits and internal evidence remain immediate. Keep the original actionId through retries, and inspect uncertain native outcomes instead of submitting a replacement.
 7. Report completed work and exact tool/Work links. If accepted commands still run, say so. External devices and Pages keep their own trust adapter.
@@ -458,7 +458,7 @@ export interface PeaProductHomeOptions {
 }
 
 export function resolvePeaProductHomePath(options: PeaProductHomeOptions = {}): string {
-  return path.resolve(readEnvPath(options.productHomePath) ?? productHomePath());
+  return path.resolve(readEnvPath(options.productHomePath) ?? userRoot());
 }
 
 export function resolvePeaStandardSkillsRoot(options: PeaProductHomeOptions = {}): string {

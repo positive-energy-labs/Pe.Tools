@@ -8,10 +8,11 @@ import { SceneMeshes, type SceneInstance } from "./types";
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 import type { Bounds, ScenePrimitive } from "./types";
 import { assertLevels } from "./levels";
+import { spaceElementKey } from "@pe/agent-contracts";
 
 /** The artifact's metadata, as the op declares it. */
 export type Psc1Metadata = RevitDetailSpaceScene.Artifact.SceneMetadata;
-export const SCENE_FORMAT = "space-scene-v4";
+export const SCENE_FORMAT = "space-scene-v5";
 
 type SceneBoxFrame = RevitDetailSpaceScene.Artifact.SceneBoxFrame;
 const BOX_FRAMES = { bounds: true, symbol: true, triangles: true, link: true } satisfies Record<
@@ -120,9 +121,6 @@ function primitiveOf(e: Psc1Metadata["elements"][number]): ScenePrimitive | unde
   return { kind: "run", bounds: e.bounds, run: r };
 }
 
-const elementKey = (h: Psc1Metadata["elements"][number]["handle"]) =>
-  JSON.stringify([h.documentKey, h.linkInstanceId ?? null, h.uniqueId]);
-
 export function decodeScene(buffer: ArrayBuffer): { metadata: Psc1Metadata; meshes: SceneMeshes } {
   const view = new DataView(buffer);
   if (buffer.byteLength < 8 || view.getUint32(0, true) !== MAGIC)
@@ -176,8 +174,15 @@ export function decodeScene(buffer: ArrayBuffer): { metadata: Psc1Metadata; mesh
       throw Error("Invalid scene category id");
     const h = e.handle,
       link = h.linkInstanceId ?? null;
+    // ADR 0035 rule 2: identity is the UniqueId seen through the link's UniqueId; `documentKey`
+    // stays on the instance as observation basis (the element menu's document scope), not identity.
+    if (link !== null && !h.linkInstanceUniqueId) throw Error("Linked scene element has no link UniqueId");
     return {
-      key: elementKey(h),
+      key: spaceElementKey({
+        uniqueId: h.uniqueId,
+        hostDocumentKey: metadata.stamp.hostDocumentKey,
+        linkInstanceUniqueId: h.linkInstanceUniqueId,
+      }),
       // A linked element's id means nothing to the host document's selection.
       revitId: link === null ? h.elementId : null,
       documentKey: h.documentKey,

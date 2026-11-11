@@ -1,6 +1,6 @@
 import { chatPluginTitle } from "../workbench/chat-plugins";
 import { threadSearchDefault } from "@pe/agent-contracts";
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlarmClock,
   AlarmClockOff,
@@ -42,9 +42,6 @@ import { useList, type ListState, type ListPersist } from "@pe/kit/lang/collecti
 import { Scroll } from "@pe/kit/lang/scroll";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Button } from "@pe/kit/lang/button";
-import { Pane } from "@pe/kit/lang/pane";
-import { Switcher } from "@pe/kit/lang/switcher";
-import { MODE_HINT, MODES, type Mode } from "#/workbench/depth";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { peClient } from "#/host/pe-client";
@@ -629,7 +626,7 @@ function ThreadActivityMark({
       <span
         data-slot="nav-state"
         data-tone={
-          activity === "failed" ? "alarm" : activity === "waiting" || woke ? "caution" : undefined
+          activity === "failed" || activity === "waiting" || woke ? "caution" : undefined
         }
         role={Icon ? "img" : undefined}
         aria-label={Icon ? word : undefined}
@@ -1003,55 +1000,6 @@ export function ThreadsSidebar({
         </TooltipHint>
       ) : null}
     </nav>
-  );
-}
-
-/** Desktop and dialog share the pane's title modes and grouped actions. */
-export function ThreadPane({
-  mode,
-  setMode,
-  count,
-  onNew,
-  children,
-}: {
-  mode: Mode;
-  setMode: (mode: Mode) => void;
-  count: number | string;
-  onNew: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <Pane
-      id="threads"
-      title="threads"
-      ground="artifact"
-      scroll="clip"
-      flush={mode === "threads"}
-      tabs={
-        <Switcher
-          ariaLabel="View depth"
-          value={mode}
-          onChange={setMode}
-          options={MODES.map((value) => ({
-            value,
-            title: MODE_HINT[value],
-            label: (
-              <>
-                {value}
-                {value === "threads" ? <small>{count}</small> : null}
-              </>
-            ),
-          }))}
-        />
-      }
-      actions={
-        <Button label="New thread" onClick={onNew}>
-          new
-        </Button>
-      }
-    >
-      {children}
-    </Pane>
   );
 }
 

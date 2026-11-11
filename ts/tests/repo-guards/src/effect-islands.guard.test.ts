@@ -1,51 +1,96 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 import baseline from "./effect-islands.baseline.json" with { type: "json" };
 import { census, islandCount } from "./effect-islands-census.ts";
 import { increases, tightenedBaseline, trustedBaseline } from "./effect-islands.ts";
 
 const trusted = trustedBaseline();
 
-it.each(["rename", "rename and raise", "new", "copy"])("ratchets a committed %s", (change) => {
-  const cwd = mkdtempSync(join(tmpdir(), "effect-islands-"));
-  const git = (...args: string[]) =>
-    execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe" }).trim();
-  try {
-    git("init", "-b", "main");
-    git("config", "user.name", "Probe");
-    git("config", "user.email", "probe@example.invalid");
-    const dir = join(cwd, "ts/tests/repo-guards/src");
-    mkdirSync(dir, { recursive: true });
-    mkdirSync(join(cwd, "ts/apps"));
-    const path = join(dir, "effect-islands.baseline.json");
-    const oldFile = "apps/probe.ts";
-    const newFile = "apps/renamed probe.ts";
-    const source = `${Array.from({ length: 20 }, (_, i) => `export const n${i} = ${i};`).join("\n")}\n// effect-edge: island, phase 5\n`;
-    writeFileSync(join(cwd, "ts", oldFile), source);
-    writeFileSync(path, JSON.stringify({ src: { [oldFile]: 1 }, tests: {} }));
-    git("add", "ts");
-    git("commit", "-m", "initial baseline");
-    git("checkout", "-b", "change");
-    if (change.startsWith("rename")) git("mv", `ts/${oldFile}`, `ts/${newFile}`);
-    const count = change === "rename and raise" ? 2 : 1;
-    writeFileSync(
-      join(cwd, "ts", newFile),
-      change === "new"
-        ? "// effect-edge: island, phase 5\nexport const brandNew = true;\n"
-        : `${source}${count === 2 ? "// effect-edge: island, phase 5\n" : ""}`,
-    );
-    const actual = {
-      src: { ...(change.startsWith("rename") ? {} : { [oldFile]: 1 }), [newFile]: count },
-      tests: {},
-    };
-    writeFileSync(path, JSON.stringify(actual));
-    git("add", "ts");
-    git("commit", "-m", change);
-    expect(git("status", "--porcelain")).toBe("");
+// Every scenario is a branch of ONE temp repo written by one `git fast-import` (2 spawns for the whole
+// file). A test selects its scenario by pointing HEAD at the branch (a file write, no spawn), so it
+// pays only trustedBaseline's own 3 spawns. Spawn count is the cost: a loaded machine multiplies it, and
+// the old per-test init/config/add/commit/mv (16 to 23 spawns) timed out at the 5 s default.
+type Commit = { branch: string; from?: string; files: Record<string, string | null> };
+const data = (text: string) => `data ${Buffer.byteLength(text)}\n${text}\n`;
+const commitStream = (commits: Commit[]) =>
+  commits
+    .map(({ branch, from, files }, n) =>
+      [
+        `commit refs/heads/${branch}\n`,
+        `committer Probe <probe@example.invalid> ${1_700_000_000 + n} +0000\n`,
+        data(branch),
+        from ? `from refs/heads/${from}\n` : "",
+        ...Object.entries(files).map(([path, text]) =>
+          text === null ? `D "${path}"\n` : `M 100644 inline "${path}"\n${data(text)}`,
+        ),
+        "\n",
+      ].join(""),
+    )
+    .join("");
+
+const baselinePath = "ts/tests/repo-guards/src/effect-islands.baseline.json";
+const oldFile = "apps/probe.ts";
+const newFile = "apps/renamed probe.ts";
+const marker = "// effect-edge: island, phase 5\n";
+const source = `${Array.from({ length: 20 }, (_, i) => `export const n${i} = ${i};`).join("\n")}\n${marker}`;
+const json = (src: Record<string, number>, space?: number) =>
+  JSON.stringify({ src, tests: {} }, null, space);
+
+// Each scenario is one commit on `base`: `tree` is the source change, `src` the baseline it commits.
+const scenarios = {
+  rename: { src: { [newFile]: 1 }, tree: { [`ts/${oldFile}`]: null, [`ts/${newFile}`]: source } },
+  "rename and raise": {
+    src: { [newFile]: 2 },
+    tree: { [`ts/${oldFile}`]: null, [`ts/${newFile}`]: `${source}${marker}` },
+  },
+  new: {
+    src: { [oldFile]: 1, [newFile]: 1 },
+    tree: { [`ts/${newFile}`]: `${marker}export const brandNew = true;\n` },
+  },
+  copy: { src: { [oldFile]: 1, [newFile]: 1 }, tree: { [`ts/${newFile}`]: source } },
+};
+
+let cwd = "";
+const ref = (scenario: string) => scenario.replaceAll(" ", "-");
+const checkout = (scenario: string) =>
+  writeFileSync(join(cwd, ".git/HEAD"), `ref: refs/heads/${ref(scenario)}\n`);
+beforeAll(() => {
+  cwd = mkdtempSync(join(tmpdir(), "effect-islands-"));
+  const git = (args: string[], input?: string) =>
+    execFileSync("git", args, { cwd, input, stdio: ["pipe", "pipe", "pipe"] });
+  git(["init", "-q"]);
+  git(
+    ["fast-import", "--quiet"],
+    commitStream([
+      {
+        branch: "base",
+        files: { [baselinePath]: json({ [oldFile]: 1 }), [`ts/${oldFile}`]: source },
+      },
+      ...Object.entries(scenarios).map(([scenario, { src, tree }]) => ({
+        branch: ref(scenario),
+        from: "base",
+        files: { ...tree, [baselinePath]: json(src) },
+      })),
+      // History for "never trusts": a raise, then a later commit that only reformats it.
+      { branch: "raised", from: "base", files: { [baselinePath]: json({ [oldFile]: 2 }) } },
+      { branch: "ratified", from: "raised", files: { [baselinePath]: json({ [oldFile]: 2 }, 2) } },
+      // A rename committed after the newest baseline: HEAD differs from the baseline's commit.
+      { branch: "renamed-later", from: "base", files: { [`ts/${oldFile}`]: null, [`ts/${newFile}`]: source } },
+    ]),
+  );
+});
+afterAll(() => rmSync(cwd, { recursive: true, force: true }));
+
+it.each(Object.keys(scenarios) as (keyof typeof scenarios)[])(
+  "ratchets a committed %s",
+  (change) => {
+    checkout(change);
+    const actual = { src: scenarios[change].src, tests: {} };
     const selected = trustedBaseline(cwd);
+    const count = actual.src[newFile]!;
     expect(increases(actual, selected.baseline, "src")).toEqual(
       change === "rename"
         ? []
@@ -57,39 +102,21 @@ it.each(["rename", "rename and raise", "new", "copy"])("ratchets a committed %s"
       expect(() => tightenedBaseline(actual, actual, selected.baseline, () => false)).toThrow(
         "refused: islands only shrink",
       );
-  } finally {
-    rmSync(cwd, { recursive: true, force: true });
-  }
-});
+  },
+);
 
 it("never trusts a committed baseline raise, even on main", () => {
-  const cwd = mkdtempSync(join(tmpdir(), "effect-islands-"));
-  const git = (...args: string[]) =>
-    execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe" }).trim();
-  try {
-    git("init", "-b", "main");
-    git("config", "user.name", "Probe");
-    git("config", "user.email", "probe@example.invalid");
-    const dir = join(cwd, "ts/tests/repo-guards/src");
-    mkdirSync(dir, { recursive: true });
-    const path = join(dir, "effect-islands.baseline.json");
-    const original = { src: { "apps/probe.ts": 1 }, tests: {} };
-    writeFileSync(path, JSON.stringify(original));
-    git("add", ".");
-    git("commit", "-m", "initial baseline");
-    const raised = { src: { "apps/probe.ts": 2 }, tests: {} };
-    writeFileSync(path, JSON.stringify(raised));
-    git("commit", "-am", "raise baseline on main");
-    expect(increases(raised, trustedBaseline(cwd).baseline, "src")).toEqual([
-      "apps/probe.ts: 2 > 1",
-    ]);
-    // A later commit naming the raise as its base cannot ratify it.
-    writeFileSync(path, JSON.stringify(raised, null, 2));
-    git("commit", "-am", "ratify");
-    expect(trustedBaseline(cwd).baseline).toEqual(original);
-  } finally {
-    rmSync(cwd, { recursive: true, force: true });
-  }
+  checkout("raised");
+  const raised = { src: { [oldFile]: 2 }, tests: {} };
+  expect(increases(raised, trustedBaseline(cwd).baseline, "src")).toEqual(["apps/probe.ts: 2 > 1"]);
+  // A later commit naming the raise as its base cannot ratify it.
+  checkout("ratified");
+  expect(trustedBaseline(cwd).baseline).toEqual({ src: { [oldFile]: 1 }, tests: {} });
+});
+
+it("carries a cap across a rename committed after the newest baseline", () => {
+  checkout("renamed-later");
+  expect(trustedBaseline(cwd).baseline).toEqual({ src: { [newFile]: 1 }, tests: {} });
 });
 
 describe("effect islands shrink only (ADR 0029 rule 2)", () => {

@@ -148,7 +148,8 @@ export function DeviceSettings({
   return (
     <section className="flex flex-col gap-4 hairline-t pt-5" aria-label="Paired devices">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="t-title">Devices</h2>
+        {/* One head scale per level (P1): a section inside a Settings group never outranks its group head. */}
+        <h2 className="font-semibold text-ink">Devices</h2>
         <div className="flex flex-wrap gap-2">
           <Button
             kind="framed"

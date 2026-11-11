@@ -1,5 +1,5 @@
 import type { RevitContextViewImage, TakeoffsCandidates } from "@pe/host-contracts/generated";
-import type { TakeoffPlanImage } from "./level-plan";
+import type { TakeoffPlanImage } from "../scene/plan-image";
 type Response = RevitContextViewImage.Res.Response;
 export type PlanRefusal = NonNullable<Response["registrationRefusal"]>;
 

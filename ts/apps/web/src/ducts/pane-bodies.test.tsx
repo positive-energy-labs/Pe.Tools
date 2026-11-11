@@ -1,7 +1,8 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 // @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
 import { emptyListSearch } from "@pe/agent-contracts";
-import { cleanup,fireEvent,render,screen } from "@testing-library/react";
+import { cleanup,fireEvent,render,screen,within } from "@testing-library/react";
 import { isValidElement } from "react";
 import { afterEach,expect,test,vi } from "vite-plus/test";
 import { createWitness } from "../fans/cutover.test-support";
@@ -9,7 +10,7 @@ import { typedSubjectDoor } from "../shell/subject";
 import { SubjectDoor } from "../shell/subject";
 import { makeAtomRegistry } from "../shell/owner";
 import { cellFocusOf,cellFocusSubject } from "./cell-focus";
-import { ductsLink,localId,localSubject } from "./identity";
+import { ductsLink, systemCode } from "./identity";
 import { snapshot } from "./test-fixture";
 import sheetFixture from "./sheet/sheet.fixture.json";
 
@@ -70,7 +71,7 @@ test("F16 the sidebar navigates the document roster before pricing and keeps ato
 test("Q2a keeps kind and colour editors on ducts and fan settings on fans", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
-  f.owner.controls.subject({ kind: "ids", ids: [localId("ducts-system", "SA")] });
+  f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
   await vi.waitFor(() => expect(f.owner.readingStatus("ducts").snapshot.current).toBe(true));
   await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
   const view = render(<RegistryContext value={registry()}>
@@ -85,14 +86,17 @@ test("Q2a keeps kind and colour editors on ducts and fan settings on fans", asyn
   expect(screen.getAllByRole("region", { name: "Unit kinds" })).toHaveLength(1);
   expect(screen.queryByRole("region", { name: "Fan settings" })).toBeNull();
   view.unmount();
+  // Fans' inputs are its own Work, drawn by the sheet slot; design friction is /ducts design data.
   render(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
-  expect(screen.getAllByRole("region", { name: "Fan settings" })).toHaveLength(1);
-  expect(document.querySelectorAll('[data-sheet-cell="Design friction"]')).toHaveLength(1);
+  expect(document.querySelectorAll('[data-sheet-cell="Design friction"]')).toHaveLength(0);
   expect(screen.queryByRole("region", { name: "System colours" })).toBeNull();
   expect(screen.queryByRole("region", { name: "Unit kinds" })).toBeNull();
-  expect(document.querySelectorAll('[data-choice-cell^="Unit role "]').length).toBe(
+  await vi.waitFor(() => expect(document.querySelectorAll('[data-sheet-address^="roles:"]').length).toBe(
     snapshot.nodes.filter(node => node.kind === "equipment").length,
-  );
+  ));
+  cleanup();
+  render(<RegistryContext value={registry()}>{nodeFor(f.owner, "design")}</RegistryContext>);
+  expect(document.querySelectorAll('[data-sheet-cell="Design friction"]')).toHaveLength(1);
 });
 
 test("F6 the real Inputs pane renders an acknowledged role edit as a choice label", async () => {
@@ -100,19 +104,23 @@ test("F6 the real Inputs pane renders an acknowledged role edit as a choice labe
   await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
   await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
   const unit = snapshot.nodes.find((node) => node.kind === "equipment")!;
-  const id = String(unit.id);
+  const id = elementSubject(unit);
   f.fans.invoke("edit", { patches: [{ path: ["roles", id], value: { edit: { value: { role: "fan" } } } }] }, f.fans.workBasis()!);
   await vi.waitFor(() => expect(f.fans.work()?.value).toMatchObject({ roles: { [id]: { edit: { value: { role: "fan" } } } } }));
   const view = render(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
-  const roles = [...view.container.querySelectorAll('[data-choice-cell^="Unit role "]')];
+  const roles = await vi.waitFor(() => {
+    const roles = [...view.container.querySelectorAll('[data-sheet-address^="roles:"]')];
+    expect(roles.length).toBeGreaterThan(0);
+    return roles;
+  });
   expect(roles.some((role) => role.textContent?.includes("Fan"))).toBe(true);
   expect(roles.every((role) => !role.textContent?.includes('{"role"'))).toBe(true);
 });
 
-test("an admitted network pane runs no sibling body when another pane is hidden", async () => {
+test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work never moves", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
-  f.owner.controls.subject({ kind: "ids", ids: [localId("ducts-system", "SA")] });
+  f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
   await vi.waitFor(() => expect(f.owner.readingStatus("ducts").snapshot.current).toBe(true));
   f.owner.setPaneDemand("e-picture", false);
   render(<RegistryContext value={registry()}>{nodeFor(f.owner, "e-sidebar")}</RegistryContext>);
@@ -146,19 +154,19 @@ test("a restored semantic cell selection lands on that fitting cell through the 
   const fitting = snapshot.nodes.find((node) => node.kind === "fitting");
   if (!fitting) throw Error("The pinned network has no fitting");
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
-  f.owner.controls.subject({ kind: "ids", ids: [localId("ducts-system", "SA")] });
+  f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
   await vi.waitFor(() => {
     const state = f.owner.readingStatus("value").snapshot;
     if (state.status === "failed") throw Error(state.reason ?? "Read failed");
     expect(state.current).toBe(true);
   });
   const subject = cellFocusSubject(snapshot, ["SA"], { segment: "componentDrops", id: fitting.id });
-  expect(f.owner.page.select([{ kind: "focus", id: localId("ducts-focus", subject) }]).kind).toBe(
+  expect(f.owner.page.select([{ kind: "focus", id: subject }]).kind).toBe(
     "accepted",
   );
   const selected = f.owner.page.read().selected[0];
   if (!selected) throw Error("The kernel did not retain the selection");
-  expect(cellFocusOf(localSubject(selected.id))).toMatchObject({
+  expect(cellFocusOf(selected.id)).toMatchObject({
     segment: "componentDrops",
     id: fitting.id,
     pane: "this",
@@ -214,56 +222,41 @@ test("/fans edits Ducts criteria and a criterion choice in place through the duc
   }));
   const ducts0 = f.owner.work()?.revision ?? 0;
   const fans0 = f.fans.work()?.revision;
-  const view = render(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
-  // The criterion is a cell now, labelled with its owner, not a link to /ducts.
-  const field = view.container.querySelector('[data-input-field="terminalDropInWg"]')!;
-  expect(field.querySelector("a")).toBeNull();
-  expect(field.textContent).toContain("from /ducts");
+  // /ducts' design sheet stages each criterion in /ducts Work (ruling 2026-11-10); Fans Work never moves.
+  const view = render(<RegistryContext value={registry()}>{nodeFor(f.owner, "design")}</RegistryContext>);
+  const field = await vi.waitFor(() => view.container.querySelector('[data-sheet-address="criteria:terminalDropInWg"]')!);
   const input = field.querySelector<HTMLInputElement>("input.dl-cell-input")!;
   fireEvent.change(input, { target: { value: "0.07" } });
   fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
   await vi.waitFor(() => expect(f.owner.work()?.revision).toBe(ducts0 + 1));
-  expect(f.owner.work()?.value).toMatchObject({ criteria: { edit: { value: { terminalDropInWg: 0.07 } } } });
-  view.rerender(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
-  // A criterion choice goes through the same owner handle.
-  const split = view.container.querySelector<HTMLElement>('[data-input-field="splitPolicy"]')!;
-  expect(split.querySelector("a")).toBeNull();
-  expect(split.textContent).toContain("from /ducts");
-  const trigger = split.querySelector<HTMLElement>("[data-choice-cell] button")!;
-  fireEvent.click(trigger);
+  expect(f.owner.work()?.value).toMatchObject({ criteria: { terminalDropInWg: { edit: { value: 0.07 } } } });
+  view.rerender(<RegistryContext value={registry()}>{nodeFor(f.owner, "design")}</RegistryContext>);
+  // A criterion choice stages its own cell the same way.
+  const split = view.container.querySelector<HTMLElement>('[data-sheet-address="criteria:splitPolicy"]')!;
+  fireEvent.click(split.querySelector<HTMLElement>("button")!);
   const pick = await vi.waitFor(() => {
     const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
     const other = options.find((o) => o.getAttribute("aria-selected") !== "true" && o.getAttribute("aria-disabled") !== "true");
-    if (!other) throw Error("no other table choice");
+    if (!other) throw Error("no other split policy");
     return other;
   });
   fireEvent.click(pick);
   await vi.waitFor(() => expect(f.owner.work()?.revision).toBe(ducts0 + 2));
-  // Fans Work never moves; every ack is the ducts owner's, labelled from /ducts.
+  expect(f.owner.work()?.value).toMatchObject({ criteria: { splitPolicy: { edit: { value: expect.any(String) } } } });
+  // Clearing the typed criterion is the cell's own clear verb; it returns to the layer underneath.
+  view.rerender(<RegistryContext value={registry()}>{nodeFor(f.owner, "design")}</RegistryContext>);
+  fireEvent.click(within(view.container.querySelector<HTMLElement>('[data-sheet-address="criteria:terminalDropInWg"]')!).getByRole("button", { name: "clear" }));
+  await vi.waitFor(() => expect(f.owner.work()?.revision).toBe(ducts0 + 3));
+  expect((f.owner.work()?.value as { criteria?: Record<string, { edit?: unknown }> }).criteria?.terminalDropInWg?.edit ?? undefined).toBeUndefined();
   expect(f.fans.work()?.revision).toBe(fans0);
   expect(acks.filter((a) => a.route === "fans")).toEqual([]);
-  expect(acks.filter((a) => a.route === "ducts").map((a) => a.label)).toEqual([
-    expect.stringContaining("· from /ducts"),
-    expect.stringContaining("· from /ducts"),
-  ]);
-  expect(f.owner.work()?.value).toMatchObject({ criteria: { edit: { value: { splitPolicy: expect.any(String) } } } });
-  // Clearing the typed criterion (an emptied cell commits null) takes the same owner path.
-  await vi.waitFor(() => expect(f.fans.readingStatus("ductsWork").snapshot.current).toBe(true));
-  view.rerender(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
-  const typed = view.container.querySelector<HTMLInputElement>('[data-input-field="terminalDropInWg"] input.dl-cell-input')!;
-  fireEvent.change(typed, { target: { value: "" } });
-  fireEvent.keyDown(typed, { key: "Enter", code: "Enter" });
-  await vi.waitFor(() => expect(f.owner.work()?.revision).toBe(ducts0 + 3));
-  expect((f.owner.work()?.value as { criteria?: { edit?: { value?: Record<string, unknown> } } }).criteria?.edit?.value?.terminalDropInWg).toBeUndefined();
-  expect(f.fans.work()?.revision).toBe(fans0);
-  expect(acks.at(-1)).toMatchObject({ route: "ducts", label: expect.stringContaining("Revert") });
 });
 
 test("a rule owner crossing without system context still lands on its rule", async () => {
   const f = await createWitness(closes);
   const url = new URL(ductsLink([], {}, { kind: "rule", key: "tap-std" }), "http://127.0.0.1");
   const destination = f.mount(f.admitted.owner, url.searchParams, "rule-no-system");
-  expect(destination.page.read().selected.map((item: {id:Parameters<typeof localSubject>[0]}) => localSubject(item.id))).toEqual(["rule:tap-std"]);
+  expect(destination.page.read().selected.map((item: { id: string }) => item.id)).toEqual(["rule:tap-std"]);
   await vi.waitFor(() => expect(destination.readingStatus("value").snapshot.current).toBe(true));
   const view = render(<RegistryContext value={registry()}>{nodeFor(destination, "e-rules-all")}</RegistryContext>);
   const row = view.container.querySelector('[data-key="tap-std"]');

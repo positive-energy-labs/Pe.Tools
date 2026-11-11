@@ -15,19 +15,20 @@ import { RouteWorkspace } from "@pe/runtime";
 import { expect, test } from "vite-plus/test";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { editPatches, workLayer } from "../src/ducts-inputs.ts";
+import { criteriaLayer } from "@pe/agent-contracts";
 import { price } from "@pe/ducts-domain/pricing";
 import { snapshot } from "../../web/src/ducts/test-fixture.ts";
 
 test("joined Fans edits reach the pricing solve and input layer", () => {
   const fans = fansDocumentSchema.parse({
-    flows: { "4": { edit: { value: { cfm: 250 } } } },
-    terminalDrops: { "4": { edit: { value: { inWg: 0.27 } } } },
+    flows: { "UniqueId:fixture%3a4": { edit: { value: { cfm: 250 } } } },
+    terminalDrops: { "UniqueId:fixture%3a4": { edit: { value: { inWg: 0.27 } } } },
     parameters: { fanFlow: { edit: { value: "Project fan flow" } } },
   });
   const joined = ductsDesign(ductsDocumentSchema.parse({}), fans);
   const layer = workLayer(joined);
-  expect(layer.flows).toEqual({ "4": { cfm: 250 } });
-  expect(layer.terminalDrops).toEqual({ "4": { inWg: 0.27 } });
+  expect(layer.flows).toEqual({ "UniqueId:fixture%3a4": { cfm: 250 } });
+  expect(layer.terminalDrops).toEqual({ "UniqueId:fixture%3a4": { inWg: 0.27 } });
   const priced = price(snapshot, {}, joined, joined);
   expect(priced.edit.parameters.fanFlow).toBe("Project fan flow");
   expect(priced.flows.get(4)).toMatchObject({ cfm: 250 });
@@ -58,7 +59,7 @@ test("fitting edits land on Work's own keys and read back through the Work layer
       assignments: { "Round Elbow": { rule: "elbow-15d-45-le10" } },
       fittingDrops: { [key]: { inWg: 0.04 } },
     };
-    const patches = editPatches(edits, null);
+    const patches = editPatches(edits);
     expect(patches).toEqual([
       { path: ["rules", "elbow-1d-le10", "edit"], value: { value: { table: "CD3-21" } } },
       {
@@ -81,10 +82,7 @@ test("fitting edits land on Work's own keys and read back through the Work layer
     });
 
     // `null` takes each back.
-    const cleared = editPatches(
-      { assignments: { "Round Elbow": null }, fittingDrops: { [key]: null } },
-      design(saved!.doc),
-    );
+    const cleared = editPatches({ assignments: { "Round Elbow": null }, fittingDrops: { [key]: null } });
     expect(await workspace.apply(scope, "ducts", "human", cleared, saved!.revision)).toMatchObject({
       ok: true,
     });
@@ -98,38 +96,18 @@ test("fitting edits land on Work's own keys and read back through the Work layer
   }
 });
 
-test("a criteria edit writes and clears one side, keeping the other side staged", () => {
-  const doc = (value: unknown) =>
-    design({ criteria: { edit: { value } } });
-  // supply 850 over nothing staged: return stays unstaged, so it keeps the firm's value and source.
-  expect(editPatches({ criteria: { velocityLimitFpm: { supply: 850 } } }, null)).toEqual([
-    { path: ["criteria", "edit"], value: { value: { velocityLimitFpm: { supply: 850 } } } },
+test("a criteria edit writes and clears one side's own cell, leaving the other side's cell alone", () => {
+  // supply 850: its own cell; return stays unstaged, so it keeps the firm's value and source.
+  expect(editPatches({ criteria: { velocityLimitFpm: { supply: 850 } } })).toEqual([
+    { path: ["criteria", "velocitySupplyFpm", "edit"], value: { value: 850 } },
   ]);
-  // return 650 over a staged supply keeps supply.
-  expect(
-    editPatches(
-      { criteria: { velocityLimitFpm: { return: 650 } } },
-      doc({ velocityLimitFpm: { supply: 850 }, healBoxIn: 30 }),
-    ),
-  ).toEqual([
-    {
-      path: ["criteria", "edit"],
-      value: { value: { velocityLimitFpm: { supply: 850, return: 650 }, healBoxIn: 30 } },
-    },
+  // Clearing a side removes only its pending edit; an unsided criterion is one cell.
+  expect(editPatches({ criteria: { velocityLimitFpm: { return: null }, healBoxIn: null, splitPolicy: "even" } })).toEqual([
+    { path: ["criteria", "velocityReturnFpm"] },
+    { path: ["criteria", "healBoxIn"] },
+    { path: ["criteria", "splitPolicy", "edit"], value: { value: "even" } },
   ]);
-  // Clearing supply removes only supply; clearing the last side drops the criterion.
-  expect(
-    editPatches(
-      { criteria: { velocityLimitFpm: { supply: null } } },
-      doc({ velocityLimitFpm: { supply: 850, return: 650 } }),
-    ),
-  ).toEqual([
-    { path: ["criteria", "edit"], value: { value: { velocityLimitFpm: { return: 650 } } } },
-  ]);
-  expect(
-    editPatches(
-      { criteria: { velocityLimitFpm: { return: null }, healBoxIn: null } },
-      doc({ velocityLimitFpm: { return: 650 }, healBoxIn: 30 }),
-    ),
-  ).toEqual([{ path: ["criteria", "edit"], value: { value: {} } }]);
+  // The engine reads the layer the cells make.
+  expect(criteriaLayer({ velocitySupplyFpm: { edit: { value: 850 } }, velocityReturnFpm: {}, healBoxIn: { edit: { value: 30 } } }))
+    .toEqual({ velocityLimitFpm: { supply: 850 }, healBoxIn: 30 });
 });

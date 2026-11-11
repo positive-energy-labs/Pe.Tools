@@ -6,15 +6,13 @@
 import { expect, it } from "vite-plus/test";
 import {
   ductsInputsSchema,
-  ductsSheetEditsSchema,
   type DuctsInputs,
   type FittingPricing,
   type Resolved,
 } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { fittingGroups, tableMeaning } from "./fitting-groups";
-import { inputRows } from "./input-rows";
-import { kindMeaning } from "./kind-meaning";
+import { kindDisabledReason, kindMeaning } from "./kind-meaning";
 
 type Node = DuctSnapshot["nodes"][number];
 const firm = <T>(value: T): Resolved<T> => ({
@@ -55,7 +53,7 @@ const port = (index: number, direction: "in" | "out", classification: string) =>
   }) as unknown as Node["connectors"][number];
 // Broan B160E75RT as Chadds models it: supply and exhaust outlets, supply and exhaust inlets.
 const erv = (id: number): Node =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind: "equipment",
     category: "Mechanical Equipment",
@@ -103,32 +101,6 @@ const unit = (kind: "erv" | "air-handler", source: "Work" | "default") => ({
     source: "none" as const,
   },
 });
-const KEY = JSON.stringify(["Broan_B160E75RT_ERV_R25", "B160E75RT"]);
-
-it("a unit kind is one row per family and type, named by family and type and the units it covers", () => {
-  // r22 drew four rows each labelled ["Broan_B160E75RT_ERV_R25","B160E… (the raw Work key).
-  const ids = [6105264, 6953852, 6104810, 12806600];
-  const rows = inputRows({
-    snapshot: { nodes: ids.map(erv) },
-    doc: null,
-    inputs: inputs({
-      units: Object.fromEntries(ids.map((id) => [id, unit("air-handler", "Work")])),
-    }),
-    fanUnitId: null,
-  }).filter((r) => r.label === "Unit kind");
-  expect(rows).toHaveLength(1);
-  const sorted = [...ids].sort((a, b) => a - b);
-  expect(rows[0]).toMatchObject({
-    title: "Broan_B160E75RT_ERV_R25 · B160E75RT",
-    ids: sorted,
-    typed: true,
-    clear: { kinds: { [KEY]: null } },
-  });
-  expect(JSON.stringify(rows[0]!.subject)).not.toContain('[\\"Broan');
-  expect(rows[0]!.subject.filter((p) => typeof p !== "string")).toEqual(
-    sorted.map((id) => ({ id })),
-  );
-});
 
 it("each kind option says what it means for this unit's ports, role and flow", () => {
   const node = erv(6105264);
@@ -141,44 +113,6 @@ it("each kind option says what it means for this unit's ports, role and flow", (
     /^no fan port: 2 outlets \(supply out c2, exhaust out c3\)/,
   );
   expect(kindMeaning(node, "other", u)).toMatch(/^passive: adds its drop and moves no air/);
-});
-
-it("a row stays when its value is not typed, carrying the source underneath and no clear", () => {
-  const rows = inputRows({
-    snapshot: { nodes: [] },
-    doc: null,
-    inputs: inputs({
-      terminals: {
-        7: {
-          cfm: {
-            value: 1120,
-            source: "model",
-            ref: "Flow",
-            units: null,
-            version: null,
-            status: "valid",
-          },
-          drop: firm(0.03),
-        },
-        8: {
-          cfm: { value: 150, source: "Work", units: null, version: null, status: "valid" },
-          drop: firm(0.03),
-        },
-      },
-    }),
-    fanUnitId: null,
-  });
-  expect(rows.find((r) => r.key === "terminal:7:cfm")).toMatchObject({
-    source: "model Flow",
-    typed: false,
-    clear: null,
-  });
-  const typed = rows.find((r) => r.key === "terminal:8:cfm")!;
-  expect(typed).toMatchObject({ typed: true, clear: { flows: { 8: null } } });
-  if (typed.control.kind !== "number") throw new Error("number row");
-  expect(ductsSheetEditsSchema.parse(typed.control.edit(160))).toEqual({
-    flows: { 8: { cfm: 160 } },
-  });
 });
 
 const fitting = (key: number, extra: Partial<FittingPricing>): FittingPricing =>
@@ -296,40 +230,18 @@ it("ASHRAE titles read as the fitting, without the id and the source", () => {
   expect(tableMeaning("CD3-9", TITLES)).toBeNull();
 });
 
-it("a kind that would take the unit off the fan list is a disabled option; the rest stay pickable", () => {
-  const rowFor = (node: Node, kind: "erv" | "air-handler", source: "Work" | "default") =>
-    inputRows({
-      snapshot: { nodes: [node] },
-      doc: null,
-      inputs: inputs({ units: { [node.id]: unit(kind, source) } }),
-      fanUnitId: null,
-    }).find((r) => r.label === "Unit kind")!;
-  const options = (node: Node) => {
-    const control = rowFor(node, "erv", "default").control;
-    if (control.kind !== "kind") throw new Error("kind control");
-    return Object.fromEntries(control.options.map((o) => [o.kind, o.disabled]));
-  };
+it("a kind that would take the unit off the fan list is a disabled reason; the rest stay pickable", () => {
   // The B160's two outlets: an air handler takes exactly one, so it is disabled with its reason.
-  const b160 = options(erv(6105264));
-  expect(b160["air-handler"]).toMatch(
+  const b160 = erv(6105264), u = unit("erv", "default");
+  expect(kindDisabledReason(b160, "air-handler", u)).toMatch(
     /^no fan port: 2 outlets \(supply out c2, exhaust out c3\).*leave the fan list/,
   );
-  expect(b160.erv).toBeNull();
-  expect(b160.other).toBeNull();
-  expect(b160.dehumidifier).toBeNull();
+  for (const kind of ["erv", "other", "dehumidifier"] as const) expect(kindDisabledReason(b160, kind, u)).toBeNull();
   // A one-outlet unit keeps air-handler enabled.
   const single = {
     ...erv(7),
     family: "SunTherm M Series",
     connectors: [port(1, "out", "SupplyAir"), port(2, "in", "ReturnAir")],
   } as Node;
-  expect(options(single)["air-handler"]).toBeNull();
-  // A stale typed air-handler on the B160 stays the standing value, flagged disabled, clearable.
-  const stale = rowFor(erv(6105264), "air-handler", "Work");
-  expect(stale.control.kind === "kind" && stale.control.value).toBe("air-handler");
-  expect(
-    stale.control.kind === "kind" &&
-      stale.control.options.find((o) => o.kind === "air-handler")?.disabled,
-  ).toBeTruthy();
-  expect(stale.clear).not.toBeNull();
+  expect(kindDisabledReason(single, "air-handler", u)).toBeNull();
 });

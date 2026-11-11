@@ -12,7 +12,7 @@ import { RouteWorkspace, observeResources } from "@pe/runtime";
 import sheet from "../ducts/sheet/sheet.fixture.json";
 import { snapshot } from "../ducts/test-fixture";
 import { placeInput } from "../shell/typed-place.test-support";
-import type { ReadingSource } from "../shell/source-contract";
+import type { UseSource } from "../shell/source-contract";
 import { browserWorkPorts, createWorkFeedClient } from "../shell/work-feed-client";
 
 import { mountTypedRoute } from "../shell/typed-mount";
@@ -22,9 +22,13 @@ import { admit } from "./admission.fixture";
 export async function createWitness(
   closes: (() => void)[],
   saved = new Map<string, unknown>(),
-  overrides: Readonly<Record<string, ReadingSource>> = {},
+  overrides: Readonly<Record<string, UseSource>> = {},
   work?: import("../shell/typed-place").PlaceInput["work"],
   receipts?: import("@pe/agent-contracts").WorkJournalDoor["receipts"],
+  /** The action door; absent, the browser's own. A witness hands in a real host journal here. */
+  submit: typeof browserWorkPorts.submit = browserWorkPorts.submit,
+  /** The Pe HTTP client the findings history door goes through; absent, the browser's own. */
+  findings?: Parameters<typeof import("../route/host").undoOwnFinding>[1],
 ) {
   const admitted = await admit();
   const ws = new RouteWorkspace({
@@ -54,7 +58,7 @@ export async function createWitness(
     { subscribe: observe, dirty() {} },
     {
       write: (key, write) => ws.write(key, key.route, "human", write),
-      submit: async command => { const call = `fans:${command.key}`; inputs.set(call,command.input); calls.set(call,(calls.get(call)??0)+1); return browserWorkPorts.submit(command); },
+      submit: async command => { const call = `fans:${command.key}`; inputs.set(call,command.input); calls.set(call,(calls.get(call)??0)+1); return submit(command); },
     },
   );
   const feed = {
@@ -74,7 +78,7 @@ export async function createWitness(
         }, end),
     }),
   };
-  const native: Record<string, ReadingSource> = {};
+  const native: Record<string, UseSource> = {};
   const wire = (value: unknown) =>
     JSON.parse(
       JSON.stringify(value, (_key, value) =>
@@ -140,9 +144,12 @@ export async function createWitness(
                     fansWork,
                     design: ductsDesign(ductsWork, fansWork),
                     effectiveDesign:
-                      withStoredRulings(ductsDesign(ductsWork, fansWork), snapshot.store) ??
+                      withStoredRulings(ductsDesign(ductsWork, fansWork), snapshot.store, snapshot) ??
                       ductsDesign(ductsWork, fansWork),
                     catalogFindings: [],espOptions:null,espOptionsError:"Fixture has no native parameter options",
+                    // The fixture's criteria as the Fans sheet fixture resolved them, over a stand-in firm file.
+                    criteria: sheet.inputs.inputs.criteria,
+                    firm: sheet.inputs.firm,
                   };
           deliver({ kind: "complete", revision: ++version, value: packet(data, version) });
         };
@@ -182,6 +189,7 @@ export async function createWitness(
           sheetSnapshot: capture,
           sheetView: sheetState(open),
           ductsWork,
+          ductsRevision: (saved.get("ducts") as { revision?: number } | undefined)?.revision ?? 0,
           fansWork,
           design: ductsDesign(ductsWork, fansWork),
         });
@@ -257,7 +265,7 @@ export async function createWitness(
       });
       places.set(place, input);
     }
-    const mounted = nativeTestAdapter(mountTypedRoute(route.typed as import("../route/typed-route").TypedRoute, input, route.workFingerprint, {work: feed, sources: Object.fromEntries(Object.entries({...native,...overrides}).map(([entry,source])=>[entry, source.kind === "use" ? { ...source, open(ctx,deliver) {
+    const mounted = nativeTestAdapter(mountTypedRoute(route.typed as import("../route/typed-route").TypedRoute, input, route.workFingerprint, {work: feed, findings, sources: Object.fromEntries(Object.entries({...native,...overrides}).map(([entry,source])=>[entry, source.kind === "use" ? { ...source, open(ctx,deliver) {
       const call = `${route.data.key}:${entry}`; calls.set(call,(calls.get(call)??0)+1); inputs.set(call,ctx.args);
       return source.open(ctx,deliver);
     } } : source])) }), feed);

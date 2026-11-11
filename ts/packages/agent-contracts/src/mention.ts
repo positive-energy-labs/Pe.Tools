@@ -37,11 +37,14 @@ export const mentionSchema = z
   }, "Mention kind must match its canonical contribution key");
 export type Mention = z.infer<typeof mentionSchema>;
 
-/** The key of an open Revit document as a capability row. */
-export const documentKey = (session: string, openId: string) => `doc:${session}/${openId}`;
+declare const openDocumentRef: unique symbol;
+/** An open Revit document as a session capability row; session state, never SubjectRef identity. */
+export type OpenDocumentRef = string & { readonly [openDocumentRef]: true };
+export const openDocumentRefOf = (session: string, openId: string) =>
+  `doc:${session}/${openId}` as OpenDocumentRef;
 
 /** `doc:<session>/<openId>` → its halves; null for any other key. */
-export function parseDocumentKey(key: string): { session: string; openId: string } | null {
+export function parseOpenDocumentRef(key: string): { session: string; openId: string } | null {
   if (!key.startsWith("doc:")) return null;
   const rest = key.slice("doc:".length);
   const slash = rest.indexOf("/");
@@ -70,7 +73,7 @@ export function documentRows(catalog: { machine: MentionMachine }): Capability[]
   // A session with no id has no key to point through; `doc:/<openId>` would not parse back.
   return machineAttachments(catalog.machine).flatMap(({ session: sessionId, documents }) =>
     (documents ?? []).map((document) => ({
-      key: documentKey(sessionId ?? "", document.openId),
+      key: openDocumentRefOf(sessionId ?? "", document.openId),
       kind: "document" as const,
       title: document.title,
       finds: [document.address ?? "", document.isFamilyDocument ? "family" : "project"].filter(
@@ -207,7 +210,7 @@ export function mentionOf(
       },
     };
   }
-  const doc = parseDocumentKey(row.key);
+  const doc = parseOpenDocumentRef(row.key);
   if (doc) {
     const session = catalog.machine.revit.sessions?.find(
       (s) => s.attachment?.session === doc.session,

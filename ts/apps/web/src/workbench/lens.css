@@ -528,19 +528,9 @@
    two sentences): the transcript reads as prose with machinery tucked under it, not as N banners.
    The summary wears the marker's row geometry above; its disclosure leads, where the eye starts.
    A call row is a control (click opens its I/O here). */
-[data-annotation="tool-run"] > summary {
-  list-style: none;
-}
-[data-annotation="tool-run"] > summary::-webkit-details-marker {
-  display: none;
-}
+/* The disclosure chevron is kit base.css's one summary marker (N2). */
 [data-annotation="tool-run"] > summary::before {
-  content: "▸";
   flex: none;
-  transition: transform var(--motion-control) ease;
-}
-[data-annotation="tool-run"][open] > summary::before {
-  transform: rotate(90deg);
 }
 /* The count leads and holds its line: it is the one fact the folded row must always say. */
 [data-annotation="tool-run"] > summary > span {
@@ -551,8 +541,9 @@
 [data-annotation="tool-run"] > summary > span:first-child {
   color: var(--pe-ink);
 }
-/* The latest activity is the elastic part: it takes the slack and truncates, so the count leads
-   and the failures ("4 failed") sit on the row's right edge. Marks centre on the row's line. */
+/* The named call (the latest, or the first failed once the run settles) is the elastic part: it
+   takes the slack and truncates, so the count ("3 tools · 1 failed") leads. Marks centre on the
+   row's line. */
 [data-annotation="tool-run"] > summary > .dl-tool-run-latest {
   flex: 1 1 0;
   min-width: 0;

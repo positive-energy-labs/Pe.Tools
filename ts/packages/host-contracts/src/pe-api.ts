@@ -1454,7 +1454,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Point At",
     description:
-      "Show the person a route place in this thread's 'Pea is pointing at' list and highlight it, without changing their selection, URL or camera. place is the route's attention field text (route:<r>.view fields). Kept until the person dismisses it.",
+      "Show the person a subject or a route place in this thread's 'Pea is pointing at' list and highlight it, without changing their selection, URL or camera. target is a SubjectRef code, or the route's attention field text (route:<r>.view fields). Kept until the person dismisses it; keeping it as a finding is findings.write.",
     intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",
@@ -1645,7 +1645,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Pods",
     description:
-      "Every installed pod under Documents/Pe.Tools/Pods: manifest id, name, version, folder, entrypoints, and members with sha256 and $schema. Members only — runs under output/ answer to pod.runs. Diagnostics cover the manifest only; a bad member never hides its siblings.",
+      "Every installed pod under Pods in the content home: manifest id, name, version, folder, entrypoints, and members with sha256 and $schema. Members only — runs under output/ answer to pod.runs. Diagnostics cover the manifest only; a bad member never hides its siblings.",
     intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",
@@ -1699,7 +1699,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Import Pod",
     description:
-      "Import a pod .zip archive into a new folder under Documents/Pe.Tools/Pods (default: the manifest id), without Revit. Bounded, all-or-nothing: refuses an installed id, an existing folder, host state, traversal, links, case twins or oversized entries. Bytes land unchanged plus imported.json (archive sha256, locator, date); Pages start unbound; carried captures join this host's store by hash.",
+      "Import a pod .zip archive into a new folder under Pods in the content home (default: the manifest id), without Revit. Bounded, all-or-nothing: refuses an installed id, an existing folder, host state, traversal, links, case twins or oversized entries. Bytes land unchanged plus imported.json (archive sha256, locator, date); Pages start unbound; carried captures join this host's store by hash.",
     intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Mutation",
@@ -1717,7 +1717,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Promote Page to Pod",
     description:
-      "Wrap a scratch Page (Documents/Pe.Tools/Pages/<page>/) as a new pod <id> holding pages/<page>/ byte for byte, so it can be exported and shared. The HTML is never rewritten; the scratch Page stays; the binding does not travel. Returns the promoted Page's key.",
+      "Wrap a scratch Page (Pages/<page>/ in the content home) as a new pod <id> holding pages/<page>/ byte for byte, so it can be exported and shared. The HTML is never rewritten; the scratch Page stays; the binding does not travel. Returns the promoted Page's key.",
     intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Mutation",

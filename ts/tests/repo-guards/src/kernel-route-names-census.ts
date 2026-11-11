@@ -14,36 +14,14 @@ const directories = ["ts/packages/runtime/src"];
 const readRoot = "ts/apps/host/src/reads";
 // Ownership is reviewed per file, never inferred from a generated-file glob.
 export const readFileOwnership = {
-  "bind.ts": { owner: "kernel", reason: "Shared thread/document binding picker" },
-  "captures.ts": { owner: "kernel", reason: "Shared capture-store browsing input" },
+  "door.ts": { owner: "kernel", reason: "Effect-free read door Pods and route directories import" },
   "evaluator.ts": { owner: "kernel", reason: "Tracked evaluation, Values and publications" },
   "events.ts": { owner: "kernel", reason: "Publication invalidation SSE transport" },
   "history-routes.ts": { owner: "kernel", reason: "Generic History HTTP admission and dispatch" },
   "history.ts": { owner: "kernel", reason: "Durable publication History and replay" },
   "inputs.ts": { owner: "kernel", reason: "Tracked native, Work, file and document inputs" },
   "invalidations.ts": { owner: "kernel", reason: "Shared input invalidation subscriptions" },
-  "open.ts": { owner: "kernel", reason: "Shared open-document, recents and thread inventory" },
   "routes.ts": { owner: "kernel", reason: "Read registry and generic HTTP dispatcher" },
-  "chat.ts": { owner: "route-owned", reason: "Chat overview projection" },
-  "duct-loss.ts": { owner: "route-owned", reason: "Duct-loss calculation composition" },
-  "ducts-design.ts": { owner: "route-owned", reason: "Duct/Fan Work and firm design layers" },
-  "ducts.ts": { owner: "route-owned", reason: "Duct roster, network and pricing composition" },
-  "families-matrix.ts": { owner: "route-owned", reason: "Families matrix and pivot calculation" },
-  "families-outcome.ts": { owner: "route-owned", reason: "Families Apply result projection" },
-  "families.ts": { owner: "route-owned", reason: "Families evidence, Work and matrix composition" },
-  "family.ts": { owner: "route-owned", reason: "Family member and specification projection" },
-  "fan-sheet.ts": { owner: "route-owned", reason: "Fan pressure sheets, roster and path composition" },
-  "fans.ts": { owner: "route-owned", reason: "Fans worksheet composition" },
-  "ops.ts": { owner: "route-owned", reason: "Operations browser model" },
-  "pods.ts": { owner: "route-owned", reason: "Pods browser model" },
-  "rooms-plan.ts": { owner: "route-owned", reason: "Rooms plan image/frame model" },
-  "rooms.ts": { owner: "route-owned", reason: "Rooms snapshot and zoning composition" },
-  "schedule-outcome.ts": { owner: "route-owned", reason: "Schedules Apply result projection" },
-  "schedules.ts": { owner: "route-owned", reason: "Schedules observation and Work composition" },
-  "settings.ts": { owner: "route-owned", reason: "Settings route model" },
-  "takeoffs.ts": { owner: "route-owned", reason: "Takeoffs snapshot and run composition" },
-  "builtins.generated.ts": { owner: "generated", reason: "Catalog linker builtin closures" },
-  "registry.generated.ts": { owner: "generated", reason: "Catalog linker host-read enrollment" },
 } as const satisfies Record<string, { owner: "kernel" | "route-owned" | "generated"; reason: string }>;
 const ownership = new Map(Object.entries(readFileOwnership));
 // Import ownership, not an occurrence allowance: the picture currency serves every caller/route.
@@ -166,7 +144,7 @@ export function kernelRouteInventory(requiredPaths: readonly string[] = []) {
         } else if (node.text === "open" && tag === "binding" || ["open", "captures"].includes(node.text) && tag === "kind") {
           real = false; reason = "Generic Work/document/resource discriminator";
         } else if (node.text === "open" && ts.isLiteralTypeNode(parent) && ts.isIndexedAccessTypeNode(parent.parent)) {
-          real = false; reason = "ReadingSource.open method selector";
+          real = false; reason = "UseSource.open method selector";
         } else if (ts.isCallExpression(parent) && ts.isIdentifier(parent.expression) && queryKeys.has(parent.expression.text)) {
           real = false; reason = "URLSearchParams key lookup, not a route selection";
         } else if (node.text === "open" && ts.isBinaryExpression(parent) && ts.isIdentifier(parent.left) && parent.left.text === "instance") {

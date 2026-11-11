@@ -64,7 +64,11 @@ export function BlockerRow({
   useEffect(() => {
     if (focused) row.current?.scrollIntoView({ block: "nearest" });
   }, [focused]);
-  const crossingVerb = closer.crossing && (
+  // A fix /ducts owns is a link that opens /ducts on the blocker's element (ruling 2026-11-10).
+  const fixLink = (link: { says: string; href: string }) => (
+    <a href={link.href} className="t-small" data-ducts-fix="" onClick={(event) => event.stopPropagation()}>{link.says}</a>
+  );
+  const crossingVerb = closer.crossing && (closer.crossing.link ? fixLink(closer.crossing.link) : (
     <>
       <Button
         kind="framed"
@@ -87,7 +91,7 @@ export function BlockerRow({
         {closer.crossing.distanceIn.toFixed(3)} in
       </span>
     </>
-  );
+  ));
   return (
     <div
       ref={row}
@@ -168,7 +172,7 @@ export function BlockerRow({
               />
             )}
             {closer.crossing?.first && crossingVerb}
-            {closer.choices?.length ? (
+            {closer.link ? fixLink(closer.link) : closer.choices?.length ? (
               // "price with…": each table the fitting may read, named with the rule it reads under.
               <ListPopup<PriceChoice>
                 key={`${blocker.id}:${closer.refusal}`}
@@ -200,7 +204,7 @@ export function BlockerRow({
               </Button>
             )}
             {closer.crossing && !closer.crossing.first && crossingVerb}
-            {closer.secondary && (
+            {closer.secondary?.link ? fixLink(closer.secondary.link) : closer.secondary && (
               <Button
                 kind="quiet"
                 label={`${closer.secondary.verb} for ${blocker.kind}`}

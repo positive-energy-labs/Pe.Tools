@@ -33,12 +33,10 @@ import { PrimaryRouteControls } from "#/navigation/route-controls";
 import { RouteHelpButton } from "#/route/help";
 import { useThreadScope } from "#/chat/scope";
 import {
-  selectApprovals,
   selectQuestions,
   selectPlan,
   selectRunStatus,
   selectTitle,
-  selectToolCalls,
 } from "@pe/agent-contracts/chat-state";
 import { useTranscript, useWorkbench } from "#/workbench/provider";
 
@@ -244,7 +242,7 @@ export function ChatSituationHead({
     kind,
     tone:
       kind === "failure"
-        ? "alarm"
+        ? "caution"
         : kind === "ready"
           ? "done"
           : kind === "busy"
@@ -396,21 +394,11 @@ export function ComposerState(_: { situation: ChatSituation }) {
 
 export type ComposerStatus = { text: string; caution: boolean; detail?: string };
 
-/** Pea's live asks, then the Work the bound document holds: the top of the composer box, so
- *  approve and reject have one location and the draft sits under what is edit. */
+/** Pea's live questions, then the Work the bound document holds: the top of the composer box.
+ *  Run consent is the topbar sweep's (ADR 0035 rule 6), never a composer card. */
 export function ComposerWork({ situation }: { situation: ChatSituation }) {
-  const { resolveApproval, answerQuestion, store, cancel, currentThreadId } = useWorkbench();
-  const { approvals, questions, calls } = useTranscript((state) => {
-    const approvals = selectApprovals(state);
-    const ids = new Set(approvals.map((ask) => ask.toolCallId));
-    return {
-      approvals,
-      questions: selectQuestions(state),
-      calls: selectToolCalls(state)
-        .filter((call) => ids.has(call.id))
-        .map(({ id, caption }) => ({ id, caption })),
-    };
-  });
+  const { answerQuestion, store, cancel, currentThreadId } = useWorkbench();
+  const questions = useTranscript(selectQuestions);
   const { inventory, bound, ladder } = situation;
   // Live asks only: an expired ask is a transcript record, never a head row.
   const works = useHeadWorks(
@@ -426,13 +414,7 @@ export function ComposerWork({ situation }: { situation: ChatSituation }) {
   );
   return (
     <>
-      <ComposerPending
-        approvals={approvals}
-        questions={questions}
-        calls={calls}
-        resolveApproval={resolveApproval}
-        answerQuestion={answerQuestion}
-      />
+      <ComposerPending questions={questions} answerQuestion={answerQuestion} />
       <ProposalHead asks={[]} works={works} />
       {currentThreadId && (
         <Button label="Revoke writes" onClick={() => void cancel()}>

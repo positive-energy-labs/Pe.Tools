@@ -24,10 +24,16 @@ import type {
   SettingsValidate,
 } from "@pe/host-contracts/generated";
 import type { PodDraftSource, PodMemberSource } from "@pe/agent-contracts";
-import { isPackageMember, listPackages, readPackage, resolvePackageIdentity } from "./packages.ts";
+import {
+  isPackageMember,
+  listPackages,
+  productPodsRoots,
+  readPackage,
+  resolvePackageIdentity,
+} from "./packages.ts";
 import { requirePackageEnabled, activePackages } from "./package-lifecycle.ts";
 import { LocalOpError } from "./local-error.ts";
-import { productPodsRootPath } from "./product-paths.ts";
+import { userWritable as userPath } from "./content-homes.ts";
 import {
   localOpFileError,
   makeDirectory,
@@ -36,7 +42,7 @@ import {
 } from "./files/index.ts";
 
 /**
- * Pod members are host-native file I/O under `Documents/Pe.Tools/Pods/<folder>/`; a pod is found by
+ * Pod members are host-native file I/O under `Pods/<folder>/` in the content home; a pod is found by
  * its manifest `id`, never its folder name. Structural (JSON schema) validation runs here, offline.
  * Composition and semantic validation belong to the Revit session and arrive through the bridge.
  */
@@ -51,7 +57,7 @@ const writeLock = Semaphore.makeUnsafe(1);
 const schemaCache = new Map<string, ValidateFunction | string>();
 
 export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
-  const root = ctx.podsRoot ?? productPodsRootPath();
+  const root = ctx.podsRoot ?? productPodsRoots();
   const found = yield* Effect.tryPromise({
     try: () => listPackages(root),
     catch: (error) => new LocalOpError("pod.list", errorMessage(error), 400),
@@ -75,7 +81,7 @@ export const resolvePodIdentity = Effect.fnUntraced(function* (
   folder: string,
   ctx: PodContext = {},
 ) {
-  const root = ctx.podsRoot ?? productPodsRootPath();
+  const root = ctx.podsRoot ?? productPodsRoots();
   return yield* Effect.tryPromise({
     try: async () => {
       const identity = await resolvePackageIdentity(folder, root);
@@ -233,7 +239,7 @@ export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: P
     catch: (error) => new LocalOpError("pod.member.read", errorMessage(error), 403),
   });
   const admitted = yield* Effect.tryPromise({
-    try: () => readPackage(member.pod, ctx.podsRoot ?? productPodsRootPath()),
+    try: () => readPackage(member.pod, ctx.podsRoot ?? productPodsRoots()),
     catch: (error) =>
       new LocalOpError(
         "pod.member.read",
@@ -274,7 +280,7 @@ export const writeRun = (
   writeLock.withPermit(
     Effect.gen(function* () {
       const key = "pod.run.write";
-      const folder = join(yield* podFolder(pod, ctx), "output", runId);
+      const folder = yield* userWritable(join(yield* podFolder(pod, ctx), "output", runId), key);
       yield* makeDirectory(folder, key);
       for (const [name, content] of Object.entries(files))
         yield* writeFileStringAtomic(join(folder, name), content, key);
@@ -320,6 +326,13 @@ export const saveMember = (request: PodMemberSaveRequest, ctx: PodContext = {}) 
     }),
   );
 
+/** Every write goes to the user root: a shared Pod is copied there on its first write (ADR 0035 rule 11). */
+const userWritable = (path: string, key: string) =>
+  Effect.try({
+    try: () => userPath(path),
+    catch: (error) => new LocalOpError(key, errorMessage(error), 500),
+  });
+
 const writablePath = Effect.fnUntraced(function* (
   request: PodMember & { content: string },
   ctx: PodContext,
@@ -338,7 +351,7 @@ const writablePath = Effect.fnUntraced(function* (
         400,
       ),
     );
-  return path;
+  return yield* userWritable(path, key);
 });
 
 const written = (request: PodMember & { content: string }): PodMemberWritten => ({
@@ -516,7 +529,7 @@ export const composedSpec = Effect.fnUntraced(function* (
 });
 
 export const podFolder = Effect.fnUntraced(function* (podId: string, ctx: PodContext = {}) {
-  const root = ctx.podsRoot ?? productPodsRootPath();
+  const root = ctx.podsRoot ?? productPodsRoots();
   yield* Effect.tryPromise({
     try: () => requirePackageEnabled(podId, root),
     catch: (error) => new LocalOpError("pod.resolve", errorMessage(error), 403),

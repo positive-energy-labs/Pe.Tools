@@ -6,7 +6,7 @@ import {
   peRouteUrl,
 } from "@pe/agent-contracts/pe-api";
 /** Scratch Pages and admitted Pod Pages share serving, binding and event state. See pe.js for the author API. */
-import { readFileSync, watch } from "node:fs";
+import { existsSync, readFileSync, watch } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,20 +59,19 @@ import {
   threadHead,
   subscribeHeads,
 } from "./control.ts";
-import { capturePackage, listPackages } from "./packages.ts";
+import { capturePackage, listPackages, productPodsRoots, type PodsRoots } from "./packages.ts";
 import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";
 import {
-  packagePageDescriptors,
-  pageFolderCollisions,
-  scratchPageDescriptors,
-  scratchPageFolders,
-  scratchPageKey,
+  pageDescriptors,
+  productPagesRoots,
+  scratchPageDirectory,
+  type PagesRoots,
 } from "./page-libraries.ts";
-import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 import { exportPage } from "./page-export.ts";
+import { userTwin, userWritable } from "./content-homes.ts";
 import { escapeHtml, withPageKey } from "./page-publication.ts";
-import { HostReceipts } from "./gateway-owner.ts";
 import type { ActionJournal } from "./action-journal.ts";
+import { ActionJournalService } from "./receipt-services.ts";
 import { PAGE_MEDIA, readJson } from "./page-artifacts.ts";
 
 /**
@@ -245,15 +244,22 @@ const unboundRefusal = (door: string): Refusal => ({
   reason: `Refused at ${door}: this Page has no target. Bind it to a thread or pin a document from the chip.`,
 });
 
-/** One page's log and snapshot, under `<page>/.state/`. Appends are serial per page. */
+/**
+ * One page's log and snapshot, under `<page>/.state/`. Appends are serial per page. A shared Page
+ * writes its state into its user copy (made on the first write) and reads from it once it exists.
+ */
 class PageState {
-  private readonly dir: string;
   private readonly listeners = new Set<Listener>();
   private readonly signals = new Set<Signal>();
   private unwatch: (() => void) | null = null;
   private queue: Promise<unknown> = Promise.resolve();
-  constructor(private readonly pageDir: string) {
-    this.dir = join(pageDir, ".state");
+  constructor(private readonly pageDir: string) {}
+  private get dir() {
+    const twin = userTwin(this.pageDir);
+    return join(twin && existsSync(twin) ? twin : this.pageDir, ".state");
+  }
+  private writable() {
+    return join(userWritable(this.pageDir), ".state");
   }
   async rows(): Promise<PageEventRow[]> {
     const text = await readFile(join(this.dir, "events.jsonl"), "utf8").catch((error) => {
@@ -269,8 +275,9 @@ class PageState {
     const job = this.queue.then(async () => {
       const seq = (await this.rows()).length + 1;
       const row: PageEventRow = { seq, at: new Date().toISOString(), origin, event };
-      await mkdir(this.dir, { recursive: true });
-      await appendFile(join(this.dir, "events.jsonl"), JSON.stringify(row) + "\n", "utf8");
+      const dir = this.writable();
+      await mkdir(dir, { recursive: true });
+      await appendFile(join(dir, "events.jsonl"), JSON.stringify(row) + "\n", "utf8");
       for (const listen of this.listeners) listen(row);
       return row;
     });
@@ -284,8 +291,9 @@ class PageState {
     return readJson(join(this.dir, "snapshot.json"), z.unknown(), null);
   }
   async writeSnapshot(value: unknown) {
-    await mkdir(this.dir, { recursive: true });
-    await writeFile(join(this.dir, "snapshot.json"), JSON.stringify(value, null, 2), "utf8");
+    const dir = this.writable();
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "snapshot.json"), JSON.stringify(value, null, 2), "utf8");
   }
   /** The page's text projection (`pe.describe`): markdown an agent reads instead of the snapshot. */
   async text(): Promise<string | null> {
@@ -295,8 +303,9 @@ class PageState {
     });
   }
   async writeText(text: string) {
-    await mkdir(this.dir, { recursive: true });
-    await writeFile(join(this.dir, "snapshot.md"), text, "utf8");
+    const dir = this.writable();
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "snapshot.md"), text, "utf8");
   }
   follow(listen: Listener) {
     this.listeners.add(listen);
@@ -372,8 +381,8 @@ const bareOp = (key: string) => key.replace(/^op:/, "");
  * server and SSE is a ReadableStream. No pods root means no pod pages.
  */
 export function createPagesHandler(
-  root: string,
-  pods?: string,
+  root: PagesRoots,
+  pods?: PodsRoots,
   live: PageLive = noLive,
   journal?: ActionJournal,
 ) {
@@ -385,13 +394,8 @@ export function createPagesHandler(
   const dirOf = async (slug: string) => {
     const [id, page, ...more] = slug.split("--");
     if (page === undefined) {
-      // A scratch Page is its folder as named: the exact name, never another spelling or a twin.
-      const folders = await scratchPageFolders(root);
-      const { key } = scratchPageKey(slug, pageFolderCollisions(folders));
-      const named = folders.find((folder) => folder.toLowerCase() === slug.toLowerCase());
-      return key && (named === undefined || named === slug)
-        ? { dir: join(root, slug), pod: null, key }
-        : null;
+      const found = await scratchPageDirectory(slug, root);
+      return found && { ...found, pod: null };
     }
     if (more.length || !pods) return null;
     for (const pod of await activePackages((await listPackages(pods)).packages, pods)) {
@@ -413,12 +417,12 @@ export function createPagesHandler(
 
   /** `GET /pages`: the one Page projection, as rows: scratch newest first, then packaged by key. */
   const list = async (): Promise<PageRow[]> =>
-    [
-      ...(await scratchPageDescriptors(root)),
-      ...packagePageDescriptors(
+    (
+      await pageDescriptors(
         pods ? await activePackages((await listPackages(pods)).packages, pods) : [],
-      ),
-    ].map((page) => ({
+        root,
+      )
+    ).map((page) => ({
       slug: page.slug,
       key: page.key,
       title: page.title,
@@ -439,7 +443,7 @@ export function createPagesHandler(
     return new Response(
       `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Pages</title><link rel="stylesheet" href="/pages/pe.css"></head>
 <body style="padding:24px;max-width:720px"><h1>Pages</h1>
-<p>Every folder under <code>${escapeHtml(root)}</code> with an <code>index.html</code>, newest first${pods ? `, and every <code>pages/&lt;page&gt;</code> inside a pod under <code>${escapeHtml(pods)}</code> as <code>&lt;pod&gt;--&lt;page&gt;</code>` : ""}. Doors: <a href="/pages/pe.js">pe.js</a> · <a href="/pages/pe.css">pe.css</a> · <a href="/pages/revit.js">revit.js</a>.</p>
+<p>Every folder under <code>${escapeHtml([root].flat().join(", "))}</code> with an <code>index.html</code>, newest first${pods ? `, and every <code>pages/&lt;page&gt;</code> inside a pod under <code>${escapeHtml([pods].flat().join(", "))}</code> as <code>&lt;pod&gt;--&lt;page&gt;</code>` : ""}. Doors: <a href="/pages/pe.js">pe.js</a> · <a href="/pages/pe.css">pe.css</a> · <a href="/pages/revit.js">revit.js</a>.</p>
 <ul>${rows}</ul>
 <h2>Make one</h2>
 <p>A page is a folder with an <code>index.html</code>; a pod carries pages in its <code>pages/</code> folder. Three lines give it Revit and a shared log:</p>
@@ -774,14 +778,16 @@ export function createPagesHandler(
         });
     }
     const current = await bindingOf(dir);
-    await mkdir(join(dir, ".state"), { recursive: true });
+    // A shared Page binds in its user copy: every write goes to the user root (ADR 0035 rule 11).
+    const home = userWritable(dir);
+    await mkdir(join(home, ".state"), { recursive: true });
     const next: PageBinding = {
       slots: { ...current.slots, default: slot },
       boundBy: { ...current.boundBy, default: caller.kind === "human" ? "human" : "agent" },
     };
-    await writeFile(bindingFile(dir), JSON.stringify(next, null, 2), "utf8");
+    await writeFile(bindingFile(home), JSON.stringify(next, null, 2), "utf8");
     stateOf(dir).signal("binding", {});
-    return json(await target(page, dir));
+    return json(await target(page, home));
   }
 
   return async function handle(request: Request): Promise<Response> {
@@ -793,7 +799,7 @@ export function createPagesHandler(
       const input = peRoutes["page.publish"].body.safeParse(await request.json());
       if (!input.success) return problem(400, input.error.message);
       try {
-        if (!journal) throw Error("Page publication requires HostReceipts.");
+        if (!journal) throw Error("Page publication requires ActionJournalService.");
         const owner = journal;
         const id = request.headers.get("x-pe-command-id") ?? randomUUID();
         await owner.invoke(
@@ -824,7 +830,7 @@ export function createPagesHandler(
     }
     const wantsHtml = (request.headers.get("accept") ?? "").includes("text/html");
     if (parts.length === 1)
-      return wantsHtml ? listPage(await list()) : json({ root, pages: await list() });
+      return wantsHtml ? listPage(await list()) : json({ root: [root].flat(), pages: await list() });
     const [, slug = "", ...rest] = parts;
     const library = request.method === "GET" ? pageLibrary(url.pathname) : null;
     if (library !== null)
@@ -944,7 +950,10 @@ export function createPagesHandler(
   };
 }
 
-export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPath) =>
+export const pagesRoute = (
+  root: () => PagesRoots = productPagesRoots,
+  pods: () => PodsRoots = productPodsRoots,
+) =>
   HttpRouter.use((router) =>
     Effect.gen(function* () {
       const { address } = yield* HttpServer.HttpServer;
@@ -968,7 +977,7 @@ export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPa
             body: JSON.stringify(body),
           }),
       };
-      const pages = createPagesHandler(root(), pods(), live, (yield* HostReceipts).journal);
+      const pages = createPagesHandler(root(), pods(), live, yield* ActionJournalService);
       const handler = HttpEffect.fromWebHandler((request) =>
         matchPeRoute(request.method, new URL(request.url).pathname)
           ? servePeRoute(request, pages)

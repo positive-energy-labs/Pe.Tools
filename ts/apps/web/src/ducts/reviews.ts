@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/generated";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { HealView as HealPlan } from "@pe/ducts-domain/pricing-view";
@@ -231,7 +232,6 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
     const before = spoken(write.before) ?? null;
     const key = `${write.kind}:${write.id ?? write.key ?? ""}`;
     // The store row is Pe's provenance record in Project Information; its "absent"/"revision n" are machine words.
-    // A slot entry names the slot the value resolver now reads (after), not only the record's old name.
     if (write.id == null && write.kind === "slot") {
       const label = `Pe loss record (Project Information): ${SLOT_WORDS[write.key ?? ""] ?? write.key} slot`;
       return {
@@ -263,7 +263,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
     // Write review is an audit: show a searchable id here. element-label.ts stays id-free elsewhere.
     const element = `${write.elementLabel ?? name(write.id) ?? "element"} · ${write.id}`;
     const group = write.kind === "component" &&
-      !scope.readings.fansWork?.value?.componentDrops?.[String(write.id)]?.edit
+      !scope.readings.fansWork?.value?.componentDrops?.[fanSubject(scope, write.id) ?? ""]?.edit
         ? "Computed losses written back" : "Your edits";
     const changes = write.changes?.length ? write.changes : [{
       parameter: write.parameter ?? slot ?? write.kind, before: write.before, after: write.after ?? next,
@@ -316,8 +316,15 @@ function fanAuthor(scope: ReviewEvidence, kind: string, id: number): "pea" | "hu
     | Readonly<Record<string, Readonly<Record<string, { edit?: { by?: string } }>> | undefined>>
     | null
     | undefined;
-  const by = segment ? work?.[segment]?.[String(id)]?.edit?.by : undefined;
+  const key = fanSubject(scope, id);
+  const by = segment && key ? work?.[segment]?.[key]?.edit?.by : undefined;
   return by === "pea" || by === "human" ? by : "unknown";
+}
+
+function fanSubject(scope: ReviewEvidence, id: number) {
+  const snapshot = snapshotOf(scope);
+  const element = [...(snapshot?.nodes ?? []), ...(snapshot?.segments ?? [])].find(e => e.id === id);
+  return element ? elementSubject(element) : null;
 }
 
 export const fanWords = (response: DuctsAssignFan.Res.Response) =>

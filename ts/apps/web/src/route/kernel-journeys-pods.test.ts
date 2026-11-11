@@ -1,3 +1,5 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { snapshot as workSnapshot } from "../ducts/test-fixture";
 // @vitest-environment jsdom
 import { cp, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -372,7 +374,6 @@ test("JP4 save rendered settings through delayed HTTP and inspect a pane fault d
 });
 
 import { createRequire } from "node:module";
-import { ActionJournal } from "../../../host/src/action-journal";
 import { createReceiptExport } from "../../../host/src/receipt-export";
 import { receiptGoldenEnvelope } from "../../../../packages/agent-contracts/tests/receipt-fixture";
 import { withInvocationContext } from "@pe/runtime/context";
@@ -380,7 +381,7 @@ import { withInvocationContext } from "@pe/runtime/context";
 async function sendFeedbackWhileDeliveryWaits() {
   const dir = await mkdtemp(resolve(tmpdir(), "jp-feedback-"));
   const stamp = receiptGoldenEnvelope.stamp!;
-  const journal = new ActionJournal(resolve(dir, "journal.json"), Date.now, () => stamp);
+  const journal = journalAt(resolve(dir, "journal.json"), Date.now, () => stamp);
   const request = Promise.withResolvers<Response>();
   let sends = 0;
   // Load the host's actual SDK dependency; the only recorded boundary is its network transport.
@@ -453,31 +454,31 @@ test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", 
       expect(await response.json()).toMatchObject({ notDispatched: true });
     }
     const staged = await f.saved.apply(f.key, "ducts", "human", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
     ], 0);
     expect(staged.ok).toBe(true);
     if (!staged.ok) throw Error("Stage refused");
     const work = { key: f.key, revision: staged.revision };
-    const plan = await f.post("/actions", { id: "jz-plan", key: "ducts.plan-losses", target: f.target, input: { work } });
+    const plan = await f.post("/actions", { id: "jz-plan", key: "sheet.plan", target: f.target, input: { work } });
     expect(plan.ok).toBe(true);
     const preview = await f.journal.wait("jz-plan");
     expect(preview.state, JSON.stringify(preview)).toBe("succeeded");
     if (preview.state !== "succeeded") throw Error(JSON.stringify(preview));
-    const foreign = await f.post("/actions", { id: "jz-foreign", key: "ducts.apply-losses", target: f.target,
+    const foreign = await f.post("/actions", { id: "jz-foreign", key: "sheet.apply", target: f.target,
       input: { work } }, { kind: "human", via: "cli", login: "review-thief" });
     expect(foreign.ok).toBe(true);
     const refused = await f.journal.wait("jz-foreign");
     expect(refused.state, "H29: another caller cannot borrow the human Plan").not.toBe("succeeded");
     expect(JSON.stringify(refused)).toContain("preview.caller");
     expect(f.dispatched.filter(row => row.key === "ducts.apply")).toEqual([]);
-    const forged = await f.post("/actions", { id: "jz-forged", key: "ducts.apply-losses", target: f.target,
+    const forged = await f.post("/actions", { id: "jz-forged", key: "sheet.apply", target: f.target,
       input: { work, seal: { forged: true }, reviewTicket: "invented" } }, pea("forger"));
     expect(forged.status, "H29: strict admission rejects invented seal and ticket fields").toBe(409);
     const changed = await f.saved.apply(f.key, "ducts", "human", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["g2"] } } },
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g2"] } } },
     ], staged.revision);
     expect(changed.ok).toBe(true);
-    const stale = await f.post("/actions", { id: "jz-stale", key: "ducts.apply-losses", target: f.target, input: { work } });
+    const stale = await f.post("/actions", { id: "jz-stale", key: "sheet.apply", target: f.target, input: { work } });
     expect(stale.ok).toBe(true);
     expect((await f.journal.wait("jz-stale")).state, "H29: changed Work withdraws the old review").not.toBe("succeeded");
     expect(f.dispatched.filter(row => row.key === "ducts.apply"), "H29: no refused attempt writes native").toEqual([]);
@@ -621,6 +622,7 @@ import { machineFixture } from "../../../../packages/agent-contracts/tests/machi
 import { hostResourceObserver } from "../../../host/src/resource-adapters";
 import { resourceSnapshot } from "@pe/runtime";
 import { readingKey } from "@pe/agent-contracts";
+import { journalAt } from "../../../host/tests/effect-test";
 import { module as openRoute } from "../open/route";
 import { OpenBody } from "../open/mount";
 const openNavigation = vi.hoisted(() => ({ bypass: false }));
@@ -706,21 +708,21 @@ test("JZ route-neutral Plan refusal preserves the reason and holds Apply through
     const reason = "Shared type cannot scope this authored flow";
     f.planRefusal.reason = reason;
     const fans = await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [
-      { path: ["flows", "4", "edit"], value: { value: { cfm: 321 } } },
+      { path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!), "edit"], value: { value: { cfm: 321 } } },
       { path: ["parameters", "terminalFlow", "edit"], value: { value: "PE_M_Grd_AirFlow" } },
     ], 0);
     if (!fans.ok) throw Error(JSON.stringify(fans));
     const staged = await f.saved.apply(f.key, "ducts", "human", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
     ], 0);
     if (!staged.ok) throw Error(JSON.stringify(staged));
     const input = { work: { key: f.key, revision: staged.revision } };
-    expect((await f.post("/actions", { id: "jz-refusal-plan", key: "ducts.plan-losses", target: f.target, input })).ok).toBe(true);
+    expect((await f.post("/actions", { id: "jz-refusal-plan", key: "sheet.plan", target: f.target, input })).ok).toBe(true);
     const plan = await f.journal.wait("jz-refusal-plan");
     expect(plan.state, JSON.stringify(plan)).toBe("succeeded");
     if (plan.state !== "succeeded") throw Error(JSON.stringify(plan));
     expect(plan.result).toMatchObject({ planRefusal: expect.stringContaining(reason), planRefusalCode: "ducts.plan-refused" });
-    expect((await f.post("/actions", { id: "jz-refusal-apply", key: "ducts.apply-losses", target: f.target, input })).ok).toBe(true);
+    expect((await f.post("/actions", { id: "jz-refusal-apply", key: "sheet.apply", target: f.target, input })).ok).toBe(true);
     const apply = await f.journal.wait("jz-refusal-apply");
     expect(apply.state, JSON.stringify(apply)).toBe("failed");
     expect(JSON.stringify(apply)).toContain(reason);
@@ -768,10 +770,10 @@ test("JZ cold HTTP action inspection discards old journal rows without conversio
   let bytes: string;
   try {
     const staged = await first.saved.apply(first.key, "ducts", "human", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
     ], 0);
     if (!staged.ok) throw Error(JSON.stringify(staged));
-    await first.post("/actions", { id: "jz-old-row", key: "ducts.plan-losses", target: first.target, input: { work: { key: first.key, revision: staged.revision } } });
+    await first.post("/actions", { id: "jz-old-row", key: "sheet.plan", target: first.target, input: { work: { key: first.key, revision: staged.revision } } });
     expect((await first.journal.wait("jz-old-row")).state).toBe("succeeded");
     bytes = (await readFile(join(first.dir, "actions.jsonl"), "utf8")).replace(/^.*?\n/, '{"version":7}\n');
   } finally { await first.close(); }

@@ -266,6 +266,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
             <button
               type="button"
               data-list-section-head=""
+              data-disclosure=""
               data-surface="artifact"
               aria-expanded={!section.closed}
               aria-disabled={!section.collapsible || undefined}
@@ -381,7 +382,7 @@ function useReachMarks<T, Sort extends string>(
           for (const item of section.rows) {
             const ref: Ref | null =
               item.subject ??
-              (item.revit?.[0] == null ? null : { doc, key: elementKey(item.revit[0]) });
+              (item.uniqueIds?.[0] == null ? null : { doc, key: elementKey(item.uniqueIds[0]) });
             if (ref?.doc === doc && lit(ref.key)) next.add(item.key);
           }
       if (!next.size && !reached.current.size) return;
@@ -493,6 +494,7 @@ function ListItemViewInner<T, Sort extends string>({
         {...parts}
         subject={item.subject}
         revit={parts.revit ?? item.revit}
+        uniqueIds={parts.uniqueIds ?? item.uniqueIds}
         damage={parts.damage ?? item.damage}
         id={id}
         data-key={item.key}
@@ -550,6 +552,7 @@ const ListItemView = memo(
     a.item.subject?.doc === b.item.subject?.doc &&
     a.item.subject?.key === b.item.subject?.key &&
     a.item.revit?.join(",") === b.item.revit?.join(",") &&
+    a.item.uniqueIds?.join(",") === b.item.uniqueIds?.join(",") &&
     a.item.damage === b.item.damage &&
     a.row === b.row &&
     a.detail === b.detail &&

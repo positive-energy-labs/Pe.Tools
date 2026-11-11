@@ -92,7 +92,7 @@ const checks: Record<string, { catalog: keyof typeof catalogWorks }> = {
 
 /** Explicit pending classification, with one Owed entry per operation in docs/features/routes/LEDGER.md. */
 const pending = [
-  "ducts.apply-losses",
+  "sheet.apply",
   "ducts.apply-heal",
   "ducts.apply-assign-fan",
   "family.apply",

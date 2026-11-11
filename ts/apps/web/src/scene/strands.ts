@@ -12,6 +12,7 @@ import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import type { SubjectKey } from "@pe/kit/lang/attention";
+import type { ElementIndex } from "#/element-index";
 import { damageColors } from "./damage";
 import { BLACK, LOOK, markAlpha, sceneLineMaterial, WHITE } from "./grounds";
 import type { IssueState, Layer3D, LayerFrame } from "./types";
@@ -220,6 +221,7 @@ export function strandLayers(
   strands: readonly Strand[],
   lines: readonly { key: SubjectKey; points: readonly Point[] }[],
   over: ReadonlySet<SubjectKey>,
+  elements: ElementIndex,
 ): Layer3D[] {
   const byKey = new Map(lines.map((line) => [line.key, line.points]));
   const chains = strands.map((strand) => chain(strand.path, (key) => byKey.get(key)));
@@ -236,7 +238,7 @@ export function strandLayers(
     const parts = drawn[i]!;
     if (!parts.length) return [];
     const weight = strand.heavy ? HEAVY : 1;
-    const elementId = Number(strand.path[0]?.slice(2));
+    const elementId = elements.idOf(strand.path[0] ?? "");
     return [
       {
         key: `strand:${strand.key}`,

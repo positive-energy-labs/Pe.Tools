@@ -1,11 +1,7 @@
 // U4 wires the real fans Work for callers without one.
 import { neutralFansWork } from "@pe/agent-contracts";
 import { flowWriteSlot } from "./flow-write-slot.ts";
-/**
- * The losses view's model, pure: what Revit holds now (the applied tables), what the person
- * edit on top, the two solves, and the `ducts.apply` request built from the edit cells.
- * The solver is W2's (`losses.ts`); nothing here looks a coefficient up itself.
- */
+/** The losses view's model, pure: what Revit holds now (the applied tables), what the person edit on top, the two solves, and the `ducts.apply` request built from the edit cells. */
 import {
   stagedDucts,
   ductsDesign,
@@ -36,6 +32,7 @@ import { equipmentFlows, type EquipmentFlow } from "./terminal-flows.ts";
 import type { DuctSnapshot } from "./types.ts";
 import { unitRoles, type UnitRole } from "./unit-roles.ts";
 
+import { elementSubject, workElementId } from "./work-subject.ts";
 type Node = DuctSnapshot["nodes"][number];
 type Group = DuctSnapshot["groups"][number];
 
@@ -52,11 +49,7 @@ const appliedChoices = (snapshot: DuctSnapshot): Choices =>
     ),
   );
 
-/**
- * The unit overrides every solve reads: each root's role and each stated design flow. A derived
- * flow is never passed: the solve derives it per group from the grilles that group's fan serves
- * (`groupFans`), where the survey's per-unit reading is the largest over every group it roots.
- */
+/** The unit overrides every solve reads: each root's role and each stated design flow. */
 const unitOverrides = (
   roles: ReadonlyMap<number, UnitRole>,
   flows: ReadonlyMap<number, EquipmentFlow>,
@@ -71,31 +64,25 @@ const unitOverrides = (
 
 /** The units as Revit holds them: stored rulings over roles proposed from Revit's own state, and each unit's stated flow. */
 // Only immutable captured inputs are reused. Staged Work still prices separately below; refreshing
-// Revit replaces the snapshot identity, so this cache cannot carry an old read into a new one.
 const appliedUnitCache = new WeakMap<DuctSnapshot, ReturnType<typeof unitOverrides>>();
 const appliedUnits = (raw: DuctSnapshot) => {
   const cached = appliedUnitCache.get(raw);
   if (cached) return cached;
   const stated = equipmentFlows(raw, {});
-  const stored = withStoredRulings(null, raw.store);
+  const stored = withStoredRulings(null, raw.store, raw);
   const roles = unitRoles(raw, stated, stagedDucts(stored, stored ?? neutralFansWork).roles);
   const units = unitOverrides(roles, stated);
   appliedUnitCache.set(raw, units);
   return units;
 };
 
-const byId = <V>(cells: Record<string, V>, pick: (value: V) => number) =>
-  Object.fromEntries(Object.entries(cells).map(([id, value]) => [Number(id), pick(value)]));
+const byId = <V>(snapshot: DuctSnapshot, cells: Record<string, V>, pick: (value: V) => number) =>
+  Object.fromEntries(Object.entries(cells).map(([id, value]) => [workElementId(snapshot, id), pick(value)]));
 
-/**
- * The catalog findings a solve raises, one per terminal and kind: a table that is not loaded and an
- * input outside a loaded table's range. Both block the terminal's drop (`bins.ts`); the rows keep
- * their prose, this makes them findings the inbox can hold.
- */
+/** The catalog findings a solve raises, one per terminal and kind: a table that is not loaded and an input outside a loaded table's range. */
 export function catalogFindings(result: LossResult): DuctFinding[] {
   const found = new Map<string, DuctFinding>();
   // A fitting no rule prices: one finding per family (or per element with no family), its elements
-  // gathered, so the inbox asks once for a drop and the rules popover once for a rule.
   const unruled = new Map<string, { family: string | null; ids: Set<number> }>();
   for (const path of Object.values(result.paths))
     for (const row of path.rows)
@@ -130,12 +117,7 @@ export function catalogFindings(result: LossResult): DuctFinding[] {
   return [...found.values()];
 }
 
-/**
- * The findings the plausibility guards raise. `implausible-loss`: a fitting row whose coefficient or
- * velocity is past the limits (`IMPLAUSIBLE_*` in losses.ts); it blocks (`bins.ts`) and its path
- * prices nothing. `mixed-classification`: an element a terminal of another air classification
- * was kept off (`flowBelow`); a diagnostic that names the element.
- */
+/** The findings the plausibility guards raise. */
 export function guardFindings(result: LossResult): DuctFinding[] {
   const rows = [
     ...Object.values(result.paths).flatMap((p) => p.rows),
@@ -261,7 +243,7 @@ export function price(
   const entry = solvedFor(snapshot, grids, catalogs, surveyed.inferred, units);
   if (entry.last?.doc === ducts && entry.last.fans === fans) return entry.last.priced;
   // The model's stored rulings under Work's pending ones (`rulings.ts`), as the survey read them.
-  const stored = withStoredRulings(doc, raw.store);
+  const stored = withStoredRulings(doc, raw.store, raw);
   const edit = stagedDucts(stored, stored ?? fans);
   const rate = edit.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
   if (entry.rate !== rate) {
@@ -291,8 +273,8 @@ export function price(
     ruleAssignment: Object.fromEntries(
       Object.entries(edit.ruleAssignments).map(([family, { rule }]) => [family, rule]),
     ),
-    terminalPs: byId(edit.terminalDrops, (drop) => drop.inWg),
-    componentDrop: byId(edit.componentDrops, (drop) => drop.inWg),
+    terminalPs: byId(raw, edit.terminalDrops, (drop) => drop.inWg),
+    componentDrop: byId(raw, edit.componentDrops, (drop) => drop.inWg),
     ...unitOverrides(surveyed.roles, surveyed.equipmentFlows),
     designFrictionRate: rate,
   };
@@ -442,15 +424,7 @@ export function proposedStatic(snapshot: DuctSnapshot, result: import("./pricing
   return parts.length ? { total: round4(parts.reduce((a, b) => a + b.fan, 0)), parts } : null;
 }
 
-/**
- * The native `ducts.apply` request from the edit cells only: every instance of a edit rule under
- * its chosen table (instances the table cannot price are left out, and the band says so), every
- * edit drop, the edit parameter slots, the edit `esp`, the resolved flow of every terminal in a
- * priced group (a group with an air mover; every precedence rung, so Revit's own value is carried
- * with its source) and the edit `equipmentFlows`. `groups` scopes the instances, drops, flows and
- * units to those groups (a system's: every group it is in, `system-scope.ts`); empty is every
- * group. The rules' chosen tables stay document-wide.
- */
+/** The native `ducts.apply` request from the edit cells only: every instance of a edit rule under its chosen table (instances the table cannot price are left out, and the band says so), every edit drop, the edit parameter slots, the edit `esp`, the resolved flow of every terminal in a priced group (a group with an air mover; every precedence rung, so Revit's own value is carried with its source) and the edit `equipmentFlows`. */
 export function applyRequest(
   snapshot: DuctSnapshot,
   priced: Priced,
@@ -491,8 +465,8 @@ export function applyRequest(
     .sort((a, b) => a.id - b.id);
   const drops = (cells: Priced["edit"]["terminalDrops"]) =>
     Object.entries(cells)
-      .filter(([id]) => inScope(Number(id)))
-      .map(([id, drop]) => ({ id: Number(id), inWg: drop.inWg, source: drop.source ?? null }))
+      .filter(([id]) => inScope(workElementId(snapshot, id)))
+      .map(([id, drop]) => ({ id: workElementId(snapshot, id), inWg: drop.inWg, source: drop.source ?? null }))
       .sort((a, b) => a.id - b.id);
   // A edit link authorizes result writes, not a write to the family type's Pe_Catalog.
   const linked = Object.values(priced.next.paths).flatMap((path) =>
@@ -522,16 +496,15 @@ export function applyRequest(
   const components = drops(priced.edit.componentDrops);
   const flowWrite = (id: number, cfm: number, source: string | null) => ({ id, cfm, source });
   // A derived flow needs its network group's air mover. An authored flow inside a fan walk needs no
-  // group: the walk starts at its unit, which is the air mover (a fan walk snapshot has no groups).
   const driven = (node: DuctSnapshot["nodes"][number]) =>
     priced.next.byGroup[node.groupId ?? ""]?.hasAirMover ||
-    (snapshot.walk != null && priced.edit.flows[String(node.id)] != null);
+    (snapshot.walk != null && priced.edit.flows[elementSubject(node)] != null);
   const terminalFlows = snapshot.nodes
     .filter((node) => node.kind === "terminal" && inScope(node.id) && driven(node))
     .flatMap((node) => {
       const flow = priced.flows.get(node.id);
       if (flow?.cfm == null) return [];
-      const stated = priced.edit.flows[String(node.id)]?.source;
+      const stated = priced.edit.flows[elementSubject(node)]?.source;
       return [
         {
           ...flowWrite(
@@ -546,7 +519,7 @@ export function applyRequest(
     .sort((a, b) => a.id - b.id);
   const roots = new Set(snapshot.groups.filter((g) => scoped.has(g.id)).flatMap((g) => g.rootIds));
   const equipmentFlows = Object.entries(priced.edit.equipmentFlows)
-    .map(([id, flow]) => flowWrite(Number(id), flow.cfm, flow.source ?? null))
+    .map(([id, flow]) => flowWrite(workElementId(snapshot, id), flow.cfm, flow.source ?? null))
     // Any unit rooted in the group, not the baseline's one pick (it is blind to a edit passive role).
     .filter(({ id }) => !scoped.size || roots.has(id))
     .sort((a, b) => a.id - b.id);
@@ -555,7 +528,7 @@ export function applyRequest(
       e.kind === "fan" || e.kind === "passive" ? [e.element.id] : [],
     ),
   );
-  if (Object.keys(priced.edit.esp).some((id) => calculationOwners.has(Number(id))))
+  if (Object.keys(priced.edit.esp).some((id) => calculationOwners.has(workElementId(snapshot, id))))
     throw Error(
       "Physical fan circuits have no admitted manufacturer scalar ESP mapping; clear the esp cell. Circuit evidence is calculation-only.",
     );
@@ -568,14 +541,14 @@ export function applyRequest(
     ),
   );
   const equipment = Object.entries(priced.edit.esp)
-    .map(([id, { inWg }]) => ({ id: Number(id), externalStaticInWg: inWg }))
+    .map(([id, { inWg }]) => ({ id: workElementId(snapshot, id), externalStaticInWg: inWg }))
     .filter(({ id }) => !blockedUnits.has(id))
     // Any unit rooted in the group, not the baseline's one pick (it is blind to a edit passive role).
     .filter(({ id }) => !scoped.size || roots.has(id))
     .sort((a, b) => a.id - b.id);
   const slots = priced.edit.parameters;
   const stored = snapshot.store;
-  const rulings = storeRulings(priced.edit, stored, appliedAt);
+  const rulings = storeRulings(priced.edit, stored, appliedAt, snapshot);
   return {
     slots,
     fittings,
@@ -585,7 +558,6 @@ export function applyRequest(
     terminalFlows,
     equipmentFlows,
     // The native op overlays these entries per key on the model's store (K3); a ruling Work takes back
-    // is named in storeDeletes, and a store that moved since the read refuses as stale.
     store: {
       ...stored,
       version: 2,

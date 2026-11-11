@@ -1,12 +1,14 @@
 /**
- * The ONE product home resolver. Host, mcps, and runtime import this; nobody keeps a copy, and the
- * Revit side (`ProductPathing.ResolveProductHome`) reads the same override name.
+ * The ONE content-home resolver (ADR 0035 rule 11). Host, mcps, and runtime import this; nobody
+ * keeps a copy, and the Revit side (`ProductPathing`) and PowerShell (`tools/product-paths.ps1`)
+ * read the same names.
  *
- * `PE_TOOLS_PRODUCT_HOME` names the whole home (Pages, Pods, skills, backups, script output).
- * Without it the home is `<Documents>\Pe.Tools`. Documents is routinely redirected (OneDrive, a
- * mapped profile), so `%USERPROFILE%\Documents` is a different content home, not a fallback. A resolver that silently produces it lets two
- * processes on one machine disagree about where the pods are. This one reads the known folder
- * or throws.
+ * Two homes. The user root always exists: an isolated `PE_TOOLS_PRODUCT_HOME`, else
+ * `<Documents>\Pe.Tools`. Documents is routinely redirected (OneDrive, a mapped profile), so
+ * `%USERPROFILE%\Documents` is a different content home, not a fallback: this reads the known
+ * folder or throws. The optional `PE_TOOLS_SHARED_ROOT` is the second home. Pods, Pages and
+ * Catalogs read user first then shared (the user's copy wins), every write and all Work go to the
+ * user root, and shared settings (firm files, keys) live only on the shared root.
  */
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
@@ -40,11 +42,39 @@ export function insideTestRoot(path: string): string {
   return path;
 }
 
-/** The product home. The Documents lookup is cached once per process; the override is always live. */
-export function productHomePath(): string {
+/** The user's content root: always present; every write lands here. The Documents lookup is cached per process. */
+export function userRoot(): string {
   const override = process.env[productPathNames.productHomeVariable]?.trim();
-  if (override) return insideTestRoot(resolve(override));
-  return insideTestRoot(join((cached ??= resolveDocumentsPath()), productIdentity.productName));
+  return insideTestRoot(override ? resolve(override) : documentsUserRoot());
+}
+
+/** `<Documents>\Pe.Tools` from the known folder, ignoring any override: the default user root. */
+export function documentsUserRoot(): string {
+  return join((cached ??= resolveDocumentsPath()), productIdentity.productName);
+}
+
+/** The optional shared content root; null when `PE_TOOLS_SHARED_ROOT` is unset. */
+export function sharedRoot(): string | null {
+  const shared = process.env[productPathNames.sharedRootVariable]?.trim();
+  return shared ? insideTestRoot(resolve(shared)) : null;
+}
+
+/** The read order: user first, so an item in both homes resolves to the user's copy. */
+export function contentHomes(): string[] {
+  const shared = sharedRoot();
+  return shared ? [userRoot(), shared] : [userRoot()];
+}
+
+/** The firm files' folder, `<shared>\Firm`; null without a shared root. */
+export function sharedFirmDir(): string | null {
+  const shared = sharedRoot();
+  return shared && join(shared, "Firm");
+}
+
+/** The shared keys file, `<shared>\keys.json`; null without a shared root. */
+export function sharedKeysPath(): string | null {
+  const shared = sharedRoot();
+  return shared && join(shared, "keys.json");
 }
 
 function resolveDocumentsPath(): string {
@@ -77,10 +107,9 @@ export function parseDocumentsKnownFolder(
   const match = /^\s*Personal\s+REG_(?:EXPAND_)?SZ\s+(.+?)\s*$/m.exec(regQueryOutput);
   if (!match)
     throw new Error(`Documents known folder unreadable: no Personal value in:\n${regQueryOutput}`);
-  const expanded = match[1]!.replace(/%([^%]+)%/g, (_whole, name: string) => {
+  return match[1]!.replace(/%([^%]+)%/g, (_whole, name: string) => {
     const value = env[name] ?? env[name.toUpperCase()];
     if (!value) throw new Error(`Documents known folder names undefined variable '${name}'.`);
     return value;
   });
-  return expanded;
 }

@@ -52,7 +52,7 @@ test("the tray adapter keeps Pea local and hands router, ordinary-anchor and nat
   await router.load();
   render(<RouterProvider router={router} />);
   await screen.findByText("open body");
-  await act(() => router.navigate({ to: "/pea", search: { shell: "tray" } }));
+  await act(() => router.navigate({ to: "/$route", params: { route: "pea" }, search: { shell: "tray" } }));
   await screen.findByText("pea body");
   const handed = () =>
     posted.mock.calls

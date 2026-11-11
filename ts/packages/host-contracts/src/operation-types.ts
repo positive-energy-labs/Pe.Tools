@@ -129,16 +129,18 @@ export const hostShellOpenDataSchema = Schema.Struct({
 export type HostShellOpenData = Schema.Schema.Type<typeof hostShellOpenDataSchema>;
 
 // --- Pointers (ADR 0030 rule 10; agent-contracts pointers.ts): per-thread, kept until dismissed ---
+/** A SubjectRef code, or a route place in its attention codec text. */
+const pointerTargetSchema = Schema.Union([Schema.String, Schema.Record(Schema.String, Schema.String)]);
 const pointerSchema = Schema.Struct({
   id: Schema.String,
   route: Schema.String,
-  place: Schema.Record(Schema.String, Schema.String),
+  target: pointerTargetSchema,
   label: Schema.String,
   at: Schema.String,
 });
 export const pointersPointRequestSchema = Schema.Struct({
   route: Schema.String,
-  place: Schema.Record(Schema.String, Schema.String),
+  target: pointerTargetSchema,
   label: Schema.String,
 });
 /** A person names the thread; Pea's own thread comes from its caller context, never its input. */

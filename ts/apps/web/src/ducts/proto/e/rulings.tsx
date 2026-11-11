@@ -5,14 +5,11 @@ import { useMemo } from "react";
 import { healFindings } from "@pe/ducts-domain/heal";
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { Button } from "@pe/kit/lang/button";
 
 import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 import type { Label, Ruling } from "../../annotations";
-import { VERDICTS } from "../../claims";
 import { FindingsList, ISSUE_KINDS } from "../../issues";
-import type { Claim } from "../../legs";
 import type { Scene } from "../../scene";
 import type { LossesWork } from "../../work";
 import { fmtFt } from "./bar";
@@ -37,7 +34,6 @@ export function useMarks({
   priced,
   heal,
   scene,
-  claims,
   work,
   issueScope,
   annotated,
@@ -47,7 +43,6 @@ export function useMarks({
   priced: Priced | null;
   heal: HealPlan | import("@pe/ducts-domain/heal").HealPlan | null;
   scene: Scene;
-  claims: readonly Claim[];
   work: LossesWork;
   issueScope: ReadonlySet<string> | null;
   annotated: ReadonlySet<string>;
@@ -63,8 +58,6 @@ export function useMarks({
 
   const rulings = useMemo<Ruling[]>(() => {
     const out: (Ruling extends infer R ? (R extends Ruling ? Omit<R, "n"> : never) : never)[] = [];
-    for (const claim of claims)
-      if (claim.at[0] != null) out.push({ kind: "claim", at: claim.at[0], claim });
     const findings = (heal ? healFindings(priced?.findings ?? [], heal) : []).filter(
       (f) =>
         (INFERRED_KINDS.has(f.kind) || f.findingIds.length > 1) &&
@@ -89,7 +82,7 @@ export function useMarks({
         (at) => ({ ...r, at, n: i + 1 }),
       ),
     );
-  }, [claims, priced, heal, snapshot, work.doc, drawn, issueScope, annotated]);
+  }, [priced, heal, snapshot, work.doc, drawn, issueScope, annotated]);
 
   // A subject's legs carry their totals; a group scene has none, so each terminal carries its path's.
   const labels = useMemo<Label[]>(
@@ -125,40 +118,7 @@ export function useMarks({
   return { rulings, labels, cumulative };
 }
 
-export function RulingBody({
-  r,
-  onVerdict,
-}: {
-  r: Ruling;
-  onVerdict?: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
-}) {
-  if (r.kind === "claim")
-    return (
-      <div className="flex flex-col gap-2" data-ruling={r.n}>
-        <p>
-          <span className="face-mono">{r.n}</span> {r.claim.title} · {r.claim.state}
-        </p>
-        <p>
-          <SubjectText text={r.claim.text} revit={r.claim.at} />
-        </p>
-        <span className="flex gap-1" role="group" aria-label="verdict">
-          {VERDICTS.map((v) => (
-            <Button
-              key={v.value}
-              type="button"
-              kind="framed"
-              label={v.word}
-              reason={v.says}
-              pressed={r.claim.verdict === v.value}
-              data-verdict={v.value}
-              onClick={() => onVerdict?.(r.claim, v.value)}
-            >
-              {v.word}
-            </Button>
-          ))}
-        </span>
-      </div>
-    );
+export function RulingBody({ r }: { r: Ruling }) {
   if (r.kind === "inferred")
     return (
       <div className="flex flex-col gap-2" data-ruling={r.n}>

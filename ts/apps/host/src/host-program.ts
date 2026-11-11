@@ -23,7 +23,7 @@ import { makeHttpLive, resolveWebRoot } from "./app.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
 import { trayOwnerArguments } from "@pe/host-contracts/service-identity";
 import { makeInstalledUpdateReader } from "./update-route.ts";
-import { HostReceipts } from "./gateway-owner.ts";
+import { ActionJournalService } from "./receipt-services.ts";
 import { installedForeignAddins } from "./foreign-addins.ts";
 
 export type HostInputSelection =
@@ -71,6 +71,18 @@ export const hostInputs = (stamp: ReceiptStamp | null, selection: HostInputSelec
   );
   return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer(lane)));
 });
+/**
+ * The journal is built in the program scope, and the launch scope (the bridge, the server) nests
+ * inside it. The nesting is the order: the bridge releases first, so its last queue facts meet an
+ * open journal, and the journal's Layer is the one closer. Tests build these two, not their own copy.
+ */
+export const openJournal = (stamp: ReceiptStamp | null, dir?: string) =>
+  Layer.build(ActionJournalService.live(stamp, dir));
+export const launchOverJournal = <J, ROut, E, R>(
+  journal: Context.Context<J>,
+  launched: Layer.Layer<ROut, E, R>,
+) => Layer.launch(launched).pipe(Effect.provideContext(journal));
+
 /** The shared host lifecycle used by both installed startup and source web development. */
 export const hostProgram = (
   web?: (
@@ -86,14 +98,11 @@ export const hostProgram = (
       // One exporter for the launch: its scope unbinds the native producers and drains pending sends.
       const stamps = admittedReceiptStamps();
       const inputs = yield* hostInputs(stamps.host, inputSelection);
-      const receipts = Context.get(
-        yield* Layer.build(HostReceipts.layer(stamps.host)),
-        HostReceipts,
-      );
-      receipts.journal.bindInputContext(inputs);
+      const receipts = yield* openJournal(stamps.host);
+      Context.get(receipts, ActionJournalService).bindInputContext(inputs);
       const telemetry = Context.get(
         yield* Layer.build(
-          ReceiptExport.layer(stamps).pipe(Layer.provide(Layer.succeed(HostReceipts, receipts))),
+          ReceiptExport.layer(stamps).pipe(Layer.provide(Layer.succeedContext(receipts))),
         ),
         ReceiptExport,
       );
@@ -189,8 +198,7 @@ export const hostProgram = (
           : Effect.never;
       yield* Effect.raceFirst(
         Effect.raceFirst(
-          Layer.launch(HttpLive).pipe(
-            Effect.provideService(HostReceipts, receipts),
+          launchOverJournal(receipts, HttpLive).pipe(
             Effect.catchTag("ServeError", (error) => {
               const cause = error.cause;
               if (

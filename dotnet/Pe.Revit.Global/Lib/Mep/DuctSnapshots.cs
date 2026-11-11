@@ -672,10 +672,10 @@ public static class DuctSnapshots {
             Text(e, BuiltInParameter.RBS_SYSTEM_CLASSIFICATION_PARAM),
             HvacConnectors(e).Select(c => Connector(c, network, metadataOnly)).ToList(),
             facts.Where(f => f.Value is not null || f.Text is not null).ToList(),
+            e.UniqueId,
             kind is DuctNodeKind.Fitting or DuctNodeKind.Accessory ? Loss(e, schemas) : null,
             kind == DuctNodeKind.Terminal ? Terminal(e, slots) : null,
             Label(e, labelParameter),
-            e.UniqueId,
             FlowParameter: flowParameter);
     }
 
@@ -750,17 +750,7 @@ public static class DuctSnapshots {
         ];
     }
 
-    internal static IEnumerable<Connector> HvacConnectors(Element e) {
-        var manager = e switch {
-            MEPCurve c => c.ConnectorManager,
-            FamilyInstance fi => fi.MEPModel?.ConnectorManager,
-            _ => null
-        };
-        if (manager is null) yield break;
-        foreach (Connector c in manager.Connectors)
-            if (c.Domain == Domain.DomainHvac && c.ConnectorType is ConnectorType.End or ConnectorType.Curve)
-                yield return c;
-    }
+    internal static IEnumerable<Connector> HvacConnectors(Element e) => MepConnectors.Physical(e, Domain.DomainHvac);
 
     private static DuctConnector Connector(Connector c, bool network, bool metadataOnly = false) {
         var shape = c.Shape switch {

@@ -1,3 +1,6 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { stableFanKey } from "../ducts/sheet/model";
+import { systemCode } from "../ducts/identity";
 import { expect, test, vi } from "vite-plus/test";
 import { fileURLToPath } from "node:url";
 import retiredReads from "../../../../tests/repo-guards/src/retired-read-aliases.forbidden.json";
@@ -54,17 +57,16 @@ import { observeResources } from "@pe/runtime";
 import { workFingerprintSchema, actionReceiptSchema } from "@pe/agent-contracts";
 import { fixture, ref, path, gate, snapshot, roster } from "../../../host/tests/host-read-graph.test-support";
 import { module as fans } from "../fans/route";
-import { localId } from "./typed-route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
 import { Effect } from "effect";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { ductsPricingData, valueReadResponse } from "@pe/agent-contracts";
+import { ductsPricingData, ductsNetworkData, ductsRosterData, valueReadResponse } from "@pe/agent-contracts";
 import { InvalidRead } from "../../../host/src/native-reads";
 import { registeredReads } from "../../../host/src/reads/routes";
-import { ductsPricing, ductsNetwork, ductsRoster } from "../../../host/src/reads/ducts";
-import { fansSheet } from "../../../host/src/reads/fans";
+import { ductsPricing, ductsNetwork, ductsRoster } from "../ducts/host";
+import { fansSheet } from "../fans/host";
 import { module as ducts } from "../ducts/route";
 import { module as families } from "../families/route";
 import type { TypedRoute } from "./typed-route";
@@ -86,12 +88,9 @@ import {
   detachedBridge,
   sessionView,
   familiesReader,
-  testHostInputs,
-} from "../../../host/tests/effect-test";
+  testHostInputs, journalAt, callRouteOver } from "../../../host/tests/effect-test";
 import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
 import { fileRouteDocumentStore } from "../../../host/src/route-document-store";
-import { ActionJournal } from "../../../host/src/action-journal";
-import { makeCallRoute } from "../../../host/src/call-route";
 import { nativeReadRoot } from "../../../host/src/app";
 import { RevitBridge } from "../../../host/src/bridge";
 import { hostOwnership } from "../../../host/src/host-ownership";
@@ -159,7 +158,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
             response: { writes: [{ id: row.unitId, kind: "equipment-flow", outcome: "planned", before: "880 cfm", after: "925 cfm" }],
               counts: { planned: 1, written: 0, refused: 0, unchanged: 0 } } } }) });
     const fingerprint = workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(e => e.routeKey === "fans")!.closure.fingerprint}`);
-    mounted = mountTypedRoute(fans, { ...j.input, memory: () => ({ fan: { kind: "ids", ids: [localId("ducts-fan", `${row.uniqueId}@${row.portIndex}`)] } }) }, fingerprint,
+    mounted = mountTypedRoute(fans, { ...j.input, memory: () => ({ fan: { kind: "ids", ids: [stableFanKey(row)] } }) }, fingerprint,
       { work, sources: { "fans.sheet": source } });
     mounted.subscribe(() => {});
     await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
@@ -175,7 +174,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     const key = mounted.work()!.handle.key;
     const staged = await j.host.workspace.apply(key, "fans", "human", [
       { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: row.unitId, portIndex: row.portIndex } } } } },
-      { path: ["equipmentFlows", String(row.unitId), "edit"], value: { value: { cfm: 925, source: "test" } } },
+      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: { cfm: 925, source: "test" } } },
     ], mounted.work()!.revision);
     expect(staged.ok).toBe(true);
     mounted.refresh();
@@ -211,7 +210,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     try {
       await ductMount.whenReady();
       const system = ductMount.value(ducts.spec.reads!.roster).value.systems[0]!.name;
-      ductMount.page.subject({ kind: "ids", ids: [localId("ducts-system", system)] });
+      ductMount.page.subject({ kind: "ids", ids: [systemCode(system)] });
       await ductMount.whenReady();
       expect(ductMount.value().value.network.systemReads.completed).toEqual([systemRoster.systems[0]!.id]);
     } finally { ductMount.dispose(); unregister(); }
@@ -223,7 +222,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     expect(mounted.review("losses"), "return from a Ducts read preserves the sealed Plan").toMatchObject({ stale: false, preview: expect.anything() });
     expect(mounted.writeRefusal()).toBeNull();
     const changed = await j.host.workspace.apply(key, "fans", "human", [
-      { path: ["equipmentFlows", String(row.unitId), "edit"], value: { value: { cfm: 950, source: "test" } } },
+      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: { cfm: 950, source: "test" } } },
     ], mounted.work()!.revision);
     expect(changed.ok).toBe(true);
     mounted.refresh();
@@ -245,7 +244,7 @@ test("JM H02/B05 select a Fan whose native walk is malformed and inspect the ref
     const before = j.mount.value().value;
     const roster = j.mount.value(fans.spec.reads!.roster).value.rows;
     const row = roster.find((row: { mark: string }) => row.mark === "MUAS-1")!;
-    j.mount.page.subject({ kind: "ids", ids: [localId("ducts-fan", `${row.uniqueId}@${row.portIndex}`)] });
+    j.mount.page.subject({ kind: "ids", ids: [stableFanKey(row)] });
     await vi.waitFor(() => expect(j.mount.value(), "H02: malformed native output cannot become current data").toMatchObject({ current: false, status: "unavailable" }));
     expect(j.mount.value().value, "B05: the last admitted Value survives").toEqual(before);
     const refused = j.mount.value();
@@ -336,16 +335,16 @@ test("JX1 compare named Fans and shared-fan Duct systems, clear scope, then clos
     await j.ready();
     const roster = (await j.host.send(100, [])).value!.data.rows;
     const chosen = ["MUAS-1", "FC-23"].map((mark) => roster.find((row) => row.mark === mark)!);
-    const ids = chosen.map((row) => `${row.uniqueId}@${row.portIndex}`);
+    const ids = chosen.map(stableFanKey);
     for (const [index, id] of ids.entries()) {
-      j.mount.page.subject({ kind: "ids", ids: [localId("ducts-fan", id)] });
+      j.mount.page.subject({ kind: "ids", ids: [id] });
       await j.ready();
       expect(
         j.mount.subjectState({}),
         "B03: subject identity is presented by its fan name",
       ).toMatchObject({ ready: true, label: expect.stringContaining(chosen[index]!.mark!) });
     }
-    j.mount.page.subject({ kind: "ids", ids: ids.map((id) => localId("ducts-fan", id)) });
+    j.mount.page.subject({ kind: "ids", ids });
     await j.ready();
     const packet = await j.host.send(101, ids);
     const data = packet.value!.data;
@@ -428,7 +427,7 @@ test("JX2 retain the pane through waiting, a refused subject, hiding and returni
     held.release.resolve();
     await j.ready();
     const retained = j.mount.value().value;
-    j.mount.page.subject({ kind: "ids", ids: [localId("ducts-fan", "missing-fan@0")] });
+    j.mount.page.subject({ kind: "ids", ids: [stableFanKey({ uniqueId: "missing-fan", portIndex: 0 })] });
     await vi.waitFor(() =>
       expect(j.mount.value(), "B05: refusal is honest and preserves the last answer").toMatchObject(
         {
@@ -581,7 +580,7 @@ async function compareSystemAnswers() {
       "fans",
       "human",
       [30, 31].map((id, i) => ({
-        path: ["terminalDrops", String(id), "edit"],
+        path: ["terminalDrops", elementSubject(snapshot.nodes.find(node => node.id === id)!), "edit"],
         value: { value: { inWg: i ? 0.35 : 0.05 } },
       })),
       0,
@@ -620,11 +619,16 @@ async function compareSystemAnswers() {
       "H23: requested system coverage is explicit",
     ).toEqual([]);
     mount.page.subject({ kind: "ids", ids: [] });
-    await vi.waitFor(() => expect(mount.value().current).toBe(true), { timeout: 20_000 });
-    const unread = ductsPricingData.parse(mount.value().value);
-    expect(unread.network.systemReads.completed, "H23: none reads no systems").toEqual([]);
+    await vi.waitFor(() => expect(mount.value(ducts.spec.reads!.network).current).toBe(true), { timeout: 20_000 });
+    const unread = ductsNetworkData.parse(mount.value(ducts.spec.reads!.network).value);
+    expect(unread.systemReads.completed, "H23: none reads no systems").toEqual([]);
+    // SubjectRef Work outside this acquisition cannot become current pricing or complete zeros.
+    await vi.waitFor(() => expect(mount.value()).toMatchObject({
+      current: false, status: "unavailable", reason: expect.stringContaining("Work subject is absent from the acquisition"),
+    }));
+    const unpriced = ductsRosterData.parse(mount.value(ducts.spec.reads!.roster).value);
     expect(
-      unread.analysis.systems.every((row) => row.total === null),
+      unpriced.rows.every((row) => row.total === null),
       "H23: unread systems retain unknown pressure, never complete zeros",
     ).toBe(true);
   } finally {
@@ -840,9 +844,9 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
         return { target: { session: target.session, document: null }, value };
       }),
   });
-  const journal = new ActionJournal(join(dir, "actions.jsonl"), Date.now);
+  const journal = journalAt(join(dir, "actions.jsonl"), Date.now);
   const web = HttpRouter.toWebHandler(
-    makeCallRoute(
+    callRouteOver(
       journal,
       captures,
       { sdk: sdkSessions, workspace, podsRoot: dir },
@@ -1003,9 +1007,8 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
 test("JZ H19 wait beyond the browser budget, then inspect queue and conflict refusals without retry", async () => {
   const { HOST_READ_WAIT_S, NATIVE_READ_WAIT_S } = await import("./waits");
   const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
-  const { makeCallRoute } = await import("../../../host/src/call-route");
   const { BridgeError } = await import("../../../host/src/bridge");
-  const { detachedBridge, testHostInputs } = await import("../../../host/tests/effect-test");
+  const { callRouteOver, detachedBridge, testHostInputs } = await import("../../../host/tests/effect-test");
   const { serveRoutes } = await import("../../../host/tests/real-server");
   const { Effect, Layer } = await import("effect");
   const j = await journey();
@@ -1015,7 +1018,7 @@ test("JZ H19 wait beyond the browser budget, then inspect queue and conflict ref
     const roster = await j.host.send(100, []);
     const row = roster.value!.data.fans.rows.find(row => row.mark === "MUAS-1")!;
     held = j.host.holdNative();
-    j.mount.page.subject({ kind: "ids", ids: [localId("ducts-fan", `${row.uniqueId}@${row.portIndex}`)] });
+    j.mount.page.subject({ kind: "ids", ids: [stableFanKey(row)] });
     await held.entered.promise;
     const calls = j.host.nativeCalls;
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -1029,9 +1032,8 @@ test("JZ H19 wait beyond the browser budget, then inspect queue and conflict ref
     const f = await nativeFixture();
     try {
       let attempts = 0;
-      const { ActionJournal } = await import("../../../host/src/action-journal");
-      const queueJournal = new ActionJournal(`${j.host.dir}/queue.json`, Date.now);
-      const server = await serveRoutes(makeCallRoute(queueJournal, undefined, {}, { dispatch: () => {
+      const queueJournal = journalAt(`${j.host.dir}/queue.json`, Date.now);
+      const server = await serveRoutes(callRouteOver(queueJournal, undefined, {}, { dispatch: () => {
         attempts++;
         return Effect.fail(new BridgeError("queue refused before send", 423, { notDispatched: true, nativeOutcome: "RefusedQueueUnresponsive" }));
       } }).pipe(Layer.provide(testHostInputs)), detachedBridge());
@@ -1043,14 +1045,14 @@ test("JZ H19 wait beyond the browser budget, then inspect queue and conflict ref
         expect(attempts).toBe(1);
       } finally { await server.close(); await queueJournal.close(); }
       const work = { key: f.key, revision: 0 };
-      const changed = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } }], 0);
+      const changed = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } }], 0);
       expect(changed.ok).toBe(true);
-      const response = await f.post("/actions", { id: "jz-conflict", key: "ducts.apply-losses", target: f.target, input: { work } });
+      const response = await f.post("/actions", { id: "jz-conflict", key: "sheet.apply", target: f.target, input: { work } });
       expect(response.ok).toBe(true);
       const receipt = await f.journal.wait("jz-conflict");
       expect(receipt.state, "H19: original stale revision is refused").not.toBe("succeeded");
       expect(f.dispatched, "H19: conflict cannot retry native mutation").toEqual([]);
-      expect((await f.journal.list()).filter(row => row.key === "ducts.apply-losses")).toHaveLength(1);
+      expect((await f.journal.list()).filter(row => row.key === "sheet.apply")).toHaveLength(1);
     } finally { await f.close(); }
   } finally { vi.useRealTimers(); held?.release.resolve(); await j.close(); }
 }, 60_000);

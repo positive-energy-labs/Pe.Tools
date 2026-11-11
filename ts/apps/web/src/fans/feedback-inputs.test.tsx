@@ -1,81 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { ChoiceCell } from "../ducts/sheet/choice-cell";
-import type { OwnedCell } from "../route/typed-route";
-import { EspParameter } from "../ducts/sheet/esp-parameter";
 import { Roster } from "../ducts/sheet/view";
 import { SubjectDoor } from "../shell/subject";
 import fixture from "../ducts/sheet/sheet.fixture.json";
 import { ductsRosterResponseSchema } from "@pe/agent-contracts";
 
-const parameterCell = (stage:OwnedCell["stage"] = vi.fn(async()=>null)):OwnedCell => ({facts:{},freshness:"current",accept:async()=>null,deny:async()=>null,undo:async()=>null,owner:{route:"fans",label:"Work"},value:{},refusal:null,stage,clear:async()=>null,delete:async()=>null,transitions:()=>[]});
-const options = {descriptor:{key:"parameter-identities",mode:"Suggestion",allowsCustomValue:true,dependsOn:[],requiredRuntimeMode:"LiveDocument"},result:{kind:"Success",message:""},items:[{value:"shared:esp|instance",label:"Available ESP · instance",metadata:{name:"Available ESP",kind:"Shared",scope:"instance",storageType:"Double",dataTypeId:"pressure"}}]} as import("@pe/host-contracts/operation-types").OpResponseOf<"revit.catalog.field-options">;
 afterEach(cleanup);
-
-test("F6 an acknowledged role edit renders the option label with its author, never its object", () => {
-  const props = {
-    label: "Unit role SH-1",
-    options: [
-      { key: "fan", label: "Fan" },
-      { key: "passive", label: "Passive" },
-    ],
-    current: "passive",
-    cell: {},
-    path: null,
-    show: (value: unknown) => String((value as { role: string }).role),
-    refusal: null,
-    pick: vi.fn(),
-  };
-  const view = render(<ChoiceCell {...props} />);
-  view.rerender(
-    <ChoiceCell
-      {...props}
-      current="fan"
-      cell={{ edit: { value: { role: "fan" }, by: "human" } }}
-    />,
-  );
-  expect(view.container.textContent).toContain("Fan");
-  expect(view.container.textContent).not.toContain('{"role"');
-  expect(view.container.querySelector('[data-unsaved="human"]')).toBeTruthy();
-});
-
-test("F5 live parameter metadata reaches the picker and the slot stages the name, not the identity key", async () => {
-  const commit = vi.fn(async () => null);
-  render(
-    <EspParameter
-      options={options} error={null}
-      cell={parameterCell(commit)}
-      model="Old ESP"
-    />,
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Old ESP" }));
-  expect(await screen.findByText("Shared · Double · pressure")).toBeTruthy();
-  fireEvent.click(screen.getByRole("option", { name: /Available ESP/ }));
-  await waitFor(() => expect(commit).toHaveBeenCalledWith("Available ESP", {label:"Unit ESP"}));
-});
-
-test("a staged write scope keeps its own cell census rather than today's offered scope", () => {
-  const view = render(
-    <ChoiceCell
-      label="Write scope"
-      current="fan"
-      options={[{ key: "fan", label: "FC-23 / 7 staged" }]}
-      cell={{ edit: { value: { walk: { unitId: 1, portIndex: 0 }, cells: [] }, by: "human" } }}
-      path={null}
-      show={() => "FC-23 / 2 staged"}
-      refusal={null}
-      pick={vi.fn()}
-    />,
-  );
-  expect(view.container.textContent).toContain("FC-23 / 2 staged");
-  expect(view.container.textContent).not.toContain("7 staged");
-});
-
-test("F5 absent or failed accepted options cannot stage a stale choice",()=>{
-  render(<EspParameter options={null} error="Disconnected" cell={parameterCell()} model="Old ESP"/>);
-  expect(screen.queryByRole("button",{name:"Old ESP"})).toBeNull();
-});
 
 test("F3/F4 the roster always exposes search and forwards all/clear as one subject transition", () => {
   const door = {
@@ -94,6 +25,7 @@ test("F3/F4 the roster always exposes search and forwards all/clear as one subje
           picked: [],
           nameOf: String,
           open: vi.fn(),
+          finding: vi.fn(),
           busy: false,
           loading: false,
         }}
@@ -116,6 +48,7 @@ test("F3 keyboard selection still opens a fan through the roster's subject door"
         picked: [],
         nameOf: String,
         open,
+        finding: vi.fn(),
         busy: false,
         loading: false,
       }}

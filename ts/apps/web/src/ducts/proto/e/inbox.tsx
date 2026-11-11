@@ -1,7 +1,7 @@
 import { RegistryContext } from "@effect/atom-react";
-import { cite, citation, citationOwner, elementKey, leaveCitation } from "@pe/kit/lang/attention";
+import { cite, citation, citationOwner, leaveCitation } from "@pe/kit/lang/attention";
 import { useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
-import { Ban, Check, Eye, EyeOff, Fan, Link, Pencil, X, type LucideIcon } from "lucide-react";
+import { Ban, Eye, EyeOff, Fan, Link, Pencil, type LucideIcon } from "lucide-react";
 import type { DuctsDesign } from "@pe/agent-contracts";
 import type { LossesWork } from "../../work";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -22,7 +22,6 @@ import { observedElements, useNativeObservation } from "#/revit/observation";
 
 import { airflowPatches } from "../../airflow";
 import { rulingPatches, verdictPatches } from "../../assumptions";
-import { VERDICTS, type Verdict } from "../../claims";
 import {
   compactStatus,
   inboxDamage,
@@ -34,11 +33,10 @@ import {
   type InboxItem,
   type RowVerb,
 } from "../../inbox-rows";
-import type { Claim } from "../../legs";
 import { inboxWriteRows, type WriteVerbs, type RulingRow } from "./inbox-write";
 
 import { SlotPicker } from "./slot-picker";
-import { SubjectText, subjectDocument } from "@pe/kit/lang/subject-text";
+import { SubjectText, citedReferences, subjectDocument } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { RuleAssignment } from "./rule-assignment";
 
@@ -88,7 +86,6 @@ export function Inbox({
   groups,
   work,
   nameOf,
-  onVerdict,
   onSelect,
   onFocusCell,
   write,
@@ -104,7 +101,6 @@ export function Inbox({
   groups: Record<Exclude<InboxGroup, "write">, readonly InboxItem[]>;
   work: InboxWork;
   nameOf: (id: number) => string;
-  onVerdict: ((claim: Claim, verdict: Verdict) => void) | null;
   onSelect: (id: number | null) => void;
   /** Select the element and focus its cell on the tree. */
   onFocusCell: (cell: CellRef) => void;
@@ -211,20 +207,6 @@ export function Inbox({
               <CommandVerb key={`p${i}`} verb={verb} pair={heal} icon={worded ? undefined : Eye} />
             );
           return worded ? <FanButton key={`n${i}`} verb={verb} fan={fan} /> : null;
-        case "claim":
-          return VERDICTS.map((v, j) =>
-            make(
-              `c${i}${j}`,
-              ([Check, X, Ban] as const)[j]!,
-              v.word,
-              `${v.word}: ${v.says}`,
-              () => onVerdict?.(verb.claim, v.value),
-              {
-                pressed: verb.claim.verdict === v.value,
-                refusal: onVerdict ? null : "no subject: the verdict has nowhere to stage",
-              },
-            ),
-          );
         case "stage":
           return <span key={`s${i}`}>{cells({ segment: verb.segment, key: verb.key })}</span>;
         case "select": {
@@ -250,7 +232,7 @@ export function Inbox({
         }
       }
     },
-    [work, nameOf, heal, fan, onFocusCell, onVerdict, cells, observation, selecting],
+    [work, nameOf, heal, fan, onFocusCell, cells, observation, selecting],
   );
   const verbsOf = useCallback(
     (item: InboxItem, worded: boolean) =>
@@ -287,11 +269,7 @@ export function Inbox({
           refs:
             lit?.owner === owner
               ? lit.refs
-              : heading.references.map(({ id, ...ref }) => ({
-                  ...ref,
-                  doc: subjects.doc,
-                  key: elementKey(id),
-                })),
+              : citedReferences(subjects, heading.references),
         });
       };
       return {
@@ -335,11 +313,7 @@ export function Inbox({
                       cite(registry, {
                         owner,
                         focus: null,
-                        refs: description.references.map(({ id, ...ref }) => ({
-                          ...ref,
-                          doc: subjects.doc,
-                          key: elementKey(id),
-                        })),
+                        refs: citedReferences(subjects, description.references),
                       });
                   }}
                 >

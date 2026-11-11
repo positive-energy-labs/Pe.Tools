@@ -1,5 +1,5 @@
-import {identityCodecs} from "@pe/agent-contracts";
-const scheduleIdentity=(subject:string)=>{const result=identityCodecs.local.encode({namespace:"schedules",subject});if(!result.ok) throw Error(result.reason);return result.value;};
+import {subjectCode} from "@pe/agent-contracts";
+const scheduleIdentity=(key:string)=>subjectCode({keyKind:"workspace",key});
 import { z } from "zod";
 import {
   routeAddress,

@@ -6,9 +6,10 @@ import { Link } from "@tanstack/react-router";
 import type { ActionReceipt } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { previousOf, useReading } from "#/host/resource-state";
 import {
-  actionRoute,
+  receiptRoute,
   actionPlace,
   actionWord,
   chatPluginTitle,
@@ -47,27 +48,34 @@ export function ProposedLine({ record }: { record: ProposedRecord }) {
  * `Pea ran {action} in {Route} · {state}`: the state is the receipt's CURRENT one, read live, and
  * only `succeeded` reads as done. An action no plugin route owns keeps its receipt link.
  */
-export function ActionLine({ call }: { call: ActionCall }) {
+export function ActionLine({
+  call,
+  told,
+}: {
+  call: ActionCall;
+  /** The call itself failed and its run's row already said so: the state takes the line's ink. */
+  told: boolean;
+}) {
   const { store } = useWorkbench();
   const reading = useReading<ActionReceipt[]>({ kind: "receipts", id: call.id });
   const row = previousOf(reading)?.find((candidate) => candidate.id === call.id);
   // A control (`action.resume`) names the original receipt; its key is the action's own.
   const key = row?.key ?? call.key;
-  const route = actionRoute(key);
+  const route = receiptRoute(key, row);
   const place = route ? actionPlace(route, row) : null;
   const state = row?.state ?? (reading.state === "failed" ? "receipt unread" : "reading");
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <div className={line} data-action={call.id}>
         <span className="truncate">
-          Pea ran {actionWord(key)}
+          Pea ran {route ? actionWord(key) : key}
           {route ? ` in ${chatPluginTitle(route)}` : ""} ·{" "}
           <span
             className="face-mono"
             data-tone={
               state === "succeeded"
                 ? "done"
-                : state === "running" || state === "reading"
+                : told || state === "running" || state === "reading"
                   ? undefined
                   : "caution"
             }
@@ -83,12 +91,14 @@ export function ActionLine({ call }: { call: ActionCall }) {
             open ›
           </Button>
         ) : (
-          <Link to="/ops" search={{ actionId: call.id }}>
-            receipt ›
-          </Link>
+          // Why there is no `open ›` is the link's hint, not a second toned line under it.
+          <TooltipHint content={place && !place.ok ? place.refusal : undefined}>
+            <Link to="/$route" params={{ route: "ops" }} search={{ actionId: call.id }}>
+              receipt ›
+            </Link>
+          </TooltipHint>
         )}
       </div>
-      {place && !place.ok ? <span data-tone="caution">{place.refusal}</span> : null}
       {row?.state === "succeeded" ? <NativeReadingReferences receipt={row} /> : null}
     </div>
   );

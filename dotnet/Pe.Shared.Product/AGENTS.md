@@ -18,8 +18,8 @@ It is not the installed-layout authority. `product.payloads.json` is the single 
 - `ProductIdentity` — vendor, product, and user-visible names.
 - `ProductPathNames` — product-owned state and user-content names.
 - `ProductLane` / `ProductRuntimeLayout` — the process's one runtime record (lane, owner root, state root) and its state/log/cache/scratch trees, including APS tokens. No binary paths.
-- `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — `Documents\Pe.Tools\preferences.json` and portable Pods.
-- `ProductPathing` — the product home (`PE_TOOLS_PRODUCT_HOME`, else `Documents\Pe.Tools`; the host resolves the same variable), safe subdirectory resolution, and the pure `StateRoot(lane, ownerRoot, home)`: `<home>\.local-state` under the override (an isolated run shares no state with the owner's host), else the dev checkout's `.artifacts\pe-tools`, else the SDK install root verbatim. TS `stateRoot` and PowerShell `Resolve-ProductRuntimeRoot` assert the same `ts/packages/host-contracts/tests/runtime-ownership.fixture.json`.
+- `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — content preferences and portable Pods.
+- `ProductPathing` — the two content homes (ADR 0035 rule 11): `UserRoot()` always (isolated `PE_TOOLS_PRODUCT_HOME`, else the Documents known folder's `Pe.Tools`, OneDrive when it redirects Documents) takes every write and all Work; optional `SharedRoot()` (`PE_TOOLS_SHARED_ROOT`) reads after it, so `ContentHomes()` is `[user, shared?]` and the user's copy wins; `SharedFirmDir()` / `SharedKeysPath()` are `<shared>\Firm` and `<shared>\keys.json`, null without a shared root. The host resolves the same names. Also safe subdirectory resolution and the pure `StateRoot(lane, ownerRoot, home, shared, user)`: `<home>\.local-state` under the override (an isolated run shares no state with the owner's host), else the dev checkout's `.artifacts\pe-tools`, else the SDK install root verbatim; it refuses a root at or under the shared root or the Documents user root. TS `stateRoot` and PowerShell `Resolve-ProductRuntimeRoot` assert the same `ts/packages/host-contracts/tests/runtime-ownership.fixture.json`.
 
 ## Hard Dependency Rule
 
@@ -37,11 +37,16 @@ Transport lives in `Pe.Shared.HostContracts`: `HostEndpoint`, `TsHostCallClient`
   logs\
   cache\
 
-Documents\Pe.Tools\
+<user root: PE_TOOLS_PRODUCT_HOME, else Documents\Pe.Tools>\   (every write; also Work\)
   AGENTS.md
   README.md
   preferences.json
   Pods\<local-folder>\{pod.json,settings\,src\,assets\,output\,AGENTS.md,README.md,PeScripts.csproj,.vscode\}
+
+<PE_TOOLS_SHARED_ROOT>\   (optional, read after the user root, never written)
+  Pods\  Pages\  Catalogs\
+  Firm\<owner>.json
+  keys.json
 ```
 
 The installer also lays binaries under the product root; their names and shape come from `product.payloads.json`, not this package.

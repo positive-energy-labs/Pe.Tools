@@ -7,9 +7,10 @@ import { NodeServices } from "@effect/platform-node";
 import { Context, Effect } from "effect";
 import { commands, parsedDocViewSchema, tools, type ActionStep } from "@pe/agent-contracts";
 import { z } from "zod";
-import { command, refused, type CommandExecutor } from "./command-executor.ts";
+import { command, io, refused, type CommandExecutor } from "./command-executor.ts";
 import { runPods, type PodDependencies } from "./family-actions.ts";
 import { podFolder } from "./settings.ts";
+import { userWritable } from "./content-homes.ts";
 /** The app owns the parser address; commands never infer a frontend from a port or file. */
 export class FamilyPdfParser extends Context.Service<FamilyPdfParser, {
   parse(file: File): Promise<unknown>;
@@ -69,7 +70,10 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
         cells: [],
         facts: [["reading"], ["spec"]],
       }));
-      const root = await runPods(deps, podFolder(member.pod, { podsRoot: deps.podsRoot }));
+      // Attaching writes the spec and its assets into the Pod: a shared Pod is copied to the user root first.
+      const root = userWritable(
+        await runPods(deps, podFolder(member.pod, { podsRoot: deps.podsRoot })),
+      );
       if (!member.path.startsWith("settings/family/") || !member.path.endsWith(".json"))
         throw Error("Attach to a captured member in settings/family/");
       const memberBytes = await readFile(safePath(root, member.path));
@@ -129,19 +133,19 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
         },
       };
     },
-    run: async (ctx, execution) => {
+    run: (ctx, execution) => Effect.gen(function* () {
       const { member, doc, specPath, assets } = execution.prepared as z.infer<
         typeof preparedSpecSchema
       >;
       for (const asset of assets)
-        await execution.step("file", "family.spec.asset", asset, async () => {
+        yield* execution.step("file", "family.spec.asset", asset, () => io(async () => {
           await mkdir(dirname(asset.path), { recursive: true });
           const temporary = `${asset.path}.${randomUUID()}.tmp`;
           await writeFile(temporary, await get(asset.blob), { flag: "wx" });
           await rename(temporary, asset.path);
           return { path: asset.path, sha256: asset.blob.digest };
-        });
-      await execution.publishWork(ctx.admission.input.work!.key, "family", [
+        }));
+      yield* execution.publishWork(ctx.admission.input.work!.key, "family", [
         { path: ["spec"], value: { member, doc } },
       ]);
       return {
@@ -151,7 +155,7 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
         blocks: doc.blocks.length,
         images: doc.images.length,
       };
-    },
+    }),
     recover: async (step: ActionStep) => {
       if (step.kind !== "file" || step.key !== "family.spec.asset")
         return { step, evidence: { reason: "No independent file witness" } };

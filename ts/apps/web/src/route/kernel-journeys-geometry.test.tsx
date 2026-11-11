@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { stableFanKey } from "../ducts/sheet/model";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { SceneMeshes } from "../scene/types";
@@ -6,7 +8,7 @@ import type { Scene3DProps } from "../scene/scene3d";
 import { TestAttention } from "../test-attention";
 import { makeAtomRegistry } from "../shell/owner";
 import { mountTypedRoute } from "../shell/typed-mount";
-import { route, localId } from "./typed-route";
+import { route } from "./typed-route";
 import { module as fans } from "../fans/route";
 import { PictureBody, RosterBody } from "../ducts/sheet/mount";
 import { SubjectDoor, typedSubjectDoor } from "../shell/subject";
@@ -106,7 +108,7 @@ function pictureJourney() {
       if (empty) { data.sheetSnapshot.nodes = []; data.sheetSnapshot.segments = []; data.open = null; data.opened = []; data.rows = []; data.fans.rows = []; }
       deliver({ kind: "complete", value: packet, revision: 1 });
     } } } });
-    mounts.push(mount); mount.subscribe(() => {}); mount.page.subject({ kind: "ids", ids: [localId("ducts-fan", "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001@2")] });
+    mounts.push(mount); mount.subscribe(() => {}); mount.page.subject({ kind: "ids", ids: [stableFanKey({ uniqueId: "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001", portIndex: 2 })] });
     return mount;
   };
   const tree = (mount: ReturnType<typeof open>) => <TestAttention registry={registry}>{mount.draw("sheet-picture", ctx => <PictureBody ctx={ctx as any} />) as React.ReactNode}</TestAttention>;
@@ -141,7 +143,7 @@ test("JM B03/B14/B18 named Fans roster and a live gesture survive typed Page pro
     expect(roster.container.textContent, "B03: readable identity never prints encoded subject ids").not.toContain("9cb9f188-28aa-4094-8b76");
     fireEvent.click(roster.getByRole("button", { name: "All fans" }));
     expect(a.page.read().fan, "B03: All remains symbolic").toEqual({ kind: "all" });
-    act(() => typedSubjectDoor(a)!.add([localId("ducts-fan", "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001@2")]));
+    act(() => typedSubjectDoor(a)!.add([stableFanKey({ uniqueId: "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001", portIndex: 2 })]));
     expect(a.page.read().fan, "B03: additive open never narrows All").toEqual({ kind: "all" });
     fireEvent.click(roster.getByRole("button", { name: "Clear fans" }));
     expect(a.page.read().fan, "B03: None remains explicit").toEqual({ kind: "ids", ids: [] });
@@ -168,7 +170,6 @@ import { HostSessionInventory } from "../../../host/src/session-inventory";
 import { DuctFiles } from "../../../host/src/ducts-files";
 import { RevitBridge, RevitBridgeLive } from "../../../host/src/bridge";
 import { SdkSession } from "../../../host/src/sdk-session";
-import { HostReceipts } from "../../../host/src/gateway-owner";
 import { ReadOwner } from "../../../host/src/builtin-inputs";
 import { makeCallRoute } from "../../../host/src/call-route";
 import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
@@ -176,7 +177,7 @@ import { bootHost } from "../../../host/tests/real-server";
 import { connectTestBridge } from "../../../host/tests/bridge-fixture";
 import { admittedReceiptStamps } from "../../../host/src/receipt-export";
 import "../ducts/sheet/mount";
-import { builtins } from "../route/builtins.neutral";
+import { builtinRouteStamp } from "../route/builtin-inventory";
 import { bindActionReadings } from "../host/resource-stream";
 
 const trace = vi.hoisted(()=>({submit:vi.fn(),fetch:vi.fn(),base:"",target:null as any,results:[] as any[]}));
@@ -218,7 +219,7 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
  const stamp=admittedReceiptStamps().host!;
  const captureStore=await Effect.runPromise(openRecordingWriter(dir,{build:JSON.stringify({version:stamp.version,build:stamp.build,commit:stamp.commit}),catalog:nativeCatalogIdentity()},{maxBytes:256*1024*1024,maxTakings:10000}));
  const inputs=await Effect.runPromise(HostInputContext.pipe(Effect.provide(HostInputContext.layer({kind:"live",captureStore}))));
- const host=await bootHost({inputs,reads:{live:{marks:ambient(HostDocumentMarks),inventory:HostSessionInventory.layer.pipe(Layer.provide(Layer.mergeAll(ambient(RevitBridge),ambient(SdkSession)))),files:DuctFiles.layer(),native}},revitCompositionFactory:()=>({provider:RevitBridgeLive,routes:Layer.unwrap(Effect.gen(function*(){const reads=yield* ReadOwner;return makeCallRoute((yield* HostReceipts).journal,undefined,{workspace:reads.work.workspace,sdk:sdkSessions,workReads:reads.work.reads},{pointers:reads.work.pointers,retainedRead:reads.retainedCall,nativeBody:reads.nativeBody});})).pipe(Layer.provide(native))})});
+ const host=await bootHost({inputs,reads:{live:{marks:ambient(HostDocumentMarks),inventory:HostSessionInventory.layer.pipe(Layer.provide(Layer.mergeAll(ambient(RevitBridge),ambient(SdkSession)))),files:DuctFiles.layer(),native}},revitCompositionFactory:()=>({provider:RevitBridgeLive,routes:Layer.unwrap(Effect.gen(function*(){const reads=yield* ReadOwner;return yield* makeCallRoute(undefined,{workspace:reads.work.workspace,sdk:sdkSessions,workReads:reads.work.reads},{pointers:reads.work.pointers,retainedRead:reads.retainedCall,nativeBody:reads.nativeBody});})).pipe(Layer.provide(native))})});
  trace.base=host.base;
  const forward=async(url:any,init:any={})=>{
    const headers=new Headers(init.headers);headers.set("x-pe-context",host.terminal);headers.set(HOST_RUNTIME_SERVICE_HEADER,hostOwnership.serviceName);
@@ -248,7 +249,7 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    }).catch(error=>{if(!ctx.signal.aborted)deliver({kind:"failure",error});});
    return ()=>{void forward("/pe/reads/value",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...body,generation:++generation,release:true})});};
  }};
- const selected=localId("ducts-fan",`${walk.nodes.find(n=>n.id===14577391)!.uniqueId}@2`);
+ const selected=stableFanKey({ uniqueId: walk.nodes.find(n=>n.id===14577391)!.uniqueId!, portIndex: 2 });
  let search=new URLSearchParams({fan:JSON.stringify({kind:"ids",ids:[selected]})});
  const {TypedWrite}=await import("../shell/typed-shell");
  const {KeyScopeHost}=await import("@pe/kit/keys");
@@ -256,11 +257,11 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    target:{kind:"document",ref:trace.target},fixture:null,work:{address:workAddress("C:/model.rvt"),open:trace.target},
    address:{read:()=>new URLSearchParams(search),write:next=>{search=new URLSearchParams(next);},subscribe:()=>()=>{}},
    custody:{current:()=>true},memory:()=>({}),
- },workFingerprintSchema.parse(`builtin-closure:${builtins.fans.closure.fingerprint}`),{sources:{"fans.sheet":source}});
+ },workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("fans")}`),{sources:{"fans.sheet":source}});
  const React=await import("react");
- const {InputsBody}=await import("../ducts/sheet/mount");
+ const {SheetPane}=await import("./slots/sheet/pane.tsx");
  const registry=makeAtomRegistry();
- function Journey(){const [,set]=React.useState(0);React.useEffect(()=>mount.subscribe(()=>set(n=>n+1)),[]);return <TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(mount)}><KeyScopeHost id="scope-revert"><TypedWrite mount={mount} id="losses"/>{mount.draw("sheet-inputs",ctx=><InputsBody ctx={ctx as any}/>) as React.ReactNode}</KeyScopeHost></SubjectDoor></TestAttention>;}
+ function Journey(){const [,set]=React.useState(0);React.useEffect(()=>mount.subscribe(()=>set(n=>n+1)),[]);return <TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(mount)}><KeyScopeHost id="scope-revert"><TypedWrite mount={mount} id="losses"/>{mount.draw("sheet-inputs",ctx=><SheetPane ctx={{draw:ctx as any,slot:mount.spec.sheet!,field:mount.spec.subject?.field}}/>) as React.ReactNode}</KeyScopeHost></SubjectDoor></TestAttention>;}
  const router=createRouter({routeTree:createRootRoute({component:Journey}),history:createMemoryHistory({initialEntries:["/fans"]})});
  const phase=(at:string)=>{if(process.env.PE_FANS_SCOPE_EVIDENCE)writeFileSync(process.env.PE_FANS_SCOPE_EVIDENCE,JSON.stringify({at,revision:mount.owner()?.handle?.revision,problem:mount.reviewProblem("losses"),results:(trace as any).results,requests},null,2));};
  try{
@@ -291,7 +292,8 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    await screen.findByRole("button",{name:"None"},{timeout:20000});
    const user=userEvent.setup();
    const edit=async(id:string,value:string)=>{
-     const row=await vi.waitFor(()=>{const row=document.querySelector(`[data-input-field="component:${id}:drop"]`);expect(row, JSON.stringify({fields:[...document.querySelectorAll("[data-input-field]")].map(e=>e.getAttribute("data-input-field")),text:document.body.textContent?.slice(-3500),value:mount.value().status})).toBeTruthy();return row!;});
+     const subject=elementSubject((walk.nodes.find((n:any)=>n.id===Number(id)) ?? walk.segments.find((n:any)=>n.id===Number(id)))!);
+     const row=await vi.waitFor(()=>{const row=document.querySelector(`[data-sheet-address="componentDrops:${subject}"]`);expect(row, JSON.stringify({cells:[...document.querySelectorAll("[data-sheet-address]")].map(e=>e.getAttribute("data-sheet-address")),text:document.body.textContent?.slice(-3500),value:mount.value().status})).toBeTruthy();return row!;});
      const input=within(row as HTMLElement).getByRole("textbox");
      await user.clear(input);await user.type(input,`${value}{Enter}`);
    };
@@ -306,7 +308,9 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    phase("r3");
    act(()=>mount.refresh());
    await vi.waitFor(()=>expect(mount.value().current).toBe(true),{timeout:20000});
-   fireEvent.click(screen.getByRole("button",{name:/Revert.*DS.?1/i}));
+   // A staged cell's own clear verb returns it to the source underneath (the old row's Revert).
+   const ds1=elementSubject((walk.nodes.find((n:any)=>n.id===14577394) ?? walk.segments.find((n:any)=>n.id===14577394))!);
+   fireEvent.click(within(document.querySelector(`[data-sheet-address="componentDrops:${ds1}"]`) as HTMLElement).getByRole("button",{name:/clear/i}));
    await vi.waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(4),{timeout:20000});
    phase("r4");
    act(()=>mount.refresh());

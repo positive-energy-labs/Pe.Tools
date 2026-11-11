@@ -1,3 +1,4 @@
+import { workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { commands, tools, canonicalRouteInput, workKey, type DuctsApplyInput ,
@@ -6,7 +7,7 @@ import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
 import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { ductsDesign, stagedDucts, workHandleSchema } from "@pe/agent-contracts";
+import { ductsDesign, ductsFirmSchema, stagedDucts, subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { Effect } from "effect";
@@ -14,8 +15,8 @@ import { admittedCommandReadIdentity } from "./command-read-identity.ts";
 import { RequestIdentity } from "./request-services.ts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { z } from "zod";
-import { invokeBridge, type RevitBridge } from "./bridge.ts";
-import { command, refused, type CommandContext } from "./command-executor.ts";
+import type { RevitBridge } from "./bridge.ts";
+import { command, nativeStep, refused, type CommandContext } from "./command-executor.ts";
 import type { ActionExecution } from "./action-journal.ts";
 import { lifetime } from "./document-lifetime.ts";
 import { ductsReadings } from "./ducts-readings.ts";
@@ -23,7 +24,8 @@ import { runPods } from "./family-actions.ts";
 import { buildSheet, resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
 import { accessoryWrites } from "@pe/ducts-domain/sheet/accessory-writes";
 import { suggestRoster } from "@pe/ducts-domain/roster";
-import { workLayer } from "./ducts-inputs.ts";
+import { FIRM_SEED, firmLayer, workLayer } from "./ducts-inputs.ts";
+import { resolveFirm } from "./reads/evaluator.ts";
 import { followAcceptedJoins } from "./ducts-walk.ts";
 import { scopeApplyRequest, appliedCellPaths, pendingCount, fanWriteCells } from "@pe/ducts-domain/staged";
 import type { DuctsApply, DuctsHeal } from "@pe/host-contracts/generated";
@@ -33,6 +35,8 @@ const prepared = z.object({
   input: z.record(z.string(), z.unknown()),
   dependencies: z.unknown(),
   nothingToWrite: z.boolean().optional(),
+  subjects: z.record(z.string(), z.string()).default({}),
+  cells: z.array(z.tuple([z.string(), z.string()])).default([]),
   labels: z.record(z.string(), z.string()).optional(),
 });
 const targetOf = (ctx: CommandContext) => {
@@ -92,6 +96,7 @@ export async function lossSnapshot(
 export function unwrittenCells(
   request: Pick<DuctsApplyInput, "terminals" | "components" | "equipment" | "terminalFlows" | "equipmentFlows">,
   cells: readonly (readonly [string, string])[],
+  snapshot: Pick<DuctSnapshot, "nodes" | "segments">,
 ): (readonly [string, string])[] {
   const written: Record<string, readonly { id: number }[]> = {
     terminalDrops: request.terminals,
@@ -100,7 +105,7 @@ export function unwrittenCells(
     flows: request.terminalFlows,
     equipmentFlows: request.equipmentFlows,
   };
-  return cells.filter(([segment, key]) => written[segment] && !written[segment]!.some((row) => String(row.id) === key),
+  return cells.filter(([segment, key]) => written[segment] && !written[segment]!.some((row) => row.id === workElementId(snapshot, key)),
   );
 }
 
@@ -138,6 +143,8 @@ export function healedCellPaths(
     : [];
 }
 
+/** Each kind's sealed plan entry: the losses plan is the sheet pair's (slice 7). */
+const PLAN_OF = { losses: "sheet.plan", heal: "ducts.plan-heal", "assign-fan": "ducts.plan-assign-fan" } as const;
 /** Work is the only authored input. Plan, rehearsal and apply share the same derivation and journal. */
 export function ductsExecutors(
   bridge: RevitBridge["Service"],
@@ -146,7 +153,12 @@ export function ductsExecutors(
 ) {
   const bind = async (ctx: CommandContext, kind: Kind, phase: Phase) => {
     const target = targetOf(ctx);
-    const raw = ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle;
+    // The sheet pair takes the asking route's own handle (/ducts or /fans); the sibling comes from readWorks or the same document.
+    const primary = ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle;
+    const siblings = z.record(z.string(), workHandleSchema).optional().parse(ctx.admission.input.readWorks);
+    const ductsView = primary.key.route === "ducts" || siblings?.ducts ? null : await ctx.work.view({ ...primary.key, route: "ducts" }, "ducts");
+    const raw = primary.key.route === "ducts" ? primary : siblings?.ducts ?? ductsView?.handle;
+    if (!raw) throw refused("Ducts Work is unavailable", "work.unavailable");
     const { process } = await lifetime(bridge, target, "project", deps);
     const doc = await ctx.selectWork(tools.ducts.work, raw, (_doc, cells) => ({
       edits: tools.ducts.work.editable,
@@ -159,7 +171,7 @@ export function ductsExecutors(
     const readWorks = z.record(z.string(), workHandleSchema).optional().parse(ctx.admission.input.readWorks);
     if (readWorks?.fans && workKey(readWorks.fans.key) !== workKey(fanView.handle.key))
       throw refused("Fans Work belongs to another document", "work.target");
-    const fans = await ctx.selectWork(tools.fans.work, readWorks?.fans ?? fanView.handle, (_doc, cells) => ({
+    const fans = await ctx.selectWork(tools.fans.work, readWorks?.fans ?? (primary.key.route === "fans" ? primary : fanView.handle), (_doc, cells) => ({
       edits: tools.fans.work.editable,
       cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
     }),
@@ -170,7 +182,7 @@ export function ductsExecutors(
       .receipts()
       .filter(
         (r) =>
-          r.key === `ducts.plan-${kind}` &&
+          r.key === PLAN_OF[kind] &&
           r.state === "succeeded" &&
           canonicalRouteInput(r.target) === canonicalRouteInput(ctx.admission.target),
       )
@@ -194,8 +206,14 @@ export function ductsExecutors(
       prepare: async () => {
         const ductsScope = doc.writeIntent.edit?.value;
         const fanScope = fans.writeIntent.edit?.value;
-        const intent = { ...ductsScope, walk: fanScope?.walk };
-        const { firm } = await runPods(deps, deps.files!.firm);
+        // The Work schema decoded each group SubjectRef; the engine speaks the group's own key.
+        const intent = {
+          ...ductsScope,
+          groups: ductsScope?.groups?.map((code) => String(subjectOf(code).key)),
+          walk: fanScope?.walk,
+        };
+        // 2b's refusal-aware layer over the owner-keyed firm file (the Pod firm door reads the same file).
+        const firm = firmLayer(resolveFirm(await runPods(deps, deps.files!.firm("ducts")), ductsFirmSchema, FIRM_SEED));
         const criteria = resolveCriteria(workLayer(design), null, firm);
         const nativeRead = deps.nativeRead;
         if (!nativeRead) throw refused("Ducts preparation requires the root native Read capability", "read.unavailable",
@@ -283,8 +301,8 @@ export function ductsExecutors(
             const cells = fanScope?.walk
               ? [...(ductsScope?.cells ?? []), ...fanWriteCells(fans, snapshot)]
               : ductsScope?.cells;
-            const scoped = scopeApplyRequest(request, snapshot.store, cells);
-            const unwritten = unwrittenCells(scoped, cells ?? []);
+            const scoped = scopeApplyRequest(request, snapshot.store, cells, snapshot);
+            const unwritten = unwrittenCells(scoped, cells ?? [], snapshot);
             if (unwritten.length)
               throw refused(
                 `These requested cells derive no write in this scope: ${unwritten
@@ -296,8 +314,10 @@ export function ductsExecutors(
               );
             const label = elementLabeler(snapshot, { unique: true });
             return {
+              cells: cells ?? [],
+              subjects: Object.fromEntries((cells ?? []).filter(([s]) => ["terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows", "roles"].includes(s)).map(([, k]) => [k, String(workElementId(snapshot, k))])),
               input: scoped as unknown as Record<string, unknown>,
-              nothingToWrite: pendingCount(design, snapshot.store) === 0,
+              nothingToWrite: pendingCount(design, snapshot.store, snapshot) === 0,
               labels: Object.fromEntries(snapshot.nodes.map((n) => [String(n.id), label(n.id)])),
               dependencies: {
                 snapshot: ductWriteEvidence(snapshot),
@@ -330,7 +350,7 @@ export function ductsExecutors(
       },
     };
   };
-  const run = async (ctx: CommandContext, execution: ActionExecution, kind: Kind, phase: Phase) => {
+  const run = (ctx: CommandContext, execution: ActionExecution, kind: Kind, phase: Phase) => Effect.gen(function* () {
     const p = prepared.parse(execution.prepared),
       target = targetOf(ctx);
     // Default slot initialization is bookkeeping, never an authored model change.
@@ -346,7 +366,7 @@ export function ductsExecutors(
         native: "ducts.apply.plan",
         refusePlan: (value: unknown) => lossPlanRefusal((value as DuctsApply.Res.Response).writes),
         retires: (input: Record<string, unknown>, value: unknown) =>
-          appliedCellPaths(input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response),
+          appliedCellPaths(input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response, p.subjects, p.cells),
       },
       heal: {
         key: "ducts.heal",
@@ -361,11 +381,11 @@ export function ductsExecutors(
     // The losses plan reads through the native Read sibling; a rehearsal calls its rolled-back TransactRead;
     // only apply reaches the ModelWrite leaf. Heal and fan plans never get here: the write boundary seals them.
     const key = phase === "apply" ? entry.key : entry.native;
-    const value = await execution.step(
+    const value = yield* execution.step(
       "native",
       key,
       p.input,
-      (id) => invokeBridge(bridge, target, key, p.input, id),
+      (id) => nativeStep(bridge, target, key, p.input, id),
       { process: p.process as import("@pe/agent-contracts").NativeProcess },
     );
     // Retain the review and its read evidence. A refusal blocks the whole intent at the write boundary;
@@ -384,31 +404,32 @@ export function ductsExecutors(
             ).join("; "),
         };
     }
-    const handle = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
+    const asked = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
+    const handle = { key: { ...asked.key, route: "ducts" } };
     const paths = phase === "apply" ? entry.retires(p.input, value) : [];
     const fanPaths = paths.filter((path) => tools.fans.work.editable.some((pattern) => pattern[0] === path[0]),
     );
     const ductPaths = paths.filter((path) => !fanPaths.includes(path));
-    const retired = ductPaths.length ? await execution.retireWork(handle.key, "ducts", ductPaths) : undefined;
-    if (fanPaths.length) await execution.retireWork({ ...handle.key, route: "fans" }, "fans", fanPaths);
+    const retired = ductPaths.length ? yield* execution.retireWork(handle.key, "ducts", ductPaths) : undefined;
+    if (fanPaths.length) yield* execution.retireWork({ ...handle.key, route: "fans" }, "fans", fanPaths);
     return {
       value,
       derivedRequest: p.input,
       target: { session: target.session, document: null },
       ...(retired ? { retired } : {}),
     };
-  };
+  });
   return {
     "ducts.refresh": command(commands["ducts.refresh"], z.null(), {
       bind: async (ctx) => {
         targetOf(ctx);
         return { effects: [] };
       },
-      run: async (ctx) => {
+      run: (ctx) => Effect.sync(() => {
         const target = targetOf(ctx);
         ductsReadings(bridge).refresh(target);
         return { target, refreshed: true };
-      },
+      }),
     }),
     // The registry wraps these at boot: `commands[key].writeBoundary` (or `workIntent` for a rehearsal) carries
     // the binding. ducts.plan-heal and ducts.plan-assign-fan have no executor: the registry binds the apply's in
@@ -416,8 +437,8 @@ export function ductsExecutors(
     ...Object.fromEntries(
       (
         [
-          ["ducts.plan-losses", "losses", "plan"],
-          ["ducts.apply-losses", "losses", "apply"],
+          ["sheet.plan", "losses", "plan"],
+          ["sheet.apply", "losses", "apply"],
           ["ducts.apply-heal", "heal", "apply"],
           ["ducts.apply-assign-fan", "assign-fan", "apply"],
           ["ducts.rehearse-heal", "heal", "rehearse"],

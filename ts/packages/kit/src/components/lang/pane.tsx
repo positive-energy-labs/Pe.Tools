@@ -130,6 +130,8 @@ interface PaneProps extends VariantProps<typeof paneRecipe>, PaneStripProps {
   /** Change it when the child changes target, so an old error cannot mask the new one. */
   boundaryKey?: Key;
   onRetry?: () => void;
+  /** The body's reading is unsettled: the kernel's own Work, drawn in this render, not after an effect. */
+  busy?: boolean;
   children: ReactNode;
 }
 
@@ -157,7 +159,7 @@ export class PaneErrorBoundary extends Component<
     if (!this.state.failed) return this.props.children;
     return (
       <div role="alert" className="flex flex-1 flex-col items-center justify-center gap-2 p-2">
-        <span className="t-small" data-tone="alarm">
+        <span className="t-small" data-tone="caution">
           {this.props.what ?? "pane"} failed to load
         </span>
         <span className="text-ink-2">{this.state.message}</span>
@@ -204,6 +206,7 @@ export function Pane({
   ground,
   boundaryKey,
   onRetry,
+  busy = false,
   modes,
   floaters,
   picture,
@@ -220,7 +223,8 @@ export function Pane({
   });
   const { root, body, field: fieldClass } = paneRecipe({ scroll, flush });
   const rootRef = useRef<HTMLElement>(null);
-  const { register: registerWork, labels: work } = useWorkOwner();
+  const { register: registerWork, labels: registered } = useWorkOwner();
+  const work = busy && !registered.includes("reading…") ? [...registered, "reading…"] : registered;
   const stage = useContext(PictureContext);
   const attentionDoc = useContext(AttentionDocument) ?? "";
   const registry = useContext(RegistryContext);

@@ -23,11 +23,12 @@ export type Bounds = {
 
 /** One drawn element: its address in Revit and its range in `SceneMeshes.positions`. */
 export type SceneInstance = {
-  /** Stable across captures: `[documentKey, linkInstanceId, uniqueId]` as JSON. */
+  /** Stable across captures: the SubjectRef code `UniqueId:<uid>`, placed by the link's UniqueId when linked. */
   key: string;
   /** The host-document element id the element menu can act on; null for a linked element. */
   revitId: number | null;
   documentKey: string;
+  /** The link instance's ElementId: payload for a Revit call, never identity. */
   linkInstanceId: number | null;
   uniqueId: string;
   /** Revit category identity; null when the capture has no category metadata. */

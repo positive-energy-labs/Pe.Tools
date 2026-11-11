@@ -1,46 +1,17 @@
+import { criteriaCellOf } from "@pe/agent-contracts";
 import type {
-  DuctsCriteriaEdits,
-  DuctsCriteriaLayer,
-  DuctsDesign,
   DuctsSheetEdits,
   RouteStatePatch,
 } from "@pe/agent-contracts";
 import { EDIT_SEGMENTS, END_KEY, FITTING_DROP_CELL, JOIN_KEY } from "./inputs.ts";
 
 /**
- * A criteria edit over the staged project layer, per criterion and per side: a value writes, null
- * removes, an absent key or side keeps what is staged. A sided criterion left with no side drops.
- */
-export function mergeCriteria(
-  staged: DuctsCriteriaLayer,
-  edits: DuctsCriteriaEdits,
-): DuctsCriteriaLayer {
-  const merged: Record<string, unknown> = { ...staged };
-  for (const [key, value] of Object.entries(edits)) {
-    if (value === undefined) continue;
-    if (value === null) delete merged[key];
-    else if (typeof value === "object") {
-      const sides: Record<string, unknown> = { ...(merged[key] as object | undefined) };
-      for (const [side, n] of Object.entries(value))
-        if (n === null) delete sides[side];
-        else if (n !== undefined) sides[side] = n;
-      if (Object.keys(sides).length) merged[key] = sides;
-      else delete merged[key];
-    } else merged[key] = value;
-  }
-  return merged as DuctsCriteriaLayer;
-}
-
-/**
- * A sheet's edits as Work patches: one per record key (`null` deletes the pending edit), the
- * criteria cell merged over what is staged, join and end rulings as `assumptions` verdicts
+ * A sheet's edits as Work patches: one per record key (`null` deletes the pending edit), one per
+ * criterion and side, join and end rulings as `assumptions` verdicts
  * (`clear` writes a delete rung, which also takes back a verdict the model's store holds), and a
  * proposed fitting's per-path drop as a `component-drop:proposed:…` override.
  */
-export function editPatches(
-  edits: DuctsSheetEdits,
-  doc: DuctsDesign | null,
-): RouteStatePatch[] {
+export function editPatches(edits: DuctsSheetEdits): RouteStatePatch[] {
   const patches: RouteStatePatch[] = [];
   for (const [field, segment] of Object.entries(EDIT_SEGMENTS) as [
     keyof typeof EDIT_SEGMENTS,
@@ -53,11 +24,15 @@ export function editPatches(
           : { path: [segment, key, "edit"], value: { value } },
       );
   }
-  if (edits.criteria)
-    patches.push({
-      path: ["criteria", "edit"],
-      value: { value: mergeCriteria(doc?.criteria?.edit?.value ?? {}, edits.criteria) },
-    });
+  // One cell per criterion and side: a value stages it, null removes its pending edit, absent keeps it.
+  for (const [key, value] of Object.entries(edits.criteria ?? {})) {
+    const sides = value !== null && typeof value === "object" ? Object.entries(value) : [[undefined, value] as const];
+    for (const [side, n] of sides) {
+      const cell = criteriaCellOf(key, side);
+      if (!cell || n === undefined) continue;
+      patches.push(n === null ? { path: ["criteria", cell] } : { path: ["criteria", cell, "edit"], value: { value: n } });
+    }
+  }
   for (const { pair, verdict } of edits.joins ?? [])
     patches.push(
       verdict === "clear"

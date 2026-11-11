@@ -14,7 +14,7 @@ import {
 } from "@pe/host-contracts/pe-revit-contract";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 import { runPeRevitCli } from "./session-route.ts";
-import { refused, StepFailure } from "./command-executor.ts";
+import { io, refused, StepFailure } from "./command-executor.ts";
 import { markDispatched, validateDispatch } from "./action-dispatch.ts";
 import type { ActionExecution, StepOptions } from "./action-journal.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
@@ -132,7 +132,7 @@ export const runSdk = <A = unknown>(
     "native",
     key,
     input,
-    (id) => dispatchSdk(input, id, read, keepEnvelope) as Promise<A>,
+    (id) => io(() => dispatchSdk(input, id, read, keepEnvelope) as Promise<A>),
     options,
   );
 

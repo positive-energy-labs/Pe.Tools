@@ -2,7 +2,7 @@ import { dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { createPluginRuntime, type PluginContext } from "@pe/agent-contracts";
 import { z } from "zod";
-import { listPackages, type AdmittedPackage } from "./packages.ts";
+import { listPackages, productPodsRoots, type AdmittedPackage, type PodsRoots } from "./packages.ts";
 import { readJson, writeArtifact } from "./page-artifacts.ts";
 import { productPluginDecisionsPath, productPodsRootPath } from "./product-paths.ts";
 import {
@@ -28,8 +28,9 @@ export async function activateImportedPackage(id: string, podsRoot: string) {
 }
 const readDecisions = (path: string) => readJson(path, decisionsSchema, {});
 /** Runtime policy only. Membership and export remain exact authored bytes. */
-export async function requirePackageEnabled(id: string, podsRoot = productPodsRootPath()) {
-  if (podsRoot !== productPodsRootPath()) return;
+export async function requirePackageEnabled(id: string, podsRoots: PodsRoots = productPodsRoots()) {
+  // Only the product's Pods carry policy: the content homes, or the user's Pods an import writes.
+  if (typeof podsRoots === "string" && podsRoots !== productPodsRootPath()) return;
   if (serving) {
     await serving.ready;
     if (!serving.active(id)) throw Error(`Pod '${id}' is inactive`);
@@ -40,10 +41,10 @@ export async function requirePackageEnabled(id: string, podsRoot = productPodsRo
 /** Inactive scopes stay visible through plugin inventory, never through their doors. */
 export async function activePackages(
   packages: readonly AdmittedPackage[],
-  podsRoot = productPodsRootPath(),
+  podsRoots: PodsRoots = productPodsRoots(),
 ) {
   const enabled = await Promise.allSettled(
-    packages.map((pod) => requirePackageEnabled(pod.id, podsRoot)),
+    packages.map((pod) => requirePackageEnabled(pod.id, podsRoots)),
   );
   return packages.filter((_, index) => enabled[index]!.status === "fulfilled");
 }

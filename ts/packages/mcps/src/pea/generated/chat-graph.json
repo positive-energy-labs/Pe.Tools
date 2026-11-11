@@ -6,7 +6,7 @@
   "name": "Pea",
   "directory": {
     "group": "Ask / automate",
-    "summary": "The Pea agent workbench and context world inspector.",
+    "summary": "The Pea agent workbench.",
     "label": "Workbench",
     "icon": "MessageSquare",
     "exposure": "Main",
@@ -26,30 +26,11 @@
     "satellites": []
   },
   "fields": {
-    "mode": {
-      "role": "query",
-      "schema": "mode",
-      "codec": "mode",
-      "initial": "threads",
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
     "selected": {
       "role": "selection",
       "kinds": [
         "focus"
       ]
-    }
-  },
-  "identities": {
-    "subject": {
-      "kind": "local",
-      "codec": "local"
-    },
-    "focus": {
-      "kind": "local",
-      "codec": "local"
     }
   },
   "readings": {
@@ -58,7 +39,6 @@
       "entry": "chat.context",
       "deps": {
         "page": [
-          "mode",
           "selected"
         ],
         "work": [],
@@ -74,8 +54,16 @@
   },
   "verbs": {},
   "panes": {
-    "main": {
-      "label": "Pea",
+    "threads": {
+      "label": "Threads",
+      "purpose": "Choose a conversation",
+      "draws": [
+        "value"
+      ],
+      "verbs": []
+    },
+    "chat": {
+      "label": "Chat",
       "purpose": "Read and compose",
       "draws": [
         "value"
@@ -84,14 +72,31 @@
     }
   },
   "layout": {
-    "kind": "pane",
-    "id": "main"
+    "kind": "split",
+    "id": "chat-threads",
+    "axis": "h",
+    "size": 300,
+    "children": [
+      {
+        "kind": "pane",
+        "id": "threads"
+      },
+      {
+        "kind": "pane",
+        "id": "chat"
+      }
+    ],
+    "sized": "start",
+    "minSize": 240,
+    "minOtherSize": 643,
+    "persist": "pe.sideWidth"
   },
   "stages": {
     "main": {
       "word": "Pea",
       "panes": [
-        "main"
+        "threads",
+        "chat"
       ],
       "verbs": []
     }
