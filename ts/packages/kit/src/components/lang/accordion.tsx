@@ -33,6 +33,7 @@ export function Accordion({
           <section key={group.key} className="hairline-t" aria-label={group.label}>
             <button
               type="button"
+              data-disclosure=""
               aria-expanded={expanded}
               className="veil flex h-(--control-h) w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-0.5 text-left"
               onClick={() => onOpen(expanded ? null : group.key)}

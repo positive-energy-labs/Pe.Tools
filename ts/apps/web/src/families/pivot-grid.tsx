@@ -235,6 +235,10 @@ export const TypeGrid = memo(function TypeGrid({
         <div
           ref={scroller}
           className="min-h-0 flex-1 overflow-auto"
+          // L4: the cells are the subject and take the brighter artifact ground, so the support
+          // heads and name column (page in dark, recess in light) recede in both themes. On the
+          // page ground the dark support plane equalled the cells and the heads merged.
+          data-surface="artifact"
           role="grid"
           aria-label="parameters × family types"
           aria-rowcount={rows.length + 1}
