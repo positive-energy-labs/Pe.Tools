@@ -1,4 +1,5 @@
 import { undoOwnFinding } from "../route/host";
+import { kernelCommands } from "../route/slots/kernel-commands.ts";
 import { hostReadSource } from "./host-read-source.ts";
 import { writeReject } from "./catalog-work-reviews";
 import { harnessClient } from "../workbench/provider/harness-client";
@@ -64,7 +65,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof undoOwnFinding>[1] } = {}) {
   const cleanups: (() => void)[] = [];
   try {
-  const { spec } = module;
+  // Every route with Work carries the kernel's commands (route/slots/kernel-commands.ts); a route's own id wins.
+  // The mount adds them, not `route()`: their contracts are the catalog, and `route()` is the Pod surface.
+  const spec = module.spec.edits
+    ? { ...module.spec, commands: { ...kernelCommands, ...module.spec.commands } } as TypedRoute["spec"]
+    : module.spec;
   const edits = spec.edits;
   const own = edits?.work.route ?? spec.key;
   const ownerConfigs = edits?.owners ?? {};
