@@ -65,11 +65,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof undoOwnFinding>[1] } = {}) {
   const cleanups: (() => void)[] = [];
   try {
-  // Every route with Work carries the kernel's commands (route/slots/kernel-commands.ts); a route's own id wins.
+  // Every route carries the kernel's commands (route/slots/kernel-commands.ts); a route's own id wins. A
+  // Workless mount (a Page projection) has them too, so a shared row body draws them refused, not thrown.
   // The mount adds them, not `route()`: their contracts are the catalog, and `route()` is the Pod surface.
-  const spec = module.spec.edits
-    ? { ...module.spec, commands: { ...kernelCommands, ...module.spec.commands } } as TypedRoute["spec"]
-    : module.spec;
+  const spec = { ...module.spec, commands: { ...kernelCommands, ...module.spec.commands } } as TypedRoute["spec"];
   const edits = spec.edits;
   const own = edits?.work.route ?? spec.key;
   const ownerConfigs = edits?.owners ?? {};
@@ -580,7 +579,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     // A row verb runs on this route's own Work handle: before the Work is ready it refuses with the Work's own
     // reason ("Start this Work to edit"), as the cells do, instead of failing a press nobody sees.
     commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions"
-      : "kind" in spec.commands[id]! ? ("row" in spec.commands[id]! && spec.commands[id]!.row && !owners.get(own)?.ready ? owners.get(own)?.problem ?? "Reading Work..." : null) : basisRefusal(),
+      : "kind" in spec.commands[id]! ? ("row" in spec.commands[id]! && spec.commands[id]!.row ? (!edits ? "This view keeps no Work to write findings into" : !owners.get(own)?.ready ? owners.get(own)?.problem ?? "Reading Work..." : null) : null) : basisRefusal(),
     problem: () => edits?basisRefusal():null, writeRefusal,
     refresh: (read?:import("../route/host-read").HostRead) => {
       requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true);
