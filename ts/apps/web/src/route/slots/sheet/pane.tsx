@@ -88,6 +88,8 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
   if (value.status === "failed" && read === undefined) return <p role="alert">{value.reason}</p>;
   if (read === undefined && value.status === "pending") return <p role="status">computing</p>;
   const empty = slot.empty?.(read ?? null);
+  const said = read !== undefined ? slot.note?.(read) : null;
+  const note = said ? <p role="note" className="min-w-0 text-ink-2" data-sheet-note="">{said}</p> : null;
   const verbed = new Set<string>();
   const verbOf = (cell: SheetCell) => {
     const subject = subjectRow(cell.row);
@@ -95,11 +97,12 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
     verbed.add(subject);
     return <FindingVerb subject={subject} name={cell.label} action={ctx.write("finding")} />;
   };
-  if (empty) return <p className="text-ink-2">{empty}</p>;
+  if (empty) return <>{note}<p className="text-ink-2">{empty}</p></>;
   return (
     <section aria-label="Sheet" className="flex min-w-0 flex-col gap-1 t-small">
       {from?.href ? <a href={from.href} className="min-w-0 truncate text-ink-2" data-sheet-from="">{from.says}</a>
         : from ? <p className="min-w-0 text-ink-2" data-sheet-from="">{from.says}</p> : null}
+      {note}
       <Button pressed={typedOnly} label={typedOnly ? "Show every cell" : "Show typed cells only"} onPress={() => setTypedOnly(!typedOnly)}>
         typed only ({typedCells(cells).length})
       </Button>
