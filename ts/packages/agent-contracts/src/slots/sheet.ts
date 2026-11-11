@@ -85,10 +85,11 @@ export interface SheetSlot<B extends Readonly<Record<string, SheetBinding>> = Re
   /** Work holds an ADR 0030 draft cell (`{ edit: { value, by, at } }`) at every address; absent, a raw value. */
   readonly draft?: true;
   /**
-   * Read-only provenance from another route's Work this sheet's answer depends on: one line and a
-   * link that opens that route on it. A sheet reads across routes; it stages only its own Work.
+   * Read-only provenance this sheet's answer depends on: one line, and a link that opens the other
+   * route on it when that provenance is another route's Work (absent for a layer the host refuses,
+   * such as the firm layer with no shared root). A sheet reads across routes; it stages only its own Work.
    */
-  readonly from?: (read: any, search: Readonly<Record<string, unknown>>) => { readonly says: string; readonly href: string } | null;
+  readonly from?: (read: any, search: Readonly<Record<string, unknown>>) => { readonly says: string; readonly href?: string } | null;
   /** What the sheet says instead of its cells when its read has nothing for it, with the exit (house law 9). */
   readonly empty?: (read: any) => string | null;
 }
