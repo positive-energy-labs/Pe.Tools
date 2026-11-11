@@ -101,9 +101,13 @@ describe("kernel gaps", () => {
   test.fails("kernel gap: parameter-binding (4)", () => {
     expect(module.data).toMatchObject({ sheet: { chosen: { binding: { kind: "parameter", parameter: "Diameter" } } } });
   });
-  test.fails("kernel gap: subjectref-codec (4)", async () => {
-    // chosen is keyed by a raw UniqueId string; no SubjectRef codec exists to key it by.
-    expect(Object.keys(await import("@pe/agent-contracts/route-kernel-codecs"))).toContainEqual(expect.stringMatching(/subjectref/i));
+  test.fails("kernel gap: pod-subjectref-door (4)", async () => {
+    // subjectCode lives in agent-contracts subject-ref.ts (zod only) but only the "." barrel exports
+    // it; that barrel pulls effect, which a Pod artifact refuses, so chosen stays keyed by raw UniqueId.
+    const contracts = JSON.parse(await readFile(new URL("../../../../../ts/packages/agent-contracts/package.json", import.meta.url), "utf8"));
+    const doors = Object.keys(contracts.exports).filter((door) => door !== ".");
+    const found = await Promise.all(doors.map(async (door) => "subjectCode" in (await import(`@pe/agent-contracts/${door.slice(2)}`))));
+    expect(found).toContain(true);
   });
   test.fails("kernel gap: pea-stages-pod-work (4)", () => {
     // Pea's Work tools register builtin tools only (mcps/src/pea/routes.ts); an admitted Pod is absent.
