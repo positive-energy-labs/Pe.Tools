@@ -114,6 +114,30 @@ The route kernel and every web route's shared shape ([ADR 0026](../../adr/0026-o
 - Wave 1 fix residue (2026-11-11): a large read still has a 2 MiB frame ceiling (/families went 8.26 to 1.30 MB by sending each family's facts once, `families` read; a native matrix near 6.5 MB overflows again); the sheet slot has no findings read, so a cell cannot list its findings (Pod gap findings-on-row (7) half open); Pea's findings.write line names no route when Pea writes through the findings handle; `keepPointer` has no UI caller and a person cannot dismiss a pointer; the ack test for a patch naming an undeclared field went with the snowdon Pod's view lease (a Pod with no agent fields leases no view), and needs a Pod fixture with agent fields to return.
 - F1 runner residue (crusade/kernel-f1-marks, 2026-11-11): a Place with no document bound carries no settledness mark, so `idle()` cannot tell an unbound Place that is done from one still finding its document; the runner falls back to the busy line. Knip on the wave tip reports 31 unused files and 176 unused exports, not compared against the base, so how many slices 6 to 10 added is unproven.
 - Purger range verdict 06196b5a..bc40426c (`.artifacts/runs/kernel-crusade-20261110/purge/p2/VERDICT-range-06196b5a-bc40426c.md`), architecture, each an Owed seam: findings is owned by about 20 production files in 4 packages, its policy keyed on a route name in the generic Work door, and 8 of 22 exports have no production importer; builtin routes have three owners (generated host registry, web glob registry, the hand `tools` catalog at `semantic-actions.ts:211`, with `admitted-builtins.ts:39` existing only to remove the overlap); kernel-added commands have two owners with opposite precedence (`route()` adds `sheet` and the kernel copy wins, the mount adds `finding` and the route copy wins); about 12 sites hand-roll `role=alert` instead of `OutcomeLine` (`ArmingStrip` missed the refusal tone); the framed Button default is `quiet` (`kit/lang/button.tsx:58`) against the ledger ruling; the pane container split was copied into 4 bodies and missed `ops/mount.tsx:24`; one Pod member identity is spelled 5 ways. Integrity items (findings forged through `work.start`, the /pods sheet pane with no read, /pods Save writing edits the sheet never shows) are in fix/purge2-integrity; test-code and dead-export seams are the purger's.
+- Purger readback of land 4777a776 (df05e617; `.artifacts/runs/kernel-crusade-20261110/purge/p2/`), Owed:
+  - Findings has one owner but two answers: Pea's handleless `findings.write` needs no route Work, while a person's row verb refuses until Start (`typed-mount.ts:590`) only because the web sends a route handle. Implementor default, re-openable: neither door takes a handle. The host half (the key always derives from `target.ref`) is in fix/purge2-integrity; dropping the web row verb's route handle and its Start gate is owed.
+  - Findings policy is still keyed on a route name at `pe-routes.ts:371,382` and `typed-mount.ts:590`. Findings lives in 16 production files across 4 packages, and undo alone has four owners.
+  - "Person undo recorded" exists only as a client-clock feed entry (`typed-mount.ts:408,544,610`), and "nothing left" is a client count of `by:"person"`. `work.history` should return the host's own steps left; then `ownFindingsLeft` and `findingMoves` delete.
+  - s9e's frame test calls `familiesReadResult` directly, not the door (`families-read-frame.test.ts:17`). `FamiliesObservationSummary` is defined three times (`families.ts:423,434`, `takeoff-captures.ts:138`).
+  - Ducts:
+    - `ducts-analysis.ts:662` still takes a virtual negative id from `elementIds[0]`.
+    - The staged design is compared by `JSON.stringify` over positional virtual ids, so an unrelated inference can mark it stale.
+    - Two degrade reasons fire for one fact (`component-flows.ts:362,427`).
+  - s10b:
+    - The bind roster takes each slug by regex over the catalog `openUrl` (`pages-bind/host.ts:17-19`). Today it drops no Page, PROVEN by reading: the only `kind: "page"` rows (`pe-routes.ts:941`) are scratch Pages with relative `/pages/<slug>/` URLs (`page-libraries.ts:116,150`). The slug should come from the row itself.
+    - "Draws no chooser" is asserted by a regex over source text (`ops/route.test.ts:34`, `pages-bind/route.test.ts:47`).
+    - The `"singleton"` branch in `route-graph.ts:257,503-518` is fed only by a test fixture now that `index/graph.ts` is deleted.
+    - `nameOf` and `namesOf` answer one question with opposite failure policies.
+  - Mutants proposed and not run, each expected to survive:
+    - the Workless mount refusal;
+    - "a handle still wins";
+    - the virtual-element drop;
+    - design matching by witness ids;
+    - the ops form following the subject;
+    - the bind roster's page filter;
+    - the bind body slug;
+    - the `/pages/<slug>/bind` redirect.
+- `route/kernel-journeys-reads.test.ts` is flaky alone: at c80e644a one of two alone runs failed and the other passed 9/9, under load from parallel writers. Cause not run down.
 - `fans-oob-work.journey.test.tsx` fails alone, deterministically, at 50a25e25 (`Unable to find /^MUAS-1.*1 staged$/`) and in fresh checkouts at ef940d36, so it predates the land; it passed alone once in the kernel-wave1 worktree, a hidden dependency on worktree state. Fix thread owed.
 - The custody throw above did not reproduce on the wave (driver at 1ebf1fb1: open another Place, reload, Back, press FC-9; 138 errors caught, none "Place is not writable"); rerun with the tooling walk's exact steps from its `steps.jsonl` before closing it.
 - The Pea head showed `resource {"kind":"machine"} changed during evaluation` (205461ae, bc40426c): the host answered `refresh-needed` for a read that raced the machine census and nothing re-read. `publicationSource` now re-reads twice before it shows a refusal (fix/tab-close-pea-error, 2026-11-11). Owed: which machine field moves mid-read on a live session is unproven, and the host does not type a race apart from a lasting refusal, so every refusal pays the two re-reads.
