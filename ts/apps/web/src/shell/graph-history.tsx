@@ -5,9 +5,12 @@ import { ListView } from "@pe/kit/lang/list-view";
 import { teachText } from "@pe/kit/lang/use-teach";
 import { useEffect, useState } from "react";
 import { routeAddress } from "@pe/agent-contracts";
+import { FINDINGS_DOORS } from "@pe/agent-contracts/slots";
 import type { JournalOwner } from "./situation-band";
 import { entryCaller, stepState, useWorkJournal } from "./situation-band";
-import { activityTime, projectTimeline, type TimelineVerbs } from "./timeline";
+import { activityTime, projectTimeline, type TimelineRow, type TimelineVerbs } from "./timeline";
+
+const receiptKey = (row: TimelineRow) => (row.entry.basis as { receipt?: { key?: string } } | undefined)?.receipt?.key;
 
 /** One History presentation for graph panes: accepted calls and exact Work receipts. */
 export function GraphHistory({
@@ -26,6 +29,9 @@ export function GraphHistory({
   const journal = useWorkJournal(owner);
   const verbs = declaredVerbs ?? {};
   const projected = projectTimeline(entries, verbs, journal);
+  // The person's latest written finding carries their undo; the host's history door undoes their own last one.
+  const ownFinding = owner.undoFinding && [...projected].reverse().find((row) =>
+    receiptKey(row) === FINDINGS_DOORS.write && row.outcome?.state === "succeeded" && entryCaller(row.entry) === "you")?.key;
   const rows = [...(journal?.intents ?? []).map(intent => ({
     key: `intent:${intent.id}`, label: intent.label,
     sub: `${intent.status} / ${intent.owner.route} / expected r${intent.input.expectedRevision} / ${intent.reason ?? "Awaiting acknowledgement"}`,
@@ -64,6 +70,11 @@ export function GraphHistory({
             <a href={routeAddress("ops").link({ actionId: row.outcome.receiptId })}>
               {row.outcome.recovery}
             </a>
+          )}
+          {row.key === ownFinding && (
+            <Button label="Undo your last finding" onPress={() => owner.undoFinding!()}>
+              Undo finding
+            </Button>
           )}
           {row.entry.receiptId &&
             ["queued", "running", "outcome-unknown"].includes(row.outcome?.state ?? "") && (

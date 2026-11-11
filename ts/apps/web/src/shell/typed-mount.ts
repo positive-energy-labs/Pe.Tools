@@ -1,3 +1,4 @@
+import { undoOwnFinding } from "../route/host";
 import { hostReadSource } from "./host-read-source.ts";
 import { writeReject } from "./catalog-work-reviews";
 import { harnessClient } from "../workbench/provider/harness-client";
@@ -60,7 +61,7 @@ const unavailable = (reason: string, value?: any, publication: Value["publicatio
 
 /** Typed routes execute declarations directly. No graph admission, body slots or reading scheduler. */
 export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerprint: RouteFingerprint,
-  ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource> } = {}) {
+  ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof undoOwnFinding>[1] } = {}) {
   const cleanups: (() => void)[] = [];
   try {
   const { spec } = module;
@@ -521,6 +522,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         intents:journals.flatMap(j=>j.intents), moves:journals.flatMap(j=>j.moves).sort((a,b)=>a.at-b.at), last:journals.flatMap(j=>j.last?[j.last]:[]).sort((a,b)=>a.step.at-b.step.at).at(-1)??null});
     },
     discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.journal.discardIntent(id); notify(); },
+    // The person's own findings live in the document's findings Work, not this route's: their undo is that door's.
+    undoFinding: () => { const key = owners.get(own)?.handle?.key; return key ? undoOwnFinding(key, ports.findings) : Promise.resolve({ message: "Wait for this route's Work before undoing a finding" }); },
     restoreWork: restore, journalRefusal: () => input.readOnly || input.history ? "needs live Revit" : [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
