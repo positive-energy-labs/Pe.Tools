@@ -1,3 +1,4 @@
+import { serviceHeaders } from "./callers.ts";
 import { journalAt } from "./effect-test.ts";
 import { sourceProvenanceSchema, type Caller, type WorkKey } from "@pe/agent-contracts";
 import { HOST_RUNTIME_SERVICE_HEADER, HOST_RUNTIME_SERVICE_QUERY } from "@pe/host-contracts/contracts";
@@ -227,8 +228,7 @@ test("historical entry serves real static files through identity and retains API
     expect(page.status, await page.clone().text()).toBe(200);
     expect(page.headers.get("content-type")).toContain("text/html"); expect(await page.text()).toBe(html);
     const cookie = page.headers.get("set-cookie")!; expect(cookie).toContain("HttpOnly"); expect(cookie).toContain("SameSite=Strict");
-    const headers = { cookie: cookie.split(";")[0]!, referer: `${host.base}/fans`, origin: host.base, "sec-fetch-site": "same-origin",
-      [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName };
+    const headers = { cookie: cookie.split(";")[0]!, referer: `${host.base}/fans`, origin: host.base, "sec-fetch-site": "same-origin", ...serviceHeaders() };
     for (const [asset, body, type] of [["app.js", "export const recorded = true;", "javascript"], ["app.css", "body { color: navy; }", "text/css"]]) {
       const response = await fetch(`${host.base}/assets/${asset}`, { headers: { ...headers, "sec-fetch-dest": asset.endsWith("css") ? "style" : "script" } });
       expect(response.status).toBe(200); expect(response.headers.get("content-type")).toContain(type); expect(await response.text()).toBe(body);

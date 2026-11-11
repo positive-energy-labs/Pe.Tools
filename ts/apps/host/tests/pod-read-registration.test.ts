@@ -1,3 +1,4 @@
+import { actAs } from "./callers.ts";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -9,7 +10,6 @@ import { expect, test } from "vite-plus/test";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { routeFingerprint, valueReadResponse } from "@pe/agent-contracts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
-import { withInvocationContext } from "@pe/runtime/context";
 import { builtinData } from "../../../packages/agent-contracts/src/route-kernel.fixtures.ts";
 import { buildRouteArtifact } from "../../web/route-module-hash.ts";
 import { loadPodHostEntry } from "../src/pod-artifact.ts";
@@ -149,7 +149,7 @@ leaves:{'${leaf}':async()=>({total:17})}};`,
   );
   const who = { kind: "human" as const, via: "local" as const };
   const probe = () =>
-    withInvocationContext({ caller: who }, () =>
+    actAs(who, () =>
       web.handler(
         new Request(new URL(peRouteUrl("reads.value", {}), "http://host"), {
           method: "POST",

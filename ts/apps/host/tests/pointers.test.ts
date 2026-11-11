@@ -3,11 +3,10 @@ import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { withInvocationContext } from "@pe/runtime/context";
 import { createProviders } from "../src/harness/providers.ts";
 import { HostLog } from "../src/host-log.ts";
 import { pointerThread, threadPointerPort } from "../src/thread-pointers.ts";
-import { human } from "./callers.ts";
+import { human, actAs } from "./callers.ts";
 
 let root = "";
 beforeAll(async () => {
@@ -30,7 +29,7 @@ const open = () =>
 
 test("a pointer lives in thread meta: it survives a host reload and leaves only by dismissal", async () => {
   const first = await open();
-  const created = await withInvocationContext({ caller: human }, () =>
+  const created = await actAs(human, () =>
     first.fetch(
       new Request("http://host/pe/threads", {
         method: "POST",

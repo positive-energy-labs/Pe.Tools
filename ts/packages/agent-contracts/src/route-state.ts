@@ -26,7 +26,19 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   editable?: readonly import("./command.ts").WorkPath[];
   /** Domain-derived bookkeeping after an authored edit, before validation. */
   reconcileEdit?: (next: unknown, patches: readonly RouteStatePatch[]) => unknown;
+  /**
+   * Host-authored Work: the one command that writes it, where the host stamps each entry's author
+   * from the caller (findings, ADR 0035 rule 9). Such a Work has no generic door: apply and start
+   * refuse and name this command, and undo steps only the caller's own writes.
+   */
+  authoredThrough?: string;
 }
+
+/** Why the generic apply and start doors refuse this Work, or null when it takes generic writes. */
+export const hostAuthoredRefusal = (spec: Pick<RouteStateSpec<z.ZodType>, "title" | "authoredThrough"> | undefined) =>
+  spec?.authoredThrough
+    ? `${spec.title} are written through the ${spec.authoredThrough} command, which stamps the author from the caller`
+    : null;
 
 /**
  * A registration's check on a write the schema already admitted, run before it lands, for

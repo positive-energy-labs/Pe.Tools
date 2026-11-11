@@ -65,6 +65,8 @@ const workStateFields = {
   reconcileEdit: hostZ
     .custom<RouteStateSpec<z.ZodType>["reconcileEdit"]>((v) => typeof v === "function")
     .optional(),
+  // Kernel Work only (findings): a route module's Work takes the generic doors its mount starts and edits through.
+  authoredThrough: hostZ.never().optional(),
 } satisfies Record<keyof RouteStateSpec<z.ZodType>, z.ZodType>;
 const workStateSchema = hostZ.strictObject(workStateFields);
 const hostModuleSchema = hostZ.strictObject({

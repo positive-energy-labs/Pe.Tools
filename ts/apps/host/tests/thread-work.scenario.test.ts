@@ -1,10 +1,10 @@
+import { actAs } from "./callers.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "vite-plus/test";
 import { createRouteRegistrations } from "@pe/mcps";
-import { withInvocationContext } from "@pe/runtime/context";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
@@ -42,9 +42,7 @@ test("explicit Pea opens travel live through world and cannot address another co
     }
   };
   const open = (thread: string, route = "families") =>
-    withInvocationContext(
-      { caller: { kind: "pea", context: "test-context", thread: "selected-chat" } },
-      () =>
+    actAs({ kind: "pea", context: "test-context", thread: "selected-chat" }, () =>
         app.fetch(
           new Request(`http://host/pe/route-view/${route}/open`, {
             method: "POST",
@@ -57,9 +55,7 @@ test("explicit Pea opens travel live through world and cannot address another co
     expect((await next()).kind).toBe("gap");
     expect((await next()).kind).toBe("snapshot");
     expect((await open("other-chat")).status).toBe(403);
-    const foreignSet = await withInvocationContext(
-      { caller: { kind: "pea", context: "test-context", thread: "selected-chat" } },
-      () =>
+    const foreignSet = await actAs({ kind: "pea", context: "test-context", thread: "selected-chat" }, () =>
         app.fetch(
           new Request("http://host/pe/route-view/families/set", {
             method: "POST",

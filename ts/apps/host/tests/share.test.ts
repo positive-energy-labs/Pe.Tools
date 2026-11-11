@@ -1,3 +1,4 @@
+import { contextHeaders } from "./callers.ts";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,8 +7,6 @@ import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { createShare, shareIntentFile, tailscaleCommand, shareRoute } from "../src/share.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
-import { mintContext } from "../src/control.ts";
-import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 
 test("fake tailscale binary: foreign rule refused; own changes re-read status; observations stay bounded", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-share-fake-"));
@@ -151,7 +150,7 @@ test("PUT share is local, human-only and validates the switch before invoking th
   );
   const human = {
     host: "127.0.0.1:5180",
-    [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }),
+    ...contextHeaders(),
   };
   const put = (body: unknown, headers: Record<string, string> = human) =>
     app.handler(

@@ -26,9 +26,9 @@ test("findings.write lands in the document's findings Work with the host's autho
   });
   const key = bindWork("findings", null, "doc-a");
   const handle = async () => workHandle(key, (await workspace.view(key, "findings"))!.revision);
-  await findingsWrite(workspace, workspace, await handle(), input("p1", port, "claim", "no"), "pea");
-  await findingsWrite(workspace, workspace, await handle(), input("h1", row, "claim", "yes"), "person");
-  await expect(findingsWrite(workspace, workspace, await handle(), input("n", port, "note", "yes"), "pea")).rejects.toThrow(/verdict/);
+  await findingsWrite(workspace, await handle(), input("p1", port, "claim", "no"), "pea");
+  await findingsWrite(workspace, await handle(), input("h1", row, "claim", "yes"), "person");
+  await expect(findingsWrite(workspace, await handle(), input("n", port, "note", "yes"), "pea")).rejects.toThrow(/verdict/);
   expect((await findingsList(workspace, key)).map((f) => [f.id, f.by])).toEqual([["p1", "pea"], ["h1", "person"]]);
   expect((await findingsList(workspace, key, port)).map((f) => f.id)).toEqual(["p1"]);
   const undone = await workspace.step(key, "findings", "pea", "undo", (await handle()).revision, true);
@@ -54,10 +54,11 @@ async function doors() {
   const dir = await mkdtemp(join(tmpdir(), "pe-findings-doors-"));
   const native = await fixtureNative(join(dir, "native"));
   const socket = await native.connect();
-  let saved: unknown = null;
+  // One record per Work key, as the real store keeps them: another document's findings are another record.
+  const saved: Record<string, unknown> = {};
   const workspace = new RouteWorkspace({
     registrations: [{ spec: findingsWork }],
-    store: { getState: async () => structuredClone(saved), setState: async ({ value }) => void (saved = structuredClone(value)) },
+    store: { getState: async ({ targetKey }) => structuredClone(saved[targetKey] ?? null), setState: async ({ targetKey, value }) => void (saved[targetKey] = structuredClone(value)) },
   });
   const target = address("C:/model.rvt");
   const key = bindWork("findings", target);
@@ -68,11 +69,12 @@ async function doors() {
   return {
     peaCaller,
     revision,
-    authors: async () => (await findingsList(workspace, key)).map((f) => [f.id, f.by]),
+    authors: async (at = key) => (await findingsList(workspace, at)).map((f) => [f.id, f.by]),
     /** `on` is the route whose own Work handle the caller holds; a row verb on /fans holds Fans'. */
     /** `on: null` sends no handle, as Pea's first call does: the host binds the target document's. */
-    async write(id: string, finding: FindingInput, caller: Caller, on: string | null = "findings") {
-      const work = on === null ? undefined : on === "findings" ? workHandle(key, await revision()) : workHandle({ ...key, route: on }, 7);
+    /** `on` as a handle is sent as it is: one keyed to another document must not carry the write there. */
+    async write(id: string, finding: FindingInput, caller: Caller, on: string | null | ReturnType<typeof workHandle> = "findings") {
+      const work = on === null ? undefined : typeof on === "object" ? on : on === "findings" ? workHandle(key, await revision()) : workHandle({ ...key, route: on }, 7);
       const response = await post({ id, key: "findings.write", target: { kind: "document", ref: socket.target },
         input: { ...(work ? { work } : {}), finding } }, caller);
       expect(response.status, await response.clone().text()).toBeLessThan(400);
@@ -83,6 +85,11 @@ async function doors() {
       expect(response.status, await response.clone().text()).toBeLessThan(400);
       return native.journal.wait(id);
     },
+    /** The generic start door: `work.start` on the findings Work with a caller-supplied seed. */
+    start: (id: string, seed: unknown, caller: Caller) =>
+      post({ id, key: "work.start", target: { kind: "host" }, input: { key, seed } }, caller),
+    stored: () => Object.keys(saved),
+    settled: (id: string) => native.journal.wait(id),
     door: (verb: "apply" | "history", body: unknown, caller: Caller = peaCaller) =>
       withInvocationContext({ caller }, () => routes.fetch(new Request(
         `http://host/pe/route-state/findings/${verb}?target=${encodeURIComponent(target)}`,
@@ -104,6 +111,21 @@ test("findings.write through the action door: the host stamps each caller's auth
     expect(refused.status).toBe(403);
     expect(await refused.json()).toMatchObject({ ok: false, error: expect.stringContaining("findings.write") });
     expect(await d.revision()).toBe(before);
+  } finally { await d.close(); }
+});
+
+/* purge-2 integrity 1: the refusal sat on apply alone, so a start seed carried a forged `by` into the Work. */
+test("a generic work.start with a findings seed is refused, for Pea and a person alike, and writes no doc", async () => {
+  const d = await doors();
+  try {
+    const forged = { ...input("f1", port, "note"), by: "person", at: new Date().toISOString() };
+    for (const [id, caller] of [["forge-pea", d.peaCaller], ["forge-human", human]] as const) {
+      await d.start(id, { findings: { f1: forged } }, caller);
+      const settled = await d.settled(id);
+      expect(d.stored(), `${id} stored a findings doc`).toEqual([]);
+      expect(settled).toMatchObject({ steps: [], outcome: { state: "refused", reason: expect.stringContaining("findings.write") } });
+    }
+    expect(await d.revision()).toBe(0);
   } finally { await d.close(); }
 });
 
@@ -136,6 +158,18 @@ test("a row verb's own route handle (Fans, Families) addresses the same document
     await d.write("fans-row", input("h1", port, "check", "fail"), human, "fans");
     await d.write("families-row", input("h2", row, "note"), human, "families");
     expect(await d.authors()).toEqual([["p1", "pea"], ["h1", "person"], ["h2", "person"]]);
+  } finally { await d.close(); }
+});
+
+/* purge-2 integrity 5: the caller's handle named the Work, so a handle keyed to another document wrote that document. */
+test("findings.write handed another document's handle lands in the admitted document's findings Work, never the other's", async () => {
+  const d = await doors();
+  try {
+    const other = bindWork("findings", address("C:/other.rvt"));
+    await d.write("wrongdoc", input("x1", port, "note"), human, workHandle(other, 0));
+    expect(await d.authors(other), "the other document's findings Work").toEqual([]);
+    expect(await d.authors()).toEqual([["x1", "person"]]);
+    expect(d.stored()).toHaveLength(1);
   } finally { await d.close(); }
 });
 

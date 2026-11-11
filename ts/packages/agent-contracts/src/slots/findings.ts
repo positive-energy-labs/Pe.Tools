@@ -57,6 +57,7 @@ export const findingsWork = {
   schema: findingsWorkSchema,
   schemaVersion: 1,
   editable: [["findings", "*"]],
+  authoredThrough: FINDINGS_DOORS.write,
 } satisfies RouteStateSpec<typeof findingsWorkSchema>;
 
 /** What a caller sends to `findings.write`: the host stamps `by` from the caller and `at` on arrival. */
@@ -64,8 +65,8 @@ export const findingInputSchema = findingFields.omit({ by: true, at: true }).ref
 export type FindingInput = z.output<typeof findingInputSchema>;
 
 /**
- * The two doors, each bound to a Work handle at this document (`workCommand`): the findings handle,
- * or a route's own handle, from which the host takes the binding and addresses the findings Work.
+ * The two doors (`workCommand`). The host addresses the findings Work of the admitted document from
+ * the target, never from the handle; a findings handle gives only its revision, the compare-and-set.
  */
 export const findingsCommands = {
   [FINDINGS_DOORS.list]: workCommand(FINDINGS_OWNER, {
