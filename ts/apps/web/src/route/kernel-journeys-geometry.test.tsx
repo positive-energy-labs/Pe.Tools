@@ -10,8 +10,8 @@ import { makeAtomRegistry } from "../shell/owner";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { route } from "./typed-route";
 import { module as fans } from "../fans/route";
-import { RosterBody } from "../ducts/sheet/mount";
-import { PictureBody } from "../fans/picture";
+import { RosterBody } from "../fans/mount";
+import { kernelPane } from "../shell/typed-shell";
 import { SubjectDoor, typedSubjectDoor } from "../shell/subject";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 const io = vi.hoisted(() => ({ call: vi.fn(), orbit: null as Scene3DProps["orbit"] | null }));
@@ -111,7 +111,7 @@ function pictureJourney() {
     mounts.push(mount); mount.subscribe(() => {}); mount.page.subject({ kind: "ids", ids: [stableFanKey({ uniqueId: "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001", portIndex: 2 })] });
     return mount;
   };
-  const tree = (mount: ReturnType<typeof open>) => <TestAttention registry={registry}>{mount.draw("sheet-picture", ctx => <PictureBody ctx={ctx as any} />) as React.ReactNode}</TestAttention>;
+  const tree = (mount: ReturnType<typeof open>) => <TestAttention registry={registry}>{mount.draw("sheet-picture", ctx => kernelPane(mount, "sheet-picture", ctx)) as React.ReactNode}</TestAttention>;
   const resize = () => act(() => { for (const [target, callback] of observers) callback([{ target, contentRect: { width: 640, height: 480 } } as ResizeObserverEntry], {} as ResizeObserver); });
   return { open, tree, resize, mounts, registry };
 }
@@ -176,7 +176,7 @@ import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
 import { bootHost } from "../../../host/tests/real-server";
 import { connectTestBridge } from "../../../host/tests/bridge-fixture";
 import { admittedReceiptStamps } from "../../../host/src/receipt-export";
-import "../ducts/sheet/mount";
+import "../fans/mount";
 import { routeRegistry } from "../route/registry";
 import { bindActionReadings } from "../host/resource-stream";
 

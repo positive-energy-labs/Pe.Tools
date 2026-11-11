@@ -15,7 +15,7 @@ import { createPeRoutes } from "../../../../../host/src/pe-routes";
 import { GraphHistory } from "../../../shell/graph-history";
 import { observeWorkReceipts } from "../../../../../host/src/work-receipt-feed";
 import { createWitness } from "../../../fans/cutover.test-support";
-import { RosterBody } from "../../../ducts/sheet/mount";
+import { RosterBody } from "../../../fans/mount";
 
 afterEach(cleanup);
 
