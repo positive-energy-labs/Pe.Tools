@@ -449,25 +449,19 @@ tr.dl-row[data-active] {
   background-color: var(--pe-select);
   --pe-on: var(--pe-select);
 }
-/* A landing fades from full ink to its rest: transparent, or on a selected row the selection
-   edge. F10: selected is the top rung, and the hover fill sits one step under the select fill
-   (near-equal on the dark ground), so a picked row keeps an edge hover never takes (N4, I4).
-   The old `[data-inbox-group]` rule that meant to do this matched nothing. */
+/* A landing (N4) flashes the ink edge once and fades. A lasting edge on a picked row is not drawn
+   here: a row outline is the focus ring's (census "state-outline-yields-to-focus"), and the select
+   fill is selection's lasting mark (F10). */
 @keyframes pe-land {
   from {
     outline-color: var(--pe-ink);
   }
   to {
-    outline-color: var(--pe-land-rest, transparent);
+    outline-color: transparent;
   }
 }
-.dl-row[aria-selected="true"] {
-  --pe-land-rest: var(--pe-ink-2);
-  outline: 2px solid var(--pe-land-rest);
-  outline-offset: -2px;
-}
 [data-landed] {
-  outline: 2px solid var(--pe-land-rest, transparent);
+  outline: 2px solid transparent;
   outline-offset: -2px;
   animation: pe-land var(--motion-land) ease-out 1;
 }
