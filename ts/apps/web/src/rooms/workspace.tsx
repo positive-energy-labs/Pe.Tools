@@ -2,9 +2,12 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useValue } from "@pe/kit/lang/collection";
 import { inboxCards } from "./cards";
 import { roomsPageSchema, type RoomsPage } from "./page";
+import { useAdmittedSubject } from "#/shell/subject";
+import { regionOf } from "./rows";
+import { regionSubject } from "./subject";
 import type { RoomsContext } from "./route";
 import { type TraceRead } from "./layers";
-import { roomRows } from "./table";
+import { levelOrder, roomRows } from "./rows";
 
 const Workspace = createContext<ReturnType<typeof useWorkspace> | null>(null);
 export const useRoomsWorkspace = () => useContext(Workspace)!;
@@ -13,13 +16,18 @@ function useWorkspace(ctx: RoomsContext) {
   const value = ctx.value;
   const data = useValue(value);
   const raw = ctx.page.read();
-  const page = roomsPageSchema.parse({ ...raw, selected: raw.picked });
-  // CHEAT: room selection still uses semantic guid/card keys; typed Page owns focus identities.
+  const door = useAdmittedSubject();
+  const all = data?.snapshot.regions ?? [];
+  // The subject is the open rooms (ADR 0035 rule 1); the drawing reads their carrier GUIDs.
+  const selected =
+    raw.room.kind === "all" ? all.map((region) => region.guid) : raw.room.ids.flatMap((id) => regionOf(id) ?? []);
+  const page = roomsPageSchema.parse({ ...raw, selected });
   const setPage = (patch: Partial<RoomsPage>) => {
-    const { view, show, selected, epoch: _epoch, ...pose } = patch;
+    const { view, selected, ...pose } = patch;
     if (view !== undefined) ctx.page.query({ view });
-    if (show !== undefined) ctx.page.query({ show });
-    ctx.page.pose({ ...pose, ...(selected !== undefined ? { picked: selected } : {}) });
+    if (selected !== undefined) door?.select((selected === "all" ? [] : selected).map(regionSubject));
+    // A new pick or view lets go of the pinned mark; the picked rooms' first mark shows instead.
+    ctx.page.pose({ ...pose, ...(selected !== undefined || view !== undefined ? { card: "" } : {}) });
   };
   const view = page.view;
   const snapshot = data?.snapshot ?? null;
@@ -28,13 +36,7 @@ function useWorkspace(ctx: RoomsContext) {
   const pending = value.status === "pending";
   const document = ctx.target?.kind === "document" ? ctx.target.ref : null;
   const work = data?.handle ? { doc: data.roomsWork, handle: data.handle } : null;
-  const levelNames = useMemo(
-    () =>
-      [...(snapshot?.levels ?? [])]
-        .sort((a, b) => a.elevation - b.elevation)
-        .map((item) => item.name),
-    [snapshot],
-  );
+  const levelNames = useMemo(() => levelOrder(snapshot?.levels ?? []), [snapshot]);
   const rows = useMemo(() => roomRows(snapshot?.regions ?? [], levelNames), [snapshot, levelNames]);
   const onView = useMemo(() => rows.filter((row) => row.region.view === view), [rows, view]);
   const regions = useMemo(
@@ -45,6 +47,16 @@ function useWorkspace(ctx: RoomsContext) {
     () => (work && snapshot && view ? inboxCards(work.doc, snapshot, view) : []),
     [work, snapshot, view],
   );
+  // The pinned mark: the one the address names, else the first that concerns a picked room.
+  const pinned =
+    (cards.find((card) => card.id === raw.card) ??
+      cards.find((card) => card.guids.some((guid) => selected.includes(guid))))?.id ?? null;
+  const pin = (id: string | null) => {
+    const card = cards.find((item) => item.id === id);
+    if (card) door?.select(card.guids.map(regionSubject));
+    else if (!id) door?.clear();
+    ctx.page.pose({ card: id ?? "" });
+  };
   const labels = useMemo(() => new Map(rows.map((row) => [row.region.guid, row.label])), [rows]);
   const trace: TraceRead = { data: data?.trace ?? null, none: data?.traceError ?? error };
   const plan = data?.plan ?? null;
@@ -72,6 +84,9 @@ function useWorkspace(ctx: RoomsContext) {
     onView,
     regions,
     cards,
+    selected,
+    pinned,
+    pin,
     labels,
     trace,
     plan,

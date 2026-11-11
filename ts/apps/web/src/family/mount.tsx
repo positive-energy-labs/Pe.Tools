@@ -3,16 +3,13 @@ import { useState } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { useList } from "@pe/kit/lang/collection";
-import { ListView } from "@pe/kit/lang/list-view";
-import { isSpecOf } from "../route/workflow";
-import { FAMILY_MODEL_SCHEMA } from "./page";
 import { FamilyProvider } from "./workspace";
 import { FamilyWorkspaceAnatomy } from "./workspace-anatomy";
 import { FamilyWorkspaceTable } from "./workspace-table";
 import { FamilyWorkspaceDocPane } from "./workspace-doc-pane";
 import { useFamilyWorkspace } from "./workspace-context";
-import type { FamilyContext } from "./route";
+import { useAdmittedSubject } from "#/shell/subject";
+import { member, type FamilyContext } from "./route";
 export function FamilyBody({ ctx }: { ctx: FamilyContext }) {
   return (
     <FamilyProvider ctx={ctx}>
@@ -23,23 +20,14 @@ export function FamilyBody({ ctx }: { ctx: FamilyContext }) {
 function Workspace({ ctx }: { ctx: FamilyContext }) {
   const { store } = useFamilyWorkspace(),
     data = ctx.value.value,
-    page = ctx.page.read();
+    page = ctx.page.read(),
+    subject = useAdmittedSubject(),
+    open = member(page),
+    // A save lands in the chosen Pod, else beside the open member.
+    pod = page.pod || open?.pod || "";
   const [failure, setFailure] = useState<string | null>(null),
     [source, setSource] = useState("");
   const [destination, setDestination] = useState<{ pod: string; text: string } | null>(null);
-  const list = useList({
-    value: ctx.value,
-    rowsOf: (data) =>
-      data.pods.flatMap((pod) =>
-        pod.members
-          .filter((member) => isSpecOf(member.schema ?? null, FAMILY_MODEL_SCHEMA))
-          .map((member) => ({ ...member, pod: pod.id, podName: pod.name })),
-      ),
-    keyOf: (row) => `${row.pod}/${row.path}`,
-    search: (row) => ({ text: [row.podName, row.path] }),
-    select: "single",
-    onPick: (row) => ctx.page.query({ pod: row.pod, path: row.path }),
-  });
   const run = async (id: string, input: unknown) => {
     try {
       await ctx.write(id).run(input);
@@ -81,21 +69,23 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
               <Input
                 aria-label="Destination pod"
                 value={
-                  destination?.pod === page.pod
+                  destination?.pod === pod
                     ? destination.text
-                    : (data?.pods.find((pod) => pod.id === page.pod)?.name ?? "")
+                    : (data?.pods.find((item) => item.id === pod)?.name ?? "")
                 }
                 onChange={(event) => {
                   const text = event.target.value;
-                  const pod = data?.pods.find((pod) => pod.name === text)?.id ?? text;
-                  setDestination({ pod, text });
-                  ctx.page.query({ pod, path: "" });
+                  const next = data?.pods.find((item) => item.name === text)?.id ?? text;
+                  setDestination({ pod: next, text });
+                  // A save stages the Work's own draft, so choosing where it lands closes the saved family in view.
+                  subject?.clear();
+                  ctx.page.query({ pod: next });
                 }}
               />
             </label>
             <Button
               label="Stage family save"
-              refusal={!page.pod ? "Choose a destination pod" : ctx.cells.refusal}
+              refusal={!pod ? "Choose a destination pod" : ctx.cells.refusal}
               onClick={() =>
                 void ctx.cells.patch(
                   [
@@ -104,7 +94,7 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
                       value: {
                         edit: {
                           value: {
-                            pod: page.pod,
+                            pod,
                             ...(data?.familyWork.reading
                               ? {
                                   spec: settingsCandidate(
@@ -126,35 +116,13 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
             </Button>
             <Button
               label="Inspect current family draft"
-              onClick={() => ctx.page.query({ path: "" })}
+              onClick={() => subject?.clear()}
             >
               Current draft
             </Button>
           </div>
           <FamilyWorkspaceAnatomy />
           <FamilyWorkspaceTable />
-          <ListView
-            list={list}
-            aria-label="Family members"
-            empty={{ message: "No saved family members", exit: "Save a family into a pod" }}
-            row={(row) => ({
-              label: row.path,
-              sub: row.podName,
-              active: page.pod === row.pod && page.path === row.path,
-              actions: (
-                <Button kind="quiet"
-                  label={`Open ${row.path}`}
-                  onClick={() =>
-                    void run("open", {
-                      source: { pod: row.pod, path: row.path, sha256: row.sha256 },
-                    })
-                  }
-                >
-                  Open member
-                </Button>
-              ),
-            })}
-          />
         </div>
         <div className="flex min-w-0 flex-col gap-(--gutter)">
           {data?.specError && (
@@ -171,15 +139,15 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
           <Button
             label="Attach PDF path or URL"
             refusal={
-              !page.pod || !page.path
-                ? "Choose a saved member"
+              !open
+                ? "Choose a saved family"
                 : !source
                   ? "Enter a PDF path or URL"
                   : null
             }
             onClick={() =>
               void run("attach", {
-                member: { pod: page.pod, path: page.path },
+                member: open,
                 source: /^https?:/.test(source) ? { url: source } : { path: source },
               })
             }
