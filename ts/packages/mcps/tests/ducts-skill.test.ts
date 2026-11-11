@@ -40,4 +40,7 @@ test("the ducts skill triggers on airflow and connectivity questions, not only p
   );
   expect(text).toContain("read_document, image: true and a crop");
   expect(text).toContain("fill it yourself through the Ducts tool's Work with the source cited");
+  for (const step of ["Inventory the project folder", "Rank the sources", "Find the design basis", "fetch the manufacturer's published data yourself"]) {
+    expect(text).toContain(step);
+  }
 });
