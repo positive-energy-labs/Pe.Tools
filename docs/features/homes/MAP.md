@@ -63,7 +63,7 @@ Each slice is stated as what it deletes. "Lane" is the cheapest lane that can fa
 
 ### Timing plan (implementor, 2026-11-11, supersedes the first waves)
 
-Four read-only censuses at a02b8aea re-checked the slice rows (`.artifacts/runs/homes-crusade-20261111/implementor/`). They changed the plan in four ways:
+Four read-only censuses at a02b8aea re-checked the slice rows (the implementor thread; each finding a writer needs is restated in its brief). They changed the plan in four ways:
 
 - The Gate column holds landing, not writing. `fix/purge2-integrity` shares no consent file with slice 3. Every slice is written now, and only the merge to main and the Revit proofs wait.
 - Slices 3 and 8 are one consent change. Pea's own doors (`instances.save`, `stop`, `close`, `reset`, `restart`, `cleanup`, the upload) return "held" directly from the host, which already reads `isModified` (`ts/apps/host/src/machine.ts:954`). No interim window is built. Only a save inside a script needs the Revit pre-event. A script run holds Revit's API context, so a person cannot press Save during one, and a save that fires while a script runs is Pea's. Assumption A shrinks to "a pre-event can cancel".
