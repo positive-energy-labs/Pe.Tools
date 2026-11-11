@@ -1,3 +1,4 @@
+import { serviceHeaders } from "./callers.ts";
 import { unavailableFieldOptions } from "./effect-test.ts";
 import { readFileSync } from "node:fs";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
@@ -11,7 +12,6 @@ import {
   NATIVE_BODY_VERSION_HEADER,
   address,
 } from "@pe/agent-contracts";
-import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
@@ -26,7 +26,6 @@ import { FIRM_SEED } from "../src/ducts-inputs.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { mintBrowserContext } from "../src/control.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
-import { hostOwnership } from "../src/host-ownership.ts";
 import { nativeCatalogIdentity, openRecordingWriter } from "../src/native-recording.ts";
 import { HostInputReadSets, defaultReadSetLimits } from "../src/input-occurrence.ts";
 import { admitNativeCaller } from "../src/native-read-policy.ts";
@@ -149,7 +148,7 @@ async function setup(mode = "normal") {
           origin: base,
           referer: `${base}/fans`,
           cookie,
-          [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
+          ...serviceHeaders(),
           [HOST_RPC_BRIDGE_SESSION_HEADER]: ref.session,
           [HOST_RPC_DOCUMENT_HEADER]: ref.openId,
           "content-type": "application/json",

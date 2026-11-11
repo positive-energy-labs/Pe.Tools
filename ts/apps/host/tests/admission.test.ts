@@ -1,6 +1,6 @@
+import { serviceHeaders } from "./callers.ts";
 import { expect, test } from "vite-plus/test";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
-import { hostOwnership } from "../src/host-ownership.ts";
 import { httpRoutes as peRoutes } from "@pe/agent-contracts/pe-api";
 import { admitRequest, type RoutePermission } from "../src/control.ts";
 
@@ -20,7 +20,7 @@ const options: IdentityOptions = {
     }),
   },
 };
-const local = { host: "127.0.0.1:5180", "x-pe-runtime-service": hostOwnership.serviceName };
+const local = { host: "127.0.0.1:5180", ...serviceHeaders() };
 
 // `/call` admits an anonymous caller only for the add-in's Pod reads (anonymous-call.test.ts).
 test.each(
