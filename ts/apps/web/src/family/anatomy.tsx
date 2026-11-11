@@ -104,7 +104,10 @@ export function AnatomyDrawing({
     );
 
   return (
-    <div className="flex size-full min-h-0">
+    // The drawing takes what its column leaves after the table and members list, with a 12rem
+    // floor; at size-full it took the whole column and the table bar fell onto the members line.
+    // ponytail: 12rem is a first guess (M1).
+    <div className="flex min-h-48 w-full flex-[1_1_0]">
       <div className="flex min-w-0 flex-1">{views}</div>
       {/* The support takes a third of the anatomy, 10rem to 18rem, so the subject (the shape)
           keeps the larger ground at every pane width (SURFACE-PHILOSOPHY L3, L4). */}
