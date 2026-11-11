@@ -98,7 +98,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   const owners = new Map<string, {
     scope: WorkScope; config: import("../route/typed-route").Owners[string]; handle: WorkHandle | null;
-    doc: any; ready: boolean; absent:boolean; problem: string | null; failure: WorkFeedFailure | null;
+    doc: any; ready: boolean; absent:boolean; problem: string | null; failure: WorkFeedFailure | null; failed: boolean;
     lease: ReturnType<typeof registry.acquire>;
   }>();
   let page: Record<string, any> = decodePage();
@@ -138,7 +138,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     const parsed = record.config.state.schema.parse(doc);
     if (record.handle?.revision === handle.revision && canonicalRouteInput(record.doc) !== canonicalRouteInput(parsed))
       throw Error("Contradictory Work revision; refresh this route");
-    record.absent=false; record.handle = freezePage(handle); record.doc = freezePage(parsed); record.ready = true; record.problem = null; record.failure = null;
+    record.absent=false; record.handle = freezePage(handle); record.doc = freezePage(parsed); record.ready = true; record.problem = null; record.failure = null; record.failed = false;
     record.lease.entry.journal.observe({ revision: handle.revision, doc: parsed });
     if (handle.key.route === own) gate.acceptWork(workAttempt,
       { kind: "snapshot", handle, value: parsed, hash: canonicalRouteInput(parsed) });
@@ -157,7 +157,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       target: input.target, subject: null };
     const lease = registry.acquire(scope.key);
     const record = { scope, config, handle: null as WorkHandle | null, doc: null as any,
-      ready: false, absent:false, problem: null as string | null, failure: null as WorkFeedFailure | null, lease };
+      ready: false, absent:false, problem: null as string | null, failure: null as WorkFeedFailure | null, failed: false, lease };
     owners.set(id, record);
     ownerStops.push(() => lease.release());
     lease.entry.connect(scope, door);
@@ -184,8 +184,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           if(record.absent){record.doc=null;record.handle=null;}
           record.failure=state.kind === "failed"?state.failure:null;
           record.problem = record.failure ? workFeedFailureMessage(record.failure) : record.absent ? "Start this Work to edit" : "Reading Work...";
+          record.failed = record.failure !== null;
         }
-      } catch (error) { record.ready = false; record.problem = String(error); }
+      } catch (error) { record.ready = false; record.problem = String(error); record.failed = true; }
       notify();
     }, notify);
     ownerStops.push(stopFeed);
@@ -570,6 +571,15 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     urlCurrent: () => canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
     commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions" : "kind" in spec.commands[id]! ? null : basisRefusal(),
     problem: () => edits?basisRefusal():null, writeRefusal,
+    /** The basis that failed (a Work feed failure, a thrown read, a failed core reading), as distinct
+     *  from a state such as "Start this Work to edit": failures draw as a pane failure line. */
+    failure: () => {
+      if (!edits) return null;
+      const owner = [...owners.values()].find(o => !o.ready && o.failed);
+      if (owner) return owner.problem;
+      const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
+      return core?.status === "failed" ? core.reason ?? "Reading failed" : null;
+    },
     refresh: (read?:import("../route/host-read").HostRead) => {
       requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true);
     }, run, result:(id:string)=>results.get(id),
