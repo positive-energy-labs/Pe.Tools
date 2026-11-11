@@ -1,4 +1,5 @@
 import type { MepSegmentSizes, MepSystemMembers } from "@pe/host-contracts/generated";
+import { pipeKey } from "./schema.ts";
 
 /** Pure sizing: everything the product decides, with no Revit and no kernel. */
 export type Pipe = {
@@ -45,7 +46,7 @@ export function size(pipes: readonly Pipe[], catalogs: Readonly<Record<string, r
     const status: Status = !flow ? "no-flow"
       : !current || !fits(flow, current, limits) ? "undersized"
       : candidate !== null && pipe.diameter > candidate ? "oversized" : "ok";
-    return { ...pipe, candidate, chosen: chosen[pipe.uniqueId] ?? null, status };
+    return { ...pipe, candidate, chosen: chosen[pipeKey(pipe.uniqueId)] ?? null, status };
   });
   const unresolved = rows.flatMap((row): Closer[] =>
     row.status === "no-flow" ? [{ uniqueId: row.uniqueId, kind: "no-flow" }]

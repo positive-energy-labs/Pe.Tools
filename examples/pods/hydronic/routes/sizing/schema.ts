@@ -1,15 +1,19 @@
 import { z } from "zod";
+import { subjectCode, subjectRefCodeSchema, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
 
 export const key = "pod.hydronic.sizing";
 export const address = `/tool/${encodeURIComponent("route:@hydronic/routes/sizing/route.artifact")}`;
 
-/** Route-wide inputs and the chosen diameter per pipe UniqueId (nominal mm). */
+/** A pipe's identity in Work: its UniqueId as a SubjectRef code, the key every door decodes. */
+export const pipeKey = (uniqueId: string) => subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse(uniqueId) });
+
+/** Route-wide inputs and the chosen diameter per pipe (nominal mm). */
 export const work = z.strictObject({
   version: z.literal(1).default(1),
   maxVelocity: z.number().positive().default(1.5).meta({ title: "Max velocity (m/s)" }),
   // Firm default belongs here once a Pod can read the firm layer (gaps.json: firm-file-layer).
   maxFriction: z.number().positive().default(400).meta({ title: "Max friction (Pa/m)" }),
-  chosen: z.record(z.string(), z.number().positive()).default({}).meta({ title: "Chosen diameter" }),
+  chosen: z.record(subjectRefCodeSchema, z.number().positive()).default({}).meta({ title: "Chosen diameter" }),
 });
 export const workState = {
   route: key,

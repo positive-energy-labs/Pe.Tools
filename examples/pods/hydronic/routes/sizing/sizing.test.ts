@@ -5,7 +5,8 @@ import { createRouteRegistrations } from "@pe/mcps";
 import { fromRevit, hydraulics, size, type Pipe } from "./size.ts";
 import type { MepSystemMembers } from "@pe/host-contracts/generated";
 import { module } from "./module.ts";
-import { key, work } from "./schema.ts";
+import { key, pipeKey, work } from "./schema.ts";
+import { decode } from "@pe/agent-contracts/subject-ref";
 import { readFile } from "node:fs/promises";
 import manifest from "../../pod.json" with { type: "json" };
 import { admitPodArtifact } from "../../../../../ts/apps/host/src/pod-artifact.ts";
@@ -31,7 +32,7 @@ describe("sizing", () => {
   });
   test("pump head is the longest friction path on the chosen sizes", () => {
     const pipes = [pipe("main", 0.6, 32), pipe("left", 0.3, 25, "main"), pipe("right", 0.1, 25, "main")];
-    const out = size(pipes, catalogs, limits, { right: 15 });
+    const out = size(pipes, catalogs, limits, { [pipeKey("right")]: 15 });
     const loss = (flow: number, inner: number) => hydraulics(flow, inner).friction * 10;
     expect(out.pumpHead.greyed).toBe(false);
     expect(out.pumpHead.pa).toBeCloseTo(loss(0.6, 32.1) + Math.max(loss(0.3, 26), loss(0.1, 13.6)));
@@ -62,6 +63,11 @@ describe("sizing", () => {
     expect(out.pipes[0]).toMatchObject({ diameter: 25.4, length: 3.048, segment: "seg" });
     expect(out.pipes[0]?.flow).toBeCloseTo(0.283, 3);
     expect(out.catalogs).toEqual({ seg: [{ nominal: 25.4, inner: 24.4 }] });
+  });
+  test("chosen diameters are keyed by the pipe's UniqueId as a SubjectRef code", () => {
+    expect(decode(pipeKey("a1-b2"))).toMatchObject({ ok: true, value: { keyKind: "UniqueId", key: "a1-b2" } });
+    expect(work.parse({ chosen: { [pipeKey("a1-b2")]: 25 } }).chosen).toEqual({ "UniqueId:a1-b2": 25 });
+    expect(() => work.parse({ chosen: { "a1-b2": 25 } })).toThrow();
   });
   test("route-wide inputs default to 1.5 m/s and 400 Pa/m", () => {
     expect(work.parse({})).toMatchObject({ maxVelocity: 1.5, maxFriction: 400, chosen: {} });
@@ -100,14 +106,6 @@ describe("kernel gaps", () => {
   });
   test.fails("kernel gap: parameter-binding (4)", () => {
     expect(module.data).toMatchObject({ sheet: { chosen: { binding: { kind: "parameter", parameter: "Diameter" } } } });
-  });
-  test.fails("kernel gap: pod-subjectref-door (4)", async () => {
-    // subjectCode lives in agent-contracts subject-ref.ts (zod only) but only the "." barrel exports
-    // it; that barrel pulls effect, which a Pod artifact refuses, so chosen stays keyed by raw UniqueId.
-    const contracts = JSON.parse(await readFile(new URL("../../../../../ts/packages/agent-contracts/package.json", import.meta.url), "utf8"));
-    const doors = Object.keys(contracts.exports).filter((door) => door !== ".");
-    const found = await Promise.all(doors.map(async (door) => "subjectCode" in (await import(`@pe/agent-contracts/${door.slice(2)}`))));
-    expect(found).toContain(true);
   });
   test.fails("kernel gap: pea-stages-pod-work (4)", () => {
     // Pea's Work tools register builtin tools only (mcps/src/pea/routes.ts); an admitted Pod is absent.
