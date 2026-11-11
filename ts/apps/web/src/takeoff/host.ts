@@ -12,9 +12,9 @@ import {
 } from "@pe/agent-contracts";
 import { adoptionArgs, adoptionData, viewCatalogueArgs, viewCatalogueData } from "@pe/agent-contracts/takeoff-read";
 import { adoptDrafts } from "@pe/agent-contracts/takeoff-adoption";
-import { leaf, read, documentMark } from "../../../host/src/reads/evaluator.ts";
+import { leaf, read, documentMark } from "@pe/host/read-graph";
 import { projectTakeoffViews } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
-import { workRead, workBinding } from "../../../host/src/reads/inputs.ts";
+import { workRead, workBinding } from "@pe/host/reads/inputs";
 const captured = leaf("resource", readingRequestSchema, takeoffCaptureSchema.nullable());
 export const takeoffSnapshotInput = z.object({
   target: documentRefSchema,

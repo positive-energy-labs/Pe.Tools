@@ -3,7 +3,13 @@ import { bindControl, mintContext, retireContext } from "../../../apps/host/src/
 import { testConsents } from "../../../apps/host/tests/effect-test.ts";
 
 /** Real run registry and host-minted credentials for HTTP/MCP journeys across turns. */
-export function peaTurns() {
+type Turn = { thread: string; turn: string };
+// Named through `testConsents`: inferred, the host's consent type is reachable only by a path a
+// route directory's `@pe/host` import exposes, which declaration emit refuses as unportable.
+export function peaTurns(): {
+  runs: ReturnType<typeof testConsents>;
+  newTurn: (thread: string, root?: Turn) => { run: Turn; token: ReturnType<typeof mintContext> };
+} {
   const tokens: string[] = [];
   const runs = testConsents(() => {}, { autoApprove: () => false });
   bindControl({ runs });

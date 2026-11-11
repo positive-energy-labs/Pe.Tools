@@ -1,12 +1,12 @@
-import { workRead } from "../../../host/src/reads/inputs.ts";
-import { familyObservation, familyReceipts } from "../../../host/src/builtin-read-handles.ts";
+import { workRead } from "@pe/host/reads/inputs";
+import { familyObservation, familyReceipts } from "@pe/host/builtin-read-handles";
 import { z } from "zod";
 import { familiesRouteState, canonicalRouteInput, actionReceiptSchema } from "@pe/agent-contracts";
 import {
   familiesViewArgs,
   familiesViewData,
 } from "../../../../packages/agent-contracts/src/families-read.ts";
-import { read, workScope, documentMark } from "../../../host/src/reads/door.ts";
+import { read, workScope, documentMark } from "@pe/host/read-graph";
 import { applyOutcome, applyTally } from "./families-outcome.ts";
 import { matrixModel, buildPivot } from "./families-matrix.ts";
 

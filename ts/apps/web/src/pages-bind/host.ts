@@ -1,7 +1,7 @@
-import { resources } from "../../../host/src/builtin-read-handles.ts";
+import { resources } from "@pe/host/builtin-read-handles";
 import { z } from "zod";
 import { executionTargetSchema } from "@pe/agent-contracts";
-import { read } from "../../../host/src/reads/evaluator.ts";
+import { read } from "@pe/host/read-graph";
 import { bindData } from "@pe/agent-contracts";
 export const reads = {
   picker: read("bind.picker", {

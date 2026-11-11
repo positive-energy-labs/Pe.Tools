@@ -1,8 +1,8 @@
-import { workRead } from "../../../host/src/reads/inputs.ts";
+import { workRead } from "@pe/host/reads/inputs";
 import { z } from "zod";
 import { memberWork, settingsRouteState, settingsCandidate } from "@pe/agent-contracts";
-import { read } from "../../../host/src/reads/evaluator.ts";
-import { localRead } from "../../../host/src/local-inputs.ts";
+import { read } from "@pe/host/read-graph";
+import { localRead } from "@pe/host/local-inputs";
 import {
   podsArgs,
   podsValue,

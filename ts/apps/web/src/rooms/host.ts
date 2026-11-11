@@ -1,9 +1,9 @@
 import { z } from "zod";
-import type { Read } from "../../../host/src/reads/evaluator.ts";
-import { workRead } from "../../../host/src/reads/inputs.ts";
+import type { Read } from "@pe/host/read-graph";
+import { workRead } from "@pe/host/reads/inputs";
 
 import { executionTargetSchema, roomsRouteState } from "@pe/agent-contracts";
-import { read, workScope, documentMark } from "../../../host/src/reads/evaluator.ts";
+import { read, workScope, documentMark } from "@pe/host/read-graph";
 import { roomsArgs, roomsData } from "@pe/agent-contracts";
 import { planOf } from "./rooms-plan.ts";
 const workspaceArgs = roomsArgs.extend({ target: executionTargetSchema });

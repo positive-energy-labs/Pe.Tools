@@ -1,6 +1,6 @@
-import { resources } from "../../../host/src/builtin-read-handles.ts";
+import { resources } from "@pe/host/builtin-read-handles";
 
-import { read } from "../../../host/src/reads/evaluator.ts";
+import { read } from "@pe/host/read-graph";
 import { chatArgs, chatValue } from "@pe/agent-contracts";
 
 // TODO: S gap 9 must admit typed host commands before exporting thread prompt/cancel/fork here.

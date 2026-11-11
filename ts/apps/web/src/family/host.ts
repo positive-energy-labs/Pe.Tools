@@ -1,12 +1,12 @@
 import { z } from "zod";
-import type { Read } from "../../../host/src/reads/evaluator.ts";
-import { workRead } from "../../../host/src/reads/inputs.ts";
+import type { Read } from "@pe/host/read-graph";
+import { workRead } from "@pe/host/reads/inputs";
 
 import { executionTargetSchema, familyDraftSchema } from "@pe/agent-contracts";
-import { read } from "../../../host/src/reads/evaluator.ts";
-import { localRead } from "../../../host/src/local-inputs.ts";
-import { familySpec, podProfile } from "../../../host/src/builtin-read-handles.ts";
-import { workBinding } from "../../../host/src/reads/inputs.ts";
+import { read } from "@pe/host/read-graph";
+import { localRead } from "@pe/host/local-inputs";
+import { familySpec, podProfile } from "@pe/host/builtin-read-handles";
+import { workBinding } from "@pe/host/reads/inputs";
 
 import { familyArgs, familyData } from "@pe/agent-contracts";
 const workspaceArgs = familyArgs.extend({ target: executionTargetSchema });
