@@ -21,6 +21,7 @@
 - 2026-10-24: Native test census compares process creation identity, executable and command; rescue pins the process handle before identity checks. Windows reused an owned PID for another process, including the same executable and command. [Custody proof](../../../.artifacts/runs/browser-20261024-port/lifecycle-r5.md).
 - 2026-10-24: Keep the protocol JSON reference as a declared pinned runtime dependency for this private workspace package; [packed-module import resolution](../../../.artifacts/runs/browser-20261024-port/integration-r2-assets.json) proves the three JSON imports and package version without a self-contained bundle claim.
 - 2026-10-24: Independent final proof on `af21713c` passed native A0–A8, required route refresh/reconnect/worker, and serial `pnpm verify` through R24 compile. [Audited receipts](../../../.artifacts/runs/browser-20261024-port/completion-audit.json) pin unchanged sources and ROOT executable parity; optional thread/arming remain omitted.
+- 2026-11-10: A session launch on Windows starts its keeper through WMI (`Pe.Browser.Guardian.exe --create-outside-job`), because `vp run` holds its task in a KILL_ON_JOB_CLOSE job with no breakaway (limit flags 0x2000) and killed every keeper with its launcher. The keeper gets the user's default environment, not the launcher's. Drives and measurements run headless (no OS window to cover); every launch passes `--disable-backgrounding-occluded-windows`, so `--unthrottled` is retired. `launch --viewport WxH` (default 1600x900) sizes the real window to the viewport; Emulation overrides are not used because they lift when their client detaches. Helium was measured against Chrome (headless, three pages, 30 s idle, median of three): 698 against 646 MB private, so Chrome stays first.
 
 ## Tried & rejected
 
@@ -31,6 +32,10 @@
 - 2026-10-24: PowerShell JSON alone did not preserve Unicode profile command lines. Explicit UTF-8 at the process-census boundary restored direct `ProfileBusy` refusal; [native red and green](../../../.artifacts/runs/browser-20261024-port/lifecycle-profile-encoding.md).
 
 ## Owed
+
+- `pea browser launch --help` ignores `--help` and launches a browser. Found by the journey trial on 2026-11-10.
+
+- Under Git Bash a `/regex/` argument to `pea browser` or a journey is rewritten into a Windows path unless `MSYS_NO_PATHCONV=1` is set. Found by the journey trial on 2026-11-10; the CLI could take the pattern from a flag that Git Bash leaves alone.
 
 - Repair acceptance instrumentation for disabled-control tooltip inspection and validate absolute restore trace arguments before launch; the gate hit null URL, shifted arguments and an unintended fresh profile. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/drive/gate-4b6bfec7/DEFECTS.md:13`.
 

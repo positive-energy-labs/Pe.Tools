@@ -3,7 +3,8 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { contributionKey, parseContributionKey } from "@pe/agent-contracts";
 import type { AdmittedPackage } from "./packages.ts";
-import { productPagesRootPath } from "./product-paths.ts";
+import { productPathNames } from "@pe/host-contracts/contracts";
+import { contentDirs } from "./content-homes.ts";
 import { sha256Hex as sha } from "./page-artifacts.ts";
 
 /** One Page the host serves, as anything that lists, ranks or opens Pages reads it. */
@@ -64,33 +65,71 @@ export function scratchPageKey(
       };
 }
 
-/** Scratch Pages: every folder under the Pages root holding an `index.html`, newest first. */
+/** One Pages folder, or the product's Pages in every content home, read in order (user first). */
+export type PagesRoots = string | readonly string[];
+export const productPagesRoots = () => contentDirs(productPathNames.pagesDirectoryName);
+
+/**
+ * The folder a scratch slug names: the first home whose folder holds an `index.html` (the same
+ * rule the listing shadows by), so the user's copy wins; else the first home's, unwritten yet.
+ */
+export async function scratchPageDirectory(slug: string, pagesRoots: PagesRoots = productPagesRoots()) {
+  const roots = [pagesRoots].flat();
+  for (const root of roots) {
+    const folders = await scratchPageFolders(root);
+    const named = folders.find((folder) => folder.toLowerCase() === slug.toLowerCase());
+    if (named === undefined || !(await stat(join(root, named, "index.html")).catch(() => null))?.isFile())
+      continue;
+    // A scratch Page is its folder as named: the exact name, never another spelling or a twin.
+    const { key } = scratchPageKey(slug, pageFolderCollisions(folders));
+    return key && named === slug ? { dir: join(root, slug), key } : null;
+  }
+  const { key } = scratchPageKey(slug);
+  return key && roots[0] ? { dir: join(roots[0], slug), key } : null;
+}
+
+/**
+ * Scratch Pages: every folder under a Pages root holding an `index.html`, newest first. Across
+ * homes a slug the user's root already has shadows the shared one.
+ */
 export async function scratchPageDescriptors(
-  pagesRoot = productPagesRootPath(),
+  pagesRoots: PagesRoots = productPagesRoots(),
 ): Promise<PageDescriptor[]> {
   const pages: PageDescriptor[] = [];
-  const folders = await scratchPageFolders(pagesRoot);
-  const collisions = pageFolderCollisions(folders);
-  for (const folder of folders) {
-    const directory = join(pagesRoot, folder);
-    const index = join(directory, "index.html");
-    const facts = await stat(index).catch((error) => { console.error("page-libraries: asynchronous operation failed", error); return null; });
-    if (!facts?.isFile()) continue;
-    const bytes = await readFile(index);
-    const named = scratchPageKey(folder, collisions);
-    pages.push({
-      ...named,
-      slug: folder,
-      openUrl: named.key ? `/pages/${folder}/` : null,
-      title: titleOf(bytes.toString("utf8"), folder),
-      pod: null,
-      entry: { path: "index.html", sha256: sha(bytes), bytes },
-      modifiedAt: facts.mtime.toISOString(),
-      directory,
-    });
+  const seen = new Set<string>();
+  for (const pagesRoot of [pagesRoots].flat()) {
+    const folders = (await scratchPageFolders(pagesRoot)).filter(
+      (folder) => !seen.has(folder.toLowerCase()),
+    );
+    const collisions = pageFolderCollisions(folders);
+    for (const folder of folders) {
+      const directory = join(pagesRoot, folder);
+      const index = join(directory, "index.html");
+      const facts = await stat(index).catch((error) => { console.error("page-libraries: asynchronous operation failed", error); return null; });
+      if (!facts?.isFile()) continue;
+      seen.add(folder.toLowerCase());
+      const bytes = await readFile(index);
+      const named = scratchPageKey(folder, collisions);
+      pages.push({
+        ...named,
+        slug: folder,
+        openUrl: named.key ? `/pages/${folder}/` : null,
+        title: titleOf(bytes.toString("utf8"), folder),
+        pod: null,
+        entry: { path: "index.html", sha256: sha(bytes), bytes },
+        modifiedAt: facts.mtime.toISOString(),
+        directory,
+      });
+    }
   }
   return pages.sort((a, b) => (b.modifiedAt ?? "").localeCompare(a.modifiedAt ?? ""));
 }
+
+/** The one Page projection: scratch Pages newest first, then the given packages' Pages by key. */
+export const pageDescriptors = async (
+  packages: readonly AdmittedPackage[],
+  pagesRoots: PagesRoots = productPagesRoots(),
+) => [...(await scratchPageDescriptors(pagesRoots)), ...packagePageDescriptors(packages)];
 
 /**
  * Packaged Pages, pure over one admitted snapshot (`listPackages()`): no read of its own, so every

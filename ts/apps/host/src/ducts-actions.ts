@@ -24,7 +24,7 @@ import { runPods } from "./family-actions.ts";
 import { buildSheet, resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
 import { accessoryWrites } from "@pe/ducts-domain/sheet/accessory-writes";
 import { suggestRoster } from "@pe/ducts-domain/roster";
-import { workLayer } from "./ducts-inputs.ts";
+import { firmLayer, workLayer } from "./ducts-inputs.ts";
 import { followAcceptedJoins } from "./ducts-walk.ts";
 import { scopeApplyRequest, appliedCellPaths, pendingCount, fanWriteCells } from "@pe/ducts-domain/staged";
 import type { DuctsApply, DuctsHeal } from "@pe/host-contracts/generated";
@@ -204,7 +204,7 @@ export function ductsExecutors(
           groups: ductsScope?.groups?.map((code) => String(subjectOf(code).key)),
           walk: fanScope?.walk,
         };
-        const { firm } = await runPods(deps, deps.files!.firm);
+        const firm = firmLayer(await runPods(deps, deps.files!.firm));
         const criteria = resolveCriteria(workLayer(design), null, firm);
         const nativeRead = deps.nativeRead;
         if (!nativeRead) throw refused("Ducts preparation requires the root native Read capability", "read.unavailable",

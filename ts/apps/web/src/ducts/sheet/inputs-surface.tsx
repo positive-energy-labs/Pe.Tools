@@ -23,7 +23,7 @@ export interface InputContext {
     inputs: { notes: readonly { kind: string; text: string }[] } | null;
   } | null;
   inputs: SheetInputs | null;
-  firm: { version: string; path: string; present: boolean } | null;
+  firm: { version: string; path: string; present: boolean } | { refused: "no-shared-root" } | null;
   slots: readonly { slot: string; covered: number; total: number }[];
   activeSlot: string;
   element: { id: number; family: string | null } | null;
@@ -71,6 +71,11 @@ type Criterion = {
       edit: (value: "even" | "proportional") => DuctsSheetEdits;
     }
 );
+/** The firm file lives only on the shared root; this names what would replace the seed. */
+export const NO_SHARED_ROOT = "No shared root: set PE_TOOLS_SHARED_ROOT to read Firm/ducts.json";
+/** A criterion's provenance when the firm layer is absent: the host resolved it on the engine seed. */
+export const ENGINE_DEFAULT_NO_SHARED_ROOT = "Engine default: no shared root, so Firm/ducts.json is not read";
+
 /** The settings rows come only from resolved inputs; Work identifies pending join/end rulings. */
 export function inputFields(ctx: InputContext): { criteria: Criterion[]; rows: InputRow[] } {
   // TODO: docs/features/routes/LEDGER.md#s10-x1-live-drive X1 browser re-drive of tap provenance and FC-23 flow conflict after the shared host-status
@@ -80,6 +85,11 @@ export function inputFields(ctx: InputContext): { criteria: Criterion[]; rows: I
   const inputs = ctx.inputs;
   const c = inputs.criteria;
   const staged = ctx.doc?.criteria?.edit;
+  // ADR 0035 rule 11 disables the shared firm layer, never the Work above it: with no shared root a
+  // criterion still on that layer is the engine seed, says so, and stays editable Work.
+  const noFirm = ctx.firm !== null && "refused" in ctx.firm;
+  const chip = (value: Resolved<unknown>) =>
+    noFirm && value.source === "firm" ? ENGINE_DEFAULT_NO_SHARED_ROOT : sourceChip(value);
   const criterionCell = (key: string, side?: "supply" | "return"): WorkCell => {
     const record = staged?.value as Record<string, unknown> | undefined;
     const value = side
@@ -95,7 +105,7 @@ export function inputFields(ctx: InputContext): { criteria: Criterion[]; rows: I
         kind: "number",
         unit,
         value: c[key][side].value,
-        source: sourceChip(c[key][side]),
+        source: chip(c[key][side]),
         cell: criterionCell(key, side),
         positive: key === "velocityLimitFpm",
         // The edited side only: the other keeps its own source (typed, stored or firm).
@@ -114,7 +124,7 @@ export function inputFields(ctx: InputContext): { criteria: Criterion[]; rows: I
       kind: "number",
       unit,
       value: c[key].value,
-      source: sourceChip(c[key]),
+      source: chip(c[key]),
       cell: criterionCell(key),
       edit: (value) => ({ criteria: { [key]: value } }),
     });
@@ -123,7 +133,7 @@ export function inputFields(ctx: InputContext): { criteria: Criterion[]; rows: I
     label: criterionLabel("splitPolicy"),
     kind: "split",
     value: c.splitPolicy.value,
-    source: sourceChip(c.splitPolicy),
+    source: chip(c.splitPolicy),
     edit: (splitPolicy) => ({ criteria: { splitPolicy } }),
   });
   sided("allowanceInWg", "in-wg");
@@ -530,7 +540,9 @@ export function InputsSurface({
         <h3 className="t-head">Criteria</h3>
         {/* The firm file is named by its leaf; the full path is the title, never a wrapped line. */}
         <div className="flex min-w-0 items-baseline gap-1 text-ink-2" data-inputs-firm="">
-          {ctx.firm ? (
+          {ctx.firm && "refused" in ctx.firm ? (
+            <span data-inputs-firm-refused={ctx.firm.refused}>{NO_SHARED_ROOT}</span>
+          ) : ctx.firm ? (
             <>
               <span className="face-mono shrink-0">{ctx.firm.version}</span>
               <span className="face-mono min-w-0 truncate">

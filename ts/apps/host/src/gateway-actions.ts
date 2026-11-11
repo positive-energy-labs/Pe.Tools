@@ -12,7 +12,7 @@ import {
 } from "./pod-transfer.ts";
 import { z } from "zod";
 import { io, nativeStep, refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
-import { productPagesRootPath } from "./product-paths.ts";
+import { scratchPageDirectory } from "./page-libraries.ts";
 import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
 import { freezeScript, requireScriptSuccess } from "./operation-script.ts";
 import { validateNativeInput } from "./native-input.ts";
@@ -405,7 +405,8 @@ export function gatewayExecutor(
             break;
           }
           case "pod.promote": {
-            const source = resolve(productPagesRootPath(), String(authored.page));
+            const source = (await scratchPageDirectory(String(authored.page)))?.dir;
+            if (!source) throw refused("Not a scratch Page slug");
             const captured = await captureDirectory(source);
             if (captured.diagnostics.some((issue) => issue.severity === "error"))
               throw refused("Page source cannot be captured safely");
