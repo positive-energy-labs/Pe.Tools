@@ -5,7 +5,7 @@ import { bindings } from "./bindings";
 import { read } from "../route/defaults";
 import { stageField } from "../route/defaults";
 import { listFields } from "../route/defaults";
-import { fansDocumentSchema } from "../../../../packages/agent-contracts/src/fans.ts";
+import { fansDocumentSchema, fansRouteState } from "../../../../packages/agent-contracts/src/fans.ts";
 import { z } from "zod";
 import {
   fansSheetEditsSchema,
@@ -124,7 +124,7 @@ export const module = route({
   },
   edits: {
     seed: () => fansDocumentSchema.parse({}),
-    work: fansDocumentSchema,
+    work: fansRouteState,
     value: "fansWork",
     // No cross-route write (ruling 2026-11-10): /fans owns only its Work; it reads /ducts' design in its core read.
     owners: {},

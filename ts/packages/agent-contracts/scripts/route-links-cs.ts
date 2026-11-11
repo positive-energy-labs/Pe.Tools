@@ -4,6 +4,9 @@
  * projects every route's path and shareable URL keys (a draft key is never in a link) into
  * `dotnet/Pe.App/Host/PeRoutes.generated.cs`.
  *
+ * `codegen:routes` (`apps/web/scripts/route-graphs.ts`) runs this after it writes the table, with
+ * `--check` when it checks, so a route author runs one step.
+ *
  *   (none)   write the file
  *   --check  exit 1 when the file differs from the contract (a test runs the same render)
  *
@@ -79,7 +82,7 @@ if (import.meta.main) {
       : "";
     if (found !== text) {
       console.error(
-        "PeRoutes.generated.cs is stale. Run `pnpm codegen:routes` in ts/packages/agent-contracts.",
+        "PeRoutes.generated.cs is stale. Run `pnpm codegen:routes` in ts/apps/web.",
       );
       process.exit(1);
     }

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { registerHooks } from "node:module";
 import { icons } from "lucide-react";
 import { projectWork } from "./host-projection.ts";
@@ -110,6 +111,7 @@ for(const dir of discovered.filter(d=>d.isDirectory())) {
   }
 }
 const keys=[...declarations.keys()].sort();
+const registryFile=new URL("../../host/src/routes.generated.ts",import.meta.url);
 const registryRows:RouteRegistryInput[]=[];
 const addressRows=new Map<string,AddressRow>(
   Object.keys(HAND_ADDRESSES).map(key=>[key,{key}]));
@@ -137,13 +139,14 @@ for (const key of keys) {
       body: `{ path: ${JSON.stringify(typed.data.address)} as const, title: ${JSON.stringify(typed.spec.name)}, fields: {\n${fields.length ? fields.join(",\n")+"," : ""}\nselected: {...${agent ? "field" : "personField"}(focusSelectionSchema,"replace"),agent:undefined}\n}${agent ? `, agent: { policy: ${JSON.stringify(typed.spec.subject ? `Choose ${typed.spec.subject.noun} through ${typed.spec.subject.field}, using the module's local identities.` : "Use the route fields as declared.")} }` : ""} }` });
     // Preserve the actual imported Work export, including refinements and reconciliation.
     // JSON Schema cannot carry that authority; a second handwritten host declaration would drift.
+    // The registry binds the Work where route.ts imports it (its own directory, or contracts), so
+    // contracts never receive a projection that imports an app.
     let work: RouteRegistryInput["work"];
     if(typed.spec.edits) {
-      const workDestination = new URL(`../../../packages/agent-contracts/src/generated/${key}-work.ts`, import.meta.url);
-      const projected=await projectWork(entry,typed,fileURLToPath(workDestination),`${identifier}RouteState`,
-        specifier=>jiti.import<Record<string,{schema?:unknown}>>(specifier));
-      await emit(workDestination,`// Generated from ${key}/route.ts by codegen:routes. Do not edit.\n${projected.definition}`);
-      work={stateExport:`${identifier}RouteState`,file:`../../../packages/agent-contracts/src/generated/${key}-work.ts`,properties:projected.properties};
+      const name=`${identifier}Work`;
+      const projected=await projectWork(entry,typed,fileURLToPath(registryFile),name,
+        specifier=>jiti.import<Record<string,{schema?:unknown}>>(specifier),false);
+      work={name,definition:projected.definition,properties:projected.properties};
     }
     registryRows.push({key,folder,address:typed.data.address,contract,dock:router?.dock === true,
       ...(typed.spec.host ? {host:typed.spec.host} : {}),...(work ? {work} : {})});
@@ -166,7 +169,7 @@ for (const key of keys) {
   });
 }
 await emit(new URL("../../../packages/agent-contracts/src/routes/table.generated.ts",import.meta.url),renderAddressTable([...addressRows.values()]));
-await emit(new URL("../../host/src/routes.generated.ts",import.meta.url),renderRouteRegistry(registryRows));
+await emit(registryFile,renderRouteRegistry(registryRows));
 const closures = await buildBuiltinClosures(builtinOptions);
 const directory = [];
 for (const [key, closure] of closures) {
@@ -215,6 +218,13 @@ if (!closureOnly)
     `// Generated from web route graphs by codegen:routes.\nimport type { RouteDirectory } from "../route-graph.ts";\nexport const routeDirectory: readonly {key: string; directory: RouteDirectory}[] = ${JSON.stringify(directory, null, 2)};\n`,
   );
 console.log(runtime ? JSON.stringify(projections) : `Projected ${directory.length} route graphs`);
+// The C# launch rows project the address table and directory just written; a child process reads
+// them from disk (this process holds the stale modules). One step owns everything a route needs.
+if (!runtime && !closureOnly) {
+  const links = fileURLToPath(new URL("../../../packages/agent-contracts/scripts/route-links-cs.ts", import.meta.url));
+  if (spawnSync(process.execPath, [links, ...(check ? ["--check"] : [])], { stdio: "inherit" }).status !== 0)
+    stale.push("dotnet/Pe.App/Host/PeRoutes.generated.cs (route-links-cs.ts)");
+}
 
 if (stale.length)
   throw Error(`Generated route artifacts drifted; run codegen:routes:\n${stale.join("\n")}`);

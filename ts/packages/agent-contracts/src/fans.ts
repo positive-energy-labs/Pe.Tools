@@ -4,6 +4,7 @@ import { decode, subjectRefCodeSchema } from "./subject-ref.ts";
 import type { Immutable } from "./route-kernel-data.ts";
 import { DUCT_PARAMETER_KEYS, ductCalculationSchema } from "./ducts.ts";
 import { draftCellSchema } from "./draft.ts";
+import type { RouteStateSpec } from "./route-state.ts";
 const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(code => {
   const ref = decode(code); return ref.ok && ref.value.keyKind === "UniqueId";
 });
@@ -50,3 +51,15 @@ export type FansDocument = Immutable<Omit<FansRouteDocument, "writeIntent">>;
 
 /** The fans Work no person has written: what a reader with no fans Work yet prices with. */
 export const neutralFansWork: FansRouteDocument = fansDocumentSchema.parse({});
+
+/**
+ * The /fans Work spec, declared once here because contracts' own consumers (`semantic-actions.ts`)
+ * read it; `fans/route.ts` names it as its Work, so the host registry binds this same object.
+ */
+export const fansRouteState = {
+  route: "fans",
+  title: "Fans",
+  description: fansDocumentSchema.description ?? "Inspect fan paths, inputs and pressure requirements",
+  schema: fansDocumentSchema,
+  schemaVersion: 1,
+} satisfies RouteStateSpec<typeof fansDocumentSchema>;
