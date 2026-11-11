@@ -43,6 +43,10 @@ public enum ParameterLinkIssueSeverity {
 public sealed record ParameterLinkProfile {
     public const int CurrentFormatVersion = 1;
 
+    /// <summary>The model's stored profile. Its version is the envelope's, so the stored data holds no formatVersion.</summary>
+    public static readonly Serialization.OwnerDescriptor Owner = new("parameter-links", CurrentFormatVersion,
+        new Guid("ceb230bf-9e1b-485a-a05e-0cda66558efd"), "_PE_ParameterLinksProfile", "Versioned Pe.Tools parameter-link profile.");
+
     public int FormatVersion { get; init; } = CurrentFormatVersion;
     [JsonProperty(Required = Required.Always)]
     public List<ParameterLinkDefinition> Definitions { get; init; } = [];

@@ -483,7 +483,7 @@ public sealed class ParameterLinksBehaviorTests {
             }
 
             var profileParameter = document.ProjectInformation.get_Parameter(
-                ParameterLinksProfileStorage.ProfileParameterGuid);
+                ParameterLinkProfile.Owner.Guid);
             Assert.Multiple(() => {
                 Assert.That(read.Error, Is.Null);
                 Assert.That(read.HasStoredProfile, Is.True);
