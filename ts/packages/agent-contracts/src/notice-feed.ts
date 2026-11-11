@@ -16,17 +16,12 @@ export type NoticeGroup = z.infer<typeof noticeGroupSchema>;
 
 /** The door a row opens, when a press answers it instead of only landing on it. */
 export const noticeActSchema = z.discriminatedUnion("kind", [
-  /** Run consent (ADR 0027 rule 11): a countdown with Reject; the topbar sweep draws it. */
-  z.strictObject({
-    kind: z.literal("consent"),
-    threadId: z.string().min(1),
-    requestId: z.string().min(1),
-    /** ISO instant the host auto-approves at; absent while auto-approve is off. */
-    deadline: z.string().optional(),
-    reject: z.strictObject({ optionId: z.string().min(1) }).optional(),
-    /** The ask's allow option: the tray card answers in place while auto-approve is off. */
-    allow: z.strictObject({ optionId: z.string().min(1) }).optional(),
-  }),
+  /**
+   * A held outward send (ADR 0038 guard 3): Confirm runs it as the person, and the result is kept
+   * where Pea's next read of the same bytes finds it. Other held acts carry no act: the person
+   * does them in Revit or the web app themselves.
+   */
+  z.strictObject({ kind: z.literal("confirm-send"), id: z.string().min(1) }),
   z.strictObject({
     kind: z.literal("question"),
     threadId: z.string().min(1),
@@ -47,7 +42,7 @@ export const noticeRowSchema = z.strictObject({
   group: noticeGroupSchema,
   /** Monotonic per key: a card re-raises only when the revision moves. */
   revision: z.int().min(0),
-  /** The one word that says what the row is: asks, approve, running, failed, done, machine… */
+  /** The one word that says what the row is: asks, held, running, failed, done, machine… */
   verb: z.string().min(1),
   what: z.string(),
   where: z.string(),
@@ -81,7 +76,3 @@ export type NoticeFeed = z.infer<typeof noticeFeedSchema>;
 /** The rows of one group, in feed order. */
 export const noticeRows = (feed: NoticeFeed, group: NoticeGroup) =>
   feed.rows.filter((row) => row.group === group);
-
-/** Every open consent window in the feed: what the topbar sweep and the tray card draw. */
-export const consentWindows = (feed: NoticeFeed) =>
-  feed.rows.flatMap((row) => (row.act?.kind === "consent" ? [{ row, act: row.act }] : []));

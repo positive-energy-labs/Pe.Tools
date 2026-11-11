@@ -14,14 +14,6 @@ export const machineNoticeSchema = z.strictObject({
   act: z
     .discriminatedUnion("kind", [
       z.strictObject({
-        kind: z.literal("permission"),
-        threadId: text,
-        requestId: text,
-        /** ISO instant the host auto-approves at; absent while auto-approve is off. */
-        deadline: text.optional(),
-        options: z.array(z.strictObject({ optionId: text, name: z.string(), kind: text })),
-      }),
-      z.strictObject({
         kind: z.literal("question"),
         threadId: text,
         requestId: text,

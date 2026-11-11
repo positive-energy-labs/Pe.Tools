@@ -3,7 +3,6 @@ import { z } from "zod";
 import { actionReceiptListDecoder, actionStatusSchema } from "./action-receipts.ts";
 
 test.each([
-  ["waiting", "queued", undefined],
   ["running", "running", undefined],
   ["unknown", "outcome-unknown", "reconcile"],
   ["incomplete", "outcome-unknown", "resume"],

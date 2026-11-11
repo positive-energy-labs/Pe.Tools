@@ -191,8 +191,7 @@ export type PeApiSchemas = Record<
   | "captureListSchema"
   | "pageTargetReadingSchema"
   | "ductCatalogReadingSchema"
-  | "parsedDocViewSchema"
-  | "routeSettingsSnapshotSchema",
+  | "parsedDocViewSchema",
   z.ZodType
 >;
 
@@ -622,15 +621,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "threads",
       "caller",
     ),
-    "thread.permission": route(
-      "POST",
-      "/pe/threads/:id/permission",
-      permissionResponseSchema,
-      ok,
-      "human",
-      "threads",
-      "human",
-    ),
     "thread.question": route(
       "POST",
       "/pe/threads/:id/question",
@@ -794,27 +784,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
     /** Query `after`, `kind`, `thread`, `limit`: one page of the host log after a cursor. */
     "log.read": route("GET", "/pe/log", none, hostLogPageSchema, "read", "pe", "read"),
     "work.list": route("GET", "/pe/route-state", none, z.array(object), "read", "pe", "read"),
-    "route-settings.get": route(
-      "GET",
-      "/pe/route-settings/:route",
-      none,
-      schemas.routeSettingsSnapshotSchema as S["routeSettingsSnapshotSchema"],
-      "read",
-      "pe",
-      "read",
-    ),
-    "route-settings.set": route(
-      "POST",
-      "/pe/route-settings/:route",
-      z.strictObject({
-        patch: z.record(z.string(), z.json()),
-        expectedRevision: z.number().int().nonnegative(),
-      }),
-      schemas.routeSettingsSnapshotSchema as S["routeSettingsSnapshotSchema"],
-      "human-or-pea",
-      "pe",
-      "human-or-pea",
-    ),
     "work.get": route("GET", "/pe/route-state/:route", none, object, "read", "pe", "read"),
     "work.apply": route(
       "POST",

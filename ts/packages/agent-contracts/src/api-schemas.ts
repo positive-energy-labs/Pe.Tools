@@ -36,6 +36,7 @@ export * from "./world.ts";
 export * from "./target.ts";
 export * from "./caller.ts";
 export * from "./run-consent.ts";
+export * from "./guards.ts";
 export * from "./principal.ts";
 export * from "./instances.ts";
 export * from "./capability.ts";
@@ -74,7 +75,6 @@ export * from "./list-search.ts";
 export * from "./scene-view.ts";
 export { threadSearchDefault } from "./routes/shared.ts";
 export * from "./route-graph.ts";
-export * from "./route-settings.ts";
 export * from "./ducts-sheet.ts";
 
 import { z } from "zod";
