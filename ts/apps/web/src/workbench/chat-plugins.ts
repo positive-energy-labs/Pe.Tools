@@ -241,6 +241,16 @@ export function actionCall(toolName: string, args: unknown, result: unknown): Ac
  * A command opens its Work owner's registered Page. A Page-less owner keeps its receipt link.
  */
 export const actionRoute = (key: string): ChatPluginRoute | null => publicRoutes.actionRoute(key);
+/**
+ * The route a receipt ran in: the route whose Work it consumed (a row verb on /fans binds Fans'),
+ * else the one route that declares the action. Work no route draws (the findings Work) names none.
+ */
+export function receiptRoute(key: string, receipt: ActionReceipt | undefined): ChatPluginRoute | null {
+  const work = receipt?.consumes.find((entry) => entry.kind === "work");
+  if (work?.kind !== "work") return actionRoute(key);
+  const route = work.probe.handle.key.route;
+  return publicRoutes.get(route) ? (route as ChatPluginRoute) : null;
+}
 
 /** `takeoffs.sync` → `sync`, `schedule.grid.push` → `grid push`. */
 export const actionWord = (key: string) => key.split(".").slice(1).join(" ") || key;
