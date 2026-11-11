@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { stableFanKey } from "../ducts/sheet/model";
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { surfaceReadiness } from "../route/readiness.test.fixture";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { Context, Effect, Layer, Queue, Option } from "effect";
@@ -28,7 +30,6 @@ import { bootHost } from "../../../host/tests/real-server";
 import { connectTestBridge } from "../../../host/tests/bridge-fixture";
 import { admittedReceiptStamps } from "../../../host/src/receipt-export";
 import { canonicalRouteInput, workFingerprintSchema, actionStatusSchema } from "@pe/agent-contracts";
-import { localId } from "../route/typed-route";
 import "../ducts/sheet/mount";
 import { TypedShell } from "./typed-shell";
 import { module as fans } from "../fans/route";
@@ -75,6 +76,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  let bridge:any;
  const roster=nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
  const walk=nativeResponseSchema("ducts.snapshot.walk").parse(walkCapture);
+ const muas=elementSubject({uniqueId:walk.nodes.find(n=>n.id===14577391)!.uniqueId!});
  const tables=nativeResponseSchema("ducts.tables").parse({folder:"fixture",tables:{},missing:[],unsupported:{}});
  const native=Layer.effect(HostNativeRead,Effect.gen(function*(){
    bridge=yield* connectTestBridge(); trace.target=bridge.target;
@@ -145,7 +147,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  const unbind=bindActionReadings();
  const dirties:any[]=[];const originalDirty=peReadings.dirty.bind(peReadings);
  peReadings.dirty=(request:any,scope?:"connection"|"subject")=>{dirties.push({request,scope});originalDirty(request,scope);};
- let search=new URLSearchParams({target:JSON.stringify({kind:"open",ref:trace.target}),thread:"f05-probe",fan:JSON.stringify({kind:"ids",ids:[localId("ducts-fan",`${walk.nodes.find(n=>n.id===14577391)!.uniqueId}@2`)]})});
+ let search=new URLSearchParams({target:JSON.stringify({kind:"open",ref:trace.target}),thread:"f05-probe",fan:JSON.stringify({kind:"ids",ids:[stableFanKey({ uniqueId: walk.nodes.find(n=>n.id===14577391)!.uniqueId!, portIndex: 2 })]})});
  const listeners=new Set<()=>void>();
  const address={read:()=>new URLSearchParams(search),write:(next:URLSearchParams)=>{search=new URLSearchParams(next);listeners.forEach(f=>f());},subscribe:(f:()=>void)=>{listeners.add(f);return()=>{listeners.delete(f);};}};
  const root=createRootRoute({validateSearch:(s:Record<string,unknown>)=>s,component:()=> <TypedShell module={fans} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtins.fans.closure.fingerprint}`)} address={address}/>});
@@ -164,7 +166,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
          kind:"apply",expectedRevision:0,press:"outside-mount",label:"Stage fan from outside the page",
          patches:[
            {path:["writeIntent","edit"],value:{value:{walk:{unitId:14577391,portIndex:2}}}},
-           {path:["equipmentFlows","14577391"],value:{edit:{value:{cfm:925}}}},
+           {path:["equipmentFlows",muas],value:{edit:{value:{cfm:925}}}},
          ],
        }),
      }));
@@ -230,7 +232,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    fireEvent.click(await screen.findByRole("option",{name:/MUAS-1.*0 staged/}));
    expect((await surfaceReadiness()).getAttribute("data-readiness")).toBe("ready");
    await act(async()=>{
-     const failure=await mount.draw("sheet-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{"14577391":{cfm:925}}},{label:"Stage MUAS-1 airflow"}));
+     const failure=await mount.draw("sheet-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{[muas]:{cfm:925}}},{label:"Stage MUAS-1 airflow"}));
      if(failure) throw Error(failure.message);
    });
    fireEvent.click(await screen.findByRole("button",{name:"Refresh Fans"}));
@@ -309,6 +311,8 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    releasePlan.resolve();
    firstSettlement??={inspectable:!!screen.queryByRole("button",{name:"Write to Revit"}),problem:trace.mounts.at(-1)?.reviewProblem("losses"),before,after:trace.mounts.length?sample():undefined};
    if(process.env.PE_F05_EVIDENCE)writeFileSync(process.env.PE_F05_EVIDENCE,JSON.stringify({mode,workFrames,firstSettlement,settlements:(trace as any).settlements,commandReads:(trace as any).commandReads,readEvents:(trace as any).readEvents,republication:(trace as any).republication,submits:trace.submit.mock.calls.length,results:(trace as any).results,receiptBatch,dirties,subscriptionChanges,http:trace.http,before,after,samples:trace.samples,stops:trace.stops,plans:trace.tokens.map(({token,gate})=>({id:token.id,current:gate.current(token),samePageEpoch:token.pageEpoch===gate.read()?.pageEpoch})),requests,body:document.body.textContent,problem:trace.mounts.at(-1)?.reviewProblem("losses")},null,2));
-   cleanup();unbind();peReadings.dirty=originalDirty;peReadings.close();for(const stream of streams)stream.close();vi.unstubAllGlobals();await host.close();await rm(dir,{recursive:true,force:true});
+   cleanup();unbind();peReadings.dirty=originalDirty;peReadings.close();for(const stream of streams)stream.close();vi.unstubAllGlobals();await host.close();
+   // A capture write can still be landing after close; its retry keeps a cleanup error from replacing the real assertion.
+   await rm(dir,{recursive:true,force:true,maxRetries:5,retryDelay:100});
  }
 }

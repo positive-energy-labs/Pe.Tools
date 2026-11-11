@@ -1,5 +1,6 @@
 import { useContext, useMemo } from "react";
-import { AttentionDocument, useMembers, type SubjectKey } from "@pe/kit/lang/attention";
+import { AttentionDocument, useMembers } from "@pe/kit/lang/attention";
+import { regionSubject } from "./subject";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 /**
  * The feedback inbox (V6 calm): one row per mark or note on the view, in `CARD_STATES` order. A
@@ -203,7 +204,7 @@ export function RoomsInbox({
         new Map(
           cards.map((card) => [
             `card:${card.id}` as const,
-            card.guids.map((guid): SubjectKey => `room:${guid}`),
+            card.guids.map(regionSubject),
           ]),
         ),
       [cards],

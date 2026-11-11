@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
-import { identityCodecs } from "../../agent-contracts/src/route-kernel-codecs.ts";
-import type { IdentityId } from "../../agent-contracts/src/route-kernel-page.ts";
+import {
+  subjectCode,
+  type DocumentKey,
+  type SubjectRefCode,
+  type UniqueId,
+} from "../../agent-contracts/src/subject-ref.ts";
 import type {
   RecordingDiffEntry,
   RecordingDiffKey,
@@ -9,13 +13,9 @@ import type {
 } from "../../agent-contracts/src/recording-diff.ts";
 import { diffKeyed } from "./recording-diff.ts";
 
-const encoded = <T>(r: { ok: true; value: T } | { ok: false; reason: string }): T => {
-  if (!r.ok) throw new Error(r.reason);
-  return r.value;
-};
-const document = encoded(identityCodecs.document.encode({ document: "doc-a" }));
-const element = (uniqueId: string, doc = "doc-a") =>
-  encoded(identityCodecs.element.encode({ document: doc, link: null, uniqueId }));
+const document = "doc-a" as DocumentKey;
+const element = (uniqueId: string, doc?: string) =>
+  subjectCode({ keyKind: "UniqueId", key: uniqueId as UniqueId, ...(doc ? { source: doc as DocumentKey } : {}) });
 const key = (id: string): RecordingDiffKey => ({ kind: "element", id: element(id) });
 const entry = (
   key: RecordingDiffKey,
@@ -92,7 +92,7 @@ it("refuses crossdocument equal names and either partial side", () => {
   expect(
     diffKeyed(s, {
       ...s,
-      document: encoded(identityCodecs.document.encode({ document: "doc-b" })),
+      document: "doc-b" as DocumentKey,
     }),
   ).toMatchObject({ kind: "incomparable", reason: "cross-document-correspondence-unavailable" });
   const partial = {
@@ -113,7 +113,7 @@ it("rejects duplicates, forged numeric aliases, conflicting documents and unsupp
   });
   for (const id of ['["doc-a",null,"123"]', element("unique-a", "other-document")]) {
     expect(
-      compare([entry({ kind: "element", id: id as IdentityId<"element"> })], []),
+      compare([entry({ kind: "element", id: id as SubjectRefCode })], []),
     ).toMatchObject({ reason: "invalid-identity" });
   }
   expect(compare([entry({ kind: "loop" })], [])).toMatchObject({ reason: "unsupported-loop" });

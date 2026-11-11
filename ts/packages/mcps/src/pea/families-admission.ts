@@ -134,7 +134,7 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
     return refuse(
       "unknown-family-type",
       `${bad.length} cell key(s) name no type of a family loaded in this Work's scope: ${bad.slice(0, 3).join(", ")}${bad.length > 3 ? ", ..." : ""}`,
-      `Nothing was written. A key is [familyName,typeName,parameter]: familyName is a family's exact name from revit.catalog.loaded-families, never an element id, and typeName is one of that family's types${sample ? `, e.g. ${familyCellKey({ familyName: sample.familyName, typeName: sample.types[0]!.typeName, parameter: "<parameter>" })}` : ""}.`,
+      `Nothing was written. A key is the SubjectRef name:[\"<familyName>\",\"<typeName>\"]#field:<parameter>: familyName is a family's exact name from revit.catalog.loaded-families, never an element id, and typeName is one of that family's types${sample ? `, e.g. ${familyCellKey({ familyName: sample.familyName, typeName: sample.types[0]!.typeName, parameter: "<parameter>" })}` : ""}.`,
       { cells: bad.map(familyCellAddress) },
     );
   };

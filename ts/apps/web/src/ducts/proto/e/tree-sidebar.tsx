@@ -1,5 +1,6 @@
 import { useContext } from "react";
 import { AttentionDocument } from "@pe/kit/lang/attention";
+import { useElementIndex } from "#/element-index";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { useCallback } from "react";
 import { ListTree } from "lucide-react";
@@ -136,6 +137,7 @@ const TREE_READERS = {
 export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersist<"name"> }) {
   const observation = useNativeObservation();
   const doc = useContext(AttentionDocument);
+  const elements = useElementIndex();
   // Every section opens; the critical run opens under the section that holds it (else the first's).
   const crit =
     ctx.trees.flatMap((t) => t.children).find((r) => r.key === ctx.criticalKey) ??
@@ -168,17 +170,12 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
     items: ctx.trees,
     search,
     subjectOf: useCallback(
-      (node: TreeNode) =>
-        doc
-          ? {
-              doc,
-              key:
-                node.kind === "element"
-                  ? (`e:${node.id}` as const)
-                  : (`${node.kind}:${node.key}` as const),
-            }
-          : undefined,
-      [doc],
+      (node: TreeNode) => {
+        const key =
+          node.kind === "element" ? elements.keyOf(node.id!) : (`${node.kind}:${node.key}` as const);
+        return doc && key ? { doc, key } : undefined;
+      },
+      [doc, elements],
     ),
     sorts: { name: labelOf },
     select: "single",

@@ -13,7 +13,8 @@ import type { LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneMeshes } from "#/scene/types";
 import type { PictureBounds } from "#/scene/framing";
-import { idOf, type PictureLine } from "./model";
+import { useElementIndex } from "#/element-index";
+import type { PictureLine } from "./model";
 
 const CORNER = { width: 300, height: 176 } as const;
 
@@ -41,6 +42,7 @@ export function usePictureFloaters({
   /** The flat picture, drawn small; absent = the picture has one mode and no corner. */
   flat?: { key: string; label: string; small: () => ReactNode };
 }): FloaterSpec[] {
+  const elements = useElementIndex();
   const [globe, setGlobe] = useState(true);
   const [corner, setCorner] = useState(true);
   const segments = useMemo(() => drawn.filter((line) => line.points.length > 1), [drawn]);
@@ -54,7 +56,7 @@ export function usePictureFloaters({
   }, [bounds, segments]);
   // The globe marks what the schematic marks: the hover-lit set heavy, the selection underlaid.
   const linesOf = (ids: ReadonlySet<number>) =>
-    lines?.filter((_, index) => ids.has(idOf(segments[index]?.key ?? "e:")));
+    lines?.filter((_, index) => ids.has(elements.idOf(segments[index]?.key ?? "")));
   const litLines = useMemo(() => linesOf(lit), [lines, segments, lit]); // eslint-disable-line react-hooks/exhaustive-deps
   const selectedLines = useMemo(() => linesOf(selected), [lines, segments, selected]); // eslint-disable-line react-hooks/exhaustive-deps
   return [

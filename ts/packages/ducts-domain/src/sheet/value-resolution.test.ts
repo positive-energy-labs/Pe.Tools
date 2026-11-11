@@ -7,15 +7,15 @@ import type { Walk } from "./walk.ts";
 import { worksheet } from "./worksheet.ts";
 import type { Sheet } from "./types.ts";
 const snapshot = {
-  nodes: [{ id: 1, kind: "terminal", facts: [], connectors: [] }],
+  nodes: [{ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,  id: 1, kind: "terminal", facts: [], connectors: [] }],
   segments: [],
 } as unknown as SheetSnapshot;
 it("duct readings expose run, Work, model and firm provenance with units", () => {
   const layers = {
     snapshot,
     firm: TEST_FIRM,
-    run: { flows: { "1": { cfm: 0 } } },
-    work: { flows: { "1": { cfm: 100 } } },
+    run: { flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { cfm: 0 } } },
+    work: { flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { cfm: 100 } } },
     store: { terminalFlows: { "1": { cfm: 200 } } },
     versions: { Work: 7 },
   };
@@ -46,18 +46,18 @@ it("duct readings expose run, Work, model and firm provenance with units", () =>
 it("a value retired into the model store keeps the authored tier over native and firm", () => {
   // Terminal 1 states 0.5 in-wg on its own catalog parameter; the firm default disagrees too.
   const native = {
-    nodes: [{ id: 1, kind: "terminal", facts: [], connectors: [], terminalDrop: { catalogDropInWg: 0.5 } }],
+    nodes: [{ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,  id: 1, kind: "terminal", facts: [], connectors: [], terminalDrop: { catalogDropInWg: 0.5 } }],
     segments: [],
   } as unknown as SheetSnapshot;
   const drop = (work: object | undefined, store: object | undefined) =>
     resolveInputs({ snapshot: native, firm: TEST_FIRM, work, store }).terminals["1"]!.drop;
-  expect(drop({ terminalDrops: { "1": { inWg: 0.2 } } }, undefined)).toMatchObject({ value: 0.2, source: "Work" });
+  expect(drop({ terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { inWg: 0.2 } } }, undefined)).toMatchObject({ value: 0.2, source: "Work" });
   // The receipt retires the staged cell: Work is cleared and the store holds the same value.
   const retired = drop(undefined, { terminals: { "1": { inWg: 0.2 } } });
   expect(retired).toMatchObject({ value: 0.2, source: "model-store", ref: "_PE_DuctLosses", units: "in-wg" });
   expect(retired.version).toBeNull();
   // A pending Work edit wins over the older stored value.
-  expect(drop({ terminalDrops: { "1": { inWg: 0.3 } } }, { terminals: { "1": { inWg: 0.2 } } })).toMatchObject({
+  expect(drop({ terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { inWg: 0.3 } } }, { terminals: { "1": { inWg: 0.2 } } })).toMatchObject({
     value: 0.3,
     source: "Work",
   });

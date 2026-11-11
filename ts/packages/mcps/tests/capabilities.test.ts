@@ -18,6 +18,8 @@ import type { PackageProjection } from "@pe/agent-contracts";
 import { peDo, peRead, peFind } from "../src/pea/capability-tools.ts";
 
 import { nativeFixture } from "../../../apps/host/tests/fans-native.fixture.ts";
+import capturedWalk from "../../../apps/host/tests/native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { commands } from "@pe/agent-contracts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 import { createServer } from "node:http";
@@ -502,7 +504,7 @@ test("Pea discovers the Ducts Plan owner, refuses Fans at schema decode, and pre
       "fans",
       "human",
       [
-        { path: ["flows", "4", "edit"], value: { value: { cfm: 250 } } },
+        { path: ["flows", elementSubject(capturedWalk.nodes.find((node) => node.id === 8718801)!), "edit"], value: { value: { cfm: 250 } } },
         { path: ["parameters", "terminalFlow", "edit"], value: { value: "PE_M_Grd_AirFlow" } },
       ],
       0,
@@ -512,7 +514,7 @@ test("Pea discovers the Ducts Plan owner, refuses Fans at schema decode, and pre
       f.key,
       "ducts",
       "human",
-      [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } }],
+      [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } }],
       0,
     );
     expect(ducts.ok).toBe(true);

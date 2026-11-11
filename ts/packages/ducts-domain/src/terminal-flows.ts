@@ -1,12 +1,6 @@
+import { elementSubject } from "./work-subject.ts";
 import type { DuctTerminalFlowSource, DuctEquipmentFlowSource } from "@pe/agent-contracts";
-/**
- * The design flow at every air terminal (pressure-drop ledger, 2026-10-16 "terminal design flow",
- * ruling 5 of 2026-10-20; Load Preview deleted at FANSPLIT, kaitpw 2026-11-03): an edit override
- * first; else the rooms seam (`roomFlows`); else Revit's own terminal flow when positive; else
- * nothing, and a finding says so. A unit's flow: an edit `equipmentFlows` cell, else Revit's
- * `fanFlow` slot fact (`equipmentFlows`).
- * Pure on the snapshot, the edit cells and the rooms split; nothing here is stored or written.
- */
+/** The design flow at every air terminal (pressure-drop ledger, 2026-10-16 "terminal design flow", ruling 5 of 2026-10-20; Load Preview deleted at FANSPLIT, kaitpw 2026-11-03): an edit override first; else the rooms seam (`roomFlows`); else Revit's own terminal flow when positive; else nothing, and a finding says so. */
 import type { DuctFlow } from "@pe/agent-contracts";
 
 import { terminalCfm } from "./topology.ts";
@@ -40,7 +34,7 @@ export function terminalFlows(
   const findings: FlowFinding[] = [];
   const flows = new Map<number, TerminalFlow>();
   for (const node of snapshot.nodes.filter((n) => n.kind === "terminal")) {
-    const override = flowsStaged[String(node.id)];
+    const override = flowsStaged[elementSubject(node)];
     const revit = terminalCfm(node);
     const room = roomFlows?.get(node.id);
     const flow: TerminalFlow = override
@@ -74,7 +68,7 @@ export function equipmentFlows(
     snapshot.nodes
       .filter((n) => n.kind === "equipment")
       .map((node) => {
-        const override = edit[String(node.id)];
+        const override = edit[elementSubject(node)];
         const revit = node.facts.find((f) => f.key === "fanFlow")?.value ?? null;
         const flow: EquipmentFlow = override
           ? { cfm: override.cfm, source: "override" }

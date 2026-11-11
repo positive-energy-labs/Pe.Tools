@@ -51,7 +51,7 @@ const duct = (
   roughness: { valueFt: 0.0003, provenance: "revit-default" },
   revit: {},
   connectors: [conn(1, a), conn(2, b)],
-  uniqueId: null,
+  uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`,
   phaseCreated,
 });
 const link = (a: Segment, ia: number, b: Segment, ib: number) => {

@@ -641,16 +641,6 @@ it("refuses workSubject fields without a codec that decodes a local Work key", a
       expect.objectContaining({ path: "workSubject", expected: "decoded Work key" }),
     );
   }
-  expect(
-    await refuse({
-      ...builtinData,
-      workSubject: "system",
-      identities: {
-        ...builtinData.identities,
-        system: { kind: "element", codec: "element" },
-      },
-    }),
-  ).toContainEqual(expect.objectContaining({ path: "workSubject", expected: "decoded Work key" }));
 });
 
 it("admits journal previews with truthful Geometry/rollback axes but still refuses native geometry", async () => {

@@ -6,6 +6,7 @@ import { type RouteStateSpec } from "./route-state.ts";
 import { showCellValue } from "./schedule-grid-data.ts";
 import { documentRefSchema } from "./target.ts";
 import { writeIntentSchema } from "./write-intent.ts";
+import { decode, subjectCode, type SubjectRefCode } from "./subject-ref.ts";
 export { familiesReadProgressSchema,type FamiliesReadProgress } from "./families-progress.ts";
 
 import { draftCellSchema } from "./draft.ts";
@@ -204,15 +205,26 @@ export interface FamilyCellAddress {
   parameter: string;
 }
 
-const familyCellAddressTupleSchema = z.tuple([z.string().min(1), z.string(), z.string()]);
-
-/** JSON tuple encoding is collision-free even when names contain separators. */
-export const familyCellKey = ({ familyName, typeName, parameter }: FamilyCellAddress): string =>
-  JSON.stringify(familyCellAddressTupleSchema.parse([familyName, typeName, parameter]));
+/** A cell is the SubjectRef `name:[family,type]#field:<parameter>` (ADR 0035 rule 2): the type is
+ * part of the name tuple and the parameter is the sub. */
+export const familyCellKey = ({ familyName, typeName, parameter }: FamilyCellAddress): SubjectRefCode =>
+  subjectCode({ keyKind: "name", key: [familyName, typeName], sub: { field: parameter } });
 
 export const familyCellAddress = (key: string): FamilyCellAddress => {
-  const [familyName, typeName, parameter] = familyCellAddressTupleSchema.parse(JSON.parse(key));
-  return { familyName, typeName, parameter };
+  const ref = decode(key);
+  if (!ref.ok) throw Error(`a family cell key is a SubjectRef: ${ref.reason}`);
+  const { value } = ref;
+  if (
+    value.keyKind !== "name" ||
+    value.key.length !== 2 ||
+    !value.key[0] ||
+    !value.sub ||
+    !("field" in value.sub) ||
+    value.source !== undefined ||
+    value.placement !== undefined
+  )
+    throw Error("a family cell key is name:[family,type]#field:<parameter>");
+  return { familyName: value.key[0], typeName: value.key[1]!, parameter: value.sub.field };
 };
 
 const familyCellKeySchema = z.string().refine(
@@ -223,7 +235,7 @@ const familyCellKeySchema = z.string().refine(
       return false;
     }
   },
-  { error: "a family cell key must be a canonical [familyName,typeName,parameter] JSON tuple" },
+  { error: "a family cell key is the SubjectRef name:[family,type]#field:<parameter>" },
 );
 
 /** Only a declared numeric storage type permits numeric coercion; Text always preserves its bytes. */
@@ -386,7 +398,7 @@ export const familiesRouteState = {
     "propose",
   ],
   description:
-    "Shared Family Foundry Work. Set scope.edit to {value:{categoryNames,familyNames,placementScope}}. Set cells.<key>.edit for a canonical [familyName,typeName,parameter] identity from scopeTypes, or patch.edit for exact native patch source bytes. Either author may replace or clear staged edits (last writer wins) and exclusions at the expected Work revision. Apply plans/checks/writes/readbacks the submitted edits; native patch and per-type edits are mutually exclusive.",
+    "Shared Family Foundry Work. Set scope.edit to {value:{categoryNames,familyNames,placementScope}}. Set cells.<key>.edit for the SubjectRef key name:[\"<familyName>\",\"<typeName>\"]#field:<parameter> (reserved % : ~ @ # / escaped as %xx) from scopeTypes, or patch.edit for exact native patch source bytes. Either author may replace or clear staged edits (last writer wins) and exclusions at the expected Work revision. Apply plans/checks/writes/readbacks the submitted edits; native patch and per-type edits are mutually exclusive.",
   schema: familiesDocumentSchema,
 } satisfies RouteStateSpec<typeof familiesDocumentSchema>;
 

@@ -4,7 +4,7 @@ import { fanCandidates, fansOwedBase } from "./fan-assignment.ts";
 import type { DuctSnapshot } from "./types.ts";
 import { unitRoles } from "./unit-roles.ts";
 
-const unit = (id: number, ...classes: string[]) => ({
+const unit = (id: number, ...classes: string[]) => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
   id,
   kind: "equipment",
   connectors: classes.map((classification, index) => ({ index, classification })),
@@ -35,7 +35,7 @@ const snapshot = (systems: ReturnType<typeof system>[]) =>
       unit(17, "SupplyAir", "ReturnAir"),
       unit(18, "SupplyAir"),
       unit(20, "SupplyAir"),
-      { id: 5, kind: "terminal", connectors: [], facts: [] },
+      { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(5).toString(16).padStart(8, "0")}`,  id: 5, kind: "terminal", connectors: [], facts: [] },
     ],
     segments: [],
     groups: [

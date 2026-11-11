@@ -46,7 +46,7 @@ const duct = (
   roughness: { valueFt: 0.0003, provenance: "revit-default" },
   revit: {},
   connectors: [conn(0, a, undefined, d), conn(1, b, undefined, d)],
-  uniqueId: null,
+  uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`,
   ...over,
 });
 const node = (id: number, kind: Node["kind"], connectors: Connector[]): Node => ({
@@ -63,7 +63,7 @@ const node = (id: number, kind: Node["kind"], connectors: Connector[]): Node => 
   classification: "Supply Air",
   connectors,
   facts: [],
-  uniqueId: null,
+  uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`,
 });
 const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
   const elements = [...segments, ...nodes];

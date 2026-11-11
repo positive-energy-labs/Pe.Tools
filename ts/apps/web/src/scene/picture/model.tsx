@@ -1,3 +1,4 @@
+import type { ElementIndex } from "#/element-index";
 import { RegistryContext } from "@effect/atom-react";
 import { holdCitation, type SubjectKey } from "@pe/kit/lang/attention";
 import { useWork } from "@pe/kit/lang/work";
@@ -57,21 +58,23 @@ export type PictureStrand = {
   /** The governing strand (the critical run): drawn heavy and always flowing. */
   heavy?: boolean;
 };
-/** Numeric element ids stop here: the renderer adapter speaks `revitId`, the picture `e:` keys. */
-export const idOf = (key: SubjectKey) => (key.startsWith("e:") ? Number(key.slice(2)) : NaN);
-
-const centrelinePoints = (lines: readonly PictureLine[], ids?: ReadonlySet<number>) =>
-  lines.flatMap((line) => (!ids || ids.has(idOf(line.key)) ? line.points : []));
+/** Numeric element ids stop at the renderer adapter, which speaks `revitId`; the picture's keys are UniqueId codes. */
+const centrelinePoints = (
+  lines: readonly PictureLine[],
+  elements?: ElementIndex,
+  ids?: ReadonlySet<number>,
+) => lines.flatMap((line) => (!ids || ids.has(elements!.idOf(line.key)) ? line.points : []));
 
 /** Where elements sit: their meshes', else their centrelines'; null when none is drawn. */
 export function boundsOfIds(
   meshes: SceneMeshes | null,
   lines: readonly PictureLine[],
   ids: ReadonlySet<number>,
+  elements: ElementIndex,
 ): Bounds | null {
   return (
     (meshes && boundsOfInstances(meshes, (i) => i.revitId !== null && ids.has(i.revitId))) ??
-    boundsOfPoints(centrelinePoints(lines, ids))
+    boundsOfPoints(centrelinePoints(lines, elements, ids))
   );
 }
 

@@ -1,6 +1,10 @@
 import { z } from "zod";
+import { decode, uniqueIdSchema, subjectRefCodeSchema } from "./subject-ref.ts";
 import { documentRefSchema } from "./target.ts";
 import { VALUE_SOURCES } from "./work-value.ts";
+const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(code => {
+  const ref = decode(code); return ref.ok && ref.value.keyKind === "UniqueId";
+});
 
 const elementId = z.number().int().positive();
 const portIndex = z.number().int().nonnegative();
@@ -29,7 +33,6 @@ export type Resolved<T> = Omit<import("./work-value.ts").ValueResolution<T>, "va
 };
 const num = z.number().finite();
 const nonneg = num.nonnegative();
-const elementKey = z.string().regex(/^[1-9]\d*$/);
 const sided = <T extends z.ZodType>(value: T) => z.strictObject({ supply: value, return: value });
 const splitPolicy = z.enum(["even", "proportional"]);
 /** The design criteria a person edits (Work `criteria`) and the firm file carries; the resolver stamps sources. */
@@ -90,11 +93,11 @@ export const endRulingSchema = z.strictObject({
 });
 export const ductsInputsSchema = z.strictObject({
   terminals: z.record(
-    elementKey,
+    z.string(),
     z.strictObject({ cfm: resolved(nonneg.nullable()), drop: resolved(nonneg.nullable()) }),
   ),
   units: z.record(
-    elementKey,
+    z.string(),
     z.strictObject({
       kind: resolved(z.enum(DUCT_UNIT_KINDS)),
       role: resolved(unitRole),
@@ -104,7 +107,7 @@ export const ductsInputsSchema = z.strictObject({
     }),
   ),
   /** An accessory, inline equipment, or a fitting a person priced by hand; null when nothing states a drop. */
-  components: z.record(elementKey, z.strictObject({ drop: resolved(nonneg.nullable()) })),
+  components: z.record(z.string(), z.strictObject({ drop: resolved(nonneg.nullable()) })),
   rulings: z.strictObject({ joins: z.array(joinRulingSchema), ends: z.array(endRulingSchema) }),
   criteria: z.strictObject({
     velocityLimitFpm: sided(resolved(num.positive())),
@@ -139,7 +142,7 @@ export type DuctsFirm = z.infer<typeof ductsFirmSchema>;
  * What a cell or Pea writes: Work's own keys, one record per key, `null` deleting the pending edit.
  * The host applies them to document Work and recomputes; nothing here reaches Revit until apply.
  */
-const edits = <T extends z.ZodType>(value: T) => z.record(elementKey, value.nullable());
+const edits = <T extends z.ZodType>(value: T) => z.record(elementSubjectSchema, value.nullable());
 export const ductsSheetEditsSchema = z.strictObject({
   flows: edits(z.strictObject({ cfm: nonneg })).optional(),
   terminalDrops: edits(z.strictObject({ inWg: nonneg })).optional(),
@@ -528,7 +531,7 @@ export const ductsRosterResponseSchema = z.object({
   rows: z.array(
     z.object({
       unitId: elementId,
-      uniqueId: z.string().min(1),
+      uniqueId: uniqueIdSchema,
       portIndex,
       mark: z.string(),
       /** Display disambiguators for a duplicate mark; the UniqueId is identity, never text. */

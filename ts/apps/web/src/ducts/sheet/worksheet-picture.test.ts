@@ -3,6 +3,7 @@
 import { expect, it } from "vite-plus/test";
 import type { Detail } from "./model";
 import { worksheetPicture } from "./picture";
+import { eKey, testElements } from "#/test-attention";
 
 const leg = (id: string, elementId: number) => ({
   id,
@@ -70,15 +71,15 @@ const ws = {
 } as unknown as Detail<"worksheet">;
 
 it("runs become strands in air order, the critical one heavy; over legs alarm; a pick widens to its section", () => {
-  const p = worksheetPicture(ws);
+  const p = worksheetPicture(ws, testElements([1, 2, 3, 4]));
   expect(p.strands).toEqual([
-    { key: "run:s1", path: ["e:1", "e:2"], heavy: false },
+    { key: "run:s1", path: [eKey(1), eKey(2)], heavy: false },
     // A return run is walked fan to grille; air flows grille to fan.
-    { key: "run:r1", path: ["e:4", "e:3"], heavy: true },
+    { key: "run:r1", path: [eKey(4), eKey(3)], heavy: true },
   ]);
-  expect([...p.over]).toEqual(["e:4"]);
-  expect(p.members.get("section:S1")).toEqual(["e:1"]);
-  expect(p.widen!("e:1")).toEqual(["e:1"]);
-  expect(p.widen!("e:3")).toEqual([]);
-  expect(worksheetPicture(null).strands).toEqual([]);
+  expect([...p.over]).toEqual([eKey(4)]);
+  expect(p.members.get("section:S1")).toEqual([eKey(1)]);
+  expect(p.widen!(eKey(1))).toEqual([eKey(1)]);
+  expect(p.widen!(eKey(3))).toEqual([]);
+  expect(worksheetPicture(null, testElements([])).strands).toEqual([]);
 });

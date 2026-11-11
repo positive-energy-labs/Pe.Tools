@@ -1,3 +1,4 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { neutralFansWork } from "@pe/agent-contracts";
 import { expect, it } from "vite-plus/test";
 import {
@@ -278,12 +279,12 @@ it("both authors share revision-fenced Work edits and refuses lossy scalar unit 
   expect(applyPatches(fansRouteState, env, "human", stage, 3)).toMatchObject({ ok: true });
   expect(applyPatches(fansRouteState, env, "human", stage, 2)).toMatchObject({ ok: false });
   const doc = work(evidence(s));
-  doc.esp["100"] = { edit: { value: { inWg: 0.2 } } };
+  doc.esp[elementSubject(s.nodes.find(node => node.id === 100)!)] = { edit: { value: { inWg: 0.2 } } };
   expect(() =>
     applyRequest(s, price(s, {}, doc, doc ?? neutralFansWork), "purpose-time", []),
   ).toThrow("no admitted manufacturer scalar ESP mapping");
-  delete doc.esp["100"];
-  doc.esp["200"] = { edit: { value: { inWg: 0.2 } } };
+  delete doc.esp[elementSubject(s.nodes.find(node => node.id === 100)!)];
+  doc.esp[elementSubject(s.nodes.find(node => node.id === 200)!)] = { edit: { value: { inWg: 0.2 } } };
   expect(() =>
     applyRequest(
       s,
@@ -297,8 +298,8 @@ it("both authors share revision-fenced Work edits and refuses lossy scalar unit 
 it("writes a edit unit flow for any unit rooted in the group, not only the baseline's pick", () => {
   const s = fixture();
   const doc = work(evidence(s));
-  doc.equipmentFlows["200"] = { edit: { value: { cfm: 825 } } };
-  doc.equipmentFlows["100"] = { edit: { value: { cfm: 400 } } };
+  doc.equipmentFlows[elementSubject(s.nodes.find(node => node.id === 200)!)] = { edit: { value: { cfm: 825 } } };
+  doc.equipmentFlows[elementSubject(s.nodes.find(node => node.id === 100)!)] = { edit: { value: { cfm: 400 } } };
   const ids = applyRequest(s, price(s, {}, doc, doc ?? neutralFansWork), "purpose-time", [
     "upstream",
   ]).equipmentFlows.map((f) => f.id);
@@ -388,7 +389,7 @@ it("refuses stale/contradictory pins, off-point losses, missing identity, scenar
     if (mode === "stale" && e.filter?.kind === "passive") e.filter.ports[0].point = [1, 0, 0];
     if (mode === "conflict") e.duplicate = e.filter!;
     if (mode === "offpoint" && e.filter?.kind === "passive") e.filter.loss.flowCfm = 120;
-    if (mode === "identity") s.segments[0]!.uniqueId = null;
+    if (mode === "identity") s.segments[0]!.uniqueId = "stale-identity";
     if (mode === "scenario") delete e.scenario;
     if (mode === "unknown-flow") s.nodes.find((n) => n.id === 300)!.facts = [];
     const result = price(s, {}, work(e), work(e) ?? neutralFansWork).next.design;

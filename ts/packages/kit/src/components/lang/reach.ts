@@ -3,6 +3,8 @@ import { createContext, type FocusEvent, type PointerEvent } from "react";
 export type SubjectTextScope = {
   doc: string;
   nameOf: (id: number) => string | null;
+  /** ElementId to UniqueId: the bus keys on UniqueIds, a subject with none is not lit. */
+  uniqueIdOf: (id: number) => string | null;
   go?: (id: number) => void;
   refProps?: (id: number) => Record<string, string | undefined>;
 };

@@ -2,11 +2,12 @@ import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { createContext, useContext, useEffect } from "react";
+import { decode, subjectCode, type UniqueId } from "@pe/agent-contracts";
 import { HOVER_GRACE } from "./hover-grace";
 
 /**
  * `<kind>:<short id>`. Kinds are open: each feature declares its own in its module; kit owns only
- * `e:` (a Revit element id, which kit rows and prose already speak). A plural mark gets a short id
+ * `UniqueId:<uid>` (ADR 0035 rule 2: a Revit element's SubjectRef code; an ElementId is session-local and never a key). A plural mark gets a short id
  * of its own and declares its members with `useMembers`, never a key that spells them out.
  */
 export type SubjectKey = `${string}:${string}`;
@@ -34,7 +35,14 @@ export const picture = Atom.family((doc: string) =>
 );
 export const AttentionDocument = createContext<string | null>(null);
 export const sameRef = (a: Ref | null, b: Ref | null) => a?.doc === b?.doc && a?.key === b?.key;
-export const elementKey = (id: number | string): SubjectKey => `e:${id}`;
+/** The attention key of a Revit element; refuses an integer-only ElementId. */
+export const elementKey = (uniqueId: string): SubjectKey =>
+  subjectCode({ keyKind: "UniqueId", key: uniqueId as UniqueId }) as SubjectKey;
+/** The UniqueId an element key names, or null for any other kind of key. */
+export const elementUniqueId = (key: SubjectKey): string | null => {
+  const ref = decode(key);
+  return ref.ok && ref.value.keyKind === "UniqueId" ? ref.value.key : null;
+};
 export const citationOwner = (doc: string, owner: string) => JSON.stringify([doc, owner]);
 export const mention = (ref: Ref) => ({ "data-subject": ref.key, "data-subject-doc": ref.doc });
 export function useMention() {

@@ -26,6 +26,7 @@ const conn = (index: number, x: number, to: [number, number] | null): Connector 
 });
 const duct = (id: number, group: string, system: string, ends: Connector[]): Segment => ({
   id,
+  uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`,
   kind: "duct",
   curveKind: "line",
   shape: "round",
@@ -49,6 +50,7 @@ const node = (
   mark?: string,
 ): Node => ({
   id,
+  uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`,
   kind,
   category: kind,
   family: kind === "equipment" ? "AHU" : kind,

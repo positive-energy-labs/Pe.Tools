@@ -84,7 +84,7 @@ it("registers portal work with the pane and removes it when the descendant unmou
 });
 
 it.each(["onPress", "onClick"] as const)(
-  "owns %s promise busy state, prevents repeat presses and shows its receipt",
+  "owns %s promise busy state, prevents repeat presses and claims no success for a void result",
   async (prop) => {
     let finish!: () => void;
     const press = vi.fn(
@@ -110,10 +110,25 @@ it.each(["onPress", "onClick"] as const)(
     );
     await act(async () => finish());
     expect(button.hasAttribute("aria-busy")).toBe(false);
-    expect(await screen.findByText("capture complete")).toBeTruthy();
     await waitFor(() => expect(document.querySelector('[data-slot="pane-work"]')).toBeNull());
+    // Only an explicit outcome claims success (1696b861): a void result shows no receipt.
+    expect(screen.queryByText("capture complete")).toBeNull();
+    expect(document.querySelector(".dl-button-outcome")).toBeNull();
   },
 );
+
+it("shows the receipt a promise resolves explicitly", async () => {
+  render(
+    <Button
+      label="capture"
+      onPress={async () => ({ kind: "receipt" as const, label: "capture complete" })}
+    >
+      capture
+    </Button>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "capture" }));
+  expect(await screen.findByText("capture complete")).toBeTruthy();
+});
 
 it.each(["refused", "error"] as const)(
   "shows a %s outcome under its button with alert semantics",

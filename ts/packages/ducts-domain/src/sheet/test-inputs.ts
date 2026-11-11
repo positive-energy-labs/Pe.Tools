@@ -1,8 +1,5 @@
-/**
- * Test-only: build a resolved `DuctsInputs` from the shorthand the sheet tests used to pass the
- * engine directly (typed end cfm and drops by element id, join and end rulings, a unit's own
- * flow), through the real resolver over a test firm. The engine itself takes only `inputs`.
- */
+/** Test-only: build a resolved `DuctsInputs` from the shorthand the sheet tests used to pass the engine directly (typed end cfm and drops by element id, join and end rulings, a unit's own flow), through the real resolver over a test firm. */
+import { elementSubject } from "../work-subject.ts";
 import type { DuctsFirm, DuctsInputs, DuctUnitKind } from "@pe/agent-contracts";
 import { catalogLinkKey } from "../catalog.ts";
 import type { DuctSnapshot } from "../types.ts";
@@ -91,9 +88,9 @@ export function inputsFor(snapshot: SheetSnapshot, s: InputsShorthand = {}): Duc
   for (const [key, inWg] of Object.entries(s.fittingDrops ?? {}))
     assumptions[FITTING_DROP_CELL(key)] = { kind: "component-drop", inWg };
   for (const [id, cfm] of Object.entries(s.endCfm ?? {}))
-    (byId.get(Number(id))?.kind === "equipment" ? equipmentFlows : flows)[id] = { cfm };
+    (byId.get(Number(id))?.kind === "equipment" ? equipmentFlows : flows)[elementSubject(byId.get(Number(id))!)] = { cfm };
   for (const [id, inWg] of Object.entries(s.drops ?? {}))
-    (byId.get(Number(id))?.kind === "terminal" ? terminalDrops : componentDrops)[id] = { inWg };
+    (byId.get(Number(id))?.kind === "terminal" ? terminalDrops : componentDrops)[elementSubject([...snapshot.nodes, ...snapshot.segments].find(e => e.id === Number(id))!)] = { inWg };
   for (const r of s.rulings ?? [])
     assumptions[JOIN_KEY(r.pair)] = {
       kind: "verdict",
@@ -102,7 +99,7 @@ export function inputsFor(snapshot: SheetSnapshot, s: InputsShorthand = {}): Duc
   for (const r of s.endRulings ?? [])
     assumptions[END_KEY(r.end)] = { kind: "verdict", verdict: "capped" };
   for (const [id, role] of Object.entries(s.roles ?? {}))
-    (work.roles as Record<string, { role: "fan" | "passive" }>)[id] = { role };
+    (work.roles as Record<string, { role: "fan" | "passive" }>)[elementSubject(byId.get(Number(id))!)] = { role };
   for (const [id, kind] of Object.entries(s.kinds ?? {})) {
     const n = byId.get(Number(id));
     if (n)

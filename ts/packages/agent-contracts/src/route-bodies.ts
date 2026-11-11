@@ -48,15 +48,6 @@ export const routeBindingSchema = z.object({
     )
     .transform((value): SchemaTable => ({ ...value })),
   codecs: z.record(z.string(), z.object({ encode: fn, decode: fn })),
-  identities: z.record(
-    z.string(),
-    z.object({
-      kind: z.enum(["local", "element", "document", "link"]),
-      encode: fn,
-      decode: fn,
-      parts: fn,
-    }),
-  ),
   entries: z.record(
     z.string(),
     z.object({ input: schema, output: schema, axes: z.record(z.string(), z.unknown()) }),
@@ -197,23 +188,9 @@ export function linkRouteBodies(
     if (!data.transition)
       fail("transitionDeps", "", "transition body", "Dependencies require transition");
   }
-  for (const [key, identity] of Object.entries(data.identities)) {
-    reference(bindings.identities, identity.codec, `identities.${key}.codec`, "identity codec");
-    if (bindings.identities[identity.codec]?.kind !== identity.kind)
-      fail(
-        `identities.${key}.kind`,
-        identity.codec,
-        identity.kind,
-        "Identity codec kind mismatch",
-        "identity",
-      );
-  }
   for (const [key, field] of Object.entries(data.fields)) {
     const path = `fields.${key}`;
-    if (field.role === "selection") {
-      list(data.identities, field.kinds, `${path}.kinds`, "identity");
-      continue;
-    }
+    if (field.role === "selection") continue;
     schemaRef(field.schema, `${path}.schema`);
     reference(bindings.codecs, field.codec, `${path}.codec`, "codec");
     const s = bindings.schemas[field.schema];
@@ -273,20 +250,6 @@ export function linkRouteBodies(
         );
     }
     if (field.role === "subject") {
-      list(
-        data.identities,
-        typeof field.identity === "string" ? [field.identity] : field.identity,
-        `${path}.identity`,
-        "identity",
-      );
-      if (Array.isArray(field.identity) && new Set(field.identity).size !== field.identity.length)
-        fail(
-          `${path}.identity`,
-          "",
-          "distinct identities",
-          "Duplicate subject identity",
-          "identity",
-        );
       reference(data.readings, field.picker.reading, `${path}.picker.reading`, "reading");
       body(field.picker.options, `${path}.picker.options`, "picker");
       if (s) validateSubjectSchema(field, s, fail, path);
@@ -630,7 +593,6 @@ export function linkRouteBodies(
     try {
       routeWorkSubject(
         data,
-        bindings,
         Object.fromEntries(
           Object.entries(data.fields).map(([key, field]) => [
             key,
@@ -659,18 +621,14 @@ function validateSubjectSchema(
   ) => unknown,
   path: string,
 ) {
-  const tagged = (value: z.ZodType) => {
+  if (field.cardinality === "many") {
     const alternatives = new Map<string, z.ZodObject>();
-    if (value instanceof z.ZodUnion)
-      for (const option of value.options)
+    const union = bare(schema);
+    if (union instanceof z.ZodUnion)
+      for (const option of union.options)
         if (option instanceof z.ZodObject && option.shape.kind instanceof z.ZodLiteral)
           for (const key of option.shape.kind.values)
             if (typeof key === "string") alternatives.set(key, option);
-    return alternatives;
-  };
-  let memberSchema = bare(schema);
-  if (field.cardinality === "many") {
-    const alternatives = tagged(memberSchema);
     const ids = alternatives.get("ids")?.shape.ids;
     if (
       canonicalRouteJson([...alternatives.keys()].sort()) !== '["all","ids"]' ||
@@ -683,27 +641,11 @@ function validateSubjectSchema(
         "Many subjects require the ids/all tagged union",
         "identity",
       );
-    if (ids instanceof z.ZodArray && ids.element instanceof z.ZodType) memberSchema = ids.element;
-  }
-  if (typeof field.identity !== "string") {
-    const kinds = [...tagged(memberSchema).keys()].sort();
-    if (canonicalRouteJson(kinds) !== canonicalRouteJson([...field.identity].sort()))
-      fail(
-        `${path}.schema`,
-        field.schema,
-        "declared identity alternatives",
-        "Mixed-subject tags differ from declared identities",
-        "identity",
-      );
   }
   const wrap = (value: unknown) =>
     field.cardinality === "many" ? { kind: "ids", ids: [value] } : value;
-  const invalid =
-    typeof field.identity === "string"
-      ? "invalid-identity"
-      : { kind: "undeclared-kind", id: "invalid" };
   if (
-    schema.safeParse(wrap(invalid)).success ||
+    schema.safeParse(wrap("invalid-identity")).success ||
     !schema.safeParse(field.cardinality === "many" ? { kind: "all" } : null).success ||
     schema.safeParse([]).success
   )

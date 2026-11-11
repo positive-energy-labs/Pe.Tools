@@ -344,14 +344,6 @@ function snapshotBindings(bindings: RouteBindings): RouteBindings {
         Object.entries(bindings.codecs).map(([key, codec]) => [key, Object.freeze({ ...codec })]),
       ),
     ),
-    identities: Object.freeze(
-      Object.fromEntries(
-        Object.entries(bindings.identities).map(([key, codec]) => [
-          key,
-          Object.freeze({ ...codec }),
-        ]),
-      ),
-    ),
     entries: Object.freeze(
       Object.fromEntries(
         Object.entries(bindings.entries).map(([key, entry]) => [
@@ -747,7 +739,7 @@ export function resolveRouteBindings(registry: AdmittedRouteRegistry, candidate:
 function sameLoadedBindings(actual: RouteBindings, loaded: RouteBindings): boolean {
   const sameKeys = (a: object, b: object) =>
     canonicalRouteJson(Object.keys(a).sort()) === canonicalRouteJson(Object.keys(b).sort());
-  for (const key of ["sources", "schemas", "codecs", "identities", "entries", "bodies"] as const)
+  for (const key of ["sources", "schemas", "codecs", "entries", "bodies"] as const)
     if (!sameKeys(actual[key], loaded[key])) return false;
   return (
     Object.entries(actual.sources).every(([id, source]) => {
@@ -766,13 +758,6 @@ function sameLoadedBindings(actual: RouteBindings, loaded: RouteBindings): boole
     Object.entries(actual.codecs).every(
       ([id, codec]) =>
         codec.encode === loaded.codecs[id]!.encode && codec.decode === loaded.codecs[id]!.decode,
-    ) &&
-    Object.entries(actual.identities).every(
-      ([id, codec]) =>
-        codec.kind === loaded.identities[id]!.kind &&
-        codec.encode === loaded.identities[id]!.encode &&
-        codec.decode === loaded.identities[id]!.decode &&
-        codec.parts === loaded.identities[id]!.parts,
     ) &&
     Object.entries(actual.entries).every(
       ([id, entry]) =>

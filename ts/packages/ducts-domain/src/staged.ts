@@ -1,4 +1,6 @@
 /** What the Work has edit for a write, counted from the document alone. */
+import { workElementId } from "./work-subject.ts";
+import { decode } from "@pe/agent-contracts";
 import type { DuctsApplyInput, DuctsDesign, WorkPath, FansDocument } from "@pe/agent-contracts";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
@@ -7,10 +9,12 @@ import type { DuctSnapshot } from "./types.ts";
 
 /** Fan targets are a projection of current edits, never a list frozen when scope was chosen. */
 export function fanWriteCells(doc: FansDocument | null, snapshot: Pick<DuctSnapshot, "nodes" | "segments">) {
-  const here = new Set([...snapshot.nodes, ...snapshot.segments].map(element => String(element.id)));
-  return (["terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows"] as const).flatMap(segment =>
-    Object.entries(doc?.[segment] ?? {}).flatMap(([id, cell]) =>
-      cell.edit != null && here.has(id) ? [[segment, id] as const] : []),
+  const here = new Set([...snapshot.nodes, ...snapshot.segments].map(element => element.uniqueId));
+  return (["terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows", "roles"] as const).flatMap(segment =>
+    Object.entries(doc?.[segment] ?? {}).flatMap(([id, cell]) => {
+      const ref = decode(id);
+      return cell.edit != null && ref.ok && ref.value.keyKind === "UniqueId" && here.has(ref.value.key) ? [[segment, id] as const] : [];
+    }),
   );
 }
 
@@ -36,8 +40,8 @@ export const stagedCells = (doc: DuctsDesign | null) =>
   );
 
 /** How many changes a write would carry: edit cells, and rulings that differ from the store's. */
-export const pendingCount = (doc: DuctsDesign | null, store: DuctSnapshot["store"]) =>
-  stagedCells(doc).length + pendingRulings(doc, store).length;
+export const pendingCount = (doc: DuctsDesign | null, store: DuctSnapshot["store"], snapshot: Pick<DuctSnapshot, "nodes" | "segments">) =>
+  stagedCells(doc).length + pendingRulings(doc, store, snapshot).length;
 
 /** Staged ESP cells: the one write that waits for a clean calc. */
 export const stagedEsp = (doc: DuctsDesign | null) =>
@@ -47,6 +51,8 @@ export const stagedEsp = (doc: DuctsDesign | null) =>
 export function appliedCellPaths(
   input: DuctsApplyInput,
   response: DuctsApply.Res.Response,
+  subjects: Readonly<Record<string, string>>,
+  cells: readonly (readonly [string, string])[],
 ): WorkPath[] {
   if (response.previewOnly) return [];
   const succeeded = response.writes.filter(
@@ -62,7 +68,7 @@ export function appliedCellPaths(
     [input.terminalFlows, "terminal-flow", "flows"],
     [input.equipmentFlows, "equipment-flow", "equipmentFlows"],
   ] as const)
-    for (const row of rows) if (has(kind, row.id)) paths.push([segment, String(row.id)]);
+    for (const row of rows) if (has(kind, row.id)) paths.push(...cells.filter(([s, key]) => s === segment && subjects[key] === String(row.id)));
   const rules = new Map<string, number[]>();
   for (const fitting of input.fittings)
     if (fitting.ruleKey)
@@ -71,7 +77,7 @@ export function appliedCellPaths(
     if (ids.every((id) => has("fitting", id))) paths.push(["rules", key]);
   for (const write of succeeded) {
     if (write.kind === "verdict" && write.key) paths.push(["assumptions", write.key]);
-    if (write.kind === "role" && write.id != null) paths.push(["roles", String(write.id)]);
+    if (write.kind === "role" && write.id != null) paths.push(...cells.filter(([s, key]) => s === "roles" && subjects[key] === String(write.id)));
     if (write.kind === "slot" && write.key) paths.push(["parameters", write.key]);
   }
   return paths;
@@ -82,9 +88,10 @@ export function scopeApplyRequest(
   request: DuctsApplyInput,
   store: DuctSnapshot["store"],
   cells: readonly (readonly [string, string])[] | undefined,
+  snapshot: Pick<DuctSnapshot, "nodes" | "segments">,
 ): DuctsApplyInput {
   if (!cells) return request;
-  const has = (segment: string, key: string | number) => cells.some(([s, k]) => s === segment && k === String(key));
+  const has = (segment: string, key: string | number) => cells.some(([s, k]) => s === segment && (s === "rules" ? k === key : workElementId(snapshot, k) === key));
   const fittings = request.fittings.filter(row => row.ruleKey && has("rules", row.ruleKey));
   const terminals = request.terminals.filter(row => has("terminalDrops", row.id));
   const components = request.components.filter(row => has("componentDrops", row.id));
@@ -102,6 +109,8 @@ export function scopeApplyRequest(
       terminals: merge("terminals", terminals.map(row => row.id)),
       terminalFlows: merge("terminalFlows", terminalFlows.map(row => row.id)),
       equipmentFlows: merge("equipmentFlows", equipmentFlows.map(row => row.id)),
+      roles: { ...store?.roles, ...Object.fromEntries(Object.entries(request.store?.roles ?? {}).filter(([id]) => has("roles", Number(id)))) },
     },
+    storeDeletes: { ...request.storeDeletes, roles: request.storeDeletes?.roles?.filter(id => has("roles", id)) },
   };
 }

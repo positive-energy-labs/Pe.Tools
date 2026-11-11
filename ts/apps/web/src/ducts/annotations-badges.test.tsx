@@ -12,8 +12,8 @@ import { NativeObservationScope } from "#/revit/observation";
 import { Annotations } from "./annotations";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { makeAtomRegistry } from "#/shell/owner";
-import { TestAttention } from "#/test-attention";
-import { citation, cite, elementKey } from "@pe/kit/lang/attention";
+import { TestAttention, eKey, uid } from "#/test-attention";
+import { citation, cite } from "@pe/kit/lang/attention";
 
 vi.mock("@pe/kit/lib/token", () => ({
   token: () => "currentColor",
@@ -79,13 +79,13 @@ it("a footnote badge sits on a drawn subject (mesh, else ghosted centreline, els
   const registry = makeAtomRegistry();
   cite(registry, {
     owner: "row",
-    refs: references.map(({ id, ...ref }) => ({ ...ref, doc: "test", key: elementKey(id) })),
+    refs: references.map(({ id, ...ref }) => ({ ...ref, doc: "test", key: eKey(id) })),
     focus: null,
   });
   const go = vi.fn();
   const { container } = render(
-    <TestAttention registry={registry}>
-      <SubjectTextContext.Provider value={{ doc: "test", nameOf: () => null, go }}>
+    <TestAttention registry={registry} ids={[1, 2, 3]}>
+      <SubjectTextContext.Provider value={{ doc: "test", nameOf: () => null, uniqueIdOf: uid, go }}>
         <Annotations
           {...({
             project: (p: readonly number[]) => [p[0]! * 10 + 50, p[1]! * 10 + 50],
@@ -115,13 +115,13 @@ it("a footnote badge sits on a drawn subject (mesh, else ghosted centreline, els
   expect(badges[1]!.querySelector("path")).not.toBeNull();
   const mark = badges[1]!.querySelector(".subject-badge")!;
   fireEvent.mouseEnter(mark);
-  expect(registry.get(citation)?.focus).toEqual({ doc: "test", key: "e:2" });
+  expect(registry.get(citation)?.focus).toEqual({ doc: "test", key: eKey(2) });
   fireEvent.click(mark);
   expect(go).toHaveBeenCalledWith(2);
 });
 
 it("one gap repair has one row, two named subjects, two pins and one evidence sentence", () => {
-  const segments = [10, 11].map((id, i) => ({
+  const segments = [10, 11].map((id, i) => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind: "duct",
     groupId: `g${id}`,

@@ -14,7 +14,7 @@ import { Scroll } from "@pe/kit/lang/scroll";
 import { Fragment, useMemo, useState } from "react";
 import { BlockerRow } from "./blocker-row";
 import type { Closer } from "./closer";
-import { fanKey, fanLabel, pressure, stableFanKey, type FanPort } from "./model";
+import { fanLabel, pressure, stableFanKey, type FanPort } from "./model";
 import {
   isConsequence,
   presentIds,
@@ -46,19 +46,18 @@ export function Roster({ props }: { props: RosterProps }) {
     persist: props.address,
     sorts: { name: (fan: FanPort) => fan.mark },
     ...(props.value ? { value: props.value, rowsOf: () => props.roster } : { items: props.roster }),
-    keyOf: fanKey,
+    keyOf: stableFanKey,
     search: rosterSearch,
     select: "multi",
     state: {
       ...listState,
-      selected: props.roster.filter((row) => props.picked?.includes(stableFanKey(row))).map(fanKey),
+      selected: props.roster.filter((row) => props.picked?.includes(stableFanKey(row))).map(stableFanKey),
     },
     onState: (next) => setListState({ ...next, selected: [] }),
     onPick: (row) => props.open(row),
     refusalOf: () => wait,
   });
   // A blank firm tag falls back to the unit's Mark or family; a name shared by two units (Chadds
-  // has two FC-23s) is told apart by level, system or order (fanLabel), never by an id.
   const nameOf = props.nameOf;
   const unitName = (fan: FanPort) => fan.mark || nameOf(fan.unitId);
   const named = useMemo(
@@ -116,7 +115,6 @@ function Sides({ props }: { props: LedgerProps }) {
     return props.busy || props.loading ? null : <p className="t-small text-ink-2">No fan open.</p>;
   const currentEsp = props.inputs?.units[String(fan.unitId)]?.esp;
   // One aligned overview: the required ESP line, then a side per row with fixed numeric columns,
-  // so the numbers read down a column instead of wrapping as run-on sentences.
   return (
     <section aria-label="Required ESP" className="flex flex-col gap-1" data-sheet-esp="">
       <h3 className="t-head">
@@ -175,7 +173,6 @@ function TierGroup({
   props: LedgerProps;
 }) {
   // The batch runs each row's closer with no typed value: the firm shim for drops, the pair for
-  // joins and heals; rows that need a typed number stay refused and are left to their row.
   const closers: Closer[] = blockers.map((b) => props.closerOf(b, null));
   const live = closers.filter((c) => c.refusal == null);
   const batch =

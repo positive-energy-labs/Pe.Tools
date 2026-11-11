@@ -512,7 +512,8 @@ export const fanRoster = read("fans.roster", {
       target: { kind: "document", ref: target },
       request: { ...(Object.keys(slots).length ? { slots } : {}), selector: { kind: "roster" } },
     });
-    const snapshot = response.body;
+    const snapshot = { ...response.body, nodes: response.body.nodes.filter(node =>
+      ductsRosterResponseSchema.shape.rows.element.shape.uniqueId.safeParse(node.uniqueId).success) };
     const inputs = resolveInputs({
       snapshot,
       work: workLayer(design),
