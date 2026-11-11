@@ -10,6 +10,8 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="Pe.Revit.Tests"/>
+        <!-- The wire serializer settings, read without Revit (WireDateTimeTests). -->
+        <InternalsVisibleTo Include="Pe.Shared.Tests"/>
     </ItemGroup>
 
     <ItemGroup>
