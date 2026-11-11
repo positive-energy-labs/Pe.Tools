@@ -7,7 +7,7 @@ import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { makeAtomRegistry } from "../shell/owner";
 import { SheetPane } from "../route/slots/sheet/pane.tsx";
 import { sheetCells } from "../route/slots/sheet/index.ts";
-import { designSheet } from "../ducts/design-sheet.ts";
+import { designSheet, ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "../ducts/design-sheet.ts";
 import { fansSheet } from "./sheet.ts";
 
 /*
@@ -77,4 +77,31 @@ test("F6 a staged unit role draws its option label with its author, never its ob
   expect(view.container.textContent).toContain("Fan");
   expect(view.container.textContent).not.toContain('{"role"');
   expect(view.container.querySelector('[data-unsaved="human"]')).toBeTruthy();
+});
+
+/*
+ * Slice 2b's no-shared-root disclosure (wave 1 review catch 3, S7-F4 and S7-F5): with no shared root
+ * the firm layer is refused, a firm criterion stands on the engine seed and says so, and the fix
+ * line is drawn. /ducts on the cell, /fans on its line from the /ducts design.
+ */
+const refused = { refused: "no-shared-root" } as const;
+const paneOf = (slot: typeof designSheet | typeof fansSheet, read: object) =>
+  render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: { cells: { doc: {}, at: () => handle({}) }, page: { read: () => ({}) },
+    value: { status: "ready", current: true, value: read } } as never, slot: slot as never }} /></RegistryContext>);
+
+test("/ducts with no shared root: a firm criterion is the engine default, and the fix line is drawn", () => {
+  const firmCell = { value: 900, source: "firm", units: "fpm" };
+  const read = { criteria: { velocityLimitFpm: { supply: firmCell, return: firmCell } }, firm: refused };
+  const cell = sheetCells(designSheet, { rows: [], work: {}, model: [], read }).find((c) => c.row === "velocitySupplyFpm");
+  expect(cell).toMatchObject({ value: 900, source: "default", ref: ENGINE_DEFAULT_NO_SHARED_ROOT });
+  const pane = paneOf(designSheet, read).container;
+  expect(pane.querySelector('[data-sheet-address="criteria:velocitySupplyFpm"]')!.textContent).toContain(ENGINE_DEFAULT_NO_SHARED_ROOT);
+  expect(pane.querySelector("[data-sheet-from]")!.textContent).toBe(NO_SHARED_ROOT);
+});
+
+test("/fans with no shared root: its line from the /ducts design says the engine default and draws the fix line", () => {
+  const read = { ductsRevision: 3, sheetSnapshot: { ...snapshot, systems: [] }, sheetView: { inputs: null, firm: refused }, fans: { slots: [] } };
+  const from = paneOf({ ...fansSheet, bindings: {} } as never, read).container.querySelector("[data-sheet-from]")!.textContent;
+  expect(from).toContain(ENGINE_DEFAULT_NO_SHARED_ROOT);
+  expect(from).toContain(NO_SHARED_ROOT);
 });
