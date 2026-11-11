@@ -13,6 +13,7 @@ import {
   isPackageMember,
   listPackages,
   onePackage,
+  productPodsRoots,
   type PackageListing,
 } from "./packages.ts";
 import { productPodsRootPath } from "./product-paths.ts";
@@ -261,10 +262,13 @@ export async function installArchive(
   const id = archiveId(entries);
   const folder = localFolder(folderName ?? id);
   const podsRoot = options.podsRoot ?? productPodsRootPath();
-  const installed = (await listPackages(podsRoot)).packages.find((p) => p.id === id);
+  // A new pod lands in the user home, and its id must be free in every home (ADR 0037 rule 4).
+  const installed = (await listPackages(options.podsRoot ?? productPodsRoots())).packages.find(
+    (p) => p.id === id,
+  );
   if (installed)
     throw new TransferRefused(
-      `Pod id '${id}' is already installed in folder '${installed.folder}'.`,
+      `Pod id '${id}' is already installed at '${installed.directory}'.`,
       409,
     );
   const directory = join(podsRoot, folder);

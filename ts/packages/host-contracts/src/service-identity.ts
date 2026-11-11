@@ -12,7 +12,7 @@ import {
   productInstallLayout,
   productPathNames,
 } from "./contracts/product.ts";
-import { documentsUserRoot, insideTestRoot } from "./product-paths.ts";
+import { documentsUserRoot, firmHome, insideTestRoot, type Home } from "./product-paths.ts";
 export {
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
@@ -32,15 +32,14 @@ export type RuntimeOwner = {
 /**
  * Pure state root for a told owner: `<home>\.local-state` under a product home override, else the dev
  * checkout's `.artifacts/pe-tools`, else the install root itself. Machine state never lands at or
- * under a content home's share: the shared root, or (without an override) the Documents user root.
+ * under a content home (ADR 0037 rule 6): `homes` is the home list, and every home in it fences.
  * The C# twin is `ProductPathing.StateRoot`; both suites assert `runtime-ownership.fixture.json`.
  */
 export function stateRoot(
   lane: HostLane,
   ownerRoot: string,
   productHome?: string,
-  sharedRoot?: string,
-  userRoot?: string,
+  homes: readonly Home[] = [],
 ): string {
   if (!isAbsolute(ownerRoot)) throw Error(`A ${lane} runtime needs an absolute owner root.`);
   if (lane === "installed" && productHome?.trim())
@@ -51,32 +50,36 @@ export function stateRoot(
     : lane === "dev"
       ? join(stateOwner, ".artifacts", "pe-tools")
       : ownerRoot;
-  const fences = [
-    [sharedRoot, productPathNames.sharedRootVariable],
-    // An override's `.local-state` sits in its own home by design (an isolated run); only the default user root is a share.
-    [productHome?.trim() ? undefined : userRoot, "the user content root"],
-  ] as const;
-  for (const [fence, name] of fences) {
-    if (!fence?.trim()) continue;
-    const home = resolve(fence.trim());
-    const away = relative(home, root);
+  for (const home of homes) {
+    // An override's `.local-state` sits in its own user home by design (an isolated run).
+    if (home.tier === "user" && productHome?.trim()) continue;
+    const fence = resolve(home.root.trim());
+    const away = relative(fence, root);
     if (away !== ".." && !away.startsWith(`..${sep}`) && !isAbsolute(away))
-      throw Error(`Machine state root '${root}' cannot be at or under ${name} '${home}'.`);
+      throw Error(`Machine state root '${root}' cannot be at or under ${fenceNames[home.tier]} '${fence}'.`);
   }
   return root;
 }
+
+// The words `runtime-ownership.fixture.json` pins for each fenced home.
+const fenceNames = {
+  user: "the user content root",
+  project: "the project home",
+  firm: productPathNames.sharedRootVariable,
+} as const;
 
 /** The owner's state root. Only an override can aim dev state at the installed namespace; that refuses. */
 export function productRoot(owner: RuntimeOwner): string {
   const ownerRoot = owner.lane === "dev" ? owner.sourceRoot : owner.installedRoot;
   if (!ownerRoot) throw Error(`A ${owner.lane} runtime was not told its owner root.`);
-  const root = stateRoot(
-    owner.lane,
-    ownerRoot,
-    process.env[productPathNames.productHomeVariable],
-    process.env[productPathNames.sharedRootVariable],
-    process.env[productPathNames.productHomeVariable]?.trim() ? undefined : documentsUserRoot(),
-  );
+  const override = process.env[productPathNames.productHomeVariable];
+  const firm = firmHome().root;
+  // The homes known at process start. The default user home is named, never resolved: under a
+  // test run it is only a fence, and resolving it would trip the isolation wire.
+  const root = stateRoot(owner.lane, ownerRoot, override, [
+    ...(override?.trim() ? [] : [{ tier: "user" as const, root: documentsUserRoot() }]),
+    ...(firm ? [{ tier: "firm" as const, root: firm }] : []),
+  ]);
   const away = relative(osUserProductRoot(), root);
   if (owner.lane === "dev" && (away === "" || (!away.startsWith("..") && !isAbsolute(away))))
     throw Error(`Dev host cannot use installed product state '${root}'.`);

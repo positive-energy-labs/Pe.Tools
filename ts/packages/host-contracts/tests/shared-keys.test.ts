@@ -11,20 +11,20 @@ const sharedWith = (text: string) => {
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
 };
 
-test("user over shared over refusal, decoded as a flat map at the boundary", () => {
+test("the person's own key, then the firm keys.json by role, then a refusal, decoded as a flat map at the boundary", () => {
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
-  expect(resolveKey("", "posthog")).toEqual({ refused: "no-shared-root" });
-  expect(resolveKey(" mine ", "posthog")).toEqual({ value: "mine", from: "user" });
-  sharedWith(JSON.stringify({ posthog: "phc_shared" }));
-  expect(resolveKey(null, "posthog")).toEqual({ value: "phc_shared", from: "shared" });
-  expect(resolveKey("mine", "posthog")).toEqual({ value: "mine", from: "user" });
-  expect(resolveKey(null, "other")).toEqual({ refused: "no-shared-key" });
-  expect(resolveKey(null, "toString")).toEqual({ refused: "no-shared-key" });
+  expect(resolveKey("", "openai.api-key")).toEqual({ refused: "no-shared-root" });
+  expect(resolveKey(" mine ", "openai.api-key")).toEqual({ value: "mine", from: "user" });
+  sharedWith(JSON.stringify({ "openai.api-key": "phc_shared" }));
+  expect(resolveKey(null, "openai.api-key")).toEqual({ value: "phc_shared", from: "shared" });
+  expect(resolveKey("mine", "openai.api-key")).toEqual({ value: "mine", from: "user" });
+  expect(resolveKey(null, "anthropic.api-key")).toEqual({ refused: "no-shared-key" });
+  expect(resolveKey(null, "toString" as never)).toEqual({ refused: "no-shared-key" });
 });
 
 test("a malformed keys.json refuses without its bytes in the reason", () => {
-  sharedWith(`{"posthog": {"nested": "phc_leaky"}`);
-  const key = resolveKey(null, "posthog");
+  sharedWith(`{"openai.api-key": {"nested": "phc_leaky"}`);
+  const key = resolveKey(null, "openai.api-key");
   expect(key).toEqual({ refused: "keys-unreadable" });
-  expect(keyRefusalText("keys-unreadable", "posthog")).not.toContain("phc_leaky");
+  expect(keyRefusalText("keys-unreadable", "openai.api-key")).not.toContain("phc_leaky");
 });

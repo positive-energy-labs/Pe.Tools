@@ -4,10 +4,11 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { productInstallLayout } from "../src/contracts/product.ts";
 import {
-  contentHomes,
   documentsUserRoot,
-  sharedFirmDir,
-  sharedKeysPath,
+  firmKeysPath,
+  firmSettingsDir,
+  homes,
+  type Home,
 } from "../src/product-paths.ts";
 import {
   installedRuntimeRoot,
@@ -48,13 +49,10 @@ test.each(fixture.stateRoots)("state root: $name", (row) => {
   vi.stubEnv("PE_TEST_HOME_ROOT", "");
   const resolvers = [
     () =>
-      stateRoot(
-        row.lane,
-        row.ownerRoot,
-        row.productHome ?? undefined,
-        row.sharedRoot ?? undefined,
-        row.userRoot,
-      ),
+      stateRoot(row.lane, row.ownerRoot, row.productHome ?? undefined, [
+        ...(row.userRoot ? [{ tier: "user", root: row.userRoot } satisfies Home] : []),
+        ...(row.sharedRoot ? [{ tier: "firm", root: row.sharedRoot } satisfies Home] : []),
+      ]),
     // A fixture user root is not this machine's Documents: only the pure resolver can take it.
     ...(row.userRoot
       ? []
@@ -74,9 +72,11 @@ test.each(fixture.contentHomes)("content homes: $name", (row) => {
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", row.sharedRoot ?? undefined);
   vi.stubEnv("PE_TEST_HOME_ROOT", "");
   const documents = dirname(documentsUserRoot());
-  expect(contentHomes()).toEqual(row.homes.map((home) => home.replace("%DOCUMENTS%", documents)));
-  expect(sharedFirmDir()).toBe(row.firm);
-  expect(sharedKeysPath()).toBe(row.keys);
+  expect(homes().map((home) => home.root)).toEqual(
+    row.homes.map((home) => home.replace("%DOCUMENTS%", documents)),
+  );
+  expect(firmSettingsDir()).toBe(row.firm);
+  expect(firmKeysPath()).toBe(row.keys);
 });
 
 test.each(fixture.trayLaunches)("tray argv: $name", (row) => {

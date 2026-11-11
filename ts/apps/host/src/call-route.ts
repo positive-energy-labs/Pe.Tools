@@ -1168,7 +1168,7 @@ const packageError = (key: string, error: unknown) => {
   return new LocalOpError(
     key,
     note,
-    note.startsWith("No installed pod") ? 404 : note.includes("claimed by folders") ? 409 : 422,
+    note.startsWith("No installed pod") ? 404 : note.includes("is claimed by") ? 409 : 422,
   );
 };
 
