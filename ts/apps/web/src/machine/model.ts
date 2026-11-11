@@ -155,7 +155,7 @@ export function autoOpen(machine: Machine | null): GroupKey | null {
   return null;
 }
 
-type Said = { readonly text: string; readonly tone?: "caution" | "alarm" | "done" };
+export type Said = { readonly text: string; readonly tone?: "caution" | "done" };
 
 export function revitState(machine: Machine): Said {
   const sessions: readonly MachineSession[] | null = machine.revit.sessions;

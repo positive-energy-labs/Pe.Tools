@@ -47,7 +47,9 @@ test("a failed Work read draws one caution failure line in the core pane, not a 
     const line = await screen.findByText("Reading failed");
     expect(line.closest("[data-slot='pane']"), "the failure line sits in a pane").not.toBeNull();
     expect(within(line.closest("[data-slot='pane']") as HTMLElement).getByText(/frame limit/)).toBeTruthy();
-    const outside = screen.queryAllByRole("alert").filter((el) => /frame limit/.test(el.textContent ?? "") && !el.closest("[data-slot='pane']"));
-    expect(outside, "no band alert sentence outside the panes").toEqual([]);
+    // Any role: the band's readiness span is a `status`, so an `alert` filter never saw it.
+    const outside = document.body.cloneNode(true) as HTMLElement;
+    outside.querySelectorAll("[data-slot='pane']").forEach((pane) => pane.remove());
+    expect(outside.textContent, "no failure sentence outside the panes").not.toContain("frame limit");
   } finally { view.unmount(); mount.dispose(); }
 }, 30_000);

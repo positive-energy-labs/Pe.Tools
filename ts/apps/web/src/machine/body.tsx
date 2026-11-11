@@ -178,8 +178,7 @@ export function SettingsBody({
   const automatic =
     autoOpen(machine) ??
     (machine
-      ? (machineGroups.find((entry) => entry.tone === "caution" || entry.tone === "alarm")?.key ??
-        null)
+      ? (machineGroups.find((entry) => entry.tone === "caution")?.key ?? null)
       : null);
   const open = group !== undefined ? group : automatic;
   return (

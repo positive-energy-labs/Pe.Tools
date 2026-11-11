@@ -31,3 +31,11 @@ test("Set rows alone are a note the chip names rather than a shade with no numbe
   expect(screen.getByRole("button").textContent).toBe("set");
   expect(systemNoteCount(calmSystem, undefined).total).toBe(0);
 });
+
+test("an unwalked system reads calm; only a walked one with no fan-to-terminal run is unpriced", () => {
+  const unpriced = { ...calmSystem, total: null };
+  expect(systemNoteCount({ ...unpriced, groups: [] }, undefined)).toEqual({ issues: [], total: 0 });
+  expect(
+    systemNoteCount({ ...unpriced, groups: [{}] }, undefined).issues.map((i) => i.word),
+  ).toEqual(["no run"]);
+});
