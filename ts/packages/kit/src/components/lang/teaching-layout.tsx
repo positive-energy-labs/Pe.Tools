@@ -27,6 +27,7 @@ type Furniture = Pick<
   | "overlay"
   | "scroll"
   | "flush"
+  | "busy"
 >;
 /** The leaf supplies body and furniture (its scroll track from the kernel's reading of the body
  * kind); identity, Pane creation and topology stay with composition. */

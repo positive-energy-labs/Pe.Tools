@@ -13,6 +13,7 @@ import { PreviewAction } from "@pe/kit/lang/write-action";
 import { KeyScopeHost, ScopeKeys, actionScopeKeys } from "@pe/kit/keys";
 import { routeOf, routeAddress, canonicalRouteInput, type LayoutNode } from "@pe/agent-contracts";
 import { useRouteTarget } from "../route/route-target";
+import { parseTarget } from "../route/target-codec";
 import { appAtomRegistry } from "./owner";
 import { admittedRouterAddress, PlaceBoundary } from "./typed-place-boundary";
 import type { AdmittedPlace, PlaceInput } from "./typed-place";
@@ -99,11 +100,14 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
     remember();
     return mount.subscribe(remember);
   }, [mount,place,history,snapshot,target.workAddress,instance,fixture,module]);
+  // Slice 6.1: a script awaits `[data-url-settled]` before it reads or reloads the URL. A Place
+  // whose `?target` does not parse never claims it, so a re-encoded target shows here first.
+  const urlSettled = useSyncExternalStore(mount?.subscribe ?? still, () => !!mount && visible && parseTarget(params.get("target"))?.kind !== "invalid" && mount.urlCurrent());
   const document = <DocumentPicker place={place} target={resolved} needs={module.spec.optionalTarget ?? needs} enabled={fixture === null && !snapshot && (!!module.spec.optionalTarget || !["browser","host"].includes(needs))} />;
   if (snapshot && !pose) return <p role="status">This route was never published at this point, or its Page is ambiguous</p>;
   // The recorded-point verbs (capture, compare, live) open from the Timeline, the topbar's history door.
   const recorded = <RecordedPoints document={snapshot?.point.history.address ?? target.workAddress} route={module.spec.key} address={place.address} snapshot={snapshot} compare={compare} />;
-  return <section className="flex min-h-0 flex-1 flex-col" data-tone={history ? "caution" : undefined} data-wash={history ? "" : undefined} aria-label={history ? "Recorded view, read-only" : undefined}>
+  return <section className="flex min-h-0 flex-1 flex-col" data-url-settled={urlSettled ? "" : undefined} data-tone={history ? "caution" : undefined} data-wash={history ? "" : undefined} aria-label={history ? "Recorded view, read-only" : undefined}>
       {problem ? <>{document}<p role="alert">{problem}</p></> : mount ? <TypedChrome mount={mount} document={document} recorded={recorded} thread={params.get("thread") ?? undefined} /> : <>{document}<p role="status">{target.resolution.kind === "failed" ? target.resolution.message : target.bindingLost?.sentence ?? "Document unavailable; choose an exact document again."}</p></>}
     </section>;
 
@@ -135,7 +139,7 @@ export function TypedChrome({ mount, document, recorded, thread }: { mount: Type
     {portal ? <PrimaryRouteControls route={spec.key} slot="situation">{head}</PrimaryRouteControls> : head}
     <GraphLayoutView layout={layout(spec.layout)} panes={Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,draws:[],verbs:[]}]))}
       active={when=>when === "subject" && !!spec.subject && (mount.page.read()[spec.subject.field]?.kind === "all" || !!mount.page.read()[spec.subject!.field]?.ids?.length)} state={{panes,onChange:next=>{setPanes(next);writeLayoutState(`route:${spec.key}`,next);}}}
-      bodies={Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,pane=>pane(mount.draw(id,ctx=><TypedPane mount={mount} id={id} ctx={ctx} />) as ReactNode,{...paneFrame(p.body),actions:slot(id)})]))} />
+      bodies={Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,pane=>pane(mount.draw(id,ctx=><TypedPane mount={mount} id={id} ctx={ctx} />) as ReactNode,{...paneFrame(p.body),actions:slot(id),busy:paneBusy(mount,p)})]))} />
   </KeyScopeHost></SubjectDoor.Provider>;
 }
 export function TypedWrite({ mount, id }: { mount: TypedMount; id: string }) {
@@ -159,6 +163,11 @@ export function TypedSubject({ mount }: { mount: TypedMount }) {
     controls: { subject: mount.page.subject },
   }} />;
 }
+const still = () => () => {};
+/** Slice 6.1: a pane says `aria-busy` while a reading it draws is pending (first read or refresh);
+ *  a route never sets it. A pane with no read of its own draws the core; the subject list, the roster. */
+const paneBusy = (mount: TypedMount, pane: TypedMount["spec"]["panes"][string]) =>
+  [pane.read ?? mount.spec.core, pane.subjectList ? mount.spec.subject?.read : undefined].some(read => !!read && mount.value(read).status === "pending");
 function layout(node: TypedRoute["spec"]["layout"]): LayoutNode {
   return node.kind==="split"?{...node,sized:node.sized??"end",minSize:node.minSize??80,minOtherSize:node.minOtherSize??80,children:node.children.map(layout)}:node.kind==="gate"?{...node,child:layout(node.child)}:node;
 }
