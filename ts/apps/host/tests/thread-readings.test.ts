@@ -6,8 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HarnessEvent, HarnessThreadBody, ReadingFrame } from "@pe/agent-contracts";
 import { resourceResponse, type ResourceObserver } from "@pe/runtime";
-import { withInvocationContext } from "@pe/runtime/context";
-import { human } from "./callers.ts";
+import { human, actAs } from "./callers.ts";
 import { HostLog } from "../src/host-log.ts";
 import { createProviders } from "../src/harness/providers.ts";
 import type { HarnessThreads } from "../src/harness/threads.ts";
@@ -48,7 +47,7 @@ async function host(limits?: { segmentBytes: number; segments: number; entryByte
     threads.observe(request, publish, after) ??
     (publish({ kind: "failure", key: "", error: "unowned" }), () => {});
   const call = async (method: string, path: string, body?: object) => {
-    const response = await withInvocationContext({ caller: human }, () =>
+    const response = await actAs(human, () =>
       threads.fetch(
         new Request(`http://host${path}`, {
           method,

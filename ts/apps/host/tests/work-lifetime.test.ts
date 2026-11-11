@@ -14,7 +14,6 @@ import type { Caller } from "@pe/agent-contracts";
 
 import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { RouteWorkspace } from "@pe/runtime";
-import { withInvocationContext } from "@pe/runtime/context";
 import { Effect, Layer, PubSub } from "effect";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -33,7 +32,7 @@ import { Spawner } from "../src/harness/spawner.ts";
 import { MachineOwner } from "../src/machine.ts";
 import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src/pe-routes.ts";
 import { createReceiptExport } from "../src/receipt-export.ts";
-import { human, pea } from "./callers.ts";
+import { human, pea, actAs } from "./callers.ts";
 import { detachedBridge, consentService } from "./effect-test.ts";
 
 afterEach(() =>
@@ -90,17 +89,14 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
     try {
       const chunks: Buffer[] = [];
       for await (const chunk of incoming) chunks.push(Buffer.from(chunk));
-      const response = await withInvocationContext(
-        {
-          caller:
-            incoming.headers["x-test-author"] === "human"
-              ? human
-              : incoming.headers["x-test-author"] === "page"
-                ? { kind: "page", page: "page:@pages/test" }
-                : incoming.headers["x-test-author"] === "external-mcp"
-                  ? { kind: "external-mcp", context: "device-context", label: "paired test device" }
-                  : pea(),
-        },
+      const response = await actAs(
+        incoming.headers["x-test-author"] === "human"
+          ? human
+          : incoming.headers["x-test-author"] === "page"
+            ? { kind: "page", page: "page:@pages/test" }
+            : incoming.headers["x-test-author"] === "external-mcp"
+              ? { kind: "external-mcp", context: "device-context", label: "paired test device" }
+              : pea(),
         () =>
           app.fetch(
             new Request(new URL(incoming.url!, base), {
@@ -264,7 +260,7 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
 
 /** Route writes cross as the human the identity middleware would mint for the web app. */
 const asHuman = (owner: { fetch: (request: Request) => Promise<Response> }) => (request: Request) =>
-  withInvocationContext({ caller: human }, () => owner.fetch(request));
+  actAs(human, () => owner.fetch(request));
 
 const registrations = [
   {
@@ -548,7 +544,7 @@ test("HTTP authored writes enforce short local revision checks", async () => {
   expect(await unknown.json()).toEqual({ error: "unknown route 'nope'" });
 
   const post = (path: string, body: unknown, as: Caller = human) =>
-    withInvocationContext({ caller: as }, () =>
+    actAs(as, () =>
       app.fetch(
         new Request(`http://local${path}?${queryA}`, {
           method: "POST",

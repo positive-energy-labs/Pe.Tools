@@ -2,7 +2,7 @@
  * Slice 5a build guards (docs/features/routes/REGISTRY-SHAPE.md): a route's host read lives in its
  * route directory under apps/web/src, so the two builds must be kept apart by edge, not by folder.
  * The host build (from apps/host/src/index.ts) reaches no browser-only module; the web build (from
- * router.tsx (and through routeTree.gen.ts every file route), routes/__root.tsx and the web builtin registry, its `import.meta.glob`s expanded) reaches no host
+ * router.tsx and routes/__root.tsx; through routeTree.gen.ts every file route, and through those the web builtin registry, its `import.meta.glob`s expanded) reaches no host
  * module and no `node:` builtin. Each guard also requires
  * the edge it protects to exist, so it is red until the fill lands and prints why.
  */
@@ -61,7 +61,11 @@ function closure(entries: string[], compiler: ts.CompilerOptions, forbid: (speci
       else if (resolved && !resolved.includes("/node_modules/") && !/\.d\.[cm]?ts$/.test(resolved) && !resolved.endsWith(".json")) walk(resolved);
     }
   };
-  for (const entry of entries) walk(entry);
+  // A renamed entry must fail here: walking nothing would report a clean build.
+  for (const entry of entries) {
+    if (!existsSync(entry)) throw Error(`Build entry is missing: ${slash(entry).slice(root.length + 1)}`);
+    walk(entry);
+  }
   return { seen, offenders };
 }
 
@@ -91,15 +95,16 @@ test("the host build reaches every route directory's host.ts and no browser-only
 });
 
 test("the web build reaches builtins through route/registry.ts and no host module", { timeout: 120_000 }, () => {
-  const registry = join(root, "apps/web/src/route/registry.ts");
-  // router.tsx reaches the TanStack file routes (routes/$route.tsx, design-system_.*, api/*) through routeTree.gen.ts.
-  const entries = [join(root, "apps/web/src/router.tsx"), join(root, "apps/web/src/routes/__root.tsx"), join(root, "apps/web/src/route/builtin-routes.tsx"), registry];
+  // router.tsx reaches the TanStack file routes (routes/$route.tsx, design-system_.*, api/*) through routeTree.gen.ts,
+  // and the builtin registry through them. Neither is an entry, so each must be reached to count as covered.
+  const entries = [join(root, "apps/web/src/router.tsx"), join(root, "apps/web/src/routes/__root.tsx")];
+  const reached = ["apps/web/src/route/registry.ts", "apps/web/src/routes/$route.tsx"];
   const reads = new Set(routeHostReads());
   // Vite resolves a client build under the `browser` export condition (@pe/runtime/context's browser twin).
   const { seen, offenders } = closure(entries, { ...options("apps/web"), customConditions: ["browser"] }, (specifier, target) =>
     specifier.startsWith("node:") || (!!target && (target.includes("/apps/host/src/") || reads.has(target))));
   expect({
     hostEdges: offenders,
-    webRegistry: existsSync(registry) && seen.has(slash(registry)) ? "present" : "absent: builtins reach the web through builtin-modules.generated.ts",
-  }).toEqual({ hostEdges: [], webRegistry: "present" });
+    unreached: reached.filter((file) => !seen.has(slash(join(root, file)))),
+  }, "the web build no longer reaches its file routes or its builtin registry from router.tsx").toEqual({ hostEdges: [], unreached: [] });
 });

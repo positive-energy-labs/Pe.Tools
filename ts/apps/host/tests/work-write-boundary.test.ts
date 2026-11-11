@@ -1,3 +1,4 @@
+import { ownedSession } from "./callers.ts";
 import { NodeCrypto } from "@effect/platform-node";
 import { commands, tools, writePreviewSchema, type Command, type ActionReceipt } from "@pe/agent-contracts";
 import { Context, Effect, Fiber, Layer } from "effect";
@@ -7,7 +8,6 @@ import { z } from "zod";
 import type { ActionExecution } from "../src/action-journal.ts";
 import type { CommandContext } from "../src/command-executor.ts";
 import { assertSealed } from "../src/document-marks.ts";
-import { hostOwnership } from "../src/host-ownership.ts";
 import { RunConsents } from "../src/run-consent.ts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import { settle, testDocumentMarks } from "./effect-test.ts";
@@ -56,9 +56,7 @@ async function fixture() {
       sessionView({
         sessionId: "A",
         connected: true,
-        lane: hostOwnership.lane,
-        sourceRoot: hostOwnership.sourceRoot,
-        serviceName: hostOwnership.serviceName,
+        ...ownedSession,
         processId: 42,
         processStartUtcUnixMs: 1000,
         state: { openDocuments: [{ ...ref, isFamilyDocument: false }] },
@@ -389,8 +387,7 @@ test("a change the host received but has not applied yet still refuses the seale
     subscribe: (next: (event: never) => void) => ((listener = next), () => {}),
     list: Effect.promise(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20)); // the tail awaits bridge.list
-      return [sessionView({ sessionId: "A", connected: true, lane: hostOwnership.lane, sourceRoot: hostOwnership.sourceRoot,
-        serviceName: hostOwnership.serviceName, processId: 42, processStartUtcUnixMs: 1000, state: { openDocuments: [{ openId: "open-A" }] } })];
+      return [sessionView({ sessionId: "A", connected: true, ...ownedSession, processId: 42, processStartUtcUnixMs: 1000, state: { openDocuments: [{ openId: "open-A" }] } })];
     }),
   } as never);
   const marks = testDocumentMarks(bridge);

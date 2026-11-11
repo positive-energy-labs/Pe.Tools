@@ -1,3 +1,4 @@
+import { actAs } from "./callers.ts";
 import { RevitBridgeLive } from "../src/bridge.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
@@ -15,7 +16,6 @@ import { expect } from "vite-plus/test";
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
 import { address, bindWork } from "@pe/agent-contracts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
-import { withInvocationContext } from "@pe/runtime/context";
 import type { RouteWorkspace } from "@pe/runtime";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import rosterCapture from "../../../packages/host-contracts/src/fixtures/k2-roster.json" with { type: "json" };
@@ -210,7 +210,7 @@ export async function fixture(
   ) => {
     const admitted = admittedRequestIdentity(who, scope);
     if (hold) holds.set(admitted.requestId, hold);
-    const response = await withInvocationContext({ caller: who }, () =>
+    const response = await actAs(who, () =>
       web.handler(
         new Request("http://host/pe/reads/value", {
           method: "POST",
@@ -246,7 +246,7 @@ export async function fixture(
     get reads() { return reads; },
     inputs,
     journal,
-    request: (request: Request) => withInvocationContext({ caller: who }, () =>
+    request: (request: Request) => actAs(who, () =>
       web.handler(request, Context.make(RequestIdentity, admittedRequestIdentity(who, scope)))),
     publicationEvent: async (generation: number) => {
       const url = new URL(peRouteUrl("resources.stream", {}), "http://host");
@@ -254,7 +254,7 @@ export async function fixture(
         "keys",
         JSON.stringify([{ kind: "publication", subscription: "sheet", generation }]),
       );
-      const response = await withInvocationContext({ caller: who }, () =>
+      const response = await actAs(who, () =>
         web.handler(new Request(url), Context.make(RequestIdentity, admittedRequestIdentity(who, scope))),
       );
       expect(response.status).toBe(200);
@@ -272,7 +272,7 @@ export async function fixture(
       }
     },
     probe: (body: unknown) =>
-      withInvocationContext({ caller: who }, () =>
+      actAs(who, () =>
         web.handler(
           new Request(new URL(peRouteUrl("reads.value", {}), "http://host"), {
             method: "POST",
@@ -284,7 +284,7 @@ export async function fixture(
       ),
     send,
     history: async (query = "", body?: unknown) => {
-      const response = await withInvocationContext({ caller: who }, () =>
+      const response = await actAs(who, () =>
         web.handler(
           new Request(
             `http://host/pe/history${query}`,

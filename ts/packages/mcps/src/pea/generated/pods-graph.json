@@ -247,7 +247,9 @@
     "sheet": {
       "label": "Sheet",
       "purpose": "Edit the bound cells",
-      "draws": [],
+      "draws": [
+        "value"
+      ],
       "verbs": [
         "open",
         "adopt",

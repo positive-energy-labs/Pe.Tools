@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { instancesSessionSelection } from "@pe/agent-contracts";
-import { HOST_CONTEXT_HEADER, HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
+import { HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { replayAnswer } from "./sdk-replay.ts";
@@ -16,7 +16,7 @@ import { bindControl, mintContext } from "../src/control.ts";
 import type { ThreadHead } from "@pe/agent-contracts";
 import { docListArgv, type SessionObservation } from "@pe/host-contracts/pe-revit-contract";
 import { unreadLeg } from "../src/update-reader.ts";
-import { crossingOf } from "./callers.ts";
+import { crossingOf, contextHeaders } from "./callers.ts";
 import { serveRoutes } from "./real-server.ts";
 import { acquisitionSessionId, foldAcquisitions } from "../src/acquisition.ts";
 import { runSemanticAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
@@ -1118,7 +1118,7 @@ test("R4d: after recovery over HTTP, cleanup closes and stops the Revit that sur
     sdkOnlyBridge,
   );
   cleanup.push(() => server.close());
-  const human = { [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }) };
+  const human = contextHeaders();
   const post = async (path: string, body: unknown) => {
     const response = await fetch(`${server.base}${path}`, {
       method: "POST",
@@ -1340,7 +1340,7 @@ test("/actions/cancel stops a running Instances step through the SDK op cancel, 
   });
   const headers = {
     "content-type": "application/json",
-    [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }),
+    ...contextHeaders(),
   };
   const admitted = await fetch(`${server.base}/actions`, {
     method: "POST",
@@ -1364,7 +1364,7 @@ test("/actions/cancel stops a running Instances step through the SDK op cancel, 
     method: "POST",
     headers: {
       "content-type": "application/json",
-      [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }),
+      ...contextHeaders(),
     },
     body: JSON.stringify({ id: row.id }),
   });

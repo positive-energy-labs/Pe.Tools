@@ -12,11 +12,10 @@ import {
   type WorkKey,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
-import { withInvocationContext } from "@pe/runtime/context";
 import type { RouteWorkspaceEvent } from "@pe/runtime";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { human, pea } from "./callers.ts";
+import { human, pea, actAs } from "./callers.ts";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -69,7 +68,7 @@ async function fixture() {
     if (event.ok) events.push(event);
   });
   const post = async (body: unknown, caller: Caller = human, operation = "apply") => {
-    const response = await withInvocationContext({ caller }, () =>
+    const response = await actAs(caller, () =>
       app.fetch(
         new Request(`http://host/pe/route-state/${scope.route}/${operation}`, {
           method: "POST",
@@ -217,7 +216,7 @@ test("an agent's HTTP write reaches a resource-stream subscriber with its host s
   const open = async () => {
     const abort = new AbortController();
     const keys = encodeURIComponent(JSON.stringify([{ kind: "work-acks", work: h.scope }]));
-    const response = await withInvocationContext({ caller: human }, () =>
+    const response = await actAs(human, () =>
       h.app.fetch(new Request(`http://host/pe/resources?keys=${keys}`, { signal: abort.signal })),
     );
     expect(response.status).toBe(200);
