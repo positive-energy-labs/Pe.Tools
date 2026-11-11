@@ -8,8 +8,8 @@ import { markSchema } from "./picture.ts";
  * Findings (ADR 0035 rule 9): one Work per document under owner key `findings` on the existing
  * bindings, keyed by SubjectRef, with kinds that declare their verdicts and a `place` in the
  * route's attention codec. Pea and a person write the same Work; undo is the Work journal per
- * document (ADR 0030 rule 9). Pointers keep their noun; a keep verb turns one into a finding.
- * Implicit kernel module: a route declares nothing. Owner: slice 9. Scaffold: contract only.
+ * document (ADR 0030 rule 9). Implicit kernel module: a route declares nothing. The host's doors
+ * are apps/host/src/slots/findings.ts; the person's row verb is the web's route/slots/findings.
  */
 
 /** Each kind names the verdicts it admits. A `note` admits none. Closed; only the kernel adds one. */
@@ -19,7 +19,6 @@ export const FINDING_KINDS = {
   check: ["pass", "fail"],
 } as const;
 export type FindingKind = keyof typeof FINDING_KINDS;
-export type FindingVerdict<K extends FindingKind = FindingKind> = (typeof FINDING_KINDS)[K][number];
 
 export const FINDINGS_OWNER = "findings" as const;
 /** The two catalog doors. `write` lands in the document's findings Work; `list` reads it. */
@@ -47,7 +46,6 @@ export type Finding = z.output<typeof findingSchema>;
 export const findingsWorkSchema = z.strictObject({
   findings: z.record(z.string(), findingSchema).default({}).meta({ title: "findings" }),
 });
-export type FindingsWork = z.output<typeof findingsWorkSchema>;
 
 /** The Work registration: one per document, owner key `findings`, on the existing bindings. */
 export const findingsWork = {
@@ -61,7 +59,7 @@ export const findingsWork = {
 } satisfies RouteStateSpec<typeof findingsWorkSchema>;
 
 /** What a caller sends to `findings.write`: the host stamps `by` from the caller and `at` on arrival. */
-export const findingInputSchema = findingFields.omit({ by: true, at: true }).refine(declaredVerdict, verdictError);
+const findingInputSchema = findingFields.omit({ by: true, at: true }).refine(declaredVerdict, verdictError);
 export type FindingInput = z.output<typeof findingInputSchema>;
 
 /**

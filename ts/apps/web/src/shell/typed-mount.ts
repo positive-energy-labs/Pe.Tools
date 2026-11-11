@@ -1,5 +1,5 @@
 import { ownFindingsLeft, undoOwnFinding } from "../route/host";
-import { kernelCommands } from "../route/slots/kernel-commands.ts";
+import { findingCommand } from "../route/slots/findings/index.ts";
 import { hostReadSource } from "./host-read-source.ts";
 import { writeReject } from "./catalog-work-reviews";
 import { harnessClient } from "../workbench/provider/harness-client";
@@ -66,10 +66,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof undoOwnFinding>[1] } = {}) {
   const cleanups: (() => void)[] = [];
   try {
-  // Every route carries the kernel's commands (route/slots/kernel-commands.ts); a route's own id wins. A
-  // Workless mount (a Page projection) has them too, so a shared row body draws them refused, not thrown.
-  // The mount adds them, not `route()`: their contracts are the catalog, and `route()` is the Pod surface.
-  const spec = { ...module.spec, commands: { ...kernelCommands, ...module.spec.commands } } as TypedRoute["spec"];
+  // Every route carries the kernel's one command, the person's `finding` (ADR 0035 rule 9); a route's own
+  // id wins. A Workless mount (a Page projection) has it too, so a shared row body draws it refused, not
+  // thrown. The mount adds it, not `route()`: its contract is the catalog, and `route()` is the Pod surface.
+  const spec = { ...module.spec, commands: { finding: findingCommand, ...module.spec.commands } } as TypedRoute["spec"];
   const edits = spec.edits;
   const own = edits?.work.route ?? spec.key;
   const ownerConfigs = edits?.owners ?? {};
