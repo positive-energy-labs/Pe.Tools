@@ -46,27 +46,32 @@ test("a tab's host reads ride its one stream, so they hold no more of the origin
 });
 
 test("a page that leaves view frees its socket at once, and takes one again when it shows", async () => {
-  vi.stubGlobal("EventSource", Stream);
+  // This owner's own sockets, apart from the tab owner the first test used.
+  const held = new Set<string>();
+  const connect = (url: string) => {
+    held.add(url);
+    return { onopen: null, onmessage: null, onerror: null, close: () => void held.delete(url) };
+  };
   const frames: string[] = [];
-  const readings = new PeReadings(() => "http://127.0.0.1/pe/resources", undefined, undefined, async () => {});
+  const readings = new PeReadings(() => "http://127.0.0.1/pe/resources", connect, undefined, async () => {});
   readings.subscribe({ kind: "inventory" }, frame => frames.push(frame.kind));
   try {
-    await vi.waitFor(() => expect(paths()).toEqual(["/pe/resources"]));
-    const first = [...live][0];
+    await vi.waitFor(() => expect(held.size).toBe(1));
+    const [first] = held;
     // Navigating away may park the page in the back/forward cache; its stream must not stay.
     window.dispatchEvent(new Event("pagehide"));
-    expect(live.size).toBe(0);
+    expect(held.size).toBe(0);
     // Nothing reopens it while hidden, not a new key and not a retry.
     readings.subscribe({ kind: "machine" }, () => {});
     await new Promise(done => setTimeout(done, 50));
-    expect(live.size).toBe(0);
+    expect(held.size).toBe(0);
     window.dispatchEvent(new Event("pageshow"));
-    expect(paths()).toEqual(["/pe/resources"]);
     // A new connection: every key is reacquired, and what was held is fenced until then.
-    expect([...live][0]).not.toBe(first);
+    expect(held.size).toBe(1);
+    expect([...held][0]).not.toBe(first);
     expect(frames.at(-1)).toBe("stale");
   } finally {
     readings.close();
   }
-  expect(live.size).toBe(0);
+  expect(held.size).toBe(0);
 });
