@@ -2,30 +2,30 @@ import { harnessEventSchema } from "@pe/agent-contracts";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { harnessClient, streamThread, type OpenEvents } from "./harness-client";
+import type { ReadingRequest } from "@pe/agent-contracts";
+import { harnessClient, streamThread } from "./harness-client";
 
-class FakeSource {
-  onmessage: ((message: MessageEvent<string>) => void) | null = null;
-  onerror: (() => void) | null = null;
-  closed = false;
-  constructor(readonly url: string) {}
-  close() {
-    this.closed = true;
-  }
-  /** One `thread` Reading frame, carrying its host log id as the SSE id. */
-  emit(seq: number, id: number) {
-    const event = harnessEventSchema.parse({
+type Listener = Parameters<NonNullable<Parameters<typeof streamThread>[0]["readings"]>["subscribe"]>[1];
+/** The tab's one stream, stood in: each subscription is one key, with its own cursor. */
+class FakeReadings {
+  readonly keys: { request: ReadingRequest; listener: Listener; released: boolean }[] = [];
+  subscribe = (request: ReadingRequest, listener: Listener) => {
+    const key = { request, listener, released: false };
+    this.keys.push(key);
+    // A new key is stale until the host answers it, as `PeReadings.subscribe` says.
+    listener({ kind: "stale", key: "k" });
+    return () => void (key.released = true);
+  };
+  /** One `thread` Reading frame, carrying its host log id. */
+  emit(index: number, seq: number, id: number) {
+    const value = harnessEventSchema.parse({
       seq,
       at: "2026-10-01T12:00:00.000Z",
       kind: "turn_end",
       turnId: "t1",
       stopReason: "end_turn",
     });
-    const frame = { kind: "event", key: "k", value: event, id };
-    this.onmessage?.({
-      data: JSON.stringify(frame),
-      lastEventId: String(id),
-    } as MessageEvent<string>);
+    this.keys[index]!.listener({ kind: "event", key: "k", value, id });
   }
 }
 
@@ -68,138 +68,67 @@ describe("harnessClient", () => {
 
 describe("streamThread", () => {
   it("a refused log tail rereads retained completion instead of leaving the turn running", () => {
-    const source = new FakeSource("http://host");
+    const readings = new FakeReadings();
     const reread = vi.fn();
     const fault = vi.fn();
     const event = vi.fn();
-    const stop = streamThread({ origin: "http://host", threadId: "th 1", cursor: 40, lastSeq: 4,
-      open: () => source as unknown as ReturnType<OpenEvents>, onEvent: event, onReread: reread, onFault: fault });
-    source.onmessage?.({ data: JSON.stringify({ kind: "failure", key: "k", error: "Mark-frame capture backlog exceeded its bound" }), lastEventId: "" } as MessageEvent<string>);
+    const stop = streamThread({ threadId: "th 1", cursor: 40, lastSeq: 4,
+      readings, onEvent: event, onReread: reread, onFault: fault });
+    readings.keys[0]!.listener({ kind: "failure", key: "k", error: "Mark-frame capture backlog exceeded its bound" });
     expect(reread).toHaveBeenCalledOnce();
     expect(fault).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining("backlog") }));
-    expect(source.closed).toBe(true);
+    expect(readings.keys[0]!.released).toBe(true);
     expect(event).not.toHaveBeenCalled();
     stop();
   });
-  const cursorOf = (url: string) => {
-    const parsed = new URL(url);
-    expect(parsed.pathname).toBe("/pe/resources");
-    expect(JSON.parse(parsed.searchParams.get("keys")!)).toEqual([
-      { kind: "thread", thread: "th 1" },
-    ]);
-    return Number(parsed.searchParams.get("after"));
-  };
   it("follows the thread Reading from the body's cursor and resumes from the last log id", () => {
-    vi.useFakeTimers();
-    const sources: FakeSource[] = [];
-    const open = ((url: string) => {
-      const source = new FakeSource(url);
-      sources.push(source);
-      return source;
-    }) as unknown as OpenEvents;
+    const readings = new FakeReadings();
     const seen: number[] = [];
     let rereads = 0;
     const stop = streamThread({
-      origin: "http://host",
       threadId: "th 1",
       cursor: 40,
       lastSeq: 4,
-      open,
+      readings,
       onEvent: (event) => seen.push(event.seq),
       onReread: () => rereads++,
     });
 
-    expect(cursorOf(sources[0]!.url)).toBe(40);
-    sources[0]!.emit(4, 40); // already in the body: skipped
-    sources[0]!.emit(5, 41);
-    sources[0]!.emit(6, 42);
-    sources[0]!.onerror?.();
-    expect(sources[0]!.closed).toBe(true);
-    vi.advanceTimersByTime(1_000);
+    // One key on the tab's stream, carrying its own cursor: no stream of its own.
+    expect(readings.keys.map((key) => key.request)).toEqual([
+      { kind: "thread", thread: "th 1", after: 40 },
+    ]);
+    readings.emit(0, 4, 40); // already in the body: skipped
+    readings.emit(0, 5, 41);
+    readings.emit(0, 6, 42);
+    // The stream is fenced or reconnects: the follow resumes after the last id it applied.
+    readings.keys[0]!.listener({ kind: "stale", key: "k" });
+    expect(readings.keys[0]!.released).toBe(true);
+    expect(readings.keys[1]!.request).toEqual({ kind: "thread", thread: "th 1", after: 42 });
+    // A second fence with nothing new keeps the key: no churn.
+    readings.keys[1]!.listener({ kind: "stale", key: "k" });
+    expect(readings.keys).toHaveLength(2);
 
-    expect(cursorOf(sources[1]!.url)).toBe(42);
-    sources[1]!.emit(6, 42); // a replay across the reconnect: skipped
-    sources[1]!.emit(7, 43);
+    readings.emit(1, 6, 42); // a replay across the reconnect: skipped
+    readings.emit(1, 7, 43);
     expect(seen).toEqual([5, 6, 7]);
 
-    // A hole in seq: re-read the body; this stream is done.
-    sources[1]!.emit(9, 45);
-    expect([rereads, sources[1]!.closed]).toEqual([1, true]);
-    vi.advanceTimersByTime(5_000);
-    expect(sources).toHaveLength(2);
+    // A hole in seq: re-read the body; this follow is done.
+    readings.emit(1, 9, 45);
+    expect([rereads, readings.keys[1]!.released]).toEqual([1, true]);
+    readings.keys[1]!.listener({ kind: "stale", key: "k" });
+    readings.emit(1, 10, 46);
+    expect([readings.keys.length, seen]).toEqual([2, [5, 6, 7]]);
     stop();
   });
-  it("a frame that does not decode is a fault and a reread, never an applied event", () => {
-    const sources: FakeSource[] = [];
-    const open = ((url: string) => {
-      const source = new FakeSource(url);
-      sources.push(source);
-      return source;
-    }) as unknown as OpenEvents;
-    const seen: number[] = [];
-    const faults: string[] = [];
+  it("a gap ends the follow with a reread, and a stop releases its key", () => {
+    const readings = new FakeReadings();
     let rereads = 0;
-    streamThread({
-      origin: "http://host",
-      threadId: "th 1",
-      cursor: 40,
-      lastSeq: 4,
-      open,
-      onEvent: (event) => seen.push(event.seq),
-      onReread: () => rereads++,
-      onFault: (error) => faults.push(error.message),
-    });
-    sources[0]!.onmessage?.({
-      data: JSON.stringify({ kind: "bogus", key: "k", id: 41 }),
-      lastEventId: "41",
-    } as MessageEvent<string>);
-    expect(seen).toEqual([]);
-    expect(rereads).toBe(1);
-    expect(sources[0]!.closed).toBe(true);
-    expect(faults[0]).toContain("Thread frame does not decode");
-  });
-  it("a valid frame with an unusable cursor is refused whole and moves nothing", () => {
-    for (const lastEventId of ["abc", "-1", "1.5", "9007199254740993"]) {
-      const sources: FakeSource[] = [];
-      const open = ((url: string) => {
-        const source = new FakeSource(url);
-        sources.push(source);
-        return source;
-      }) as unknown as OpenEvents;
-      const seen: number[] = [];
-      const faults: string[] = [];
-      let rereads = 0;
-      streamThread({
-        origin: "http://host",
-        threadId: "th 1",
-        cursor: 40,
-        lastSeq: 4,
-        open,
-        onEvent: (event) => seen.push(event.seq),
-        onReread: () => rereads++,
-        onFault: (error) => faults.push(error.message),
-      });
-      sources[0]!.emit(5, 41);
-      const frame = JSON.stringify({
-        kind: "event",
-        key: "k",
-        id: 42,
-        value: harnessEventSchema.parse({
-          seq: 6,
-          at: "2026-10-01T12:00:00.000Z",
-          kind: "turn_end",
-          turnId: "t1",
-          stopReason: "end_turn",
-        }),
-      });
-      sources[0]!.onmessage?.({ data: frame, lastEventId } as MessageEvent<string>);
-      expect({ lastEventId, seen, rereads, closed: sources[0]!.closed }).toEqual({
-        lastEventId,
-        seen: [5],
-        rereads: 1,
-        closed: true,
-      });
-      expect(faults[0]).toContain("Thread frame does not decode");
-    }
+    streamThread({ threadId: "th 1", cursor: 40, lastSeq: 4, readings, onEvent: () => {}, onReread: () => rereads++ });
+    readings.keys[0]!.listener({ kind: "gap", key: "k", dropped: null, id: 90 });
+    expect([rereads, readings.keys[0]!.released]).toEqual([1, true]);
+    const stop = streamThread({ threadId: "th 1", cursor: 90, lastSeq: 4, readings, onEvent: () => {}, onReread: () => rereads++ });
+    stop();
+    expect(readings.keys[1]!.released).toBe(true);
   });
 });

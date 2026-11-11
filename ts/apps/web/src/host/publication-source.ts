@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { openEventSource } from "./resource-stream";
+import { peReadings } from "./resource-stream";
 import type { ReadingContext, UseSource } from "../shell/source-contract";
 
 export function publicationSource<T extends { generation: number; version: number; state: string; reason?: string; value: { evaluation: string; coverage: { refused: readonly { keys: readonly string[]; reason: string }[]; unknown: readonly string[] } } | null }>(options: {
@@ -8,7 +8,7 @@ export function publicationSource<T extends { generation: number; version: numbe
   return { kind: "use", dirties: ["snapshot"], open(ctx, deliver) {
     const publication = ctx.publication ?? { subscription: crypto.randomUUID(), generation: 0 };
     let closed = false, refreshing = false, invalidated = false;
-    let events: EventSource | undefined;
+    let unfollow: (() => void) | undefined;
     const refresh = async () => {
       if (closed) return;
       if (refreshing) { invalidated = true; return; }
@@ -17,15 +17,18 @@ export function publicationSource<T extends { generation: number; version: numbe
         const result = await options.read(ctx, publication, false);
         if (closed || ctx.signal.aborted || result.generation !== publication.generation) return;
         // Observe even a superseded first response; the host retains its Work invalidation.
-        if (!events && !ctx.historyPoint) {
-          events = openEventSource(`/pe/read-events?subscription=${encodeURIComponent(publication.subscription)}&generation=${publication.generation}`);
-          events.onmessage = event => {
-            const state = z.object({ generation: z.number(), state: z.string() }).parse(JSON.parse(event.data));
-            if (!closed && state.generation === publication.generation && state.state === "refresh-needed") {
+        // Invalidation is a Reading on the tab's one stream, never a stream per read (the origin has
+        // 6 sockets). A fence or reconnect of that stream is not this read's staleness: the host
+        // answers the key again, and `refresh-needed` then says whether to read.
+        if (!unfollow && !ctx.historyPoint) {
+          unfollow = peReadings.subscribe({ kind: "publication", subscription: publication.subscription, generation: publication.generation }, frame => {
+            if (closed || frame.kind === "stale") return;
+            if (frame.kind === "failure") return deliver({ kind: "stale" });
+            const state = z.object({ generation: z.number(), state: z.string() }).safeParse(frame.kind === "snapshot" && !frame.stale ? frame.value : null);
+            if (state.success && state.data.generation === publication.generation && state.data.state === "refresh-needed") {
               deliver({ kind: "stale" }); void refresh();
             }
-          };
-          events.onerror = () => { if (!closed) deliver({ kind: "stale" }); };
+          });
         }
         if (result.state === "superseded") return;
         if (!result.value) return deliver({ kind: "failure", error: result.reason ?? "Refresh needed" });
@@ -37,6 +40,6 @@ export function publicationSource<T extends { generation: number; version: numbe
       finally { refreshing = false; if (invalidated) { invalidated = false; void refresh(); } }
     };
     void refresh();
-    return () => { closed = true; events?.close(); if (!ctx.historyPoint) void options.read({ ...ctx, signal: new AbortController().signal }, publication, true).catch(() => {}); };
+    return () => { closed = true; unfollow?.(); if (!ctx.historyPoint) void options.read({ ...ctx, signal: new AbortController().signal }, publication, true).catch(() => {}); };
   } };
 }

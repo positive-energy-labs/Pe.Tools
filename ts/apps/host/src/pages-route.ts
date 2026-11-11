@@ -33,6 +33,9 @@ import {
   emptyThreadHead,
   resolvePinned,
   unboundPage,
+  readingKey,
+  type ReadingFrame,
+  type ReadingRequest,
   type Caller,
   type DocumentRef,
   type PageBinding,
@@ -45,6 +48,7 @@ import {
   type ActionAdmission,
 } from "@pe/agent-contracts";
 import { z } from "zod";
+import { resourceSnapshot, type OwnerValue } from "@pe/runtime";
 import { RevitBridge } from "./bridge.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import {
@@ -790,7 +794,43 @@ export function createPagesHandler(
     return json(await target(page, home));
   }
 
-  return async function handle(request: Request): Promise<Response> {
+  /**
+   * The `page-target` Reading: this Page's target now, and again when a thread head or its binding
+   * moves. The SPA's chip follows it on its one Readings stream, never on a stream of its own.
+   */
+  const observeTarget = (slug: string, publish: (result: OwnerValue<PageTargetReading>) => void) => {
+    let closed = false;
+    let turn = 0;
+    let stops: (() => void)[] = [];
+    const fail = (error: unknown) => {
+      if (!closed) publish({ error: error instanceof Error ? error.message : String(error) });
+    };
+    void (async () => {
+      const where = pageKeyOf(slug) ? await dirOf(slug) : null;
+      if (closed) return;
+      if (!where) return fail(`no page ${slug}`);
+      const send = () => {
+        const mine = ++turn;
+        void target(where.key, where.dir).then((value) => {
+          if (!closed && mine === turn) publish({ value });
+        }, fail);
+      };
+      stops = [
+        subscribeHeads(send),
+        stateOf(where.dir).hear((event) => {
+          if (event === "binding") send();
+        }),
+      ];
+      send();
+    })().catch(fail);
+    return () => {
+      closed = true;
+      for (const stop of stops) stop();
+    };
+  };
+
+  return Object.assign(handle, { observeTarget });
+  async function handle(request: Request): Promise<Response> {
     const caller = currentCaller();
     const url = new URL(request.url);
     if (url.pathname === peRoutes["page.publish"].path && request.method === "POST") {
@@ -947,8 +987,25 @@ export function createPagesHandler(
         },
       });
     return file(slug, where.dir, where.key, rest.length ? rest : ["index.html"]);
-  };
+  }
 }
+
+/**
+ * The served pages handler's `page-target` Reading. Module state, as `control.ts` holds its
+ * sources: the pages route and the Readings stream compose in separate layers of one host.
+ */
+let served: ReturnType<typeof createPagesHandler>["observeTarget"] | undefined;
+/** Serves `{ kind: "page-target" }`; any other request is not this Reading's (undefined). */
+export const observePageTarget = (
+  request: ReadingRequest,
+  publish: (frame: ReadingFrame) => void,
+): (() => void) | undefined => {
+  if (request.kind !== "page-target") return undefined;
+  const key = readingKey(request);
+  if (served) return served(request.slug, (result) => publish(resourceSnapshot(key, result)));
+  publish({ kind: "failure", key, error: "Pages are unavailable on this host" });
+  return () => {};
+};
 
 export const pagesRoute = (
   root: () => PagesRoots = productPagesRoots,
@@ -978,6 +1035,7 @@ export const pagesRoute = (
           }),
       };
       const pages = createPagesHandler(root(), pods(), live, yield* ActionJournalService);
+      served = pages.observeTarget;
       const handler = HttpEffect.fromWebHandler((request) =>
         matchPeRoute(request.method, new URL(request.url).pathname)
           ? servePeRoute(request, pages)

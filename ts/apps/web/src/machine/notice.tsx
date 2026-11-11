@@ -125,7 +125,6 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
     webview?.addEventListener("message", receive);
     tray({ type: "notice-ready" });
     const stop = followNotices({
-      origin: resolveWorkbenchConfig().origin,
       as: "tray",
       seen: loadSeen(window.localStorage, SEEN),
       onRow: (row) => take(cardOf(row)),

@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { routeAddress, type PageTargetReading } from "@pe/agent-contracts";
+import {
+  pageTargetReadingSchema,
+  routeAddress,
+  type PageTargetReading,
+} from "@pe/agent-contracts";
 import { useRouteSearch } from "#/route/activity";
-import { openEventSource } from "#/host/resource-stream";
-import { peClient } from "#/host/pe-client";
-import { readPageTarget } from "./client";
+import { peReadings } from "#/host/resource-stream";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** SPA chrome owns consent. Page code never draws or answers this control. */
@@ -12,39 +14,19 @@ export function PageBindingChip({ slug }: { slug: string }) {
   const [reading, setReading] = useState<PageTargetReading | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   useEffect(() => {
-    let retired = false;
-    let generation = 0;
-    const fresh = async () => {
-      const attempt = ++generation;
-      setReading(null);
-      try {
-        const next = await readPageTarget(slug);
-        if (retired || attempt !== generation) return;
-        setReading(next);
-        setRefusal(null);
-      } catch (error) {
-        if (!retired && attempt === generation)
-          setRefusal(error instanceof Error ? error.message : String(error));
-      }
-    };
-    const events = openEventSource(
-      peClient.url("page.events", {
-        params: { slug },
-        query: { after: Number.MAX_SAFE_INTEGER },
-      }),
-    );
-    events.onopen = () => void fresh();
-    events.addEventListener("head", () => void fresh());
-    events.addEventListener("binding", () => void fresh());
-    events.onerror = () => {
-      generation++;
-      setReading(null);
-    };
-    void fresh();
-    return () => {
-      retired = true;
-      events.close();
-    };
+    setReading(null);
+    // The Page's target is a Reading on the tab's one stream; the host serves it again when a
+    // thread head or the binding moves. A fenced or lost stream stops naming the document at once.
+    return peReadings.subscribe({ kind: "page-target", slug }, (frame) => {
+      const next =
+        frame.kind === "snapshot" && !frame.stale
+          ? pageTargetReadingSchema.safeParse(frame.value)
+          : null;
+      setReading(next?.success ? next.data : null);
+      if (next?.success) setRefusal(null);
+      else if (frame.kind === "failure") setRefusal(frame.error);
+      else if (next) setRefusal(next.error.message);
+    });
   }, [slug]);
   const write = reading?.write;
   // The document's name is the visible consent (ADR 0021): a thread slot that writes names it.

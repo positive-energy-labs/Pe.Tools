@@ -30,7 +30,6 @@ import { History, localHistory } from "./reads/history.ts";
 import { historyRoutes } from "./reads/history-routes.ts";
 import { historyPoseSchema, addressSchema, sameAddress } from "@pe/agent-contracts";
 import { ActionJournalService } from "./receipt-services.ts";
-import { readEvents } from "./reads/events.ts";
 import { readInvalidations } from "./reads/invalidations.ts";
 import { graphRoute, graphRouteIds, registeredReads } from "./reads/routes.ts";
 import { ResourceConnectionOwner } from "./request-services.ts";
@@ -341,8 +340,6 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       runPods({}, Effect.provide(effect, admitted));
     const url = new URL(web.url),
       declared = matchPeRoute(web.method, url.pathname)!;
-    if (declared.id === "reads.events")
-      return { readEvents: readEvents(publications, identity.caller, web) };
     if (declared.id === "resources.subscriptions") return { resourceOwner: connectionOwner };
     if (![...graphRouteIds, "work.get", "ducts.analysis", "resources.stream"].includes(declared.id)) return {};
     const stream = declared.id === "resources.stream";
@@ -592,6 +589,30 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       after: Parameters<ResourceObserver>[2],
       recordedFrame?: InputConsumption,
     ) => {
+      // A read publication's invalidation rides the tab's one stream (HTTP/1.1 gives an origin 6
+      // sockets; a stream per read starved the rest). Metadata only, per caller: the value travels
+      // once in the read response, and this consumes no recording.
+      if (reading.kind === "publication") {
+        const key = readingKey(reading);
+        const { generation } = reading;
+        let answered = false;
+        const stop = publications.observe(
+          canonicalJson([identity.caller, reading.subscription]),
+          (publication) => {
+            if (publication.generation !== generation) return;
+            answered = true;
+            publish({
+              kind: "snapshot",
+              key,
+              value: { generation, version: publication.version, state: publication.state },
+            });
+          },
+        );
+        // Every key is answered once, so a stream that carries only this key is never silent.
+        if (!answered)
+          publish({ kind: "snapshot", key, value: { generation, version: 0, state: "absent" } });
+        return stop;
+      }
       if (
         !recorded &&
         !["work", "work-acks", "ducts-snapshot", "ducts-tables", "inventory"].includes(reading.kind)

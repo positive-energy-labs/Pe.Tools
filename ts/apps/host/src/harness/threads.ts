@@ -2313,7 +2313,9 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       event.kind === "thread"
         ? { kind: "event", key, value: event.event, id }
         : { kind: "gap", key, dropped: null, id };
-    const replay = after == null ? null : options.log.read(after, mine);
+    // The key's own cursor wins: one connection carries many tails, each resumed on its own.
+    const from = request.after ?? after;
+    const replay = from == null ? null : options.log.read(from, mine);
     if (!replay || replay.gap) publish({ kind: "gap", key, dropped: null, id: options.log.last });
     else replay.entries.forEach((entry) => publish(frame(entry)));
     // Read and subscribe run in one synchronous step, so no entry falls between them.

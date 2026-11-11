@@ -11,7 +11,6 @@ import type { MachineNotice } from "@pe/agent-contracts";
 
 import { SwitchRow } from "@pe/kit/lang/switch-row";
 import { useSurfaceHost } from "#/navigation/surface-host";
-import { resolveWorkbenchConfig } from "#/workbench/config";
 import { peClient } from "#/host/pe-client";
 
 /** Each mount has its own caller id, so tabs and the flyout cannot erase one another. */
@@ -120,7 +119,6 @@ export function OsNotices() {
       else deliver(notice);
     };
     const stop = followNotices({
-      origin: resolveWorkbenchConfig().origin,
       seen: loadSeen(window.localStorage, SEEN),
       onRow: (row) => raise(cardOf(row)),
       onSeen: (seen) => saveSeen(window.localStorage, SEEN, seen),

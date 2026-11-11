@@ -2,7 +2,10 @@ import { currentFixture } from "../shell/fixture-name";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { hostFetch, runtimeStreamUrl } from "#/host/runtime";
 /**
- * The wire. One EventSource per tab: SSE frames, fences, reconnect backoff.
+ * The wire. One EventSource per tab: SSE frames, fences, reconnect backoff. The host speaks
+ * HTTP/1.1, so a browser gives the whole origin 6 sockets across every tab and every page held in
+ * the back/forward cache; a second long-lived stream starves ordinary requests (2026-11-11). Every
+ * push therefore is a Reading kind on this stream, and a page that is hidden releases its socket.
  *
  * This module is a transport only. Host resource snapshots and typed Values own their lifecycle; this module carries frames only. A write is
  * not a Reading: it is a plain async call whose success calls `dirty(request)`, which reacquires
@@ -32,10 +35,6 @@ type Source = Pick<EventSource, "onopen" | "onmessage" | "onerror" | "close">;
 const READING_DEADLINE_MS = 30_000;
 /** Reconnect delays double from 1 s to this ceiling, and reset on the first fresh frame. */
 const RETRY_CEILING_MS = 30_000;
-
-/** The one place the web opens an SSE stream: Readings, and a harness thread's tail. */
-// TODO: docs/features/routes/LEDGER.md#s7-500118f3a3 Fold cursor-resuming thread tails into this transport with the composer owner; they still use a separate SSE.
-export const openEventSource = (url: string) => new EventSource(runtimeStreamUrl(url));
 
 /** One browser connection. This map owns subscriptions and retained evidence, never owner truth. */
 export class PeReadings {
@@ -74,12 +73,16 @@ export class PeReadings {
   private faulted = false;
   private readonly resyncs = new Set<() => void>();
   private unwatchWake?: () => void;
+  /** The page left view (`pagehide`): no socket is held until it shows again. */
+  private hidden = false;
   private readonly pending = new Map<string, Frame[]>();
   private cancelDelivery?: () => void;
 
   constructor(
     private readonly url: () => string,
-    private readonly connect: (url: string) => Source = openEventSource,
+    // The one place the web opens a long-lived stream; a repo guard counts it by call site.
+    private readonly connect: (url: string) => Source = (url) =>
+      new EventSource(runtimeStreamUrl(url)),
     private readonly batch: (deliver: () => void) => () => void = (deliver) => {
       // Transport progress must not depend on a paint: a visible tab can become occluded
       // after scheduling, leaving an rAF (and all later frames) stranded indefinitely.
@@ -129,9 +132,9 @@ export class PeReadings {
   }
 
   /**
-   * Transports this owner cannot carry (a thread's log tail, which resumes from its own cursor)
-   * follow its liveness: the listener runs when the connection reopens after a connection fault,
-   * and re-reads its own state from the host. One owner decides when the world is suspect.
+   * State this owner does not carry (a thread's body, read over RPC) follows its liveness: the
+   * listener runs when the connection reopens after a connection fault or a hidden page, and
+   * re-reads its own state from the host. One owner decides when the world is suspect.
    */
   onResync(listener: () => void): () => void {
     this.resyncs.add(listener);
@@ -179,11 +182,42 @@ export class PeReadings {
         this.resync();
       }
     };
+    // A page that left view may sit in the back/forward cache, where an open stream keeps one of
+    // the origin's 6 sockets from every live tab. Release it at once; evidence is fenced, and the
+    // stream reopens with every follower re-reading when the page shows again.
+    const hide = () => {
+      if (this.hidden) return;
+      this.hidden = true;
+      clearTimeout(this.retry);
+      this.retry = undefined;
+      clearTimeout(this.watchdog);
+      this.cancelDelivery?.();
+      this.cancelDelivery = undefined;
+      this.pending.clear();
+      this.generation++;
+      this.source?.close();
+      this.source = undefined;
+      this.opening?.close();
+      this.opening = undefined;
+      this.opened = false;
+      this.fence();
+    };
+    const show = () => {
+      if (!this.hidden) return;
+      this.hidden = false;
+      this.faulted = true;
+      this.attempts = 0;
+      this.open();
+    };
     window.addEventListener("offline", lostNetwork);
     window.addEventListener("online", online);
+    window.addEventListener("pagehide", hide);
+    window.addEventListener("pageshow", show);
     this.unwatchWake = () => {
       window.removeEventListener("offline", lostNetwork);
       window.removeEventListener("online", online);
+      window.removeEventListener("pagehide", hide);
+      window.removeEventListener("pageshow", show);
     };
   }
 
@@ -347,11 +381,15 @@ export class PeReadings {
       this.opening?.close();
       this.opening = undefined;
       clearTimeout(this.watchdog);
-      this.unwatchWake?.();
-      this.unwatchWake = undefined;
+      // A hidden page keeps its watch, or nothing would hear it show again.
+      if (!this.hidden) {
+        this.unwatchWake?.();
+        this.unwatchWake = undefined;
+      }
       return;
     }
     this.watchWake();
+    if (this.hidden) return;
     const generation = this.generation;
     const observationEpoch = this.observationEpoch;
     const url = new URL(this.url());
