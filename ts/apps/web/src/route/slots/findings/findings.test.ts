@@ -34,9 +34,7 @@ test("slice 9: a note with a verdict is refused; both doors are in the catalog P
   );
 });
 
-// Red until slice 8: the fans scene capture carries no SubjectRef per port, so nothing real feeds
-// `captured` and `findingMark` throws. Slice 8 (the picture slot) flips this back to test().
-test.fails("slice 9: one mark draws on the port's geometry (needs slice 8 Captured SubjectRef per port)", () => {
+test("slice 9: one mark draws on the port's geometry", () => {
   const pea = finding("p1", port, "pea", "claim", "no");
   expect(findingMark(pea, [{ ref: port, point: [448.6, 738.7, 1.8] }])).toEqual({
     kind: "ring",

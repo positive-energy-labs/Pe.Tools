@@ -6,7 +6,6 @@ import { subjectRefCodeSchema, type SubjectRefCode } from "../subject-ref.ts";
  * frame; it is a scope, never an identity. Marks are a closed set the kernel draws on a subject's
  * geometry or at model coordinates. The kernel resolves every SubjectRef to geometry itself: a
  * route declares no translator, no element-key regex and no selection-string bridge.
- * Owner: slice 8. Scaffold: types and the closed sets only.
  */
 
 /** Model feet, z up (the scene's host-internal frame). */
@@ -81,3 +80,8 @@ export const pictureSlotDataSchema = z.strictObject({
   marks: z.array(z.enum(MARK_KINDS)).readonly(),
 });
 export type PictureSlotData = z.output<typeof pictureSlotDataSchema>;
+/** The declaration's data projection. ponytail: `marks` names the whole closed set when the route draws any, since `marks(ctx)` is a function; narrow it when a reader needs the kinds. */
+export const pictureSlotData = (slot: PictureSlot<never>): PictureSlotData => ({
+  scope: slot.scope === "subject" ? "subject" : "derived",
+  marks: slot.marks ? MARK_KINDS : [],
+});

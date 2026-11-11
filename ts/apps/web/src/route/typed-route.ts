@@ -16,7 +16,7 @@ import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "./host-read.ts";
-import { sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
+import { pictureSlotData, sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
 
 /*
  * The sheet pair's contracts, inline: importing `typed-actions` would pull the whole semantic catalog into
@@ -311,7 +311,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
       return meta?.title ? [[key,{label:meta.title,internal:meta.internal === true}]] : [];
     })),cells:{},panes:Object.fromEntries(Object.entries(normalized.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,
       draws:p.read?[readIds.get(p.read)!]:[],verbs:Object.keys(verbs)}])),readings,verbs,seeds:{},layout:discoveryLayout(spec.layout),
-    ...(sheet?{sheet}:{}),...(spec.goal?{goal:readIds.get(spec.goal)!}:{}),
+    ...(sheet?{sheet}:{}),...(spec.picture?{picture:pictureSlotData(spec.picture)}:{}),...(spec.goal?{goal:readIds.get(spec.goal)!}:{}),
     needs:normalized.needs === "browser" || normalized.needs === "host" ? "nothing" : normalized.needs,
     predicates:{},observe:[],resetOnTarget:[],stageOrder:[stage],stages:{[stage]:{panes:Object.keys(normalized.panes),verbs:Object.keys(verbs),word:spec.name}}};
   const host:HostRouteModule={data,schemas,...(work?{workState:work,readWorks:Object.keys(owners).filter(id=>id!==work.route)}:{})};
