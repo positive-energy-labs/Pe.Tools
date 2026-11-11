@@ -206,9 +206,16 @@ public static class Rooms
         var zones = ours.Where(r => r.Role == TakeoffCarriers.RoleZoningRegion)
             .Select(r => (r.View.Id.Value(), r.Guid)).ToHashSet();
         var regions = new List<RoomsRegion>();
+        // ADR 0039 keep: a blob this build can't read is reported with its reason and the listing goes on.
+        var unreadable = new List<TakeoffUnreadableBlob>();
         foreach (var (fr, view, role, guid) in ours)
         {
-            var provenance = ReadProvenance(fr, role);
+            var read = TryReadProvenance(fr, role);
+            if (read.Value is not { } provenance)
+            {
+                unreadable.Add(new TakeoffUnreadableBlob(fr.Id.Value(), TakeoffCarriers.Provenance.Name, read.Refusal!));
+                continue;
+            }
             var loops = TakeoffAtlas.Boundaries(fr);
             if (loops.Count == 0) continue;
             var outer = loops.OrderByDescending(loop => Math.Abs(Kernel.Shoelace(loop))).First();
@@ -233,7 +240,7 @@ public static class Rooms
                 touched, role != TakeoffCarriers.RoleZoningRegion && Locked(provenance, loops),   // an authored held row reads locked too (Astra ad180f8f)
                 provenance.Flags.Contains(FlagStale)));
         }
-        return new RoomsSnapshotData(levels, regions);
+        return new RoomsSnapshotData(levels, regions, unreadable);
     }
 
     /// <summary>
@@ -731,19 +738,25 @@ public static class Rooms
             ? provenance
             : provenance with { Flags = [.. provenance.Flags, FlagAuthored] };
 
-    private static RegionProvenance ReadProvenance(FilledRegion fr, string? role)
+    // For a write run: a blob that cannot be read stops the run with its reason and is never written over.
+    private static RegionProvenance ReadProvenance(FilledRegion fr, string? role) =>
+        TryReadProvenance(fr, role).OrThrow()!;
+
+    private static Pe.Shared.RevitData.Serialization.OwnerValue<RegionProvenance> TryReadProvenance(FilledRegion fr, string? role)
     {
-        var json = TakeoffCarriers.ReadProvenance(fr);
-        if (role != TakeoffCarriers.RoleZoningRegion)
-            return RegionProvenance.FromJson(json ?? throw new InvalidOperationException($"region {fr.Id} has no provenance blob"));
+        var blob = TakeoffCarriers.ReadProvenanceBlob(fr);
+        if (role != TakeoffCarriers.RoleZoningRegion) return RegionProvenance.Read(blob);
         // A zone takeoffs adopted carries TakeoffZoneProvenance (V, View, Name, SystemTag): read it with defaults
         // (Version 0, no RunId), call it drawn, and let its keys ride in Unknown. The next write stores it as v1.
-        var read = json == null ? null : Newtonsoft.Json.JsonConvert.DeserializeObject<RegionProvenance>(json);
-        return (read ?? new RegionProvenance(1, Guid.Empty, RunDrawn, "", 0)) with
+        // A zone with no blob at all reads as drawn too.
+        var read = Pe.Shared.RevitData.Serialization.OwnerBlob.Parse(blob, data =>
+            Newtonsoft.Json.JsonConvert.DeserializeObject<RegionProvenance>(data.ToString(Newtonsoft.Json.Formatting.None)));
+        if (read.Refusal != null) return read;
+        return new((read.Value ?? new RegionProvenance(1, Guid.Empty, RunDrawn, "", 0)) with
         {
             Version = 1,
-            RunId = string.IsNullOrEmpty(read?.RunId) ? RunDrawn : read!.RunId,
-        };
+            RunId = string.IsNullOrEmpty(read.Value?.RunId) ? RunDrawn : read.Value!.RunId,
+        }, null);
     }
 
     private static ViewPlan LevelView(Document doc, string name)

@@ -44,6 +44,9 @@ public static class TakeoffAtlas
             .Select(fr => ToRegionFacts(doc, fr)).ToList();
         var grouped = new Dictionary<string, List<TakeoffLiveRegion>>(StringComparer.OrdinalIgnoreCase);
         var geometryKeys = new Dictionary<Guid, string>();
+        // ADR 0039 keep: a blob this build can't read is reported with its reason and the listing goes on.
+        var unreadable = zones.Where(zone => zone.Unreadable != null)
+            .Select(zone => new TakeoffUnreadableBlob(zone.ElementId, TakeoffCarriers.Provenance.Name, zone.Unreadable!)).ToList();
 
         foreach (var fr in new FilteredElementCollector(doc).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
                      .Where(fr => views.Contains(fr.OwnerViewId) || zoneIds.Count > 0))
@@ -51,9 +54,15 @@ public static class TakeoffAtlas
             var (role, guid) = TakeoffCarriers.ReadIdentity(fr);
             if (guid == null || role is not (TakeoffCarriers.RoleRoomRegion or TakeoffCarriers.RoleHeldResidue))
                 continue;
-            string blob = TakeoffCarriers.ReadProvenance(fr)
-                          ?? throw new InvalidOperationException($"{role} {fr.Id} has no provenance blob");
-            var provenance = RegionProvenance.FromJson(blob);
+            var stored = TakeoffCarriers.ReadProvenanceBlob(fr);
+            var read = RegionProvenance.Read(stored);
+            if (read.Value is not { } provenance)
+            {
+                // Its zone is unknown without the blob, so it is reported only when its own view was asked for.
+                if (views.Contains(fr.OwnerViewId))
+                    unreadable.Add(new TakeoffUnreadableBlob(fr.Id.Value(), TakeoffCarriers.Provenance.Name, read.Refusal!));
+                continue;
+            }
             if (!views.Contains(fr.OwnerViewId) && !zoneIds.Contains(provenance.ZoneGuid)) continue;
             string key = provenance.ZoneGuid.ToString("D");
             if (!grouped.TryGetValue(key, out var regions))
@@ -61,14 +70,16 @@ public static class TakeoffAtlas
             if (!geometryKeys.TryGetValue(provenance.ZoneGuid, out var geometryKey))
                 geometryKeys[provenance.ZoneGuid] = geometryKey = RegionMeasurements.ScopeKey(
                     doc, (View)doc.GetElement(fr.OwnerViewId), provenance.ZoneGuid);
-            regions.Add(ToLiveRegion(doc, fr, role, guid.Value, blob, geometryKey));
+            regions.Add(ToLiveRegion(doc, fr, role, guid.Value, stored.Data!.ToString(Formatting.None), geometryKey));
         }
 
-        var registry = TakeoffCarriers.ReadRegistry(doc);
+        var registry = TakeoffCarriers.TryReadRegistry(doc);
+        if (registry.Refusal != null)
+            unreadable.Add(new TakeoffUnreadableBlob(null, SystemRegistry.Owner.Name, registry.Refusal));
         var status = new TakeoffModelStatus(
-            registry.Systems.Select(s => new TakeoffRegistrySystem(s.Guid, s.Tag)).ToList(),
+            (registry.Value?.Systems ?? []).Select(s => new TakeoffRegistrySystem(s.Guid, s.Tag)).ToList(),
             TakeoffCarriers.Preflight(doc));
-        return new TakeoffSnapshotData(status, zones, grouped);
+        return new TakeoffSnapshotData(status, zones, grouped, unreadable);
     }
 
     public static List<TakeoffRegionFacts> CandidateRegions(Document doc, TakeoffCandidatesRequest request)
@@ -286,6 +297,7 @@ public static class TakeoffAtlas
         }
         catch { }
         var loops = Boundaries(fr);
+        var blob = TakeoffCarriers.TryReadProvenance(fr);
         return new TakeoffRegionFacts(
             fr.Id.Value(),
             type?.Name ?? "",
@@ -294,9 +306,10 @@ public static class TakeoffAtlas
             Area(fr, loops),
             role,
             guid,
-            TakeoffCarriers.ReadProvenance(fr) ?? "",
+            blob.Value ?? "",
             loops,
-            owner is { CropBoxActive: true } && loops.Count > 0 ? OwnerCrop(owner.CropBox, loops) : null);
+            owner is { CropBoxActive: true } && loops.Count > 0 ? OwnerCrop(owner.CropBox, loops) : null,
+            blob.Refusal);
     }
 
     private static RevitCropCoverage OwnerCrop(BoundingBoxXYZ crop, List<List<double[]>> loops)
