@@ -57,3 +57,5 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 - The remote MCP gateway stays on its branch until its send tools have a door that returns "held".
 - The driver observed at dfaed397 that per-terminal rows label 0.03 as "firm" while the firm read is refused. FS's provenance target is the falsifier; the fix belongs to slice 6b.
 - The comment at `ductsFirmSchema` in `ts/packages/agent-contracts/src/ducts-sheet.ts` names `<user content>/Firm/ducts.json`; the code reads the shared root. Correct it in the commit that renames `Firm/` to `Settings/`.
+- The takeoffs and rooms sheets do not yet show the `unreadable` lists that slice 2 puts on the wire (`TakeoffUnreadableBlob`, homes/c-carriers f8baf399). A TS writer surfaces them as "can't read, kept".
+- `ops-catalog.sha` hashes every C# source, and merges of C# edits from separate branches leave it stale. Regenerate it at each integration checkpoint before the purger's suite.
