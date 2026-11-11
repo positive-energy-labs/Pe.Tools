@@ -63,6 +63,9 @@ export const module = route({
       title: "Families",
       purpose: "Audit family values",
       body: "scroll",
+      // Dark `support` resolves to the page colour, so the matrix heads recede only on the artifact
+      // ground (design ledger default 6, 2026-11-11).
+      ground: "artifact",
       draw: draw("scroll", () => import("./matrix.tsx"), "FamiliesMatrix"),
     },
   },
