@@ -86,7 +86,7 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
 
   return (
     <div className="flex w-full max-w-sm flex-col items-center gap-2">
-      <Button
+      <Button kind="quiet"
         label="upload a PDF"
         pressed={dragOver}
         busy={parsing}

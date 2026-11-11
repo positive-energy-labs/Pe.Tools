@@ -6,6 +6,7 @@
 import { expect, it } from "vite-plus/test";
 
 import { neighboursOf, cutLine, enteredLine } from "./neighbours.ts";
+import { groupOf, nodeOf, snapshotOf } from "./test-snapshot.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 type Segment = DuctSnapshot["segments"][number];
@@ -55,24 +56,13 @@ const run = (
       ],
     }),
   );
-const group = (id: string, system: string) => ({
-  id,
-  rootIds: [100],
-  classifications: [],
-  systemNames: [system],
-  terminalCount: 0,
-  elementCount: 0,
-  loops: 0,
-  issueIds: [],
-});
+const group = (id: string, system: string) =>
+  groupOf(id, { rootIds: [100], systemNames: [system] });
 
-const snapshot = {
+const snapshot = snapshotOf({
   groups: [group("gS", "SA 1"), group("gF", "FA 1"), group("gR", "EX 1"), group("gE", "EX 2")],
   nodes: [
-    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(100).toString(16).padStart(8, "0")}`,
-      id: 100,
-      kind: "equipment",
-      category: "equipment",
+    nodeOf(100, "equipment", {
       family: "ERV",
       point: [0, 0, 0],
       groupId: null,
@@ -83,8 +73,7 @@ const snapshot = {
         conn(2, "ExhaustAir", [21, 0]),
         conn(3, "ExhaustAir", [31, 0]),
       ],
-      facts: [],
-    },
+    }),
   ],
   segments: [
     ...run("gS", "SA 1", "SupplyAir", 0, [1, 2], [5, 5]),
@@ -93,11 +82,7 @@ const snapshot = {
     // A 30 ft duct on the port: the stub is that one element, however long.
     ...run("gE", "EX 2", "ExhaustAir", 3, [31, 32], [30, 2]),
   ],
-  flows: [],
-  issues: [],
-  levels: [],
-  systems: [],
-} as unknown as DuctSnapshot;
+});
 
 it("keeps to the open port's airstream by default", () => {
   expect(

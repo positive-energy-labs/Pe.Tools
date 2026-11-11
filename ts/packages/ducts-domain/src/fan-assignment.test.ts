@@ -1,43 +1,38 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { fanCandidates, fansOwedBase } from "./fan-assignment.ts";
-import type { DuctSnapshot } from "./types.ts";
+import {
+  connOf,
+  groupOf,
+  nodeOf,
+  snapshotOf,
+  systemOf,
+  type System,
+} from "./test-snapshot.ts";
 import { unitRoles } from "./unit-roles.ts";
 
-const unit = (id: number, ...classes: string[]) => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-  id,
-  kind: "equipment",
-  connectors: classes.map((classification, index) => ({ index, classification })),
-  facts: [],
-});
-const group = (id: string, rootIds: number[], systemNames: string[]) => ({
-  id,
-  rootIds,
-  systemNames,
-  classifications: [],
-});
+const unit = (id: number, ...classes: string[]) =>
+  nodeOf(id, "equipment", {
+    connectors: classes.map((classification, index) => connOf(index, null, { classification })),
+  });
+const group = (id: string, rootIds: number[], systemNames: string[]) =>
+  groupOf(id, { rootIds, systemNames });
 const system = (
   id: number,
   name: string,
   classification: string,
   baseEquipmentId: number | null = null,
-) => ({
-  id,
-  name,
-  classification,
-  baseEquipmentId,
-});
+) => systemOf(id, { name, classification, baseEquipmentId });
 
 // FC-17 (17) roots SA 19 and RA 19; AHU (18) roots SA 19 too; FC-20 (20) is already SA 20's base.
-const snapshot = (systems: ReturnType<typeof system>[]) =>
-  ({
+const snapshot = (systems: System[]) =>
+  snapshotOf({
     nodes: [
       unit(17, "SupplyAir", "ReturnAir"),
       unit(18, "SupplyAir"),
       unit(20, "SupplyAir"),
-      { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(5).toString(16).padStart(8, "0")}`,  id: 5, kind: "terminal", connectors: [], facts: [] },
+      nodeOf(5, "terminal"),
     ],
-    segments: [],
     groups: [
       group("g1", [17, 18], ["SA 19"]),
       group("g2", [17], ["RA 19"]),
@@ -45,8 +40,7 @@ const snapshot = (systems: ReturnType<typeof system>[]) =>
     ],
     systems,
     store: null,
-    slots: {},
-  }) as unknown as DuctSnapshot;
+  });
 
 describe("fanCandidates", () => {
   it("offers the systems the unit's own groups carry, of a class its ports have, with no base yet", () => {

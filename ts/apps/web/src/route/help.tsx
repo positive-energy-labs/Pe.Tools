@@ -221,7 +221,7 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
                   className="flex min-w-0 flex-col gap-1 t-small wrap-anywhere"
                 >
                   <h2 className="t-small t-upper">
-                    <Button
+                    <Button kind="quiet"
                       label={`Read ${r.label} controls`}
                       pressed={selected.key === r.key}
                       onClick={() => setPicked(r.key)}
@@ -307,7 +307,7 @@ function HelpBody({
       ) : null}
       {utilities ? (
         <div className="hairline-t flex items-center gap-3 px-8 py-3">
-          <Button
+          <Button kind="quiet"
             label="Send feedback"
             onClick={() => {
               close();
@@ -435,7 +435,7 @@ export function RouteHelpButton({ docs, name, utilities = false }: HelpProps) {
     );
   return (
     <span className="dl-hotkey-command" data-command-face="responsive">
-      <Button
+      <Button kind="quiet"
         label={HELP_CHORD.label}
         reason="how this tool works — its regions and every key bound right now"
         onClick={() => void showHelp(page)}

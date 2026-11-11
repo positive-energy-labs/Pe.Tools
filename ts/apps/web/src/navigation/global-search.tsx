@@ -65,7 +65,7 @@ export function GlobalSearch({
         <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-1">
           <span className="flex flex-wrap gap-1">
             {(["All", "Tools", "Works", "Pea threads"] as const).map((value) => (
-              <Button
+              <Button kind="quiet"
                 key={value}
                 label={
                   value === "All" ? "Open work, then everything as you type" : `Search ${value}`

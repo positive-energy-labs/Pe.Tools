@@ -57,14 +57,14 @@ export function SectionControls({
           }
         />
         <ButtonGroup>
-          <Button
+          <Button kind="quiet"
             label="Section to subject"
             pressed={section?.kind === "box"}
             onClick={() => setSection(fitSection(subject, padding))}
           >
             Section to subject
           </Button>
-          <Button
+          <Button kind="quiet"
             label="Plane cut"
             pressed={section?.kind === "plane"}
             onClick={() => setSection(section?.kind === "plane" ? null : plane("z"))}
@@ -72,7 +72,7 @@ export function SectionControls({
             Plane
           </Button>
           {section && (
-            <Button label="Clear section" onClick={() => setSection(null)}>
+            <Button kind="quiet" label="Clear section" onClick={() => setSection(null)}>
               Clear
             </Button>
           )}
@@ -134,7 +134,7 @@ export function SectionControls({
             />
           </span>
           <span>ft</span>
-          <Button
+          <Button kind="quiet"
             label="Flip kept side"
             onClick={() =>
               setSection({ ...section, keep: section.keep === "below" ? "above" : "below" })

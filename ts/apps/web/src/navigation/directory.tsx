@@ -85,7 +85,7 @@ function NavigationStatus() {
               : `inventory · ${snapshot ? at(snapshot.observedAt) : "never"}`}
         </span>
       </TooltipHint>
-      <Button
+      <Button kind="quiet"
         label="Refresh navigation inventory"
         icon={RefreshCw}
         busy={loading}
@@ -242,7 +242,7 @@ export function Directory({
             selection and action readiness.
           </p>
           {tool.satellites?.map((satellite) => (
-            <Button key={satellite.to} label={satellite.label} onClick={() => go(satellite.to)}>
+            <Button kind="quiet" key={satellite.to} label={satellite.label} onClick={() => go(satellite.to)}>
               {satellite.label}
             </Button>
           ))}
@@ -265,7 +265,7 @@ export function Directory({
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="text-ink-2">Exposure suggestion:</span>
           {(["All", "Main", "Preview", "Archive"] as const).map((value) => (
-            <Button
+            <Button kind="quiet"
               key={value}
               label={`Show ${value} exposure`}
               pressed={exposure === value}

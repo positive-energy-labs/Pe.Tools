@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, renderHook } from "@testing-library/react";
-import { afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import { address, roomEditKey, roomsRouteState } from "@pe/agent-contracts";
-import { publicRoutes, publicRoutesReady } from "../route/builtin-routes";
+import { publicRoutes } from "../route/builtin-routes";
 import { useHeadWorks } from "./head-works";
 
 const reads = vi.hoisted(() => ({
@@ -28,7 +28,6 @@ vi.mock("../routes/__root", async () => {
   return { Route: createRootRoute() };
 });
 afterEach(cleanup);
-beforeAll(() => publicRoutesReady);
 
 test("the chat head reads executable graph Work and cell families for addressed and unsaved documents", () => {
   reads.route = "rooms";

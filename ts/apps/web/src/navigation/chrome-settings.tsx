@@ -31,7 +31,7 @@ export function ChromeSettings({ word = false }: { word?: boolean }) {
   if (host.shell.icons.some((icon) => icon.route === "settings")) return null;
   if (host.shell.settings === "route")
     return (
-      <Button
+      <Button kind="quiet"
         label="Settings"
         icon={Settings2}
         pressed={pathname === "/settings"}
@@ -50,7 +50,7 @@ export function ChromeSettings({ word = false }: { word?: boolean }) {
     >
       <PopoverTrigger
         render={
-          <Button label="Settings" icon={Settings2} data-chrome-settings>
+          <Button kind="quiet" label="Settings" icon={Settings2} data-chrome-settings>
             {word ? "Settings" : null}
           </Button>
         }
@@ -67,12 +67,12 @@ export function ChromeSettings({ word = false }: { word?: boolean }) {
           <SettingsProjection quick subject={subject} />
         </div>
         <span className="pe-settings-row">
-          <Button label="All settings" onClick={openSettings}>
+          <Button kind="quiet" label="All settings" onClick={openSettings}>
             All settings
           </Button>
         </span>
         <span className="pe-settings-row">
-          <Button
+          <Button kind="quiet"
             label="Providers and agent approvals"
             onClick={() => {
               close();

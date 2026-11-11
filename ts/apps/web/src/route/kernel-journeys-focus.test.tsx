@@ -39,7 +39,7 @@ import { historySnapshotSchema } from "../shell/history";
 import * as historyLinks from "../shell/history";
 import { ref, path } from "../../../host/tests/host-read-graph.test-support";
 import { publicationSource } from "../host/publication-source";
-import { builtinRouteStamp } from "./builtin-inventory";
+import { routeRegistry } from "./registry";
 
 test("JZ Families History offers published values and marks ambiguous publications Unavailable", async () => {
   const browserHref = window.location.href;
@@ -147,7 +147,7 @@ test("JZ Families History offers published values and marks ambiguous publicatio
     } }) };
     const live = mounts.mountTypedRoute(families, { address, fixture: null, publicationInstance: lifecyclePose.instance,
       target: { kind: "document", ref }, work: { address: path, open: ref }, custody: { current: () => true }, memory: () => ({}),
-    }, workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("families")}`), { work, sources: { "families.view": source } });
+    }, routeRegistry.families!.fingerprint, { work, sources: { "families.view": source } });
     mountsToClose.push(live);
     const firstStop = live.subscribe(() => {});
     await waitFor(() => expect(live.value().current).toBe(true));
@@ -639,7 +639,7 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
     target: f.target, fixture: null, work: { address: null, open: f.target.ref },
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => true }, memory: () => ({}),
-  }, workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("fans")}`), { work, sources: { "fans.sheet": { kind: "use", open: () => () => {} } } });
+  }, routeRegistry.fans!.fingerprint, { work, sources: { "fans.sheet": { kind: "use", open: () => () => {} } } });
   const view = render(<JournalButtons owner={mount} />);
   try {
     const staged = await stage("ducts", [
@@ -1569,8 +1569,7 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
   const threads = [{ id: "jz-family-first" }, { id: "jz-family-other" }];
   const store = createChatPageStore({ registry: appAtomRegistry, search: { patch: async () => {} } });
   conversation.value = { store, threads };
-  const { builtinRouteStamp } = await import("./builtin-inventory");
-  const stamp = workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("family")}`);
+  const stamp = routeRegistry.family!.fingerprint;
   const declaration = route({ ...family.spec, panes: { workspace: {
     ...family.spec.panes.workspace,
     body: "scroll", draw: ctx => scrollBody(<output aria-label="Mounted Family Work">{ctx.cells.doc?.spec?.doc.fileName}</output>),

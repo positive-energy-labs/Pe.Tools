@@ -1,4 +1,5 @@
 /// <reference path="./source-closure.d.ts" />
+import { workFingerprintSchema, type RouteFingerprint } from "@pe/agent-contracts";
 import { closureSchema } from "./builtin-closure.ts";
 import type { TypedRoute } from "./typed-route";
 
@@ -9,7 +10,7 @@ import type { TypedRoute } from "./typed-route";
  */
 const declarations = import.meta.glob<{
   module: TypedRoute;
-  router?: { contract?: string; dock?: boolean };
+  router?: { dock?: boolean };
 }>("../*/route.ts", { eager: true });
 const closures = import.meta.glob<unknown>("../*/source-closure.generated.json", {
   eager: true,
@@ -18,13 +19,11 @@ const closures = import.meta.glob<unknown>("../*/source-closure.generated.json",
 
 export interface WebRoute {
   readonly key: string;
-  readonly folder: string;
   readonly module: TypedRoute;
-  /** The address table row: `router.contract ?? key`. */
-  readonly contract: string;
   /** The dock draws this route; its address renders nothing. */
   readonly dock: boolean;
-  readonly closure: ReturnType<typeof closureSchema.parse>;
+  /** The Work fingerprint this build mounts the route under: its builtin closure's. */
+  readonly fingerprint: RouteFingerprint;
 }
 
 export const routeRegistry: Readonly<Record<string, WebRoute>> = Object.fromEntries(
@@ -33,8 +32,8 @@ export const routeRegistry: Readonly<Record<string, WebRoute>> = Object.fromEntr
     const closure = closures[`../${folder}/source-closure.generated.json`];
     if (!closure) throw Error(`${module.data.key} has no builtin closure: run codegen:routes`);
     const key = module.data.key;
-    return [key, { key, folder, module, contract: router?.contract ?? key, dock: router?.dock === true,
-      closure: closureSchema.parse(closure) }];
+    return [key, { key, module, dock: router?.dock === true,
+      fingerprint: workFingerprintSchema.parse(`builtin-closure:${closureSchema.parse(closure).fingerprint}`) }];
   }),
 );
 

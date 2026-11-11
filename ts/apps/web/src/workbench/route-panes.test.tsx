@@ -24,7 +24,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { appAtomRegistry, routeSearch } from "#/shell/owner";
 import { createChatPageStore } from "./store";
 import { RouteDock } from "./route-panes";
-import { useRouteCurrent } from "#/route/activity";
+import { RouteVisibility, useRouteCurrent } from "#/route/activity";
 import { admittedRouterAddress } from "#/shell/typed-place-boundary";
 import { searchCodec } from "#/route/address-transport";
 import { SHOWN, urlSettled } from "#/test-journey";
@@ -316,7 +316,7 @@ test("an actual admitted standalone Fans Place enrolls without a chat or native 
   // JSON string codec text (plain, empty, numeric-looking) survives the history tag's state write.
   const strings = {
     stage: JSON.stringify("sheet"),
-    contextStyle: JSON.stringify("glass"),
+    context: JSON.stringify("glass"),
     inputSort: JSON.stringify(""),
     sheetPath: JSON.stringify("8081605"),
   };
@@ -375,7 +375,7 @@ test("an admitted Place keeps its codec bytes through open, switch, bare URL res
     rosterSearch,
     contextRadiusFt: "15",
     stage: JSON.stringify("sheet"),
-    contextStyle: JSON.stringify("glass"),
+    context: JSON.stringify("glass"),
     inputSort: JSON.stringify(""),
     sheetPath: JSON.stringify("8081605"),
   };
@@ -975,4 +975,18 @@ test("6.1b first open of /fans while the document bind is pending reads as pendi
     await screen.findByText("Finding the open document");
     expect(document.querySelector('[aria-busy="true"]:has(> [data-kind="busy"])')).not.toBeNull();
   } finally { watch.disconnect(); }
+});
+
+test("6.1b a hidden Place's section carries no aria-busy while the document bind is pending", async () => {
+  sessionStorage.clear();
+  const { admit } = await import("../fans/admission.fixture");
+  fansRoute = (await admit()).presenter;
+  // The same pending bind as above (`useReading` is mocked pending), on a Place the dock hides.
+  const root = createRootRoute({ component: () => <RouteVisibility.Provider value={false}><FansProbe /></RouteVisibility.Provider> });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/fans"] }) });
+  await router.load();
+  render(<RegistryContext.Provider value={appAtomRegistry}><RouterProvider router={router} /></RegistryContext.Provider>);
+  await screen.findByText("Finding the open document");
+  await settle();
+  expect(document.querySelectorAll("[aria-busy]")).toHaveLength(0);
 });

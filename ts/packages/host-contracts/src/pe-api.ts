@@ -838,7 +838,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "pe",
       "human-or-pea",
     ),
-    "reads.events": route("GET", "/pe/read-events", none, object, "read", "pe", "read", "stream"),
       "reads.value": route("POST", "/pe/reads/value", schemas.valueReadRequest as S["valueReadRequest"], schemas.valueReadResponse as S["valueReadResponse"], "read", "pe", "read"),
     "ducts.analysis": route(
       "POST",

@@ -1,6 +1,6 @@
 import { criteriaCellOf } from "@pe/agent-contracts";
 import type {
-  DuctsSheetEdits,
+  SheetEdits,
   RouteStatePatch,
 } from "@pe/agent-contracts";
 import { EDIT_SEGMENTS, END_KEY, FITTING_DROP_CELL, JOIN_KEY } from "./inputs.ts";
@@ -11,7 +11,7 @@ import { EDIT_SEGMENTS, END_KEY, FITTING_DROP_CELL, JOIN_KEY } from "./inputs.ts
  * (`clear` writes a delete rung, which also takes back a verdict the model's store holds), and a
  * proposed fitting's per-path drop as a `component-drop:proposed:…` override.
  */
-export function editPatches(edits: DuctsSheetEdits): RouteStatePatch[] {
+export function editPatches(edits: SheetEdits): RouteStatePatch[] {
   const patches: RouteStatePatch[] = [];
   for (const [field, segment] of Object.entries(EDIT_SEGMENTS) as [
     keyof typeof EDIT_SEGMENTS,

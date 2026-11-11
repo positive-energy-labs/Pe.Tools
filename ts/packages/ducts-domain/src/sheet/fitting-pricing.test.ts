@@ -7,42 +7,34 @@
 import { expect, it } from "vite-plus/test";
 
 import type { FanPort } from "../roster.ts";
-import type { DuctSnapshot } from "../types.ts";
+import {
+  connOf,
+  ductOf,
+  nodeOf,
+  type Fact,
+  type Node,
+} from "../test-snapshot.ts";
 import { buildSheet, resolveInputs, type SheetSnapshot } from "./index.ts";
 import { grids } from "./tables.fixture.ts";
 import { inputsFor, TEST_FIRM } from "./test-inputs.ts";
 
-type Node = DuctSnapshot["nodes"][number];
-type Segment = DuctSnapshot["segments"][number];
-type Conn = Node["connectors"][number];
+// The size string is the bare diameter here, not the shared `round`'s `8"ø`.
 const round = (d: number) => ({ shape: "round" as const, size: `${d}`, diameterIn: d });
-const conn = (index: number, to: [number, number] | null, d = 8): Conn =>
-  ({
-    index,
-    kind: "end",
-    point: [0, 0, 0],
-    direction: "out",
-    connectedTo: to ? { elementId: to[0], connector: to[1] } : null,
-    ...round(d),
-  }) as Conn;
-const node = (id: number, kind: string, extra: object): Node =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,  id, kind, category: "", point: [0, 0, 0], facts: [], ...extra }) as unknown as Node;
-const duct = (id: number, a: [number, number], b: [number, number]): Segment =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-    id,
-    kind: "duct",
-    curveKind: "line",
+const conn = (index: number, to: [number, number] | null, d = 8) =>
+  connOf(index, to, { direction: "out", ...round(d) });
+const node = (id: number, kind: Node["kind"], extra: Partial<Node>) =>
+  nodeOf(id, kind, { category: "", point: [0, 0, 0], ...extra });
+const duct = (id: number, a: [number, number], b: [number, number]) =>
+  ductOf(id, {
     ...round(8),
     lengthFt: 10,
     polyline: [
       [0, 0, 0],
       [10, 0, 0],
     ],
-    roughness: { valueFt: 0.0003, provenance: "revit-default" },
-    revit: {},
     connectors: [conn(0, a), conn(1, b)],
-  }) as unknown as Segment;
-const elbow = (id: number, a: [number, number], b: [number, number], facts: object[]) =>
+  });
+const elbow = (id: number, a: [number, number], b: [number, number], facts: Fact[]) =>
   node(id, "fitting", {
     family: "Round Elbow",
     type: "1.5 D",

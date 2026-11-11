@@ -1,5 +1,6 @@
-import { beforeAll, describe, expect, it } from "vite-plus/test";
-import { publicRoutesReady } from "../route/builtin-routes";
+import { describe, expect, it } from "vite-plus/test";
+// Registration is the import, as in `routes/__root.tsx`.
+import "../route/builtin-routes";
 
 import {
   actionReceiptSchema,
@@ -10,8 +11,6 @@ import {
 } from "@pe/agent-contracts";
 
 import { actionPlace, actionRoute, capturedPlace, proposedRecord, receiptRoute } from "./chat-plugins";
-
-beforeAll(async () => { await publicRoutesReady; });
 
 const member = { pod: "mechanical", path: "settings/family.json" };
 /** The /pods Page a member opens on: the member as its one subject. */
@@ -78,8 +77,6 @@ describe("chat plugin records", () => {
     ).toMatchObject({ ok: false, refusal: expect.stringContaining("document target") });
   });
   it("an action opens the pane whose manifest declares a verb doing it, never a guess at its words", async () => {
-    const { publicRoutesReady } = await import("../route/builtin-routes");
-    await publicRoutesReady;
     expect(actionRoute("takeoffs.adopt")).toBe("takeoffs");
     expect(actionRoute("rooms.merge")).toBe("rooms");
     expect(actionRoute("family.build")).toBe("family");

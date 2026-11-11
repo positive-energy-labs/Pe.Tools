@@ -99,15 +99,14 @@ async function emit(destination: URL, text: string) {
 const root = fileURLToPath(new URL("../", import.meta.url));
 const builtinOptions = [];
 const discovered = await readdir(new URL("../src/",import.meta.url),{withFileTypes:true});
-const declarations=new Map<string,{folder:string;file:string;module:{data:{key:string}}}>();
+const declarations=new Map<string,{folder:string;module:{data:{key:string}}}>();
 for(const dir of discovered.filter(d=>d.isDirectory())) {
-  for(const file of ["route.ts","route.tsx","kernel.ts","kernel.tsx"]) {
-    const text=await readFile(new URL(`../src/${dir.name}/${file}`,import.meta.url),"utf8").catch(()=>"");
-    if(/export\s+(?:const|let)\s+module\b/.test(text)) {
-      const {module}=await jiti.import<{module:{data:{key:string}}}>(fileURLToPath(new URL(`../src/${dir.name}/${file}`,import.meta.url)));
-      if(declarations.has(module.data.key)) throw Error(`Duplicate route module ${module.data.key}`);
-      declarations.set(module.data.key,{folder:dir.name,file,module});break;
-    }
+  const file=new URL(`../src/${dir.name}/route.ts`,import.meta.url);
+  const text=await readFile(file,"utf8").catch(()=>"");
+  if(/export\s+(?:const|let)\s+module\b/.test(text)) {
+    const {module}=await jiti.import<{module:{data:{key:string}}}>(fileURLToPath(file));
+    if(declarations.has(module.data.key)) throw Error(`Duplicate route module ${module.data.key}`);
+    declarations.set(module.data.key,{folder:dir.name,module});
   }
 }
 const keys=[...declarations.keys()].sort();
@@ -116,9 +115,9 @@ const registryRows:RouteRegistryInput[]=[];
 const addressRows=new Map<string,AddressRow>(
   Object.keys(HAND_ADDRESSES).map(key=>[key,{key}]));
 for (const key of keys) {
-  const {folder,file:kernel}=declarations.get(key)!;
-  const entry = fileURLToPath(new URL(`../src/${folder}/${kernel}`, import.meta.url));
-  const { module, router } = await jiti.import<{ module: { data: unknown }; router?: {contract?:string; dock?:boolean} }>(entry);
+  const {folder}=declarations.get(key)!;
+  const entry = fileURLToPath(new URL(`../src/${folder}/route.ts`, import.meta.url));
+  const { module, router } = await jiti.import<{ module: { data: unknown }; router?: {contract?:string} }>(entry);
   if ("spec" in module) {
     const typed = module as unknown as import("../src/route/typed-route.ts").TypedRoute;
     if (!(typed.data.directory.icon in icons)) throw Error(`${key}: icon ${typed.data.directory.icon} is not a lucide-react icon name`);
@@ -148,7 +147,7 @@ for (const key of keys) {
         specifier=>jiti.import<Record<string,{schema?:unknown}>>(specifier),false);
       work={name,definition:projected.definition,properties:projected.properties};
     }
-    registryRows.push({key,folder,address:typed.data.address,contract,dock:router?.dock === true,
+    registryRows.push({key,folder,
       ...(typed.spec.host ? {host:typed.spec.host} : {}),...(work ? {work} : {})});
   }
   builtinOptions.push({

@@ -562,7 +562,7 @@ function ReasoningPart({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="hairline-l-faint pl-2">
-      <Button
+      <Button kind="quiet"
         label="Thought process"
         reason="Pea's chain of thought for this turn — collapsed so the spine stays calm"
         onClick={() => setOpen((value) => !value)}

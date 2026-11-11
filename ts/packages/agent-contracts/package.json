@@ -69,7 +69,6 @@
     "dev": "vp pack --watch",
     "test": "vp test",
     "check": "vp check",
-    "codegen:routes": "node ../../apps/web/scripts/route-graphs.ts",
     "prepublishOnly": "vp run build"
   },
   "dependencies": {

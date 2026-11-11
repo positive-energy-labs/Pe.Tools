@@ -1,5 +1,6 @@
 import { createElement } from "react";
-import { RosterBody, PictureBody, LedgerBody } from "../ducts/sheet/mount";
+import { RosterBody, LedgerBody } from "../ducts/sheet/mount";
+import { PictureBody } from "./picture";
 import { SheetPane } from "../route/slots/sheet/pane.tsx";
 import * as networkBodies from "../ducts/proto/e/screen";
 import type { TypedMount } from "../shell/typed-mount";

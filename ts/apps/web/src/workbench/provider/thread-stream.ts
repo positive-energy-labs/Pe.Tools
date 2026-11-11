@@ -109,7 +109,6 @@ export function useThreadStream(options: {
   useEffect(() => {
     if (threadId === null || cursor === undefined) return;
     return streamThread({
-      origin,
       threadId,
       cursor,
       lastSeq: lastSeq(storedRef.current?.events ?? []),

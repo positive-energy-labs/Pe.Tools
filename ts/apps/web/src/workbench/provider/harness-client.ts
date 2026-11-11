@@ -1,4 +1,4 @@
-import { createPeClient, peRouteUrl } from "@pe/agent-contracts/pe-api";
+import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { hostFetch } from "#/host/runtime";
 /**
  * The harness-thread wire, typed (`@pe/agent-contracts` harness-thread.ts lists every route). The
@@ -9,30 +9,21 @@ import type {
   HarnessEvent,
   HarnessThreadSummary,
   promptRequestSchema,
-  ReadingRequest,
   UpdateThreadRequest,
   PutTarget,
   TurnElementNamesRequest,
 } from "@pe/agent-contracts";
-import { harnessThreadSummarySchema, readingFrameSchema } from "@pe/agent-contracts";
+import { harnessThreadSummarySchema } from "@pe/agent-contracts";
 import { followThread } from "@pe/agent-contracts/chat-state";
 import { fromStandardSchema } from "@pe/host-contracts/contracts";
 import { Cause, Exit, Schema } from "effect";
 import type { z } from "zod";
-import { openEventSource, peReadings } from "#/host/resource-stream";
+import { peReadings, type Readings } from "#/host/resource-stream";
 
 /** What a send posts: text, attachments, mentions (`promptRequestSchema`); the client mints its id. */
 export type PromptRequest = Omit<z.input<typeof promptRequestSchema>, "id">;
 
-/** A thread's SSE frame and the thread list's snapshot value, decoded (ADR 0029 rule 7). */
-const ThreadFrame = Schema.fromJsonString(fromStandardSchema(readingFrameSchema, "ReadingFrame"));
-/** One SSE message: the frame and its host log cursor, accepted or refused together. */
-const ThreadMessage = Schema.Struct({
-  data: ThreadFrame,
-  id: Schema.optional(
-    Schema.NumberFromString.pipe(Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
-  ),
-});
+/** The thread list's snapshot value, decoded (ADR 0029 rule 7). */
 const ThreadSummaries = Schema.Array(
   fromStandardSchema(harnessThreadSummarySchema, "HarnessThreadSummary"),
 );
@@ -102,69 +93,43 @@ export function harnessClient(origin: string) {
 /** The host answered 404: the thread (or route) does not exist there. */
 export const notFound = (error: unknown) => (error as { status?: unknown } | null)?.status === 404;
 
-/** The browser's EventSource, or a test's stand-in with the same three members. */
-export type OpenEvents = (url: string) => Pick<EventSource, "onmessage" | "onerror" | "close">;
-
-/** One Readings connection (`resources.stream`) for one key, resumed after a host log cursor. */
-export const readingsUrl = (origin: string, key: ReadingRequest, after?: number) =>
-  peRouteUrl(
-    "resources.stream",
-    {
-      query: {
-        keys: JSON.stringify([key]),
-        ...(after === undefined ? {} : { after: String(after) }),
-      },
-    },
-    origin,
-  );
-
 /**
- * Follow one thread's `thread` Reading from the body's `cursor`, applying events past `lastSeq` by
- * the shared rule (`followThread`). A dropped stream reopens after the last host log id it saw, so
- * a reconnect neither replays nor skips. A gap or a hole in seq ends this stream with `onReread`:
- * read the body again and follow from its cursor.
+ * Follow one thread's `thread` Reading on the tab's one stream, from the body's `cursor`, applying
+ * events past `lastSeq` by the shared rule (`followThread`). The cursor rides the key: when the
+ * stream is fenced or reconnects, the follow subscribes again after the last host log id it saw,
+ * so a reconnect neither replays nor skips. A gap or a hole in seq ends this follow with
+ * `onReread`: read the body again and follow from its cursor. A dropped connection is the Readings
+ * owner's fault to report (`onResync`), not this follower's.
  */
 export function streamThread(options: {
-  origin: string;
   threadId: string;
   cursor: number;
   lastSeq: number;
   onEvent: (event: HarnessEvent) => void;
   onReread: () => void;
   onFault?: (error: Error) => void;
-  open?: OpenEvents;
-  retryMs?: number;
+  readings?: Pick<Readings, "subscribe">;
 }): () => void {
-  const { origin, threadId, onEvent, onReread, onFault, retryMs = 1_000 } = options;
-  const open = options.open ?? openEventSource;
+  const { threadId, onEvent, onReread, onFault, readings = peReadings } = options;
   let cursor = options.cursor;
   let last = options.lastSeq;
   let stopped = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let source: ReturnType<OpenEvents> | undefined;
+  let subscribed = cursor;
+  let release = () => {};
   const stop = () => {
     stopped = true;
-    clearTimeout(timer);
-    source?.close();
+    release();
   };
-  const connect = () => {
-    const events = open(readingsUrl(origin, { kind: "thread", thread: threadId }, cursor));
-    source = events;
-    events.onmessage = (message: MessageEvent<string>) => {
-      if (stopped || source !== events) return;
-      // Promise/React caller until phase 5: a message that does not decode, whether its frame or
-      // its cursor, is a fault then a reread; the resume cursor moves only for an accepted frame.
-      const accepted = Schema.decodeUnknownExit(ThreadMessage)({
-        data: message.data,
-        id: message.lastEventId || undefined,
-      });
-      if (Exit.isFailure(accepted)) {
-        stop();
-        onFault?.(new Error(`Thread frame does not decode: ${Cause.pretty(accepted.cause)}`));
-        onReread();
+  const follow = () => {
+    release();
+    subscribed = cursor;
+    release = readings.subscribe({ kind: "thread", thread: threadId, after: cursor }, (frame) => {
+      if (stopped) return;
+      if (frame.kind === "stale") {
+        // Fenced or reconnecting: resume after what was applied, not from the first cursor.
+        if (cursor !== subscribed) follow();
         return;
       }
-      const frame = accepted.value.data;
       // SHIM: S gap 6 queues event tails behind mark capture. Remove this failure-body reread
       // and its backlog test once the kernel bypasses that queue and exposes stream failures.
       if (frame.kind === "failure") {
@@ -173,7 +138,8 @@ export function streamThread(options: {
         onReread();
         return;
       }
-      if (accepted.value.id !== undefined) cursor = accepted.value.id;
+      if (frame.kind === "snapshot") return;
+      if (frame.id !== undefined) cursor = frame.id;
       const step = followThread(last, frame);
       if (step.kind === "apply") {
         last = step.event.seq;
@@ -182,14 +148,10 @@ export function streamThread(options: {
         stop();
         onReread();
       }
-    };
-    events.onerror = () => {
-      events.close();
-      if (stopped) return;
-      onFault?.(new Error("Thread stream dropped; reconnecting."));
-      timer = setTimeout(connect, retryMs);
-    };
+    });
+    // A listener may stop the follow before `subscribe` returns its release.
+    if (stopped) release();
   };
-  connect();
+  follow();
   return stop;
 }

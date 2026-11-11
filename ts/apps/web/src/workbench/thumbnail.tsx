@@ -34,7 +34,7 @@ export function Thumbnail({
   return (
     <>
       <span className="relative inline-flex">
-        <Button label={`Open ${name} full size`} onClick={() => setOpen(true)}>
+        <Button kind="quiet" label={`Open ${name} full size`} onClick={() => setOpen(true)}>
           <img
             src={src}
             alt={name}

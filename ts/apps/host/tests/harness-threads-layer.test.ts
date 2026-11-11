@@ -196,6 +196,15 @@ nodeTest("replay damage preserves sequence identity and delivers the first live 
     expect(response.status).toBe(200);
     expect.soft(threads.historySnapshot()[0]?.events.map((e) => e.seq)).toEqual([1, 3, 4]);
     expect(delivered).toMatchObject([{ kind: "apply", event: { seq: 4, kind: "title_changed" } }]);
+    // One stream carries many tails, so the cursor rides the key: `after` replays the log from
+    // there, where a key with no cursor is told to re-read the body.
+    const kinds = (request: Parameters<typeof threads.observe>[0]) => {
+      const seen: string[] = [];
+      threads.observe(request, (frame) => seen.push(frame.kind))?.();
+      return seen;
+    };
+    expect(kinds({ kind: "thread", thread: "thread", after: 0 })).toEqual(["event"]);
+    expect(kinds({ kind: "thread", thread: "thread" })).toEqual(["gap"]);
   }),
 );
 

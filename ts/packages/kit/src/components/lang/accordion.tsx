@@ -10,7 +10,7 @@ export interface AccordionGroup {
   readonly label: string;
   /** The group's critical state, said while folded. */
   readonly state: ReactNode;
-  readonly tone?: "caution" | "alarm" | "done";
+  readonly tone?: "caution" | "done";
   readonly body: ReactNode;
 }
 

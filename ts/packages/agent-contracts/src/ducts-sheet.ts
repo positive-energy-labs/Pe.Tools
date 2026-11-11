@@ -173,7 +173,7 @@ export type DuctsFirm = z.infer<typeof ductsFirmSchema>;
  * The host applies them to document Work and recomputes; nothing here reaches Revit until apply.
  */
 const edits = <T extends z.ZodType>(value: T) => z.record(elementSubjectSchema, value.nullable());
-export const ductsSheetEditsSchema = z.strictObject({
+export const sheetEditsSchema = z.strictObject({
   flows: edits(z.strictObject({ cfm: nonneg })).optional(),
   terminalDrops: edits(z.strictObject({ inWg: nonneg })).optional(),
   componentDrops: edits(z.strictObject({ inWg: nonneg })).optional(),
@@ -206,11 +206,14 @@ export const ductsSheetEditsSchema = z.strictObject({
     .array(z.strictObject({ end: endRulingSchema.shape.end, verdict: z.enum(["capped", "clear"]) }))
     .optional(),
 });
+/** Every edit the shared sheet engine prices (`editPatches`); each route's door admits only its own Work's keys. */
+export type SheetEdits = z.infer<typeof sheetEditsSchema>;
+const FANS_EDITS = { flows: true, terminalDrops: true, componentDrops: true, esp: true, equipmentFlows: true, roles: true } as const;
+/** /ducts' edit door (ruling 2026-11-10, no cross-route write): Ducts Work only; the Fans inputs are /fans' door. */
+export const ductsSheetEditsSchema = sheetEditsSchema.omit(FANS_EDITS);
 export type DuctsSheetEdits = z.infer<typeof ductsSheetEditsSchema>;
 /** /fans' edit door (ruling 2026-11-10, no cross-route write): its own cells only; /ducts' keys are refused. */
-export const fansSheetEditsSchema = ductsSheetEditsSchema.pick({
-  flows: true, terminalDrops: true, componentDrops: true, esp: true, equipmentFlows: true, roles: true,
-});
+export const fansSheetEditsSchema = sheetEditsSchema.pick(FANS_EDITS);
 export type FansSheetEdits = z.infer<typeof fansSheetEditsSchema>;
 /** A closure or reading the engine took on its own: shown, never parsed. */
 export const sheetNoteSchema = z.strictObject({
@@ -236,7 +239,7 @@ const common = {
   basis: z.string().min(1).optional(),
   detail: detail.optional(),
   /** Pending edits to apply to document Work before computing. */
-  edits: ductsSheetEditsSchema.optional(),
+  edits: sheetEditsSchema.optional(),
   /** Basis-bound calculation ruling. Does not change the Revit model. */
   proposal: z
     .strictObject({

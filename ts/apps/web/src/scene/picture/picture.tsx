@@ -87,12 +87,6 @@ export interface PictureContent<L extends string = string, F extends string = st
   hoverGroups?: (group: SubjectKey) => boolean;
   /** A picked element's selection, widened (E: its leg). Absent = the single element. */
   widen?: (key: SubjectKey) => readonly SubjectKey[];
-  /** Routes can declare only the zero-tessellation default. The kernel owns detail. */
-  geometry: {
-    overview: ReturnType<typeof sceneRequest> & {
-      contextRepresentation: Extract<ContextRepresentation, "overview">;
-    };
-  };
   /** Capture limits and clipping; `meshes` substitutes a dev fixture for the capture. */
   capture?: { maxTriangles?: number; cuts?: SceneMeshes["cuts"]; meshes?: SceneMeshes | null };
   /** Centrelines: bounds before meshes arrive, the jump fallback, and the globe's lines. */
@@ -108,8 +102,8 @@ export interface PictureContent<L extends string = string, F extends string = st
   kinds: Kinds;
   colour: ColourMode;
   layers?: readonly PictureLayer[];
-  /** The layer strip, in order. `meshes`, `context` and `halo` are the scene's own keys. */
-  layerOptions: readonly { key: L; label: string; chord?: Chord; says?: string }[];
+  /** The layer strip, in order; `off` layers are not in the picture's default set. Context is the pose's `context`, never a layer. */
+  layerOptions: readonly LayerOption<L>[];
   /** DOM drawn over the picture at the released frame. */
   overlay?: (frame: PictureOverlayFrame) => ReactNode;
   readout: {
@@ -145,12 +139,16 @@ export const CONTEXT_DEFAULT = "overview" satisfies PictureContext;
 
 type DocRef = { session: string; openId: string };
 type Move = { history: "push" | "replace" };
-const CONTEXT_KEYS = ["context", "halo"];
+export type LayerOption<L extends string = string> = { key: L; label: string; chord?: Chord; says?: string; off?: true };
+
+/** The layer keys on: the page's list, or the options' default set. */
+export const layersOn = <L extends string>(layers: PicturePage["layers"], options: readonly LayerOption<L>[]): L[] =>
+  options.filter((o) => (layers === "default" ? !o.off : layers.includes(o.key))).map((o) => o.key);
 
 /** The capture request a focus asks for; null when nothing is walked or near. */
 export function captureRequest(
   focus: PictureContent["focus"],
-  layers: readonly string[],
+  context: boolean,
   radiusFt: number,
   representation: ContextRepresentation,
   maxTriangles = 3_000_000,
@@ -160,7 +158,7 @@ export function captureRequest(
   return {
     ...sceneRequest(
       ids.sort((a, b) => a - b),
-      representation !== "meshes" && !CONTEXT_KEYS.some((key) => layers.includes(key)),
+      representation !== "meshes" && !context,
       representation === "meshes" ? Math.max(5, radiusFt) : radiusFt,
       representation,
     ),
@@ -201,18 +199,18 @@ export function membersWithStrands(members: Members, strands: readonly PictureSt
 }
 
 /** What a mark pick writes to the page: a subject mark (a strand) selects its own key; an issue
- * mark selects its element and the issue. */
-export const markPick = (target: IssueTarget) =>
+ * mark selects its element's SubjectRef and the issue. The selection holds SubjectRefs, never an ElementId. */
+export const markPick = (target: IssueTarget, elements: ElementIndex) =>
   target.subject
     ? { selected: target.key, issue: "" }
-    : { selected: String(target.elementId), issue: target.key };
+    : { selected: elements.keyOf(target.elementId) ?? "", issue: target.key };
 
 /** What a jump to `key` selects and frames. An element frames itself, not the section a pick
  * widens it to (a footnote names the element); a group (a run, an issue, a path) selects itself
  * and frames its element leaves. */
 export function jumpSubject(key: SubjectKey, members: Members, elements: ElementIndex) {
   const id = elements.idOf(key);
-  if (Number.isFinite(id) && id > 0) return { selected: String(id), ids: new Set([id]) };
+  if (Number.isFinite(id) && id > 0) return { selected: key as string, ids: new Set([id]) };
   const ids = leavesOf(members, key).map(elements.idOf);
   return { selected: key as string, ids: new Set(ids.filter((n) => Number.isFinite(n) && n > 0)) };
 }
@@ -256,10 +254,7 @@ export function Picture<L extends string, F extends string>({
   // No document = selection and member registration silently do nothing (the fan sheet's 10-28
   // defect), so a Picture outside an `AttentionRoot` fails loudly instead.
   const visibleLayers = useMemo(
-    () =>
-      content.layerOptions
-        .filter((layer) => page.layers === "all" || page.layers.includes(layer.key))
-        .map((layer) => layer.key),
+    () => layersOn(page.layers, content.layerOptions),
     [page.layers, content.layerOptions],
   );
   const doc = useContext(AttentionDocument);
@@ -304,22 +299,21 @@ export function Picture<L extends string, F extends string>({
     () =>
       captureRequest(
         content.focus,
-        visibleLayers,
+        page.context !== "off",
         page.contextRadiusFt,
         contextRepresentation,
         content.capture?.maxTriangles,
       ),
     [
       content.focus,
-      visibleLayers,
+      page.context,
       page.contextRadiusFt,
       contextRepresentation,
       content.capture?.maxTriangles,
     ],
   );
-  const overviewRequest = request
-    ? { ...request, contextRepresentation: "overview" as const }
-    : content.geometry.overview;
+  // The kernel builds every capture from the focus; a route authors no scene request (ADR 0035 rule 2).
+  const overviewRequest = request ? { ...request, contextRepresentation: "overview" as const } : null;
   const captured = useCapture(
     pictureSize ? (contextRepresentation === "meshes" ? request : overviewRequest) : null,
     native,
@@ -425,13 +419,9 @@ export function Picture<L extends string, F extends string>({
     setPage({ picture: picture === "model" && flat ? flat.key : "model" }, { history: "push" });
 
   // The page's element pick; a claim or a row selects through `issue` and its members.
-  const pickedId = /^\d+$/.test(page.selected) ? Number(page.selected) : null;
-  const pickedKey: SubjectKey | null =
-    pickedId != null
-      ? elements.keyOf(pickedId)
-      : page.selected.includes(":")
-        ? (page.selected as SubjectKey)
-        : null;
+  const pickedElement = elements.idOf(page.selected);
+  const pickedId = Number.isFinite(pickedElement) ? pickedElement : null;
+  const pickedKey: SubjectKey | null = page.selected.includes(":") ? (page.selected as SubjectKey) : null;
   const widen = content.widen;
   const selectionOf = (id: number) => {
     const key = elements.keyOf(id);
@@ -470,7 +460,7 @@ export function Picture<L extends string, F extends string>({
     setAbsent(null);
     const key = id == null ? null : elements.keyOf(id);
     if (id == null || key) content.onPick?.(key);
-    setPage({ selected: id == null ? "" : String(id), issue: "" }, { history: "push" });
+    setPage({ selected: key ?? "", issue: "" }, { history: "push" });
   };
   // Escape and a click on empty picture both clear; neither pushes history when nothing is picked.
   const clearPick = () => {
@@ -478,11 +468,11 @@ export function Picture<L extends string, F extends string>({
   };
   const pickIssue =
     content.onIssuePick ??
-    ((target: IssueTarget) => setPage(markPick(target), { history: "push" }));
+    ((target: IssueTarget) => setPage(markPick(target, elements), { history: "push" }));
   const pickMark = (target: IssueTarget) => {
     if (!target.subject) return pickIssue(target);
     content.onPick?.(target.key as SubjectKey);
-    setPage(markPick(target), { history: "push" });
+    setPage(markPick(target, elements), { history: "push" });
   };
   // A subject mark lights its own key; an issue mark lights `issue:<key>` (useIssueHover).
   const hoverMark = (target: IssueTarget | null) =>
@@ -601,22 +591,9 @@ export function Picture<L extends string, F extends string>({
           <ModelPicture
             sceneView={page.sceneView}
             paint={content.paint}
-            contextMode={
-              // Layer visibility changes drawing only; detailed acquisition stays explicit.
-              CONTEXT_KEYS.some((key) => layers.has(key)) ? page.contextStyle : "off"
-            }
-            onContextMode={(mode) =>
-              setPage(
-                {
-                  ...(mode === "off" ? {} : { contextStyle: mode }),
-                  layers:
-                    mode === "off"
-                      ? visibleLayers.filter((key) => !CONTEXT_KEYS.includes(key))
-                      : [...new Set([...visibleLayers, "context" as L])],
-                },
-                { history: "push" },
-              )
-            }
+            // How context draws changes drawing only; detailed acquisition stays explicit.
+            contextMode={page.context}
+            onContextMode={(context) => setPage({ context }, { history: "push" })}
             kinds={content.kinds}
             colour={content.colour}
             contextRadiusFt={page.contextRadiusFt}
@@ -721,10 +698,7 @@ export function Picture<L extends string, F extends string>({
               : undefined,
             layers: {
               value: visibleLayers,
-              options: content.layerOptions.map((option) => ({
-                ...option,
-                busy: CONTEXT_KEYS.includes(option.key) && read.pending,
-              })),
+              options: content.layerOptions,
               onToggle: (key) =>
                 setPage(
                   {

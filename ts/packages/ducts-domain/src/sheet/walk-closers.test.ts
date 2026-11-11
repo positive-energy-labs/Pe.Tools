@@ -6,6 +6,8 @@ import { withHealth } from "./health.fixture.ts";
 import { graphOf, walkFrom } from "./walk.ts";
 
 type Connector = DuctSnapshot["nodes"][number]["connectors"][number];
+// Both casts below are kept: `withHealth` keys the recorded C# health by a hash of the exact node and
+// segment JSON, so the partial shapes are load-bearing until the fixture is re-recorded through Revit.
 const port = (index: number, x: number, facing: number[], to: [number, number] | null): Connector =>
   ({
     index,

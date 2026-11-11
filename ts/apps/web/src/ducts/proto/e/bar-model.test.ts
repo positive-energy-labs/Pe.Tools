@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { factOf, nodeOf } from "@pe/ducts-domain/test-snapshot";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { barRows, ruleConditions, selectedBarRow } from "./bar-model";
 import type { Split } from "../../loss-split";
@@ -13,11 +13,10 @@ test("the open rule editor follows its fittings when repricing changes their gro
 });
 
 test("bar columns follow this run's actual rules, lookup inputs, unique count and unknown loss", () => {
-  const node = {
-    id: 1,
+  const node = nodeOf(1, "fitting", {
     family: "Elbow family",
-    facts: [{ key: "rOverD", value: 0.75 }],
-  } as DuctSnapshot["nodes"][number];
+    facts: [factOf("rOverD", 0.75)],
+  });
   const part = { dp: 0, ids: [], unpriced: 0 };
   const split: Split = {
     unit: part,

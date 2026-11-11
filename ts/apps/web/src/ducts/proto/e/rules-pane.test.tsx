@@ -4,7 +4,7 @@ import { designOf } from "@pe/ducts-domain/test-design";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
 import { RulesTree } from "./rules-pane";
 
 vi.mock("./rules", () => ({
@@ -16,7 +16,7 @@ afterEach(cleanup);
 
 test("rule rows keep native ids and editable cells keep their arrow and Enter keys", () => {
   const onFocus = vi.fn();
-  const snapshot = { nodes: [20, 30, 40].map(id => ({ id, uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`, connectors: [] })), segments: [], groups: [] } as unknown as DuctSnapshot;
+  const snapshot = snapshotOf({ nodes: [20, 30, 40].map((id) => nodeOf(id, "fitting")) });
   const result = {
     paths: {
       20: {

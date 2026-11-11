@@ -33,6 +33,7 @@ const RV25 = 13770618;
 const RV7 = 6953852;
 
 const load = () => {
+  // Kept: an untyped file boundary (a retained host capture outside git), not a constructed shape.
   const snap = (
     JSON.parse(readFileSync(CHADDS, "utf8").replace(/^\uFEFF/, "")) as { result: DuctSnapshot }
   ).result;

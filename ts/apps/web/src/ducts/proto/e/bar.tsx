@@ -419,12 +419,11 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
     () => barRows(split, scale, context?.nodes ?? new Map()),
     [split, scale, context?.nodes],
   );
-  const ids = selected?.startsWith("elements:")
-    ? selected.slice("elements:".length).split(",").map(Number)
-    : selected && /^\d+$/.test(selected)
-      ? [Number(selected)]
-      : [];
-  const current = selectedBarRow(entries, ids.length ? { key: "", ids } : null);
+  const elements = useElementIndex();
+  // A picked row is its split place; a picked element selects the row holding it.
+  const picked = entries.find((entry) => selected === splitKey(split, entry.key));
+  const element = selected ? elements.idOf(selected) : NaN;
+  const current = picked ?? selectedBarRow(entries, Number.isFinite(element) ? { key: "", ids: [element] } : null);
   const small = entries.filter(
     (entry) => entry.dp > 0 && entry.share < 3 && entry.key !== current?.key,
   );
@@ -457,7 +456,7 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
   const barCol = Math.min(144, Math.max(96, barW));
 
   const choose = (row: BarRow) =>
-    row.key === "other" ? setExpanded(true) : owner?.select(`elements:${row.ids.join(",")}`);
+    row.key === "other" ? setExpanded(true) : owner?.select(splitKey(split, row.key));
   const columns: Column<BarRow>[] = [
     {
       key: "loss",
@@ -492,7 +491,7 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
       label: "loss group",
       cell: (row) => (
         <>
-          <Button
+          <Button kind="quiet"
             label={row.key === "other" ? row.label : `Edit rule for ${row.label}`}
             onClick={() => choose(row)}
           >
@@ -585,7 +584,7 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
           />
         </LeaderDiagram>
         {expanded && small.length > 1 ? (
-          <Button
+          <Button kind="quiet"
             label="Collapse small loss groups"
             onClick={() => {
               setExpanded(false);

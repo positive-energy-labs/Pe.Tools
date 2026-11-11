@@ -6,40 +6,39 @@ import { computeLosses } from "./losses.ts";
 import { survey } from "./survey.ts";
 import { terminalFlows } from "./terminal-flows.ts";
 import { designOf } from "./test-design.ts";
+import {
+  connOf,
+  ductOf,
+  factOf,
+  groupOf,
+  nodeOf,
+  round,
+  snapshotOf,
+  systemOf,
+  type Connector,
+  type Node,
+} from "./test-snapshot.ts";
 import type { DuctSnapshot } from "./types.ts";
-
-type Node = DuctSnapshot["nodes"][number];
-type Segment = DuctSnapshot["segments"][number];
-type Connector = Node["connectors"][number];
 
 const port = (
   index: number,
   to: { elementId: number; connector: number } | null,
   areaFt2: number | null = 0.7854,
-): Connector =>
-  ({
-    index,
-    kind: "end",
+) =>
+  connOf(index, to && [to.elementId, to.connector], {
+    ...round(12),
     point: [0, 0, 9],
-    shape: "round",
-    size: '12"ø',
-    diameterIn: 12,
-    direction: "bidirectional",
     classification: "SupplyAir",
-    connectedTo: to,
     areaFt2,
-  }) as Connector;
+  });
 const node = (
   id: number,
-  kind: string,
+  kind: Node["kind"],
   groupId: string | null,
   connectors: Connector[],
   facts: Node["facts"] = [],
-): Node =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-    id,
-    kind,
-    category: kind,
+) =>
+  nodeOf(id, kind, {
     family: kind,
     type: "Standard",
     levelId: 100,
@@ -49,16 +48,11 @@ const node = (
     classification: "Supply Air",
     connectors,
     facts,
-  }) as unknown as Node;
-const duct = (id: number, groupId: string, connectors: Connector[]): Segment =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-    id,
-    kind: "duct",
-    curveKind: "line",
+  });
+const duct = (id: number, groupId: string, connectors: Connector[]) =>
+  ductOf(id, {
     type: "Round Duct",
-    shape: "round",
-    size: '12"ø',
-    diameterIn: 12,
+    ...round(12),
     lengthFt: 10,
     polyline: [
       [0, 0, 9],
@@ -68,14 +62,10 @@ const duct = (id: number, groupId: string, connectors: Connector[]): Segment =>
     groupId,
     systemName: "SA",
     classification: "Supply Air",
-    roughness: { valueFt: 0.0003, provenance: "revit-default" },
-    revit: {},
     connectors,
-  }) as unknown as Segment;
-const mark = (text: string): Node["facts"][number] =>
-  ({ key: "mark", text, unit: "", provenance: "revit" }) as unknown as Node["facts"][number];
-const flow = (value: number): Node["facts"][number] =>
-  ({ key: "flow", value, unit: "cfm", provenance: "revit" }) as unknown as Node["facts"][number];
+  });
+const mark = (text: string) => factOf("mark", text);
+const flow = (value: number) => factOf("flow", value, { unit: "cfm" });
 
 /**
  * Equipment 1 (FC-4) feeds duct 10, which taps duct 11; terminals 30 (12"ø) and 31 hang off them.
@@ -83,41 +73,11 @@ const flow = (value: number): Node["facts"][number] =>
  * Terminals 40 (Revit flow 120) and 41 (no flow) sit in group g40 with no equipment.
  */
 const snapshot = (area31: number | null): DuctSnapshot =>
-  ({
-    document: { title: "t", readAt: "", elapsedMs: 0, networkBasedCalculations: true },
-    coordinateEncoding: "native-double",
-    levels: [],
+  snapshotOf({
     groups: [
-      {
-        id: "g10",
-        rootIds: [1],
-        classifications: [],
-        systemNames: [],
-        terminalCount: 2,
-        elementCount: 4,
-        loops: 0,
-        issueIds: [],
-      },
-      {
-        id: "g12",
-        rootIds: [2],
-        classifications: [],
-        systemNames: [],
-        terminalCount: 0,
-        elementCount: 1,
-        loops: 0,
-        issueIds: [],
-      },
-      {
-        id: "g40",
-        rootIds: [],
-        classifications: [],
-        systemNames: [],
-        terminalCount: 2,
-        elementCount: 3,
-        loops: 0,
-        issueIds: [],
-      },
+      groupOf("g10", { rootIds: [1], terminalCount: 2, elementCount: 4 }),
+      groupOf("g12", { rootIds: [2], elementCount: 1 }),
+      groupOf("g40", { terminalCount: 2, elementCount: 3 }),
     ],
     nodes: [
       node(1, "equipment", null, [port(1, { elementId: 10, connector: 1 })], [mark("FC-4")]),
@@ -144,12 +104,7 @@ const snapshot = (area31: number | null): DuctSnapshot =>
         port(2, { elementId: 41, connector: 1 }),
       ]),
     ],
-    flows: [],
-    issues: [],
-    layers: [],
-    systems: [],
-    slots: {},
-  }) as unknown as DuctSnapshot;
+  });
 
 const run = (edit = {}) => {
   const { flows, findings } = terminalFlows(snapshot(0.7854), edit);
@@ -196,9 +151,9 @@ describe("a group with no air mover", () => {
     s.groups[0]!.systemNames = ["SA 1"];
     s.groups[1]!.systemNames = ["SA 2"];
     s.systems = [
-      { name: "SA 1", baseEquipmentId: 1, sections: [] },
-      { name: "SA 2", baseEquipmentId: 2, sections: [] },
-    ] as unknown as DuctSnapshot["systems"];
+      systemOf(1, { name: "SA 1", baseEquipmentId: 1 }),
+      systemOf(2, { name: "SA 2", baseEquipmentId: 2 }),
+    ];
     const work = designOf({});
     const found = survey(s, work).findings.filter((f) => f.kind === "no-fan");
     expect(found.map((f) => f.groupId)).toEqual(["g40"]);

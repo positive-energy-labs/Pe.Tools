@@ -334,7 +334,7 @@ function QueryPicker({
               vocabulary.filters?.some(
                 (filter) => filter.default && !hasQueryFilter(state.query, filter),
               ) && (
-                <Button
+                <Button kind="quiet"
                   label="Restore default filters"
                   onClick={() => {
                     write(restoreQueryFilters(state.query, vocabulary.filters!));
@@ -401,7 +401,7 @@ function QueryPicker({
                     />
                   ))}
                 </div>
-                <Button
+                <Button kind="quiet"
                   label={only ? `clear ${only}` : "clear conditions and sorts"}
                   onClick={() => {
                     onStateChange(

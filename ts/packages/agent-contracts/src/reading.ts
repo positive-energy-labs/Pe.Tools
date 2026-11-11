@@ -214,8 +214,27 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
    * One harness thread's events from the host log (`host-log.ts`): each `event` frame is one
    * HarnessEvent and carries its log `id`. With no cursor, or one older than retention, the first
    * frame is a `gap` carrying the cursor: read the thread body, then apply events by `seq`.
+   * `after` is this key's own cursor: a tab's one stream carries many log tails, so the cursor
+   * rides the key, and a follower resumes by subscribing again after the last id it saw.
    */
-  z.strictObject({ kind: z.literal("thread"), thread: z.string().min(1).max(200) }),
+  z.strictObject({
+    kind: z.literal("thread"),
+    thread: z.string().min(1).max(200),
+    after: z.number().int().nonnegative().optional(),
+  }),
+  /**
+   * One host read publication's invalidation (`reads.value`): each `snapshot` is metadata only,
+   * `{ generation, version, state }`. `refresh-needed` tells the subscriber to read again; the
+   * value itself travels once, in the read response. `absent` answers a subscription the host
+   * holds no publication for.
+   */
+  z.strictObject({
+    kind: z.literal("publication"),
+    subscription: z.string().min(1).max(128),
+    generation: z.number().int().nonnegative(),
+  }),
+  /** One Page's target (`page.target`), served again when a thread head or its binding moves. */
+  z.strictObject({ kind: z.literal("page-target"), slug: z.string().min(1).max(200) }),
   /**
    * The one notice feed (ADR 0035 rule 7, `notice-feed.ts`): each `snapshot` frame is a
    * `NoticeFeed`, every row grouped waits, working, interrupted, failed, unread, built at the host

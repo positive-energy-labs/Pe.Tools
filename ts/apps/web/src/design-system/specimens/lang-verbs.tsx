@@ -72,7 +72,7 @@ function WriteActionSpecimen() {
           done: "healed 2",
         }}
       />
-      <Button label="change the inputs" onClick={() => setInput((n) => n + 1)}>
+      <Button kind="quiet" label="change the inputs" onClick={() => setInput((n) => n + 1)}>
         change the inputs
       </Button>
     </div>
@@ -99,7 +99,7 @@ export function LangPressSpecimens() {
               <span className="t-small">{rung}</span>
               <Row label="Supply duct" onClick={noop} />
               <StateCell scale="row" value="420" unit={{ label: "cfm" }} onCommit={noop} />
-              <Button label="Frame duct" onClick={noop}>
+              <Button kind="quiet" label="Frame duct" onClick={noop}>
                 Frame duct
               </Button>
             </div>

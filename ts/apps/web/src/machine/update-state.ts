@@ -11,6 +11,7 @@ import type { Machine } from "@pe/agent-contracts";
 import type { UpdatePlan } from "@pe/host-contracts/pe-revit-contract";
 
 import { planWaits, receiptRunning } from "@pe/agent-contracts";
+import type { Said } from "./model";
 
 export type UpdateStatus =
   | { readonly state: "idle"; readonly current: string | null; readonly checkError: string | null }
@@ -54,8 +55,6 @@ export function updateStatus(machine: Machine, checking: boolean): UpdateStatus 
   if (!plan && planLeg.error) return { state: "failed", during: "check", message: planLeg.error };
   return { state: "idle", current: plan?.current ?? null, checkError: planLeg.error };
 }
-
-type Said = { readonly text: string; readonly tone?: "caution" | "alarm" | "done" };
 
 /** The Update group's header and the chip: the state in a few words. */
 export function updateSaid(machine: Machine, checking = false): Said {

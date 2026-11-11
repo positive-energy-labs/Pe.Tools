@@ -112,7 +112,7 @@ export function HeadLadder({ face = "control" }: { face?: ComponentProps<typeof 
       {head.list.map((provider) => {
         const word = !isReady(provider) && repairWord(provider);
         return word ? (
-          <Button
+          <Button kind="quiet"
             key={provider.id}
             label={`${word} ${provider.name}`}
             onClick={() => void providers.openLogin(provider.id)}
@@ -121,7 +121,7 @@ export function HeadLadder({ face = "control" }: { face?: ComponentProps<typeof 
           </Button>
         ) : null;
       })}
-      <Button
+      <Button kind="quiet"
         label="Manage providers"
         onClick={() => {
           setOpen(false);

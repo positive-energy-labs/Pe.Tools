@@ -119,7 +119,7 @@ function HandleCells() {
     >
       <div className="flex items-center gap-2">
         <StateCell {...drawing} />
-        <Button label="Toggle fixture freshness" onClick={() => setStale((value) => !value)}>
+        <Button kind="quiet" label="Toggle fixture freshness" onClick={() => setStale((value) => !value)}>
           Toggle freshness
         </Button>
         <PreviewAction

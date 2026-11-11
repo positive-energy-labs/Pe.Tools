@@ -19,7 +19,7 @@ export function DetailedRead({
   const cost = metadata?.stamp.geometryCost;
   return (
     <>
-      <Button
+      <Button kind="quiet"
         label={overview ? "Use overview" : "Read detailed"}
         busy={pending}
         refusal={refusal}
@@ -29,7 +29,7 @@ export function DetailedRead({
         {overview ? "Use overview" : "Read detailed"}
       </Button>
       {pending && (
-        <Button
+        <Button kind="quiet"
           label="Stop"
           reason="Stop waiting for detail; Revit may finish work already dispatched."
           onClick={onRead}

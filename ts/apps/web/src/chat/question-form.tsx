@@ -289,7 +289,7 @@ function Field({
           }}
         >
           {options.map((option, index) => (
-            <Button
+            <Button kind="quiet"
               key={label(option.const)}
               type="button"
               label={option.title ?? label(option.const)}
@@ -317,7 +317,7 @@ function Field({
           ))}
           {other ? (
             // Clears the pick and moves to the box; it never answers by itself.
-            <Button
+            <Button kind="quiet"
               type="button"
               label="Other"
               refusal={disabled ? "The answer is being sent." : null}

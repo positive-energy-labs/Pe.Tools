@@ -154,8 +154,8 @@ test("with a session, the draft composes natively, then schema and semantic chec
   expect(result.schemaJson).toBe(schema);
   expect(result).toMatchObject({ schemaValidation: "passed", semanticValidation: "failed" });
 });
-test("settings.write saves reviewed member Work and republishes the new basis", async () => {
-  await writeFile(file(), '{"width":1}');
+/** The `settings.write` action door over one member's Work, as the host binds it. */
+function settingsDoor() {
   const scope = {
     binding: "workspace" as const,
     route: settingsRouteState.route,
@@ -172,27 +172,10 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
       },
     },
   });
-  const sha256 = digest('{"width":1}');
-  const observed = await work.publish(
-    scope,
-    settingsRouteState.route,
-    [{ path: ["basis"], value: { member, rawContent: '{"width":1}', sha256 } }],
-    0,
-  );
-  if (!observed.ok) throw Error("Expected accepted published Work");
-  const authored = await work.apply(
-    scope,
-    settingsRouteState.route,
-    "human",
-    [{ path: ["fields"], value: { "/width": { edit: { value: 5 } } } }],
-    observed.revision,
-  );
-  if (!authored.ok) throw Error("Expected accepted authored Work");
   const owner = journalAt(join(root, "journal.json"), Date.now);
-  const bridge = detachedBridge();
   bindCommandRuntime(
     owner,
-    bridge,
+    detachedBridge(),
     captureStore(join(root, "captures")),
     { workspace: work, podsRoot: root },
     () => Effect.fail(Error("settings.write owns its writer")),
@@ -212,6 +195,27 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
         crossingOf("human"),
       )
       .then((row) => owner.wait(row.id));
+  return { scope, work, admit };
+}
+test("settings.write saves reviewed member Work and republishes the new basis", async () => {
+  await writeFile(file(), '{"width":1}');
+  const { scope, work, admit } = settingsDoor();
+  const sha256 = digest('{"width":1}');
+  const observed = await work.publish(
+    scope,
+    settingsRouteState.route,
+    [{ path: ["basis"], value: { member, rawContent: '{"width":1}', sha256 } }],
+    0,
+  );
+  if (!observed.ok) throw Error("Expected accepted published Work");
+  const authored = await work.apply(
+    scope,
+    settingsRouteState.route,
+    "human",
+    [{ path: ["fields"], value: { "/width": { edit: { value: 5 } } } }],
+    observed.revision,
+  );
+  if (!authored.ok) throw Error("Expected accepted authored Work");
   const destination = { pod: member.pod, path: "settings/copy.json" };
   const copied = await admit("copy", { destination }, authored.revision);
   expect(copied.state, JSON.stringify(copied)).toBe("succeeded");
@@ -238,6 +242,22 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
   );
   expect(stale.state).toBe("failed");
   expect(JSON.parse(await readFile(file(), "utf8"))).toEqual({ width: 9 });
+});
+test("settings.write refuses a save from member Work that has no saved basis", async () => {
+  await writeFile(file(), '{"width":1,"depth":2}');
+  const { scope, work, admit } = settingsDoor();
+  const authored = await work.apply(
+    scope,
+    settingsRouteState.route,
+    "human",
+    [{ path: ["fields"], value: { "/width": { edit: { value: 5 } } } }],
+    0,
+  );
+  if (!authored.ok) throw Error("Expected accepted authored Work");
+  const refusal = await admit("save", {}, authored.revision);
+  expect(refusal.state, JSON.stringify(refusal)).toBe("failed");
+  expect(JSON.stringify(refusal)).toContain("this Work has no saved basis");
+  expect(await readFile(file(), "utf8")).toBe('{"width":1,"depth":2}');
 });
 test("partial temp write failure cleans only the acquired temp and preserves destination", async () => {
   await writeFile(file(), "original");

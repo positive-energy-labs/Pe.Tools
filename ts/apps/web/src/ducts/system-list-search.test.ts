@@ -2,15 +2,15 @@ import { expect, test } from "vite-plus/test";
 import type { DuctFinding } from "@pe/agent-contracts";
 import type { HealPlan } from "@pe/ducts-domain/heal";
 import { survey } from "@pe/ducts-domain/survey";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import fixture from "./fixtures/synthetic-snapshot.json";
+import { syntheticSnapshot } from "./test-fixture";
 import { systemNotes } from "./system-list-search";
 
 test("Fix notes exclude advisory Heal rows and another system sharing the group", () => {
+  const fixture = syntheticSnapshot();
   const snapshot = {
     ...fixture,
     groups: fixture.groups.map((group) => ({ ...group, systemNames: ["SA 1", "Other"] })),
-  } as DuctSnapshot;
+  };
   const base = survey(snapshot, null);
   const finding: DuctFinding = {
     id: "open-end:21:1",

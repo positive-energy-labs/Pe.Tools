@@ -1,6 +1,7 @@
 import { PreviewAction } from "@pe/kit/lang/write-action";
 import { useState } from "react";
 import { Button } from "@pe/kit/lang/button";
+import { ButtonGroup } from "@pe/kit/lang/button-group";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { scheduleGridRouteState, scheduleReadingSchema } from "@pe/agent-contracts";
 import { ScheduleGridWorkspace, type ScheduleGridState } from "../route/schedules/workspace";
@@ -72,13 +73,16 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
   };
   return (
     <>
-      <Button label="Read schedule" onClick={() => run("read")}>
-        Read schedule
-      </Button>
-      <Button label="Bind schedule" onClick={() => run("bind")}>
-        Bind schedule
-      </Button>
-      <PreviewAction handle={ctx.write("push")} label="Apply cells" />
+      {/* One verb row of one shape (P1), the trio /families draws: framed words beside the plan press. */}
+      <ButtonGroup label="Schedule verbs">
+        <Button label="Read schedule" onClick={() => run("read")}>
+          Read schedule
+        </Button>
+        <Button label="Bind schedule" onClick={() => run("bind")}>
+          Bind schedule
+        </Button>
+        <PreviewAction handle={ctx.write("push")} label="Apply cells" />
+      </ButtonGroup>
       {!ctx.value.current && (data || ctx.value.status === "pending") && (
         <OutcomeLine kind="advisory" label="Schedule reading" says={ctx.value.reason} />
       )}

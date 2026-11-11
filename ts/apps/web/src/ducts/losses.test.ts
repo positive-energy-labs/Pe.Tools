@@ -20,7 +20,17 @@ import { groupTree } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import physicalTransitions from "./fixtures/physical-transitions.json";
 import rootAttached from "./fixtures/root-attached-fittings.json";
-import synthetic from "./fixtures/synthetic-snapshot.json";
+import { syntheticSnapshot } from "./test-fixture";
+import {
+  connOf,
+  ductOf,
+  groupOf,
+  nodeOf,
+  rect,
+  snapshotOf,
+  type Connector,
+  type Node,
+} from "@pe/ducts-domain/test-snapshot";
 
 const grids: Grids = {
   "CD3-2": tableGrids["CD3-2"]!,
@@ -32,74 +42,36 @@ const grids: Grids = {
 
 // ---- synthetic network: unit 100 -> duct 1 -> elbow 2 -> duct 3 (tap 4 at 5 ft) -> transition 5
 // -> grille 6 (200 cfm, 0.05); tap 4 -> duct 7 -> terminal 8 (100 cfm, 0.08). ------------------
-type Conn = DuctSnapshot["nodes"][number]["connectors"][number];
-const round = (d: number) => ({ shape: "round" as const, size: `${d}`, diameterIn: d });
-const rect = (w: number, h: number) => ({
-  shape: "rectangular" as const,
-  size: `${w}x${h}`,
-  widthIn: w,
-  heightIn: h,
-});
+type Size = Pick<Connector, "shape" | "size" | "diameterIn" | "widthIn" | "heightIn">;
+const round = (d: number): Size => ({ shape: "round", size: `${d}`, diameterIn: d });
 const conn = (
   index: number,
   to: [number, number] | null,
-  size: object,
+  size: Size,
   kind = "end",
   point = [0, 0, 0],
-): Conn =>
-  ({
-    index,
-    kind,
-    point,
-    direction: "out",
-    connectedTo: to ? { elementId: to[0], connector: to[1] } : null,
-    ...size,
-  }) as Conn;
-const node = (id: number, kind: string, extra: object): DuctSnapshot["nodes"][number] =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-    id,
-    kind,
-    category: "",
-    point: [0, 0, 0],
-    groupId: "g1",
-    facts: [],
-    ...extra,
-  }) as unknown as DuctSnapshot["nodes"][number];
+) => connOf(index, to, { kind, point, direction: "out", ...size });
+const node = (id: number, kind: Node["kind"], extra: Partial<Node>) =>
+  nodeOf(id, kind, { category: "", point: [0, 0, 0], groupId: "g1", ...extra });
 const duct = (
   id: number,
   lengthFt: number,
-  size: ReturnType<typeof round>,
+  size: Size,
   polyline: number[][],
-  connectors: Conn[],
-) =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-    id,
-    kind: "duct",
-    curveKind: "line",
-    ...size,
-    lengthFt,
-    polyline,
-    groupId: "g1",
-    roughness: { valueFt: 0.0003, provenance: "revit-default" },
-    revit: {},
-    connectors,
-  }) as unknown as DuctSnapshot["segments"][number];
+  connectors: Connector[],
+) => ductOf(id, { ...size, lengthFt, polyline, groupId: "g1", connectors });
+const nativeNode = nativeResponseDefinitionSchema<Node>("ducts.snapshot.walk", "DuctNode");
 
-const snapshot = {
-  coordinateEncoding: "native-double",
-  document: { title: "t", readAt: "2026-10-04T00:00:00Z", elapsedMs: 1 },
-  levels: [],
+const snapshot = snapshotOf({
+  document: { title: "t", readAt: "2026-10-04T00:00:00Z", elapsedMs: 1, networkBasedCalculations: false },
   groups: [
-    {
-      id: "g1",
+    groupOf("g1", {
       rootIds: [100],
       classifications: ["Supply Air"],
       systemNames: ["SA 1"],
       terminalCount: 2,
       elementCount: 7,
-      loops: 0,
-      issueIds: [],
-    },
+    }),
   ],
   nodes: [
     node(100, "equipment", { groupId: null, connectors: [conn(0, [1, 0], round(8))] }),
@@ -169,10 +141,7 @@ const snapshot = {
       [conn(0, [4, 1], round(6)), conn(1, [8, 0], round(6))],
     ),
   ],
-  flows: [],
-  issues: [],
-  layers: [],
-} as unknown as DuctSnapshot;
+});
 
 // Expected, computed independently (Python, same grids, handcalc.py arithmetic):
 //  common  duct 1 (8 in, 10 ft, 300 cfm) 0.0152039 + elbow CD3-2 D=8 C .24 x Pv(300 cfm) 0.0110481
@@ -221,7 +190,7 @@ it("runs the whole pipeline over W1's synthetic snapshot", () => {
   //       + duct 11 (10 ft, 300 cfm) 0.0021239 + terminal NotDefined (no drop) = 0.0115778
   //  T31  duct 10 0.0035563 + tap branch SD5-9 Cb(.25, abOverAc .25) 1.38 x Pv(100 cfm in 6 in)
   //       0.0223083 + duct 12 (6 in, 7.5 ft, 100 cfm) 0.0063438 + terminal 0.05       = 0.0822084
-  const snap = synthetic as unknown as DuctSnapshot;
+  const snap = syntheticSnapshot();
   const r = computeLosses(snap, grids);
   // T30's grille holds a NotDefined connector drop (0): no drop is stated, so it is unpriced (the total is unchanged).
   expect(r.errors.map((e) => e.id)).toEqual([30]);
@@ -246,7 +215,7 @@ it("prices under the table a person edit in the Work document", () => {
   const choices = Object.fromEntries(
     Object.entries(stagedDucts(doc, doc ?? neutralFansWork).rules).map(([key, v]) => [key, v.table]),
   );
-  const r = computeLosses(synthetic as unknown as DuctSnapshot, grids, choices);
+  const r = computeLosses(syntheticSnapshot(), grids, choices);
   const elbow = r.paths[30]!.rows.find((x) => x.rule === "elbow-1d-gt10")!;
   expect(elbow).toMatchObject({
     table: "CD3-2",
@@ -261,7 +230,6 @@ it.each(rootAttached.cases)(
   "resolves the exact root attachment of retained fitting $fitting.id",
   (captured) => {
     for (const reverse of [false, true]) {
-      const nativeNode = nativeResponseDefinitionSchema<DuctSnapshot["nodes"][number]>("ducts.snapshot.walk", "DuctNode");
       const fitting = nativeNode.parse(structuredClone(captured.fitting));
       const equipment = nativeNode.parse(structuredClone(captured.equipment));
       const terminalId = 900000001;
@@ -361,7 +329,7 @@ it.each(rootAttached.cases)(
 it.each(physicalTransitions.nodes)(
   "uses retained transition $id physical directions independently of its non-root walk",
   (captured) => {
-    const fitting = structuredClone(captured) as DuctSnapshot["nodes"][number];
+    const fitting = nativeNode.parse(structuredClone(captured));
     fitting.groupId = "g1";
     fitting.facts = [{ key: "angle", value: 45, unit: "deg", provenance: "designer-stated" }];
     fitting.connectors[0]!.connectedTo = { elementId: 1, connector: 1 };
@@ -400,7 +368,7 @@ it.each(physicalTransitions.nodes)(
 
 /** The synthetic network with grille 30 lifted 0.4 in off duct 11's end, its facing `facing`. */
 const lifted = (facing?: number[]) => {
-  const broken = structuredClone(synthetic as unknown as DuctSnapshot);
+  const broken = syntheticSnapshot();
   const end = broken.segments.find((s) => s.id === 11)!.connectors.find((c) => c.index === 2)!;
   const grille = broken.nodes.find((n) => n.id === 30)!;
   end.connectedTo = null;

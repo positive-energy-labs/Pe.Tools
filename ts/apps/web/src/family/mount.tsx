@@ -142,7 +142,7 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
               sub: row.podName,
               active: page.pod === row.pod && page.path === row.path,
               actions: (
-                <Button
+                <Button kind="quiet"
                   label={`Open ${row.path}`}
                   onClick={() =>
                     void run("open", {

@@ -4,6 +4,14 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 import type { DuctSnapshot } from "../types.ts";
 import { suggestRoster, type FanPort } from "../roster.ts";
+import {
+  slots,
+  snapshotOf,
+  uniqueIdOf,
+  type Connector as Port,
+  type Node,
+  type Segment,
+} from "../test-snapshot.ts";
 import { friction, roundSection } from "../loss-physics.ts";
 import { buildSheet } from "./build.ts";
 import { grids } from "./tables.fixture.ts";
@@ -12,7 +20,8 @@ import { graphOf, walkFrom } from "./walk.ts";
 import { PROPOSED_KEY } from "./inputs.ts";
 import { assumedFanFlows } from "./assumed-flow.ts";
 
-type Port = DuctSnapshot["nodes"][number]["connectors"][number];
+// These three keep their casts: `withHealth` keys the recorded C# health by a hash of the exact
+// node and segment JSON, so the partial shapes are load-bearing until the fixture is re-recorded.
 const port = (
   index: number,
   point: number[],
@@ -31,29 +40,31 @@ const port = (
     classification: cls,
     connectedTo: to ? { elementId: to[0], connector: to[1] } : null,
   }) as Port;
-const node = (id: number, kind: string, connectors: Port[], flow?: number) => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-  id,
-  kind,
-  facts: flow == null ? [] : [{ key: "flow", value: flow }],
-  connectors,
-});
-const duct = (id: number, a: number[], b: number[], connectors: Port[]) => ({
-  id,
-  uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`,
-  shape: "round",
-  diameterIn: 8,
-  polyline: [a, b],
-  lengthFt: Math.hypot(...a.map((v, i) => v - b[i]!)),
-  roughness: { valueFt: 0.0003 },
-  connectors,
-});
+const node = (id: number, kind: string, connectors: Port[], flow?: number) =>
+  ({
+    uniqueId: uniqueIdOf(id),
+    id,
+    kind,
+    facts: flow == null ? [] : [{ key: "flow", value: flow }],
+    connectors,
+  }) as unknown as Node;
+const duct = (id: number, a: number[], b: number[], connectors: Port[]) =>
+  ({
+    id,
+    uniqueId: uniqueIdOf(id),
+    shape: "round",
+    diameterIn: 8,
+    polyline: [a, b],
+    lengthFt: Math.hypot(...a.map((v, i) => v - b[i]!)),
+    roughness: { valueFt: 0.0003 },
+    connectors,
+  }) as unknown as Segment;
 const roster = [
   { unitId: 100, portIndex: 0, inletPortIndex: 1, side: "supply", tag: "F", kind: "air-handler" },
 ] as FanPort[];
 function fixture() {
-  return {
-    document: { title: "heals", readAt: "fixed" },
-    slots: { terminalFlow: "named" },
+  return snapshotOf({
+    slots: { ...slots, terminalFlow: "named" },
     nodes: [
       node(100, "equipment", [
         port(0, [0, 0, 0], [1, 0, 0], [1, 0]),
@@ -76,7 +87,7 @@ function fixture() {
         [port(0, [5, 0, 0], [-1, 0, 0], null), port(1, [8, 0, 0], [1, 0, 0], [200, 0])],
       ),
     ],
-  } as unknown as DuctSnapshot;
+  });
 }
 
 it("extends a join on the assumed walk, charges gap friction, and only an accepted ruling completes known ESP", () => {
@@ -130,20 +141,20 @@ it("proposes a duct-body tap and walks on through the landing duct both ways (R-
     [5, -5, 0],
     [5, 5, 0],
     [port(0, [5, -5, 0], [0, -1, 0], [300, 0]), port(1, [5, 5, 0], [0, 1, 0], [400, 0])],
-  ) as unknown as DuctSnapshot["segments"][number];
+  );
   snapshot.nodes.push(
     node(
       300,
       "terminal",
       [port(0, [5, -5, 0], [0, 1, 0], [2, 0])],
       50,
-    ) as unknown as DuctSnapshot["nodes"][number],
+    ),
     node(
       400,
       "terminal",
       [port(0, [5, 5, 0], [0, -1, 0], [2, 1])],
       50,
-    ) as unknown as DuctSnapshot["nodes"][number],
+    ),
   );
   const sheetSnapshot2 = withHealth(snapshot);
   const input = {
@@ -245,7 +256,7 @@ it("occupied mouths require a risky tee, preserve both branches, and cross-air-t
   snapshot.nodes.push(
     node(900, "fitting", [
       port(0, [5, 0, 0], [1, 0, 0], [2, 0]),
-    ]) as unknown as DuctSnapshot["nodes"][number],
+    ]),
   );
   const sheetSnapshot3 = withHealth(snapshot);
   const input = {
@@ -313,11 +324,11 @@ it("a capped mouth 2.6 in from an open end proposes replacing the cap with a tra
     diameterIn: undefined,
     widthIn: 30,
     heightIn: 30,
-  } as unknown as DuctSnapshot["segments"][number];
+  };
   snapshot.nodes.push(
     node(900, "cap", [
       rect(port(0, [4 + gap, 0, 0], [1, 0, 0], [2, 0])),
-    ]) as unknown as DuctSnapshot["nodes"][number],
+    ]),
   );
   const s = withHealth(snapshot);
   const input = {
@@ -377,12 +388,12 @@ it("derived served-terminal flow supplies assumed ESP, preserves missing designe
       [4, 0, 0],
       [port(0, [0, 0, 0], [-1, 0, 0], [100, 0]), port(1, [4, 0, 0], [1, 0, 0], [400, 1])],
     ),
-  ] as unknown as DuctSnapshot["segments"];
+  ];
   snapshot.nodes.push(
     node(400, "equipment", [
       port(1, [4, 0, 0], [-1, 0, 0], [1, 1]),
       port(0, [8, 0, 0], [1, 0, 0], [200, 0]),
-    ]) as unknown as DuctSnapshot["nodes"][number],
+    ]),
   );
   snapshot.nodes[2]!.connectors[0]!.connectedTo = { elementId: 400, connector: 0 };
   snapshot.nodes[2]!.facts = [
@@ -437,7 +448,7 @@ it("an accepted pair takes priority over a nearer automatic join", () => {
       "terminal",
       [port(0, [4.1, 0, 0], [-1, 0, 0], null)],
       50,
-    ) as unknown as DuctSnapshot["nodes"][number],
+    ),
   );
   const sheetSnapshot5 = withHealth(snapshot);
   const input = {
@@ -503,6 +514,7 @@ const retained =
 it.skipIf(!existsSync(retained))(
   "retained Chadds: compare assumptions with and without served-terminal derivation",
   () => {
+    // Kept: an untyped file boundary (a retained host capture outside git), not a constructed shape.
     const snapshot = (JSON.parse(readFileSync(retained, "utf8")) as { result: DuctSnapshot })
       .result;
     const r = suggestRoster(snapshot),
@@ -553,10 +565,9 @@ it.skipIf(!existsSync(retained))(
 
 it("assumed flow borrows a receiving unit's flow only through its intake, never from a co-source on a shared trunk", () => {
   const units = (bDirection: "in" | "out", aKind: FanPort["kind"] = "muas") => {
-    const dir = (p: Port, d: string) => ({ ...p, direction: d }) as Port;
-    const snapshot = {
-      document: { title: "co-source", readAt: "fixed" },
-      slots: { terminalFlow: "named" },
+    const dir = (p: Port, d: string): Port => ({ ...p, direction: d });
+    const snapshot = snapshotOf({
+      slots: { ...slots, terminalFlow: "named" },
       nodes: [
         node(300, "equipment", [
           dir(port(0, [0, 0, 0], [1, 0, 0], [10, 0]), "out"),
@@ -576,7 +587,7 @@ it("assumed flow borrows a receiving unit's flow only through its intake, never 
           [port(0, [0, 0, 0], [-1, 0, 0], [300, 0]), port(1, [4, 0, 0], [1, 0, 0], [400, 0])],
         ),
       ],
-    } as unknown as DuctSnapshot;
+    });
     const units = [
       { unitId: 300, portIndex: 0, inletPortIndex: 1, side: "supply", tag: "A", kind: aKind },
       {

@@ -2,20 +2,28 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { lossGroups } from "./loss-breakdown.ts";
 import type { Row } from "./losses.ts";
-import type { DuctSnapshot } from "./types.ts";
+import { connOf, ductOf, nodeOf, snapshotOf } from "./test-snapshot.ts";
 
-const snapshot = {
+const snapshot = snapshotOf({
   nodes: [
-    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,  id: 1, kind: "equipment", family: "AHU", type: "Coil", connectors: [] },
-    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(20).toString(16).padStart(8, "0")}`,  id: 20, kind: "fitting", family: "Elbow", type: "Radius", connectors: [{ size: '12"ø' }] },
-    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(21).toString(16).padStart(8, "0")}`,  id: 21, kind: "fitting", family: "Elbow", type: "Radius", connectors: [{ size: '8"ø' }] },
-    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(30).toString(16).padStart(8, "0")}`,  id: 30, kind: "terminal", family: "Grille", type: "G1", connectors: [] },
+    nodeOf(1, "equipment", { family: "AHU", type: "Coil" }),
+    nodeOf(20, "fitting", {
+      family: "Elbow",
+      type: "Radius",
+      connectors: [connOf(0, null, { size: '12"ø' })],
+    }),
+    nodeOf(21, "fitting", {
+      family: "Elbow",
+      type: "Radius",
+      connectors: [connOf(0, null, { size: '8"ø' })],
+    }),
+    nodeOf(30, "terminal", { family: "Grille", type: "G1" }),
   ],
   segments: [
-    { id: 10, kind: "duct", type: "Round Duct", size: '12"ø' },
-    { id: 11, kind: "duct", type: "Round Duct", size: '8"ø' },
+    ductOf(10, { type: "Round Duct", size: '12"ø' }),
+    ductOf(11, { type: "Round Duct", size: '8"ø' }),
   ],
-} as unknown as DuctSnapshot;
+});
 const row = (id: number, kind: Row["kind"], dp: number | null): Row =>
   ({ id, kind, dp, desc: "" }) as Row;
 const rows = [

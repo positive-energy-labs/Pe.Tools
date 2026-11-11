@@ -273,7 +273,7 @@ export function SelectionBoxButton({ target }: { target: Target }) {
       {...revitScope(target.scope)}
       {...revitTarget(target.ids, target.refs)}
     >
-      <Button
+      <Button kind="quiet"
         busy={busy}
         refusal={prepared.kind === "refused" ? prepared.message : null}
         label={SELECTION_BOX_LABEL}

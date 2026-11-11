@@ -130,6 +130,7 @@ import {
   type NavigationSources,
 } from "./navigation.ts";
 import { createNoticeFeed, noticeRows, type NoticeSources } from "./notice-feed.ts";
+import { observePageTarget } from "./pages-route.ts";
 import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
 import {
   captureDirectory,
@@ -204,7 +205,6 @@ export interface PeRoutesOptions {
   readGraph?: (request: unknown) => Promise<unknown>;
 }
 export interface PeRouteInvocation {
-  readonly readEvents?: Response;
   readonly readGraph?: (request: unknown) => Promise<unknown>;
   readonly document?: (ref: DocumentRef) => Promise<DocumentRow>;
   readonly observe?: ResourceObserver;
@@ -226,7 +226,7 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 
 const historicalPeRefusal = (inputs: HostInputContext["Service"] | undefined, method: string, id: string) => {
   if (inputs?.lane.kind !== "recording") return null;
-  if (!["reads.events", ...graphRouteIds, "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get"].includes(id))
+  if (![...graphRouteIds, "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get"].includes(id))
     return method === "GET" ? new InvalidRead({ message: "Recording does not cover this route owner", status: 409, problem: "recording.coverage" })
       : inputs.check({ kind: "work", verb: "edit" });
   const needs = id.startsWith("work.") ? ["work" as const] : [];
@@ -433,7 +433,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
         );
       }
     }
-    if (declared.id === "reads.events") return invocation.readEvents ?? json({ error: "Read publications are unavailable" }, 503);
     if (graphRouteIds.includes(declared.id)) {
       const read = invocation.readGraph ?? options.readGraph;
       if (!read) return json({ error: "Host read graph is unavailable" }, 503);
@@ -1448,6 +1447,7 @@ function* hostPeRoutes(
     observeHostResource: (request, publish, after) =>
       threads.observe(request, publish, after) ??
       notices.observe(request, publish, after) ??
+      observePageTarget(request, publish) ??
       hostObserve(request, publish, after),
     markReadings: markReadings(marks, (ref, key, at) => ref ? runPods({}, Effect.provide(marks.readFrame(ref, key, at), runtime)) : Promise.resolve(null)),
     telemetry,

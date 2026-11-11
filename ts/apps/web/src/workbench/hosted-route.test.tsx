@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { Suspense } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
-import { publicRoutes, publicRoutesReady } from "../route/builtin-routes";
+import { afterEach, expect, test, vi } from "vite-plus/test";
+import { publicRoutes } from "../route/builtin-routes";
 import { hostedRouteAddress, HostedRoute } from "./hosted-route";
 const seen = vi.hoisted(() => ({ props: null as any }));
 vi.mock("../shell/typed-shell", () => ({
@@ -15,7 +15,6 @@ vi.mock("../routes/__root", async () => {
   const { createRootRoute } = await import("@tanstack/react-router");
   return { Route: createRootRoute() };
 });
-beforeAll(() => publicRoutesReady);
 afterEach(cleanup);
 test("workbench mounts the typed registration with exact caller bindings and honors visibility", async () => {
   const props = {

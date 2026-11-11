@@ -1,8 +1,7 @@
 import { memo } from "react";
 import { TeachPage, TeachReference } from "@pe/kit/lang/use-teach";
-import { workFingerprintSchema } from "@pe/agent-contracts";
 import { TypedShell } from "../shell/typed-shell";
-import { builtinRouteStamp } from "../route/builtin-inventory";
+import { routeRegistry } from "../route/registry";
 import { STARTUP_TEACHING } from "../route/teaching";
 import { module } from "./route";
 import { ChatSurfaceProps, type ChatShellProps } from "./chat-drawing";
@@ -11,7 +10,7 @@ import { ChatSurfaceProps, type ChatShellProps } from "./chat-drawing";
 export const ChatShell = memo(function ChatShell(props: ChatShellProps) {
   return <TeachPage value="/pea"><TeachReference value={STARTUP_TEACHING}>
     <ChatSurfaceProps.Provider value={props}>
-      <TypedShell module={module} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("chat")}`)} />
+      <TypedShell module={module} fingerprint={routeRegistry.chat!.fingerprint} />
     </ChatSurfaceProps.Provider>
   </TeachReference></TeachPage>;
 });

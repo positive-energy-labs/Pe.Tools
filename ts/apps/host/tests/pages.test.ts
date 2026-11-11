@@ -361,6 +361,38 @@ describe("pages", () => {
       });
     });
 
+    it("the page-target Reading serves the target now, and again when the binding or a head moves", async () => {
+      let headMoved = () => {};
+      bindControl({
+        heads: (thread) => heads[thread] ?? emptyThreadHead,
+        subscribeHeads: (notify) => ((headMoved = notify), () => (headMoved = () => {})),
+        acquired: () => null,
+        acquiredSession: () => null,
+      });
+      const { handle, as } = await host([session("S1")]);
+      const seen: unknown[] = [];
+      const stop = handle.observeTarget("todo", (result) =>
+        seen.push("value" in result ? [result.value.binding.kind, result.value.write?.kind] : result),
+      );
+      await expect.poll(() => seen).toEqual([["none", "read"]]);
+      await as(human).put("/pe/pages/todo/binding", { kind: "thread", thread: "t1" });
+      // The thread has no document yet: the binding is named, and nothing is writable.
+      await expect.poll(() => seen.at(-1)).toEqual(["thread", undefined]);
+      heads.t1 = grantedHead(docA);
+      headMoved();
+      await expect.poll(() => seen.at(-1)).toEqual(["thread", "thread"]);
+      // Released: nothing more is served, and the head store is no longer followed.
+      stop();
+      const served = seen.length;
+      headMoved();
+      await as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
+      expect(seen).toHaveLength(served);
+      const missing: unknown[] = [];
+      // A name that is no Page slug is refused, as the HTTP door refuses it.
+      handle.observeTarget("not a slug", (result) => missing.push(result));
+      await expect.poll(() => missing).toEqual([{ error: "no page not a slug" }]);
+    });
+
     it("a Pod page runs its package's script key on its binding's target, as the page", async () => {
       bind();
       const { pods, as, forwarded } = await host([session("S1")]);

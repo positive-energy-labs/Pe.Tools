@@ -16,7 +16,6 @@ const readRoot = "ts/apps/host/src/reads";
 export const readFileOwnership = {
   "door.ts": { owner: "kernel", reason: "Effect-free read door Pods and route directories import" },
   "evaluator.ts": { owner: "kernel", reason: "Tracked evaluation, Values and publications" },
-  "events.ts": { owner: "kernel", reason: "Publication invalidation SSE transport" },
   "history-routes.ts": { owner: "kernel", reason: "Generic History HTTP admission and dispatch" },
   "history.ts": { owner: "kernel", reason: "Durable publication History and replay" },
   "inputs.ts": { owner: "kernel", reason: "Tracked native, Work, file and document inputs" },

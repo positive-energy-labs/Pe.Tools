@@ -1,4 +1,4 @@
-import { builtinRouteKeys, typedBuiltin } from "../route/builtin-inventory";
+import { routeRegistry } from "../route/registry";
 import type { Page, Fields } from "../route/typed-route";
 import type { HostRead } from "../route/host-read";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -13,7 +13,7 @@ import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
 
 // Registry words and actual declared fixture publications must name things, never their keys.
 afterEach(() => vi.unstubAllGlobals());
-const routes = builtinRouteKeys.map(typedBuiltin);
+const routes = Object.keys(routeRegistry).sort().map((key) => routeRegistry[key]!.module);
 const fixtures = (module: (typeof routes)[number]) => {
   const page: Page<Fields> = { ...Object.fromEntries(Object.entries(module.spec.fields).map(([key, field]) => [key, field.initial])), selected: [] };
   const reads = new Set<HostRead & { args?(page: Page<Fields>): unknown }>([

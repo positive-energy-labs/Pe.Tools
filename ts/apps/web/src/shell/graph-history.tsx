@@ -43,7 +43,7 @@ export function GraphHistory({
     sub: `${intent.status} / ${intent.owner.route} / expected r${intent.input.expectedRevision} / ${intent.reason ?? "Awaiting acknowledgement"}`,
     actions: <><Popover><PopoverTrigger aria-label={`Inspect ${intent.label}`}>Inspect</PopoverTrigger>
       <SubjectPopoverContent aria-label={`Original input: ${intent.label}`}><pre>{JSON.stringify(intent,null,2)}</pre></SubjectPopoverContent>
-    </Popover>{owner.discardIntent && <Button label={`Discard ${intent.label}`} refusal={intent.status === "pending" ? "Awaiting acknowledgement" : null} onClick={()=>owner.discardIntent!(intent.id)}>Discard</Button>}</>,
+    </Popover>{owner.discardIntent && <Button kind="quiet" label={`Discard ${intent.label}`} refusal={intent.status === "pending" ? "Awaiting acknowledgement" : null} onClick={()=>owner.discardIntent!(intent.id)}>Discard</Button>}</>,
   })), ...[...projected]
     .reverse()
     .filter((row) => !workOnly || row.kind === "journal")
@@ -78,7 +78,7 @@ export function GraphHistory({
             </a>
           )}
           {row.key === ownFinding && (
-            <Button
+            <Button kind="quiet"
               label="Undo your last finding"
               refusal={ownLeft === 0 ? "Nothing of yours left to undo: Pea's findings are Pea's to undo" : null}
               onPress={async () => {
@@ -92,7 +92,7 @@ export function GraphHistory({
           )}
           {row.entry.receiptId &&
             ["queued", "running", "outcome-unknown"].includes(row.outcome?.state ?? "") && (
-              <Button
+              <Button kind="quiet"
                 label="Stop command"
                 onClick={() => void owner.stopCommand(row.entry.receiptId!)}
               >

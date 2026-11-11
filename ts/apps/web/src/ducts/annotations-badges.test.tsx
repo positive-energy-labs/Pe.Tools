@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import type { DuctFinding } from "@pe/agent-contracts";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { connOf, ductOf, issueOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
 import { healPlan } from "@pe/ducts-domain/heal";
 import { subjectDocument } from "@pe/kit/lang/subject-text";
 import { inboxRows, annotatedFindings } from "./inbox-rows";
@@ -121,43 +121,34 @@ it("a footnote badge sits on a drawn subject (mesh, else ghosted centreline, els
 });
 
 it("one gap repair has one row, two named subjects, two pins and one evidence sentence", () => {
-  const segments = [10, 11].map((id, i) => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-    id,
-    kind: "duct",
-    groupId: `g${id}`,
-    systemName: "SA 1",
-    classification: "SupplyAir",
-    size: "10x7",
-    polyline: [
-      [i * 11.25, 0, 0],
-      [i * 11.25 + 10, 0, 0],
-    ],
-    connectors: [
-      {
-        index: 0,
-        kind: "end",
-        point: [10 + i * 1.25, 0, 0],
-        shape: "rectangular",
-        widthIn: 10,
-        heightIn: 7,
-        connectedTo: null,
-      },
-    ],
-  }));
-  const issues = segments.map((e) => ({
-    id: `open-end:${e.id}:0`,
-    kind: "open-end",
-    elementId: e.id,
-    connector: 0,
-    point: e.connectors[0]!.point,
-    note: "open",
-  }));
-  const snapshot = {
-    nodes: [],
-    segments,
-    issues,
-    groups: [],
-  } as unknown as DuctSnapshot;
+  const segments = [10, 11].map((id, i) =>
+    ductOf(id, {
+      groupId: `g${id}`,
+      systemName: "SA 1",
+      classification: "SupplyAir",
+      size: "10x7",
+      polyline: [
+        [i * 11.25, 0, 0],
+        [i * 11.25 + 10, 0, 0],
+      ],
+      connectors: [
+        connOf(0, null, {
+          point: [10 + i * 1.25, 0, 0],
+          shape: "rectangular",
+          widthIn: 10,
+          heightIn: 7,
+        }),
+      ],
+    }),
+  );
+  const issues = segments.map((e) =>
+    issueOf(`open-end:${e.id}:0`, "open-end", e.id, {
+      connector: 0,
+      point: e.connectors[0]!.point,
+      note: "open",
+    }),
+  );
+  const snapshot = snapshotOf({ segments, issues });
   const findings = issues.map((i) => ({
     id: i.id,
     kind: "open-end",

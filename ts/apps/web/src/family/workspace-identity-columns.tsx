@@ -106,7 +106,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
         const dim = world.geomBySlug.get(slug)?.dims.find((entry) => entry.property === property);
         return (
           <span className="flex h-(--item-h) min-w-0 items-center px-(--item-pad-x)">
-            <Button
+            <Button kind="quiet"
               label={`${row.name} geom`}
               onClick={() => setInspect({ kind: "part", slug })}
               // Row-specific facts only; what a geom row IS lives on the table's TooltipHint.
@@ -215,7 +215,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
                   {isFormula(authored) && drives.length > 0 && <span> · </span>}
                   {drives.length > 0 && <span>→ </span>}
                   {drives.map((entry, index) => (
-                    <Button
+                    <Button kind="quiet"
                       key={`${entry.slug}.${entry.property}`}
                       label={`${entry.slug}.${entry.property}`}
                       onMouseDown={(event) => event.preventDefault()}

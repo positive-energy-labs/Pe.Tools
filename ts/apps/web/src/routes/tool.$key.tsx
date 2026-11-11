@@ -18,7 +18,7 @@ function PodTool() {
   useSyncExternalStore(publicRoutes.subscribe, publicRoutes.revision, publicRoutes.revision);
   const row = inventory?.rows.find((entry) => entry.key === key);
   const route = row?.trusted ? publicRoutes.typed(row.workRoute) : null;
-  const alarm = error || inventory?.errors[key] || inventory?.errors.inventory;
+  const caution = error || inventory?.errors[key] || inventory?.errors.inventory;
   if (row && route)
     return (
       <PaneErrorBoundary what="Pod route" key={`${row.key}:${row.fingerprint}`}>
@@ -57,9 +57,9 @@ function PodTool() {
           </Button>
         </>
       )}
-      {alarm && (
+      {caution && (
         <p role="alert" data-tone="caution">
-          {alarm}
+          {caution}
         </p>
       )}
     </main>

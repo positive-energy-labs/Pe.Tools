@@ -4,7 +4,7 @@ import type { SceneRenderer } from "./renderer";
 import { prepareScene } from "./preparation";
 import { samePlan, type ScenePlan } from "./scene-plan";
 
-export type SceneRequest = { focus: ScenePlan; context: ScenePlan; appearance?: PaintOf };
+type SceneRequest = { focus: ScenePlan; context: ScenePlan; appearance?: PaintOf };
 type Display = { focus: SceneMeshes; plan: ScenePlan };
 export type SceneSnapshot =
   | { state: "empty"; display: null }

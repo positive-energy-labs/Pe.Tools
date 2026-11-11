@@ -1,17 +1,16 @@
 // @vitest-environment jsdom
 import { subjectCode } from "@pe/agent-contracts";
-import { beforeAll, expect, test, vi } from "vite-plus/test";
-import { builtinRouteKeys } from "./builtin-inventory";
-import { publicRoutes, publicRoutesReady } from "./builtin-routes";
+import { expect, test, vi } from "vite-plus/test";
+import { routeRegistry } from "./registry";
+import { publicRoutes } from "./builtin-routes";
 import { hostedRouteAddress } from "../workbench/hosted-route";
 import { actionRoute, capturedPlace } from "../workbench/chat-plugins";
 vi.mock("../routes/__root", async () => {
   const { createRootRoute } = await import("@tanstack/react-router");
   return { Route: createRootRoute() };
 });
-beforeAll(() => publicRoutesReady);
 test("every builtin is discoverable once with its typed authority and a hosted mount", () => {
-  for (const key of builtinRouteKeys) {
+  for (const key of Object.keys(routeRegistry)) {
     const entries = publicRoutes.entries().filter(({ manifest }) => manifest.key === key);
     expect(entries, key).toHaveLength(1);
     const registered = publicRoutes.byAddress(publicRoutes.typed(key)!.data.address);
