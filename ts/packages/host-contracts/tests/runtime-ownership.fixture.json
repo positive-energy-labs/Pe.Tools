@@ -1,5 +1,5 @@
 {
-  "$comment": "One table, three resolvers: C# ProductPathing.StateRoot (Pe.Shared.Tests RuntimeOwnershipTests), TS stateRoot (host-contracts runtime-ownership.test.ts), PowerShell Resolve-ProductRuntimeRoot (tools/tests/host-state-isolation.ps1). contentHomes: TS contentHomes/sharedFirmDir/sharedKeysPath, C# ProductPathing, PowerShell Resolve-ContentHomes; %DOCUMENTS% is the machine's Documents known folder. trayLaunches: TS trayOwnerArguments emits argv; C# Pe.Host.Tray Program.ParseOwner must accept it.",
+  "$comment": "One table, three resolvers: C# ProductPathing (Pe.Shared.Tests RuntimeOwnershipTests), TS host-contracts (runtime-ownership.test.ts), PowerShell Resolve-ProductRuntimeRoot (tools/tests/host-state-isolation.ps1, stateRoots only). Frozen by docs/features/homes/MAP.md freeze shapes 1 to 4 and 7. stateRoots: the machine state root, unchanged; sharedRoot there is the firm-home fence. markers: the text of a pe-home.json and the tier it proves, null when it proves none. homes: pure resolution of the home list [user, project, firm] from injected facts. productHome and sharedRoot are the two environment overrides; drives is the drive list; folders maps a directory to its child folder names in the order the disk returned them; markerFiles maps a folder to the text of its pe-home.json; pointer is data.path of the model's project-home blob. %DOCUMENTS% is the machine's Documents known folder. The firm probe reads, per drive in the given order, <L>:\\Shared drives\\<child>\\04 PE Software Files\\Pe.Tools for each child in ordinal (code unit) order, then <L>:\\04 PE Software Files\\Pe.Tools; the first whose marker reads firm wins. A non-blank sharedRoot replaces the probe and still needs the marker. sharedDriveRoot is the firm home's grandparent. The project home is <sharedDriveRoot>\\<pointer>\\Pe.Tools, accepted only when its marker reads project. stateTree: every homes folder sits under the state root's state\\ folder. podlessRuns is where a run with no pod writes. trayLaunches: TS trayOwnerArguments emits argv; C# Pe.Host.Tray Program.ParseOwner must accept it.",
   "stateRoots": [
     {
       "name": "a dev owner under the user content root refuses",
@@ -162,48 +162,664 @@
       "error": "absolute owner root"
     }
   ],
-  "contentHomes": [
+  "markers": [
     {
-      "name": "no shared root: the user root alone, under Documents",
+      "name": "user",
+      "text": "{\"tier\":\"user\"}",
+      "tier": "user"
+    },
+    {
+      "name": "project",
+      "text": "{\"tier\":\"project\"}",
+      "tier": "project"
+    },
+    {
+      "name": "firm",
+      "text": "{\"tier\":\"firm\"}",
+      "tier": "firm"
+    },
+    {
+      "name": "whitespace and a trailing newline are not content",
+      "text": "{\r\n  \"tier\" : \"firm\"\r\n}\r\n",
+      "tier": "firm"
+    },
+    {
+      "name": "a byte order mark is not content",
+      "text": "\ufeff{\"tier\":\"firm\"}",
+      "tier": "firm"
+    },
+    {
+      "name": "an unknown tier proves nothing",
+      "text": "{\"tier\":\"admin\"}",
+      "tier": null
+    },
+    {
+      "name": "tier is case-sensitive",
+      "text": "{\"tier\":\"Firm\"}",
+      "tier": null
+    },
+    {
+      "name": "a second field proves nothing: the marker holds tier and nothing else",
+      "text": "{\"tier\":\"firm\",\"id\":\"pe\"}",
+      "tier": null
+    },
+    {
+      "name": "an empty file proves nothing",
+      "text": "",
+      "tier": null
+    },
+    {
+      "name": "not JSON proves nothing",
+      "text": "tier: firm",
+      "tier": null
+    }
+  ],
+  "homes": [
+    {
+      "name": "no firm home on any drive: the user home alone, under Documents",
       "productHome": null,
       "sharedRoot": null,
+      "drives": [
+        "C:\\"
+      ],
+      "folders": {},
+      "markerFiles": {},
+      "pointer": null,
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": null,
+      "sharedDriveRoot": null,
       "homes": [
         "%DOCUMENTS%\\Pe.Tools"
       ],
-      "firm": null,
-      "keys": null
+      "firmSettings": null,
+      "firmPreferences": null,
+      "firmKeys": null
     },
     {
-      "name": "blank values configure nothing",
+      "name": "blank overrides configure nothing",
       "productHome": "  ",
       "sharedRoot": "  ",
+      "drives": [
+        "C:\\"
+      ],
+      "folders": {},
+      "markerFiles": {},
+      "pointer": null,
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": null,
+      "sharedDriveRoot": null,
       "homes": [
         "%DOCUMENTS%\\Pe.Tools"
       ],
-      "firm": null,
-      "keys": null
+      "firmSettings": null,
+      "firmPreferences": null,
+      "firmKeys": null
     },
     {
-      "name": "a shared root reads after the user root",
+      "name": "the probe finds the firm home under a Google Drive mount",
       "productHome": null,
-      "sharedRoot": " S:\\Pe.Tools ",
+      "sharedRoot": null,
+      "drives": [
+        "C:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "PE Team Folder"
+        ]
+      },
+      "markerFiles": {
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
+      },
+      "pointer": null,
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
+      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools",
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
+      ],
+      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
+      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
+    },
+    {
+      "name": "the probe finds the firm home on a drive mapped at the shared drive root",
+      "productHome": null,
+      "sharedRoot": null,
+      "drives": [
+        "C:\\",
+        "P:\\"
+      ],
+      "folders": {},
+      "markerFiles": {
+        "P:\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
+      },
+      "pointer": null,
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": "P:\\04 PE Software Files\\Pe.Tools",
+      "sharedDriveRoot": "P:\\",
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools",
+        "P:\\04 PE Software Files\\Pe.Tools"
+      ],
+      "firmSettings": "P:\\04 PE Software Files\\Pe.Tools\\Settings",
+      "firmPreferences": "P:\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "P:\\04 PE Software Files\\Pe.Tools\\keys.json"
+    },
+    {
+      "name": "a folder at the firm path with no marker is not a home",
+      "productHome": null,
+      "sharedRoot": null,
+      "drives": [
+        "C:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "PE Team Folder"
+        ]
+      },
+      "markerFiles": {},
+      "pointer": null,
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": null,
+      "sharedDriveRoot": null,
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools"
+      ],
+      "firmSettings": null,
+      "firmPreferences": null,
+      "firmKeys": null
+    },
+    {
+      "name": "a folder at the firm path whose marker reads another tier is not the firm home",
+      "productHome": null,
+      "sharedRoot": null,
+      "drives": [
+        "C:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "PE Team Folder"
+        ]
+      },
+      "markerFiles": {
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"user\"}"
+      },
+      "pointer": null,
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": null,
+      "sharedDriveRoot": null,
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools"
+      ],
+      "firmSettings": null,
+      "firmPreferences": null,
+      "firmKeys": null
+    },
+    {
+      "name": "two shared drives hold a firm home: the first child in ordinal order wins, whatever order the disk returned",
+      "productHome": null,
+      "sharedRoot": null,
+      "drives": [
+        "C:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "Zeta",
+          "PE Team Folder"
+        ]
+      },
+      "markerFiles": {
+        "G:\\Shared drives\\Zeta\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
+      },
+      "pointer": null,
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
+      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools",
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
+      ],
+      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
+      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
+    },
+    {
+      "name": "two drives hold a firm home: the first drive in the given order wins, and a Shared drives child is read before the drive's own root",
+      "productHome": null,
+      "sharedRoot": null,
+      "drives": [
+        "H:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "PE Team Folder"
+        ],
+        "H:\\Shared drives": [
+          "Other"
+        ]
+      },
+      "markerFiles": {
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
+        "H:\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
+        "H:\\Shared drives\\Other\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
+      },
+      "pointer": null,
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": "H:\\Shared drives\\Other\\04 PE Software Files\\Pe.Tools",
+      "sharedDriveRoot": "H:\\Shared drives\\Other",
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools",
+        "H:\\Shared drives\\Other\\04 PE Software Files\\Pe.Tools"
+      ],
+      "firmSettings": "H:\\Shared drives\\Other\\04 PE Software Files\\Pe.Tools\\Settings",
+      "firmPreferences": "H:\\Shared drives\\Other\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "H:\\Shared drives\\Other\\04 PE Software Files\\Pe.Tools\\keys.json"
+    },
+    {
+      "name": "the dev override replaces the probe",
+      "productHome": null,
+      "sharedRoot": " T:\\scratch\\04 PE Software Files\\Pe.Tools ",
+      "drives": [
+        "C:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "PE Team Folder"
+        ]
+      },
+      "markerFiles": {
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
+        "T:\\scratch\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
+      },
+      "pointer": null,
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": "T:\\scratch\\04 PE Software Files\\Pe.Tools",
+      "sharedDriveRoot": "T:\\scratch",
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools",
+        "T:\\scratch\\04 PE Software Files\\Pe.Tools"
+      ],
+      "firmSettings": "T:\\scratch\\04 PE Software Files\\Pe.Tools\\Settings",
+      "firmPreferences": "T:\\scratch\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "T:\\scratch\\04 PE Software Files\\Pe.Tools\\keys.json"
+    },
+    {
+      "name": "a dev override with no firm marker is no firm home, and the probe is not read instead",
+      "productHome": null,
+      "sharedRoot": "T:\\scratch\\firm",
+      "drives": [
+        "C:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "PE Team Folder"
+        ]
+      },
+      "markerFiles": {
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
+      },
+      "pointer": null,
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": null,
+      "sharedDriveRoot": null,
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools"
+      ],
+      "firmSettings": null,
+      "firmPreferences": null,
+      "firmKeys": null
+    },
+    {
+      "name": "a dev override one folder below its drive has no shared drive root",
+      "productHome": null,
+      "sharedRoot": "S:\\Pe.Tools",
+      "drives": [
+        "C:\\"
+      ],
+      "folders": {},
+      "markerFiles": {
+        "S:\\Pe.Tools": "{\"tier\":\"firm\"}"
+      },
+      "pointer": null,
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": "S:\\Pe.Tools",
+      "sharedDriveRoot": null,
       "homes": [
         "%DOCUMENTS%\\Pe.Tools",
         "S:\\Pe.Tools"
       ],
-      "firm": "S:\\Pe.Tools\\Firm",
-      "keys": "S:\\Pe.Tools\\keys.json"
+      "firmSettings": "S:\\Pe.Tools\\Settings",
+      "firmPreferences": "S:\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "S:\\Pe.Tools\\keys.json"
     },
     {
-      "name": "an isolated home is the user root",
+      "name": "an isolated home is the user home",
       "productHome": " D:\\isolated ",
-      "sharedRoot": "S:\\Pe.Tools",
+      "sharedRoot": null,
+      "drives": [
+        "C:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "PE Team Folder"
+        ]
+      },
+      "markerFiles": {
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
+      },
+      "pointer": null,
+      "user": "D:\\isolated",
+      "project": null,
+      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
+      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
       "homes": [
         "D:\\isolated",
-        "S:\\Pe.Tools"
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
       ],
-      "firm": "S:\\Pe.Tools\\Firm",
-      "keys": "S:\\Pe.Tools\\keys.json"
+      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
+      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
+    },
+    {
+      "name": "the model's pointer names the project home",
+      "productHome": null,
+      "sharedRoot": null,
+      "drives": [
+        "C:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "PE Team Folder"
+        ]
+      },
+      "markerFiles": {
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
+        "G:\\Shared drives\\PE Team Folder\\Projects\\2024-012 Chadds\\Pe.Tools": "{\"tier\":\"project\"}"
+      },
+      "pointer": "Projects/2024-012 Chadds",
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": "G:\\Shared drives\\PE Team Folder\\Projects\\2024-012 Chadds\\Pe.Tools",
+      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
+      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools",
+        "G:\\Shared drives\\PE Team Folder\\Projects\\2024-012 Chadds\\Pe.Tools",
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
+      ],
+      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
+      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
+    },
+    {
+      "name": "a pointed-at folder with no project marker is unbound",
+      "productHome": null,
+      "sharedRoot": null,
+      "drives": [
+        "C:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "PE Team Folder"
+        ]
+      },
+      "markerFiles": {
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
+      },
+      "pointer": "Projects/2024-012 Chadds",
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
+      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools",
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
+      ],
+      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
+      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
+    },
+    {
+      "name": "a pointed-at folder whose marker reads firm is unbound",
+      "productHome": null,
+      "sharedRoot": null,
+      "drives": [
+        "C:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "PE Team Folder"
+        ]
+      },
+      "markerFiles": {
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
+        "G:\\Shared drives\\PE Team Folder\\Projects\\2024-012 Chadds\\Pe.Tools": "{\"tier\":\"firm\"}"
+      },
+      "pointer": "Projects/2024-012 Chadds",
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
+      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools",
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
+      ],
+      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
+      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
+    },
+    {
+      "name": "a pointer with no firm home has no shared drive root to resolve against",
+      "productHome": null,
+      "sharedRoot": null,
+      "drives": [
+        "C:\\"
+      ],
+      "folders": {},
+      "markerFiles": {
+        "C:\\Projects\\2024-012 Chadds\\Pe.Tools": "{\"tier\":\"project\"}"
+      },
+      "pointer": "Projects/2024-012 Chadds",
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": null,
+      "sharedDriveRoot": null,
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools"
+      ],
+      "firmSettings": null,
+      "firmPreferences": null,
+      "firmKeys": null
+    },
+    {
+      "name": "a pointer that climbs out of the shared drive root is unbound",
+      "productHome": null,
+      "sharedRoot": null,
+      "drives": [
+        "C:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "PE Team Folder"
+        ]
+      },
+      "markerFiles": {
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
+        "G:\\Shared drives\\Other drive\\Job\\Pe.Tools": "{\"tier\":\"project\"}"
+      },
+      "pointer": "../Other drive/Job",
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
+      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools",
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
+      ],
+      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
+      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
+    },
+    {
+      "name": "a pointer with a drive letter is unbound",
+      "productHome": null,
+      "sharedRoot": null,
+      "drives": [
+        "C:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "PE Team Folder"
+        ]
+      },
+      "markerFiles": {
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
+        "C:\\Projects\\Job\\Pe.Tools": "{\"tier\":\"project\"}"
+      },
+      "pointer": "C:/Projects/Job",
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
+      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools",
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
+      ],
+      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
+      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
+    },
+    {
+      "name": "a pointer written with backslashes is unbound: the stored form is forward-slash",
+      "productHome": null,
+      "sharedRoot": null,
+      "drives": [
+        "C:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "PE Team Folder"
+        ]
+      },
+      "markerFiles": {
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
+        "G:\\Shared drives\\PE Team Folder\\Projects\\2024-012 Chadds\\Pe.Tools": "{\"tier\":\"project\"}"
+      },
+      "pointer": "Projects\\2024-012 Chadds",
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
+      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools",
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
+      ],
+      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
+      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
+    },
+    {
+      "name": "a rooted pointer is unbound",
+      "productHome": null,
+      "sharedRoot": null,
+      "drives": [
+        "C:\\",
+        "G:\\"
+      ],
+      "folders": {
+        "G:\\Shared drives": [
+          "PE Team Folder"
+        ]
+      },
+      "markerFiles": {
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
+        "G:\\Shared drives\\PE Team Folder\\Projects\\2024-012 Chadds\\Pe.Tools": "{\"tier\":\"project\"}"
+      },
+      "pointer": "/Projects/2024-012 Chadds",
+      "user": "%DOCUMENTS%\\Pe.Tools",
+      "project": null,
+      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
+      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
+      "homes": [
+        "%DOCUMENTS%\\Pe.Tools",
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
+      ],
+      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
+      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
+    }
+  ],
+  "stateTree": [
+    {
+      "name": "a dev checkout",
+      "stateRoot": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools",
+      "podId": "duct-takeoff",
+      "runId": "20261111-153000-0123456789abcdef0123456789abcdef",
+      "pageSlug": "takeoff",
+      "blobSha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "work": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools\\state\\Work",
+      "pageState": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools\\state\\Pages\\takeoff",
+      "run": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools\\state\\Runs\\duct-takeoff\\20261111-153000-0123456789abcdef0123456789abcdef",
+      "podlessRuns": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools\\state\\Runs\\_no-pod",
+      "blob": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools\\state\\Blobs\\sha256\\9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "t3": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools\\state\\T3",
+      "agent": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools\\state\\Agent"
+    },
+    {
+      "name": "an installed root, under the state folder an MSI upgrade keeps",
+      "stateRoot": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools",
+      "podId": "duct-takeoff",
+      "runId": "20261111-153000-0123456789abcdef0123456789abcdef",
+      "pageSlug": "takeoff",
+      "blobSha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "work": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\Work",
+      "pageState": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\Pages\\takeoff",
+      "run": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\Runs\\duct-takeoff\\20261111-153000-0123456789abcdef0123456789abcdef",
+      "podlessRuns": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\Runs\\_no-pod",
+      "blob": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\Blobs\\sha256\\9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "t3": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\T3",
+      "agent": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\Agent"
+    },
+    {
+      "name": "an isolated home",
+      "stateRoot": "D:\\pe-home\\.local-state",
+      "podId": "duct-takeoff",
+      "runId": "20261111-153000-0123456789abcdef0123456789abcdef",
+      "pageSlug": "takeoff",
+      "blobSha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "work": "D:\\pe-home\\.local-state\\state\\Work",
+      "pageState": "D:\\pe-home\\.local-state\\state\\Pages\\takeoff",
+      "run": "D:\\pe-home\\.local-state\\state\\Runs\\duct-takeoff\\20261111-153000-0123456789abcdef0123456789abcdef",
+      "podlessRuns": "D:\\pe-home\\.local-state\\state\\Runs\\_no-pod",
+      "blob": "D:\\pe-home\\.local-state\\state\\Blobs\\sha256\\9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "t3": "D:\\pe-home\\.local-state\\state\\T3",
+      "agent": "D:\\pe-home\\.local-state\\state\\Agent"
     }
   ],
   "trayLaunches": [
