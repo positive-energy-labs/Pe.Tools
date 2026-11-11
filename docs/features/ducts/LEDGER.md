@@ -172,6 +172,7 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 
 ## Owed
 
+- 2026-11-11, the MUAS-1 sheet loses the discharge main's side branches. `ducts.sheet` for unit 14577391 port 2 at basis `59756bf4` returns five ends (FC-23 join 13760945:6 and four open ends) and no `roster-fan-port` end. It reaches the RA 37 takeoff 13926753, DS-1 and SH-1, but not RV-7 6953852 c4 or RV-15 6105264 c4 on FA 27, which the 10-30 census walked as `roster-fan-port` ends (fans convergence C1, PROVEN[live]). Pea therefore cannot say MUAS-1 feeds two ERV inlets. Evidence: Pea thread d7daa9e2, `.artifacts/pe-tools/scratch/tool-output/pe_read-2026-11-11T05-51-39-656Z-70g7mr.json` in worktree t3-6e21b259; census `.artifacts/tmp/muas-grounding/muas-louver-topology.html`. Route work, for the kernel crusade.
 - kaitpw: choose native Direction, network scoring, or permanent disclosure of both as the MUAS flow-role authority; MUAS-1 element 14577391 has reversed inlet/discharge roles. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/DIAG-MUAS-PORTS-REPORT.md`.
 - Register Ducts analysis as a host registry read; delete the second read path at `pe-routes.ts:436-440` and `options.ductsAnalysis` (ADR 0033 rules 1 and 7). Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:393`.
 
