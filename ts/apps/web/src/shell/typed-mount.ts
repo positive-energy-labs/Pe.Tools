@@ -1,4 +1,4 @@
-import { undoOwnFinding } from "../route/host";
+import { ownFindingsLeft, undoOwnFinding } from "../route/host";
 import { kernelCommands } from "../route/slots/kernel-commands.ts";
 import { hostReadSource } from "./host-read-source.ts";
 import { writeReject } from "./catalog-work-reviews";
@@ -65,11 +65,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof undoOwnFinding>[1] } = {}) {
   const cleanups: (() => void)[] = [];
   try {
-  // Every route with Work carries the kernel's commands (route/slots/kernel-commands.ts); a route's own id wins.
+  // Every route carries the kernel's commands (route/slots/kernel-commands.ts); a route's own id wins. A
+  // Workless mount (a Page projection) has them too, so a shared row body draws them refused, not thrown.
   // The mount adds them, not `route()`: their contracts are the catalog, and `route()` is the Pod surface.
-  const spec = module.spec.edits
-    ? { ...module.spec, commands: { ...kernelCommands, ...module.spec.commands } } as TypedRoute["spec"]
-    : module.spec;
+  const spec = { ...module.spec, commands: { ...kernelCommands, ...module.spec.commands } } as TypedRoute["spec"];
   const edits = spec.edits;
   const own = edits?.work.route ?? spec.key;
   const ownerConfigs = edits?.owners ?? {};
@@ -406,6 +405,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       return {ready:true,refusal:null,label:ids.length===1?options.find(o=>o.id===ids[0])!.label:ids.length?`${ids.length} ${spec.subject?.noun ?? "Subject"}s`:"",link:`${module.data.address}?${link}`};
     } catch { return refused(`${spec.subject?.noun ?? "Subject"} is malformed`); }
   };
+  const findingMoves: import("./timeline").TimelineEntry[] = [];
   const results = new Map<string,unknown>();
   const pending = new Set<string>();
   const run = async (id: string, apply = false, supplied?:unknown) => {
@@ -536,7 +536,15 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     },
     discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.journal.discardIntent(id); notify(); },
     // The person's own findings live in the document's findings Work, not this route's: their undo is that door's.
-    undoFinding: () => { const key = owners.get(own)?.handle?.key; return key ? undoOwnFinding(key, ports.findings) : Promise.resolve({ message: "Wait for this route's Work before undoing a finding" }); },
+    undoFinding: async () => {
+      const key = owners.get(own)?.handle?.key;
+      if (!key) return { message: "Wait for this route's Work before undoing a finding" };
+      const refused = await undoOwnFinding(key, ports.findings);
+      // ponytail: the History entry lives for this Place; a durable one needs the findings Work's own moves here.
+      if (!refused) { findingMoves.push({ kind: "feed", at: new Date().toISOString(), verb: "findings.undo", subject: { message: "you undid your last finding" } }); notify(); }
+      return refused;
+    },
+    ownFindingsLeft: () => { const key = owners.get(own)?.handle?.key; return key ? ownFindingsLeft(key, ports.findings) : Promise.resolve(null); },
     restoreWork: restore, journalRefusal: () => input.readOnly || input.history ? "needs live Revit" : [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
@@ -576,7 +584,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
      *  (slice 6.1, `data-url-settled`); a reload reads only the address. */
     urlCurrent: () => canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
-    commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions" : "kind" in spec.commands[id]! ? workCommandRefusal(spec.commands[id]!.entry) : basisRefusal(),
+    // A row verb runs on this route's own Work handle: before the Work is ready it refuses with the Work's own
+    // reason ("Start this Work to edit"), as the cells do, instead of failing a press nobody sees. Any other
+    // catalog command that carries the Work handle refuses through workCommandRefusal.
+    commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions"
+      : "kind" in spec.commands[id]! ? ("row" in spec.commands[id]! && spec.commands[id]!.row ? (!edits ? "This view keeps no Work to write findings into" : !owners.get(own)?.ready ? owners.get(own)?.problem ?? "Reading Work..." : null) : workCommandRefusal(spec.commands[id]!.entry)) : basisRefusal(),
     problem: () => edits?basisRefusal():null, writeRefusal,
     /** The basis that failed (a Work feed failure, a thrown read, a failed core reading), as distinct
      *  from a state such as "Start this Work to edit": failures draw as a pane failure line. */
@@ -596,7 +608,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         rows: stale ? [] : r.presentation.rows, cells: stale ? [] : r.presentation.cells, stale }; },
     reviewProblem: (id: string) => problems.get(id) ?? null,
     cancel: (id: string) => { const token=plans.get(id);if(token) gate.retire(token.token);plans.delete(id);reviews.delete(id);notify(); },
-    timeline: () => [...owners.values()].flatMap(o => o.lease.entry.timeline()),
+    timeline: () => [...[...owners.values()].flatMap(o => o.lease.entry.timeline()), ...findingMoves],
     draw(id: string, render?: (ctx: DrawContext<any,any,any,any>)=>unknown) {
       const pane = spec.panes[id]!;
       const value = pane.read ? reads.get(pane.read)?.snapshot ?? unavailable(pane.read.demand === "explicit"?"Press Read":"Reading...") : unavailable("No read declared");

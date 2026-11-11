@@ -20,22 +20,23 @@ const KIND_SAYS: Record<FindingKind, string> = {
 export function FindingVerb({
   subject,
   name,
-  write,
+  action,
 }: {
   subject: SubjectRefCode;
   /** The row's own name, for the trigger's label. */
   name: string;
-  write: (finding: FindingInput) => Promise<unknown>;
+  /** The route's `finding` command: its refusal (no Work yet) refuses Write before any press. */
+  action: { run(finding: FindingInput): Promise<unknown>; readonly refusal: string | null };
 }) {
   const [kind, setKind] = useState<FindingKind>("note");
   const [verdict, setVerdict] = useState("");
   const [text, setText] = useState("");
   const verdicts: readonly string[] = FINDING_KINDS[kind];
-  const refusal = !text.trim()
+  const refusal = action.refusal ?? (!text.trim()
     ? "Write what you found"
     : verdicts.length && !verdicts.includes(verdict)
       ? `Choose this ${kind}'s verdict`
-      : null;
+      : null);
   return (
     <Popover>
       <PopoverTrigger aria-label={`Write a finding on ${name}`}>Finding</PopoverTrigger>
@@ -66,7 +67,7 @@ export function FindingVerb({
           refusal={refusal}
           onPress={async () => {
             try {
-              await write({
+              await action.run({
                 id: crypto.randomUUID(),
                 subject,
                 kind,
