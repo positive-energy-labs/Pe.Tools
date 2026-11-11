@@ -16,6 +16,7 @@ for (const folder of ["apps", "packages", "tests"])
       steps.push([`types ${folder}/${name}`, cwd, ["pnpm", "exec", "tsc", "--noEmit"]]);
   }
 steps.push(
+  // Every route projection, PeRoutes.generated.cs (route-links-cs.ts) included.
   [
     "route projections",
     resolve(root, "apps/web"),
@@ -25,11 +26,6 @@ steps.push(
     "Page projection",
     resolve(root, "packages/kit"),
     [process.execPath, "scripts/page.mjs", "--check"],
-  ],
-  [
-    "C# route links",
-    resolve(root, "packages/agent-contracts"),
-    [process.execPath, "scripts/route-links-cs.ts", "--check"],
   ],
   [
     "catalog source hash",

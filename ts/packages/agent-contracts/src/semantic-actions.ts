@@ -1,4 +1,4 @@
-import { fansRouteState } from "./generated/fans-work.ts";
+import { fansRouteState } from "./fans.ts";
 import { stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
 import { ANY_ROUTE, workIntent, workWriteCommands } from "./write-intent.ts";
 import { SHEET_COMMANDS } from "./slots/sheet.ts";
