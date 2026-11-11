@@ -1,6 +1,6 @@
 # Root run consent and shared Work
 
-Status: accepted; the per-turn countdown is superseded by [ADR 0027](0027-one-route-one-subject-one-consent.md) (consent per thread, auto-approve after a "Reject?" window). Shared Work, the journal and the run token still stand.
+Status: accepted; the per-turn countdown is superseded by [ADR 0027](0027-one-route-one-subject-one-consent.md) (consent per thread, auto-approve after a "Reject?" window). Shared Work, the journal and the run token still stand. "Unjournaled native mutation approvals refuse" is superseded by [ADR 0036](0036-harness-tools-are-ungated.md).
 
 ## Context
 

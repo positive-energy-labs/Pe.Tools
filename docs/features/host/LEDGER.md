@@ -213,6 +213,8 @@ Rebuilt 2026-10-22 against `a553a15a`; C# declarations and generated metadata ow
 
 ## Owed
 
+- 2026-11-11, a controlled dev Revit (session pe.app-25-t3-6e21b259) did not reconnect its bridge to a new source host after a host restart or takeover: `bridgeIsConnected` stayed false until the session was stopped (`--unsaved keep`) and started again after the host. Diagnose the bridge's reconnect on host identity change. Evidence: parent thread of branch `t3/pea-muas-retest`, 2026-11-10.
+- 2026-11-11, Pea's new-session path ("open chadds in 25") is refused by a stale `session-slot` claim from action 89878f76. The host journal releases a slot claim only on a journaled stop, so a session that ends any other way holds its slot forever. Release the claim when the Machine census no longer sees the session. Evidence: parent thread of branch `t3/pea-muas-retest`, 2026-11-10.
 - Diagnose the ReadOnly scripting probe reporting Modified 1 without setters, then rolling back; receipt `527ba484` and postguard IsModified=false do not explain the modification. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/drive/gate-10da8792/DEFECTS.md:17`.
 
 - 2026-11-04, SDK `ClientContractEmitter` does not publish verb/result associations. The local `scripts/sdk-wire.ts` projection validates the nested envelope frame and leaves result payloads unknown because the SDK also emits anonymous objects; add payload authority at the SDK before selecting result decoders. (testing-world)

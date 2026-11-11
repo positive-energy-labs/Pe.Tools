@@ -137,7 +137,7 @@ export interface MachineSources {
  */
 const LEG_DEADLINE_MS = 15_000;
 /** The machine tick: it recovers receipts and census drift without reading the update feed. */
-const POLL_PERIOD_MS = 5_000;
+export const POLL_PERIOD_MS = 5_000;
 /** The update feed is GitHub's API at 60 unauthenticated calls an hour: read at boot and this often. */
 const UPDATE_PERIOD_MS = 30 * 60_000;
 /** Feed-failure backoff base: retry sooner than the 30 min cadence, never faster than 2 min. */
@@ -754,6 +754,19 @@ export const useHostMachine = (owner: MachineOwnerPromise | undefined) => {
 const liveMachine = () => {
   if (!hostMachine) throw Error("Machine census is unavailable.");
   return hostMachine;
+};
+/**
+ * A reader that only needs the census answers from the held Machine while its sessions leg is younger
+ * than one poll period (how stale a watching browser's frame can be), and refreshes otherwise. With nobody
+ * watching there is no poll, the leg is old, and the read pays for its own pass as it always did.
+ */
+export const machineForRead = async (
+  held: Machine,
+  refresh: () => Promise<Machine>,
+  now = Date.now(),
+): Promise<Machine> => {
+  const seen = held.legs.sessions?.observedAtUtc;
+  return seen && now - Date.parse(seen) < POLL_PERIOD_MS ? held : refresh();
 };
 export const hostMachineFace: MachineOwnerPromise = {
   refresh: () => liveMachine().refresh(),

@@ -20,11 +20,11 @@
   "dependencies": {
     "@base-ui/react": "catalog:",
     "@effect/atom-react": "4.0.2",
-    "@llamaindex/llama-cloud": "^2.10.0",
     "@pe/agent-contracts": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/kit": "workspace:*",
+    "@pe/mcps": "workspace:*",
     "@pe/runtime": "workspace:*",
     "@pe/schema-core": "workspace:*",
     "@tanstack/react-devtools": "0.10.11",
