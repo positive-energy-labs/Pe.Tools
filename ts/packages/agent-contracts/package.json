@@ -32,6 +32,10 @@
       "types": "./src/route-kernel-codecs.ts",
       "import": "./src/route-kernel-codecs.ts"
     },
+    "./subject-ref": {
+      "types": "./src/subject-ref.ts",
+      "import": "./src/subject-ref.ts"
+    },
     "./route-state": {
       "types": "./src/route-state.ts",
       "import": "./src/route-state.ts"
