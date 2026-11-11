@@ -4,6 +4,23 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { readingFrameSchema, type NoticeRow } from "@pe/agent-contracts";
 
 import { OsNotices, setOsNotices, useThreadPresence } from "./os-notices";
+// The feed is a key on the tab's one Readings stream. Each follower is stood in as the key it
+// asked for (`url` carries it) and the door its frames arrive through.
+vi.mock("#/host/resource-stream", async (actual) => ({
+  ...(await actual<typeof import("#/host/resource-stream")>()),
+  peReadings: {
+    subscribe: (request: unknown, listener: (frame: unknown) => void) => {
+      streams.push({
+        url: `/pe/resources?keys=${encodeURIComponent(JSON.stringify([request]))}`,
+        onmessage: (message) => listener(JSON.parse(message.data)),
+      });
+      return () => {};
+    },
+    onResync: () => () => {},
+    dirty: () => {},
+  },
+}));
+
 /** Presence beats as the host sees them: the PUT bodies, through the real client and hostFetch. */
 const beats: { thread: string | null; visible: boolean; focused: boolean }[] = [];
 const recordBeats = () =>
@@ -45,7 +62,7 @@ test("thread presence beats on focus and every 5 seconds, and stops on route dep
   vi.useRealTimers();
 });
 
-/** The host's `notices` stream as the browser sees it: real Reading frames over a stand-in EventSource. */
+/** The host's `notices` Reading as each follower sees it: real Reading frames on the stood-in stream. */
 const streams: { url: string; onmessage: ((m: MessageEvent<string>) => void) | null }[] = [];
 const send = (frame: unknown) =>
   act(() =>
@@ -96,17 +113,6 @@ beforeEach(() => {
       setItem: (k: string, v: string) => void store.set(k, v),
     },
   });
-  vi.stubGlobal(
-    "EventSource",
-    class {
-      onmessage: ((m: MessageEvent<string>) => void) | null = null;
-      onerror: (() => void) | null = null;
-      constructor(public url: string) {
-        streams.push(this);
-      }
-      close() {}
-    },
-  );
   vi.stubGlobal(
     "Notification",
     class {
