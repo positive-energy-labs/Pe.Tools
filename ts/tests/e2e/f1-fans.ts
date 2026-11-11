@@ -237,7 +237,14 @@ const actions: Action[] = [
   },
   {
     name: "back",
-    can: async ({ page }) => !!(await idle(page)) && (await page.send("Page.getNavigationHistory")).currentIndex > 0,
+    // Back must stay inside the product. A fresh tab's first entry is a blank page, and opening the same
+    // URL twice adds no entry, so "an earlier entry exists" let two walks step out of the app and wait out
+    // the whole limit on a page that never settles.
+    can: async ({ page }) => {
+      const h = await page.send("Page.getNavigationHistory");
+      const earlier = h.entries[h.currentIndex - 1]?.url;
+      return !!(await idle(page)) && !!earlier && new URL(earlier).host === new URL(WEB).host;
+    },
     async act({ page }) {
       const before = await page.url();
       await history(page, -1);
