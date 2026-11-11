@@ -28,15 +28,6 @@
     "satellites": []
   },
   "fields": {
-    "op": {
-      "role": "query",
-      "schema": "op",
-      "codec": "op",
-      "initial": "",
-      "url": "push",
-      "share": true,
-      "agent": "none"
-    },
     "actionId": {
       "role": "query",
       "schema": "actionId",
@@ -46,6 +37,23 @@
       "share": true,
       "agent": "none"
     },
+    "op": {
+      "role": "subject",
+      "schema": "op",
+      "codec": "op",
+      "initial": {
+        "kind": "ids",
+        "ids": []
+      },
+      "url": "push",
+      "share": true,
+      "agent": "none",
+      "cardinality": "many",
+      "picker": {
+        "reading": "value",
+        "options": "subject"
+      }
+    },
     "selected": {
       "role": "selection",
       "kinds": [
@@ -53,14 +61,21 @@
       ]
     }
   },
+  "subject": {
+    "field": "op",
+    "noun": "operation",
+    "roster": "value",
+    "detail": "value",
+    "pane": "main"
+  },
   "readings": {
     "value": {
       "kind": "use",
       "entry": "ops.workspace",
       "deps": {
         "page": [
-          "op",
           "actionId",
+          "op",
           "selected"
         ],
         "work": [],
@@ -81,7 +96,9 @@
       "label": "Run read",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "op"
+        ],
         "work": [],
         "readings": [
           "value"
@@ -99,7 +116,9 @@
       "label": "Receipt control",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "op"
+        ],
         "work": [],
         "readings": [
           "value"

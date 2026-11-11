@@ -106,8 +106,8 @@ selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
 selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
 }, agent: { policy: "Use the route fields as declared." }, module: "open" },
 "ops": { path: "/ops" as const, title: "Ops", fields: {
-"op": personField((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
 "actionId": personField((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
+"op": personField(subjectSchema(1).default({"kind":"ids","ids":[]}), "push"),
 selected: {...personField(focusSelectionSchema,"replace"),agent:undefined}
 }, module: "ops" },
 "pea": peaAddress,
