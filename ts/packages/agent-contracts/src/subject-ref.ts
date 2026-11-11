@@ -222,6 +222,14 @@ export const subjectOf = (code: SubjectRefCode): SubjectRef => {
 };
 
 /** ADR 0035 rule 3: a `parameter` binding keys by UniqueId with no sub and no placement. */
+/** A one-name subject set (`name:["<key>"]`) for a route whose subject is one named thing (an op, a Page). */
+export const oneName = (key: string) =>
+  ({ kind: "ids" as const, ids: key ? [subjectCode({ keyKind: "name", key: [key] })] : [] });
+/** The first name key of a subject set, or "" with none chosen; a non-name ref is not one. */
+export const nameOf = (value: { readonly kind: "all" } | { readonly kind: "ids"; readonly ids: readonly SubjectRefCode[] }): string => {
+  const ref = value.kind === "ids" && value.ids[0] ? subjectOf(value.ids[0]) : null;
+  return ref?.keyKind === "name" ? (ref.key[0] ?? "") : "";
+};
 export type ParameterSubject = Extract<SubjectRef, { keyKind: "UniqueId" }> & {
   readonly placement?: undefined;
   readonly sub?: undefined;

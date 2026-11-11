@@ -2,12 +2,13 @@ import { harnessThreadSummarySchema } from "@pe/agent-contracts";
 import { useState } from "react";
 import type { PageTargetReading, PageChoice } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
-import { Input } from "@pe/kit/lang/input";
 import { inventoryOf } from "../host/resource-state";
 import { BindPicker } from "./bind-picker";
+import { nameOf } from "#/route/typed-route";
 import type { BindContext } from "./route";
 export function BindBody({ ctx }: { ctx: BindContext }) {
   const page = ctx.page.read(),
+    slug = nameOf(page.page),
     data = ctx.value.value;
   const [reading, setReading] = useState<PageTargetReading | null>(null),
     [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null);
@@ -29,26 +30,16 @@ export function BindBody({ ctx }: { ctx: BindContext }) {
     return (
       <iframe
         className="size-full flex-1"
-        title={`Page ${page.page}`}
-        src={`/pages/${encodeURIComponent(page.page)}/?${new URLSearchParams(page.query)}${page.fragment ? `#${page.fragment}` : ""}`}
+        title={`Page ${slug}`}
+        src={`/pages/${encodeURIComponent(slug)}/?${new URLSearchParams(page.query)}${page.fragment ? `#${page.fragment}` : ""}`}
       />
     );
   return (
     <>
-      <label>
-        Page
-        <Input
-          aria-label="Page slug"
-          value={page.page}
-          onChange={(event) => {
-            ctx.page.query({ page: event.target.value });
-            setReading(null);
-          }}
-        />
-      </label>
+      {/* The kernel draws the Page chooser from the subject slot (pane head); a route draws no second one. */}
       <Button
         label="Read current binding"
-        refusal={!page.page ? "Choose a Page" : null}
+        refusal={!slug ? "Choose a Page" : null}
         onClick={() =>
           void read().catch((error) => setOutcome({ ok: false, message: String(error) }))
         }
@@ -57,8 +48,8 @@ export function BindBody({ ctx }: { ctx: BindContext }) {
       </Button>
       {!ctx.value.current && <p role="status">{ctx.value.reason}</p>}
       <BindPicker
-        slug={page.page}
-        reading={reading?.page === page.page ? reading : null}
+        slug={slug}
+        reading={reading?.page === slug ? reading : null}
         threads={data ? harnessThreadSummarySchema.array().parse(data.threads) : null}
         documents={
           data

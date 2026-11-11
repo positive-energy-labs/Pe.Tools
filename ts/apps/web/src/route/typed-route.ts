@@ -12,6 +12,7 @@ import type {
   Many,
 } from "@pe/agent-contracts";
 import { subjectOf, type SubjectRefCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
+export { oneName, nameOf } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";

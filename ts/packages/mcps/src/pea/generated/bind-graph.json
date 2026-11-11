@@ -26,24 +26,6 @@
     "satellites": []
   },
   "fields": {
-    "page": {
-      "role": "query",
-      "schema": "page",
-      "codec": "page",
-      "initial": "",
-      "url": "push",
-      "share": true,
-      "agent": "none"
-    },
-    "view": {
-      "role": "pose",
-      "schema": "view",
-      "codec": "view",
-      "initial": false,
-      "url": "replace",
-      "share": true,
-      "agent": "none"
-    },
     "query": {
       "role": "query",
       "schema": "query",
@@ -54,10 +36,36 @@
       "agent": "none"
     },
     "fragment": {
-      "role": "pose",
+      "role": "query",
       "schema": "fragment",
       "codec": "fragment",
       "initial": "",
+      "url": "replace",
+      "share": true,
+      "agent": "none"
+    },
+    "page": {
+      "role": "subject",
+      "schema": "page",
+      "codec": "page",
+      "initial": {
+        "kind": "ids",
+        "ids": []
+      },
+      "url": "push",
+      "share": true,
+      "agent": "none",
+      "cardinality": "many",
+      "picker": {
+        "reading": "value",
+        "options": "subject"
+      }
+    },
+    "view": {
+      "role": "pose",
+      "schema": "view",
+      "codec": "view",
+      "initial": false,
       "url": "replace",
       "share": true,
       "agent": "none"
@@ -69,16 +77,23 @@
       ]
     }
   },
+  "subject": {
+    "field": "page",
+    "noun": "Page",
+    "roster": "value",
+    "detail": "value",
+    "pane": "main"
+  },
   "readings": {
     "value": {
       "kind": "use",
       "entry": "bind.picker",
       "deps": {
         "page": [
-          "page",
-          "view",
           "query",
           "fragment",
+          "page",
+          "view",
           "selected"
         ],
         "work": [],
@@ -99,7 +114,9 @@
       "label": "Bind",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "page"
+        ],
         "work": [],
         "readings": [
           "value"
@@ -117,7 +134,9 @@
       "label": "Read binding",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "page"
+        ],
         "work": [],
         "readings": [
           "value"

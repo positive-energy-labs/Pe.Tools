@@ -3,9 +3,9 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
 import { Code, stringify } from "@pe/kit/lang/code";
-import { Ladder } from "#/route/ladder";
 import { NativeObservationScope } from "#/revit/observation";
 import type { DocumentRef } from "@pe/agent-contracts";
+import { nameOf } from "#/route/typed-route";
 import type { OpsContext } from "./route";
 import { requestOf } from "./form";
 import { OpForm, seedValues, type FormValues } from "./form";
@@ -26,7 +26,8 @@ export function Operation({ ctx }: { ctx: OpsContext }) {
     [value, setValue] = useState<Value | null>(null),
     [failure, setFailure] = useState<string | null>(null);
   const operations = observed?.operations ?? [];
-  const selected = operations.find((entry) => entry.key === page.op);
+  const selected = operations.find((entry) => entry.key === nameOf(page.op));
+  const note = !ctx.value.current ? ctx.value.reason : observed?.bridgeCatalogError;
 
   const Output = value ? outputRenderers[value.op] : undefined;
   useEffect(() => {
@@ -41,23 +42,8 @@ export function Operation({ ctx }: { ctx: OpsContext }) {
   }, [selected?.key]);
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
-      <Ladder
-        levels={[
-          {
-            key: "op",
-            label: selected?.displayName ?? selected?.key ?? null,
-            placeholder: "choose an operation",
-            options: operations.map((entry) => ({
-              id: entry.key,
-              label: entry.displayName ?? entry.key,
-              sub: `${entry.intent ?? "unknown"} / ${entry.needs}`,
-            })),
-            note: !ctx.value.current ? ctx.value.reason : observed?.bridgeCatalogError,
-            picked: (id) => id === page.op,
-            pick: (op) => ctx.page.query({ op }),
-          },
-        ]}
-      />
+      {/* The kernel draws the op chooser from the subject slot (pane head); a route draws no second one. */}
+      {note ? <p role="status">{note}</p> : null}
       {selected ? (
         <section className="flex flex-col gap-4">
           <header>
@@ -144,7 +130,7 @@ export function Operation({ ctx }: { ctx: OpsContext }) {
       ) : (
         <EmptyState
           story="scope"
-          exit="choose an operation in the sentence; a session lists its Revit ops"
+          exit="choose an operation in the head; a session lists its Revit ops"
         >
           no operation selected
         </EmptyState>

@@ -1,4 +1,5 @@
 import { pageKeyOf, routeAddress } from "@pe/agent-contracts";
+import { oneName } from "#/route/typed-route";
 
 /** A Page on this runtime opens in the existing viewer. Foreign hosts and Page assets remain
  * ordinary links. This changes navigation only, never the Page's own binding or authority. */
@@ -19,7 +20,7 @@ export function pageLink(href: string, frontend: string) {
     const slug = decodeURIComponent(match[1]!);
     if (!pageKeyOf(slug)) return null;
     const page = {
-      page: slug,
+      page: oneName(slug),
       view: true,
       query: url.search.slice(1),
       fragment: url.hash.slice(1),

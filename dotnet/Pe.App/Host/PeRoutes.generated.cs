@@ -13,10 +13,10 @@ internal static class PeRoutes {
         internal static class Keys {
             public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
-            public const string Page = "page";
-            public const string View = "view";
             public const string Query = "query";
             public const string Fragment = "fragment";
+            public const string Page = "page";
+            public const string View = "view";
             public const string Selected = "selected";
         }
     }
@@ -197,8 +197,8 @@ internal static class PeRoutes {
         internal static class Keys {
             public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
-            public const string Op = "op";
             public const string ActionId = "actionId";
+            public const string Op = "op";
             public const string Selected = "selected";
         }
     }
