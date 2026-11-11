@@ -238,6 +238,7 @@ export function MasterTableBody<Row extends RowData>({
   // Virtual from the first render: drawing every row until the scroller is known laid out the
   // whole grid once (374 ms for 2000 rows, production bundle).
   const virtualized = visibleRows.length >= VIRTUAL_FROM;
+  const span = table.getVisibleLeafColumns().length + (gutter ? 1 : 0);
   const [margin, setMargin] = useState(0);
   const [headroom, setHeadroom] = useState(0);
   useLayoutEffect(() => {
@@ -513,7 +514,7 @@ export function MasterTableBody<Row extends RowData>({
         const gap = virtualized ? start - (at ? drawn[at - 1]!.end : 0) : 0;
         return (
           <Fragment key={key}>
-            {gap > 0 && <Spacer height={gap} />}
+            {gap > 0 && <Spacer height={gap} span={span} />}
             <MasterRow
               subject={subject?.(tableRow.original)}
               revit={revit?.(tableRow.original) ?? rowRevit(tableRow.original, key)}
@@ -703,7 +704,7 @@ export function MasterTableBody<Row extends RowData>({
           </Fragment>
         );
       })}
-      {tail > 0 && <Spacer height={tail} />}
+      {tail > 0 && <Spacer height={tail} span={span} />}
     </tbody>
   );
 }
@@ -711,11 +712,13 @@ export function MasterTableBody<Row extends RowData>({
 /** The `--item-h` row; measuring corrects any taller row. */
 const ROW_ESTIMATE = 24;
 
-/** Holds the extent of rows not drawn: one empty full-width row, so the table keeps its layout. */
-function Spacer({ height }: { height: number }) {
+/** Holds the extent of rows not drawn: one empty full-width row, so the table keeps its layout.
+ * It spans exactly the drawn columns: an oversized span adds phantom grid columns, and a fixed
+ * layout shares the free width among them, leaving a real auto column ~0px wide. */
+function Spacer({ height, span }: { height: number; span: number }) {
   return (
     <tr aria-hidden data-master-spacer="">
-      <td colSpan={1000} style={{ height, padding: 0, border: 0 }} />
+      <td colSpan={span} style={{ height, padding: 0, border: 0 }} />
     </tr>
   );
 }

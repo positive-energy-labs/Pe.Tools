@@ -112,12 +112,10 @@ selected: {...personField(focusSelectionSchema,"replace"),agent:undefined}
 }, module: "ops" },
 "pea": peaAddress,
 "pods": { path: "/pods" as const, title: "Pods", fields: {
-"pod": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
-"path": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
 "runs": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","enum":["member","pod"]}) as z.ZodType<Immutable<"member" | "pod">>).default("member"), "replace"),
-"mode": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","enum":["form","raw"]}) as z.ZodType<Immutable<"form" | "raw">>).default("form"), "replace"),
+"member": field(subjectSchema(1).default({"kind":"ids","ids":[]}), "push"),
 selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
-}, agent: { policy: "Use the route fields as declared." }, module: "pods" },
+}, agent: { policy: "Choose member through member, using the module's local identities." }, module: "pods" },
 "rooms": { path: "/rooms" as const, title: "Rooms", fields: {
 "stage": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"partition","type":"string","enum":["partition","review","history"]}) as z.ZodType<Immutable<"partition" | "review" | "history">>).default("partition"), "push"),
 "view": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),

@@ -6,7 +6,7 @@
  */
 import { useState, type ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { routeAddress } from "@pe/agent-contracts";
+import { podMemberCode, routeAddress } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
 import { hostShellOpenRpc } from "../../../../packages/mcps/src/shared/rpc-client";
@@ -34,7 +34,7 @@ const MEMBER: Inspectable = {
     kind: "route",
     href: (id) => {
       const [pod, path] = JSON.parse(id) as [string, string];
-      return routeAddress("pods").link({ pod, path });
+      return routeAddress("pods").link({ member: { kind: "ids", ids: [podMemberCode({ pod, path })] } });
     },
   },
 };

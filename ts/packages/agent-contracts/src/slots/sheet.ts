@@ -55,6 +55,8 @@ export interface BindingDraw<R = any> {
   readonly digits?: number;
   /** The value is an object; the cell edits this one numeric key (`{ inWg }`). */
   readonly field?: string;
+  /** The value is any JSON: the cell shows and takes its JSON text, and a value held as a string stays text. */
+  readonly json?: true;
   /** The binding's own rows, apart from the route subject (equipment units, criteria, slot names). */
   readonly rows?: (read: R) => readonly string[];
   readonly rowLabel?: (read: R, row: string) => string;
@@ -137,6 +139,7 @@ const drawData = {
   max: z.number().optional(),
   digits: z.number().int().nonnegative().optional(),
   field: z.string().min(1).optional(),
+  json: z.literal(true).optional(),
 };
 export const sheetSlotDataSchema = z.strictObject({
   draft: z.literal(true).optional(),

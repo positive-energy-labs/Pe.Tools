@@ -23,7 +23,7 @@ import {
 } from "@pe/agent-contracts";
 
 import { publicRoutes } from "#/route/route-discovery";
-import { isRecord } from "@pe/agent-contracts";
+import { isRecord, podMemberCode } from "@pe/agent-contracts";
 
 export type ChatPluginRoute = string;
 const chatPluginRoutes = () => publicRoutes.keys();
@@ -116,6 +116,8 @@ export function capturedPlace(
     if (!id.ok) return { ok: false, refusal: id.reason };
     search.system = { kind: "ids", ids: [id.value] };
   }
+  // The Pods subject is the member as a `name` SubjectRef `[pod, path]` (ADR 0035 rule 2).
+  if (key === "pods") search.member = { kind: "ids", ids: [podMemberCode({ pod: String(input.pod), path: String(input.path) })] };
   if (key === "schedules" && scope.binding === "workspace") {
     const id = encode({ keyKind: "workspace", key: scope.work });
     if (!id.ok) return { ok: false, refusal: id.reason };

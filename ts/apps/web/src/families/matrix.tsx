@@ -98,8 +98,11 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
           row={(choice) => ({ label: choice.name, refusal: scopeCell.refusal })}
         />
       </div>
+      {/* One verb shape (P1): the plain action button is framed (ledger 2026-10-12), like the plan
+          press beside it; bare words beside a box read as two kinds of thing. */}
       <ButtonGroup label="Family verbs">
         <Button
+          kind="framed"
           label="Read families"
           onClick={() => {
             const readId = crypto.randomUUID();
@@ -109,7 +112,7 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
         >
           Read families
         </Button>
-        <Button label="Stop family read" onClick={() => run("stop")}>
+        <Button kind="framed" label="Stop family read" onClick={() => run("stop")}>
           Stop
         </Button>
         <PreviewAction handle={ctx.write("apply")} label="Apply families" />
