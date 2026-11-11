@@ -1,6 +1,6 @@
 import { PreviewAction } from "@pe/kit/lang/write-action";
 import { refuse } from "#/route/refusal";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { familyCellAddress } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { ButtonGroup } from "@pe/kit/lang/button-group";
@@ -11,6 +11,7 @@ import { TypeGrid } from "./pivot-grid";
 import { useCellCollection } from "@pe/kit/lang/cell";
 import { useMeasuredParse } from "#/host/measured-parse";
 import { FindingVerb } from "#/route/slots/findings/verb";
+import { joinRows } from "./families-matrix";
 import { subjectCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
   const [failure, setFailure] = useState<string | null>(null);
@@ -26,7 +27,7 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
   const data = ctx.value.value;
   const work = ctx.cells.doc;
   const shown = data?.observation;
-  const rows = data?.rows ?? [];
+  const rows = useMemo(() => (data ? joinRows(data.rows, data.facts) : []), [data]);
   const params = data?.params ?? [];
   const pivot = { pivotRows: data?.pivotRows ?? [], pivotFamilies: data?.pivotFamilies ?? [] };
   const scope =
