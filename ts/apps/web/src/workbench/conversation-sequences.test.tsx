@@ -179,8 +179,48 @@ test("a consented write that succeeds counts no failure: the allowed consent ask
     { seq: 6, at, kind: "turn_end", turnId: "t", stopReason: "end_turn" },
   ]);
   const view = show(selectMessages({ ...emptyChatState(), events }));
-  expect(view.container.querySelector("summary")!.textContent).toMatch(/^2 tools(?! · 1 failed)/);
+  expect(view.container.querySelector("summary")!.textContent).toMatch(/^1 tool(?!s| · 1 failed)/);
   expect(view.queryByText("failed")).toBeNull();
+});
+
+// The consent ask is the host's question about the run, not a call the agent made.
+const consentAt = "2026-11-11T20:02:08.000Z";
+const consentAsk = (seq: number) => [
+  { seq, at: consentAt, kind: "permission_request", turnId: "t", requestId: "ask", scope: "run", deadline: consentAt, commands: ["c"],
+    toolCall: { toolCallId: "writes:t", title: "First write: directory Work. Then all writes in this thread until Stop." },
+    options: [{ optionId: "allow_now", name: "Allow now", kind: "allow_once" }, { optionId: "stop_writes", name: "Reject", kind: "reject_once" }] },
+  { seq: seq + 1, at: consentAt, kind: "permission_resolved", turnId: "t", requestId: "ask", by: "user", optionId: "allow_now" },
+];
+
+test("five tool calls and an allowed consent ask read 5 tools: the ask is not a tool", () => {
+  const call = (seq: number, id: string, status: string, sessionUpdate = "tool_call_update") => ({
+    seq, at: consentAt, kind: "update", turnId: "t", update: { sessionUpdate, toolCallId: id, title: "mcp__pea__pe_do", status },
+  });
+  const ids = ["a", "b", "c", "d", "e"];
+  const events = harnessEventSchema.array().parse([
+    { seq: 1, at: consentAt, kind: "prompt", turnId: "t", text: "Write five findings." },
+    call(2, "a", "pending", "tool_call"),
+    ...consentAsk(3),
+    call(5, "a", "completed"),
+    ...ids.slice(1).flatMap((id, index) => [call(6 + index * 2, id, "pending", "tool_call"), call(7 + index * 2, id, "completed")]),
+    { seq: 20, at: consentAt, kind: "turn_end", turnId: "t", stopReason: "end_turn" },
+  ]);
+  const view = show(selectMessages({ ...emptyChatState(), events }));
+  expect(view.container.querySelector("summary")!.textContent).toMatch(/^5 tools(?! ·)/);
+  // Hidden from the count, not from the record: the ask's row stays in the opened run.
+  expect(view.container.querySelector('[data-tool-id="writes:t"]')).not.toBeNull();
+});
+
+test("a run that holds only the consent ask draws its row plain: no fold, no count", () => {
+  const events = harnessEventSchema.array().parse([
+    { seq: 1, at: consentAt, kind: "prompt", turnId: "t", text: "Write a finding." },
+    ...consentAsk(2),
+    { seq: 4, at: consentAt, kind: "turn_end", turnId: "t", stopReason: "end_turn" },
+  ]);
+  const view = show(selectMessages({ ...emptyChatState(), events }));
+  expect(view.container.querySelector("summary")).toBeNull();
+  expect(view.container.querySelector('[data-tool-id="writes:t"]')).not.toBeNull();
+  expect(view.container.textContent).not.toMatch(/\d tools?/);
 });
 
 test("one streamed entry renders once at N=10 and N=200, including equal-length text changes", () => {
