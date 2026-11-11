@@ -25,6 +25,7 @@ vi.resetModules();
 const oracle = (await import("./proximity.ts")).inferJoints;
 vi.doUnmock("./geometry.ts");
 
+// Kept casts (here and in `cases`): an untyped JSON file boundary, not a constructed shape.
 const fixture = (name: string) =>
   JSON.parse(
     readFileSync(join(__dirname, "../../../apps/web/src/ducts/fixtures", name), "utf8"),
