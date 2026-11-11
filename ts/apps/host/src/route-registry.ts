@@ -8,14 +8,6 @@ import type { BuiltinClosure, HostRouteModule } from "@pe/agent-contracts";
 export interface RouteRegistryRow {
   /** `module.data.key`. */
   readonly key: string;
-  /** The route directory under `apps/web/src/`. */
-  readonly folder: string;
-  /** `module.data.address`. */
-  readonly address: string;
-  /** The address table row: `router.contract ?? key`. */
-  readonly contract: string;
-  /** `router.dock`: the web renders null at this address; the dock pane draws it. */
-  readonly dock: boolean;
   readonly closure: { readonly fingerprint: string; readonly envelope: BuiltinClosure };
   /** Closure data, the work projection, and the reads and leaves of `<folder>/host.ts`. */
   readonly host: HostRouteModule;

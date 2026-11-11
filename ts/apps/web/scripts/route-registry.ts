@@ -6,10 +6,8 @@
  */
 export interface RouteRegistryInput {
   readonly key: string;
+  /** The route directory under `apps/web/src/`. */
   readonly folder: string;
-  readonly address: string;
-  readonly contract: string;
-  readonly dock: boolean;
   /** The host read module `route.ts` names, relative to the declaration (`./host.ts`); absent when the route has none. */
   readonly host?: string;
   /**
@@ -51,7 +49,7 @@ export function renderRouteRegistry(rows: readonly RouteRegistryInput[]): string
         : `data: r${index}.envelope.data, schemas: {}`,
       ...(row.host ? [`reads: h${index}.reads`] : []),
     ].join(", ");
-    return `${JSON.stringify(row.key)}: { key: ${JSON.stringify(row.key)}, folder: ${JSON.stringify(row.folder)}, address: ${JSON.stringify(row.address)}, contract: ${JSON.stringify(row.contract)}, dock: ${row.dock}, closure: r${index}, host: { ${module} } }`;
+    return `${JSON.stringify(row.key)}: { key: ${JSON.stringify(row.key)}, closure: r${index}, host: { ${module} } }`;
   });
   const parsed = rows.map((_row, index) => `const r${index} = closureSchema.parse(c${index});`);
   return [HEADER, ...imports, ...works, ...parsed, `export const routeRegistry: RouteRegistry = {\n${entries.join(",\n")},\n};`, ""].join("\n");
