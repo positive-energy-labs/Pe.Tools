@@ -61,15 +61,49 @@ Each slice is stated as what it deletes. "Lane" is the cheapest lane that can fa
 | 9 | Shared derived outputs | a parse is stored once and found by a second person | re-parsing per call; vendor downloads in the user root or a temp folder | J2: zero documents parsed again; the census counts zero shared files whose name does not match their bytes | slice 6 | two homes | 3 |
 | 10 | T3 | the agent engine | every row of [T3-CUTOVER.md](T3-CUTOVER.md) | F1 to F11, then the flip rule | the Revit lane is free; touches no storage slice | dev session with the T3 sidecar | parallel track |
 
-Order inside a wave is by collision: slice 5 lands before slice 6, or run output lands on G: and the pod's machine-specific files flip between machines.
+### Timing plan (implementor, 2026-11-11, supersedes the first waves)
 
-Slice 3 keeps the existing consent window, narrowed to the guarded acts, as the interim guard. Slice 8 replaces that window with the three choke points. This reading joins `POSITION-v2` slice 3 to slice 8 and is the capture's default, re-openable.
+Four read-only censuses at a02b8aea re-checked the slice rows (`.artifacts/runs/homes-crusade-20261111/implementor/`). They changed the plan in four ways:
 
-### Waves
+- The Gate column holds landing, not writing. `fix/purge2-integrity` shares no consent file with slice 3. Every slice is written now, and only the merge to main and the Revit proofs wait.
+- Slices 3 and 8 are one consent change. Pea's own doors (`instances.save`, `stop`, `close`, `reset`, `restart`, `cleanup`, the upload) return "held" directly from the host, which already reads `isModified` (`ts/apps/host/src/machine.ts:954`). No interim window is built. Only a save inside a script needs the Revit pre-event. A script run holds Revit's API context, so a person cannot press Save during one, and a save that fires while a script runs is Pea's. Assumption A shrinks to "a pre-event can cancel".
+- Slices 5 and 6 are one coupled decision: the state-root layout, the agent's working directory (it also sets the world id, `ts/apps/host/src/local-ops.ts:40`), and C# being handed a pod's absolute folder instead of joining a name onto the user's Pods (`dotnet/Pe.Revit.Scripting/Pods/ScriptPodPreparationService.cs:157`). The freeze shapes below settle them once, before either is written.
+- Main already sends file bytes to LlamaCloud (`ts/apps/web/src/routes/api/pdf-audit/parse.ts:17`), so guard 3 covers main's path as well as the branch's.
 
-- **Wave 1, now, while the kernel crusade runs.** Slice 0, the purger's censuses C1 to C7 (defined in `muse/round3/purger.md` section 6 and in the purger's brief), slice 1, slice 7, and the Drive revision spike (C5). No full suite. No Revit. An implementor and a purger. No driver. kaitpw 2026-11-11: "agreed on phasing with kernel crusade".
-- **Wave 2, each slice when its named kernel piece lands.** Slices 3 and 4 after `fix/purge2-integrity`. Slice 5 after kernel slice 10 /family. Slices 2 and 8, and anything else that needs Revit, after the kernel's end gate frees the Revit lane.
-- **Wave 3, after the kernel crusade ends.** Slices 6, 6b and 9. The driver starts here. The T3 spike takes the Revit lane here.
+Waves. The integration branch is `crusade/homes`. Each writer is a Fable 5.2 child in its own worktree, proving with typecheck and touched tests.
+
+| Wave | Writer | Slices | Hours | Waits on |
+|---|---|---|---|---|
+| 0 | implementor with kaitpw | the freeze shapes below | 2 | nothing |
+| 1 | A consent | 3, the TS half of 8; merges `t3/pea-muas-retest` with the gateway deleted; deletes the route-settings store (its one field is `chat.autoApprove`) | 7 | nothing |
+| 1 | B store kernel | 4; the write door, compare-and-swap and safety net as modules; adoption in files no other writer owns | 5 | nothing |
+| 1 | C carriers | 2 in C#, compile and `Pe.Shared.Tests` | 4 | nothing |
+| 1 | D names | 1, and 7 reduced to hashing ids used in paths | 2 | nothing |
+| 1 | E standards | 0, and the Drive revision spike (assumption B) | 2 | nothing |
+| 1 | F homes C# | the C# halves of 5 and 6 | 5 | wave 0 |
+| 1 | G1 homes TS | 6: resolver, home list, listing, duplicate refusal, door adoption, copy-on-write deleted | 5 | wave 0, B's door module |
+| 1 | G2 homes TS | 5: Work, Page state, run output and the working directory moved to the state root | 5 | wave 0 |
+| 2 | one batched Revit contact | carrier round-trip, the pre-event spike and its small C# subscriber, the C# run writer, the pointer write on both clones (assumption C) | 3 | the kernel's Revit lane |
+| 2 | H settings | 6b, then 9 | 6 + 3 | the kernel ends, G1 |
+| 3 | driver | the final drive | | everything |
+
+The critical path is wave 0, then G1, then the kernel's end, then H. The kernel's end is the one gate this crusade does not control. Main takes the `crusade/homes` tip at the first green full suite after the kernel crusade lands its last merge. The driver starts now on lanes that need no Revit. The T3 track runs beside this table and is not on its critical path.
+
+### Freeze shapes (wave 0, for kaitpw's review)
+
+Each line is the stored bytes a coworker will come to hold. A writer codes against these and moves each into code or `ts/packages/host-contracts/tests/runtime-ownership.fixture.json`, which already pins the TS, C# and PowerShell resolvers to one table.
+
+1. Marker: `pe-home.json` holds `{"tier":"user"|"project"|"firm"}` and nothing else.
+2. Layout of every home: `Pods/`, `Pages/`, `Catalogs/`, `Settings/<owner>.json`. The user home adds `Skills/`. The firm home adds `keys.json`. `preferences.json` at a home root folds into `Settings/preferences.json`. No home root holds `AGENTS.md`, `README.md` or `output/`.
+3. Firm home: on each drive letter, `<L>:\Shared drives\*\04 PE Software Files\Pe.Tools` and `<L>:\04 PE Software Files\Pe.Tools`, accepted only when the marker reads `firm`. On kaitpw's machine it is `G:\Shared drives\PE Team Folder\04 PE Software Files\Pe.Tools`. The shared drive root is the folder that holds `04 PE Software Files`. `PE_TOOLS_SHARED_ROOT` stays as a dev override only.
+4. Project pointer: one in-model owner blob `{"owner":"project-home","version":1,"data":{"path":"<folder>/<folder>"}}`, a forward-slash path relative to the shared drive root, with no drive letter. Pe's files sit in `<path>/Pe.Tools`, which carries a `project` marker.
+5. In-model envelope: `{"owner":"<owner>","version":<int>,"data":{…}}` in one hidden text parameter per owner. An unknown version is refused, and its bytes are never overwritten.
+6. `$schema`: `/schemas/settings/<module>/<root>.json`, the existing `SettingsSchemaUrl.Path` form, with no origin. The host resolves it. Editor completion is not required.
+7. Machine state root: the existing resolver, unchanged. Under it: `Work/`; `Pages/<slug>/` for Page state; `Runs/<pod-id>/<run-id>/` for run output; `Blobs/sha256/<hash>` for the safety net; `T3/` for the T3 home; `Agent/` for the agent's working directory, which holds the harness projections, the agent's `AGENTS.md` and the generated script workspace. Pod and Page ids are unique across homes, so no key names a home.
+8. Script workspace: `PeScripts.csproj` and `.vscode/` are generated per machine under `Agent/`. A reference a person adds by hand is declared in `pod.json`, so no authored byte lives in a generated file.
+9. Secret role names in `keys.json` and the person's own store: `openai.api-key`, `anthropic.api-key`, `llamaparse.api-key`. LlamaParse moves off the web server's environment onto this resolver.
+
+Open in wave 0: whether the installed state root survives an MSI upgrade (freeze item 8). G2 checks `productInstallLayout` and reports before it moves Work.
 
 ### Assumptions that no run has checked
 
@@ -134,3 +168,10 @@ The owner: "we need to be relient if these assumptions dont hold, but I think th
 - 2026-11-11, muse default, re-openable: the second drive lane is Windows Sandbox for install and upgrade, a second Windows profile for first run with Revit, and a coworker's machine only as a scripted runbook at the first real release. The owner asked to learn about a second Windows profile before ruling.
 - 2026-11-11, muse default, re-openable: which files are standards is not ruled. Slice 0 produces the classified list (real, test, proof, WIP, archive, one-off, no registered library, dangling reference) for the owner to tick.
 - 2026-11-11, five consulted threads (T3 research, journeys, and forks of the kernel implementor, purger and driver) signed `POSITION-v3`. The purger and driver forks were limited handoffs and marked their claims "from records".
+- 2026-11-11, kaitpw, on the implementor's re-plan: "i resonate with everything you've said, especially the wave squashes." Writing starts for every slice now; only landing and Revit proofs wait.
+- 2026-11-11, kaitpw: `t3/pea-muas-retest` has no other writer. "noones working on it, do what u wan". Writer A merges it with the gateway deleted.
+- 2026-11-11, kaitpw: editor completion for `$schema` is not required. "its not a requirement. occam".
+- 2026-11-11, kaitpw: the driver starts now, and Revit and host runs are free when the machine has room. "the only constraint we have is too many revits while the kernel crusade is running ... I honestly dont care when u run revit/host etc."
+- 2026-11-11, implementor default, re-openable: no interim consent window. Slice 3 ships the "held" returns for Pea's own doors; slice 8 adds only the pre-event for saves inside a script.
+- 2026-11-11, implementor default, re-openable: `RunRef` gets no engine tag. Runs live only in discard-class stores, so a tag added at the T3 cutover needs no migration.
+- 2026-11-11, implementor default, re-openable pending kaitpw: in-model blobs use one envelope on two anchors, Project Information for project-level owners and hidden element parameters for Takeoff's per-region blobs.
