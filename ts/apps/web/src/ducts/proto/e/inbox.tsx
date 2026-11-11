@@ -1,5 +1,5 @@
 import { RegistryContext } from "@effect/atom-react";
-import { cite, citation, citationOwner, elementKey, leaveCitation } from "@pe/kit/lang/attention";
+import { cite, citation, citationOwner, leaveCitation } from "@pe/kit/lang/attention";
 import { useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { Ban, Check, Eye, EyeOff, Fan, Link, Pencil, X, type LucideIcon } from "lucide-react";
 import type { DuctsDesign } from "@pe/agent-contracts";
@@ -38,7 +38,7 @@ import type { Claim } from "../../legs";
 import { inboxWriteRows, type WriteVerbs, type RulingRow } from "./inbox-write";
 
 import { SlotPicker } from "./slot-picker";
-import { SubjectText, subjectDocument } from "@pe/kit/lang/subject-text";
+import { SubjectText, citedReferences, subjectDocument } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { RuleAssignment } from "./rule-assignment";
 
@@ -287,11 +287,7 @@ export function Inbox({
           refs:
             lit?.owner === owner
               ? lit.refs
-              : heading.references.map(({ id, ...ref }) => ({
-                  ...ref,
-                  doc: subjects.doc,
-                  key: elementKey(id),
-                })),
+              : citedReferences(subjects, heading.references),
         });
       };
       return {
@@ -335,11 +331,7 @@ export function Inbox({
                       cite(registry, {
                         owner,
                         focus: null,
-                        refs: description.references.map(({ id, ...ref }) => ({
-                          ...ref,
-                          doc: subjects.doc,
-                          key: elementKey(id),
-                        })),
+                        refs: citedReferences(subjects, description.references),
                       });
                   }}
                 >

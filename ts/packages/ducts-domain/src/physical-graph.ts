@@ -15,11 +15,11 @@ export interface CircuitReason {
   message: string;
 }
 export interface PhysicalGraph {
-  ports: { elementId: number; uniqueId: string | null; connector: Node["connectors"][number] }[];
+  ports: { elementId: number; uniqueId: string; connector: Node["connectors"][number] }[];
   joints: { a: string; b: string; reciprocal: boolean }[];
   parts: {
     elementId: number;
-    uniqueId: string | null;
+    uniqueId: string;
     ports: number[];
     continuity: "component" | "passive" | "fan-boundary" | "unknown-equipment";
   }[];
@@ -181,7 +181,7 @@ export function physicalGraph(
     if (!equipment || passives.has(e.id)) adjacent.set(e.id, []);
     graph.parts.push({
       elementId: e.id,
-      uniqueId: e.uniqueId ?? null,
+      uniqueId: e.uniqueId,
       ports: e.connectors.map((c) => c.index),
       continuity: !equipment
         ? "component"
@@ -192,7 +192,7 @@ export function physicalGraph(
             : "unknown-equipment",
     });
     for (const c of e.connectors) {
-      graph.ports.push({ elementId: e.id, uniqueId: e.uniqueId ?? null, connector: c });
+      graph.ports.push({ elementId: e.id, uniqueId: e.uniqueId, connector: c });
       if (!c.connectedTo) continue;
       const to = c.connectedTo;
       const a = key(e.id, c.index),

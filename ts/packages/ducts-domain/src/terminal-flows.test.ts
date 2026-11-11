@@ -36,7 +36,7 @@ const node = (
   connectors: Connector[],
   facts: Node["facts"] = [],
 ): Node =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind,
     category: kind,
@@ -51,7 +51,7 @@ const node = (
     facts,
   }) as unknown as Node;
 const duct = (id: number, groupId: string, connectors: Connector[]): Segment =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind: "duct",
     curveKind: "line",
@@ -172,7 +172,7 @@ describe("terminalFlows", () => {
   });
 
   it("takes an edit flow over Revit", () => {
-    expect(run({ "40": { cfm: 90 } }).flows[40]).toEqual({ cfm: 90, source: "override" });
+    expect(run({ "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000028": { cfm: 90 } }).flows[40]).toEqual({ cfm: 90, source: "override" });
   });
 
   it("takes a rooms flow after an edit one and before Revit", () => {
@@ -182,7 +182,7 @@ describe("terminalFlows", () => {
       [31, { cfm: 222, source: "room 102" }],
       [40, { cfm: 333, source: "room 103" }],
     ]);
-    const { flows } = terminalFlows(s, { "31": { cfm: 150 } }, rooms);
+    const { flows } = terminalFlows(s, { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0000001f": { cfm: 150 } }, rooms);
     expect(flows.get(31)).toEqual({ cfm: 150, source: "override" });
     expect(flows.get(30)).toEqual({ cfm: 111, source: "rooms:room 101" });
     expect(flows.get(40)).toEqual({ cfm: 333, source: "rooms:room 103" });
@@ -211,7 +211,7 @@ describe("a group with no air mover", () => {
     expect(result.paths[30]).toBeDefined();
     // Staging unit 1 passive leaves g10 with no fan too.
     const passive = designOf({
-      roles: { "1": { edit: { value: { role: "passive" } } } },
+      roles: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { edit: { value: { role: "passive" } } } },
     });
     const again = survey(s, passive).findings.filter((f) => f.kind === "no-fan");
     expect(again.map((f) => f.groupId)).toEqual(["g10", "g40"]);

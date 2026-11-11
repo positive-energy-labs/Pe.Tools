@@ -1,3 +1,4 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 // U4 wires the real fans Work for callers without one.
 import { neutralFansWork } from "@pe/agent-contracts";
 import { readFileSync } from "node:fs";
@@ -27,7 +28,7 @@ test("fan preview survives identical re-pricing but rejects changed model inputs
   const work = ductsDesign(
     null,
     fansDocumentSchema.parse({
-      componentDrops: { "14088043": { edit: { value: { inWg: 0.026 } } } },
+      componentDrops: { [elementSubject(snapshot.nodes.find(n => n.id === 14088043)!) ]: { edit: { value: { inWg: 0.026 } } } },
     }),
   );
   const handle = {
@@ -119,7 +120,7 @@ test("fan loss preparation reads both sides and carries authored drops into prev
   const work = ductsDesign(
     null,
     fansDocumentSchema.parse({
-      componentDrops: { [node.id]: { edit: { value: { inWg: 0.026 } } } },
+      componentDrops: { [elementSubject(node)]: { edit: { value: { inWg: 0.026 } } } },
     }),
   );
   const request = applyRequest(
@@ -150,10 +151,10 @@ test("an authored terminal flow inside a fan walk with no network groups reaches
     const nodes = snapshot.nodes.map((n) => (n.id === authored!.id ? { ...n, flowParameter: "Flow" } : n));
     const s = { ...snapshot, nodes, walk: walk ? { startId: 14577391, hops: 1, elementsReached: snapshot.nodes.length, openEnds: 0, candidates: [], truncated: false, elapsedMs: 1 } : undefined };
     const work = ductsDesign(null, fansDocumentSchema.parse({
-      flows: { [authored!.id]: { edit: { value: { cfm: 123, source: "controlled sample proof" } } } },
+      flows: { [elementSubject(authored!)]: { edit: { value: { cfm: 123, source: "controlled sample proof" } } } },
       parameters: { terminalFlow: { edit: { value: "Flow" } } },
     }));
-    return scopeApplyRequest(applyRequest(s, price(s, {}, work, work ?? neutralFansWork, EMPTY_CATALOGS), "", []), s.store, [["flows", String(authored!.id)]]);
+    return scopeApplyRequest(applyRequest(s, price(s, {}, work, work ?? neutralFansWork, EMPTY_CATALOGS), "", []), s.store, [["flows", elementSubject(authored!)]], s);
   };
   expect(request(true).terminalFlows).toEqual([expect.objectContaining({ id: authored!.id, cfm: 123 })]);
   // Derived flows keep their network guard: no group with an air mover, no write.
@@ -163,18 +164,19 @@ test("an authored terminal flow inside a fan walk with no network groups reaches
 });
 
 test("a requested write cell that derives no write is refused, never planned as an empty request", () => {
+  const snapshot = { nodes: [{ id: 1380293, uniqueId: "fixture-terminal", connectors: [] }], segments: [] } as any;
   const empty = { fittings: [], terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [] } as never;
-  expect(unwrittenCells(empty, [["flows", "1380293"], ["rules", "elbow"], ["calculation", "x"]])).toEqual([["flows", "1380293"]]);
-  expect(unwrittenCells({ ...(empty as object), terminalFlows: [{ id: 1380293, cfm: 123 }] } as never, [["flows", "1380293"]])).toEqual([]);
+  expect(unwrittenCells(empty, [["flows", "UniqueId:fixture-terminal"], ["rules", "elbow"], ["calculation", "x"]], snapshot)).toEqual([["flows", "UniqueId:fixture-terminal"]]);
+  expect(unwrittenCells({ ...(empty as object), terminalFlows: [{ id: 1380293, cfm: 123 }] } as never, [["flows", "UniqueId:fixture-terminal"]], snapshot)).toEqual([]);
 });
 
 test("an unwritten cell names why: an empty or consumed Work cell is not a staged value", () => {
   // The preserved r82 shape: writeIntent still names both ESP cells after r67 published both edits.
   const fans = fansDocumentSchema.parse({
-    esp: { "14577391": { edit: null }, "10016301": { edit: { value: { inWg: 2.7 } } } },
+    esp: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef": { edit: null }, "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0098d62d": { edit: { value: { inWg: 2.7 } } } },
   });
   const staged = stagedDucts(null, fans);
-  expect(unwrittenReason(staged, ["esp", "14577391"])).toMatch(/no staged edit/);
+  expect(unwrittenReason(staged, ["esp", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef"])).toMatch(/no staged edit/);
   // A staged cell that still derives nothing is a different case; it is never called empty.
-  expect(unwrittenReason(staged, ["esp", "10016301"])).toMatch(/^staged/);
+  expect(unwrittenReason(staged, ["esp", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0098d62d"])).toMatch(/^staged/);
 });

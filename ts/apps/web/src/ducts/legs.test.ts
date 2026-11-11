@@ -43,7 +43,7 @@ function makeupSnapshot(rows: Row[]): DuctSnapshot {
     const size = i >= 46 && i <= 70 ? '10"ø' : '8"ø';
     if (row.k === "duct") {
       const [a, b] = row.line as [number[], number[]];
-      segments.push({
+      segments.push({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(row.id).toString(16).padStart(8, "0")}`,
         id: row.id,
         kind: "duct",
         type: "Round Duct",
@@ -60,7 +60,7 @@ function makeupSnapshot(rows: Row[]): DuctSnapshot {
       } as Segment);
       return;
     }
-    nodes.push({
+    nodes.push({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(row.id).toString(16).padStart(8, "0")}`,
       id: row.id,
       kind: row.k,
       category: row.k,

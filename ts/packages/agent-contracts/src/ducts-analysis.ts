@@ -216,7 +216,7 @@ const row = z.strictObject({
         heightIn: z.number().nullable(),
         areaFt2: z.number().nullable(),
       }),
-      uniqueId: z.string().nullable(),
+      uniqueId: z.string(),
       index: z.number().int(),
       pin: ductPortPinSchema.nullable(),
       externalExchange: z

@@ -43,7 +43,7 @@ const snapshot = {
     },
   ],
   nodes: [
-    {
+    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(3).toString(16).padStart(8, "0")}`,
       id: 3,
       kind: "accessory",
       category: "Duct Accessories",
@@ -52,7 +52,7 @@ const snapshot = {
       connectors: [],
       facts: [],
     },
-    {
+    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(9).toString(16).padStart(8, "0")}`,
       id: 9,
       kind: "equipment",
       category: "Mechanical Equipment",

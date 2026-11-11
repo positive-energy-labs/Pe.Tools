@@ -3,22 +3,16 @@ import type { RouteGraphJson } from "./route-kernel-data.ts";
 import type { BodyBindings, EntryTable } from "./route-kernel-bodies.ts";
 import type { RouteModule, RouteFingerprintInput } from "./route-kernel-admission.ts";
 import type { CodecBindings } from "./route-kernel-bodies.ts";
-import type { IdentityId } from "./route-kernel-page.ts";
+import { jsonCodec } from "./route-kernel-codecs.ts";
+import { decode, subjectRefCodeSchema } from "./subject-ref.ts";
 
-import { identityCodecs, jsonCodec } from "./route-kernel-codecs.ts";
-
-const localId = z.custom<IdentityId<"local">>(
-  (value) => typeof value === "string" && identityCodecs.local.decode(value).ok,
-);
-const elementId = z.custom<IdentityId<"element">>(
-  (value) => typeof value === "string" && identityCodecs.element.decode(value).ok,
-);
-export const localCodec = identityCodecs.local;
-export const elementCodec = identityCodecs.element;
-const mixedSubject = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("manual"), id: localId }),
-  z.strictObject({ kind: z.literal("circuit"), id: elementId }),
-]);
+const localId = subjectRefCodeSchema;
+/** A pod's manual circuit is a `group` SubjectRef, a modelled one a `UniqueId`; keyKind is the tag. */
+const mixedSubject = subjectRefCodeSchema;
+const isManual = (code: string | null) => {
+  const ref = code === null ? null : decode(code);
+  return ref?.ok === true && ref.value.keyKind === "group";
+};
 export const schemas = {
   mixedSubject: mixedSubject.nullable(),
   cellKey: z.enum(["voltage", "length"]),
@@ -85,10 +79,6 @@ export const builtinData = {
     listed: false,
     satellites: [],
   },
-  identities: {
-    system: { kind: "local", codec: "local" },
-    element: { kind: "element", codec: "element" },
-  },
   fields: {
     system: {
       role: "subject",
@@ -96,7 +86,6 @@ export const builtinData = {
       codec: "subject",
       initial: null,
       cardinality: "one",
-      identity: "system",
       picker: { reading: "roster", options: "pick" },
       ...policy,
     },
@@ -217,15 +206,10 @@ export const podData = {
   key: "pod.circuits",
   address: "/pod/circuits",
   name: "Circuit calculator",
-  identities: {
-    manual: { kind: "local", codec: "local" },
-    circuit: { kind: "element", codec: "element" },
-  },
   fields: {
     ...builtinData.fields,
     system: {
       ...builtinData.fields.system,
-      identity: ["manual", "circuit"],
       schema: "mixedSubject",
     },
     selected: { role: "selection", kinds: ["manual", "circuit"] },
@@ -295,7 +279,7 @@ export const podBodies = {
     ...builtinBodies.calculate,
     run: ({ page, work, readings }) => ({
       total:
-        page.system?.kind === "manual"
+        isManual(page.system)
           ? work.amount
           : work.amount * (readings.roster.value?.length ?? 1),
     }),
@@ -308,7 +292,7 @@ export const podBodies = {
     ...builtinBodies.apply,
     run: ({ work, captures }) => ({ amount: captures.total.value?.total ?? work.amount }),
   },
-  main: { ...builtinBodies.main, run: ({ page }) => page.read().system?.kind ?? "none" },
+  main: { ...builtinBodies.main, run: ({ page }) => (isManual(page.read().system) ? "manual" : "none") },
   cellGroup: {
     slot: "cells.input.groupOf",
     kind: "group",
@@ -345,7 +329,6 @@ export const builtinModule = {
   entries,
   bodies: builtinBodies,
   codecs: builtinCodecs,
-  identities: { local: localCodec, element: elementCodec },
   artifact: artifact(builtinData),
 } satisfies RouteModule<typeof builtinData, typeof schemas, typeof entries, string>;
 export const podModule = {
@@ -354,7 +337,6 @@ export const podModule = {
   entries: podEntries,
   bodies: podBodies,
   codecs: { ...builtinCodecs, subject: jsonCodec(schemas.mixedSubject) },
-  identities: { local: localCodec, element: elementCodec },
   artifact: artifact(podData),
 } satisfies RouteModule<typeof podData, typeof schemas, typeof podEntries, string>;
 

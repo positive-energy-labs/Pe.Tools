@@ -13,12 +13,13 @@ import {
   fansSheetCapability,
   ductsPictureFields,
   type Immutable,
+  type SubjectRefCode,
 } from "@pe/agent-contracts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
-import { field, route, subjectSchema, localId, namesOf, split } from "../route/defaults.ts";
+import { field, route, subjectSchema, split } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
-import { fanLabel } from "../ducts/sheet/model.ts";
+import { fanLabel, stableFanKey } from "../ducts/sheet/model.ts";
 import { describeInputHistory, editMetaSchema } from "../ducts/sheet/input-history.neutral.ts";
 import { sheetValueFixtures } from "../ducts/sheet/value-fixtures.ts";
 import { presentLosses } from "../ducts/reviews.ts";
@@ -45,7 +46,7 @@ export const fields = {
 export const sheet = read(
   hostRead(fansSheetCapability, sheetValueFixtures),
   (page: { fan: Immutable<z.output<typeof fan>>; sheetPath: string }) => ({
-    fan: namesOf(page.fan),
+    fan: page.fan.kind === "all" ? "all" : page.fan.ids,
     sheetPath: page.sheetPath,
   }),
 );
@@ -79,7 +80,7 @@ export const module = route({
     pane: "sheet-roster",
     options: (data: FansDrawContext["value"]["value"]) =>
       (data?.rows ?? []).map((row) => ({
-        id: localId("ducts-fan", `${row.uniqueId}@${row.portIndex}`),
+        id: stableFanKey(row),
         label: fanLabel(row, data?.rows ?? []),
       })),
   },
@@ -158,13 +159,13 @@ export const module = route({
 });
 export const fansData = module.data;
 export const fansHostModule = module.host;
-export function fansLink(ids: readonly string[], search: Readonly<Record<string, unknown>>) {
+export function fansLink(ids: SubjectRefCode[], search: Readonly<Record<string, unknown>>) {
   return routeLinks.fans({
     ...Object.fromEntries(
       ["target", "fixture", "thread"].flatMap((key) =>
         typeof search[key] === "string" ? [[key, search[key]]] : [],
       ),
     ),
-    fan: { kind: "ids", ids: ids.map((id) => localId("ducts-fan", id)) },
+    fan: { kind: "ids", ids },
   });
 }

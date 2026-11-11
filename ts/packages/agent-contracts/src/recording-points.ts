@@ -1,6 +1,5 @@
 import { Schema } from "effect";
-import { identityCodecs } from "./route-kernel-codecs.ts";
-import type { IdentityId } from "./route-kernel-page.ts";
+import { documentKeySchema, type DocumentKey } from "./subject-ref.ts";
 
 declare const pointId: unique symbol;
 /** Opaque host-minted name; decoding a name does not grant access to a point. */
@@ -11,8 +10,7 @@ export const recordingPointIdSchema = Schema.declare(
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value),
 );
 const document = Schema.declare(
-  (value): value is IdentityId<"document"> =>
-    typeof value === "string" && identityCodecs.document.decode(value).ok,
+  (value): value is DocumentKey => documentKeySchema.safeParse(value).success,
 );
 const cursor = Schema.Number.check(Schema.makeFilter((n) => Number.isSafeInteger(n) && n >= 0));
 export const recordingPointReasonSchema = Schema.Union([

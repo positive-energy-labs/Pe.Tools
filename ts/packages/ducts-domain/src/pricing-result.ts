@@ -46,7 +46,7 @@ export function pricingResult(
       heal,
       notes: systemNotes(priced, doc, heal),
       systems: systemList(priced.snapshot, priced),
-      inference: inferJoints(snapshot, 1, withStoredRulings(doc, snapshot.store)),
+      inference: inferJoints(snapshot, 1, withStoredRulings(doc, snapshot.store, snapshot)),
     },
   };
 }

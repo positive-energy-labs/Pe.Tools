@@ -26,7 +26,6 @@ export const routeFieldJsonSchema = z.discriminatedUnion("role", [
     role: z.literal("subject"),
     ...scalar,
     cardinality: z.enum(["one", "many"]),
-    identity: z.union([ref, refs.min(2)]),
     picker: z.strictObject({ reading: ref, options: ref }),
   }),
   z.strictObject({
@@ -222,10 +221,6 @@ export const RouteGraphJson = z.strictObject({
     resume: z.literal("document").optional(),
   }),
   fields: z.record(ref, routeFieldJsonSchema),
-  identities: z.record(
-    ref,
-    z.strictObject({ kind: z.enum(["document", "link", "element", "local"]), codec: ref }),
-  ),
   subject: z.strictObject({
     field: ref,
     noun: z.string(),

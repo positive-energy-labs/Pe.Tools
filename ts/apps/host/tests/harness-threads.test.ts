@@ -1,6 +1,7 @@
 import { markReadings } from "../src/resource-adapters.ts";
 import { openRecordingWriter, openRecordingReader, nativeCatalogIdentity } from "../src/native-recording.ts";
 import { fansDocumentSchema } from "@pe/agent-contracts";
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { detachedBridge, sessionView, consentService, harnessThreads, testSpawner, settle, testHostInputs, captureStore, journalAt } from "./effect-test.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
@@ -222,6 +223,7 @@ test.each(["claude", "codex"] as const)(
       ),
     );
     const writes: unknown[] = [];
+    const equipmentSubject = elementSubject(snapshot.nodes.find((node: { id: number }) => node.id === 14577391)!);
     const invokeFixture = (op: string, input: unknown, _session?: string, _doc?: string | null, requestId?: string) =>
         Effect.promise(async () => {
           let value: unknown;
@@ -320,7 +322,7 @@ test.each(["claude", "codex"] as const)(
                 target: { document: address },
                 result: {
                   revision: 1,
-                  doc: { equipmentFlows: { "14577391": { edit: { value: { cfm: 975 } } } } },
+                  doc: { equipmentFlows: { [equipmentSubject]: { edit: { value: { cfm: 975 } } } } },
                 },
               });
               const census = await routes.workspace.instances();
@@ -358,7 +360,7 @@ test.each(["claude", "codex"] as const)(
                       press: null,
                       patches: [
                         {
-                          path: ["equipmentFlows", "14577391"],
+                          path: ["equipmentFlows", equipmentSubject],
                           value: { edit: { value: { cfm: 975, source: "chain" } } },
                         },
                         {

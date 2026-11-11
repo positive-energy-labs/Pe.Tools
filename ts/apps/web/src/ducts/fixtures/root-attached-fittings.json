@@ -1,5 +1,5 @@
 {
-  "provenance": "Regression excerpts from retained Project A snapshot cb808a82d7c48f25a487fb80de72185c8c557c2e757e29f863b7adba1d6e669c. Root equipment and fitting connector geometry are retained; tests synthesize only the downstream terminal and group. This is not a complete Project A solve.",
+  "provenance": "Native re-capture 2026-11-10: verbatim nodes (uniqueId included) from ducts.snapshot.walk, selector systems SA 2, FA 52, RA 39, RA 59, SA 10, read on a controlled dev session over the Project A local model copy (20261028); nothing saved. The nodes replace the excerpts first taken from retained Project A snapshot cb808a82d7c48f25a487fb80de72185c8c557c2e757e29f863b7adba1d6e669c, which lacked uniqueId. Root equipment and fitting connector geometry are retained; tests synthesize only the downstream terminal and group. The case scalars (ports, areas, ratio) come from the earlier snapshot and match these connectors. This is not a complete Project A solve.",
   "cases": [
     {
       "fitting": {
@@ -10,7 +10,11 @@
         "type": "45 Degree",
         "partType": "Transition",
         "levelId": 1311741,
-        "point": [325.486, 616.732, -7.451],
+        "point": [
+          325.4857,
+          616.7315,
+          -7.4508
+        ],
         "groupId": "g9185727",
         "systemName": "RA 59",
         "classification": "Return Air",
@@ -18,7 +22,11 @@
           {
             "index": 0,
             "kind": "end",
-            "point": [325.486, 616.732, -7.451],
+            "point": [
+              325.4857,
+              616.7315,
+              -7.4508
+            ],
             "shape": "rectangular",
             "size": "12x12",
             "widthIn": 12,
@@ -29,12 +37,28 @@
               "elementId": 11599307,
               "connector": 1
             },
-            "areaFt2": 1
+            "areaFt2": 1,
+            "facing": [
+              0.707,
+              -0.707,
+              0
+            ],
+            "widthAxis": [
+              0.707,
+              0.707,
+              0
+            ],
+            "isPrimary": true,
+            "isSecondary": false
           },
           {
             "index": 1,
             "kind": "end",
-            "point": [325.343, 616.874, -7.451],
+            "point": [
+              325.3435,
+              616.8738,
+              -7.4508
+            ],
             "shape": "round",
             "size": "10\"\u00c3\u00b8",
             "diameterIn": 10,
@@ -44,15 +68,44 @@
               "elementId": 10205336,
               "connector": 2
             },
-            "areaFt2": 0.54542
+            "areaFt2": 0.54542,
+            "facing": [
+              -0.707,
+              0.707,
+              0
+            ],
+            "isPrimary": false,
+            "isSecondary": true
           }
         ],
-        "facts": [],
+        "facts": [
+          {
+            "key": "angle",
+            "value": 45,
+            "text": "type:690191; uid:74a14448-5bab-4c76-a56e-75868998bac1-000a880f; parameter:689244; name:Angle; spec:autodesk.spec.aec:angle-2.0.0; rawRadians:0.7853981633974475; builtIn:INVALID; sharedGuid:none",
+            "unit": "deg",
+            "provenance": "geometry"
+          },
+          {
+            "key": "inlet",
+            "value": 0,
+            "unit": "",
+            "provenance": "derived"
+          },
+          {
+            "key": "aoOverA1",
+            "value": 0.545415391248228,
+            "unit": "",
+            "provenance": "geometry"
+          }
+        ],
+        "uniqueId": "6739b176-eaf6-4ee4-b9b4-fbf9af765558-00bd2d2f",
         "loss": {
           "method": "ashrae-table",
           "serverId": "8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19",
           "fields": {}
-        }
+        },
+        "phaseCreated": "New Construction"
       },
       "equipment": {
         "id": 10205336,
@@ -61,14 +114,22 @@
         "family": "Wine Guardian DS050 Indoor Unit",
         "type": "DS050",
         "levelId": 7288514,
-        "point": [324.252, 617.965, -8.271],
+        "point": [
+          324.2522,
+          617.9651,
+          -8.2708
+        ],
         "systemName": "SA 92,RA 59",
         "classification": "Supply Air,Return Air,Other,Sanitary",
         "connectors": [
           {
             "index": 2,
             "kind": "end",
-            "point": [325.343, 616.874, -7.451],
+            "point": [
+              325.3435,
+              616.8738,
+              -7.4508
+            ],
             "shape": "round",
             "size": "10\"\u00c3\u00b8",
             "diameterIn": 10,
@@ -78,12 +139,21 @@
               "elementId": 12398836,
               "connector": 1
             },
-            "areaFt2": 0.54542
+            "areaFt2": 0.54542,
+            "facing": [
+              0.707,
+              -0.707,
+              0
+            ]
           },
           {
             "index": 1,
             "kind": "end",
-            "point": [324.252, 617.965, -6.133],
+            "point": [
+              324.2522,
+              617.9651,
+              -6.1333
+            ],
             "shape": "round",
             "size": "10\"\u00c3\u00b8",
             "diameterIn": 10,
@@ -93,17 +163,25 @@
               "elementId": 12398824,
               "connector": 1
             },
-            "areaFt2": 0.54542
+            "areaFt2": 0.54542,
+            "facing": [
+              0,
+              0,
+              1
+            ]
           }
         ],
         "facts": [
           {
-            "key": "fanFlow",
-            "value": 410,
-            "unit": "cfm",
+            "key": "mark",
+            "text": "WS-2E",
+            "unit": "",
             "provenance": "designer-stated"
           }
-        ]
+        ],
+        "uniqueId": "7d4bec96-9633-46c7-b8c2-eff7cac21ca5-009bb898",
+        "label": "WS-2E",
+        "phaseCreated": "New Construction"
       },
       "rootEquipmentPort": 2,
       "inletIndex": 1,
@@ -121,7 +199,11 @@
         "type": "45 Degree",
         "partType": "Transition",
         "levelId": 5765339,
-        "point": [307.512, 590.045, 25.602],
+        "point": [
+          307.5118,
+          590.0446,
+          25.6024
+        ],
         "groupId": "g6497546",
         "systemName": "RA 39",
         "classification": "Return Air",
@@ -129,7 +211,11 @@
           {
             "index": 2,
             "kind": "end",
-            "point": [307.614, 589.942, 25.602],
+            "point": [
+              307.6141,
+              589.9424,
+              25.6024
+            ],
             "shape": "rectangular",
             "size": "20x21.2",
             "widthIn": 20,
@@ -141,12 +227,28 @@
               "elementId": 6497546,
               "connector": 0
             },
-            "areaFt2": 2.94278
+            "areaFt2": 2.94278,
+            "facing": [
+              0.707,
+              -0.707,
+              0
+            ],
+            "widthAxis": [
+              0.707,
+              0.707,
+              0
+            ],
+            "isPrimary": false,
+            "isSecondary": true
           },
           {
             "index": 1,
             "kind": "end",
-            "point": [307.512, 590.045, 25.602],
+            "point": [
+              307.5118,
+              590.0446,
+              25.6024
+            ],
             "shape": "rectangular",
             "size": "21.2x19.8",
             "widthIn": 21.188,
@@ -158,10 +260,31 @@
               "elementId": 6497307,
               "connector": 5
             },
-            "areaFt2": 2.90599
+            "areaFt2": 2.90599,
+            "facing": [
+              -0.707,
+              0.707,
+              0
+            ],
+            "widthAxis": [
+              -0.707,
+              -0.707,
+              0
+            ],
+            "isPrimary": true,
+            "isSecondary": false
           }
         ],
-        "facts": [],
+        "facts": [
+          {
+            "key": "angle",
+            "value": 45,
+            "text": "type:691064; uid:74a14448-5bab-4c76-a56e-75868998bac1-000a8b78; parameter:690872; name:Angle; spec:autodesk.spec.aec:angle-2.0.0; rawRadians:0.7853981633974475; builtIn:INVALID; sharedGuid:none",
+            "unit": "deg",
+            "provenance": "geometry"
+          }
+        ],
+        "uniqueId": "fda6bcc6-c863-4760-be06-e5cd05f649b2-00632515",
         "loss": {
           "method": "ashrae-table",
           "serverId": "8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19",
@@ -169,7 +292,8 @@
           "fields": {
             "ASHRAETableName": "ER4-2"
           }
-        }
+        },
+        "phaseCreated": "New Construction"
       },
       "equipment": {
         "id": 6497307,
@@ -178,26 +302,22 @@
         "family": "Aprilaire 2000 Series MERV16 Filter Chassis",
         "type": "20x25 - model 2216 - up to 1000 cfm",
         "levelId": 5765339,
-        "point": [307.512, 590.045, 25.602],
+        "point": [
+          307.5118,
+          590.0446,
+          25.6024
+        ],
         "systemName": "RA 39",
         "classification": "Return Air,Power",
         "connectors": [
           {
-            "index": 4,
-            "kind": "end",
-            "point": [307.114, 590.442, 25.602],
-            "shape": "rectangular",
-            "size": "21.2x19.8",
-            "widthIn": 21.188,
-            "heightIn": 19.75,
-            "direction": "bidirectional",
-            "classification": "ReturnAir",
-            "areaFt2": 2.90599
-          },
-          {
             "index": 5,
             "kind": "end",
-            "point": [307.512, 590.045, 25.602],
+            "point": [
+              307.5118,
+              590.0446,
+              25.6024
+            ],
             "shape": "rectangular",
             "size": "21.2x19.8",
             "widthIn": 21.188,
@@ -209,10 +329,56 @@
               "elementId": 6497557,
               "connector": 1
             },
-            "areaFt2": 2.90599
+            "areaFt2": 2.90599,
+            "facing": [
+              0.707,
+              -0.707,
+              0
+            ],
+            "widthAxis": [
+              -0.707,
+              -0.707,
+              0
+            ]
+          },
+          {
+            "index": 4,
+            "kind": "end",
+            "point": [
+              307.1141,
+              590.4424,
+              25.6024
+            ],
+            "shape": "rectangular",
+            "size": "21.2x19.8",
+            "widthIn": 21.188,
+            "heightIn": 19.75,
+            "direction": "bidirectional",
+            "classification": "ReturnAir",
+            "areaFt2": 2.90599,
+            "facing": [
+              -0.707,
+              0.707,
+              0
+            ],
+            "widthAxis": [
+              -0.707,
+              -0.707,
+              0
+            ]
           }
         ],
-        "facts": []
+        "facts": [
+          {
+            "key": "mark",
+            "text": "FR-1",
+            "unit": "",
+            "provenance": "designer-stated"
+          }
+        ],
+        "uniqueId": "fda6bcc6-c863-4760-be06-e5cd05f649b2-0063241b",
+        "label": "FR-1",
+        "phaseCreated": "New Construction"
       },
       "rootEquipmentPort": 5,
       "inletIndex": 1,
@@ -230,7 +396,11 @@
         "type": "45 Degree",
         "partType": "Transition",
         "levelId": 1311741,
-        "point": [381.069, 654.158, -6.909],
+        "point": [
+          381.0687,
+          654.1581,
+          -6.9085
+        ],
         "groupId": "g6064399",
         "systemName": "SA 10",
         "classification": "Supply Air",
@@ -238,7 +408,11 @@
           {
             "index": 2,
             "kind": "end",
-            "point": [381.069, 654.158, -6.305],
+            "point": [
+              381.0687,
+              654.1581,
+              -6.305
+            ],
             "shape": "rectangular",
             "size": "12x12",
             "widthIn": 12,
@@ -249,12 +423,28 @@
               "elementId": 12182309,
               "connector": 0
             },
-            "areaFt2": 1
+            "areaFt2": 1,
+            "facing": [
+              0,
+              0,
+              1
+            ],
+            "widthAxis": [
+              0.707,
+              0.707,
+              0
+            ],
+            "isPrimary": false,
+            "isSecondary": true
           },
           {
             "index": 1,
             "kind": "end",
-            "point": [381.069, 654.158, -6.909],
+            "point": [
+              381.0687,
+              654.1581,
+              -6.9085
+            ],
             "shape": "rectangular",
             "size": "16x18",
             "widthIn": 16,
@@ -265,15 +455,49 @@
               "elementId": 6064216,
               "connector": 1
             },
-            "areaFt2": 2
+            "areaFt2": 2,
+            "facing": [
+              0,
+              0,
+              -1
+            ],
+            "widthAxis": [
+              -0.707,
+              -0.707,
+              0
+            ],
+            "isPrimary": true,
+            "isSecondary": false
           }
         ],
-        "facts": [],
+        "facts": [
+          {
+            "key": "angle",
+            "value": 45,
+            "text": "type:691064; uid:74a14448-5bab-4c76-a56e-75868998bac1-000a8b78; parameter:690872; name:Angle; spec:autodesk.spec.aec:angle-2.0.0; rawRadians:0.7853981633974475; builtIn:INVALID; sharedGuid:none",
+            "unit": "deg",
+            "provenance": "geometry"
+          },
+          {
+            "key": "inlet",
+            "value": 1,
+            "unit": "",
+            "provenance": "derived"
+          },
+          {
+            "key": "aoOverA1",
+            "value": 0.5,
+            "unit": "",
+            "provenance": "geometry"
+          }
+        ],
+        "uniqueId": "88b28097-3323-4e8b-8ad8-d5a7af0a5400-009be0b7",
         "loss": {
           "method": "ashrae-table",
           "serverId": "8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19",
           "fields": {}
-        }
+        },
+        "phaseCreated": "New Construction"
       },
       "equipment": {
         "id": 6064216,
@@ -282,30 +506,22 @@
         "family": "SunTherm M Series Vertical Air Handler",
         "type": "Mortex MSVT18",
         "levelId": 1311741,
-        "point": [380.833, 654.394, -10.491],
+        "point": [
+          380.833,
+          654.3938,
+          -10.4912
+        ],
         "systemName": "SA 10,RA 9,H/CHWS 43,H/CHWR 48",
         "classification": "Supply Air,Communication,Return Air,Hydronic Supply,Hydronic Return",
         "connectors": [
           {
-            "index": 1,
-            "kind": "end",
-            "point": [381.069, 654.158, -6.909],
-            "shape": "rectangular",
-            "size": "16x18",
-            "widthIn": 16,
-            "heightIn": 18,
-            "direction": "out",
-            "classification": "SupplyAir",
-            "connectedTo": {
-              "elementId": 10220093,
-              "connector": 1
-            },
-            "areaFt2": 2
-          },
-          {
             "index": 3,
             "kind": "end",
-            "point": [381.069, 654.158, -10.458],
+            "point": [
+              381.0687,
+              654.1581,
+              -10.4583
+            ],
             "shape": "rectangular",
             "size": "17.5x21",
             "widthIn": 17.5,
@@ -316,10 +532,60 @@
               "elementId": 12186032,
               "connector": 1
             },
-            "areaFt2": 2.55208
+            "areaFt2": 2.55208,
+            "facing": [
+              0,
+              0,
+              -1
+            ],
+            "widthAxis": [
+              -0.707,
+              -0.707,
+              0
+            ]
+          },
+          {
+            "index": 1,
+            "kind": "end",
+            "point": [
+              381.0687,
+              654.1581,
+              -6.9085
+            ],
+            "shape": "rectangular",
+            "size": "16x18",
+            "widthIn": 16,
+            "heightIn": 18,
+            "direction": "out",
+            "classification": "SupplyAir",
+            "connectedTo": {
+              "elementId": 10220093,
+              "connector": 1
+            },
+            "areaFt2": 2,
+            "facing": [
+              0,
+              0,
+              1
+            ],
+            "widthAxis": [
+              -0.707,
+              -0.707,
+              0
+            ]
           }
         ],
-        "facts": []
+        "facts": [
+          {
+            "key": "mark",
+            "text": "FC-9",
+            "unit": "",
+            "provenance": "designer-stated"
+          }
+        ],
+        "uniqueId": "30a95c8c-a80c-4055-b5fa-fcd22fcad57a-005c8858",
+        "label": "FC-9",
+        "phaseCreated": "New Construction"
       },
       "rootEquipmentPort": 1,
       "inletIndex": 1,

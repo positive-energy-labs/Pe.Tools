@@ -132,6 +132,7 @@ public sealed record TakeoffRhvacLinksData(IReadOnlyList<TakeoffWriteResult> Wri
 public sealed record RoomsLevel(string Name, double Elevation, IReadOnlyList<string> Views);
 public sealed record RoomsRegion(
     long ElementId,
+    string UniqueId,
     Guid Guid,
     string View,
     string Level,

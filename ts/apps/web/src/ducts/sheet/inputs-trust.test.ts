@@ -1,3 +1,4 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 /**
  * The inputs pane kaitpw distrusted on cloud Chadds MUAS-1 (2026-10-30; reconstruction in
  * Pe.Tools/.artifacts/tmp/inputs-trust/reconstruction.md): kind rows by raw key and per instance,
@@ -55,7 +56,7 @@ const port = (index: number, direction: "in" | "out", classification: string) =>
   }) as unknown as Node["connectors"][number];
 // Broan B160E75RT as Chadds models it: supply and exhaust outlets, supply and exhaust inlets.
 const erv = (id: number): Node =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
     id,
     kind: "equipment",
     category: "Mechanical Equipment",
@@ -145,7 +146,7 @@ it("each kind option says what it means for this unit's ports, role and flow", (
 
 it("a row stays when its value is not typed, carrying the source underneath and no clear", () => {
   const rows = inputRows({
-    snapshot: { nodes: [] },
+    snapshot: { nodes: [7, 8].map(id => ({ ...erv(id), uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}` })) },
     doc: null,
     inputs: inputs({
       terminals: {
@@ -174,10 +175,10 @@ it("a row stays when its value is not typed, carrying the source underneath and 
     clear: null,
   });
   const typed = rows.find((r) => r.key === "terminal:8:cfm")!;
-  expect(typed).toMatchObject({ typed: true, clear: { flows: { 8: null } } });
+  expect(typed).toMatchObject({ typed: true, clear: { flows: { [elementSubject(erv(8))]: null } } });
   if (typed.control.kind !== "number") throw new Error("number row");
   expect(ductsSheetEditsSchema.parse(typed.control.edit(160))).toEqual({
-    flows: { 8: { cfm: 160 } },
+    flows: { [elementSubject(erv(8))]: { cfm: 160 } },
   });
 });
 

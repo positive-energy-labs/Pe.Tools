@@ -65,21 +65,21 @@ test("the chat head reads executable graph Work and cell families for addressed 
 
 test("admitted Families contributes a head row with its typed focus and exact recorded target", () => {
   reads.route = "families";
-  reads.doc = { cells: { '["Family","Type","Parameter"]': { edit: { value: "changed" } } } };
+  reads.doc = { cells: { 'name:["Family","Type"]#field:Parameter': { edit: { value: "changed" } } } };
   const document = { session: "original-session", openId: "original-open" };
   const exits = { open: vi.fn(), planIn: vi.fn() };
   const { result } = renderHook(() => useHeadWorks(null, "Building", exits, document));
   expect(reads.entries.filter(({ work }) => work.route === "families")).toHaveLength(1);
   const head = result.current.find((row) => row.route === "Families")!;
   expect(head).toBeDefined();
-  expect(head.groupOf('["Family","Type","Parameter"]')).toEqual(
-    publicRoutes.get("families")!.work!.cells[0]!.groupOf('["Family","Type","Parameter"]'),
+  expect(head.groupOf('name:["Family","Type"]#field:Parameter')).toEqual(
+    publicRoutes.get("families")!.work!.cells[0]!.groupOf('name:["Family","Type"]#field:Parameter'),
   );
-  head.open?.('["Family","Type","Parameter"]');
+  head.open?.('name:["Family","Type"]#field:Parameter');
   expect(exits.open).toHaveBeenCalledWith(
     expect.objectContaining({
       route: "families",
-      page: expect.objectContaining({ focus: '["Family","Type","Parameter"]' }),
+      page: expect.objectContaining({ focus: 'name:["Family","Type"]#field:Parameter' }),
       carry: expect.objectContaining({ target: JSON.stringify({ kind: "open", ref: document }) }),
     }),
   );

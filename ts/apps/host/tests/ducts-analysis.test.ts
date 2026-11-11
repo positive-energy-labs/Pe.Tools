@@ -66,7 +66,7 @@ function fixture() {
       },
     ],
     nodes: [
-      {
+      { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,
         id: 1,
         kind: "equipment",
         category: "Equipment",
@@ -77,7 +77,7 @@ function fixture() {
         connectors: [connector(2)],
         facts: [],
       },
-      {
+      { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(2).toString(16).padStart(8, "0")}`,
         id: 2,
         kind: "terminal",
         flowParameter: "revit:Flow",
@@ -94,6 +94,8 @@ function fixture() {
         ],
         terminalDrop: { catalogDropInWg: 0.08, assignedPressureDropInWg: null, writable: false },
       },
+      { id: 3, uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000003", kind: "accessory",
+        category: "Accessory", family: "Fixture", type: "Fixture", connectors: [], facts: [] },
     ],
     segments: [],
     levels: [],
@@ -810,11 +812,11 @@ test("actual analysis handler shares bounded prescribed hydraulic closure and ex
 function candidateWork() {
   return fansDocumentSchema.parse({
     terminalDrops: {
-      "2": {
+      "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000002": {
         edit: { value: { inWg: 0.12, source: "Approved purpose point" } },
       },
     },
-    componentDrops: { "3": { edit: { value: { inWg: 0.02, source: "Stated component" } } } },
+    componentDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000003": { edit: { value: { inWg: 0.02, source: "Stated component" } } } },
     parameters: { terminalDrop: { edit: { value: "TerminalDrop" } } },
   });
 }
@@ -910,7 +912,7 @@ test("apply-request builds a canonical immutable candidate without reacquiring",
 test("a fan cell left in the ducts Work is not priced; at the fans binding it is", async () => {
   const f = fixture();
   // Analysis reads fan drops from the fans Work only.
-  const drop = { "2": { edit: { value: { inWg: 0.12, source: "Approved purpose point" } } } };
+  const drop = { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000002": { edit: { value: { inWg: 0.12, source: "Approved purpose point" } } } };
   f.sources.readWork = works(() => ({}), 1, () => ({ terminalDrops: drop }));
   await expect(f.api.read(read({ kind: "fresh", target: f.target }))).rejects.toThrow();
   f.sources.readWork = works(() => ({}));
@@ -1014,7 +1016,9 @@ test("apply-request cannot turn empty Work or physical fan required head into na
   f.snapshot.nodes[0]!.connectors[0]!.direction = "out";
   doc = fansDocumentSchema.parse({
     ...candidateWork(),
-    esp: { "1": { edit: { value: { inWg: 0.25 } } } },
+    terminalDrops: { "UniqueId:purpose-2": Object.values(candidateWork().terminalDrops)[0] },
+    componentDrops: { "UniqueId:purpose-3": Object.values(candidateWork().componentDrops)[0] },
+    esp: { "UniqueId:purpose-1": { edit: { value: { inWg: 0.25 } } } },
     calculation: {
       fan: {
         edit: {

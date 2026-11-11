@@ -122,7 +122,7 @@ describe("mounted route view custody", () => {
     store.subscribe((intent) => {
       commandId = intent.commandId;
     });
-    const system = JSON.stringify({kind:"ids",ids:[JSON.stringify(["ducts-system","Supply 1"])]});
+    const system = JSON.stringify({kind:"ids",ids:["system-name:Supply 1"]});
     const page = {...ducts(id1).page,system};
     const result = store.set("t", "ducts", id1, lease.revision, { system });
     store.publish({ ...ducts(id1), page });

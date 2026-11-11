@@ -1,3 +1,4 @@
+import { workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { commands, tools, canonicalRouteInput, workKey, type DuctsApplyInput ,
@@ -6,7 +7,7 @@ import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
 import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { ductsDesign, stagedDucts, workHandleSchema } from "@pe/agent-contracts";
+import { ductsDesign, stagedDucts, subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { Effect } from "effect";
@@ -33,6 +34,8 @@ const prepared = z.object({
   input: z.record(z.string(), z.unknown()),
   dependencies: z.unknown(),
   nothingToWrite: z.boolean().optional(),
+  subjects: z.record(z.string(), z.string()).default({}),
+  cells: z.array(z.tuple([z.string(), z.string()])).default([]),
   labels: z.record(z.string(), z.string()).optional(),
 });
 const targetOf = (ctx: CommandContext) => {
@@ -92,6 +95,7 @@ export async function lossSnapshot(
 export function unwrittenCells(
   request: Pick<DuctsApplyInput, "terminals" | "components" | "equipment" | "terminalFlows" | "equipmentFlows">,
   cells: readonly (readonly [string, string])[],
+  snapshot: Pick<DuctSnapshot, "nodes" | "segments">,
 ): (readonly [string, string])[] {
   const written: Record<string, readonly { id: number }[]> = {
     terminalDrops: request.terminals,
@@ -100,7 +104,7 @@ export function unwrittenCells(
     flows: request.terminalFlows,
     equipmentFlows: request.equipmentFlows,
   };
-  return cells.filter(([segment, key]) => written[segment] && !written[segment]!.some((row) => String(row.id) === key),
+  return cells.filter(([segment, key]) => written[segment] && !written[segment]!.some((row) => row.id === workElementId(snapshot, key)),
   );
 }
 
@@ -194,7 +198,12 @@ export function ductsExecutors(
       prepare: async () => {
         const ductsScope = doc.writeIntent.edit?.value;
         const fanScope = fans.writeIntent.edit?.value;
-        const intent = { ...ductsScope, walk: fanScope?.walk };
+        // The Work schema decoded each group SubjectRef; the engine speaks the group's own key.
+        const intent = {
+          ...ductsScope,
+          groups: ductsScope?.groups?.map((code) => String(subjectOf(code).key)),
+          walk: fanScope?.walk,
+        };
         const firm = firmLayer(await runPods(deps, deps.files!.firm));
         const criteria = resolveCriteria(workLayer(design), null, firm);
         const nativeRead = deps.nativeRead;
@@ -283,8 +292,8 @@ export function ductsExecutors(
             const cells = fanScope?.walk
               ? [...(ductsScope?.cells ?? []), ...fanWriteCells(fans, snapshot)]
               : ductsScope?.cells;
-            const scoped = scopeApplyRequest(request, snapshot.store, cells);
-            const unwritten = unwrittenCells(scoped, cells ?? []);
+            const scoped = scopeApplyRequest(request, snapshot.store, cells, snapshot);
+            const unwritten = unwrittenCells(scoped, cells ?? [], snapshot);
             if (unwritten.length)
               throw refused(
                 `These requested cells derive no write in this scope: ${unwritten
@@ -296,8 +305,10 @@ export function ductsExecutors(
               );
             const label = elementLabeler(snapshot, { unique: true });
             return {
+              cells: cells ?? [],
+              subjects: Object.fromEntries((cells ?? []).filter(([s]) => ["terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows", "roles"].includes(s)).map(([, k]) => [k, String(workElementId(snapshot, k))])),
               input: scoped as unknown as Record<string, unknown>,
-              nothingToWrite: pendingCount(design, snapshot.store) === 0,
+              nothingToWrite: pendingCount(design, snapshot.store, snapshot) === 0,
               labels: Object.fromEntries(snapshot.nodes.map((n) => [String(n.id), label(n.id)])),
               dependencies: {
                 snapshot: ductWriteEvidence(snapshot),
@@ -346,7 +357,7 @@ export function ductsExecutors(
         native: "ducts.apply.plan",
         refusePlan: (value: unknown) => lossPlanRefusal((value as DuctsApply.Res.Response).writes),
         retires: (input: Record<string, unknown>, value: unknown) =>
-          appliedCellPaths(input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response),
+          appliedCellPaths(input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response, p.subjects, p.cells),
       },
       heal: {
         key: "ducts.heal",

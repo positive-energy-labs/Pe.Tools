@@ -599,7 +599,6 @@ function infer(
     union(a, b);
   };
   // (0) C#'s inline parts (a two-port part inside one straight duct's body, ports open and along
-  // the run; DuctHealth.Inline), each one a person may rule on, kept while both ports are still open.
   const portOf = new Map(open.map((p) => [p.k, p]));
   for (const issue of snapshot.issues) {
     const host = issue.kind === "inline" ? issue.inline : null;
@@ -631,7 +630,6 @@ function infer(
   }
   const pairs: { a: (typeof open)[number]; b: (typeof open)[number]; d: number }[] = [];
   // Each end's box is `tol` either way in a grid of `tol` cells: its own cell's list holds every
-  // end within `tol` (its 27 neighbouring cells), in the order the all-pairs scan met them.
   const near = cells(
     open.map((p) => [p.point.map((v) => v - tol), p.point.map((v) => v + tol)] as const),
     tol || 1,
@@ -678,9 +676,6 @@ function infer(
   );
   const faceTol = FACE_TOL_IN / 12;
   // Each face's box: its centerline piece or origin, out by its section's reach (w + h bounds a
-  // rectangle's half-diagonal) and the tolerance, so a port's own cell lists every face it lands on.
-  // ponytail: 1 ft cells, as 2 in cells over a large duct's box run to tens of thousands; a long
-  // diagonal duct still covers its whole box, an oriented index if that ever measures slow.
   const faceAt = cells(
     faces.map((f) => {
       const ends = f.label === "side" ? [f.a, add(f.a, f.u, f.len)] : [f.origin];
@@ -777,8 +772,6 @@ function infer(
     }
   }
   // (c) A terminal whose open connector lies in a duct's body or within `FACE_TOL_IN` of its open
-  // end, facing along the duct either way, joins that end even facing the wrong way (Project A
-  // grilles 10922066, 10922068 inside their 72x3 plenums): always `anomalous`.
   const ends = open.filter((q) => q.axis && "polyline" in byId.get(q.id)!);
   for (const p of open) {
     const e = byId.get(p.id)!;
@@ -848,7 +841,6 @@ function infer(
       if (gapIn <= Math.max(FACE_TOL_IN, tolIn) || gapIn > MISSED_JOIN_MAX_IN) continue;
       if (dot(a.normal, b.normal) > -NEAR_MISS_OPPOSED_COS) continue;
       // Chadds SA 44's opposed mouths overlap: captured normals point away along their separation.
-      // An advisory accepts either signed side of the plane; both centres must lie within the sections.
       const ab = land(a, b.origin, b.normal),
         ba = land(b, a.origin, a.normal);
       if (!ab || !ba) continue;
@@ -1020,7 +1012,8 @@ export function tolerate(
         },
       ],
       facts: [],
-      uniqueId: null,
+      // A proposed tap has no native owner and never mints an element Work cell.
+      uniqueId: `inference:${t.id}`,
     };
     nodes.push(tap);
     byId.set(id, tap);
@@ -1055,7 +1048,7 @@ export function tolerate(
     const rest: Segment = {
       ...main,
       id,
-      uniqueId: null,
+      uniqueId: main.uniqueId,
       polyline: [add(a, u, resume), b],
       lengthFt: (main.lengthFt * (len - resume)) / len,
       connectors: [...far, end(add(a, u, resume), x.ports[1])],

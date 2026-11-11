@@ -1,4 +1,5 @@
 import { useContext } from "react";
+import { regionSubject } from "./subject";
 import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attention";
 /**
  * The rooms table: one row per zone, room and held region. Every edit stages an owner cell
@@ -98,11 +99,11 @@ export function RoomsTable({
   const attention = useAttention(doc);
   const selected = new Set(
     rows
-      .filter((row) => attention.selected.has(elementKey(row.region.elementId)))
+      .filter((row) => attention.selected.has(elementKey(row.region.uniqueId)))
       .map((row) => row.region.guid),
   );
   const hovered =
-    rows.find((row) => attention.hovered.has(elementKey(row.region.elementId)))?.region.guid ??
+    rows.find((row) => attention.hovered.has(elementKey(row.region.uniqueId)))?.region.guid ??
     null;
   const columns = useMemo<Column<RoomRow>[]>(() => {
     const zoneLabels = new Map(
@@ -257,7 +258,7 @@ export function RoomsTable({
         visibleKeys={visibleKeys}
         selection={{ selected, onChange: onSelect }}
         activeKey={hovered}
-        subject={(row) => ({ doc, key: `room:${row.region.guid}` })}
+        subject={(row) => ({ doc, key: regionSubject(row.region.guid) })}
         empty={
           rows.length ? (
             <EmptyState story="filter" exit="clear the search">

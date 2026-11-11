@@ -1,3 +1,4 @@
+import { systemCode } from "./identity";
 import { command } from "../route/typed-actions.ts";
 import { poseFields } from "../route/defaults";
 import { bindings } from "./bindings";
@@ -19,7 +20,6 @@ import {
   field,
   subjectSchema,
   namesOf,
-  localId,
   split,
   whenSubject,
 } from "../route/defaults.ts";
@@ -93,7 +93,7 @@ export const module = route({
     read: roster,
     options: (data) =>
       (data?.systems ?? []).map((system) => ({
-        id: localId("ducts-system", system.name),
+        id: systemCode(system.name),
         label: system.name,
       })),
   },

@@ -44,6 +44,8 @@ export interface RowState {
   refusal?: string | null;
   /** The Revit elements the row stands for: right-click or BX shows them in Revit (the app's element menu). */
   revit?: readonly number[];
+  /** The same elements' UniqueIds: the attention bus keys on these, never on `revit`. */
+  uniqueIds?: readonly string[];
   /** Captured native references; the app verifies kind and expected identity before dispatch. */
   revitRefs?: readonly RevitElementReference[];
 }
@@ -131,7 +133,9 @@ export function Row(props: RowProps) {
     ...reachProps(),
     ...(props.subject
       ? mention(props.subject)
-      : mark(props.revit?.[0] == null ? null : elementKey(props.revit[0]))),
+      : mark(
+          props.uniqueIds?.[0] == null ? null : elementKey(props.uniqueIds[0]),
+        )),
     id: props.id,
     role: props.role,
     onClick: refusal ? undefined : props.onClick,

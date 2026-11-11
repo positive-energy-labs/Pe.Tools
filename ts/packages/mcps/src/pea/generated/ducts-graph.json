@@ -117,7 +117,6 @@
       "share": true,
       "agent": "set",
       "cardinality": "many",
-      "identity": "subject",
       "picker": {
         "reading": "roster",
         "options": "subject"
@@ -203,16 +202,6 @@
       "kinds": [
         "focus"
       ]
-    }
-  },
-  "identities": {
-    "subject": {
-      "kind": "local",
-      "codec": "local"
-    },
-    "focus": {
-      "kind": "local",
-      "codec": "local"
     }
   },
   "subject": {

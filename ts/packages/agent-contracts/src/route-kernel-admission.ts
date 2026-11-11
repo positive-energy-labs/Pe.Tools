@@ -2,7 +2,7 @@ import type { SemanticPreviewKey } from "./semantic-actions.ts";
 import type { BodyBindings, CodecBindings, EntryTable } from "./route-kernel-bodies.ts";
 import type { RouteDiagnostic, RouteGraphJson } from "./route-kernel-data.ts";
 import type { AdmittedRoute } from "./route-module.ts";
-import type { IdentityBindings, SchemaTable } from "./route-kernel-page.ts";
+import type { SchemaTable } from "./route-kernel-page.ts";
 
 import { z } from "zod";
 
@@ -68,7 +68,6 @@ export interface RouteModule<
   readonly data: G & { readonly readings: LinkedReadings<G, E> };
   readonly schemas: S;
   readonly codecs: CodecBindings<G, S>;
-  readonly identities: IdentityBindings<G>;
   readonly entries: E;
   readonly bodies: BodyBindings<G, S, E, Render>;
   /** Source adapters imported by the module travel in its verified executable closure. */

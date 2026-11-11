@@ -4,6 +4,7 @@
 
 ## Decided
 
+- 2026-11-10, kaitpw: "The carrier GUID is the rooms domain's stable identity" and "Don't key attention by the FilledRegion's UniqueId". Restated: rooms attention uses ADR 0035 `region` subjects minted from the carrier GUID through `subjectCode`; domain selection and commands retain that GUID, while membership resolves to the current Revit element.
 - 2026-09-24, a `/rooms` row is a Room Region, a Revit Filled Region carrying the `_PE_TakeoffGuid` spine and the takeoff carriers. It is not a native Revit Room; native Rooms stay solver proposals.
 - 2026-09-24, partition scope is a level plus an optional bounds polygon, never a zoning region. The chosen plan view of that level is the plan image and the carrier for regions.
 - 2026-09-24, a region the user drew or edited in Revit is locked authority on rerun; the solver fills only uncovered area. User-touched is a geometry hash mismatch against provenance.

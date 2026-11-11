@@ -23,7 +23,7 @@ import { useDomProjection, useProjection } from "../lang/scroll";
 import { CellHost } from "../lang/cell";
 import { land } from "../lang/land";
 import { Row } from "../lang/row";
-import { rowRevit } from "../lang/revit-target";
+import { rowRevit, rowUniqueIds } from "../lang/revit-target";
 import { CellNavigationProvider, type CellMove } from "./cell-navigation";
 import type { ResolvedColumn } from "./master-table-columns";
 import { CELL_EDITOR, editCell, isInteractive, isTypingKey } from "./master-table-state";
@@ -47,6 +47,7 @@ interface MasterRowProps<Row extends RowData> {
   row: Row;
   subject?: Ref;
   revit?: readonly number[];
+  uniqueIds?: readonly string[];
   /** The row's key, as `data-key`: a `Connectors` anchor and a test handle. */
   rowKey: string;
   /** The row's place in the shown order: the virtualizer's measure handle and the keys' address. */
@@ -79,6 +80,7 @@ function MasterRowView<Row extends RowData>({
   index,
   measure,
   revit,
+  uniqueIds,
   subject,
   active,
   selected,
@@ -107,6 +109,7 @@ function MasterRowView<Row extends RowData>({
       data-index={index}
       subject={subject}
       revit={revit}
+      uniqueIds={uniqueIds}
       active={active}
       selected={selected}
       refusal={refusal}
@@ -135,6 +138,7 @@ const MasterRow = memo(
     previous.index === next.index &&
     previous.measure === next.measure &&
     previous.revit?.join(",") === next.revit?.join(",") &&
+    previous.uniqueIds?.join(",") === next.uniqueIds?.join(",") &&
     previous.active === next.active &&
     previous.selected === next.selected &&
     previous.refusal === next.refusal &&
@@ -513,6 +517,7 @@ export function MasterTableBody<Row extends RowData>({
             <MasterRow
               subject={subject?.(tableRow.original)}
               revit={revit?.(tableRow.original) ?? rowRevit(tableRow.original, key)}
+              uniqueIds={rowUniqueIds(tableRow.original)}
               row={tableRow.original}
               rowKey={key}
               index={rowIndex}

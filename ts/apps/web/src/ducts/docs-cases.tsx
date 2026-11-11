@@ -1,4 +1,4 @@
-import { localId } from "./identity";
+import { systemCode } from "./identity";
 import { Deferred } from "@pe/kit/lang/section";
 import { Link } from "@tanstack/react-router";
 import { CASE_GROUPS, DUCT_CASES, type DuctCase } from "@pe/agent-contracts/ducts-guide";
@@ -39,10 +39,10 @@ function CaseCard({ c }: { c: DuctCase }) {
               search={{
                 system: JSON.stringify({
                   kind: "ids",
-                  ids: e.system ? [localId("ducts-system", e.system)] : [],
+                  ids: e.system ? [systemCode(e.system)] : [],
                 }),
                 selected: JSON.stringify(
-                  e.selected ? [{ kind: "focus", id: localId("ducts-focus", e.selected) }] : [],
+                  e.selected ? [{ kind: "focus", id: e.selected }] : [],
                 ),
               }}
               className="mr-3 underline"

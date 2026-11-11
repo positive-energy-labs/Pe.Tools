@@ -5,7 +5,6 @@ import {
   historyPointSchema,
   historyPoseSchema,
   recordedWorkSchema,
-  identityCodecs,
   sameAddress,
   addressSchema,
   type HistoryBinding,
@@ -16,6 +15,7 @@ import {
   type RecordingPoint,
   type RecordingPointReason,
   type Caller,
+  documentKeyOf,
 } from "@pe/agent-contracts";
 import { canonicalRouteInput as canonicalJson } from "@pe/agent-contracts";
 import type { RecordingReader, RecordingWriter } from "../native-recording.ts";
@@ -33,11 +33,7 @@ export function localHistory(caller: Caller) {
 const json = (value: unknown) =>
   Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value)));
 const addressKey = (address: Address) => address.replaceAll("/", "\\").toLowerCase();
-const documentId = (address: Address) => {
-  const result = identityCodecs.document.encode({ document: addressKey(address) });
-  if (!result.ok) throw fail(result.reason);
-  return result.value;
-};
+const documentId = (address: Address) => documentKeyOf(addressKey(address));
 type Published = {
   generation: number;
   binding: HistoryBinding;
