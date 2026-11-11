@@ -151,7 +151,7 @@ function ArmingRoute() {
               <OutcomeLine
                 kind="refused"
                 label="refused · plan hash drift"
-                says="declined before touching anything — a refusal IS the model disagreeing, so it earns the one alarm"
+                says="declined before touching anything; the drift wears the one alarm on its cell, the refusal stays caution"
               />
             ) : null}
           </div>
