@@ -1,10 +1,16 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Pe.Revit.Parameters;
+using Pe.Shared.RevitData.Serialization;
 
 namespace Pe.Revit.Takeoff;
 
 // The one place that spells takeoff's persistence homes (README data-homes table). Everything
 // above speaks FRs and the registry only through this module — nobody else touches a Parameter.
-// Mirrors ParameterLinksProfileStorage for the Project Information blob. Extensible storage is banned.
+// Both blobs (the per-region provenance and the System registry) are owner envelopes written through
+// OwnerBlobStore: the region blob on its element, the registry on Project Information. Extensible
+// storage is banned; the one exception in the repo is the duct per-fitting results entity, which
+// Revit's pressure-drop server API requires (ADR 0032 storage amendment, rule 7).
 //
 // FOOTGUN: OST_FilledRegion.AllowsBoundParameters == false, but a shared param instance-bound to
 // Detail Items IS writable on FR instances — that indirection is the only reason this module works.
@@ -18,8 +24,11 @@ public static class TakeoffCarriers
     // Stable carrier identities. Changing any of these orphans deployed models — never reuse.
     internal static readonly Guid RoleGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9001");
     internal static readonly Guid RegionGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9002");
-    internal static readonly Guid ProvenanceGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9003");
-    internal static readonly Guid RegistryGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9004");
+    // The per-region blob's data is the consumer's (RegionProvenance on rooms and residue, TakeoffZoneProvenance
+    // on an adopted zone); the envelope version gates both. The registry's descriptor is SystemRegistry.Owner.
+    internal static readonly OwnerDescriptor Provenance = new("takeoff-region", 1,
+        new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9003"), "_PE_TakeoffProvenance",
+        "Pe takeoff machine bookkeeping blob (run id, source hash, .r10 link, holds).");
     internal static readonly Guid RoomTypeGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9005");
 
     internal static readonly Guid RoomNameGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9010");
@@ -44,12 +53,8 @@ public static class TakeoffCarriers
         new(new SharedDefinitionSpec("_PE_TakeoffGuid", SpecTypeId.String.Text,
                 Description: "Pe takeoff stable region identity.",
                 Guid: RegionGuid, Visible: false, UserModifiable: false), BuiltInCategory.OST_DetailComponents),
-        new(new SharedDefinitionSpec("_PE_TakeoffProvenance", SpecTypeId.String.Text,
-                Description: "Pe takeoff machine bookkeeping blob (run id, source hash, .r10 link, holds).",
-                Guid: ProvenanceGuid, Visible: false, UserModifiable: false), BuiltInCategory.OST_DetailComponents),
-        new(new SharedDefinitionSpec("_PE_TakeoffSystemRegistry", SpecTypeId.String.Text,
-                Description: "Versioned Pe takeoff System registry (GUID <-> tag).",
-                Guid: RegistryGuid, Visible: false, UserModifiable: false), BuiltInCategory.OST_ProjectInformation),
+        new(OwnerBlobStore.Spec(Provenance), BuiltInCategory.OST_DetailComponents),
+        new(OwnerBlobStore.Spec(SystemRegistry.Owner), BuiltInCategory.OST_ProjectInformation),
     ];
 
     private static readonly Carrier RoomTypeCarrier = new(
@@ -145,12 +150,18 @@ public static class TakeoffCarriers
             Guid.TryParse(raw, out var guid) ? guid : null);
     }
 
-    // The blob is a dumb pipe here; its schema (and fail-closed parsing) belongs to the consumer.
-    public static void WriteProvenance(FilledRegion region, string json) =>
-        Set(region, ProvenanceGuid, json);
+    // The data is a dumb pipe here; its schema (and fail-closed parsing) belongs to the consumer. The text in and
+    // out is the envelope's data; the envelope, the version rule and the refusal to overwrite belong to the store.
+    public static void WriteProvenance(FilledRegion region, string json)
+    {
+        // Dates stay strings so the stored data is the consumer's text, not a reformatted copy.
+        using var reader = new JsonTextReader(new StringReader(json)) { DateParseHandling = DateParseHandling.None };
+        _ = OwnerBlobStore.Write(region, Provenance, JObject.Load(reader));
+    }
 
+    // Null when the region holds no blob. A blob this build cannot read throws: fail closed, bytes kept.
     public static string? ReadProvenance(FilledRegion region) =>
-        region.get_Parameter(ProvenanceGuid)?.AsString() is { Length: > 0 } s ? s : null;
+        OwnerBlobStore.Read(region, Provenance).DataOrThrow()?.ToString(Formatting.None);
 
     public static void WriteRoomType(FilledRegion region, string roomType) =>
         Set(region, RoomTypeGuid, roomType);
@@ -187,22 +198,13 @@ public static class TakeoffCarriers
 
     // Absent blob = empty registry (a model that never registered a System). Any stored blob that
     // fails the codec throws — fail closed, never proceed against a half-read registry.
-    public static SystemRegistry ReadRegistry(Document document)
-    {
-        string? json = document.ProjectInformation?.get_Parameter(RegistryGuid)?.AsString();
-        return string.IsNullOrWhiteSpace(json) ? new SystemRegistry() : SystemRegistry.Deserialize(json!);
-    }
+    public static SystemRegistry ReadRegistry(Document document) =>
+        OwnerBlobStore.Read(document, SystemRegistry.Owner).DataOrThrow() is { } data
+            ? SystemRegistry.FromData(data)
+            : new SystemRegistry();
 
-    public static void WriteRegistry(Document document, SystemRegistry registry)
-    {
-        var parameter = document.ProjectInformation?.get_Parameter(RegistryGuid)
-                        ?? throw new InvalidOperationException(
-                            "System registry parameter is not bound — initialize Takeoff adoption carriers first.");
-        string json = registry.Serialize();
-        if (string.Equals(parameter.AsString(), json, StringComparison.Ordinal)) return;
-        if (!parameter.Set(json))
-            throw new InvalidOperationException("Revit rejected the System registry blob.");
-    }
+    public static void WriteRegistry(Document document, SystemRegistry registry) =>
+        _ = OwnerBlobStore.Write(document, SystemRegistry.Owner, registry.ToData());
 
     private static void Set(FilledRegion region, Guid guid, string value)
     {

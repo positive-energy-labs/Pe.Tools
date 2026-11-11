@@ -248,15 +248,18 @@ export namespace DuctsApply {
       slot?: null | string;
     }
     /**
-     * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
+     * Pe's provenance for duct losses: one owner blob in the hidden Project Information text parameter
      * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
      * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
      * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-     * edits. A v1 blob reads as v2 with no rulings; every write is v2.
+     * edits. Any other stored version or shape is refused and kept: there is no migration.
      *
      */
     export interface DuctLossStore {
+      /**
+       * On the wire only. In the model the version is the envelope's, so the stored data holds none.
+       */
       version?: number;
       rules?: {
         [k: string]: DuctRuleChoice;
@@ -522,15 +525,18 @@ export namespace DuctsApplyPlan {
       slot?: null | string;
     }
     /**
-     * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
+     * Pe's provenance for duct losses: one owner blob in the hidden Project Information text parameter
      * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
      * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
      * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-     * edits. A v1 blob reads as v2 with no rulings; every write is v2.
+     * edits. Any other stored version or shape is refused and kept: there is no migration.
      *
      */
     export interface DuctLossStore {
+      /**
+       * On the wire only. In the model the version is the envelope's, so the stored data holds none.
+       */
       version?: number;
       rules?: {
         [k: string]: DuctRuleChoice;
@@ -1632,15 +1638,18 @@ export namespace DuctsSnapshotRoster {
       terminalFlow: string;
     }
     /**
-     * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
+     * Pe's provenance for duct losses: one owner blob in the hidden Project Information text parameter
      * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
      * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
      * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-     * edits. A v1 blob reads as v2 with no rulings; every write is v2.
+     * edits. Any other stored version or shape is refused and kept: there is no migration.
      *
      */
     export interface DuctLossStore {
+      /**
+       * On the wire only. In the model the version is the envelope's, so the stored data holds none.
+       */
       version: number;
       rules: {
         [k: string]: DuctRuleChoice;
@@ -2258,15 +2267,18 @@ export namespace DuctsSnapshotWalk {
       terminalFlow: string;
     }
     /**
-     * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
+     * Pe's provenance for duct losses: one owner blob in the hidden Project Information text parameter
      * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
      * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
      * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-     * edits. A v1 blob reads as v2 with no rulings; every write is v2.
+     * edits. Any other stored version or shape is refused and kept: there is no migration.
      *
      */
     export interface DuctLossStore {
+      /**
+       * On the wire only. In the model the version is the envelope's, so the stored data holds none.
+       */
       version: number;
       rules: {
         [k: string]: DuctRuleChoice;

@@ -1,6 +1,8 @@
 using Pe.Revit.Global.Services.Document;
 using Newtonsoft.Json;
-using Pe.Revit.Global.Lib;
+using Newtonsoft.Json.Linq;
+using Pe.Revit.Parameters;
+using Pe.Shared.RevitData.Serialization;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.Loader.Documents;
 using Pe.Revit.SettingsRuntime.Modules.AutoTag;
@@ -20,8 +22,16 @@ public class AutoTagService {
     private IDocumentTracker? _documents;
     // ponytail: the extensible-storage DataStorage store was deleted without migration (kaitpw, 2026-11-06, greenfield);
     // a document saved by the old store reads as "no settings" and the user re-enters them once.
-    private static readonly ProjectInfoText Store = new(new Guid("a89b3d96-72ad-4972-a532-81676635755b"), "_PE_AutoTag", "Pe.Tools AutoTag settings (JSON).");
-    private static readonly JsonSerializerSettings JsonSettings = RevitJsonFormatting.CreateRevitIndentedSettings();
+    public static readonly OwnerDescriptor Owner = new("autotag", 1,
+        new Guid("a89b3d96-72ad-4972-a532-81676635755b"), "_PE_AutoTag", "Pe.Tools AutoTag settings (JSON).");
+    private static readonly JsonSerializer Json = CreateSerializer();
+
+    // An unknown key is a read error, not a key to drop on the next save (ADR 0032 storage amendment, rule 2).
+    private static JsonSerializer CreateSerializer() {
+        var settings = RevitJsonFormatting.CreateRevitIndentedSettings();
+        settings.MissingMemberHandling = MissingMemberHandling.Error;
+        return JsonSerializer.Create(settings);
+    }
     private AutoTagUpdater? _updater;
 
     public static AutoTagService Instance {
@@ -37,7 +47,9 @@ public class AutoTagService {
     public void SaveSettingsForDocument(Document doc, AutoTagSettings settings) {
         using (var transaction = new Transaction(doc, "Save AutoTag Settings")) {
             _ = transaction.Start();
-            _ = Store.Write(doc, JsonConvert.SerializeObject(settings, JsonSettings));
+            // A stored blob this build cannot read is never written over: the parse throws, and so does the store.
+            _ = Parse(OwnerBlobStore.Read(doc, Owner));
+            _ = OwnerBlobStore.Write(doc, Owner, JObject.FromObject(settings, Json));
             _ = transaction.Commit();
         }
         var tracked = this._documents?.Find(doc);
@@ -50,20 +62,27 @@ public class AutoTagService {
         Log.Information("AutoTag: Settings saved and reloaded for '{Title}'", doc.Title);
     }
 
-    /// <summary>Null when the document holds no AutoTag settings or the stored JSON is invalid (logged).</summary>
+    /// <summary>Null when the document holds no AutoTag settings or the stored blob is refused (logged).</summary>
     private static AutoTagSettings? ReadSettings(Document doc) {
-        if (Store.Read(doc) is not { } json)
-            return null;
         try {
-            return JsonConvert.DeserializeObject<AutoTagSettings>(json, JsonSettings);
-        } catch (JsonException ex) {
-            Log.Error(ex, "AutoTag: Stored settings in '{Title}' are invalid; AutoTag stays off", doc.Title);
+            return Parse(OwnerBlobStore.Read(doc, Owner));
+        } catch (InvalidOperationException ex) {
+            Log.Error(ex, "AutoTag: Stored settings in '{Title}' are refused; AutoTag stays off", doc.Title);
             return null;
         }
     }
 
+    /// <summary>Null when absent. Throws when the stored blob is refused or its data is not AutoTag settings.</summary>
+    private static AutoTagSettings? Parse(OwnerBlobRead read) {
+        try {
+            return read.DataOrThrow()?.ToObject<AutoTagSettings>(Json);
+        } catch (JsonException ex) {
+            throw new InvalidOperationException($"the stored {Owner.Name} data is not valid AutoTag settings ({ex.Message}); it is refused and kept as it is");
+        }
+    }
+
     public bool HasSettingsInDocument(Document doc) {
-        return Store.Read(doc) != null;
+        return OwnerBlobStore.Read(doc, Owner).Status != OwnerBlobStatus.Absent;
     }
 
     public void Initialize(AddInId addInId, IDocumentTracker documents) {

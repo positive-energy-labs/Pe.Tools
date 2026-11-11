@@ -21,14 +21,14 @@ public sealed class DuctHealthTests {
             to is { } id ? new DuctRef(id, toPort) : null, Facing: facing);
 
     private static DuctNode Node(long id, DuctNodeKind kind, double[] at, IReadOnlyList<DuctConnector> ports, params DuctFact[] facts) =>
-        new(id, kind, kind.ToString(), "Fam", "Type", null, null, at, null, "SA 1", "Supply Air", ports, facts);
+        new(id, kind, kind.ToString(), "Fam", "Type", null, null, at, null, "SA 1", "Supply Air", ports, facts, $"uid-{id}");
 
     private static DuctSegment Duct(long id, double[] a, double[] b, DuctConnector p0, DuctConnector p1, double d = 8,
         DuctSegmentKind kind = DuctSegmentKind.Duct, DuctRoughness? roughness = null, double? velocity = null) =>
         new(id, kind, DuctCurveKind.Line, "Round", DuctShape.Round, $"{d}\"ø", d, null, null,
             Math.Sqrt(Math.Pow(b[0] - a[0], 2) + Math.Pow(b[1] - a[1], 2) + Math.Pow(b[2] - a[2], 2)),
             [a, b], null, null, "SA 1", "Supply Air", roughness ?? new DuctRoughness(0.0003, DuctProvenance.Geometry),
-            new DuctRevitValues(null, velocity, null, null), [p0, p1]);
+            new DuctRevitValues(null, velocity, null, null), [p0, p1], $"uid-{id}");
 
     private static DuctFact Fact(string key, double value) => new(key, value, null, "", DuctProvenance.DesignerStated);
 
