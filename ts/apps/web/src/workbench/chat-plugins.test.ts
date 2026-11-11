@@ -99,7 +99,7 @@ describe("chat plugin records", () => {
 
   it("a findings.write names the route whose Work its receipt consumed, never the first route that declares findings (gate-1ebf1fb1: 'Pea ran write in Families' on a fan port)", () => {
     const consumed = (route: string) => ({ consumes: [{ kind: "work", probe: { handle: { key: { binding: "address", route, target: "c:/model.rvt" }, revision: 1 } } }] }) as never;
-    // Families, Fans and Ducts all carry the findings command: the key alone names no route.
+    // No route declares the findings command (the mount adds it to each): the key alone names no route.
     expect(actionRoute("findings.write")).toBeNull();
     expect(receiptRoute("findings.write", consumed("fans"))).toBe("fans");
     expect(receiptRoute("findings.write", consumed("families"))).toBe("families");
