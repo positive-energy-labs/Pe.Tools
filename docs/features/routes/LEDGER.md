@@ -138,6 +138,7 @@ The route kernel and every web route's shared shape ([ADR 0026](../../adr/0026-o
     - the bind body slug;
     - the `/pages/<slug>/bind` redirect.
 - `route/kernel-journeys-reads.test.ts` is flaky alone: at c80e644a one of two alone runs failed and the other passed 9/9, under load from parallel writers. Cause not run down.
+- Host `tests/dev-takeover.test.ts` is flaky alone: at b2caafd3 one of two alone runs failed and the other passed, and it took 237 s in the gate. Cause not run down.
 - The test-cast ratchet (purge-2) was rebaselined once, from 319 to 321 casts, at the wave merge d45934dd. Slice 8, one-stream and ducts-taps were written before the ratchet existed and added casts: `fans/picture.test.tsx` 4, `fans/worksheet-picture.test.ts` 1, `host/connection-budget.test.ts` 1, `route/kernel-journeys-reads.test.ts` 1, `ducts-domain/src/sa11-diagnosis.test.ts` 5. Move them onto `@pe/ducts-domain/test-snapshot` and the builders, then `--tighten`.
 - `fans-oob-work.journey.test.tsx` fails alone, deterministically, at 50a25e25 (`Unable to find /^MUAS-1.*1 staged$/`) and in fresh checkouts at ef940d36, so it predates the land; it passed alone once in the kernel-wave1 worktree, a hidden dependency on worktree state. Fix thread owed.
 - The custody throw above did not reproduce on the wave (driver at 1ebf1fb1: open another Place, reload, Back, press FC-9; 138 errors caught, none "Place is not writable"); rerun with the tooling walk's exact steps from its `steps.jsonl` before closing it.
