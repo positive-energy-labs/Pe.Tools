@@ -18,7 +18,8 @@ import { PictureReadout } from "@pe/kit/lang/readout";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import { Legend, legendWord } from "@pe/kit/lang/legend";
-import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
+// The picture frame is the picture slot's render (scene/picture), not the kernel's layout (slice 8).
+import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
@@ -156,7 +157,7 @@ export function RoomsPlan({
   value,
   overlay,
 }: {
-  renderPane: PaneApi;
+  renderPane: TeachingPaneRender;
   /** A synthetic plan (`?fixture=plan`): said in the pane's meta, where the view is named. */
   fixture?: boolean;
   /** Drawn over the plan in screen px (the feedback layer), given the plan's frame. */

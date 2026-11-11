@@ -35,6 +35,7 @@ import { TypedShell } from "./typed-shell";
 import { module as fans } from "../fans/route";
 import { builtins } from "../route/builtins.neutral";
 import { peReadings, bindActionReadings } from "../host/resource-stream";
+import { settled } from "../test-journey";
 
 const trace = vi.hoisted(()=>({gates:[] as any[],tokens:[] as any[],samples:[] as any[],stops:[] as any[],mounts:[] as any[],submit:vi.fn(),http:[] as any[],fetch:vi.fn(),base:"",target:null as any,holdPlan:()=>Promise.resolve()}));
 // These Work journeys do not import Pods; bootstrap otherwise outlives the isolated host's home.
@@ -203,7 +204,9 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      await vi.waitFor(()=>expect((trace as any).results.at(-1)).toMatchObject({key:"ducts.plan-losses",state:"succeeded"}),{timeout:45000});
      await screen.findByRole("button",{name:"Write to Revit"});
      expect((trace as any).results.at(-1).consumes.some((row:any)=>row.kind==="work" && row.probe.handle.key.route==="ducts" && row.probe.handle.revision===1)).toBe(true);
-     fireEvent.click(screen.getByRole("button",{name:"Capture point"}));
+     // Slice 6: the recorded-point verbs live in the Timeline popover, the topbar's history door.
+     fireEvent.click(screen.getByRole("button",{name:"Open the Timeline"}));
+     fireEvent.click(await screen.findByRole("button",{name:"Capture point"}));
      await vi.waitFor(()=>expect(trace.http.find(row=>row.url==="/pe/history" && row.request?.kind==="captured")?.status).toBe(200),{timeout:10000});
      const point=trace.http.find(row=>row.url==="/pe/history" && row.request?.kind==="captured").body;
      const history=await (await forward(`/pe/history?at=${point.id}`)).json();
@@ -235,7 +238,9 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      const failure=await mount.draw("sheet-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{[muas]:{cfm:925}}},{label:"Stage MUAS-1 airflow"}));
      if(failure) throw Error(failure.message);
    });
-   fireEvent.click(await screen.findByRole("button",{name:"Refresh Fans"}));
+   // Slice 6 deleted per-pane Refresh; the staged Work republishes the watched Fans read, so the
+   // journey waits on the panes' busy marks (slice 6.1) instead of pressing a re-read.
+   for(const pane of document.querySelectorAll('[data-slot="pane"][data-pane-id^="sheet-"]')) await settled(pane,45000);
    await mount.whenWritable();
    for(mode of ["recording","batched"] as const){
      if(mode==="batched"){batchReleased=false;receiptBatch.length=0;heldReceipts.length=0;readyAfterBatch.length=0;}

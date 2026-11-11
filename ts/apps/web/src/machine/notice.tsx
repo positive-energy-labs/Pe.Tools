@@ -1,11 +1,11 @@
 /**
- * The tray's notice card, mounted only in the card shell. The host projects receipt
- * revisions onto the `notices` Reading (the host log) and holds each burst ~30 s; the tray shim hands every item to
- * a native `notice` event once this card says `notice-ready`, and shows its separate window without
- * taking focus. One card pages every pending item: a new notice appends to the open card, a
- * draining timer walks passive items and ends after the last; pending asks hold the queue, hover
- * pauses it and typing stops it for good. Card messages ride the tray's string-JSON `type` protocol
- * (`notice-ready`/`notice-card`/`notice-hide`/`notice-panel`); opening an href is the surface's own
+ * The tray's notice card, mounted only in the card shell. It follows the host's notice feed as the
+ * tray (`notice-follow.ts`, ADR 0035 rule 7) and raises each row whose revision moved; saying
+ * `notice-card` with its height shows the tray's separate window without taking focus. One card
+ * pages every pending item: a new notice appends to the open card, a draining timer walks passive
+ * items and ends after the last; pending asks hold the queue, hover pauses it and typing stops it
+ * for good. Card messages ride the tray's string-JSON `type` protocol (`notice-ready`/
+ * `notice-card`/`notice-hide`/`notice-panel`; a native `notice: null` ends the card); opening an href is the surface's own
  * `open-window`. The card settles nothing: every answer goes to the thread's own door, which stays
  * the authority, and an item leaves only when that door accepts.
  */
@@ -22,6 +22,7 @@ import {
 
 import { QuestionForm } from "#/chat/question-form";
 import { Button } from "@pe/kit/lang/button";
+import { ConsentSweep, type ConsentWindow } from "@pe/kit/lang/consent-sweep";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Row } from "@pe/kit/lang/row";
 import { Composer } from "#/components/lang/conversation";
@@ -36,12 +37,14 @@ import {
   admit,
   currentView,
   loadLedger,
+  loadSeen,
   saveLedger,
+  saveSeen,
   snooze,
   wake,
   type NoticeLedger,
-  type NoticeView,
 } from "./notice-policy";
+import { cardOf, followNotices } from "./notice-follow";
 import { AutomaticUpdates } from "./update";
 import { NoticePreview } from "./notice-preview";
 
@@ -58,6 +61,8 @@ const tray = (message: TrayMessage) => postRendererMessage(window.chrome?.webvie
 const NOTICE_DRAIN_MS = 8_000;
 const TICK_MS = 100;
 const FIXTURE = "Fixture: nothing here reaches a host.";
+/** The card's record of the last feed it saw. */
+const SEEN = "pe.notices.card-seen";
 /** How often snoozed items are checked for their hour being up. */
 const WAKE_MS = 30_000;
 
@@ -93,7 +98,8 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   };
   useEffect(() => {
     const webview = window.chrome?.webview;
-    const take = (next: MachineNotice, view: NoticeView = currentView()) => {
+    const take = (next: MachineNotice) => {
+      const view = currentView();
       record((l) => l);
       const verdict = admit(ledger.current!, next, view, Date.now());
       // Looking at that thread is seeing it: no card, and it will not come back.
@@ -113,12 +119,18 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
     const receive = ({ data }: NativeMessageEvent) => {
       const parsed = nativeMessageSchema.safeParse(data);
       if (!parsed.success || parsed.data.type !== "notice") return;
-      const next = parsed.data.notice;
-      if (!next) return end();
-      take(next, parsed.data.view);
+      // The tray hid the card window; the feed, not the tray, is where rows come from.
+      if (!parsed.data.notice) end();
     };
     webview?.addEventListener("message", receive);
     tray({ type: "notice-ready" });
+    const stop = followNotices({
+      origin: resolveWorkbenchConfig().origin,
+      as: "tray",
+      seen: loadSeen(window.localStorage, SEEN),
+      onRow: (row) => take(cardOf(row)),
+      onSeen: (seen) => saveSeen(window.localStorage, SEEN, seen),
+    });
     // A snoozed item whose hour is up comes back through the same door as a new one.
     const timer = setInterval(() => {
       record((l) => l);
@@ -128,6 +140,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
       woken.due.forEach((notice) => take(notice));
     }, WAKE_MS);
     return () => {
+      stop();
       webview?.removeEventListener("message", receive);
       clearInterval(timer);
     };
@@ -206,6 +219,14 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
       item.href && openFullWindow(item.href) ? { type: "notice-hide" } : { type: "notice-panel" },
     );
   const act = item.act;
+  /** One answer to the thread's door; the item leaves only when the door accepts. */
+  const answer = (option: { optionId: string } | null | undefined) => {
+    if (fixture) return setError(FIXTURE);
+    if (act?.kind !== "permission" || !option) return;
+    return harness()
+      .permission(act.threadId, act.requestId, option.optionId)
+      .then(() => settle(item.id), refused);
+  };
   /** A failure's door opens in the tray panel at that route; the card steps aside. */
   const door = (href: string) => {
     close({ type: "notice-panel", url: href });
@@ -278,31 +299,20 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
                     .then(() => settle(item.id), refused)
             }
           />
+        ) : act?.kind === "permission" ? (
+          // The tray's consent is the sweep in its card shell (ADR 0035 rule 6); the head names the thread.
+          <ConsentSweep
+            shell="card"
+            windows={[consentOf(item.title, item.body, act)]}
+            onReject={(ask) => answer(ask.reject)}
+            onAllow={(ask) => answer(ask.allow)}
+          />
         ) : (
           <div className="min-h-0 overflow-auto">
             <FailureNote text={item.body} onDoor={door} />
           </div>
         )}
-        {act?.kind === "permission" ? (
-          <span className="flex flex-wrap gap-1.5">
-            {act.options.map((option) => (
-              <Button
-                key={option.optionId}
-                kind={option.kind.startsWith("allow") ? "commit" : "framed"}
-                label={option.name}
-                reason={fixture ? FIXTURE : `answer Pea: ${option.name}`}
-                refusal={fixture ? FIXTURE : null}
-                onClick={() =>
-                  void harness()
-                    .permission(act.threadId, act.requestId, option.optionId)
-                    .then(() => settle(item.id), refused)
-                }
-              >
-                {option.name}
-              </Button>
-            ))}
-          </span>
-        ) : act?.kind === "automatic-updates" ? (
+        {act?.kind === "automatic-updates" ? (
           <AutomaticUpdates reading={reading} fixture={fixture} />
         ) : null}
         {error ? <OutcomeLine kind="refused" label={error} /> : null}
@@ -317,6 +327,23 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
       </div>
     </div>
   );
+}
+
+type PermissionAct = Extract<NonNullable<MachineNotice["act"]>, { kind: "permission" }>;
+
+/** The card's one consent window: the reject and allow options the feed row carried. */
+function consentOf(thread: string, says: string, act: PermissionAct): ConsentWindow {
+  const option = (kind: string) => act.options.find((o) => o.kind.startsWith(kind));
+  const allow = option("allow");
+  return {
+    requestId: act.requestId,
+    threadId: act.threadId,
+    thread,
+    verb: says || "Pea writes",
+    ...(act.deadline ? { deadline: act.deadline } : {}),
+    reject: option("reject") ?? null,
+    ...(allow ? { allow } : {}),
+  };
 }
 
 /** The reply composer (draft and one Send/Stop slot); the response lives in the title preview. */

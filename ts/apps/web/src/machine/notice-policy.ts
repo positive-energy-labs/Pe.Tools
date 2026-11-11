@@ -1,6 +1,6 @@
 /**
- * When a card item may show, and what a person did with it. The host announces every item; the
- * surface that would show it decides, from what it can see: it stays quiet for the thread the
+ * When a card item may show, and what a person did with it. The notice feed raises a row when it
+ * moves (`notice-follow.ts`); the surface that would show it decides, from what it can see: it stays quiet for the thread the
  * person is looking at, for a revision already acknowledged, and while an item is snoozed. The
  * ledger is that surface's own record (acknowledged revisions, snoozed items), kept across reloads.
  * Nothing here settles a receipt: an acknowledged card leaves every action exactly as it was.
@@ -41,6 +41,8 @@ export function admit(
 ): Admission {
   if ((ledger.acked[notice.id] ?? -1) >= notice.revision) return "acknowledged";
   if ((ledger.snoozed[notice.id]?.until ?? 0) > now) return "snoozed";
+  // The host saw a person on this thread in some window (presence beats): seeing it is the card.
+  if (notice.attended) return "looking";
   const thread = threadOf(notice);
   return view.visible &&
     view.focused &&
@@ -95,6 +97,24 @@ export function saveLedger(storage: Store, ledger: NoticeLedger) {
     storage.setItem(STORAGE_KEY, JSON.stringify(ledger));
   } catch (error) { console.warn("ts/apps/web/src/machine/notice-policy.ts: fallback after failure", error);
     /* Storage can be unavailable or full: the ledger then lasts for this page only. */
+  }
+}
+
+/** A follower's record of the last feed it saw (`notice-follow.ts`); unreadable is a first follow. */
+export function loadSeen(storage: Store, key: string): Readonly<Record<string, number>> | null {
+  try {
+    const parsed = z.record(z.string(), z.number()).safeParse(JSON.parse(storage.getItem(key) ?? "null"));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveSeen(storage: Store, key: string, seen: Readonly<Record<string, number>>) {
+  try {
+    storage.setItem(key, JSON.stringify(seen));
+  } catch {
+    // Full or unavailable storage: the record lasts for this page only.
   }
 }
 

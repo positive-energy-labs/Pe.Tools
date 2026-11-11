@@ -107,18 +107,23 @@ test("live pane titles and list fallback change labels without changing semantic
   function Consumer() {
     const [title, setTitle] = useState("First system");
     const [header, setHeader] = useState(true);
-    const current = { ...one, pane: { ...(header ? {} : { header: false as const }) } };
     return (
       <TeachPage value="/title">
         <TeachReference value={declaredTeaching(one)}>
           <button onClick={() => setTitle("Second system")}>Rename</button>
           <button onClick={() => setHeader(false)}>Use list name</button>
-          <TeachingLayoutView<typeof current>
-            layout={current}
+          {/* ADR 0035 rule 5: the head is the frame's furniture, never a per-node `header`
+              knob; a frame that draws no title (the dock's Pea pane) names the list instead. */}
+          <TeachingLayoutView<typeof one>
+            layout={one}
             content={{
               stable: (pane) =>
                 pane(<div data-list-view="" aria-label="System runs" />, {
-                  title: <PaneCrumb segments={[{ label: "Systems" }, { label: title }]} />,
+                  title: header ? (
+                    <PaneCrumb segments={[{ label: "Systems" }, { label: title }]} />
+                  ) : (
+                    ""
+                  ),
                 }),
             }}
           />

@@ -7,6 +7,7 @@ import { roomsPageSchema } from "./page";
 import { RoomsPlan } from "./plan";
 import { Pane } from "@pe/kit/lang/pane";
 import { RoomsTable, roomRows } from "./table";
+import { scrollBody } from "../route/body";
 import { regionSubject } from "./subject";
 
 test("rooms attention decodes as a region with its stable carrier GUID", () => {
@@ -133,7 +134,7 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
   const {workFingerprintSchema}=await import("@pe/agent-contracts");
   const frames:Parameters<import("../shell/source-contract").UseSource["open"]>[1][]=[];
   let search=new URLSearchParams();
-  const mount=mountTypedRoute({...module,spec:{...module.spec,panes:{main:{...module.spec.panes.main,draw:(ctx:unknown)=>ctx}}}},
+  const mount=mountTypedRoute({...module,spec:{...module.spec,panes:{main:{...module.spec.panes.main,body:"scroll" as const,draw:(ctx:any)=>scrollBody(ctx)}}}},
     {address:{read:()=>search,write:next=>{search=next;},subscribe:()=>()=>{}},fixture:null,target:{kind:"document",ref:{session:"retained",openId:"rooms"}},
       work:{address:null,open:{session:"retained",openId:"rooms"}},custody:{current:()=>true},memory:()=>({})},
     workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),{work:createFixtureWorkDoor(roomsRouteState,roomsRouteState.schema.parse({})),

@@ -44,17 +44,20 @@ export const module = route({
     wheel: {
       title: "Wheel",
       purpose: "Drag diameter or airflow",
-      draw: draw(() => import("./route.tsx"), "WheelBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./route.tsx"), "WheelBody"),
     },
     inputs: {
       title: "Inputs",
       purpose: "Type a duct and read its loss",
-      draw: draw(() => import("./route.tsx"), "InputsBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./route.tsx"), "InputsBody"),
     },
     charts: {
       title: "Charts",
       purpose: "Inspect the friction law",
-      draw: draw(() => import("./route.tsx"), "ChartsBody"),
+      body: "scroll",
+      draw: draw("scroll", () => import("./route.tsx"), "ChartsBody"),
     },
   },
   layout: {

@@ -9,6 +9,7 @@ import { TypedChrome } from "../shell/typed-shell";
 import * as mounts from "../shell/typed-mount";
 import type { UseSource } from "../shell/source-contract";
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
+import { settled } from "../test-journey";
 import { evaluate } from "../../../host/src/reads/evaluator";
 import { reads as familyReads } from "../../../host/src/reads/family";
 
@@ -90,8 +91,9 @@ async function mounted(cells: FamilyDraft["cells"], reading = raw) {
     history: createMemoryHistory({ initialEntries: ["/family"] }) });
   render(<RouterProvider router={router} />);
   cleanups.push(() => mount.dispose());
-  await waitFor(() => expect(mount.value().current).toBe(true), { timeout: 10_000 });
-  await screen.findByRole("textbox", { name: "Destination pod" }, { timeout: 10_000 });
+  // The journey waits on the kernel's busy mark (slice 6.1), not on the mount's Value or a field appearing.
+  await settled(await screen.findByRole("region", { name: "Family" }));
+  screen.getByRole("textbox", { name: "Destination pod" });
   workKeyUsed = accepted!.key;
   return { mount, writes, doc: () => mount.owner()!.doc as FamilyDraft };
 }

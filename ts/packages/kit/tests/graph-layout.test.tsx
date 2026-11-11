@@ -199,7 +199,10 @@ test("an empty projection removes all regions and can mount again", () => {
   expect(view.container.querySelectorAll("[data-pane-id]")).toHaveLength(3);
 });
 
-test("graph layout owns picture furniture and bounded persisted resizing", () => {
+// ADR 0035 rule 5: layout is data. The declaration's `frame` knobs are deleted; a pane's furniture
+// is what its body hands the frame (the kernel's `paneFrame` reading of the body kind). A legend is
+// a picture's own furniture: the picture draws its own Pane (scene/picture, until slice 8).
+test("graph layout passes the body's furniture and bounded persisted resizing", () => {
   localStorage.setItem("graph-layout-policy", "350");
   const declaration = split(
     "policy",
@@ -218,10 +221,7 @@ test("graph layout owns picture furniture and bounded persisted resizing", () =>
   const view = render(
     <GraphLayoutView
       layout={declaration}
-      panes={{
-        ...panes,
-        plan: { ...panes.plan, frame: { picture: true, scroll: "clip", flush: true } },
-      }}
+      panes={panes}
       active={() => true}
       bodies={{
         ...bodies,
@@ -230,6 +230,8 @@ test("graph layout owns picture furniture and bounded persisted resizing", () =>
             meta: "Plan metadata",
             legend: <span>Plan legend</span>,
             actions: <button>Layer action</button>,
+            scroll: "clip",
+            flush: true,
           }),
       }}
     />,
@@ -242,7 +244,9 @@ test("graph layout owns picture furniture and bounded persisted resizing", () =>
   expect(seam.getAttribute("aria-valuenow")).toBe("360");
   expect(localStorage.getItem("graph-layout-policy")).toBe("360");
   expect(view.container.querySelectorAll('[data-pane-id="plan"]')).toHaveLength(1);
-  expect(view.getByText("Plan legend")).toBeTruthy();
+  const body = view.container.querySelector('[data-pane-id="plan"] [data-slot="pane-body"]')!;
+  expect(body.hasAttribute("data-scroll"), "a fill body's pane clips; it draws no Scroll").toBe(false);
+  expect(view.queryByText("Plan legend"), "the layout draws no picture legend").toBeNull();
   expect(view.getByText("Plan metadata")).toBeTruthy();
   expect(view.getByRole("button", { name: "Layer action" })).toBeTruthy();
   localStorage.removeItem("graph-layout-policy");

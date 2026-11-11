@@ -3,6 +3,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { address } from "@pe/agent-contracts";
 import { historySnapshotSchema } from "../shell/history";
 import { mountTypedRoute } from "../shell/typed-mount";
+import { scrollBody } from "../route/body";
 import type { ReadingContext } from "../shell/source-contract";
 import { createWitness } from "./cutover.test-support";
 
@@ -52,7 +53,7 @@ test("optional Work, explicit demand and invocation arguments share one typed sc
   const read=hostRead({...valueRead("probe.value",z.object({}),z.object({answer:z.number()})),demand:"explicit"});
   const declaration={key:"wave4-probe",address:"/",name:"Probe",needs:"host" as const,directory:reference.data.directory,
     fields:{member:field(z.string(),"","query")},core:{...read,args:()=>({})},
-    panes:{main:{title:"Probe",purpose:"Scope falsifier",read,draw:(ctx:unknown)=>ctx}},layout:{kind:"pane" as const,id:"main"}};
+    panes:{main:{title:"Probe",purpose:"Scope falsifier",read,body:"scroll" as const,draw:(ctx:any)=>scrollBody(ctx)}},layout:{kind:"pane" as const,id:"main"}};
   const calls:unknown[]=[],queries:unknown[]=[];
   const door={
     lifetime:"subscription",receipts:()=>({subscribe:()=>()=>{}}),
@@ -68,7 +69,7 @@ test("optional Work, explicit demand and invocation arguments share one typed sc
   const input={address:{read:()=>new URLSearchParams(search),write:(next:URLSearchParams)=>{search=new URLSearchParams(next);},subscribe:()=>()=>{}},
     fixture:null,target:{kind:"host" as const},work:{address:null,open:null},custody:{current:()=>true},memory:()=>({})};
   const fingerprint=workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
-  const browser=mountTypedRoute(route({...declaration,needs:"browser",core:undefined,panes:{main:{title:"Probe",purpose:"Browser",draw:(ctx:unknown)=>ctx}}}),{...input,target:null},fingerprint,{work:door});
+  const browser=mountTypedRoute(route({...declaration,needs:"browser",core:undefined,panes:{main:{title:"Probe",purpose:"Browser",body:"scroll" as const,draw:(ctx:any)=>scrollBody(ctx)}}}),{...input,target:null},fingerprint,{work:door});
   try {expect(calls).toEqual([]);expect(browser.workBasis()).toBeNull();browser.page.query({member:"local"});expect(browser.page.read().member).toBe("local");}
   finally {browser.dispose();}
   search=new URLSearchParams();
@@ -105,7 +106,7 @@ test("cell undo targets the exact owner press and leaves the other owner staged"
   const secondary={...primary,route:"undo-b",title:"B"};
   const module=route({key:primary.route,name:"Undo",needs:"host",directory:reference.data.directory,fields:{},
     edits:{work:primary,owners:{"undo-b":{state:secondary}},input:z.never(),patches:()=>[],history:z.object({label:z.string()}),describe:(detail:{label:string})=>detail},
-    panes:{main:{title:"Cells",purpose:"Undo falsifier",draw:(ctx:unknown)=>ctx}},layout:{kind:"pane",id:"main"}});
+    panes:{main:{title:"Cells",purpose:"Undo falsifier",body:"scroll" as const,draw:(ctx:any)=>scrollBody(ctx)}},layout:{kind:"pane",id:"main"}});
   const door=createFixtureWorkDoor(primary,schema.parse({}),{"undo-b":schema},{"undo-a":schema.parse({}),"undo-b":schema.parse({})},{"undo-b":"undo-b"});
   const mount=mountTypedRoute(module,{address:{read:()=>new URLSearchParams(),write:()=>{},subscribe:()=>()=>{}},fixture:null,
     target:{kind:"host"},work:{address:null,open:{session:"undo",openId:"cells"}},custody:{current:()=>true},memory:()=>({})},

@@ -3,18 +3,10 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { ComposerPending } from "./composer-pending";
 import { composerAnswer, QuestionForm } from "./question-form";
-import type { Approval, Question, ToolCall } from "@pe/agent-contracts/chat-state";
+import type { Question } from "@pe/agent-contracts/chat-state";
 
 afterEach(cleanup);
 
-const call: ToolCall = {
-  id: "call-original",
-  title: "script_execute",
-  target: "session-original / open-original",
-  args: {},
-  images: [],
-  status: "in_progress",
-};
 const question: Question = {
   requestId: "question-original",
   message: "Which sheet name?",
@@ -30,13 +22,7 @@ test("required question fields refuse an empty answer and Enter cannot submit th
   const answerQuestion = vi.fn(async () => {});
   const screen = render(
     <form onSubmit={submit}>
-      <ComposerPending
-        approvals={[]}
-        questions={[question]}
-        calls={[]}
-        resolveApproval={vi.fn()}
-        answerQuestion={answerQuestion}
-      />
+      <ComposerPending questions={[question]} answerQuestion={answerQuestion} />
     </form>,
   );
   fireEvent.click(screen.getByRole("button", { name: "1 request needs you" }));
@@ -99,64 +85,6 @@ test("question choices use radio navigation and Enter submits the focused choice
   expect(answer).toHaveBeenCalledExactlyOnceWith("accept", { choice: "delete" });
   expect(submit).not.toHaveBeenCalled();
   await act(async () => finish());
-});
-
-test("root-turn write consent stays visible, counts down and sends the host option ids", async () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(Date.parse("2026-10-26T12:00:00Z"));
-  try {
-    const resolveApproval = vi.fn(async () => {});
-    const hold: Approval = {
-      requestId: "run-approval",
-      toolCallId: "run-write",
-      toolName: "write",
-      scope: "run",
-      deadline: "2026-10-26T12:01:00Z",
-      options: [
-        { optionId: "allow_now", name: "Allow now", kind: "allow_once" },
-        { optionId: "stop_writes", name: "Reject", kind: "reject_once" },
-      ],
-    };
-    const screen = render(
-      <ComposerPending
-        approvals={[hold]}
-        questions={[]}
-        calls={[
-          {
-            ...call,
-            id: hold.toolCallId,
-            caption: "First write: file C:/user/design.json. Then all writes for this turn.",
-          },
-        ]}
-        resolveApproval={resolveApproval}
-        answerQuestion={vi.fn()}
-      />,
-    );
-    expect(screen.queryByRole("button", { name: /request needs you/ })).toBeNull();
-    expect(screen.getByRole("timer").textContent).toBe("Reject? 60s");
-    expect(
-      screen.getByText("First write: file C:/user/design.json. Then all writes for this turn."),
-    ).toBeTruthy();
-    await act(async () => {
-      vi.advanceTimersByTime(18_000);
-    });
-    expect(screen.getByRole("timer").textContent).toBe("Reject? 42s");
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Allow now" }));
-    });
-    expect(resolveApproval).toHaveBeenLastCalledWith("run-approval", "allow_now");
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Reject" }));
-    });
-    expect(resolveApproval).toHaveBeenLastCalledWith("run-approval", "stop_writes");
-    await act(async () => {
-      vi.advanceTimersByTime(60_000);
-    });
-    expect(screen.getByRole("timer").textContent).toBe("Reject? 0s");
-    expect(resolveApproval).toHaveBeenCalledTimes(2); // The host alone owns deadline approval.
-  } finally {
-    vi.useRealTimers();
-  }
 });
 
 // The Claude adapter's AskUserQuestion shape: a pick plus its own "Other" box (claude-agent-acp elicitation.js).
