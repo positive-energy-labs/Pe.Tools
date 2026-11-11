@@ -34,13 +34,16 @@ public sealed class DuctSyntheticFixtureTests {
 
     private static DuctNode Node(long id, DuctNodeKind kind, string family, string? part, double[] at, IReadOnlyList<DuctConnector> ports,
         IReadOnlyList<DuctFact> facts, DuctLoss? loss = null, DuctTerminalDrop? drop = null) =>
-        new(id, kind, kind.ToString(), family, "Standard", part, 100, at, null, "SA 1", "Supply Air", ports, facts, loss, drop);
+        new(id, kind, kind.ToString(), family, "Standard", part, 100, at, null, "SA 1", "Supply Air", ports, facts, Uid(id), loss, drop);
+
+    // The fixture's identity: one fake document GUID plus the element id as 8 hex digits, the shape Revit gives a UniqueId.
+    private static string Uid(long id) => $"6d52156a-3876-4d76-b641-341454252f26-{id:x8}";
 
     private static DuctSegment Duct(long id, double d, double[] a, double[] b, params DuctConnector[] ports) =>
         new(id, DuctSegmentKind.Duct, DuctCurveKind.Line, "Round Duct", DuctShape.Round, $"{d}\"ø", d, null, null,
             Math.Sqrt(Math.Pow(b[0] - a[0], 2) + Math.Pow(b[1] - a[1], 2) + Math.Pow(b[2] - a[2], 2)),
             [a, b], 100, null, "SA 1", "Supply Air", new DuctRoughness(0.0003, DuctProvenance.RevitDefault),
-            new DuctRevitValues(null, null, null, null), ports);
+            new DuctRevitValues(null, null, null, null), ports, Uid(id));
 
     private static DuctFact Fact(string key, double value, string unit, DuctProvenance p) => new(key, value, null, unit, p);
 
