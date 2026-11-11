@@ -86,7 +86,9 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
       {!cells.length ? <p className="text-ink-2">Nothing on this sheet yet: open a subject to list its cells.</p>
         : !shown.length ? <p className="text-ink-2">No typed cells; show every cell to type one.</p>
         : (
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,9rem)_minmax(0,6rem)] items-center gap-x-2 gap-y-1">
+          // The label keeps its floor (10rem or 45%); the value input sheds width first and the
+          // source word takes only its own width, so a ~330px pane no longer reads "Vel..." (L3).
+          <div className="grid grid-cols-[minmax(min(10rem,45%),1fr)_minmax(0,9rem)_fit-content(6rem)] items-center gap-x-2 gap-y-1">
             {shown.map((cell) => <Cell key={`${cell.binding}:${cell.row ?? ""}`} ctx={ctx} cell={cell} />)}
           </div>
         )}
