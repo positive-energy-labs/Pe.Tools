@@ -25,6 +25,6 @@ export function findingMark(finding: Finding, captured: readonly Captured[]): Ma
  */
 export const findingCommand = {
   ...catalogAction(FINDINGS_DOORS.write),
-  label: "Write finding",
+  label: "Write finding", row: true as const,
   input: (_context: unknown, supplied: unknown) => ({ finding: supplied }),
 };
