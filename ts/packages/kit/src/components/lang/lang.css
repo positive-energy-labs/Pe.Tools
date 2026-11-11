@@ -821,7 +821,16 @@ tr.dl-row[data-active] {
 .dl-row-head > :first-child::first-letter {
   text-transform: uppercase;
 }
+/* A head is one line: the name ellipsizes, the count never moves off it (L3: no wrap; a wrapped
+   head drew its first line over the row above). */
+.dl-row-head > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .dl-row-head > [data-slot="count"] {
+  flex: none;
   font-weight: var(--weight-regular);
   font-variant-numeric: tabular-nums;
   color: var(--pe-ink-mute);
