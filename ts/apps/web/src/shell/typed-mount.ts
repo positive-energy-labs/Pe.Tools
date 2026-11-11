@@ -1,5 +1,5 @@
 import { undoOwnFinding } from "../route/host";
-import { findingCommand } from "../route/slots/findings/index.ts";
+import { kernelCommands } from "../route/slots/kernel-commands.ts";
 import { hostReadSource } from "./host-read-source.ts";
 import { writeReject } from "./catalog-work-reviews";
 import { harnessClient } from "../workbench/provider/harness-client";
@@ -65,13 +65,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof undoOwnFinding>[1] } = {}) {
   const cleanups: (() => void)[] = [];
   try {
-  /*
-   * ADR 0035 rule 9: every route with Work carries the person's `finding` command, which reaches the
-   * document's findings Work through that route's own Work handle. The mount adds it, not `route()`:
-   * the command's contract is the catalog, and `route()` is the Pod surface, which bundles without it.
-   */
-  const spec = module.spec.edits && !("finding" in module.spec.commands)
-    ? { ...module.spec, commands: { ...module.spec.commands, finding: findingCommand } } as TypedRoute["spec"]
+  // Every route with Work carries the kernel's commands (route/slots/kernel-commands.ts); a route's own id wins.
+  // The mount adds them, not `route()`: their contracts are the catalog, and `route()` is the Pod surface.
+  const spec = module.spec.edits
+    ? { ...module.spec, commands: { ...kernelCommands, ...module.spec.commands } } as TypedRoute["spec"]
     : module.spec;
   const edits = spec.edits;
   const own = edits?.work.route ?? spec.key;
