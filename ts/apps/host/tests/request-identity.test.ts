@@ -1,3 +1,4 @@
+import { serviceHeaders } from "./callers.ts";
 import { createServer, request } from "node:http";
 import { Deferred, Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
@@ -123,7 +124,7 @@ effectTest(
           headers: {
             "content-type": "application/json",
             [HOST_CONTEXT_HEADER]: token,
-            [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
+            ...serviceHeaders(),
           },
         });
         outgoing.on("error", () => {});

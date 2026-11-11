@@ -3,8 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { withInvocationContext } from "@pe/runtime/context";
-import { human } from "./callers.ts";
+import { human, actAs } from "./callers.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";
 import { bindPackageLifecycle, requirePackageEnabled } from "../src/package-lifecycle.ts";
@@ -72,7 +71,7 @@ test("public disable removes Page, script, member, catalog and receipted skill; 
   expect(before.packages.map((p) => p.id)).toEqual(["sample"]);
   expect((await pages(new Request("http://host/pages/sample--tour/"))).status).toBe(200);
   const toggle = (enabled: boolean) =>
-    withInvocationContext({ caller: human }, () =>
+    actAs(human, () =>
       servePeRoute(
         new Request("http://host/pe/plugins/pod%3Asample", {
           method: "PUT",

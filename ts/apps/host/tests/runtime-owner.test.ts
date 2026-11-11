@@ -1,3 +1,4 @@
+import { serviceHeaders, ownedSession } from "./callers.ts";
 import { Effect, Queue, Layer, Fiber } from "effect";
 import { NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { HttpRouter } from "effect/http";
@@ -91,7 +92,7 @@ test("real loopback HTTP and WebSocket refuse a foreign checkout before routing"
     await once(server, "listening");
     const base = `http://127.0.0.1:${port()}`;
     const own = await fetch(`${base}/host/status`, {
-      headers: { [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName },
+      headers: serviceHeaders(),
     });
     expect(own.status).toBe(200);
     expect(await own.json()).toMatchObject({
@@ -148,9 +149,7 @@ test("real loopback HTTP and WebSocket refuse a foreign checkout before routing"
           contractVersion: BRIDGE_CONTRACT_VERSION,
           processId: 42,
           processStartUtcUnixMs: 1000,
-          lane: hostOwnership.lane,
-          sourceRoot: hostOwnership.sourceRoot,
-          serviceName: hostOwnership.serviceName,
+          ...ownedSession,
           state: {
             activeDocumentIsFamilyDocument: false,
             activeDocumentIsModelInCloud: false,
@@ -170,7 +169,7 @@ test("real loopback HTTP and WebSocket refuse a foreign checkout before routing"
       registrationAck: { accepted: true },
     });
     const connected = await fetch(`${base}/host/status`, {
-      headers: { [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName },
+      headers: serviceHeaders(),
     });
     expect(await connected.json()).toMatchObject({ runtimeMatch: "verified" });
   } finally {

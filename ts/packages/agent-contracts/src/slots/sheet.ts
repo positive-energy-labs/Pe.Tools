@@ -94,6 +94,11 @@ export interface SheetSlot<B extends Readonly<Record<string, SheetBinding>> = Re
   readonly from?: (read: any, search: Readonly<Record<string, unknown>>) => { readonly says: string; readonly href?: string } | null;
   /** What the sheet says instead of its cells when its read has nothing for it, with the exit (house law 9). */
   readonly empty?: (read: any) => string | null;
+  /**
+   * What the sheet's Work stages that no cell shows (an edit at an address the bindings do not draw):
+   * one line above the cells, so the route's save never writes more than a person can read here.
+   */
+  readonly note?: (read: any) => string | null;
 }
 
 /** The cell's address: a binding name, and the row for a per-subject binding (a SubjectRef code, or the binding's own row key). */

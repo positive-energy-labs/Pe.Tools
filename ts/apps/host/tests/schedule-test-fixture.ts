@@ -1,3 +1,4 @@
+import { ownedSession } from "./callers.ts";
 import { testDocumentMarks, journalAt, callRouteOver } from "./effect-test.ts";
 import { graphRoute } from "../src/reads/routes.ts";
 import { Publications } from "../src/reads/evaluator.ts";
@@ -30,7 +31,6 @@ import { sdkSessions, originalProcess } from "./native-receipt-fixture.ts";
 import { markDispatched } from "../src/action-dispatch.ts";
 import { replayAnswer } from "./sdk-replay.ts";
 import { detailResponse } from "./schedule-fixture.ts";
-import { hostOwnership } from "../src/host-ownership.ts";
 import { HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
 import { mintContext } from "../src/control.ts";
 import { serveRoutes } from "./real-server.ts";
@@ -135,9 +135,7 @@ export async function setup(options: { cold?: boolean } = {}) {
       processId: target === a ? 42 : 43,
       processStartUtcUnixMs: 1000,
       connected: true,
-      lane: hostOwnership.lane,
-      sourceRoot: hostOwnership.sourceRoot,
-      serviceName: hostOwnership.serviceName,
+      ...ownedSession,
       state: {
         openDocuments: [
           {

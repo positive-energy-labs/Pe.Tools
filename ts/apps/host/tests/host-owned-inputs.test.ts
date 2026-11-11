@@ -1,3 +1,4 @@
+import { actAs } from "./callers.ts";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -11,7 +12,6 @@ import { z } from "zod";
 import { read as hostRead } from "../src/reads/evaluator.ts";
 import { nativeRead } from "../src/reads/evaluator.ts";
 import { registeredReads } from "../src/reads/routes.ts";
-import { withInvocationContext } from "@pe/runtime/context";
 import { readInputRoutes } from "../src/builtin-inputs.ts";
 import { HostInputContext } from "../src/input-context.ts";
 import { PictureCaptures, PictureCaptureStore } from "../src/captures-route.ts";
@@ -137,7 +137,7 @@ test("recorded host-local inputs and immutable capture files replay without a li
   let live: ReturnType<typeof make> | undefined = make({ kind: "live", captureStore: writer }),
     replay: ReturnType<typeof make> | undefined;
   const request = (web: ReturnType<typeof make>, path: string, body?: unknown) =>
-    withInvocationContext({ caller: who }, () =>
+    actAs(who, () =>
       web.handler(
         new Request(
           new URL(path, "http://host"),

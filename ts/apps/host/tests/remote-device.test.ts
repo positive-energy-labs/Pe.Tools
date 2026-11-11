@@ -1,3 +1,4 @@
+import { serviceHeaders } from "./callers.ts";
 import { expect, test } from "vite-plus/test";
 import {
   readRequestIdentity,
@@ -15,8 +16,6 @@ import { createDevices, DEVICE_COOKIE } from "../src/remote-device.ts";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
-import { hostOwnership } from "../src/host-ownership.ts";
 
 const options: IdentityOptions = {
   port: () => 5180,
@@ -193,7 +192,7 @@ test("access-005/006: paired remote browser cannot grant rw or reach local pairi
   const headers = {
     ...remote,
     cookie: `${DEVICE_COOKIE}=${claimed.token}`,
-    [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
+    ...serviceHeaders(),
   };
   expect(
     await readRequestIdentity(headers, "/pe/scope/thread", { ...options, devices }, "PUT"),

@@ -5,10 +5,9 @@ import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { bindWork, workKey } from "@pe/agent-contracts";
-import { withInvocationContext } from "@pe/runtime/context";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { human } from "./callers.ts";
+import { human, actAs } from "./callers.ts";
 
 test("D rule 5 opens discarded disk Work empty and saves the first edit without retaining old bytes", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-discard-http-"));
@@ -34,7 +33,7 @@ test("D rule 5 opens discarded disk Work empty and saves the first edit without 
       expect(opened.status).toBe(200);
       expect(await opened.json()).toMatchObject({ doc: { note: "" }, revision: 0 });
       expect(await readdir(dir), "opening discards the original, with no aside or archive").toEqual([]);
-      const saved = await withInvocationContext({ caller: human }, () => app.fetch(request("POST", "/apply", {
+      const saved = await actAs(human, () => app.fetch(request("POST", "/apply", {
         patches: [{ path: ["note"], value: "First edit" }], expectedRevision: 0, press: crypto.randomUUID(),
       })));
       expect(saved.status).toBe(200);

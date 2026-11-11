@@ -1,3 +1,4 @@
+import { actAs } from "./callers.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { NativeReads } from "../src/native-reads.ts";
@@ -19,7 +20,6 @@ import {
 import { RouteWorkspace } from "@pe/runtime";
 import type { ResourceObserver } from "../../../packages/runtime/src/resource-stream.ts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { withInvocationContext } from "@pe/runtime/context";
 import { settle } from "./effect-test.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
@@ -126,7 +126,7 @@ export async function nativeFixture(
       { disableLogger: true },
     );
     const request = (request: Request, caller: Caller = { kind: "human", via: "local" }) =>
-      withInvocationContext({ caller }, () =>
+      actAs(caller, () =>
         web.handler(
           request,
           Context.make(

@@ -12,10 +12,9 @@ import {
   type ThreadHead,
 } from "@pe/agent-contracts";
 import { createPagesHandler, type LiveSession, type PageLive } from "../src/pages-route.ts";
-import { hostOwnership } from "../src/host-ownership.ts";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
 import { admitCrossing, bindControl, callerOf, Refused } from "../src/control.ts";
-import { asCaller, human, pea } from "./callers.ts";
+import { asCaller, human, pea, serviceHeaders } from "./callers.ts";
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -529,7 +528,7 @@ describe("pages", () => {
         { kind: "local" },
         {
           origin: "http://127.0.0.1:5180",
-          [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
+          ...serviceHeaders(),
           referer: "http://127.0.0.1:5180/pages/ductkit--tour/",
         },
       );

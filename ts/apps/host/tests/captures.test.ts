@@ -1,3 +1,4 @@
+import { actAs } from "./callers.ts";
 import { existsSync } from "node:fs";
 import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordings } from "./native-recordings.ts";
@@ -8,7 +9,6 @@ import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { bindControl } from "../src/control.ts";
 import { testConsents, journalAt, callRouteOver } from "./effect-test.ts";
 import type { ConsentEvent } from "../src/run-consent.ts";
-import { withInvocationContext } from "@pe/runtime/context";
 import { pictureCaptures } from "./effect-test.ts";
 import { detachedBridge } from "./effect-test.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
@@ -154,7 +154,7 @@ test("Work start validates seeds, waits for consent, and cannot overwrite a winn
     { disableLogger: true },
   );
   const invoke = async (id: string, seed: unknown) => {
-    const response = await withInvocationContext({ caller }, () =>
+    const response = await actAs(caller, () =>
       web.handler(
         new Request("http://host/actions", {
           method: "POST",

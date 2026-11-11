@@ -1,11 +1,11 @@
+import { serviceHeaders } from "./callers.ts";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { randomUUID } from "node:crypto";
 import ts from "typescript";
 import { expect, test, vi } from "vite-plus/test";
-import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
+import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import { mintBrowserContext, mintContext } from "../src/control.ts";
-import { hostOwnership } from "../src/host-ownership.ts";
 import { bootHost } from "./real-server.ts";
 
 vi.mock("../src/pe-revit-launch.ts", async (original) => ({
@@ -37,7 +37,7 @@ const send = async (
 const token = (value: string) => ({ [HOST_CONTEXT_HEADER]: value });
 const browser = (base: string, path: string) => ({
   cookie: mintBrowserContext({ kind: "local" }).split(";")[0]!,
-  [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
+  ...serviceHeaders(),
   origin: base,
   "sec-fetch-site": "same-origin",
   referer: `${base}${path}`,

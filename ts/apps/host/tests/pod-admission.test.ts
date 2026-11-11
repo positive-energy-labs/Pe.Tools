@@ -1,3 +1,4 @@
+import { actAs } from "./callers.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -16,7 +17,6 @@ import { linkedCatalog, peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { admitPodArtifact } from "../src/pod-artifact.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
-import { withInvocationContext } from "@pe/runtime/context";
 
 async function fixture(
   root: string,
@@ -208,7 +208,7 @@ async function setup(saved: unknown = currentWork, blockRead = false, initialWor
       lifecycle,
       workspace,
       readStored: () =>
-        withInvocationContext({ caller: { kind: "human", via: "local" } }, () =>
+        actAs({ kind: "human", via: "local" }, () =>
           createPeRoutes({ workspace, registrations: [] }).fetch(
             new Request(`http://host/pe/route-state/${key.route}`),
           ),

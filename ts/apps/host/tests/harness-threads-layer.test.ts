@@ -5,8 +5,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Context, Effect, FileSystem, Layer, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, vi } from "vite-plus/test";
-import { human } from "./callers.ts";
-import { withInvocationContext } from "@pe/runtime/context";
+import { human, actAs } from "./callers.ts";
 import { HostLog } from "../src/host-log.ts";
 import { HarnessThreads, type HarnessThreadsOptions } from "../src/harness/threads.ts";
 import { loadThread } from "../src/harness/thread-store.ts";
@@ -141,7 +140,7 @@ nodeTest("event timestamps come from the Clock, not the wall", () =>
     const threads = yield* store(root);
     // The provider stub cannot start a child, so the new thread logs an `error` event: a stamped append.
     yield* Effect.promise(async () => {
-      const response = await withInvocationContext({ caller: human }, () =>
+      const response = await actAs(human, () =>
         threads.fetch(
           new Request("http://host/pe/threads", {
             method: "POST",
@@ -183,7 +182,7 @@ nodeTest("replay damage preserves sequence identity and delivers the first live 
     });
     yield* Effect.addFinalizer(() => Effect.sync(() => unsubscribe?.()));
     const response = yield* Effect.promise(() =>
-      withInvocationContext({ caller: human }, () =>
+      actAs(human, () =>
         threads.fetch(
           new Request("http://host/pe/threads/thread", {
             method: "PUT",
@@ -238,7 +237,7 @@ nodeTest("a replay gap keeps every new target part linked to its prompt sequence
       JSON.stringify({ ...turnEnd, seq: 3 }), "",
     ].join("\n"));
     const threads = yield* store(root);
-    const response = yield* Effect.promise(() => withInvocationContext({ caller: human }, () =>
+    const response = yield* Effect.promise(() => actAs(human, () =>
       threads.fetch(new Request("http://host/pe/threads/thread/prompt", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: randomUUID(), text: "after damage" }),
