@@ -2,6 +2,11 @@
    header while expanded. Places give way before they overlap: a label ellipsizes. The close
    reserves no width at rest (L1, L3: twelve hidden closes starved every label to one glyph); it
    floats over its own tab's end on hover or focus, so nothing shifts, and stays in the tab order. */
+/* One resting gap between Places, the button group's token (L3): with the close reserving no
+   width, labels otherwise ran together as "FansDuctsFamilies". */
+[data-slot="route-tabs"] {
+  gap: var(--space-unit);
+}
 [data-slot="route-tabs"] > * {
   position: relative;
   display: flex;
