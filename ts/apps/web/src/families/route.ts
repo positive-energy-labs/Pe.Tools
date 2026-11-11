@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { command, sessionCommand } from "../route/typed-actions.ts";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
@@ -10,7 +11,7 @@ import {
   cellPatches,
   showFamilyCell,
 } from "@pe/agent-contracts";
-import { familiesViewCapability } from "../../../../packages/agent-contracts/src/families-read.ts";
+import { reads } from "./reads.ts";
 import { route, field } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
@@ -35,13 +36,13 @@ export const edit = z.object({
   value: familyCellValueSchema,
   current: z.string(),
 });
-export const view = read(hostRead(familiesViewCapability));
-export type { Context as FamiliesDrawContext } from "./context.generated";
+export const view = read(hostRead(reads.view));
+export type FamiliesDrawContext = ContextOf<typeof fields, typeof view, typeof import("@pe/agent-contracts").familiesRouteState, typeof edit>;
 export const module = route({
   key: "families",
   name: "Families",
   needs: "project",
-  host: "../../../host/src/reads/families.ts",
+  host: "./host.ts",
   directory: {
     group: "Build / audit families",
     summary: "Audit and reconcile loaded family parameters",

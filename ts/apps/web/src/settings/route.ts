@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
@@ -16,12 +17,12 @@ export const fields = {
   section: field(z.enum(["none", ...SETTINGS_SECTIONS]).optional(), undefined, "query", "push"),
   session: field(z.string(), "", "pose"),
 };
-export type { Context as SettingsContext } from "./context.generated";
+export type SettingsContext = ContextOf<typeof fields, typeof loaded, never, never>;
 export const module = route({
   key: "settings",
   name: "Settings",
   needs: "host",
-  host: "../../../host/src/reads/settings.ts",
+  host: "./host.ts",
   directory: {
     group: "Explore / maintain",
     summary: "This machine and every route's user settings",

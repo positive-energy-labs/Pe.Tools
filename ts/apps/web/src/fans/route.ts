@@ -1,7 +1,7 @@
+import type { ContextOf } from "../route/defaults";
 import { command } from "../route/typed-actions.ts";
 import { poseFields } from "../route/defaults";
 import { bindings } from "./bindings";
-import { routeLinks } from "../route/links.generated";
 import { read } from "../route/defaults";
 import { stageField } from "../route/defaults";
 import { listFields } from "../route/defaults";
@@ -9,11 +9,12 @@ import { fansDocumentSchema } from "../../../../packages/agent-contracts/src/fan
 import { z } from "zod";
 import {
   fansSheetEditsSchema,
-  fansSheetCapability,
   ductsPictureFields,
+  routeAddress,
   type Immutable,
   type SubjectRefCode,
 } from "@pe/agent-contracts";
+import { reads } from "./reads.ts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
 import { field, route, subjectSchema, split } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
@@ -45,21 +46,20 @@ export const fields = {
   sheetPath: field(z.string(), "", "query"),
 };
 export const sheet = read(
-  hostRead(fansSheetCapability, sheetValueFixtures),
+  hostRead(reads.sheet, sheetValueFixtures),
   (page: { fan: Immutable<z.output<typeof fan>>; sheetPath: string }) => ({
     fan: page.fan.kind === "all" ? "all" : page.fan.ids,
     sheetPath: page.sheetPath,
   }),
 );
-const roster = read(hostRead(fansSheetCapability, sheetValueFixtures), () => ({
+const roster = read(hostRead(reads.sheet, sheetValueFixtures), () => ({
   fan: [],
   sheetPath: "",
 }));
-export type { Context as FansDrawContext } from "./context.generated";
-import type { Context as FansDrawContext } from "./context.generated";
+export type FansDrawContext = ContextOf<typeof fields, typeof sheet, typeof import("../../../../packages/agent-contracts/src/fans.ts").fansDocumentSchema, typeof import("@pe/agent-contracts").fansSheetEditsSchema>;
 export const module = route({
   key: "fans",
-  host: "../../../host/src/reads/fans.ts",
+  host: "./host.ts",
   name: "Fans",
   directory: {
     aliases: ["fan", "ESP", "pressure"],
@@ -167,7 +167,7 @@ export const module = route({
 export const fansData = module.data;
 export const fansHostModule = module.host;
 export function fansLink(ids: SubjectRefCode[], search: Readonly<Record<string, unknown>>) {
-  return routeLinks.fans({
+  return routeAddress("fans").link({
     ...Object.fromEntries(
       ["target", "fixture", "thread"].flatMap((key) =>
         typeof search[key] === "string" ? [[key, search[key]]] : [],

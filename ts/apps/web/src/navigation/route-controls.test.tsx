@@ -44,13 +44,13 @@ test("the shell attaches only its current owner's host across retained route swi
   expect(outlet.textContent).toBe("ducts controls");
   const firstHost = outlet.firstElementChild!;
   await act(async () => {
-    await router.navigate({ to: "/fans" });
+    await router.navigate({ to: "/$route", params: { route: "fans" } });
   });
   expect(outlet.childElementCount).toBe(1);
   expect(outlet.textContent).toBe("fans controls");
   expect(firstHost.isConnected).toBe(false);
   await act(async () => {
-    await router.navigate({ to: "/ducts" });
+    await router.navigate({ to: "/$route", params: { route: "ducts" } });
   });
   expect(outlet.childElementCount).toBe(1);
   expect(outlet.firstElementChild).toBe(firstHost);

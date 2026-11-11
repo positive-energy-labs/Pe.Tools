@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { systemCode } from "./identity";
 import { command } from "../route/typed-actions.ts";
 import { poseFields } from "../route/defaults";
@@ -11,7 +12,6 @@ import {
   listSearchSchema,
   fansRouteState,
   ductsSheetEditsSchema,
-  ductsNetworkCapability,
   DUCTS_SYSTEM_MAX,
 } from "@pe/agent-contracts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
@@ -27,7 +27,7 @@ import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 import { scrollBody } from "../route/body.ts";
 import { describeInputHistory, editMetaSchema } from "./sheet/input-history.neutral.ts";
-import { ductsPricingCapability, ductsRosterCapability } from "@pe/agent-contracts";
+import { reads } from "./reads.ts";
 import { presentLosses, presentHeal, presentFan } from "./reviews.ts";
 import { designSheet } from "./design-sheet.ts";
 
@@ -57,11 +57,10 @@ const args = (page: {
     | z.output<typeof system>
     | import("@pe/agent-contracts").Immutable<z.output<typeof system>>;
 }) => ({ system: namesOf(page.system) });
-export const roster = read(hostRead(ductsRosterCapability));
-export const network = read(hostRead(ductsNetworkCapability), args);
-export const pricing = read(hostRead(ductsPricingCapability), args);
-export type { Context as DuctsDrawContext } from "./context.generated";
-import type { Context as DuctsDrawContext } from "./context.generated";
+export const roster = read(hostRead(reads.roster));
+export const network = read(hostRead(reads.network), args);
+export const pricing = read(hostRead(reads.pricing), args);
+export type DuctsDrawContext = ContextOf<typeof fields, typeof pricing, typeof import("../../../../packages/agent-contracts/src/ducts.ts").ductsRouteState, typeof import("@pe/agent-contracts").ductsSheetEditsSchema>;
 const evidence = (
   data: DuctsDrawContext["value"]["value"],
   work: DuctsDrawContext["cells"]["doc"],
@@ -73,7 +72,7 @@ const evidence = (
 });
 export const module = route({
   key: "ducts",
-  host: "../../../host/src/reads/ducts.ts",
+  host: "./host.ts",
   name: "Ducts",
   directory: {
     group: "Calculate loads & airflow",

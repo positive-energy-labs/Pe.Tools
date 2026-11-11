@@ -52,7 +52,7 @@ export const module = route({
   key: "takeoffs",
   name: "View adoption",
   needs: "project",
-  host: "../../../host/src/reads/takeoffs.ts",
+  host: "./host.ts",
   directory: {
     label: "Manual J",
     exposure: "Main",

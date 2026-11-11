@@ -1,3 +1,4 @@
+import type { ContextOf } from "../route/defaults";
 import { read } from "../route/defaults";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
 import { route } from "../route/defaults.ts";
@@ -7,7 +8,7 @@ import { draw } from "../route/draw.tsx";
 import { chatArgs, chatValue } from "../../../../packages/agent-contracts/src/chat-read.ts";
 export const loaded = read(hostRead(valueRead("chat.context", chatArgs, chatValue)));
 export const fields = {};
-export type { Context as ChatHandle } from "./context.generated";
+export type ChatHandle = ContextOf<typeof fields, typeof loaded, never, never>;
 /** `minOtherSize` is Pea's floor: the chat column's reading measure (`--chat-measure` in
  * chat-shell.css) between its two side lanes, in px at comfort density. Layout is data, so the
  * token-derived floor is fixed here; dense density folds the threads a little early. */
@@ -30,7 +31,7 @@ export const module = route({
   address: "/pea",
   name: "Pea",
   needs: "host",
-  host: "../../../host/src/reads/chat.ts",
+  host: "./host.ts",
   directory: {
     group: "Ask / automate",
     summary: "The Pea agent workbench.",

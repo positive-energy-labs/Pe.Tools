@@ -8,7 +8,7 @@
     "group": "Start / open work",
     "summary": "Find tools and resume open work",
     "label": "Home",
-    "icon": "Home",
+    "icon": "House",
     "exposure": "Main",
     "surfaces": {
       "web": "full",

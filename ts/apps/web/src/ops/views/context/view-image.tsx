@@ -48,7 +48,7 @@ export function ViewImageView({ data }: OpViewProps) {
       ) : null}
       <Provenance>
         {res.byteSize} bytes ·{" "}
-        <Link to="/captures" search={sha ? { sha } : {}}>
+        <Link to="/$route" params={{ route: "captures" }} search={sha ? { sha } : {}}>
           {sha ? `capture ${sha.slice(0, 8)}` : "kept in captures"}
         </Link>
       </Provenance>

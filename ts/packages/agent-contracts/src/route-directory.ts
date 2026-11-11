@@ -27,23 +27,8 @@ export interface AppRoute {
   title: string;
   label: string;
   description: string;
-  iconKey:
-    | "FileScan"
-    | "FlaskConical"
-    | "Image"
-    | "Boxes"
-    | "LayoutDashboard"
-    | "LayoutGrid"
-    | "Link2"
-    | "Map"
-    | "MessageSquare"
-    | "Palette"
-    | "Server"
-    | "Settings2"
-    | "Table"
-    | "Table2"
-    | "Terminal"
-    | "Wind";
+  /** Any Lucide icon name; codegen:routes refuses one `lucide-react` does not export. */
+  iconKey: string;
   task: AppTask;
   exposure: AppExposure;
   aliases: string;
@@ -57,7 +42,7 @@ export const ROUTE_DIRECTORY: readonly AppRoute[] = routeDirectory.map(
   ({ directory: d, key }) => ({
     ...d,
     key,
-    iconKey: d.icon as AppRoute["iconKey"],
+    iconKey: d.icon,
     task: d.category as AppTask,
     description: d.blurb,
     aliases: d.aliases.join(" "),
