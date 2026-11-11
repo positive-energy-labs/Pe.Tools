@@ -1043,7 +1043,7 @@ test("an endpoint provider is checked before save, and every thread carries its 
   // measured 2026-11-02. The cost is the Spawner closing a live leader, not this test.
 }, 90_000);
 
-test("both harnesses run in their ungated shell mode (ADR 0034)", async () => {
+test("both harnesses run in their ungated shell mode (ADR 0036)", async () => {
   const threads = await host();
   expect(said(await envOf(threads, "claude"), "MODE")).toBe("bypassPermissions");
   expect(said(await envOf(threads, "codex"), "MODE")).toBe("agent-full-access");
@@ -1413,7 +1413,7 @@ for (const harness of ["claude", "codex"] as const) {
       await h.close();
     }
   });
-  test(`${harness}: a native write approval is allowed with no card (ADR 0034)`, async () => {
+  test(`${harness}: a native write approval is allowed with no card (ADR 0036)`, async () => {
     const h = await host(),
       call = caller(h),
       read = reader(h);
@@ -1438,7 +1438,7 @@ for (const harness of ["claude", "codex"] as const) {
   });
 }
 
-test("Codex native shell and edit approvals are allowed with no card (ADR 0034)", async () => {
+test("Codex native shell and edit approvals are allowed with no card (ADR 0036)", async () => {
   const h = await host(),
     call = caller(h),
     read = reader(h);

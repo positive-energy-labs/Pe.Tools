@@ -1,4 +1,4 @@
-# 0034: The harness's own tools are ungated
+# 0036: The harness's own tools are ungated
 
 Date: 2026-11-10. Status: accepted. Source: kaitpw, 2026-11-10, "Pea's harness shell should never have been blocked. The reason for moving Pea onto lab harnesses (Claude Code, Codex) was their shell setups, and capability is not gated by default." Supersedes the last clause of [ADR 0027](0027-one-route-one-subject-one-consent.md) rule 11 ("native writes outside the journal stay refused") and the sentence "Unjournaled native mutation approvals refuse" in [ADR 0024](0024-root-run-consent-and-shared-work.md). The harness access switch of [ADR 0021](0021-one-access-switch-and-document-targets.md) stays deleted.
 

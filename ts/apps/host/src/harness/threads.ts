@@ -1137,7 +1137,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         }
         scheduleIdle(t);
       },
-      // The harness's own tools (shell, files, edits) are ungated (ADR 0034): this host answers every
+      // The harness's own tools (shell, files, edits) are ungated (ADR 0036): this host answers every
       // per-call approval with allow and shows no card. Revit and product state still change only
       // through Pea's host commands (pe_do, run consent, the ActionJournal); the harness has no Revit door.
       requestPermission: async (request: RequestPermissionRequest) => {
@@ -1302,7 +1302,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     for (const [id, value] of Object.entries(wantTraits))
       if (t.meta.traits.find((trait) => trait.id === id)?.current !== value)
         await setTrait(t, live, id, value).catch(notReapplied(`${id} ${String(value)}`));
-    // The harness's normal ungated shell (ADR 0034): bypass for Claude (default answers every ask
+    // The harness's normal ungated shell (ADR 0036): bypass for Claude (default answers every ask
     // allow in requestPermission, so it is the same shell when the adapter withholds bypass), full
     // access for Codex, whose read-only sandbox would block the shell itself.
     const offered = new Set(session.modes?.availableModes.map((m) => m.id));
