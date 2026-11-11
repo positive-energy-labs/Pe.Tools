@@ -5,6 +5,7 @@ import { PNG } from "pngjs";
 import { productScratchPath } from "@pe/host-contracts/service-identity";
 import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import z from "zod";
+import { DEFAULT_LLAMA_TIER, parseWithLlamaCloud, requireLlamaCloudKey } from "./llama-parse.ts";
 import { officeExtensions, readOfficeText } from "./read-office.ts";
 import { createTool } from "./tool.ts";
 
@@ -38,7 +39,13 @@ const inputSchema = z.object({
   crop: cropSchema
     .optional()
     .describe(
-      "Keep only a page region: the fraction cut away from each side, e.g. {top: 0.55, bottom: 0.2} keeps the band between 55% and 80% of the page height. Applies to the text and the render, and the render is sharper (200 dpi).",
+      "Keep only a page region: the fraction cut away from each side, e.g. {top: 0.55, bottom: 0.2} keeps the band between 55% and 80% of the page height. Applies to the text and the render, and the render is sharper (200 dpi). Not available with parser: llamaparse.",
+    ),
+  parser: z
+    .enum(["liteparse", "llamaparse"])
+    .default("liteparse")
+    .describe(
+      'Text reader. "liteparse" (default) reads locally and free. "llamaparse" sends the file to LlamaCloud (needs LLAMA_CLOUD_API_KEY in the host environment, costs credits) and returns its plain text for the same pages, for A/B reads of a hard page. image still renders locally.',
     ),
 });
 
@@ -106,32 +113,73 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
     };
   }
 
-  const { LiteParse } = await liteparse;
-  const parser = new LiteParse({
-    outputFormat: "text",
-    quiet: true,
-    targetPages: input.pages,
-    dpi: input.crop ? 200 : 150,
-    ...(input.crop ? { cropBox: input.crop } : {}),
-  });
-  // LiteParse's own failures (LibreOffice missing, file not a document, bad page range) already name the fix.
-  const parsed = await parser.parse(file).catch((error: unknown) => {
-    throw new Error(`read_document: ${error instanceof Error ? error.message : String(error)}`);
-  });
+  // Built on first use, so parser: llamaparse without a render never loads the native binary.
+  const makeParser = async () => {
+    const { LiteParse } = await liteparse;
+    return new LiteParse({
+      outputFormat: "text",
+      quiet: true,
+      targetPages: input.pages,
+      dpi: input.crop ? 200 : 150,
+      ...(input.crop ? { cropBox: input.crop } : {}),
+    });
+  };
 
-  const pages = parsed.pages.map((page) => page.pageNum);
-  let text = parsed.pages.map((page) => `--- page ${page.pageNum} ---\n${page.text}`).join("\n\n");
+  let pageTexts: Array<{ pageNum: number; text: string }>;
+  let counted: string;
+  if (input.parser === "llamaparse") {
+    if (input.crop)
+      throw new Error("read_document: crop is not available with parser: llamaparse.");
+    // Refuses before any upload when the key is absent; the key itself never enters a message or log.
+    let apiKey: string;
+    try {
+      apiKey = requireLlamaCloudKey();
+    } catch (error) {
+      throw new Error(`read_document: parser llamaparse refused: ${(error as Error).message}`);
+    }
+    const tier = process.env.PE_LLAMAPARSE_TIER ?? DEFAULT_LLAMA_TIER;
+    const bytes = await fs.readFile(file);
+    const upload = new File([new Uint8Array(bytes)], path.basename(file), {
+      type: extension === ".pdf" ? "application/pdf" : "",
+    });
+    const result = await parseWithLlamaCloud({
+      file: upload,
+      apiKey,
+      tier,
+      targetPages: input.pages,
+      expand: ["text"],
+    }).catch((error: unknown) => {
+      throw new Error(
+        `read_document: LlamaParse failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+    pageTexts = (result.text?.pages ?? []).map((page) => ({
+      pageNum: page.page_number,
+      text: page.text,
+    }));
+    counted = `parsed by LlamaParse (${tier}), read`;
+  } else {
+    // LiteParse's own failures (LibreOffice missing, file not a document, bad page range) already name the fix.
+    const parsed = await (await makeParser()).parse(file).catch((error: unknown) => {
+      throw new Error(`read_document: ${error instanceof Error ? error.message : String(error)}`);
+    });
+    pageTexts = parsed.pages.map((page) => ({ pageNum: page.pageNum, text: page.text }));
+    counted = `${parsed.totalPages} page(s) in the document, read`;
+  }
+
+  const pages = pageTexts.map((page) => page.pageNum);
+  let text = pageTexts.map((page) => `--- page ${page.pageNum} ---\n${page.text}`).join("\n\n");
   let truncated = "";
   if (text.length > MAX_TEXT_CHARS) {
     text = text.slice(0, MAX_TEXT_CHARS);
     truncated = ` Text was cut at ${MAX_TEXT_CHARS} characters; ask for fewer pages or a crop.`;
   }
-  const header = `${file}: ${parsed.totalPages} page(s) in the document, read ${pages.join(", ") || "none"}${input.crop ? ` cropped ${JSON.stringify(input.crop)}` : ""}.${truncated}`;
+  const header = `${file}: ${counted} ${pages.join(", ") || "none"}${input.crop ? ` cropped ${JSON.stringify(input.crop)}` : ""}.${truncated}`;
 
   const images: ReadDocumentResult["images"] = [];
   if (input.image) {
     const dir = await scratchDir(file, stats.mtimeMs);
-    const renders = await parser.screenshot(file, pages.slice(0, MAX_RENDERED_PAGES));
+    const renders = await (await makeParser()).screenshot(file, pages.slice(0, MAX_RENDERED_PAGES));
     for (const render of renders) {
       const png = input.crop ? cropPng(render.imageBuffer, input.crop) : render.imageBuffer;
       // A crop is part of the name so a second crop never overwrites the first render a result named.
@@ -159,6 +207,7 @@ export const readDocument = createTool({
   description: [
     "Read a project document on disk (PDF spec sheet, schedule, submittal, drawing set; images by OCR; .xlsx and .docx directly, including docx review comments). Local and read-only; the file is never modified and renders go to a product scratch folder named in the result.",
     "Method: take the text first to LOCATE the value (spatial text keeps table columns aligned), then pass image: true with the same pages, and crop when you only need one schedule or chart, to READ it. The text layer loses red strike-throughs, revision clouds, symbols and chart lines, so a number read from text alone is not verified until you have seen the page.",
+    "parser: llamaparse reads the same pages with LlamaCloud instead of locally (key in the host environment, costs credits); use it to A/B a page the local text garbled, not by default.",
     "Not for Revit model facts; use pe_find for those.",
   ].join("\n"),
   inputSchema,

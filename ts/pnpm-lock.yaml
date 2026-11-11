@@ -256,9 +256,6 @@ importers:
       '@effect/atom-react':
         specifier: 4.0.2
         version: 4.0.2(effect@4.0.2)(react@19.2.7)(scheduler@0.27.0)
-      '@llamaindex/llama-cloud':
-        specifier: ^2.10.0
-        version: 2.10.0
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../../packages/agent-contracts
@@ -271,6 +268,9 @@ importers:
       '@pe/kit':
         specifier: workspace:*
         version: link:../../packages/kit
+      '@pe/mcps':
+        specifier: workspace:*
+        version: link:../../packages/mcps
       '@pe/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
@@ -605,6 +605,9 @@ importers:
       '@llamaindex/liteparse':
         specifier: 'catalog:'
         version: 2.18.0
+      '@llamaindex/llama-cloud':
+        specifier: ^2.10.0
+        version: 2.10.0
       '@modelcontextprotocol/client':
         specifier: 'catalog:'
         version: 2.4.0

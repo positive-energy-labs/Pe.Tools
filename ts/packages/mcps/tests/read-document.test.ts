@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { crc32, deflateRawSync } from "node:zlib";
 import { PNG } from "pngjs";
-import { expect, test } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import { runReadDocument } from "../src/shared/read-document.ts";
 
 /** One 612x792 page with a schedule row near the top and a footer note near the bottom, offsets exact. */
@@ -158,6 +158,63 @@ test("read_document reads an xlsx and a docx from their XML, with cell refs and 
     expect(doc).toContain(
       '[comment 0] Hap 2026-11-03 on "taps the return": Tapping into the return air',
     );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+test("parser llamaparse refuses without the key, then returns LlamaCloud's per-page text in liteparse's shape", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "read-document-llama-"));
+  try {
+    const file = join(dir, "schedule.pdf");
+    writeFileSync(file, schedulePdf());
+    const secret = "llx-test-key-never-printed";
+    const calls: string[] = [];
+    let sentKey = false;
+    // Only the network is mocked: the real SDK runs its upload and poll against these two routes.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Request | string | URL, init?: RequestInit) => {
+        const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+        calls.push(`${init?.method ?? "GET"} ${url.pathname}${url.search}`);
+        if (init?.method === "POST") {
+          sentKey = new Headers(init.headers).get("authorization") === `Bearer ${secret}`;
+          return Response.json({ id: "job-1", project_id: "p", status: "PENDING" });
+        }
+        return Response.json({
+          job: { id: "job-1", project_id: "p", status: "COMPLETED" },
+          text: { pages: [{ page_number: 1, text: "TAG AHU-1 SUPPLY 6000 CFM" }] },
+        });
+      }),
+    );
+
+    vi.stubEnv("LLAMA_CLOUD_API_KEY", "");
+    await expect(runReadDocument({ path: file, pages: "1", parser: "llamaparse" })).rejects.toThrow(
+      /llamaparse refused: LLAMA_CLOUD_API_KEY is not set/,
+    );
+    expect(calls).toEqual([]);
+
+    vi.stubEnv("LLAMA_CLOUD_API_KEY", secret);
+    await expect(
+      runReadDocument({ path: file, pages: "1", parser: "llamaparse", crop: { top: 0.5 } }),
+    ).rejects.toThrow(/crop is not available/);
+
+    const lite = await runReadDocument({ path: file, pages: "1" });
+    const llama = await runReadDocument({ path: file, pages: "1", parser: "llamaparse" });
+    expect(calls.some((call) => call.startsWith("POST /api/v2/parse/upload"))).toBe(true);
+    expect(calls.some((call) => call.includes("expand=text"))).toBe(true);
+    // Same page block shape, so two runs diff line for line.
+    expect(llama.text).toContain("--- page 1 ---\nTAG AHU-1 SUPPLY 6000 CFM");
+    expect(lite.text).toContain("--- page 1 ---");
+    expect(llama.text).toContain("parsed by LlamaParse (agentic), read 1.");
+    expect(sentKey).toBe(true);
+    expect(llama.text).not.toContain(secret);
+    expect(llama.images).toEqual([]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -35,7 +35,9 @@ test("the ducts skill triggers on airflow and connectivity questions, not only p
   }
   expect(text).toContain("Never answer them from a script over connector Direction");
   expect(text).toContain("what each component on the walked path does to the air");
-  expect(text).toContain("the project cut sheet or submittal first, then a schedule, then the vendor's site");
+  expect(text).toContain(
+    "the project cut sheet or submittal first, then a schedule, then the vendor's site",
+  );
   expect(text).toContain("read_document, image: true and a crop");
   expect(text).toContain("fill it yourself through the Ducts tool's Work with the source cited");
 });
