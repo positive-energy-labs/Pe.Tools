@@ -129,6 +129,7 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
   rg exit 1 means "no matches", not an error. Never blind-retry a quoting variant, and never put
   JSON on a command line (`pea ... --request '{...}'` dies in re-quoting): one failed quote → write
   the payload/pattern to a file (harness Read/Grep tools where available), see the `execute` skill.
+- The harness Bash tool is Git Bash. It rewrites an argument that starts with `/` into a Windows path (`/fans/` becomes `C:/Program Files/Git/fans/`). Set `MSYS_NO_PATHCONV=1` on a command that passes a route or a `/regex/`.
 - `pe-revit dev link` run through the shim fails with "file in use", because the shim locks its own `pe-revit.exe` and `Pe.Revit.Cli.dll`. Run `dotnet tool run pe-revit -- dev link` from the checkout instead.
 - Background and poll anything minutes-scale, and read `status` before any retry. The SDK reaps its own children.
 - A `preview_evaluate` that runs past its 15 s limit kills whatever JavaScript the page is running then; inside a React render that leaves the page wedged with no error. Poll with short evaluates; never wait inside one.
