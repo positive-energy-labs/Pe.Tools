@@ -28,6 +28,8 @@
   <label>Doubling <input id="doubling" /></label>
   <!-- A retained hidden Place: same region name, earlier in the document than the shown one. -->
   <section aria-label="Pane" hidden><button id="stale">Scoped action</button></section>
+  <!-- A retained Place that still has a box: inert, so a person cannot press it either. -->
+  <section aria-label="Pane" inert><button id="inert">Scoped action</button></section>
   <section aria-label="Pane"><button id="scoped">Scoped action</button></section>
   <output id="log"></output>
   <script>
