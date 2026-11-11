@@ -173,7 +173,9 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      }));
      expect(edited.status).toBe(200);
      expect(await edited.json()).toMatchObject({ok:true,revision:1,handle:{key:{route:"fans"},revision:1}});
-     await screen.findByText(/^MUAS-1.*1 staged$/);
+     // Not `findByText`: each failed poll pretty-prints the whole sheet DOM for its error, on the thread
+     // the in-process host re-evaluates fans.sheet on, so the label lands ten times later than it would.
+     await vi.waitFor(()=>expect(screen.queryByText(/^MUAS-1.*1 staged$/)).not.toBeNull(),{timeout:45000,interval:100});
      await vi.waitFor(()=>expect(trace.mounts.at(-1).readiness().kind).not.toBe("pending"),{timeout:10000});
      expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("Start this Work");
      expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("Work is absent");
