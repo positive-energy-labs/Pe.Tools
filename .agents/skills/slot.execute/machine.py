@@ -70,9 +70,9 @@ def free_gib():
 
 
 def processes():
-    script = ("Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,CommandLine,"
+    script = ("[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,CommandLine,"
               "WorkingSetSize,@{n='Created';e={$_.CreationDate.ToUniversalTime().ToString('o')}} | ConvertTo-Json -Compress")
-    out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True).stdout
+    out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, encoding="utf-8").stdout
     rows = json.loads(out or "[]", strict=False)  # PS 5.1 ConvertTo-Json leaves raw newlines from multi-line command lines
     now = dt.datetime.now(dt.timezone.utc)
     result = []
@@ -232,6 +232,7 @@ def stop(pids):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # a piped stdout is cp1252, and command lines are not
     argv = sys.argv[1:]
     as_json = "--json" in argv
     show_all = "--all" in argv

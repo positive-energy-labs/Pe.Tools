@@ -11,12 +11,12 @@ public sealed class DuctNetworkTests {
             to is { } id ? new DuctRef(id, toPort) : null);
 
     private static DuctNode Node(long id, DuctNodeKind kind, IReadOnlyList<DuctConnector> ports, params DuctFact[] facts) =>
-        new(id, kind, kind.ToString(), "Fam", "Type", null, null, [0, 0, 0], null, "SA 1", "Supply Air", ports, facts);
+        new(id, kind, kind.ToString(), "Fam", "Type", null, null, [0, 0, 0], null, "SA 1", "Supply Air", ports, facts, $"uid-{id}");
 
     private static DuctSegment Duct(long id, double lengthFt, params DuctConnector[] ports) =>
         new(id, DuctSegmentKind.Duct, DuctCurveKind.Line, "Round", DuctShape.Round, "8\"ø", 8, null, null, lengthFt,
             [[0, 0, 0], [lengthFt, 0, 0]], null, null, "SA 1", "Supply Air",
-            new DuctRoughness(0.0003, DuctProvenance.RevitDefault), new DuctRevitValues(null, null, null, null), ports);
+            new DuctRoughness(0.0003, DuctProvenance.RevitDefault), new DuctRevitValues(null, null, null, null), ports, $"uid-{id}");
 
     [Test]
     public void One_root_tree_sums_terminal_flow_and_health_names_its_open_end() {

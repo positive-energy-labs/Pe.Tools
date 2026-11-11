@@ -106,6 +106,6 @@ Safe to invest: `packages/mcps` tools, the operation catalog, scripting, `contro
 
 1. Slice 5 fixes the agent's working directory once, outside any synced or shared home. T3 finds its project by that path, and a later move strands every thread.
 2. The T3 home sits under the machine state root and is named in freeze item 8. Its files are `foreign`: no Pe decode, no Pe discard.
-3. Slice 7 keeps thread and run refs out of paths and tags each with its engine. T3 child ids contain `:` and `%`.
+3. Slice 7 keeps thread and run refs out of paths; an id used in a path is hashed, because T3 child ids contain `:` and `%`. Refs carry no engine tag (kaitpw: "no engine tag, now or later").
 4. Secrets are named by role, and the firm key is injected at spawn, never copied.
 5. Provider records are entered again at cutover, never migrated.

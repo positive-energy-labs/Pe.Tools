@@ -48,7 +48,6 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 - Slices 0 to 10 are in [MAP.md](MAP.md); each lands with its red falsifier. Journeys and end-gate targets are in [JOURNEYS.md](JOURNEYS.md).
 - The T3 cutover rows, falsifiers F1 to F11 and the flip rule are in [T3-CUTOVER.md](T3-CUTOVER.md). The purger holds that file. No row may end as "both exist".
 - kaitpw ticks the classified standards list that slice 0 produces (real, test, proof, WIP, archive, one-off, no registered library, dangling reference). Until then no file is called a standard.
-- kaitpw renames or deletes the installer-harvest folders under `04 PE Software Files\Pe.Tools` before a marker is written there. The purger's census C0 checks that the folder holds no harvest when the firm home lands.
 - kaitpw rules the second drive lane after reading about a second Windows profile. One Autodesk licence per named user on a second profile is UNPROVEN[not tried].
 - The three assumption spikes in the MAP: the Drive revision spike (census C5, wave 1), the pre-event spike (slice 8), and the pointer write on a cloud workshared model (slice 6).
 - The written promise (freeze item 11) has no home yet: what survives an update, the three guards, the honest limit, and the plain statement that inference sends what Pea reads to the model provider. Slice 6 writes it where a coworker reads it.

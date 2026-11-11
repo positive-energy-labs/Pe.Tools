@@ -1,74 +1,78 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Pe.Revit.Parameters;
 using Pe.Revit.Space;
+using Pe.Shared.RevitData.Serialization;
 
 namespace Pe.Revit.Partition;
 
 /// <summary>
-///     Enclosure is declared per document, never inferred (ledger ruling 3). One text shared
-///     parameter on Project Information carries the JSON; when it is unset or unparseable the
-///     default applies and the answer says which and why. No UI: the first configuration surface is
-///     the parameter in Revit properties, and a second project has to prove the list changes before
-///     anything else is built.
-///     <para>
-///         The carrier lives beside <c>Pe.Revit.Takeoff.TakeoffCarriers</c>'s registry blob and uses
-///         the same <see cref="SharedParameterBinder" />; Partition cannot reference Takeoff, so the
-///         spec is declared here against the same helper rather than a second parameter home.
-///     </para>
+///     Enclosure is declared per document, never inferred (ledger ruling 3). One owner blob on Project Information
+///     carries it through <see cref="OwnerBlobStore" />; when it is absent or refused the default applies and the
+///     answer says which and why. No UI and no production writer yet: a second project has to prove the list
+///     changes before anything else is built.
 /// </summary>
 public static class EnclosureDeclaration {
-    /// <summary>Stable carrier identity. Changing it orphans deployed models — never reuse.</summary>
-    internal static readonly Guid EnclosureGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9006");
+    /// <summary>Stable carrier identity. Changing the GUID orphans deployed models — never reuse.</summary>
+    public static readonly OwnerDescriptor Owner = new("partition-enclosure", 1,
+        new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9006"), "_PE_PartitionEnclosure",
+        "Pe partition enclosure declaration (which categories and DWG layers draw enclosure).");
 
-    public static readonly SharedDefinitionSpec Spec = new(
-        "_PE_PartitionEnclosure", SpecTypeId.String.Text,
-        Description: "Pe partition enclosure declaration (JSON: which categories and DWG layers draw enclosure).",
-        Guid: EnclosureGuid, Visible: false, UserModifiable: false);
+    // An unknown key is a read error, not a key to drop on the next write (ADR 0032 storage amendment, rule 2).
+    private static readonly JsonSerializer Json = JsonSerializer.Create(new JsonSerializerSettings {
+        ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver(),
+        NullValueHandling = NullValueHandling.Ignore,
+        MissingMemberHandling = MissingMemberHandling.Error
+    });
 
     /// <summary>Idempotent; the caller owns the transaction.</summary>
     public static void EnsureBound(Document document) =>
-        SharedParameterBinder.EnsureProjectBinding(document, Spec, [BuiltInCategory.OST_ProjectInformation]);
+        SharedParameterBinder.EnsureProjectBinding(document, OwnerBlobStore.Spec(Owner), [BuiltInCategory.OST_ProjectInformation]);
 
     public static bool IsBound(Document document) {
-        var element = SharedParameterElement.Lookup(document, EnclosureGuid);
+        var element = SharedParameterElement.Lookup(document, Owner.Guid);
         return element is not null && document.ParameterBindings.Contains(element.GetDefinition());
     }
 
     /// <summary>The declaration and the one-line reason a reader is owed about where it came from.</summary>
     public static (Enclosure Enclosure, string Source) Read(Document document) {
-        string? json = null;
+        OwnerBlobRead read;
         try {
-            json = document.ProjectInformation?.get_Parameter(EnclosureGuid)?.AsString();
+            read = OwnerBlobStore.Read(document, Owner);
         } catch (Autodesk.Revit.Exceptions.ApplicationException) {
             return (Enclosure.Default, "default: enclosure parameter unreadable on this document");
         }
 
-        if (string.IsNullOrWhiteSpace(json))
+        if (read.Status == OwnerBlobStatus.Absent)
             return (Enclosure.Default, IsBound(document)
                 ? "default: enclosure parameter is bound but unset"
                 : "default: enclosure parameter is not bound on this document");
+        return Parse(read) is { Declared: { } declared }
+            ? (declared.ToEnclosure(), $"declared: {Owner.Name} on Project Information")
+            : (Enclosure.Default, "default: " + Parse(read).Error);
+    }
 
+    /// <summary>Writes a declaration. Caller owns the transaction. A stored blob this build cannot read is never written over.</summary>
+    public static void Write(Document document, Enclosure enclosure) {
+        var stored = OwnerBlobStore.Read(document, Owner);
+        if (stored.Status == OwnerBlobStatus.Ok && Parse(stored).Error is { } error)
+            throw new InvalidOperationException($"Refusing to overwrite: {error}.");
+        _ = OwnerBlobStore.Write(document, Owner, JObject.FromObject(Declared.From(enclosure), Json));
+    }
+
+    private static (Declared? Declared, string? Error) Parse(OwnerBlobRead read) {
+        if (read.Status != OwnerBlobStatus.Ok) return (null, read.Error);
         try {
-            var d = JsonConvert.DeserializeObject<Declared>(json!);
-            if (d is null || (d.SolidCategories is null && d.RibbonLayers is null))
-                return (Enclosure.Default, "default: enclosure declaration parsed to nothing");
-            return (d.ToEnclosure(), "declared: _PE_PartitionEnclosure on Project Information");
+            var d = read.Data!.ToObject<Declared>(Json)!;
+            return d.SolidCategories is null && d.RibbonLayers is null
+                ? (null, "the enclosure declaration names no categories and no layers")
+                : (d, null);
         } catch (JsonException e) {
-            return (Enclosure.Default, "default: enclosure declaration is not valid JSON (" + e.Message + ")");
+            return (null, "the enclosure declaration data is not valid (" + e.Message + ")");
         }
     }
 
-    /// <summary>Writes a declaration. Caller owns the transaction; the parameter must already be bound.</summary>
-    public static void Write(Document document, Enclosure enclosure) {
-        var p = document.ProjectInformation?.get_Parameter(EnclosureGuid)
-            ?? throw new InvalidOperationException(
-                "enclosure parameter is not bound — call EnclosureDeclaration.EnsureBound first.");
-        var json = JsonConvert.SerializeObject(Declared.From(enclosure));
-        if (string.Equals(p.AsString(), json, StringComparison.Ordinal)) return;
-        if (!p.Set(json)) throw new InvalidOperationException("Revit rejected the enclosure declaration blob.");
-    }
-
-    /// <summary>The on-disk shape. Flat on purpose: a human edits this in a Revit properties box.</summary>
+    /// <summary>The stored data shape. Flat on purpose.</summary>
     internal sealed class Declared {
         public string[]? SolidSources { get; set; }
         public string[]? SolidCategories { get; set; }

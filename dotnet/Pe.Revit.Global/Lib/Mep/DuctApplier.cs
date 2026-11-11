@@ -3,9 +3,11 @@ using Autodesk.Revit.DB.ExtensibleStorage;
 using Autodesk.Revit.DB.ExternalService;
 using Autodesk.Revit.DB.Mechanical;
 using Pe.Revit.Failures;
+using Pe.Revit.Parameters;
 using Pe.Revit.Tasks;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Ducts;
+using Pe.Shared.RevitData.Serialization;
 using Serilog;
 using System.Globalization;
 
@@ -31,18 +33,14 @@ public static class DuctApplier {
     private const string PressureLossField = "PressureLoss";
     private const string TableField = "ASHRAETableName";
 
-    internal static readonly ProjectInfoText StoreText = new(
-        new Guid("91e80aa7-f842-43ac-adbe-9b1f6a40c2d2"),
-        "_PE_DuctLosses",
-        "Versioned Pe.Tools duct loss provenance (ducts.apply).");
-
     private static readonly ForgeTypeId InWg = UnitTypeId.InchesOfWater60DegreesFahrenheit;
     private static readonly ForgeTypeId Cfm = UnitTypeId.CubicFeetPerMinute;
 
     public static (DuctLossStore? Store, string? Error) ReadStore(Document doc) {
-        if (StoreText.Read(doc) is not { } json) return (null, null);
+        var read = OwnerBlobStore.Read(doc, DuctLossStore.Owner);
+        if (read.Status != OwnerBlobStatus.Ok) return (null, read.Error);
         try {
-            return (DuctLossStore.FromJson(json), null);
+            return (DuctLossStore.FromData(read.Data!), null);
         } catch (InvalidOperationException ex) {
             return (null, ex.Message);
         }
@@ -130,7 +128,7 @@ public static class DuctApplier {
         var store = new Item(null, "store", stored is null ? storeError is null ? "absent" : "unreadable" : $"revision {storeRevision}") {
             After = $"revision {storeRevision + 1}"
         };
-        if (storeError is not null) store.Refuse($"the model's {StoreText.Name} is unreadable ({storeError}); refusing to overwrite it");
+        if (storeError is not null) store.Refuse($"the model's {DuctLossStore.Owner.Name} is unreadable ({storeError}); refusing to overwrite it");
         else if (UnbackedProvenance(request, stored) is { } unbacked) store.Refuse(unbacked);
         else if (request.Store.WorkRevision < storeRevision)
             store.Refuse($"stale: the model holds store revision {storeRevision}, the request carries {request.Store.WorkRevision}; re-read ducts.snapshot");
@@ -163,7 +161,7 @@ public static class DuctApplier {
                 store.Outcome = "unchanged";
                 return $"revision {storeRevision}";
             }
-            StoreText.Write(doc, next.ToJson());
+            _ = OwnerBlobStore.Write(doc, DuctLossStore.Owner, next.ToData());
             return $"revision {next.WorkRevision}";
         };
 
@@ -338,7 +336,7 @@ public static class DuctApplier {
                 if (w.Results is not { Count: > 0 } || w.Results.Any(r => !PeLossServer.Valid(r)))
                     return new Item(w.Id, kind, null) { Element = e }.Refuse("host-priced leg results with finite coefficients and velocity-pressure bases are required");
                 return Lossy(doc, w.Id, kind, BuiltInCategory.OST_DuctFitting, PeLossServer.Id, schemas,
-                    [(PeLossServer.ResultsField, JsonConvert.SerializeObject(w.Results))], 0, $"pe-server host results ({w.Results.Count} legs)");
+                    [(PeLossServer.ResultsField, DuctLossResult.Encode(w.Results))], 0, $"pe-server host results ({w.Results.Count} legs)");
             }
             case DuctFittingMethod.SpecificCoefficient:
                 return Lossy(doc, w.Id, kind, BuiltInCategory.OST_DuctFitting, SpecificCoefficient, schemas,
@@ -627,8 +625,8 @@ public static class DuctApplier {
         var store = planned.Any(i => i.Kind == "store");
         var ids = planned.Where(i => i.Id is not null && WritingKinds.Contains(i.Kind)).Select(i => i.Id!.Value);
         if (store && doc.ProjectInformation is { } info) ids = ids.Append(info.Id.Value());
-        var binds = store && doc.ProjectInformation?.get_Parameter(StoreText.Guid) is null;
-        return WorksharingDisclosures.Disclose(doc, ids, binds ? [$"{StoreText.Name} project parameter"] : []);
+        var binds = store && doc.ProjectInformation?.get_Parameter(DuctLossStore.Owner.Guid) is null;
+        return WorksharingDisclosures.Disclose(doc, ids, binds ? [$"{DuctLossStore.Owner.Name} project parameter"] : []);
     }
 
     private static readonly HashSet<string> WritingKinds = ["fitting", "terminal", "component", "equipment", "terminal-flow", "equipment-flow"];

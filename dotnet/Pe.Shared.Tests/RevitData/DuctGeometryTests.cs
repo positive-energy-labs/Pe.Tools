@@ -15,12 +15,12 @@ public sealed class DuctGeometryTests {
             to is { } id ? new DuctRef(id, toPort) : null);
 
     private static DuctNode Node(long id, DuctNodeKind kind, string? part, IReadOnlyList<DuctConnector> ports, params DuctFact[] facts) =>
-        new(id, kind, kind.ToString(), "Fam", "Type", part, null, [0, 0, 0], null, "SA 1", "Supply Air", ports, facts);
+        new(id, kind, kind.ToString(), "Fam", "Type", part, null, [0, 0, 0], null, "SA 1", "Supply Air", ports, facts, $"uid-{id}");
 
     private static DuctSegment Duct(long id, double d, params DuctConnector[] ports) =>
         new(id, DuctSegmentKind.Duct, DuctCurveKind.Line, "Round", DuctShape.Round, $"{d}\"ø", d, null, null, 10,
             [[0, 0, 0], [10, 0, 0]], null, null, "SA 1", "Supply Air",
-            new DuctRoughness(0.0003, DuctProvenance.RevitDefault), new DuctRevitValues(null, null, null, null), ports);
+            new DuctRoughness(0.0003, DuctProvenance.RevitDefault), new DuctRevitValues(null, null, null, null), ports, $"uid-{id}");
 
     private static double? F(DuctNetwork.Analysis a, long id, string key) => DuctNetwork.Fact(a.Nodes.Single(n => n.Id == id), key);
 
