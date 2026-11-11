@@ -39,7 +39,30 @@ public sealed record DuctFittingWrite(long Id, DuctFittingMethod Method, double 
     IReadOnlyList<DuctLossResult>? Results = null);
 
 /// <summary>A signed host coefficient at one velocity pressure in in-wg. Native code refuses changed or ambiguous bases.</summary>
-public sealed record DuctLossResult(double VelocityPressureInWg, double Coefficient);
+public sealed record DuctLossResult(double VelocityPressureInWg, double Coefficient) {
+    /// <summary>
+    ///     The per-fitting results entity of Pe's pressure-loss server. It is the one Extensible Storage Pe writes,
+    ///     because Revit's server API requires it (ADR 0032 storage amendment, rule 7). The GUID and name are the
+    ///     schema's; the schema's one text field holds the envelope.
+    /// </summary>
+    public static readonly OwnerDescriptor Owner = new("duct-loss-results", 1,
+        new Guid("5e1f0c0e-7e10-4c0e-9e1f-0000c0ef0003"), "PeDuctLossResults",
+        "Host-priced coefficients and velocity-pressure bases. Reapply from Pe when the basis changes.");
+
+    public static string Encode(IReadOnlyList<DuctLossResult> results) =>
+        OwnerBlob.Encode(Owner, new JObject { ["results"] = JArray.FromObject(results, RevitDataJson.CreateStoredSerializer()) });
+
+    /// <summary>Null when the text is absent or refused: the server then prices nothing and the person reapplies.</summary>
+    public static IReadOnlyList<DuctLossResult>? Decode(string? text) {
+        if (OwnerBlob.Decode(Owner, text) is not { Status: OwnerBlobStatus.Ok, Data: { Count: 1 } data } || data["results"] is not JArray results)
+            return null;
+        try {
+            return results.ToObject<List<DuctLossResult>>(RevitDataJson.CreateStoredSerializer());
+        } catch (JsonException) {
+            return null;
+        }
+    }
+}
 
 /// <summary>Consume host results in Pe's server, or freeze one coefficient for export.</summary>
 [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
@@ -106,18 +129,21 @@ public sealed record DuctVerdictRecord(string Verdict, DateTimeOffset RuledAt);
 public sealed record DuctRoleRecord(string Role, DateTimeOffset RuledAt);
 
 /// <summary>
-///     Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
+///     Pe's provenance for duct losses: one owner blob in the hidden Project Information text parameter
 ///     `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
 ///     carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
 ///     v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
 ///     finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-///     edits. A v1 blob reads as v2 with no rulings; every write is v2.
+///     edits. An envelope at any other version is refused and kept; an old un-enveloped store reads as absent.
 /// </summary>
 public sealed record DuctLossStore {
     public const int CurrentVersion = 2;
 
-    // No default: a blob without a version is not a store.
-    public int Version { get; init; }
+    public static readonly OwnerDescriptor Owner = new("duct-losses", CurrentVersion,
+        new Guid("91e80aa7-f842-43ac-adbe-9b1f6a40c2d2"), "_PE_DuctLosses", "Versioned Pe.Tools duct loss provenance (ducts.apply).");
+
+    /// <summary>On the wire only. In the model the version is the envelope's, so the stored data holds none.</summary>
+    public int Version { get; init; } = CurrentVersion;
     public Dictionary<string, DuctRuleChoice> Rules { get; init; } = new(StringComparer.Ordinal);
     public Dictionary<long, DuctInstanceRecord> Instances { get; init; } = new();
     public Dictionary<long, DuctDropRecord> Terminals { get; init; } = new();
@@ -132,7 +158,14 @@ public sealed record DuctLossStore {
     [JsonExtensionData]
     public IDictionary<string, JToken> Unknown { get; init; } = new Dictionary<string, JToken>();
 
-    public string ToJson() => JsonConvert.SerializeObject(this, Formatting.None, Settings());
+    /// <summary>The stored text: the owner envelope around <see cref="ToData" />.</summary>
+    public string ToJson() => OwnerBlob.Encode(Owner, this.ToData());
+
+    public JObject ToData() {
+        var data = JObject.FromObject(this, RevitDataJson.CreateStoredSerializer());
+        _ = data.Remove("version");
+        return data;
+    }
 
     /// <summary>
     ///     The stored map overlaid per key by the request's entries, minus the keys explicitly deleted. A key neither
@@ -148,23 +181,25 @@ public sealed record DuctLossStore {
         return next;
     }
 
-    /// <summary>Fail-closed: invalid JSON or any version but 1 or <see cref="CurrentVersion" /> throws.</summary>
+    /// <summary>Fail-closed: any text that is not this owner's envelope at <see cref="CurrentVersion" /> throws.</summary>
     public static DuctLossStore FromJson(string json) {
-        DuctLossStore store;
-        try {
-            store = JsonConvert.DeserializeObject<DuctLossStore>(json, Settings())
-                    ?? throw new InvalidOperationException("duct loss store is empty");
-        } catch (JsonException ex) {
-            throw new InvalidOperationException($"duct loss store is not valid JSON: {ex.Message}");
-        }
-        return store.Version is 1 or CurrentVersion
-            ? store
-            : throw new InvalidOperationException($"duct loss store is v{store.Version}; this build reads v1 and v{CurrentVersion}");
+        var read = OwnerBlob.Decode(Owner, json);
+        return read.Status == OwnerBlobStatus.Ok
+            ? FromData(read.Data!)
+            : throw new InvalidOperationException(read.Error ?? "duct loss store is empty");
     }
 
-    private static JsonSerializerSettings Settings() {
-        var settings = RevitDataJson.CreateSerializerSettings();
-        settings.DefaultValueHandling = DefaultValueHandling.Include;
-        return settings;
+    /// <summary>The model's store, or the reason it is "can't read, kept".</summary>
+    public static OwnerValue<DuctLossStore> Read(OwnerBlobRead read) => read.Parse(FromData);
+
+    /// <summary>Fail-closed: data this build cannot read as a store throws.</summary>
+    public static DuctLossStore FromData(JObject data) {
+        if (data.ContainsKey("version"))
+            throw new InvalidOperationException("duct loss store data holds a version; the version belongs to the envelope");
+        try {
+            return data.ToObject<DuctLossStore>(RevitDataJson.CreateStoredSerializer())!;
+        } catch (JsonException ex) {
+            throw new InvalidOperationException($"duct loss store data is not valid: {ex.Message}");
+        }
     }
 }
