@@ -434,6 +434,39 @@
       ],
       "entry": "ducts.apply-assign-fan",
       "intent": "assign"
+    },
+    "finding": {
+      "kind": "command",
+      "input": "none",
+      "label": "Write finding",
+      "review": "shown",
+      "deps": {
+        "page": [
+          "system"
+        ],
+        "work": [
+          "criteria",
+          "designFriction",
+          "kinds",
+          "writeIntent",
+          "assumptions",
+          "rules",
+          "catalogs",
+          "ruleAssignments",
+          "subject",
+          "labelParameter",
+          "workingPhase",
+          "systemColours"
+        ],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "findings.write",
+      "intent": "finding"
     }
   },
   "panes": {
@@ -446,7 +479,8 @@
       "verbs": [
         "losses",
         "heal",
-        "assign"
+        "assign",
+        "finding"
       ]
     },
     "e-sidebar": {
@@ -458,7 +492,8 @@
       "verbs": [
         "losses",
         "heal",
-        "assign"
+        "assign",
+        "finding"
       ]
     },
     "e-rules-all": {
@@ -470,7 +505,8 @@
       "verbs": [
         "losses",
         "heal",
-        "assign"
+        "assign",
+        "finding"
       ]
     },
     "e-rules": {
@@ -482,7 +518,8 @@
       "verbs": [
         "losses",
         "heal",
-        "assign"
+        "assign",
+        "finding"
       ]
     },
     "e-picture": {
@@ -494,7 +531,8 @@
       "verbs": [
         "losses",
         "heal",
-        "assign"
+        "assign",
+        "finding"
       ]
     },
     "design": {
@@ -506,7 +544,8 @@
       "verbs": [
         "losses",
         "heal",
-        "assign"
+        "assign",
+        "finding"
       ]
     },
     "e-inbox": {
@@ -518,7 +557,8 @@
       "verbs": [
         "losses",
         "heal",
-        "assign"
+        "assign",
+        "finding"
       ]
     }
   },
@@ -635,7 +675,8 @@
       "verbs": [
         "losses",
         "heal",
-        "assign"
+        "assign",
+        "finding"
       ]
     }
   },
