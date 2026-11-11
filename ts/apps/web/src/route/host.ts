@@ -8,7 +8,7 @@ import {
   type WorkWrite,
 } from "@pe/agent-contracts";
 import { peRoutes } from "@pe/agent-contracts/pe-api";
-import { FINDINGS_OWNER } from "@pe/agent-contracts/slots";
+import { FINDINGS_OWNER, findingsWorkSchema } from "@pe/agent-contracts/slots";
 import { z } from "zod";
 import type { WorkAdmission } from "./route-discovery";
 export function routeInput(route: string, key: WorkKey) {
@@ -64,6 +64,17 @@ export async function undoOwnFinding(
   return response.ok && wire?.ok !== false
     ? null
     : { message: String(wire?.error ?? `Undo failed (${response.status})`) };
+}
+
+/** How many of this document's findings a person wrote, as the host's findings Work holds them; null when unread. */
+export async function ownFindingsLeft(
+  key: WorkKey,
+  client: Pick<typeof peClient, "response"> = peClient,
+): Promise<number | null> {
+  const read = await client.response("work.get", routeInput(FINDINGS_OWNER, { ...key, route: FINDINGS_OWNER }));
+  if (read.status === 404) return 0;
+  const doc = read.ok ? z.object({ doc: findingsWorkSchema }).safeParse(await read.json()).data?.doc : undefined;
+  return doc ? Object.values(doc.findings).filter((finding) => finding.by === "person").length : null;
 }
 
 export type RouteWriteResponse = { status: number; result: RouteStateWriteResult | null };

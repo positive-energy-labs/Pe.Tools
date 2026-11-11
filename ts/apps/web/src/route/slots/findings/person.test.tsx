@@ -129,6 +129,12 @@ test("the person undoes their own finding from its History row; Pea's newer find
     render(<GraphHistory owner={f.typed} />);
     fireEvent.click(await screen.findByRole("button", { name: "Undo your last finding" }, { timeout: 20_000 }));
     await waitFor(async () => expect(await authors()).toEqual([["pea note", "pea"]]), { timeout: 20_000 });
+    // gate-ef940d36: the undo is recorded in History, and with nothing of the person's left the verb says so.
+    expect(await screen.findByText(/you undid your last finding/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Undo your last finding" }).getAttribute("aria-description"))
+      .toBe("Nothing of yours left to undo: Pea's findings are Pea's to undo"));
+    fireEvent.click(screen.getByRole("button", { name: "Undo your last finding" }));
+    expect(await authors()).toEqual([["pea note", "pea"]]);
   } finally {
     closes.reverse().forEach((close) => close());
     await native.close();

@@ -1,4 +1,4 @@
-import { undoOwnFinding } from "../route/host";
+import { ownFindingsLeft, undoOwnFinding } from "../route/host";
 import { kernelCommands } from "../route/slots/kernel-commands.ts";
 import { hostReadSource } from "./host-read-source.ts";
 import { writeReject } from "./catalog-work-reviews";
@@ -398,6 +398,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       return {ready:true,refusal:null,label:ids.length===1?options.find(o=>o.id===ids[0])!.label:ids.length?`${ids.length} ${spec.subject?.noun ?? "Subject"}s`:"",link:`${module.data.address}?${link}`};
     } catch { return refused(`${spec.subject?.noun ?? "Subject"} is malformed`); }
   };
+  const findingMoves: import("./timeline").TimelineEntry[] = [];
   const results = new Map<string,unknown>();
   const pending = new Set<string>();
   const run = async (id: string, apply = false, supplied?:unknown) => {
@@ -528,7 +529,15 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     },
     discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.journal.discardIntent(id); notify(); },
     // The person's own findings live in the document's findings Work, not this route's: their undo is that door's.
-    undoFinding: () => { const key = owners.get(own)?.handle?.key; return key ? undoOwnFinding(key, ports.findings) : Promise.resolve({ message: "Wait for this route's Work before undoing a finding" }); },
+    undoFinding: async () => {
+      const key = owners.get(own)?.handle?.key;
+      if (!key) return { message: "Wait for this route's Work before undoing a finding" };
+      const refused = await undoOwnFinding(key, ports.findings);
+      // ponytail: the History entry lives for this Place; a durable one needs the findings Work's own moves here.
+      if (!refused) { findingMoves.push({ kind: "feed", at: new Date().toISOString(), verb: "findings.undo", subject: { message: "you undid your last finding" } }); notify(); }
+      return refused;
+    },
+    ownFindingsLeft: () => { const key = owners.get(own)?.handle?.key; return key ? ownFindingsLeft(key, ports.findings) : Promise.resolve(null); },
     restoreWork: restore, journalRefusal: () => input.readOnly || input.history ? "needs live Revit" : [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
@@ -582,7 +591,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         rows: stale ? [] : r.presentation.rows, cells: stale ? [] : r.presentation.cells, stale }; },
     reviewProblem: (id: string) => problems.get(id) ?? null,
     cancel: (id: string) => { const token=plans.get(id);if(token) gate.retire(token.token);plans.delete(id);reviews.delete(id);notify(); },
-    timeline: () => [...owners.values()].flatMap(o => o.lease.entry.timeline()),
+    timeline: () => [...[...owners.values()].flatMap(o => o.lease.entry.timeline()), ...findingMoves],
     draw(id: string, render?: (ctx: DrawContext<any,any,any,any>)=>unknown) {
       const pane = spec.panes[id]!;
       const value = pane.read ? reads.get(pane.read)?.snapshot ?? unavailable(pane.read.demand === "explicit"?"Press Read":"Reading...") : unavailable("No read declared");
