@@ -21,6 +21,10 @@ namespace Pe.Revit.Global.Services.Host;
 public static class SdkOperations {
     internal static readonly JsonSerializerSettings Json = new() {
         NullValueHandling = NullValueHandling.Ignore,
+        // The catalog declares every DateTime as JSON Schema date-time, which requires an offset.
+        // The default (RoundtripKind) writes an Unspecified-kind value, such as default(DateTime), with
+        // none, and every client's decoder then refuses the whole answer. Unspecified is read as UTC.
+        DateTimeZoneHandling = DateTimeZoneHandling.Utc,
         ContractResolver = new DefaultContractResolver {
             NamingStrategy = new CamelCaseNamingStrategy {
                 ProcessDictionaryKeys = false,

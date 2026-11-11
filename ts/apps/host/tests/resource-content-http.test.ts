@@ -1,8 +1,8 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
 import { z } from "zod";
-import { readingKey, readingRequestSchema, type Machine } from "@pe/agent-contracts";
-import { resourceSnapshot, type ResourceObserver } from "@pe/runtime";
+import { readingRequestSchema, type Machine } from "@pe/agent-contracts";
+import type { ResourceObserver } from "@pe/runtime";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { buildCapabilities, createCapabilityCatalogSource } from "../../../packages/mcps/src/pea/capabilities.ts";
 import { fixture } from "./host-read-graph.test-support.ts";
@@ -13,6 +13,7 @@ import { registeredReads } from "../src/reads/routes.ts";
 import { resources } from "../src/builtin-read-handles.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import { listBridgeSessions } from "../src/local-ops.ts";
+import type { HostSessionInventory } from "../src/session-inventory.ts";
 
 const sdk = vi.hoisted(() => ({ answer: (_args: readonly string[]): string => { throw Error("Unexpected SDK launch"); } }));
 // Only process I/O is recorded. SDK argv, envelope validation and reading owner stay real.
@@ -26,13 +27,13 @@ const instant = (n: number) => new Date(Date.UTC(2026, 10, 8, 0, n)).toISOString
 const seed = machineFixture([{ session: "running", documents: [] }]);
 const machineAt = (n: number): Machine => ({ ...seed, observedAtUtc: instant(n) });
 
-async function surface(observer: ResourceObserver) {
+async function surface(observer: ResourceObserver, list?: HostSessionInventory["Service"]["list"]) {
   const definition = read("test.resource-content", {
     input: readingRequestSchema, output: z.unknown(),
     run: (ctx, args) => ctx.read(args.kind === "capabilities" ? resources.capabilities : args.kind === "inventory" ? resources.inventory : resources.recents, args),
   });
   const unregister = registeredReads.register({ probe: definition });
-  const host = await fixture(false, { resourceObserver: observer });
+  const host = await fixture(false, { resourceObserver: observer, list });
   let sequence = 0;
   return {
     async post(args: z.infer<typeof readingRequestSchema>) {
@@ -155,17 +156,15 @@ test("SDK HTTP versions ignore session/document/holdings sampling and request id
 test("inventory HTTP version ignores a new equal bridge observation, but fences document and incarnation changes", async () => {
   let samples = 0, change: "none" | "document" | "incarnation" = "none";
   const bodies: unknown[] = [];
-  const http = await surface((request, publish) => {
+  // The inventory's owner is HostSessionInventory (a138a6e1), for a graph read as for the stream: the
+  // resource adapter refuses it ("Host does not own 'inventory'", gate c80e644a /bind), so it is never asked.
+  const http = await surface(hostResourceObserver(), () => {
     const n = ++samples;
     const view = sessionView({ connected: true, sessionId: "running", processId: 42,
       processStartUtcUnixMs: change === "incarnation" && n === 2 ? 2000 : 1000,
       state: { activeDocumentTitle: change === "document" && n === 2 ? "Other" : "Model",
         activeDocumentObservedAtUnixMs: n * 1000, openDocuments: [{ openId: "doc", title: "Model" }] } });
-    let closed = false;
-    void Effect.runPromise(listBridgeSessions(Effect.succeed([view]))).then(value => {
-      bodies.push(value); if (!closed) publish(resourceSnapshot(readingKey(request), { value }));
-    });
-    return () => { closed = true; };
+    return Effect.map(listBridgeSessions(Effect.succeed([view])), value => { bodies.push(value); return value; });
   });
   try {
     const packet = await http.post({ kind: "inventory" });
