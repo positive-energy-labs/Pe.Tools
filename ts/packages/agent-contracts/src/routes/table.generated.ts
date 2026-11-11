@@ -11,10 +11,10 @@ const personField = <S extends z.ZodType>(schema: S, url: "push" | "replace") =>
 /** Every route's address, by route key. A row with `module` is a builtin declared in that web folder. */
 export const routeAddresses = {
 "bind": { path: "/bind" as const, title: "Bind", fields: {
-"page": personField((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
-"view": personField((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"boolean"}) as z.ZodType<Immutable<boolean>>).default(false), "replace"),
 "query": personField((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","propertyNames":{"type":"string"},"additionalProperties":{"type":"string"}}) as z.ZodType<Immutable<{}>>).default({}), "replace"),
 "fragment": personField((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "replace"),
+"page": personField(subjectSchema(1).default({"kind":"ids","ids":[]}), "push"),
+"view": personField((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"boolean"}) as z.ZodType<Immutable<boolean>>).default(false), "replace"),
 selected: {...personField(focusSelectionSchema,"replace"),agent:undefined}
 }, module: "pages-bind" },
 "captures": { path: "/captures" as const, title: "Captures", fields: {
