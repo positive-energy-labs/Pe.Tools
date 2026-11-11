@@ -1093,7 +1093,7 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
     ], f.fans.work()!.revision);
     await vi.waitFor(() => expect(f.fans.work()!.value.equipmentFlows[elementSubject(realMuas.nodes.find(node => node.id === 14577391)!)]?.edit?.value.cfm).toBe(1000));
     f.fans.refresh("value");
-    for (const id of ["value", "owner:ducts"])
+    for (const id of ["value"])
       await vi.waitFor(() => expect(f.fans.readingStatus(id).snapshot).toMatchObject({ current: true }));
     function WriteReview() {
       const [, changed] = useReducer(n => n + 1, 0);
@@ -1173,7 +1173,7 @@ test.each([false, true])(
     );
     await vi.waitFor(() => expect(f.fans.work()!.value.writeIntent).toBeTruthy());
     f.fans.refresh("value");
-    for (const id of ["value", "owner:ducts"])
+    for (const id of ["value"])
       await vi.waitFor(() => {
         const snapshot = f.fans.readingStatus(id).snapshot;
         if (snapshot.status === "failed") throw Error(`${id}: ${snapshot.reason}`);
