@@ -18,7 +18,7 @@
   --pe-ink: light-dark(#2b2721, #e6dfd2);
   --pe-ink-2: light-dark(#625a4e, #a59b8b);
   --pe-ink-mute: light-dark(#8e8679, #6e665a);
-  --pe-line: light-dark(#e0d9ca, #2a2620);
+  --pe-line: light-dark(#d3caba, #353028); /* kaitpw 2026-11-11 (default 10): one step up, the midpoint to --pe-line-2 (was #e0d9ca, #2a2620) */
   --pe-line-2: light-dark(#c5bbaa, #403a30);
   /* The same two hairlines one step up the ramp, for a dimmed ground (the side pane, the list bar):
      --pe-line is tuned for --pe-page and vanishes on --pe-recess (1.05:1). A dimmed scope remaps
