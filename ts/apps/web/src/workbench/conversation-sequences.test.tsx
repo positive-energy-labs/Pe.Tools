@@ -161,6 +161,28 @@ test("a settled run voices its failure once: the glyph alone is toned, the count
   expect([...summary.querySelectorAll("[data-tone]")].map((node) => node.tagName)).toEqual(["svg"]);
 });
 
+// The host's log shape from drive gate-c80e644a: the run-consent ask rides its own `writes:<turn>`
+// id (run-consent.ts), which no harness tool call ever settles.
+test("a consented write that succeeds counts no failure: the allowed consent ask is done", () => {
+  const at = "2026-11-11T20:02:08.000Z";
+  const tool = (seq: number, status: string, sessionUpdate = "tool_call_update") => ({
+    seq, at, kind: "update", turnId: "t", update: { sessionUpdate, toolCallId: "do", title: "mcp__pea__pe_do", status },
+  });
+  const events = harnessEventSchema.array().parse([
+    { seq: 1, at, kind: "prompt", turnId: "t", text: "Write a finding." },
+    tool(2, "pending", "tool_call"),
+    { seq: 3, at, kind: "permission_request", turnId: "t", requestId: "ask", scope: "run", deadline: at, commands: ["c"],
+      toolCall: { toolCallId: "writes:t", title: "First write: directory Work. Then all writes in this thread until Stop." },
+      options: [{ optionId: "allow_now", name: "Allow now", kind: "allow_once" }, { optionId: "stop_writes", name: "Reject", kind: "reject_once" }] },
+    { seq: 4, at, kind: "permission_resolved", turnId: "t", requestId: "ask", by: "deadline", optionId: "allow_now" },
+    tool(5, "completed"),
+    { seq: 6, at, kind: "turn_end", turnId: "t", stopReason: "end_turn" },
+  ]);
+  const view = show(selectMessages({ ...emptyChatState(), events }));
+  expect(view.container.querySelector("summary")!.textContent).toMatch(/^2 tools(?! · 1 failed)/);
+  expect(view.queryByText("failed")).toBeNull();
+});
+
 test("one streamed entry renders once at N=10 and N=200, including equal-length text changes", () => {
   const counts: number[] = [];
   const register = () => {};

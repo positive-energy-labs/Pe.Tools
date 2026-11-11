@@ -29,7 +29,7 @@ const machineAt = (n: number): Machine => ({ ...seed, observedAtUtc: instant(n) 
 async function surface(observer: ResourceObserver) {
   const definition = read("test.resource-content", {
     input: readingRequestSchema, output: z.unknown(),
-    run: (ctx, args) => ctx.read(args.kind === "capabilities" ? resources.capabilities : args.kind === "inventory" ? resources.inventory : resources.recents, args),
+    run: (ctx, args) => ctx.read(args.kind === "machine" ? resources.machine : args.kind === "capabilities" ? resources.capabilities : args.kind === "inventory" ? resources.inventory : resources.recents, args),
   });
   const unregister = registeredReads.register({ probe: definition });
   const host = await fixture(false, { resourceObserver: observer });
@@ -44,6 +44,40 @@ async function surface(observer: ResourceObserver) {
   };
 }
 
+// The live wound (drive gate-c80e644a): 32 of 117 consecutive machine frames differed only in the
+// SDK queue's running request, which is whichever read the census poll caught in flight.
+test("machine HTTP version ignores the SDK queue's running request; the host settles a race itself, and a lasting one refuses in plain words", async () => {
+  let samples = 0, change: "queue" | "once" | "lasting" = "queue";
+  const session = seed.revit.sessions![0]!, row = session.row;
+  if (row.case !== "controlled-active") throw Error("Fixture needs a controlled session");
+  const bridge = row.bridge;
+  if (bridge.bridge !== "ready") throw Error("Fixture needs a ready bridge");
+  const owner = {
+    current: () => seed, refresh: async () => seed, fresh: async () => seed, acquisitions: () => [],
+    observe(accept: (value: Machine) => void) {
+      const n = ++samples, caught = n % 2 === 0;
+      const gone = change === "once" ? n === 2 : change === "lasting" && caught;
+      accept({ ...machineAt(n), revit: { ...seed.revit, sessions: gone ? [] : [{ ...session, row: { ...row, bridge: { ...bridge,
+        queue: { depth: 0, health: "responsive", lastTickUtc: instant(n), runningKey: caught ? "doc.list" : null,
+          runningRequestId: caught ? `doc-list-${n}` : null, runningStartedUtc: caught ? instant(n) : null } } } }] } });
+      return () => {};
+    },
+  };
+  const http = await surface(hostResourceObserver(undefined, undefined, undefined, undefined, undefined, owner));
+  try {
+    const packet = await http.post({ kind: "machine" });
+    expect(packet, JSON.stringify(packet).slice(0, 400)).toMatchObject({ state: "current" });
+    expect(samples, "one read and its final validation").toBe(2);
+    change = "once"; samples = 0;
+    expect(await http.post({ kind: "machine" }), "a raced first publication is re-evaluated on the host").toMatchObject({ state: "current" });
+    expect(samples).toBe(4);
+    change = "lasting"; samples = 0;
+    const refused = await http.post({ kind: "machine" });
+    expect(refused).toMatchObject({ state: "refresh-needed", value: null, reason: "The machine input changed while this was being read." });
+    expect(samples, "three evaluations, then the refusal").toBe(6);
+  } finally { await http.close(); }
+}, 60_000);
+
 test("capabilities HTTP version ignores TTL and embedded-machine samples, but fences changed capabilities", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   let samples = 0, mode: "catalog" | "machine" | "content" = "catalog";
@@ -52,7 +86,7 @@ test("capabilities HTTP version ignores TTL and embedded-machine samples, but fe
   if (!native) throw Error("Fixture needs one publicly discoverable native operation");
   vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
     const url = String(input instanceof Request ? input.url : input);
-    if (url.endsWith("/ops")) return Response.json({ operations: mode === "content" && samples === 2 ? [{ key: native.key.slice(3) }] : [] });
+    if (url.endsWith("/ops")) return Response.json({ operations: mode === "content" && samples % 2 === 0 ? [{ key: native.key.slice(3) }] : [] });
     if (url.includes("/instances/readings?read=recents")) return Response.json({ result: { recents: [] } });
     throw Error(`Unexpected catalogue transport ${url}`);
   });
@@ -83,7 +117,7 @@ test("capabilities HTTP version ignores TTL and embedded-machine samples, but fe
     }
     mode = "content"; samples = 0; observed.length = 0; catalog.invalidate();
     expect(await http.post({ kind: "capabilities" })).toMatchObject({ state: "refresh-needed", value: null,
-      reason: expect.stringMatching(/capabilities.*changed during evaluation/) });
+      reason: "The capabilities input changed while this was being read." });
     expect(observed[0]).toMatchObject({ capabilities: expect.arrayContaining([
       expect.objectContaining({ key: native.key, availability: { state: "unavailable" } }),
     ]) });
@@ -104,7 +138,7 @@ test("SDK HTTP versions ignore session/document/holdings sampling and request id
     if (variant === "sessions-observation") envelope.result.sessions[0].observedAtUtc = instant(n);
     if (variant === "sessions-request") envelope.result.requestId = `poll-${n}`;
     if (variant === "documents") envelope.resolved.observedAtUtc = instant(n);
-    if (changed && n === 2) {
+    if (changed && n % 2 === 0) {
       if (verb === "session-list") envelope.result.sessions = [];
       else if (verb === "doc-list") envelope.result.documents = [];
       else envelope.result.checks[0].ok = !envelope.result.checks[0].ok;
@@ -121,7 +155,7 @@ test("SDK HTTP versions ignore session/document/holdings sampling and request id
           isDetached: null, isCloud: null, centralPath: null, region: null, projectGuid: null, modelGuid: null, persistence: null }],
         holdingsLeg: { observedAtUtc: instant(n), attemptedAtUtc: instant(n), error: null },
         holdings: [{ openId: "doc", title: "Model", holdings: { empty: true, unsaved: false, workshared: true,
-          savedNotSynced: null, elements: [], worksets: changed && n === 2 ? ["HVAC"] : [] } }],
+          savedNotSynced: null, elements: [], worksets: changed && n % 2 === 0 ? ["HVAC"] : [] } }],
       }] } };
     },
     refresh: async () => seed, fresh: async () => seed, acquisitions: () => [], observe: () => () => {},
@@ -147,7 +181,7 @@ test("SDK HTTP versions ignore session/document/holdings sampling and request id
       }
       samples = 0; changed = true;
       expect(await http.post(request), name).toMatchObject({ state: "refresh-needed", value: null,
-        reason: expect.stringMatching(/sdk.*changed during evaluation/) });
+        reason: "The sdk input changed while this was being read." });
     }
   } finally { await http.close(); }
 }, 60_000);
@@ -158,8 +192,8 @@ test("inventory HTTP version ignores a new equal bridge observation, but fences 
   const http = await surface((request, publish) => {
     const n = ++samples;
     const view = sessionView({ connected: true, sessionId: "running", processId: 42,
-      processStartUtcUnixMs: change === "incarnation" && n === 2 ? 2000 : 1000,
-      state: { activeDocumentTitle: change === "document" && n === 2 ? "Other" : "Model",
+      processStartUtcUnixMs: change === "incarnation" && n % 2 === 0 ? 2000 : 1000,
+      state: { activeDocumentTitle: change === "document" && n % 2 === 0 ? "Other" : "Model",
         activeDocumentObservedAtUnixMs: n * 1000, openDocuments: [{ openId: "doc", title: "Model" }] } });
     let closed = false;
     void Effect.runPromise(listBridgeSessions(Effect.succeed([view]))).then(value => {
@@ -175,7 +209,7 @@ test("inventory HTTP version ignores a new equal bridge observation, but fences 
     for (const content of ["document", "incarnation"] as const) {
       change = content; samples = 0;
       expect(await http.post({ kind: "inventory" }), content).toMatchObject({ state: "refresh-needed", value: null,
-        reason: expect.stringMatching(/inventory.*changed during evaluation/) });
+        reason: "The inventory input changed while this was being read." });
     }
   } finally { await http.close(); }
 }, 60_000);
