@@ -87,12 +87,6 @@ export interface PictureContent<L extends string = string, F extends string = st
   hoverGroups?: (group: SubjectKey) => boolean;
   /** A picked element's selection, widened (E: its leg). Absent = the single element. */
   widen?: (key: SubjectKey) => readonly SubjectKey[];
-  /** Routes can declare only the zero-tessellation default. The kernel owns detail. */
-  geometry: {
-    overview: ReturnType<typeof sceneRequest> & {
-      contextRepresentation: Extract<ContextRepresentation, "overview">;
-    };
-  };
   /** Capture limits and clipping; `meshes` substitutes a dev fixture for the capture. */
   capture?: { maxTriangles?: number; cuts?: SceneMeshes["cuts"]; meshes?: SceneMeshes | null };
   /** Centrelines: bounds before meshes arrive, the jump fallback, and the globe's lines. */
@@ -317,9 +311,8 @@ export function Picture<L extends string, F extends string>({
       content.capture?.maxTriangles,
     ],
   );
-  const overviewRequest = request
-    ? { ...request, contextRepresentation: "overview" as const }
-    : content.geometry.overview;
+  // The kernel builds every capture from the focus; a route authors no scene request (ADR 0035 rule 2).
+  const overviewRequest = request ? { ...request, contextRepresentation: "overview" as const } : null;
   const captured = useCapture(
     pictureSize ? (contextRepresentation === "meshes" ? request : overviewRequest) : null,
     native,

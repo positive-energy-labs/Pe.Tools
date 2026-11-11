@@ -5,7 +5,6 @@
  * row's hover lights its mark. Rendered through the layout's pane renderer, as `e-picture` is.
  */
 import { useElementAttention } from "#/attention";
-import { sceneRequest } from "#/scene/host";
 import {
   Picture,
   type PictureContent,
@@ -384,14 +383,6 @@ export function SheetPicture({
       onPose={props.onPose}
       jump={jump}
       content={{
-        geometry: {
-          overview: sceneRequest(
-            [...new Set(overviewFans.map((fan) => fan.unitId))],
-            false,
-            0,
-            "overview",
-          ),
-        },
         focus,
         members,
         // Ruling C: hovering an element lights its section; a pick selects that section.

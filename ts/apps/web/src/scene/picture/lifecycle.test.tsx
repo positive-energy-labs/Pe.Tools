@@ -50,15 +50,6 @@ afterEach(() => {
 });
 const selection = Atom.make<ReadonlySet<SubjectKey>>(new Set<SubjectKey>());
 const content: PictureContent = {
-  geometry: {
-    overview: {
-      elementIds: [7311],
-      contextPaddingFt: 0,
-      focusOnly: false,
-      contextRepresentation: "overview",
-      maxTriangles: 100000,
-    },
-  },
   focus: { walked: [7311], near: [] },
   lines: [],
   name: () => "duct",

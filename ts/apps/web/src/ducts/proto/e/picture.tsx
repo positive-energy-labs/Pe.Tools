@@ -1,4 +1,3 @@
-import { sceneRequest } from "#/scene/host";
 import { picturePageMove } from "#/shell/picture-page";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -14,7 +13,6 @@ import { VisibleRouteResource } from "#/route/activity";
 import { damageLayers } from "#/scene/damage";
 import {
   Picture,
-  type PictureContent,
   type PictureLayer,
   type PictureOverlayFrame,
 } from "#/scene/picture/picture";
@@ -81,7 +79,6 @@ interface DuctsPictureProps {
 }
 
 const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
-const NO_FOCUS: PictureContent["focus"] = { walked: [], near: [] };
 /** A tree group lights under an element hovered in 3D; an issue's set does not. */
 const hoverGroups = (group: SubjectKey) => !group.startsWith("issue:");
 
@@ -228,7 +225,12 @@ function Content({
   const stubs = useMemo(() => stubIdsOf(neighbours, opened), [neighbours, opened]);
   // E's system scope is one producer of focus: its members walked, the neighbours' stubs near.
   const focus = useMemo(
-    () => ductsFocus(snapshot, page.system, members, stubs) ?? NO_FOCUS,
+    // No system open: the equipment overview, as context the picture captures from its focus.
+    () =>
+      ductsFocus(snapshot, page.system, members, stubs) ?? {
+        walked: [],
+        near: snapshot.nodes.filter((node) => node.kind === "equipment").map((node) => node.id),
+      },
     [snapshot, page.system, members, stubs],
   );
   const systemColours = page.layers.includes("system-colours");
@@ -571,14 +573,6 @@ function Content({
       onPose={onPose}
       jump={jump}
       content={{
-        geometry: {
-          overview: sceneRequest(
-            snapshot.nodes.filter((node) => node.kind === "equipment").map((node) => node.id),
-            false,
-            0,
-            "overview",
-          ),
-        },
         focus,
         members: membership,
         hoverGroups,
