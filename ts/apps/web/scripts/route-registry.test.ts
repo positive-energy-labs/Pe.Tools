@@ -1,4 +1,8 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
+import { projectWork } from "./host-projection.ts";
 import { renderRouteRegistry } from "./route-registry.ts";
 
 test("one row per builtin: static closure and host read imports, the work projection aliased", () => {
@@ -26,4 +30,21 @@ test("a host read outside the route directory is refused; a duplicate key is ref
     "fans: a host read lives in its route directory",
   );
   expect(() => renderRouteRegistry([row, row])).toThrow("Duplicate route key fans");
+});
+
+test("a Work declared in route.ts is refused, with or without the extension", async () => {
+  const folder = mkdtempSync(join(tmpdir(), "project-work-"));
+  try {
+    for (const specifier of ["./route", "./route.ts"]) {
+      const entry = join(folder, "entry.ts");
+      writeFileSync(entry, `import { fansWork } from ${JSON.stringify(specifier)};
+export const module = route({ edits: { work: fansWork } });
+`);
+      // The refusal precedes every read of the typed route and of the Work module.
+      await expect(projectWork(entry, undefined as never, join(folder, "routes.generated.ts"), "fansWork", async () => ({}), false))
+        .rejects.toThrow("declare Work in a neutral module beside route.ts");
+    }
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
 });
