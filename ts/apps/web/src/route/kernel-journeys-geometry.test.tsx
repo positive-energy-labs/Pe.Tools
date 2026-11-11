@@ -10,7 +10,8 @@ import { makeAtomRegistry } from "../shell/owner";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { route } from "./typed-route";
 import { module as fans } from "../fans/route";
-import { PictureBody, RosterBody } from "../ducts/sheet/mount";
+import { RosterBody } from "../ducts/sheet/mount";
+import { PictureBody } from "../fans/picture";
 import { SubjectDoor, typedSubjectDoor } from "../shell/subject";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 const io = vi.hoisted(() => ({ call: vi.fn(), orbit: null as Scene3DProps["orbit"] | null }));
@@ -57,8 +58,7 @@ test("JZ H04 typed Fans picture demands exact elements and reach, refuses docume
     await waitFor(() => expect(io.call.mock.calls.some(([, req]) => req.contextRepresentation === "meshes")).toBe(true));
     const detail = io.call.mock.calls.find(([, req]) => req.contextRepresentation === "meshes")!;
     const sheet = (a.value().value as any).open;
-    const layers = a.page.read().layers;
-    const context = layers === "all" || layers.includes("context") || layers.includes("halo");
+    const context = a.page.read().context !== "off";
     const expected = [...new Set<number>([sheet.overview.fan.unitId, ...sheet.elements.walkedElementIds,
       ...(context ? sheet.elements.beyond.flatMap((unit: { elementIds: number[] }) => unit.elementIds) : []),
     ])].sort((x, y) => x - y);

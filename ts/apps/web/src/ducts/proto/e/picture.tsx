@@ -1,4 +1,3 @@
-import { sceneRequest } from "#/scene/host";
 import { picturePageMove } from "#/shell/picture-page";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -13,8 +12,8 @@ import { useContext, useMemo, type ReactNode, type RefObject } from "react";
 import { VisibleRouteResource } from "#/route/activity";
 import { damageLayers } from "#/scene/damage";
 import {
+  layersOn,
   Picture,
-  type PictureContent,
   type PictureLayer,
   type PictureOverlayFrame,
 } from "#/scene/picture/picture";
@@ -65,6 +64,7 @@ import { GoToSubject } from "./go-to";
 import { RulingBody, useMarks } from "./rulings";
 import { RunDetail, runOf } from "./run-detail";
 import { DUCTS_FLAT, DUCTS_LAYER_OPTIONS } from "./teaching";
+import { issueOf, issueSubject } from "../../cell-focus";
 
 type PictureContext = DuctsDrawContext;
 interface DuctsPictureProps {
@@ -81,7 +81,6 @@ interface DuctsPictureProps {
 }
 
 const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
-const NO_FOCUS: PictureContent["focus"] = { walked: [], near: [] };
 /** A tree group lights under an element hovered in 3D; an issue's set does not. */
 const hoverGroups = (group: SubjectKey) => !group.startsWith("issue:");
 
@@ -197,8 +196,8 @@ function Content({
   };
   const select = (selected: string) =>
     ctx.page.select(selected ? [{ kind: "focus", id: selected }] : []);
-  const pickIssue = (selected: string) => {
-    select(selected);
+  const pickIssue = (issue: string) => {
+    select(issueSubject(issue));
     ctx.page.query({ rulingSearch: emptyListSearch() });
   };
   const movePicture = picturePageMove<PicturePage<string, "schematic">>(
@@ -228,10 +227,16 @@ function Content({
   const stubs = useMemo(() => stubIdsOf(neighbours, opened), [neighbours, opened]);
   // E's system scope is one producer of focus: its members walked, the neighbours' stubs near.
   const focus = useMemo(
-    () => ductsFocus(snapshot, page.system, members, stubs) ?? NO_FOCUS,
+    // No system open: the equipment overview, as context the picture captures from its focus.
+    () =>
+      ductsFocus(snapshot, page.system, members, stubs) ?? {
+        walked: [],
+        near: snapshot.nodes.filter((node) => node.kind === "equipment").map((node) => node.id),
+      },
     [snapshot, page.system, members, stubs],
   );
-  const systemColours = page.layers.includes("system-colours");
+  const on = layersOn(page.layers, DUCTS_LAYER_OPTIONS);
+  const systemColours = on.includes("system-colours");
   const colours = coloursOf(work.doc);
   const routePaint = useMemo(
     () => paintOfDucts(snapshot, opened, stubs),
@@ -385,7 +390,7 @@ function Content({
 
   // A page write, as the tree's: the picture registers the selection it becomes.
   const pick = (id: number | null) => {
-    select(id == null ? "" : String(id));
+    select(id == null ? "" : (elements.keyOf(id) ?? ""));
   };
   const widen = useMemo(
     () =>
@@ -533,7 +538,7 @@ function Content({
         </span>
       </TooltipHint>
     );
-  const marksOn = new Set<string>(page.layers);
+  const marksOn = new Set<string>(on);
   const overlay = (frame: PictureOverlayFrame) => (
     <DuctsOverlay
       frame={frame}
@@ -549,7 +554,7 @@ function Content({
       ]}
       issues={issues}
       pointOf={pointOf}
-      issue={page.selected}
+      issue={issueOf(page.selected)}
       onRuling={ruling}
     />
   );
@@ -565,20 +570,12 @@ function Content({
         label: page.system.join(", "),
         refreshing: identity.refreshing,
       }}
-      page={{ ...page, issue: page.selected }}
+      page={{ ...page, issue: issueOf(page.selected) }}
       setPage={movePicture}
       renderPane={renderPane}
       onPose={onPose}
       jump={jump}
       content={{
-        geometry: {
-          overview: sceneRequest(
-            snapshot.nodes.filter((node) => node.kind === "equipment").map((node) => node.id),
-            false,
-            0,
-            "overview",
-          ),
-        },
         focus,
         members: membership,
         hoverGroups,

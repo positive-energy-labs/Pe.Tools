@@ -40,50 +40,6 @@
       "share": true,
       "agent": "set"
     },
-    "contextStyle": {
-      "role": "pose",
-      "schema": "contextStyle",
-      "codec": "contextStyle",
-      "initial": "glass",
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "encoding": {
-      "role": "pose",
-      "schema": "encoding",
-      "codec": "encoding",
-      "initial": "health",
-      "url": "push",
-      "share": true,
-      "agent": "set"
-    },
-    "layers": {
-      "role": "pose",
-      "schema": "layers",
-      "codec": "layers",
-      "initial": [
-        "meshes",
-        "system-colours",
-        "stub-labels",
-        "halo",
-        "no-run",
-        "labels",
-        "findings"
-      ],
-      "url": "push",
-      "share": true,
-      "agent": "set"
-    },
-    "picture": {
-      "role": "pose",
-      "schema": "picture",
-      "codec": "picture",
-      "initial": "model",
-      "url": "push",
-      "share": true,
-      "agent": "set"
-    },
     "sceneView": {
       "role": "pose",
       "schema": "sceneView",
@@ -102,6 +58,42 @@
       "codec": "viewport",
       "initial": null,
       "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "context": {
+      "role": "pose",
+      "schema": "context",
+      "codec": "context",
+      "initial": "glass",
+      "url": "push",
+      "share": true,
+      "agent": "set"
+    },
+    "layers": {
+      "role": "pose",
+      "schema": "layers",
+      "codec": "layers",
+      "initial": "default",
+      "url": "push",
+      "share": true,
+      "agent": "set"
+    },
+    "encoding": {
+      "role": "pose",
+      "schema": "encoding",
+      "codec": "encoding",
+      "initial": "",
+      "url": "push",
+      "share": true,
+      "agent": "set"
+    },
+    "picture": {
+      "role": "pose",
+      "schema": "picture",
+      "codec": "picture",
+      "initial": "model",
+      "url": "push",
       "share": true,
       "agent": "set"
     },
@@ -224,12 +216,12 @@
       "deps": {
         "page": [
           "contextRadiusFt",
-          "contextStyle",
-          "encoding",
-          "layers",
-          "picture",
           "sceneView",
           "viewport",
+          "context",
+          "layers",
+          "encoding",
+          "picture",
           "system",
           "stage",
           "systemSearch",
@@ -256,12 +248,12 @@
       "deps": {
         "page": [
           "contextRadiusFt",
-          "contextStyle",
-          "encoding",
-          "layers",
-          "picture",
           "sceneView",
           "viewport",
+          "context",
+          "layers",
+          "encoding",
+          "picture",
           "system",
           "stage",
           "systemSearch",
@@ -288,12 +280,12 @@
       "deps": {
         "page": [
           "contextRadiusFt",
-          "contextStyle",
-          "encoding",
-          "layers",
-          "picture",
           "sceneView",
           "viewport",
+          "context",
+          "layers",
+          "encoding",
+          "picture",
           "system",
           "stage",
           "systemSearch",

@@ -55,7 +55,7 @@ import { z } from "zod";
 import type { DuctsDrawContext } from "../../route.ts";
 import { roster as rosterRead, network as networkSource } from "../../route.ts";
 import { airflowOptions } from "../../airflow";
-import { attentionSubjects, cellFocusOf, cellFocusSubject, focusedElement } from "../../cell-focus";
+import { cellFocusOf, cellFocusSubject, focusedElement, issueOf, issueSubject, selectedKeys } from "../../cell-focus";
 import {
   annotatedFindings,
   focusRow,
@@ -111,8 +111,8 @@ function useNetworkData(ctx: NetworkContext) {
   const seen = ctx.value.value?.effectiveDesign ?? null;
   const attentionDoc = doc ? `${doc.session}/${doc.openId}` : "ducts:unbound";
   const selection = useMemo(
-    () => Atom.make(attentionSubjects(page.selected.map(({ id }) => id), ductElements(snapshot))),
-    [page.selected, snapshot],
+    () => Atom.make<ReadonlySet<SubjectKey>>(new Set(selectedKeys(page.selected.map(({ id }) => id)))),
+    [page.selected],
   );
   const select = (selected: string) =>
     ctx.page.select(selected ? [{ kind: "focus", id: selected }] : []);
@@ -183,7 +183,7 @@ function useNetworkData(ctx: NetworkContext) {
     active,
     selected,
     select,
-    selectElement: (id: number | null) => select(id === null ? "" : String(id)),
+    selectElement: (id: number | null) => select(id === null ? "" : (ductElements(snapshot).keyOf(id) ?? "")),
     document: doc,
     attentionDoc,
     selection,
@@ -392,7 +392,7 @@ export function SystemsPane({ ctx }: { ctx: DuctsDrawContext }) {
 export function TreePane({ ctx }: { ctx: DuctsDrawContext }) {
   const data = useNetworkData(ctx);
   const { snapshot, priced, page, systems, work, captureSource, selectElement, select } = data;
-  const selectedElement = focusedElement(data.selected);
+  const selectedElement = focusedElement(data.selected, ductElements(snapshot));
   const ruleOf = ruleOfIds(priced);
   const { scope, trees, labels, nameOf } = useTreeProjection(snapshot, priced, work.doc, systems);
   const { neighbours } = useNeighbours(snapshot, scope, systems);
@@ -501,7 +501,7 @@ export function InboxBody({ ctx }: { ctx: DuctsDrawContext }) {
   );
   const focused = inbox
     ? focusRow(
-        selected,
+        issueOf(selected) || selected,
         new Set(
           [...inbox.fix, ...inbox.set, ...inbox.check, ...inbox.diagnostics].map((row) => row.key),
         ),
@@ -521,9 +521,9 @@ export function InboxBody({ ctx }: { ctx: DuctsDrawContext }) {
           heal={handles}
           fan={handles}
           cells={commands}
-          selected={focusedElement(selected)}
+          selected={focusedElement(selected, ductElements(snapshot))}
           focused={focused}
-          onPick={select}
+          onPick={(key) => select(issueSubject(key))}
           address={{
             scope: `${openKey(systems)}:${captureSource?.version ?? ""}`,
             search: page.rulingSearch,

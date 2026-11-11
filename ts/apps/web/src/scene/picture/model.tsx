@@ -192,7 +192,7 @@ export function ModelPicture({
   onIssuePick: (target: IssueTarget) => void;
   issue: string;
   setPage: (
-    next: Partial<Pick<PicturePage, "sceneView" | "contextRadiusFt" | "contextStyle">>,
+    next: Partial<Pick<PicturePage, "sceneView" | "contextRadiusFt" | "context">>,
     move?: { history: "push" | "replace" },
   ) => void;
   onPick: (id: number, at: { x: number; y: number }) => void;

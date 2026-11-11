@@ -316,7 +316,7 @@ test("an actual admitted standalone Fans Place enrolls without a chat or native 
   // JSON string codec text (plain, empty, numeric-looking) survives the history tag's state write.
   const strings = {
     stage: JSON.stringify("sheet"),
-    contextStyle: JSON.stringify("glass"),
+    context: JSON.stringify("glass"),
     inputSort: JSON.stringify(""),
     sheetPath: JSON.stringify("8081605"),
   };
@@ -375,7 +375,7 @@ test("an admitted Place keeps its codec bytes through open, switch, bare URL res
     rosterSearch,
     contextRadiusFt: "15",
     stage: JSON.stringify("sheet"),
-    contextStyle: JSON.stringify("glass"),
+    context: JSON.stringify("glass"),
     inputSort: JSON.stringify(""),
     sheetPath: JSON.stringify("8081605"),
   };

@@ -6,14 +6,12 @@ import { pictureModes, stageTeaching } from "#/scene/stage-teaching";
 
 const LAYER_WORDS: Record<
   (typeof DUCTS_LAYERS)[number],
-  { label: string; chord?: "M" | "C" | "L" }
+  { label: string; chord?: "M" | "L"; off?: true }
 > = {
   meshes: { label: "meshes", chord: "M" },
   "system-colours": { label: "system colours" },
   "stub-labels": { label: "stub labels" },
-  halo: { label: "proximity halo" },
-  context: { label: "context", chord: "C" },
-  centrelines: { label: "centrelines", chord: "L" },
+  centrelines: { label: "centrelines", chord: "L", off: true },
   "no-run": { label: "branches with no run" },
   labels: { label: "labels" },
   findings: { label: "findings" },
