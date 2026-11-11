@@ -9,6 +9,17 @@ import { DEFAULT_LLAMA_TIER, parseWithLlamaCloud, requireLlamaCloudKey } from ".
 import { officeExtensions, readOfficeText } from "./read-office.ts";
 import { createTool } from "./tool.ts";
 
+// ponytail: 2026-11-11 Pea-level parser A/B. A checkout's .artifacts/tmp/parser-ab.env (gitignored) sets
+// PE_READ_DOCUMENT_PARSER and PE_AB_ENV_FILE (an env file holding the key) for threads started after it exists,
+// so the trial needs no host takeover. Delete with the knob below once kaitpw rules on the default parser.
+{
+  const ab = path.resolve(import.meta.dirname, "../../../../../.artifacts/tmp/parser-ab.env");
+  try {
+    process.loadEnvFile(ab);
+    if (process.env.PE_AB_ENV_FILE) process.loadEnvFile(process.env.PE_AB_ENV_FILE);
+  } catch {}
+}
+
 /** Fraction of the page cut away from each side, top-left origin: LiteParse's own `cropBox`. */
 const cropSchema = z
   .object({
