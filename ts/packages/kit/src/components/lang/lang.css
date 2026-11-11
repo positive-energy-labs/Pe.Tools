@@ -60,13 +60,18 @@
     opacity: 0.5;
   }
 }
+/* The pill lives inside its field: in a pane collapsed to its head the field is ~0px, so the pill
+   shrinks to nothing instead of drawing over the head above it (L2; panel 39b24c0f). */
 [data-slot="pane-work"] {
   position: absolute;
   inset-inline-start: var(--gutter);
   inset-block-end: var(--gutter);
   z-index: calc(var(--z-popup) + 1);
   max-inline-size: calc(100% - var(--gutter) * 2);
-  padding: var(--space-unit);
+  block-size: var(--control-h);
+  max-block-size: max(0px, 100% - var(--gutter) * 2);
+  padding: 0 var(--space-unit);
+  line-height: var(--control-h);
   background: var(--pe-artifact);
   color: var(--pe-ink-2);
   pointer-events: none;
