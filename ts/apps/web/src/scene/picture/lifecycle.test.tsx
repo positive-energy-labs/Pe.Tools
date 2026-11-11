@@ -50,15 +50,6 @@ afterEach(() => {
 });
 const selection = Atom.make<ReadonlySet<SubjectKey>>(new Set<SubjectKey>());
 const content: PictureContent = {
-  geometry: {
-    overview: {
-      elementIds: [7311],
-      contextPaddingFt: 0,
-      focusOnly: false,
-      contextRepresentation: "overview",
-      maxTriangles: 100000,
-    },
-  },
   focus: { walked: [7311], near: [] },
   lines: [],
   name: () => "duct",
@@ -118,7 +109,7 @@ function mount(
             viewport: viewport && { ...viewport, pivot: [...viewport.pivot] },
             sceneView: { preset: "all", section: null },
             contextRadiusFt: 10,
-            contextStyle: "glass",
+            context: "glass",
             picture: "model",
             layers: full ? ownContent.layerOptions.map((l) => l.key) : ["meshes"],
           }}
@@ -265,7 +256,7 @@ it("hosts globe, layers, real selected-group facts and one context box through t
     readout: { summary: "fan ready", facts: (key) => <span data-read-facts={key}>120 cfm</span> },
     layerOptions: [
       { key: "meshes", label: "meshes" },
-      { key: "context", label: "context" },
+      { key: "labels", label: "labels" },
     ],
   };
   const view = mount("furniture", false, null, own, true, "run:r1");
@@ -278,9 +269,9 @@ it("hosts globe, layers, real selected-group facts and one context box through t
   expect(view.container.querySelectorAll('[aria-label="section and context"]')).toHaveLength(1);
   expect(view.container.querySelector('[aria-label="scene completeness"]')).toBeNull();
   fireEvent.click(view.getByRole("button", { name: "meshes" }));
-  expect(view.setPage).toHaveBeenLastCalledWith({ layers: ["context"] }, { history: "push" });
+  expect(view.setPage).toHaveBeenLastCalledWith({ layers: ["labels"] }, { history: "push" });
   fireEvent.click(view.getByRole("button", { name: "off" }));
-  expect(view.setPage).toHaveBeenLastCalledWith({ layers: ["meshes"] }, { history: "push" });
+  expect(view.setPage).toHaveBeenLastCalledWith({ context: "off" }, { history: "push" });
   fireEvent.click(view.getByRole("button", { name: "Read detailed" }));
   await waitFor(() =>
     expect(io.call.mock.calls.some((call) => call[1]?.contextRepresentation === "meshes")).toBe(

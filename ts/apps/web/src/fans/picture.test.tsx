@@ -7,7 +7,8 @@
  */
 import { AttentionRoot } from "#/attention";
 import { ElementIndexContext } from "#/element-index";
-import { ductElements } from "./../identity";
+import { selectedKeys } from "../ducts/cell-focus";
+import { ductElements } from "../ducts/sheet/../identity";
 import { boundsOfPoints } from "#/scene/orbit";
 import type { ModelPicture } from "#/scene/picture/model";
 import type { PictureStage } from "#/scene/stage-controller";
@@ -20,11 +21,11 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import * as Atom from "effect/reactivity/Atom";
 import { createElement, type ComponentProps } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { NAVIGATION_FIXTURE } from "../navigation.fixture";
+import { NAVIGATION_FIXTURE } from "../ducts/navigation.fixture";
 import { openFanSheetSchema as openSheetSchema } from "@pe/agent-contracts";
-import type { OpenSheet } from "./types.ts";
-import sheetFixture from "./sheet.fixture.json";
-import { type FanPort } from "./model";
+import type { OpenSheet } from "../ducts/sheet/types.ts";
+import sheetFixture from "../ducts/sheet/sheet.fixture.json";
+import { type FanPort } from "../ducts/sheet/model";
 import type { SheetPictureProps } from "./picture";
 import { beyondPicture, SheetPicture } from "./picture";
 
@@ -91,7 +92,7 @@ const sheet = {
 
 function mount(
   open: OpenSheet | null = sheet,
-  layers = ["meshes", "halo", "findings"],
+  layers = ["meshes", "findings"],
   fans?: FanPort[],
   full = false,
 ) {
@@ -123,7 +124,7 @@ function mount(
   const page = Atom.make({ selected: "", issue: "" });
   const selection = Atom.make(
     (get): ReadonlySet<SubjectKey> =>
-      new Set(/^\d+$/.test(get(page).selected) ? [elements.keyOf(Number(get(page).selected))!] : []),
+      new Set(selectedKeys([get(page).selected])),
   );
   const setPage = vi.fn();
   const pageOf = () => ({
@@ -132,7 +133,7 @@ function mount(
     layers,
     sceneView: { preset: "all" as const, section: null },
     contextRadiusFt: 10,
-    contextStyle: "glass" as const,
+    context: "glass" as const,
     picture: "model" as const,
     encoding: "health",
   });
@@ -172,9 +173,9 @@ it("a pick writes the page's selection and the stage pivot follows it", () => {
   const { registry, page, setPage, rerender } = mount();
   expect(seen.stage!.selectedBounds).toBeNull();
   act(() => seen.model!.onPick(a!.id, { x: 0, y: 0 }));
-  expect(setPage).toHaveBeenCalledWith({ selected: String(a!.id), issue: "" }, { history: "push" });
+  expect(setPage).toHaveBeenCalledWith({ selected: elements.keyOf(a!.id)!, issue: "" }, { history: "push" });
   // The route derives the selection atom from the page it just wrote.
-  act(() => registry.set(page, { selected: String(a!.id), issue: "" }));
+  act(() => registry.set(page, { selected: elements.keyOf(a!.id)!, issue: "" }));
   rerender();
   // Registered for the document: rows elsewhere (the ledger) read the same selection.
   expect([...registry.get(attention("d")).selected]).toEqual([elements.keyOf(a!.id)]);
@@ -214,7 +215,7 @@ it("beyond draws only while context is, cut where the host cut it, and never on 
 });
 
 it("hovering a context element names whose air it is and that this fan's calc leaves it out", () => {
-  const { registry } = mount(beyondSheet, ["meshes", "halo", "findings"]);
+  const { registry } = mount(beyondSheet, ["meshes", "findings"]);
   act(() => setHovered(registry, { doc: "d", key: elements.keyOf(c!.id)! }));
   const readout = render(<>{seen.model!.readout}</>);
   expect(readout.container.textContent).toContain(
@@ -270,7 +271,7 @@ it("reads a selected duct and run from the current sheet, including missing data
     },
   });
   const view = mount(open);
-  act(() => view.registry.set(view.page, { selected: String(a!.id), issue: "" }));
+  act(() => view.registry.set(view.page, { selected: elements.keyOf(a!.id)!, issue: "" }));
   view.rerender();
   const duct = render(<>{seen.model!.readout}</>);
   expect(duct.container.querySelector(`[data-facts="${a!.id}"]`)).not.toBeNull();

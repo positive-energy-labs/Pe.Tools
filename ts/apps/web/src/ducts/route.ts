@@ -1,16 +1,13 @@
 import type { ContextOf } from "../route/defaults";
 import { systemCode } from "./identity";
 import { command } from "../route/typed-actions.ts";
-import { poseFields } from "../route/defaults";
 import { bindings } from "./bindings";
 import { read } from "../route/defaults";
 import { stageField } from "../route/defaults";
 import { ductsRouteState } from "../../../../packages/agent-contracts/src/ducts.ts";
 import { z } from "zod";
 import {
-  ductsPictureFields,
   listSearchSchema,
-  fansRouteState,
   ductsSheetEditsSchema,
   DUCTS_SYSTEM_MAX,
 } from "@pe/agent-contracts";
@@ -24,6 +21,7 @@ import {
   whenSubject,
 } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
+import { picturePose } from "../route/slots/picture/pose.ts";
 import { draw } from "../route/draw.tsx";
 import { scrollBody } from "../route/body.ts";
 import { describeInputHistory, editMetaSchema } from "./sheet/input-history.neutral.ts";
@@ -31,18 +29,9 @@ import { reads } from "./reads.ts";
 import { presentLosses, presentHeal, presentFan } from "./reviews.ts";
 import { designSheet } from "./design-sheet.ts";
 
-const shared = ductsPictureFields;
 const system = subjectSchema(DUCTS_SYSTEM_MAX);
 export const fields = {
-  ...poseFields(shared, [
-    "contextRadiusFt",
-    "contextStyle",
-    "encoding",
-    "layers",
-    "picture",
-    "sceneView",
-    "viewport",
-  ]),
+  ...picturePose,
   system: field(system, { kind: "ids", ids: [] }, "subject", "push"),
   stage: stageField(["network"]),
   systemSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
@@ -158,9 +147,8 @@ export const module = route({
     seed: () => ductsRouteState.schema.parse({}),
     work: ductsRouteState,
     value: "ductsWork",
-    owners: {
-      fans: { state: fansRouteState, value: "fansWork" },
-    },
+    // No cross-route write (ruling 2026-11-10): /ducts owns only its Work; the host reads Fans Work into its core read.
+    owners: {},
     input: ductsSheetEditsSchema,
     patches: (input) => editPatches(input),
     history: editMetaSchema,

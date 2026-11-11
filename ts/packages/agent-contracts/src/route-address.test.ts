@@ -11,7 +11,7 @@ import { canonicalPlace, routeAddress, routeAt, routeOf } from "./route-address.
 import { oneName } from "./subject-ref.ts";
 
 test("an admitted Place retains its owner's JSON query bytes through thread context", () => {
-  const link = '/fans?inputSort=%22%22&contextStyle=%22glass%22&fan=%7B%22kind%22%3A%22ids%22%2C%22ids%22%3A%5B%5D%7D';
+  const link = '/fans?inputSort=%22%22&context=%22glass%22&fan=%7B%22kind%22%3A%22ids%22%2C%22ids%22%3A%5B%5D%7D';
   expect(routeAddress("fans").tab(link).ok).toBe(true);
   expect(canonicalPlace("fans", link)).toEqual({ ok: true, link });
   expect(canonicalPlace("fans", `${link}&thread=another` ).ok).toBe(false);
@@ -21,15 +21,8 @@ test("an admitted Place retains its owner's JSON query bytes through thread cont
 describe("a layers field", () => {
   test("opens on its declared set, and the address stays bare there", () => {
     const ducts = routeAddress("ducts");
-    expect(ducts.defaults.layers).toEqual([
-      "meshes",
-      "system-colours",
-      "stub-labels",
-      "halo",
-      "no-run",
-      "labels",
-      "findings",
-    ]);
+    // The kernel pose's `default` is the picture's own default set (ADR 0035 rule 1).
+    expect(ducts.defaults.layers).toBe("default");
     expect(ducts.write({ layers: ducts.defaults.layers })).toEqual({
       layers: undefined,
     });
@@ -46,23 +39,18 @@ describe("a layers field", () => {
   });
 
   test("an unknown layer name falls to the default", () => {
-    expect(routeAddress("ducts").read({ layers: "none" }).page.layers).toEqual([
-      "meshes",
-      "system-colours",
-      "stub-labels",
-      "halo",
-      "no-run",
-      "labels",
-      "findings",
-    ]);
+    expect(routeAddress("ducts").read({ layers: "none" }).page.layers).toBe("default");
   });
-  test("ducts carries each independent context, colour and stub-label toggle in its address", () => {
+  test("ducts carries each colour and stub-label toggle, and how context draws, in its address", () => {
     const ducts = routeAddress("ducts");
-    for (const layer of ["system-colours", "stub-labels", "halo", "context"] as const) {
+    for (const layer of ["system-colours", "stub-labels"] as const) {
       const url = ducts.link({ layers: [layer] });
       expect(url).toBe(`/ducts?${new URLSearchParams({layers:JSON.stringify([layer])})}`);
       expect(ducts.read({ layers: JSON.stringify([layer]) }).page.layers).toEqual([layer]);
     }
+    // One `context` key; no layer aliases it.
+    for (const context of ["off", "lines"] as const)
+      expect(ducts.read({ context: JSON.stringify(context) }).page.context).toBe(context);
   });
 });
 

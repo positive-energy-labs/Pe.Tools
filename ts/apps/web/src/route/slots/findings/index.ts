@@ -1,6 +1,6 @@
 import { FINDINGS_DOORS, type Finding, type Mark } from "@pe/agent-contracts/slots";
 import { catalogAction } from "../../typed-actions.ts";
-import type { Captured } from "../picture/index.ts";
+import { resolveMark, type Captured } from "../picture/index.ts";
 
 /*
  * The kernel seam for findings (ADR 0035 rule 9): one Work per document under owner key
@@ -12,10 +12,9 @@ import type { Captured } from "../picture/index.ts";
 
 /** The mark the picture draws for a finding: its own `mark`, else a ring on the subject's geometry. */
 export function findingMark(finding: Finding, captured: readonly Captured[]): Mark {
-  void finding;
-  void captured;
-  // Not drawn until a real scene capture carries the subject: today's fans capture has no ref per port.
-  throw Error("not implemented: needs slice 8 Captured SubjectRef per port");
+  const own: Mark = finding.mark ?? { kind: "ring", at: finding.subject };
+  // Nothing captured the subject: the mark stays on its SubjectRef for the picture to resolve later.
+  return resolveMark(own, captured) ?? own;
 }
 
 /**
