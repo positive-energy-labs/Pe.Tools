@@ -249,9 +249,11 @@ export async function fixture(
     request: (request: Request) => withInvocationContext({ caller: who }, () =>
       web.handler(request, Context.make(RequestIdentity, admittedRequestIdentity(who, scope)))),
     publicationEvent: async (generation: number) => {
-      const url = new URL(peRouteUrl("reads.events", {}), "http://host");
-      url.searchParams.set("subscription", "sheet");
-      url.searchParams.set("generation", String(generation));
+      const url = new URL(peRouteUrl("resources.stream", {}), "http://host");
+      url.searchParams.set(
+        "keys",
+        JSON.stringify([{ kind: "publication", subscription: "sheet", generation }]),
+      );
       const response = await withInvocationContext({ caller: who }, () =>
         web.handler(new Request(url), Context.make(RequestIdentity, admittedRequestIdentity(who, scope))),
       );
@@ -264,7 +266,7 @@ export async function fixture(
           if (chunk.done) throw Error("Publication stream closed without a state");
           text += new TextDecoder().decode(chunk.value);
         }
-        return JSON.parse(text.split("data: ")[1]!.split("\n")[0]!);
+        return JSON.parse(text.split("data: ")[1]!.split("\n")[0]!).value;
       } finally {
         await reader.cancel();
       }

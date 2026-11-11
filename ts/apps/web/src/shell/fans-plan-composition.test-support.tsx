@@ -127,7 +127,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    deliver(data:string){
      const frame=JSON.parse(data);
      if(frame.value?.handle?.key?.route === "ducts") workFrames.push(frame);
-     if(!frame.kind&&typeof frame.generation==="number") (trace as any).readEvents.push({url:this.url,...frame});
+     if(frame.kind==="snapshot"&&typeof frame.value?.generation==="number"&&typeof frame.value?.state==="string"){const key=JSON.parse(frame.key);if(key.kind==="publication")(trace as any).readEvents.push({subscription:key.subscription,...frame.value});}
      this.keys.add(frame.key);
      if(mode==="batched"&&!batchReleased&&trace.tokens.length && (frame.value?.kind==="receipt"||frame.value?.kind==="ready"&&frame.value.receipts)){
        heldReceipts.push(data);receiptBatch.push({kind:"held",key:frame.key,cursor:frame.value.cursor??frame.value.receipts.through,state:frame.value.receipt?.state??frame.value.receipts.rows.at(-1)?.state});return;
@@ -237,7 +237,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      if(mode==="batched"){batchReleased=false;receiptBatch.length=0;heldReceipts.length=0;readyAfterBatch.length=0;}
      before=sample();
      const watched=trace.http.find(row=>row.url==="/pe/reads/value"&&row.request?.read==="fans.sheet"&&row.body?.value?.evaluation===before.dependencies["fans.sheet"]);
-     const watches=(row:any)=>new URL(row.url,host.base).searchParams.get("subscription")===watched.request.subscription;
+     const watches=(row:any)=>row.subscription===watched.request.subscription;
      if(mode==="recording") await vi.waitFor(()=>expect((trace as any).readEvents.some(watches)).toBe(true),{timeout:10000});
      fireEvent.click(screen.getByRole("button",{name:"plan Write to Revit"}));
      if(mode==="recording"){

@@ -173,7 +173,8 @@ test("an empty ancestor directory cannot invalidate the missing firm input mid-r
     });
     const result = await response.json();
     expect(result.state, JSON.stringify(result)).toBe("current");
-    const events = await fetch(`${host.base}/pe/read-events?subscription=metadata&generation=1`, {
+    const keys = JSON.stringify([{ kind: "publication", subscription: "metadata", generation: 1 }]);
+    const events = await fetch(`${host.base}/pe/resources?keys=${encodeURIComponent(keys)}`, {
       headers: host.headers,
       signal: AbortSignal.timeout(10000),
     });

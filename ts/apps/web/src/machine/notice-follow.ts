@@ -6,15 +6,9 @@
  * neither repeats nor skips. A first follow (no record) owes nothing earlier: it only records.
  * `notice-policy.ts` then decides whether a raised row shows (acknowledged, snoozed, looking).
  */
-import {
-  noticeFeedSchema,
-  type MachineNotice,
-  type NoticeRow,
-  type ReadingFrame,
-} from "@pe/agent-contracts";
+import { noticeFeedSchema, type MachineNotice, type NoticeRow } from "@pe/agent-contracts";
 
-import { openEventSource } from "#/host/resource-stream";
-import { readingsUrl, type OpenEvents } from "#/workbench/provider/harness-client";
+import { peReadings, type Readings } from "#/host/resource-stream";
 
 export type NoticeSeen = Readonly<Record<string, number>>;
 
@@ -22,7 +16,6 @@ export type NoticeSeen = Readonly<Record<string, number>>;
 const pushes = (row: NoticeRow) => row.group !== "working" && row.verb !== "review";
 
 export function followNotices(options: {
-  origin: string;
   /** The tray's own card follows `as: "tray"`: its rows carry `attended`. */
   as?: "tray";
   /** What this follower saw of the last feed; null on a first follow. */
@@ -31,23 +24,15 @@ export function followNotices(options: {
   /** Called after each feed with the record to keep. */
   onSeen: (seen: NoticeSeen) => void;
   onTray?: (present: boolean) => void;
-  open?: OpenEvents;
-  retryMs?: number;
+  /** The tab's one stream carries the feed; its owner reconnects, and this record spans it. */
+  readings?: Pick<Readings, "subscribe">;
 }): () => void {
-  const { origin, onRow, onSeen, onTray, retryMs = 1_000 } = options;
-  const open = options.open ?? openEventSource;
+  const { onRow, onSeen, onTray, readings = peReadings } = options;
   let seen = options.seen;
-  let stopped = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let source: ReturnType<OpenEvents> | undefined;
-  const connect = () => {
-    const events = open(
-      readingsUrl(origin, { kind: "notices", ...(options.as ? { as: options.as } : {}) }),
-    );
-    source = events;
-    events.onmessage = (message: MessageEvent<string>) => {
-      const frame = JSON.parse(message.data) as ReadingFrame;
-      if (frame.kind !== "snapshot") return;
+  return readings.subscribe(
+    { kind: "notices", ...(options.as ? { as: options.as } : {}) },
+    (frame) => {
+      if (frame.kind !== "snapshot" || frame.stale) return;
       const feed = noticeFeedSchema.safeParse(frame.value);
       if (!feed.success) return;
       onTray?.(feed.data.tray);
@@ -56,18 +41,8 @@ export function followNotices(options: {
           if (pushes(row) && (seen[row.key] ?? -1) < row.revision) onRow(row);
       seen = Object.fromEntries(feed.data.rows.map((row) => [row.key, row.revision]));
       onSeen(seen);
-    };
-    events.onerror = () => {
-      events.close();
-      if (!stopped) timer = setTimeout(connect, retryMs);
-    };
-  };
-  connect();
-  return () => {
-    stopped = true;
-    clearTimeout(timer);
-    source?.close();
-  };
+    },
+  );
 }
 
 /** The card's drawing input, built from a feed row; the host sends rows, never cards. */

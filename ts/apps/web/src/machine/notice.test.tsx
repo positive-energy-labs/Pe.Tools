@@ -18,6 +18,23 @@ vi.mock("#/workbench/provider/harness-client", async (actual) => ({
   harnessClient: () => ({ permission, question, prompt, cancel }),
 }));
 
+// The feed is a key on the tab's one Readings stream. Each follower is stood in as the key it
+// asked for (`url` carries it) and the door its frames arrive through.
+vi.mock("#/host/resource-stream", async (actual) => ({
+  ...(await actual<typeof import("#/host/resource-stream")>()),
+  peReadings: {
+    subscribe: (request: unknown, listener: (frame: unknown) => void) => {
+      streams.push({
+        url: `/pe/resources?keys=${encodeURIComponent(JSON.stringify([request]))}`,
+        onmessage: (message) => listener(JSON.parse(message.data)),
+      });
+      return () => {};
+    },
+    onResync: () => () => {},
+    dirty: () => {},
+  },
+}));
+
 const base = {
   group: "waits",
   revision: 1,
@@ -94,17 +111,6 @@ beforeEach(() => {
     },
   );
   streams = [];
-  vi.stubGlobal(
-    "EventSource",
-    class {
-      onmessage: ((m: MessageEvent<string>) => void) | null = null;
-      onerror: (() => void) | null = null;
-      constructor(public url: string) {
-        streams.push(this);
-      }
-      close() {}
-    },
-  );
   postMessage = vi.fn<(message: string) => void>();
   listeners = new Set();
   window.chrome = {

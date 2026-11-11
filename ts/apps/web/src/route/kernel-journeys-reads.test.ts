@@ -81,7 +81,7 @@ import { Context, Layer, Scope, Exit } from "effect";
 import { admittedBuiltinsLayer } from "../../../host/src/admitted-builtins";
 import { HttpRouter } from "effect/http";
 import { RouteWorkspace } from "@pe/runtime";
-import { bindWork } from "@pe/agent-contracts";
+import { bindWork, readingKey, type ReadingRequest } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import {
   captureStore,
@@ -105,10 +105,13 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
   const systemRoster = { ...roster, systems: roster.systems.slice(0, 1) };
   const j = await journey({ roster: systemRoster, snapshot: { ...snapshot, systems: systemRoster.systems }, freshness: () => nativeGeneration });
   const streams = new Set<{ close(): void }>();
+  // The read invalidations the tab's one stream is watching now, as the host was told.
+  const watched = new Set<string>();
   let mounted: ReturnType<typeof mountTypedRoute> | undefined;
   let held: ReturnType<typeof gate> | undefined;
   // EventSource is a browser platform shim over the actual host HTTP/SSE handler.
   class Stream {
+    onopen?: () => void;
     onmessage?: (event: { data: string }) => void;
     onerror?: () => void;
     private reader?: ReadableStreamDefaultReader<Uint8Array>;
@@ -119,6 +122,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
         const response = await j.host.request(new Request(url));
         this.reader = response.body!.getReader();
         if (this.closed) return void this.reader.cancel();
+        this.onopen?.();
         let buffer = "";
         const decoder = new TextDecoder();
         while (!this.closed) {
@@ -136,8 +140,17 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     removeEventListener() {}
     close() { this.closed = true; void this.reader?.cancel(); streams.delete(this); }
   }
-  vi.stubGlobal("window", { location: { href: "http://host/", search: "" } });
+  vi.stubGlobal("window", { location: { href: "http://host/", origin: "http://host", search: "" } });
   vi.stubGlobal("EventSource", Stream);
+  // The stream's keys travel by POST to the same host handler the stream reads.
+  const realFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+    if (new URL(url).pathname !== "/pe/resource-subscriptions") return realFetch(url, init);
+    const body = JSON.parse(String(init!.body)) as { add: ReadingRequest[]; remove: string[] };
+    for (const request of body.add) if (request.kind === "publication") watched.add(readingKey(request));
+    for (const key of body.remove) watched.delete(key);
+    return j.host.request(new Request(url, init));
+  });
   try {
     await j.ready();
     const source = publicationSource({ read: (ctx, publication, release) => j.host.send(publication.generation,
@@ -162,7 +175,9 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
       { work, sources: { "fans.sheet": source } });
     mounted.subscribe(() => {});
     await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
-    await vi.waitFor(() => expect(streams.size).toBeGreaterThan(0));
+    // One stream for the tab, carrying each read's invalidation as a key.
+    await vi.waitFor(() => expect(watched.size).toBeGreaterThan(0));
+    expect(streams.size).toBe(1);
     const before = mounted.value().value;
     held = j.host.holdNative();
     j.host.changed();
@@ -190,7 +205,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     expect(mounted.review("losses"), "identical sealed inputs remain Apply-eligible after reconnect").toMatchObject({ stale: false, preview: expect.anything() });
     expect(mounted.writeRefusal()).toBeNull();
     mounted.release();
-    await vi.waitFor(() => expect(streams.size, "B05: hiding releases streams").toBe(0));
+    await vi.waitFor(() => expect(watched.size, "B05: hiding releases the read's watch").toBe(0));
     mounted.subscribe(() => {});
     await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
     expect(mounted.review("losses"), "show reacquires identical inputs without retiring the Plan").toMatchObject({ stale: false, preview: expect.anything() });
@@ -230,7 +245,8 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     expect(mounted.review("losses")).toMatchObject({ stale: true, rows: [], cells: [] });
     await expect(mounted.action("losses").apply()).rejects.toThrow(/stale/i);
     mounted.dispose();
-    await vi.waitFor(() => expect(streams.size, "H05: disposal closes watched inputs").toBe(0));
+    await vi.waitFor(() => expect(watched.size, "H05: disposal closes watched inputs").toBe(0));
+    expect(streams.size, "a tab never holds more than its one stream").toBeLessThanOrEqual(1);
   } finally { held?.release.resolve(); mounted?.dispose(); streams.forEach(stream => stream.close()); vi.unstubAllGlobals(); await j.close(); }
 }, 60_000);
 
