@@ -4,7 +4,7 @@ import { subjectCode, subjectRefCodeSchema, uniqueIdSchema } from "@pe/agent-con
 export const key = "pod.hydronic.sizing";
 export const address = `/tool/${encodeURIComponent("route:@hydronic/routes/sizing/route.artifact")}`;
 
-/** A pipe's identity in Work: its UniqueId as a SubjectRef code, the key every door decodes. */
+/** A pipe's identity in Work: its UniqueId encoded to a SubjectRef code, the key every door decodes. */
 export const pipeKey = (uniqueId: string) => subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse(uniqueId) });
 
 /** Route-wide inputs and the chosen diameter per pipe (nominal mm). */
