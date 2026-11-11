@@ -86,7 +86,7 @@ function Receipt({ machine, gap }: { machine: Machine; gap: boolean }) {
         ) : receipt?.state === "ok" ? (
           <span data-tone="done">updated · read from the receipt</span>
         ) : receipt?.state === "failed" || receipt?.state === "refused" ? (
-          <span data-tone="alarm">
+          <span data-tone="caution">
             update {receipt.state}
             {last?.detail ? `: ${last.detail}` : ""}
           </span>
@@ -168,7 +168,7 @@ export function UpdateGroup({
             <OutcomeLine kind="busy" label="Reading the update feed" />
           ) : status.state === "failed" ? (
             // An apply's reason is the receipt's own line below; a check has no receipt to say it.
-            <span data-tone={status.during === "check" ? "caution" : "alarm"}>
+            <span data-tone="caution">
               {status.during === "check"
                 ? `Update check failed: ${status.message}`
                 : "Update failed. Recheck to plan again."}

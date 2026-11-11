@@ -8,6 +8,7 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 
 ## Decided
 
+- 2026-11-11, kernel crusade polish (orchestrator, from panel 39b24c0f; re-openable by kaitpw): a refusal, a failed tool run, a failed read or update, and a pane that failed to load wear `caution`, never the one alarm. Rule: SURFACE-PHILOSOPHY I2 (damage is rare and loud; calm things stay calm) and the swatch law "one alarm" (errors use their own meaning). Alarm keeps drift, over-limit and blocking model damage. Supersedes the 2026-10-11 "failed uses alarm" line and the swatch's "alarm: refusal" meaning.
 - 2026-11-10, kaitpw, [ADR 0035](../../adr/0035-route-slots-subjectref-one-notice-feed.md): two chrome layers on every surface, the topbar then pane heads, nothing between or below. Consumers: /pea, /fans, /ducts, the tray, the dock. The `ConsentSweep` replaces the `ArmingStrip` ("I HATE the arming strip"): one component, a sweep that goes down, mounted in the topbar on web and as the card in the tray. Consumers: chat composer, Situation Timeline head, typed verb and Start, the native card.
 
 - 2026-11-05, F10, kaitpw: "selected (highest saturation), then hovered, then indirectly hovered". One shell ladder lives in kit `base.css`: `--pe-select`, `--pe-hover`, `--pe-indirect`; `lang.css` maps local hover/cursor, subject reach, and selection to these rungs. Selection wins their overlap. Kind and alarm hue semantics remain unchanged. Picture consumes the same ruling through its owner.
@@ -614,7 +615,7 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 - 2026-10-12, question panel: Answer/Skip sit bottom right, Answer carries the commit mark. The question owns Enter in its region (including text fields); Enter on Skip declines. Single-choice fields expose radio semantics with arrow/Home/End and Space. Required and in-flight guards apply to keyboard and pointer alike.
 - 2026-10-12, one `Pane` is header, scrolling body and error boundary; collapse lives in `PaneSplit`. Keys register through `ScopeKeys` from `route/keys`; the per-pane key card is gone, Help (Alt+/) is the key listing. Each primitive's CSS sits beside its tsx. `Band` lives in `components/work/band.tsx`, not the kit. `card.tsx` is deleted.
 - 2026-10-12, one geometry for every route; no density switch.
-- 2026-10-11, failed uses alarm, waiting uses caution. The chat rail reserves one height for app chrome and keeps status in its trailing slot.
+- 2026-10-11, failed uses alarm (superseded 2026-11-11: failed uses caution), waiting uses caution. The chat rail reserves one height for app chrome and keeps status in its trailing slot.
 - 2026-10-09, machine control plane primitives: `PidChip`, `ShapeCells` over `FactChip` (`components/lang/process.tsx`), `Accordion` (`accordion.tsx`), `LegStrip` with dashed not-observed stages (`leg-strip.tsx`), `SwitchRow` with its refusal on the surface (`switch-row.tsx`). The version chip and 380px shell are product owners in `machine/`, not kit.
 
 ### Feedback picker (2026-10)

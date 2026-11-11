@@ -78,7 +78,7 @@ export function ToolStatus({
   return (
     <span
       className="dl-tool-status"
-      data-tone={state === "failed" ? "alarm" : state === "waiting" ? "caution" : undefined}
+      data-tone={state === "failed" || state === "waiting" ? "caution" : undefined}
       data-state={state}
     >
       {state}

@@ -260,7 +260,7 @@ export function Ledger({ props }: { props: LedgerProps }) {
   return (
     <div className="flex flex-col gap-3 p-2" data-sheet-ledger="">
       {props.error && (
-        <p role="alert" data-tone="alarm">
+        <p role="alert" data-tone="caution">
           {props.error}
         </p>
       )}

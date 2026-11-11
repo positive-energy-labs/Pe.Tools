@@ -159,7 +159,7 @@ export class PaneErrorBoundary extends Component<
     if (!this.state.failed) return this.props.children;
     return (
       <div role="alert" className="flex flex-1 flex-col items-center justify-center gap-2 p-2">
-        <span className="t-small" data-tone="alarm">
+        <span className="t-small" data-tone="caution">
           {this.props.what ?? "pane"} failed to load
         </span>
         <span className="text-ink-2">{this.state.message}</span>

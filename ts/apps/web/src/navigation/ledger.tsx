@@ -23,7 +23,8 @@ import { useDestination, useNavigation } from "./state";
 import { GROUP_NAME, type LedgerItem, type LedgerPresentation } from "./ledger-model";
 import { feedRows, useNoticeFeed } from "./notice-feed";
 
-const TONE: Partial<Record<string, "caution" | "alarm">> = {
+// A failed tool run is not damage to the model or to Work, so it wears caution (I2, "one alarm").
+const TONE: Partial<Record<string, "caution">> = {
   asks: "caution",
   approve: "caution",
   review: "caution",
@@ -31,7 +32,7 @@ const TONE: Partial<Record<string, "caution" | "alarm">> = {
   incomplete: "caution",
   machine: "caution",
   interrupted: "caution",
-  failed: "alarm",
+  failed: "caution",
 };
 /** Open work stays above tools, Works and threads while a query ranks them. */
 const LEADING_GROUPS = NOTICE_GROUPS.map((group) => GROUP_NAME[group]);

@@ -24,7 +24,7 @@ export interface SessionFacts {
   name: string | null;
   pid: number | null;
   phase: Phase;
-  phaseTone: "caution" | "alarm" | undefined;
+  phaseTone: "caution" | undefined;
   custody: "controlled" | "observed";
   /** A modal dialog is open in it. */
   dialog: boolean;
