@@ -33,6 +33,10 @@
 
 ## Owed
 
+- `pea browser launch --help` ignores `--help` and launches a browser. Found by the journey trial on 2026-11-10.
+
+- Under Git Bash a `/regex/` argument to `pea browser` or a journey is rewritten into a Windows path unless `MSYS_NO_PATHCONV=1` is set. Found by the journey trial on 2026-11-10; the CLI could take the pattern from a flag that Git Bash leaves alone.
+
 - Repair acceptance instrumentation for disabled-control tooltip inspection and validate absolute restore trace arguments before launch; the gate hit null URL, shifted arguments and an unintended fresh profile. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/drive/gate-4b6bfec7/DEFECTS.md:13`.
 
 - Move the last `playwright-core` consumers to `@pe/browser`, then drop the dependency from `ts/apps/host/package.json` and `ts/packages/kit/package.json`. `ts/apps/host/tests/demo-lane.scenario.browser.test.ts` was ported and passed 7/7 on `0b40c293` (`16813184` on `port/browser-cutover-owed` before its rebase), but main then rewrote its `/family` and `/families` journeys for shared Apply, so it must be redone on main's tests. Keep the port's lessons: one browser context per test, side-effect-free reads, `fill` by focus (as Playwright did, no hit test), and the pane-title fold exit. `ts/packages/kit/tests/browser.mjs` needs a Revit-backed hosted Page (downloads, offline `file://` blocking); the branch draft is `c1a71a85`.
