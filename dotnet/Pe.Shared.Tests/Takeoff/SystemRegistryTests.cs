@@ -25,8 +25,10 @@ public sealed class SystemRegistryTests
 
     [TestCase("not json at all")]
     [TestCase("null")]
-    [TestCase("{\"Version\":99,\"Systems\":[]}")]
-    [TestCase("{\"Version\":1,\"Systems\":[{\"Guid\":\"00000000-0000-0000-0000-000000000000\",\"Tag\":\"FC-1\"}]}")]
+    [TestCase("{\"Version\":1,\"Systems\":[]}")]
+    [TestCase("{\"owner\":\"takeoff-systems\",\"version\":99,\"data\":{\"systems\":[]}}")]
+    [TestCase("{\"owner\":\"takeoff-systems\",\"version\":1,\"data\":{\"systems\":[],\"extra\":1}}")]
+    [TestCase("{\"owner\":\"takeoff-systems\",\"version\":1,\"data\":{\"systems\":[{\"guid\":\"00000000-0000-0000-0000-000000000000\",\"tag\":\"FC-1\"}]}}")]
     public void Codec_fails_closed_on_bad_blobs(string blob)
     {
         Assert.Throws<InvalidOperationException>(() => SystemRegistry.Deserialize(blob));
@@ -37,7 +39,7 @@ public sealed class SystemRegistryTests
     {
         var registry = Registry("FC-8");
         Assert.Throws<InvalidOperationException>(() => registry.Register("fc-8"));
-        string forged = registry.Serialize().Replace("]", $",{{\"Guid\":\"{registry.Systems[0].Guid}\",\"Tag\":\"FC-9\"}}]");
+        string forged = registry.Serialize().Replace("]", $",{{\"guid\":\"{registry.Systems[0].Guid}\",\"tag\":\"FC-9\"}}]");
         Assert.Throws<InvalidOperationException>(() => SystemRegistry.Deserialize(forged));
     }
 
