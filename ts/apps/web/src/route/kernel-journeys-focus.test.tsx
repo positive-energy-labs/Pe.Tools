@@ -235,7 +235,7 @@ test("JZ Families History offers published values and marks ambiguous publicatio
       }
       const router = createRouter({ routeTree: createRootRoute({ component: Recorded }), history: createMemoryHistory({ initialEntries: [picked] }) });
       render(<RouterProvider router={router} />);
-      expect(await screen.findByRole("button", { name: "Choose Air Terminal Tags" })).toBeTruthy();
+      expect(await screen.findByRole("option", { name: "Air Terminal Tags" })).toBeTruthy();
       const binding = point.history.publications.find((b: any) => b.instance === recordedPose.instance && b.read === "families.view");
       expect(mounted.value().publication!.evaluation).toBe(binding.evaluation);
       if (recordedPose.instance === pose.instance) expect(mounted.value().value).toEqual(first.value.data);
@@ -1461,15 +1461,15 @@ async function pendingFamiliesChoice() {
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/families"] }) });
   const view = render(<RouterProvider router={router} />);
   try {
-    await screen.findByRole("button", { name: "Choose Air Terminal Tags" });
+    await screen.findByRole("option", { name: "Air Terminal Tags" });
     await waitFor(() => expect(mount.work()).not.toBeNull());
     await waitFor(() => expect(mount.value().current).toBe(true));
     hold = true;
     await act(async () => mount.refresh());
     expect(mount.value(), "B03 Families: pending refresh retains named choices").toMatchObject({ status: "pending", current: false });
     const before = { work: mount.work(), page: mount.page.read(), url: search.toString() };
-    const category = screen.getByRole("button", { name: "Choose Air Terminal Tags" });
-    const member = screen.getByRole("button", { name: "Choose Air Terminal Tag" });
+    const category = screen.getByRole("option", { name: "Air Terminal Tags" });
+    const member = screen.getByRole("option", { name: "Air Terminal Tag" });
     expect.soft(category.getAttribute("aria-disabled"), "B03 Families: pending category is visibly disabled, not a swallowed choice").toBe("true");
     expect.soft(member.getAttribute("aria-disabled"), "B03 Families: the same refusal governs family choices").toBe("true");
     expect.soft(screen.queryByText("Family scope unavailable"), "B03 Families: scope refusal is visible before interaction").not.toBeNull();
@@ -1480,7 +1480,7 @@ async function pendingFamiliesChoice() {
     expect(familiesRouteState.schema.parse(mount.work()?.value).scope.edit, "B03 Families: no category was queued secretly").toBeUndefined();
     await act(async () => { release.resolve(); });
     await waitFor(() => expect(mount.value().current).toBe(true));
-    expect(screen.getByRole("button", { name: "Choose Air Terminal Tags" }).getAttribute("aria-disabled"), "B03 Families: current basis re-enables scope choices").not.toBe("true");
+    expect(screen.getByRole("option", { name: "Air Terminal Tags" }).getAttribute("aria-disabled"), "B03 Families: current basis re-enables scope choices").not.toBe("true");
     expect(familiesRouteState.schema.parse(mount.work()?.value).scope.edit).toBeUndefined();
   } finally { release.resolve(); view.unmount(); mount.dispose(); await Promise.all(tasks); }
 }
@@ -1660,7 +1660,7 @@ test.each(["takeoffs", "families"] as const)("JZ kernel Start on %s after read r
       expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
       if (route === "takeoffs") expect(j.mount.value().value.initialize.refusal).toBeNull();
       else {
-        const category = await screen.findByRole("button", { name: "Choose Air Terminal Tags" });
+        const category = await screen.findByRole("option", { name: "Air Terminal Tags" });
         expect(category.getAttribute("aria-disabled")).toBeNull();
         fireEvent.click(category);
         await j.ready();
