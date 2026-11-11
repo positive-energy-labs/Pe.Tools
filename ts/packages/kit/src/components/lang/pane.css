@@ -55,11 +55,11 @@
   font-size: var(--type-title-size);
   letter-spacing: -0.01em;
 }
-/* A collapsed pane's rail label (pane-resize.tsx) matches the chat thread title (workbench
-   lens.css: body face, title size), not the display face a bare name takes. */
+/* A collapsed pane's rail label (pane-resize.tsx) wears the pane-title face its open siblings wear
+   (P1): a folded pane never out-shouts an open one. */
 [data-slot="pane-rail-title"] {
   font-family: var(--font-body);
-  font-size: var(--type-title-size);
+  font-size: var(--type-small-size);
   font-weight: var(--weight-strong);
   letter-spacing: -0.01em;
   line-height: var(--type-title-line-height);
