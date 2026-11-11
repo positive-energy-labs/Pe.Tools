@@ -351,6 +351,9 @@ function fold(state: ChatState): Fold {
           const optionId = event.optionId;
           if (ask!.options.find((o) => o.optionId === optionId)?.kind.startsWith("reject"))
             Object.assign(call, { status: "denied" });
+          // The host's run-consent ask rides its own `writes:<turn>` id (run-consent.ts): no harness
+          // call settles it, so its allow is its end. Left open, `turn_end` drew it failed.
+          else if (ask!.scope === "run") Object.assign(call, { status: "completed" });
         }
         break;
       }

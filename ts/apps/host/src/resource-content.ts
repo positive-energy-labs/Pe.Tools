@@ -1,11 +1,14 @@
 import type { ReadingRequest } from "@pe/agent-contracts";
 
 // Sampling is evidence, not census content (ADR 0033). Keep errors and unread/observed presence.
+// The SDK queue's running request is whichever read the poll caught in flight, often a census
+// `doc.list`: it is null or set from one poll to the next, so its presence is sampling too.
+const SAMPLED = new Set(["uptimeSeconds", "privateBytes", "runningKey", "runningRequestId", "runningStartedUtc"]);
 function sampledContent(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sampledContent);
   if (value === null || typeof value !== "object") return value;
   return Object.fromEntries(Object.entries(value).flatMap(([key, value]) =>
-    key === "uptimeSeconds" || key === "privateBytes" ? [] : [[key,
+    SAMPLED.has(key) ? [] : [[key,
       key === "observedAtUtc" || key === "attemptedAtUtc" || key === "lastTickUtc" || key === "activeDocumentObservedAtUnixMs"
         ? value === null ? null : true
         : sampledContent(value),
