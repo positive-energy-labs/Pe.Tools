@@ -1185,8 +1185,7 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
   const subscribe = async () => {
     await page.read(`(async () => {
       const { createWorkFeedClient } = await import('/src/shell/work-feed-client.ts');
-      const { publicRoutes, publicRoutesReady } = await import('/src/route/builtin-routes.tsx');
-      await publicRoutesReady;
+      const { publicRoutes } = await import('/src/route/builtin-routes.tsx');
       const admission = publicRoutes.get('fans').work.admission;
       globalThis.__workJourney?.close();
       const state = globalThis.__workJourney = { frames: [], close: () => {} };

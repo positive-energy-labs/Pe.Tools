@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { RouteGraphJson } from "../../../packages/agent-contracts/src/route-kernel-data";
-import { builtinRouteKeys, typedBuiltin } from "./route/builtin-inventory";
+import { routeRegistry } from "./route/registry";
 import { agentFields } from "@pe/agent-contracts";
 
 const projections = import.meta.glob<{ default: unknown }>(
@@ -8,10 +8,10 @@ const projections = import.meta.glob<{ default: unknown }>(
   { eager: true },
 );
 
-test.each(builtinRouteKeys)(
+test.each(Object.keys(routeRegistry).sort())(
   "%s admits and publishes the same typed route to Pea (codegen:routes)",
   (key) => {
-    const module = typedBuiltin(key);
+    const module = routeRegistry[key]!.module;
     const declared = RouteGraphJson.parse(module.data);
     const projection = projections[`../../../packages/mcps/src/pea/generated/${key}-graph.json`];
     expect(projection, `Missing projection for ${key}`).toBeDefined();
