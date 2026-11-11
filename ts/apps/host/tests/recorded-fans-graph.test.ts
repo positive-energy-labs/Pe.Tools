@@ -399,8 +399,8 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       const fingerprint = workFingerprintSchema.parse(`builtin-closure:${fans.closure.fingerprint}`);
       const scope = bindWork("fans", null, undefined, ref);
       const admission = { routeKey: "fans", fingerprint };
+      // Fans' admission reads only its own Work (ruling 2026-11-10); /ducts' feed is /ducts' to admit.
       const works: ReadingRequest[] = [{ ...scope, kind: "work", admission },
-        { ...scope, route: "ducts", kind: "work", admission },
         { kind: "work-acks", work: scope, admission }];
       const all = [...works, ...coldKeys];
       const connection = crypto.randomUUID();
@@ -431,10 +431,10 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
         expect(addAll.status).toBe(200); await ready(all);
         const beforeEdit = seen.length;
         expect(await workspace!.apply(scope, "fans", "human", [{ path: ["parameters", "fanFlow", "edit"], value: { value: "PE_M_Fan_AirFlow" } }], 0)).toMatchObject({ ok: true });
-        await ready([works[0]!, works[2]!]); expect(writer.capture.truncated(), "changed Work and ack after slot edit").toBeNull();
+        await ready([works[0]!, works[1]!]); expect(writer.capture.truncated(), "changed Work and ack after slot edit").toBeNull();
         const edits = seen.slice(beforeEdit);
         expect(edits.find((frame) => frame.key === readingKey(works[0]!))?.value).toMatchObject({ revision: 1, doc: { parameters: { fanFlow: { edit: { value: "PE_M_Fan_AirFlow" } } } } });
-        expect(edits.find((frame) => frame.key === readingKey(works[2]!))).toMatchObject({ kind: "event", value: { revision: 1 } });
+        expect(edits.find((frame) => frame.key === readingKey(works[1]!))).toMatchObject({ kind: "event", value: { revision: 1 } });
         const previous = batches.flatMap((batch) => batch.add).find((key) => key.kind === "ducts-snapshot")! as Extract<ReadingRequest, { kind: "ducts-snapshot" }>;
         const selected = { ...previous, slots: { ...previous.slots, fanFlow: "PE_M_Fan_AirFlow" } };
         const beforeSelection = nativeCalls;
@@ -535,14 +535,19 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     expect(cold.headers.get("x-pe-ducts-reused")).toBe("false");
     expect(nativeCalls).toBe(beforeHit);
     await historical.dispose(); historical = undefined;
-    const fans = builtinEnrollments.find((entry) => entry.routeKey === "fans")!;
-    const fingerprint = workFingerprintSchema.parse(`builtin-closure:${fans.closure.fingerprint}`);
+    const admission = (routeKey: string) => ({ routeKey, fingerprint: workFingerprintSchema.parse(
+      `builtin-closure:${builtinEnrollments.find((entry) => entry.routeKey === routeKey)!.closure.fingerprint}`) });
+    const workKeys = (route: string, by = route) => `/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ ...key(route), kind: "work", admission: admission(by) } satisfies ReadingRequest]))}`;
+    // Each route's own feed; the reconciliation case below replays both as recorded siblings.
     for (const route of ["fans", "ducts"]) {
-      const reading: ReadingRequest = { ...key(route), kind: "work", admission: { routeKey: "fans", fingerprint } };
-      const frame = await capture(`/pe/resources?keys=${encodeURIComponent(JSON.stringify([reading]))}`, undefined, true);
+      const frame = await capture(workKeys(route), undefined, true);
       expect(frame.kind).toBe("snapshot"); expect(frame.changed).toBe(true);
       expect(frame.value.handle.key.route).toBe(route); expect(frame.value.history).toBeDefined();
     }
+    // Ruling 2026-11-10 (no cross-route write): Fans' admission seals no /ducts Work feed.
+    const foreign = await firstFrame(await send(live, workKeys("ducts", "fans")));
+    expect(foreign.kind, JSON.stringify(foreign)).toBe("failure");
+    expect(foreign.failure.code).toBe("WorkRouteMismatch");
     holdHuman = true;
     const workUrl = "/pe/route-state/fans?open=captured-chadds/chadds-open";
     const humanRead = capture(workUrl);
