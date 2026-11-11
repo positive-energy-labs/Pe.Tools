@@ -3,6 +3,14 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { HealPlan } from "@pe/ducts-domain/heal";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
+import {
+  connOf,
+  ductOf,
+  groupOf,
+  nodeOf,
+  systemOf,
+  type Node,
+} from "@pe/ducts-domain/test-snapshot";
 
 import {
   compactStatus,
@@ -13,25 +21,10 @@ import {
   type TriageInput,
 } from "./inbox-rows";
 
-const node = (id: number, kind: string, groupId: string | null) =>
-  ({
-    id,
-    kind,
-    groupId,
-    facts: [],
-    connectors: [],
-  }) as unknown as TriageInput["snapshot"]["nodes"][number];
+const node = (id: number, kind: Node["kind"], groupId: string | null) =>
+  nodeOf(id, kind, { groupId });
 const group = (id: string, rootIds: number[], issueIds: string[] = []) =>
-  ({
-    id,
-    rootIds,
-    issueIds,
-    classifications: [],
-    systemNames: [],
-    terminalCount: 0,
-    elementCount: 0,
-    loops: 0,
-  }) as unknown as TriageInput["snapshot"]["groups"][number];
+  groupOf(id, { rootIds, issueIds });
 
 const snapshot: TriageInput["snapshot"] = {
   groups: [group("g1", [1], ["open-end:2:1"]), group("g2", [], [])],
@@ -130,17 +123,17 @@ describe("the ducts inbox", () => {
     ]);
   });
   it("a no-fan row with exactly one unit offers to make it its system's fan, places one reviewed kernel command", () => {
-    const unit = {
-      ...node(7, "equipment", null),
-      connectors: [{ index: 1, classification: "SupplyAir" }],
-    } as unknown as TriageInput["snapshot"]["nodes"][number];
+    const unit = nodeOf(7, "equipment", {
+      groupId: null,
+      connectors: [connOf(1, null, { classification: "SupplyAir" })],
+    });
     const fanless = {
       ...snapshot,
       groups: [{ ...group("g2", [7]), systemNames: ["SA 19"] }],
       nodes: [...snapshot.nodes, unit],
       systems: [
-        { id: 19, name: "SA 19", classification: "SupplyAir", baseEquipmentId: null },
-      ] as TriageInput["snapshot"]["systems"],
+        systemOf(19, { name: "SA 19", classification: "SupplyAir", baseEquipmentId: null }),
+      ],
     };
     const roles = new Map([[7, { role: "passive" as const, why: "proposed", reason: "x" }]]);
     const noFan = () =>
@@ -242,13 +235,7 @@ it("compacts a status for the closed row and keeps unknown words", () => {
 describe("a heal in a shared group belongs to the systems of the ends it heals", () => {
   // Chadds 2026-10-30: one group carried FA 20 and RA 37; its caps were all on RA 37's ducts, and the
   // row read "Heal FA 20, FA 27" on FA 20's view.
-  const seg = (id: number, systemName: string) =>
-    ({
-      id,
-      groupId: "gS",
-      systemName,
-      connectors: [],
-    }) as unknown as TriageInput["snapshot"]["segments"][number];
+  const seg = (id: number, systemName: string) => ductOf(id, { groupId: "gS", systemName });
   const shared: TriageInput["snapshot"] = {
     groups: [{ ...group("gS", []), systemNames: ["FA 20", "RA 37"] }],
     nodes: [],

@@ -4,7 +4,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { citation, selection } from "@pe/kit/lang/attention";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
 import type { Pointer } from "../../../../packages/agent-contracts/src/pointers.ts";
 
 // The host list behind `pointers.list`/`pointers.dismiss`; the components read and dismiss through it.
@@ -22,14 +22,9 @@ import { makeAtomRegistry } from "#/shell/owner";
 import { elementKey } from "@pe/kit/lang/attention";
 
 afterEach(cleanup);
-const snapshot = {
-  nodes: [
-    { id: 7, uniqueId: "u-7", connectors: [] },
-    { id: 8, uniqueId: "u-8", connectors: [] },
-  ],
-  segments: [],
-  systems: [],
-} as unknown as DuctSnapshot;
+const snapshot = snapshotOf({
+  nodes: [nodeOf(7, "equipment", { uniqueId: "u-7" }), nodeOf(8, "equipment", { uniqueId: "u-8" })],
+});
 
 test("a fan place maps to the snapshot unit's real element key; foreign text maps to nothing", () => {
   const place = { fan: JSON.stringify({ kind: "ids", ids: [stableFanKey({ uniqueId: "u-7", portIndex: 0 })] }) };

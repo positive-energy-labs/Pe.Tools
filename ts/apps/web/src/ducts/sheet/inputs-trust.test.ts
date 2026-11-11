@@ -10,11 +10,10 @@ import {
   type FittingPricing,
   type Resolved,
 } from "@pe/agent-contracts";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { connOf, factOf, nodeOf } from "@pe/ducts-domain/test-snapshot";
 import { fittingGroups, tableMeaning } from "./fitting-groups";
 import { kindDisabledReason, kindMeaning } from "./kind-meaning";
 
-type Node = DuctSnapshot["nodes"][number];
 const firm = <T>(value: T): Resolved<T> => ({
   value,
   source: "firm",
@@ -43,31 +42,22 @@ const inputs = (extra: Partial<DuctsInputs> = {}): DuctsInputs =>
     ...extra,
   });
 const port = (index: number, direction: "in" | "out", classification: string) =>
-  ({
-    index,
-    direction,
-    classification,
-    kind: "end",
-    point: [0, 0, 0],
-    connectedTo: null,
-  }) as unknown as Node["connectors"][number];
+  connOf(index, null, { direction, classification });
 // Broan B160E75RT as Chadds models it: supply and exhaust outlets, supply and exhaust inlets.
-const erv = (id: number): Node =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-    id,
-    kind: "equipment",
+const erv = (id: number) =>
+  nodeOf(id, "equipment", {
     category: "Mechanical Equipment",
     family: "Broan_B160E75RT_ERV_R25",
     type: "B160E75RT",
     point: [0, 0, 0],
-    facts: [{ key: "mark", text: `RV-${id}` }],
+    facts: [factOf("mark", `RV-${id}`)],
     connectors: [
       port(2, "out", "SupplyAir"),
       port(3, "out", "ExhaustAir"),
       port(1, "in", "ExhaustAir"),
       port(4, "in", "SupplyAir"),
     ],
-  }) as unknown as Node;
+  });
 const unit = (kind: "erv" | "air-handler", source: "Work" | "default") => ({
   kind: {
     value: kind,
@@ -242,6 +232,6 @@ it("a kind that would take the unit off the fan list is a disabled reason; the r
     ...erv(7),
     family: "SunTherm M Series",
     connectors: [port(1, "out", "SupplyAir"), port(2, "in", "ReturnAir")],
-  } as Node;
+  };
   expect(kindDisabledReason(single, "air-handler", u)).toBeNull();
 });

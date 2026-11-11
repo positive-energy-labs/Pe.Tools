@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import snapshot from "./fixtures/synthetic-snapshot.json";
+import { syntheticSnapshot } from "./test-fixture";
 import { subjectNamer } from "./subject-text";
 import { SubjectText, subjectDocument } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
@@ -54,7 +53,7 @@ test("unknown ids, dimensions, decimals and embedded keys stay honest; row ids s
 });
 
 test("names use a grille's mark, fitting size and part, then type, without inventing unknown subjects", () => {
-  const base = snapshot as unknown as DuctSnapshot;
+  const base = syntheticSnapshot();
   const node = base.nodes[0]!;
   const named = subjectNamer({
     ...base,

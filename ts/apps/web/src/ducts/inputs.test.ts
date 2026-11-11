@@ -2,10 +2,10 @@ import { expect, test, vi } from "vite-plus/test";
 import { readFileSync } from "node:fs";
 import { groupTree } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import saved from "./fixtures/synthetic-snapshot.json";
+import { syntheticSnapshot } from "./test-fixture";
 import { ruleFanOut } from "./inputs";
 
-const snapshot = () => structuredClone(saved) as DuctSnapshot;
+const snapshot = syntheticSnapshot;
 
 test("fan-out reuses unchanged document-wide rules across scope visits without scanning or walking", () => {
   const raw = snapshot();
