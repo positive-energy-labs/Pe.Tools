@@ -1,8 +1,8 @@
+import { ownedSession } from "./callers.ts";
 import { Effect, Queue } from "effect";
 import { type HttpServerRequest } from "effect/http";
 import { BRIDGE_CONTRACT_VERSION, type BridgeFrame, type BridgeStateSnapshot } from "@pe/host-contracts/contracts";
 import { RevitBridge } from "../src/bridge.ts";
-import { hostOwnership } from "../src/host-ownership.ts";
 export const connectTestBridge = (processId = 42, ownership: Record<string, unknown> = {}, state: Partial<BridgeStateSnapshot> = {}) =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
@@ -33,9 +33,7 @@ export const connectTestBridge = (processId = 42, ownership: Record<string, unkn
           processStartUtcUnixMs: 1000,
           sdkSessionId: "4242",
           contractVersion: BRIDGE_CONTRACT_VERSION,
-          lane: hostOwnership.lane,
-          sourceRoot: hostOwnership.sourceRoot,
-          serviceName: hostOwnership.serviceName,
+          ...ownedSession,
           ...ownership,
           state: {
             activeDocumentIsFamilyDocument: false,

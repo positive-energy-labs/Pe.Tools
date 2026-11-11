@@ -30,7 +30,7 @@ import type {
 } from "@pe/agent-contracts";
 import { HARNESS_EVENT_MAX_BYTES, readingKey, tools, bindWork, stagedDucts, workKey, address as documentAddress } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
-import { human } from "./callers.ts";
+import { human, actAs } from "./callers.ts";
 import {
   admitCrossing,
   bindControl,
@@ -114,7 +114,7 @@ const host = async (
   const routed: Host = {
     as: human,
     fetch: (request) =>
-      withInvocationContext({ caller: routed.as }, () =>
+      actAs(routed.as, () =>
         /^\/pe\/(providers|access)/.test(new URL(request.url).pathname)
           ? providers.fetch(request)
           : threads.fetch(request),
