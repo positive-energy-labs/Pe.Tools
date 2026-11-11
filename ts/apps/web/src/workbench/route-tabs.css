@@ -1,7 +1,10 @@
 /* THE TOOLS TAB STRIP (Thread Places), in Pea's header while collapsed, in the tools pane's
    header while expanded. Places give way before they overlap: a label ellipsizes. The close
-   reserves no width at rest (L1, L3: twelve hidden closes starved every label to one glyph); it
-   floats over its own tab's end on hover or focus, so nothing shifts, and stays in the tab order. */
+   reserves no width at rest (L1, L3: twelve hidden closes starved every label to one glyph) and
+   takes no pointer there. It stays in the tab order.
+   Exception to "nothing shifts" (gate bc40426c, fix line 1): on hover or focus the close joins the
+   flow beside the label, so the strip moves by one close. Floating it over the tab's end covered a
+   28px label ("Fans") and a click on the label closed the Place. Still held: no width at rest. */
 /* One resting gap between Places, the button group's token (L3): with the close reserving no
    width, labels otherwise ran together as "FansDuctsFamilies". */
 [data-slot="route-tabs"] {
@@ -20,13 +23,12 @@
 }
 [data-slot="route-tabs"] > * > :last-child {
   position: absolute;
-  inset-block: 0;
-  inset-inline-end: 0;
-  display: flex;
-  align-items: center;
-  background: var(--pe-on, var(--pe-page));
   opacity: 0;
+  pointer-events: none;
 }
 [data-slot="route-tabs"] > :is(:hover, :focus-within) > :last-child {
+  position: static;
+  flex-shrink: 0;
   opacity: 1;
+  pointer-events: auto;
 }
