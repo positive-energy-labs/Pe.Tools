@@ -19,27 +19,34 @@ import { snapshotById } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Members, SubjectKey } from "@pe/kit/lang/attention";
 import type { ElementIndex } from "#/element-index";
-import { ductElements } from "../identity";
+import { ductElements } from "../ducts/identity";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
-import type * as Atom from "effect/reactivity/Atom";
-import { useMemo, type RefObject } from "react";
-import { coloursOf } from "../colours";
-import { NodeFactsView, SegmentFactsView } from "../facts";
-import { EncodingPicker } from "../proto/encoding/picker";
-import { ScaleLegend } from "../proto/encoding/scale-legend";
-import { flowDirections } from "../proto/encoding/flow";
-import { encodingFor } from "../encoding";
-import type { OpenSheet } from "./types.ts";
-import { DuctsOverlay, linesOf, useEquipment } from "../picture-content";
-import { GoToSubject } from "../proto/e/go-to";
-import { DUCTS_LAYER_OPTIONS } from "../proto/e/teaching";
-import { indexOf, sceneOf } from "../scene";
-import { paintOfDucts } from "../selection";
-import { subjectNamer } from "../subject-text";
-import type { LossesWork } from "../work";
-import { blockerElements, sheetIssues, sheetLayers } from "./layers";
-import type { Detail, FanPort } from "./model";
-import type { SheetBlocker } from "./tiers";
+import * as Atom from "effect/reactivity/Atom";
+import { useMemo, useRef, type RefObject } from "react";
+import { picturePageMove } from "#/shell/picture-page";
+import { systemScope } from "@pe/ducts-domain/system-scope";
+import { renderPicturePane } from "#/scene/picture/picture";
+import { issueOf, selectedKeys } from "../ducts/cell-focus";
+import { EMPTY_SHEET_STATE } from "../ducts/sheet/state";
+import { stableFanKey } from "../ducts/sheet/model";
+import { SheetEmpty, SheetFrame, sheetSnapshot, useSheetData, type SheetContext } from "../ducts/sheet/mount";
+import { coloursOf } from "../ducts/colours";
+import { NodeFactsView, SegmentFactsView } from "../ducts/facts";
+import { EncodingPicker } from "../ducts/proto/encoding/picker";
+import { ScaleLegend } from "../ducts/proto/encoding/scale-legend";
+import { flowDirections } from "../ducts/proto/encoding/flow";
+import { encodingFor } from "../ducts/encoding";
+import type { OpenSheet } from "../ducts/sheet/types.ts";
+import { DuctsOverlay, linesOf, useEquipment } from "../ducts/picture-content";
+import { GoToSubject } from "../ducts/proto/e/go-to";
+import { DUCTS_LAYER_OPTIONS } from "../ducts/proto/e/teaching";
+import { indexOf, sceneOf } from "../ducts/scene";
+import { paintOfDucts } from "../ducts/selection";
+import { subjectNamer } from "../ducts/subject-text";
+import type { LossesWork } from "../ducts/work";
+import { blockerElements, sheetIssues, sheetLayers } from "../ducts/sheet/layers";
+import type { Detail, FanPort } from "../ducts/sheet/model";
+import type { SheetBlocker } from "../ducts/sheet/tiers";
 export interface SheetPictureProps {
   page: PicturePage<string, "schematic">;
   setPage(
@@ -504,5 +511,73 @@ export function SheetPicture({
         ),
       }}
     />
+  );
+}
+
+export function PictureBody({ ctx }: { ctx: SheetContext }) {
+  const snapshot = sheetSnapshot(ctx.value.value?.sheetSnapshot);
+  return "kind" in snapshot ? (
+    <SheetEmpty value={ctx.value} />
+  ) : (
+    <PictureContent ctx={ctx} snapshot={snapshot} />
+  );
+}
+function PictureContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSnapshot }) {
+  const { authored, value, sheet, roster, nameOf, selected } = useSheetData(ctx, snapshot);
+  const target = ctx.target;
+  const doc = target?.kind === "document" ? target.ref : null;
+  const workDoc = ctx.value.value?.design ?? null;
+  const select = (selected: string) =>
+    ctx.selection.set(selected ? [{ kind: "focus", id: selected }] : []);
+  const setPage = picturePageMove<PicturePage<string, "schematic">>(
+    (patch, intent) => ctx.page.pose(patch, intent),
+    select,
+  );
+  const selection = useMemo(
+    () => Atom.make<ReadonlySet<SubjectKey>>(new Set(selectedKeys(authored.selected.map(({ id }) => id)))),
+    [authored.selected],
+  );
+  const pickedFans = authored.fan.kind === "all" ? "all" : authored.fan.ids;
+  const nativeSnapshot = ctx.value.value?.sheetSnapshot;
+  const captureSource =
+    ctx.value.current &&
+    doc &&
+    nativeSnapshot &&
+    !("kind" in nativeSnapshot) &&
+    nativeSnapshot.sourceVersion
+      ? { document: doc, version: nativeSnapshot.sourceVersion }
+      : null;
+  const state = ctx.value.value?.sheetView ?? EMPTY_SHEET_STATE;
+  const jump = useRef<((key: SubjectKey) => void) | null>(null);
+  const fanId = (row: FanPort) => stableFanKey(row);
+  const ownPane = ((renderPane: TeachingPaneRender) => (
+    <SheetPicture
+      props={{
+        page: { ...authored, selected, issue: issueOf(selected) },
+        setPage,
+        work: { doc: workDoc },
+        selection,
+        captureSource,
+        doc,
+        refreshing: !ctx.value.current,
+      }}
+      snapshot={snapshot}
+      sheet={sheet}
+      opened={value?.opened}
+      fans={roster.filter((row) => pickedFans === "all" || pickedFans.includes(stableFanKey(row)))}
+      blockers={state.blockers}
+      systemFans={(system) => {
+        // A system's fans: the units on the runs that price it, or the roster's own word.
+        const units = systemScope(snapshot, system).units;
+        return roster.filter((row) => row.system === system || units.has(row.unitId)).map(fanId);
+      }}
+      renderPane={renderPane}
+      jump={jump}
+    />
+  ))(renderPicturePane);
+  return (
+    <SheetFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf} jump={jump}>
+      {ownPane}
+    </SheetFrame>
   );
 }

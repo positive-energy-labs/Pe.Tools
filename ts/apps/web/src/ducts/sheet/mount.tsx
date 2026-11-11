@@ -1,22 +1,17 @@
 import { workElementId } from "@pe/ducts-domain/work-subject";
-import { renderPicturePane } from "#/scene/picture/picture";
 import { PointerCite } from "#/shell/pointer-list";
 import { ductElements, pointerRefs } from "../identity.ts";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { useRouteSearchSlice } from "#/route/activity";
-import { picturePageMove } from "#/shell/picture-page";
 import { useAdmittedSubject } from "#/shell/subject";
 
-import type { FansSheetEdits, PicturePage, SubjectRefCode } from "@pe/agent-contracts";
-import { systemScope } from "@pe/ducts-domain/system-scope";
+import type { FansSheetEdits, SubjectRefCode } from "@pe/agent-contracts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
-import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
-import * as Atom from "effect/reactivity/Atom";
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import type { FansDrawContext } from "../../fans/route.ts";
-import { issueOf, issueSubject, selectedKeys } from "../cell-focus";
+import { issueOf, issueSubject } from "../cell-focus";
 import { ductsLink } from "../identity.ts";
 import { subjectNamer } from "../subject-text";
 import { describeCloser, DUCTS_FIXES, type Closer, type CloserAction, type CloserLink } from "./closer";
@@ -24,13 +19,12 @@ import { fittingGroups } from "./fitting-groups";
 import { FittingReadouts } from "./fitting-readouts";
 import { editLabel, type EditMeta } from "./input-history.neutral";
 import { rosterOrder, stableFanKey, type FanPort } from "./model";
-import { SheetPicture } from "./picture";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { sheetSystems } from "./scoped-snapshot.ts";
 import { EMPTY_SHEET_STATE } from "./state";
 import { Ledger, Roster } from "./view";
-type SheetContext = FansDrawContext;
-function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
+export type SheetContext = FansDrawContext;
+export function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
   const authored = ctx.page.read();
   const reading = ctx.value;
   const value = reading.value;
@@ -106,76 +100,9 @@ export function RosterBody({ ctx }: { ctx: SheetContext }) {
     </SheetFrame>
   );
 }
-function SheetEmpty({ value }: { value: SheetContext["value"] }) {
+export function SheetEmpty({ value }: { value: SheetContext["value"] }) {
   return value.status === "failed" ? <p role="alert">{value.reason}</p> : value.status === "pending"
     ? <p role="status">computing</p> : <p>Open a fan from the roster.</p>;
-}
-export function PictureBody({ ctx }: { ctx: SheetContext }) {
-  const snapshot = sheetSnapshot(ctx.value.value?.sheetSnapshot);
-  return "kind" in snapshot ? (
-    <SheetEmpty value={ctx.value} />
-  ) : (
-    <PictureContent ctx={ctx} snapshot={snapshot} />
-  );
-}
-function PictureContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSnapshot }) {
-  const { authored, value, sheet, roster, nameOf, selected } = useSheetData(ctx, snapshot);
-  const target = ctx.target;
-  const doc = target?.kind === "document" ? target.ref : null;
-  const workDoc = ctx.value.value?.design ?? null;
-  const select = (selected: string) =>
-    ctx.selection.set(selected ? [{ kind: "focus", id: selected }] : []);
-  const setPage = picturePageMove<PicturePage<string, "schematic">>(
-    (patch, intent) => ctx.page.pose(patch, intent),
-    select,
-  );
-  const selection = useMemo(
-    () => Atom.make<ReadonlySet<SubjectKey>>(new Set(selectedKeys(authored.selected.map(({ id }) => id)))),
-    [authored.selected],
-  );
-  const pickedFans = authored.fan.kind === "all" ? "all" : authored.fan.ids;
-  const nativeSnapshot = ctx.value.value?.sheetSnapshot;
-  const captureSource =
-    ctx.value.current &&
-    doc &&
-    nativeSnapshot &&
-    !("kind" in nativeSnapshot) &&
-    nativeSnapshot.sourceVersion
-      ? { document: doc, version: nativeSnapshot.sourceVersion }
-      : null;
-  const state = ctx.value.value?.sheetView ?? EMPTY_SHEET_STATE;
-  const jump = useRef<((key: SubjectKey) => void) | null>(null);
-  const fanId = (row: FanPort) => stableFanKey(row);
-  const ownPane = ((renderPane: TeachingPaneRender) => (
-    <SheetPicture
-      props={{
-        page: { ...authored, selected, issue: issueOf(selected) },
-        setPage,
-        work: { doc: workDoc },
-        selection,
-        captureSource,
-        doc,
-        refreshing: !ctx.value.current,
-      }}
-      snapshot={snapshot}
-      sheet={sheet}
-      opened={value?.opened}
-      fans={roster.filter((row) => pickedFans === "all" || pickedFans.includes(stableFanKey(row)))}
-      blockers={state.blockers}
-      systemFans={(system) => {
-        // A system's fans: the units on the runs that price it, or the roster's own word.
-        const units = systemScope(snapshot, system).units;
-        return roster.filter((row) => row.system === system || units.has(row.unitId)).map(fanId);
-      }}
-      renderPane={renderPane}
-      jump={jump}
-    />
-  ))(renderPicturePane);
-  return (
-    <SheetFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf} jump={jump}>
-      {ownPane}
-    </SheetFrame>
-  );
 }
 export function LedgerBody({ ctx }: { ctx: SheetContext }) {
   const snapshot = sheetSnapshot(ctx.value.value?.sheetSnapshot);
@@ -338,7 +265,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
 export function sheetSnapshot(value: import("@pe/agent-contracts").Immutable<DuctSnapshot | { kind: "absent" }> | undefined): (DuctSnapshot & { sourceVersion?: string }) | { kind: "absent" } {
   return structuredClone(value ?? { kind: "absent" }) as (DuctSnapshot & { sourceVersion?: string }) | { kind: "absent" };
 }
-function SheetFrame({
+export function SheetFrame({
   ctx,
   snapshot,
   nameOf,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** The worksheet as picture content: strands in air order, critical heavy, over legs, section widen. */
 import { expect, it } from "vite-plus/test";
-import type { Detail } from "./model";
+import type { Detail } from "../ducts/sheet/model";
 import { worksheetPicture } from "./picture";
 import { eKey, testElements } from "#/test-attention";
 

@@ -7,8 +7,8 @@
  */
 import { AttentionRoot } from "#/attention";
 import { ElementIndexContext } from "#/element-index";
-import { selectedKeys } from "../cell-focus";
-import { ductElements } from "./../identity";
+import { selectedKeys } from "../ducts/cell-focus";
+import { ductElements } from "../ducts/sheet/../identity";
 import { boundsOfPoints } from "#/scene/orbit";
 import type { ModelPicture } from "#/scene/picture/model";
 import type { PictureStage } from "#/scene/stage-controller";
@@ -21,11 +21,11 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import * as Atom from "effect/reactivity/Atom";
 import { createElement, type ComponentProps } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { NAVIGATION_FIXTURE } from "../navigation.fixture";
+import { NAVIGATION_FIXTURE } from "../ducts/navigation.fixture";
 import { openFanSheetSchema as openSheetSchema } from "@pe/agent-contracts";
-import type { OpenSheet } from "./types.ts";
-import sheetFixture from "./sheet.fixture.json";
-import { type FanPort } from "./model";
+import type { OpenSheet } from "../ducts/sheet/types.ts";
+import sheetFixture from "../ducts/sheet/sheet.fixture.json";
+import { type FanPort } from "../ducts/sheet/model";
 import type { SheetPictureProps } from "./picture";
 import { beyondPicture, SheetPicture } from "./picture";
 

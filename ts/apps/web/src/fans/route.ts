@@ -102,7 +102,7 @@ export const module = route({
       purpose: "Inspect fan paths",
       bindings,
       body: "scroll",
-      draw: draw("scroll", () => import("../ducts/sheet/mount.tsx"), "PictureBody"),
+      draw: draw("scroll", () => import("./picture.tsx"), "PictureBody"),
     },
     "sheet-ledger": {
       title: "Ledger",
