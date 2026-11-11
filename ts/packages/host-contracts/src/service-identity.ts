@@ -73,9 +73,11 @@ export function productRoot(owner: RuntimeOwner): string {
   const ownerRoot = owner.lane === "dev" ? owner.sourceRoot : owner.installedRoot;
   if (!ownerRoot) throw Error(`A ${owner.lane} runtime was not told its owner root.`);
   const override = process.env[productPathNames.productHomeVariable];
-  const firm = firmHome().root;
   // The homes known at process start. The default user home is named, never resolved: under a
-  // test run it is only a fence, and resolving it would trip the isolation wire.
+  // test run it is only a fence, and resolving it would trip the isolation wire. A told firm
+  // folder fences whether or not its marker proves it: state never lands on a named share.
+  const told = process.env[productPathNames.sharedRootVariable]?.trim();
+  const firm = told ? resolve(told) : firmHome().root;
   const root = stateRoot(owner.lane, ownerRoot, override, [
     ...(override?.trim() ? [] : [{ tier: "user" as const, root: documentsUserRoot() }]),
     ...(firm ? [{ tier: "firm" as const, root: firm }] : []),
@@ -84,6 +86,29 @@ export function productRoot(owner: RuntimeOwner): string {
   if (owner.lane === "dev" && (away === "" || (!away.startsWith("..") && !isAbsolute(away))))
     throw Error(`Dev host cannot use installed product state '${root}'.`);
   return insideTestRoot(root);
+}
+
+/**
+ * Where the machine keeps what no home may hold (homes freeze shape 7), all under the state
+ * root's `state` folder, the one an MSI upgrade keeps. Pod and Page ids are unique across homes,
+ * so no key names a home. Pinned by `runtime-ownership.fixture.json` `stateTree`.
+ */
+export function stateTree(root: string) {
+  const state = (...segments: string[]) =>
+    join(root, productPathNames.stateDirectoryName, ...segments);
+  return {
+    work: state("Work"),
+    /** Page state, one folder per slug. */
+    pages: state("Pages"),
+    /** Run output, `<pod-id>\<run-id>`. */
+    runs: state(productPathNames.runsDirectoryName),
+    /** Where a run no pod owns writes. Not a pod id: an id cannot start with `_`. */
+    podlessRuns: state(productPathNames.runsDirectoryName, "_no-pod"),
+    /** The write door's `blobRoot`: prior bytes rest in `sha256\<hash>` under it. */
+    blobs: state(productPathNames.blobsDirectoryName),
+    t3: state("T3"),
+    agent: state("Agent"),
+  };
 }
 
 /** OS-user product state namespace, independent of product-home overrides; test isolation still applies. */

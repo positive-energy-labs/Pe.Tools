@@ -5,15 +5,21 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { productInstallLayout } from "../src/contracts/product.ts";
 import {
   documentsUserRoot,
+  firmHome,
   firmKeysPath,
   firmSettingsDir,
   homes,
+  markerTier,
+  sharedDriveRoot,
   type Home,
+  type HomeFacts,
+  type HomeTier,
 } from "../src/product-paths.ts";
 import {
   installedRuntimeRoot,
   productRoot,
   stateRoot,
+  stateTree,
   trayOwnerArguments,
   type RuntimeOwner,
 } from "../src/service-identity.ts";
@@ -32,14 +38,29 @@ const fixture = JSON.parse(
     stateRoot?: string;
     error?: string;
   }[];
-  contentHomes: {
+  markers: { name: string; text: string; tier: HomeTier | null }[];
+  homes: {
     name: string;
     productHome: string | null;
     sharedRoot: string | null;
-    homes: string[];
+    drives: string[];
+    folders: Record<string, string[]>;
+    markerFiles: Record<string, string>;
+    pointer: string | null;
+    user: string;
+    project: string | null;
     firm: string | null;
-    keys: string | null;
+    sharedDriveRoot: string | null;
+    homes: string[];
+    firmSettings: string | null;
+    firmPreferences: string | null;
+    firmKeys: string | null;
   }[];
+  stateTree: (Record<
+    "name" | "stateRoot" | "podId" | "runId" | "pageSlug" | "blobSha256" | "work" | "pageState",
+    string
+  > &
+    Record<"run" | "podlessRuns" | "blob" | "t3" | "agent", string>)[];
   trayLaunches: { name: string; owner: RuntimeOwner; launch: string[]; argv: string[] }[];
 };
 
@@ -67,16 +88,67 @@ test.each(fixture.stateRoots)("state root: $name", (row) => {
   }
 });
 
-test.each(fixture.contentHomes)("content homes: $name", (row) => {
+test.each(fixture.markers)("marker: $name", (row) => {
+  expect(markerTier(row.text)).toBe(row.tier);
+});
+
+// Freeze shape 3 as amended at crusade/homes c3340423 (24 s after the fixture): two firm markers
+// refuse both. These two rows still expect the first to win; writer F owes their correction, and
+// "two firm markers refuse both" in product-paths.test.ts holds the rule meanwhile.
+const overruled = (name: string) => /^two (shared )?drives hold a firm home/.test(name);
+test("the overruled first-wins rows are exactly two, and both resolve to no firm home", () => {
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", undefined);
+  vi.stubEnv("PE_TEST_HOME_ROOT", "");
+  const rows = fixture.homes.filter((row) => overruled(row.name));
+  expect(rows).toHaveLength(2);
+  for (const row of rows) expect(firmHome(factsOf(row))).toMatchObject({ root: null });
+});
+const factsOf = (row: (typeof fixture.homes)[number]): HomeFacts => ({
+  drives: row.drives,
+  list: (directory) => row.folders[directory] ?? [],
+  marker: (folder) => row.markerFiles[folder] ?? null,
+});
+
+test.each(fixture.homes.filter((row) => !overruled(row.name)))("homes: $name", (row) => {
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", row.productHome ?? undefined);
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", row.sharedRoot ?? undefined);
   vi.stubEnv("PE_TEST_HOME_ROOT", "");
-  const documents = dirname(documentsUserRoot());
-  expect(homes().map((home) => home.root)).toEqual(
-    row.homes.map((home) => home.replace("%DOCUMENTS%", documents)),
+  const at = (path: string) => path.replace("%DOCUMENTS%", dirname(documentsUserRoot()));
+  const facts = factsOf(row);
+  const list = homes({ pointer: row.pointer, facts });
+  const of = (tier: HomeTier) => list.find((home) => home.tier === tier)?.root ?? null;
+  expect(list.map((home) => home.root)).toEqual(row.homes.map(at));
+  expect(of("user")).toBe(at(row.user));
+  expect(of("project")).toBe(row.project);
+  expect(of("firm")).toBe(row.firm);
+  expect(firmHome(facts).root).toBe(row.firm);
+  expect(sharedDriveRoot(facts)).toBe(row.sharedDriveRoot);
+  expect(firmSettingsDir(facts)).toBe(row.firmSettings);
+  expect(firmSettingsDir(facts) && join(firmSettingsDir(facts)!, "preferences.json")).toBe(
+    row.firmPreferences,
   );
-  expect(firmSettingsDir()).toBe(row.firm);
-  expect(firmKeysPath()).toBe(row.keys);
+  expect(firmKeysPath(facts)).toBe(row.firmKeys);
+});
+
+test.each(fixture.stateTree)("state tree: $name", (row) => {
+  const tree = stateTree(row.stateRoot);
+  expect({
+    work: tree.work,
+    pageState: join(tree.pages, row.pageSlug),
+    run: join(tree.runs, row.podId, row.runId),
+    podlessRuns: tree.podlessRuns,
+    blob: join(tree.blobs, "sha256", row.blobSha256),
+    t3: tree.t3,
+    agent: tree.agent,
+  }).toEqual({
+    work: row.work,
+    pageState: row.pageState,
+    run: row.run,
+    podlessRuns: row.podlessRuns,
+    blob: row.blob,
+    t3: row.t3,
+    agent: row.agent,
+  });
 });
 
 test.each(fixture.trayLaunches)("tray argv: $name", (row) => {

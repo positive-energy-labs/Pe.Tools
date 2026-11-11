@@ -12,12 +12,11 @@
  * them, and a write lands in the home the thing came from. A machine with no firm home runs.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve, isAbsolute } from "node:path";
 import { z } from "zod";
 import { productIdentity, productPathNames } from "./contracts/product.ts";
-import { readStored } from "./store.ts";
 
 const userShellFolders =
   "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders";
@@ -61,56 +60,44 @@ export type Home = { readonly tier: HomeTier; readonly root: string };
 
 const markerSchema = z.strictObject({ tier: z.enum(["user", "project", "firm"]) });
 
-/** The tier a folder's marker claims; null when it has no marker or the marker is not exactly `{tier}`. */
-export function homeTier(root: string): HomeTier | null {
-  const marker = readStored(join(root, productPathNames.homeMarkerFileName), markerSchema, {
-    class: "keep",
-    place: "Home marker",
-  });
-  return marker.kind === "ok" ? marker.value.tier : null;
+/** The tier a marker's text proves: exactly `{"tier": ...}` and nothing else (a byte order mark is not content). */
+export function markerTier(text: string | null): HomeTier | null {
+  if (text === null) return null;
+  try {
+    const marker = markerSchema.safeParse(JSON.parse(text.replace(/^﻿/, "")));
+    return marker.success ? marker.data.tier : null;
+  } catch {
+    return null;
+  }
 }
 
-/**
- * The firm home; or, with none, every place the probe looked. `refused` holds the folders when the
- * probe found more than one firm marker: none is used, as with a pod id claimed twice.
- */
-export type FirmHome = {
-  readonly root: string | null;
-  readonly looked: readonly string[];
-  readonly refused?: readonly string[];
+/** What the resolver reads from the machine. A test, and the fixture shared with C#, supply their own. */
+export type HomeFacts = {
+  readonly drives: readonly string[];
+  /** A directory's child names; empty when it is not a directory. */
+  readonly list: (directory: string) => readonly string[];
+  /** The text of a folder's `pe-home.json`; null when it has none. */
+  readonly marker: (folder: string) => string | null;
 };
 
-/**
- * Homes freeze shape 3: on each drive, `<drive>\Shared drives\*\04 PE Software Files\Pe.Tools`
- * and `<drive>\04 PE Software Files\Pe.Tools`, accepted only when its marker reads `firm`. Two
- * accepted folders (a `subst` letter beside the real drive, a second mount) refuse both: the
- * machine runs with no firm home and the notice names each.
- */
-export function probeFirmHome(drives: readonly string[]): FirmHome {
-  const looked: string[] = [];
-  const found: string[] = [];
-  for (const drive of drives) {
-    const sharedDrives = join(drive, productPathNames.sharedDrivesDirectoryName);
-    let mounts: string[] = [];
+/** The disk's facts over the given drive roots (default: every mounted drive). */
+export const machineFacts = (drives: readonly string[] = mountedDrives()): HomeFacts => ({
+  drives,
+  list: (directory) => {
     try {
-      mounts = readdirSync(sharedDrives).sort();
+      return readdirSync(directory);
     } catch {
-      // No `Shared drives` folder on this drive: only its root is a candidate.
+      return [];
     }
-    looked.push(
-      join(sharedDrives, "*", ...productPathNames.firmHomeSegments),
-      join(drive, ...productPathNames.firmHomeSegments),
-    );
-    found.push(
-      ...[...mounts.map((mount) => join(sharedDrives, mount)), drive]
-        .map((base) => join(base, ...productPathNames.firmHomeSegments))
-        .filter((candidate) => homeTier(candidate) === "firm"),
-    );
-  }
-  return found.length === 1
-    ? { root: found[0]!, looked }
-    : { root: null, looked, ...(found.length ? { refused: found } : {}) };
-}
+  },
+  marker: (folder) => {
+    try {
+      return readFileSync(join(folder, productPathNames.homeMarkerFileName), "utf8");
+    } catch {
+      return null;
+    }
+  },
+});
 
 /**
  * Every mounted drive root. A test run probes none: a test names its drives, so the owner's real
@@ -123,19 +110,60 @@ const mountedDrives = (): string[] =>
     ? []
     : [..."CDEFGHIJKLMNOPQRSTUVWXYZ"].map((letter) => `${letter}:\\`).filter((d) => existsSync(d));
 
+/**
+ * The firm home; or, with none, every place that was read. `refused` holds the folders when the
+ * probe found more than one firm marker: none is used, as with a pod id claimed twice.
+ */
+export type FirmHome = {
+  readonly root: string | null;
+  readonly looked: readonly string[];
+  readonly refused?: readonly string[];
+};
+
+/**
+ * Homes freeze shape 3: on each drive, `<drive>\Shared drives\*\04 PE Software Files\Pe.Tools`
+ * (children in code unit order) then `<drive>\04 PE Software Files\Pe.Tools`, accepted only when
+ * its marker reads `firm`. Two accepted folders (a `subst` letter beside the real drive, a second
+ * mount) refuse both: the machine runs with no firm home and the notice names each.
+ */
+export function probeFirmHome(facts: HomeFacts): FirmHome {
+  const looked: string[] = [];
+  const found: string[] = [];
+  for (const drive of facts.drives) {
+    const sharedDrives = join(drive, productPathNames.sharedDrivesDirectoryName);
+    looked.push(
+      join(sharedDrives, "*", ...productPathNames.firmHomeSegments),
+      join(drive, ...productPathNames.firmHomeSegments),
+    );
+    found.push(
+      ...[...[...facts.list(sharedDrives)].sort().map((mount) => join(sharedDrives, mount)), drive]
+        .map((base) => join(base, ...productPathNames.firmHomeSegments))
+        .filter((candidate) => markerTier(facts.marker(candidate)) === "firm"),
+    );
+  }
+  return found.length === 1
+    ? { root: found[0]!, looked }
+    : { root: null, looked, ...(found.length ? { refused: found } : {}) };
+}
+
 let probed: { firm: FirmHome; at: number } | undefined;
 
 /**
- * The firm home: the dev override `PE_TOOLS_SHARED_ROOT` taken as told, else the probe. `drives`
- * replaces the machine's drives (tests). A found home is kept for the process; a miss is probed
- * again after 30 s, so a drive that mounts late (Google Drive after sign-in) is picked up.
+ * The firm home. The dev override `PE_TOOLS_SHARED_ROOT` names it outright and replaces the probe;
+ * it still needs the `firm` marker. Without `facts` this reads the machine: a found home is kept
+ * for the process, and a miss is probed again after 30 s, so a drive that mounts late (Google
+ * Drive after sign-in) is picked up.
  */
-export function firmHome(drives?: readonly string[]): FirmHome {
+export function firmHome(facts?: HomeFacts): FirmHome {
   const override = process.env[productPathNames.sharedRootVariable]?.trim();
-  if (override) return { root: insideTestRoot(resolve(override)), looked: [] };
-  if (drives) return inside(probeFirmHome(drives));
+  if (override) {
+    const told = insideTestRoot(resolve(override));
+    const proven = markerTier((facts ?? machineFacts([])).marker(told)) === "firm";
+    return { root: proven ? told : null, looked: [told] };
+  }
+  if (facts) return inside(probeFirmHome(facts));
   if (!probed || (!probed.firm.root && Date.now() - probed.at > 30_000))
-    probed = { firm: probeFirmHome(mountedDrives()), at: Date.now() };
+    probed = { firm: probeFirmHome(machineFacts()), at: Date.now() };
   return inside(probed.firm);
 }
 const inside = (firm: FirmHome): FirmHome => {
@@ -146,7 +174,7 @@ const inside = (firm: FirmHome): FirmHome => {
 /** What a person reads when there is no firm home: what was looked for and where, or the folders refused. */
 export const noFirmHomeText = (firm: Pick<FirmHome, "looked" | "refused">): string =>
   firm.refused
-    ? `No firm home: ${firm.refused.join(" and ")} each hold a ${productPathNames.homeMarkerFileName} of tier "firm". Neither is used until only one is mounted.`
+    ? `No firm home: ${firm.refused.join(" and ")} each hold a ${productPathNames.homeMarkerFileName} of tier "firm". None is used until only one is mounted.`
     : `No firm home: no folder with a ${productPathNames.homeMarkerFileName} of tier "firm" at ${
         firm.looked.length ? firm.looked.join(", ") : "any drive (none was probed)"
       }.`;
@@ -154,28 +182,43 @@ export const noFirmHomeText = (firm: Pick<FirmHome, "looked" | "refused">): stri
 /**
  * The shared drive root, the base a project pointer is relative to (homes freeze shape 4): the
  * folder that holds `04 PE Software Files`, so the firm home's grandparent, override or probe.
+ * Null when the firm home sits one folder below its drive: it has no grandparent.
  */
-export function sharedDriveRoot(drives?: readonly string[]): string | null {
-  const firm = firmHome(drives).root;
-  return firm && dirname(dirname(firm));
+export function sharedDriveRoot(facts?: HomeFacts): string | null {
+  const firm = firmHome(facts).root;
+  if (!firm) return null;
+  const parent = dirname(firm);
+  return dirname(parent) === parent ? null : dirname(parent);
+}
+
+/**
+ * The project home a model's pointer names: `<shared drive root>\<pointer>\Pe.Tools`, accepted
+ * only when its marker reads `project`. The pointer is model data, so it is untrusted: anything
+ * but a forward-slash relative path that stays inside the shared drive root is unbound, never a throw.
+ */
+export function projectHome(pointer: string | null | undefined, facts?: HomeFacts): string | null {
+  const base = sharedDriveRoot(facts);
+  const segments = pointer?.split("/") ?? [];
+  if (!base || !pointer || /[\\:]/.test(pointer)) return null;
+  if (segments.some((segment) => !segment.trim() || segment === "." || segment === "..")) return null;
+  const root = insideTestRoot(join(base, ...segments, productIdentity.productName));
+  return markerTier((facts ?? machineFacts([])).marker(root)) === "project" ? root : null;
 }
 
 export type HomesInput = {
-  /** The project home the target document names; listed only when its marker reads `project`. */
-  readonly project?: string | null;
-  /** Replaces the machine's drives in the firm probe (tests). */
-  readonly drives?: readonly string[];
+  /** `data.path` of the target document's project-home blob; absent or unusable is unbound. */
+  readonly pointer?: string | null;
+  /** Replaces the machine's facts (tests, the shared fixture). */
+  readonly facts?: HomeFacts;
 };
 
 /** The home list: user, the target document's project home, firm. A pod id is unique across it. */
 export function homes(input: HomesInput = {}): Home[] {
-  const project = input.project?.trim() ? resolve(input.project.trim()) : null;
-  const firm = firmHome(input.drives).root;
+  const project = projectHome(input.pointer, input.facts);
+  const firm = firmHome(input.facts).root;
   return [
     { tier: "user", root: userRoot() },
-    ...(project && homeTier(project) === "project"
-      ? [{ tier: "project" as const, root: insideTestRoot(project) }]
-      : []),
+    ...(project ? [{ tier: "project" as const, root: project }] : []),
     ...(firm ? [{ tier: "firm" as const, root: firm }] : []),
   ];
 }
@@ -185,14 +228,14 @@ export const homeDirs = (name: string, input?: HomesInput): string[] =>
   homes(input).map((home) => join(home.root, name));
 
 /** The firm home's tiered values, `<firm>\Settings`; null without a firm home. */
-export function firmSettingsDir(drives?: readonly string[]): string | null {
-  const firm = firmHome(drives).root;
+export function firmSettingsDir(facts?: HomeFacts): string | null {
+  const firm = firmHome(facts).root;
   return firm && join(firm, productPathNames.homeSettingsDirectoryName);
 }
 
 /** The firm key file, `<firm>\keys.json`; null without a firm home. */
-export function firmKeysPath(drives?: readonly string[]): string | null {
-  const firm = firmHome(drives).root;
+export function firmKeysPath(facts?: HomeFacts): string | null {
+  const firm = firmHome(facts).root;
   return firm && join(firm, productPathNames.keysFileName);
 }
 

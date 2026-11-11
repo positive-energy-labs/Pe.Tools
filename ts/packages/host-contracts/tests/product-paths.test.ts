@@ -9,6 +9,7 @@ import {
   firmKeysPath,
   firmSettingsDir,
   homes,
+  machineFacts,
   noFirmHomeText,
   sharedDriveRoot,
   testHomeRootVariable,
@@ -83,16 +84,17 @@ test("H1: a mapped shared drive holding a firm marker is the firm home, with no 
     join(mapped, "Shared drives", "PE Team Folder", ...firmSegments),
     `{"tier":"firm"}`,
   );
-  expect(firmHome([empty, mapped]).root).toBe(firm);
-  expect(homes({ drives: [empty, mapped] })).toEqual([
+  expect(firmHome(machineFacts([empty, mapped])).root).toBe(firm);
+  expect(homes({ facts: machineFacts([empty, mapped]) })).toEqual([
     { tier: "user", root: process.env[homeVariable] },
     { tier: "firm", root: firm },
   ]);
-  expect(firmSettingsDir([empty, mapped])).toBe(join(firm, "Settings"));
-  expect(firmKeysPath([empty, mapped])).toBe(join(firm, "keys.json"));
+  expect(firmSettingsDir(machineFacts([empty, mapped]))).toBe(join(firm, "Settings"));
+  expect(firmKeysPath(machineFacts([empty, mapped]))).toBe(join(firm, "keys.json"));
   // The bare form, a drive whose root is the shared drive root.
   const bare = drive();
-  expect(firmHome([mark(join(bare, ...firmSegments), `{ "tier": "firm" }`)].map(() => bare)).root).toBe(
+  mark(join(bare, ...firmSegments), `{ "tier": "firm" }`);
+  expect(firmHome(machineFacts([bare])).root).toBe(
     join(bare, ...firmSegments),
   );
 });
@@ -105,7 +107,7 @@ test("H1: no firm home leaves the user home alone, and the notice names every pl
   mark(join(wrongTier, "Shared drives", "Team", ...firmSegments), `{"tier":"user"}`);
   mark(join(extraField, ...firmSegments), `{"tier":"firm","id":"x"}`);
   const drives = [plain, wrongTier, extraField];
-  const found = firmHome(drives);
+  const found = firmHome(machineFacts(drives));
   expect(found.root).toBeNull();
   expect(found.looked).toEqual(
     drives.flatMap((root) => [
@@ -113,31 +115,45 @@ test("H1: no firm home leaves the user home alone, and the notice names every pl
       join(root, ...firmSegments),
     ]),
   );
-  expect(homes({ drives })).toEqual([{ tier: "user", root: process.env[homeVariable] }]);
-  expect(firmSettingsDir(drives)).toBeNull();
+  expect(homes({ facts: machineFacts(drives) })).toEqual([{ tier: "user", root: process.env[homeVariable] }]);
+  expect(firmSettingsDir(machineFacts(drives))).toBeNull();
   for (const place of found.looked) expect(noFirmHomeText(found)).toContain(place);
 });
 
-test("the project home joins the list between user and firm, only when its marker reads project", () => {
+test("the model's pointer names the project home, between user and firm, only when its marker reads project", () => {
   noHomeVariables();
-  const project = mark(join(drive(), "Projects", "Chadds", "Pe.Tools"), `{"tier":"project"}`);
-  const unmarked = join(drive(), "Projects", "Other", "Pe.Tools");
-  mkdirSync(unmarked, { recursive: true });
-  expect(homes({ project, drives: [] }).map((home) => home.tier)).toEqual(["user", "project"]);
-  expect(homes({ project: unmarked, drives: [] }).map((home) => home.tier)).toEqual(["user"]);
+  const mapped = drive();
+  mark(join(mapped, "Shared drives", "Team", ...firmSegments), `{"tier":"firm"}`);
+  const project = mark(
+    join(mapped, "Shared drives", "Team", "Projects", "Chadds", "Pe.Tools"),
+    `{"tier":"project"}`,
+  );
+  mkdirSync(join(mapped, "Shared drives", "Team", "Projects", "Other", "Pe.Tools"), {
+    recursive: true,
+  });
+  const facts = machineFacts([mapped]);
+  const tiers = (pointer: string | null) => homes({ pointer, facts }).map((home) => home.tier);
+  expect(homes({ pointer: "Projects/Chadds", facts })[1]).toEqual({ tier: "project", root: project });
+  expect(tiers("Projects/Chadds")).toEqual(["user", "project", "firm"]);
+  // Unbound must work: no pointer, an unmarked folder, and a pointer that leaves the shared drive.
+  for (const unbound of [null, "Projects/Other", "../Team/Projects/Chadds", "Projects\\Chadds"])
+    expect(tiers(unbound)).toEqual(["user", "firm"]);
 });
 
 test("the override names the firm home itself and skips the probe; the shared drive root is its grandparent", () => {
   noHomeVariables();
   const mapped = drive();
   const probedFirm = mark(join(mapped, "Shared drives", "Team", ...firmSegments), `{"tier":"firm"}`);
-  expect(sharedDriveRoot([mapped])).toBe(join(mapped, "Shared drives", "Team"));
-  // Told, not probed: no marker is needed, the drives are never read, and nothing was looked for.
+  const facts = machineFacts([mapped]);
+  expect(sharedDriveRoot(facts)).toBe(join(mapped, "Shared drives", "Team"));
+  // Told, not probed: the drives are never read, and the told folder still proves itself.
   const told = join(drive(), "share", "software", "Pe.Tools");
   vi.stubEnv(productPathNames.sharedRootVariable, ` ${told} `);
-  expect(firmHome([mapped])).toEqual({ root: told, looked: [] });
-  expect(firmHome([mapped]).root).not.toBe(probedFirm);
-  expect(sharedDriveRoot([mapped])).toBe(join(told, "..", ".."));
+  expect(firmHome(facts)).toEqual({ root: null, looked: [told] });
+  mark(told, `{"tier":"firm"}`);
+  expect(firmHome(facts)).toEqual({ root: told, looked: [told] });
+  expect(firmHome(facts).root).not.toBe(probedFirm);
+  expect(sharedDriveRoot(facts)).toBe(join(told, "..", ".."));
 });
 
 test("two firm markers refuse both: no firm home, and one notice names both paths", () => {
@@ -145,13 +161,14 @@ test("two firm markers refuse both: no firm home, and one notice names both path
   const [real, substituted] = [drive(), drive()];
   const first = mark(join(real, "Shared drives", "Team", ...firmSegments), `{"tier":"firm"}`);
   const second = mark(join(substituted, ...firmSegments), `{"tier":"firm"}`);
-  const found = firmHome([real, substituted]);
+  const facts = machineFacts([real, substituted]);
+  const found = firmHome(facts);
   expect(found).toMatchObject({ root: null, refused: [first, second] });
-  expect(homes({ drives: [real, substituted] }).map((home) => home.tier)).toEqual(["user"]);
-  expect(sharedDriveRoot([real, substituted])).toBeNull();
+  expect(homes({ facts }).map((home) => home.tier)).toEqual(["user"]);
+  expect(sharedDriveRoot(facts)).toBeNull();
   const notice = noFirmHomeText(found);
   expect(notice).toContain(first);
   expect(notice).toContain(second);
   // One of them alone is the firm home.
-  expect(firmHome([real]).root).toBe(first);
+  expect(firmHome(machineFacts([real])).root).toBe(first);
 });

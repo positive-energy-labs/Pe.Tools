@@ -7,6 +7,7 @@ import { keyRefusalText, resolveKey } from "../src/shared-keys.ts";
 afterEach(() => vi.unstubAllEnvs());
 const sharedWith = (text: string) => {
   const shared = mkdtempSync(join(tmpdir(), "pe-shared-keys-"));
+  writeFileSync(join(shared, "pe-home.json"), `{"tier":"firm"}`);
   writeFileSync(join(shared, "keys.json"), text);
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
 };
