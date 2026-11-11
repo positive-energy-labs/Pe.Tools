@@ -29,7 +29,7 @@ test("a Pod's sheet row keyed by a SubjectRef shows the person's Finding verb, w
   expect(pod.spec.commands).not.toHaveProperty("finding");
   const run = vi.fn(async (_id: string, _input: unknown) => null);
   const ctx = { cells: { doc: {}, at: () => ({ owner: { route: "pod-sizing", label: "Sizing" }, refusal: null, value: {}, transitions: () => [], stage: async () => null, clear: async () => null }) },
-    page: { read: () => ({}) }, value: { status: "ready", current: true, value: {} }, write: (id: string) => ({ run: (input: unknown) => run(id, input) }) };
+    page: { read: () => ({}) }, value: { status: "ready", current: true, value: {} }, write: (id: string) => ({ run: (input: unknown) => run(id, input), refusal: null }) };
   render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: ctx as never, slot: sheet }} /></RegistryContext>);
   // The pipe row has the verb; the slot-name row ("fanFlow") is no subject and has none.
   expect(screen.getAllByRole("button", { name: /^Write a finding on / }).map((b) => b.getAttribute("aria-label"))).toEqual(["Write a finding on Pipe size"]);

@@ -65,7 +65,7 @@ export function commandRegistry(
     ductsWithoutSheet,
     sheetExecutors(bridge, deps, ducts),
     catalogWorkExecutors(bridge, deps),
-    findingsExecutors(deps.workspace),
+    findingsExecutors(deps.workspace, bridge),
   ]) {
     for (const [key, factory] of Object.entries(group)) {
       if (implementations[key]) throw Error(`Command '${key}' has two executors`);

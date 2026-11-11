@@ -424,6 +424,13 @@ export const familiesObservationSummarySchema = familiesObservationSchema
   .omit({ result: true })
   .extend({ familyCount: z.number(), typeCount: z.number(), issueCount: z.number() });
 export type FamiliesObservation = z.output<typeof familiesObservationSchema>;
+/** An observation without its matrix: what a receipt or a listing carries (the matrix stays in the capture). */
+export const summarizeFamiliesObservation = ({ result, ...reading }: FamiliesObservation): FamiliesObservationSummary => ({
+  ...reading,
+  familyCount: result.families.length,
+  typeCount: result.families.reduce((count, family) => count + family.typeNames.length, 0),
+  issueCount: result.issues.length,
+});
 export type FamiliesObservationSummary = Omit<FamiliesObservation, "result"> & {
   familyCount: number;
   typeCount: number;

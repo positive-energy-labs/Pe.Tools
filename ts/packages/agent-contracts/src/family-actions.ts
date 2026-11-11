@@ -8,7 +8,7 @@ import { workKeySchema } from "./route-state.ts";
 import { workHandleSchema } from "./command.ts";
 import { podDraftSourceSchema, podMemberSchema, podMemberSourceSchema } from "./settings.ts";
 import {
-  familiesObservationSchema,
+  familiesObservationSummarySchema,
   diagnosticSchema,
   familyExecutionOptionsSchema,
   ffPlanEntrySchema,
@@ -123,7 +123,9 @@ export const familyActions = {
     needs: "project-document",
     effect: "command",
     input: z.strictObject({ work: workHandleSchema, readId: z.uuid() }),
-    result: familiesObservationSchema,
+    // The summary, not the matrix: a receipt is one reading frame (gate-ef940d36: 2.95 MB against 2 MiB).
+    // The bound matrix is read through route:families.view.
+    result: familiesObservationSummarySchema,
   },
   "families.cancel-read": {
     native: ["op.cancel"],
