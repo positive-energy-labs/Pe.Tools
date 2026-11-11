@@ -219,27 +219,28 @@ export function createWorkJournal(key: WorkKey) {
       sending?.expectedRevision === ack.base &&
       sending.restoreOf === ack.restoreOf;
     if (ownRestore) return;
-    // Pea's undo/redo (`work.history`) or another mount's restore of the top step walks this same
-    // journal: the step moves across exactly as if this mount had replayed it.
+    // Pea's undo/redo (`work.history`) or another mount's restore walks this same journal: the
+    // step moves across exactly as if this mount had replayed it. A per-author undo restores that
+    // author's last step, which need not be the top one, so the step is found by its revision.
     if (ack.kind === "restore" && !pending) {
-      const undone = undo.at(-1);
+      const undone = undo.findLast((step) => step.transitions[step.cursor - 1]?.revision === ack.restoreOf);
       const back = undone?.transitions[undone.cursor - 1];
-      if (undone && back && !undone.superseded && back.revision === ack.restoreOf) {
+      if (undone && back && !undone.superseded) {
         back.forward = ack.inverse;
         back.revision = ack.revision;
         if (--undone.cursor === 0) {
-          redo.push(undo.pop()!);
+          redo.push(...undo.splice(undo.indexOf(undone), 1));
           move("undo", undone, ack.by, ack.at ?? Date.now());
         }
         return;
       }
-      const redone = redo.at(-1);
+      const redone = redo.findLast((step) => step.transitions[step.cursor]?.revision === ack.restoreOf);
       const ahead = redone?.transitions[redone.cursor];
-      if (redone && ahead && !redone.superseded && ahead.revision === ack.restoreOf) {
+      if (redone && ahead && !redone.superseded) {
         ahead.inverse = ack.inverse;
         ahead.revision = ack.revision;
         if (++redone.cursor === redone.transitions.length) {
-          undo.push(redo.pop()!);
+          undo.push(...redo.splice(redo.indexOf(redone), 1));
           move("redo", redone, ack.by, ack.at ?? Date.now());
         }
         return;
@@ -351,6 +352,8 @@ export function createWorkJournal(key: WorkKey) {
     direction: "undo" | "redo",
     write: JournalWriter,
     press?: string,
+    /** Only this author's last step (ADR 0026: Ctrl+Z reverts the person's own edits); absent = the last step, whoever wrote it. */
+    author?: Step["by"],
   ): Promise<JournalResult> => {
     if (busy)
       return { ok: false, code: "busy", message: "The journal is already restoring a step" };
@@ -362,7 +365,7 @@ export function createWorkJournal(key: WorkKey) {
       };
     if (held) return { ok: false, code: "barrier", message: "Work changed; review and retry" };
     const source = direction === "undo" ? undo : redo;
-    const step = pending?.step ?? source.at(-1);
+    const step = pending?.step ?? (author ? source.findLast((entry) => entry.by === author) : source.at(-1));
     if (!step || revision === null)
       return { ok: false, code: "empty", message: `Nothing to ${direction}` };
     if (press !== undefined && step.press !== press)
@@ -603,8 +606,8 @@ export function createWorkJournal(key: WorkKey) {
     hold(on: boolean) {
       held = on;
     },
-    undo: (write: JournalWriter, press?: string) => replay("undo", write, press),
-    redo: (write: JournalWriter, press?: string) => replay("redo", write, press),
+    undo: (write: JournalWriter, press?: string, author?: Step["by"]) => replay("undo", write, press, author),
+    redo: (write: JournalWriter, press?: string, author?: Step["by"]) => replay("redo", write, press, author),
     read: () => {
       for (const step of [...undo, ...redo]) {
         delete step.notWritten;

@@ -130,7 +130,6 @@ for (const [i, duct] of snapshot.segments.entries()) {
 export const COLOURS_FIXTURE = {
   snapshot,
   subject: null,
-  claims: {},
   grids: {},
   meshes: new SceneMeshes(
     new Float32Array(vertices),

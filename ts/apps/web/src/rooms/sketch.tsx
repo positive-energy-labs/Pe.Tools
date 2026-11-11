@@ -6,7 +6,7 @@ import { SvgTip } from "@pe/kit/lang/tooltip";
  * one count badge per region with cards, and the card projected beside its room. A draft is
  * client-local until it drops; on drop it is edit. Escape cancels, `v` returns to look.
  */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
@@ -26,7 +26,7 @@ export interface PlanGeo {
   pins: ReadonlyMap<string, Point2>;
 }
 
-type Tool = "look" | "merge" | "reject" | "note";
+type Tool = "look" | "merge" | "reject";
 const TOOLS: { value: Tool; label: string; title: string }[] = [
   { value: "look", label: "look", title: "look: pan, hover and pin cards (v)" },
   {
@@ -38,11 +38,6 @@ const TOOLS: { value: Tool; label: string; title: string }[] = [
     value: "reject",
     label: "✗ reject",
     title: "click a region that is not a room: stages a reject mark; partition holds it `rejected`",
-  },
-  {
-    value: "note",
-    label: "✎ note",
-    title: "click a place, then type: writes a note, never edit",
   },
 ];
 /** RDP tolerance and the smallest lasso that is a mark (model feet, square feet). */
@@ -70,7 +65,6 @@ export function RoomsSketch({
   onClear,
   card,
   onDrop,
-  onNote,
 }: {
   geo: PlanGeo;
   cards: readonly Card[];
@@ -85,25 +79,20 @@ export function RoomsSketch({
   card: (card: Card, live: boolean) => ReactNode;
   /** Stages the drawn mark; answers a refusal's sentence, else null. */
   onDrop: (drop: Drop) => Promise<string | null>;
-  onNote: (point: Point2, text: string) => Promise<string | null>;
 }) {
   const [tool, setTool] = useState<Tool>("look");
   const [draft, setDraft] = useState<Point2[] | null>(null);
-  const [placing, setPlacing] = useState<Point2 | null>(null);
   const [said, setSaid] = useState<string | null>(null);
-  const noteRef = useRef<HTMLInputElement>(null);
 
   useScopeKeys([
     {
       hotkey: "Escape",
       label: "cancel or clear",
-      says: "cancel the mark or note being drawn, else unpin the card and clear the selection",
+      says: "cancel the mark being drawn, else unpin the card and clear the selection",
       options: { ignoreInputs: false },
       callback: () => {
-        if (draft || placing) {
-          setDraft(null);
-          setPlacing(null);
-        } else {
+        if (draft) setDraft(null);
+        else {
           // This scope is deeper than the plan's own Esc, so it ends the selection too (N2).
           setPinned(null);
           onClear();
@@ -120,7 +109,6 @@ export function RoomsSketch({
       },
     },
   ]);
-  useEffect(() => noteRef.current?.focus(), [placing]);
 
   const at = (event: React.PointerEvent | React.MouseEvent): Point2 => {
     const rect = (event.currentTarget as Element).getBoundingClientRect();
@@ -136,7 +124,6 @@ export function RoomsSketch({
     land(onDrop({ kind: "merge", polygon: points }));
   };
   const click = (point: Point2) => {
-    if (tool === "note") return setPlacing(point);
     const region = regions.find((r) => inLoop(point[0], point[1], r.outer));
     if (!region) return setSaid("no region under that point");
     land(
@@ -187,13 +174,13 @@ export function RoomsSketch({
         onPointerUp={() => (draft ? drop() : undefined)}
         onClick={(event) => {
           event.stopPropagation();
-          if (tool === "reject" || tool === "note") click(at(event));
+          if (tool === "reject") click(at(event));
         }}
       >
         {cards.map((c) => {
           const px = c.polygon.map((p) => geo.toScreen([p[0]!, p[1]!]));
           const color = ink(c.state);
-          return c.polygon.length > 2 ? (
+          return (
             <path
               key={c.id}
               data-mark={c.id}
@@ -203,10 +190,6 @@ export function RoomsSketch({
               strokeWidth={c.id === pinned ? 3 : 2}
               className={c.state === "accepted" ? "dash-reference" : undefined}
             />
-          ) : (
-            <text key={c.id} x={px[0]![0]} y={px[0]![1]} fill={color} textAnchor="middle">
-              {CARD_META.note.glyph}
-            </text>
           );
         })}
         {[...byRegion].map(([guid, list]) => {
@@ -260,7 +243,6 @@ export function RoomsSketch({
               onChange={(next) => {
                 setTool(next);
                 setDraft(null);
-                setPlacing(null);
                 setSaid(null);
               }}
               options={TOOLS}
@@ -273,28 +255,7 @@ export function RoomsSketch({
           </ButtonGroup>
         </div>
       </PaneOverlay>
-      {placing ? (
-        <div
-          className="absolute"
-          data-surface="document"
-          style={place([placing])}
-          onPointerDown={stop}
-          onClick={stop}
-        >
-          <input
-            ref={noteRef}
-            aria-label="note text"
-            placeholder="note, Enter writes it"
-            className="t-small px-1"
-            onKeyDown={(event) => {
-              const text = event.currentTarget.value.trim();
-              if (event.key !== "Enter" || !text) return;
-              land(onNote(placing, text));
-              setPlacing(null);
-            }}
-          />
-        </div>
-      ) : shown ? (
+      {shown ? (
         <div
           className="absolute"
           data-surface="document"

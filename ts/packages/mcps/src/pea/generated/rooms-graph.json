@@ -134,8 +134,7 @@
         "work": [
           "writeIntent",
           "edits",
-          "marks",
-          "notes"
+          "marks"
         ],
         "readings": [
           "value"
@@ -157,8 +156,7 @@
         "work": [
           "writeIntent",
           "edits",
-          "marks",
-          "notes"
+          "marks"
         ],
         "readings": [
           "value"
@@ -180,8 +178,7 @@
         "work": [
           "writeIntent",
           "edits",
-          "marks",
-          "notes"
+          "marks"
         ],
         "readings": [
           "value"
@@ -230,12 +227,7 @@
   ],
   "predicates": {},
   "cells": {},
-  "workFields": {
-    "notes": {
-      "label": "room notes",
-      "internal": false
-    }
-  },
+  "workFields": {},
   "seeds": {},
   "needs": "project",
   "resetOnTarget": [],

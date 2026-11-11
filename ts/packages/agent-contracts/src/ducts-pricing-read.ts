@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { nativeResponseDefinitionSchema } from "@pe/host-contracts/decoders";
 import type { DuctsSnapshotWalk } from "@pe/host-contracts/generated";
-import { ductComponentWitnessSchema, ductCalculationSchema, ductAssumptionSchema, ductClaimSchema } from "./ducts.ts";
+import { ductComponentWitnessSchema, ductCalculationSchema, ductAssumptionSchema } from "./ducts.ts";
 import { ductsCriteriaLayerSchema, DUCT_UNIT_KINDS } from "./ducts-sheet.ts";
 import { DUCT_INFERENCE_GRADES } from "./ducts-analysis.ts";
 const n=z.number(),s=z.string(),nullable=n.nullable(),ns=z.array(n),ss=z.array(s);
@@ -39,5 +39,5 @@ export const inferenceReadSchema=z.object({
 });
 export const overridesReadSchema=z.object({terminalCfm:record(n).optional(),terminalPs:record(n).optional(),catalogLinks:record(z.object({table:s})).optional(),componentDrop:record(n).optional(),ruleAssignment:record(s).optional(),unitRole:record(z.enum(["fan","passive"])).optional(),unitCfm:record(n).optional(),designFrictionRate:n.optional()});
 const drop=z.object({inWg:n,source:s.optional()}),flow=z.object({cfm:n,source:s.optional()});
-export const stagedDuctsReadSchema=z.object({calculation:record(ductCalculationSchema),rules:record(z.object({table:s})),criteria:ductsCriteriaLayerSchema,kinds:record(z.object({kind:z.enum(DUCT_UNIT_KINDS)})),assumptions:record(ductAssumptionSchema),catalogs:record(z.object({table:s})),ruleAssignments:record(z.object({rule:s})),terminalDrops:record(drop),componentDrops:record(drop),esp:record(z.object({inWg:n})),equipmentFlows:record(flow),roles:record(z.object({role:z.enum(["fan","passive"])})),flows:record(flow),parameters:record(s),subject:record(ns),claims:record(ductClaimSchema),labelParameter:s.nullable(),workingPhase:s.nullable(),designFriction:n.nullable()});
+export const stagedDuctsReadSchema=z.object({calculation:record(ductCalculationSchema),rules:record(z.object({table:s})),criteria:ductsCriteriaLayerSchema,kinds:record(z.object({kind:z.enum(DUCT_UNIT_KINDS)})),assumptions:record(ductAssumptionSchema),catalogs:record(z.object({table:s})),ruleAssignments:record(z.object({rule:s})),terminalDrops:record(drop),componentDrops:record(drop),esp:record(z.object({inWg:n})),equipmentFlows:record(flow),roles:record(z.object({role:z.enum(["fan","passive"])})),flows:record(flow),parameters:record(s),subject:record(ns),labelParameter:s.nullable(),workingPhase:s.nullable(),designFriction:n.nullable()});
 

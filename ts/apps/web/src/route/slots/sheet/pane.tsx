@@ -78,7 +78,8 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
   if (empty) return <p className="text-ink-2">{empty}</p>;
   return (
     <section aria-label="Sheet" className="flex min-w-0 flex-col gap-1 t-small">
-      {from ? <a href={from.href} className="min-w-0 truncate text-ink-2" data-sheet-from="">{from.says}</a> : null}
+      {from?.href ? <a href={from.href} className="min-w-0 truncate text-ink-2" data-sheet-from="">{from.says}</a>
+        : from ? <p className="min-w-0 text-ink-2" data-sheet-from="">{from.says}</p> : null}
       <Button pressed={typedOnly} label={typedOnly ? "Show every cell" : "Show typed cells only"} onPress={() => setTypedOnly(!typedOnly)}>
         typed only ({typedCells(cells).length})
       </Button>

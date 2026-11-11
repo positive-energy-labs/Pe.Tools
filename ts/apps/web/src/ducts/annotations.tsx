@@ -16,7 +16,6 @@ import type { StageIssue } from "./inbox-rows";
 import type { Project, Size } from "#/scene/projection";
 
 import {
-  claimInk,
   DASH_CLASS,
   issueInk,
   nodeInk,
@@ -25,7 +24,6 @@ import {
   type Encoding,
   type Issue,
 } from "./encoding";
-import type { Claim } from "./legs";
 import type { Scene } from "./scene";
 import { pathOf, SubjectLabels } from "./subject-labels";
 import { reachProps, SubjectTextContext } from "@pe/kit/lang/reach";
@@ -35,7 +33,6 @@ import { useMention } from "@pe/kit/lang/attention";
 import { useElementIndex } from "#/element-index";
 
 export type Ruling =
-  | { kind: "claim"; n: number; at: number; claim: Claim }
   | { kind: "inferred"; n: number; at: number; finding: DuctFinding }
   | { kind: "issue"; n: number; at: number; issue: Issue };
 
@@ -273,19 +270,9 @@ export function Annotations({
       ) : null}
       {layers.has("findings")
         ? pins.map(({ value: r, x, y }) => {
-            const ink =
-              r.kind === "claim"
-                ? claimInk(r.claim)
-                : r.kind === "issue"
-                  ? issueInk(r.issue)
-                  : token("caution");
+            const ink = r.kind === "issue" ? issueInk(r.issue) : token("caution");
             const on = r.kind === "issue" && r.issue.id === issue;
-            const finding =
-              r.kind === "claim"
-                ? `claim:${r.claim.id}`
-                : r.kind === "issue"
-                  ? r.issue.id
-                  : r.finding.id;
+            const finding = r.kind === "issue" ? r.issue.id : r.finding.id;
             const issueTarget = {
               key: issues.find((i) => i.findings.includes(finding))?.key ?? finding,
               elementId: r.at,
@@ -305,19 +292,15 @@ export function Annotations({
                 onClick={(e) => onRuling(r, at(e))}
                 onDoubleClick={() => onFrame(r.at)}
               >
-                {r.kind === "claim" ? (
-                  <circle r={PIN} fill={ink} stroke={token(on ? "ink" : "page")} />
-                ) : (
-                  <rect
-                    x={-PIN}
-                    y={-PIN}
-                    width={PIN * 2}
-                    height={PIN * 2}
-                    fill={ink}
-                    stroke={token(on ? "ink" : "page")}
-                    strokeWidth={on ? 2.5 : 1}
-                  />
-                )}
+                <rect
+                  x={-PIN}
+                  y={-PIN}
+                  width={PIN * 2}
+                  height={PIN * 2}
+                  fill={ink}
+                  stroke={token(on ? "ink" : "page")}
+                  strokeWidth={on ? 2.5 : 1}
+                />
                 <text dy="0.35em" textAnchor="middle" fontSize={10} fill={token("page")}>
                   {r.n}
                 </text>

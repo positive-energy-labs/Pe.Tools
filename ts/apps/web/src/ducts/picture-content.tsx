@@ -155,13 +155,7 @@ export function DuctsOverlay({
   const marks = rulings.filter(
     (r) =>
       !meshes ||
-      !covered.has(
-        r.kind === "claim"
-          ? `claim:${r.claim.id}`
-          : r.kind === "inferred"
-            ? r.finding.id
-            : r.issue.id,
-      ),
+      !covered.has(r.kind === "inferred" ? r.finding.id : r.issue.id),
   );
   return (
     <CaptionBounds.Provider value={captionField}>

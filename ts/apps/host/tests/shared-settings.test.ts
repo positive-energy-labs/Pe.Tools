@@ -37,6 +37,16 @@ test("a shared firm file is read from <shared>/Firm/ducts.json", async () => {
   expect("firm" in reading && reading.firm.version).toBe("firm-7");
 });
 
+test("firm files are per owner: two owners, two files, each reader gets its own (S7-F3)", async () => {
+  const shared = mkdtempSync(join(tmpdir(), "pe-shared-"));
+  mkdirSync(join(shared, "Firm"));
+  for (const owner of ["ducts", "hydronic"]) writeFileSync(join(shared, "Firm", `${owner}.json`), JSON.stringify({ owner }));
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
+  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer())));
+  for (const owner of ["ducts", "hydronic"])
+    expect(await Effect.runPromise(files.firm(owner))).toEqual({ path: join(shared, "Firm", `${owner}.json`), json: { owner } });
+});
+
 test("a shared PostHog key exports receipts yet never lands in a receipt file or a log line", async () => {
   const shared = mkdtempSync(join(tmpdir(), "pe-shared-"));
   writeFileSync(join(shared, "keys.json"), JSON.stringify({ posthog: "phc_SHARED_LEAK_PROBE" }));

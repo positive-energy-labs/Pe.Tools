@@ -183,7 +183,6 @@ it("one gap repair has one row, two named subjects, two pins and one evidence se
     flows: new Map(),
     equipmentFlows: new Map(),
     doc: null,
-    claims: [],
     write: { edit: 0, esp: 0 },
   };
   const rows = inboxRows(input);
@@ -203,7 +202,6 @@ it("one gap repair has one row, two named subjects, two pins and one evidence se
       snapshot,
       priced: { findings, next: { paths: {} } } as never,
       scene: { segments: segments.map((segment) => ({ segment })), nodes: [] } as never,
-      claims: [],
       work: { doc: null } as never,
       issueScope: null,
       annotated: annotatedFindings(rows, heal, ""),

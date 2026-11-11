@@ -2,11 +2,12 @@
  * Slice 5a build guards (docs/features/routes/REGISTRY-SHAPE.md): a route's host read lives in its
  * route directory under apps/web/src, so the two builds must be kept apart by edge, not by folder.
  * The host build (from apps/host/src/index.ts) reaches no browser-only module; the web build (from
- * routes/__root.tsx and the web builtin registry) reaches no host module. Each guard also requires
+ * router.tsx (and through routeTree.gen.ts every file route), routes/__root.tsx and the web builtin registry, its `import.meta.glob`s expanded) reaches no host
+ * module and no `node:` builtin. Each guard also requires
  * the edge it protects to exist, so it is red until the fill lands and prints why.
  */
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, globSync, readFileSync, readdirSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { expect, test } from "vite-plus/test";
 import ts from "typescript";
 
@@ -33,6 +34,12 @@ const runtimeImports = (source: ts.SourceFile) => {
           names.elements.every((name) => name.isTypeOnly))) imports.push(node.moduleSpecifier.text);
     } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword &&
         node.arguments[0] && ts.isStringLiteral(node.arguments[0])) imports.push(node.arguments[0].text);
+    // Vite's `import.meta.glob` is an edge too (route/registry.ts reaches every route.ts this way):
+    // each match is imported by its relative path.
+    else if (ts.isCallExpression(node) && node.expression.getText(source) === "import.meta.glob" &&
+        node.arguments[0] && ts.isStringLiteral(node.arguments[0]))
+      for (const match of globSync(node.arguments[0].text, { cwd: dirname(source.fileName) }))
+        imports.push(`./${slash(match)}`);
     ts.forEachChild(node, visit);
   };
   visit(source);
@@ -85,10 +92,12 @@ test("the host build reaches every route directory's host.ts and no browser-only
 
 test("the web build reaches builtins through route/registry.ts and no host module", { timeout: 120_000 }, () => {
   const registry = join(root, "apps/web/src/route/registry.ts");
-  const entries = [join(root, "apps/web/src/routes/__root.tsx"), join(root, "apps/web/src/route/builtin-routes.tsx"), registry];
+  // router.tsx reaches the TanStack file routes (routes/$route.tsx, design-system_.*, api/*) through routeTree.gen.ts.
+  const entries = [join(root, "apps/web/src/router.tsx"), join(root, "apps/web/src/routes/__root.tsx"), join(root, "apps/web/src/route/builtin-routes.tsx"), registry];
   const reads = new Set(routeHostReads());
-  const { seen, offenders } = closure(entries, options("apps/web"), (_specifier, target) =>
-    !!target && (target.includes("/apps/host/src/") || reads.has(target)));
+  // Vite resolves a client build under the `browser` export condition (@pe/runtime/context's browser twin).
+  const { seen, offenders } = closure(entries, { ...options("apps/web"), customConditions: ["browser"] }, (specifier, target) =>
+    specifier.startsWith("node:") || (!!target && (target.includes("/apps/host/src/") || reads.has(target))));
   expect({
     hostEdges: offenders,
     webRegistry: existsSync(registry) && seen.has(slash(registry)) ? "present" : "absent: builtins reach the web through builtin-modules.generated.ts",

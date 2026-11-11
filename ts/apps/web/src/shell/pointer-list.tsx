@@ -73,7 +73,7 @@ function usePointers(route: string) {
 }
 
 /**
- * The highlight, mounted INSIDE the route's AttentionRoot: the route maps each pointer's place to
+ * The highlight, mounted INSIDE the route's AttentionRoot: the route maps each pointer's target to
  * its own refs and this cites them (focus null). It writes only the citation atom, never selection,
  * the URL or the camera; dismissal, a thread change or unmount clears it.
  */
@@ -82,14 +82,14 @@ export function PointerCite({
   refs,
 }: {
   route: string;
-  refs: (place: Pointer["place"]) => readonly SubjectReference[];
+  refs: (target: Pointer["target"]) => readonly SubjectReference[];
 }) {
   const registry = useContext(RegistryContext);
   const { pointers } = usePointers(route);
   const owner = `pointers:${route}`;
   const cited = pointers.flatMap((pointer) => {
     try {
-      return refs(pointer.place);
+      return refs(pointer.target);
     } catch {
       return []; // A place that does not read as this route's codec text highlights nothing.
     }
