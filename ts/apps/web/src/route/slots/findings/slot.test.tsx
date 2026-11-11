@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { local } from "@pe/agent-contracts/slots";
-import { findingCommand, route, paneLayout, scrollBody } from "@pe/web/route";
+import { route, paneLayout, scrollBody } from "@pe/web/route";
 import { subjectCode, uniqueIdSchema } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
 import { makeAtomRegistry } from "../../../shell/owner";
 import { SheetPane } from "../sheet/pane.tsx";
@@ -24,8 +24,9 @@ const pod = route({
   layout: paneLayout("main"),
 } as never);
 
-test("a Pod's sheet row keyed by a SubjectRef shows the person's Finding verb, which runs the kernel's findings.write command", async () => {
-  expect((pod.spec.commands as Record<string, { entry: string }>).finding?.entry).toBe(findingCommand.entry);
+test("a Pod's sheet row keyed by a SubjectRef shows the person's Finding verb, which runs the `finding` command the mount adds", async () => {
+  // route() is the Pod surface and stays catalog-free: the mount adds `finding`, never the declaration.
+  expect(pod.spec.commands).not.toHaveProperty("finding");
   const run = vi.fn(async (_id: string, _input: unknown) => null);
   const ctx = { cells: { doc: {}, at: () => ({ owner: { route: "pod-sizing", label: "Sizing" }, refusal: null, value: {}, transitions: () => [], stage: async () => null, clear: async () => null }) },
     page: { read: () => ({}) }, value: { status: "ready", current: true, value: {} }, write: (id: string) => ({ run: (input: unknown) => run(id, input) }) };

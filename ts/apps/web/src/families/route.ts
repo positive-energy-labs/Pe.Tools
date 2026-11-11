@@ -15,7 +15,6 @@ import { reads } from "./reads.ts";
 import { route, field } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
-import { findingCommand } from "../route/slots/findings/index.ts";
 export const fields = {
   readId: field(z.string(), "", "pose"),
   focus: field(
@@ -86,7 +85,6 @@ export const module = route({
     describe: (detail) => ({ label: detail.label }),
   },
   commands: {
-    finding: findingCommand,
     read: {
       ...sessionCommand("families.read"),
       label: "Read families",
