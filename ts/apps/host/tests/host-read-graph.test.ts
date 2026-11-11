@@ -6,7 +6,7 @@ import { Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { takeoffSnapshotInput } from "../src/reads/takeoffs.ts";
+import { takeoffSnapshotInput } from "../../web/src/takeoff/host.ts";
 import { takeoffCaptureSchema } from "@pe/agent-contracts";
 
 

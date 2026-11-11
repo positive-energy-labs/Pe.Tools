@@ -55,6 +55,11 @@
     "./family-spec": "./src/family-spec.ts",
     "./read-graph": "./src/reads/door.ts",
     "./reads/evaluator": "./src/reads/evaluator.ts",
-    "./reads/family": "./src/reads/family.ts"
+    "./builtin-read-handles": "./src/builtin-read-handles.ts",
+    "./ducts-files": "./src/ducts-files.ts",
+    "./ducts-inputs": "./src/ducts-inputs.ts",
+    "./ducts-walk": "./src/ducts-walk.ts",
+    "./local-inputs": "./src/local-inputs.ts",
+    "./reads/inputs": "./src/reads/inputs.ts"
   }
 }

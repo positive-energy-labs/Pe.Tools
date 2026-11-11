@@ -745,7 +745,7 @@ test("JZ header chooser query keys preserve the current schedule until an explic
 });
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
 import { evaluate } from "../../../host/src/reads/evaluator";
-import { reads as familyReads } from "../../../host/src/reads/family";
+import { reads as familyReads } from "../family/host";
 import { FAMILY_MODEL_SCHEMA } from "../family/page";
 import { leaks } from "../shell/visible-text";
 
@@ -1605,10 +1605,10 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
     vi.spyOn(Date, "now").mockReturnValue(now + 20_000);
     await (await import("@testing-library/react")).act(() => vi.advanceTimersByTimeAsync(5_000));
     expect((await read(threads[0]!.id)).status, "B05: a folded Place refreshes past the 15-second lease expiry").toBe(200);
-    await (await import("@testing-library/react")).act(() => router.navigate({ to: "/family", search: { thread: threads[1]!.id } }));
+    await (await import("@testing-library/react")).act(() => router.navigate({ to: "/$route", params: { route: "family" }, search: { thread: threads[1]!.id } }));
     await waitFor(async () => expect((await read(threads[1]!.id)).status).toBe(200));
     expect((await read(threads[0]!.id)).status, "B05: switching conversation retires the previous association").toBe(409);
-    await (await import("@testing-library/react")).act(() => router.navigate({ to: "/family", search: { thread: threads[0]!.id } }));
+    await (await import("@testing-library/react")).act(() => router.navigate({ to: "/$route", params: { route: "family" }, search: { thread: threads[0]!.id } }));
     await waitFor(async () => expect((await read(threads[0]!.id)).status).toBe(200));
     expect((await (await read(threads[0]!.id)).json()).work).toMatchObject({ revision: 3, doc });
     expect(publicRoutes.declaration("family"), "B05: the shipped root registers typed builtins").toMatchObject({ name: "Family" });

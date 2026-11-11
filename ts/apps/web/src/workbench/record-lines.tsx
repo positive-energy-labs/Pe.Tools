@@ -93,7 +93,7 @@ export function ActionLine({
         ) : (
           // Why there is no `open ›` is the link's hint, not a second toned line under it.
           <TooltipHint content={place && !place.ok ? place.refusal : undefined}>
-            <Link to="/ops" search={{ actionId: call.id }}>
+            <Link to="/$route" params={{ route: "ops" }} search={{ actionId: call.id }}>
               receipt ›
             </Link>
           </TooltipHint>

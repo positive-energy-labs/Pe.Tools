@@ -3,7 +3,7 @@ import { composeHostRouteRegistration } from "./host-route-registration.ts";
 import type { HostWorkRegistration } from "@pe/agent-contracts";
 import { Context, Effect, Layer, Schema } from "effect";
 import type { RouteWorkspace } from "@pe/runtime";
-import { admittedBuiltinKeys } from "../../../packages/agent-contracts/src/admitted-builtin-keys.ts";
+import { routeRegistry } from "./routes.generated.ts";
 import {
   createBuiltinRouteInventory,
   createHostAdmittedRouteRegistry,
@@ -37,7 +37,7 @@ export class AdmittedBuiltins extends Context.Service<
  * registerAdmitted, and RouteWorkspace.register refuses a second owner for a key. Discovery stays unfiltered.
  */
 export const constructorWorkRegistrations = (registrations: readonly HostWorkRegistration[]) =>
-  registrations.filter((r) => !admittedBuiltinKeys.includes(r.spec.route));
+  registrations.filter((r) => !Object.hasOwn(routeRegistry, r.spec.route));
 
 /** Acquisition precedes HTTP publication. The workspace remains the composition root's instance. */
 export function admittedBuiltinsLayer(
@@ -61,16 +61,6 @@ export function admittedBuiltinsLayer(
       );
       const failed = (routeKey: string, reason: unknown) =>
         new BuiltinEnrollmentFailed({ routeKey, reason: String(reason) });
-      if (
-        inventory === builtinEnrollments &&
-        inventory
-          .map((r) => r.routeKey)
-          .sort()
-          .join("\n") !== [...admittedBuiltinKeys].sort().join("\n")
-      )
-        return yield* Effect.fail(
-          failed("inventory", "Builtin cutover keys and host enrollment differ"),
-        );
       const byKey = new Map(inventory.map((entry) => [entry.routeKey, entry]));
       if (byKey.size !== inventory.length)
         return yield* Effect.fail(failed("inventory", "Duplicate builtin enrollment"));

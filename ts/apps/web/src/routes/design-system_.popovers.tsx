@@ -152,7 +152,7 @@ function ResourcePreviews() {
                 machineReading.state === "failed" ? machineReading.message : "No observation yet."
               }
             />
-            <Link to="/settings">Open Settings</Link>
+            <Link to="/$route" params={{ route: "settings" }}>Open Settings</Link>
           </div>
         </PreviewRow>
         <PreviewRow
@@ -359,7 +359,7 @@ function PopoverHarness() {
   return (
     <main className="space-y-5 p-3">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
-        <Link to="/design-system">Back to design system</Link>
+        <Link to="/$route" params={{ route: "design-system" }}>Back to design system</Link>
         <h1>Popovers</h1>
         <ThemeToggle />
       </header>

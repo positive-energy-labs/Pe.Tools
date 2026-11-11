@@ -11,7 +11,7 @@ import type { UseSource } from "../shell/source-contract";
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
 import { settled } from "../test-journey";
 import { evaluate } from "../../../host/src/reads/evaluator";
-import { reads as familyReads } from "../../../host/src/reads/family";
+import { reads as familyReads } from "../family/host";
 
 // Family cell behaviour on the typed mount: production FamilyBody over the real host read and a real
 // RouteWorkspace Work store. Only the pod roster and file inputs are stubbed (empty).

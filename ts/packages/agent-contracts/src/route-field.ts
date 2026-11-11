@@ -12,7 +12,7 @@ import { INVALID, type Codec } from "./page-keys.ts";
  * - `agent`: Pea reads the key on a leased view (`read`), or reads and sets it (`set`).
  *
  * A field with neither is Page state the route declares but never projects. Each route declares its
- * fields in `routes/<route>.ts`; every projection (`route-address.ts`) is derived from them; nothing here keeps a second schema of the same key. Contracts are
+ * fields in its address table row (`routes/table.generated.ts`, or a hand file it imports); every projection (`route-address.ts`) is derived from them; nothing here keeps a second schema of the same key. Contracts are
  * pure: no router, no DOM. Nothing here is Work, so no transition replays a native action.
  */
 
@@ -117,6 +117,8 @@ export interface RouteDeclaration<F extends Fields = Fields> {
   path: `/${string}`;
   title: string;
   fields: F;
+  /** The web folder of the builtin declared at this key; absent for a route no builtin owns. */
+  module?: string;
   /**
    * A rule between fields: the key that breaks it and why, or null. `transition` (a person's move
    * and Pea's alike) refuses a named key that breaks it and resets an unnamed one to its default;

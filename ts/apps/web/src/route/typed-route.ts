@@ -165,7 +165,7 @@ export type Specification<
   directory: RouteGraphJson["directory"];
   needs?: "project" | "family" | "document" | "host" | "browser";
   optionalTarget?: "document" | "project" | "family" | "session";
-  /** Host-only module relative to this declaration; codegen imports it only on the host. */
+  /** `./host.ts`, the route directory's reads; only the generated host registry imports it. */
   host?: string;
   subject?: {
     field: RoleFields<F,"subject"> & string;

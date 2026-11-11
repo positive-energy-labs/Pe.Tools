@@ -3,7 +3,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { observeResources } from "@pe/runtime";
 import { historyPointSchema, workFingerprintSchema } from "@pe/agent-contracts";
 import { registeredReads } from "../../../host/src/reads/routes";
-import { fansSheet } from "../../../host/src/reads/fans";
+import { fansSheet } from "../fans/host";
 import { fixture, ref, path, gate } from "../../../host/tests/host-read-graph.test-support";
 import { module as fans } from "../fans/route";
 import { mountTypedRoute } from "../shell/typed-mount";

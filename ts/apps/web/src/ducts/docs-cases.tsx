@@ -35,7 +35,7 @@ function CaseCard({ c }: { c: DuctCase }) {
           {c.examples.map((e, i) => (
             <Link
               key={i}
-              to="/ducts"
+              to="/$route" params={{ route: "ducts" }}
               search={{
                 system: JSON.stringify({
                   kind: "ids",

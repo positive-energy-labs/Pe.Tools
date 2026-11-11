@@ -272,7 +272,7 @@ function Header({ title, note }: { title: string; note: string }) {
     <header className="sticky z-sticky">
       <div className="flex items-center justify-between py-2.5">
         <div className="flex min-w-0 items-baseline gap-3">
-          <Link to="/design-system">← design system</Link>
+          <Link to="/$route" params={{ route: "design-system" }}>← design system</Link>
           <span>{title}</span>
           <span>{note}</span>
           <FactChip dashed title="Everything on this page is fixture data — no host, no plan.">

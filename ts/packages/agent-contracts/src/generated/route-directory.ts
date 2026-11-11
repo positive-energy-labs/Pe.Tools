@@ -260,7 +260,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     "key": "home",
     "directory": {
       "label": "Home",
-      "icon": "Home",
+      "icon": "House",
       "exposure": "Main",
       "surfaces": {
         "web": "full",

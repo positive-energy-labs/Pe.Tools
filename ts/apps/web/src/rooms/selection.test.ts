@@ -1,5 +1,6 @@
 import { expect, test } from "vite-plus/test";
-import { roomsAddress } from "../../../../packages/agent-contracts/src/routes/rooms";
+import { routeAddresses } from "../../../../packages/agent-contracts/src/routes/index.ts";
+const roomsAddress = routeAddresses.rooms;
 import { roomSelection } from "./selection";
 import { roomsPageSchema } from "./page";
 

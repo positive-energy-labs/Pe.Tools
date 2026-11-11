@@ -1,4 +1,3 @@
-import type { ExecutionTarget } from "./target.ts";
 import { circuitReadSchema, inferenceReadSchema, overridesReadSchema, stagedDuctsReadSchema } from "./ducts-pricing-read.ts";
 import { z } from "zod";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
@@ -251,35 +250,4 @@ export type DuctsRosterData = z.infer<typeof ductsRosterData>;
 export type DuctsNetworkData = z.infer<typeof ductsNetworkData>;
 export type DuctsPricingData = z.infer<typeof ductsPricingData>;
 
-const axes = {
-  subject: "Document",
-  touches: ["Metadata"],
-  effect: "Read",
-  cost: "Cheap",
-  cardinality: "One",
-} as const;
-export const ductsRosterCapability = {
-  key: "ducts.roster.value",
-  endpoint: "reads.value",
-  request: (args: object, target?: ExecutionTarget) => ({ read: "ducts.roster", args: { ...args, target: target?.kind === "document" ? target.ref : target } }),
-  input: ductsRosterArgs.omit({ target: true }),
-  output: ductsRosterReadResponse,
-  axes,
-} as const;
-export const ductsNetworkCapability = {
-  key: "ducts.network.value",
-  endpoint: "reads.value",
-  request: (args: object, target?: ExecutionTarget) => ({ read: "ducts.network", args: { ...args, target: target?.kind === "document" ? target.ref : target } }),
-  input: ductsNetworkArgs.omit({ target: true }),
-  output: ductsNetworkReadResponse,
-  axes,
-} as const;
-export const ductsPricingCapability = {
-  key: "ducts.pricing.value",
-  endpoint: "reads.value",
-  request: (args: object, target?: ExecutionTarget) => ({ read: "ducts.pricing", args: { ...args, target: target?.kind === "document" ? target.ref : target } }),
-  input: ductsNetworkArgs.omit({ target: true }),
-  output: ductsPricingReadResponse,
-  axes,
-} as const;
 

@@ -23,7 +23,7 @@ export function SwatchSpecimens() {
       <header className="sticky z-sticky">
         <div className="flex items-center justify-between py-2.5">
           <div className="flex min-w-0 items-baseline gap-3">
-            <Link className="t-small face-mono text-ink-2" to="/design-system">
+            <Link className="t-small face-mono text-ink-2" to="/$route" params={{ route: "design-system" }}>
               ← design system
             </Link>
             <span className="t-title text-ink">swatch</span>

@@ -9,6 +9,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { elementSubject, workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { ductsLink } from "../ducts/identity.ts";
+import { ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "../ducts/design-sheet.ts";
 
 /*
  * /fans' sheet (ruling 2026-11-10: /fans keeps Fans Work only). Every binding stages Fans Work; the
@@ -98,7 +99,7 @@ export const fansSheet = {
     return {
       // Slice 2b: without a shared root the firm layer is refused and the design runs on the engine seed.
       says: `Priced with the /ducts design, Work r${read.ductsRevision}${!firm ? "" : "refused" in firm
-        ? " on the engine default (no shared root, so Firm/ducts.json is not read)"
+        ? `: ${ENGINE_DEFAULT_NO_SHARED_ROOT}. ${NO_SHARED_ROOT}`
         : ` over firm ${firm.version} · ${firm.path.split(/[\\/]/).at(-1)}`}`,
       href: ductsLink(snapshot ? sheetSystems(snapshot) : [], search),
     };

@@ -16,10 +16,10 @@ type DesignRead = {
   readonly firm?: { readonly version: string; readonly path: string; readonly present: boolean } | { readonly refused: "no-shared-root" };
 } | null;
 
-/** Slice 2b (moved from the deleted inputs surface): the firm file lives only on the shared root. */
-export const NO_SHARED_ROOT = "No shared root: set PE_TOOLS_SHARED_ROOT to read Firm/ducts.json";
+/** Slice 2b (moved from the deleted inputs surface): the firm files, one per owner, live only on the shared root. */
+export const NO_SHARED_ROOT = "No shared root: set PE_TOOLS_SHARED_ROOT to read the firm files (Firm/<owner>.json)";
 /** A criterion's provenance when the firm layer is refused: the host resolved it on the engine seed. */
-export const ENGINE_DEFAULT_NO_SHARED_ROOT = "Engine default: no shared root, so Firm/ducts.json is not read";
+export const ENGINE_DEFAULT_NO_SHARED_ROOT = "Engine default: no shared root, so the /ducts firm file (Firm/ducts.json) is not read";
 
 const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { "model-store": "model-store", model: "model", firm: "firm", default: "default" };
 const resolvedOf = (read: DesignRead, cell: DuctsCriteriaCell) => {
@@ -28,11 +28,13 @@ const resolvedOf = (read: DesignRead, cell: DuctsCriteriaCell) => {
   return (side ? (at as Record<string, Resolved> | undefined)?.[side] : at) as Resolved | undefined;
 };
 /** The firm line: which file the firm layer is, and whether it is there or the seed stands in for it. */
-export const firmRef = (firm: NonNullable<DesignRead>["firm"]) =>
-  firm && "refused" in firm ? NO_SHARED_ROOT : firm ? `${firm.version} · ${firm.path.split(/[\/]/).at(-1)}${firm.present ? "" : " (missing, on the seed)"}` : undefined;
+const firmRef = (firm: Exclude<NonNullable<DesignRead>["firm"], { readonly refused: string }> | undefined) =>
+  firm ? `${firm.version} · ${firm.path.split(/[\/]/).at(-1)}${firm.present ? "" : " (missing, on the seed)"}` : undefined;
 
 export const designSheet = {
   draft: true,
+  // Slice 2b's banner: with the firm layer refused, the sheet draws the fix once, above its cells.
+  from: (read: DesignRead) => (read?.firm && "refused" in read.firm ? { says: NO_SHARED_ROOT } : null),
   bindings: {
     criteria: store("_PE_DuctLosses", DUCTS_CRITERIA_CELLS.velocitySupplyFpm.value.or(DUCTS_CRITERIA_CELLS.splitPolicy.value), "subject", {
       min: 0,
@@ -50,7 +52,7 @@ export const designSheet = {
           return { value: resolved.value, source: "default", ref: ENGINE_DEFAULT_NO_SHARED_ROOT,
             ...(resolved.units ? { unit: resolved.units } : {}) };
         const source = SOURCES[resolved.source] ?? "model";
-        return { value: resolved.value, source, ...(source === "firm" ? { ref: firmRef(read?.firm) } : {}),
+        return { value: resolved.value, source, ...(source === "firm" ? { ref: firmRef(read?.firm as Parameters<typeof firmRef>[0]) } : {}),
           ...(resolved.units ? { unit: resolved.units } : {}) };
       },
       choices: (_read, row) => row === "splitPolicy"
