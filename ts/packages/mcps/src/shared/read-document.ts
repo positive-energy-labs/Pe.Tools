@@ -127,6 +127,14 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
 
   let pageTexts: Array<{ pageNum: number; text: string }>;
   let counted: string;
+  // ponytail: A/B knob for the 2026-11-11 Pea-level parser trial. PE_READ_DOCUMENT_PARSER=llamaparse makes an
+  // uncropped read that left parser at its default use LlamaParse. Delete once kaitpw rules on the default.
+  if (
+    raw.parser === undefined &&
+    !input.crop &&
+    process.env.PE_READ_DOCUMENT_PARSER === "llamaparse"
+  )
+    input.parser = "llamaparse";
   if (input.parser === "llamaparse") {
     if (input.crop)
       throw new Error("read_document: crop is not available with parser: llamaparse.");
