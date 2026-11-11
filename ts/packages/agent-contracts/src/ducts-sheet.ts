@@ -353,6 +353,8 @@ const blocker = z.object({
     "equipment-pairing",
   ]),
   elementId,
+  /** The element's `UniqueId:` SubjectRef code; absent only for a stand-in with no element. */
+  subject: elementSubjectSchema.optional(),
   connector: portIndex.optional(),
   effectInWg: z.number().nullable(),
   closer: z.enum(["default", "heal", "ruling"]),

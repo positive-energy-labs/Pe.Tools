@@ -309,6 +309,7 @@ const compact = (value: Sheet["blockers"][number]) => ({
   id: value.id,
   kind: value.kind,
   elementId: value.elementId,
+  ...(value.subject ? { subject: value.subject } : {}),
   ...(value.connector === undefined ? {} : { connector: value.connector }),
   effectInWg: value.effectInWg,
   closer: value.closer.kind,

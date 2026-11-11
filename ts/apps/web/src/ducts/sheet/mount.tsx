@@ -7,7 +7,7 @@ import { useRouteSearchSlice } from "#/route/activity";
 import { picturePageMove } from "#/shell/picture-page";
 import { useAdmittedSubject } from "#/shell/subject";
 
-import type { FansSheetEdits, PicturePage } from "@pe/agent-contracts";
+import type { FansSheetEdits, PicturePage, SubjectRefCode } from "@pe/agent-contracts";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { SubjectKey } from "@pe/kit/lang/attention";
@@ -231,15 +231,16 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
       action ? ctx.cells.label(editsFor([{ ...closer, action }]), verb) : verb;
     // No cross-route write (ruling 2026-11-10): a fix whose Work is /ducts' is a link that opens /ducts
     // on the blocker's element, named by what it fixes; only Fans' own fixes stage here.
-    const element = [...snapshot.nodes, ...snapshot.segments].find((e) => e.id === blocker.elementId);
     const linkTo = (action: CloserAction | null | undefined): CloserLink | null => {
       if (!action || !DUCTS_FIXES.has(action.kind)) return null;
       const name = nameOf(blocker.elementId);
       const what = action.kind === "rule" ? `join ${name}` : action.kind === "cap" ? `end ${name}`
         : action.kind === "price" ? `assignment ${action.family}` : action.kind === "table" ? `table ${action.rule}` : `fitting ${name}`;
-      // Never a fallback to a write: an element off this walk's read goes by ElementId, which /ducts resolves.
+      // Never a fallback to a write or an ElementId (slice 5): the blocker's producer stamps its
+      // UniqueId SubjectRef; a stand-in with none opens /ducts on the sheet's systems, named by the text.
       return { says: `Fix in /ducts: ${what} ›`, href: ductsLink(sheetSystems(snapshot), search,
-        element ? { kind: "subject", code: elementSubject(element) } : { kind: "element", id: blocker.elementId }) };
+        // The contract admitted it as an element UniqueId code (`elementSubjectSchema`).
+        blocker.subject ? { kind: "subject", code: blocker.subject as SubjectRefCode } : { kind: "route" }) };
     };
     const own = (link: CloserLink | null, action: CloserAction | null) => (link ? null : action);
     const link = linkTo(closer.action) ?? linkTo(closer.choices?.[0]?.action);
