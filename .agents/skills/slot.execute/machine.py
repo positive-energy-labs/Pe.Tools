@@ -73,7 +73,7 @@ def processes():
     script = ("Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,CommandLine,"
               "WorkingSetSize,@{n='Created';e={$_.CreationDate.ToUniversalTime().ToString('o')}} | ConvertTo-Json -Compress")
     out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True).stdout
-    rows = json.loads(out or "[]")
+    rows = json.loads(out or "[]", strict=False)  # PS 5.1 ConvertTo-Json leaves raw newlines from multi-line command lines
     now = dt.datetime.now(dt.timezone.utc)
     result = []
     for r in rows:
