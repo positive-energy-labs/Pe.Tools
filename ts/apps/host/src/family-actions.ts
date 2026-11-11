@@ -35,6 +35,7 @@ import {
   address,
   addressSchema,
   familiesObservationSchema,
+  summarizeFamiliesObservation,
   type FamilyActionKey,
   type FamilyReadKey,
   type DocumentRef,
@@ -1599,10 +1600,7 @@ export function familyExecutors(
           );
           if (!published.ok)
             throw refused("Families Work changed during the read; read the current scope again");
-          return familiesObservationSchema.parse({
-            ...saved,
-            envelope: { revision: published.revision },
-          });
+          return familiesReadResult(saved, published.revision);
         }),
       },
     ),
@@ -1810,3 +1808,7 @@ export async function projectReader(
   return { process, capturedAt, fence, read };
 }
 
+
+/** What a families.read receipt carries for the observation it bound at a Work revision. */
+export const familiesReadResult = (saved: z.input<typeof familiesObservationSchema>, revision: number) =>
+  summarizeFamiliesObservation(familiesObservationSchema.parse({ ...saved, envelope: { revision } }));
