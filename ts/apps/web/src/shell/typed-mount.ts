@@ -283,6 +283,13 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (spec.core && !core?.current) return core?.reason ?? "Reading Value...";
     return valueAfterWork();
   };
+  /** A catalog command that carries the route's Work handle cannot run before that Work exists (a raw
+   *  `work: null` decode error was the 2b drive's /pods "Open saved bytes"); it says why instead. */
+  const workCommandRefusal = (entry: string) => {
+    const catalog = commands[entry as keyof typeof commands];
+    if (!catalog || !("work" in catalog) || !catalog.work || owners.get(own)?.handle) return null;
+    return owners.get(own)?.absent ? "Start this Work first" : "Reading Work...";
+  };
   const writeRefusal = () => input.fixture !== null ? "Fixture has no native writes" : basisRefusal();
   // Settlement includes every demanded reading, not only the core write basis.
   const readiness = (): RouteReadiness => {
@@ -568,7 +575,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
      *  (slice 6.1, `data-url-settled`); a reload reads only the address. */
     urlCurrent: () => canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
-    commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions" : "kind" in spec.commands[id]! ? null : basisRefusal(),
+    commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions" : "kind" in spec.commands[id]! ? workCommandRefusal(spec.commands[id]!.entry) : basisRefusal(),
     problem: () => edits?basisRefusal():null, writeRefusal,
     refresh: (read?:import("../route/host-read").HostRead) => {
       requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true);

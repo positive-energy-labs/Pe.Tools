@@ -13,11 +13,17 @@ import {
   settingsValue,
 } from "../../../../packages/agent-contracts/src/settings-read.ts";
 export const loaded = read(hostRead(valueRead("settings.machine", settingsArgs, settingsValue)));
-export const fields = {
+/** The Revit session row a link focuses. */
+export const fields = { session: field(z.string(), "", "pose") };
+/*
+ * ADR 0035 rule 1: settings has no subject and an empty sheet. Its per-user setting fields have no
+ * binding kind (rule 3 is closed to `parameter`, `store` and `local`), so the settings pane stays the
+ * route's own drawing until a kind is ruled; `section` is the one route-owned query.
+ */
+export const query = {
   section: field(z.enum(["none", ...SETTINGS_SECTIONS]).optional(), undefined, "query", "push"),
-  session: field(z.string(), "", "pose"),
 };
-export type SettingsContext = ContextOf<typeof fields, typeof loaded, never, never>;
+export type SettingsContext = ContextOf<typeof fields & typeof query, typeof loaded, never, never>;
 export const module = route({
   key: "settings",
   name: "Settings",
@@ -46,6 +52,7 @@ export const module = route({
     surfaces: { web: "full", pwa: "full", tray: "compact" },
   },
   fields,
+  query,
   core: loaded,
   panes: {
     settings: {

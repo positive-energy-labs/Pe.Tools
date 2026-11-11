@@ -4,6 +4,7 @@ import { publicRoutesReady } from "../route/builtin-routes";
 import {
   actionReceiptSchema,
   memberWork,
+  podMemberCode,
   catalogWorkCommands,
   catalogWorkSpecs,
 } from "@pe/agent-contracts";
@@ -13,6 +14,8 @@ import { actionPlace, actionRoute, capturedPlace, proposedRecord, receiptRoute }
 beforeAll(async () => { await publicRoutesReady; });
 
 const member = { pod: "mechanical", path: "settings/family.json" };
+/** The /pods Page a member opens on: the member as its one subject. */
+const memberPage = { member: { kind: "ids", ids: [podMemberCode(member)] } };
 const workspace = {
   binding: "workspace" as const,
   route: "pods",
@@ -111,13 +114,13 @@ describe("chat plugin records", () => {
   it("host-only settings receipts retain their exact member and Work without a chat document", () => {
     expect(actionPlace("pods", settingsReceipt({ member }))).toMatchObject({
       ok: true,
-      page: member,
+      page: memberPage,
       carry: { target: "", work: workspace.work },
     });
     // A source input cannot redirect a receipt whose durable Work key names another member.
     expect(
       capturedPlace("pods", workspace, { pod: "other", path: "settings/other.json" }),
-    ).toMatchObject({ ok: true, page: member, carry: { work: workspace.work } });
+    ).toMatchObject({ ok: true, page: memberPage, carry: { work: workspace.work } });
     expect(actionPlace("pods", settingsReceipt({ member }, false))).toMatchObject({ ok: false });
     expect(
       capturedPlace("pods", { binding: "host", route: "pods", target: null }, {}),
@@ -190,7 +193,7 @@ describe("chat plugin records", () => {
     expect(record).toMatchObject({
       changes: 2,
       subject: workspace.work,
-      place: { ok: true, page: member, carry: { target: "", work: workspace.work } },
+      place: { ok: true, page: memberPage, carry: { target: "", work: workspace.work } },
     });
   });
 

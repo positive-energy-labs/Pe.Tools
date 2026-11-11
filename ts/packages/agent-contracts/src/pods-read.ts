@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { Schema } from "effect";
-import { podMemberSchema, settingsRouteState } from "./settings.ts";
+import { podMemberSchema, settingsRouteState, type PodMember } from "./settings.ts";
+import { goalSchema } from "./slots/goal.ts";
+import { decode, subjectCode, type SubjectRefCode } from "./subject-ref.ts";
 import {
   podListResponseSchema,
   podRunsResponseSchema,
@@ -46,6 +48,19 @@ export const podsValue = z.object({
   draft: z.string(),
   schemaRef: z.string().nullable(),
   runs: podRunsSchema,
+  // The member's Goal (ADR 0035 rule 8): what is left before a run can consume these bytes.
+  ...goalSchema(z.string()).shape,
+  // The member's cells are the sheet's; the Goal carries none of its own.
+  inputs: z.array(z.never()).readonly(),
 });
 export const podMemberOfPage = (page: { pod: string; path: string }) =>
   podMemberSchema.safeParse({ pod: page.pod, path: page.path }).data ?? null;
+/** A Pod member as a subject: keyKind `name`, the tuple `[pod, path]` (ADR 0035 rule 2). */
+export const podMemberCode = (member: PodMember): SubjectRefCode =>
+  subjectCode({ keyKind: "name", key: [member.pod, member.path] });
+/** The member a subject code names, or null for any other subject. */
+export const podMemberOfCode = (code: string | undefined): PodMember | null => {
+  const ref = code === undefined ? null : decode(code);
+  if (!ref?.ok || ref.value.keyKind !== "name" || ref.value.key.length !== 2) return null;
+  return podMemberSchema.safeParse({ pod: ref.value.key[0], path: ref.value.key[1] }).data ?? null;
+};

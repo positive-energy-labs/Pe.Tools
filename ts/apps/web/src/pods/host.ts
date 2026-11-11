@@ -63,7 +63,27 @@ export const reads = {
           draft,
           result: await ctx.read(localRead("pod.member.compose"), { ...ref, content: draft }),
         };
+      const staged = same ? Object.values(work?.fields ?? {}).filter((cell) => cell.edit).length : 0;
+      const says = (id: string, text: string) => ({ id, says: text, resolver: "person" as const });
+      // An error blocks the run; a warning or a note is what the run assumes.
+      const issues = (composition?.result.diagnostics ?? []).map((issue, i) => [i, issue] as const);
+      const unresolved = !ref
+        ? [says("member", "Pick a member to read its Goal")]
+        : !ref.path.endsWith(".json")
+          ? [says("source", `${ref.path} is source, not a JSON spec`)]
+          : [
+              ...(json ? [] : [says("json", "The draft is not JSON; a run cannot read it")]),
+              ...issues.filter(([, issue]) => issue.severity === "error").map(([i, issue]) => says(`issue:${i}`, `${issue.path || "/"}: ${issue.message}`)),
+              ...(staged ? [says("save", `Save ${staged} staged edit${staged === 1 ? "" : "s"}; a run reads the saved bytes`)] : []),
+            ];
       return {
+        unresolved,
+        assumed: issues.filter(([, issue]) => issue.severity !== "error").map(([i, issue]) => says(`issue:${i}`, `${issue.path || "/"}: ${issue.message}`)),
+        next: unresolved[0] ?? null,
+        inputs: [],
+        result: unresolved.length || !ref
+          ? { kind: "estimate" as const, value: null, sources: [] }
+          : { kind: "complete" as const, value: `${ref.path} is ready to run` },
         scope: args,
         member: selected,
         work,

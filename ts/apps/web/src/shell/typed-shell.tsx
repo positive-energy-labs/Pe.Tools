@@ -29,7 +29,7 @@ import { SituationBand, TimelineHead } from "./situation-band";
 import { CatalogWorkReviews } from "./catalog-work-reviews";
 import { readLayoutState, writeLayoutState } from "./layout-state";
 import { GraphHistory } from "./graph-history";
-import { PaneActionSlots, usePaneActionSlot } from "./pane-actions";
+import { PaneActions, PaneActionSlots, usePaneActionSlot } from "./pane-actions";
 import { SubjectDoor } from "./subject";
 import { SubjectPicker } from "./subject-picker";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
@@ -201,6 +201,7 @@ function TypedPane({mount,id,ctx}: {mount:TypedMount;id:string;ctx:DrawContext<a
   return <ValueScope value={ctx.value}><AttentionScope doc={doc} selected={selected} members={bindings?.members} elements={elements}>
     <NativeObservationScope value={ctx.value.current?observation:{...observation,scope:null}}>
       {mount.spec.panes[id]!.read!==mount.spec.core&&retainedValueLabel(ctx.value)?<p role="status">{retainedValueLabel(ctx.value)}</p>:null}
+      {titlePane(mount.spec) === id ? <PaneTitle text={mount.spec.title!(ctx)} pane={id} /> : null}
       {kernelPane(mount, id, ctx) ?? mount.spec.panes[id]!.draw(ctx).node}
     </NativeObservationScope>
   </AttentionScope></ValueScope>;
@@ -263,4 +264,13 @@ function kernelPane(mount: TypedMount, id: string, ctx: Parameters<TypedMount["s
     return <SheetPane ctx={{ draw: ctx as never, slot: mount.spec.sheet, field: mount.spec.subject?.field }} />;
   if (kernel === "goal") return <GoalPane ctx={{ goal: ctx.value.value as Goal | undefined }} />;
   return null;
+}
+
+/** ADR 0035 rules 1 and 5: `title(ctx)` rides the head of the first pane, in layout order, that is not the subject list. */
+const panesInOrder = (node: TypedRoute["spec"]["layout"]): string[] =>
+  node.kind === "pane" ? [node.id] : node.kind === "split" ? node.children.flatMap(panesInOrder) : node.kind === "gate" ? panesInOrder(node.child) : [];
+export const titlePane = (spec: TypedMount["spec"]) =>
+  spec.title ? panesInOrder(spec.layout).find((id) => !spec.panes[id]?.subjectList) ?? null : null;
+function PaneTitle({ text, pane }: { text: string | null; pane: string }) {
+  return text ? <PaneActions pane={pane}><span data-slot="pane-subject" className="min-w-0 truncate">{text}</span></PaneActions> : null;
 }

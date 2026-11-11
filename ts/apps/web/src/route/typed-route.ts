@@ -70,6 +70,8 @@ export const namesOf = (value: Many<SubjectRefCode>): string[] | "all" =>
       });
 export { subjectSchema };
 export type Fields = Readonly<Record<string, Field>>;
+/** Route-owned Page fields no slot holds (ADR 0035 rule 1). */
+export type QueryFields = Readonly<Record<string, Field & { role: "query" }>>;
 type FieldValues<F extends Fields> = {
   readonly [K in keyof F]: Immutable<z.output<F[K]["schema"]>>;
 };
@@ -156,6 +158,7 @@ export type Specification<
   Edit extends z.ZodType,
   Reads extends Readonly<Record<string, HostRead>> = Readonly<Record<string, HostRead>>,
   SubjectRead extends HostRead = HostRead,
+  Q extends QueryFields = {},
 > = {
   key: string;
   address?: string;
@@ -168,14 +171,14 @@ export type Specification<
   /** `./host.ts`, the route directory's reads; only the generated host registry imports it. */
   host?: string;
   subject?: {
-    field: RoleFields<F,"subject"> & string;
+    field: RoleFields<F & NoInfer<Q>,"subject"> & string;
     noun: string;
     multiple?: boolean;
     pane: string;
     read?: SubjectRead;
     options(data: Immutable<ReadData<SubjectRead>>): readonly { id: SubjectRefCode; label: string }[];
   };
-  core?: HostRead & { output: z.ZodType<Publication<D>>; args(page: Page<F>): unknown };
+  core?: HostRead & { output: z.ZodType<Publication<D>>; args(page: Page<F & NoInfer<Q>>): unknown };
   /*
    * ADR 0035 rule 1: the five slots are `subject` (above), `sheet`, `picture`, `goal` and `layout`
    * (below), plus `query` and `title(ctx)`. Types are inferred from the declaration, never
@@ -186,15 +189,16 @@ export type Specification<
   /** Slice 7: bindings by cell name, three closed kinds; the kernel draws a StateCell per binding per row. */
   sheet?: SheetSlot;
   /** Slice 8: a scope (SubjectRef set, box, or prism with a frame) and marks from the closed set. */
-  picture?: PictureSlot<DrawContext<NoInfer<D>, NoInfer<F>, z.output<W>, z.output<Edit>>>;
+  picture?: PictureSlot<DrawContext<NoInfer<D>, NoInfer<F & NoInfer<Q>>, z.output<W>, z.output<Edit>>>;
   /** Slice 7: one host Read whose data is the Goal; the kernel draws its unresolved list first. */
-  goal?: HostRead & { output: z.ZodType<Publication<Goal>>; args(page: Page<NoInfer<F>>): unknown };
+  goal?: HostRead & { output: z.ZodType<Publication<Goal>>; args(page: Page<NoInfer<F & NoInfer<Q>>>): unknown };
   /** Route-owned Page fields no slot holds; folded into `fields` for projection until slice 10 retires `fields`. */
-  query?: Readonly<Record<string, Field & { role: "query" }>>;
-  /** The pane head's title; chrome derives from filled slots (ADR 0035 rule 5). */
-  title?(ctx: DrawContext<NoInfer<D>, NoInfer<F>, z.output<W>, z.output<Edit>>): string;
+  query?: Q;
+  /** The pane head's title (ADR 0035 rule 5): the kernel draws it in the head of the first pane, in layout
+   * order, that is not the subject list. Null draws nothing. */
+  title?(ctx: DrawContext<NoInfer<D>, NoInfer<F & NoInfer<Q>>, z.output<W>, z.output<Edit>>): string | null;
   fields: F;
-  reads?: Readonly<Record<string, HostRead & { args(page: Page<F>): unknown }>>;
+  reads?: Readonly<Record<string, HostRead & { args(page: Page<F & NoInfer<Q>>): unknown }>>;
   panes: {
     readonly [K in keyof Reads]: {
       title: string;
@@ -203,13 +207,13 @@ export type Specification<
       /** A pane the shell draws from a filled slot (`typed-shell.tsx`); the route names and places it, and its `draw` is unused. */
       kernel?: "sheet" | "goal";
       read?: Reads[K];
-      bindings?(ctx: DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>): PaneBindings;
-    } & PaneBody<DrawContext<ReadData<Reads[K]>, F, z.output<W>, z.output<Edit>>>;
+      bindings?(ctx: DrawContext<ReadData<Reads[K]>, F & NoInfer<Q>, z.output<W>, z.output<Edit>>): PaneBindings;
+    } & PaneBody<DrawContext<ReadData<Reads[K]>, F & NoInfer<Q>, z.output<W>, z.output<Edit>>>;
   };
   edits?: {
     work: W | RouteStateSpec<W>;
-    key?(page: Page<F>): string | null;
-    seed?(page: Page<F>, target: import("@pe/agent-contracts").ExecutionTarget | null): z.output<W>;
+    key?(page: Page<F & NoInfer<Q>>): string | null;
+    seed?(page: Page<F & NoInfer<Q>>, target: import("@pe/agent-contracts").ExecutionTarget | null): z.output<W>;
     value?: keyof D & string;
     owners: Owners;
     input: Edit;
@@ -226,14 +230,14 @@ export type Specification<
         contract: EntryContract;
         planContract: EntryContract;
         label: string;
-        input?(context:{page:Page<F>;target:import("@pe/agent-contracts").ExecutionTarget|null;
+        input?(context:{page:Page<F & NoInfer<Q>>;target:import("@pe/agent-contracts").ExecutionTarget|null;
           work:import("@pe/agent-contracts").WorkHandle|null;value:Immutable<D>|undefined},supplied?:any):unknown;
         present(result: unknown, data: Immutable<D>, work: Immutable<z.output<W>>): unknown;
       } | { kind: "session" | "catalog" | "query" | "rpc"; entry: string; contract: EntryContract; label: string;
         /** A pane draws this verb on its rows, with the row's subject; the band does not. */
         row?: true;
         invoke?: import("@pe/agent-contracts").ReadEntry["run"];
-        input?(context: { page: Page<F>; target: import("@pe/agent-contracts").ExecutionTarget | null;
+        input?(context: { page: Page<F & NoInfer<Q>>; target: import("@pe/agent-contracts").ExecutionTarget | null;
           work: import("@pe/agent-contracts").WorkHandle | null; value: Immutable<D> | undefined },supplied?:any): unknown }
     >
   >;
@@ -241,7 +245,7 @@ export type Specification<
 };
 /** The shell executes this typed module. Data is a one-way discovery/host admission projection. */
 export function route<D, const F extends Fields, W extends z.ZodObject, Edit extends z.ZodType,
-  const Reads extends Readonly<Record<string, HostRead>>, SubjectRead extends HostRead>(spec: Specification<D, F, W, Edit, Reads, SubjectRead>) {
+  const Reads extends Readonly<Record<string, HostRead>>, SubjectRead extends HostRead, const Q extends QueryFields = {}>(spec: Specification<D, F, W, Edit, Reads, SubjectRead, Q>) {
   const edits = spec.edits;
   const declared = edits?.work;
   const work = !declared ? undefined : "schema" in declared ? declared : { route: spec.key, title: spec.name,
@@ -263,8 +267,9 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     ...(spec.sheet && !Object.values(spec.panes).some((p) => p.kernel === "sheet") ? { sheet: { title: "Sheet", purpose: "Edit the bound cells", kernel: "sheet", body: "scroll", draw: () => scrollBody(null) } } : {}),
     ...(spec.goal && !("goal" in spec.panes) ? { goal: { title: "Unresolved", purpose: "What is left before the answer", read: spec.goal,
       kernel: "goal", body: "scroll", draw: () => scrollBody(null) } } : {}),
-  } as unknown as Specification<D, F, W, Edit, Reads, SubjectRead>["panes"];
-  const normalized = { ...spec, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb } as NonNullable<typeof spec.commands>,
+  } as unknown as Specification<D, F, W, Edit, Reads, SubjectRead, Q>["panes"];
+  // `query` fields mount as Page fields: the shell reads one field table (rule 1: `query` holds what no slot does).
+  const normalized = { ...spec, fields: { ...spec.query, ...spec.fields } as F & Q, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb } as NonNullable<typeof spec.commands>,
     panes: { ...spec.panes, ...kernelPanes }, edits: work && edits ? {...edits,work,owners} : undefined };
   const schemas: Record<string,z.ZodType> = { none:z.strictObject({}) };
   if (work && edits) {

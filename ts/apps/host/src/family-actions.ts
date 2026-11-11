@@ -1416,8 +1416,12 @@ export function familyExecutors(
       const member = { pod: reference.packageId, path: reference.path };
       if (doc.basis && canonicalRouteInput(doc.basis.member) !== canonicalRouteInput(member))
         throw refused("The original member basis changed");
-      const destination = ctx.admission.input.destination,
-        content = settingsCandidate(doc.basis?.rawContent ?? "{}", doc.fields),
+      const destination = ctx.admission.input.destination;
+      // Without a basis the candidate is the edits over `{}` and the write has no hash to check, so it
+      // would replace the saved member with only the staged keys.
+      if (!destination && !doc.basis)
+        throw refused("Open the member's saved bytes before saving; this Work has no saved basis");
+      const content = settingsCandidate(doc.basis?.rawContent ?? "{}", doc.fields),
         request = {
           ...(destination ?? member),
           content,
