@@ -180,7 +180,10 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
   let truncated = "";
   if (text.length > MAX_TEXT_CHARS) {
     text = text.slice(0, MAX_TEXT_CHARS);
-    truncated = ` Text was cut at ${MAX_TEXT_CHARS} characters; ask for fewer pages or a crop.`;
+    // Name the lost pages: a reader told only "cut" concludes a tag is absent when its page never arrived.
+    const lastSeen = [...text.matchAll(/^--- page (\d+) ---$/gm)].at(-1)?.[1];
+    const lost = pages.filter((p) => p >= Number(lastSeen ?? 0));
+    truncated = ` Text was cut at ${MAX_TEXT_CHARS} characters: pages ${lost.join(", ")} were not fully returned, so nothing on them was searched; read them one page at a time or with a crop.`;
   }
   const header = `${file}: ${counted} ${pages.join(", ") || "none"}${input.crop ? ` cropped ${JSON.stringify(input.crop)}` : ""}.${truncated}`;
 
