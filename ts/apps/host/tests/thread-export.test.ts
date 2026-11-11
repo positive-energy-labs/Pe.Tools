@@ -16,7 +16,7 @@ import { expect, test } from "vite-plus/test";
 import { emptyThreadHead, emptyThreadLifecycle, type HarnessEvent } from "@pe/agent-contracts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import type { HarnessThreads } from "../src/harness/threads.ts";
-import { exportThread } from "../src/thread-export.ts";
+import { exportThread, threadSegment } from "../src/thread-export.ts";
 import { HostLog } from "../src/host-log.ts";
 import type { Providers } from "../src/harness/providers.ts";
 
@@ -204,6 +204,38 @@ test("export reports host retention gaps and oversize pointers without truncatin
         { id: 2, event: { kind: "oversize", of: "thread", ref: { thread: "thread", seq: 2 } } },
       ],
     });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// Mutant: threadSegment returns the id. The store folder then carries ':' and the export throws.
+test("a T3-shaped thread id round-trips: hashed in every path, itself in the archive", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pe-export-t3-"));
+  const id = "thread:delegated-task:command%3Amcp%3Afoo";
+  try {
+    const segment = threadSegment(id);
+    expect(segment).toBe(sha(id));
+    expect(threadSegment("thread-1")).toBe("thread-1");
+    mkdirSync(join(root, segment));
+    writeFileSync(join(root, segment, "meta.json"), JSON.stringify({ id }));
+    const log = new HostLog(join(root, ".log"), Date.now);
+    const event: HarnessEvent = {
+      kind: "prompt",
+      seq: 1,
+      at: new Date().toISOString(),
+      turnId: "turn-1",
+      text: "hi",
+    };
+    writeFileSync(join(root, segment, "events.jsonl"), JSON.stringify(event) + "\n");
+    log.append({ kind: "thread", thread: id, event });
+    const response = await exportThread(root, id, log);
+    expect(response.headers.get("content-disposition")).toMatch(
+      new RegExp(`^attachment; filename="${segment}-[0-9a-f]{12}\\.json"$`),
+    );
+    const archive = await response.json();
+    expect(archive).toMatchObject({ threadId: id, metadata: { id }, events: [event] });
+    expect(archive.hostLog.entries).toHaveLength(1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
