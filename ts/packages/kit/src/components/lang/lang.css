@@ -515,11 +515,18 @@ tr.dl-row[data-active] {
   border: 0.5px solid var(--pe-line);
   font-variant-numeric: tabular-nums;
 }
+/* `anywhere` on the prose box lowers a cell's min-content to one glyph, so auto table layout
+   squeezed short columns to "Kin/d". A cell breaks a word only when it overflows; a code token
+   (a UniqueId) still breaks anywhere, so it wraps instead of widening the table. */
 .prose-pe :is(th, td) {
   padding: calc(var(--space-unit) * 1.5) var(--gutter);
   border: 0;
   text-align: left;
   vertical-align: top;
+  overflow-wrap: break-word;
+}
+.prose-pe :is(th, td) code {
+  overflow-wrap: anywhere;
 }
 .prose-pe :is(th, td) + :is(th, td) {
   border-left: 0.5px solid var(--pe-line);
