@@ -1,7 +1,9 @@
+import { stableFanKey } from "../ducts/sheet/model";
 import {route as declareRoute} from "../route/typed-route";
 import {module as familiesDeclaration} from "../families/route";
 import {workFingerprintSchema} from "@pe/agent-contracts";
-import {localId,localSubject} from "../ducts/identity";
+import { systemCode } from "../ducts/identity";
+import { namesOf } from "../route/typed-route";
 import type {TypedRoute} from "../route/typed-route";
 import type {RouteFingerprint} from "@pe/agent-contracts";
 import { TypedShell } from "../shell/typed-shell";
@@ -33,7 +35,7 @@ const store = createChatPageStore({
 const ducts: ThreadTab = {
   id: "aaaaaaaa-0000-4000-8000-000000000001",
   route: "ducts",
-  link: routeAddress("ducts").link({ system: {kind:"ids",ids:[localId("ducts-system","S1")]} }),
+  link: routeAddress("ducts").link({ system: {kind:"ids",ids:[systemCode("S1")]} }),
   at: "2026-10-24T00:00:00.000Z",
 };
 const TAB = routeAddress("ducts").title;
@@ -43,7 +45,7 @@ const DOC_A = address("C:/Jobs/Level A.rvt"),
 const place = (id: string, system: string, selected: string, target: unknown): ThreadTab => ({
   id,
   route: "ducts",
-  link: routeAddress("ducts").link({ system: {kind:"ids",ids:[localId("ducts-system",system)]}, selected: [{kind:"focus",id:localId("ducts-focus",selected)}] } as never, {
+  link: routeAddress("ducts").link({ system: {kind:"ids",ids:[systemCode(system)]}, selected: [{kind:"focus",id:selected}] } as never, {
     target: JSON.stringify(target),
   }),
   at: "2026-10-24T00:00:00.000Z",
@@ -117,7 +119,7 @@ function DuctsProbe() {
   const system = useRouterState({
     select: (state) => routeAddress("ducts").read(state.location.search).page.system,
   });
-  return <output data-ducts-probe="">{system.kind === "all" ? "all" : system.ids.map(localSubject).join(" + ")}</output>;
+  return <output data-ducts-probe="">{system.kind === "all" ? "all" : (namesOf(system) as string[]).join(" + ")}</output>;
 }
 
 beforeEach(() => {
@@ -192,7 +194,7 @@ test("a tab press expands the tools on that Place; a Work press restores its Pag
   sessionStorage.setItem(
     "pe.places",
     JSON.stringify([
-      { ...ducts, link: routeAddress("ducts").link({ system: {kind:"ids",ids:[localId("ducts-system","S1")]} }, { work: "w1" }) },
+      { ...ducts, link: routeAddress("ducts").link({ system: {kind:"ids",ids:[systemCode("S1")]} }, { work: "w1" }) },
     ]),
   );
   const router = await mount();
@@ -235,8 +237,8 @@ const resume = (
 });
 const shown = (router: Awaited<ReturnType<typeof mount>>) => ({
   path: router.state.location.pathname,
-  system: (()=>{const subject=routeAddress("ducts").read(router.state.location.search).page.system; return subject.kind === "all" ? "all" : subject.ids.map(localSubject).join(" + ");})(),
-  selected: routeAddress("ducts").read(router.state.location.search).page.selected.map(item=>localSubject(item.id)).join(","),
+  system: (()=>{const subject=routeAddress("ducts").read(router.state.location.search).page.system; return subject.kind === "all" ? "all" : (namesOf(subject) as string[]).join(" + ");})(),
+  selected: routeAddress("ducts").read(router.state.location.search).page.selected.map(item=>item.id).join(","),
   target: (router.state.location.search as { target?: string }).target,
   tab: (router.state.location.state as { __peRouteTab?: { id: string } }).__peRouteTab?.id ?? null,
 });
@@ -271,7 +273,7 @@ test("no Work-key match opens a new Place; Places are never guessed by route", a
     route: "ducts",
     target: address("C:/Jobs/Level C.rvt"),
   } as const;
-  await press(resume(key, routeAddress("ducts").link({system:{kind:"ids",ids:[localId("ducts-system","SC")]}})));
+  await press(resume(key, routeAddress("ducts").link({system:{kind:"ids",ids:[systemCode("SC")]}})));
   await waitFor(() => expect(shown(router)).toMatchObject({ path: "/ducts", system: "SC" }));
   expect(seeded.map((tab) => tab.id)).not.toContain(shown(router).tab);
 });
@@ -360,8 +362,7 @@ test("an admitted Place keeps its codec bytes through open, switch, bare URL res
   // Object, list, numeric, numeric-looking string, empty string, plain string and literal-percent
   // values: each one the legacy codec or TanStack's parse/stringify re-encoded (`%257B`, `"{..}"`)
   // or unquoted (`"glass"` -> `glass`) before the admitted owner could read it.
-  const { localId } = await import("../route/typed-route");
-  const fan = JSON.stringify({ kind: "ids", ids: [localId("ducts-fan","MUAS-1 50%@2"), localId("ducts-fan","8081605")] });
+  const fan = JSON.stringify({ kind: "ids", ids: [stableFanKey({ uniqueId: "MUAS-1 50%", portIndex: 2 }), stableFanKey({ uniqueId: "8081605-uid", portIndex: 0 })] });
   const rosterSearch = JSON.stringify({ keywords: "100%25 off", pills: [], v: 1 });
   const page = {
     fixture: "layout",
@@ -606,7 +607,7 @@ test("an explicit open's command id clears when the thread association changes",
 test("a saved legacy open-ref Place keeps its id under StrictMode, /pea and a cross-row Work press", async () => {
   sessionStorage.clear();
   // The bytes a writer saves (host navigation.ts resume link); a restore matches saved bytes exactly.
-  const legacy = routeAddress("ducts").link({ system: {kind:"ids",ids:[localId("ducts-system","Office retained page")]} }, {
+  const legacy = routeAddress("ducts").link({ system: {kind:"ids",ids:[systemCode("Office retained page")]} }, {
     target: JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }),
   });
   // New enrollment is exercised above through actual Fans admission. This tests saved-Place rebinding.
@@ -688,7 +689,7 @@ test("a Pea open of a new tool keeps its first lease instance, and a set against
       commandId: "55555555-5555-4555-8555-555555555555",
       revision: 1,
       patch: {
-        focus: routeAddress("families").agent.write({focus:"[\"Family\",\"Type\",\"Name\"]"}).focus!,
+        focus: routeAddress("families").agent.write({focus:'name:["Family","Type"]#field:Name'}).focus!,
       },
     }),
   );

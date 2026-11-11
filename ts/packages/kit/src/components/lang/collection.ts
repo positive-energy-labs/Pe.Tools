@@ -1,5 +1,5 @@
 import { land } from "./land";
-import { rowRevit } from "./revit-target";
+import { rowRevit, rowUniqueIds } from "./revit-target";
 import type { Ref } from "./attention";
 import { rowDamage } from "../master-table/model";
 import type { Mark, Span } from "./scroll-project";
@@ -711,7 +711,7 @@ interface ListOptionsBase<T, Sort extends string = string> {
 export type ListOptions<T, Sort extends string = string, Data = readonly T[]> =
   Omit<ListOptionsBase<T, Sort>, "items"> & ValueItems<T, Data>;
 
-export interface ListItem<T> extends Pick<RowState, "revit" | "damage"> {
+export interface ListItem<T> extends Pick<RowState, "revit" | "uniqueIds" | "damage"> {
   subject?: Ref;
   key: string;
   item: T;
@@ -780,6 +780,7 @@ export function listModel<T, Sort extends string>(
           rowRevit(item) ??
           (searchIndex?.get(item) ?? options.search(item)).ids ??
           rowRevit(undefined, key),
+        uniqueIds: rowUniqueIds(item),
         damage: rowDamage(item),
         key,
         item,

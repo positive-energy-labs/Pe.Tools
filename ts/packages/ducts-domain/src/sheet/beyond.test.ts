@@ -19,7 +19,7 @@ const port = (index: number, point: P, elementId: number) => ({
   point,
   connectedTo: { elementId, connector: 0 },
 });
-const node = (id: number, kind: Kind, ports: [P, number][]) => ({
+const node = (id: number, kind: Kind, ports: [P, number][]) => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
   id,
   kind,
   point: ports[0]?.[0] ?? [0, 0, 0],

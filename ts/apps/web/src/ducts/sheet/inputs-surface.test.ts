@@ -46,7 +46,10 @@ const inputs = (): DuctsInputs =>
     rulings: { joins: [], ends: [] },
   });
 const context = (): Omit<InputContext, "inputs"> & { inputs: DuctsInputs } => ({
-  snapshot: EMPTY_SNAPSHOT,
+  snapshot: { ...EMPTY_SNAPSHOT, nodes: [13760867, 7, 1, 2].map(id => ({
+    ...networkSnapshot.nodes[0]!, id, uniqueId: `fixture:${id}`,
+    kind: id === 7 ? "terminal" as const : "equipment" as const,
+  })) },
   doc: null,
   revision: 3,
   sheet: null,

@@ -1,4 +1,4 @@
-import { identityCodecs } from "../../agent-contracts/src/route-kernel-codecs.ts";
+import { decode, documentKeySchema } from "../../agent-contracts/src/subject-ref.ts";
 import type {
   DiffJson,
   DiffPort,
@@ -63,8 +63,8 @@ export function diffKeyed(
   if (before.coverage.kind === "partial" || after.coverage.kind === "partial")
     return refuse("partial-coverage");
   if (
-    !identityCodecs.document.decode(before.document).ok ||
-    !identityCodecs.document.decode(after.document).ok
+    !documentKeySchema.safeParse(before.document).success ||
+    !documentKeySchema.safeParse(after.document).success
   )
     return refuse("invalid-identity");
   // No saved correspondence Work authority is admitted by this port. Equal names cannot supply it.
@@ -79,12 +79,14 @@ export function diffKeyed(
     return refuse("coverage-mismatch");
 
   let failure: RecordingDiffIncomparableReason | null = null;
-  const document = identityCodecs.document.parts(before.document).document;
+  const document = before.document;
   const decoded = new Map<string, boolean>();
+  // An element is in this document when its host (placement host, else source, else omitted) is it.
   const element = (id: string): boolean => {
     if (!decoded.has(id)) {
-      const r = identityCodecs.element.decode(id);
-      decoded.set(id, r.ok && identityCodecs.element.parts(r.value).document === document);
+      const r = decode(id);
+      const at = r.ok ? (r.value.placement?.host ?? r.value.source) : null;
+      decoded.set(id, r.ok && r.value.keyKind === "UniqueId" && (at === undefined || at === document));
     }
     return decoded.get(id)!;
   };

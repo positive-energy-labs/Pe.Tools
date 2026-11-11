@@ -1,3 +1,5 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import capturedWalk from "./native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +16,8 @@ import { nativeFixture } from "./fans-native.fixture.ts";
 import { pagesRoute } from "../src/pages-route.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { Layer } from "effect";
+
+const terminalSubject = elementSubject(capturedWalk.nodes.find(node => node.id === 8718801)!);
 
 async function fixture(withPage = false) {
   const dir = await mkdtemp(join(tmpdir(), "pe-write-safety-"));
@@ -197,8 +201,8 @@ test("R5 a real native rehearsal receipt cannot substitute for the declared Plan
   const f = await nativeFixture("test");
   try {
     f.select("fresh-ducts.heal.preview", "fresh-ducts.heal");
-    expect(await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [{ path: ["flows", "8718801", "edit"], value: { value: { cfm: 250 } } }], 0)).toMatchObject({ ok: true });
-    const staged = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g8718801"] } } }], 0);
+    expect(await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 250 } } }], 0)).toMatchObject({ ok: true });
+    const staged = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g8718801"] } } }], 0);
     if (!staged.ok) throw Error(JSON.stringify(staged));
     const input = { work: { key: f.key, revision: staged.revision } };
     for (const [id, key] of [["rehearsal", "ducts.rehearse-heal"], ["apply", "ducts.apply-heal"]]) {

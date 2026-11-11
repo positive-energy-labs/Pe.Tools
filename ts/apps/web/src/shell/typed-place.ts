@@ -2,7 +2,7 @@ import type { Address, DocumentRef, ExecutionTarget } from "@pe/agent-contracts"
 import { fixtureName } from "./fixture-name";
 import type { RouteActivityScope } from "../route/activity";
 import type { AdmittedAddressPort } from "./typed-address";
-import { freezePage } from "./page-port";
+import { freezePage } from "./freeze-page";
 
 export type PlaceInput = Readonly<{
   address: AdmittedAddressPort;

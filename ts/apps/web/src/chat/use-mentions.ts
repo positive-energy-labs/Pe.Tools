@@ -29,7 +29,7 @@ import {
   findCapabilities,
   mentionOf,
   mentionToken,
-  parseDocumentKey,
+  parseOpenDocumentRef,
   recentKey,
   recentRows,
   recentSegments,
@@ -69,7 +69,7 @@ export function mentionFace(
   row: Capability,
   catalog: CapabilityCatalog,
 ): { title: string; fact: string | null; mono: boolean; detail: string } {
-  const doc = parseDocumentKey(row.key);
+  const doc = parseOpenDocumentRef(row.key);
   if (doc) {
     const address = machineAttachments(catalog.machine)
       .find((session) => session.session === doc.session)

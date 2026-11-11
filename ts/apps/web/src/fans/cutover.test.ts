@@ -1,3 +1,5 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { snapshot } from "../ducts/test-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { fansDocumentSchema, ductsDocumentSchema, workKey, type WorkWriteAck } from "@pe/agent-contracts";
 import type {
@@ -7,6 +9,9 @@ import type {
 import { presentInputHistory } from "../ducts/sheet/input-history.neutral";
 import { createWitness } from "./cutover.test-support";
 const closes: (() => void)[] = [];
+const partNode = snapshot.nodes.find(node => node.kind === "fitting")!;
+const part = elementSubject(partNode);
+const terminal = elementSubject(snapshot.nodes.find(node => node.kind === "terminal")!);
 afterEach(() =>
   closes
     .splice(0)
@@ -44,17 +49,17 @@ test("human slot/drop/flow edits stay in Fans Work, preserve siblings and restor
       history: {
         label: "Part drop DS-1",
         clear: true,
-        rowKey: "part-drop:7",
+        rowKey: `part-drop:${partNode.id}`,
         was: "0.18 in-wg",
-        row: { label: "DS-1", section: "parts", ids: [7] },
+        row: { label: "DS-1", section: "parts", ids: [partNode.id] },
       },
-      patches: [{ path: ["componentDrops", "7"], value: { edit: { value: { inWg: 0.18 } } } }],
+      patches: [{ path: ["componentDrops", part], value: { edit: { value: { inWg: 0.18 } } } }],
     },
     {
       history: { label: "Set terminal flow" },
       patches: [
         {
-          path: ["flows", "8"],
+          path: ["flows", terminal],
           value: { edit: { value: { cfm: 200 } } },
         },
       ],
@@ -68,7 +73,7 @@ test("human slot/drop/flow edits stay in Fans Work, preserve siblings and restor
   expect(f.owner.work()?.revision).toBe(0);
   const value = fansDocumentSchema.parse(f.fans.work()!.value);
   expect(value.parameters.fanFlow?.edit?.value).toBe("PE_M_Fan_AirFlow");
-  expect(value.componentDrops["7"]?.edit?.value.inWg).toBe(0.18);
+  expect(value.componentDrops[part]?.edit?.value.inWg).toBe(0.18);
   f.fans.close();
   const next = f.mount(f.admitted.presenter);
   await vi.waitFor(() => expect(next.workBasis()).not.toBeNull());
@@ -81,7 +86,7 @@ test("human slot/drop/flow edits stay in Fans Work, preserve siblings and restor
   expect(await next.history!.undo()).toMatchObject({ ok: true });
   expect(fansDocumentSchema.parse(next.work()!.value).flows).toEqual({});
   expect(await next.history!.redo()).toMatchObject({ ok: true });
-  expect(fansDocumentSchema.parse(next.work()!.value).flows).toHaveProperty("8");
+  expect(fansDocumentSchema.parse(next.work()!.value).flows).toHaveProperty(terminal);
   const history = presentInputHistory(
     next.history!.entries as Parameters<typeof presentInputHistory>[0],
     null,
@@ -100,7 +105,7 @@ test("W06: one-press Revert is a new edit; cleared-row Restore uses the host inv
   await vi.waitFor(() => expect(f.fans.workBasis()).not.toBeNull());
   const edit = {
     history: { label: "Part drop DS-1" },
-    patches: [{ path: ["componentDrops", "7"], value: { edit: { value: { inWg: 0.18 } } } }],
+    patches: [{ path: ["componentDrops", part], value: { edit: { value: { inWg: 0.18 } } } }],
   };
   expect(await settle(f.fans.invoke("edit", edit) as Observation<WorkWriteOutcome>)).toMatchObject({
     kind: "accepted",
@@ -109,32 +114,32 @@ test("W06: one-press Revert is a new edit; cleared-row Restore uses the host inv
     history: {
       label: "Revert DS-1",
       clear: true,
-      rowKey: "part-drop:7",
+      rowKey: `part-drop:${partNode.id}`,
       was: "0.18 in-wg",
-      row: { label: "DS-1", section: "parts", ids: [7] },
+      row: { label: "DS-1", section: "parts", ids: [partNode.id] },
     },
-    patches: [{ path: ["componentDrops", "7", "edit"], value: null }],
+    patches: [{ path: ["componentDrops", part, "edit"], value: null }],
   };
   expect(await settle(f.fans.invoke("edit", clear) as Observation<WorkWriteOutcome>)).toMatchObject(
     { kind: "accepted" },
   );
-  expect(fansDocumentSchema.parse(f.fans.work()!.value).componentDrops["7"]?.edit).toBeNull();
+  expect(fansDocumentSchema.parse(f.fans.work()!.value).componentDrops[part]?.edit).toBeNull();
   const history = presentInputHistory(
     f.fans.history!.entries as Parameters<typeof presentInputHistory>[0],
     null,
   );
   expect(history.cleared).toMatchObject({
-    rowKey: "part-drop:7",
+    rowKey: `part-drop:${partNode.id}`,
     was: "0.18 in-wg",
-    row: { label: "DS-1", ids: [7] },
+    row: { label: "DS-1", ids: [partNode.id] },
   });
   expect(await f.fans.history!.undo(history.cleared!.press)).toMatchObject({ ok: true });
   expect(
-    fansDocumentSchema.parse(f.fans.work()!.value).componentDrops["7"]?.edit?.value.inWg,
+    fansDocumentSchema.parse(f.fans.work()!.value).componentDrops[part]?.edit?.value.inWg,
   ).toBe(0.18);
   expect(f.fans.journal()!.receipts.at(-1)).toMatchObject({ kind: "restore", restoreOf: 2 });
   expect(await f.fans.history!.redo()).toMatchObject({ ok: true });
-  expect(fansDocumentSchema.parse(f.fans.work()!.value).componentDrops["7"]?.edit).toBeNull();
+  expect(fansDocumentSchema.parse(f.fans.work()!.value).componentDrops[part]?.edit).toBeNull();
 });
 
 test("W07/X01: a new workspace reacquires Pea history and never replays an old value over the snapshot", async () => {
@@ -146,7 +151,7 @@ test("W07/X01: a new workspace reacquires Pea history and never replays an old v
       key,
       "fans",
       "pea",
-      [{ path: ["componentDrops", "8"], value: { edit: { value: { inWg: 0.25 } } } }],
+      [{ path: ["componentDrops", terminal], value: { edit: { value: { inWg: 0.25 } } } }],
       0,
       false,
       { press: "pea-drop", kind: "apply", label: "Pea part drop" },
@@ -160,7 +165,7 @@ test("W07/X01: a new workspace reacquires Pea history and never replays an old v
   const next = await createWitness(closes, f.saved);
   await vi.waitFor(() => expect(next.fans.workBasis()).not.toBeNull());
   expect(
-    fansDocumentSchema.parse(next.fans.work()!.value).componentDrops["8"]?.edit?.value.inWg,
+    fansDocumentSchema.parse(next.fans.work()!.value).componentDrops[terminal]?.edit?.value.inWg,
   ).toBe(0.25);
   expect(next.fans.history!.entries.map((entry) => entry.label)).toEqual(["Pea part drop"]);
   expect(await next.fans.history!.undo()).toMatchObject({ ok: true });

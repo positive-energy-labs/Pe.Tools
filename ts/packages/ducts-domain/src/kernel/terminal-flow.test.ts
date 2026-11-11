@@ -10,7 +10,7 @@ import { slotFlowOf, terminalFlow } from "./terminal-flow.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 const terminal = (flow: number | null, flowParameter: string | null): Node =>
-  ({
+  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(40).toString(16).padStart(8, "0")}`,
     id: 40,
     kind: "terminal",
     category: "Air Terminals",

@@ -1,4 +1,5 @@
 import type { ResolvedReadDescriptor } from "./native-read-door.ts";
+import type { DocumentKey, SubjectRefCode } from "./subject-ref.ts";
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 import type { z } from "zod";
 import type { AdmittedRoute } from "./route-kernel-admission.ts";
@@ -8,7 +9,6 @@ import type {
   AcceptanceToken,
   CausalParentId,
   DecodeResult,
-  IdentityId,
   InvocationToken,
   Many,
   ScopeToken,
@@ -19,7 +19,7 @@ export type SceneContextRepresentation = RevitDetailSpaceScene.Req.SceneContextR
 export type GeometryScope =
   | {
       readonly kind: "subjects";
-      readonly ids: readonly [IdentityId<"element">, ...IdentityId<"element">[]];
+      readonly ids: readonly [SubjectRefCode, ...SubjectRefCode[]];
     }
   | {
       readonly kind: "subjects";
@@ -27,8 +27,8 @@ export type GeometryScope =
       readonly ids: readonly [number, ...number[]];
       readonly scope: ScopeToken;
     }
-  | { readonly kind: "region"; readonly id: IdentityId<"local"> }
-  | { readonly kind: "family-document"; readonly id: IdentityId<"document"> };
+  | { readonly kind: "region"; readonly id: SubjectRefCode }
+  | { readonly kind: "family-document"; readonly id: DocumentKey };
 let mintExplicit: (token: AcceptanceToken) => ExplicitDetailRequest;
 let mintReach: (
   subject: GeometryScope,
@@ -94,7 +94,7 @@ export type GeometryRequest<R extends SceneContextRepresentation = "overview"> =
 } & (R extends "overview"
   ? {
       readonly representation: "overview";
-      readonly subjects: Many<IdentityId<"element">>;
+      readonly subjects: Many<SubjectRefCode>;
       readonly scope: ScopeToken;
     }
   : { readonly representation: R; readonly reach: PreparedDetailReach });

@@ -43,6 +43,7 @@ const scene: Pick<Scene, "nodes"> = {
   nodes: [
     {
       node: {
+        uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000001",
         id: 1,
         kind: "equipment",
         category: "anything",

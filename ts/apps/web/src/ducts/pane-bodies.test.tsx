@@ -1,3 +1,4 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 // @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
 import { emptyListSearch } from "@pe/agent-contracts";
@@ -9,7 +10,7 @@ import { typedSubjectDoor } from "../shell/subject";
 import { SubjectDoor } from "../shell/subject";
 import { makeAtomRegistry } from "../shell/owner";
 import { cellFocusOf,cellFocusSubject } from "./cell-focus";
-import { ductsLink,localId,localSubject } from "./identity";
+import { ductsLink, systemCode } from "./identity";
 import { snapshot } from "./test-fixture";
 import sheetFixture from "./sheet/sheet.fixture.json";
 
@@ -70,7 +71,7 @@ test("F16 the sidebar navigates the document roster before pricing and keeps ato
 test("Q2a keeps kind and colour editors on ducts and fan settings on fans", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
-  f.owner.controls.subject({ kind: "ids", ids: [localId("ducts-system", "SA")] });
+  f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
   await vi.waitFor(() => expect(f.owner.readingStatus("ducts").snapshot.current).toBe(true));
   await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
   const view = render(<RegistryContext value={registry()}>
@@ -100,7 +101,7 @@ test("F6 the real Inputs pane renders an acknowledged role edit as a choice labe
   await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
   await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
   const unit = snapshot.nodes.find((node) => node.kind === "equipment")!;
-  const id = String(unit.id);
+  const id = elementSubject(unit);
   f.fans.invoke("edit", { patches: [{ path: ["roles", id], value: { edit: { value: { role: "fan" } } } }] }, f.fans.workBasis()!);
   await vi.waitFor(() => expect(f.fans.work()?.value).toMatchObject({ roles: { [id]: { edit: { value: { role: "fan" } } } } }));
   const view = render(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
@@ -112,7 +113,7 @@ test("F6 the real Inputs pane renders an acknowledged role edit as a choice labe
 test("an admitted network pane runs no sibling body when another pane is hidden", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
-  f.owner.controls.subject({ kind: "ids", ids: [localId("ducts-system", "SA")] });
+  f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
   await vi.waitFor(() => expect(f.owner.readingStatus("ducts").snapshot.current).toBe(true));
   f.owner.setPaneDemand("e-picture", false);
   render(<RegistryContext value={registry()}>{nodeFor(f.owner, "e-sidebar")}</RegistryContext>);
@@ -146,19 +147,19 @@ test("a restored semantic cell selection lands on that fitting cell through the 
   const fitting = snapshot.nodes.find((node) => node.kind === "fitting");
   if (!fitting) throw Error("The pinned network has no fitting");
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
-  f.owner.controls.subject({ kind: "ids", ids: [localId("ducts-system", "SA")] });
+  f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
   await vi.waitFor(() => {
     const state = f.owner.readingStatus("value").snapshot;
     if (state.status === "failed") throw Error(state.reason ?? "Read failed");
     expect(state.current).toBe(true);
   });
   const subject = cellFocusSubject(snapshot, ["SA"], { segment: "componentDrops", id: fitting.id });
-  expect(f.owner.page.select([{ kind: "focus", id: localId("ducts-focus", subject) }]).kind).toBe(
+  expect(f.owner.page.select([{ kind: "focus", id: subject }]).kind).toBe(
     "accepted",
   );
   const selected = f.owner.page.read().selected[0];
   if (!selected) throw Error("The kernel did not retain the selection");
-  expect(cellFocusOf(localSubject(selected.id))).toMatchObject({
+  expect(cellFocusOf(selected.id)).toMatchObject({
     segment: "componentDrops",
     id: fitting.id,
     pane: "this",
@@ -263,7 +264,7 @@ test("a rule owner crossing without system context still lands on its rule", asy
   const f = await createWitness(closes);
   const url = new URL(ductsLink([], {}, { kind: "rule", key: "tap-std" }), "http://127.0.0.1");
   const destination = f.mount(f.admitted.owner, url.searchParams, "rule-no-system");
-  expect(destination.page.read().selected.map((item: {id:Parameters<typeof localSubject>[0]}) => localSubject(item.id))).toEqual(["rule:tap-std"]);
+  expect(destination.page.read().selected.map((item: { id: string }) => item.id)).toEqual(["rule:tap-std"]);
   await vi.waitFor(() => expect(destination.readingStatus("value").snapshot.current).toBe(true));
   const view = render(<RegistryContext value={registry()}>{nodeFor(destination, "e-rules-all")}</RegistryContext>);
   const row = view.container.querySelector('[data-key="tap-std"]');

@@ -2,7 +2,7 @@ import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
-import { field, route, localId } from "../route/defaults.ts";
+import { field, route } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
@@ -10,7 +10,6 @@ import { chatArgs, chatValue } from "../../../../packages/agent-contracts/src/ch
 export const loaded = read(hostRead(valueRead("chat.context", chatArgs, chatValue)));
 export const fields = { mode: field(z.enum(["threads", "world"]), "threads", "query") };
 export type { Context as ChatHandle } from "./context.generated";
-export const threadIdentity = (thread: string) => localId("chat", thread);
 export const chatLayout = {
   kind: "split",
   axis: "h",

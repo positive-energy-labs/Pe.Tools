@@ -185,6 +185,8 @@ internal static class AabbRevit {
             select new XYZ(x, y, z)];
 }
 
+// LinkInstanceId is the link instance's session-local ElementId: payload for a Revit call, never identity.
+// LinkInstanceUniqueId is its UniqueId, the SubjectRef placement of an element seen through that link (ADR 0035 rule 2).
 /// <summary>The address of one element. Enough for the host to select it.</summary>
 public sealed record Handle(
     string DocumentKey,
@@ -195,7 +197,8 @@ public sealed record Handle(
     PrimKind Kind,
     string? Layer = null,
     Extrusion? Extrusion = null,
-    HeightRole HeightRole = HeightRole.None
+    HeightRole HeightRole = HeightRole.None,
+    string? LinkInstanceUniqueId = null
 );
 
 /// <summary>

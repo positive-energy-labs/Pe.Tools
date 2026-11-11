@@ -13,7 +13,7 @@ import { portLayer } from "#/scene/ports";
 import type { ColourMode } from "#/scene/renderer";
 import { systemPaint } from "#/scene/surfaces";
 import type { Kinds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
-import { elementKey } from "@pe/kit/lang/attention";
+import type { ElementIndex } from "#/element-index";
 import type { PictureLayer, PictureLine, PictureOverlayFrame } from "#/scene/picture/picture";
 import { Annotations, type Label, type Ruling } from "./annotations";
 import type { Encoding } from "./encoding";
@@ -23,9 +23,15 @@ import type { Scene } from "./scene";
 import { CaptionBounds } from "./subject-labels";
 
 /** The scene's centrelines as the picture reads them: segments first, then node points. */
-export const linesOf = (scene: Scene): PictureLine[] => [
-  ...scene.segments.map((f) => ({ key: elementKey(f.segment.id), points: f.segment.polyline })),
-  ...scene.nodes.flatMap((f) => f.node.point ? [{ key: elementKey(f.node.id), points: [f.node.point] }] : []),
+export const linesOf = (scene: Scene, elements: ElementIndex): PictureLine[] => [
+  ...scene.segments.flatMap((f) => {
+    const key = elements.keyOf(f.segment.id);
+    return key ? [{ key, points: f.segment.polyline }] : [];
+  }),
+  ...scene.nodes.flatMap((f) => {
+    const key = elements.keyOf(f.node.id);
+    return key && f.node.point ? [{ key, points: [f.node.point] }] : [];
+  }),
 ];
 
 /** Equipment paint over the shown meshes, and the ports layer drawn from the same scene graph. */

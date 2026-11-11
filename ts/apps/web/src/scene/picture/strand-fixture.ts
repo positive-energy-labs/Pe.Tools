@@ -5,7 +5,7 @@
  * (the farthest heavy), so they share a trunk; the heavy strand's middle element is `over`.
  * Unjoined lines (the colours demo's loose ducts) get overlapping windows of three instead.
  */
-import type { SubjectKey } from "@pe/kit/lang/attention";
+import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import { boundsOfInstances } from "#/scene/orbit";
 import type { SceneMeshes } from "#/scene/types";
 import type { PictureLine, PictureStrand } from "./model";
@@ -27,7 +27,7 @@ const meshLines = (meshes: SceneMeshes | null): PictureLine[] =>
     const mid = min.map((v, k) => (v + max[k]!) / 2);
     const axis = [0, 1, 2].reduce((a, k) => (max[k]! - min[k]! > max[a]! - min[a]! ? k : a), 0);
     const at = (v: number) => mid.map((m, k) => (k === axis ? v : m));
-    return [{ key: `e:${i.revitId}` as SubjectKey, points: [at(min[axis]!), at(max[axis]!)] }];
+    return [{ key: elementKey(i.uniqueId), points: [at(min[axis]!), at(max[axis]!)] }];
   });
 
 export function strandFixture(given: readonly PictureLine[], meshes: SceneMeshes | null) {

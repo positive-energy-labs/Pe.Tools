@@ -9,6 +9,7 @@ import { ActionJournal } from "../src/action-journal.ts";
 import { CANCEL_OPERATION_KEY } from "../src/bridge.ts";
 import { command, StepFailure } from "../src/command-executor.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
+import { HostLog } from "../src/host-log.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import { settle } from "./effect-test.ts";
 
@@ -24,7 +25,7 @@ async function fixture() {
   );
   const native = Deferred.makeUnsafe<unknown, StepFailure>();
   const calls: { key: string; requestId: string }[] = [];
-  const seen: { identity?: RequestIdentityData; interrupted: boolean } = { interrupted: false };
+  const seen: { identity?: RequestIdentityData; interrupted: boolean; cancelsSettled: number } = { interrupted: false, cancelsSettled: 0 };
   journal.bindCommands({
     probe: async () => null,
     resolve: () =>
@@ -45,6 +46,7 @@ async function fixture() {
           cancel: (requestId) =>
             Effect.sync(() => calls.push({ key: CANCEL_OPERATION_KEY, requestId })).pipe(
               Effect.andThen(Effect.sleep("300 millis")),
+              Effect.andThen(Effect.sync(() => void seen.cancelsSettled++)),
               Effect.as({ cancelled: true }),
             ),
         },
@@ -77,6 +79,8 @@ async function fixture() {
     answer: (value: Effect.Effect<unknown, StepFailure>) => Deferred.doneUnsafe(native, value),
     closeHost: () => settle(Scope.close(host, Exit.void)),
     reopen: () => new ActionJournal(join(dir, "partition-operations.json"), Date.now),
+    /** Receipt revisions the host log holds, as JSON text. */
+    logged: () => new HostLog(join(dir, "log"), Date.now).read(0, (entry) => entry.event.kind === "receipt").entries.map((entry) => JSON.stringify(entry.event)),
     async dispose() {
       // A failed assertion leaves the step held; release it so the scope's join can finish.
       Deferred.doneUnsafe(native, Effect.succeed(null));
@@ -162,6 +166,42 @@ test("a fork under a running attempt's key never interrupts it, even a cancel un
   }
 });
 
+test("an action id that equals a running step's id runs its own step; ids are two namespaces", async () => {
+  const f = await fixture();
+  try {
+    const stepId = await f.submit("named-other");
+    // A caller may choose any id, including the uuid of another action's running step.
+    const own = await f.submit(stepId);
+    expect(own).not.toBe(stepId);
+    // The other action's Stop reaches its own step, and nothing of the bare-id action.
+    const stopping = f.journal.cancel("named-other");
+    await vi.waitFor(() => expect(f.calls.filter((call) => call.key === CANCEL_OPERATION_KEY)).toEqual([{ key: CANCEL_OPERATION_KEY, requestId: stepId }]));
+    await stopping;
+    f.answer(Effect.succeed({ ok: true }));
+    expect(await f.journal.wait(stepId)).toMatchObject({ state: "succeeded", steps: [{ id: own, state: "succeeded" }] });
+    expect(f.seen.interrupted).toBe(false);
+  } finally {
+    await f.dispose();
+  }
+});
+
+test("closing joins a Stop still sending: the cancel settles before the journal closes", async () => {
+  const f = await fixture();
+  try {
+    await f.submit("stopped-at-close");
+    const stopping = f.journal.cancel("stopped-at-close");
+    await vi.waitFor(() => expect(f.calls.some((call) => call.key === CANCEL_OPERATION_KEY)).toBe(true));
+    // The attempt settles at once; only the 300 ms op.cancel send is still open at close.
+    f.answer(Effect.fail(new StepFailure("Revit cancelled the request", 499, "cancelled")));
+    await f.journal.wait("stopped-at-close");
+    await f.closeHost();
+    expect(f.seen.cancelsSettled).toBe(1);
+    await expect(stopping).resolves.toMatchObject({ id: "stopped-at-close" });
+  } finally {
+    await f.dispose();
+  }
+});
+
 test("closing the host scope joins the attempt; it never interrupts it", async () => {
   const f = await fixture();
   try {
@@ -174,6 +214,8 @@ test("closing the host scope joins the attempt; it never interrupts it", async (
     await closing;
     expect(f.seen.interrupted).toBe(false);
     expect((await f.reopen().list())[0]).toMatchObject({ id: "joined", state: "succeeded" });
+    // The revision the final join committed reached the log: its subscription outlives the close.
+    expect(f.logged().some((event) => event.includes('"joined"') && event.includes('"succeeded"'))).toBe(true);
   } finally {
     await f.dispose();
   }

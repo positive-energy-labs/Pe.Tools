@@ -47,7 +47,7 @@ test("a pointer lives in thread meta: it survives a host reload and leaves only 
   const pea = { kind: "pea", thread: id } as never;
   port.point(pointerThread(pea, "another-thread"), {
     route: "fans",
-    place: { selected: '["e:7"]' },
+    place: { selected: '["UniqueId:u-7"]' },
     label: "FC-1 fan flow",
   });
   await first.close();
@@ -55,7 +55,7 @@ test("a pointer lives in thread meta: it survives a host reload and leaves only 
   const second = await open();
   port.bind(second.pointers);
   const [pointer] = port.read(pointerThread({ kind: "human" } as never, id)).pointers;
-  expect(pointer).toMatchObject({ route: "fans", label: "FC-1 fan flow", place: { selected: '["e:7"]' } });
+  expect(pointer).toMatchObject({ route: "fans", label: "FC-1 fan flow", place: { selected: '["UniqueId:u-7"]' } });
   port.dismiss(id, pointer!.id);
   await second.close();
 

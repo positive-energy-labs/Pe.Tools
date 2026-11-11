@@ -52,7 +52,7 @@ const duct = (id: number, a: number[], b: number[], groupId = "g1"): Segment => 
   roughness: { valueFt: 0.0003, provenance: "revit-default" },
   revit: {},
   connectors: [conn(1, a), conn(2, b)],
-  uniqueId: null,
+  uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`,
 });
 /** A rectangular duct `w` x `h` in. */
 const rect = (id: number, a: number[], b: number[], w: number, h: number, groupId = "g1") => {
@@ -136,7 +136,7 @@ it.each([6311356, 7320242])(
       widthAxis: [-0.707, -0.707, 0],
     };
     main.connectors = [port];
-    const terminal: Node = {
+    const terminal: Node = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(terminalId).toString(16).padStart(8, "0")}`,
       id: terminalId,
       kind: "terminal",
       category: "Air Terminals",
@@ -427,7 +427,7 @@ const damper = (id: number, at: number[], facing = false): Node => {
     classification: "Supply Air",
     connectors: [port(1, half), port(2, -half)],
     facts: [],
-    uniqueId: null,
+    uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`,
   };
 };
 

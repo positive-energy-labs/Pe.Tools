@@ -38,8 +38,8 @@ export function withHealth<T extends Pick<DuctSnapshot, "nodes" | "segments">>(
   tolerances?: Input["tolerances"],
 ): T & Health {
   const input: Input = {
-    nodes: s.nodes,
-    segments: s.segments,
+    nodes: s.nodes.map(({ uniqueId: _identity, ...geometry }) => geometry),
+    segments: s.segments.map(({ uniqueId: _identity, ...geometry }) => geometry),
     ...(tolerances ? { tolerances } : {}),
   };
   const json = JSON.stringify(input);

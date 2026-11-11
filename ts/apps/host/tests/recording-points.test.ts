@@ -10,7 +10,7 @@ import {
   type RecordingPointId,
   type RecordingConsumer,
 } from "@pe/agent-contracts";
-import { identityCodecs } from "../../../packages/agent-contracts/src/route-kernel-codecs.ts";
+import type { DocumentKey } from "../../../packages/agent-contracts/src/subject-ref.ts";
 import {
   CurrentInputConsumption,
   HostInputReadSets,
@@ -34,11 +34,7 @@ const identity = { build: "point-body-selection", catalog: "catalog" };
 const bounds = { maxBytes: 32 * 1024 * 1024, maxTakings: 4096 };
 const ref = { session: "point-session", openId: "point-open" };
 const path = address("C:/Models/point.rvt");
-const documentId = (document: string) => {
-  const decoded = identityCodecs.document.encode({ document });
-  if (!decoded.ok) throw Error("Invalid test document");
-  return decoded.value;
-};
+const documentId = (document: string) => document as DocumentKey;
 const doc = documentId(path),
   foreign = documentId("C:/Models/foreign.rvt");
 const consumer = (instance: string): RecordingConsumer => ({

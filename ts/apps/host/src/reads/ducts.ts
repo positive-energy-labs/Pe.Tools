@@ -185,7 +185,7 @@ export const ductsPricing = read("ducts.pricing", {
             ...result.analysis,
             systems: roster.rows.map((row) => priced.get(row.key) ?? row),
           },
-          effectiveDesign: withStoredRulings(design, snapshot.store) ?? design,
+          effectiveDesign: withStoredRulings(design, snapshot.store, snapshot) ?? design,
           fanRows: fans.rows,
           design,
           network,

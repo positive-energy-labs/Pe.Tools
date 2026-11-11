@@ -257,7 +257,7 @@ export type FiberOwner = {
   ) => Fiber.Fiber<unknown, unknown>;
 };
 /** Attempts by action id and op.cancel sends by step id: never one map, so neither key reaches the other. */
-export type Attempts = { readonly attempts: FiberOwner; readonly cancels: FiberOwner };
+export type Owners = { readonly attempts: FiberOwner; readonly cancels: FiberOwner };
 const joined = (fiber: Fiber.Fiber<unknown, unknown>) =>
   new Promise<Exit.Exit<unknown, unknown>>((resolve) => fiber.addObserver(resolve));
 /** Rule 14: the journal owns the attempt; the submitting request is only its causal parent. */
@@ -534,7 +534,7 @@ export class ActionJournal implements ReceiptReader {
     private readonly stamp: () => ReceiptStamp | null = () => null,
     private readonly retain = RETAIN_RECEIPTS,
     /** Absent only on a read-side journal (a restart reader); such a journal admits nothing. */
-    private readonly owners?: Attempts,
+    private readonly owners?: Owners,
   ) {}
   /** Bound once when the host/demo/test runtime acquires its exact bridge and Work owner. */
   bindCommands(environment: CommandEnvironment): void {
@@ -1611,13 +1611,9 @@ export class ActionJournal implements ReceiptReader {
                 process ??
                 (incarnation?.kind === "incarnation" ? incarnation.probe.process : undefined);
               const step: ActionStep = {
-                // Opaque caller ids cannot serve as the SDK's native request UUID.
-                id:
-                  kind === "native" &&
-                  !row.steps.some((step) => step.kind === "native") &&
-                  z.uuid().safeParse(row.id).success
-                    ? row.id
-                    : randomUUID(),
+                // Step ids are their own namespace, never a caller-chosen action id: a native
+                // request id is one step's, and two steps never share one.
+                id: randomUUID(),
                 kind,
                 key,
                 ...(kind === "native" && nativeEffect(key) ? { effect: nativeEffect(key) } : {}),

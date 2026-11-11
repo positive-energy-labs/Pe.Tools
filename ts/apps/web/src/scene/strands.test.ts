@@ -4,26 +4,27 @@ import { expect, test } from "vite-plus/test";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { chain, lanes, segments, strandLayers, type Strand } from "./strands";
 import type { LayerFrame } from "./types";
+import { eKey, testElements } from "#/test-attention";
 
 const lines = [
   // e:1 drawn with flow, e:2 drawn against it, e:3 a fitting's one point, e:4 against again.
   {
-    key: "e:1",
+    key: eKey(1),
     points: [
       [0, 0, 0],
       [4, 0, 0],
     ],
   },
   {
-    key: "e:2",
+    key: eKey(2),
     points: [
       [9, 0, 0],
       [5, 0, 0],
     ],
   },
-  { key: "e:3", points: [[10, 0, 0]] },
+  { key: eKey(3), points: [[10, 0, 0]] },
   {
-    key: "e:4",
+    key: eKey(4),
     points: [
       [10, 6, 0],
       [10, 1, 0],
@@ -33,7 +34,7 @@ const lines = [
 const pointsOf = (key: SubjectKey) => lines.find((line) => line.key === key)?.points;
 
 test("a chain orients each element to continue the last, in path order", () => {
-  const links = chain(["e:1", "e:2", "e:3", "e:4"], pointsOf);
+  const links = chain([eKey(1), eKey(2), eKey(3), eKey(4)], pointsOf);
   expect(links.map((l) => l.points)).toEqual([
     [
       [0, 0, 0],
@@ -51,56 +52,56 @@ test("a chain orients each element to continue the last, in path order", () => {
   ]);
   expect(links.map((l) => l.reversed)).toEqual([false, true, false, true]);
   // Flow runs the other way: the first element orients toward its successor.
-  expect(chain(["e:2", "e:1"], pointsOf)[0]!.points[0]).toEqual([9, 0, 0]);
+  expect(chain([eKey(2), eKey(1)], pointsOf)[0]!.points[0]).toEqual([9, 0, 0]);
   // An element without a centreline is skipped and the chain bridges it.
-  expect(chain(["e:1", "e:9", "e:2"], pointsOf).map((l) => l.element)).toEqual(["e:1", "e:2"]);
+  expect(chain([eKey(1), eKey(9), eKey(2)], pointsOf).map((l) => l.element)).toEqual([eKey(1), eKey(2)]);
 });
 
 test("shared elements give distinct lanes, ordered by strand order all along", () => {
   const strands: Strand[] = [
-    { key: "run:a", path: ["e:1", "e:2", "e:3"] },
-    { key: "run:b", path: ["e:2", "e:3", "e:4"] },
-    { key: "run:c", path: ["e:3", "e:4"], heavy: true },
+    { key: "run:a", path: [eKey(1), eKey(2), eKey(3)] },
+    { key: "run:b", path: [eKey(2), eKey(3), eKey(4)] },
+    { key: "run:c", path: [eKey(3), eKey(4)], heavy: true },
   ];
   const chains = strands.map((s) => chain(s.path, pointsOf));
   const [a, b, c] = lanes(strands, chains);
-  expect(a!.get("e:1")).toBe(0);
-  expect(a!.get("e:2")).toBeLessThan(b!.get("e:2")!);
-  const on3 = [a!.get("e:3")!, b!.get("e:3")!, c!.get("e:3")!];
+  expect(a!.get(eKey(1))).toBe(0);
+  expect(a!.get(eKey(2))).toBeLessThan(b!.get(eKey(2))!);
+  const on3 = [a!.get(eKey(3))!, b!.get(eKey(3))!, c!.get(eKey(3))!];
   expect(new Set(on3).size).toBe(3);
   // No swap: a stays on the same side of b from e:2 into e:3, and b of c from e:3 into e:4.
   expect(on3[0]).toBeLessThan(on3[1]);
-  expect(b!.get("e:4")).toBeLessThan(c!.get("e:4")!);
+  expect(b!.get(eKey(4))).toBeLessThan(c!.get(eKey(4))!);
   // The heavy lane is wider: its centre sits further from b's than a's does.
   expect(on3[2] - on3[1]).toBeGreaterThan(on3[1] - on3[0]);
   // A strand crossing a shared element the other way keeps its own lane: lanes sit on opposite
   // sides of the centreline, so equal offsets relative to opposite travel are opposite sides.
-  const back: Strand[] = [strands[0]!, { key: "run:d", path: ["e:2", "e:1"] }];
+  const back: Strand[] = [strands[0]!, { key: "run:d", path: [eKey(2), eKey(1)] }];
   const [a2, d] = lanes(
     back,
     back.map((s) => chain(s.path, pointsOf)),
   );
-  expect(a2!.get("e:1")).toBe(-2.5);
-  expect(d!.get("e:1")).toBe(-2.5);
+  expect(a2!.get(eKey(1))).toBe(-2.5);
+  expect(d!.get(eKey(1))).toBe(-2.5);
 });
 
 test("segments ramp the lane across a gap, each half its element's, and drop zero lengths", () => {
-  const links = chain(["e:1", "e:2"], pointsOf);
+  const links = chain([eKey(1), eKey(2)], pointsOf);
   const parts = segments(
     links,
     new Map<SubjectKey, number>([
-      ["e:1", -2],
-      ["e:2", 4],
+      [eKey(1), -2],
+      [eKey(2), 4],
     ]),
   );
   expect(parts.map((s) => [s.element, s.lane])).toEqual([
-    ["e:1", [-2, -2]],
-    ["e:1", [-2, 1]],
-    ["e:2", [1, 4]],
-    ["e:2", [4, 4]],
+    [eKey(1), [-2, -2]],
+    [eKey(1), [-2, 1]],
+    [eKey(2), [1, 4]],
+    [eKey(2), [4, 4]],
   ]);
   expect(parts[1]!.to).toEqual([4.5, 0, 0]);
-  const touching = chain(["e:2", "e:3"], pointsOf);
+  const touching = chain([eKey(2), eKey(3)], pointsOf);
   expect(touching.length).toBe(2);
   expect(segments(touching, new Map()).length).toBe(3);
 });
@@ -115,10 +116,10 @@ const frame = (state: LayerFrame["state"], reducedMotion = false): LayerFrame =>
 
 test("a pick meets the nearer lane, so a bundled strand selects its own subject", () => {
   const strands: Strand[] = [
-    { key: "run:a", path: ["e:1"] },
-    { key: "run:b", path: ["e:1"] },
+    { key: "run:a", path: [eKey(1)] },
+    { key: "run:b", path: [eKey(1)] },
   ];
-  const built = strandLayers(strands, lines, new Set());
+  const built = strandLayers(strands, lines, new Set(), testElements([1, 2, 3, 4]));
   expect(built.map((l) => l.targets)).toEqual([
     [{ key: "run:a", elementId: 1, subject: true }],
     [{ key: "run:b", elementId: 1, subject: true }],
@@ -156,11 +157,12 @@ test("a pick meets the nearer lane, so a bundled strand selects its own subject"
 test("only the heavy, hovered or selected strand flows; reduced motion holds it still; over is alarm", () => {
   const built = strandLayers(
     [
-      { key: "run:a", path: ["e:1", "e:2"] },
-      { key: "run:h", path: ["e:1"], heavy: true },
+      { key: "run:a", path: [eKey(1), eKey(2)] },
+      { key: "run:h", path: [eKey(1)], heavy: true },
     ],
     lines,
-    new Set(["e:2"]),
+    new Set([eKey(2)]),
+    testElements([1, 2, 3, 4]),
   );
   const [plain, heavy] = built.map((layer) => {
     const group = new THREE.Group();

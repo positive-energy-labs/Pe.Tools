@@ -108,8 +108,11 @@ describe("the route address", () => {
   test("a route known only as a key is any route's address, still typed", () => {
     const key = routeOf("ducts")!;
     const at = routeAddress(key);
-    const subject = {kind:"ids",ids:[JSON.stringify(["ducts-system","SA"])]};
+    const subject = {kind:"ids",ids:["system-name:SA"]};
     const { page } = at.read({ system: JSON.stringify(subject) });
+    // The old tuple spelling is refused at the URL door, never migrated.
+    const old = at.read({ system: JSON.stringify({kind:"ids",ids:[JSON.stringify(["ducts-system","SA"])]}) });
+    expect("system" in old.page ? old.page.system : null).toEqual({kind:"ids",ids:[]});
     // The union of every route's page narrows by its keys; a page of no route is refused.
     expect("system" in page ? page.system : null).toEqual(subject);
     expect(at.link(page)).toBe(`/ducts?${new URLSearchParams({system:JSON.stringify(subject)})}`);

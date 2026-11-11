@@ -12,6 +12,7 @@ import type { SubjectKey } from "@pe/kit/lang/attention";
 import { BlockerRow } from "./blocker-row";
 import { describeCloser, type Closer } from "./closer";
 import type { SheetBlocker } from "./tiers";
+import { eKey } from "#/test-attention";
 
 afterEach(cleanup);
 
@@ -102,7 +103,7 @@ it("delegates row hover to the document subject scope and withdraws the issue on
     <AttentionScope
       doc="blocker-model"
       selected={selected}
-      members={new Map<SubjectKey, readonly SubjectKey[]>([[`issue:${blocker.id}`, ["e:9"]]])}
+      members={new Map<SubjectKey, readonly SubjectKey[]>([[`issue:${blocker.id}`, [eKey(9)]]])}
     >
       <Probe />
       <BlockerRow

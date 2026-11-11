@@ -31,7 +31,7 @@ const port = (
     classification: cls,
     connectedTo: to ? { elementId: to[0], connector: to[1] } : null,
   }) as Port;
-const node = (id: number, kind: string, connectors: Port[], flow?: number) => ({
+const node = (id: number, kind: string, connectors: Port[], flow?: number) => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
   id,
   kind,
   facts: flow == null ? [] : [{ key: "flow", value: flow }],
@@ -39,6 +39,7 @@ const node = (id: number, kind: string, connectors: Port[], flow?: number) => ({
 });
 const duct = (id: number, a: number[], b: number[], connectors: Port[]) => ({
   id,
+  uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${id.toString(16).padStart(8, "0")}`,
   shape: "round",
   diameterIn: 8,
   polyline: [a, b],

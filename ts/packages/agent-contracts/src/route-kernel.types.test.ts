@@ -1,6 +1,7 @@
 /* eslint-disable typescript/no-misused-spread -- Deliberate hostile copies test nominal authority refusals. */
 import type { ActionAdmission } from "./semantic-actions.ts";
 import type { InvocationBasis } from "./route-kernel-page.ts";
+import { subjectCode, type SubjectRefCode, type UniqueId } from "./subject-ref.ts";
 import type {
   JournalSubmission,
   NativeOutcome,
@@ -45,8 +46,6 @@ import type {
   PageOf,
   CausalParentId,
   FieldControls,
-  IdentityCodecs,
-  IdentityId,
   PageOwner,
   PagePort,
   RestoreToken,
@@ -79,9 +78,7 @@ export function typeRefusals(
   fingerprint: RouteFingerprint,
   registry: AdmittedRouteRegistry,
   native: NativeWriteCapability,
-  codecs: IdentityCodecs,
-  local: IdentityId<"local">,
-  element: IdentityId<"element">,
+  local: SubjectRefCode,
   fixtureBase: FixtureEnvironment,
 ): void {
   // @ts-expect-error roles are required, never inferred as pose
@@ -112,8 +109,8 @@ export function typeRefusals(
   };
   const picker: Builtin["pick"] = {
     ...builtinBodies.pick,
-    // @ts-expect-error picker cannot substitute native elements for local system identity
-    run: () => [{ id: element, label: "Wrong kind" }],
+    // @ts-expect-error picker ids are SubjectRef codes, never raw strings
+    run: () => [{ id: "raw-system", label: "Wrong kind" }],
   };
   const pod: Pod["calculate"] = {
     ...podBodies.calculate,
@@ -161,7 +158,7 @@ export function typeRefusals(
   page.set("density", 2);
   page.select([
     { kind: "system", id: local },
-    { kind: "element", id: element },
+    { kind: "element", id: "attention-place" },
   ]);
   controls.query("search", "fan");
   // @ts-expect-error query is not a setting
@@ -177,14 +174,14 @@ export function typeRefusals(
   page.read().viewport.x = 3;
   // @ts-expect-error no raw Page writer on the public port
   page.movePage({ search: "x" }, { kind: "human" });
-  // @ts-expect-error selection identity is kind-specific
-  page.select([{ kind: "element", id: local }]);
+  // @ts-expect-error selection kinds are the declared ones
+  page.select([{ kind: "undeclared", id: "x" }]);
   // @ts-expect-error selection is never all
   page.select("all");
   // @ts-expect-error numeric ElementId is not a stable identity
-  codecs.element.encode({ document: "doc", link: null, uniqueId: 42 });
-  // @ts-expect-error linked identity needs the source and linked document
-  codecs.link.encode({ linkUniqueId: "unique" });
+  subjectCode({ keyKind: "UniqueId", key: 42 });
+  // @ts-expect-error a sub is a port or a field, never a free string
+  subjectCode({ keyKind: "UniqueId", key: "u" as UniqueId, sub: "port-2" });
   // @ts-expect-error origin is mandatory
   owner.movePage({ search: "x" });
   // @ts-expect-error no universal action exemption from freshness
@@ -237,7 +234,7 @@ export function criticRefusals(
   attempt: AcceptanceToken,
   invocation: InvocationToken,
   restore: RestoreToken,
-  system: IdentityId<"local">,
+  system: SubjectRefCode,
   native: () => void,
   reads: ReadCapability,
   resolved: ResolvedRead<string>,
@@ -345,19 +342,9 @@ export function criticRefusals(
   const lostReceipt: WorkDelivery<unknown> = { kind: "ack", revision: 1, value: {} };
   // @ts-expect-error typed cells reject undeclared keys
   podBodies.cellGroup.run("anything");
-  const nativeId = podModule.identities.element.encode({
-    document: "doc",
-    link: null,
-    uniqueId: "unique",
-  });
-  if (nativeId.ok) {
-    const wrongSubject: PageOf<typeof podData, typeof schemas>["system"] = {
-      kind: "manual",
-      // @ts-expect-error manual subjects cannot carry native ids
-      id: nativeId.value,
-    };
-    void wrongSubject;
-  }
+  // @ts-expect-error a subject is a SubjectRef code, never a tagged object
+  const wrongSubject: PageOf<typeof podData, typeof schemas>["system"] = { kind: "manual", id: "x" };
+  void wrongSubject;
   const omittedGeometry = {
     ...podData,
     readings: {
@@ -434,28 +421,18 @@ describe("S0 signature witnesses", () => {
     ).toBe(false);
   });
   it("round trips both Pod subject kinds through its bound field codec", () => {
-    const manual = podModule.identities.local.encode({
-      namespace: "pod.circuits",
-      subject: "manual",
-    });
-    const native = podModule.identities.element.encode({
-      document: "doc",
-      link: null,
-      uniqueId: "circuit-uid",
-    });
-    if (!manual.ok || !native.ok) throw new Error("Witness identity codec refused valid parts");
     const values = [
-      { kind: "manual", id: manual.value },
-      { kind: "circuit", id: native.value },
-    ] as const;
+      subjectCode({ keyKind: "group", key: "manual" }),
+      subjectCode({ keyKind: "UniqueId", key: "circuit-uid" as UniqueId }),
+    ];
     for (const value of values)
       expect(podModule.codecs.subject.decode(podModule.codecs.subject.encode(value))).toEqual({
         ok: true,
         value,
       });
-    expect(
-      podModule.codecs.subject.decode(JSON.stringify({ kind: "manual", id: native.value })).ok,
-    ).toBe(false);
+    expect(podModule.codecs.subject.decode(JSON.stringify('["pod.circuits","manual"]')).ok).toBe(
+      false,
+    );
     expect(podModule.bodies.cellGroup.run("voltage")).toEqual(["electrical"]);
   });
   it("refuses missing roles, executable data, unknown policy, and required review", () => {

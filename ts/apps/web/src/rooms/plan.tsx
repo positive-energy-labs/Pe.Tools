@@ -1,4 +1,5 @@
 import { RegistryContext } from "@effect/atom-react";
+import { regionSubject } from "./subject";
 import {
   AttentionDocument,
   elementKey,
@@ -180,11 +181,11 @@ export function RoomsPlan({
   const attention = useAttention(doc);
   const selected = new Set(
     rows
-      .filter((row) => attention.selected.has(elementKey(row.region.elementId)))
+      .filter((row) => attention.selected.has(elementKey(row.region.uniqueId)))
       .map((row) => row.region.guid),
   );
   const onHover = (guid: string | null) =>
-    setHovered(registry, guid == null ? null : { doc, key: `room:${guid}` });
+    setHovered(registry, guid == null ? null : { doc, key: regionSubject(guid) });
   const bounds = useMemo(() => {
     const points: Point2[] = rows.flatMap((row) => loopOf(row.region.outer));
     if (plan) points.push(...planCorners(plan));
@@ -508,8 +509,8 @@ export function RoomsPlan({
                     const fillInk = stale ? token(REGION_INK.stale.ink!) : ink;
                     const on = selected.has(region.guid);
                     const hot =
-                      attention.hovered.has(elementKey(region.elementId)) ||
-                      attention.lit.has(elementKey(region.elementId));
+                      attention.hovered.has(elementKey(region.uniqueId)) ||
+                      attention.lit.has(elementKey(region.uniqueId));
                     const width = on ? 3 : 2;
                     return (
                       <path
@@ -531,7 +532,7 @@ export function RoomsPlan({
                           strokeWidth: `calc(var(--sw) * ${width}px)`,
                           cursor: "pointer",
                         }}
-                        {...mention({ doc, key: `room:${region.guid}` })}
+                        {...mention({ doc, key: regionSubject(region.guid) })}
                         onClick={(event) => {
                           event.stopPropagation();
                           if (dragDist.current < CLICK_PX) onSelect(region.guid, event.shiftKey);
@@ -563,8 +564,8 @@ export function RoomsPlan({
                     const region = rows.find((row) => row.region.guid === callout.guid)?.region;
                     const hot =
                       !!region &&
-                      (attention.hovered.has(elementKey(region.elementId)) ||
-                        attention.lit.has(elementKey(region.elementId)));
+                      (attention.hovered.has(elementKey(region.uniqueId)) ||
+                        attention.lit.has(elementKey(region.uniqueId)));
                     const [ax, ay] = callout.anchor;
                     const [px, py] = callout.pin;
                     const textX = px + callout.pinWidth / 2 + 8;
@@ -577,7 +578,7 @@ export function RoomsPlan({
                         ])}
                         data-callout={callout.label}
                         style={{ pointerEvents: "auto", cursor: "pointer" }}
-                        {...mention({ doc, key: `room:${callout.guid}` })}
+                        {...mention({ doc, key: regionSubject(callout.guid) })}
                         onClick={(event) => {
                           event.stopPropagation();
                           if (dragDist.current < CLICK_PX) onSelect(callout.guid, event.shiftKey);

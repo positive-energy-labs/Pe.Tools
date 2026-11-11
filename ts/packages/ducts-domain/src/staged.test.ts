@@ -6,8 +6,8 @@ import type { DuctsApply } from "@pe/host-contracts/generated";
 import { appliedCellPaths, pendingCount, stagedCells, stagedEsp } from "./staged.ts";
 
 const doc = designOf({
-  esp: { "100": { edit: { value: { inWg: 0.5 } } } },
-  flows: { "4": { edit: { value: { cfm: 100 } } }, "5": {} },
+  esp: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000064": { edit: { value: { inWg: 0.5 } } } },
+  flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000004": { edit: { value: { cfm: 100 } } }, "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000005": {} },
 });
 
 it("retires only transmitted successful writes, retaining held ESP and partially refused rules", () => {
@@ -45,26 +45,28 @@ it("retires only transmitted successful writes, retaining held ESP and partially
       { kind: "slot", key: "terminalFlow", outcome: "written" },
     ],
   };
-  expect(appliedCellPaths(input, response)).toEqual([
-    ["terminalDrops", "4"],
-    ["flows", "6"],
-    ["equipmentFlows", "7"],
+  const cells = [["terminalDrops", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000004"], ["flows", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000006"], ["equipmentFlows", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000007"], ["roles", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000008"]] as const;
+  const subjects = Object.fromEntries(cells.map(([, key], i) => [key, String([4, 6, 7, 8][i])]));
+  expect(appliedCellPaths(input, response, subjects, cells)).toEqual([
+    ["terminalDrops", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000004"],
+    ["flows", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000006"],
+    ["equipmentFlows", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000007"],
     ["rules", "complete"],
     ["assumptions", "open-end:4:1"],
-    ["roles", "8"],
+    ["roles", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000008"],
     ["parameters", "terminalFlow"],
   ]);
-  expect(appliedCellPaths(input, { ...response, previewOnly: true })).toEqual([]);
+  expect(appliedCellPaths(input, { ...response, previewOnly: true }, subjects, cells)).toEqual([]);
 });
 
 it("counts the edit cells a write carries, and the ESP among them", () => {
   expect(stagedCells(doc).map(({ segment, key }) => `${segment}:${key}`)).toEqual([
-    "flows:4",
-    "esp:100",
+    "flows:UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000004",
+    "esp:UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000064",
   ]);
   expect(stagedEsp(doc)).toBe(1);
   expect(stagedEsp(null)).toBe(0);
-  expect(pendingCount(null, undefined)).toBe(0);
+  expect(pendingCount(null, undefined, { nodes: [], segments: [] })).toBe(0);
 });
 
 import { scopeApplyRequest } from "./staged.ts";
@@ -76,11 +78,13 @@ it("one reviewed fan-flow cell excludes eight unrelated staged and derived write
     equipmentFlows: [{id: 14577391, cfm: 1050}],
     store: { ...store, instances: { ...store.instances, "1": {coefficient: 9, appliedAt: "new"}}, terminals: {"5": {inWg: .026}}, equipmentFlows: {"14577391": {cfm: 1050, appliedAt: "new"}} },
   } as unknown as import("@pe/agent-contracts").DuctsApplyInput;
-  const scoped = scopeApplyRequest(request, store as any, [["equipmentFlows", "14577391"]]);
+  const key = "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef";
+  const snapshot = { nodes: [{ id: 14577391, uniqueId: key.slice(9), connectors: [] }], segments: [] } as any;
+  const scoped = scopeApplyRequest(request, store as any, [["equipmentFlows", key]], snapshot);
   expect([scoped.fittings, scoped.terminals, scoped.components, scoped.equipment, scoped.terminalFlows].flat()).toEqual([]);
   expect(scoped.equipmentFlows).toEqual([{id: 14577391, cfm: 1050}]);
   expect(scoped.store?.instances).toEqual(store.instances);
   expect(scoped.store?.terminals).toEqual({});
   expect(scoped.store?.equipmentFlows).toEqual(request.store?.equipmentFlows);
-  expect(scopeApplyRequest(request, store as any, undefined)).toBe(request);
+  expect(scopeApplyRequest(request, store as any, undefined, snapshot)).toBe(request);
 });

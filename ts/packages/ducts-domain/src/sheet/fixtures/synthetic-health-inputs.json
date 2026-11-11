@@ -2,7 +2,7 @@
   "9c70b50f-1323": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -22,7 +22,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [],
         "connectors": [
@@ -44,7 +44,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -82,7 +82,7 @@
         ]
       },
       {
-        "id": 2,
+        "id": 2, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000002",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -124,7 +124,7 @@
   "3cd0381b-1365": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -144,7 +144,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [],
         "connectors": [
@@ -166,7 +166,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -204,7 +204,7 @@
         ]
       },
       {
-        "id": 2,
+        "id": 2, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000002",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -246,7 +246,7 @@
   "e5dfc37b-1341": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -266,7 +266,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [],
         "connectors": [
@@ -288,7 +288,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -326,7 +326,7 @@
         ]
       },
       {
-        "id": 2,
+        "id": 2, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000002",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -371,7 +371,7 @@
   "7e2c2b54-2189": {
     "nodes": [
       {
-        "id": 500,
+        "id": 500, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000001f4",
         "kind": "equipment",
         "category": "",
         "point": [0, 0, 0],
@@ -407,7 +407,7 @@
         ]
       },
       {
-        "id": 54,
+        "id": 54, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000036",
         "kind": "terminal",
         "category": "",
         "point": [0, 0, 0],
@@ -432,7 +432,7 @@
     ],
     "segments": [
       {
-        "id": 51,
+        "id": 51, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000033",
         "kind": "duct",
         "curveKind": "line",
         "shape": "round",
@@ -476,7 +476,7 @@
         ]
       },
       {
-        "id": 52,
+        "id": 52, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000034",
         "kind": "duct",
         "curveKind": "line",
         "shape": "round",
@@ -520,7 +520,7 @@
         ]
       },
       {
-        "id": 53,
+        "id": 53, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000035",
         "kind": "duct",
         "curveKind": "line",
         "shape": "round",
@@ -568,7 +568,7 @@
   "e7d06859-1980": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -603,7 +603,7 @@
         ]
       },
       {
-        "id": 102,
+        "id": 102, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000066",
         "kind": "terminal",
         "facts": [
           {
@@ -629,7 +629,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [
           {
@@ -657,7 +657,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -697,7 +697,7 @@
         ]
       },
       {
-        "id": 2,
+        "id": 2, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000002",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -741,7 +741,7 @@
   "aa0488f5-3585": {
     "nodes": [
       {
-        "id": 600,
+        "id": 600, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000258",
         "kind": "equipment",
         "category": "",
         "point": [0, 0, 0],
@@ -777,7 +777,7 @@
         ]
       },
       {
-        "id": 70,
+        "id": 70, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000046",
         "kind": "terminal",
         "category": "",
         "point": [0, 0, 0],
@@ -800,7 +800,7 @@
         ]
       },
       {
-        "id": 71,
+        "id": 71, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000047",
         "kind": "terminal",
         "category": "",
         "point": [0, 0, 0],
@@ -823,7 +823,7 @@
         ]
       },
       {
-        "id": 62,
+        "id": 62, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000003e",
         "kind": "fitting",
         "category": "",
         "point": [0, 0, 0],
@@ -860,7 +860,7 @@
         ]
       },
       {
-        "id": 63,
+        "id": 63, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000003f",
         "kind": "fitting",
         "category": "",
         "point": [0, 0, 0],
@@ -899,7 +899,7 @@
     ],
     "segments": [
       {
-        "id": 61,
+        "id": 61, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000003d",
         "kind": "duct",
         "curveKind": "line",
         "shape": "round",
@@ -972,7 +972,7 @@
         ]
       },
       {
-        "id": 64,
+        "id": 64, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000040",
         "kind": "duct",
         "curveKind": "line",
         "shape": "round",
@@ -1017,7 +1017,7 @@
         ]
       },
       {
-        "id": 65,
+        "id": 65, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000041",
         "kind": "duct",
         "curveKind": "line",
         "shape": "round",
@@ -1066,7 +1066,7 @@
   "25029363-2552": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -1101,7 +1101,7 @@
         ]
       },
       {
-        "id": 102,
+        "id": 102, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000066",
         "kind": "terminal",
         "facts": [
           {
@@ -1127,7 +1127,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [
           {
@@ -1153,7 +1153,7 @@
         ]
       },
       {
-        "id": 300,
+        "id": 300, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000012c",
         "kind": "terminal",
         "facts": [
           {
@@ -1179,7 +1179,7 @@
         ]
       },
       {
-        "id": 400,
+        "id": 400, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000190",
         "kind": "terminal",
         "facts": [
           {
@@ -1207,7 +1207,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -1247,7 +1247,7 @@
         ]
       },
       {
-        "id": 2,
+        "id": 2, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000002",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -1294,7 +1294,7 @@
   "42b45913-2247": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -1329,7 +1329,7 @@
         ]
       },
       {
-        "id": 102,
+        "id": 102, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000066",
         "kind": "terminal",
         "facts": [
           {
@@ -1355,7 +1355,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [
           {
@@ -1381,7 +1381,7 @@
         ]
       },
       {
-        "id": 900,
+        "id": 900, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000384",
         "kind": "cap",
         "facts": [],
         "connectors": [
@@ -1404,7 +1404,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -1444,7 +1444,7 @@
         ]
       },
       {
-        "id": 2,
+        "id": 2, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000002",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -1491,7 +1491,7 @@
   "11175203-2006": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -1526,7 +1526,7 @@
         ]
       },
       {
-        "id": 102,
+        "id": 102, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000066",
         "kind": "terminal",
         "facts": [
           {
@@ -1552,7 +1552,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [
           {
@@ -1580,7 +1580,7 @@
         ]
       },
       {
-        "id": 400,
+        "id": 400, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000190",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -1617,7 +1617,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -1664,7 +1664,7 @@
   "03769b92-2228": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -1699,7 +1699,7 @@
         ]
       },
       {
-        "id": 102,
+        "id": 102, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000066",
         "kind": "terminal",
         "facts": [
           {
@@ -1725,7 +1725,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [
           {
@@ -1751,7 +1751,7 @@
         ]
       },
       {
-        "id": 250,
+        "id": 250, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000fa",
         "kind": "terminal",
         "facts": [
           {
@@ -1776,7 +1776,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -1816,7 +1816,7 @@
         ]
       },
       {
-        "id": 2,
+        "id": 2, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000002",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -1860,7 +1860,7 @@
   "8dcd298b-959": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -1892,7 +1892,7 @@
         ]
       },
       {
-        "id": 102,
+        "id": 102, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000066",
         "kind": "terminal",
         "facts": [
           {
@@ -1918,7 +1918,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [
           {
@@ -1946,7 +1946,7 @@
   "bb27aef9-1356": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -1966,7 +1966,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [],
         "connectors": [
@@ -1988,7 +1988,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -2026,7 +2026,7 @@
         ]
       },
       {
-        "id": 2,
+        "id": 2, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000002",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -2071,7 +2071,7 @@
   "091ddc12-1361": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -2091,7 +2091,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [],
         "connectors": [
@@ -2113,7 +2113,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -2151,7 +2151,7 @@
         ]
       },
       {
-        "id": 2,
+        "id": 2, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000002",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -2193,7 +2193,7 @@
   "73e3656a-669": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -2215,7 +2215,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -2257,7 +2257,7 @@
   "e74ed2dd-3585": {
     "nodes": [
       {
-        "id": 600,
+        "id": 600, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000258",
         "kind": "equipment",
         "category": "",
         "point": [0, 0, 0],
@@ -2293,7 +2293,7 @@
         ]
       },
       {
-        "id": 70,
+        "id": 70, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000046",
         "kind": "terminal",
         "category": "",
         "point": [0, 0, 0],
@@ -2316,7 +2316,7 @@
         ]
       },
       {
-        "id": 71,
+        "id": 71, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000047",
         "kind": "terminal",
         "category": "",
         "point": [0, 0, 0],
@@ -2339,7 +2339,7 @@
         ]
       },
       {
-        "id": 62,
+        "id": 62, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000003e",
         "kind": "fitting",
         "category": "",
         "point": [0, 0, 0],
@@ -2376,7 +2376,7 @@
         ]
       },
       {
-        "id": 63,
+        "id": 63, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000003f",
         "kind": "fitting",
         "category": "",
         "point": [0, 0, 0],
@@ -2415,7 +2415,7 @@
     ],
     "segments": [
       {
-        "id": 61,
+        "id": 61, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000003d",
         "kind": "duct",
         "curveKind": "line",
         "shape": "round",
@@ -2488,7 +2488,7 @@
         ]
       },
       {
-        "id": 64,
+        "id": 64, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000040",
         "kind": "duct",
         "curveKind": "line",
         "shape": "round",
@@ -2533,7 +2533,7 @@
         ]
       },
       {
-        "id": 65,
+        "id": 65, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000041",
         "kind": "duct",
         "curveKind": "line",
         "shape": "round",
@@ -2582,7 +2582,7 @@
   "2fa62873-2247": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -2617,7 +2617,7 @@
         ]
       },
       {
-        "id": 102,
+        "id": 102, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000066",
         "kind": "terminal",
         "facts": [
           {
@@ -2643,7 +2643,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [
           {
@@ -2669,7 +2669,7 @@
         ]
       },
       {
-        "id": 900,
+        "id": 900, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000384",
         "kind": "cap",
         "facts": [],
         "connectors": [
@@ -2692,7 +2692,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -2732,7 +2732,7 @@
         ]
       },
       {
-        "id": 2,
+        "id": 2, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000002",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -2779,7 +2779,7 @@
   "9aaa4aeb-1389": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -2799,7 +2799,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [],
         "connectors": [
@@ -2821,7 +2821,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -2859,7 +2859,7 @@
         ]
       },
       {
-        "id": 2,
+        "id": 2, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000002",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -2904,7 +2904,7 @@
   "e4592002-969": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "family": "Air Handler",
         "facts": [
@@ -2942,7 +2942,7 @@
         ]
       },
       {
-        "id": 101,
+        "id": 101, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000065",
         "kind": "terminal",
         "facts": [
           {
@@ -2965,7 +2965,7 @@
         ]
       },
       {
-        "id": 102,
+        "id": 102, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000066",
         "kind": "terminal",
         "facts": [
           {
@@ -2996,7 +2996,7 @@
   "7aba8a81-1458": {
     "nodes": [
       {
-        "id": 700,
+        "id": 700, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000002bc",
         "kind": "equipment",
         "category": "",
         "point": [0, 0, 0],
@@ -3019,7 +3019,7 @@
         ]
       },
       {
-        "id": 73,
+        "id": 73, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000049",
         "kind": "terminal",
         "category": "",
         "point": [10, 0, 0],
@@ -3042,7 +3042,7 @@
         ]
       },
       {
-        "id": 72,
+        "id": 72, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000048",
         "kind": "accessory",
         "category": "",
         "point": [7, 0, 0],
@@ -3077,7 +3077,7 @@
     ],
     "segments": [
       {
-        "id": 71,
+        "id": 71, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000047",
         "kind": "duct",
         "curveKind": "line",
         "shape": "round",
@@ -3125,10 +3125,10 @@
       }
     ]
   },
-  "7cd402fa-2085": {
+  "92f6ed5f-2037": {
     "nodes": [
       {
-        "id": 9,
+        "id": 9, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000009",
         "kind": "accessory",
         "category": "Duct Accessories",
         "family": "Damper_Volume_Round",
@@ -3165,13 +3165,12 @@
             "areaFt2": 0.196
           }
         ],
-        "facts": [],
-        "uniqueId": null
+        "facts": []
       }
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "kind": "duct",
         "curveKind": "line",
         "type": "Round Duct",
@@ -3220,11 +3219,10 @@
             },
             "areaFt2": 0.196
           }
-        ],
-        "uniqueId": null
+        ]
       },
       {
-        "id": 3,
+        "id": 3, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000003",
         "kind": "duct",
         "curveKind": "line",
         "type": "Round Duct",
@@ -3273,15 +3271,14 @@
             "connectedTo": null,
             "areaFt2": 0.196
           }
-        ],
-        "uniqueId": null
+        ]
       }
     ]
   },
-  "ff579bf8-1346": {
+  "63469c64-1314": {
     "nodes": [
       {
-        "id": 9,
+        "id": 9, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000009",
         "kind": "accessory",
         "category": "Duct Accessories",
         "family": "Damper_Volume_Round",
@@ -3318,13 +3315,12 @@
             "areaFt2": 0.196
           }
         ],
-        "facts": [],
-        "uniqueId": null
+        "facts": []
       }
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "kind": "duct",
         "curveKind": "line",
         "type": "Round Duct",
@@ -3370,15 +3366,14 @@
             "connectedTo": null,
             "areaFt2": 0.196
           }
-        ],
-        "uniqueId": null
+        ]
       }
     ]
   },
-  "5cb7d2cd-2120": {
+  "f6c8e264-2072": {
     "nodes": [
       {
-        "id": 9,
+        "id": 9, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000009",
         "kind": "accessory",
         "category": "Duct Accessories",
         "family": "Damper_Volume_Round",
@@ -3417,13 +3412,12 @@
             "facing": [-1, 0, 0]
           }
         ],
-        "facts": [],
-        "uniqueId": null
+        "facts": []
       }
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "kind": "duct",
         "curveKind": "line",
         "type": "Round Duct",
@@ -3472,11 +3466,10 @@
             },
             "areaFt2": 0.196
           }
-        ],
-        "uniqueId": null
+        ]
       },
       {
-        "id": 3,
+        "id": 3, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000003",
         "kind": "duct",
         "curveKind": "line",
         "type": "Round Duct",
@@ -3525,15 +3518,14 @@
             "connectedTo": null,
             "areaFt2": 0.196
           }
-        ],
-        "uniqueId": null
+        ]
       }
     ]
   },
   "2d2f275c-2251": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -3568,7 +3560,7 @@
         ]
       },
       {
-        "id": 102,
+        "id": 102, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000066",
         "kind": "terminal",
         "facts": [
           {
@@ -3594,7 +3586,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [
           {
@@ -3620,7 +3612,7 @@
         ]
       },
       {
-        "id": 900,
+        "id": 900, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000384",
         "kind": "fitting",
         "facts": [],
         "connectors": [
@@ -3643,7 +3635,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -3683,7 +3675,7 @@
         ]
       },
       {
-        "id": 2,
+        "id": 2, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000002",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -3730,7 +3722,7 @@
   "e2ea010e-2383": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -3765,7 +3757,7 @@
         ]
       },
       {
-        "id": 102,
+        "id": 102, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000066",
         "kind": "terminal",
         "facts": [
           {
@@ -3791,7 +3783,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [
           {
@@ -3817,7 +3809,7 @@
         ]
       },
       {
-        "id": 900,
+        "id": 900, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000384",
         "kind": "cap",
         "facts": [],
         "connectors": [
@@ -3841,7 +3833,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -3881,7 +3873,7 @@
         ]
       },
       {
-        "id": 2,
+        "id": 2, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000002",
         "shape": "rectangular",
         "polyline": [
           [4.216666666666667, 0, 0],
@@ -3931,7 +3923,7 @@
   "eca73154-2251": {
     "nodes": [
       {
-        "id": 100,
+        "id": 100, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000064",
         "kind": "equipment",
         "facts": [],
         "connectors": [
@@ -3966,7 +3958,7 @@
         ]
       },
       {
-        "id": 102,
+        "id": 102, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000066",
         "kind": "terminal",
         "facts": [
           {
@@ -3992,7 +3984,7 @@
         ]
       },
       {
-        "id": 200,
+        "id": 200, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-000000c8",
         "kind": "terminal",
         "facts": [
           {
@@ -4018,7 +4010,7 @@
         ]
       },
       {
-        "id": 900,
+        "id": 900, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000384",
         "kind": "fitting",
         "facts": [],
         "connectors": [
@@ -4041,7 +4033,7 @@
     ],
     "segments": [
       {
-        "id": 1,
+        "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [
@@ -4081,7 +4073,7 @@
         ]
       },
       {
-        "id": 2,
+        "id": 2, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000002",
         "shape": "round",
         "diameterIn": 8,
         "polyline": [

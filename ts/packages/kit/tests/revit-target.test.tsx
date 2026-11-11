@@ -23,7 +23,7 @@ test("Row ids, chip ids and subject tokens carry their captured scope through po
       <FactChip title="captured fitting" revit={[42]}>
         chip
       </FactChip>
-      <SubjectTextContext value={{ doc: "test", nameOf: () => "fitting" }}>
+      <SubjectTextContext value={{ doc: "test", nameOf: () => "fitting", uniqueIdOf: () => "u42" }}>
         <SubjectText text="42" revit={[42]} />
       </SubjectTextContext>
       <RevitTarget scope={null}>

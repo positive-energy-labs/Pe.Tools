@@ -25,7 +25,7 @@ const conn = (index: number, point: number[], facing: number[], connectedTo = nu
   connectedTo,
   areaFt2: 1,
 });
-const duct = (id: number, a: number[], b: number[], connectors: unknown[]) => ({
+const duct = (id: number, a: number[], b: number[], connectors: unknown[]) => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
   id,
   kind: "duct",
   curveKind: "line",
@@ -139,7 +139,7 @@ it("a chosen system draws its findings without annotations and excludes annotati
 const sa44 = {
   ...snapshot,
   nodes: [
-    {
+    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(6071117).toString(16).padStart(8, "0")}`,
       id: 6071117,
       kind: "equipment",
       point: [264.2429, 609.5216, -8.75],
@@ -159,7 +159,7 @@ const sa44 = {
         },
       ],
     },
-    {
+    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(6566361).toString(16).padStart(8, "0")}`,
       id: 6566361,
       kind: "equipment",
       point: [264.361, 609.14, -9.2796],
@@ -180,7 +180,7 @@ const sa44 = {
         },
       ],
     },
-    {
+    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(9098869).toString(16).padStart(8, "0")}`,
       id: 9098869,
       kind: "fitting",
       point: [265.0097, 608.7564, -3.6667],

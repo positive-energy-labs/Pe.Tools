@@ -14,6 +14,8 @@ export interface GoToItem {
   group?: string;
   meta?: ReactNode;
   id?: number | string | null;
+  /** The subject's attention key; a numeric `id` is only the select payload. */
+  uniqueId?: string | null;
   /** Override for linked or non-native subjects whose numeric id is not a host target. */
   revit?: readonly number[];
 }
@@ -43,7 +45,7 @@ export function GoToPopup<Item extends GoToItem>({
     if (scope && (item === null || typeof item.id === "number")) {
       setHovered(
         registry,
-        typeof item?.id === "number" ? { doc: scope.doc, key: elementKey(item.id) } : null,
+        item?.uniqueId != null ? { doc: scope.doc, key: elementKey(item.uniqueId) } : null,
       );
     } else hover?.(item);
   };
@@ -101,6 +103,7 @@ export function GoToPopup<Item extends GoToItem>({
         label: item.name,
         meta: item.meta,
         revit: item.revit ?? (typeof item.id === "number" ? [item.id] : undefined),
+        uniqueIds: item.uniqueId == null ? undefined : [item.uniqueId],
       })}
     />
   );

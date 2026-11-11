@@ -1361,10 +1361,10 @@ export namespace DuctsSnapshotRoster {
       classification?: null | string;
       connectors: DuctConnector[];
       facts: DuctFact[];
+      uniqueId: string;
       loss?: null | DuctLoss;
       terminalDrop?: null | DuctTerminalDrop;
       label?: null | string;
-      uniqueId?: null | string;
       phaseCreated?: null | string;
       phaseDemolished?: null | string;
       flowParameter?: null | string;
@@ -1473,7 +1473,7 @@ export namespace DuctsSnapshotRoster {
       roughness: DuctRoughness;
       revit: DuctRevitValues;
       connectors: DuctConnector[];
-      uniqueId?: null | string;
+      uniqueId: string;
       phaseCreated?: null | string;
       phaseDemolished?: null | string;
       reason?: null | string;
@@ -1987,10 +1987,10 @@ export namespace DuctsSnapshotWalk {
       classification?: null | string;
       connectors: DuctConnector[];
       facts: DuctFact[];
+      uniqueId: string;
       loss?: null | DuctLoss;
       terminalDrop?: null | DuctTerminalDrop;
       label?: null | string;
-      uniqueId?: null | string;
       phaseCreated?: null | string;
       phaseDemolished?: null | string;
       flowParameter?: null | string;
@@ -2099,7 +2099,7 @@ export namespace DuctsSnapshotWalk {
       roughness: DuctRoughness;
       revit: DuctRevitValues;
       connectors: DuctConnector[];
-      uniqueId?: null | string;
+      uniqueId: string;
       phaseCreated?: null | string;
       phaseDemolished?: null | string;
       reason?: null | string;
@@ -7479,6 +7479,7 @@ export namespace RevitDetailSpaceCensus {
       layer?: null | string;
       extrusion?: null | Extrusion;
       heightRole: HeightRole;
+      linkInstanceUniqueId?: null | string;
     }
     /**
      * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
@@ -7655,6 +7656,7 @@ export namespace RevitDetailSpaceProbe {
       layer?: null | string;
       extrusion?: null | Extrusion;
       heightRole: HeightRole;
+      linkInstanceUniqueId?: null | string;
     }
     /**
      * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
@@ -8097,6 +8099,7 @@ export namespace RevitDetailSpaceScene {
       layer?: null | string;
       extrusion?: null | Extrusion;
       heightRole: HeightRole;
+      linkInstanceUniqueId?: null | string;
     }
     /**
      * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
@@ -8445,6 +8448,7 @@ export namespace RevitDetailSpaceSlice {
       layer?: null | string;
       extrusion?: null | Extrusion;
       heightRole: HeightRole;
+      linkInstanceUniqueId?: null | string;
     }
     /**
      * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
@@ -8734,6 +8738,7 @@ export namespace RevitDetailSpaceSweep {
       layer?: null | string;
       extrusion?: null | Extrusion;
       heightRole: HeightRole;
+      linkInstanceUniqueId?: null | string;
     }
     /**
      * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
@@ -10085,6 +10090,7 @@ export namespace RoomsRoster {
     }
     export interface RoomsRegion {
       elementId: number;
+      uniqueId: string;
       guid: string;
       view: string;
       level: string;
@@ -10131,6 +10137,7 @@ export namespace RoomsSnapshot {
     }
     export interface RoomsRegion {
       elementId: number;
+      uniqueId: string;
       guid: string;
       view: string;
       level: string;

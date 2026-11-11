@@ -1,5 +1,5 @@
 import { makeAtomRegistry } from "#/shell/owner";
-import { TestAttention } from "#/test-attention";
+import { TestAttention, eKey, uid } from "#/test-attention";
 import { hovered } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { Row } from "@pe/kit/lang/row";
@@ -186,9 +186,9 @@ test("the kit row channel lights the globe through the one scene adapter without
     return <OrbitMinimap orbit={orbit} lines={line} litLines={hovered === 42 ? line : []} />;
   }
   const view = render(
-    <TestAttention registry={registry}>
-      <SubjectTextContext value={{ doc: "test", nameOf: () => "duct" }}>
-        <Row label="duct" revit={[42]} />
+    <TestAttention registry={registry} ids={[42]}>
+      <SubjectTextContext value={{ doc: "test", nameOf: () => "duct", uniqueIdOf: uid }}>
+        <Row label="duct" revit={[42]} uniqueIds={[uid(42)]} />
         <Picture />
       </SubjectTextContext>
     </TestAttention>,
@@ -197,7 +197,7 @@ test("the kit row channel lights the globe through the one scene adapter without
   expect(path.getAttribute("d")).toBe("");
   fireEvent.pointerOver(view.container.querySelector(".dl-row")!);
   expect(path.getAttribute("d")).toContain("L");
-  expect(registry.get(hovered)?.key).toBe("e:42");
+  expect(registry.get(hovered)?.key).toBe(eKey(42));
   fireEvent.pointerOver(view.container.firstElementChild!);
   expect(path.getAttribute("d")).toBe("");
   expect(orbit.read()).toEqual(viewport);

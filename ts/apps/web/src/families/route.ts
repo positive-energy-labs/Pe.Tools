@@ -112,9 +112,9 @@ export const module = route({
         sentence: "Review family parameter changes",
         rows: Object.entries(work.cells).flatMap(([key, cell]) => {
           if (!cell.edit) return [];
-          const [family, type, parameter] = JSON.parse(key) as string[];
+          const { familyName, typeName, parameter } = familyCellAddress(key);
           return [
-            `${family} / ${type} / ${parameter}: observed value to ${showFamilyCell(cell.edit.value)}`,
+            `${familyName} / ${typeName} / ${parameter}: observed value to ${showFamilyCell(cell.edit.value)}`,
           ];
         }),
       }),

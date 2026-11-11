@@ -11,7 +11,7 @@ import { NO_SYSTEM, systemsOf } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 export type GoTarget = { system: string; id: number | null };
-type Item = GoTarget & { key: string; name: string; detail: string; group: string; meta: string };
+type Item = GoTarget & { uniqueId?: string | null; key: string; name: string; detail: string; group: string; meta: string };
 type Element = DuctSnapshot["nodes"][number] | DuctSnapshot["segments"][number];
 
 const HERE = "Open here";
@@ -37,6 +37,7 @@ function itemsOf(
       key: `e${e.id}`,
       system: into,
       id: e.id,
+      uniqueId: e.uniqueId,
       name: nameOf(e.id),
       detail: `${kind} ${into} ${"category" in e ? (e.category ?? "") : "duct"}`,
       group: here.has(e.id) ? HERE : ELSEWHERE,
@@ -89,6 +90,7 @@ export function GoToSubject({
               key: `e${e.id}`,
               system: systemOf(snapshot, e),
               id: e.id,
+              uniqueId: e.uniqueId,
               name: nameOf(e.id),
               detail: "",
               group: ELSEWHERE,

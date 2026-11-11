@@ -1,4 +1,5 @@
 import { fanWriteCells } from "@pe/ducts-domain/staged";
+import { workElementId } from "@pe/ducts-domain/work-subject";
 import { renderPicturePane } from "#/scene/picture/picture";
 import { EspParameter } from "./esp-parameter";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
@@ -6,7 +7,7 @@ import { StateCell, cellSource } from "@pe/kit/lang/cell";
 import { Button } from "@pe/kit/lang/button";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
 import { PointerCite } from "#/shell/pointer-list";
-import { pointerRefs } from "../pointer-refs";
+import { ductElements, pointerRefs } from "../identity.ts";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { useRouteSearchSlice } from "#/route/activity";
 import { picturePageMove } from "#/shell/picture-page";
@@ -14,7 +15,8 @@ import { useAdmittedSubject } from "#/shell/subject";
 
 import type { DuctsSheetEdits, PicturePage } from "@pe/agent-contracts";
 import { systemScope } from "@pe/ducts-domain/system-scope";
-import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import type { SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import * as Atom from "effect/reactivity/Atom";
@@ -24,7 +26,6 @@ import { fansDocumentSchema } from "@pe/agent-contracts";
 const scopeSchema = fansDocumentSchema.shape.writeIntent.unwrap().shape.edit.unwrap().unwrap()
   .shape.value;
 import { attentionSubjects } from "../cell-focus";
-import { localId, localSubject, namesOf } from "../identity.ts";
 import { ductsLink } from "../identity.ts";
 import { subjectNamer } from "../subject-text";
 import { describeCloser, type Closer } from "./closer";
@@ -45,10 +46,10 @@ function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
   const fans = ctx.value.value?.fans;
   const roster = rosterOrder(value?.rows ?? fans?.rows ?? []);
   const nameOf = useMemo(() => subjectNamer(snapshot), [snapshot]);
-  const selected = authored.selected.map(({ id }) => localSubject(id)).join(",");
+  const selected = authored.selected.map(({ id }) => id).join(",");
   const changeInputs = async (
     edits: DuctsSheetEdits,
-    history: EditMeta = { label: editLabel(edits, nameOf) },
+    history: EditMeta = { label: editLabel(edits, key => nameOf(workElementId(snapshot, key))) },
   ) => {
     return ctx.cells.edit(edits, history).then((result) => result ?? undefined);
   };
@@ -66,11 +67,7 @@ function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
     busy: reading.status === "pending",
   };
 }
-/**
- * The person's explicit fan write scope, required by the host losses command. Offered from the host
- * sheet's open fan. Current staged cells in that walk are projected by the host; the walk is staged only on a pick,
- * never from the Page or a plan. Another fan's standing scope is shown, not replaced on navigation.
- */
+/** The person's explicit fan write scope, required by the host losses command. */
 function WriteScope({
   ctx,
   snapshot,
@@ -147,8 +144,8 @@ export function RosterBody({ ctx }: { ctx: SheetContext }) {
     [snapshot],
   );
   const subject = useAdmittedSubject();
-  const open = (row: FanPort) => subject?.toggle(localId("ducts-fan", stableFanKey(row)));
-  const pickedFans = namesOf(authored.fan);
+  const open = (row: FanPort) => subject?.toggle(stableFanKey(row));
+  const pickedFans = authored.fan.kind === "all" ? "all" : authored.fan.ids;
   const search = useRouteSearchSlice((search) => search);
   const ownPane = (
     <>
@@ -291,7 +288,7 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
         {snapshot.nodes
           .filter((node) => node.kind === "equipment")
           .map((node) => {
-            const key = String(node.id);
+            const key = elementSubject(node);
             const cell = ctx.cells.doc?.roles[key] ?? {};
             const label = `Unit role ${nameOf(node.id)}`;
             return (
@@ -373,16 +370,16 @@ function PictureContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSn
   const doc = target?.kind === "document" ? target.ref : null;
   const workDoc = ctx.value.value?.design ?? null;
   const select = (selected: string) =>
-    ctx.selection.set(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
+    ctx.selection.set(selected ? [{ kind: "focus", id: selected }] : []);
   const setPage = picturePageMove<PicturePage<string, "schematic">>(
     (patch, intent) => ctx.page.pose(patch, intent),
     select,
   );
   const selection = useMemo(
-    () => Atom.make(attentionSubjects(authored.selected.map(({ id }) => localSubject(id)))),
-    [authored.selected],
+    () => Atom.make(attentionSubjects(authored.selected.map(({ id }) => id), ductElements(snapshot))),
+    [authored.selected, snapshot],
   );
-  const pickedFans = namesOf(authored.fan);
+  const pickedFans = authored.fan.kind === "all" ? "all" : authored.fan.ids;
   const nativeSnapshot = ctx.value.value?.sheetSnapshot;
   const captureSource =
     ctx.value.current &&
@@ -394,7 +391,7 @@ function PictureContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSn
       : null;
   const state = ctx.value.value?.sheetView ?? EMPTY_SHEET_STATE;
   const jump = useRef<((key: SubjectKey) => void) | null>(null);
-  const fanId = (row: FanPort) => localId("ducts-fan", stableFanKey(row));
+  const fanId = (row: FanPort) => stableFanKey(row);
   const ownPane = ((renderPane: TeachingPaneRender) => (
     <SheetPicture
       props={{
@@ -435,12 +432,17 @@ export function LedgerBody({ ctx }: { ctx: SheetContext }) {
   );
 }
 function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSnapshot }) {
+  const nativeElement = (id: number) => {
+    const e = [...snapshot.nodes, ...snapshot.segments].find(e => e.id === id);
+    if (!e) throw Error(`Element ${id} is unavailable`);
+    return e;
+  };
   const { reading, sheet, roster, nameOf, selected, changeInputs, busy } = useSheetData(
     ctx,
     snapshot,
   );
   const select = (selected: string) =>
-    ctx.selection.set(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
+    ctx.selection.set(selected ? [{ kind: "focus", id: selected }] : []);
   const state = ctx.value.value?.sheetView ?? EMPTY_SHEET_STATE;
   const closerOf = (blocker: import("./tiers").SheetBlocker, typed: number | null): Closer => {
     const closer = describeCloser(blocker, typed, {
@@ -501,22 +503,22 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
                 ...edits,
                 terminalDrops: {
                   ...edits.terminalDrops,
-                  [action.elementId]: { inWg: action.value },
+                  [elementSubject(nativeElement(action.elementId))]: { inWg: action.value },
                 },
               }
             : {
                 ...edits,
                 componentDrops: {
                   ...edits.componentDrops,
-                  [action.elementId]: { inWg: action.value },
+                  [elementSubject(nativeElement(action.elementId))]: { inWg: action.value },
                 },
               };
         case "cfm":
-          return { ...edits, flows: { ...edits.flows, [action.elementId]: { cfm: action.value } } };
+          return { ...edits, flows: { ...edits.flows, [elementSubject(nativeElement(action.elementId))]: { cfm: action.value } } };
         case "unitCfm":
           return {
             ...edits,
-            equipmentFlows: { ...edits.equipmentFlows, [action.unitId]: { cfm: action.value } },
+            equipmentFlows: { ...edits.equipmentFlows, [elementSubject(nativeElement(action.unitId))]: { cfm: action.value } },
           };
         case "rule":
           return {
@@ -595,10 +597,13 @@ function SheetFrame({
   const document = target?.kind === "document" ? target.ref : null;
   const attentionDoc = document ? `${document.session}/${document.openId}` : "fans:unbound";
   const refProps = useRevitSubjectProps();
-  const go = (id: number) =>
-    jump?.current
-      ? jump.current(elementKey(id))
-      : ctx.selection.set([{ kind: "focus", id: localId("ducts-focus", String(id)) }]);
+  const elements = ductElements(snapshot);
+  const go = (id: number) => {
+    const key = elements.keyOf(id);
+    return jump?.current && key
+      ? jump.current(key)
+      : ctx.selection.set([{ kind: "focus", id: String(id) }]);
+  };
   return (
     <>
       {"kind" in snapshot ? null : (
@@ -607,7 +612,7 @@ function SheetFrame({
           refs={(place) => pointerRefs(place, snapshot, attentionDoc, (id) => nameOf(id))}
         />
       )}
-      <SubjectTextContext.Provider value={{ doc: attentionDoc, nameOf, go, refProps }}>
+      <SubjectTextContext.Provider value={{ doc: attentionDoc, nameOf, uniqueIdOf: elements.uniqueIdOf, go, refProps }}>
           {children}
 
       </SubjectTextContext.Provider>

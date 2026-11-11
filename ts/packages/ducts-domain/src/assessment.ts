@@ -1,3 +1,4 @@
+import { elementSubject } from "./work-subject.ts";
 import type {
   DuctFinding,
   DuctsAnalysisRequest,
@@ -149,7 +150,7 @@ export function assessDucts(
     return (
       node.terminalDrop?.catalogDropInWg != null ||
       (row?.dp != null &&
-        (!!row.source || work?.terminalDrops[String(node.id)]?.edit?.value !== undefined))
+        (!!row.source || work?.terminalDrops[elementSubject(node)]?.edit?.value !== undefined))
     );
   };
   const priced = reached.filter(
