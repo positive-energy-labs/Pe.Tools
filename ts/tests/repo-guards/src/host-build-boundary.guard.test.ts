@@ -2,7 +2,7 @@
  * Slice 5a build guards (docs/features/routes/REGISTRY-SHAPE.md): a route's host read lives in its
  * route directory under apps/web/src, so the two builds must be kept apart by edge, not by folder.
  * The host build (from apps/host/src/index.ts) reaches no browser-only module; the web build (from
- * routes/__root.tsx and the web builtin registry, its `import.meta.glob`s expanded) reaches no host
+ * router.tsx (and through routeTree.gen.ts every file route), routes/__root.tsx and the web builtin registry, its `import.meta.glob`s expanded) reaches no host
  * module and no `node:` builtin. Each guard also requires
  * the edge it protects to exist, so it is red until the fill lands and prints why.
  */
@@ -92,7 +92,8 @@ test("the host build reaches every route directory's host.ts and no browser-only
 
 test("the web build reaches builtins through route/registry.ts and no host module", { timeout: 120_000 }, () => {
   const registry = join(root, "apps/web/src/route/registry.ts");
-  const entries = [join(root, "apps/web/src/routes/__root.tsx"), join(root, "apps/web/src/route/builtin-routes.tsx"), registry];
+  // router.tsx reaches the TanStack file routes (routes/$route.tsx, design-system_.*, api/*) through routeTree.gen.ts.
+  const entries = [join(root, "apps/web/src/router.tsx"), join(root, "apps/web/src/routes/__root.tsx"), join(root, "apps/web/src/route/builtin-routes.tsx"), registry];
   const reads = new Set(routeHostReads());
   // Vite resolves a client build under the `browser` export condition (@pe/runtime/context's browser twin).
   const { seen, offenders } = closure(entries, { ...options("apps/web"), customConditions: ["browser"] }, (specifier, target) =>
