@@ -826,46 +826,15 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
     ).toBe(commandId);
     expect(hostCalls("thread.place")).toHaveLength(1);
     expect(hostCalls("thread.place")[0]![1]).toMatchObject({ body: { route: podRoute.module.data.key } });
-    await waitFor(() =>
-      expect(hostCalls("view.publish")).toContainEqual([
-        "view.publish",
-        expect.objectContaining({
-          body: expect.objectContaining({ openCommandId: commandId, page: {} }),
-        }),
-      ]),
-    );
     const saved = places().find((tab) => tab.route === podRoute!.module.data.key)!;
     expect(saved.link).toBe(link);
     expect(screen.getByRole("button", { name: /^Circuit voltage drop/ })).toBeTruthy();
     expect(
       new URL(router.history.location.href, "http://place.invalid").searchParams.get("target"),
     ).toBe(query.get("target"));
-    const priorHref = router.history.location.href;
-    const published = hostCalls("view.publish").filter(([, input]) =>
-      (input as { body: { route: string } }).body.route === podRoute!.module.data.key,
-    ).at(-1)![1] as { body: { instance: string } };
-    act(() =>
-      hostEvents.emit({
-        type: "route-view-intent",
-        route: podRoute!.module.data.key,
-        thread: "T",
-        instance: published.body.instance,
-        revision: 1,
-        commandId: "33333333-3333-4333-8333-333333333333",
-        patch: { worksheet: "" },
-      }),
-    );
-    await waitFor(() =>
-      expect(hostCalls("view.ack")).toContainEqual([
-        "view.ack",
-        expect.objectContaining({
-          body: expect.objectContaining({ outcome: "refused", page: {} }),
-        }),
-      ]),
-    );
-    // This artifact declares no worksheet Page field; refusal leaves the leased entry untouched.
-    expect(new URL(router.history.location.href, "http://place.invalid").searchParams.get("worksheet")).toBeNull();
-    expect(router.history.location.href).toBe(priorHref);
+    // This artifact declares no agent field, so the host leases it no view (`viewRoute`: a registered
+    // route leases only with agent fields) and refuses its PUT; the browser publishes none (slice 6.1b).
+    expect(hostCalls("view.publish").filter(([, input]) => (input as { params: { route: string } }).params.route === podRoute!.module.data.key)).toEqual([]);
     await act(() => router.navigate({ to: "/fans", search: { thread: "T", fixture: "layout" } } as never));
     const priorFans = router.history.location.href;
     deliver();
@@ -991,4 +960,19 @@ test("6.1 two Places, one hidden: the shown copy is the only one that answers it
   await waitFor(() => expect(document.querySelectorAll(roster)).toHaveLength(2), { timeout: 10_000 });
   expect(screen.getAllByRole("region", { name: "Fans" })).toHaveLength(1);
   expect(document.querySelectorAll(`${roster}${SHOWN}`)).toHaveLength(1);
+});
+
+test("6.1b first open of /fans while the document bind is pending reads as pending, never as unavailable", async () => {
+  sessionStorage.clear();
+  let drew = false;
+  const watch = new MutationObserver(() => { drew ||= document.body.textContent?.includes("Document unavailable") ?? false; });
+  watch.observe(document.body, { subtree: true, childList: true, characterData: true });
+  try {
+    // The inventory Reading is mocked pending (`useReading`), so the bind never answers here.
+    await mount("/fans");
+    await settle();
+    expect(drew).toBe(false);
+    await screen.findByText("Finding the open document");
+    expect(document.querySelector('[aria-busy="true"]:has(> [data-kind="busy"])')).not.toBeNull();
+  } finally { watch.disconnect(); }
 });
