@@ -4,8 +4,16 @@ import {
   routeStartupSourceHash,
 } from "@pe/host-contracts/route-startup";
 import type { RouteStartupProjection } from "@pe/host-contracts/route-startup";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { execFile } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build, type Plugin } from "vite-plus";
@@ -15,7 +23,11 @@ import ts from "typescript";
 import { routeFingerprint } from "../../packages/agent-contracts/src/route-module.ts";
 import type { RouteFingerprintInput } from "../../packages/agent-contracts/src/route-kernel-admission.ts";
 import type { RouteGraphJson } from "../../packages/agent-contracts/src/route-kernel-data.ts";
-import { sharedContractId, type SharedRouteModule, type RouteArtifactBytes } from "./src/route/route-artifact.ts";
+import {
+  sharedContractId,
+  type SharedRouteModule,
+  type RouteArtifactBytes,
+} from "./src/route/route-artifact.ts";
 
 /** Pod packaging only. Builtins use buildBuiltinClosure, with ordinary source imports.
  * Produce the exact self-contained JS closure the package loader will evaluate. Source EOLs
@@ -24,20 +36,47 @@ import { sharedContractId, type SharedRouteModule, type RouteArtifactBytes } fro
 export async function buildRouteArtifact(options: {
   readonly entry: string;
   readonly source?: string;
-  readonly hostEntry?: {readonly entry:string;readonly source:string};
+  readonly hostEntry?: { readonly entry: string; readonly source: string };
   readonly root?: string;
   readonly data: RouteGraphJson;
   readonly contracts: readonly { readonly id: string; readonly bytes: Uint8Array }[];
   readonly shared?: readonly SharedRouteModule[];
-}):Promise<RouteArtifactBytes> {
-  if(options.hostEntry) {
-    const {hostEntry,...browser}=options;
-    const [web,host]=await Promise.all([buildRouteArtifact(browser),buildRouteArtifact({...browser,...hostEntry,shared:[]})]);
-    const hostExecutable={...host.executables[0]!,client:"host" as const,entry:"host.js",
-      members:host.executables[0]!.members.map(member=>({...member,path:member.path==="route.js"?"host.js":member.path}))};
-    const artifact={...web.artifact,executables:[...web.artifact.executables,{client:"host" as const,entry:"host.js",
-      members:hostExecutable.members.map(member=>({path:member.path,sha256:createHash("sha256").update(member.bytes).digest("hex")}))}]};
-    return {...web,artifact,fingerprint:await routeFingerprint(artifact),executables:[...web.executables,hostExecutable]};
+}): Promise<RouteArtifactBytes> {
+  if (options.hostEntry) {
+    const { hostEntry, ...browser } = options;
+    const [web, host] = await Promise.all([
+      buildRouteArtifact(browser),
+      buildRouteArtifact({ ...browser, ...hostEntry, shared: [] }),
+    ]);
+    const hostExecutable = {
+      ...host.executables[0]!,
+      client: "host" as const,
+      entry: "host.js",
+      members: host.executables[0]!.members.map((member) => ({
+        ...member,
+        path: member.path === "route.js" ? "host.js" : member.path,
+      })),
+    };
+    const artifact = {
+      ...web.artifact,
+      executables: [
+        ...web.artifact.executables,
+        {
+          client: "host" as const,
+          entry: "host.js",
+          members: hostExecutable.members.map((member) => ({
+            path: member.path,
+            sha256: createHash("sha256").update(member.bytes).digest("hex"),
+          })),
+        },
+      ],
+    };
+    return {
+      ...web,
+      artifact,
+      fingerprint: await routeFingerprint(artifact),
+      executables: [...web.executables, hostExecutable],
+    };
   }
   if (!isAbsolute(options.entry) || (options.root !== undefined && !isAbsolute(options.root)))
     throw Error("Pod artifact entry and root must be absolute");
@@ -70,7 +109,7 @@ export async function buildRouteArtifact(options: {
         name: "route-artifact-source-eol",
         enforce: "pre",
         resolveId(id, importer) {
-          if(options.source !== undefined && id === options.entry) return id;
+          if (options.source !== undefined && id === options.entry) return id;
           // Never silently bundle a second copy of a stateful shell runtime. Subpath
           // imports need their own explicit deployment pin, not the parent package's bytes.
           if (
@@ -79,10 +118,12 @@ export async function buildRouteArtifact(options: {
             ) &&
             !shared.some((item) => item.specifier === id)
           )
-            throw Error(`Shared route module needs an explicit deployment pin: ${id} (imported by ${importer})`);
+            throw Error(
+              `Shared route module needs an explicit deployment pin: ${id} (imported by ${importer})`,
+            );
         },
         load(id) {
-          if(options.source !== undefined && id === options.entry) return options.source;
+          if (options.source !== undefined && id === options.entry) return options.source;
           if (/\.[cm]?[jt]sx?$/.test(id)) return readFileSync(id, "utf8").replaceAll("\r\n", "\n");
         },
       },
@@ -184,6 +225,21 @@ async function runtimeRoutes() {
   return JSON.parse(stdout) as Record<string, string>;
 }
 
+/** The freshness check hashes what git lists, and the producer finds routes by reading the folder. A route
+ * folder git ignores is therefore invisible to the check, so the cache is off while one exists.
+ * `git check-ignore` exits 1 when none of the paths is ignored. */
+const noIgnoredRouteFolder = (source: string) =>
+  spawnSync(
+    "git",
+    [
+      "check-ignore",
+      ...readdirSync(source, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && existsSync(join(source, d.name, "route.ts")))
+        .map((d) => join(source, d.name)),
+    ],
+    { cwd: source },
+  ).status === 1;
+
 /** Test lane only (vite.config.ts `mode === "test"`). Every web test file reaches the producer through
  * @pe/agent-contracts -> generated/route-directory.ts, and one producer run costs minutes and ~2 GiB.
  * Keep its last answer as a dev-host style receipt and reuse it only while
@@ -192,6 +248,8 @@ async function runtimeRoutes() {
 export async function cachedRuntimeRoutes() {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
   const receiptPath = join(import.meta.dirname, "node_modules", ".cache", "route-projection.json");
+  // Neither read nor written while git ignores a route folder: a receipt made then would outlive the folder.
+  if (!noIgnoredRouteFolder(join(import.meta.dirname, "src"))) return runtimeRoutes();
   try {
     const receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as RouteStartupProjection;
     if (currentRouteStartupProjection(root, receipt)) return receipt.projections;
@@ -201,11 +259,20 @@ export async function cachedRuntimeRoutes() {
   // Hash before producing: an edit during the run leaves a receipt the next check refuses.
   const sourceHash = routeStartupSourceHash(root);
   const projections = await runtimeRoutes();
-  const receipt: RouteStartupProjection = { checkout: routeStartupOwner(root), sourceHash, projections };
+  const receipt: RouteStartupProjection = {
+    checkout: routeStartupOwner(root),
+    sourceHash,
+    projections,
+  };
   mkdirSync(dirname(receiptPath), { recursive: true });
   const temp = `${receiptPath}.${process.pid}`;
   writeFileSync(temp, JSON.stringify(receipt));
-  renameSync(temp, receiptPath);
+  try {
+    renameSync(temp, receiptPath);
+  } catch {
+    // Windows refuses a rename over a file another run has open. That run holds an equally fresh receipt.
+    rmSync(temp, { force: true });
+  }
   return projections;
 }
 

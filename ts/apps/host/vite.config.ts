@@ -3,7 +3,16 @@ import { browserGuardianPlugin } from "@pe/browser/build";
 import { dirname, join } from "node:path";
 import { receiptBuildDefines } from "./src/build-stamp.ts";
 import { prepareSourceClosures } from "./src/source-closures.ts";
-import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   currentRouteStartupProjection,
@@ -28,12 +37,28 @@ const diskClosures = () =>
         }
       }),
   );
+/** The freshness check hashes what git lists, and the producer finds routes by reading the folder. A route
+ * folder git ignores is therefore invisible to the check, so the cache is off while one exists.
+ * `git check-ignore` exits 1 when none of the paths is ignored. */
+const noIgnoredRouteFolder = (source: string) =>
+  spawnSync(
+    "git",
+    [
+      "check-ignore",
+      ...readdirSync(source, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && existsSync(join(source, d.name, "route.ts")))
+        .map((d) => join(source, d.name)),
+    ],
+    { cwd: source },
+  ).status === 1;
 /** Test lane only (Vitest sets VITEST before it loads this file). The closure producer
  * (route-graphs.ts --builtin-closure-only) took ~45 s of every host test run before Vitest started.
  * Skip it while the disk closures are exactly the ones a stamp recorded and
  * `currentRouteStartupProjection` (the dev host's source-hash + closure-member check) still passes;
  * otherwise produce and stamp. Pack and source startup always produce. */
 async function prepareTestSourceClosures() {
+  // Neither read nor written while git ignores a route folder: a stamp made then would outlive the folder.
+  if (!noIgnoredRouteFolder(webSource)) return prepareSourceClosures();
   try {
     const stamp = JSON.parse(readFileSync(stampPath, "utf8")) as RouteStartupProjection;
     const disk = diskClosures();
@@ -59,7 +84,12 @@ async function prepareTestSourceClosures() {
   };
   mkdirSync(dirname(stampPath), { recursive: true });
   writeFileSync(`${stampPath}.${process.pid}`, JSON.stringify(stamp));
-  renameSync(`${stampPath}.${process.pid}`, stampPath);
+  try {
+    renameSync(`${stampPath}.${process.pid}`, stampPath);
+  } catch {
+    // Windows refuses a rename over a file another run has open. That run holds an equally fresh stamp.
+    rmSync(`${stampPath}.${process.pid}`, { force: true });
+  }
 }
 
 await (process.env.VITEST === "true" ? prepareTestSourceClosures() : prepareSourceClosures());

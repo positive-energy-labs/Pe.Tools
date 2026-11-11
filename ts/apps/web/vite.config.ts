@@ -72,7 +72,9 @@ const config = defineConfig(({ mode, command }) => {
             this.error(`Browser import reaches Node builtin ${id} from ${importer}`);
         },
       },
-      routeModuleHash(mode === "test" ? cachedRuntimeRoutes : undefined),
+      routeModuleHash(
+        mode === "test" && process.env.VITEST === "true" ? cachedRuntimeRoutes : undefined,
+      ),
       devIcons(),
       // proto: with a saved ducts fixture and no host, answer the shell's one
       // required host call so /ducts opens in a plain browser. Throwaway.
