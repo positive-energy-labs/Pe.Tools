@@ -1,18 +1,20 @@
 /**
- * The host's file inputs (ADR 0031 rule 1): the firm file and the duct catalogs. A body reads them
- * through this service so a test or a recording can answer instead of the disk. Provenance stays
- * in each reading: the firm says present or why not, the catalogs carry their findings, and a
- * recording keeps both exactly as they were read.
+ * The host's file inputs (ADR 0031 rule 1): the firm files and the duct catalogs. A body reads them
+ * through this service so a test or a recording can answer instead of the disk. A firm file is
+ * kept as read (absent, unreadable, or its JSON); `ctx.firm` decodes it against the owner's schema
+ * and seed, so the recording holds the input, never a derived fallback.
  */
 import { Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { z } from "zod";
 import { existsSync, watch } from "node:fs";
-import { dirname, relative, resolve, sep } from "node:path";
+import { readFile, readdir } from "node:fs/promises";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { catalogTableSchema, ductsFirmSchema } from "@pe/agent-contracts";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
+import { sharedFirmDir } from "@pe/host-contracts/product-paths";
 import { readDuctCatalogs, productCatalogsRoots, type CatalogReading } from "./duct-catalogs.ts";
-import { firmFilePath, readFirm, type FirmReading } from "./ducts-inputs.ts";
+import { firmFileSchema, firmOwner, type FirmFile } from "./reads/evaluator.ts";
 import {
   captureInput,
   inputBindingKey,
@@ -22,7 +24,37 @@ import {
   type TakingObserver,
 } from "./native-recording.ts";
 
-// The readings' own contracts: a recorded firm or catalog decodes only if it is still that reading.
+/**
+ * Slice 2b (ADR 0035 rule 11): firm files are a shared setting with no user layer, at
+ * `<shared>/Firm/<owner>.json` (ducts' is `<shared>/Firm/ducts.json`); null without a shared root.
+ */
+export const firmRootPath = (): string | null => sharedFirmDir();
+/** One owner's firm file as read; malformed JSON is a visible error, never a thrown defect. */
+async function readFirmFile(root: string | null, owner: string): Promise<FirmFile> {
+  // No shared root: the file has no home, so the read refuses rather than seeding silently.
+  if (root === null) return { refused: "no-shared-root" };
+  const path = join(root, `${firmOwner.parse(owner)}.json`);
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { path };
+    return { path, error: String(error) };
+  }
+  try {
+    return { path, json: JSON.parse(text) };
+  } catch (error) {
+    return { path, error: String(error) };
+  }
+}
+const readFirmRoot = async (root: string | null) => {
+  if (root === null) return [];
+  const names = await readdir(root).catch(() => [] as string[]);
+  const owners = names.filter((name) => name.endsWith(".json")).map((name) => name.slice(0, -5));
+  return Promise.all(owners.filter((owner) => firmOwner.safeParse(owner).success).map((owner) => readFirmFile(root, owner)));
+};
+
+// The decoded ducts layer, and the catalogs' own contract: a recorded input decodes only if it is still that input.
 export const firmReading = z.union([
   z.strictObject({
     firm: ductsFirmSchema,
@@ -36,31 +68,32 @@ export const catalogReading = z.strictObject({
   tables: z.record(z.string(), catalogTableSchema),
   findings: z.array(z.string()),
 });
-const firmCodec = Schema.declare((u): u is FirmReading => firmReading.safeParse(u).success);
+const firmCodec = Schema.declare((u): u is FirmFile => firmFileSchema.safeParse(u).success);
 const catalogsCodec = Schema.declare(
   (u): u is CatalogReading => catalogReading.safeParse(u).success,
 );
 const FIRM = { kind: "files", file: "firm" } as const;
 const CATALOGS = { kind: "files", file: "duct-catalogs" } as const;
-// A file input has no document: its one scope is the host's product root.
+// A file input has no document: its scope is the host's product root, and a firm file's its owner.
 const SCOPE = "{}";
+const firmScope = (owner: string) => JSON.stringify({ owner });
 
 export class DuctFiles extends Context.Service<
   DuctFiles,
   {
-    readonly firm: Effect.Effect<FirmReading, DoorFailure>;
+    readonly firm: (owner: string) => Effect.Effect<FirmFile, DoorFailure>;
     readonly ductCatalogs: Effect.Effect<CatalogReading, DoorFailure>;
     readonly subscribe?: (changed: (name: string) => void) => () => void;
   }
 >()("pe/DuctFiles") {
   static readonly layer = (
     roots: { readonly firm: string | null; readonly catalogs: string | readonly string[] } = {
-      firm: firmFilePath(),
+      firm: firmRootPath(),
       catalogs: productCatalogsRoots(),
     },
   ) =>
     Layer.succeed(DuctFiles, {
-      firm: Effect.promise(() => readFirm(roots.firm)),
+      firm: (owner) => Effect.promise(() => readFirmFile(roots.firm, owner)),
       ductCatalogs: Effect.promise(() => readDuctCatalogs(roots.catalogs)),
       subscribe: (changed) => {
         const stops = [
@@ -72,7 +105,7 @@ export class DuctFiles extends Context.Service<
             // A filesystem hint (including an ancestor change) is not a changed input.
             // Compare the producer's answer so absent files and access metadata stay quiet.
             const read =
-              name === "firm" ? () => readFirm(roots.firm) : () => readDuctCatalogs(roots.catalogs);
+              name === "firm" ? () => readFirmRoot(roots.firm) : () => readDuctCatalogs(roots.catalogs);
             let closed = false;
             let previous = read().then((value) => JSON.stringify(value));
             const refresh = () => {
@@ -114,7 +147,8 @@ export class DuctFiles extends Context.Service<
       DuctFiles,
       Effect.map(Effect.service(DuctFiles), (live) => ({
         subscribe: live.subscribe,
-        firm: captureInput(writer, FIRM, SCOPE, firmCodec, live.firm, observed),
+        firm: (owner) =>
+          captureInput(writer, FIRM, firmScope(owner), firmCodec, live.firm(owner), observed),
         ductCatalogs: captureInput(
           writer,
           CATALOGS,
@@ -131,7 +165,14 @@ export class DuctFiles extends Context.Service<
     bindings: ReadonlyMap<string, string> = new Map(),
   ) =>
     Layer.succeed(DuctFiles, {
-      firm: replayInput(reader, FIRM, SCOPE, firmCodec, bindings.get(inputBindingKey(FIRM, SCOPE))),
+      firm: (owner) =>
+        replayInput(
+          reader,
+          FIRM,
+          firmScope(owner),
+          firmCodec,
+          bindings.get(inputBindingKey(FIRM, firmScope(owner))),
+        ),
       ductCatalogs: replayInput(
         reader,
         CATALOGS,

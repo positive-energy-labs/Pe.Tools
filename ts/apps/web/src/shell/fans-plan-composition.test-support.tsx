@@ -132,7 +132,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      if(mode==="batched"&&!batchReleased&&trace.tokens.length && (frame.value?.kind==="receipt"||frame.value?.kind==="ready"&&frame.value.receipts)){
        heldReceipts.push(data);receiptBatch.push({kind:"held",key:frame.key,cursor:frame.value.cursor??frame.value.receipts.through,state:frame.value.receipt?.state??frame.value.receipts.rows.at(-1)?.state});return;
      }
-     if(Array.isArray(frame.value)&&frame.value.some((row:any)=>row.key==="ducts.plan-losses"&&row.id!==previousPlan&&row.state==="succeeded")){
+     if(Array.isArray(frame.value)&&frame.value.some((row:any)=>row.key==="sheet.plan"&&row.id!==previousPlan&&row.state==="succeeded")){
        batchReleased=true;
        receiptBatch.push({kind:"flush",count:heldReceipts.length});
        for(const held of heldReceipts.splice(0))this.onmessage?.({data:held});
@@ -179,39 +179,28 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("Work is absent");
      expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("ducts");
      expect(screen.queryByRole("button",{name:"Start"})).toBeNull();
-     expect(workFrames.some(frame=>frame.value.revision===0 && frame.value.history.from===1 && !frame.value.history.acks.length)).toBe(true);
+     // Ruling 2026-11-10 (no cross-route write): /fans opens no /ducts Work and draws no /ducts criterion.
+     expect(workFrames).toEqual([]);
      const beforeEdit=await (await forward("/pe/navigation")).json();
      expect(beforeEdit.works.some((row:any)=>row.route==="ducts")).toBe(false);
-     const criterion=screen.getByLabelText("Velocity limit supply fpm").querySelector("input")!;
-     expect(criterion).not.toBeNull();
-     fireEvent.change(criterion,{target:{value:"850"}});
-     fireEvent.keyDown(criterion,{key:"Enter"});
-     await vi.waitFor(()=>expect(trace.http.find(row=>row.url==="/pe/route-state/ducts/apply" && row.method==="POST")?.body)
-       .toMatchObject({ok:true,revision:1,handle:{key:{route:"ducts"},revision:1}}),{timeout:10000});
-     const cellWrite=trace.http.find(row=>row.url==="/pe/route-state/ducts/apply" && row.method==="POST");
-     expect(cellWrite.request.expectedRevision).toBe(0);
-     expect(cellWrite.body.doc.criteria.edit.value.velocityLimitFpm.supply).toBe(850);
-     const persisted=await (await forward(peRouteUrl("work.get",{params:{route:"ducts"},query:{open:`${trace.target.session}/${trace.target.openId}`}},host.base))).json();
-     expect(persisted).toMatchObject({revision:1,handle:{key:{route:"ducts"},revision:1},doc:{criteria:{edit:{value:{velocityLimitFpm:{supply:850}}}}}});
-     const afterEdit=await (await forward("/pe/navigation")).json();
-     expect(afterEdit.works.find((row:any)=>row.route==="ducts")).toMatchObject({revision:1,state:"ready"});
+     expect(screen.queryByLabelText("Velocity limit supply fpm")).toBeNull();
      await trace.mounts.at(-1).whenWritable();
-     expect(screen.getByLabelText("Velocity limit supply fpm").querySelector("input")?.value).toBe("850");
      expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("Work is absent");
      fireEvent.click(screen.getByRole("button",{name:"plan Write to Revit"}));
      await vi.waitFor(()=>expect(planPending).toBe(true),{timeout:45000});
      releasePlan.resolve();
-     await vi.waitFor(()=>expect((trace as any).results.at(-1)).toMatchObject({key:"ducts.plan-losses",state:"succeeded"}),{timeout:45000});
+     await vi.waitFor(()=>expect((trace as any).results.at(-1)).toMatchObject({key:"sheet.plan",state:"succeeded"}),{timeout:45000});
      await screen.findByRole("button",{name:"Write to Revit"});
-     expect((trace as any).results.at(-1).consumes.some((row:any)=>row.kind==="work" && row.probe.handle.key.route==="ducts" && row.probe.handle.revision===1)).toBe(true);
+     expect((trace as any).results.at(-1).consumes.some((row:any)=>row.kind==="work" && row.probe.handle.key.route==="fans" && row.probe.handle.revision===1)).toBe(true);
      // Slice 6: the recorded-point verbs live in the Timeline popover, the topbar's history door.
      fireEvent.click(screen.getByRole("button",{name:"Open the Timeline"}));
      fireEvent.click(await screen.findByRole("button",{name:"Capture point"}));
      await vi.waitFor(()=>expect(trace.http.find(row=>row.url==="/pe/history" && row.request?.kind==="captured")?.status).toBe(200),{timeout:10000});
      const point=trace.http.find(row=>row.url==="/pe/history" && row.request?.kind==="captured").body;
      const history=await (await forward(`/pe/history?at=${point.id}`)).json();
-     expect(history.work.find((row:any)=>row.handle.key.route==="ducts"))
-       .toMatchObject({revision:1,doc:{criteria:{edit:{value:{velocityLimitFpm:{supply:850}}}}}});
+     expect(history.work.find((row:any)=>row.handle.key.route==="fans")).toMatchObject({revision:1});
+     // The host's plan reads /ducts Work itself (a read, not a cross-route write): nothing on /fans moved it.
+     expect(history.work.filter((row:any)=>row.handle.key.route==="ducts").every((row:any)=>row.revision===0)).toBe(true);
      expect(document.body.textContent).not.toContain("Work is absent");
      return;
    }
@@ -279,7 +268,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    const commandReads=[];
    for(const id of captureStore.readSets.ids()){
      const record=await Effect.runPromise(captureStore.readSets.get(id));
-     if(record.recipe.key==="command.work.view"&&(record.recipe.input as any).command==="ducts.plan-losses") commandReads.push(record);
+     if(record.recipe.key==="command.work.view"&&(record.recipe.input as any).command==="sheet.plan") commandReads.push(record);
    }
    expect(new Set(commandReads.map(record=>(record.recipe.input as any).route))).toEqual(new Set(["ducts","fans"]));
    expect(commandReads.every(record=>record.state==="complete"&&record.inputs.some(input=>input.input.kind==="work"&&input.input.view==="view"))).toBe(true);

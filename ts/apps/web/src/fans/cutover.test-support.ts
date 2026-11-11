@@ -143,6 +143,9 @@ export async function createWitness(
                       withStoredRulings(ductsDesign(ductsWork, fansWork), snapshot.store, snapshot) ??
                       ductsDesign(ductsWork, fansWork),
                     catalogFindings: [],espOptions:null,espOptionsError:"Fixture has no native parameter options",
+                    // The fixture's criteria as the Fans sheet fixture resolved them, over a stand-in firm file.
+                    criteria: sheet.inputs.inputs.criteria,
+                    firm: sheet.inputs.firm,
                   };
           deliver({ kind: "complete", revision: ++version, value: packet(data, version) });
         };
@@ -182,6 +185,7 @@ export async function createWitness(
           sheetSnapshot: capture,
           sheetView: sheetState(open),
           ductsWork,
+          ductsRevision: (saved.get("ducts") as { revision?: number } | undefined)?.revision ?? 0,
           fansWork,
           design: ductsDesign(ductsWork, fansWork),
         });

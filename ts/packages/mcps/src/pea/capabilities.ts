@@ -158,7 +158,7 @@ export function createCapabilityCatalogSource(options: {
 
   async function readScoped(scope: HostSessionScope): Promise<Omit<CapabilityCatalog, "machine">> {
     // Live registrations key the cache, so a trusted, replaced or withdrawn route is never served stale.
-    const cacheKey = JSON.stringify([scope, options.admittedRoutes?.() ?? []]);
+    const cacheKey = JSON.stringify([scope, (options.admittedRoutes?.() ?? []).map(({ work: _work, ...view }) => view)]);
     const hit = cache.get(cacheKey);
     if (hit && Date.now() - hit.at < CATALOG_TTL_MS) return hit.catalog;
 

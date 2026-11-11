@@ -75,7 +75,8 @@
     "./route-startup": "./src/route-startup.ts",
     "./native-adapter": "./src/native-adapter.ts",
     "./host-descriptor": "./src/host-descriptor.ts",
-    "./decoders": "./src/decoders.ts"
+    "./decoders": "./src/decoders.ts",
+    "./native-schemas": "./src/native-schemas.ts"
   },
   "publishConfig": {
     "access": "public"

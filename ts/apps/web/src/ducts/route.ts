@@ -25,9 +25,11 @@ import {
 } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
+import { scrollBody } from "../route/body.ts";
 import { describeInputHistory, editMetaSchema } from "./sheet/input-history.neutral.ts";
 import { ductsPricingCapability, ductsRosterCapability } from "@pe/agent-contracts";
 import { presentLosses, presentHeal, presentFan } from "./reviews.ts";
+import { designSheet } from "./design-sheet.ts";
 
 const shared = ductsPictureFields;
 const system = subjectSchema(DUCTS_SYSTEM_MAX);
@@ -100,6 +102,7 @@ export const module = route({
   core: pricing,
   fields,
   reads: { roster, network },
+  sheet: designSheet,
   panes: {
     "e-systems": {
       subjectList: true,
@@ -137,6 +140,13 @@ export const module = route({
       body: "scroll",
       draw: draw("scroll", () => import("./proto/e/screen.tsx"), "PictureBody"),
     },
+    design: {
+      title: "Design",
+      purpose: "Stage the design criteria and friction rate over the firm file",
+      kernel: "sheet",
+      body: "scroll",
+      draw: () => scrollBody(null),
+    },
     "e-inbox": {
       title: "Rulings",
       purpose: "Review assumptions and planned writes",
@@ -153,13 +163,13 @@ export const module = route({
       fans: { state: fansRouteState, value: "fansWork" },
     },
     input: ductsSheetEditsSchema,
-    patches: (input, data) => editPatches(input, data.design),
+    patches: (input) => editPatches(input),
     history: editMetaSchema,
     describe: describeInputHistory,
   },
   commands: {
     losses: {
-      ...command("ducts.apply-losses"),
+      ...command("sheet.apply"),
       label: "Write to Revit",
       present: (result, data, work) => presentLosses(result, evidence(data, work)),
     },
@@ -185,11 +195,11 @@ export const module = route({
             size: 240,
             sized: "start",
           }),
-          split("v", ["e-rules-all", whenSubject("e-rules")], {
+          split("v", [split("v", ["e-rules-all", whenSubject("e-rules")], {
             id: "scope-lower",
             size: 176,
             sized: "start",
-          }),
+          }), "design"], { id: "design-lower", size: 220, sized: "end" }),
         ],
         { id: "stack", size: 300, sized: "end" },
       ),

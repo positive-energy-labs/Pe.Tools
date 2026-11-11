@@ -6,15 +6,24 @@ import { PostHog } from "posthog-node";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { analyticsConfig } from "@pe/runtime";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
-import { FIRM_SEED, firmFilePath, readFirm } from "../src/ducts-inputs.ts";
+import { Effect } from "effect";
+import { ductsFirmSchema } from "@pe/agent-contracts";
+import { FIRM_SEED } from "../src/ducts-inputs.ts";
+import { DuctFiles, firmRootPath } from "../src/ducts-files.ts";
+import { resolveFirm } from "../src/reads/door.ts";
 import { createReceiptExport } from "../src/receipt-export.ts";
 import { journalAt } from "./effect-test.ts";
 
 afterEach(() => vi.unstubAllEnvs());
+// The ducts firm layer as the host reads it: the owner-keyed file (the Pod firm door's), decoded.
+const readFirm = async () => {
+  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer())));
+  return resolveFirm(await Effect.runPromise(files.firm("ducts")), ductsFirmSchema, FIRM_SEED);
+};
 
 test("no shared root: the firm read refuses with a typed reason, never the seed", async () => {
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
-  expect(firmFilePath()).toBeNull();
+  expect(firmRootPath()).toBeNull();
   expect(await readFirm()).toEqual({ refused: "no-shared-root" });
 });
 

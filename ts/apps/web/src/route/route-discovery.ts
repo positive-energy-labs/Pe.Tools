@@ -42,7 +42,10 @@ export function typedWorkCells(
   const focus = module.spec.fields.focus;
   return Object.entries(work.schema.shape).flatMap(([key, schema]): CellsDecl<any>[] => {
     const value = unwrap(schema as z.ZodType);
-    const segment = value instanceof z.ZodRecord && cell(value.valueType as z.ZodType) ? key : null;
+    // A family is a record of cells, or a fixed-key object of them (/ducts `criteria`: one cell per criterion and side).
+    const fixed = value instanceof z.ZodObject && !cell(value) && Object.keys(value.shape).length > 0 &&
+      Object.values(value.shape).every((s) => cell(s as z.ZodType));
+    const segment = (value instanceof z.ZodRecord && cell(value.valueType as z.ZodType)) || fixed ? key : null;
     if (segment === null && !cell(value)) return [];
     return [
       {

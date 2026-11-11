@@ -91,7 +91,8 @@ export async function admitPodArtifact(value:unknown,expected:string,hostOnly=fa
   }
   const {module}=z.object({module:z.object({data:z.unknown(),entries:z.record(z.string(),z.object({axes:z.unknown()}).passthrough())}).passthrough()}).parse(loaded);
   if("spec" in module) throw Error("Typed Pods require a separate host entry");
-  const catalog=requireLinkedCatalog(linkedCatalog().extend(Object.entries(module.entries).map(([key,entry])=>
+  // A kernel command a Pod verb names (the sheet pair) is already linked; its contract is the catalog's, never the Pod's.
+  const catalog=requireLinkedCatalog(linkedCatalog().extend(Object.entries(module.entries).filter(([key])=>!Object.hasOwn(contracts.commands,key)).map(([key,entry])=>
     commandLink(key,entry as unknown as Command,entry.axes as CatalogAxes,""))));
   const port=await createRouteAdmission({...evidence,loadedBindings:module,expectedFingerprint:evidence.wire.fingerprint,catalog:[...catalog.entries.values()]});
   const result=port.admitUnknown({...module,artifact:evidence.artifact});

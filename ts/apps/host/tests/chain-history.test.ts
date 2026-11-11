@@ -19,7 +19,7 @@ const edit = (revision: number, value: number): WorkWriteAck => ({
 const receipt = (id: string, state: "succeeded" | "cancelled", revision: number, value: number) =>
   actionReceiptSchema.parse({
     id,
-    key: "ducts.apply-losses",
+    key: "sheet.apply",
     state,
     ...(state === "succeeded" ? { result: {} } : { error: "rejected by you", status: 499 }),
     caller: { kind: "pea", context: "chain", thread: "chain" },

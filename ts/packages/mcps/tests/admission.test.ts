@@ -395,7 +395,7 @@ test.each(["open", "address", "workspace", "host"] as const)("loss preview reads
     }
     throw Error(`Unexpected ${url.pathname}`);
   });
-  const run = () => runCapability("ducts.plan-losses", {work}, {hostBaseUrl: "http://preflight.test", receipt: true, bridgeSessionId: "A", openDocumentId: "open-A"}, {door: "command", mutates: false, needs: "project-document"});
+  const run = () => runCapability("sheet.plan", {work}, {hostBaseUrl: "http://preflight.test", receipt: true, bridgeSessionId: "A", openDocumentId: "open-A"}, {door: "command", mutates: false, needs: "project-document"});
   if (scoped) {
     expect(await run()).toMatchObject({state: "succeeded"});
     expect(posts).toHaveLength(1);
@@ -406,14 +406,15 @@ test.each(["open", "address", "workspace", "host"] as const)("loss preview reads
   }
  }
 });
-test("loss preview refuses a non-ducts Work handle before any read or submission", async () => {
+test("a fans handle runs the losses preflight: it reads both Works at its document before any submission", async () => {
   const seen: string[] = [];
   vi.stubGlobal("fetch", async (input: Request | string | URL) => {
     seen.push(new URL(input instanceof Request ? input.url : String(input)).pathname);
-    throw Error("no request expected");
+    return new Response("unavailable", { status: 503 });
   });
   const work = { key: {route: "fans", binding: "host", target: null}, revision: 1 };
-  await expect(runCapability("ducts.plan-losses", {work}, {hostBaseUrl: "http://preflight.test", receipt: true}, {door: "command", mutates: false, needs: "project-document"}))
-    .rejects.toThrow("Expected the route:ducts Work handle");
-  expect(seen).toEqual([]);
+  await expect(runCapability("sheet.plan", {work}, {hostBaseUrl: "http://preflight.test", receipt: true}, {door: "command", mutates: false, needs: "project-document"}))
+    .rejects.toThrow("before preview (503)");
+  expect(seen.some((path) => path.endsWith("/ducts"))).toBe(true);
+  expect(seen.some((path) => path.endsWith("/fans"))).toBe(true);
 });

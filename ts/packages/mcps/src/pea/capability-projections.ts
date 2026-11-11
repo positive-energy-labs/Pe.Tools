@@ -45,7 +45,9 @@ export function podCapabilities(): Capability[] {
 export function dynamicCapabilityProvider(sources: CapabilitySources): Capability[] {
   return [
     ...podCapabilities(),
-    ...sources.routes.flatMap(routeRows),
+    // V3: every admitted route's Work is a Pea door, builtin or Pod; a builtin registration already listed is not repeated.
+    ...[...sources.routes, ...(sources.admittedRoutes?.() ?? []).flatMap((view) =>
+      view.work && !sources.routes.some((spec) => spec.route === view.work!.route) ? [view.work] : [])].flatMap(routeRows),
     ...viewRoutes(sources.admittedRoutes?.() ?? []).flatMap(routeViewRows),
     ...sources.packages.flatMap(packageRows),
     ...sources.skills.map(skillRow),

@@ -15,6 +15,7 @@ import { instancesExecutors, type InstancesActionDependencies } from "./instance
 import { takeoffExecutors } from "./takeoff-actions.ts";
 import { ductsExecutors } from "./ducts-actions.ts";
 import { catalogWorkExecutors } from "./catalog-work-actions.ts";
+import { sheetExecutors } from "./slots/sheet.ts";
 import { gatewayExecutor } from "./gateway-actions.ts";
 import { bootstrapExecutor } from "./bootstrap.ts";
 import { pagePublicationExecutor } from "./page-publication.ts";
@@ -25,6 +26,7 @@ import { Effect } from "effect";
 import { CANCEL_OPERATION_KEY } from "./bridge.ts";
 import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
 import { catalogWorkSpecs, commands, type WriteBoundaryBinding } from "@pe/agent-contracts";
+import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
 /** Composed once for this exact runtime. Invocation-local facts live only in bind/prepare. */
@@ -49,12 +51,18 @@ export function commandRegistry(
       deps.pictures!,
     ),
   };
+  // The ducts losses half of the sheet pair answers through the sheet dispatcher, not as its own entry.
+  const ducts = ductsExecutors(bridge, deps) as Record<string, CommandExecutor>;
+  const ductsWithoutSheet = Object.fromEntries(
+    Object.entries(ducts).filter(([key]) => !(Object.values(SHEET_COMMANDS) as string[]).includes(key)),
+  );
   for (const group of [
     familyExecutors(captures, bridge, deps),
     scheduleExecutors(captures, bridge, deps),
     instancesExecutors(deps),
     takeoffExecutors(captures, bridge, deps),
-    ductsExecutors(bridge, deps),
+    ductsWithoutSheet,
+    sheetExecutors(bridge, deps, ducts),
     catalogWorkExecutors(bridge, deps),
   ]) {
     for (const [key, factory] of Object.entries(group)) {

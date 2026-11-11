@@ -1,3 +1,6 @@
+import { SheetPane } from "../route/slots/sheet/pane.tsx";
+import { GoalPane } from "../route/slots/goal/pane.tsx";
+import type { Goal } from "@pe/agent-contracts/slots";
 import { refuse } from "../route/refusal";
 import * as Atom from "effect/reactivity/Atom";
 import { AttentionScope } from "../attention";
@@ -192,7 +195,7 @@ function TypedPane({mount,id,ctx}: {mount:TypedMount;id:string;ctx:DrawContext<a
   return <ValueScope value={ctx.value}><AttentionScope doc={doc} selected={selected} members={bindings?.members} elements={elements}>
     <NativeObservationScope value={ctx.value.current?observation:{...observation,scope:null}}>
       {mount.spec.panes[id]!.read!==mount.spec.core&&retainedValueLabel(ctx.value)?<p role="status">{retainedValueLabel(ctx.value)}</p>:null}
-      {mount.spec.panes[id]!.draw(ctx).node}
+      {kernelPane(mount, id, ctx) ?? mount.spec.panes[id]!.draw(ctx).node}
     </NativeObservationScope>
   </AttentionScope></ValueScope>;
 }
@@ -246,3 +249,12 @@ export function PublishedPlaceViews({ views }: { views: ReturnType<typeof create
   return [...views.entries].map(([id, entry]) => <PublishedView key={id} view={{ ...entry.view, thread: undefined, visible: entry.current() }} />);
 }
 function PublishedView({ view }: { view: View }) { useRouteViewBridge(view); return null; }
+
+/** ADR 0035 rules 3 and 8: the sheet and goal slots draw here, the same way on every route, builtin or Pod. */
+function kernelPane(mount: TypedMount, id: string, ctx: Parameters<TypedMount["spec"]["panes"][string]["draw"]>[0]): ReactNode | null {
+  const kernel = (mount.spec.panes[id] as { kernel?: "sheet" | "goal" }).kernel;
+  if (kernel === "sheet" && mount.spec.sheet)
+    return <SheetPane ctx={{ draw: ctx as never, slot: mount.spec.sheet, field: mount.spec.subject?.field }} />;
+  if (kernel === "goal") return <GoalPane ctx={{ goal: ctx.value.value as Goal | undefined }} />;
+  return null;
+}

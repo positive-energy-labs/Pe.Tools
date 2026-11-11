@@ -7,7 +7,7 @@ import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
 import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { ductsDesign, stagedDucts, subjectOf, workHandleSchema } from "@pe/agent-contracts";
+import { ductsDesign, ductsFirmSchema, stagedDucts, subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { Effect } from "effect";
@@ -24,7 +24,8 @@ import { runPods } from "./family-actions.ts";
 import { buildSheet, resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
 import { accessoryWrites } from "@pe/ducts-domain/sheet/accessory-writes";
 import { suggestRoster } from "@pe/ducts-domain/roster";
-import { firmLayer, workLayer } from "./ducts-inputs.ts";
+import { FIRM_SEED, firmLayer, workLayer } from "./ducts-inputs.ts";
+import { resolveFirm } from "./reads/evaluator.ts";
 import { followAcceptedJoins } from "./ducts-walk.ts";
 import { scopeApplyRequest, appliedCellPaths, pendingCount, fanWriteCells } from "@pe/ducts-domain/staged";
 import type { DuctsApply, DuctsHeal } from "@pe/host-contracts/generated";
@@ -142,6 +143,8 @@ export function healedCellPaths(
     : [];
 }
 
+/** Each kind's sealed plan entry: the losses plan is the sheet pair's (slice 7). */
+const PLAN_OF = { losses: "sheet.plan", heal: "ducts.plan-heal", "assign-fan": "ducts.plan-assign-fan" } as const;
 /** Work is the only authored input. Plan, rehearsal and apply share the same derivation and journal. */
 export function ductsExecutors(
   bridge: RevitBridge["Service"],
@@ -150,7 +153,12 @@ export function ductsExecutors(
 ) {
   const bind = async (ctx: CommandContext, kind: Kind, phase: Phase) => {
     const target = targetOf(ctx);
-    const raw = ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle;
+    // The sheet pair takes the asking route's own handle (/ducts or /fans); the sibling comes from readWorks or the same document.
+    const primary = ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle;
+    const siblings = z.record(z.string(), workHandleSchema).optional().parse(ctx.admission.input.readWorks);
+    const ductsView = primary.key.route === "ducts" || siblings?.ducts ? null : await ctx.work.view({ ...primary.key, route: "ducts" }, "ducts");
+    const raw = primary.key.route === "ducts" ? primary : siblings?.ducts ?? ductsView?.handle;
+    if (!raw) throw refused("Ducts Work is unavailable", "work.unavailable");
     const { process } = await lifetime(bridge, target, "project", deps);
     const doc = await ctx.selectWork(tools.ducts.work, raw, (_doc, cells) => ({
       edits: tools.ducts.work.editable,
@@ -163,7 +171,7 @@ export function ductsExecutors(
     const readWorks = z.record(z.string(), workHandleSchema).optional().parse(ctx.admission.input.readWorks);
     if (readWorks?.fans && workKey(readWorks.fans.key) !== workKey(fanView.handle.key))
       throw refused("Fans Work belongs to another document", "work.target");
-    const fans = await ctx.selectWork(tools.fans.work, readWorks?.fans ?? fanView.handle, (_doc, cells) => ({
+    const fans = await ctx.selectWork(tools.fans.work, readWorks?.fans ?? (primary.key.route === "fans" ? primary : fanView.handle), (_doc, cells) => ({
       edits: tools.fans.work.editable,
       cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
     }),
@@ -174,7 +182,7 @@ export function ductsExecutors(
       .receipts()
       .filter(
         (r) =>
-          r.key === `ducts.plan-${kind}` &&
+          r.key === PLAN_OF[kind] &&
           r.state === "succeeded" &&
           canonicalRouteInput(r.target) === canonicalRouteInput(ctx.admission.target),
       )
@@ -204,7 +212,8 @@ export function ductsExecutors(
           groups: ductsScope?.groups?.map((code) => String(subjectOf(code).key)),
           walk: fanScope?.walk,
         };
-        const firm = firmLayer(await runPods(deps, deps.files!.firm));
+        // 2b's refusal-aware layer over the owner-keyed firm file (the Pod firm door reads the same file).
+        const firm = firmLayer(resolveFirm(await runPods(deps, deps.files!.firm("ducts")), ductsFirmSchema, FIRM_SEED));
         const criteria = resolveCriteria(workLayer(design), null, firm);
         const nativeRead = deps.nativeRead;
         if (!nativeRead) throw refused("Ducts preparation requires the root native Read capability", "read.unavailable",
@@ -395,7 +404,8 @@ export function ductsExecutors(
             ).join("; "),
         };
     }
-    const handle = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
+    const asked = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
+    const handle = { key: { ...asked.key, route: "ducts" } };
     const paths = phase === "apply" ? entry.retires(p.input, value) : [];
     const fanPaths = paths.filter((path) => tools.fans.work.editable.some((pattern) => pattern[0] === path[0]),
     );
@@ -427,8 +437,8 @@ export function ductsExecutors(
     ...Object.fromEntries(
       (
         [
-          ["ducts.plan-losses", "losses", "plan"],
-          ["ducts.apply-losses", "losses", "apply"],
+          ["sheet.plan", "losses", "plan"],
+          ["sheet.apply", "losses", "apply"],
           ["ducts.apply-heal", "heal", "apply"],
           ["ducts.apply-assign-fan", "assign-fan", "apply"],
           ["ducts.rehearse-heal", "heal", "rehearse"],

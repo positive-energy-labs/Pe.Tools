@@ -29,7 +29,7 @@ test("the admitted criteria editor resolves Work, and host Undo resolves the fir
   // Q2: criteria belongs to the ducts Work, through its own edit door.
   const changed = await settle(
     f.owner.invoke("edit", {
-      patches: [{ path: ["criteria"], value: { edit: { value: { allowanceInWg: { return: 0.35 } } } } }],
+      patches: [{ path: ["criteria", "allowanceReturnInWg"], value: { edit: { value: 0.35 } } }],
       history: { label: "Return allowance" },
     }) as Observation<WorkWriteOutcome>,
   );
