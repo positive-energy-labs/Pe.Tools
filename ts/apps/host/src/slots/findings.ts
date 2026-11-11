@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { z } from "zod";
-import { commands, refusalText, workHandleSchema, type WorkKey } from "@pe/agent-contracts";
+import { address, bindWork, commands, refusalText, workHandle, workHandleSchema, type ActionAdmission, type WorkKey } from "@pe/agent-contracts";
 import {
   FINDINGS_DOORS,
   FINDINGS_OWNER,
@@ -11,6 +11,8 @@ import {
 } from "@pe/agent-contracts/slots";
 import type { RouteWorkspace } from "@pe/runtime";
 import { command, io, refused, StepFailure, type CommandWorkReads } from "../command-executor.ts";
+import type { RevitBridge } from "../bridge.ts";
+import { currentDocument } from "../document-lifetime.ts";
 import { productRouteWorkPath } from "../product-paths.ts";
 
 /*
@@ -61,20 +63,38 @@ const handleOf = (input: { work?: z.output<typeof workHandleSchema> }) => {
   return input.work;
 };
 
-export const findingsExecutors = (workspace: RouteWorkspace | undefined) => ({
+/*
+ * gate-ef940d36: Pea's first call carried no handle and was refused. A call without one binds the
+ * findings Work of the admitted document itself, as a route's mount binds its own: the target is
+ * one exact open document, so there is nothing ambiguous to resolve. A handle still wins.
+ */
+async function bound<I extends { work?: z.output<typeof workHandleSchema> }>(
+  workspace: RouteWorkspace,
+  bridge: RevitBridge["Service"],
+  { target, input }: { target: ActionAdmission["target"]; input: I },
+): Promise<I> {
+  if (input.work) return input;
+  if (target.kind !== "document") throw refused("The document's findings Work handle is required");
+  const session = await currentDocument(bridge, target.ref, "project");
+  const doc = session.state!.openDocuments.find((d) => d.openId === target.ref.openId)!;
+  const key = bindWork(FINDINGS_OWNER, doc.address ? address(doc.address) : null, undefined, target.ref);
+  return { ...input, work: workHandle(key, (await workspace.view(key, FINDINGS_OWNER))?.revision ?? 0) };
+}
+
+export const findingsExecutors = (workspace: RouteWorkspace | undefined, bridge: RevitBridge["Service"]) => ({
   [FINDINGS_DOORS.list]: command(commands[FINDINGS_DOORS.list], commands[FINDINGS_DOORS.list].input, {
-    async bind({ admission: { input } }) {
+    async bind({ admission }) {
       if (!workspace) throw refused("Work storage is unavailable");
-      handleOf(input);
+      const input = await bound(workspace, bridge, admission);
       return { effects: [], prepare: async () => input };
     },
     run: (ctx, execution) =>
       io(async () => ({ findings: await findingsList(ctx.work, findingsKey(handleOf(execution.prepared).key), execution.prepared.subject) })),
   }),
   [FINDINGS_DOORS.write]: command(commands[FINDINGS_DOORS.write], commands[FINDINGS_DOORS.write].input, {
-    async bind({ admission: { input } }) {
+    async bind({ admission }) {
       if (!workspace) throw refused("Work storage is unavailable");
-      handleOf(input);
+      const input = await bound(workspace, bridge, admission);
       return { effects: [{ kind: "directory", path: productRouteWorkPath() }], prepare: async () => input };
     },
     run: ({ caller, work }, execution) =>

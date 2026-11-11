@@ -70,12 +70,18 @@ async function doors() {
     revision,
     authors: async () => (await findingsList(workspace, key)).map((f) => [f.id, f.by]),
     /** `on` is the route whose own Work handle the caller holds; a row verb on /fans holds Fans'. */
-    async write(id: string, finding: FindingInput, caller: Caller, on = "findings") {
-      const work = on === "findings" ? workHandle(key, await revision()) : workHandle({ ...key, route: on }, 7);
+    /** `on: null` sends no handle, as Pea's first call does: the host binds the target document's. */
+    async write(id: string, finding: FindingInput, caller: Caller, on: string | null = "findings") {
+      const work = on === null ? undefined : on === "findings" ? workHandle(key, await revision()) : workHandle({ ...key, route: on }, 7);
       const response = await post({ id, key: "findings.write", target: { kind: "document", ref: socket.target },
-        input: { work, finding } }, caller);
+        input: { ...(work ? { work } : {}), finding } }, caller);
       expect(response.status, await response.clone().text()).toBeLessThan(400);
       expect(await native.journal.wait(id), id).toMatchObject({ state: "succeeded" });
+    },
+    async list(id: string, caller: Caller) {
+      const response = await post({ id, key: "findings.list", target: { kind: "document", ref: socket.target }, input: {} }, caller);
+      expect(response.status, await response.clone().text()).toBeLessThan(400);
+      return native.journal.wait(id);
     },
     door: (verb: "apply" | "history", body: unknown, caller: Caller = peaCaller) =>
       withInvocationContext({ caller }, () => routes.fetch(new Request(
@@ -130,5 +136,15 @@ test("a row verb's own route handle (Fans, Families) addresses the same document
     await d.write("fans-row", input("h1", port, "check", "fail"), human, "fans");
     await d.write("families-row", input("h2", row, "note"), human, "families");
     expect(await d.authors()).toEqual([["p1", "pea"], ["h1", "person"], ["h2", "person"]]);
+  } finally { await d.close(); }
+});
+
+/* gate-ef940d36: Pea's first findings.write and findings.list were refused for a missing handle, then retried. */
+test("Pea's first findings.write and findings.list, with no handle, succeed on the target document's findings Work", async () => {
+  const d = await doors();
+  try {
+    await d.write("first-write", input("p1", port, "note"), d.peaCaller, null);
+    expect(await d.authors()).toEqual([["p1", "pea"]]);
+    expect(await d.list("first-list", d.peaCaller)).toMatchObject({ state: "succeeded", result: { findings: [expect.objectContaining({ id: "p1", by: "pea" })] } });
   } finally { await d.close(); }
 });
