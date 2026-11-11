@@ -64,6 +64,7 @@ import { GoToSubject } from "./go-to";
 import { RulingBody, useMarks } from "./rulings";
 import { RunDetail, runOf } from "./run-detail";
 import { DUCTS_FLAT, DUCTS_LAYER_OPTIONS } from "./teaching";
+import { issueOf, issueSubject } from "../../cell-focus";
 
 type PictureContext = DuctsDrawContext;
 interface DuctsPictureProps {
@@ -195,8 +196,8 @@ function Content({
   };
   const select = (selected: string) =>
     ctx.page.select(selected ? [{ kind: "focus", id: selected }] : []);
-  const pickIssue = (selected: string) => {
-    select(selected);
+  const pickIssue = (issue: string) => {
+    select(issueSubject(issue));
     ctx.page.query({ rulingSearch: emptyListSearch() });
   };
   const movePicture = picturePageMove<PicturePage<string, "schematic">>(
@@ -389,7 +390,7 @@ function Content({
 
   // A page write, as the tree's: the picture registers the selection it becomes.
   const pick = (id: number | null) => {
-    select(id == null ? "" : String(id));
+    select(id == null ? "" : (elements.keyOf(id) ?? ""));
   };
   const widen = useMemo(
     () =>
@@ -553,7 +554,7 @@ function Content({
       ]}
       issues={issues}
       pointOf={pointOf}
-      issue={page.selected}
+      issue={issueOf(page.selected)}
       onRuling={ruling}
     />
   );
@@ -569,7 +570,7 @@ function Content({
         label: page.system.join(", "),
         refreshing: identity.refreshing,
       }}
-      page={{ ...page, issue: page.selected }}
+      page={{ ...page, issue: issueOf(page.selected) }}
       setPage={movePicture}
       renderPane={renderPane}
       onPose={onPose}

@@ -5,8 +5,6 @@ import { isValidElement } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { elementKey } from "@pe/kit/lang/attention";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { attentionSubjects } from "../ducts/cell-focus";
-import { ductElements } from "../ducts/identity";
 import { snapshot } from "../ducts/test-fixture";
 import sheetFixture from "../ducts/sheet/sheet.fixture.json";
 import { makeAtomRegistry } from "../shell/owner";
@@ -55,7 +53,7 @@ test("a Fans Ledger fix is a link that lands on /ducts with its element selected
   const arrived = f.mount(f.admitted.owner, href.searchParams, "ducts-arrival");
   const selected = arrived.native.page.read().selected as readonly { kind: string; id: string }[];
   expect(selected).toHaveLength(1);
-  expect([...attentionSubjects(selected.map((s) => s.id), ductElements(snapshot))]).toEqual([elementKey(element.uniqueId)]);
+  expect(selected.map((s) => s.id)).toEqual([elementKey(element.uniqueId)]);
   // Following the link wrote nothing: /ducts Work is where it was.
   expect(f.owner.work()?.revision ?? 0).toBe(ducts0);
 });

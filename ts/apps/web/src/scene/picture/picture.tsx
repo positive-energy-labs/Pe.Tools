@@ -199,18 +199,18 @@ export function membersWithStrands(members: Members, strands: readonly PictureSt
 }
 
 /** What a mark pick writes to the page: a subject mark (a strand) selects its own key; an issue
- * mark selects its element and the issue. */
-export const markPick = (target: IssueTarget) =>
+ * mark selects its element's SubjectRef and the issue. The selection holds SubjectRefs, never an ElementId. */
+export const markPick = (target: IssueTarget, elements: ElementIndex) =>
   target.subject
     ? { selected: target.key, issue: "" }
-    : { selected: String(target.elementId), issue: target.key };
+    : { selected: elements.keyOf(target.elementId) ?? "", issue: target.key };
 
 /** What a jump to `key` selects and frames. An element frames itself, not the section a pick
  * widens it to (a footnote names the element); a group (a run, an issue, a path) selects itself
  * and frames its element leaves. */
 export function jumpSubject(key: SubjectKey, members: Members, elements: ElementIndex) {
   const id = elements.idOf(key);
-  if (Number.isFinite(id) && id > 0) return { selected: String(id), ids: new Set([id]) };
+  if (Number.isFinite(id) && id > 0) return { selected: key as string, ids: new Set([id]) };
   const ids = leavesOf(members, key).map(elements.idOf);
   return { selected: key as string, ids: new Set(ids.filter((n) => Number.isFinite(n) && n > 0)) };
 }
@@ -419,13 +419,9 @@ export function Picture<L extends string, F extends string>({
     setPage({ picture: picture === "model" && flat ? flat.key : "model" }, { history: "push" });
 
   // The page's element pick; a claim or a row selects through `issue` and its members.
-  const pickedId = /^\d+$/.test(page.selected) ? Number(page.selected) : null;
-  const pickedKey: SubjectKey | null =
-    pickedId != null
-      ? elements.keyOf(pickedId)
-      : page.selected.includes(":")
-        ? (page.selected as SubjectKey)
-        : null;
+  const pickedElement = elements.idOf(page.selected);
+  const pickedId = Number.isFinite(pickedElement) ? pickedElement : null;
+  const pickedKey: SubjectKey | null = page.selected.includes(":") ? (page.selected as SubjectKey) : null;
   const widen = content.widen;
   const selectionOf = (id: number) => {
     const key = elements.keyOf(id);
@@ -464,7 +460,7 @@ export function Picture<L extends string, F extends string>({
     setAbsent(null);
     const key = id == null ? null : elements.keyOf(id);
     if (id == null || key) content.onPick?.(key);
-    setPage({ selected: id == null ? "" : String(id), issue: "" }, { history: "push" });
+    setPage({ selected: key ?? "", issue: "" }, { history: "push" });
   };
   // Escape and a click on empty picture both clear; neither pushes history when nothing is picked.
   const clearPick = () => {
@@ -472,11 +468,11 @@ export function Picture<L extends string, F extends string>({
   };
   const pickIssue =
     content.onIssuePick ??
-    ((target: IssueTarget) => setPage(markPick(target), { history: "push" }));
+    ((target: IssueTarget) => setPage(markPick(target, elements), { history: "push" }));
   const pickMark = (target: IssueTarget) => {
     if (!target.subject) return pickIssue(target);
     content.onPick?.(target.key as SubjectKey);
-    setPage(markPick(target), { history: "push" });
+    setPage(markPick(target, elements), { history: "push" });
   };
   // A subject mark lights its own key; an issue mark lights `issue:<key>` (useIssueHover).
   const hoverMark = (target: IssueTarget | null) =>

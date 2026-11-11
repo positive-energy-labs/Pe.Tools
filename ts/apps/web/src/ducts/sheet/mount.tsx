@@ -16,7 +16,7 @@ import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import * as Atom from "effect/reactivity/Atom";
 import { useMemo, useRef } from "react";
 import type { FansDrawContext } from "../../fans/route.ts";
-import { attentionSubjects } from "../cell-focus";
+import { issueOf, issueSubject, selectedKeys } from "../cell-focus";
 import { ductsLink } from "../identity.ts";
 import { subjectNamer } from "../subject-text";
 import { describeCloser, DUCTS_FIXES, type Closer, type CloserAction, type CloserLink } from "./closer";
@@ -130,8 +130,8 @@ function PictureContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSn
     select,
   );
   const selection = useMemo(
-    () => Atom.make(attentionSubjects(authored.selected.map(({ id }) => id), ductElements(snapshot))),
-    [authored.selected, snapshot],
+    () => Atom.make<ReadonlySet<SubjectKey>>(new Set(selectedKeys(authored.selected.map(({ id }) => id)))),
+    [authored.selected],
   );
   const pickedFans = authored.fan.kind === "all" ? "all" : authored.fan.ids;
   const nativeSnapshot = ctx.value.value?.sheetSnapshot;
@@ -149,7 +149,7 @@ function PictureContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSn
   const ownPane = ((renderPane: TeachingPaneRender) => (
     <SheetPicture
       props={{
-        page: { ...authored, selected, issue: selected },
+        page: { ...authored, selected, issue: issueOf(selected) },
         setPage,
         work: { doc: workDoc },
         selection,
@@ -317,9 +317,9 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
         closerOf: closerOf,
         close: (closer: Closer) => changeInputs(editsFor([closer]), { label: closer.verb }),
         closeMany: (closers: readonly Closer[]) => changeInputs(editsFor(closers)),
-        focusedBlocker: selected || null,
+        focusedBlocker: issueOf(selected) || null,
         focusBlocker: (issue: string | null) => {
-          select(issue ?? "");
+          select(issue ? issueSubject(issue) : "");
         },
       }}
     />
@@ -358,9 +358,8 @@ function SheetFrame({
   const elements = ductElements(snapshot);
   const go = (id: number) => {
     const key = elements.keyOf(id);
-    return jump?.current && key
-      ? jump.current(key)
-      : ctx.selection.set([{ kind: "focus", id: String(id) }]);
+    if (!key) return;
+    return jump?.current ? jump.current(key) : ctx.selection.set([{ kind: "focus", id: key }]);
   };
   return (
     <>

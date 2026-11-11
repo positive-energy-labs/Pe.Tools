@@ -7,6 +7,7 @@
  */
 import { AttentionRoot } from "#/attention";
 import { ElementIndexContext } from "#/element-index";
+import { selectedKeys } from "../cell-focus";
 import { ductElements } from "./../identity";
 import { boundsOfPoints } from "#/scene/orbit";
 import type { ModelPicture } from "#/scene/picture/model";
@@ -123,7 +124,7 @@ function mount(
   const page = Atom.make({ selected: "", issue: "" });
   const selection = Atom.make(
     (get): ReadonlySet<SubjectKey> =>
-      new Set(/^\d+$/.test(get(page).selected) ? [elements.keyOf(Number(get(page).selected))!] : []),
+      new Set(selectedKeys([get(page).selected])),
   );
   const setPage = vi.fn();
   const pageOf = () => ({
@@ -172,9 +173,9 @@ it("a pick writes the page's selection and the stage pivot follows it", () => {
   const { registry, page, setPage, rerender } = mount();
   expect(seen.stage!.selectedBounds).toBeNull();
   act(() => seen.model!.onPick(a!.id, { x: 0, y: 0 }));
-  expect(setPage).toHaveBeenCalledWith({ selected: String(a!.id), issue: "" }, { history: "push" });
+  expect(setPage).toHaveBeenCalledWith({ selected: elements.keyOf(a!.id)!, issue: "" }, { history: "push" });
   // The route derives the selection atom from the page it just wrote.
-  act(() => registry.set(page, { selected: String(a!.id), issue: "" }));
+  act(() => registry.set(page, { selected: elements.keyOf(a!.id)!, issue: "" }));
   rerender();
   // Registered for the document: rows elsewhere (the ledger) read the same selection.
   expect([...registry.get(attention("d")).selected]).toEqual([elements.keyOf(a!.id)]);
@@ -270,7 +271,7 @@ it("reads a selected duct and run from the current sheet, including missing data
     },
   });
   const view = mount(open);
-  act(() => view.registry.set(view.page, { selected: String(a!.id), issue: "" }));
+  act(() => view.registry.set(view.page, { selected: elements.keyOf(a!.id)!, issue: "" }));
   view.rerender();
   const duct = render(<>{seen.model!.readout}</>);
   expect(duct.container.querySelector(`[data-facts="${a!.id}"]`)).not.toBeNull();

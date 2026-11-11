@@ -333,7 +333,7 @@ export function SheetPicture({
       covered={NONE}
       issues={issues}
       pointOf={pointOf}
-      issue={page.selected}
+      issue={page.issue}
       onRuling={() => {}}
     />
   );
@@ -379,7 +379,7 @@ export function SheetPicture({
         label: "fan sheet",
         refreshing: props.refreshing,
       }}
-      page={{ ...page, issue: page.selected }}
+      page={page}
       setPage={setPage}
       renderPane={renderPane}
       onPose={props.onPose}
