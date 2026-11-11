@@ -2,9 +2,11 @@ import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test, vi } from "vite-plus/test";
+import { expect, test } from "vite-plus/test";
 import { bindWork, ductsDocumentSchema, familiesRouteState, fansRouteState, workKey } from "@pe/agent-contracts";
 import { decode, subjectCode, uniqueIdSchema } from "../../../packages/agent-contracts/src/subject-ref.ts";
+import { readStoredNotices } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "../src/notice-feed.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 
@@ -15,7 +17,6 @@ test("stored Families Work in the old [family,type,parameter] spelling is discar
   const spec = { ...familiesRouteState, route: "subject-ref-discard" };
   const key = bindWork(spec.route, null), targetKey = workKey(key);
   const path = join(dir, `${createHash("sha256").update(`${key.route}:${targetKey}`).digest("hex")}.json`);
-  const log = vi.spyOn(console, "warn").mockImplementation(() => {});
   const cell = { edit: { value: { value: "3", storageType: "String" } } };
   const stored = (cellKey: string) =>
     JSON.stringify({ format: "route-state-record-v2", targetKey, route: key.route,
@@ -29,11 +30,13 @@ test("stored Families Work in the old [family,type,parameter] spelling is discar
     await writeFile(path, stored('["F","T","P"]'));
     expect(await open()).toMatchObject({ revision: 0, doc: { cells: {} } });
     expect(await readdir(dir)).toEqual([]);
-    expect(log.mock.calls.at(-1)?.[0]).toMatch(/Discarded stored Work .*SubjectRef/);
+    // The loss is a notice in the feed's durable source, in the runtime's own words.
+    expect(readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === path))
+      .toMatchObject([{ class: "discard", reason: expect.stringContaining("SubjectRef") }]);
     // The canonical SubjectRef spelling is kept as written.
     await writeFile(path, stored('name:["F","T"]#field:P'));
     expect(await open()).toMatchObject({ revision: 7, doc: { cells: { 'name:["F","T"]#field:P': cell } } });
-  } finally { log.mockRestore(); await rm(dir, { recursive: true, force: true }); }
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("the Work groups door refuses the old bare group spelling", () => {

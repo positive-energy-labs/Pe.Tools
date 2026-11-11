@@ -70,8 +70,10 @@ import {
   HttpServerResponse,
 } from "effect/http";
 import { createHash } from "node:crypto";
+import { unwatchFile, watchFile } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readStoredNotices } from "@pe/host-contracts/store";
 import { z } from "zod";
 import type { CapabilityContent } from "../../../packages/mcps/src/pea/capabilities.ts";
 import { skillSnapshot } from "../../../packages/mcps/src/pea/skill-publication.ts";
@@ -129,7 +131,12 @@ import {
   resumeWork,
   type NavigationSources,
 } from "./navigation.ts";
-import { createNoticeFeed, noticeRows, type NoticeSources } from "./notice-feed.ts";
+import {
+  createNoticeFeed,
+  noticeRows,
+  storedNoticesPath,
+  type NoticeSources,
+} from "./notice-feed.ts";
 import { observePageTarget } from "./pages-route.ts";
 import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
 import {
@@ -1314,6 +1321,7 @@ function* hostPeRoutes(
             receipts: [...noticeCache.receipts.values()],
             works: noticeCache.works,
             machine,
+            stored: readStoredNotices(storedNoticesPath()),
           },
           Date.now(),
         ),
@@ -1337,7 +1345,10 @@ function* hostPeRoutes(
         threads.observe({ kind: "threads" }, changed) ?? (() => {}),
         routes.workspace.subscribeUncaptured(readWorks),
         bridge?.subscribe(readWorks) ?? (() => {}),
+        // A refusal is posted by whichever store met the bad file, so the file is the event.
+        () => unwatchFile(storedNoticesPath(), changed),
       ];
+      watchFile(storedNoticesPath(), { interval: 2_000 }, changed);
       try {
         releases.push(hostMachineFace.observe(() => changed()));
       } catch {

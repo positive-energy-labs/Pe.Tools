@@ -1,8 +1,9 @@
 import { createServer, type Server } from "node:http";
 import { once } from "node:events";
-import { existsSync, readFileSync } from "node:fs";
 import { z } from "zod";
 import { remoteIngressSchema } from "@pe/host-contracts/pe-api";
+import { readStored } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "./notice-feed.ts";
 
 const configSchema = z.strictObject({
   listenHost: z.union([z.ipv4(), z.ipv6()]),
@@ -23,8 +24,18 @@ const configSchema = z.strictObject({
     )
     .min(1),
 });
-export const readRemoteIngress = (path: string) =>
-  existsSync(path) ? configSchema.parse(JSON.parse(readFileSync(path, "utf8"))) : null;
+/**
+ * A person writes this file by hand, so it is `keep` (ADR 0039 rule 1): one that does not decode is
+ * refused with a notice, its bytes stay, no remote listener opens, and the host starts.
+ */
+export function readRemoteIngress(path: string) {
+  const read = readStored(path, configSchema, {
+    class: "keep",
+    place: "Remote ingress configuration",
+    notices: storedNoticesPath(),
+  });
+  return read.kind === "ok" ? read.value : null;
+}
 
 /** A separate listener keeps SSH-forwarded loopback traffic outside the local human door. */
 export function remoteListener(target: Server, requests: WeakSet<object>) {
