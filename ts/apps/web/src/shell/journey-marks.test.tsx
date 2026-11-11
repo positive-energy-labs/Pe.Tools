@@ -7,6 +7,7 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { roomsRouteState, workFingerprintSchema } from "@pe/agent-contracts";
 import { module } from "../rooms/route";
 import { DEMO_ROOMS } from "../rooms/demo";
+import { roomsGoal } from "../rooms/goal";
 import { scrollBody } from "../route/body";
 import { mountTypedRoute } from "./typed-mount";
 import { createFixtureWorkDoor } from "./fixture-work-door";
@@ -18,6 +19,8 @@ import { RouteVisibility } from "../route/activity";
 
 const call = vi.hoisted(() => vi.fn(async (door: unknown, ..._: unknown[]) => (door === "view.publish" ? { revision: 1 } : {})));
 vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
+// The core read is the route's Goal (slice 10): a rooms packet carries its fields.
+const GOAL = roomsGoal(roomsRouteState.schema.parse({}), DEMO_ROOMS, "");
 const fingerprint = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
 const roomsProbe = (spec: Partial<typeof module.spec> = {}) =>
   route({ ...module.spec, ...spec, panes: { main: { ...module.spec.panes.main, body: "scroll" as const, draw: () => scrollBody(<p>Rooms body</p>) } } });
@@ -32,7 +35,7 @@ function held(typed: ReturnType<typeof roomsProbe>, frames: Parameters<UseSource
       sources: { "rooms.workspace": { kind: "use", open: (_ctx, deliver) => { frames.push(deliver); return () => {}; } } } });
 }
 const complete = (deliver: Parameters<UseSource["open"]>[1]) => deliver({ kind: "complete", revision: 1, value: { key: "busy", generation: 0, version: 1, state: "current", value: {
-  data: { roomsWork: roomsRouteState.schema.parse({}), handle: null, snapshot: DEMO_ROOMS, trace: null, traceError: null, plan: null, planError: null },
+  data: { ...GOAL, roomsWork: roomsRouteState.schema.parse({}), handle: null, snapshot: DEMO_ROOMS, trace: null, traceError: null, plan: null, planError: null },
   evaluation: "busy", inputs: "busy", origin: { kind: "fixture" }, trace: [], freshness: "current",
   coverage: { requested: [], covered: [], unknown: [], refused: [] } } } });
 const router = (component: () => React.ReactNode) =>
@@ -41,7 +44,7 @@ const router = (component: () => React.ReactNode) =>
 test("6.1 a pane whose reading is pending says aria-busy, and clears it when the reading settles", async () => {
   const frames: Parameters<UseSource["open"]>[1][] = [];
   const mount = mountTypedRoute(
-    { ...module, spec: { ...module.spec, panes: { main: { ...module.spec.panes.main, body: "scroll" as const, draw: () => scrollBody(<p>Rooms body</p>) } } } },
+    { ...module, spec: { ...module.spec, panes: { ...module.spec.panes, main: { ...module.spec.panes.main, body: "scroll" as const, draw: () => scrollBody(<p>Rooms body</p>) } } } },
     { address: { read: () => new URLSearchParams(), write: () => {}, subscribe: () => () => {} }, fixture: null,
       target: { kind: "document", ref: { session: "busy", openId: "rooms" } }, work: { address: null, open: { session: "busy", openId: "rooms" } },
       custody: { current: () => true }, memory: () => ({}) },
@@ -56,7 +59,7 @@ test("6.1 a pane whose reading is pending says aria-busy, and clears it when the
     const pane = await screen.findByRole("region", { name: "Rooms" });
     expect(pane.getAttribute("aria-busy")).toBe("true");
     await act(async () => frames.at(-1)!({ kind: "complete", revision: 1, value: { key: "busy", generation: 0, version: 1, state: "current", value: {
-      data: { roomsWork: roomsRouteState.schema.parse({}), handle: null, snapshot: DEMO_ROOMS, trace: null, traceError: null, plan: null, planError: null },
+      data: { ...GOAL, roomsWork: roomsRouteState.schema.parse({}), handle: null, snapshot: DEMO_ROOMS, trace: null, traceError: null, plan: null, planError: null },
       evaluation: "busy", inputs: "busy", origin: { kind: "fixture" }, trace: [], freshness: "current",
       coverage: { requested: [], covered: [], unknown: [], refused: [] } } } }));
     await settled(pane);

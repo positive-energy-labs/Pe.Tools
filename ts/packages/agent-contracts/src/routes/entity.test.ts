@@ -5,12 +5,12 @@ import { podMemberCode } from "../pods-read.ts";
 describe("an entity route's address", () => {
   test("Family declaration publishes its spec keys and pose through one codec", () => {
     const family = routeAddress("family");
-    const page = { stage: "history" as const, pod: "p", path: "a.json", pane: "output" as const };
+    const page = { stage: "history" as const, pod: "p", member: { kind: "ids" as const, ids: [podMemberCode({ pod: "p", path: "a.json" })] }, pane: "output" as const };
     const link = family.link(page);
     expect(new URL(link, "http://x").pathname).toBe("/family");
     expect(family.read(Object.fromEntries(new URL(link, "http://x").searchParams)).page).toMatchObject(page);
     expect(family.keys).toContain("pane");
-    expect(Object.keys(family.agent.fields.shape)).toEqual(expect.arrayContaining(["stage", "pane", "pod", "path", "query", "sort", "hidden", "inspector"]));
+    expect(Object.keys(family.agent.fields.shape)).toEqual(expect.arrayContaining(["stage", "pane", "pod", "member", "query", "sort", "hidden", "inspector"]));
     const schedules = routeAddress("schedules");
     expect(Object.keys(schedules.agent.fields.shape)).toEqual(expect.arrayContaining(["workspaceId", "table", "cell"]));
   });
@@ -34,7 +34,7 @@ describe("an entity route's address", () => {
 
   test("a subject pick pushes while table and pane pose changes replace", () => {
     const family = routeAddress("family");
-    expect(family.history({ pod: "a" }, { pod: "b" })).toBe("push");
+    expect(family.history({ member: { kind: "ids", ids: [] } }, { member: { kind: "ids", ids: [podMemberCode({ pod: "p", path: "b.json" })] } })).toBe("push");
     expect(family.history({ sort: { columns: [] } }, { sort: { columns: [{ key: "x", dir: "asc" }] } })).toBe("replace");
     expect(family.history({ pane: "spec" }, { pane: "output" })).toBe("replace");
   });

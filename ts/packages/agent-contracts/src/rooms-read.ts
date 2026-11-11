@@ -2,6 +2,7 @@ import { z } from "zod";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { roomsRouteState } from "./rooms.ts";
 import { workHandleSchema } from "./command.ts";
+import { goalSchema } from "./slots/goal.ts";
 export const roomsPlanImageSchema = z.object({
   href: z.string(),
   registration: z.object({
@@ -33,4 +34,8 @@ export const roomsData = z.object({
   traceError: z.string().nullable(),
   plan: roomsPlanReadingSchema,
   planError: z.string().nullable(),
+  // The view's Goal (ADR 0035 rule 8): the partition inbox, what is left before the rooms stand.
+  ...goalSchema(z.string()).shape,
+  // The room fields are the regions table's cells; the Goal carries none of its own.
+  inputs: z.array(z.never()).readonly(),
 });

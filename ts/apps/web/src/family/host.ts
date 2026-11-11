@@ -9,6 +9,7 @@ import { familySpec, podProfile } from "@pe/host/builtin-read-handles";
 import { workBinding } from "@pe/host/reads/inputs";
 
 import { familyArgs, familyData } from "@pe/agent-contracts";
+import { familyGoal } from "./goal.ts";
 const workspaceArgs = familyArgs.extend({ target: executionTargetSchema });
 export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<typeof familyData>> } = {
   workspace: read("family.workspace", {
@@ -33,14 +34,20 @@ export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<t
         args.member && !attached
           ? await ctx.read(familySpec, args.member)
           : { doc: null, error: null };
+      const spec =
+        attached ?? (args.member && document.doc ? { member: args.member, doc: document.doc } : null);
       return {
+        ...familyGoal(familyWork, {
+          member: !!args.member,
+          profileError: loaded.error,
+          spec: !!spec,
+          specError: document.error,
+        }),
         familyWork,
         handle: saved ? { key, revision: saved.revision } : null,
         profile: loaded.profile,
         profileError: loaded.error,
-        spec:
-          attached ??
-          (args.member && document.doc ? { member: args.member, doc: document.doc } : null),
+        spec,
         specError: document.error,
         pods: (await ctx.read(localRead("pod.list"), {})).pods,
       };

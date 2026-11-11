@@ -6,7 +6,9 @@ import { DEMO_PLAN, DEMO_ROOMS, DEMO_VIEW } from "./demo";
 import { roomsPageSchema } from "./page";
 import { RoomsPlan } from "./plan";
 import { Pane } from "@pe/kit/lang/pane";
-import { RoomsTable, roomRows } from "./table";
+import { RoomsTable } from "./table";
+import { roomRows } from "./rows";
+import { roomsGoal } from "./goal";
 import { scrollBody } from "../route/body";
 import { regionSubject } from "./subject";
 
@@ -141,11 +143,11 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
       sources:{"rooms.workspace":{kind:"use",open:(_context,deliver)=>{frames.push(deliver);return ()=>{};}}}});
   const ctx=()=>mount.draw("main") as import("./route").RoomsContext;
   const packet=(label:string)=>({key:"retained",generation:0,version:1,state:"current",value:{
-    data:{roomsWork:roomsRouteState.schema.parse({}),handle:null,snapshot:{...DEMO_ROOMS,levels:[{name:label,elevation:0,views:["First view","Second view"]}]},trace:null,traceError:null,plan:null,planError:null},
+    data:{...roomsGoal(roomsRouteState.schema.parse({}),DEMO_ROOMS,""),roomsWork:roomsRouteState.schema.parse({}),handle:null,snapshot:{...DEMO_ROOMS,levels:[{name:label,elevation:0,views:["First view","Second view"]}]},trace:null,traceError:null,plan:null,planError:null},
     evaluation:label,inputs:"retained",origin:{kind:"fixture"},trace:[],freshness:"current",coverage:{requested:[],covered:[],unknown:[],refused:[]}}});
   const emit=(index:number,label:string)=>frames[index]!({kind:"complete",revision:1,value:packet(label)});
   function Chooser(){useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);const current=ctx();return <RoomsProvider ctx={current}>
-    <ScopeBody ctx={current} page={roomsPageSchema.parse({...current.page.read(),selected:current.page.read().picked})} verbs={()=>null}/>
+    <ScopeBody ctx={current} page={roomsPageSchema.parse({view:current.page.read().view})} verbs={()=>null}/>
     <output>{retainedValueLabel(current.value)}</output></RoomsProvider>;}
   try {
     emit(0,"Fixture level");
