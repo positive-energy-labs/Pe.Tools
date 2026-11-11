@@ -6,40 +6,37 @@ import { bin } from "./bins.ts";
 import type { Grids } from "./loss-grid.ts";
 import { computeLosses, IMPLAUSIBLE_ROW_IN_WG } from "./losses.ts";
 import { price } from "./pricing.ts";
-import type { DuctSnapshot } from "./types.ts";
-
-type Node = DuctSnapshot["nodes"][number];
-type Segment = DuctSnapshot["segments"][number];
-type Connector = Node["connectors"][number];
-type Fact = Node["facts"][number];
+import {
+  connOf,
+  ductOf,
+  factOf,
+  groupOf,
+  nodeOf,
+  round,
+  snapshotOf as snapshot,
+  type Connector,
+  type Fact,
+  type Node,
+  type Segment,
+} from "./test-snapshot.ts";
 
 const port = (index: number, to: number | null, connector = 1, classification = "SupplyAir") =>
-  ({
-    index,
-    kind: "end",
+  connOf(index, to == null ? null : [to, connector], {
+    ...round(12),
     point: [0, 0, 9],
-    shape: "round",
-    size: '12"ø',
-    diameterIn: 12,
-    direction: "bidirectional",
     classification,
-    connectedTo: to == null ? null : { elementId: to, connector },
     areaFt2: 0.7854,
-  }) as Connector;
-const fact = (key: string, value: number | null) =>
-  ({ key, value, unit: "", provenance: "revit" }) as unknown as Fact;
+  });
+const fact = (key: string, value: number | null) => factOf(key, value);
 const node = (
   id: number,
-  kind: string,
+  kind: Node["kind"],
   connectors: Connector[],
   facts: Fact[] = [],
   classification = "Supply Air",
   partType: string | null = kind === "fitting" ? "Tee" : null,
 ) =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-    id,
-    kind,
-    category: kind,
+  nodeOf(id, kind, {
     family: kind,
     type: "Standard",
     partType,
@@ -50,16 +47,11 @@ const node = (
     classification,
     connectors,
     facts,
-  }) as unknown as Node;
-const duct = (id: number, ends: [number, number], classification = "Supply Air"): Segment =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-    id,
-    kind: "duct",
-    curveKind: "line",
+  });
+const duct = (id: number, ends: [number, number], classification = "Supply Air") =>
+  ductOf(id, {
     type: "Round Duct",
-    shape: "round",
-    size: '12"ø',
-    diameterIn: 12,
+    ...round(12),
     lengthFt: 10,
     polyline: [
       [0, 0, 9],
@@ -69,35 +61,22 @@ const duct = (id: number, ends: [number, number], classification = "Supply Air")
     groupId: "g10",
     systemName: "SA",
     classification,
-    roughness: { valueFt: 0.0003, provenance: "revit-default" },
-    revit: {},
     connectors: [port(1, ends[0]), port(2, ends[1])],
-  }) as unknown as Segment;
+  });
 const snapshotOf = (nodes: Node[], segments: Segment[], classifications: string[]) =>
-  ({
-    document: { title: "t", readAt: "", elapsedMs: 0, networkBasedCalculations: true },
-    coordinateEncoding: "native-double",
-    levels: [],
+  snapshot({
     groups: [
-      {
-        id: "g10",
+      groupOf("g10", {
         rootIds: [1],
         classifications,
         systemNames: ["SA"],
         terminalCount: 1,
         elementCount: nodes.length + segments.length,
-        loops: 0,
-        issueIds: [],
-      },
+      }),
     ],
     nodes,
     segments,
-    flows: [],
-    issues: [],
-    layers: [],
-    systems: [],
-    slots: {},
-  }) as unknown as DuctSnapshot;
+  });
 
 // SD5-9's small Ab/Ac row is steep (the real table gives 670 at Ab/Ac 0.0428); a flat grid stands in.
 const grids: Grids = {

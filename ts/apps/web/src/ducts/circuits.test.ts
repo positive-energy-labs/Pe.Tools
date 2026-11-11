@@ -13,85 +13,74 @@ import {
 } from "@pe/agent-contracts";
 import { applyRequest, price, proposedStatic } from "@pe/ducts-domain/pricing";
 import { friction, roundSection } from "@pe/ducts-domain/loss-physics";
+import {
+  connOf,
+  ductOf,
+  factOf,
+  groupOf,
+  nodeOf,
+  snapshotOf,
+  systemOf,
+  type Connector,
+} from "@pe/ducts-domain/test-snapshot";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { designOf } from "@pe/ducts-domain/test-design";
 
-const port = (index: number, owner: number, connector: number, direction = "bidirectional") => ({
-  index,
-  kind: "end",
-  point: [0, 0, 0],
-  shape: "round" as const,
-  size: "8",
-  diameterIn: 8,
-  widthIn: null,
-  heightIn: null,
-  flowCfm: null,
-  direction,
-  classification: null,
-  connectedTo: { elementId: owner, connector },
-});
-const eq = (id: number, connectors: ReturnType<typeof port>[]) => ({
-  id,
-  uniqueId: `purpose-${id}`,
-  flowParameter: "Observed flow",
-  kind: "equipment",
-  category: "Equipment",
-  family: "Purpose fixture",
-  type: "fixture",
-  point: [0, 0, 0],
-  groupId: null,
-  connectors,
-  facts: [],
-});
-const terminal = (id: number, owner: number, connector: number, groupId: string, drop = 0.03) => ({
-  id,
-  uniqueId: `purpose-${id}`,
-  flowParameter: "Observed flow",
-  kind: "terminal",
-  point: [0, 0, 0],
-  groupId,
-  connectors: [port(0, owner, connector)],
-  facts: [{ key: "flow", value: 100, unit: "cfm", provenance: "designer-stated" }],
-  terminalDrop: { catalogDropInWg: drop, writable: false },
-});
-const segment = (id: number, groupId: string, connectors: ReturnType<typeof port>[]) => ({
-  id,
-  uniqueId: `purpose-${id}`,
-  flowParameter: "Observed flow",
-  kind: "duct",
-  curveKind: "line",
-  shape: "round",
-  size: "8",
-  diameterIn: 8,
-  lengthFt: 5,
-  polyline: [
-    [0, 0, 0],
-    [5, 0, 0],
-  ],
-  groupId,
-  roughness: { valueFt: 0.0003, provenance: "designer-stated" },
-  revit: {},
-  connectors,
-});
-const group = (id: string, rootIds: number[], terminalCount: number) => ({
-  id,
-  rootIds,
-  classifications: ["Supply Air"],
-  systemNames: [],
-  terminalCount,
-  elementCount: 2,
-  loops: 0,
-  issueIds: [],
-});
+const port = (index: number, owner: number, connector: number, direction = "bidirectional") =>
+  connOf(index, [owner, connector], {
+    size: "8",
+    diameterIn: 8,
+    widthIn: null,
+    heightIn: null,
+    flowCfm: null,
+    direction,
+    classification: null,
+  });
+const eq = (id: number, connectors: Connector[]) =>
+  nodeOf(id, "equipment", {
+    uniqueId: `purpose-${id}`,
+    flowParameter: "Observed flow",
+    category: "Equipment",
+    family: "Purpose fixture",
+    type: "fixture",
+    point: [0, 0, 0],
+    groupId: null,
+    connectors,
+  });
+const terminal = (id: number, owner: number, connector: number, groupId: string, drop = 0.03) =>
+  nodeOf(id, "terminal", {
+    uniqueId: `purpose-${id}`,
+    flowParameter: "Observed flow",
+    point: [0, 0, 0],
+    groupId,
+    connectors: [port(0, owner, connector)],
+    facts: [factOf("flow", 100, { unit: "cfm", provenance: "designer-stated" })],
+    terminalDrop: { catalogDropInWg: drop, writable: false },
+  });
+const segment = (id: number, groupId: string, connectors: Connector[]) =>
+  ductOf(id, {
+    uniqueId: `purpose-${id}`,
+    size: "8",
+    diameterIn: 8,
+    lengthFt: 5,
+    polyline: [
+      [0, 0, 0],
+      [5, 0, 0],
+    ],
+    groupId,
+    roughness: { valueFt: 0.0003, provenance: "designer-stated" },
+    connectors,
+  });
+const group = (id: string, rootIds: number[], terminalCount: number) =>
+  groupOf(id, { rootIds, classifications: ["Supply Air"], terminalCount, elementCount: 2 });
 function fixture() {
-  return {
-    coordinateEncoding: "native-double",
+  return snapshotOf({
     document: {
       title: "Purpose fixture, NOT Project A",
       readAt: "2026-10-15T00:00:00Z",
       elapsedMs: 0,
+      networkBasedCalculations: false,
     },
-    levels: [],
     // Both units are base equipment of a system they serve: proposed fans, never passed through.
     groups: [
       { ...group("upstream", [100, 200], 0), systemNames: ["SA up"] },
@@ -106,13 +95,11 @@ function fixture() {
       segment(10, "upstream", [port(0, 100, 0), port(1, 200, 1)]),
       segment(20, "downstream", [port(0, 200, 2), port(1, 300, 0)]),
     ],
-    flows: [],
-    issues: [],
     systems: [
-      { name: "SA up", baseEquipmentId: 100, sections: [] },
-      { name: "SA down", baseEquipmentId: 200, sections: [] },
+      systemOf(1, { name: "SA up", baseEquipmentId: 100 }),
+      systemOf(2, { name: "SA down", baseEquipmentId: 200 }),
     ],
-  } as unknown as DuctSnapshot;
+  });
 }
 function pin(
   s: DuctSnapshot,
@@ -324,7 +311,7 @@ it("pairs two independent ERV fans by exact ports instead of classifications", (
     terminal(302, 100, 2, "b", 0.16),
     terminal(303, 100, 3, "c", 0.12),
     terminal(304, 100, 4, "d", 0.06),
-  ] as unknown as DuctSnapshot["nodes"];
+  ];
   s.segments = [];
   s.groups = [];
   const e: Record<string, DuctCalculation> = {
@@ -412,7 +399,7 @@ it("retains parallel joints and refuses mesh/multiple fan allocation without cut
       s.segments[0]!.connectors.push(port(2, 20, 2));
       s.segments[1]!.connectors.push(port(2, 10, 2));
     } else {
-      s.nodes.push(eq(400, [port(0, 20, 2)]) as unknown as DuctSnapshot["nodes"][number]);
+      s.nodes.push(eq(400, [port(0, 20, 2)]));
       s.segments[1]!.connectors.push(port(2, 400, 0));
       e.otherFan = {
         kind: "fan",

@@ -1,5 +1,5 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { workFingerprintSchema, type RouteKey } from "@pe/agent-contracts";
+import type { RouteKey } from "@pe/agent-contracts";
 import { routeAt } from "../route/registry";
 import { routeFile } from "../shell/route-file";
 import { TypedShell } from "../shell/typed-shell";
@@ -21,7 +21,6 @@ function Builtin() {
   const { route } = Route.useParams();
   const row = routeAt(`/${route}`)!;
   if (row.dock) return null;
-  const fingerprint = workFingerprintSchema.parse(`builtin-closure:${row.closure.fingerprint}`);
   // One component serves every address: the key remounts the shell when the route changes.
-  return <TypedShell key={row.key} module={row.module} fingerprint={fingerprint} />;
+  return <TypedShell key={row.key} module={row.module} fingerprint={row.fingerprint} />;
 }

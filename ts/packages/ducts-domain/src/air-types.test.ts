@@ -1,11 +1,12 @@
 import { expect, test } from "vite-plus/test";
 import { airTypesOf } from "./air-types.ts";
-import type { DuctSnapshot } from "./types.ts";
+import { nodeOf, snapshotOf, systemOf, type Node, type System } from "./test-snapshot.ts";
 
-const snapshot = (
-  nodes: Partial<DuctSnapshot["nodes"][number]>[],
-  systems: Partial<DuctSnapshot["systems"][number]>[] = [],
-) => ({ nodes, systems, segments: [] }) as unknown as DuctSnapshot;
+const snapshot = (nodes: (Partial<Node> & { id: number })[], systems: Partial<System>[] = []) =>
+  snapshotOf({
+    nodes: nodes.map((n) => nodeOf(n.id, "fitting", n)),
+    systems: systems.map((s, k) => systemOf(k + 1, s)),
+  });
 
 test("classification beats misleading names; FA refines Revit's shared SupplyAir classification", () => {
   const types = airTypesOf(

@@ -11,14 +11,15 @@ import { expect, it } from "vite-plus/test";
 import { lookupGrid } from "../loss-grid.ts";
 import { friction, roundSection } from "../loss-physics.ts";
 import { suggestRoster, type FanPort } from "../roster.ts";
+import { uniqueIdOf, type Connector as Conn, type Node, type Segment } from "../test-snapshot.ts";
 import type { DuctSnapshot } from "../types.ts";
 import { withHealth } from "./health.fixture.ts";
 import { buildChain, buildSheet, type SheetSnapshot } from "./index.ts";
 import { grids } from "./tables.fixture.ts";
 
-type Node = DuctSnapshot["nodes"][number];
-type Segment = DuctSnapshot["segments"][number];
-type Conn = Node["connectors"][number];
+// `conn`, `node` and `duct` keep their casts: `withHealth` keys the recorded C# health by a hash of
+// the exact node and segment JSON (field order included), so these shapes stay byte-for-byte until
+// the fixture is re-recorded through Revit. Everything built from them is typed.
 const round = (d: number) => ({ shape: "round" as const, size: `${d}`, diameterIn: d });
 const rect = (w: number, h: number) => ({
   shape: "rectangular" as const,
@@ -44,7 +45,8 @@ const conn = (
     ...size,
   }) as Conn;
 const node = (id: number, kind: string, extra: object): Node =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
+  ({
+    uniqueId: uniqueIdOf(id),
     id,
     kind,
     category: "",
@@ -60,7 +62,8 @@ const duct = (
   polyline: number[][],
   connectors: Conn[],
 ): Segment =>
-  ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
+  ({
+    uniqueId: uniqueIdOf(id),
     id,
     kind: "duct",
     curveKind: "line",
@@ -343,9 +346,10 @@ it("a side-stream into another fan's return ends at the merge without a class-ch
   const withG: SheetSnapshot = {
     ...sheetSnapshot1,
     slots: {
+      ...TEST_SLOTS,
       fanFlow: "PE_M_Fan_AirFlowDesign",
       terminalFlow: "PE_M_Grd_AirFlow",
-    } as DuctSnapshot["slots"],
+    },
     nodes: sheetSnapshot1.nodes.map((n) =>
       n.id === 400
         ? {
@@ -353,7 +357,7 @@ it("a side-stream into another fan's return ends at the merge without a class-ch
             facts: [{ key: "fanFlow", value: 1200, unit: "cfm", provenance: "designer-stated" }],
           }
         : n,
-    ) as Node[],
+    ),
   };
   const gInputs = inputsFor(withG, { endCfm: { 300: 100 } });
   expect(gInputs.units["400"]!.cfm).toMatchObject({ value: 1200, source: "model" });
@@ -589,6 +593,7 @@ const CHADDS =
 it.skipIf(!existsSync(CHADDS))(
   "MUAS-1 on Chadds: bounded walk, the capped plenum named, FC-23 a stop, no ESP",
   () => {
+    // Kept: an untyped file boundary (a retained host capture outside git), not a constructed shape.
     const snap = (JSON.parse(readFileSync(CHADDS, "utf8")) as { result: DuctSnapshot }).result;
     const r = suggestRoster(snap);
     const roster = [...r.fans, ...r.suggestions];
@@ -666,7 +671,8 @@ it("firm terminal drop is priced and visible; typed and catalog drops take prece
   const catalog = structuredClone(network);
   catalog.nodes.find((n) => n.id === 8)!.terminalDrop = {
     catalogDropInWg: 0.09,
-  } as Node["terminalDrop"];
+    writable: false,
+  };
   const priced = buildSheet({
     ...input,
     snapshot: catalog,
@@ -714,7 +720,7 @@ it("side-stream design flow: a receiving unit's design flow is its share at its 
     ),
   );
   const snap = snapshot([f, fork, ...receivers], runs);
-  snap.slots = { fanFlow: "PE_M_Fan_AirFlowDesign" } as DuctSnapshot["slots"];
+  snap.slots = { ...TEST_SLOTS, fanFlow: "PE_M_Fan_AirFlowDesign" };
   const input = {
     snapshot: snap,
     fan: { unitId: 100, portIndex: 0 },
@@ -1167,7 +1173,7 @@ it("R-SHARE + C3: a proposed transition in front of a shared plenum carries this
   const louver = node(30, "terminal", {
     family: "Outdoor Louver",
     connectors: [
-      { ...conn(0, [13, 1], round(12), "end", [15, 0, 0], "OutdoorAir"), flowCfm: 1120 } as Conn,
+      { ...conn(0, [13, 1], round(12), "end", [15, 0, 0], "OutdoorAir"), flowCfm: 1120 },
     ],
   });
   const grille20 = node(20, "terminal", {
@@ -1182,7 +1188,7 @@ it("R-SHARE + C3: a proposed transition in front of a shared plenum carries this
   ]);
   const d11 = duct(11, 10, round(10), line([0, 0, 0], [10, 0, 0]), [
     conn(0, [100, 0], round(10), "end", [0, 0, 0]),
-    { ...conn(1, null, round(10), "end", [10, 0, 0]), facing: [1, 0, 0] } as Conn,
+    { ...conn(1, null, round(10), "end", [10, 0, 0]), facing: [1, 0, 0] },
   ]);
   const d13 = duct(13, 5, round(12), line([10 + gap, 0, 0], [15, 0, 0]), [
     conn(0, [12, 1], round(12), "end", [10 + gap, 0, 0]),
@@ -1218,10 +1224,11 @@ it("R-SHARE + C3: a proposed transition in front of a shared plenum carries this
               cappedBy: 900,
             },
           ],
+          faces: [],
           bodies: [],
         },
       },
-    ] as unknown as DuctSnapshot["issues"],
+    ],
   };
   const sheet = buildSheet({
     snapshot: snap,
@@ -1259,6 +1266,7 @@ it.skipIf(
 )(
   "MUAS-1's fittings census lists only fittings its paths cross",
   () => {
+    // Kept: an untyped file boundary (a retained host capture outside git), not a constructed shape.
     const load = (n: string) =>
       JSON.parse(readFileSync(`${GROUNDING}${n}.json`, "utf8")) as DuctSnapshot;
     const a = load("from-muas-t"),
@@ -1269,11 +1277,11 @@ it.skipIf(
         if (!m.has(e.id) || (m.get(e.id)!.reason ?? "walked") !== "walked") m.set(e.id, e);
       return [...m.values()];
     };
-    const snap = {
+    const snap: DuctSnapshot = {
       ...a,
-      nodes: union(a.nodes as never[], b.nodes as never[]),
-      segments: union(a.segments as never[], b.segments as never[]),
-    } as DuctSnapshot;
+      nodes: union(a.nodes, b.nodes),
+      segments: union(a.segments, b.segments),
+    };
     const r = suggestRoster(snap);
     const sheet = buildSheet({
       snapshot: snap,

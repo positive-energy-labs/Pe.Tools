@@ -6,7 +6,6 @@ import type { Readings } from "../host/resource-stream";
 import {
   bindWork,
   commands,
-  workFingerprintSchema,
   actionReceiptSchema,
 } from "@pe/agent-contracts";
 import type {
@@ -20,7 +19,7 @@ import { createWorkFeedClient } from "../shell/work-feed-client";
 import { completion } from "../shell/work-door-observation";
 import { mountTypedRoute, type TypedMount } from "../shell/typed-mount";
 import type { UseSource } from "../shell/source-contract";
-import { builtinRouteStamp } from "../route/builtin-inventory";
+import { routeRegistry } from "../route/registry";
 import { module, viewCatalogue } from "./route";
 import { AdoptionBody } from "./typed-adoption";
 import { module as familiesModule } from "../families/route";
@@ -293,7 +292,7 @@ export async function journey(options: { catalogue?: ReturnType<typeof gate>; sn
         subscribe: () => () => {},
       },
     },
-    workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp(options.route ?? "takeoffs")}`),
+    routeRegistry[options.route ?? "takeoffs"]!.fingerprint,
     { work, sources: { "takeoffs.adoption": source("takeoffs.adoption"), "takeoffs.views": source("takeoffs.views"), "families.view": source("families.view") } },
   );
   const stop = mount.subscribe(() => {});

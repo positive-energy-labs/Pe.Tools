@@ -3,6 +3,7 @@ import { designOf } from "./test-design.ts";
 import { expect, it } from "vite-plus/test";
 
 import { HEAL_JOIN_GAP_IN, healPlan, healRequestGroup, proximityId } from "./heal.ts";
+import { groupOf, snapshotOf } from "./test-snapshot.ts";
 import type { DuctSnapshot } from "./types.ts";
 import { TEST_SLOTS } from "./sheet/test-inputs.ts";
 
@@ -79,33 +80,27 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
         note: "nothing attached",
       })),
   );
-  return {
-    coordinateEncoding: "native-double",
+  return snapshotOf({
     document: {
       title: "t",
       readAt: "2026-10-20T00:00:00Z",
       elapsedMs: 1,
       networkBasedCalculations: true,
     },
-    levels: [],
-    groups: elements.map((e) => ({
-      id: e.groupId!,
-      rootIds: [],
-      classifications: ["Supply Air"],
-      systemNames: [e.systemName ?? "SA 1"],
-      terminalCount: e.kind === "terminal" ? 1 : 0,
-      elementCount: 1,
-      loops: 0,
-      issueIds: issues.filter((i) => i.elementId === e.id).map((i) => i.id),
-    })),
+    groups: elements.map((e) =>
+      groupOf(e.groupId!, {
+        classifications: ["Supply Air"],
+        systemNames: [e.systemName ?? "SA 1"],
+        terminalCount: e.kind === "terminal" ? 1 : 0,
+        elementCount: 1,
+        issueIds: issues.filter((i) => i.elementId === e.id).map((i) => i.id),
+      }),
+    ),
     nodes,
     segments,
-    flows: [],
     issues,
-    layers: [],
-    systems: [],
     slots: { ...TEST_SLOTS },
-  } as DuctSnapshot;
+  });
 };
 const items = (s: DuctSnapshot) => healPlan(s).groups.flatMap((g) => g.items);
 

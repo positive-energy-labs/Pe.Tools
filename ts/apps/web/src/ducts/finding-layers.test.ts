@@ -5,47 +5,54 @@
  */
 import { expect, it } from "vite-plus/test";
 
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import {
+  connOf,
+  ductOf,
+  issueOf,
+  nodeOf,
+  snapshotOf,
+  type Connector,
+} from "@pe/ducts-domain/test-snapshot";
 import { findingLayers, findingShapes, noRunLayers } from "./finding-layers";
 
 const IN = 1 / 12;
-const conn = (index: number, point: number[], facing: number[], connectedTo = null as unknown) => ({
-  index,
-  kind: "end",
-  point,
-  facing,
-  widthAxis: [0, 1, 0],
-  shape: "rectangular",
-  size: "12x12",
-  widthIn: 12,
-  heightIn: 12,
-  diameterIn: null,
-  direction: "bidirectional",
-  classification: "SupplyAir",
-  connectedTo,
-  areaFt2: 1,
-});
-const duct = (id: number, a: number[], b: number[], connectors: unknown[]) => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-  id,
-  kind: "duct",
-  curveKind: "line",
-  type: "Rect",
-  shape: "rectangular",
-  size: "12x12",
-  widthIn: 12,
-  heightIn: 12,
-  diameterIn: null,
-  lengthFt: Math.hypot(...a.map((v, k) => v - b[k]!)),
-  polyline: [a, b],
-  levelId: 1,
-  groupId: "g",
-  systemName: "SA 1",
-  classification: "Supply Air",
-  connectors,
-});
+const conn = (
+  index: number,
+  point: number[],
+  facing: number[],
+  connectedTo: Connector["connectedTo"] = null,
+) =>
+  connOf(index, null, {
+    point,
+    facing,
+    widthAxis: [0, 1, 0],
+    shape: "rectangular",
+    size: "12x12",
+    widthIn: 12,
+    heightIn: 12,
+    diameterIn: null,
+    classification: "SupplyAir",
+    connectedTo,
+    areaFt2: 1,
+  });
+const duct = (id: number, a: number[], b: number[], connectors: Connector[]) =>
+  ductOf(id, {
+    type: "Rect",
+    shape: "rectangular",
+    size: "12x12",
+    widthIn: 12,
+    heightIn: 12,
+    diameterIn: null,
+    lengthFt: Math.hypot(...a.map((v, k) => v - b[k]!)),
+    polyline: [a, b],
+    levelId: 1,
+    groupId: "g",
+    systemName: "SA 1",
+    classification: "Supply Air",
+    connectors,
+  });
 const gap = 0.5 * IN;
-const snapshot = {
-  nodes: [],
+const snapshot = snapshotOf({
   segments: [
     duct(
       1,
@@ -66,13 +73,7 @@ const snapshot = {
       ],
     ),
   ],
-  issues: [],
-  groups: [],
-  flows: [],
-  levels: [],
-  layers: [],
-  systems: [],
-} as unknown as DuctSnapshot;
+});
 
 it("an annotated near-miss draws both faces, the gap bar and the overhung edges", () => {
   const id = "proximity:1:1|2:0";
@@ -122,10 +123,10 @@ it("a chosen system draws its findings without annotations and excludes annotati
   const raw = {
     ...snapshot,
     issues: [
-      { id: "open-end:1:1", kind: "open-end", elementId: 1, connector: 1 },
-      { id: "open-end:2:0", kind: "open-end", elementId: 2, connector: 0 },
+      issueOf("open-end:1:1", "open-end", 1, { connector: 1 }),
+      issueOf("open-end:2:0", "open-end", 2, { connector: 0 }),
     ],
-  } as DuctSnapshot;
+  };
   const scoped = findingShapes(raw, new Set(), null, new Set([1, 2]));
   expect(scoped.bars).toHaveLength(1);
   expect(scoped.outlines.map((o) => o.ink)).toEqual(["inferred", "inferred"]);
@@ -136,12 +137,10 @@ it("a chosen system draws its findings without annotations and excludes annotati
 
 // Chadds ducts.snapshot receipt 17cf1b06-216a-42cb-ae97-95c65e46e82d, 2026-10-23.
 // FC-1 has supply and return ports. Its return joins FR-2 on RA 50, below the SA 44 meshes.
-const sa44 = {
+const sa44 = snapshotOf({
   ...snapshot,
   nodes: [
-    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(6071117).toString(16).padStart(8, "0")}`,
-      id: 6071117,
-      kind: "equipment",
+    nodeOf(6071117, "equipment", {
       point: [264.2429, 609.5216, -8.75],
       connectors: [
         {
@@ -158,10 +157,8 @@ const sa44 = {
           classification: "ReturnAir",
         },
       ],
-    },
-    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(6566361).toString(16).padStart(8, "0")}`,
-      id: 6566361,
-      kind: "equipment",
+    }),
+    nodeOf(6566361, "equipment", {
       point: [264.361, 609.14, -9.2796],
       connectors: [
         {
@@ -179,10 +176,8 @@ const sa44 = {
           classification: "ReturnAir",
         },
       ],
-    },
-    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(9098869).toString(16).padStart(8, "0")}`,
-      id: 9098869,
-      kind: "fitting",
+    }),
+    nodeOf(9098869, "fitting", {
       point: [265.0097, 608.7564, -3.6667],
       connectors: [
         {
@@ -199,7 +194,7 @@ const sa44 = {
           diameterIn: 8,
         },
       ],
-    },
+    }),
   ],
   segments: [
     {
@@ -227,7 +222,7 @@ const sa44 = {
       groupId: null,
     },
   ],
-} as unknown as DuctSnapshot;
+});
 
 it("SA 44 excludes FC-1's RA 50 return rectangle, 4.634 ft below its duct, even when annotated", () => {
   const returnJoin = "proximity:6071117:3|6566361:4";
@@ -246,7 +241,7 @@ it("SA 44 excludes FC-1's RA 50 return rectangle, 4.634 ft below its duct, even 
 });
 
 it("a heal that caps a round open end draws a cylinder of the duct's diameter", () => {
-  const round = {
+  const round = snapshotOf({
     ...snapshot,
     segments: [
       {
@@ -272,8 +267,8 @@ it("a heal that caps a round open end draws a cylinder of the duct's diameter", 
         diameterIn: 12,
       },
     ],
-    issues: [{ id: "open-end:1:1", kind: "open-end", elementId: 1, connector: 1, note: "" }],
-  } as unknown as DuctSnapshot;
+    issues: [issueOf("open-end:1:1", "open-end", 1, { connector: 1 })],
+  });
   const shapes = findingShapes(round, new Set(), null, new Set([1]));
   const cyl = shapes.boxes.find((b) => b.shape === "cylinder");
   expect(cyl).toBeDefined();

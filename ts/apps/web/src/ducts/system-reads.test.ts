@@ -1,39 +1,27 @@
 import { describe, expect, it } from "vite-plus/test";
+import { groupOf, nodeOf, snapshotOf, systemOf } from "@pe/ducts-domain/test-snapshot";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { mergeSnapshots, nextSystemsRead } from "@pe/ducts-domain/system-reads";
 
-const part = (over: Partial<DuctSnapshot>): DuctSnapshot =>
-  ({
+const part = (over: Partial<DuctSnapshot>) =>
+  snapshotOf({
     document: {
       title: "Chadds",
       readAt: "2026-10-29T00:00:00Z",
       elapsedMs: 10,
       networkBasedCalculations: false,
     },
-    coordinateEncoding: "native-double",
-    levels: [],
-    groups: [],
-    nodes: [],
-    segments: [],
-    flows: [],
-    issues: [],
-    layers: [],
-    systems: [],
-    slots: {},
     ...over,
-  }) as unknown as DuctSnapshot;
+  });
 
-const group = (id: string) =>
-  ({
-    id,
-    rootIds: [],
-    classifications: [],
-    systemNames: [],
-    terminalCount: 0,
-    elementCount: 1,
-    loops: 0,
-    issueIds: [],
-  }) as unknown as DuctSnapshot["groups"][number];
+const group = (id: string) => groupOf(id, { elementCount: 1 });
+const sizes = (have: number, of: number): DuctSnapshot["layers"][number] => ({
+  key: "sizes",
+  title: "",
+  query: "",
+  coverage: { have, of },
+  provenance: "geometry",
+});
 
 describe("nextSystemsRead", () => {
   it("reads the wanted systems not read yet, open ones first, a few at a time", () => {
@@ -47,9 +35,9 @@ describe("mergeSnapshots", () => {
   it("joins reads by id, so a group two reads share counts once", () => {
     const a = part({
       groups: [group("g20"), group("g5")],
-      nodes: [{ id: 5 }, { id: 20 }] as DuctSnapshot["nodes"],
-      systems: [{ id: 2, name: "SA-2" }] as DuctSnapshot["systems"],
-      layers: [{ key: "sizes", coverage: { have: 1, of: 2 } }] as DuctSnapshot["layers"],
+      nodes: [nodeOf(5, "fitting"), nodeOf(20, "fitting")],
+      systems: [systemOf(2, { name: "SA-2" })],
+      layers: [sizes(1, 2)],
     });
     const b = part({
       document: {
@@ -59,9 +47,9 @@ describe("mergeSnapshots", () => {
         networkBasedCalculations: false,
       },
       groups: [group("g20"), group("g100")],
-      nodes: [{ id: 20 }, { id: 100 }] as DuctSnapshot["nodes"],
-      systems: [{ id: 1, name: "EA-1" }] as DuctSnapshot["systems"],
-      layers: [{ key: "sizes", coverage: { have: 3, of: 3 } }] as DuctSnapshot["layers"],
+      nodes: [nodeOf(20, "fitting"), nodeOf(100, "fitting")],
+      systems: [systemOf(1, { name: "EA-1" })],
+      layers: [sizes(3, 3)],
     });
     const merged = mergeSnapshots([a, b])!;
     expect(merged.groups.map((g) => g.id)).toEqual(["g5", "g20", "g100"]);

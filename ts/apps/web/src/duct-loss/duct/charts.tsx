@@ -9,7 +9,7 @@ import { useRef, useState, type PointerEvent } from "react";
 
 import { dash } from "@pe/kit/lib/token";
 import { C, EXP, diameterFor, read, ticks, type Face, type Range } from "./ductulator";
-import { BASE, CURSOR, DISK } from "./wheel";
+import { BASE, INK } from "./wheel";
 
 const INK2 = "var(--color-ink-2)";
 const fmt = (n: number, d = 2) => n.toLocaleString(undefined, { maximumFractionDigits: d });
@@ -235,7 +235,7 @@ function LogLog({
             cx={sx(point[0])}
             cy={sy(point[1])}
             r={4}
-            fill={CURSOR}
+            fill={INK}
             stroke="var(--color-document)"
             strokeWidth={2}
             pointerEvents="none"
@@ -281,7 +281,7 @@ export function DuctCharts({
   const constantV: Series[] = SPEEDS.filter(within(r.velocity)).map((V) => ({
     key: `V${V}`,
     label: `${V} fpm`,
-    color: DISK,
+    color: INK,
     dash: "void",
     labelAt: "mid",
     pts: logspace(r.cfmFriction).map((Q) => {
@@ -352,7 +352,7 @@ export function DuctCharts({
             {
               key: "v",
               label: "",
-              color: DISK,
+              color: INK,
               pts: logspace(r.diameter).map((D) => [D, read(cfm, D).velocity] as const),
             },
           ]}

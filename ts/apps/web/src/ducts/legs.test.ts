@@ -5,12 +5,19 @@ import { expect, it } from "vite-plus/test";
 
 import { groupTree } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import {
+  connOf,
+  ductOf,
+  nodeOf,
+  slots,
+  snapshotOf,
+  type Node,
+  type Segment,
+} from "@pe/ducts-domain/test-snapshot";
 
 import { legsOf } from "./legs";
 
-type Node = DuctSnapshot["nodes"][number];
-type Segment = DuctSnapshot["segments"][number];
-type Row = { id: number; k: string; p: number[]; line?: number[][] };
+type Row = { id: number; k: Node["kind"] | "duct"; p: number[]; line?: number[][] };
 
 const LEVELS = [
   { id: 30, name: "Main", elevationFt: 0 },
@@ -24,16 +31,8 @@ const ft = (a: number[], b: number[]) => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!
 
 /** The trace as a chain: connector 1 reaches the row before, connector 2 the row after. */
 function makeupSnapshot(rows: Row[]): DuctSnapshot {
-  const connector = (index: number, point: number[], to: Row | undefined, size: string) => ({
-    index,
-    kind: "end",
-    point,
-    shape: "round" as const,
-    size,
-    diameterIn: 8,
-    direction: "bidirectional",
-    connectedTo: to ? { elementId: to.id, connector: index === 1 ? 2 : 1 } : null,
-  });
+  const connector = (index: number, point: number[], to: Row | undefined, size: string) =>
+    connOf(index, to ? [to.id, index === 1 ? 2 : 1] : null, { point, size, diameterIn: 8 });
   const nodes: Node[] = [];
   const segments: Segment[] = [];
   rows.forEach((row, i) => {
@@ -41,39 +40,35 @@ function makeupSnapshot(rows: Row[]): DuctSnapshot {
     const next = rows[i + 1];
     // The riser into the attic is a size up, so the dominant size per leg is observable.
     const size = i >= 46 && i <= 70 ? '10"ø' : '8"ø';
+    const levelId = levelAt(row.p[2]!);
     if (row.k === "duct") {
       const [a, b] = row.line as [number[], number[]];
-      segments.push({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(row.id).toString(16).padStart(8, "0")}`,
-        id: row.id,
-        kind: "duct",
-        type: "Round Duct",
-        shape: "round",
-        size,
-        diameterIn: 8,
-        lengthFt: ft(a, b),
-        polyline: [a, b],
-        levelId: levelAt(row.p[2]!),
-        groupId: "g1",
-        roughness: { valueFt: 0.0003, provenance: "revit-default" },
-        revit: {},
-        connectors: [connector(1, a, prev, size), connector(2, b, next, size)],
-      } as Segment);
+      segments.push(
+        ductOf(row.id, {
+          type: "Round Duct",
+          size,
+          diameterIn: 8,
+          lengthFt: ft(a, b),
+          polyline: [a, b],
+          levelId,
+          groupId: "g1",
+          connectors: [connector(1, a, prev, size), connector(2, b, next, size)],
+        }),
+      );
       return;
     }
-    nodes.push({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(row.id).toString(16).padStart(8, "0")}`,
-      id: row.id,
-      kind: row.k,
-      category: row.k,
-      family: row.k,
-      type: "Std",
-      levelId: levelAt(row.p[2]!),
-      point: row.p,
-      groupId: "g1",
-      connectors: [connector(1, row.p, prev, size), connector(2, row.p, next, size)],
-      facts: [],
-    } as Node);
+    nodes.push(
+      nodeOf(row.id, row.k, {
+        family: row.k,
+        type: "Std",
+        levelId,
+        point: row.p,
+        groupId: "g1",
+        connectors: [connector(1, row.p, prev, size), connector(2, row.p, next, size)],
+      }),
+    );
   });
-  return {
+  return snapshotOf({
     document: {
       title: "makeup",
       readAt: "2026-10-17T00:00:00Z",
@@ -81,15 +76,10 @@ function makeupSnapshot(rows: Row[]): DuctSnapshot {
       networkBasedCalculations: false,
     },
     levels: LEVELS,
-    groups: [],
     nodes,
     segments,
-    flows: [],
-    issues: [],
-    layers: [],
-    systems: [],
-    slots: { fanStatic: "", fanFlow: "", componentDrop: "" },
-  } as unknown as DuctSnapshot;
+    slots: { ...slots, fanStatic: "", fanFlow: "", componentDrop: "" },
+  });
 }
 
 // The client model stays outside git; the dev knob `PE_DUCTS_FIXTURE` names it (vite.config.ts).
@@ -97,7 +87,7 @@ const FIXTURE = process.env.PE_DUCTS_FIXTURE ?? "";
 it.skipIf(!FIXTURE || !existsSync(FIXTURE))(
   "project-a: a group's longest run cuts from its unit to its terminal with real connectors",
   () => {
-    const snapshot = JSON.parse(readFileSync(FIXTURE, "utf8")) as DuctSnapshot;
+    const snapshot: DuctSnapshot = JSON.parse(readFileSync(FIXTURE, "utf8"));
     const tree = groupTree(snapshot, "g6119626");
     const subject = [tree.root!.equipment!, ...tree.longest];
     const cut = legsOf(snapshot, subject);

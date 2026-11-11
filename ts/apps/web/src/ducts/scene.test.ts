@@ -4,12 +4,12 @@ import { readFileSync } from "node:fs";
 import type { Row } from "@pe/ducts-domain/losses";
 import { price } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import saved from "./fixtures/synthetic-snapshot.json";
+import { syntheticSnapshot } from "./test-fixture";
 import { indexOf, sceneOf, subjectScene } from "./scene";
 import { legsOf } from "./legs";
 
 test("both Scene builders retain stub connector facts without admitting stubs to subject annotations", () => {
-  const raw = structuredClone(saved) as DuctSnapshot;
+  const raw = syntheticSnapshot();
   const index = indexOf(raw);
   const subject = raw.segments[0]!;
   const adjacent = raw.nodes.find((n) => n.kind === "equipment")!;
@@ -33,7 +33,7 @@ test("both Scene builders retain stub connector facts without admitting stubs to
 });
 
 test("scopes share immutable loss projections, preserving interval sums and alternative legs", () => {
-  const raw = structuredClone(saved) as DuctSnapshot;
+  const raw = syntheticSnapshot();
   const priced = price(raw, {}, null, neutralFansWork);
   const path = Object.values(priced.next.paths)[0]!;
   const rows: Row[] = [
@@ -83,7 +83,7 @@ test("scopes share immutable loss projections, preserving interval sums and alte
 test("saved pricing reuses losses across scopes and replaces them when the result changes", () => {
   const raw: DuctSnapshot = process.env.PE_DUCTS_CACHE_FIXTURE
     ? JSON.parse(readFileSync(process.env.PE_DUCTS_CACHE_FIXTURE, "utf8"))
-    : (structuredClone(saved) as DuctSnapshot);
+    : syntheticSnapshot();
   const priced = price(raw, {}, null, neutralFansWork);
   const original = indexOf(priced.snapshot, priced);
   expect(original.loss.size).toBeGreaterThan(0);

@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 
 import { suggestRoster } from "../roster.ts";
+import { connOf, ductOf, nodeOf, snapshotOf } from "../test-snapshot.ts";
 import type { DuctSnapshot } from "../types.ts";
 import { beyondOf, stoppingUnits } from "./beyond.ts";
 import { buildSheet } from "./build.ts";
@@ -14,31 +15,27 @@ import type { Sheet } from "./types.ts";
 
 type Kind = "equipment" | "terminal" | "fitting";
 type P = [number, number, number];
-const port = (index: number, point: P, elementId: number) => ({
-  index,
-  point,
-  connectedTo: { elementId, connector: 0 },
-});
-const node = (id: number, kind: Kind, ports: [P, number][]) => ({ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(id).toString(16).padStart(8, "0")}`,
-  id,
-  kind,
-  point: ports[0]?.[0] ?? [0, 0, 0],
-  connectors: ports.map(([at, to], i) => port(i, at, to)),
-});
-const seg = (id: number, a: [P, number], b: [P, number] | P) => ({
-  id,
-  polyline: [a[0], Array.isArray(b[0]) ? b[0] : b],
-  connectors: [
-    port(0, a[0], a[1]),
-    ...(Array.isArray(b[0]) ? [port(1, b[0] as P, b[1] as number)] : []),
-  ],
-});
+const port = (index: number, point: P, elementId: number) =>
+  connOf(index, [elementId, 0], { point });
+const node = (id: number, kind: Kind, ports: [P, number][]) =>
+  nodeOf(id, kind, {
+    point: ports[0]?.[0] ?? [0, 0, 0],
+    connectors: ports.map(([at, to], i) => port(i, at, to)),
+  });
+const seg = (id: number, a: [P, number], b: [P, number] | P) =>
+  ductOf(id, {
+    polyline: [a[0], Array.isArray(b[0]) ? b[0] : (b as P)],
+    connectors: [
+      port(0, a[0], a[1]),
+      ...(Array.isArray(b[0]) ? [port(1, b[0], b[1] as number)] : []),
+    ],
+  });
 /**
  * fan 1 -2- ERV 3 (the stop). ERV 3's other ports: duct 4 (5 ft) to grille 5; duct 6 (30 ft) to
  * fitting 7; duct 10 (2 ft) to unit 9, then duct 11 past it. Duct 11 names its joint to 9 on one
  * side only.
  */
-const snapshot = {
+const snapshot = snapshotOf({
   nodes: [
     node(1, "equipment", [[[-10, 0, 0], 2]]),
     node(3, "equipment", [
@@ -58,7 +55,7 @@ const snapshot = {
     seg(10, [[1, 0, 0], 3], [[3, 0, 0], 9]),
     seg(11, [[3, 0, 0], 9], [5, 0, 0]),
   ],
-} as unknown as DuctSnapshot;
+});
 const end = (kind: string, elementId: number, unitId: number) => ({
   side: "supply",
   legIds: [],
@@ -112,6 +109,7 @@ const RV7 = 6953852;
 it.skipIf(!existsSync(CHADDS))(
   "MUAS-1 on Chadds: RV-15's and RV-7's other ports run out as stubs, none of it priced",
   () => {
+    // Kept: an untyped file boundary (a retained host capture outside git), not a constructed shape.
     const snap = (
       JSON.parse(readFileSync(CHADDS, "utf8").replace(/^\uFEFF/, "")) as { result: DuctSnapshot }
     ).result;

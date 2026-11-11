@@ -1,7 +1,6 @@
 import { mountTypedRoute, type TypedMount } from "#/shell/typed-mount";
 import { currentFixture } from "../shell/fixture-name";
-import { builtinRouteStamp } from "#/route/builtin-inventory";
-import { workFingerprintSchema } from "@pe/agent-contracts";
+import { routeRegistry } from "#/route/registry";
 import { module, type OpenContext } from "./route";
 import { useOpenTypedOwner } from "./typed-owner";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -25,7 +24,7 @@ export function OpenControls({ children }: { children: ReactNode }) {
         subscribe: listener => { listeners.add(listener); return () => void listeners.delete(listener); } },
       fixture: currentFixture(), target: { kind: "host" }, work: { address: null, open: null },
       custody: { current: () => active }, memory: () => ({}),
-    }, workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("open")}`));
+    }, routeRegistry.open!.fingerprint);
     setMount(mounted);
     return () => { active = false; mounted.dispose(); };
   }, []);

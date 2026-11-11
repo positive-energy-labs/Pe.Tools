@@ -23,10 +23,8 @@ import {
 // cursor are one kind, so they share ink and differ by rung. The fixed base plate recedes; the
 // disk you turn and the cursor you drag read at full ink. Solid against dashed and ring position
 // already tell them apart, so a hue here would be a second channel carrying nothing (I3).
-const INK = "var(--color-ink)";
+export const INK = "var(--color-ink)";
 export const BASE = "var(--color-ink-2)";
-export const DISK = INK;
-export const CURSOR = INK;
 
 const fmt = (n: number, d = 2) => n.toLocaleString(undefined, { maximumFractionDigits: d });
 
@@ -140,7 +138,7 @@ export function Ductulator({
         {fmt(diameter, 1)}″
       </text>
       <text y={-10}>
-        <tspan fill={DISK}>{fmt(cfm, 0)} cfm</tspan>
+        <tspan fill={INK}>{fmt(cfm, 0)} cfm</tspan>
         {"  ·  "}
         <tspan fill={BASE}>{fmt(friction, 3)} in. wg</tspan>
         {"  ·  "}
@@ -187,13 +185,13 @@ export function Ductulator({
 
       {/* clear disk */}
       <g transform={`rotate(${spin})`} onPointerDown={down("disk")} style={{ cursor: "grab" }}>
-        <circle r={284} fill={INK} fillOpacity={0.035} stroke={DISK} strokeWidth={1.5} />
+        <circle r={284} fill={INK} fillOpacity={0.035} stroke={INK} strokeWidth={1.5} />
         <Scale
           r={284}
           out={false}
           angle={g.disk.cfmFriction}
           range={face.range.cfmFriction}
-          color={DISK}
+          color={INK}
           title="AIR VOLUME · CFM"
         />
         <Scale
@@ -201,7 +199,7 @@ export function Ductulator({
           out={false}
           angle={g.disk.cfmVelocity}
           range={face.range.cfmVelocity}
-          color={DISK}
+          color={INK}
           title="AIR VOLUME · CFM"
         />
         <Scale
@@ -209,14 +207,14 @@ export function Ductulator({
           out
           angle={g.disk.diameter}
           range={face.range.diameter}
-          color={DISK}
+          color={INK}
           title="ROUND DUCT · INCHES"
         />
         <circle
           r={110}
           fill="var(--color-line)"
           fillOpacity={0.35}
-          stroke={DISK}
+          stroke={INK}
           strokeWidth={0.75}
         />
       </g>
@@ -233,7 +231,7 @@ export function Ductulator({
           stroke={INK}
           strokeWidth={1.5}
         />
-        <line y1={-158} y2={-112} stroke={CURSOR} strokeWidth={0.75} />
+        <line y1={-158} y2={-112} stroke={INK} strokeWidth={0.75} />
       </g>
       {hub}
       <g
@@ -241,12 +239,12 @@ export function Ductulator({
         onPointerDown={down("cursor")}
         style={{ cursor: "ew-resize" }}
       >
-        <line y1={-328} y2={-200} stroke={CURSOR} strokeWidth={1} />
+        <line y1={-328} y2={-200} stroke={INK} strokeWidth={1} />
         <line y1={-328} y2={-200} stroke="transparent" strokeWidth={14} />
-        <circle cy={-318} r={5} fill={CURSOR} />
+        <circle cy={-318} r={5} fill={INK} />
       </g>
       <g transform={`rotate(${g.disk.cfmVelocity(cfm) + spin})`} pointerEvents="none">
-        <line y1={-262} y2={-200} stroke={CURSOR} strokeWidth={1} strokeDasharray={dash("seam")} />
+        <line y1={-262} y2={-200} stroke={INK} strokeWidth={1} strokeDasharray={dash("seam")} />
       </g>
     </svg>
   );

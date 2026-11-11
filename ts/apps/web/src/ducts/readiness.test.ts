@@ -10,75 +10,35 @@ import {
 
 import { ISSUE_KINDS } from "./issues";
 import { readiness } from "@pe/ducts-domain/readiness";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
-
-const issue = (id: string, kind: DuctSnapshot["issues"][number]["kind"], elementId: number) => ({
-  id,
-  kind,
-  elementId,
-  point: [0, 0, 0],
-  note: "",
-});
+import { groupOf, issueOf, nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
 
 /** One supply group off AHU 9: an open end and an accessory with no drop. */
-const snapshot = {
-  coordinateEncoding: "native-double",
+const snapshot = snapshotOf({
   document: {
     title: "t",
     readAt: "2026-09-26T00:00:00Z",
     elapsedMs: 1,
     networkBasedCalculations: false,
   },
-  levels: [],
   groups: [
-    {
-      id: "g1",
+    groupOf("g1", {
       rootIds: [9],
       classifications: ["Supply Air"],
       systemNames: ["SA 1"],
       terminalCount: 1,
       elementCount: 4,
-      loops: 0,
       issueIds: ["open-end:2:1", "no-component-drop:3"],
-    },
+    }),
   ],
   nodes: [
-    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(3).toString(16).padStart(8, "0")}`,
-      id: 3,
-      kind: "accessory",
-      category: "Duct Accessories",
-      family: "Damper",
-      point: [0, 0, 0],
-      connectors: [],
-      facts: [],
-    },
-    { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(9).toString(16).padStart(8, "0")}`,
-      id: 9,
-      kind: "equipment",
-      category: "Mechanical Equipment",
-      family: "AHU",
-      point: [0, 0, 0],
-      connectors: [],
-      facts: [],
-    },
+    nodeOf(3, "accessory", { category: "Duct Accessories", family: "Damper", point: [0, 0, 0] }),
+    nodeOf(9, "equipment", { category: "Mechanical Equipment", family: "AHU", point: [0, 0, 0] }),
   ],
-  segments: [],
-  flows: [],
   issues: [
-    issue("open-end:2:1", "open-end", 2),
-    issue("no-component-drop:3", "no-component-drop", 3),
+    issueOf("open-end:2:1", "open-end", 2, { point: [0, 0, 0] }),
+    issueOf("no-component-drop:3", "no-component-drop", 3, { point: [0, 0, 0] }),
   ],
-  layers: [],
-  systems: [],
-  slots: {
-    terminalDrop: "PE_M_Grd_ExternalStaticPressure",
-    fanStatic: "PE_M_Fan_ExternalStaticPressure",
-    fanFlow: "PE_M_Fan_AirFlow",
-    componentDrop: "Pressure Drop",
-    fittingCoefficient: "Pe_C",
-    terminalFlow: "PE_M_Grd_AirFlow",
-  },
-} as DuctSnapshot;
+});
 
 it("a group climbs from blocked to walkable to budgetable as a person stages assumptions", () => {
   const stage = (doc: DuctsRouteDocument, key: string, value: unknown) => {
