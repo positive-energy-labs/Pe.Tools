@@ -4,7 +4,7 @@
  * overwritten. Callers await this before anything reads the pods root.
  */
 import { join, dirname, resolve } from "node:path";
-import { mkdir, readFile, readdir } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { noteStored, readStored, writeAtomic } from "@pe/host-contracts/store";
@@ -169,7 +169,10 @@ async function run(
     const bytes = await readFile(path);
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     const installed = (await listPackages(everyRoot)).packages.find(pod => pod.id === archiveId(readZip(bytes)));
-    if (ledger.offered[sha256] && !installed) {
+    // A manifest-free folder may be a prior torn import, even if an old host called it present.
+    const partial = !installed && await lstat(join(options.podsRoot ?? productPodsRootPath(), archiveId(readZip(bytes))))
+      .catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return null; });
+    if (ledger.offered[sha256] && !installed && !partial) {
       outcomes.push({ archive, sha256, outcome: "offered-before" });
       continue;
     }
@@ -177,7 +180,7 @@ async function run(
       ...options, stateRoot: options.stateRoot ?? dirname(ledgerFile),
       originalsRoot: join(dirname(ledgerFile), "shipped-pod-originals"),
     }, installed);
-    outcomes.push(ledger.offered[sha256] && outcome.outcome === "present" && !shippedPodUpdateRefusals.has(installed!.id)
+    outcomes.push(ledger.offered[sha256] && outcome.outcome === "present" && (!installed || !shippedPodUpdateRefusals.has(installed.id))
       ? { archive, sha256, outcome: "offered-before" } : outcome);
     ledger.offered[sha256] = {
       archive,

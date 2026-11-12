@@ -13,7 +13,7 @@ import { PictureCaptures } from "../src/captures-route.ts";
 import { storedNoticesPath } from "../src/notice-feed.ts";
 import { importShippedPods } from "../src/installed-pods.ts";
 import { listPackages } from "../src/packages.ts";
-import { exportPod, importPod, importRecordPath } from "../src/pod-transfer.ts";
+import { exportPod, importPod, importRecordPath, readZip } from "../src/pod-transfer.ts";
 import * as settings from "../src/settings.ts";
 import { productPodsRootPath } from "../src/product-paths.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -52,6 +52,41 @@ beforeEach(async () => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); return rm(root, { recursive: true, force: true }); });
 
 const boot = () => importShippedPods({ shippedRoot: shipped, ledger, podsRoot: pods, captures });
+
+test("a torn import resumes missing members and publishes its manifest last", async () => {
+  const directory = join(pods, "example");
+  const member = join(directory, "pages", "tour", "index.html");
+  await mkdir(dirname(member), { recursive: true });
+  await writeFile(member, "<title>Tour</title>");
+  const writes = vi.spyOn(settings, "writeHome");
+  await expect(importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures }))
+    .resolves.toMatchObject({ id: "example" });
+  expect(await readFile(join(directory, "pod.json"), "utf8")).toContain('"example"');
+  expect(writes.mock.calls.map(([path]) => path)).toEqual([join(directory, "pod.json")]);
+});
+
+test.each(["different", "extra"])("a torn folder with a %s file refuses with its address and remedy", async (kind) => {
+  const directory = join(pods, "example");
+  const member = join(directory, kind === "extra" ? "notes.txt" : "pages/tour/index.html");
+  await mkdir(dirname(member), { recursive: true });
+  await writeFile(member, "mine");
+  const result = importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures });
+  await expect(result).rejects.toThrow(directory);
+  await expect(result).rejects.toThrow(kind === "extra" ? "notes.txt" : "pages/tour/index.html");
+  await expect(result).rejects.toThrow(/remove or rename/i);
+  expect(await readFile(member, "utf8")).toBe("mine");
+});
+
+test("a shipped example resumes a torn folder on restart, even if previously recorded present", async () => {
+  const entries = readZip(await readFile(join(shipped, "example.zip")));
+  const member = join(pods, "example", "pages", "tour", "index.html");
+  await mkdir(dirname(member), { recursive: true });
+  await writeFile(member, entries.get("pages/tour/index.html")!);
+  expect((await boot()).outcomes).toMatchObject([{ outcome: "imported" }]);
+  await rm(join(pods, "example", "pod.json"));
+  expect((await boot()).outcomes).toMatchObject([{ outcome: "imported" }]);
+  expect(await readFile(join(pods, "example", "pod.json"), "utf8")).toContain('"example"');
+});
 
 test.each(["io", "cas"] as const)("import rolls back a second-member failure (%s) and a retry succeeds", async (mode) => {
   const write = settings.writeHome;
