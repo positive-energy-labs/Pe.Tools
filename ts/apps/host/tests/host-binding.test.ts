@@ -228,6 +228,30 @@ test("an installed launch binds a free port after its peer never publishes a rec
   expect(waits).toEqual(Array(60).fill(500));
 });
 
+test("an installed launch binds 5180 as soon as its recordless peer frees the port", async () => {
+  const ownership = owner("installed", temp());
+  const waits: number[] = [];
+  let discoveries = 0;
+  const dependencies = {
+    ...machine(new Map([[installedPort, ownership.executablePath]])),
+    discover: async () => {
+      discoveries++;
+      return null;
+    },
+    portAvailable: async (port: number) => {
+      expect(port).toBe(installedPort);
+      return waits.length > 0;
+    },
+    sleep: async (ms: number) => {
+      waits.push(ms);
+    },
+  };
+  expect(await prepareHostBinding(false, "0.7.31", ownership, dependencies)).toBe(installedPort);
+  // Returning 5180 only at the tail after the full wait is also a regression.
+  expect(waits).toEqual([500]);
+  expect(discoveries).toBe(3);
+});
+
 test.each([false, true])(
   "an older verified incumbent is retired after discovery (boot window: %s)",
   async (bootWindow) => {
