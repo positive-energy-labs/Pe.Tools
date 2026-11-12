@@ -26,7 +26,7 @@ import { openFanSheetSchema as openSheetSchema } from "@pe/agent-contracts";
 import type { OpenSheet } from "./types.ts";
 import sheetFixture from "./sheet.fixture.json";
 import { type FanPort } from "./model";
-import { beyondPicture, SheetPicture } from "./picture";
+import { beyondLabels, beyondPicture, SheetPicture } from "./picture";
 
 const io = vi.hoisted(() => ({ call: vi.fn() }));
 vi.mock("#/host/client", () => ({ callHostRpc: io.call }));
@@ -235,7 +235,17 @@ it("hovering a context element names whose air it is and that this fan's calc le
   });
 });
 
-
+// Drive 10 fix line 2: about 20 copies of one sentence swamped the /fans picture.
+it("a stopping unit's stubs say whose air they are once, however many elements lie beyond it", () => {
+  const markOf = new Map([[1, "RV-33"], [2, "RV-33"], [3, "RV-33"], [4, "RV-7"]]);
+  const labels = beyondLabels(markOf, (id) => (id === 1 ? null : [id, 0, 0]));
+  expect(labels.map((label) => label.text)).toEqual([
+    "beyond RV-33 (its own fan); not in this fan's calc",
+    "beyond RV-7 (its own fan); not in this fan's calc",
+  ]);
+  // Anchored on the first element with a point; every element of the unit still answers a hover.
+  expect(labels[0]).toMatchObject({ at: [2, 0, 0], ids: [2, 3], stub: true });
+});
 
 it("reads a selected duct and run from the current sheet, including missing data and provenance", () => {
   const leg = { ...sheetFixture.legs.legs[0], elementId: a!.id, flowCfm: 120, velocityFpm: null };

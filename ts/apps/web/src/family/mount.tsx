@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { AttachPdf } from "./attach-pdf";
 import { FamilyProvider } from "./workspace";
 import { FamilyWorkspaceAnatomy } from "./workspace-anatomy";
 import { FamilyWorkspaceTable } from "./workspace-table";
@@ -25,8 +26,7 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
     open = member(page),
     // A save lands in the chosen Pod, else beside the open member.
     pod = page.pod || open?.pod || "";
-  const [failure, setFailure] = useState<string | null>(null),
-    [source, setSource] = useState("");
+  const [failure, setFailure] = useState<string | null>(null);
   const [destination, setDestination] = useState<{ pod: string; text: string } | null>(null);
   const run = async (id: string, input: unknown) => {
     try {
@@ -128,32 +128,15 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
           {data?.specError && (
             <OutcomeLine kind="error" label="Saved PDF evidence" says={data.specError} />
           )}
-          <label>
-            PDF path or URL
-            <Input
-              aria-label="PDF path or URL"
-              value={source}
-              onChange={(event) => setSource(event.target.value)}
-            />
-          </label>
-          <Button
-            label="Attach PDF path or URL"
-            refusal={
-              !open
-                ? "Choose a saved family"
-                : !source
-                  ? "Enter a PDF path or URL"
-                  : null
-            }
-            onClick={() =>
+          <AttachPdf
+            open={open != null}
+            onAttach={(source) =>
               void run("attach", {
                 member: open,
                 source: /^https?:/.test(source) ? { url: source } : { path: source },
               })
             }
-          >
-            Attach PDF
-          </Button>
+          />
           {data?.profile && (
             <Button
               label="Stage family build"
