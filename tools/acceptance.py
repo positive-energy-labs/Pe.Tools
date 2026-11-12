@@ -434,25 +434,34 @@ def census(run: str, label: str = "census") -> None:
 
 def teardown(run: str) -> None:
     state = load(run)
-    for session in state["sessions"]:
-        stopped = sdk(run, f"teardown-stop-{session}", ["session", "stop", "--id", session, "--unsaved",
-                                                      "keep" if state.get("lane") == "installed" else "discard"])
-        if state.get("lane") == "installed" and not sdk_ok(stopped):
-            census(run, "teardown-refused")
-            sys.exit("Owned installed session did not stop; host preserved; inspect receipt")
-    svc = service(state)
-    if (svc and state["host"] and state["host"].get("owned", True)
-            and svc["pid"] == state["host"].get("pid")  # absent while a timed-out launcher is unadopted
-            and (not state["host"].get("instanceId") or svc.get("instanceId") == state["host"]["instanceId"])):
-        result = http(state, "service", "POST", "/admin/shutdown", b"{}")
-        log(run, f"host shutdown {result['status']}")
-        deadline = time.time() + 30
-        while pid_alive(svc["pid"]) and time.time() < deadline:
-            time.sleep(1)
-    census(run, "teardown")
-    residue = [p for p in processes() if str(CHECKOUT).lower() in (p.get("CommandLine") or "").lower()]
-    revit = [p for p in revit_pids() if p not in state["revitBefore"]]
-    log(run, f"teardown residue: {len(residue)} checkout processes {[p['ProcessId'] for p in residue]}, new Revit {revit}")
+    try:
+        for session in state["sessions"]:
+            stopped = sdk(run, f"teardown-stop-{session}", ["session", "stop", "--id", session, "--unsaved",
+                                                          "keep" if state.get("lane") == "installed" else "discard"])
+            if state.get("lane") == "installed" and not sdk_ok(stopped):
+                census(run, "teardown-refused")
+                sys.exit("Owned installed session did not stop; host preserved; inspect receipt")
+        svc = service(state)
+        if (svc and state["host"] and state["host"].get("owned", True)
+                and svc["pid"] == state["host"].get("pid")  # absent while a timed-out launcher is unadopted
+                and (not state["host"].get("instanceId") or svc.get("instanceId") == state["host"]["instanceId"])):
+            result = http(state, "service", "POST", "/admin/shutdown", b"{}")
+            log(run, f"host shutdown {result['status']}")
+            deadline = time.time() + 30
+            while pid_alive(svc["pid"]) and time.time() < deadline:
+                time.sleep(1)
+        census(run, "teardown")
+        residue = [p for p in processes() if str(CHECKOUT).lower() in (p.get("CommandLine") or "").lower()]
+        revit = [p for p in revit_pids() if p not in state["revitBefore"]]
+        log(run, f"teardown residue: {len(residue)} checkout processes {[p['ProcessId'] for p in residue]}, new Revit {revit}")
+    finally:
+        if state.get("lane") != "installed" and os.environ.get("PE_ACCEPT_KEEP_HOME") != "1":
+            # Only remove the system-temp container created by setup, never an arbitrary saved home.
+            home = Path(state["home"]).resolve()
+            container = home.parent
+            if (home.name == "Pe.Tools" and container.name.startswith("pe-accept-")
+                    and container.parent == Path(tempfile.gettempdir()).resolve()):
+                shutil.rmtree(container)
 
 
 def processes() -> list[dict]:
