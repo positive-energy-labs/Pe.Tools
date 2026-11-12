@@ -3,6 +3,19 @@ import { parseFamilyPdf } from "@pe/mcps/family-pdf";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
+test("a failed upload surfaces after one attempt per person send", async () => {
+  const uploads: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (!url.endsWith("/api/v2/parse/upload")) throw Error("Unexpected polling after failed upload");
+    uploads.push(url);
+    return Response.json({ detail: "Upload failed" }, { status: 500 });
+  }));
+  await expect(parseFamilyPdf({ sender: "person", file: new File(["%PDF-fixture"], "sheet.pdf"), apiKey: "fixture-key" }))
+    .rejects.toThrow(/500/);
+  expect(uploads).toHaveLength(1);
+});
+
 // Mutant: restore the old adapter's no-webUrl refusal. Only the remote HTTP boundary is substituted.
 test("parseFamilyPdf uses the explicit key in-process without a webUrl or environment key", async () => {
   vi.stubEnv("LLAMA_CLOUD_API_KEY", "");
