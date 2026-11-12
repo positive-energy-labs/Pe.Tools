@@ -55,7 +55,7 @@ test("stored fans Work with an ElementId cell is discarded; UniqueId port cells 
   const cell = { edit: { value: { inWg: 0.2 } } };
   const open = async (cellKey: string) => {
     await writeFile(path, JSON.stringify({ format: "route-state-record-v2", targetKey, route: key.route,
-      value: { version: 1, schemaVersion: 1, revision: 7,
+      value: { version: 1, schemaVersion: spec.schemaVersion, revision: 7,
         doc: { terminalDrops: { [cellKey]: cell } }, history: [] } }));
     return (await createPeRoutes({ store: fileRouteDocumentStore(dir), registrations: [{ spec }] })
       .fetch(new Request(`http://host/pe/route-state/${key.route}`))).json();

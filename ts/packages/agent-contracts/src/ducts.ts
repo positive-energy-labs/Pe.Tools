@@ -626,7 +626,7 @@ export const DUCTS_FINDS = [
 ] as const;
 
 export const ductsRouteState = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   route: "ducts",
   title: "Ducts",
   description:

@@ -93,6 +93,7 @@
         "per": "route",
         "label": "Velocity limit supply",
         "unit": "fpm",
+        "default": 900,
         "min": 0
       },
       "setting.ducts.velocityReturnFpm": {
@@ -110,6 +111,7 @@
         "per": "route",
         "label": "Velocity limit return",
         "unit": "fpm",
+        "default": 700,
         "min": 0
       },
       "setting.ducts.terminalDropInWg": {
@@ -126,6 +128,7 @@
         "per": "route",
         "label": "Default terminal drop",
         "unit": "in-wg",
+        "default": 0.03,
         "min": 0
       },
       "setting.ducts.autoJoinGapIn": {
@@ -142,6 +145,7 @@
         "per": "route",
         "label": "Auto-join gap",
         "unit": "in",
+        "default": 3,
         "min": 0
       },
       "setting.ducts.healBoxIn": {
@@ -158,6 +162,7 @@
         "per": "route",
         "label": "Heal box",
         "unit": "in",
+        "default": 36,
         "min": 0
       },
       "setting.ducts.splitPolicy": {
@@ -172,7 +177,8 @@
           "firm"
         ],
         "per": "route",
-        "label": "Split policy"
+        "label": "Split policy",
+        "default": "even"
       },
       "setting.ducts.allowanceSupplyInWg": {
         "kind": "setting",
@@ -189,6 +195,7 @@
         "per": "route",
         "label": "Allowance supply",
         "unit": "in-wg",
+        "default": 0,
         "min": 0
       },
       "setting.ducts.allowanceReturnInWg": {
@@ -206,6 +213,7 @@
         "per": "route",
         "label": "Allowance return",
         "unit": "in-wg",
+        "default": 0,
         "min": 0
       },
       "setting.ducts.parameters.fanStatic": {

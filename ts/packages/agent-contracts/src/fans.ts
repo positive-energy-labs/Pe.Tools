@@ -58,5 +58,5 @@ export const fansRouteState = {
   title: "Fans",
   description: fansDocumentSchema.description ?? "Inspect fan paths, inputs and pressure requirements",
   schema: fansDocumentSchema,
-  schemaVersion: 1,
+  schemaVersion: 2,
 } satisfies RouteStateSpec<typeof fansDocumentSchema>;
