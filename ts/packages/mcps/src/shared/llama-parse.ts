@@ -93,7 +93,8 @@ export async function parseWithLlamaCloud(
     );
   // Dynamic import keeps the SDK out of the client bundle and out of hosts that never parse.
   const { default: LlamaCloud } = await import("@llamaindex/llama-cloud");
-  const client = new LlamaCloud({ apiKey: request.apiKey });
+  // ADR 0038: one Confirm, one upload; the person retries via Confirm.
+  const client = new LlamaCloud({ apiKey: request.apiKey, maxRetries: 0 });
   const result = await client.parsing.parse(
     {
       tier: LLAMA_TIER,

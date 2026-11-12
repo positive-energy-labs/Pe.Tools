@@ -170,6 +170,30 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+test("a failed Confirm uploads once and surfaces the error; a later Confirm can retry", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "held-upload-failure-"));
+  try {
+    const path = join(dir, "schedule.pdf");
+    const bytes = schedulePdf();
+    writeFileSync(path, bytes);
+    vi.stubEnv("LLAMA_CLOUD_API_KEY", "fixture-key");
+    let uploads = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: Request | string | URL) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      if (url.pathname !== "/api/v2/parse/upload") throw Error("Unexpected polling after failed upload");
+      uploads++;
+      return Response.json({ detail: "Upload failed" }, { status: 500 });
+    }));
+    const request = { path, sha256: sha256Of(bytes), pages: "1" };
+    await expect(sendHeldParse(request)).rejects.toThrow(/500/);
+    expect(uploads).toBe(1);
+    await expect(sendHeldParse(request)).rejects.toThrow(/500/);
+    expect(uploads).toBe(2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // Guard 3 (ADR 0038; homes MAP R2/R3): Pea's read never sends a file outward. Mutant that turns
 // this red: in `src/shared/llama-parse.ts` replace `request.sender !== "person"` with `false`
 // (the upload POST then appears on Pea's own call).
