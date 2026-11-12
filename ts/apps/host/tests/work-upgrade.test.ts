@@ -1,12 +1,53 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { bindWork, workKey, ductsRouteState, fansRouteState } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
-import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
+import { readStoredNotices, sha256Hex, writeHomeFile } from "@pe/host-contracts/store";
 import { storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
+
+vi.mock("@pe/host-contracts/store", async (original) => {
+  const store = await original<typeof import("@pe/host-contracts/store")>();
+  return { ...store, writeHomeFile: vi.fn(store.writeHomeFile) };
+});
+
+test("upgrade refuses concurrent Work changes and preserves the newer bytes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-work-upgrade-conflict-"));
+  const store = fileRouteDocumentStore(dir);
+  const spec = ductsRouteState;
+  const key = bindWork(spec.route, null), targetKey = workKey(key);
+  const workspace = new RouteWorkspace({ store, registrations: [{ spec }] });
+  const actual = await vi.importActual<typeof import("@pe/host-contracts/store")>("@pe/host-contracts/store");
+  try {
+    await store.setState({ targetKey, route: spec.route, value: {
+      version: 1, schemaVersion: 2, revision: 7,
+      doc: { ...spec.schema.parse({}), designFriction: { edit: { value: 0.12 } } }, history: [],
+    } });
+    const path = join(dir, (await readdir(dir))[0]!);
+    const record = JSON.parse(await readFile(path, "utf8"));
+    record.value.revision = 8;
+    record.value.doc.designFriction.edit.value = 0.24;
+    const newer = Buffer.from(`\n  ${JSON.stringify(record)}\n`);
+    vi.mocked(writeHomeFile).mockImplementationOnce((file, bytes, options) => {
+      expect(file).toBe(path);
+      // Race after preservePrior reads its hash, before the real write door compares it.
+      writeFileSync(path, newer);
+      const saved = actual.writeHomeFile(file, bytes, options);
+      expect(saved).toMatchObject({ ok: false, kind: "conflict" });
+      return saved;
+    });
+    await expect(workspace.readUncaptured(key, spec.route)).rejects.toThrow(
+      "Work changed before its schema upgrade",
+    );
+    expect(await readFile(path)).toEqual(newer);
+  } finally {
+    vi.mocked(writeHomeFile).mockReset().mockImplementation(actual.writeHomeFile);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 
 for (const [spec, previous, removed, staged, dropped] of [
   [ductsRouteState, 2, "designFriction", { labelParameter: { edit: { value: "Mark" } } }, { edit: { value: 0.12 } }],
