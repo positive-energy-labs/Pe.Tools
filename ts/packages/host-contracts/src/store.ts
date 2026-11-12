@@ -370,7 +370,7 @@ export function discardStored(
 /**
  * The derived store (ADR 0037 rule 6): one flat folder of write-once files, `<key>.<sha256 of the
  * file's own bytes>`. The key names what the file was derived from, so a second person finds it;
- * the second half lets any reader prove the bytes, so a torn or altered file is never served.
+ * the second half lets any reader prove the bytes are intact, not who wrote them.
  * `dir` is a project home's `Derived` folder, or the machine's `state\Derived` when there is none.
  */
 export type DerivedStore = { dir: string; notices: string; blobRoot: string };
