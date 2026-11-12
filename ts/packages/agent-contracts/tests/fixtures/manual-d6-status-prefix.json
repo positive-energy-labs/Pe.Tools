@@ -147,6 +147,9 @@
             "flows"
           ],
           [
+            "parameters"
+          ],
+          [
             "subject"
           ],
           [
@@ -212,6 +215,10 @@
           ],
           [
             "flows",
+            "*"
+          ],
+          [
+            "parameters",
             "*"
           ],
           [
@@ -287,6 +294,10 @@
           ],
           [
             "flows",
+            "*"
+          ],
+          [
+            "parameters",
             "*"
           ],
           [
@@ -398,6 +409,14 @@
         "roles": {},
         "loads": {},
         "flows": {},
+        "parameters": {
+          "fanFlow": {
+            "edit": null
+          },
+          "terminalFlow": {
+            "edit": null
+          }
+        },
         "subject": {},
         "claims": {},
         "labelParameter": {},
