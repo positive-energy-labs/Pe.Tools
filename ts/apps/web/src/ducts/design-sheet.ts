@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DUCTS_CRITERIA_CELLS, type DuctsCriteriaCell } from "@pe/agent-contracts";
-import { local, store, type CellLayer, type SheetSlot } from "@pe/agent-contracts/slots";
+import { local, setting, store, type CellLayer, type SheetBinding, type SheetSlot } from "@pe/agent-contracts/slots";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { criterionLabel } from "./sheet/criterion-words.neutral.ts";
 
@@ -21,7 +21,25 @@ export const NO_SHARED_ROOT = "No firm home: no shared drive on this machine hol
 /** A criterion's provenance when the firm layer is refused: the host resolved it on the engine seed. */
 export const ENGINE_DEFAULT_NO_SHARED_ROOT = "Engine default: no firm home, so the /ducts firm file (Settings/ducts.json) is not read";
 
-const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { "model-store": "model-store", model: "model", firm: "firm", default: "default" };
+const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { "model-store": "model-store", model: "model", project: "project", firm: "firm", default: "default" };
+const cellLabel = (cell: DuctsCriteriaCell) => {
+  const [key, side] = DUCTS_CRITERIA_CELLS[cell].layer;
+  return side ? `${criterionLabel(key)} ${side}` : criterionLabel(key);
+};
+/**
+ * The ducts criteria as tiered settings (ADR 0037 rule 8): `criteria.<...>` in `Settings/ducts.json`
+ * of the project home, then the firm home. They decide a computed result, so no user tier is
+ * declared (ADR 0026: two engineers price the same thing the same way). /fans, /ducts and /settings
+ * draw the same bindings, so one value has one label everywhere.
+ */
+export const ductsSettings = Object.fromEntries(
+  (Object.keys(DUCTS_CRITERIA_CELLS) as DuctsCriteriaCell[]).map((cell) => {
+    const declared = DUCTS_CRITERIA_CELLS[cell];
+    return [`setting.ducts.${cell}`, setting("ducts", ["criteria", ...declared.layer], declared.value, ["project", "firm"], {
+      label: cellLabel(cell), ...(declared.unit ? { unit: declared.unit } : {}), ...(cell === "splitPolicy" ? {} : { min: 0 }),
+    })];
+  }),
+) as Readonly<Record<string, SheetBinding>>;
 const resolvedOf = (read: DesignRead, cell: DuctsCriteriaCell) => {
   const [key, side] = DUCTS_CRITERIA_CELLS[cell].layer;
   const at = read?.criteria?.[key];
@@ -36,19 +54,17 @@ export const designSheet = {
   // Slice 2b's banner: with the firm layer refused, the sheet draws the fix once, above its cells.
   from: (read: DesignRead) => (read?.firm && "refused" in read.firm ? { says: NO_SHARED_ROOT } : null),
   bindings: {
+    ...ductsSettings,
     criteria: store("_PE_DuctLosses", DUCTS_CRITERIA_CELLS.velocitySupplyFpm.value.or(DUCTS_CRITERIA_CELLS.splitPolicy.value), "subject", {
       min: 0,
       rows: () => Object.keys(DUCTS_CRITERIA_CELLS),
-      rowLabel: (_read, row) => {
-        const [key, side] = DUCTS_CRITERIA_CELLS[row as DuctsCriteriaCell].layer;
-        return side ? `${criterionLabel(key)} ${side}` : criterionLabel(key);
-      },
+      rowLabel: (_read, row) => cellLabel(row as DuctsCriteriaCell),
       model: (read: DesignRead, row) => {
         const resolved = resolvedOf(read, row as DuctsCriteriaCell);
         if (!resolved || resolved.value == null) return null;
-        // ADR 0035 rule 11 disables the shared firm layer, never the Work above it: a criterion on that
-        // layer with no firm home is the engine seed, says so, and stays an editable cell.
-        if (resolved.source === "firm" && read?.firm && "refused" in read.firm)
+        // A criterion no home states is the engine default; with the firm home not found, the row says so.
+        // The host never labels a refused firm read "firm"; if a read ever did, this sheet still would not.
+        if ((resolved.source === "default" || resolved.source === "firm") && read?.firm && "refused" in read.firm)
           return { value: resolved.value, source: "default", ref: ENGINE_DEFAULT_NO_SHARED_ROOT,
             ...(resolved.units ? { unit: resolved.units } : {}) };
         const source = SOURCES[resolved.source] ?? "model";

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SETTING_TIERS, type SettingTier } from "../tiered-setting.ts";
 
 /*
  * The sheet slot (ADR 0035 rules 1 and 3; ADR 0030 rules 4, 6 and 8). A route fills it with data:
@@ -7,8 +8,11 @@ import { z } from "zod";
  * Owner: slice 7. Scaffold: types and the closed kinds only.
  */
 
-/** Three closed binding kinds. Only the kernel adds one; the firm file is a layer, a Pod member a home. */
-export const BINDING_KINDS = ["parameter", "store", "local"] as const;
+/**
+ * Four closed binding kinds (ADR 0035 rule 3, amended by ADR 0037 rule 8). Only the kernel adds one.
+ * A `setting` is a tiered value in `Settings/<owner>.json` of a home; a Pod member is a home of Work.
+ */
+export const BINDING_KINDS = ["parameter", "store", "local", "setting"] as const;
 export type BindingKind = (typeof BINDING_KINDS)[number];
 
 /** Whether a binding has one cell per subject row or one cell for the route. */
@@ -25,7 +29,7 @@ export interface SheetChoice {
   readonly clear?: true;
 }
 
-/** A layer under Work for one row: what the model, the store, the firm file or a default holds, and from where. */
+/** A layer under Work for one row: what the model, the store, a home tier or a default holds, and from where. */
 export interface CellLayer {
   readonly value: unknown;
   readonly source?: Exclude<CellSource, "work">;
@@ -72,6 +76,11 @@ export type SheetBinding<V extends z.ZodType = z.ZodType> = BindingDraw &
     | { kind: "store"; store: string; schema: V; per: BindingPer }
     /** Work only; feeds the Goal and never reaches Revit. */
     | { kind: "local"; schema: V; per: BindingPer }
+    /**
+     * A tiered value: `path` inside `Settings/<owner>.json`, served by the most specific of `tiers`
+     * that states it. It never stages in Work: a person saves it at a tier, through the home write door.
+     */
+    | { kind: "setting"; owner: string; path: readonly string[]; schema: V; tiers: readonly SettingTier[]; per: "route" }
   );
 
 export const parameter = <V extends z.ZodType>(parameter: string, schema: V, unit?: string, draw?: BindingDraw) =>
@@ -80,6 +89,9 @@ export const store = <V extends z.ZodType>(store: string, schema: V, per: Bindin
   ({ ...draw, kind: "store", store, schema, per }) as const satisfies SheetBinding<V>;
 export const local = <V extends z.ZodType>(schema: V, per: BindingPer = "route", draw?: BindingDraw) =>
   ({ ...draw, kind: "local", schema, per }) as const satisfies SheetBinding<V>;
+
+export const setting = <V extends z.ZodType>(owner: string, path: readonly string[], schema: V, tiers: readonly SettingTier[], draw?: BindingDraw) =>
+  ({ ...draw, kind: "setting", owner, path, schema, tiers, per: "route" }) as const satisfies SheetBinding<V>;
 
 /** The declaration: bindings by cell name. Rows are the route subject; the kernel supplies them. */
 export interface SheetSlot<B extends Readonly<Record<string, SheetBinding>> = Readonly<Record<string, SheetBinding>>> {
@@ -107,8 +119,12 @@ export interface CellAddress {
   readonly row?: string;
 }
 
-/** Where the drawn value came from (ADR 0026 layers: Work → model store → firm → default), or the model itself. */
-export type CellSource = "work" | "model-store" | "firm" | "default" | "model";
+/**
+ * Where the drawn value came from (ADR 0026 layers: Work → model store → project → firm → default), or
+ * the model itself. `user`, `project` and `firm` name the home that served it; a home that was not
+ * found is never a source.
+ */
+export type CellSource = "work" | "model-store" | SettingTier | "default" | "model";
 
 /** Every value Pea can touch (ADR 0030 rule 8): current, model (struck), pending author, drift, freshness, source. */
 export interface StateCell<V = unknown> extends CellAddress {
@@ -154,6 +170,7 @@ export const sheetSlotDataSchema = z.strictObject({
       z.strictObject({ kind: z.literal("parameter"), parameter: z.string().min(1), per: z.literal("subject"), ...drawData }),
       z.strictObject({ kind: z.literal("store"), store: z.string().min(1), per: z.enum(["subject", "route"]), ...drawData }),
       z.strictObject({ kind: z.literal("local"), per: z.enum(["subject", "route"]), ...drawData }),
+      z.strictObject({ kind: z.literal("setting"), owner: z.string().min(1), path: z.array(z.string().min(1)).min(1).readonly(), tiers: z.array(z.enum(SETTING_TIERS)).min(1).readonly(), per: z.literal("route"), ...drawData }),
     ]),
   ),
 });
@@ -165,5 +182,5 @@ export const sheetSlotData = (slot: SheetSlot): SheetSlotData => ({
   bindings: Object.fromEntries(Object.entries(slot.bindings).map(([name, binding]) => [name,
     Object.fromEntries(Object.entries(binding).filter(([key, value]) => key !== "schema" && typeof value !== "function"))])),
 }) as SheetSlotData;
-/** A binding the plan derives a Revit write from (`local` feeds only the Goal). */
-export const writesRevit = (data: SheetSlotData) => Object.values(data.bindings).some((b) => b.kind !== "local");
+/** A binding the plan derives a Revit write from (`local` feeds only the Goal; a `setting` writes a home). */
+export const writesRevit = (data: SheetSlotData) => Object.values(data.bindings).some((b) => b.kind === "parameter" || b.kind === "store");

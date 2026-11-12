@@ -76,11 +76,153 @@
       "refresh": "dependencies"
     }
   },
+  "sheet": {
+    "bindings": {
+      "setting.ducts.velocitySupplyFpm": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "velocityLimitFpm",
+          "supply"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Velocity limit supply",
+        "unit": "fpm",
+        "min": 0
+      },
+      "setting.ducts.velocityReturnFpm": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "velocityLimitFpm",
+          "return"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Velocity limit return",
+        "unit": "fpm",
+        "min": 0
+      },
+      "setting.ducts.terminalDropInWg": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "terminalDropInWg"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Default terminal drop",
+        "unit": "in-wg",
+        "min": 0
+      },
+      "setting.ducts.autoJoinGapIn": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "autoJoinGapIn"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Auto-join gap",
+        "unit": "in",
+        "min": 0
+      },
+      "setting.ducts.healBoxIn": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "healBoxIn"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Heal box",
+        "unit": "in",
+        "min": 0
+      },
+      "setting.ducts.splitPolicy": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "splitPolicy"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Split policy"
+      },
+      "setting.ducts.allowanceSupplyInWg": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "allowanceInWg",
+          "supply"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Allowance supply",
+        "unit": "in-wg",
+        "min": 0
+      },
+      "setting.ducts.allowanceReturnInWg": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "allowanceInWg",
+          "return"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Allowance return",
+        "unit": "in-wg",
+        "min": 0
+      }
+    }
+  },
   "verbs": {},
   "panes": {
     "settings": {
-      "label": "Settings",
-      "purpose": "Configure this machine and every route",
+      "label": "This machine",
+      "purpose": "Revit, updates, sharing, providers and appearance on this machine",
+      "draws": [
+        "value"
+      ],
+      "verbs": []
+    },
+    "sheet": {
+      "label": "Sheet",
+      "purpose": "Edit the bound cells",
       "draws": [
         "value"
       ],
@@ -88,14 +230,28 @@
     }
   },
   "layout": {
-    "kind": "pane",
-    "id": "settings"
+    "kind": "split",
+    "id": "settings-layout",
+    "axis": "v",
+    "size": 320,
+    "children": [
+      {
+        "kind": "pane",
+        "id": "settings"
+      },
+      {
+        "kind": "pane",
+        "id": "sheet"
+      }
+    ],
+    "sized": "end"
   },
   "stages": {
     "main": {
       "word": "Settings",
       "panes": [
-        "settings"
+        "settings",
+        "sheet"
       ],
       "verbs": []
     }

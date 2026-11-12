@@ -2,8 +2,10 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { canonicalRouteInput as canonicalJson } from "@pe/agent-contracts";
 import { documentRefSchema } from "@pe/agent-contracts/target";
+import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 import {
   firm as firmFile,
+  settingsFile,
   firmOwner,
   leaf,
   nativeRead,
@@ -122,6 +124,8 @@ export interface ReadContext {
   native<K extends CatalogReadKey>(key: K, args: NativeArgs<K>): Promise<NativeValue<K>>;
   /** The firm file layer (ADR 0026): the firm's per-owner `<owner>.json` decoded by `schema`, else `seed` with why. */
   firm<T>(owner: string, schema: z.ZodType<T>, seed: T): Promise<FirmValue<T>>;
+  /** Every home tier's `Settings/<owner>.json` for the target model (ADR 0037 rule 8), most specific first. */
+  settings(owner: string, target: z.output<typeof documentRefSchema> | null): Promise<SettingTierRead[]>;
   collect<K, I, O>(
     keys: readonly K[],
     options: {
@@ -209,6 +213,7 @@ export async function evaluate<I, O>(
     native: (key, args) => ctx.read(nativeRead(key), args),
     firm: async (owner, schema, seed) =>
       resolveFirm(await ctx.read(firmFile, firmOwner.parse(owner)), schema, seed),
+    settings: (owner, target) => ctx.read(settingsFile, { owner: firmOwner.parse(owner), target }),
     collect: async (keys, options) => {
       if (!Number.isSafeInteger(options.batch) || options.batch < 1)
         throw Error("Batch must be a positive integer");

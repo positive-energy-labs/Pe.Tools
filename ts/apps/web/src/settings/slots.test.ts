@@ -1,20 +1,21 @@
 /**
- * Slice 10 falsifier for /settings (routes MAP row 10, ADR 0035 rules 1 and 3): no subject, `section`
- * is the route's one query, and the sheet slot stays empty, because the per-user setting fields have
- * no binding kind and rule 3 is closed. The settings pane is the route's own drawing until a kind is
- * ruled; this test turns red the day a sheet, subject or second query appears without that ruling.
+ * /settings' slots (routes MAP row 10; homes MAP slice 6b; ADR 0035 rules 1 and 3 as amended by
+ * ADR 0037 rule 8): no subject, `section` is the route's one query, and the sheet holds only
+ * `setting` bindings. A tiered value is saved at a home, never staged in Work, so this test turns
+ * red the day a Work-staging kind, a subject or a second query appears here.
  */
 import { expect, test } from "vite-plus/test";
 import { module } from "./route.ts";
 
-test("/settings declares no subject and no sheet, and `section` as its query", () => {
+test("/settings declares no subject, a sheet of tiered settings only, and `section` as its query", () => {
   const { spec, data } = module;
   expect(spec.subject).toBeUndefined();
-  expect(spec.sheet).toBeUndefined();
+  expect(Object.values(spec.sheet!.bindings).map((binding) => binding.kind)).toContain("setting");
+  expect(Object.values(spec.sheet!.bindings).every((binding) => binding.kind === "setting")).toBe(true);
   expect(spec.goal).toBeUndefined();
   expect(Object.keys(spec.query ?? {})).toEqual(["section"]);
   expect(data.fields.section).toMatchObject({ role: "query", url: "push" });
-  expect(data.sheet).toBeUndefined();
-  // The one pane is the route's own: no kernel slot holds a per-user setting.
-  expect(Object.keys(spec.panes)).toEqual(["settings"]);
+  expect(Object.values(data.sheet!.bindings).every((binding) => binding.kind === "setting")).toBe(true);
+  // The route's own pane holds acts on this machine; values in a home are the kernel sheet's.
+  expect(Object.keys(spec.panes)).toEqual(["settings", "sheet"]);
 });

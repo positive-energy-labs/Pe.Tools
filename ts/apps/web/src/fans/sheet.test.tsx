@@ -19,13 +19,16 @@ afterEach(cleanup);
 test("/fans stages no /ducts Work, and /ducts' sheet stages its criteria", () => {
   const fansKeys = Object.keys(fansDocumentSchema.shape), ductsKeys = Object.keys(ductsDocumentSchema.shape);
   // Every Fans binding addresses a Fans Work key that /ducts does not own.
-  for (const binding of Object.keys(fansSheet.bindings)) {
+  // A `setting` binding stages no Work at all: it saves at a home tier (slice 6b).
+  const staged = (sheet: { bindings: Readonly<Record<string, { kind: string }>> }) => Object.keys(sheet.bindings).filter((name) => sheet.bindings[name]!.kind !== "setting");
+  expect(Object.keys(fansSheet.bindings).length).toBeGreaterThan(staged(fansSheet).length);
+  for (const binding of staged(fansSheet)) {
     expect(fansKeys, binding).toContain(binding);
     expect(binding === "writeIntent" || !ductsKeys.includes(binding), binding).toBe(true);
   }
   // /ducts' sheet stages its criteria (a row per cell) and the design friction rate, in /ducts Work.
-  expect(Object.keys(designSheet.bindings)).toEqual(["criteria", "designFriction"]);
-  for (const binding of Object.keys(designSheet.bindings)) expect(ductsKeys).toContain(binding);
+  expect(staged(designSheet)).toEqual(["criteria", "designFriction"]);
+  for (const binding of staged(designSheet)) expect(ductsKeys).toContain(binding);
   const rows = sheetCells(designSheet, { rows: [], work: { criteria: { velocitySupplyFpm: { edit: { value: 850, by: "human" } } } }, model: [], read: null });
   expect(rows.find((c) => c.row === "velocitySupplyFpm")).toMatchObject({ value: 850, source: "work", label: "Velocity limit supply" });
   expect(rows.find((c) => c.binding === "designFriction")).toMatchObject({ value: 0.08, source: "default", unit: "in-wg/100 ft" });

@@ -4,6 +4,7 @@
  * it is the SDK session service and the bridge list under the caller's own policy. Recorded, it is
  * historical identity only: nothing here mints a current session, a bridge or an attachment.
  */
+import { z } from "zod";
 import { Context, Effect, Layer, Schema } from "effect";
 import {
   addressSchema,
@@ -33,6 +34,8 @@ export interface DocumentRow {
   readonly session: string;
   readonly openId: string;
   readonly address: Address | null;
+  /** `data.path` of the document's project-home blob (homes freeze shape 4); absent or null names no project home. */
+  readonly projectHome?: string | null;
 }
 type Read<A> = Effect.Effect<A, DoorFailure, RequestIdentity>;
 interface Inventory {
@@ -47,7 +50,7 @@ interface Inventory {
 }
 
 const sessionCodec = Schema.Struct({ sessionId: Schema.String });
-const documentRow = documentRefSchema.extend({ address: addressSchema.nullable() });
+const documentRow = documentRefSchema.extend({ address: addressSchema.nullable(), projectHome: z.string().nullable().optional() });
 const rowCodec = Schema.declare((u): u is DocumentRow => documentRow.safeParse(u).success);
 /** One selector's input and its fence: the selector with its exact arguments. */
 const selector = (name: Exclude<keyof Inventory, "subscribe">, args: Schema.Json) => {
@@ -83,6 +86,7 @@ export class HostSessionInventory extends Context.Service<HostSessionInventory, 
                     session: ref.session,
                     openId: ref.openId,
                     address: (open.address as Address | null | undefined) ?? null,
+                    projectHome: open.projectHome ?? null,
                   })
                 : Effect.fail(
                     new InvalidRead({

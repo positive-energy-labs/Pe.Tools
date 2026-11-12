@@ -113,6 +113,7 @@ import {
   writeMember,
   type PodContext,
 } from "./settings.ts";
+import { readSettingTiers, writeSettingTier } from "./tiered-settings.ts";
 import { fileVersion } from "./takeoff-actions.ts";
 import { CaptureStore as TakeoffCaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
 import { pointerThread, type ThreadPointers } from "./thread-pointers.ts";
@@ -1108,6 +1109,22 @@ const localEntries = {
   }),
   "pod.runs": Effect.fnUntraced(function* ({ request }: LocalCall) {
     return yield* listRuns(yield* decodeRequest("pod.runs", request));
+  }),
+  "settings.tiers.read": Effect.fnUntraced(function* ({ request, scope, bridge }: LocalCall) {
+    const { owner } = yield* decodeRequest("settings.tiers.read", request);
+    return { tiers: readSettingTiers(owner, (yield* targetHomes(bridge, scope)).pointer) };
+  }),
+  "settings.tiers.write": Effect.fnUntraced(function* ({ request, scope, bridge }: LocalCall) {
+    const key = "settings.tiers.write";
+    const input = yield* decodeRequest(key, request);
+    const { pointer } = yield* targetHomes(bridge, scope);
+    const wrote = yield* Effect.try({
+      try: () => writeSettingTier(input, { pointer }),
+      catch: (error) => new LocalOpError(key, error instanceof Error ? error.message : String(error), 500),
+    });
+    if (!wrote.ok) return yield* Effect.fail(new LocalOpError(key, wrote.message, wrote.status));
+    const { ok: _ok, ...written } = wrote;
+    return written;
   }),
   "pod.member.read": Effect.fnUntraced(function* ({ request, scope, bridge }: LocalCall) {
     return yield* readMember(

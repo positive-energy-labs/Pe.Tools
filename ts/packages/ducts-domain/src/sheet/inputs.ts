@@ -1,5 +1,5 @@
 import { elementSubject } from "../work-subject.ts";
-import { resolveValue, type ValueLayers, type ValueSource } from "@pe/agent-contracts";
+import { criteriaCellOf, resolveValue, type DuctsCriteriaCell, type ValueLayers, type ValueSource } from "@pe/agent-contracts";
 /** Duct-specific acquisition feeds the shared Work resolver; observed parameters and catalogs belong to the model layer. */
 import type {
   DuctUnitKind,
@@ -140,14 +140,17 @@ export function resolveCriteria(
     stored: T | undefined,
     base: T,
     units: string | null,
-    immediate?: T,
+    immediate: T | undefined,
+    cell: DuctsCriteriaCell,
   ): Resolved<T> => {
+    // The base is labelled by the tier that served this cell (ADR 0037 rule 8), never "firm" by default of thought.
+    const tier = firm.served?.[cell] ?? "firm";
     const result = resolveValue(
       {
         run: { value: immediate },
         Work: { value: typed },
         "model-store": { value: stored, ref: STORE },
-        firm: { value: base, version: firm.version },
+        [tier]: { value: base, ...(tier === "firm" ? { version: firm.version } : {}) },
       },
       units,
     );
@@ -164,6 +167,7 @@ export function resolveCriteria(
       firm.criteria[key],
       key === "splitPolicy" ? null : key === "terminalDropInWg" ? "in-wg" : "in",
       run?.criteria?.[key] as DuctsCriteriaValues[K] | undefined,
+      criteriaCellOf(key)!,
     );
   // Each side resolves on its own: typing return keeps supply's source (ducts LEDGER, sided criteria).
   const sided = (key: Sided) => ({
@@ -173,6 +177,7 @@ export function resolveCriteria(
       firm.criteria[key].supply,
       key === "velocityLimitFpm" ? "fpm" : "in-wg",
       run?.criteria?.[key]?.supply,
+      criteriaCellOf(key, "supply")!,
     ),
     return: layered(
       work?.criteria?.[key]?.return,
@@ -180,6 +185,7 @@ export function resolveCriteria(
       firm.criteria[key].return,
       key === "velocityLimitFpm" ? "fpm" : "in-wg",
       run?.criteria?.[key]?.return,
+      criteriaCellOf(key, "return")!,
     ),
   });
   return {
@@ -250,7 +256,8 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
           Work: { value: typedDrop ?? work.criteria?.terminalDropInWg },
           "model-store": { value: storedDrop ?? store.criteria?.terminalDropInWg, ref: STORE },
           model: { value: catalog?.dp ?? parameter, ref: catalog?.table },
-          firm: { value: firm.criteria.terminalDropInWg, version: firm.version },
+          // The per-terminal fallback is the criterion's base, under the tier that served it.
+          [firm.served?.terminalDropInWg ?? "firm"]: { value: firm.criteria.terminalDropInWg, version: firm.version },
         },
         "in-wg",
       );

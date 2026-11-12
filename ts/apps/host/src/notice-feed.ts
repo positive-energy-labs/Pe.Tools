@@ -45,6 +45,8 @@ export const storedBlobsPath = () => stateTree(hostOwnership.rootPath).blobs;
 /** The Place a no-firm-home notice is filed under; its row is a finding, not a file that did not decode. */
 const FIRM_HOME_PLACE = "Firm home";
 const EARLIER_WORK_PLACE = "Work saved by an earlier version";
+/** A setting saved at a home tier (homes MAP slice 6b): the row says what happened; nothing was refused. */
+export const SETTING_WRITE_PLACE = "Setting saved";
 
 /** The start census posts findings to the same durable feed as stored-file refusals. */
 export function noteStartupHomes(
@@ -211,6 +213,20 @@ function storedRow(notice: StoredNotice, now: number): NoticeDraft | null {
       at: notice.at,
       url: null,
       refusal: "This version no longer reads this folder",
+      detail: notice.path,
+    };
+  if (notice.place === SETTING_WRITE_PLACE)
+    return {
+      key: `stored:${notice.path}:${notice.sha256}`,
+      group: "unread",
+      revision: 0,
+      verb: "saved",
+      what: notice.place,
+      where: notice.path,
+      // The file, the writer and the receipt (the hash of the bytes it replaced) are in the reason.
+      says: notice.reason,
+      at: notice.at,
+      url: routeAddress("settings").link(),
       detail: notice.path,
     };
   if (notice.place === FIRM_HOME_PLACE)

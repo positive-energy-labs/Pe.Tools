@@ -17,8 +17,8 @@ import { sheetCells } from "./index.ts";
 const uid = (text: string) => subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse(text) });
 
 test("slice 7: the sheet slot draws a binding's StateCells, and a ModelWrite binds a plan whose effect is Read or TransactRead", () => {
-  // The three closed kinds, and the data projection a Pod decodes (the hydronic Pod's `chosen` binding).
-  expect(BINDING_KINDS).toEqual(["parameter", "store", "local"]);
+  // The four closed kinds (ADR 0037 rule 8 added `setting`), and the data projection a Pod decodes (the hydronic Pod's `chosen` binding).
+  expect(BINDING_KINDS).toEqual(["parameter", "store", "local", "setting"]);
   const slot = { bindings: { chosen: parameter("Diameter", z.number()), maxVelocity: local(z.number()) } };
   expect(
     sheetSlotDataSchema.parse({

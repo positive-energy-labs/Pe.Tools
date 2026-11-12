@@ -1,17 +1,26 @@
 /**
  * The host side of the inputs resolver (ducts LEDGER 2026-10-29): load the layers the pure
  * `resolveInputs` reads (Work's staged edits, the firm file) and turn a sheet's `edits` into Work
- * patches. The firm file (`Settings/ducts.json` in the firm home, read through `ctx.firm`) is the base layer under every
- * project criterion; absent, the seed below stands in and says so (`present: false`), so a sheet
- * never prices on an unnamed constant.
+ * patches. `Settings/ducts.json` in the project home, then in the firm home (read through `ctx.firm`),
+ * is the base under Work and the model store; a criterion neither states runs on the engine default
+ * below and is labelled `default`, so a sheet never prices on an unnamed constant.
  */
-import { stagedDucts, type DuctsFirm, type DuctsDesign } from "@pe/agent-contracts";
+import {
+  DUCTS_CRITERIA_CELLS,
+  ductsFirmSchema,
+  stagedDucts,
+  type DuctsCriteriaCell,
+  type DuctsDesign,
+  type DuctsFirm,
+  type DuctsFirmFile,
+  type SettingTierRead,
+} from "@pe/agent-contracts";
 import { type WorkLayer } from "@pe/ducts-domain/sheet/index";
 import type { FirmValue } from "./reads/door.ts";
 
-// firm-default: what a firm with no file yet runs on. Velocity limits are Manual D's rules of
-// thumb (trunk 900 supply, 700 return); 0.03 in-wg is the grille placeholder; 3 in and 36 in are
-// the Q5 auto-join gap and the Q6 heal box. The firm's own numbers belong in the file.
+// The engine default: what a criterion runs on when no home tier states it. Velocity limits are
+// Manual D's rules of thumb (trunk 900 supply, 700 return); 0.03 in-wg is the grille placeholder;
+// 3 in and 36 in are the Q5 auto-join gap and the Q6 heal box. The firm's own numbers belong in the file.
 export const FIRM_SEED: DuctsFirm = {
   version: "seed",
   criteria: {
@@ -24,12 +33,37 @@ export const FIRM_SEED: DuctsFirm = {
   },
 };
 
-/** The ducts firm layer as read through `ctx.firm("ducts", …)` / `DuctFiles.firm("ducts")`, or refused without a firm home. */
-export type FirmReading = FirmValue<DuctsFirm>;
+/** The ducts firm file as read through `ctx.firm("ducts", …)` / `DuctFiles.firm("ducts")`, or refused without a firm home. */
+export type FirmReading = FirmValue<DuctsFirmFile>;
 
-/** The firm layer a resolver runs on: the reading's firm, or the named seed when the read refused (slice 2b). */
-export const firmLayer = (reading: FirmReading): DuctsFirm =>
-  "refused" in reading ? FIRM_SEED : reading.firm;
+const cellAt = (criteria: unknown, [key, side]: readonly [string, string?]) => {
+  const at = (criteria as Record<string, unknown> | undefined)?.[key];
+  return side ? (at as Record<string, unknown> | undefined)?.[side] : at;
+};
+
+/**
+ * The base layer a resolver runs on (ADR 0037 rule 8): each criterion from the project home's file,
+ * else the firm home's, else the engine default, with the tier that served it. A firm home that was
+ * not found, or holds no file, serves nothing: its criteria are `default`, never `firm`.
+ */
+export function firmLayer(reading: FirmReading, settings?: readonly SettingTierRead[] | null): DuctsFirm {
+  const project = settings?.find((read) => read.tier === "project");
+  const projectFile = project?.home ? ductsFirmSchema.safeParse(project.json) : null;
+  const firmFile = "refused" in reading || !reading.present ? null : reading.firm;
+  const criteria: Record<string, unknown> = structuredClone(FIRM_SEED.criteria);
+  const served: Record<string, "project" | "firm" | "default"> = {};
+  for (const [cell, declared] of Object.entries(DUCTS_CRITERIA_CELLS)) {
+    const [key, side] = declared.layer;
+    const fromProject = projectFile?.success ? cellAt(projectFile.data.criteria, declared.layer) : undefined;
+    const fromFirm = cellAt(firmFile?.criteria, declared.layer);
+    const value = fromProject ?? fromFirm;
+    served[cell as DuctsCriteriaCell] = fromProject != null ? "project" : fromFirm != null ? "firm" : "default";
+    if (value == null) continue;
+    if (side) (criteria[key] as Record<string, unknown>)[side] = value;
+    else criteria[key] = value;
+  }
+  return { version: firmFile?.version ?? (firmFile ? "firm" : FIRM_SEED.version), criteria: criteria as DuctsFirm["criteria"], served };
+}
 
 /** Work's staged edits as the resolver reads them. */
 export function workLayer(design: DuctsDesign): WorkLayer {
