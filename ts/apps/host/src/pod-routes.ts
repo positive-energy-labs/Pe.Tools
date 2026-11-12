@@ -1,13 +1,13 @@
 import type { RevitBridge } from "./bridge.ts";
 import * as contracts from "@pe/agent-contracts";
-import { dirname } from "node:path";
 import { z } from "zod";
 import { type PodRouteDescriptor } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import type { HostAdmittedRoute } from "../../../packages/agent-contracts/src/host-route-admission.ts";
 import type { createPackageLifecycle } from "./package-lifecycle.ts";
 import { productRouteTrustPath } from "./product-paths.ts";
-import { readJson, writeArtifact } from "./page-artifacts.ts";
+import { readStored, writeAtomic } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "./notice-feed.ts";
 import { admitPodArtifact, loadPodHostEntry, verifyPodArtifact } from "./pod-artifact.ts";
 import { registeredReads } from "./reads/routes.ts";
 
@@ -64,7 +64,16 @@ export function createPodRoutes(
   const registrations = new Map<string, { hash: string; dispose: () => void }>();
   let closed = false;
   let tail = Promise.resolve();
-  const decisions = () => readJson(path, trustSchema, {});
+  // Machine state (ADR 0039): trust that does not decode is discarded with a notice, and every
+  // route reads as untrusted until a person trusts its current bytes again.
+  const decisions = async () => {
+    const read = readStored(path, trustSchema, {
+      class: "discard",
+      place: "Pod route trust",
+      notices: storedNoticesPath(),
+    });
+    return read.kind === "ok" ? read.value : {};
+  };
   let listing = Promise.resolve<PodRouteDescriptor[]>([]);
   function list(): Promise<PodRouteDescriptor[]> {
     const next = listing.then(readList, readList);
@@ -155,7 +164,7 @@ export function createPodRoutes(
         const trust = await decisions();
         if (trusted) trust[key] = hash;
         else delete trust[key];
-        await writeArtifact(dirname(path), path, JSON.stringify(trust), true);
+        writeAtomic(path, JSON.stringify(trust));
       });
       tail = write.catch((error) => {
         console.error("pod-routes: asynchronous operation failed", error);

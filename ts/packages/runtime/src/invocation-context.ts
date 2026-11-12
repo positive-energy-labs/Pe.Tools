@@ -8,9 +8,10 @@ import {
   HOST_RUNTIME_SERVICE_HEADER,
 } from "@pe/host-contracts/contracts";
 import { resolveLaneAndRoot, runtimeRoot } from "./runtime-owner.ts";
-import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import { writeAtomic } from "@pe/host-contracts/store";
 import type { InvocationContext } from "./invocation-context.browser.ts";
 export type {
   InvocationContext,
@@ -75,13 +76,10 @@ export function writeOutbox(slot: string, value?: InvocationRecord): void {
     }
     return;
   }
-  mkdirSync(join(path, ".."), { recursive: true });
-  const temp = `${path}.${randomUUID()}.tmp`;
-  writeFileSync(
-    temp,
+  writeAtomic(
+    path,
     JSON.stringify(value.admission ? { ...value, contextHash: capturedContextHash() } : value),
   );
-  renameSync(temp, path);
 }
 
 /** Node fetch drops Host. Internal proxy requests must retain the verified authority on the wire. */

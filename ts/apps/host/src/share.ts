@@ -13,7 +13,6 @@ const intentSchema = z.object({
   allowRemoteAdministration: z.boolean().optional(),
 });
 type Intent = z.infer<typeof intentSchema>;
-type Mapping = NonNullable<Intent["mapping"]>;
 type ServeStatus = {
   TCP?: Record<string, unknown>;
   Web?: Record<string, { Handlers?: Record<string, unknown> }>;

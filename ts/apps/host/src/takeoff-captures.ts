@@ -1,3 +1,5 @@
+import { readStored, writeAtomic } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "./notice-feed.ts";
 import { writeArtifact } from "./page-artifacts.ts";
 import { scheduleReadingSchema, type ScheduleReading } from "@pe/agent-contracts";
 
@@ -29,11 +31,11 @@ import {
   type WorkKey,
 } from "@pe/agent-contracts";
 import { Cause, Clock, Context, Effect, Exit, Layer } from "effect";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { mkdir, readFile, readdir, rename, writeFile, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile, rm, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import {
   sameAddress,
@@ -174,6 +176,26 @@ const familyObservationId = (id: string) => familiesObservationSchema.shape.id.p
 
 /** Immutable Takeoffs and Family observations outside authored Work. Immutable files use the host's existing atomic-replace pattern. */
 type ProgressManifest = { observation: Omit<FamiliesObservation, "result">; records: string[] };
+const progressManifestSchema: z.ZodType<ProgressManifest> = z.object({
+  observation: z.custom<ProgressManifest["observation"]>(
+    (value) => typeof value === "object" && value !== null,
+  ),
+  records: z.array(z.string().regex(/^[a-f0-9]{64}$/)),
+});
+/**
+ * Captures are derived files (ADR 0039 rule 1): one that does not decode is discarded with one
+ * notice, and from then on reads as missing, like a capture this host never held.
+ */
+function storedCapture<T>(path: string, schema: z.ZodType<T>): T | null {
+  const read = readStored(path, schema, {
+    class: "discard",
+    place: "Captures",
+    notices: storedNoticesPath(),
+  });
+  return read.kind === "ok" ? read.value : null;
+}
+const missingCapture = (path: string) =>
+  Object.assign(Error(`ENOENT: no readable capture at '${path}'`), { code: "ENOENT" });
 /** A progress revision in the completed-reading envelope; `families` may be empty for a parts reply. */
 const progressReading = (manifest: ProgressManifest, families: unknown[]) => ({
   ...manifest.observation,
@@ -453,7 +475,7 @@ export class TakeoffCaptures {
         .filter((name) => /^[a-f0-9]{64}\.json$/.test(name))
         .map(async (name) => {
           const id = name.slice(0, -5);
-          const stamp = retainedStamp(await this.storedSchedule(id));
+          const stamp = retainedStamp(await this.storedSchedule(id).catch(() => null));
           return stamp?.workspaceId === workspaceId
             ? [{ id, at: stamp.capturedAt, label: "grid read" }]
             : [];
@@ -467,13 +489,18 @@ export class TakeoffCaptures {
     return latest ? this.schedule(latest.id) : null;
   }
   private async storedSchedule(id: string): Promise<unknown> {
-    return JSON.parse(await readFile(join(this.directory, "schedules", `${id}.json`), "utf8"));
+    const path = join(this.directory, "schedules", `${id}.json`);
+    // JSON null is no reading, so `unknown` loses nothing by reading it as missing.
+    const stored = storedCapture(path, z.unknown());
+    if (stored == null) throw missingCapture(path);
+    return stored;
   }
   async saved(id: string): Promise<TakeoffCapture> {
     takeoffCaptureSchema.shape.id.parse(id);
-    return takeoffCaptureSchema.parse(
-      JSON.parse(await readFile(join(this.directory, `${id}.json`), "utf8")),
-    );
+    const path = join(this.directory, `${id}.json`);
+    const stored = storedCapture(path, takeoffCaptureSchema);
+    if (!stored) throw missingCapture(path);
+    return stored;
   }
 
   /**
@@ -521,11 +548,11 @@ export class TakeoffCaptures {
   }
   async family(id: string, signal?: AbortSignal): Promise<FamilyCapture> {
     familyCaptureSchema.shape.id.parse(id);
-    return familyCaptureSchema.parse(
-      JSON.parse(
-        await readFile(join(this.directory, "family", `${id}.json`), { encoding: "utf8", signal }),
-      ),
-    );
+    signal?.throwIfAborted();
+    const path = join(this.directory, "family", `${id}.json`);
+    const stored = storedCapture(path, familyCaptureSchema);
+    if (!stored) throw missingCapture(path);
+    return stored;
   }
   async savedFamilyText(id: string): Promise<{ path: string; text: string }> {
     familyCaptureSchema.shape.id.parse(id);
@@ -581,15 +608,9 @@ export class TakeoffCaptures {
         if (latestId !== expectedLatestId)
           throw Error("A newer Families reading replaced the readback basis");
       }
-      const tempPointer = join(directory, `${key}.${randomUUID()}.tmp`);
-      try {
-        await writeArtifact(directory, snapshot, JSON.stringify(observation));
-        await writeFile(tempPointer, id, "utf8");
-        await rename(tempPointer, pointer);
-        await this.displayPointer(value.work, id);
-      } finally {
-        await rm(tempPointer, { force: true });
-      }
+      await writeArtifact(directory, snapshot, JSON.stringify(observation));
+      writeAtomic(pointer, id);
+      await this.displayPointer(value.work, id);
     };
     const pending = (this.familiesSaves.get(key) ?? Promise.resolve())
       .catch((error) => {
@@ -699,10 +720,7 @@ export class TakeoffCaptures {
 
   private async displayPointer(work: WorkKey, id: string) {
     const key = createHash("sha256").update(workKey(work)).digest("hex");
-    const path = join(this.directory, "families", `${key}.display`);
-    const temp = `${path}.${randomUUID()}.tmp`;
-    await writeFile(temp, id);
-    await rename(temp, path);
+    writeAtomic(join(this.directory, "families", `${key}.display`), id);
     this.notify(`families-reading:${workKey(work)}`);
   }
 
@@ -712,23 +730,24 @@ export class TakeoffCaptures {
   private async familiesFile(id: string) {
     familyObservationId(id);
     let path = join(this.directory, "families", `${id}.json`);
-    const bytes = await readFile(path).catch(async (error: NodeJS.ErrnoException) => {
-      const manifest = error.code === "ENOENT" ? await this.progressManifest(id) : null;
-      if (!manifest) throw error;
-      path = join(this.directory, "families", "progress", "artifacts", `${id}.json`);
-      const families = await Promise.all(
-        manifest.records.map(async (hash) =>
-          JSON.parse(
-            await readFile(join(this.directory, "families", "records", `${hash}.json`), "utf8"),
-          ),
-        ),
-      );
-      return Buffer.from(JSON.stringify(progressReading(manifest, families)));
+    const schema = familiesObservationSchema.refine(
+      (record) => record.id === id,
+      "Families observation ID does not match its file",
+    );
+    const whole = storedCapture(path, schema);
+    if (whole) return { record: whole as FamiliesObservation, path, bytes: await readFile(path) };
+    const manifest = await this.progressManifest(id);
+    if (!manifest) throw missingCapture(path);
+    path = join(this.directory, "families", "progress", "artifacts", `${id}.json`);
+    const families = manifest.records.map((hash) => {
+      const record = join(this.directory, "families", "records", `${hash}.json`);
+      const stored = storedCapture(record, z.unknown());
+      if (stored == null) throw missingCapture(record);
+      return stored;
     });
-    const record = familiesObservationSchema.parse(
-      JSON.parse(bytes.toString("utf8")),
-    ) as FamiliesObservation;
-    if (record.id !== id) throw Error("Families observation ID does not match its file");
+    // Composed in memory from a manifest and its records, so a failure here is not a stored file's.
+    const bytes = Buffer.from(JSON.stringify(progressReading(manifest, families)));
+    const record = schema.parse(JSON.parse(bytes.toString("utf8"))) as FamiliesObservation;
     return { record, path, bytes };
   }
 
@@ -736,16 +755,11 @@ export class TakeoffCaptures {
    *  restart, or an older revision of a settled run) can never finish, so it reads as failed. */
   private async progressManifest(id: string): Promise<ProgressManifest | null> {
     familyObservationId(id);
-    const raw = await readFile(
+    const manifest = storedCapture(
       join(this.directory, "families", "progress", `${id}.json`),
-      "utf8",
-    ).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return null;
-      throw error;
-    });
-    if (raw === null) return null;
-    const manifest = JSON.parse(raw) as ProgressManifest;
-    for (const hash of manifest.records) familyObservationId(hash);
+      progressManifestSchema,
+    );
+    if (!manifest) return null;
     const progress = manifest.observation.progress;
     if (progress?.state === "reading" && !this.liveReads.has(progress.runId))
       manifest.observation.progress = {
@@ -797,9 +811,7 @@ export class TakeoffCaptures {
       "progress",
       `${this.progressKey(value.document, value.filter)}.latest`,
     );
-    const temp = `${pointer}.${randomUUID()}.tmp`;
-    await writeFile(temp, id);
-    await rename(temp, pointer);
+    writeAtomic(pointer, id);
     await this.displayPointer(value.work, id);
     this.notify(`families-matrix:${keyOf(value.document)}`);
     return { ...observation, result: value.result };

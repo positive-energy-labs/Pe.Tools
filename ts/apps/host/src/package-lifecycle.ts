@@ -1,9 +1,9 @@
-import { dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { createPluginRuntime, type PluginContext } from "@pe/agent-contracts";
 import { z } from "zod";
 import { listPackages, productPodsRoots, type AdmittedPackage, type PodsRoots } from "./packages.ts";
-import { readJson, writeArtifact } from "./page-artifacts.ts";
+import { readStored, writeAtomic } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "./notice-feed.ts";
 import { productPluginDecisionsPath, productPodsRootPath } from "./product-paths.ts";
 import {
   builtinPeaSkillSnapshots,
@@ -26,7 +26,15 @@ export async function activateImportedPackage(id: string, podsRoot: string) {
   await serving.refresh();
   await serving.setEnabled(`pod:${id}`, true);
 }
-const readDecisions = (path: string) => readJson(path, decisionsSchema, {});
+/** Machine state (ADR 0039): choices that do not decode are discarded with a notice; defaults hold. */
+const readDecisions = async (path: string) => {
+  const read = readStored(path, decisionsSchema, {
+    class: "discard",
+    place: "Pod on and off choices",
+    notices: storedNoticesPath(),
+  });
+  return read.kind === "ok" ? read.value : {};
+};
 /** Runtime policy only. Membership and export remain exact authored bytes. */
 export async function requirePackageEnabled(id: string, podsRoots: PodsRoots = productPodsRoots()) {
   // Only the product's Pods carry policy: the content homes, or the user's Pods an import writes.
@@ -70,7 +78,7 @@ export function createPackageLifecycle(
     changed,
     persist: async (id, enabled) => {
       const next = { ...decisions, [id]: enabled };
-      await writeArtifact(dirname(decisionsPath), decisionsPath, JSON.stringify(next), true);
+      writeAtomic(decisionsPath, JSON.stringify(next));
       decisions = next;
     },
   });

@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
+import { writeAtomic } from "@pe/host-contracts/store";
 import { LocalOpError } from "../local-error.ts";
 
 export type DirectoryEntryInfo = { name: string; info: FileSystem.File.Info };
@@ -44,29 +44,16 @@ export const readFileStringBomAwareOrEmpty = Effect.fnUntraced(function* (
   return bytes.toString("utf8");
 });
 
-export const writeFileStringAtomic = Effect.fnUntraced(function* (
-  path: string,
-  content: string,
-  operationKey: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const tempPath = `${path}.${randomUUID()}.tmp`;
-  let owned = false;
-  const write = Effect.scoped(
-    Effect.gen(function* () {
-      const file = yield* fs.open(tempPath, { flag: "wx" });
-      owned = true;
-      yield* file.writeAll(new TextEncoder().encode(content));
-    }),
-  );
-  yield* write.pipe(
-    Effect.flatMap(() => fs.rename(tempPath, path)),
-    Effect.mapError((error) => localOpFileError(operationKey, error)),
-    Effect.ensuring(
-      Effect.suspend(() => (owned ? fs.remove(tempPath).pipe(Effect.ignore) : Effect.void)),
-    ),
-  );
-});
+/**
+ * The store kernel's `writeAtomic` as an Effect with this module's error.
+ * ponytail: `settings.ts` is the only caller. Its files are authored home files, so writer G1 moves
+ * them to the write door (`writeHomeFile`) and deletes this adapter.
+ */
+export const writeFileStringAtomic = (path: string, content: string, operationKey: string) =>
+  Effect.try({
+    try: () => writeAtomic(path, content),
+    catch: (error) => localOpFileError(operationKey, error),
+  });
 
 export const makeDirectory = Effect.fnUntraced(function* (path: string, operationKey: string) {
   const fs = yield* FileSystem.FileSystem;

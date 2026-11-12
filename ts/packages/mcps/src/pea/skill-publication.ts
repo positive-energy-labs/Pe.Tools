@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { writeAtomic } from "@pe/host-contracts/store";
 import { contributionKey, type ContributionSource } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
@@ -160,8 +161,6 @@ async function directories(root: string) {
 async function writeFiles(root: string, files: readonly SkillFile[]) {
   for (const file of files) {
     const path = join(root, file.path);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(`${path}.tmp`, file.bytes);
-    await rename(`${path}.tmp`, path);
+    writeAtomic(path, file.bytes);
   }
 }

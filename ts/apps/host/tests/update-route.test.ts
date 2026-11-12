@@ -6,6 +6,8 @@ import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import type { Envelope, UpdatePlan, UpdateReceipt } from "@pe/host-contracts/pe-revit-contract";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
+import { readStoredNotices } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "../src/notice-feed.ts";
 import {
   createUpdateReader,
   UpdateReader,
@@ -306,7 +308,7 @@ test("a disconnected admission stays pending across restart and blocks a second 
   }
 });
 
-test("wrong request or plan cannot overwrite a confirmed receipt, and corrupt admission fails closed", async () => {
+test("wrong request or plan cannot overwrite a confirmed receipt, and a corrupt admission is discarded with a notice", async () => {
   const f = await fixture();
   try {
     const admitted = await f.reader.apply(plan.planId);
@@ -322,10 +324,16 @@ test("wrong request or plan cannot overwrite a confirmed receipt, and corrupt ad
       args[0] === "op" ? recovered(receipt("different-request")) : envelope(plan),
     );
     expect((await wrongRequest.refresh()).receiptLeg.error).toContain("different update request");
+    // ADR 0039: the admission is machine state. One that does not decode is discarded with one
+    // notice, the update reads as never admitted, and the next apply is admitted fresh. The SDK,
+    // not this record, refuses an apply while another update runs.
     await writeFile(f.path, "{}");
-    const broken = f.make();
-    await expect(broken.apply(plan.planId)).rejects.toThrow();
-    expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(1);
+    const again = await f.make().apply(plan.planId);
+    expect(again.requestId).not.toBe(admitted.requestId);
+    expect(
+      readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === f.path),
+    ).toMatchObject([{ class: "discard", place: "Update status" }]);
+    expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(2);
   } finally {
     await f.close();
   }

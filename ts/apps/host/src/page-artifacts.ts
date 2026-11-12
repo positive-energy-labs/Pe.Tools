@@ -1,11 +1,19 @@
-import { createHash, randomUUID } from "node:crypto";
-import { link, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { link, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { Script } from "node:vm";
 import type { z } from "zod";
 import { parse, parseFragment, type DefaultTreeAdapterMap } from "parse5";
+import { sha256Hex, writeAtomic } from "@pe/host-contracts/store";
 
-/** A JSON file through its schema; a missing file reads as `missing`. */
+export { sha256Hex };
+
+/**
+ * A JSON file through its schema; a missing file reads as `missing`.
+ * ponytail: the one shim left by the store kernel. It still throws on a file that does not decode.
+ * `pages-route.ts` is its last caller (the Page snapshot and binding); writer G2 moves those to
+ * `readStored` when Page state moves to the state root, and deletes this.
+ */
 export async function readJson<T>(path: string, schema: z.ZodType<T>, missing: T): Promise<T> {
   try {
     return schema.parse(JSON.parse(await readFile(path, "utf8")));
@@ -14,9 +22,6 @@ export async function readJson<T>(path: string, schema: z.ZodType<T>, missing: T
     throw error;
   }
 }
-
-export const sha256Hex = (bytes: string | Uint8Array) =>
-  createHash("sha256").update(bytes).digest("hex");
 
 /** Served Page files and exported data URLs name media the same way. */
 export const PAGE_MEDIA: Record<string, string> = {
@@ -92,8 +97,9 @@ export class ContentAddressCorruption extends Error {
 }
 
 /** The one artifact writer, for Pages, exports and Pods: no directory it creates or writes into
- * resolves outside `root`. `replace` swaps atomically; otherwise an existing artifact must already
- * hold the same bytes. Neither mode changes the supplied bytes. */
+ * resolves outside `root`. `replace` swaps atomically through the store kernel's `writeAtomic`;
+ * otherwise an existing artifact must already hold the same bytes. Neither mode changes the
+ * supplied bytes. */
 export async function writeArtifact(
   root: string,
   path: string,
@@ -127,17 +133,19 @@ export async function writeArtifact(
     if (actual !== expected) throw new ContentAddressCorruption(path, expected, actual);
     return true;
   };
-  if (!replace && await existing()) return path;
+  if (replace) {
+    writeAtomic(path, bytes);
+    return path;
+  }
+  if (await existing()) return path;
   const temporary = join(directory, `.artifact-${randomUUID()}`);
   try {
     await writeFile(temporary, bytes, { flag: "wx" });
-    if (replace) await rename(temporary, path);
-    // Node rename can replace a concurrent winner; link atomically publishes only if absent.
-    else
-      await link(temporary, path).catch(async (error: NodeJS.ErrnoException) => {
-        if (error.code !== "EEXIST") throw error;
-        if (!await existing()) throw error;
-      });
+    // A rename can replace a concurrent winner; link atomically publishes only if absent.
+    await link(temporary, path).catch(async (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EEXIST") throw error;
+      if (!await existing()) throw error;
+    });
   } finally {
     await rm(temporary, { force: true });
   }

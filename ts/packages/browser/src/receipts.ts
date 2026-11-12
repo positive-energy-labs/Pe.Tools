@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
-import { open, readFile, rename, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { writeAtomic } from "@pe/host-contracts/store";
 import type { SessionReceipt } from "./browser.ts";
 import { BrowserError } from "./errors.ts";
 // One owner budget covers graceful root exit, joined job termination, and profile cleanup.
@@ -84,20 +84,7 @@ export async function readSessionReceipt(
 
 /** Ready and terminal are immutable separate publications, each with one writer. */
 export async function publishJson(destination: string, value: unknown): Promise<void> {
-  const temporary = `${destination}.${randomUUID()}.tmp`;
-  const handle = await open(temporary, "wx", 0o600);
-  try {
-    await handle.writeFile(JSON.stringify(value, null, 2));
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  try {
-    await rename(temporary, destination);
-  } catch (error) {
-    await rm(temporary, { force: true });
-    throw error;
-  }
+  writeAtomic(destination, JSON.stringify(value, null, 2));
 }
 export async function publishSessionReceipt(file: string, receipt: SessionReceipt): Promise<void> {
   await publishJson(
