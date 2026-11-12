@@ -190,3 +190,45 @@ test("a firm drive mounted after subscription is discovered and then watched", a
     rmSync(drive, { recursive: true, force: true });
   }
 });
+
+test("W3e outside rewrite of the user tier fires exactly one change", async () => {
+  const { watchSettingTiers } = await import("../src/tiered-settings.ts");
+  const home = mkdtempSync(join(tmpdir(), "pe-user-watch-"));
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", home);
+  mkdirSync(join(home, "Settings"));
+  const path = join(home, "Settings", "ducts.json");
+  writeFileSync(path, '{"version":"before"}');
+  let changes = 0;
+  const watches = watchSettingTiers(() => changes++);
+  try {
+    expect(watches.read("ducts").find(tier => tier.tier === "user")).toMatchObject({ path, json: { version: "before" } });
+    writeFileSync(path, '{"version":"after"}');
+    await expect.poll(() => changes).toBe(1);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(changes).toBe(1);
+  } finally { watches.close(); rmSync(home, { recursive: true, force: true }); }
+});
+
+test("a failed firm refresh keeps its value and the next refresh still notifies", async () => {
+  const shared = firmHome();
+  let fail = 0;
+  let attempts = 0;
+  const root = () => {
+    attempts++;
+    if (fail > 0 && --fail === 0) throw Error("one read failed");
+    return join(shared, "Settings");
+  };
+  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer({ firm: root, catalogs: [] }))));
+  const changes: string[] = [];
+  const stop = files.subscribe!(name => changes.push(name));
+  try {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const before = attempts;
+    fail = 2;
+    writeFileSync(join(shared, "pe-home.json"), '{"tier":"firm","name":"changed"}');
+    await expect.poll(() => attempts).toBeGreaterThan(before);
+    mkdirSync(join(shared, "Settings"));
+    writeFileSync(join(shared, "Settings", "ducts.json"), '{"version":"later"}');
+    await expect.poll(() => changes).toEqual(["firm"]);
+  } finally { stop(); rmSync(shared, { recursive: true, force: true }); }
+});

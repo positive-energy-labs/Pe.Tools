@@ -198,3 +198,23 @@ test("E8 a re-send refuses when the journal's own discard time does not parse", 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("W7c an intact journal admits a future re-send as new work", async () => {
+  const f = await setup();
+  const admission = await f.admission();
+  const dir = await mkdtemp(join(tmpdir(), "pe-intact-future-"));
+  const cold = await fixtureNative(dir);
+  try {
+    const response = await cold.actions().request(new Request("http://host/actions", {
+      method: "POST",
+      headers: { "content-type": "application/json", [ADMISSION_RESEND_HEADER]: new Date(Date.now() + 600_000).toISOString() },
+      body: JSON.stringify(admission),
+    }));
+    expect(response.status, await response.clone().text()).toBeLessThan(400);
+    expect(await cold.journal.wait(admission.id)).toMatchObject({ id: admission.id });
+    expect(await cold.journal.list(undefined, admission.id)).toHaveLength(1);
+  } finally {
+    await cold.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});

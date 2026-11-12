@@ -5,6 +5,10 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
 
+const storedSchemaPath = new RegExp(`^${settingsSchemaPathPattern.source}$`);
+const isStored = (value: string) => storedSchemaPath.test(value);
+const isLibrary = (value: string) => settingsSchemaPath(value.replace(/\\+/g, "/")) !== null;
+
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 // A `$schema` key and its string value, plain or inside an escaped JSON string (`\"$schema\": \"…\"`).
 // The value keeps its escape pairs, so a `C:\\…` or `\\\\srv\\…` origin is read whole, not cut at its first backslash.
@@ -27,13 +31,21 @@ test("every checked-in JSON file stores a library $schema as its path", () => {
     .flatMap((file) =>
       [...readFileSync(resolve(root, file), "utf8").matchAll(schemaValue)]
         .map((match) => match[1]!)
-        .filter((value) => settingsSchemaPath(value.replace(/\\+/g, "/")) !== null)
+        .filter((value) => isLibrary(value))
         .map((value) => ({ file, value })),
     );
-  expect(census.filter(({ value }) => settingsSchemaPathPattern.exec(value)?.[0] !== value)).toEqual([]);
+  expect(census.filter(({ value }) => !isStored(value))).toEqual([]);
   // The known set, so an empty or narrowed scan fails. A new fixture updates this count.
   expect(new Set(census.map(({ file }) => file)).size).toBe(11);
   expect(census.map(({ file }) => file)).toContain(
     "ts/apps/host/tests/fixtures/families-live-preview-20261102.json",
   );
+});
+
+test.each([
+  "/Schemas/Settings/a/B.JSON",
+  String.raw`C:\\x\\schemas\\settings\\a\\b.json`,
+])("rejects a noncanonical stored library schema: %s", value => {
+  expect(isLibrary(value)).toBe(true);
+  expect(isStored(value)).toBe(false);
 });
