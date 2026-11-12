@@ -1,6 +1,6 @@
 import { workElementId } from "@pe/ducts-domain/work-subject";
 import { PointerCite } from "#/shell/pointer-list";
-import { ductElements, pointerRefs } from "../identity.ts";
+import { ductElements, pointerRefs } from "../ducts/identity.ts";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { useRouteSearchSlice } from "#/route/activity";
 import { useAdmittedSubject } from "#/shell/subject";
@@ -10,19 +10,19 @@ import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { useMemo } from "react";
-import type { FansDrawContext } from "../../fans/route.ts";
-import { issueOf, issueSubject } from "../cell-focus";
-import { ductsLink } from "../identity.ts";
-import { subjectNamer } from "../subject-text";
-import { describeCloser, DUCTS_FIXES, type Closer, type CloserAction, type CloserLink } from "./closer";
-import { fittingGroups } from "./fitting-groups";
-import { FittingReadouts } from "./fitting-readouts";
-import { editLabel, type EditMeta } from "./input-history.neutral";
-import { rosterOrder, stableFanKey, type FanPort } from "./model";
+import type { FansDrawContext } from "./route.ts";
+import { issueOf, issueSubject } from "../ducts/cell-focus";
+import { ductsLink } from "../ducts/identity.ts";
+import { subjectNamer } from "../ducts/subject-text";
+import { describeCloser, DUCTS_FIXES, type Closer, type CloserAction, type CloserLink } from "../ducts/sheet/closer";
+import { fittingGroups } from "../ducts/sheet/fitting-groups";
+import { FittingReadouts } from "../ducts/sheet/fitting-readouts";
+import { editLabel, type EditMeta } from "../ducts/sheet/input-history.neutral";
+import { rosterOrder, stableFanKey, type FanPort } from "../ducts/sheet/model";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { sheetSystems } from "./scoped-snapshot.ts";
-import { EMPTY_SHEET_STATE } from "./state";
-import { Ledger, Roster } from "./view";
+import { sheetSystems } from "../ducts/sheet/scoped-snapshot.ts";
+import { EMPTY_SHEET_STATE } from "../ducts/sheet/state";
+import { Ledger, Roster } from "../ducts/sheet/view";
 export type SheetContext = FansDrawContext;
 export function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
   const authored = ctx.page.read();
@@ -49,6 +49,10 @@ export function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
     roster,
     nameOf,
     selected,
+    /** The focused blocker: the selection's `issue:<key>` place, bare. */
+    issue: issueOf(selected),
+    state: value?.sheetView ?? EMPTY_SHEET_STATE,
+    fanKey: stableFanKey,
     changeInputs,
     busy: reading.status === "pending",
   };
@@ -126,7 +130,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
     ctx.selection.set(selected ? [{ kind: "focus", id: selected }] : []);
   const state = ctx.value.value?.sheetView ?? EMPTY_SHEET_STATE;
   const search = useRouteSearchSlice((search) => search);
-  const closerOf = (blocker: import("./tiers").SheetBlocker, typed: number | null): Closer => {
+  const closerOf = (blocker: import("../ducts/sheet/tiers").SheetBlocker, typed: number | null): Closer => {
     const closer = describeCloser(blocker, typed, {
       terminalDrop: state.inputs?.criteria.terminalDropInWg ?? null,
       nameOf,

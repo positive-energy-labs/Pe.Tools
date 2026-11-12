@@ -192,7 +192,8 @@ test("no open fan is absence and every sheet pane renders without a native decod
     await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
     const view = render(<RegistryContext value={registry()}>{nodeFor(f.fans, pane)}</RegistryContext>);
     if (pane === "sheet-roster") expect(view.container.textContent).toContain("FC-23");
-    else expect(screen.getByText("Open a fan from the roster.")).toBeTruthy();
+    // The picture pane is the kernel's, loaded lazily: its empty state arrives after the first paint.
+    else expect(await screen.findByText("Open a fan from the roster.")).toBeTruthy();
     expect(view.container.textContent).not.toContain("readAt");
     view.unmount();
   }

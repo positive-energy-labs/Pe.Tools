@@ -30,7 +30,7 @@ import { bootHost } from "../../../host/tests/real-server";
 import { connectTestBridge } from "../../../host/tests/bridge-fixture";
 import { admittedReceiptStamps } from "../../../host/src/receipt-export";
 import { canonicalRouteInput, actionStatusSchema } from "@pe/agent-contracts";
-import "../ducts/sheet/mount";
+import "../fans/mount";
 import { TypedShell } from "./typed-shell";
 import { module as fans } from "../fans/route";
 import { routeRegistry } from "../route/registry";

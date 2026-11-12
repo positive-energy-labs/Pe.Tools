@@ -327,6 +327,10 @@
       }
     }
   },
+  "picture": {
+    "scope": "subject",
+    "marks": []
+  },
   "verbs": {
     "losses": {
       "kind": "command",

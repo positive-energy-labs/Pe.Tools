@@ -1,5 +1,5 @@
 import type { Mark, PictureScope, PictureSlot, Vec3 } from "@pe/agent-contracts/slots";
-import type { SubjectRefCode } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
+import { subjectCode, subjectOf, type SubjectRefCode } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
 
 /*
  * The kernel seam for the picture slot (ADR 0035 rules 1 and 2). The slot resolves every
@@ -13,6 +13,8 @@ import type { SubjectRefCode } from "../../../../../../packages/agent-contracts/
 export interface Captured {
   readonly ref: SubjectRefCode;
   readonly point: Vec3;
+  /** The geometry's extent, when the capture knows it: what an `outline` or `volume` mark takes. */
+  readonly box?: { readonly min: Vec3; readonly max: Vec3 };
 }
 
 export interface PictureInput {
@@ -40,11 +42,24 @@ export interface PictureHandle {
   marks(): readonly Mark[];
 }
 
-/** A mark on a SubjectRef sits at its captured point; a ref nothing captured is not drawable (null). */
+/** The element a sub (a port, a field) belongs to: the same ref without its sub. */
+export const elementOf = (code: SubjectRefCode): SubjectRefCode => {
+  const { sub: _sub, ...element } = subjectOf(code);
+  return subjectCode(element);
+};
+
+/**
+ * A mark on a SubjectRef sits on its captured geometry: an `outline` or `volume` takes the box, any
+ * other kind the point. A sub nothing captured by itself (a port: the capture carries one instance
+ * per element) sits on its element. A ref nothing captured is not drawable (null).
+ */
 export function resolveMark(mark: Mark, captured: readonly Captured[]): Mark | null {
-  if (typeof mark.at !== "string") return mark;
-  const at = captured.find((c) => c.ref === mark.at);
-  return at ? { ...mark, at: { point: at.point } } : null;
+  const ref = mark.at;
+  if (typeof ref !== "string") return mark;
+  const at = captured.find((c) => c.ref === ref) ?? captured.find((c) => c.ref === elementOf(ref));
+  if (!at) return null;
+  const boxed = at.box && (mark.kind === "outline" || mark.kind === "volume");
+  return { ...mark, at: boxed ? { from: at.box!.min, to: at.box!.max } : { point: at.point } };
 }
 
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];

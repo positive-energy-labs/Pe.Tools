@@ -17,7 +17,7 @@ import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "./host-read.ts";
-import { pictureSlotData, sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
+import { picturePoseSchemas, pictureSlotData, sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureScope, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
 
 /*
  * The sheet pair's contracts, inline: importing `typed-actions` would pull the whole semantic catalog into
@@ -29,7 +29,7 @@ const sheetContract = (effect: "Read" | "ModelWrite") => ({
 });
 const sheetCommand = { entry: SHEET_COMMANDS.apply, plan: SHEET_COMMANDS.plan,
   contract: sheetContract("ModelWrite"), planContract: sheetContract("Read") };
-import { scrollBody, type Body, type BodyKind } from "./body.ts";
+import { fillBody, scrollBody, type Body, type BodyKind } from "./body.ts";
 export { scrollBody, fillBody, type Body, type BodyKind } from "./body.ts";
 
 type Field = {
@@ -59,6 +59,21 @@ export const field = <S extends z.ZodType, const R extends Field["role"]>(
   role: R,
   url: Field["url"] = "replace",
 ) => ({ schema, initial, role, url });
+/**
+ * The kernel's picture pose as Page fields (ADR 0035 rule 1). Each default is the contract schema's own
+ * (`picturePoseSchemas`): nothing here states one. `route()` puts `picturePose` on the Page of every route
+ * that declares `picture`; a route spreads it into `fields` only to read the pose in its own typed context.
+ */
+export const poseFields = (s: typeof picturePoseSchemas) => ({
+  contextRadiusFt: field(s.contextRadiusFt, s.contextRadiusFt.parse(undefined), "pose", "replace"),
+  sceneView: field(s.sceneView, s.sceneView.parse(undefined), "pose", "replace"),
+  viewport: field(s.viewport, s.viewport.parse(undefined), "pose", "replace"),
+  context: field(s.context, s.context.parse(undefined), "pose", "push"),
+  layers: field(s.layers, s.layers.parse(undefined), "pose", "push"),
+  encoding: field(s.encoding, s.encoding.parse(undefined), "pose", "push"),
+  picture: field(s.picture, s.picture.parse(undefined), "pose", "push"),
+});
+export const picturePose = poseFields(picturePoseSchemas);
 /** The text keys of a subject set of plain refs (system name, workspace id); a tuple key, placement or sub is not a name and throws. */
 export const namesOf = (value: Many<SubjectRefCode>): string[] | "all" =>
   value.kind === "all"
@@ -189,8 +204,12 @@ export type Specification<
    */
   /** Slice 7: bindings by cell name, three closed kinds; the kernel draws a StateCell per binding per row. */
   sheet?: SheetSlot;
-  /** Slice 8: a scope (SubjectRef set, box, or prism with a frame) and marks from the closed set. */
-  picture?: PictureSlot<DrawContext<NoInfer<D>, NoInfer<F & NoInfer<Q>>, z.output<W>, z.output<Edit>>>;
+  /** Slice 8: a scope (SubjectRef set, box, or prism with a frame) and marks from the closed set; the kernel draws
+   * them in its picture pane. `overlay` is the one hook for what the closed marks cannot express: a builtin
+   * loads it with `overlay()` (`slots/picture/overlay.tsx`, which types its parts); a Pod declares none. */
+  picture?: PictureSlot<DrawContext<NoInfer<D>, NoInfer<F & NoInfer<Q>>, z.output<W>, z.output<Edit>>> & {
+    overlay?(props: { ctx: DrawContext<NoInfer<D>, NoInfer<F & NoInfer<Q>>, z.output<W>, z.output<Edit>>; scope: PictureScope; picture(parts: any): any }): unknown;
+  };
   /** Slice 7: one host Read whose data is the Goal; the kernel draws its unresolved list first. */
   goal?: HostRead & { output: z.ZodType<Publication<Goal>>; args(page: Page<NoInfer<F & NoInfer<Q>>>): unknown };
   /** Route-owned Page fields no slot holds; folded into `fields` for projection until slice 10 retires `fields`. */
@@ -206,7 +225,7 @@ export type Specification<
       purpose: string;
       subjectList?: true;
       /** A pane the shell draws from a filled slot (`typed-shell.tsx`); the route names and places it, and its `draw` is unused. */
-      kernel?: "sheet" | "goal";
+      kernel?: "sheet" | "goal" | "picture";
       /** The pane's ground (kit `Pane`): `artifact` lets support heads inside it recede (L4). */
       ground?: "artifact";
       read?: Reads[K];
@@ -257,7 +276,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     description: declared.description ?? spec.directory.summary, schema: declared, schemaVersion: 1, };
   const owners = work && edits ? { ...edits.owners, [work.route]: {state:work,value:edits.value} } : {};
   const sheet = spec.sheet ? sheetSlotData(spec.sheet) : undefined;
-  // ADR 0035 rules 3 and 8: a filled sheet or goal slot is a kernel-drawn pane and, for a sheet that writes Revit,
+  // ADR 0035 rules 2, 3 and 8: a filled sheet, goal or picture slot is a kernel-drawn pane and, for a sheet that writes Revit,
   // the one sheet pair as the route's `sheet` verb. A route that declares either itself keeps its own.
   const declaredCommands = spec.commands ?? {};
   const sheetVerb = sheet && writesRevit(sheet) && !Object.values(declaredCommands).some((c) => c.entry === SHEET_COMMANDS.apply)
@@ -273,9 +292,19 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     ...(spec.sheet && !Object.values(spec.panes).some((p) => p.kernel === "sheet") ? { sheet: { title: "Sheet", purpose: "Edit the bound cells", read: spec.core, kernel: "sheet", body: "scroll", draw: () => scrollBody(null) } } : {}),
     ...(spec.goal && !("goal" in spec.panes) ? { goal: { title: "Unresolved", purpose: "What is left before the answer", read: spec.goal,
       kernel: "goal", body: "scroll", draw: () => scrollBody(null) } } : {}),
+    // The picture fills its pane and reads the core, whose evaluation is the capture's revision.
+    ...(spec.picture && !Object.values(spec.panes).some((p) => p.kernel === "picture") ? { picture: { title: "Picture", purpose: "See the subject in the model", read: spec.core,
+      kernel: "picture", body: "fill", draw: () => fillBody(null) } } : {}),
   } as unknown as Specification<D, F, W, Edit, Reads, SubjectRead, Q>["panes"];
+  // The pose is the kernel's: a declared picture brings its fields, so the pane the kernel adds can draw for a
+  // route that named none. A route's own field under a pose name would be drawn as the pose, so it is refused.
+  const own: Fields = { ...spec.query, ...spec.fields };
+  const pose: Fields = spec.picture ? picturePose : {};
+  const clash = Object.keys(pose).find((key) => own[key] && own[key] !== pose[key]);
+  if (clash) throw Error(`Route ${spec.key}: field "${clash}" is the picture's pose; spread picturePose or rename it`);
+  const pageFields = { ...pose, ...own };
   // `query` fields mount as Page fields: the shell reads one field table (rule 1: `query` holds what no slot does).
-  const normalized = { ...spec, fields: { ...spec.query, ...spec.fields } as F & Q, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb } as NonNullable<typeof spec.commands>,
+  const normalized = { ...spec, fields: pageFields as F & Q, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb } as NonNullable<typeof spec.commands>,
     panes: { ...spec.panes, ...kernelPanes }, edits: work && edits ? {...edits,work,owners} : undefined };
   const schemas: Record<string,z.ZodType> = { none:z.strictObject({}) };
   if (work && edits) {
@@ -284,7 +313,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   }
   const fields: Record<string,RouteGraphJson["fields"][string]> = {};
   const fieldSchemas: Record<string,string> = {};
-  for (const [key,field] of Object.entries({ ...spec.query, ...spec.fields } as Fields)) {
+  for (const [key,field] of Object.entries(pageFields)) {
     let schema=key;
     while(Object.hasOwn(schemas,schema)) schema=`page:${schema}`;
     fieldSchemas[key]=schema;

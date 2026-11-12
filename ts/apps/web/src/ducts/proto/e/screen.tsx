@@ -12,7 +12,6 @@ import { ductElements, pointerRefs } from "../../identity.ts";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { LoadingContext } from "#/route/loading-context";
-import { PaneActions } from "#/shell/pane-actions";
 import { useAdmittedSubject } from "#/shell/subject";
 import {
   DUCT_UNIT_KINDS,
@@ -79,6 +78,7 @@ import { FanFacts, fanFacts, type FanFact } from "./fan-sections";
 import { Inbox, type FanVerbs } from "./inbox";
 import { grilleLabels } from "./labels";
 import { DuctsPicture } from "./picture";
+import type { PictureOverlayProps } from "#/route/slots/picture/overlay";
 import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemColours } from "./settings";
 import { SystemTree } from "./tree-sidebar";
@@ -535,7 +535,8 @@ export function InboxBody({ ctx }: { ctx: DuctsDrawContext }) {
     </NetworkFrame>
   );
 }
-export function PictureBody({ ctx }: { ctx: DuctsDrawContext }) {
+/** The /ducts picture slot's overlay: the opened systems' network as parts for the kernel's picture pane. */
+export function NetworkPicture({ ctx, picture }: PictureOverlayProps<DuctsDrawContext>) {
   const data = useNetworkData(ctx);
   const { snapshot, priced, page, systems, active, work, edit, analysis, coverage } = data;
   const projection = useTreeProjection(snapshot, priced, work.doc, systems);
@@ -624,17 +625,10 @@ export function PictureBody({ ctx }: { ctx: DuctsDrawContext }) {
             snapshot={data.snapshotRead.value ? snapshot : null}
             priced={priced}
             analysis={analysis}
-            captureSource={data.captureSource}
-            doc={data.document}
+            source={{ version: data.captureSource?.version ?? "", current: data.snapshotRead.current }}
             subject={data.subject}
             work={work}
-            selection={data.selection}
-            renderPane={(body, furniture) => (
-              <>
-                {body}
-                <PaneActions pane="e-picture">{furniture?.actions}</PaneActions>
-              </>
-            )}
+            picture={picture}
             membership={membership}
             issueScope={issueScope}
             annotated={annotated}

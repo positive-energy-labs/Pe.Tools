@@ -1,32 +1,31 @@
 // @vitest-environment jsdom
 /**
- * The sheet picture registers on attention through the shared `Picture`: a pick writes the page's
+ * The fan walk, drawn as the /fans overlay hands it to the kernel's picture pane: a pick writes the page's
  * selection, which the document's attention then carries and the stage pivot follows; a hovered
  * worst path lights its legs. Fails if the
  * sheet ever mounts its picture without them again (the 2026-10-28 defect).
  */
 import { AttentionRoot } from "#/attention";
 import { ElementIndexContext } from "#/element-index";
-import { selectedKeys } from "../ducts/cell-focus";
-import { ductElements } from "../ducts/sheet/../identity";
+import { ductElements } from "../identity";
 import { boundsOfPoints } from "#/scene/orbit";
 import type { ModelPicture } from "#/scene/picture/model";
 import type { PictureStage } from "#/scene/stage-controller";
-import { renderPicturePane } from "#/scene/picture/picture";
+import { PicturePane } from "#/route/slots/picture/pane";
+import type { PictureOverlayProps } from "#/route/slots/picture/overlay";
 import { SceneMeshes } from "#/scene/types";
 import { makeAtomRegistry } from "#/shell/owner";
 import { RegistryContext } from "@effect/atom-react";
-import { attention, setHovered, type SubjectKey } from "@pe/kit/lang/attention";
+import { attention, setHovered } from "@pe/kit/lang/attention";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import * as Atom from "effect/reactivity/Atom";
 import { createElement, type ComponentProps } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { NAVIGATION_FIXTURE } from "../ducts/navigation.fixture";
+import { NAVIGATION_FIXTURE } from "../navigation.fixture";
 import { openFanSheetSchema as openSheetSchema } from "@pe/agent-contracts";
-import type { OpenSheet } from "../ducts/sheet/types.ts";
-import sheetFixture from "../ducts/sheet/sheet.fixture.json";
-import { type FanPort } from "../ducts/sheet/model";
-import type { SheetPictureProps } from "./picture";
+import type { OpenSheet } from "./types.ts";
+import sheetFixture from "./sheet.fixture.json";
+import { type FanPort } from "./model";
 import { beyondPicture, SheetPicture } from "./picture";
 
 const io = vi.hoisted(() => ({ call: vi.fn() }));
@@ -90,12 +89,7 @@ const sheet = {
   worstLegs: [{ pathId: "p1", legs: [{ elementId: a!.id }, { elementId: b!.id }] }],
 } as unknown as OpenSheet;
 
-function mount(
-  open: OpenSheet | null = sheet,
-  layers = ["meshes", "findings"],
-  fans?: FanPort[],
-  full = false,
-) {
+function mount(open: OpenSheet | null = sheet, layers = ["meshes", "findings"], fans?: FanPort[]) {
   const sceneSession = crypto.randomUUID();
   if (typeof ResizeObserver === "undefined")
     vi.stubGlobal(
@@ -122,58 +116,67 @@ function mount(
     );
   const registry = makeAtomRegistry();
   const page = Atom.make({ selected: "", issue: "" });
-  const selection = Atom.make(
-    (get): ReadonlySet<SubjectKey> =>
-      new Set(selectedKeys([get(page).selected])),
-  );
-  const setPage = vi.fn();
-  const pageOf = () => ({
-    ...registry.get(page),
-    viewport: null,
-    layers,
-    sceneView: { preset: "all" as const, section: null },
-    contextRadiusFt: 10,
-    context: "glass" as const,
-    picture: "model" as const,
-    encoding: "health",
-  });
-  const props = (): SheetPictureProps => ({
-    page: pageOf(),
-    setPage,
-    selection,
-    work: { doc: null },
-    captureSource: fans
-      ? { document: { session: sceneSession, openId: "doc" }, version: "roster-1" }
-      : null,
-    doc: fans ? { session: sceneSession, openId: "doc" } : null,
-    refreshing: false,
-  });
+  const pose = vi.fn();
+  const select = vi.fn();
+  const draw = {
+    target: fans ? { kind: "document", ref: { session: sceneSession, openId: "doc" } } : null,
+    value: { status: "ready", current: true, value: {}, hash: "roster-1", publication: null },
+    page: {
+      read: () => ({
+        viewport: null,
+        layers,
+        sceneView: { preset: "all" as const, section: null },
+        contextRadiusFt: 10,
+        context: "glass" as const,
+        picture: "model" as const,
+        encoding: "health",
+        selected: registry.get(page).selected ? [{ kind: "focus", id: registry.get(page).selected }] : [],
+      }),
+      pose,
+      query: vi.fn(),
+      select: vi.fn(),
+    },
+    selection: { read: () => [], set: select },
+  };
+  // The /fans picture slot, as the route declares it: the kernel pane draws, the overlay hands it the walk.
+  const slot = {
+    scope: { derive: () => ({ kind: "subjects" as const, refs: [] }) },
+    overlay: ({ picture }: PictureOverlayProps<unknown>) => (
+      <SheetPicture
+        props={{
+          page: { layers, context: "glass", encoding: "health", issue: registry.get(page).issue },
+          pose: (patch) => pose(patch, "named"),
+          select: (key) => select([{ kind: "focus", id: key }]),
+          work: { doc: null },
+          source: { version: fans ? "roster-1" : "", current: true },
+        }}
+        snapshot={snapshot}
+        sheet={open}
+        fans={fans}
+        systemFans={() => []}
+        blockers={[]}
+        picture={picture}
+      />
+    ),
+  };
   const tree = () => (
     <RegistryContext value={registry}>
       <ElementIndexContext value={elements}>
-      <AttentionRoot doc="d">
-        <SheetPicture
-          props={props()}
-          snapshot={snapshot}
-          sheet={open}
-          fans={fans}
-          systemFans={() => []}
-          blockers={[]}
-          renderPane={full ? renderPicturePane : (body) => body}
-        />
-      </AttentionRoot>
+        <AttentionRoot doc="d">
+          <PicturePane ctx={{ draw: draw as never, slot, name: "fan sheet", findings: [] }} />
+        </AttentionRoot>
       </ElementIndexContext>
     </RegistryContext>
   );
   const view = render(tree());
-  return { ...view, registry, page, setPage, rerender: () => view.rerender(tree()) };
+  return { ...view, registry, page, pose, select, rerender: () => view.rerender(tree()) };
 }
 
 it("a pick writes the page's selection and the stage pivot follows it", () => {
-  const { registry, page, setPage, rerender } = mount();
+  const { registry, page, select, rerender } = mount();
   expect(seen.stage!.selectedBounds).toBeNull();
   act(() => seen.model!.onPick(a!.id, { x: 0, y: 0 }));
-  expect(setPage).toHaveBeenCalledWith({ selected: elements.keyOf(a!.id)!, issue: "" }, { history: "push" });
+  expect(select).toHaveBeenCalledWith([{ kind: "focus", id: elements.keyOf(a!.id)! }]);
   // The route derives the selection atom from the page it just wrote.
   act(() => registry.set(page, { selected: elements.keyOf(a!.id)!, issue: "" }));
   rerender();
@@ -290,7 +293,7 @@ it("reads a selected duct and run from the current sheet, including missing data
 });
 
 it("restores all nine encodings and makes a choice draw its centrelines through Page", async () => {
-  const view = mount(sheet, ["meshes"], undefined, true);
+  const view = mount(sheet, ["meshes"]);
   fireEvent.click(view.getByRole("button", { name: "lines show health" }));
   for (const label of [
     "none",
@@ -305,8 +308,14 @@ it("restores all nine encodings and makes a choice draw its centrelines through 
   ])
     expect((await view.findAllByText(label, { exact: true })).length).toBeGreaterThan(0);
   fireEvent.click(view.getByText("size", { exact: true }));
-  expect(view.setPage).toHaveBeenLastCalledWith(
-    { encoding: "size", layers: ["meshes", "centrelines"] },
-    { history: "push" },
-  );
+  expect(view.pose).toHaveBeenLastCalledWith({ encoding: "size", layers: ["meshes", "centrelines"] }, "named");
+});
+
+it("the sheet's blockers draw under `blockers`; `findings` is the kernel's findings Work, never the sheet's marks", () => {
+  mount(sheet, ["meshes", "findings"]);
+  expect(seen.model!.drawn.map((layer) => layer.key)).not.toContain("sheet");
+  cleanup();
+  mount(sheet, ["meshes", "blockers"]);
+  expect(seen.model!.drawn.map((layer) => layer.key)).toContain("sheet");
+  expect(seen.model!.drawn.map((layer) => layer.key)).not.toContain("findings");
 });
