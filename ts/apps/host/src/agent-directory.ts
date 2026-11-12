@@ -28,6 +28,8 @@ export function prepareAgentDirectory(): void {
   const instructions = join(agent, productPathNames.agentInstructionsFileName);
   try {
     mkdirSync(agent, { recursive: true });
+    // ADR 0037 rule 6: product-owned machine state outside every home is replaced on any
+    // byte difference; a hand edit to state/Agent/AGENTS.md is not kept.
     if (!existsSync(instructions) || readFileSync(instructions, "utf8") !== peaAgentInstructions)
       writeAtomic(instructions, peaAgentInstructions);
   } catch (error) {
