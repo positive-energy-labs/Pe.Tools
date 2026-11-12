@@ -30,6 +30,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

@@ -38,7 +38,8 @@ public sealed record BridgeDocumentSnapshot(
     string Title,
     string? Address,
     bool IsFamilyDocument,
-    bool IsActive
+    bool IsActive,
+    [property: JsonProperty(NullValueHandling = NullValueHandling.Include)] string? ProjectHome
 );
 
 public sealed record BridgeStateSnapshot(

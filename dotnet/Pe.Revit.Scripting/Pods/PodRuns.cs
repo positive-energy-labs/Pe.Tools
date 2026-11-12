@@ -5,6 +5,7 @@ using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Product;
 using System.Text;
+using Pe.Shared.StorageRuntime;
 
 namespace Pe.Revit.Scripting.Pods;
 
@@ -103,17 +104,14 @@ public static class PodRuns {
             foreach (var file in files) {
                 var path = Path.Combine(runFolder, file.File.Replace('/', Path.DirectorySeparatorChar));
                 _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
-                    stream.Write(file.Bytes, 0, file.Bytes.Length);
+                StoredFile.WriteAtomic(path, file.Bytes);
                 written.Add(file.File);
             }
             var input = JObject.FromObject(metadata, Serializer);
             input["files"] = JArray.FromObject(files.Select(file => new {
                 file.Role, file.Pod, file.Address, Sha256 = ScriptPodPreparationService.Sha256(file.Bytes), file.File
             }), Serializer);
-            using (var stream = new FileStream(Path.Combine(runFolder, "input.json"), FileMode.CreateNew, FileAccess.Write, FileShare.Read))
-            using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
-                writer.Write(input.ToString(Formatting.Indented));
+            StoredFile.WriteAtomic(Path.Combine(runFolder, "input.json"), Encoding.UTF8.GetBytes(input.ToString(Formatting.Indented)));
             written.Insert(0, "input.json");
             return written;
         } catch {
@@ -145,12 +143,11 @@ public static class PodRuns {
             if (string.IsNullOrWhiteSpace(name) || name != Path.GetFileName(name) || string.Equals(name, "receipt.json", StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException($"Run output name must be a plain file name other than receipt.json: '{name}'.", nameof(outputs));
             var outputPath = Path.Combine(runFolder, name);
-            using (var stream = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
-                stream.Write(bytes, 0, bytes.Length);
+            StoredFile.WriteAtomic(outputPath, bytes);
             written.Add(name);
         }
         var path = Path.Combine(runFolder, "receipt.json");
-        File.WriteAllText(path, JsonConvert.SerializeObject(receipt with { Outputs = [.. receipt.Outputs, .. written] }, Json));
+        StoredFile.WriteAtomic(path, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(receipt with { Outputs = [.. receipt.Outputs, .. written] }, Json)));
         return path;
     }
 }

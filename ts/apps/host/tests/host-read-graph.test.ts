@@ -611,7 +611,7 @@ test("HTTP retaining one capture twice with an open reader never rewrites it and
   const f = await fixture(false, {
     read: () => { throw Error("Retention requires no native dispatch"); },
     inventory: { sessions: [{ sessionId: ref.session, connected: true, openDocumentCount: 1,
-      openDocuments: [{ openId: ref.openId, title: "Chadds", address: path, isFamilyDocument: false, isActive: true }] }] },
+      openDocuments: [{ openId: ref.openId, title: "Chadds", address: path, isFamilyDocument: false, isActive: true, projectHome: null }] }] },
   });
   const args = { target: ref, views: [], snapshot: {
     reading: { at: path, version: "same", observedAt: "2026-11-07T00:00:00.000Z" },

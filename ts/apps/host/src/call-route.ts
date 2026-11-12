@@ -1203,7 +1203,7 @@ export const targetHomes = Effect.fnUntraced(function* (
   const target = (yield* bridge.list)
     .flatMap((session) => session.state?.openDocuments ?? [])
     .find((document) => document.openId === scope.openDocumentId);
-  return (target ? { pointer: target.projectHome ?? null } : {}) satisfies PodContext;
+  return (target ? { pointer: target.projectHome } : {}) satisfies PodContext;
 });
 
 /** A session-less host composes schema-only; it never pretends a bridge is there. */
