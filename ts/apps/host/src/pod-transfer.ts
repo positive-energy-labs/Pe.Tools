@@ -1,7 +1,7 @@
 /** Transport consumes packages.ts's captured members; source bytes and local custody stay distinct. */
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { copyFile, cp, lstat, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { copyFile, cp, lstat, mkdir, readFile, rename, rm, rmdir, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { message, packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
@@ -24,6 +24,7 @@ import { scratchPageDirectory } from "./page-libraries.ts";
 import { activateImportedPackage } from "./package-lifecycle.ts";
 import { sha256Hex as sha256, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 import { StepFailure } from "./command-executor.ts";
+import { rollbackHomeMembers, writeHome, type HomeMemberUndo } from "./settings.ts";
 
 const VENDOR_DIRECTORY = "_vendor";
 const LOCAL_PREFIX = "@local/";
@@ -295,6 +296,8 @@ export async function installArchive(
   const archiveSha256 = sha256(archive);
   // Staged under machine state, never in the home: a crash leaves no half folder on a synced drive.
   const staging = podStatePath(options, "pod-importing", randomUUID());
+  const writes: HomeMemberUndo[] = [];
+  const directories = new Set<string>([directory]);
   try {
     for (const [path, bytes] of entries) {
       await writeArtifact(staging, join(staging, folder, path), bytes);
@@ -302,17 +305,26 @@ export async function installArchive(
     const admitted = (await listPackages(staging)).packages[0];
     if (!admitted || admitted.id !== id)
       throw new TransferRefused(`Pod archive '${locator}' is not an admissible pod.`);
-    await placePod(join(staging, folder), directory);
+    // Manifest last: readers never admit a partially published pod. Home writes use CAS,
+    // including first imports, rather than renaming machine state onto a synced drive.
+    for (const [path, bytes] of [...entries].sort(([a], [b]) => Number(a === "pod.json") - Number(b === "pod.json"))) {
+      const target = join(directory, path);
+      for (let parent = dirname(target); parent !== directory; parent = dirname(parent)) directories.add(parent);
+      const wrote = writeHome(target, bytes, null);
+      if (!wrote.ok)
+        throw new TransferRefused(`Pod member changed during import: ${path}`, 409);
+      writes.push({ path: target, sha256: wrote.sha256, prior: null });
+    }
     // The import record is machine state (it is derived, and dated here), keyed by the pod's id.
     // It names its archive by content hash and file name: no machine path is stored anywhere.
-    writeAtomic(
-      importRecordPath(id, options),
-      `${JSON.stringify({ archiveSha256, archive: basename(locator), date: new Date().toISOString() }, null, 2)}\n`,
-    );
     const store = options.captures!;
     for (const [path, bytes] of entries)
       if (CAPTURE_MEMBER.exec(path)?.[2] === "png") await store.adopt(bytes);
     await activateImportedPackage(id, podsRoot);
+    writeAtomic(
+      importRecordPath(id, options),
+      `${JSON.stringify({ archiveSha256, archive: basename(locator), date: new Date().toISOString() }, null, 2)}\n`,
+    );
     return {
       id,
       folder,
@@ -321,6 +333,18 @@ export async function installArchive(
       members: admitted.members.map((m) => ({ path: m.path, sha256: m.sha256 })),
       diagnostics: admitted.diagnostics,
     };
+  } catch (error) {
+    const kept = rollbackHomeMembers(writes);
+    // This import required an absent folder. Remove only empty directories, never a later writer's files.
+    for (const path of [...directories].sort((a, b) => b.length - a.length)) {
+      try { await rmdir(path); }
+      catch (undoError) {
+        if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes((undoError as NodeJS.ErrnoException).code ?? ""))
+          kept.push(`${path} (${String(undoError)})`);
+      }
+    }
+    if (kept.length) throw new Error(`${String(error)}; rollback kept: ${kept.join("; ")}`, { cause: error });
+    throw error;
   } finally {
     await rm(staging, { recursive: true, force: true });
   }

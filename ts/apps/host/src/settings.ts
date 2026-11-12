@@ -1,5 +1,6 @@
 import { settingsSchemaPath } from "@pe/host-contracts/settings-schema";
 import { lstat, stat } from "node:fs/promises";
+import { readFileSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { isUtf8 } from "node:buffer";
 import { join, win32 } from "node:path";
@@ -41,7 +42,7 @@ import { LocalOpError } from "./local-error.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { stateTree } from "@pe/host-contracts/service-identity";
-import { writeAtomic, writeHomeFile } from "@pe/host-contracts/store";
+import { sha256Hex, writeAtomic, writeHomeFile } from "@pe/host-contracts/store";
 import {
   localOpFileError,
   makeDirectory,
@@ -75,6 +76,33 @@ export const writeHome = (path: string, bytes: Uint8Array | string, expectSha256
     expectSha256,
     blobRoot: stateTree(hostOwnership.rootPath).blobs,
   });
+
+/** Only for undoing a newly created Pod member after failed publication; never delete a later edit.
+ * Like writeHome, this has the store's compare-then-I/O concurrency ceiling. */
+export function deleteHomeIfSha(path: string, expectSha256: string): boolean {
+  let bytes: Buffer;
+  try { bytes = readFileSync(path); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+  if (sha256Hex(bytes) !== expectSha256) return false;
+  unlinkSync(path);
+  return true;
+}
+
+export type HomeMemberUndo = { path: string; sha256: string; prior: Uint8Array | null };
+
+/** Undo only this publication's writes, newest first; one conflict must not prevent other undos. */
+export function rollbackHomeMembers(writes: readonly HomeMemberUndo[]): string[] {
+  const kept: string[] = [];
+  for (const write of [...writes].reverse()) {
+    try {
+      const undone = write.prior === null
+        ? deleteHomeIfSha(write.path, write.sha256)
+        : writeHome(write.path, write.prior, write.sha256).ok;
+      if (!undone) kept.push(`${write.path} (changed after publication)`);
+    } catch (error) { kept.push(`${write.path} (${String(error)})`); }
+  }
+  return kept;
+}
 
 /**
  * One pod's run output, `state\Runs\<pod-id>` (homes freeze shape 7); a run no pod owns goes to
