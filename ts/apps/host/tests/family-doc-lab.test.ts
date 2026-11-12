@@ -3,7 +3,7 @@
  * The /family doc-lab chain (routes MAP row 10, "/family acceptance") through the real action doors:
  * capture, save, attach, a cited value staged by Pea. Substituted: the native socket (it answers
  * `family.capture` with the a-box fixture, padded to a field family's size) and the PDF parser (the
- * web LlamaCloud endpoint). Work, the journal, consent, Pod files and the PDF bytes are real.
+ * in-process LlamaCloud parser). Work, the journal, consent, Pod files and the PDF bytes are real.
  */
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createServer } from "node:http";
@@ -15,6 +15,9 @@ import { fileURLToPath } from "node:url";
 import { address, bindWork, familyDraftRouteState, type Caller } from "@pe/agent-contracts";
 import * as actionClient from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import { nativeFixture } from "./fans-work-fixture.ts";
+import { heldSends, releaseSend } from "../src/guards.ts";
+import { noticeRows } from "../src/notice-feed.ts";
+import { actAs } from "./callers.ts";
 import { familySpecAsset } from "../src/family-spec.ts";
 
 const pdf = fileURLToPath(new URL("../../web/public/acme-fcu400-submittal.pdf", import.meta.url));
@@ -36,10 +39,11 @@ const pdfSize = readFileSync(pdf).length;
 
 const closes: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
+  for (const send of heldSends()) releaseSend(send.id);
   for (const close of closes.splice(0).reverse()) await close();
 });
 
-async function lab() {
+async function lab(beforeParse?: () => Promise<void>) {
   const pods = await mkdtemp(join(tmpdir(), "pe-doc-lab-"));
   closes.push(() => rm(pods, { recursive: true, force: true }));
   await mkdir(join(pods, "lab"), { recursive: true });
@@ -56,12 +60,14 @@ async function lab() {
           address: familyAddress,
           isActive: true,
           isFamilyDocument: true,
+          projectHome: null,
         },
       ],
-    } as never,
+    },
     deps: {
       podsRoot: pods,
       parsePdf: async (file) => {
+        await beforeParse?.();
         const bytes = Buffer.from(await file.arrayBuffer());
         if (bytes.subarray(0, 5).toString() !== "%PDF-") throw Error("The parser was not handed a PDF");
         parsed.push({ name: file.name, bytes: bytes.length });
@@ -92,7 +98,6 @@ async function lab() {
   const doc = async () =>
     familyDraftRouteState.schema.parse((await f.saved.view(key, "family"))!.doc);
   let n = 0;
-  const allowed = new Set<string>();
   /** One action through `POST /actions`: its settled receipt, or the admission's refusal text. */
   const act = async (
     name: string,
@@ -103,18 +108,7 @@ async function lab() {
     const id = `lab-${++n}`;
     const response = await f.post("/actions", { id, key: name, target, input }, caller);
     if (!response.ok) return { state: "refused", error: await response.text() };
-    // Pea runs under real run consent (ADR 0027): allow each ask as the person watching would.
-    let settled = false;
-    const receipt = f.journal.wait(id).finally(() => (settled = true));
-    while (!settled) {
-      for (const event of f.events)
-        if (event.kind === "permission_request" && !allowed.has(event.requestId)) {
-          allowed.add(event.requestId);
-          f.runs.decide(run.thread, event.requestId, "allow_now");
-        }
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    return receipt;
+    return f.journal.wait(id);
   };
   const stage = async (by: "human" | "pea", path: (string | number)[], value: unknown) => {
     const written = await f.saved.apply(key, "family", by, [{ path, value }], (await handle()).revision);
@@ -134,7 +128,16 @@ async function lab() {
       result: { member: { pod: string; path: string; sha256: string } };
     };
   };
-  return { f, pods, pea, parsed, handle, doc, act, stage, save };
+  const outward = (id: string, caller: Caller = { kind: "human", via: "local" }) => actAs(caller, () =>
+    f.api.fetch(new Request(`http://fixture/pe/outward/held/${id}/confirm`, { method: "POST" })));
+  const confirm = async () => {
+    const send = heldSends().find((send) => send.thread === run.thread);
+    expect(send).toBeDefined();
+    const response = await outward(send!.id);
+    expect(response.status, await response.clone().text()).toBe(200);
+    return f.journal.wait(`${(await f.journal.list()).find(row => row.key === "family.attach-spec" && row.refusal?.kind === "held")!.id}:confirmed`);
+  };
+  return { f, pods, pea, parsed, handle, doc, act, stage, save, confirm, outward };
 }
 
 test("blocker 3: a capture refused for its keys tells Pea where the input goes", async () => {
@@ -189,6 +192,7 @@ test("blocker 2: the page's own save is a member attach accepts", async () => {
     work: await handle(),
   });
   expect(attached.state, JSON.stringify(attached).slice(0, 2000)).toBe("succeeded");
+  expect(heldSends()).toEqual([]);
 }, 60_000);
 
 test("blocker 1: attach takes a path and a URL as well as an upload", async () => {
@@ -252,7 +256,7 @@ test("an attach refusal names what to do, without the repo's source", async () =
 }, 60_000);
 
 test("the chain: Pea captures and saves a family, attaches its sheet by path, and stages a cited value on a cell", async () => {
-  const { f, pods, pea, save, act, stage, handle, doc } = await lab();
+  const { f, pods, pea, save, act, stage, handle, doc, confirm } = await lab();
   const { member: saved } = (await save("pea")).result;
   const member = { pod: saved.pod, path: saved.path };
   expect(JSON.parse(await readFile(join(pods, "lab", member.path), "utf8"))).toMatchObject({
@@ -264,8 +268,10 @@ test("the chain: Pea captures and saves a family, attaches its sheet by path, an
     { member, source: { path: pdf }, work: await handle() },
     pea,
   );
-  expect(attached.state, JSON.stringify(attached).slice(0, 2000)).toBe("succeeded");
-  expect(attached.result).toMatchObject({ member, blocks: 1 });
+  expect(attached.error).toContain("Held, not done");
+  const confirmed = await confirm();
+  expect(confirmed.state).toBe("succeeded");
+  expect("result" in confirmed && confirmed.result).toMatchObject({ member, blocks: 1 });
   const cell = "/parameters/Width/value";
   await stage("pea", ["cells", cell, "edit"], {
     value: "30in",
@@ -286,8 +292,8 @@ test("the chain: Pea captures and saves a family, attaches its sheet by path, an
 }, 60_000);
 
 /** A member where attach looks, so each narrowing test is red for its source alone. */
-async function boxed() {
-  const l = await lab();
+async function boxed(beforeParse?: () => Promise<void>) {
+  const l = await lab(beforeParse);
   const member = { pod: "lab", path: "settings/family/box.json" };
   await mkdir(join(l.pods, "lab", "settings/family"), { recursive: true });
   await writeFile(join(l.pods, "lab", member.path), JSON.stringify(aBox));
@@ -363,52 +369,47 @@ test("narrow 2: a URL source is http(s), unredirected, timed and capped", async 
   expect(parsed).toEqual([]);
 }, 120_000);
 
-test("narrow 3: the consent card names the source and that it is sent for parsing", async () => {
+// Mutant: remove the held-command continuation in ActionJournal.invoke. The missing path and URL
+// request counter are sentinels: a bind that reads early fails before the person creates the source.
+test("narrow 3: Pea attach is held before source reads; the notice Confirm attaches once", async () => {
   for (const kind of ["path", "url"] as const) {
-    const { f, pea, attach, serve } = await boxed();
-    const source =
-      kind === "path"
-        ? { path: pdf }
-        : {
-            url: `${await serve((_request, response) => response.end(readFileSync(pdf)))}/acme.pdf`,
-          };
-    expect(await attach(source, pea)).toMatch(/"state":"succeeded"/);
-    const ask = f.events.find((event) => event.kind === "permission_request");
-    const title = (ask as { toolCall: { title: string } }).toolCall.title;
-    expect(title).toContain(Object.values(source)[0]);
-    expect(title).toMatch(/sent .*for parsing/);
+    const { pods, pea, attach, parsed, serve, confirm, doc, outward } = await boxed();
+    let reads = 0;
+    const source = kind === "path" ? { path: join(pods, "not-yet-created.pdf") } : {
+      url: `${await serve((_request, response) => { reads++; response.end(readFileSync(pdf)); })}/acme.pdf`,
+    };
+    expect(await attach(source, pea)).toContain("Held, not done");
+    expect(parsed).toEqual([]);
+    expect(reads).toBe(0);
+    const send = heldSends().find(row => row.thread === pea.thread)!;
+    expect(send).toBeDefined();
+    const rows = noticeRows({ threads: [], receipts: [], works: [], machine: null, stored: [], held: [send] }, Date.now());
+    expect(rows).toMatchObject([{ what: Object.values(source)[0], says: expect.stringContaining("LlamaCloud"), act: { kind: "confirm-send", id: send.id } }]);
+    await expect(outward(send.id, pea)).rejects.toThrow(/human.only/);
+    expect(parsed).toEqual([]);
+    if ("path" in source) await copyFile(pdf, source.path!);
+    expect((await confirm()).state).toBe("succeeded");
+    expect(parsed).toHaveLength(1);
+    expect((await doc()).spec?.doc.blocks).toEqual([block]);
+    expect((await outward(send.id)).status).toBe(404);
+    expect(parsed).toHaveLength(1);
   }
 }, 60_000);
 
+// Mutant: family-spec re-reads source.path when retaining source.pdf instead of using admitted bytes.
 test("narrow 5: a PDF edited after admission attaches the bytes the admission retained", async () => {
-  const { f, pods, pea, member, handle } = await boxed();
-  const sheet = join(pods, "sheet.pdf");
-  await copyFile(pdf, sheet);
-  const response = await f.post(
-    "/actions",
-    {
-      id: "edited",
-      key: "family.attach-spec",
-      target: host,
-      input: { member, source: { path: sheet }, work: await handle() },
-    },
-    pea,
-  );
-  expect(response.ok, await response.clone().text()).toBe(true);
-  const ask = await vi.waitFor(() => {
-    const event = f.events.find((event) => event.kind === "permission_request");
-    if (!event) throw Error("no consent ask yet");
-    return event as { requestId: string };
+  let sheet: string;
+  const { pods, member, attach, parsed } = await boxed(async () => {
+    await appendFile(sheet, "\n% edited after admission\n");
   });
-  await appendFile(sheet, "\n% edited while the Reject window was open\n");
-  f.runs.decide(pea.run!.thread, ask.requestId, "allow_now");
-  const receipt = await f.journal.wait("edited");
-  expect(receipt.state, JSON.stringify(receipt).slice(0, 2000)).toBe("succeeded");
-  const sidecar = JSON.parse(
-    await readFile(join(pods, "lab", `${member.path}.spec.json`), "utf8"),
-  ) as { path: string };
+  sheet = join(pods, "sheet.pdf");
+  await copyFile(pdf, sheet);
+  expect(await attach({ path: sheet })).toMatch(/"state":"succeeded"/);
+  expect(parsed).toEqual([{ name: "sheet.pdf", bytes: pdfSize }]);
+  const sidecar = JSON.parse(await readFile(join(pods, "lab", `${member.path}.spec.json`), "utf8"));
   const kept = await readFile(join(pods, "lab", sidecar.path.replace(/\.json$/, ""), "source.pdf"));
-  expect(kept.length).toBe(pdfSize);
+  expect(kept).toEqual(readFileSync(pdf));
+  expect((await readFile(sheet)).length).toBeGreaterThan(pdfSize);
 }, 60_000);
 
 test("narrow 6: the spec asset door serves only what normalizes under the family folder", async () => {

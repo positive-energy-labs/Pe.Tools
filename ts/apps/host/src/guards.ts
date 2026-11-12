@@ -73,6 +73,8 @@ export function guardSend(caller: Caller, file: string, service: string): void {
 /* ── Held outward sends: the one guarded act the person confirms from its notice row ───── */
 
 const sends = new Map<string, HeldSend>();
+const continuations = new Map<string, () => Promise<void>>();
+const confirming = new Map<string, Promise<void>>();
 const listeners = new Set<() => void>();
 const sendKey = (send: HeldSendRequest) => `${send.service}:${send.sha256}:${send.pages}`;
 
@@ -90,8 +92,22 @@ export function holdSend(request: HeldSendRequest, thread: string | null, at: st
 }
 export const heldSends = (): HeldSend[] => [...sends.values()];
 export const heldSend = (id: string) => sends.get(id);
+/** A command held before reading a source has an intent digest, not a digest of unread bytes. */
+export function holdSendCommand(request: HeldSendRequest, thread: string | null, run: () => Promise<void>) {
+  const send = holdSend(request, thread, new Date().toISOString());
+  if (!continuations.has(send.id)) continuations.set(send.id, run);
+  return send;
+}
+export function confirmSend(send: HeldSend, fallback: (send: HeldSend) => Promise<void>): Promise<void> {
+  const pending = confirming.get(send.id);
+  if (pending) return pending;
+  const run = Promise.resolve().then(() => continuations.get(send.id)?.() ?? fallback(send)).then(() => releaseSend(send.id));
+  confirming.set(send.id, run);
+  return run.finally(() => confirming.delete(send.id));
+}
 /** The person confirmed it and the send ran, or the row is void: either way it leaves the feed. */
 export function releaseSend(id: string) {
+  continuations.delete(id);
   if (sends.delete(id)) for (const listener of listeners) listener();
 }
 export const subscribeHeldSends = (listener: () => void) => {

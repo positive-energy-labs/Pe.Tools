@@ -294,7 +294,7 @@ export function noticeRows(sources: NoticeSources, now: number): NoticeDraft[] {
       verb: "held",
       what: send.path,
       where: "Pea",
-      says: `Pea wants to send pages ${send.pages} of this file to LlamaCloud to read it. Nothing was sent. Confirm to send it; Pea's next read of the same file finds the result.`,
+      says: `Pea wants to send pages ${send.pages} of this source to LlamaCloud to read it. Nothing was sent. Confirm to send it and keep the result for Pea.`,
       at: send.at,
       url: send.thread ? routeAddress("pea").link({}, { thread: send.thread }) : null,
       ...(send.thread ? {} : { refusal: "No thread asked for this" }),
