@@ -180,3 +180,12 @@ test("a declared cell can be cleared, but an undeclared owner or path cannot be 
   expect(at.criteria.terminalDropInWg).toMatchObject({ value: 0.03, source: "default" });
 });
 
+test.each(["written", "__proto__", "constructor", "prototype"])("the write door refuses reserved path key %s", (key) => {
+  for (const path of [[key], ["criteria", key], [key, "terminalDropInWg"]]) {
+    const before = readSettingTiers("ducts", pointer);
+    const notices = readStoredNotices(storedNoticesPath());
+    expect(writeSettingTier({ owner: "ducts", tier: "firm", path, value: 1, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422, message: expect.stringContaining("reserved") });
+    expect(readSettingTiers("ducts", pointer)).toEqual(before);
+    expect(readStoredNotices(storedNoticesPath())).toEqual(notices);
+  }
+});

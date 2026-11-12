@@ -96,6 +96,8 @@ export function writeSettingTier(
   request: { owner: string; tier: SettingTier; path: readonly string[]; value: unknown; expectedSha256: string | null },
   context: { pointer?: string | null; writer?: string; now?: () => Date } = {},
 ): SettingWrite {
+  if (request.path.some((key) => ["written", "__proto__", "constructor", "prototype"].includes(key)))
+    return { ok: false, status: 422, message: "The setting path contains a reserved key." };
   const read = readTier(request.tier, request.owner, context.pointer);
   if (read.home === null || read.path === null)
     return { ok: false, status: 404, message: read.notFound ?? `No ${request.tier} home` };
