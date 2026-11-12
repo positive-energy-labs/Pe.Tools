@@ -218,3 +218,11 @@ test("snapshot slot names come from the project home, never Fans Work", () => {
   expect(fansDocumentSchema.parse({})).not.toHaveProperty("parameters");
   expect(fansDocumentSchema.safeParse({ parameters: {} }).success).toBe(false);
 });
+
+// Mutant H5-caption: claim a missing firm file supplied the seed.
+test("the pricing caption calls an absent firm file defaults, never firm seed", () => {
+  const read = { ductsRevision: 0, sheetView: { firm: { version: "seed", path: "Settings/ducts.json", present: false } } } as unknown as Parameters<typeof fansSheet.from>[0];
+  const caption = fansSheet.from(read, {})!.says;
+  expect(caption).toContain("defaults");
+  expect(caption).not.toContain("over firm");
+});

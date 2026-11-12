@@ -83,6 +83,7 @@ export const fansSheet = {
       // Slice 2b: without a shared root the firm layer is refused and the design runs on the engine seed.
       says: `Priced with the /ducts design, Work r${read.ductsRevision}${!firm ? "" : "refused" in firm
         ? `: ${ENGINE_DEFAULT_NO_SHARED_ROOT}. ${NO_SHARED_ROOT}`
+        : !firm.present ? " over defaults where no home states a value"
         : ` over firm ${firm.version} · ${firm.path.split(/[\\/]/).at(-1)}`}`,
       href: ductsLink(snapshot ? sheetSystems(snapshot) : [], search),
     };
