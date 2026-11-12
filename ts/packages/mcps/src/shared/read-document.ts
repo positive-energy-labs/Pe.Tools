@@ -58,6 +58,7 @@ export type ReadDocumentInput = z.input<typeof inputSchema>;
 export interface ReadDocumentResult {
   text: string;
   images: Array<{ page: number; path: string; mediaType: "image/png"; data: string }>;
+  warnings?: Array<{ code: "no-text-layer"; page: number }>;
 }
 
 const MAX_RENDERED_PAGES = 4;
@@ -162,6 +163,7 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
     const { LiteParse } = await loadLiteParse();
     return new LiteParse({
       outputFormat: "text",
+      ocrEnabled: false, // The local parser makes no network request, including OCR language downloads.
       quiet: true,
       targetPages: input.pages,
       dpi: input.crop ? 200 : 150,
@@ -189,6 +191,15 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
     counted = `${parsed.totalPages} page(s) in the document, read`;
   }
 
+  const warnings: NonNullable<ReadDocumentResult["warnings"]> = [];
+  if (input.parser === "liteparse") {
+    for (const page of pageTexts) {
+      if (page.text.trim()) continue;
+      warnings.push({ code: "no-text-layer", page: page.pageNum });
+      page.text =
+        "No text layer was extracted from this page or selected crop. Local OCR is disabled to prevent network downloads. Use image: true to view it, or parser: llamaparse to request a hosted read held for the person's confirmation.";
+    }
+  }
   const pages = pageTexts.map((page) => page.pageNum);
   let text = pageTexts.map((page) => `--- page ${page.pageNum} ---\n${page.text}`).join("\n\n");
   let truncated = "";
@@ -224,13 +235,13 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
   const note = images.length
     ? `\nRendered pages (also on disk): ${images.map((i) => i.path).join(", ")}${pages.length > images.length ? ` Only the first ${MAX_RENDERED_PAGES} pages were rendered.` : ""}`
     : "";
-  return { text: `${header}\n\n${text}${note}`, images };
+  return { text: `${header}\n\n${text}${note}`, images, ...(warnings.length ? { warnings } : {}) };
 }
 
 export const readDocument = createTool({
   id: "read_document",
   description: [
-    "Read a project document on disk (PDF spec sheet, schedule, submittal, drawing set; images by OCR; .xlsx and .docx directly, including docx review comments). Local and read-only; the file is never modified and renders go to a product scratch folder named in the result.",
+    "Read a project document on disk (PDF spec sheet, schedule, submittal, drawing set; .xlsx and .docx directly, including docx review comments). Local text extraction makes no network requests and does not run OCR. Pages without extracted text are reported; use image: true to view scans. Read-only; the file is never modified and renders go to a product scratch folder named in the result.",
     "Method: take the text first to LOCATE the value (spatial text keeps table columns aligned), then pass image: true with the same pages, and crop when you only need one schedule or chart, to READ it. The text layer loses red strike-throughs, revision clouds, symbols and chart lines, so a number read from text alone is not verified until you have seen the page.",
     "parser: llamaparse is LlamaCloud's read of the same pages. Sending a file outward is the person's act, so the first call returns Held (not an error, and nobody refused) and posts one notice; once they confirm, the same call returns the kept result. Use it for a page the local text garbled, not by default, and keep working locally while it is held.",
     "Not for Revit model facts; use pe_find for those.",
