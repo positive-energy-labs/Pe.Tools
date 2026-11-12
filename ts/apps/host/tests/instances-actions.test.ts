@@ -1577,5 +1577,9 @@ test("a quarantined launch refused through /actions reads refused in the feed an
   const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: receipt }] }, Date.now());
   // Its local copies were made before the refused launch, so the row still waits on cleanup.
   expect(rows).toMatchObject([{ group: "waits", verb: "refused", says: expect.stringMatching(/quarantine[\s\S]*clean up/) }]);
+  // The cleanup line rides on the refused tail itself, not on the receipt carrying an error.
+  const { error: _error, ...bare } = receipt;
+  const bareRows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: bare }] }, Date.now());
+  expect(bareRows).toMatchObject([{ group: "waits", verb: "refused", says: expect.stringMatching(/clean up/) }]);
 });
 
