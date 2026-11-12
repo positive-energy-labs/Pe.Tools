@@ -115,14 +115,16 @@ function SettingCell({ ctx, cell, schema }: { ctx: Ctx; cell: SheetCell; schema:
     }
   };
   return (
-    <div className="contents" data-sheet-cell={cell.label} data-sheet-address={cell.binding} data-source={cell.source}>
-      <span className="min-w-0 truncate">{cell.label}</span>
-      <span className="flex min-w-0 items-center gap-1">
-        <span className="shrink-0">{cell.value == null ? "\u2014" : String(cell.value)}{cell.unit ? ` ${cell.unit}` : ""}</span>
+    <div className="col-span-full flex min-w-0 flex-col gap-1" data-sheet-cell={cell.label} data-sheet-address={cell.binding} data-source={cell.source}>
+      <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+        <span className="min-w-0 truncate">{cell.label}</span>
+        <span className="min-w-0 truncate text-ink-2" data-input-source={cell.source}>{[layerWord(cell), cell.note].filter(Boolean).join(" \u00b7 ")}</span>
+      </span>
+      <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-center gap-1">
+        <span className="min-w-0 truncate">{cell.value == null ? "\u2014" : String(cell.value)}{cell.unit ? ` ${cell.unit}` : ""}</span>
         <Input aria-label={`${cell.label}: value to save`} value={text} placeholder="save at" onChange={(event) => setText(event.target.value)} />
       </span>
-      <span className="t-small min-w-0 truncate text-ink-2" data-input-source={cell.source}>{[layerWord(cell), cell.note].filter(Boolean).join(" \u00b7 ")}</span>
-      <span className="flex gap-1">
+      <span className="flex min-w-0 flex-wrap gap-1">
         {cell.setting!.tiers.map((tier) => (
           <Button key={tier.tier} kind="quiet" label={`Save ${cell.label} at the ${tier.tier} home${text.trim() ? "" : " (empty clears it there)"}`}
             busy={busy === tier.tier} {...(tier.home ? {} : { refusal: tier.notFound ?? `No ${tier.tier} home` })} onPress={() => void save(tier)}>
