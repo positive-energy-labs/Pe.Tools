@@ -159,3 +159,24 @@ test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served
   // A write at a home that was not found is refused, never written somewhere else.
   expect(writeSettingTier({ owner: "ducts", tier: "firm", path: PATHS.terminalDropInWg!, value: 0.07, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 404 });
 });
+
+test.each([-1, "0.05", {}, false])("the write door refuses invalid terminal drop %j without changing bytes or notices", (value) => {
+  const before = readSettingTiers("ducts", pointer);
+  const notices = readStoredNotices(storedNoticesPath());
+  expect(writeSettingTier({ owner: "ducts", tier: "firm", path: PATHS.terminalDropInWg!, value, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422 });
+  expect(readSettingTiers("ducts", pointer)).toEqual(before);
+  expect(readStoredNotices(storedNoticesPath())).toEqual(notices);
+});
+
+test("a declared cell can be cleared, but an undeclared owner or path cannot be written", async () => {
+  const request = { owner: "ducts", tier: "firm" as const, path: PATHS.terminalDropInWg!, value: 0.05, expectedSha256: null };
+  expect(writeSettingTier(request, { pointer })).toMatchObject({ ok: true });
+  const expectedSha256 = sha(readSettingTiers("ducts", pointer), "firm");
+  expect(writeSettingTier({ ...request, path: ["criteria", "unknown"], expectedSha256 }, { pointer })).toMatchObject({ ok: false, status: 422 });
+  expect(writeSettingTier({ ...request, owner: "unknown" }, { pointer })).toMatchObject({ ok: false, status: 422 });
+  expect(writeSettingTier({ ...request, value: null, expectedSha256 }, { pointer })).toMatchObject({ ok: true });
+  const at = await sheet();
+  expect(at.cell("terminalDropInWg")).toMatchObject({ value: null, source: "default" });
+  expect(at.criteria.terminalDropInWg).toMatchObject({ value: 0.03, source: "default" });
+});
+
