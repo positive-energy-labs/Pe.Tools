@@ -7,7 +7,7 @@ import {
 } from "@pe/agent-contracts/pe-api";
 /** Scratch Pages and admitted Pod Pages share serving, binding and event state. See pe.js for the author API. */
 import { readFileSync, watch } from "node:fs";
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -77,7 +77,13 @@ import { escapeHtml, withPageKey } from "./page-publication.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import { ActionJournalService } from "./receipt-services.ts";
 import { PAGE_MEDIA } from "./page-artifacts.ts";
-import { readStored, writeAtomic, type StoredPolicy } from "@pe/host-contracts/store";
+import {
+  appendStoredLine,
+  readStored,
+  readStoredLines,
+  writeAtomic,
+  type StoredPolicy,
+} from "@pe/host-contracts/store";
 import { storedNoticesPath } from "./notice-feed.ts";
 import { productPageStatePath } from "./product-paths.ts";
 
@@ -169,6 +175,7 @@ const pageEventRowSchema = z.object({
   event: z.unknown(),
 });
 export type PageEventRow = z.infer<typeof pageEventRowSchema>;
+const lastSeq = (rows: readonly PageEventRow[]) => rows.at(-1)?.seq ?? 0;
 /** One `GET /pages` row; `pod` is the package id when an admitted package contributes the page. */
 export type PageRow = {
   slug: string;
@@ -260,8 +267,9 @@ const unboundRefusal = (door: string): Refusal => ({
 /**
  * One page's log, snapshot and binding. They are machine state (ADR 0037 rule 6): `dir` is the
  * Page's folder under the state root, never the Page's own folder in a home. Appends are serial
- * per page. Page state is discard class (ADR 0039): a file that does not decode is deleted with
- * one notice and reads as absent.
+ * per page. Page state is discard class (ADR 0039): a snapshot or binding that does not decode is
+ * deleted with one notice and reads as absent. The event log is append-only and decodes per line:
+ * a bad line is left out with one notice, and a read never rewrites the file.
  */
 class PageState {
   private readonly listeners = new Set<Listener>();
@@ -271,26 +279,22 @@ class PageState {
   constructor(
     private readonly pageDir: string,
     private readonly dir: string,
-    private readonly policy: StoredPolicy,
+    private readonly policy: Extract<StoredPolicy, { class: "discard" }>,
   ) {}
-  private stored<T>(file: string, schema: z.ZodType<T>, missing: T, parse?: StoredPolicy["parse"]) {
-    const read = readStored(join(this.dir, file), schema, { ...this.policy, parse });
+  private stored<T>(file: string, schema: z.ZodType<T>, missing: T) {
+    const read = readStored(join(this.dir, file), schema, this.policy);
     return read.kind === "ok" ? read.value : missing;
   }
   async rows(): Promise<PageEventRow[]> {
-    return this.stored("events.jsonl", z.array(pageEventRowSchema), [], (text) =>
-      text
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => JSON.parse(line) as unknown),
-    );
+    const read = readStoredLines(join(this.dir, "events.jsonl"), pageEventRowSchema, this.policy);
+    return read.kind === "ok" ? read.values : [];
   }
   append(event: unknown, origin: string): Promise<PageEventRow> {
     const job = this.queue.then(async () => {
-      const seq = (await this.rows()).length + 1;
+      // After the last row that reads, not a count: a line left out must not hand its number out twice.
+      const seq = lastSeq(await this.rows()) + 1;
       const row: PageEventRow = { seq, at: new Date().toISOString(), origin, event };
-      await mkdir(this.dir, { recursive: true });
-      await appendFile(join(this.dir, "events.jsonl"), JSON.stringify(row) + "\n", "utf8");
+      appendStoredLine(join(this.dir, "events.jsonl"), JSON.stringify(row));
       for (const listen of this.listeners) listen(row);
       return row;
     });
@@ -957,7 +961,7 @@ export function createPagesHandler(
     if (verb === "state" && request.method === "GET") {
       const rows = await state.rows();
       return json({
-        seq: rows.length,
+        seq: lastSeq(rows),
         events: rows,
         snapshot: await state.snapshot(),
         text: await state.text(),

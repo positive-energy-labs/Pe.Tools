@@ -2,26 +2,10 @@ import { randomUUID } from "node:crypto";
 import { link, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { Script } from "node:vm";
-import type { z } from "zod";
 import { parse, parseFragment, type DefaultTreeAdapterMap } from "parse5";
 import { sha256Hex, writeAtomic } from "@pe/host-contracts/store";
 
 export { sha256Hex };
-
-/**
- * A JSON file through its schema; a missing file reads as `missing`.
- * ponytail: the one throwing reader the store kernel leaves. It throws on a file that does not decode.
- * `pages-route.ts` is its last caller (the Page snapshot and binding); writer G2 moves those to
- * `readStored` when Page state moves to the state root, and deletes this.
- */
-export async function readJson<T>(path: string, schema: z.ZodType<T>, missing: T): Promise<T> {
-  try {
-    return schema.parse(JSON.parse(await readFile(path, "utf8")));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return missing;
-    throw error;
-  }
-}
 
 /** Served Page files and exported data URLs name media the same way. */
 export const PAGE_MEDIA: Record<string, string> = {
