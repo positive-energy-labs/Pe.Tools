@@ -18,10 +18,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
-import { readStoredNotices } from "@pe/host-contracts/store";
+import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
 import { hostInputs } from "../src/host-program.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { noticeRows, storedNoticesPath } from "../src/notice-feed.ts";
+import { noticeRows, storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
 import { createPackageLifecycle } from "../src/package-lifecycle.ts";
 import { listPackages } from "../src/packages.ts";
 import { createPodRoutes } from "../src/pod-routes.ts";
@@ -54,6 +54,11 @@ const posted = (path: string) =>
   readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === path);
 const holds = (path: string, bytes: string) =>
   existsSync(path) && readFileSync(path, "utf8") === bytes;
+/** Whether the blob store holds these exact bytes under their hash (`state\\Blobs\\sha256\\<hash>`). */
+const rests = (bytes: string) => {
+  const blob = join(storedBlobsPath(), "sha256", sha256Hex(bytes));
+  return existsSync(blob) && readFileSync(blob, "utf8") === bytes;
+};
 
 /** A discard-class kind: `read` meets the seeded file the way the host does, and must not throw. */
 type Kind = { name: string; place: string; file: () => string; read: (path: string) => unknown };
@@ -87,15 +92,7 @@ const kinds: Kind[] = [
     name: "update admission",
     place: "Update status",
     file: () => join(root, "update.json"),
-    read: (path) =>
-      createUpdateReader({
-        path,
-        run: async () => {
-          throw Error("no SDK in this test");
-        },
-        installed: true,
-        pid: 1,
-      }).refresh(false),
+    read: (path) => updates(path).refresh(false),
   },
   {
     name: "a retained schedule reading",
@@ -104,6 +101,15 @@ const kinds: Kind[] = [
     read: () => captures().scheduleHistory("any-workspace"),
   },
 ];
+const updates = (path: string) =>
+  createUpdateReader({
+    path,
+    run: async () => {
+      throw Error("no SDK in this test");
+    },
+    installed: true,
+    pid: 1,
+  });
 const captures = () =>
   new TakeoffCaptures(join(root, "captures"), join(root, "aps.json"), () => "2026-11-11T00:00:00Z");
 
@@ -113,6 +119,11 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
     await read(path);
     expect(holds(path, CORRUPT), "the corrupt bytes are gone").toBe(false);
     expect(posted(path)).toMatchObject([{ class: "discard", place }]);
+    // The update admission holds authority, so its bytes rest in the blob store before they go.
+    if (place === "Update status") {
+      expect(posted(path)[0]!.sha256).toBe(sha256Hex(CORRUPT));
+      expect(rests(CORRUPT)).toBe(true);
+    }
     // A second read, and a second start over the same store, post nothing new.
     await read(path);
     await read(path);
@@ -163,7 +174,11 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
     const path = seed(join(root, "journal", "journal.jsonl"), bytes);
     const journal = journalAt(path, Date.now);
     expect(await journal.list()).toEqual([]);
-    expect(posted(path)).toMatchObject([{ class: "discard", place: "Action journal" }]);
+    expect(posted(path)).toMatchObject([
+      { class: "discard", place: "Action journal", sha256: sha256Hex(bytes) },
+    ]);
+    // Nothing is lost: the discarded bytes rest in the blob store under the hash the notice names.
+    expect(rests(bytes)).toBe(true);
     // Before this, the throw was cached and every later journal write rejected.
     const join_ = await journal.actionJoin("first-action");
     expect(readFileSync(path, "utf8").split("\n")[0]).toBe('{"version":8}');
@@ -244,10 +259,12 @@ describe("keep: a person's file is listed \"can't read, kept\", its bytes never 
   );
 });
 
-test("host start throws 0 times over corrupt scheduled tasks, devices, a torn journal and a torn recording", async () => {
+test("host start throws 0 times over corrupt scheduled tasks, devices, a torn journal, a torn update admission and a torn recording", async () => {
   const tasks = seed(join(root, "scheduled-tasks.json"), CORRUPT);
   const devices = seed(join(root, "devices.json"), CORRUPT);
   const journal = seed(join(root, "journal", "journal.jsonl"), CORRUPT);
+  const TORN_UPDATE = '{"requestId":"torn-update-admission';
+  const update = seed(join(root, "state", "host-update.json"), TORN_UPDATE);
   // The recording bundle lives under the host's own state root: open it once, then tear a line.
   const stamp = admitBuild(
     "host",
@@ -270,6 +287,8 @@ test("host start throws 0 times over corrupt scheduled tasks, devices, a torn jo
   for (const start of [
     async () => void (inputs = await record()),
     () => journalAt(journal, Date.now).list(),
+    // `app.ts` builds the update reader and the machine reading refreshes it.
+    () => updates(update).refresh(false),
     () => createDevices(devices).list(),
     () => scheduler(tasks),
   ])
@@ -282,6 +301,10 @@ test("host start throws 0 times over corrupt scheduled tasks, devices, a torn jo
   // The host runs on fresh machine state, with recording off and the torn bundle untouched.
   expect(JSON.parse(readFileSync(tasks, "utf8"))).toBeInstanceOf(Array);
   expect(JSON.parse(readFileSync(devices, "utf8"))).toMatchObject({ sessions: [] });
+  expect(existsSync(journal)).toBe(false);
+  expect(existsSync(update)).toBe(false);
+  expect(posted(update)).toMatchObject([{ class: "discard", place: "Update status" }]);
+  expect([rests(CORRUPT), rests(TORN_UPDATE)]).toEqual([true, true]);
   expect(inputs!.source).toMatchObject({ kind: "live", capturing: false, truncated: { reason: "setup" } });
   expect(readFileSync(join(bundle, "takings.jsonl"))).toEqual(torn);
   expect(posted(bundle)).toMatchObject([{ class: "keep", place: "Recording history" }]);

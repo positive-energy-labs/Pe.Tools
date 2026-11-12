@@ -14,7 +14,7 @@ import {
   type UpdateReceipt,
 } from "@pe/host-contracts/pe-revit-contract";
 import { readStored, writeAtomic } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "./notice-feed.ts";
+import { storedBlobsPath, storedNoticesPath } from "./notice-feed.ts";
 
 const blocker = z.object({ code: z.string(), detail: z.string() });
 const processIdentity = z.object({ pid: z.number().int(), processStartUtc: z.string().nullable() });
@@ -186,11 +186,13 @@ export function createUpdateReader(options: {
   const load = () =>
     (loading ??= (async () => {
       // Machine state (ADR 0039): an admission that does not decode, or whose receipt answers
-      // another request, is discarded with a notice. The update then reads as never admitted.
+      // another request, is discarded with a notice. The update then reads as never admitted. Its
+      // bytes rest in the blob store first, under the hash the notice names.
       const read = readStored(options.path, storedAdmissionSchema, {
         class: "discard",
         place: "Update status",
         notices: storedNoticesPath(),
+        blobRoot: storedBlobsPath(),
       });
       if (read.kind === "ok") {
         admission = read.value;

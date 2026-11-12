@@ -10,9 +10,14 @@ import { readJournalSnapshot } from "./journal-snapshot.ts";
 import { nativeEffect, validateNativeInput } from "./native-input.ts";
 import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
-import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "./notice-feed.ts";
-import { dirname, join, win32 } from "node:path";
+import {
+  discardStored,
+  readStored,
+  readStoredNotices,
+  writeAtomic,
+} from "@pe/host-contracts/store";
+import { storedBlobsPath, storedNoticesPath } from "./notice-feed.ts";
+import { dirname, join, resolve, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
 import { Cause, Effect, Exit, FiberMap, type Fiber } from "effect";
@@ -86,6 +91,8 @@ export type Crossing = {
   readonly basis: Basis | null;
   /** The submitting request's id: the owned attempt's causal parent, never its context. */
   readonly parent?: string;
+  /** The caller says an earlier send of this admission may have arrived (`ADMISSION_RESEND_HEADER`). */
+  readonly resent?: boolean;
 };
 
 const messageOf = (error: unknown) =>
@@ -545,6 +552,16 @@ export class ActionJournal implements ReceiptReader {
 
   private loadOnce(): Promise<void> {
     return (this.loaded ??= this.load());
+  }
+  /** Whether this journal's file was ever discarded. The discard's notice is the durable record. */
+  private wasDiscarded(): boolean {
+    const path = resolve(this.path);
+    // ponytail: read on a re-sent admission only, and the notice file is never pruned. If it is
+    // ever pruned by age, an outbox older than that is admitted as new again: write the discard
+    // into the journal header then.
+    return readStoredNotices(storedNoticesPath()).some(
+      (notice) => notice.class === "discard" && notice.path === path,
+    );
   }
 
   async read(query: ReceiptQuery): Promise<Receipt[]> {
@@ -1183,6 +1200,14 @@ export class ActionJournal implements ReceiptReader {
       admission.input = portable.input.parse(admission.input) as Record<string, unknown>;
     await this.loadOnce();
     const prior = this.rows.get(admission.id);
+    // The replay guard (MAP decision log 2026-11-12). A re-sent admission this journal does not
+    // know is new only if the journal kept its history. After a discard the action may already
+    // have run, so it is refused and never dispatched as new.
+    if (!prior && crossing.resent && this.wasDiscarded())
+      throw refused(
+        `Action '${admission.id}' was sent before, and the action journal that knew whether it ran could not be read and was discarded. It is not run again. Check its result, then submit it as a new action if it is still wanted.`,
+        "journal.discarded",
+      );
     if (prior && !sameCaller(prior.caller, crossing.caller))
       throw Error("Command id belongs to another authenticated caller");
     if (prior) {
@@ -2075,7 +2100,13 @@ export class ActionJournal implements ReceiptReader {
     const discard = (reason: string) => {
       discardStored(
         this.path,
-        { class: "discard", place: "Action journal", notices: storedNoticesPath() },
+        {
+          class: "discard",
+          place: "Action journal",
+          notices: storedNoticesPath(),
+          // The bytes rest in the blob store first, under the hash the notice names.
+          blobRoot: storedBlobsPath(),
+        },
         reason,
       );
       for (const held of [

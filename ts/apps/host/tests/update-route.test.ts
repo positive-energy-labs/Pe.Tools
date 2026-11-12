@@ -6,8 +6,8 @@ import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import type { Envelope, UpdatePlan, UpdateReceipt } from "@pe/host-contracts/pe-revit-contract";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
-import { readStoredNotices } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "../src/notice-feed.ts";
+import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
+import { storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
 import {
   createUpdateReader,
   UpdateReader,
@@ -336,7 +336,9 @@ test("wrong request or plan cannot overwrite a confirmed receipt, and a corrupt 
     expect(again.requestId).not.toBe(admitted.requestId);
     expect(
       readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === f.path),
-    ).toMatchObject([{ class: "discard", place: "Update status" }]);
+    ).toMatchObject([{ class: "discard", place: "Update status", sha256: sha256Hex("{}") }]);
+    // Nothing is lost: the discarded bytes rest in the blob store under the hash the notice names.
+    expect(await readFile(join(storedBlobsPath(), "sha256", sha256Hex("{}")), "utf8")).toBe("{}");
     expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(2);
   } finally {
     await f.close();
@@ -461,7 +463,8 @@ test("U-02/U-04: a lost acknowledgement is unknown, and late recovery of a runni
 // read with an error, for as long as the file stayed.
 test("an admission that does not decode is discarded on the request that meets it, not a 500", async () => {
   const f = await fixture();
-  await writeFile(f.path, "{ this is not JSON");
+  const corrupt = "{ this is not JSON";
+  await writeFile(f.path, corrupt);
   const lifecycle = await hostLifecycle();
   const web = HttpRouter.toWebHandler(
     updateRoutes.pipe(
@@ -489,7 +492,10 @@ test("an admission that does not decode is discarded on the request that meets i
     expect(admitted.status, await admitted.clone().text()).toBe(202);
     expect(
       readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === f.path),
-    ).toMatchObject([{ class: "discard", place: "Update status" }]);
+    ).toMatchObject([{ class: "discard", place: "Update status", sha256: sha256Hex(corrupt) }]);
+    expect(await readFile(join(storedBlobsPath(), "sha256", sha256Hex(corrupt)), "utf8")).toBe(
+      corrupt,
+    );
   } finally {
     await web.dispose();
     await f.close();
