@@ -369,7 +369,7 @@ export const assertRunAdmission = (origin: Origin) => {
   if (origin.caller.kind !== "pea") return;
   if (!sources.runs) throw refuse("run.none", "/actions", "No harness run owns this write.");
   if (!origin.run || !origin.root)
-    throw refuse("run.none", "/actions", "This Pea process has no immutable causal run context.");
+    throw refuse("run.none", "/actions", "This Pea process is not inside a running turn, so it has no run. Send the command from a tool call or shell of the current turn.");
   try {
     sources.runs.assertOpen(origin);
   } catch (error) {

@@ -15,7 +15,7 @@ export { nativeReadRoot } from "./native-read-root.ts";
 
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { catalogWorkSpecs } from "@pe/agent-contracts";
-import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
+import { BRIDGE_PATH, HOST_CONTEXT_HEADER, hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { createRouteRegistrations } from "@pe/mcps";
 import { type PeaRuntimeCapabilities } from "@pe/runtime";
@@ -28,7 +28,9 @@ import { hostLoadedFamilies } from "../../../packages/mcps/src/pea/families-admi
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { makeCallRoute } from "./call-route.ts";
 import { capturesRoute, PictureCaptureStore } from "./captures-route.ts";
-import { bindControl, Refused } from "./control.ts";
+import { bindControl, mintContext, Refused } from "./control.ts";
+
+let hostPerson: string | undefined;
 import { demoRoutes } from "./demo-owner.ts";
 import { deviceRoutes } from "./device-routes.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
@@ -418,7 +420,15 @@ function liveHttpLive(options: HttpLiveOptions) {
         const url = await Effect.runPromise(Deferred.await(webUrl));
         const form = new FormData();
         form.append("file", file);
-        const response = await fetch(new URL("/api/pdf-audit/parse", url), { method: "POST", body: form });
+        // The parse route sends only for the person (ADR 0038 guard 3). `family.attach-spec` is
+        // this parser's one caller and its bind already held everyone else, so the host vouches
+        // for the hop with a human context it minted.
+        hostPerson ??= mintContext({ kind: "human", via: "cli" });
+        const response = await fetch(new URL("/api/pdf-audit/parse", url), {
+          method: "POST",
+          body: form,
+          headers: { [HOST_CONTEXT_HEADER]: hostPerson },
+        });
         const payload = await response.json();
         if (!response.ok) throw Error(typeof payload?.error === "string" ? payload.error : `Parse failed (${response.status})`);
         return payload;

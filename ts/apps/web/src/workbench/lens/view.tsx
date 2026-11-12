@@ -39,7 +39,6 @@ export function Lens({ state }: { state: ChatState }) {
     if (
       event.kind === "turn_end" ||
       event.kind === "error" ||
-      event.kind === "permission_request" ||
       event.kind === "question_request"
     ) {
       seenSeq = event.seq;

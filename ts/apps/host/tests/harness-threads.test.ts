@@ -192,7 +192,6 @@ const kinds = (events: HarnessEvent[]) =>
   events
     .filter(
       (event, index) =>
-        event.kind !== "run_consent" &&
         event.kind !== "starting" &&
         (event.kind !== "session" || events.findIndex((item) => item.kind === "session") === index),
     )
@@ -516,14 +515,9 @@ test("automatic update admission refuses a new Pea prompt through download and r
   }
 });
 const turnEnds = (body: HarnessThreadBody) => body.events.filter((e) => e.kind === "turn_end");
-/** The open asks: `permission_request`s with no `permission_resolved`. */
+/** Permission cards in the log. The kinds are deleted (ADR 0038), so any such row is a defect. */
 const openAsks = (body: HarnessThreadBody) =>
-  body.events.flatMap((e) =>
-    e.kind === "permission_request" &&
-    !body.events.some((r) => r.kind === "permission_resolved" && r.requestId === e.requestId)
-      ? [e]
-      : [],
-  );
+  body.events.filter((e) => String(e.kind).startsWith("permission_"));
 const openQuestions = (body: HarnessThreadBody) =>
   body.events.flatMap((e) =>
     e.kind === "question_request" &&
@@ -1390,7 +1384,7 @@ for (const harness of ["claude", "codex"] as const) {
       await call("POST", `/pe/threads/${id}/prompt`, { text: "permission mcp" });
       const body = await until(read, id, (body) => !body.running && turnEnds(body).length === 1);
       expect(openAsks(body)).toHaveLength(0);
-      expect(body.events.some((event) => event.kind === "permission_request")).toBe(false);
+      expect(openAsks(body)).toEqual([]);
       expect(
         body.events.some(
           (event) =>
@@ -1490,7 +1484,7 @@ test("R1: one permission request per ACP tool kind is allowed, read from the fak
       other: "yes",
     });
     // Nothing asked a person: no card was written for any of them.
-    expect(body.events.some((event) => event.kind === "permission_request")).toBe(false);
+    expect(openAsks(body)).toEqual([]);
   } finally {
     await h.close();
   }

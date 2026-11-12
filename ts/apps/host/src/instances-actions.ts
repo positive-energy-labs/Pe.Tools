@@ -806,7 +806,11 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
       }),
     }),
     "instances.dialogs": command(commands["instances.dialogs"], controlledPreparedSchema, {
-      // Dismissing a window closes no document: nothing to guard.
+      // Nothing to guard (ADR 0038): `--dismiss` sends the window WM_CLOSE and presses no button
+      // (pe-revit SDK `Pe.Revit.Loader/DialogDispatch.cs`, `SendMessage(target, 0x10, 0, 0)`). A
+      // "Save changes?" or "Synchronize?" prompt answers WM_CLOSE as Cancel, or ignores it when
+      // it has no Cancel, so Pea cannot save or discard through it. A dismiss that named a
+      // button would need `guardSave`/`guardDiscard` here.
       bind: (ctx) => bindControl(ctx, read, ctx.admission.input.session, undefined, () => {}),
       run: (ctx, execution) => Effect.gen(function* () {
         const { target } = execution.prepared;

@@ -23,7 +23,7 @@ const feed: NoticeFeed = {
       says: "Delete the schedule",
       at: "2026-11-10T12:00:00.000Z",
       url: "/pea?thread=t1",
-      act: { kind: "confirm-send", id: "h1" },
+      act: { kind: "confirm-send", id: "h1", to: "LlamaCloud" },
     },
     {
       key: "action:a1",
@@ -68,6 +68,8 @@ test("red (slice 6 seam c): home Activity reads the notice feed", async () => {
   render(<Ledger presentation={LEDGER_PRESENTATIONS.home} />);
   expect(screen.queryByText("Wiring"), GAP).not.toBeNull();
   expect(screen.queryByText("revit.ducts.resize"), GAP).not.toBeNull();
+  // The Confirm button names where the bytes go, not the row's place ("Claude" here).
+  expect(screen.getByRole("button", { name: "Confirm: send Wiring to LlamaCloud" })).toBeTruthy();
 });
 
 test("red (slice 6 seam c): tray Activity reads the notice feed", async () => {

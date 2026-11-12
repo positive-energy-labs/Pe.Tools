@@ -108,6 +108,8 @@ export function stateTree(root: string) {
     blobs: state(productPathNames.blobsDirectoryName),
     t3: state("T3"),
     agent: state("Agent"),
+    /** Results of outward sends the person confirmed, `<service>\<sha256>-<pages>.json`: paid for, so kept across an upgrade. */
+    parses: state("Parses"),
   };
 }
 

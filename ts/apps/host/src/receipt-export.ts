@@ -900,8 +900,6 @@ export function createThreadReceiptAdapter(
     : null;
   const threadJoin = (id: string) => exporter.journal.opaqueId("thread", id);
   const ASKS = {
-    permission_request: ["permission", "asked"],
-    permission_resolved: ["permission", "resolved"],
     question_request: ["question", "asked"],
     question_resolved: ["question", "resolved"],
   } as const;
@@ -911,8 +909,6 @@ export function createThreadReceiptAdapter(
         "prompt",
         "turn_end",
         "error",
-        "permission_request",
-        "permission_resolved",
         "question_request",
         "question_resolved",
       ].includes(event.kind)

@@ -298,7 +298,7 @@ export function noticeRows(sources: NoticeSources, now: number): NoticeDraft[] {
       at: send.at,
       url: send.thread ? routeAddress("pea").link({}, { thread: send.thread }) : null,
       ...(send.thread ? {} : { refusal: "No thread asked for this" }),
-      act: { kind: "confirm-send" as const, id: send.id },
+      act: { kind: "confirm-send" as const, id: send.id, to: "LlamaCloud" },
     })),
     // Staged Work includes human edits and scope choices; it carries no proposal-actor count.
     ...sources.works

@@ -62,12 +62,8 @@ type ToolOutcome = { result?: unknown } & (
   | { status: "in_progress" }
   | { status: "completed" }
   | { status: "failed"; error: string }
-  /** Its permission ask expired unanswered: a record, never answerable. */
-  | { status: "expired" }
   /** A cancel stopped it mid-run: not a failure. */
   | { status: "cancelled" }
-  /** The user answered its permission ask with a reject option. */
-  | { status: "denied" }
 );
 
 export type ToolCall = {
@@ -82,14 +78,6 @@ export type ToolCall = {
   images: string[];
 } & ToolOutcome;
 
-/** One open ACP permission request, answered by `optionId`. */
-export interface Approval {
-  requestId: string;
-  toolCallId: string;
-  toolName: string;
-  options: Extract<HarnessEvent, { kind: "permission_request" }>["options"];
-}
-
 /** One open ACP form question (`question_request`): answered with content keyed by property, or
  * declined. The schema is the ACP elicitation form verbatim; the question card renders it. */
 export interface Question {
@@ -103,7 +91,7 @@ export type ChatPart =
   | { type: "reasoning"; text: string }
   | { type: "image"; image: string; name?: string }
   | { type: "file"; name: string; mimeType: string; size: number; data?: string }
-  | { type: "tool-call"; call: ToolCall; approval?: Approval };
+  | { type: "tool-call"; call: ToolCall };
 
 /** A sent attachment as the user's bubble draws it: what crossed as an image is a thumbnail. */
 const sentPart = (a: PromptAttachment): ChatPart =>
@@ -193,14 +181,13 @@ function chunkText(update: Record<string, unknown>): string {
 /**
  * The one fold of the event log into transcript rows. `prompt` opens a user row; chunks, tool
  * calls and their updates land on the turn's assistant row; `turn_end`, `error` and `session`
- * close it; a `permission_request` with no later `permission_resolved` is that call's approval.
+ * close it; a `question_request` with no later `question_resolved` is an open question.
  */
 function fold(state: ChatState): Fold {
   const cached = folds.get(state);
   if (cached) return cached;
   const rows: ChatMessage[] = [];
   const calls = new Map<string, ToolCall>();
-  const approvals = new Map<string, Approval>();
   const questions = new Map<string, Question>();
   let open: ChatMessage | undefined;
   let turnId: string | undefined;
@@ -235,7 +222,6 @@ function fold(state: ChatState): Fold {
     if (open) open.running = false;
     open = undefined;
     turn = false;
-    approvals.clear();
     questions.clear();
   };
   const line = (event: HarnessEvent, said: string) =>
@@ -280,8 +266,6 @@ function fold(state: ChatState): Fold {
       call.result = result;
       call.images = toolImages(result);
     }
-    // A denied call stays denied: the harness reports the refusal as a failed call.
-    if (call.status === "denied") return;
     if (body.status === "completed") call.status = "completed";
     if (body.status === "failed")
       Object.assign(call, { status: "failed", error: text(result) || "Tool call failed." });
@@ -319,35 +303,6 @@ function fold(state: ChatState): Fold {
           else row.parts.push({ type, text: said });
         } else if (kind === "tool_call" || kind === "tool_call_update") {
           applyCall(event, update as unknown as AcpToolCall);
-        }
-        break;
-      }
-      case "permission_request": {
-        const toolCallId = event.toolCall.toolCallId;
-        applyCall(event, event.toolCall as AcpToolCall);
-        approvals.set(event.requestId, {
-          requestId: event.requestId,
-          toolCallId,
-          toolName: calls.get(toolCallId)?.title ?? "tool",
-          options: event.options,
-        });
-        break;
-      }
-      case "permission_resolved": {
-        const ask = approvals.get(event.requestId);
-        approvals.delete(event.requestId);
-        const call = ask && calls.get(ask.toolCallId);
-        if (call?.status !== "in_progress") break;
-        // Only cancel/expired carry no option.
-        if (!("optionId" in event))
-          Object.assign(call, { status: event.by === "expired" ? "expired" : "cancelled" });
-        else {
-          const optionId = event.optionId;
-          if (ask!.options.find((o) => o.optionId === optionId)?.kind.startsWith("reject"))
-            Object.assign(call, { status: "denied" });
-          // Old logs only: the retired run-consent ask rode its own `writes:<turn>` id, so no harness
-          // call settles it and its allow is its end. Left open, `turn_end` drew it failed.
-          else if (call.id.startsWith("writes:")) Object.assign(call, { status: "completed" });
         }
         break;
       }
@@ -392,16 +347,9 @@ function fold(state: ChatState): Fold {
         break;
     }
   }
-  for (const approval of approvals.values()) {
-    const part = rows
-      .flatMap((row) => row.parts)
-      .find((item) => item.type === "tool-call" && item.call.id === approval.toolCallId);
-    if (part?.type === "tool-call") part.approval = approval;
-  }
   const result = {
     rows,
     calls: [...calls.values()],
-    approvals: [...approvals.values()],
     questions: [...questions.values()],
     turn,
     failure,
@@ -414,7 +362,6 @@ function fold(state: ChatState): Fold {
 interface Fold {
   rows: ChatMessage[];
   calls: ToolCall[];
-  approvals: Approval[];
   questions: Question[];
   /** A prompt's turn has not ended. */
   turn: boolean;
@@ -447,12 +394,7 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
   return fold(state).calls;
 }
 
-/** Live asks only: a resolved or expired request is a transcript record, never a head row. */
-export function selectApprovals(state: ChatState): Approval[] {
-  return fold(state).approvals;
-}
-
-/** Open form questions, same lifetime as approvals. */
+/** Open form questions: a resolved one is a transcript record, never a head row. */
 export function selectQuestions(state: ChatState): Question[] {
   return fold(state).questions;
 }
@@ -465,8 +407,8 @@ export function selectTurnFailure(state: ChatState): string | undefined {
 export type RunStatus = "idle" | "running" | "waiting";
 
 export function selectRunStatus(state: ChatState): RunStatus {
-  const { approvals, questions, turn } = fold(state);
-  if (approvals.length > 0 || questions.length > 0) return "waiting";
+  const { questions, turn } = fold(state);
+  if (questions.length > 0) return "waiting";
   return turn ? "running" : "idle";
 }
 

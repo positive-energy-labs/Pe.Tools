@@ -33,7 +33,6 @@ import {
   skillInvocation,
   toolDetail,
   toolOutputForDisplay,
-  type Approval,
   type ChatMessage,
   type ChatPart,
   type ToolCall,
@@ -361,12 +360,7 @@ function RunStack({ run }: { run: RunPart[] }) {
         part.type === "reasoning" ? (
           <ReasoningPart key={index} text={part.text} />
         ) : (
-          <ToolCallPart
-            key={part.call.id}
-            call={part.call}
-            approval={part.approval}
-            recordsOnly={false}
-          />
+          <ToolCallPart key={part.call.id} call={part.call} recordsOnly={false} />
         ),
       )}
     </div>
@@ -378,7 +372,7 @@ function RunStack({ run }: { run: RunPart[] }) {
 function RecordsStack({ parts }: { parts: CallPart[] }) {
   const shown = parts.filter((part) => {
     const { proposed, action, diagram } = callRecords(part.call);
-    return part.approval || proposed || action || diagram;
+    return proposed || action || diagram;
   });
   // The images sit at the group's foot, below every later call's records, visible without opening
   // a call and while one still runs.
@@ -394,7 +388,7 @@ function RecordsStack({ parts }: { parts: CallPart[] }) {
   return (
     <div className="flex min-w-0 flex-col" data-tool-records="">
       {shown.map((part) => (
-        <ToolCallPart key={part.call.id} call={part.call} approval={part.approval} recordsOnly />
+        <ToolCallPart key={part.call.id} call={part.call} recordsOnly />
       ))}
       {images.length > 0 ? (
         <div className="flex flex-wrap gap-1.5" data-tool-images="">
@@ -593,11 +587,9 @@ const CLOSE_TIP = "close this call";
 const ToolCallPart = memo(
   function ToolCallPart({
     call,
-    approval,
     recordsOnly,
   }: {
     call: ToolCall;
-    approval?: Approval;
     recordsOnly: boolean;
   }) {
     const view = useCurrentThreadView();
@@ -608,20 +600,13 @@ const ToolCallPart = memo(
     const open = openKey === key;
     const running = call.status === "in_progress";
     const failed = call.status === "failed";
-    // Only a host restart expires an ask (`permission_resolved by:"expired"`).
-    const expired = call.status === "expired";
     // The runtime's cancel record rides the same record path: a word, no tag, nothing to press.
     const cancelled = call.status === "cancelled";
-    const record = expired
-      ? " — expired, unanswered; the host restarted"
-      : cancelled
-        ? " — cancelled"
-        : null;
-    const denied = call.status === "denied";
+    const record = cancelled ? " — cancelled" : null;
     // TODO: Manual D drive-7 verdict E (S9): "The Pea transcript shows its tool rows' paths" to raw-id tool-result files. Present inspectable names here.
     const title = toolTitle(call.title);
     const detail = toolDetail(call);
-    const tone = failed ? "failed" : running && !approval ? "active" : "";
+    const tone = failed ? "failed" : running ? "active" : "";
     const { result, proposed, action, diagram } = callRecords(call);
     // What the run actually touched: the Scope revision it was admitted under and the session and
     // document the host resolved to. Read from the result, so it is evidence, not intent.
@@ -635,7 +620,7 @@ const ToolCallPart = memo(
         data-tool-id={recordsOnly ? undefined : call.id}
         data-surface={!recordsOnly && open ? "artifact" : undefined}
       >
-        {(recordsOnly ? approval : !approval) ? (
+        {!recordsOnly ? (
           <TooltipHint content={`${call.title} · ${open ? CLOSE_TIP : OPEN_TIP}`}>
             <div
               {...annotation("tool-marker")}
@@ -673,15 +658,7 @@ const ToolCallPart = memo(
               {record ? null : (
                 <ToolStatus
                   state={
-                    failed
-                      ? "failed"
-                      : denied
-                        ? "denied"
-                        : approval
-                          ? "waiting"
-                          : running
-                            ? "working"
-                            : "done"
+                    failed ? "failed" : running ? "working" : "done"
                   }
                 />
               )}
@@ -717,8 +694,6 @@ const ToolCallPart = memo(
         ) : null}
         {recordsOnly && proposed ? <ProposedLine record={proposed} /> : null}
         {recordsOnly && action ? <ActionLine call={action} told={failed} /> : null}
-        {/* A live ask answers in the Chat head (`chat/composer-head.tsx`), never here: the
-          transcript holds its record (F-J1-9). */}
       </div>
     );
   },

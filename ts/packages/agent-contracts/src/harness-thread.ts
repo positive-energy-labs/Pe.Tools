@@ -6,7 +6,6 @@ import {
 } from "./provider.ts";
 import { z } from "zod";
 import { callerSchema } from "./caller.ts";
-import { runRefSchema, type RunConsent } from "./run-consent.ts";
 import { mentionSchema } from "./mention.ts";
 import { documentRequestSchema, threadHeadSchema } from "./target.ts";
 import { turnElementNameSchema, turnElementNamesSnapshotSchema } from "./turn-element-names.ts";
@@ -51,7 +50,6 @@ import { turnElementNameSchema, turnElementNamesSnapshotSchema } from "./turn-el
  *   GET    /pe/threads/:id/wait?turn=<id>&timeoutMs=<n> -> TurnState   (answers once the turn
  *            settles, or as it stands after `timeoutMs`, at most {@link TURN_WAIT_MAX_MS})
  *   POST   /pe/threads/:id/cancel
- *   POST   /pe/threads/:id/permission {requestId, optionId}
  *   POST   /pe/threads/:id/question {requestId, action, content?}   (answers an ACP elicitation form)
  *   POST   /pe/threads/:id/fork {providerId?, title?} -> HarnessThreadSummary
  *            (copies the log; same provider forks the ACP session, another re-feeds the transcript)
@@ -83,12 +81,6 @@ export type AddProviderRequest = z.infer<typeof addProviderRequestSchema>;
  */
 export const HARNESS_EVENT_MAX_BYTES = 64 * 1024;
 export const acpSessionUpdateSchema = z.object({ sessionUpdate: z.string() }).passthrough();
-
-export const permissionOptionSchema = z.object({
-  optionId: z.string(),
-  name: z.string(),
-  kind: z.enum(["allow_once", "allow_always", "reject_once", "reject_always"]),
-});
 
 /** One file the user attached to a prompt, as the composer read it: `text` for a text file, base64
  * `data` for any other. The host makes each an ACP content block (`attachmentKind` says which). */
@@ -201,47 +193,6 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
     turnId: z.string().nullable(),
     update: acpSessionUpdateSchema,
   }),
-  z.object({
-    seq: z.number(),
-    at: z.string(),
-    kind: z.literal("run_consent"),
-    run: runRefSchema,
-    consent: z.custom<RunConsent>(),
-  }),
-  z.object({
-    seq: z.number(),
-    at: z.string(),
-    kind: z.literal("permission_request"),
-    turnId: z.string().nullable(),
-    requestId: z.string(),
-    toolCall: z.object({ toolCallId: z.string(), title: z.string().optional() }).passthrough(),
-    options: z.array(permissionOptionSchema),
-    deadline: z.string().optional(),
-    scope: z.literal("run").optional(),
-    commands: z.array(z.string()).optional(),
-  }),
-  /** One member per `by`: a user answer carries `optionId`; `cancel` (the turn was cancelled with
-   * the ask open) and `expired` (the host restarted with it open) carry none. Nested so the outer
-   * union keeps one `permission_resolved` discriminator. */
-  z.discriminatedUnion("by", [
-    z.object({
-      seq: z.number(),
-      at: z.string(),
-      kind: z.literal("permission_resolved"),
-      turnId: z.string().nullable(),
-      requestId: z.string(),
-      by: z.enum(["user", "deadline"]),
-      optionId: z.string(),
-    }),
-    z.object({
-      seq: z.number(),
-      at: z.string(),
-      kind: z.literal("permission_resolved"),
-      turnId: z.string().nullable(),
-      requestId: z.string(),
-      by: z.enum(["cancel", "expired"]),
-    }),
-  ]),
   /** An ACP `elicitation/create` in `form` mode: the harness asks the user (Claude's AskUserQuestion,
    * an MCP elicitation). `requestedSchema` is the ACP form schema verbatim; the web renders it. A
    * non-form mode is declined by the host and never logged. */
@@ -468,7 +419,7 @@ export const harnessThreadBodySchema = harnessThreadSummarySchema.extend({
   models: z.array(harnessModelSchema),
   traits: z.array(traitOptionSchema),
   /** Derivable from `events` (a `prompt` with no `turn_end`/`error`); carried so a one-shot reader
-   * need not fold the log. Open asks are the unresolved `permission_request` events. */
+   * need not fold the log. Open asks are the unresolved `question_request` events. */
   running: z.boolean(),
   session: z.enum(["started", "resumed", "forked", "detached", "closed"]),
   /** From the last session's `initialize`; null until a harness child has started once. */

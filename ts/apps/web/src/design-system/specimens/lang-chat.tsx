@@ -110,11 +110,9 @@ export function LangChatSpecimens() {
             </div>
           </ConversationBody>
           <div className="flex gap-4">
-            {(["working", "waiting", "failed", "denied", "cancelled", "expired"] as const).map(
-              (state) => (
-                <ToolStatus key={state} state={state} />
-              ),
-            )}
+            {(["working", "failed", "cancelled"] as const).map((state) => (
+              <ToolStatus key={state} state={state} />
+            ))}
           </div>
           <ComposerFrame>
             <Composer

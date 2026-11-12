@@ -601,6 +601,10 @@ export function createPeRoutes(options: PeRoutesOptions) {
       releaseSend(send.id);
       return json({ ok: true });
     }
+    if (method === "POST" && declared.id === "outward.person") {
+      requireHuman(caller, url.pathname, "sending a file outward");
+      return json({ ok: true });
+    }
     // Agent feedback (owner ruling 2026-10-14): any admitted caller may file; the host stamps it.
     if (method === "POST" && declared.id === "agent-feedback.submit") {
       const parsed = agentFeedbackSchema.safeParse(await body());

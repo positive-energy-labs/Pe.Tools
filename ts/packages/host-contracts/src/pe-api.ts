@@ -783,6 +783,11 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "pe",
       "human",
     ),
+    /**
+     * Guard 3's proof for a server that sends for the person (the doc lab's parse route): it
+     * replays the request's identity here before a byte leaves, and only the person's answers ok.
+     */
+    "outward.person": route("POST", "/pe/outward/person", none, ok, "human", "pe", "human"),
     "diagnostics.submit": route(
       "POST",
       "/pe/diagnostics",

@@ -4,6 +4,11 @@
  * through `parseWithLlamaCloud`, and only a send the person originates leaves this machine.
  */
 import { held, type Held } from "@pe/agent-contracts";
+import {
+  HOST_CONTEXT_HEADER,
+  HOST_RUNTIME_SERVICE_HEADER,
+  hostProcessIdentity,
+} from "@pe/host-contracts/contracts";
 
 export const LLAMA_CLOUD_KEY_VAR = "LLAMA_CLOUD_API_KEY";
 
@@ -22,6 +27,35 @@ export function requireLlamaCloudKey(env: NodeJS.ProcessEnv = process.env): stri
 
 /** Who originates a send: the person (a press in the web app, or their Confirm), or anyone else. */
 export type Sender = "person" | "pea";
+
+/**
+ * Whether a request to a server that sends for the person (the doc lab's parse route) is the
+ * person's own. The host is the one judge of who is asking: the request's identity (the browser's
+ * HttpOnly host cookie, or a context the host minted) is replayed to `outward.person`. Anything
+ * but ok, including no host to ask, is not the person.
+ */
+export async function isPersonRequest(
+  headers: Headers,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<boolean> {
+  const host = env[hostProcessIdentity.hostBaseUrlVariable];
+  if (!host) return false;
+  const replay = new Headers();
+  for (const name of ["cookie", "origin", "referer", "sec-fetch-site", HOST_CONTEXT_HEADER]) {
+    const value = headers.get(name);
+    if (value !== null) replay.set(name, value);
+  }
+  // The server speaks for the one host that started it, whatever owner the request claims.
+  const service = env[hostProcessIdentity.serviceNameVariable];
+  if (service) replay.set(HOST_RUNTIME_SERVICE_HEADER, service);
+  try {
+    const answer = await fetch(new URL("/pe/outward/person", host), { method: "POST", headers: replay });
+    return answer.ok;
+  } catch (error) {
+    console.warn("llama-parse: the host did not answer who is asking", error);
+    return false;
+  }
+}
 
 interface LlamaParseWork {
   file: File;
