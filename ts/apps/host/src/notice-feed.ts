@@ -234,7 +234,7 @@ function storedRow(notice: StoredNotice, now: number): NoticeDraft | null {
       verb: "saved",
       what: notice.place,
       where: notice.path,
-      // The file, the writer and the receipt (the hash of the bytes it replaced) are in the reason.
+      // The file, writer, action receipt id and prior bytes hash are in the reason.
       says: notice.reason,
       at: notice.at,
       url: routeAddress("settings").link(),
@@ -310,7 +310,11 @@ function receiptRow(
           url: null,
           refusal: "Nothing to open: do this in Revit or the web app yourself",
         };
-  const group = RECEIPT_GROUP[receipt.state];
+  // A known refusal is not a human hold, even when earlier local effects leave cleanup to do.
+  const last = receipt.steps?.at(-1);
+  const refused = receipt.state === "failed" && receipt.notDispatched === true ||
+    receipt.state === "incomplete" && last?.state === "failed" && last.notDispatched === true;
+  const group = refused ? "failed" : RECEIPT_GROUP[receipt.state];
   if (!group) return null;
   const failure =
     "error" in receipt
@@ -324,10 +328,10 @@ function receiptRow(
     key: `action:${receipt.id}`,
     group,
     revision,
-    verb: receipt.state,
+    verb: refused ? "refused" : receipt.state,
     what: receipt.key,
     where: callerWord(receipt.caller),
-    says: failure.summary,
+    says: refused && "error" in receipt ? receipt.error : failure.summary,
     at: receipt.startedAt,
     // The failure's door is the row's address; a receipt itself has no page yet.
     url: failure.door
