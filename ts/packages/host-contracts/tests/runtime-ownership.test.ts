@@ -164,6 +164,15 @@ test("a cached firm probe rechecks its marker without rescanning the injected dr
   expect(firmHome(facts).root).toBeNull();
   expect(firmSettingsDir(facts)).toBeNull();
   expect(facts.list).toHaveBeenCalledTimes(1);
+  renameSync(join(shared, "marker-away.json"), join(shared, "pe-home.json"));
+  expect(firmHome(facts).root).toBeNull();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 30_001);
+  try {
+    expect(firmHome(facts).root).toBe(shared);
+    expect(facts.list).toHaveBeenCalledTimes(2);
+  } finally {
+    clock.mockRestore();
+  }
 });
 
 beforeEach(() => {
