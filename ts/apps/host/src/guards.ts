@@ -60,20 +60,23 @@ export function guardDiscard(caller: Caller, docs: readonly GuardedDocument[], v
     );
 }
 
+/** A held outward send: the command names what would leave, so its journal can hold it by subject. */
+export class SendHeld extends CommandRejected {
+  constructor(readonly send: Pick<HeldSendRequest, "service" | "path">, where: string) {
+    super(held("send-outward", `'${send.path}'`, `It would go to ${where}; the person runs this themselves from the web app.`));
+  }
+}
+
 /** Pea sending a file to an outside service through a host command (guard 3). */
-export function guardSend(caller: Caller, file: string, service: string): void {
-  if (guards(caller))
-    throw hold(
-      "send-outward",
-      `'${file}'`,
-      `It would go to ${service}; the person runs this themselves from the web app.`,
-    );
+export function guardSend(caller: Caller, send: SendHeld["send"], where: string): void {
+  if (guards(caller)) throw new SendHeld(send, where);
 }
 
 /* ── Held outward sends: the one guarded act the person confirms from its notice row ───── */
 
 const sends = new Map<string, HeldSend>();
-const continuations = new Map<string, () => Promise<void>>();
+type Person = Extract<Caller, { kind: "human" }>;
+const continuations = new Map<string, (person: Person) => Promise<void>>();
 const confirming = new Map<string, Promise<void>>();
 const listeners = new Set<() => void>();
 const sendKey = (send: HeldSendRequest) => `${send.service}:${send.sha256}:${send.pages}`;
@@ -93,15 +96,16 @@ export function holdSend(request: HeldSendRequest, thread: string | null, at: st
 export const heldSends = (): HeldSend[] => [...sends.values()];
 export const heldSend = (id: string) => sends.get(id);
 /** A command held before reading a source has an intent digest, not a digest of unread bytes. */
-export function holdSendCommand(request: HeldSendRequest, thread: string | null, run: () => Promise<void>) {
+export function holdSendCommand(request: HeldSendRequest, thread: string | null, run: (person: Person) => Promise<void>) {
   const send = holdSend(request, thread, new Date().toISOString());
   if (!continuations.has(send.id)) continuations.set(send.id, run);
   return send;
 }
-export function confirmSend(send: HeldSend, fallback: (send: HeldSend) => Promise<void>): Promise<void> {
+/** Runs as `person`, the caller the confirm route authenticated. A failed run keeps its row for the next Confirm. */
+export function confirmSend(send: HeldSend, person: Person, fallback: (send: HeldSend) => Promise<void>): Promise<void> {
   const pending = confirming.get(send.id);
   if (pending) return pending;
-  const run = Promise.resolve().then(() => continuations.get(send.id)?.() ?? fallback(send)).then(() => releaseSend(send.id));
+  const run = Promise.resolve().then(() => continuations.get(send.id)?.(person) ?? fallback(send)).then(() => releaseSend(send.id));
   confirming.set(send.id, run);
   return run.finally(() => confirming.delete(send.id));
 }

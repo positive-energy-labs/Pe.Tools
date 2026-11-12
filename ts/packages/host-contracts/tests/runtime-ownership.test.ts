@@ -155,6 +155,7 @@ beforeEach(() => {
   installed = join(local, "Positive Energy", "Pe.Tools");
   vi.stubEnv("LOCALAPPDATA", local);
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", undefined);
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", join(root, "no-firm")); // a told, unmarked firm replaces the probe: no real G: drive
 });
 
 afterEach(() => {

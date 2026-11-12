@@ -8,7 +8,7 @@ import { HostInputReadSets } from "../../../host/src/input-occurrence.ts";
 import { nativeCatalogIdentity, openRecordingWriter } from "../../../host/src/native-recording.ts";
 import type { CommandResources } from "../../../host/src/command-executor.ts";
 // @vitest-environment node
-import { test, expect, vi } from "vite-plus/test";
+import { test, expect, vi, beforeEach, afterEach } from "vite-plus/test";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,6 +31,9 @@ import { detachedBridge, testHostInputs, journalAt, callRouteOver } from "../../
 import { bindActionReadings, type Readings } from "../host/resource-stream";
 import { submitAction, recoverAction } from "../../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import { withInvocationContext, readOutbox } from "@pe/runtime/context";
+
+beforeEach(() => vi.stubEnv("LLAMA_CLOUD_API_KEY", "fixture-key"));
+afterEach(() => vi.unstubAllEnvs());
 
 // Real typed declaration, command client, HTTP handler, journal, Work and receipt projection.
 // A real socket drives production action reconciliation. PDF parsing and the unused native bridge are substitutes.

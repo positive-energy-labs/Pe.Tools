@@ -61,7 +61,7 @@ export const Route = createFileRoute("/api/pdf-audit/parse")({
 
         let view;
         try {
-          view = await parseFamilyPdf(uploadFile);
+          view = await parseFamilyPdf({ sender: "person", file: uploadFile, apiKey });
         } catch (error) {
           return Response.json({ error: error instanceof Error ? error.message : "Parse job failed" }, { status: 502 });
         }

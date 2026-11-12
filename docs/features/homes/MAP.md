@@ -211,6 +211,13 @@ The owner: "we need to be relient if these assumptions dont hold, but I think th
   - Opus runs only the standing partners: purger, driver, T3 partner. It never writes implementation, even when Fable is exhausted.
   - Fable takes the judgment-heavy half of the writing, at low or medium thinking, and high only rarely.
   - Sol 6.1 (Codex, `gpt-6.1-sol`) takes the foot-soldier half, at any thinking level.
-  - A medium- or high-thinking agent idle for an hour or more is not messaged, because its prompt cache has expired. A fresh agent with a full brief replaces it.
+  - A medium- or high-thinking Fable agent idle for an hour or more is not messaged, because its prompt cache has expired. A fresh agent with a full brief replaces it.
+  - Clarification, verbatim: "the reason opus is for partners is because cache miss is near negligible, and Sol is so cheap that it never really matters." The hour rule therefore binds Fable only. Opus partners and Sol agents may be messaged at any age.
   - The implementor cannot redeem Fable resets, and Fable stood at 50% at this ruling, so Fable is spent sparingly.
   - If Sol's usage credits do not draw once its meter runs out, the implementor tries to fix that itself (a Codex config setting or argument). If it cannot, the work keeps moving on what still runs, never on Opus.
+- 2026-11-12, the implementor and the kernel implementor agreed, at the owner's suggestion, to make the kernel implementor the homes integrator, because kernel is closed at main 3051c56f.
+  - Its one input is `crusade/homes`, and it works on `integrate/homes` in its own worktree.
+  - It merges main, runs the full gate there, and triages each red as main-red, merge break or homes regression.
+  - It makes small merge-resolution fixes itself and hands anything bigger to the implementor.
+  - The implementor keeps merging writer branches into `crusade/homes` and keeps the owner queue.
+  - Homes reaches main only after three gates clear: the driver's A2 drive on canonical `src/dev.ts`, the Sandbox or installed-lane run, and the owner's runbook.

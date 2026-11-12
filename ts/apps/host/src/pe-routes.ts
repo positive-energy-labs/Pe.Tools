@@ -596,11 +596,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
       });
     }
     if (method === "POST" && declared.id === "outward.confirm") {
-      requireHuman(caller, url.pathname, "confirming an outward send");
+      const person = requireHuman(caller, url.pathname, "confirming an outward send");
       const send = heldSend(declared.params.id!);
       if (!send) return json({ error: "No held send with that id; it was confirmed or the host restarted." }, 404);
       try {
-        await confirmSend(send, options.sendHeld ?? sendHeldParse);
+        await confirmSend(send, person, options.sendHeld ?? sendHeldParse);
       } catch (error) {
         return json({ error: message(error) }, 502);
       }
