@@ -161,7 +161,7 @@ export const familyActions = {
     result: z.strictObject({ cancelled: z.literal(true) }),
   },
   "family.attach-spec": {
-    says: `Attach a PDF cut sheet and its parsed assets to a saved family member (under ${FAMILY_MEMBER_DIR}; family.capture with a pod saves one and returns it). source is { path } for a file on this machine, { url }, or an uploaded blob. Cells then cite its blocks by id.`,
+    says: `Attach a PDF cut sheet and its parsed assets to a saved family member (under ${FAMILY_MEMBER_DIR}; family.capture with a pod staged in Work saves one and returns it). source is { path } for a file on this machine, { url }, or an uploaded blob. Cells then cite its blocks by id.`,
     needs: "nothing",
     effect: "command",
     dirties: ["pods"],
@@ -211,7 +211,7 @@ export const familyActions = {
     input: z.strictObject({ destination: podMemberSchema.optional() }),
   },
   "family.capture": {
-    says: `Read the open family's spec. With a pod, file it as a new member under ${FAMILY_MEMBER_DIR} (the draft's \`spec\` text when given, else what Revit said), write the run and return the member; without one, return the spec and write nothing.`,
+    says: `Read the open family's spec. To save a new member under ${FAMILY_MEMBER_DIR}, stage writeIntent["family.capture"].edit.value.pod in route:family Work. Example: writeIntent["family.capture"].edit = { "value": { "pod": "lab" } }. Then invoke with only { work: { key, revision } } at the accepted Work revision. Optional path and spec go beside pod in edit.value; spec overrides what Revit said. With a staged pod, write the run and return the member; without one, return the spec and write nothing.`,
     needs: "family-document",
     effect: "command",
     dirties: ["pods"],

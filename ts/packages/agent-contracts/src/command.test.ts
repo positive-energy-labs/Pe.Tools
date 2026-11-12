@@ -72,6 +72,21 @@ describe("portable tool consumers", () => {
 });
 
 describe("family.capture destination", () => {
+  it("documents a staged pod example the public Work command actually consumes", () => {
+    const capture = tools.family.commands["family.capture"];
+    const work = { key: bindWork("family", null, "reviewed"), revision: 1 };
+    expect(capture.says).toContain('writeIntent["family.capture"].edit.value.pod');
+    const example = capture.says.match(/Example: writeIntent\["family.capture"\]\.edit = (\{.*\})\./);
+    expect(example).not.toBeNull();
+    const edit = JSON.parse(example![1]!);
+    expect(capture.workIntent.derive({ writeIntent: { "family.capture": { edit } } })).toEqual({
+      pod: "lab",
+    });
+    expect(capture.input.parse({ work })).toEqual({ work });
+    expect(capture.input.safeParse({ work, pod: "lab" }).success).toBe(false);
+    expect(capture.workIntent.derive({})).toEqual({});
+  });
+
   it("refuses a path that leaves the family folder, as the host does", () => {
     const input = familyActions["family.capture"].input;
     expect(input.safeParse({ pod: "lab", path: "settings/family/box.json" }).success).toBe(true);
