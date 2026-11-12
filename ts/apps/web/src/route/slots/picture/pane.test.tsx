@@ -58,6 +58,9 @@ test("a route that declares `picture` gets the kernel's picture pane; one it pla
     panes: { main, view: { title: "View", purpose: "See pipes", kernel: "picture", body: "fill", draw: main.draw as never } },
     layout: paneLayout("view") });
   expect(Object.keys(placed.spec.panes)).toEqual(["main", "view"]);
+  // Both author specimens declare `picture` and leave it out of their layout: the pane is still the route's.
+  const unplaced = route({ key: "pod-unplaced", name: "Pipes", directory, fields: {}, picture, panes: { main }, layout: paneLayout("main") });
+  expect(unplaced.data.panes).toHaveProperty("picture");
   // No picture declared, no pane.
   expect(route({ key: "pod-plain", name: "Pipes", directory, fields: {}, panes: { main }, layout: paneLayout("main") }).spec.panes).not.toHaveProperty("picture");
 });
