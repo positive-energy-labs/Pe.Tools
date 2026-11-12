@@ -455,7 +455,8 @@ export const fanWorksheet = read("fans.worksheet", {
       limits: {
         supplyFpm: limits.supply,
         returnFpm: limits.return,
-        source: `${limit.supply.source}${limit.supply.ref ? `:${limit.supply.ref}` : ""}`,
+        supplySource: `${limit.supply.source}${limit.supply.ref ? `:${limit.supply.ref}` : ""}`,
+        returnSource: `${limit.return.source}${limit.return.ref ? `:${limit.return.ref}` : ""}`,
       },
       ...result,
       legs: Object.fromEntries([...named].map((id) => [id, entry.value.legs[id]])),

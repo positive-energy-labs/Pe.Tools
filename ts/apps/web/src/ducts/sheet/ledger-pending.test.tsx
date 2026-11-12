@@ -93,7 +93,7 @@ test("the Ledger summary says N of M branches known and names only a complete br
   // The domain's worst is over complete branches only (worksheet.ts): 0.05 here, none on return.
   (sheet as { worksheet: unknown }).worksheet = {
     target: { session: "s", openId: "o" }, basis: "b", kind: "worksheet",
-    limits: { supplyFpm: 900, returnFpm: 700, source: "firm:seed" },
+    limits: { supplyFpm: 900, returnFpm: 700, supplySource: "firm:seed", returnSource: "firm:seed" },
     supply: { runs: [run("r1", "l1", true, 0.05), run("r2", "l2", false, 0)], sections: [], worstKnownInWg: 0.05, elementSections: {} },
     return: { runs: [run("r3", "l3", false, 0)], sections: [], worstKnownInWg: null, elementSections: {} },
     legs: { l1: leg("l1", 200, 0.05), l2: leg("l2", null, null), l3: leg("l3", null, null) },

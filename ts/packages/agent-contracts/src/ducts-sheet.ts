@@ -527,7 +527,7 @@ export const ductsSheetResponseSchema = z.discriminatedUnion("kind", [
   z.object({
     ...responseBase,
     kind: z.literal("worksheet"),
-    limits: z.object({ supplyFpm: z.number(), returnFpm: z.number(), source: z.string() }),
+    limits: z.object({ supplyFpm: z.number(), returnFpm: z.number(), supplySource: z.string(), returnSource: z.string() }),
     supply: worksheetSide,
     return: worksheetSide,
     /** Every leg a run names, by leg id. */
