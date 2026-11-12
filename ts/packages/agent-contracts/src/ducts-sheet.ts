@@ -3,6 +3,16 @@ import { decode, uniqueIdSchema, subjectRefCodeSchema } from "./subject-ref.ts";
 import { documentRefSchema } from "./target.ts";
 import { VALUE_SOURCES } from "./work-value.ts";
 import { settingWrittenSchema } from "./tiered-setting.ts";
+/** The parameter slots `ducts.snapshot` reads and `ducts.apply` writes through. */
+export const DUCT_PARAMETER_KEYS = [
+  "fanStatic",
+  "fanFlow",
+  "componentDrop",
+  "terminalDrop",
+  "fittingCoefficient",
+  "terminalFlow",
+] as const;
+
 const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(code => {
   const ref = decode(code); return ref.ok && ref.value.keyKind === "UniqueId";
 });
@@ -182,7 +192,7 @@ export const ductsFirmSchema = z.strictObject({
   version: z.string().min(1).optional(),
   criteria: ductsCriteriaLayerSchema.optional(),
   designFriction: z.number().positive().optional(),
-  parameters: z.record(z.string(), z.string().min(1)).optional(),
+  parameters: z.partialRecord(z.enum(DUCT_PARAMETER_KEYS), z.string().min(1)).optional(),
   written: settingWrittenSchema.optional(),
 });
 export type DuctsFirmFile = z.infer<typeof ductsFirmSchema>;

@@ -90,11 +90,6 @@ export type SettingWrite =
   | { ok: false; status: 404 | 409 | 422; message: string };
 
 /**
- * Save one value at one tier. The file is rewritten with the value at `path` (null removes it) and
- * the writer's stamp, on the hash the writer read; a file changed since then is a conflict, and a
- * home that was not found is refused, never written somewhere else.
- */
-/**
  * A declared ducts cell accepts the value (`null` clears it). Criteria cells check their own
  * schema; the whole-key settings (`designFriction`, one `parameters` slot) check through the tier
  * file's schema on a file holding only that value, so a bad sibling never blocks a good write.
@@ -111,6 +106,11 @@ function ductsCellAccepts(path: readonly string[], value: unknown): boolean {
   return probe !== null && (value === null || ductsFirmSchema.safeParse(probe).success);
 }
 
+/**
+ * Save one value at one tier. The file is rewritten with the value at `path` (null removes it) and
+ * the writer's stamp, on the hash the writer read; a file changed since then is a conflict, and a
+ * home that was not found is refused, never written somewhere else.
+ */
 export function writeSettingTier(
   request: { owner: string; tier: SettingTier; path: readonly string[]; value: unknown; expectedSha256: string | null },
   context: { pointer?: string | null; writer?: string; now?: () => Date } = {},

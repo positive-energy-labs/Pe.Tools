@@ -3,7 +3,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store";
+import { discardStored, noteStored, readStored, writeAtomic } from "@pe/host-contracts/store";
 import type { RouteDocumentStore } from "@pe/runtime";
 import { storedNoticesPath } from "./notice-feed.ts";
 
@@ -46,10 +46,15 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
         else rmSync(path, { force: true });
         return;
       }
+      const bytes = JSON.stringify({ format: "route-state-record-v2", targetKey, route, value });
       writeAtomic(
         path,
-        JSON.stringify({ format: "route-state-record-v2", targetKey, route, value }),
+        bytes,
       );
+      if (reason) noteStored(storedNoticesPath(), {
+        class: "discard", place: `Work for ${route} (${targetKey})`, path,
+        sha256: createHash("sha256").update(bytes).digest("hex"), reason,
+      });
     },
     // The listing is read-only, and ADR 0039's discard does not apply here. Ruling: commit 556652bc
     // (2026-11-07) moved deletion of a misplaced record to the addressed read and left discovery
