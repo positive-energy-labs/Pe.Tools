@@ -102,6 +102,7 @@ function SettingCell({ ctx, cell, schema }: { ctx: Ctx; cell: SheetCell; schema:
         target: ctx.target?.kind === "document" ? { kind: "document", ref: ctx.target.ref } : { kind: "host" },
         input: { owner: cell.setting!.owner, tier: tier.tier, path: [...cell.setting!.path], value: parsed ? parsed.data : null, expectedSha256: tier.sha256 },
       });
+      if (receipt.state === "failed" && receipt.outcome?.state === "refused") ctx.refresh();
       if (receipt.state !== "succeeded")
         throw Error(`Save ${receipt.state}${"error" in receipt ? `: ${receipt.error}` : ""}`);
       const wrote = receipt.result as OpResponseOf<"settings.tiers.write">;
