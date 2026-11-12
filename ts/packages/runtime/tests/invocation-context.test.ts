@@ -47,6 +47,45 @@ test.each(["old-run", ""])(
   },
 );
 
+// ADR 0039 keep: a torn outbox used to throw a bare SyntaxError from every read, clear and write
+// on its slot, and nothing named the file.
+test("a torn outbox is refused with its file named and kept, and a re-read posts no second notice", async () => {
+  const { readOutbox, writeOutbox } = await import("@pe/runtime/context");
+  const { resolveLaneAndRoot, runtimeRoot } = await import("../src/runtime-owner.ts");
+  const { readStoredNotices } = await import("@pe/host-contracts/store");
+  const { createHash } = await import("node:crypto");
+  const { join, dirname } = await import("node:path");
+  const { mkdirSync, readFileSync, writeFileSync, rmSync } = await import("node:fs");
+  const slot = `http://outbox.test/${crypto.randomUUID()}`;
+  const file = join(
+    runtimeRoot(),
+    "state",
+    resolveLaneAndRoot().serviceName,
+    "invocation-outbox",
+    `${createHash("sha256").update(slot).digest("hex")}.json`,
+  );
+  const posted = () =>
+    readStoredNotices(join(runtimeRoot(), "state", "stored-notices.jsonl")).filter(
+      (notice) => notice.path === file,
+    );
+  const torn = '{"id":"torn';
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, torn);
+  try {
+    expect(() => readOutbox(slot)).toThrow(file);
+    expect(() => readOutbox(slot)).toThrow("can't be read, so the file is kept");
+    expect(() => writeOutbox(slot)).toThrow(file);
+    expect(() => writeOutbox(slot, { id: crypto.randomUUID() })).toThrow(file);
+    expect(readFileSync(file, "utf8")).toBe(torn);
+    expect(posted()).toMatchObject([{ class: "keep", place: "Pending action" }]);
+    // A person removes the file, and the slot works again.
+    rmSync(file);
+    expect(readOutbox(slot)).toBeUndefined();
+  } finally {
+    rmSync(file, { force: true });
+  }
+});
+
 test("pre-ACK files keep causal evidence and unproven historical bytes; ACK stores only id", async () => {
   const { readOutbox, writeOutbox } = await import("@pe/runtime/context");
   const { resolveLaneAndRoot, runtimeRoot } = await import("../src/runtime-owner.ts");
