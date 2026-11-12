@@ -6,7 +6,50 @@ on:
       - "**"
   pull_request:
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
+  csharp:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug.R23, Debug.R24, Debug.R25, Debug.R26, Release.R25]
+    env:
+      NuGetPackageSourceCredentials_github: Username=${{ github.actor }};Password=${{ secrets.GITHUB_TOKEN }};ValidAuthenticationTypes=Basic
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            10.0.x
+            8.0.x
+
+      - name: Configure CI package sources
+        run: |
+          # Replace only the runner's config so SDK resolution cannot see the local folder feed.
+          Copy-Item .github/nuget.config nuget.config
+          dotnet nuget add source https://nuget.pkg.github.com/positive-energy-labs/index.json --name github --configfile nuget.config
+
+      - name: Restore SDK tool
+        run: dotnet tool restore
+
+      # Compile only. The SDK supplies Revit reference assemblies from NuGet; deployment,
+      # Revit launch, packaging and Revit-backed tests stay on the local machine.
+      - name: Restore C#
+        run: dotnet restore Pe.Tools.slnx -p:Configuration=${{ matrix.configuration }} -p:DeployAddin=false -p:LaunchRevit=false
+
+      - name: Build C#
+        run: dotnet build Pe.Tools.slnx --no-restore -c ${{ matrix.configuration }} -p:DeployAddin=false -p:LaunchRevit=false
+
+      - name: Build standalone close-model tests without running them
+        run: dotnet build dotnet/Pe.App.CloseModel.Tests/Pe.App.CloseModel.Tests.csproj -c ${{ matrix.configuration }}
+
   windows:
     runs-on: windows-latest
     steps:
@@ -15,14 +58,7 @@ jobs:
         with:
           fetch-depth: 0 # repo guards read history and origin/main
 
-      # LEFT OUT, needs the owner: every C# step (`dotnet tool restore`, `pe-revit doctor`,
-      # `dotnet build Pe.Tools.slnx -c Debug.R25 | Debug.R23 | Release.R25`, and the deterministic
-      # rung `pe-revit test --project <P>`). The Pe.Revit.Sdk MSBuild SDK and the pe.revit.cli tool
-      # pinned in global.json and .config/dotnet-tools.json exist only in the machine-local folder
-      # feed that nuget.config names (%USERPROFILE%\source\feeds\pe-revit-sdk, ADR 0006); they are
-      # not on nuget.org. A hosted runner cannot restore them. Restore these steps once the SDK
-      # family is published to a feed the runner can reach.
-      # The same gap leaves out the `pnpm verify` steps that shell to dotnet (codegen:check, r24).
+      # Cross-language codegen checks remain separate from this TS gate.
 
       - name: Setup Node
         uses: actions/setup-node@v5
