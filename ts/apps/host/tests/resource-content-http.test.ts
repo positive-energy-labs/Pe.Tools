@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
 import { z } from "zod";
-import { readingRequestSchema, type Machine } from "@pe/agent-contracts";
+import { documentRows, readingRequestSchema, recentRows, type Machine } from "@pe/agent-contracts";
 import type { ResourceObserver } from "@pe/runtime";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { buildCapabilities, createCapabilityCatalogSource } from "../../../packages/mcps/src/pea/capabilities.ts";
@@ -125,6 +125,52 @@ test("capabilities HTTP version ignores TTL and embedded-machine samples, but fe
     expect(observed[1]).toMatchObject({ capabilities: expect.arrayContaining([
       expect.objectContaining({ key: native.key, availability: { state: "available" } }),
     ]) });
+  } finally { await http.close(); }
+}, 60_000);
+
+// Host startup: the background Pod import, the recents read (slower than its 2 s budget when cold)
+// and the machine's sessions each land on their own clock, and the catalog carries all three. Each
+// landed inside a different evaluation, so the three evaluations of a first publication all raced.
+test("a catalog read during startup settles current: other owners' content is not the catalog's version", async () => {
+  let samples = 0;
+  const recents = Promise.withResolvers<Response>();
+  const recent = { title: "Model", path: "C:/Models/Model.rvt", isCloud: false, region: null, projectGuid: null,
+    modelGuid: null, year: 2025, savedYear: 2025, rank: 1 };
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.endsWith("/ops")) return Response.json({ operations: [] });
+    if (url.includes("/instances/readings?read=recents")) return (await recents.promise).clone();
+    throw Error(`Unexpected catalogue transport ${url}`);
+  });
+  const page = { key: "page:@pages/shipped", kind: "page" as const, title: "Shipped", description: "Page shared state and binding.",
+    needs: "nothing" as const, effect: "query" as const, mutates: false, principal: ["human" as const], input: {}, source: "pages", rank: 1,
+    package: { id: "pages", path: "shipped/index.html", sha256: "0".repeat(64) }, projection: { openUrl: "/pages/shipped/", pane: "page" as const } };
+  let imported = false;
+  const catalog = createCapabilityCatalogSource({ hostBaseUrl: "http://recorded", registrations: [],
+    machine: async () => samples >= 6 ? seed : machineFixture([]),
+    content: async () => ({ packages: [], skills: [], pages: imported ? [page] : [], diagnostics: [] }),
+  });
+  const observed: { sources: Record<string, string>; capabilities: { kind: string }[] }[] = [];
+  const http = await surface(hostResourceObserver(undefined, undefined, undefined, "http://host", async () => {
+    const n = ++samples;
+    // The import's `changed` invalidates the catalog (pe-routes.ts, createContributionContent).
+    if (n === 2) { imported = true; catalog.invalidate(); }
+    if (n === 4) recents.resolve(Response.json({ result: { recents: [recent] } }));
+    const value = await catalog.read();
+    // The route's own projection (pe-routes.ts, capabilities.find): documents and recents are rows too.
+    const served = { ...value, capabilities: [...value.capabilities, ...documentRows(value), ...recentRows(value)] };
+    observed.push(served);
+    return Response.json(served);
+  }));
+  try {
+    const packet = await http.post({ kind: "capabilities" });
+    expect(packet, JSON.stringify(packet).slice(0, 400)).toMatchObject({ state: "current" });
+    expect(packet.reason).toBeUndefined();
+    expect(samples, "the import's rows raced one evaluation; the next one settled").toBe(4);
+    expect(observed[2]!.sources.recents).toMatch(/^still reading/);
+    expect(observed[3]!.sources.recents).toBe("ok");
+    expect(observed[3]!.capabilities.some(row => row.kind === "recent")).toBe(true);
+    expect(packet.value?.data.capabilities, "the published Value is the read's own sample").toEqual(observed[2]!.capabilities);
   } finally { await http.close(); }
 }, 60_000);
 

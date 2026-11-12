@@ -23,8 +23,15 @@ export function resourceContent(request: ReadingRequest, value: unknown): unknow
     case "inventory":
       return sampledContent(value);
     case "capabilities": {
-      const { at: _sampledAt, ...catalog } = value as Record<string, unknown>;
-      return { ...catalog, machine: sampledContent(catalog.machine) };
+      // The catalog's version is its own rows. The machine and the recents are other readings with
+      // their own owners and versions (a read that needs them reads them: `chat.context`,
+      // `bind.picker`), `sources` is each source's outcome for this poll, and document and recent rows
+      // are projections of those two. Counted here, host startup raced every evaluation of a first
+      // publication: the recents budget, the machine's sessions and the Pod import each land alone.
+      const { at: _sampledAt, machine: _machine, recents: _recents, sources: _sources, capabilities, ...catalog } =
+        value as Record<string, unknown>;
+      return { ...catalog, capabilities: Array.isArray(capabilities)
+        ? capabilities.filter((row) => row?.kind !== "document" && row?.kind !== "recent") : capabilities };
     }
     case "sdk": {
       const content = sampledContent(value);
