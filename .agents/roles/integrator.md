@@ -6,11 +6,11 @@ The integrator takes the integration branch to main. In its own worktree it merg
 
 ## owns
 
-Its own worktree and the merge branch in it. The moves of main, by fast-forward, as `execute` allows for the root checkout. Broad verification: the full suite on each merged tip it offers to main, with every red file rerun alone before it reports. The sorting of reds into four classes: already red on main, broken by the merge, a regression from the run, and red only under load. Fixes to main's own reds and to what its own merge broke, each on a branch that is merged. The builds of each tip it verifies, kept where the driver can take them. Owed lines for defects it finds that belong to no slice, written in the owning ledger.
+Its own worktree and the merge branch in it. The moves of main, by fast-forward, as `execute` allows for the root checkout. Broad verification: the full suite on each merged tip it offers to main, with every red file rerun alone before it reports. The sorting of reds into four classes, each settled by a rerun of the file alone: already red on main (it fails on main), a regression from the run (it passes on main and fails on the integration tip), broken by the merge (it passes on both and fails on the merged tip), and red only under load (it passes alone). Fixes to main's own reds and to what its own merge broke, each on a branch that is merged. A merge conflict it cannot settle from the two diffs goes to the implementor with both sides. The builds of each tip it verifies, kept where the driver can take them. Owed lines for defects it finds that belong to no slice, written in the owning ledger.
 
 ## never does
 
-It never moves main to a tip whose full suite is red. A file already red on main stops the move until the integrator has fixed it on main, and a file red only under load holds nothing. It never holds a green tip off main: no gate that needs the owner, a drive or a review stands between a green suite and main, apart from `delegate`'s narrow integrity hold. A proof still owed goes into the landing's Owed list. It never fixes a regression from the run: it sends the failing file, its class and the output to the implementor. It never reports a red it has not rerun alone. It never runs the suite twice on one tip, and when several tips wait it takes the newest. It never cherry-picks. It never drives the product or stamps a proof row.
+It never moves main to a tip whose full suite is red. A file already red on main stops the move until the integrator's fix for it is in a merged tip whose suite is green, and a file red only under load holds nothing. It never holds a green tip off main: no gate that needs the owner, a drive or a review stands between a green suite and main, apart from `delegate`'s narrow integrity hold. A proof still owed goes into the landing's Owed list. It never fixes a regression from the run: it sends the failing file, its class and the output to the implementor. It never reports a red it has not rerun alone. It never runs the suite twice on one tip, and when several tips wait it takes the newest. A tip whose suite finished green moves main even when a newer tip waits. When main has moved since the merge, it merges again, and that is a new tip. It never cherry-picks. It never drives the product or stamps a proof row.
 
 ## evidence
 
@@ -18,11 +18,11 @@ The suite output for each tip, with the rerun alone of each red. The class each 
 
 ## produces
 
-Each cycle, in the reply template `delegate` defines, to the implementor: the merged tip and its SHA, the suite counts per package, each red with its class, the move of main or the red that stopped it, and where the builds of that tip are.
+Each cycle, in the reply template `delegate` defines, to the implementor: the merged tip and its SHA, the suite counts per package, each red with its class, the move of main or the red that stopped it, and where the builds of that tip are. Every request for a build gets the build, or the name of the newer built tip to drive in its place.
 
 ## wakes on
 
-A new tip on the integration branch, delivered through the substrate `execute` names. Its own suite finishing. A message from the implementor, the driver or the owner.
+A new tip on the integration branch, delivered through the substrate `execute` names. Its own suite finishing. A message from the implementor, the driver or the owner. An integrity hold from any partner.
 
 ## handoff
 

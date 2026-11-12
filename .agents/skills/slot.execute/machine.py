@@ -1,6 +1,7 @@
 """The machine: what holds it, whether a heavy step may start, and a receipted stop.
 
 usage: python machine.py admit <kind> [--json]   ADMIT, HOLD, or REFUSE (suite in a delegated child); exit 0, 3 or 4
+       python machine.py admit suite --integrator the integrator is a delegated child that owns the suite, so it says so
        python machine.py who [--all] [--json]     every process this repo's work can attribute, biggest first
        python machine.py stop <pid> [<pid>...]    stop processes `who` marks stoppable; refuses the rest; writes a receipt
        python machine.py prune [--dry]            stop every editor and bystander app; `admit` does this itself before it answers HOLD
@@ -138,9 +139,12 @@ def admit(kind, as_json, pruned=False):
         return 2
     # Owner, 2026-11-10: a full suite runs once per wave, on the merged tip, never inside a writing child. 58% of child tool
     # time in the kernel crusade was tests on code still churning. A delegated child runs touched tests (kind light).
-    if kind == "suite" and os.environ.get("T3CODE_THREAD_ID", "").startswith("thread:delegated-task:"):
+    # Exception, 2026-11-12: the integrator is a delegated child and the owner of that one suite at once. The rule
+    # above still binds every writing child; the flag is a statement of role, not a lock.
+    if (kind == "suite" and "--integrator" not in sys.argv
+            and os.environ.get("T3CODE_THREAD_ID", "").startswith("thread:delegated-task:")):
         print("REFUSE suite: a delegated child runs typecheck and the tests its diff touches (kind light); "
-              "the full suite runs once per wave, on the merged tip")
+              "the full suite runs once per merged tip, in the integrator, which passes --integrator")
         return 4
     free, total = free_gib()
     procs = processes()
