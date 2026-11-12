@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Newtonsoft.Json;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Scripting.Execution;
+using Pe.Shared.Scripting.Pods;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.References;
 using System.Reflection;
@@ -121,12 +122,19 @@ public sealed class ScriptPodSourceTests {
         Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Main.cs"));
     }
 
+    // Mutant, run red once: drop the pod.json check in `ScriptPodSourceNormalizer.Normalize` (keep the
+    // `TryGetValue`, remove its throw). The null manifest then fails later as an ArgumentNullException, which is
+    // still an ArgumentException, so only the message and stage asserts catch it.
     [Test]
-    public void Duplicates_limits_and_missing_entrypoint_are_refused() {
-        void Reject(ScriptPodSourceBundle bundle) => Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Main.cs"));
+    public void Duplicates_limits_a_missing_manifest_and_a_missing_entrypoint_are_refused() {
+        ArgumentException Reject(ScriptPodSourceBundle bundle) => Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Main.cs"))!;
         var bundle = Bundle();
         Reject(bundle with { Files = [bundle.Files[0], bundle.Files[1], bundle.Files[1] with { Path = "src/main.cs" }] });
-        Reject(bundle with { Files = [bundle.Files[0], bundle.Files[2]] });
+        // Each of these two refusals is named by its own message, so an unrelated refusal cannot pass for it.
+        Assert.That(Reject(bundle with { Files = [bundle.Files[0], bundle.Files[2]] }).Message, Does.Contain("lacks the selected entrypoint"));
+        var noManifest = Reject(bundle with { Files = [bundle.Files[1]] });
+        Assert.That(noManifest.Message, Does.Contain("Captured Pod lacks pod.json"));
+        Assert.That(noManifest.ParamName, Is.EqualTo(PodManifestValidator.DiagnosticStage), "the execution service maps this to the pod-manifest stage");
         Reject(bundle with { Files = [bundle.Files[0], .. Enumerable.Range(0, 201).Select(i => new ScriptPodSourceFile($"src/F{i}.cs", ""))] });
         Reject(bundle with { Files = [bundle.Files[0], bundle.Files[1] with { BytesBase64 = Convert.ToBase64String(new byte[512 * 1024 + 1]) }] });
         Reject(bundle with { Files = [bundle.Files[0], .. Enumerable.Range(0, 9).Select(i => new ScriptPodSourceFile($"src/F{i}.cs", Convert.ToBase64String(new byte[512 * 1024])))] });
