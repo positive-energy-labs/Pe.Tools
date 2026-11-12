@@ -10,14 +10,14 @@ import {
 import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { lstat, open, readdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   scriptPodMemberBounds as memberBounds,
   type ScriptingExecute,
 } from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { homeDirs } from "@pe/host-contracts/product-paths";
+import { homeDirs, homes } from "@pe/host-contracts/product-paths";
 import { hostOwnership } from "./host-ownership.ts";
 import { verifyPodArtifact } from "./pod-artifact.ts";
 import { productPodsRootPath } from "./product-paths.ts";
@@ -118,6 +118,14 @@ export const podStatePath = (
     : owner.podsRoot && resolve(owner.podsRoot) !== resolve(productPodsRootPath())
       ? join(owner.podsRoot, "..", ...segments)
       : join(hostOwnership.rootPath, productPathNames.stateDirectoryName, ...segments);
+
+/** The home a pod's folder sits in, by its tier and folder; undefined for a folder outside every home. */
+export const podHome = (directory: string) => {
+  const home = homes().find(
+    (one) => resolve(dirname(directory)) === resolve(one.root, productPathNames.podsDirectoryName),
+  );
+  return home && { tier: home.tier, path: home.root };
+};
 
 /** One Pods folder, or the product's Pods in every home, in list order (user, project, firm). */
 export type PodsRoots = string | readonly string[];

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { firmHome, homes, userRoot } from "@pe/host-contracts/product-paths";
@@ -10,9 +10,11 @@ import { stateTree } from "@pe/host-contracts/service-identity";
 import * as paths from "../src/product-paths.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { capturePackage, listPackages, readPackage } from "../src/packages.ts";
-import { scratchPageDescriptors, scratchPageDirectory } from "../src/page-libraries.ts";
+import { productPagesRoots, scratchPageDescriptors, scratchPageDirectory } from "../src/page-libraries.ts";
+import { commitPagePublication, pageVersion } from "../src/page-publication.ts";
+import { importShippedPods } from "../src/installed-pods.ts";
 import { readDuctCatalogs } from "../src/duct-catalogs.ts";
-import { listRuns, readMember, saveMember, writeMember, writeRun } from "../src/settings.ts";
+import { listPods, listRuns, readMember, saveMember, writeMember, writeRun } from "../src/settings.ts";
 import { sourceRunOutput } from "../src/family-actions.ts";
 import { importPod, writeZip } from "../src/pod-transfer.ts";
 import { peaMcpServer } from "../src/harness/adapter.ts";
@@ -253,6 +255,77 @@ test("importing a pod whose id the firm home already holds is refused: no duplic
   );
   await expect(importPod({ archivePath: archive })).rejects.toThrow(`already installed at '${theirs}'`);
   expect(existsSync(join(user, "Pods"))).toBe(false);
+});
+
+// Mutant, run red once (2026-11-12): `podHome` returns the first home for every folder.
+test("H2: a read says which home a pod is in, and a member read says when its file was last written", async () => {
+  pod(user, "mine", "mine", "user");
+  const theirs = pod(firm, "theirs", "theirs", "firm");
+  writeFileSync(join(theirs, "settings", "a.json"), "{}");
+  const listed = (await run(listPods())).pods.map((one) => [one.id, one.home]);
+  expect(listed).toEqual([
+    ["mine", { tier: "user", path: user }],
+    ["theirs", { tier: "firm", path: firm }],
+  ]);
+  const read = await run(readMember({ pod: "theirs", path: "settings/a.json" }));
+  expect(read.home).toEqual({ tier: "firm", path: firm });
+  expect(read.modifiedAt).toBe(statSync(join(theirs, "settings", "a.json")).mtime.toISOString());
+});
+
+const archiveOf = (path: string, id: string) => {
+  writeFileSync(
+    path,
+    writeZip(new Map([["pod.json", Buffer.from(JSON.stringify({ schemaVersion: 2, id, entrypoints: [] }))]])),
+  );
+  return path;
+};
+
+// Mutant, run red once (2026-11-12): in `installed-pods.ts` `run`, check `productPodsRootPath()`
+// (the user home alone) instead of every home.
+test("W1: a shipped example whose id the firm home holds is not installed again in the user home", async () => {
+  const theirs = pod(firm, "example", "example", "firm");
+  const shipped = join(user, "shipped");
+  mkdirSync(shipped);
+  archiveOf(join(shipped, "example.zip"), "example");
+  const report = await importShippedPods({ shippedRoot: shipped, ledger: join(user, "state", "shipped-pods.json") });
+  expect(report.outcomes).toMatchObject([{ outcome: "present", id: "example", reason: `installed at '${theirs}'` }]);
+  expect(existsSync(join(user, "Pods", "example"))).toBe(false);
+  // The sentinel: the firm pod is still the one admitted pod of that id.
+  expect((await listPackages()).packages.filter((p) => p.id === "example").map((p) => p.directory)).toEqual([theirs]);
+});
+
+// Mutant, run red once (2026-11-12): in `installArchive`, check the folder in the user home only.
+test("W3: importing under a folder name another home already uses is refused", async () => {
+  const theirs = pod(firm, "kept", "firm-kept", "firm");
+  await expect(
+    importPod({ archivePath: archiveOf(join(user, "other.zip"), "other"), folder: "kept" }),
+  ).rejects.toThrow(`Pod folder already exists: ${theirs}`);
+  expect(existsSync(join(user, "Pods", "kept"))).toBe(false);
+});
+
+// Mutant, run red once (2026-11-12): `pageHomeRoot` returns the first (user) root for every slug.
+test("W2: page.publish writes a firm Page where it is, through the door, and makes no user twin", async () => {
+  const theirs = page(firm, "plan", "old");
+  const before = readFileSync(join(theirs, "index.html"), "utf8");
+  const input = { kind: "page" as const, slug: "plan", title: "Plan", html: "<title>new</title>" };
+  const version = await pageVersion(productPagesRoots, "plan");
+  // The sentinel: the version read is the firm file's, not "no such Page".
+  expect(version).toBe(sha(before));
+  await commitPagePublication(
+    productPagesRoots,
+    { input: input as never, origin: "http://fixture", capture: {} as never },
+    version,
+  );
+  expect(readFileSync(join(theirs, "index.html"), "utf8")).toBe("<title>new</title>");
+  expect(existsSync(join(user, "Pages", "plan"))).toBe(false);
+  // Item 5: the door's safety net holds the bytes the publication replaced.
+  expect(readFileSync(join(stateTree(hostOwnership.rootPath).blobs, "sha256", version!), "utf8")).toBe(before);
+  // A slug two homes hold is refused with both paths, and nothing is written.
+  page(user, "twice", "mine");
+  const firms = page(firm, "twice", "theirs");
+  await expect(pageVersion(productPagesRoots, "twice")).rejects.toThrow(
+    `claimed by ${join(user, "Pages", "twice")} and ${firms}`,
+  );
 });
 
 test("the harness tells its MCP child the firm home it resolved", () => {

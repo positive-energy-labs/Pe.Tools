@@ -140,6 +140,7 @@ import {
   storedNoticesPath,
   type NoticeSources,
 } from "./notice-feed.ts";
+import { homeLogLines } from "@pe/host-contracts/product-paths";
 import { heldSend, heldSends, holdSend, releaseSend, subscribeHeldSends } from "./guards.ts";
 import { sendHeldParse } from "@pe/mcps/held-parse";
 import { observePageTarget } from "./pages-route.ts";
@@ -345,9 +346,14 @@ export function createPeRoutes(options: PeRoutesOptions) {
       (notify) => {
         const releaseWork = work.subscribeUncaptured(() => notify());
         const releaseContext = options.navigation?.subscribe?.(notify);
+        // A read that discards a Work record changes this census and raises no workspace event.
+        // Every discard posts to the notice file, so the file is the event, as for the notice feed.
+        const discarded = () => notify();
+        watchFile(storedNoticesPath(), { interval: 2_000 }, discarded);
         return () => {
           releaseWork();
           releaseContext?.();
+          unwatchFile(storedNoticesPath(), discarded);
         };
       },
       (result) => publish(resourceSnapshot(key, result)),
@@ -909,7 +915,12 @@ export function createContributionContent(options: {
   let pending = false;
   let bootstrapProblem: string | undefined;
   let admitted: readonly AdmittedPackage[] = [];
-  const importing = Promise.resolve().then(() => options.bootstrap?.());
+  // In the background the start census runs first and the import after it, in that order every
+  // time: what the import adds is then activated by name, never left off by a race with the census.
+  const importing = Promise.resolve().then(async () => {
+    if (options.bootstrapInBackground) await lifecycle.ready;
+    return options.bootstrap?.();
+  });
   const lifecycle = createPackageLifecycle({
     decisionsPath: options.decisionsPath,
     packages: async () => {
@@ -1162,6 +1173,8 @@ function* hostPeRoutes(
   mkdirSync(worldRoot, { recursive: true });
   // Unbound is a working state (ADR 0037 rule 2): the host starts, and the feed says where it looked.
   noteNoFirmHome();
+  // One host log line per home, with its tier and how it was found; with no firm home, where it looked.
+  for (const line of homeLogLines()) yield* Effect.logInfo(line);
   let invalidateCatalog = () => {};
   const content = createContributionContent({
     worldRoot,

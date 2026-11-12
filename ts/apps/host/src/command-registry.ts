@@ -21,7 +21,7 @@ import { gatewayExecutor } from "./gateway-actions.ts";
 import { bootstrapExecutor } from "./bootstrap.ts";
 import { pagePublicationExecutor } from "./page-publication.ts";
 import { pageLibrary } from "./pages-route.ts";
-import { productPagesRootPath } from "./product-paths.ts";
+import { productPagesRoots } from "./page-libraries.ts";
 import { readNativeReceipt } from "./native-receipts.ts";
 import { Effect } from "effect";
 import { CANCEL_OPERATION_KEY } from "./bridge.ts";
@@ -42,7 +42,8 @@ export function commandRegistry(
     "work.start": workStartExecutor(deps.workspace),
     "machine.bootstrap": bootstrapExecutor(deps.sdk),
     "page.publish": pagePublicationExecutor(
-      productPagesRootPath(),
+      // Every home's Pages, read at publish time: a Page is published where its folder is.
+      productPagesRoots,
       // Read at publish time: the bound port is known only after the claim, and may not be 5180.
       origin ??
         (() =>

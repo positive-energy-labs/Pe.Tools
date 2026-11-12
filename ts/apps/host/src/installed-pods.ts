@@ -3,7 +3,7 @@
  * offered once (a deleted example stays deleted); an installed id or existing folder is never
  * overwritten. Callers await this before anything reads the pods root.
  */
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { mkdir, readFile, readdir, writeFile, rename } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -22,8 +22,9 @@ import {
   TransferRefused,
   type TransferOptions,
 } from "./pod-transfer.ts";
-import { captureDirectory, isPackageMember, listPackages, type AdmittedPackage } from "./packages.ts";
+import { captureDirectory, isPackageMember, listPackages, productPodsRoots, type AdmittedPackage } from "./packages.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
+import { activateImportedPackage } from "./package-lifecycle.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 
 type ShippedPodOutcome =
@@ -67,14 +68,30 @@ const ledgerPath = () =>
 let firstRun: Promise<ShippedPodsReport> | undefined;
 
 /**
- * Resolves when this process's shipped-pod import has finished, at once when none has started.
- * It never rejects: a failed import is reported by its own caller, and a reader only needs it over.
+ * Resolves when a run has settled or `waitMs` has passed, whichever is first. It never rejects: a
+ * failed import is reported by its own caller, and a reader only needs it over.
  */
-export const shippedPodsSettled = (): Promise<void> =>
-  (firstRun ?? Promise.resolve()).then(
-    () => {},
-    () => {},
-  );
+export const settledWithin = (run: Promise<unknown> | undefined, waitMs: number): Promise<void> => {
+  if (!run) return Promise.resolve();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    run.then(
+      () => {},
+      () => {},
+    ),
+    new Promise<void>((done) => {
+      timer = setTimeout(done, waitMs);
+      timer.unref();
+    }),
+  ]).finally(() => clearTimeout(timer));
+};
+
+/**
+ * Resolves when this process's shipped-pod import has finished, at once when none has started.
+ * Bounded: an import that hangs must not hang every pod listing, so after the bound a reader lists
+ * what is there. A fresh dev home takes about 15 s to export and import the checkout's examples.
+ */
+export const shippedPodsSettled = (): Promise<void> => settledWithin(firstRun, 60_000);
 
 /**
  * Import every shipped pod not yet offered. Memoized per process: every caller awaits the same run.
@@ -92,8 +109,12 @@ export const importShippedPods = (
  * an inline probe then fails before it runs ("No unique admitted pod owns output folder", Cody,
  * 2026-10-14). Written once; an existing manifest is never touched.
  */
-async function ensureDefaultPod(podsRoot = productPodsRootPath()): Promise<void> {
+async function ensureDefaultPod(podsRoot: string | undefined): Promise<void> {
   const key = scriptingWorkspaceIdentity.defaultWorkspaceKey;
+  // Another home may already hold the default pod; a second one would refuse both.
+  if ((await listPackages(podsRoot ?? productPodsRoots())).packages.some((pod) => pod.id === key))
+    return;
+  podsRoot ??= productPodsRootPath();
   const manifest = join(podsRoot, key, "pod.json");
   await mkdir(dirname(manifest), { recursive: true });
   await writeFile(
@@ -101,9 +122,15 @@ async function ensureDefaultPod(podsRoot = productPodsRootPath()): Promise<void>
     `${JSON.stringify({ schemaVersion: 2, id: key, name: key, version: "0.1.0", entrypoints: [] }, null, 2)}
 `,
     { flag: "wx" },
-  ).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "EEXIST") throw error;
-  });
+  ).then(
+    // The host made this pod at this start, so it is on, like an import: a pod first seen after
+    // the start census is otherwise off, and `pod.list` would never name it. An existing manifest
+    // keeps whatever a person chose.
+    () => activateImportedPackage(key, podsRoot!),
+    (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EEXIST") throw error;
+    },
+  );
 }
 
 async function run(
@@ -126,19 +153,21 @@ async function run(
     notices: storedNoticesPath(),
   });
   const ledger = read.kind === "ok" ? read.value : { offered: {} };
-  const podsRoot = options.podsRoot ?? productPodsRootPath();
+  // An id is unique across homes (ADR 0037 rule 4): the offer looks in every home, and
+  // `installArchive` places a new pod in the user home.
+  const everyRoot = options.podsRoot ?? productPodsRoots();
   const outcomes: ShippedPodOutcome[] = [];
   for (const archive of archives) {
     const path = join(shippedRoot, archive);
     const bytes = await readFile(path);
     const sha256 = createHash("sha256").update(bytes).digest("hex");
-    const installed = (await listPackages(podsRoot)).packages.find(pod => pod.id === archiveId(readZip(bytes)));
+    const installed = (await listPackages(everyRoot)).packages.find(pod => pod.id === archiveId(readZip(bytes)));
     if (ledger.offered[sha256] && !installed) {
       outcomes.push({ archive, sha256, outcome: "offered-before" });
       continue;
     }
     const outcome = await offer(archive, path, bytes, sha256, {
-      ...options, podsRoot, stateRoot: options.stateRoot ?? dirname(ledgerFile),
+      ...options, stateRoot: options.stateRoot ?? dirname(ledgerFile),
       originalsRoot: join(dirname(ledgerFile), "shipped-pod-originals"),
     }, installed);
     outcomes.push(ledger.offered[sha256] && outcome.outcome === "present" && !shippedPodUpdateRefusals.has(installed!.id)
@@ -158,7 +187,7 @@ async function offer(
   path: string,
   bytes: Buffer,
   sha256: string,
-  options: TransferOptions & { podsRoot: string; originalsRoot: string },
+  options: TransferOptions & { originalsRoot: string },
   installed?: AdmittedPackage,
 ): Promise<ShippedPodOutcome> {
   try {
@@ -167,6 +196,9 @@ async function offer(
     await mkdir(options.originalsRoot, { recursive: true });
     await writeArtifact(options.originalsRoot, join(options.originalsRoot, `${sha256}.zip`), bytes);
     if (installed) {
+      // A pod another home holds is that home's to change: the offer never replaces or moves it.
+      if (resolve(dirname(installed.directory)) !== resolve(options.podsRoot ?? productPodsRootPath()))
+        return { archive, sha256, outcome: "present", id, reason: `installed at '${installed.directory}'` };
       shippedPodUpdateRefusals.delete(id);
       const matches = (entries: ReadonlyMap<string, Buffer>, pod: AdmittedPackage) => {
         const authored = [...entries].filter(([path]) => isPackageMember(path));

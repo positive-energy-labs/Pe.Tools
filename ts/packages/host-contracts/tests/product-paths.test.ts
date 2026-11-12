@@ -172,3 +172,37 @@ test("two firm markers refuse both: no firm home, and one notice names both path
   // One of them alone is the firm home.
   expect(firmHome(machineFacts([real])).root).toBe(first);
 });
+
+// Mutant, run red once (2026-11-12): `homesFound` labels a told firm home "probe" instead of "override".
+test("H1: the host log has one line per home with its tier and how it was found, and one for a firm home not found", async () => {
+  const { homeLogLines, homesFound } = await import("../src/product-paths.ts");
+  noHomeVariables();
+  const user = process.env[homeVariable]!;
+  const mapped = drive();
+  const firm = mark(join(mapped, "Shared drives", "Team", ...firmSegments), `{"tier":"firm"}`);
+  const project = mark(join(mapped, "Shared drives", "Team", "Projects", "Chadds", "Pe.Tools"), `{"tier":"project"}`);
+  const facts = machineFacts([mapped]);
+  // Probed: the user home is an override here (a test names it), the project by pointer, the firm by probe.
+  expect(homeLogLines(homesFound({ pointer: "Projects/Chadds", facts }))).toEqual([
+    `Home user: ${user} (found by override)`,
+    `Home project: ${project} (found by pointer)`,
+    `Home firm: ${firm} (found by probe)`,
+  ]);
+  // Told: the same folder named by the dev override says so.
+  vi.stubEnv(productPathNames.sharedRootVariable, firm);
+  expect(homeLogLines(homesFound({ facts })).at(-1)).toBe(`Home firm: ${firm} (found by override)`);
+  vi.stubEnv(productPathNames.sharedRootVariable, undefined);
+  // Not found: the line says where the host looked.
+  const empty = machineFacts([drive()]);
+  const none = homesFound({ facts: empty });
+  expect(none.homes.map((home) => home.tier)).toEqual(["user"]);
+  expect(homeLogLines(none)).toHaveLength(2);
+  for (const place of firmHome(empty).looked) expect(homeLogLines(none)[1]).toContain(place);
+  // Two markers: both refused, and the line names both.
+  const second = drive();
+  const twin = mark(join(second, ...firmSegments), `{"tier":"firm"}`);
+  const both = homesFound({ facts: machineFacts([mapped, second]) });
+  expect(both.homes.map((home) => home.tier)).toEqual(["user"]);
+  expect(both.firmNotice).toContain(firm);
+  expect(both.firmNotice).toContain(twin);
+});

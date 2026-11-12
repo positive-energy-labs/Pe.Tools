@@ -1,4 +1,4 @@
-import { lstat } from "node:fs/promises";
+import { lstat, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { isUtf8 } from "node:buffer";
 import { join, win32 } from "node:path";
@@ -27,6 +27,7 @@ import type { PodDraftSource, PodMemberSource } from "@pe/agent-contracts";
 import {
   isPackageMember,
   listPackages,
+  podHome,
   podStatePath,
   productPodsRoots,
   readPackage,
@@ -87,6 +88,12 @@ const schemaCache = new Map<string, ValidateFunction | string>();
  * for that import: the first `pod.list` on a fresh home names every shipped pod. An owner that
  * supplies its own Pods root has no import to wait for.
  */
+/** Provenance on a read (ADR 0037): the home a pod's folder sits in, when it sits in one. */
+const withHome = (directory: string) => {
+  const home = podHome(directory);
+  return home ? { home } : {};
+};
+
 const shippedPodsImported = (ctx: PodContext) =>
   ctx.podsRoot === undefined ? Effect.promise(shippedPodsSettled) : Effect.void;
 
@@ -103,6 +110,7 @@ export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
       name: pod.name,
       version: pod.version,
       folder: pod.folder,
+      ...withHome(pod.directory),
       entrypoints: pod.entrypoints,
       contributions: pod.contributions,
       members: pod.members.map(({ path, sha256, schema }) => ({ path, sha256, schema })),
@@ -295,10 +303,18 @@ export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: P
     return yield* Effect.fail(
       new LocalOpError("pod.member.read", "The member is not valid UTF-8 text.", 400),
     );
+  const written = yield* Effect.promise(() =>
+    stat(join(admitted.directory, member.path)).then(
+      (facts) => facts.mtime.toISOString(),
+      () => undefined,
+    ),
+  );
   return {
     content: new TextDecoder("utf-8", { ignoreBOM: true }).decode(captured.bytes),
     sha256: captured.sha256,
     bytesBase64: Buffer.from(captured.bytes).toString("base64"),
+    ...withHome(admitted.directory),
+    ...(written ? { modifiedAt: written } : {}),
   };
 });
 

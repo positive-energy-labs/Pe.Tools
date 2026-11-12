@@ -228,6 +228,39 @@ export function homes(input: HomesInput = {}): Home[] {
   ];
 }
 
+/**
+ * How a home was found: the user home is the Documents folder or the product-home override, a
+ * project home comes from the document's pointer, and the firm home from the drive probe or the
+ * dev override. Every project and firm home is also proven by its marker.
+ */
+export type HomeFound = "documents" | "override" | "pointer" | "probe";
+export type FoundHome = Home & { readonly found: HomeFound };
+
+/** The home list with how each was found, and the firm home's absence in words when there is none. */
+export function homesFound(input: HomesInput = {}): {
+  homes: FoundHome[];
+  firmNotice: string | null;
+} {
+  const told = (variable: string) => Boolean(process.env[variable]?.trim());
+  const found = (tier: HomeTier): HomeFound =>
+    tier === "project"
+      ? "pointer"
+      : tier === "user"
+        ? told(productPathNames.productHomeVariable) ? "override" : "documents"
+        : told(productPathNames.sharedRootVariable) ? "override" : "probe";
+  const firm = firmHome(input.facts);
+  return {
+    homes: homes(input).map((home) => ({ ...home, found: found(home.tier) })),
+    firmNotice: firm.root ? null : noFirmHomeText(firm),
+  };
+}
+
+/** What the host log says about homes at start: one line per home, and one for a firm home not found. */
+export const homeLogLines = (found = homesFound()): string[] => [
+  ...found.homes.map((home) => `Home ${home.tier}: ${home.root} (found by ${home.found})`),
+  ...(found.firmNotice ? [found.firmNotice] : []),
+];
+
 /** One content folder (`Pods`, `Pages`, `Catalogs`) in every home, in list order. */
 export const homeDirs = (name: string, input?: HomesInput): string[] =>
   homes(input).map((home) => join(home.root, name));
