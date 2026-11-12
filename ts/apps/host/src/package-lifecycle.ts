@@ -1,9 +1,9 @@
-import { dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { createPluginRuntime, type PluginContext } from "@pe/agent-contracts";
 import { z } from "zod";
 import { listPackages, productPodsRoots, type AdmittedPackage, type PodsRoots } from "./packages.ts";
-import { readJson, writeArtifact } from "./page-artifacts.ts";
+import { readStored, writeAtomic } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "./notice-feed.ts";
 import { productPluginDecisionsPath, productPodsRootPath } from "./product-paths.ts";
 import {
   builtinPeaSkillSnapshots,
@@ -26,7 +26,21 @@ export async function activateImportedPackage(id: string, podsRoot: string) {
   await serving.refresh();
   await serving.setEnabled(`pod:${id}`, true);
 }
-const readDecisions = (path: string) => readJson(path, decisionsSchema, {});
+/**
+ * A person's choices, so `keep` (MAP decision log 92bdf2df names `plugins.json`). A file that does
+ * not decode is refused with a notice and its bytes stay. Defaults hold, and no choice is saved
+ * over it until a person fixes or removes the file.
+ */
+const storedDecisions = (path: string) =>
+  readStored(path, decisionsSchema, {
+    class: "keep",
+    place: "Pod on and off choices",
+    notices: storedNoticesPath(),
+  });
+const readDecisions = async (path: string) => {
+  const read = storedDecisions(path);
+  return read.kind === "ok" ? read.value : {};
+};
 /** Runtime policy only. Membership and export remain exact authored bytes. */
 export async function requirePackageEnabled(id: string, podsRoots: PodsRoots = productPodsRoots()) {
   // Only the product's Pods carry policy: the content homes, or the user's Pods an import writes.
@@ -69,8 +83,13 @@ export function createPackageLifecycle(
   const runtime = createPluginRuntime<Contribution>({
     changed,
     persist: async (id, enabled) => {
+      const stored = storedDecisions(decisionsPath);
+      if (stored.kind === "kept")
+        throw Error(
+          `Pod on and off choices can't be read, so the file is kept and this choice is not saved: ${stored.reason}`,
+        );
       const next = { ...decisions, [id]: enabled };
-      await writeArtifact(dirname(decisionsPath), decisionsPath, JSON.stringify(next), true);
+      writeAtomic(decisionsPath, JSON.stringify(next));
       decisions = next;
     },
   });

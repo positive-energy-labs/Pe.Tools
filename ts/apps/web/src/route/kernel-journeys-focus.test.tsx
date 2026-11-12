@@ -26,7 +26,7 @@ import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
 import { KeyScopeHost } from "@pe/kit/keys";
 import { module as families } from "../families/route";
-import { familyDraftRouteState } from "@pe/agent-contracts";
+import { familyDraftRouteState, podMemberCode } from "@pe/agent-contracts";
 import { module as family } from "../family/route";
 import { detailResponse } from "../../../host/tests/schedule-fixture";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
@@ -887,14 +887,16 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
     expect(readiness.textContent).toBe("");
     expect(screen.queryByText(/^Ready$/)).toBeNull();
     expect(mount.owner()?.doc).toEqual(original);
-    expect.soft(await screen.findByText(member)).toBeTruthy();
-    expect.soft(screen.queryByText("Mechanical library")).toBeTruthy();
+    // Slice 10: the kernel's subject picker is the one family chooser; the roster is its options, by name.
+    await waitFor(() => expect(mount.value().value).toBeTruthy());
+    expect.soft(family.spec.subject!.options(mount.value().value as never).map(option => option.label)).toEqual([`Mechanical library · ${member}`]);
     cleanWords("C747: actual Work and member payload display strings");
-    fireEvent.click(screen.getByText(member));
+    const picked = { kind: "ids" as const, ids: [podMemberCode({ pod, path: member })] };
+    await act(async () => { mount.page.subject(picked); });
     await waitFor(() => expect(memberReads).toBeGreaterThan(0));
     await waitFor(() => expect(mount.value().current).toBe(true));
-    expect(mount.page.read()).toMatchObject({ pod, path: member });
-    expect.soft((screen.getByRole("textbox", { name: "Destination pod" }) as HTMLInputElement).value).toBe("Mechanical library");
+    expect(mount.page.read()).toMatchObject({ pod, member: picked });
+    expect.soft((await screen.findByRole("textbox", { name: "Destination pod" }) as HTMLInputElement).value).toBe("Mechanical library");
     cleanWords("C746: selected roster member keeps its canonical key off the surface");
     await act(async () => fireEvent.click(screen.getAllByRole("button", { name: /^bind/ })[0]!));
     const picker = await screen.findByRole("listbox", { name: "bind c1.diameter" });
@@ -908,7 +910,7 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
       cleanWords(`C746: rendered Family route/stage words in ${stage}`);
     }
     fireEvent.change(screen.getByRole("textbox", { name: "Destination pod" }), { target: { value: "new-mechanical" } });
-    expect(mount.page.read()).toMatchObject({ pod: "new-mechanical", path: "" });
+    expect(mount.page.read()).toMatchObject({ pod: "new-mechanical", member: { kind: "ids", ids: [] } });
     expect((screen.getByRole("textbox", { name: "Destination pod" }) as HTMLInputElement).value).toBe("new-mechanical");
     expect(mount.owner()?.doc).toEqual(original);
     expect((await surfaceReadiness()).getAttribute("data-readiness")).toBe("ready");
@@ -922,7 +924,7 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
 
 
 test("JM H17 browse an optional host route without a pin, then refuse malformed document pins", async () => {
-  const module = route({ ...family.spec, edits: undefined, core: undefined, commands: {}, reads: {},
+  const module = route({ ...family.spec, edits: undefined, core: undefined, subject: undefined, goal: undefined, query: undefined, fields: {}, picture: undefined, title: undefined, commands: {}, reads: {},
     panes: { main: { title: "Optional document", purpose: "Inspect exact target authority",
       body: "scroll", draw: ctx => scrollBody(<p role="status">{ctx.target?.kind === "host" ? "Host browsing" : "Pinned document"}</p>) } },
     layout: { kind: "pane", id: "main" } });
@@ -973,7 +975,7 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
     const owner = live(...args); owners.push(owner); return owner;
   });
   const make = (key: string) => route({ ...fans.spec, key, name: key, needs: "browser", core: undefined,
-    subject: undefined, reads: {}, edits: undefined, commands: {}, fields: {}, picture: undefined, title: undefined,
+    subject: undefined, goal: undefined, query: undefined, reads: {}, edits: undefined, commands: {}, fields: {}, picture: undefined, title: undefined,
     panes: { main: { title: key, purpose: "Focus ownership", body: "scroll", draw: () => scrollBody(<><button>{key} focus</button><textarea aria-label={`${key} text`} />{createPortal(<button>{key} portal</button>, document.body)}</>) } },
     layout: { kind: "pane", id: "main" } });
   const a = make("jz-a"), b = make("jz-b");
@@ -1570,7 +1572,9 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
   const store = createChatPageStore({ registry: appAtomRegistry, search: { patch: async () => {} } });
   conversation.value = { store, threads };
   const stamp = routeRegistry.family!.fingerprint;
-  const declaration = route({ ...family.spec, panes: { workspace: {
+  // This journey holds Family Work with no host read behind it: one hand pane, and no subject or goal,
+  // since a subject route's Place enrolls only once its roster read is current (`typed-mount.ts`, subjectState).
+  const declaration = route({ ...family.spec, subject: undefined, goal: undefined, layout: { kind: "pane", id: "workspace" }, panes: { workspace: {
     ...family.spec.panes.workspace,
     body: "scroll", draw: ctx => scrollBody(<output aria-label="Mounted Family Work">{ctx.cells.doc?.spec?.doc.fileName}</output>),
   } } });
@@ -1710,7 +1714,7 @@ test("JZ E8-12 close Home clears a capacity refusal and permits another Place", 
   const store = createChatPageStore({ registry: appAtomRegistry, search: { patch: async () => {} } });
   conversation.value = { store, threads: [] };
   const module = route({ ...family.spec, key: "home", address: "/", name: "Home", needs: "browser", core: undefined,
-    subject: undefined, reads: {}, edits: undefined, commands: {}, fields: {}, picture: undefined, title: undefined,
+    subject: undefined, goal: undefined, query: undefined, reads: {}, edits: undefined, commands: {}, fields: {}, picture: undefined, title: undefined,
     panes: { main: { title: "Home", purpose: "Place capacity", body: "scroll", draw: () => scrollBody(<p>Home body</p>) } }, layout: { kind: "pane", id: "main" } });
   const root = createRootRoute({ component: () => <RegistryContext.Provider value={appAtomRegistry}>
     <RouteDock renderRoute={body => body}>{null}</RouteDock>
@@ -1903,7 +1907,7 @@ test("JZ audit optional document pins retain exact source authority and retire r
   const created: mounts.TypedMount[] = [];
   const original = mounts.mountTypedRoute;
   const factory = vi.spyOn(mounts, "mountTypedRoute").mockImplementation((...args) => { const m = original(...args); created.push(m); return m; });
-  const module = route({ ...family.spec, needs: "host", optionalTarget: "document", edits: undefined, core: undefined, reads: {}, commands: {}, fields: {}, picture: undefined, title: undefined,
+  const module = route({ ...family.spec, needs: "host", optionalTarget: "document", edits: undefined, core: undefined, subject: undefined, goal: undefined, query: undefined, reads: {}, commands: {}, fields: {}, picture: undefined, title: undefined,
     panes: { main: { title: "Optional document", purpose: "Inspect exact document authority", body: "scroll", draw: ctx => scrollBody(<p>{ctx.target?.kind === "document" ? `Pinned ${ctx.target.ref.session}/${ctx.target.ref.openId}` : ctx.target?.kind === "host" ? "Host browsing" : "No authority"}</p>) } }, layout: { kind: "pane", id: "main" } });
   let search = new URLSearchParams();
   const listeners = new Set<() => void>();

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { LocalOpError } from "../local-error.ts";
@@ -42,30 +41,6 @@ export const readFileStringBomAwareOrEmpty = Effect.fnUntraced(function* (
   if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf)
     return bytes.subarray(3).toString("utf8");
   return bytes.toString("utf8");
-});
-
-export const writeFileStringAtomic = Effect.fnUntraced(function* (
-  path: string,
-  content: string,
-  operationKey: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const tempPath = `${path}.${randomUUID()}.tmp`;
-  let owned = false;
-  const write = Effect.scoped(
-    Effect.gen(function* () {
-      const file = yield* fs.open(tempPath, { flag: "wx" });
-      owned = true;
-      yield* file.writeAll(new TextEncoder().encode(content));
-    }),
-  );
-  yield* write.pipe(
-    Effect.flatMap(() => fs.rename(tempPath, path)),
-    Effect.mapError((error) => localOpFileError(operationKey, error)),
-    Effect.ensuring(
-      Effect.suspend(() => (owned ? fs.remove(tempPath).pipe(Effect.ignore) : Effect.void)),
-    ),
-  );
 });
 
 export const makeDirectory = Effect.fnUntraced(function* (path: string, operationKey: string) {

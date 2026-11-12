@@ -689,9 +689,9 @@ test("JZ Open machine census: sampling drift lists documents; content conflict n
     view.unmount();
     samples = 0; conflict = true;
     packet = await read("conflict");
-    expect(packet).toMatchObject({ state: "refresh-needed", value: null, reason: expect.stringMatching(/machine.*changed during evaluation/) });
+    expect(packet).toMatchObject({ state: "refresh-needed", value: null, reason: "The machine input changed while this was being read." });
     view = await draw();
-    expect(screen.getByText(/machine.*changed during evaluation/)).toBeTruthy();
+    expect(screen.getByText("The machine input changed while this was being read.")).toBeTruthy();
     expect(screen.queryByText(/no Revit is running/i)).toBeNull();
     expect(screen.queryByText(/0 of 0/)).toBeNull();
     view.unmount();

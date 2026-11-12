@@ -64,7 +64,9 @@ public record ExecuteRevitScriptData(
     string ExecutionId,
     List<ScriptArtifactData>? Artifacts = null,
     object? Data = null,
-    PodReceipt? Attribution = null
+    PodReceipt? Attribution = null,
+    // The one reason a project save or synchronize inside this run was cancelled (ADR 0038); null when none was.
+    string? Held = null
 );
 
 /// <summary>What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.</summary>

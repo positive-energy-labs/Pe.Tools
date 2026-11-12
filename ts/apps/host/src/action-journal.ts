@@ -9,8 +9,9 @@ import { CommandRejected, StepFailure, io, refused } from "./command-executor.ts
 import { readJournalSnapshot } from "./journal-snapshot.ts";
 import { nativeEffect, validateNativeInput } from "./native-input.ts";
 import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
-import { appendFile, mkdir, readdir, readFile, writeFile, rm } from "node:fs/promises";
-import { renameReplacing } from "./rename-retry.ts";
+import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
+import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "./notice-feed.ts";
 import { dirname, join, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
@@ -808,9 +809,13 @@ export class ActionJournal implements ReceiptReader {
     for (const entry of names)
       if (entry.isFile() && entry.name.endsWith(".json")) {
         const path = join(entry.parentPath, entry.name);
-        files[path.slice(home.length + 1).replaceAll("\\", "/")] = JSON.parse(
-          await readFile(path, "utf8"),
-        );
+        // Derived (ADR 0039): an export that does not decode is discarded with a notice and left out.
+        const read = readStored(path, z.unknown(), {
+          class: "discard",
+          place: "Action outputs",
+          notices: storedNoticesPath(),
+        });
+        if (read.kind === "ok") files[path.slice(home.length + 1).replaceAll("\\", "/")] = read.value;
       }
     return { id, home, files };
   }
@@ -823,10 +828,7 @@ export class ActionJournal implements ReceiptReader {
     );
   }
   private async export(id: string, name: string, value: unknown) {
-    const file = join(this.home(id), name);
-    await mkdir(dirname(file), { recursive: true });
-    await writeFile(`${file}.tmp`, JSON.stringify(value, null, 2), "utf8");
-    await renameReplacing(`${file}.tmp`, file);
+    writeAtomic(join(this.home(id), name), JSON.stringify(value, null, 2));
   }
   private async waitForTurn(id: string, retirementOnly = false) {
     for (;;) {
@@ -2067,13 +2069,45 @@ export class ActionJournal implements ReceiptReader {
       throw error;
     });
     if (originalBytes === null) return;
-    const version = JSON.parse(originalBytes.toString("utf8").split("\n")[0]!)?.version;
-    const snapshot = readJournalSnapshot(originalBytes);
-    if (!snapshot) {
-      await rm(this.path);
-      console.warn(`${this.path} has unsupported journal data (${String(version)}); discarded`);
-      return;
+    // The journal is `discard` (ADR 0039 rule 1): one that does not decode, or contradicts
+    // itself, is deleted with one notice and the host runs on an empty journal. Before this, a
+    // throw here rejected every later journal write for the life of the host.
+    const discard = (reason: string) => {
+      discardStored(
+        this.path,
+        { class: "discard", place: "Action journal", notices: storedNoticesPath() },
+        reason,
+      );
+      for (const held of [
+        this.rows,
+        this.receipts,
+        this.mappings,
+        this.actionReceipt,
+        this.stepAction,
+        this.open,
+      ])
+        held.clear();
+      this.fresh = [];
+      this.minted = new Set();
+      this.lines = 0;
+      this.factCount = 0;
+      this.header = false;
+      this.torn = false;
+    };
+    let changed: ActionReceipt[];
+    try {
+      changed = this.fold(originalBytes);
+    } catch (error) {
+      return discard(error instanceof Error ? error.message : String(error));
     }
+    if (this.torn) await this.compact();
+    if (changed.length) await this.commit(changed);
+    this.notify();
+  }
+  /** Replay stored lines into memory. Throws on corruption; `load` turns the throw into a discard. */
+  private fold(originalBytes: Buffer): ActionReceipt[] {
+    const snapshot = readJournalSnapshot(originalBytes);
+    if (!snapshot) throw Error("Unsupported journal version");
     const { receipts, mappings } = snapshot;
     this.torn = snapshot.torn;
     this.lines = snapshot.lines;
@@ -2123,9 +2157,7 @@ export class ActionJournal implements ReceiptReader {
       this.index(next);
       if (canonicalRouteInput(next) !== canonicalRouteInput(row)) changed.push(next);
     }
-    if (this.torn) await this.compact();
-    if (changed.length) await this.commit(changed);
-    this.notify();
+    return changed;
   }
 
   /** Append the revisions these rows and facts make, and any freshly minted mappings. */
@@ -2247,13 +2279,10 @@ export class ActionJournal implements ReceiptReader {
       ...[...this.mappings].map((mapping) => ({ mapping })),
       ...[...this.receipts.values()].map((receipt) => ({ receipt })),
     ];
-    await mkdir(dirname(this.path), { recursive: true });
-    await writeFile(
-      `${this.path}.tmp`,
+    writeAtomic(
+      this.path,
       `{"version":8}\n${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
-      "utf8",
     );
-    await renameReplacing(`${this.path}.tmp`, this.path);
     this.header = true;
     this.torn = false;
     this.fresh = [];

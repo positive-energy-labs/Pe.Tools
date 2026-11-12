@@ -79,6 +79,8 @@ public sealed class DeploymentRuntimeContractTests {
             }
             // Mutant, run red once: point ModuleStorage.Output back at the user home fails both lines.
             var state = ProductRuntimeLayout.Current.State.RootPath;
+            // Module output is not run-shaped, so it sits beside the pod-less runs, never among them.
+            Assert.That(new ModuleStorage("census").Output().DirectoryPath, Is.EqualTo(Path.Combine(state, "Runs", "_modules", "census")));
             foreach (var path in new[] {
                          new ModuleStorage("census").Output().DirectoryPath,
                          Pe.Revit.Scripting.Storage.RevitScriptingStorageLocations.ResolveInlineTraceDirectory()

@@ -2,12 +2,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
-import { address, bindWork, keepPointer, workHandle, type Caller } from "@pe/agent-contracts";
+import { address, bindWork, workHandle, type Caller } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { findingsWork, type FindingInput } from "@pe/agent-contracts/slots";
 import { RouteWorkspace } from "@pe/runtime";
 import { subjectCode, uniqueIdSchema, type SubjectRefCode } from "../../../packages/agent-contracts/src/subject-ref.ts";
-import { findingsList, findingsWrite } from "../src/slots/findings.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { approvedPea, human } from "./callers.ts";
 import { fixtureNative } from "./fixture-native.ts";
@@ -16,33 +15,6 @@ const port = subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse("9e9fb
 const row = subjectCode({ keyKind: "name", key: ["Price LBP15A Return", "8 X 4 D"] });
 const input = (id: string, subject: SubjectRefCode, kind: FindingInput["kind"], verdict?: string): FindingInput => ({
   id, subject, kind, text: id, place: { subject }, ...(verdict ? { verdict } : {}),
-});
-
-test("findings.write lands in the document's findings Work with the host's author; findings.list reads it; each author's undo leaves the other's", async () => {
-  let saved: unknown = null;
-  const workspace = new RouteWorkspace({
-    registrations: [{ spec: findingsWork }],
-    store: { getState: async () => structuredClone(saved), setState: async ({ value }) => void (saved = structuredClone(value)) },
-  });
-  const key = bindWork("findings", null, "doc-a");
-  const handle = async () => workHandle(key, (await workspace.view(key, "findings"))!.revision);
-  await findingsWrite(workspace, await handle(), input("p1", port, "claim", "no"), "pea");
-  await findingsWrite(workspace, await handle(), input("h1", row, "claim", "yes"), "person");
-  await expect(findingsWrite(workspace, await handle(), input("n", port, "note", "yes"), "pea")).rejects.toThrow(/verdict/);
-  expect((await findingsList(workspace, key)).map((f) => [f.id, f.by])).toEqual([["p1", "pea"], ["h1", "person"]]);
-  expect((await findingsList(workspace, key, port)).map((f) => f.id)).toEqual(["p1"]);
-  const undone = await workspace.step(key, "findings", "pea", "undo", (await handle()).revision, true);
-  expect(undone.ok).toBe(true);
-  expect((await findingsList(workspace, key)).map((f) => f.id)).toEqual(["h1"]);
-});
-
-test("the keep verb turns a pointer on a subject into a finding; a pointer on a place has no subject to keep", () => {
-  const pointer = { id: "pt-1", route: "fans", target: port, label: "FC-1 port 1 looks undersized", at: "2026-11-10T12:00:00.000Z" };
-  expect(keepPointer(pointer, { kind: "claim", verdict: "yes" })).toEqual({
-    id: "pt-1", subject: port, kind: "claim", verdict: "yes", text: "FC-1 port 1 looks undersized", place: {},
-  });
-  expect(() => keepPointer(pointer, { kind: "note", verdict: "yes" })).toThrow(/verdict/);
-  expect(() => keepPointer({ ...pointer, target: { selected: "[]" } }, { kind: "note" })).toThrow(/subject/);
 });
 
 /*
@@ -66,10 +38,24 @@ async function doors() {
   const peaCaller = approvedPea("findings-doors");
   const post = native.actions({ workspace });
   const routes = createPeRoutes({ workspace, registrations: [{ spec: findingsWork }] });
+  let lists = 0;
   return {
     peaCaller,
     revision,
-    authors: async (at = key) => (await findingsList(workspace, at)).map((f) => [f.id, f.by]),
+    /** Through `findings.list`, as the person; `subject` narrows it to one SubjectRef code. */
+    async authors(subject?: SubjectRefCode) {
+      const id = `list-${++lists}`;
+      const response = await post({ id, key: "findings.list", target: { kind: "document", ref: socket.target }, input: subject ? { subject } : {} }, human);
+      expect(response.status, await response.clone().text()).toBeLessThan(400);
+      const receipt = await native.journal.wait(id);
+      expect(receipt, id).toMatchObject({ state: "succeeded" });
+      return (receipt as unknown as { result: { findings: { id: string; by: string }[] } }).result.findings.map((f) => [f.id, f.by]);
+    },
+    /** A Work the door cannot address (another document's), read from the workspace itself. */
+    held: async (at: typeof key) => Object.keys(((await workspace.view(at, "findings"))?.doc as { findings?: object } | undefined)?.findings ?? {}),
+    /** The raw post, for a write the host must refuse. */
+    post,
+    target: socket.target,
     /** `on` is the route whose own Work handle the caller holds; a row verb on /fans holds Fans'. */
     /** `on: null` sends no handle, as Pea's first call does: the host binds the target document's. */
     /** `on` as a handle is sent as it is: one keyed to another document must not carry the write there. */
@@ -104,6 +90,15 @@ test("findings.write through the action door: the host stamps each caller's auth
   try {
     await d.write("by-person", input("h1", row, "claim", "yes"), human);
     await d.write("by-pea", input("p1", port, "claim", "no"), d.peaCaller);
+    expect(await d.authors()).toEqual([["h1", "person"], ["p1", "pea"]]);
+    expect(await d.authors(port), "findings.list narrowed to one subject").toEqual([["p1", "pea"]]);
+    // The contract refuses a verdict the kind does not declare, before any Work changes.
+    const unwritten = await d.revision();
+    const bad = await d.post({ id: "note-verdict", key: "findings.write", target: { kind: "document", ref: d.target },
+      input: { finding: input("n", port, "note", "yes") } }, d.peaCaller);
+    expect(bad.status).toBe(409);
+    expect(await bad.text()).toMatch(/verdict/);
+    expect(await d.revision()).toBe(unwritten);
     expect(await d.authors()).toEqual([["h1", "person"], ["p1", "pea"]]);
     const forged = { ...input("p2", port, "note"), by: "person", at: new Date().toISOString() };
     const before = await d.revision();
@@ -167,7 +162,7 @@ test("findings.write handed another document's handle lands in the admitted docu
   try {
     const other = bindWork("findings", address("C:/other.rvt"));
     await d.write("wrongdoc", input("x1", port, "note"), human, workHandle(other, 0));
-    expect(await d.authors(other), "the other document's findings Work").toEqual([]);
+    expect(await d.held(other), "the other document's findings Work").toEqual([]);
     expect(await d.authors()).toEqual([["x1", "person"]]);
     expect(d.stored()).toHaveLength(1);
   } finally { await d.close(); }

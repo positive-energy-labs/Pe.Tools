@@ -1,11 +1,12 @@
 import { ownFindingsLeft, undoOwnFinding } from "../route/host";
-import { kernelCommands } from "../route/slots/kernel-commands.ts";
+import { findingCommand } from "../route/slots/findings/index.ts";
 import { hostReadSource } from "./host-read-source.ts";
 import { writeReject } from "./catalog-work-reviews";
 import { harnessClient } from "../workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "../workbench/config";
 import { z } from "zod";
 import { readableRefusal } from "../route/readable-refusal";
+import { reportFault } from "../host/diagnostics";
 
 /** Host refusals carry serialized issues; local Value decoding throws the same issues. */
 function valueRefusal(error: unknown, read: string): string {
@@ -65,10 +66,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof undoOwnFinding>[1] } = {}) {
   const cleanups: (() => void)[] = [];
   try {
-  // Every route carries the kernel's commands (route/slots/kernel-commands.ts); a route's own id wins. A
-  // Workless mount (a Page projection) has them too, so a shared row body draws them refused, not thrown.
-  // The mount adds them, not `route()`: their contracts are the catalog, and `route()` is the Pod surface.
-  const spec = { ...module.spec, commands: { ...kernelCommands, ...module.spec.commands } } as TypedRoute["spec"];
+  // Every route carries the kernel's one command, the person's `finding` (ADR 0035 rule 9); a route's own
+  // id wins. A Workless mount (a Page projection) has it too, so a shared row body draws it refused, not
+  // thrown. The mount adds it, not `route()`: its contract is the catalog, and `route()` is the Pod surface.
+  const spec = { ...module.spec, commands: { finding: findingCommand, ...module.spec.commands } } as TypedRoute["spec"];
   const edits = spec.edits;
   const own = edits?.work.route ?? spec.key;
   const ownerConfigs = edits?.owners ?? {};
@@ -434,7 +435,17 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         if (queryPage && (disposed || !input.custody.current() || gate.read()?.pageEpoch !== queryPage))
           throw Error("This read finished for an earlier Page; run it again");
         results.set(id,result); syncReads(true); return result;
-      } catch(error) {problems.set(id,error instanceof Error?error.message:String(error));throw error;}
+      } catch(error) {
+        // A request or an answer its contract refuses reads as one sentence, as a Value does (`valueRefusal`);
+        // the issue list (a whole regex, for a format) is diagnostics' and never the person's.
+        const raw=error instanceof Error?error.message:String(error);
+        const at=error instanceof z.ZodError?error.issues[0]?.path.join("."):"";
+        const said=readableRefusal(error,`${cmd.label} does not match its contract${at?` at ${at}`:""}. The detail is in the log.`);
+        problems.set(id,said);
+        if(said === raw) throw error;
+        reportFault({code:"action.failed",routeCode:spec.key,readingKind:cmd.entry},error);
+        throw Error(said,{cause:error});
+      }
       finally {notify();}
     }
     if (apply) {

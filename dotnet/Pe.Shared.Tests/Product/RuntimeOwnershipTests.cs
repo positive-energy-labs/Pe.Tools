@@ -134,6 +134,7 @@ namespace Pe.Revit.Tests {
         [TestCase("../escape")]
         [TestCase("a/b")]
         [TestCase("_no-pod")]
+        [TestCase("_modules")]
         [TestCase("")]
         public void A_run_path_refuses_a_pod_id_that_is_not_one_folder_name(string podId) =>
             Assert.That(() => ProductRuntimeLayout.Current.State.RunPath(podId, "run"), Throws.ArgumentException);
@@ -198,6 +199,29 @@ namespace Pe.Revit.Tests {
                 var runtime = ProductRuntimeLayout.For(lane, root, null);
                 Assert.That(runtime.RootPath, Is.EqualTo(sdkRoot));
                 Assert.That(runtime.State.ApsTokenStorePath, Is.EqualTo(sdkRoot + @"\state\aps-auth\tokens.json"));
+            } finally {
+                Environment.SetEnvironmentVariable("LOCALAPPDATA", previous);
+            }
+        }
+
+        // Census R3: an authored PeScripts.csproj imports $(LOCALAPPDATA), which MSBuild reads from the environment
+        // variable, so bootstrap writes the props file under that variable, not under the known folder. Mutant,
+        // run red once: resolve from the known folder alone (drop the environment read in `MachinePropsPath`)
+        // fails the first two asserts.
+        [Test, NonParallelizable]
+        public void The_machine_props_file_is_written_where_the_import_reads_it() {
+            var previous = Environment.GetEnvironmentVariable("LOCALAPPDATA");
+            var known = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var redirected = Path.Combine(Path.GetTempPath(), $"pe-redirected-{Guid.NewGuid():N}");
+            try {
+                Environment.SetEnvironmentVariable("LOCALAPPDATA", redirected);
+                Assert.That(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Is.EqualTo(known), "the known folder ignores the variable");
+                Assert.That(ProductPathing.MachinePropsPath, Does.StartWith(redirected + Path.DirectorySeparatorChar));
+                // What MSBuild expands the import to is the file bootstrap writes.
+                Assert.That(ProductPathing.MachinePropsImport.Replace("$(LOCALAPPDATA)", redirected), Is.EqualTo(ProductPathing.MachinePropsPath));
+                // Without the variable the known folder stands in.
+                Environment.SetEnvironmentVariable("LOCALAPPDATA", null);
+                Assert.That(ProductPathing.MachinePropsPath, Is.EqualTo(Path.Combine(known, VendorName, "PeScripts.props")));
             } finally {
                 Environment.SetEnvironmentVariable("LOCALAPPDATA", previous);
             }

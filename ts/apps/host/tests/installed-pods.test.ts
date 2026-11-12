@@ -7,7 +7,9 @@ import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { readStoredNotices } from "@pe/host-contracts/store";
 import { PictureCaptures } from "../src/captures-route.ts";
+import { storedNoticesPath } from "../src/notice-feed.ts";
 import { importShippedPods } from "../src/installed-pods.ts";
 import { listPackages } from "../src/packages.ts";
 import { exportPod, importRecordPath } from "../src/pod-transfer.ts";
@@ -111,4 +113,19 @@ test("the real examples stage and first-boot import unchanged: same members, pro
   expect(new Set(landed.contributions.map((c) => c.kind))).toEqual(
     new Set(["script", "page", "skill", "member"]),
   );
+});
+
+test("a ledger that does not decode is discarded with one notice, and the shipped pod is offered again", async () => {
+  const posted = () =>
+    readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === ledger);
+  await mkdir(join(root, "state"), { recursive: true });
+  await writeFile(ledger, "{ this is not JSON");
+
+  // Before ADR 0039 the read's fallback covered a missing ledger only, and this boot threw.
+  expect((await boot()).outcomes.map((o) => o.outcome)).toEqual(["imported"]);
+  expect(JSON.parse(await readFile(ledger, "utf8")).offered).toBeTypeOf("object");
+  expect(posted()).toMatchObject([{ class: "discard", place: "Shipped Pods ledger" }]);
+
+  expect((await boot()).outcomes.map((o) => o.outcome)).toEqual(["offered-before"]);
+  expect(posted()).toHaveLength(1);
 });

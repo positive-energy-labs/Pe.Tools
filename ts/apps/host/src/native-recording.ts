@@ -6,8 +6,9 @@ import { writeArtifact } from "./page-artifacts.ts";
  * reaches a live input. Coverage is only the kinds a bundle durably holds, never a whole document.
  */
 import { randomUUID, createHash } from "node:crypto";
-import { appendFile, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { writeAtomic } from "@pe/host-contracts/store";
 import { Cause, Clock, Effect, Exit, Layer, Option, Result, Schema } from "effect";
 import { attemptFor, CurrentInputConsumption } from "./input-occurrence.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -518,11 +519,7 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
     used += size;
     const path = join(dir, READ_SETS, `${record.id}.json`);
     const kept = yield* Effect.exit(
-      io(async () => {
-        await mkdir(join(dir, READ_SETS), { recursive: true });
-        await writeFile(`${path}.tmp`, bytes, { flag: "w" });
-        await rename(`${path}.tmp`, path);
-      }),
+      io(async () => writeAtomic(path, bytes)),
     );
     if (Exit.isFailure(kept)) {
       used -= size;
@@ -551,11 +548,7 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
         pointWrites.add(point.id);
         const path = join(dir, "points", `${point.id}.json`);
         // Same reservation and atomic metadata durability as read sets. Failed IO remains charged.
-        const kept = yield* Effect.exit(io(async () => {
-          await mkdir(join(dir, "points"), { recursive: true });
-          await writeFile(`${path}.tmp`, bytes, { flag: "wx" });
-          await rename(`${path}.tmp`, path);
-        }));
+        const kept = yield* Effect.exit(io(async () => writeAtomic(path, bytes)));
         pointWrites.delete(point.id);
         if (Exit.isFailure(kept)) return yield* Effect.failCause(kept.cause);
         loaded.points.push(point.id);

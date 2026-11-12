@@ -111,7 +111,9 @@ export interface InputPort {
 }
 export class RefreshNeeded extends Error {}
 export class RefusedPartition extends Error {}
-const inputLabel = (name: string, args: unknown) => `${name} ${canonicalJson(args)}`;
+/** A lasting refusal's reason reaches the pane, so it names the input in words, never its args as JSON. */
+const moved = (name: string, args: unknown, when = "while this was being read") =>
+  `The ${name === "resource" && typeof args === "object" && args && "kind" in args ? String(args.kind) : name} input changed ${when}.`;
 export interface ReadContext {
   read<I, O>(read: Read<I, O> | Leaf<I, O>, args: I): Promise<O>;
   /** Work by key, or a target document's Work for `owner` given its document ref (a Pod's door: no module import). */
@@ -181,7 +183,7 @@ export async function evaluate<I, O>(
           trace.push({ recipe, name: definition.name, args, outcome: "answered", hash });
           if ("leaf" in definition) {
             if (port.revision(definition.name, args) !== revision)
-              throw new RefreshNeeded(`${inputLabel(definition.name, args)} changed while reading`);
+              throw new RefreshNeeded(moved(definition.name, args));
             if (definition.validate) checks.set(recipe, { definition, args, hash, revision });
           }
           return data;
@@ -271,11 +273,11 @@ export async function evaluate<I, O>(
       hash,
     });
     if (hash !== check.hash)
-      throw new RefreshNeeded(`${inputLabel(check.definition.name, check.args)} changed during evaluation`);
+      throw new RefreshNeeded(moved(check.definition.name, check.args));
   }
   for (const check of checks.values())
     if (port.revision(check.definition.name, check.args) !== check.revision)
-      throw new RefreshNeeded(`${inputLabel(check.definition.name, check.args)} invalidated before publication`);
+      throw new RefreshNeeded(moved(check.definition.name, check.args, "before this could be shown"));
   const dependencies = trace.sort(
     (a, b) => a.recipe.localeCompare(b.recipe) || a.outcome.localeCompare(b.outcome),
   );
@@ -497,14 +499,27 @@ export class Publications {
     const pending = (flight && this.flightInputs.get(flight)) ?? { inputs: [], superseded: false };
     slot.pending = pending;
     if (!flight) {
-      flight = evaluate(definition, args, {
+      const tracked: InputPort = {
         ...port,
         take: (name, args, context) => {
           if (pending.superseded) throw new RefreshNeeded("Work basis superseded");
           pending.inputs.push({ name, args });
           return port.take(name, args, context);
         },
-      }).then((value) => {
+      };
+      // A first publication has no Value to label stale, and its refusal sends no event (below), so
+      // nobody would read again: the host re-evaluates a raced read itself. A slot that retains a
+      // Value keeps the labelled old Value and its publication event instead.
+      // ponytail: three evaluations, no backoff; an input that outruns the read is a lasting refusal.
+      const settle = async (left: number): Promise<Value<O>> => {
+        try {
+          return await evaluate(definition, args, tracked);
+        } catch (error) {
+          if (!(error instanceof RefreshNeeded) || !left || pending.superseded) throw error;
+          return settle(left - 1);
+        }
+      };
+      flight = settle(slot.published?.value ? 0 : 2).then((value) => {
         const version = ++owner.version;
         return immutable({ key, generation, version, value, state: "current" as const });
       });

@@ -514,7 +514,12 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           work: workReadContext(current, scoped(current)),
         },
         resource: (request) =>
-          takeOwner(
+          // The session inventory is no resource adapter's (`fallback` refuses it). A graph read takes
+          // it from the owner the stream door uses (`retainedResource`), as that owner's own taking:
+          // inside `takeOwner` it would be one taking nested in another on the same consumption.
+          (request as { kind: string }).kind === "inventory"
+            ? invoke(inventory.list())
+            : takeOwner(
             current,
             { kind: "resource", key: "snapshot", args: canonicalJson(json(request)) },
             () => {

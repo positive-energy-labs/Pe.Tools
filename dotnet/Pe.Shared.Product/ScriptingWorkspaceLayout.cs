@@ -24,12 +24,6 @@ public sealed record ScriptingWorkspaceLayout(string RootPath) {
     public string ResolveProjectFilePath(string? workspaceKey) =>
         Path.Combine(this.ResolveWorkspaceRoot(workspaceKey), ProjectFileName);
 
-    public string ResolveAgentInstructionsPath(string? workspaceKey) =>
-        Path.Combine(this.ResolveWorkspaceRoot(workspaceKey), AgentInstructionsFileName);
-
-    public string ResolveReadmePath(string? workspaceKey) =>
-        Path.Combine(this.ResolveWorkspaceRoot(workspaceKey), ReadmeFileName);
-
     public string ResolvePodManifestPath(string? workspaceKey) =>
         Path.Combine(this.ResolveWorkspaceRoot(workspaceKey), PodManifestFileName);
 

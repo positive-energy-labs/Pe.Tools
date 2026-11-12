@@ -3,6 +3,7 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
 import { Code, stringify } from "@pe/kit/lang/code";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { NativeObservationScope } from "#/revit/observation";
 import type { DocumentRef } from "@pe/agent-contracts";
 import { nameOf } from "#/route/typed-route";
@@ -102,12 +103,12 @@ export function Operation({ ctx }: { ctx: OpsContext }) {
                   setValue(result as Value);
                   setFailure(null);
                 })
-                .catch((error) => setFailure(String(error)))
+                .catch((error) => setFailure(error instanceof Error ? error.message : String(error)))
             }
           >
             Run read
           </Button>
-          {failure && <p role="alert">{failure}</p>}
+          {failure && <OutcomeLine kind="refused" label="Read refused" says={failure} />}
           {value ? (
             <section className="flex flex-col gap-2">
               <h2>

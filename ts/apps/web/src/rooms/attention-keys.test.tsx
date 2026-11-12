@@ -10,7 +10,7 @@ import { AttentionScope } from "#/attention";
 import { DEMO_PLAN, DEMO_ROOMS, DEMO_VIEW } from "./demo";
 import { roomsPageSchema } from "./page";
 import { RoomsPlan } from "./plan";
-import { roomRows } from "./table";
+import { roomRows } from "./rows";
 import { regionSubject } from "./subject";
 import { bindings } from "./bindings";
 import type { RoomsContext } from "./route";
@@ -27,7 +27,7 @@ test("a region hovered or picked as its regionSubject draws hovered and selected
     disconnect() {}
   });
   const [target, other] = DEMO_ROOMS.regions;
-  const ctx = { value: { value: { snapshot: DEMO_ROOMS } }, page: { read: () => ({ picked: [target!.guid] }) }, cells: { doc: null }, target: null } as unknown as RoomsContext;
+  const ctx = { value: { value: { snapshot: DEMO_ROOMS } }, page: { read: () => ({ room: { kind: "ids", ids: [regionSubject(target!.guid)] } }) }, cells: { doc: null }, target: null } as unknown as RoomsContext;
   const bound = bindings(ctx);
   const registry = makeAtomRegistry();
   const doc = "s/1";

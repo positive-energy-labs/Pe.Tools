@@ -37,12 +37,11 @@ import { LocalOpError } from "./local-error.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { stateTree } from "@pe/host-contracts/service-identity";
-import { writeHomeFile } from "@pe/host-contracts/store";
+import { writeAtomic, writeHomeFile } from "@pe/host-contracts/store";
 import {
   localOpFileError,
   makeDirectory,
   readDirectoryEntriesOrEmpty,
-  writeFileStringAtomic,
 } from "./files/index.ts";
 
 /**
@@ -309,7 +308,11 @@ export const writeRun = (
       const folder = join(runsFolder(pod, ctx), runId);
       yield* makeDirectory(folder, key);
       for (const [name, content] of Object.entries(files))
-        yield* writeFileStringAtomic(join(folder, name), content, key);
+        // Run output is machine state, so it takes the kernel's atomic write, not the home door.
+        yield* Effect.try({
+          try: () => writeAtomic(join(folder, name), content),
+          catch: (error) => localOpFileError(key, error),
+        });
       return folder;
     }),
   );

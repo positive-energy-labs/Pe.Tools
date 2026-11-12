@@ -2,6 +2,8 @@ import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
+import { readStoredNotices } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "../src/notice-feed.ts";
 import { setup } from "./schedule-recorded-fixture.ts";
 import { fixtureNative } from "./fixture-native.ts";
 
@@ -28,24 +30,27 @@ test("E8 cold HTTP reentry converts a real running native write to unknown witho
   } finally { release(); await pending; await cold?.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
-test("E8 corrupt journal refuses a real action and preserves the exact malformed bytes", async () => {
+// ADR 0039 rule 1 reverses this journey. It used to assert that a corrupt journal refuses every
+// action and keeps its malformed bytes, which left the host unable to act until a person deleted
+// the file. The journal is `discard`: it is deleted with one notice and the host acts on an empty
+// journal. The boundary that still holds is the test above: a journal that decodes never
+// redispatches a write it knows was running. A journal that does not decode knows nothing.
+test("E8 corrupt journal is discarded with one notice, and a real action then runs", async () => {
   const f = await setup();
   const admission = await f.admission();
   const dir = await mkdtemp(join(tmpdir(), "pe-corrupt-journal-"));
   const path = join(dir, "partition-operations.json");
-  const corrupt = Buffer.from("corrupt journal header\n", "utf8");
-  await writeFile(path, corrupt);
+  await writeFile(path, Buffer.from("corrupt journal header\n", "utf8"));
   const cold = await fixtureNative(dir);
   try {
-    let refused = false;
-    try { refused = (await cold.actions()(admission)).status >= 400; }
-    catch { refused = true; } // Startup itself can refuse corrupt durable storage.
-    expect(refused).toBe(true);
-    expect(await readFile(path)).toEqual(corrupt);
-    expect(cold.calls).toEqual([]);
+    const response = await cold.actions()(admission);
+    expect(response.status, await response.clone().text()).toBeLessThan(400);
+    expect((await readFile(path, "utf8")).split("\n")[0]).toBe('{"version":8}');
+    expect(
+      readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === path),
+    ).toMatchObject([{ class: "discard", place: "Action journal" }]);
   } finally {
-    // The rejected storage load is also reported by its owning finalizer.
-    await cold.close().catch(() => {});
+    await cold.close();
     await rm(dir, { recursive: true, force: true });
   }
 });

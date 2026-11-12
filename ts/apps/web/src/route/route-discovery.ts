@@ -101,7 +101,7 @@ export function createRouteDiscovery() {
     entries,
     keys: () => [...registered.keys()],
     get: (key: string) => registered.get(key),
-    /** The one route that declares this action; a kernel action several routes carry (findings.write) names none. */
+    /** The one route that declares this action; a kernel action no route declares (findings.write, which the mount adds) names none. */
     actionRoute(key: string) {
       const owners = entries().filter(({ typed }) =>
         Object.values(typed.spec.commands).some((verb) =>

@@ -1,10 +1,19 @@
 import { z } from "zod";
 import { receiptSchema, type Receipt } from "@pe/agent-contracts";
 
-/** Decode only the current epoch. Unsupported journals grant no retained or resumed authority. */
+/**
+ * Decode only the current epoch. Unsupported journals grant no retained or resumed authority.
+ * Null is another epoch, which includes a header that is not JSON. A corrupt line throws. The
+ * journal's load turns both into one discard with a notice (ADR 0039); nothing else calls this.
+ */
 export function readJournalSnapshot(bytes: Buffer) {
   const lines = bytes.toString("utf8").split("\n");
-  const version = JSON.parse(lines[0]!)?.version;
+  let version: unknown;
+  try {
+    version = JSON.parse(lines[0]!)?.version;
+  } catch {
+    return null;
+  }
   if (version !== 8) return null;
   const receipts: Receipt[] = [];
   const mappings: [string, string][] = [];

@@ -60,6 +60,7 @@ export async function fixture(
     snapshot?: typeof snapshot;
     roster?: typeof roster;
     document?: HostSessionInventory["Service"]["document"];
+    list?: HostSessionInventory["Service"]["list"];
     read?: (input: NativeReadInput) => unknown;
     inventory?: BridgeSessionsListData;
     freshness?: () => string;
@@ -145,7 +146,7 @@ export async function fixture(
           document: recorded.document ?? (() => Effect.succeed({ ...ref, address: path })),
           session: () => Effect.succeed({ sessionId: ref.session }),
           attachment: () => Effect.succeed({ sessionId: ref.session }),
-          list: () => native ? Effect.succeed(native.inventory) : Effect.die("No inventory list requested"),
+          list: recorded.list ?? (() => native ? Effect.succeed(native.inventory) : Effect.die("No inventory list requested")),
           subscribe: () => () => {},
         }),
         native: Layer.succeed(HostNativeRead, {

@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
 import { NodeServices } from "../../../host/tests/family-attach-host.fixture.ts";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
-import { bindWork, canonicalRouteInput, familyDraftRouteState, READING_MAX_FRAME_BYTES } from "@pe/agent-contracts";
+import { bindWork, canonicalRouteInput, familyDraftRouteState, podMemberCode, READING_MAX_FRAME_BYTES } from "@pe/agent-contracts";
 import { module } from "./route";
 import { mountTypedRoute } from "../shell/typed-mount.ts";
 import { createWorkFeedClient } from "../shell/work-feed-client.ts";
@@ -91,7 +91,7 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
   const stop = bindActionReadings(readings);
   vi.stubGlobal("fetch", request);
   const door = createWorkFeedClient(readings, { submit: command => withInvocationContext({caller}, () => submitAction(command)), write: async () => { throw Error("No cell write"); } });
-  const search = new URLSearchParams({pod: JSON.stringify(member.pod), path: JSON.stringify(member.path)});
+  const search = new URLSearchParams({member: JSON.stringify({kind: "ids", ids: [podMemberCode(member)]})});
   const mount = mountTypedRoute(module, { address: {read: () => search, write() {}, subscribe: () => () => {}},
     target: {kind: "host"}, work: {address: null, open: null}, fixture: null, custody: {current: () => true}, memory: () => ({}) },
     fingerprint, {work: door});
