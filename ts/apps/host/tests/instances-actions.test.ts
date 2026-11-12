@@ -1,9 +1,9 @@
 import { noticeRows } from "../src/notice-feed.ts";
 import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
 import { Layer, Effect } from "effect";
-import { afterEach, expect, test } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, rmdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { instancesSessionSelection } from "@pe/agent-contracts";
@@ -23,6 +23,25 @@ import { acquisitionSessionId, foldAcquisitions } from "../src/acquisition.ts";
 import { runSemanticAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 // Instances owns its SDK transport. These HTTP witnesses expose no bridge attachment or dispatch.
 const sdkOnlyBridge = detachedBridge();
+vi.mock("node:fs/promises", async (original) => {
+  const fs = await original<typeof import("node:fs/promises")>();
+  return { ...fs, rmdir: vi.fn(fs.rmdir) };
+});
+
+test.each(["EBUSY", "EPERM", "ENOTEMPTY"])("cleanup keeps a folder on rmdir %s and still stops its Revit", async (code) => {
+  const { f, acquired } = await acquisitionSetup();
+  let blocked = "";
+  vi.mocked(rmdir).mockImplementationOnce(async (path) => {
+    blocked = String(path);
+    throw Object.assign(Error(code), { code });
+  });
+  const receipt = await f.admit("instances.cleanup", { acquisition: acquired.id, unsaved: "discard" });
+  expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
+  expect(f.calls.some(args => args[0] === "session" && args[1] === "stop")).toBe(true);
+  expect((receipt as { result?: { kept: string[] } }).result?.kept).toContain(blocked);
+  expect(existsSync(blocked)).toBe(true);
+});
+
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const f of cleanup.splice(0).reverse()) await f();
@@ -1447,7 +1466,7 @@ test.each([
   },
 );
 
-/* ── ADR 0038: the host's own doors hold Pea's guarded acts ───────────────────────────── */
+/* â”€â”€ ADR 0038: the host's own doors hold Pea's guarded acts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 // Mutant that turns every held expectation below red: `guards` in src/guards.ts returning `false`
 // (the caller check replaced by false). `guards` returning `true` turns the person's rows red, and
 // `isProject` returning `true` turns the family rows red.

@@ -142,6 +142,8 @@ async function removeReserved(root: string, path: string) {
 async function removeEmptyAcquisitionRoot(root: string): Promise<string[]> {
   const kept: string[] = [];
   async function prune(path: string): Promise<void> {
+    const before = kept.length;
+    try {
     const stat = await lstat(path).catch((error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") return null;
       throw error;
@@ -151,14 +153,11 @@ async function removeEmptyAcquisitionRoot(root: string): Promise<string[]> {
       kept.push(path);
       return;
     }
-    const before = kept.length;
     for (const name of await readdir(path)) await prune(join(path, name));
-    try {
       await rmdir(path);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === "ENOENT") return;
-      if (code !== "ENOTEMPTY" && code !== "EEXIST") throw error;
       if (kept.length === before) kept.push(path);
     }
   }
