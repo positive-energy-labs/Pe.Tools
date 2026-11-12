@@ -39,3 +39,24 @@ for (const [spec, previous, removed, staged, dropped] of [
     } finally { await rm(dir, { recursive: true, force: true }); }
   });
 }
+
+test("ducts v1 is discarded rather than upgraded as pre-h2 Work", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-work-upgrade-old-"));
+  const store = fileRouteDocumentStore(dir);
+  const spec = ductsRouteState;
+  const key = bindWork(spec.route, null), targetKey = workKey(key);
+  const workspace = new RouteWorkspace({ store, registrations: [{ spec }] });
+  const before = readStoredNotices(storedNoticesPath());
+  try {
+    await store.setState({ targetKey, route: spec.route, value: {
+      version: 1, schemaVersion: 1, revision: 7,
+      doc: { ...spec.schema.parse({}), labelParameter: { edit: { value: "Mark" } },
+        designFriction: { edit: { value: 0.12 } } }, history: [],
+    } });
+    expect(await workspace.readUncaptured(key, spec.route)).toBeNull();
+    expect(await store.getState({ targetKey, route: spec.route })).toBeNull();
+    expect(readStoredNotices(storedNoticesPath()).slice(before.length)).toMatchObject([
+      { class: "discard", reason: expect.stringContaining("schemaVersion") },
+    ]);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
