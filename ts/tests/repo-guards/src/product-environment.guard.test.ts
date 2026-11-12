@@ -9,6 +9,8 @@ const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const testScripts = new Set([
   "tools/release-sandbox/Check.ps1",
   "tools/release-sandbox/CheckAutomatic.ps1",
+  // Times a cold host in a throwaway product root, so it must build that root's env itself.
+  "ts/apps/host/scripts/time-cold-start.ts",
 ]);
 const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
   cwd: root,

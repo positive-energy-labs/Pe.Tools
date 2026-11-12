@@ -23,7 +23,7 @@ import { createJiti } from "jiti";
 import { readdir, mkdir, writeFile, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { familyFixturesDir } from "../checkout-paths.ts";
-import { routeStartupSourceHash, writeRouteStartupReceipt } from "../../../packages/host-contracts/src/route-startup.ts";
+import { routeStartupSourceHash, writeRouteStartupReceipt } from "@pe/host-contracts/route-startup";
 import {
   buildBuiltinClosures,
   routeSourceHash,
