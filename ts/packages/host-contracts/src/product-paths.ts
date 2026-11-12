@@ -151,13 +151,13 @@ export function probeFirmHome(facts: HomeFacts): FirmHome {
     : { root: null, looked, ...(found.length ? { refused: found } : {}) };
 }
 
-let probed: { firm: FirmHome; at: number } | undefined;
+let probed: { firm: FirmHome; at: number; facts?: HomeFacts } | undefined;
 
 /**
  * The firm home. The dev override `PE_TOOLS_SHARED_ROOT` names it outright and replaces the probe;
- * it still needs the `firm` marker. Without `facts` this reads the machine: a found home is kept
- * for the process, and a miss is probed again after 30 s, so a drive that mounts late (Google
- * Drive after sign-in) is picked up.
+ * it still needs the `firm` marker. A found home is cached but its marker is re-read on each call.
+ * A miss is probed again after 30 s, so a drive that mounts late (Google Drive after sign-in) is
+ * picked up. Injected facts use the same cache, scoped to that facts object.
  */
 export function firmHome(facts?: HomeFacts): FirmHome {
   const override = process.env[productPathNames.sharedRootVariable]?.trim();
@@ -166,9 +166,13 @@ export function firmHome(facts?: HomeFacts): FirmHome {
     const proven = markerTier((facts ?? machineFacts([])).marker(told)) === "firm";
     return { root: proven ? told : null, looked: [told] };
   }
-  if (facts) return inside(probeFirmHome(facts));
-  if (!probed || (!probed.firm.root && Date.now() - probed.at > 30_000))
-    probed = { firm: probeFirmHome(machineFacts()), at: Date.now() };
+  if (
+    probed?.facts === facts && probed?.firm.root &&
+    markerTier((facts ?? machineFacts([])).marker(probed.firm.root)) !== "firm"
+  )
+    probed = { ...probed, firm: { ...probed.firm, root: null } };
+  if (!probed || probed.facts !== facts || (!probed.firm.root && Date.now() - probed.at > 30_000))
+    probed = { firm: probeFirmHome(facts ?? machineFacts()), at: Date.now(), facts };
   return inside(probed.firm);
 }
 const inside = (firm: FirmHome): FirmHome => {
