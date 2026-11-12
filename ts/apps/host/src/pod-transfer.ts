@@ -270,18 +270,21 @@ export async function installArchive(
   const folder = localFolder(folderName ?? id);
   const podsRoot = options.podsRoot ?? productPodsRootPath();
   // A new pod lands in the user home, and its id must be free in every home (ADR 0037 rule 4).
-  const installed = (await listPackages(options.podsRoot ?? productPodsRoots())).packages.find(
-    (p) => p.id === id,
-  );
+  const everyRoot = options.podsRoot ?? productPodsRoots();
+  const installed = (await listPackages(everyRoot)).packages.find((p) => p.id === id);
   if (installed)
     throw new TransferRefused(
       `Pod id '${id}' is already installed at '${installed.directory}'.`,
       409,
     );
   const directory = join(podsRoot, folder);
-  // An absent folder is the expected case; any other failure is not swallowed.
-  if (await lstat(directory).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return null; }))
-    throw new TransferRefused(`Pod folder already exists: ${directory}`, 409);
+  // The folder name is an address too, unique across every home (`resolvePackageIdentity`), so it
+  // must be free in each. An absent folder is the expected case; any other failure is not swallowed.
+  for (const root of [everyRoot].flat()) {
+    const taken = join(root, folder);
+    if (await lstat(taken).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return null; }))
+      throw new TransferRefused(`Pod folder already exists: ${taken}`, 409);
+  }
   for (const [path, bytes] of entries) {
     if (/^pages\/[^/]+\/index\.html$/.test(path)) validatePageHtml(bytes.toString("utf8"), true);
     const sha = CAPTURE_MEMBER.exec(path);

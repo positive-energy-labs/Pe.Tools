@@ -23,6 +23,7 @@ import type { PeaRuntimeCapabilities } from "@pe/runtime";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
 import { productAgentPath } from "./product-paths.ts";
+import { homesFound } from "@pe/host-contracts/product-paths";
 import { processCustody } from "./machine.ts";
 
 /** Status must answer even when the installed manifest is unreadable; the throw belongs to boot. */
@@ -53,7 +54,10 @@ export function getHostStatus(
   capabilities: PeaRuntimeCapabilities = hostCapabilities,
   runtimeRefusal: string | null = null,
 ) {
+  const found = homesFound();
   return Effect.succeed({
+    homes: found.homes.map(({ tier, root, found }) => ({ tier, path: root, found })),
+    firmHomeNotice: found.firmNotice,
     runtimeMatch: bridge.connected
       ? (bridge.runtimeMatch ?? "unknown")
       : runtimeRefusal

@@ -129,3 +129,13 @@ test("a ledger that does not decode is discarded with one notice, and the shippe
   expect((await boot()).outcomes.map((o) => o.outcome)).toEqual(["offered-before"]);
   expect(posted()).toHaveLength(1);
 });
+
+test("the wait for the shipped-pod import is bounded: a run that never settles does not hang a reader", async () => {
+  const { settledWithin } = await import("../src/installed-pods.ts");
+  const started = Date.now();
+  await settledWithin(new Promise(() => {}), 30);
+  expect(Date.now() - started).toBeLessThan(2_000);
+  // A failed run is over too, and no run is no wait.
+  await settledWithin(Promise.reject(Error("refused")), 60_000);
+  await settledWithin(undefined, 60_000);
+});

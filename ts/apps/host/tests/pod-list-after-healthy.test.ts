@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
@@ -8,7 +9,9 @@ import { bootHost } from "./real-server.ts";
 // The host answers healthy while the shipped-pod import still runs, so the first listing waits for
 // it. Alone in its file: the import is memoized per process, and only the first boot runs it.
 // Mutant, run red once (2026-11-11): drop `yield* shippedPodsImported(ctx)` from `listPods`.
-test("the first pod.list after healthy on a fresh home lists every shipped pod", async () => {
+// The default pod: made at this start, after the start census, so it is activated by name. Before
+// that fix (2026-11-12) this test was red: the four shipped pods listed and `default` did not.
+test("the first pod.list after healthy on a fresh home lists every shipped pod and the default pod", async () => {
   const shipped = (
     await listPackages(join(hostOwnership.sourceRoot!, "examples", "pods"))
   ).packages.map((pod) => pod.id);
@@ -25,6 +28,9 @@ test("the first pod.list after healthy on a fresh home lists every shipped pod",
     expect(response.status, text).toBe(200);
     const listed = (JSON.parse(text) as { pods: { id: string }[] }).pods.map((pod) => pod.id);
     expect(listed).toEqual(expect.arrayContaining(shipped));
+    // The default pod is the user home's own: created at this start, it lists at this start.
+    expect(listed).toContain("default");
+    expect(existsSync(join(process.env.PE_TOOLS_PRODUCT_HOME!, "Pods", "default", "pod.json"))).toBe(true);
   } finally {
     await host.close();
   }

@@ -8,7 +8,9 @@ import { createServer } from "node:net";
 import { connectCdp, openBrowser, type BrowserSession, type CdpClient } from "@pe/browser";
 import type { PictureCaptures } from "./captures-route.ts";
 import { pagePublicationSchema, type PagePublication } from "@pe/host-contracts/pe-api";
-import { validatePageHtml, writeArtifact } from "./page-artifacts.ts";
+import { validatePageHtml } from "./page-artifacts.ts";
+import type { PagesRoots } from "./page-libraries.ts";
+import { writeHome } from "./settings.ts";
 
 export const escapeHtml = (text: string) =>
   text.replace(
@@ -318,9 +320,36 @@ async function capturePage(
   }
 }
 
+/** One Pages folder, or the Pages folder of every home in list order; a thunk reads the homes at publish time. */
+export type PagesSource = PagesRoots | (() => PagesRoots);
+
+/**
+ * The Pages folder that holds a slug, in whichever home has it; a new slug starts in the first
+ * (user) home. A slug two homes hold is refused with both paths: publishing would make a third
+ * claim, and no listing admits a twin (ADR 0037 rule 4).
+ */
+export async function pageHomeRoot(source: PagesSource, slug: string): Promise<string> {
+  const roots = [typeof source === "function" ? source() : source].flat();
+  const holding: string[] = [];
+  for (const root of roots) {
+    const names = await readdir(root).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return [] as string[];
+      throw error;
+    });
+    if (names.some((name) => name.toLowerCase() === slug.toLowerCase())) holding.push(root);
+  }
+  if (holding.length > 1)
+    throw new StepFailure(
+      `Page '${slug}' is claimed by ${holding.map((root) => join(root, slug)).join(" and ")}: none is published until the name is unique.`,
+      409,
+      "refused",
+    );
+  return resolve(holding[0] ?? roots[0]!);
+}
+
 /** Keep the exact authored HTML and existing .state; candidate capture precedes atomic replacement. */
 export async function preparePagePublication(
-  root: string,
+  source: PagesSource,
   raw: unknown,
   origin: string,
   library: (path: string) => string | null,
@@ -329,7 +358,8 @@ export async function preparePagePublication(
   const input = pagePublicationSchema.parse(raw);
   validatePageHtml(input.html);
   library("/pages/pe.js"); // The host's own Page client must render before any browser starts.
-  const directory = join(resolve(root), input.slug);
+  const root = await pageHomeRoot(source, input.slug);
+  const directory = join(root, input.slug);
   const index = join(directory, "index.html");
   await ordinaryPath(index);
   const names = await readdir(root).catch((error) => {
@@ -345,8 +375,8 @@ export async function preparePagePublication(
 }
 
 /** The frozen version is checked at the actual file effect, after consent and capture. */
-export async function pageVersion(root: string, slug: string): Promise<string | null> {
-  const index = join(resolve(root), slug, "index.html");
+export async function pageVersion(source: PagesSource, slug: string): Promise<string | null> {
+  const index = join(await pageHomeRoot(source, slug), slug, "index.html");
   await ordinaryPath(index);
   const bytes = await readFile(index).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "ENOENT") throw error;
@@ -356,18 +386,21 @@ export async function pageVersion(root: string, slug: string): Promise<string | 
 }
 
 export async function commitPagePublication(
-  root: string,
+  source: PagesSource,
   prepared: Awaited<ReturnType<typeof preparePagePublication>>,
   expectedVersion: string | null,
 ) {
   const { input, capture, origin } = prepared;
-  if ((await pageVersion(root, input.slug)) !== expectedVersion)
+  const index = join(await pageHomeRoot(source, input.slug), input.slug, "index.html");
+  await ordinaryPath(index);
+  // The write door (ADR 0037 rules 5 and 7): the frozen version is the compare-and-swap, the write
+  // lands in the home that holds the Page, and an overwrite rests the prior bytes in `state\Blobs`.
+  if (!writeHome(index, input.html, expectedVersion).ok)
     throw new StepFailure(
       "Page changed after submission; read it and submit a new command",
       409,
       "refused",
     );
-  await writeArtifact(root, join(resolve(root), input.slug, "index.html"), input.html, true);
   return {
     ok: true as const,
     kind: "page" as const,
@@ -381,7 +414,7 @@ export async function commitPagePublication(
 
 /** The standalone publisher uses the same prepare and commit as the journal adapter. */
 export async function publishPage(
-  root: string,
+  root: PagesSource,
   raw: unknown,
   origin: string,
   library: (path: string) => string | null,
@@ -414,7 +447,7 @@ const preparedPublication = z.strictObject({
 
 /** The HTTP door and recovery resolve one stable publication implementation. */
 export const pagePublicationExecutor = (
-  root: string,
+  root: PagesSource,
   origin: string | (() => string),
   library: (path: string) => string | null,
   captures: Pick<PictureCaptures, "adopt">,
@@ -437,7 +470,7 @@ export const pagePublicationExecutor = (
           consumes: [
             {
               kind: "file",
-              probe: { path: join(root, input.slug, "index.html") },
+              probe: { path: join(await pageHomeRoot(root, input.slug), input.slug, "index.html") },
               expected: version,
             },
           ],

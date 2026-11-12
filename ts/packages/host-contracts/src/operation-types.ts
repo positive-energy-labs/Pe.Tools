@@ -191,6 +191,12 @@ export const podContributionSchema = Schema.Struct({
 });
 export type PodContribution = Schema.Schema.Type<typeof podContributionSchema>;
 
+/** The content home a pod sits in (ADR 0037): its tier and the home's folder. Absent outside the homes (the demo lane). */
+export const podHomeSchema = Schema.Struct({
+  tier: Schema.Literals(["user", "project", "firm"]),
+  path: Schema.String,
+});
+
 export const podListResponseSchema = Schema.Struct({
   pods: Schema.Array(
     Schema.Struct({
@@ -198,6 +204,7 @@ export const podListResponseSchema = Schema.Struct({
       name: Schema.String,
       version: Schema.String,
       folder: Schema.String,
+      home: Schema.optional(podHomeSchema),
       entrypoints: Schema.Array(podEntrypointSchema),
       contributions: Schema.Array(podContributionSchema),
       members: Schema.Array(
@@ -384,6 +391,9 @@ export const podMemberReadResponseSchema = Schema.Struct({
   content: Schema.String,
   sha256: Schema.String,
   bytesBase64: Schema.String,
+  home: Schema.optional(podHomeSchema),
+  /** When the file was last written, from the file itself (ISO instant). It names no writer. */
+  modifiedAt: Schema.optional(Schema.String),
 });
 export type PodMemberRead = Schema.Schema.Type<typeof podMemberReadResponseSchema>;
 
@@ -512,6 +522,18 @@ export const hostProbeDataSchema = Schema.Struct({
     storage: Schema.Struct({ kind: Schema.Literals(["local-unversioned"]) }),
     isolation: Schema.Literals(["none"]),
   }),
+  // The content homes this host reads, in list order, with how each was found (ADR 0037 rule 2).
+  homes: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        tier: Schema.Literals(["user", "project", "firm"]),
+        path: Schema.String,
+        found: Schema.Literals(["documents", "override", "pointer", "probe"]),
+      }),
+    ),
+  ),
+  // Null with a firm home. Otherwise where the host looked, or the folders refused for holding two firm markers.
+  firmHomeNotice: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 // The operator's map (ADR 0003 glance tier, host-side): host identity + every
