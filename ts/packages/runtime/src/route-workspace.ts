@@ -471,23 +471,20 @@ export class RouteWorkspace {
     return { value, carriage };
   }
 
-  /**
-   * The saved document exactly as stored, not validated against the route's schema.
-   * Consumers must validate the whole document before using it. Null when no Work exists;
-   * `doc` is null when even the envelope is unreadable. Retained under the C402/K4 fence.
-   */
+  /** Saved Work without view metadata, upgraded and validated through the same door as reads.
+   * Null when no readable Work exists. Retained under the C402/K4 capture fence. */
   async readRaw(
     scope: WorkKey,
     route: string,
     context?: WorkReadContext,
   ): Promise<{ doc: unknown; revision: number; handle: WorkHandle } | null> {
-    if (!this.#registry.has(route)) return null;
+    const spec = this.#registry.get(route)?.spec;
+    if (!spec) return null;
     return (await this.#captured(scope, "raw", context, async () => {
-      const raw = await this.#serialized(() => this.#carryOver(scope, route));
-      if (raw == null) return null;
-      const envelope = envelopeSchema.safeParse(raw);
-      const revision = envelope.success ? envelope.data.revision : 0;
-      return { doc: envelope.success ? envelope.data.doc : null, revision, handle: workHandle(scope, revision) };
+      const envelope = await this.#serialized(() => this.#load(scope, spec, false));
+      if (!envelope) return null;
+      const { doc, revision } = envelope;
+      return { doc, revision, handle: workHandle(scope, revision) };
     })).value;
   }
 

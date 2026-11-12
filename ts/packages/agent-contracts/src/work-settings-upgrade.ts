@@ -11,7 +11,11 @@ export function upgradeSettingsWork(raw: unknown, previous: number, removed: rea
   const strip = (value: unknown) => {
     const parsed = record.safeParse(value);
     if (!parsed.success) return value;
-    return Object.fromEntries(Object.entries(parsed.data).filter(([key]) => !removed.includes(key) && !(emptyOnly.includes(key) && record.safeParse(parsed.data[key]).success && Object.keys(parsed.data[key] as object).length === 0)));
+    return Object.fromEntries(Object.entries(parsed.data).filter(([key, cell]) => {
+      if (removed.includes(key)) return false;
+      const old = record.safeParse(cell);
+      return !(emptyOnly.includes(key) && old.success && Object.keys(old.data).length === 0);
+    }));
   };
   const history = Array.isArray(saved.data.history) ? saved.data.history.map(entry => {
     const parsed = record.safeParse(entry);

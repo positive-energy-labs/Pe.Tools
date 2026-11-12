@@ -146,7 +146,7 @@ test("upgrade strips obsolete history snapshots and refuses undo without losing 
 });
 
 // Driver gate-ab5b9d5f/w4: exact pre-h2 records, with only their document address rebound.
-test("HTTP navigation upgrades the driver's pre-h2 Work without losing cells", async () => {
+test.each(["navigation", "instances", "raw", "read", "view"] as const)("%s upgrades the driver's pre-h2 Work without losing cells", async (door) => {
   const dir = await mkdtemp(join(tmpdir(), "pe-census-upgrade-"));
   const store = fileRouteDocumentStore(dir);
   const registrations = [ductsRouteState, fansRouteState].map(spec => ({ spec }));
@@ -167,6 +167,17 @@ test("HTTP navigation upgrades the driver's pre-h2 Work without losing cells", a
       planted.push({ spec, key, targetKey, path, prior, record });
     }
     const read = async () => navigationSnapshotSchema.parse(await (await app.fetch(new Request("http://host/pe/navigation"))).json());
+    const workspace = new RouteWorkspace({ store, registrations });
+    if (door === "instances") expect((await workspace.instances()).works).toHaveLength(2);
+    if (door === "raw" || door === "read" || door === "view") {
+      for (const { spec, key, record } of planted) {
+        const saved = await (door === "raw" ? workspace.readRaw(key, spec.route) :
+          door === "read" ? workspace.read(key, spec.route) : workspace.view(key, spec.route));
+        const { designFriction: _, parameters: __, claims: ___, ...cells } = record.value.doc;
+        expect(saved).toMatchObject({ doc: spec.schema.parse(cells), revision: record.value.revision });
+        expect(spec.schema.safeParse(saved?.doc).success).toBe(true);
+      }
+    }
     expect((await read()).works, JSON.stringify(readStoredNotices(storedNoticesPath()).slice(before.length))).toHaveLength(2);
     for (const { spec, key, targetKey, path, prior, record } of planted) {
       const saved = await store.getState({ targetKey, route: spec.route });
