@@ -4,10 +4,8 @@ using Pe.Shared.StorageRuntime.Json;
 namespace Pe.Shared.StorageRuntime;
 
 public sealed class OutputStorage {
-    private const string DefaultName = ProductPathNames.OutputDirectoryName;
-
-    public OutputStorage(string parentDirectoryPath, string? subdirectory = null) => this.DirectoryPath =
-        ResolveDirectoryPath(parentDirectoryPath, subdirectory ?? DefaultName);
+    public OutputStorage(string parentDirectoryPath, string subdirectory) => this.DirectoryPath =
+        ResolveDirectoryPath(parentDirectoryPath, subdirectory);
 
     public string DirectoryPath { get; }
 

@@ -56,30 +56,87 @@ namespace Pe.Revit.Tests {
             } finally { Environment.SetEnvironmentVariable(ProductPathNames.SharedRootVariable, previous); }
         }
 
-        private static IEnumerable<TestCaseData> ContentHomeRows() {
-            using var fixture = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "runtime-ownership.fixture.json")));
-            foreach (var row in fixture.RootElement.GetProperty("contentHomes").EnumerateArray())
-                yield return new TestCaseData(row.GetProperty("productHome").GetString(), row.GetProperty("sharedRoot").GetString(),
-                    row.GetProperty("homes").EnumerateArray().Select(home => home.GetString()!).ToArray(),
-                    row.GetProperty("firm").GetString(), row.GetProperty("keys").GetString()).SetName("ContentHomes: " + row.GetProperty("name").GetString());
+        // The fixture holds the rows by value, so a section a resolver stopped reading fails here, not silently.
+        private static IEnumerable<TestCaseData> Rows(string section, int atLeast) {
+            var rows = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "runtime-ownership.fixture.json")))
+                .RootElement.GetProperty(section).EnumerateArray().ToList();
+            if (rows.Count < atLeast) throw new InvalidOperationException($"Fixture section '{section}' holds {rows.Count} rows; expected at least {atLeast}.");
+            return rows.Select(row => new TestCaseData(row).SetName($"{section}: {row.GetProperty("name").GetString()}"));
         }
 
-        [TestCaseSource(nameof(ContentHomeRows)), NonParallelizable]
-        public void Content_homes_match_the_shared_fixture(string? home, string? shared, string[] homes, string? firm, string? keys) {
-            var previousHome = Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable);
-            var previousShared = Environment.GetEnvironmentVariable(ProductPathNames.SharedRootVariable);
-            Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, home);
-            Environment.SetEnvironmentVariable(ProductPathNames.SharedRootVariable, shared);
-            try {
-                var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                Assert.That(ProductPathing.ContentHomes(), Is.EqualTo(homes.Select(path => path.Replace("%DOCUMENTS%", documents)).ToArray()));
-                Assert.That(ProductPathing.SharedFirmDir(), Is.EqualTo(firm));
-                Assert.That(ProductPathing.SharedKeysPath(), Is.EqualTo(keys));
-            } finally {
-                Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previousHome);
-                Environment.SetEnvironmentVariable(ProductPathNames.SharedRootVariable, previousShared);
-            }
+        private static IEnumerable<TestCaseData> MarkerRows() => Rows("markers", 10);
+        private static IEnumerable<TestCaseData> HomeRows() => Rows("homes", 22);
+        private static IEnumerable<TestCaseData> StateTreeRows() => Rows("stateTree", 3);
+
+        // Mutant, run red once: accept any tier text (`(user|project|firm)` to `(\w+)`) fails "an unknown tier proves nothing".
+        [TestCaseSource(nameof(MarkerRows))]
+        public void Marker_tier_matches_the_shared_fixture(JsonElement row) {
+            HomeTier? expected = row.GetProperty("tier").GetString() switch {
+                "user" => HomeTier.User, "project" => HomeTier.Project, "firm" => HomeTier.Firm, _ => null
+            };
+            Assert.That(ProductPathing.MarkerTier(row.GetProperty("text").GetString()), Is.EqualTo(expected));
         }
+
+        // The same table TS codes to. Every disk fact is injected, so no row reads this machine's drives.
+        // Mutant, run red once: take the first firm marker instead of refusing two (`firms.Count != 1` to
+        // `firms.Count == 0`) fails all four conflict rows.
+        [TestCaseSource(nameof(HomeRows))]
+        public void Homes_match_the_shared_fixture(JsonElement row) {
+            var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            string? Text(string name) => row.GetProperty(name).GetString()?.Replace("%DOCUMENTS%", documents);
+            string[] Texts(JsonElement list) => list.EnumerateArray().Select(item => item.GetString()!.Replace("%DOCUMENTS%", documents)).ToArray();
+            Dictionary<string, T> Map<T>(string name, Func<JsonElement, T> value) => row.GetProperty(name).EnumerateObject()
+                .ToDictionary(entry => entry.Name, entry => value(entry.Value), StringComparer.OrdinalIgnoreCase);
+            var folders = Map("folders", Texts);
+            var markers = Map("markerFiles", text => text.GetString());
+
+            var homes = ProductPathing.Homes(
+                row.GetProperty("productHome").GetString(), row.GetProperty("sharedRoot").GetString(),
+                Texts(row.GetProperty("drives")),
+                directory => folders.TryGetValue(directory, out var children) ? children : [],
+                home => markers.TryGetValue(home, out var text) ? text : null,
+                row.GetProperty("pointer").GetString());
+
+            Assert.Multiple(() => {
+                Assert.That(homes.User, Is.EqualTo(Text("user")), "user");
+                Assert.That(homes.Project, Is.EqualTo(Text("project")), "project");
+                Assert.That(homes.Firm, Is.EqualTo(Text("firm")), "firm");
+                Assert.That(homes.SharedDriveRoot, Is.EqualTo(Text("sharedDriveRoot")), "sharedDriveRoot");
+                Assert.That(homes.List, Is.EqualTo(Texts(row.GetProperty("homes"))), "homes");
+                Assert.That(homes.FirmConflict, Is.EqualTo(Texts(row.GetProperty("firmConflict"))), "firmConflict");
+                Assert.That(homes.FirmSettingsDir, Is.EqualTo(Text("firmSettings")), "firmSettings");
+                Assert.That(homes.FirmPreferencesPath, Is.EqualTo(Text("firmPreferences")), "firmPreferences");
+                Assert.That(homes.FirmKeysPath, Is.EqualTo(Text("firmKeys")), "firmKeys");
+            });
+        }
+
+        // Freeze shape 7: every homes folder sits under <state root>\state, the one folder an MSI upgrade keeps.
+        // Mutant, run red once: hang Runs off the state root's parent (`RunsPath` from `this.RootPath` to
+        // `Path.GetDirectoryName(this.RootPath)`) fails `run` and `podlessRuns` on every row.
+        [TestCaseSource(nameof(StateTreeRows))]
+        public void State_tree_matches_the_shared_fixture(JsonElement row) {
+            string Text(string name) => row.GetProperty(name).GetString()!;
+            var state = new ProductRuntimeLayout(ProductLane.Dev, Text("stateRoot"), Text("stateRoot")).State;
+            Assert.Multiple(() => {
+                Assert.That(state.WorkPath, Is.EqualTo(Text("work")), "work");
+                Assert.That(state.PageStatePath(Text("pageSlug")), Is.EqualTo(Text("pageState")), "pageState");
+                Assert.That(state.RunPath(Text("podId"), Text("runId")), Is.EqualTo(Text("run")), "run");
+                Assert.That(state.PodlessRunsPath, Is.EqualTo(Text("podlessRuns")), "podlessRuns");
+                Assert.That(state.RunPath(null, Text("runId")), Is.EqualTo(Path.Combine(Text("podlessRuns"), Text("runId"))), "pod-less run");
+                Assert.That(state.BlobPath(Text("blobSha256")), Is.EqualTo(Text("blob")), "blob");
+                Assert.That(state.T3Path, Is.EqualTo(Text("t3")), "t3");
+                Assert.That(state.AgentPath, Is.EqualTo(Text("agent")), "agent");
+            });
+        }
+
+        // An id becomes exactly one folder under Runs, and the pod-less segment cannot be claimed by a pod.
+        [TestCase(@"C:\Users\Alice\Pe.Tools\Pods\office")]
+        [TestCase("../escape")]
+        [TestCase("a/b")]
+        [TestCase("_no-pod")]
+        [TestCase("")]
+        public void A_run_path_refuses_a_pod_id_that_is_not_one_folder_name(string podId) =>
+            Assert.That(() => ProductRuntimeLayout.Current.State.RunPath(podId, "run"), Throws.ArgumentException);
 
         // Upgrade safety: an installed user's existing state must be found byte-for-byte where v0.7.30 put it.
         // Frozen from `git show v0.7.30:dotnet/Pe.Shared.Product/ProductPathing.cs` (ResolveRuntimeRoot(null))

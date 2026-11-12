@@ -21,6 +21,10 @@ public sealed class ScriptProjectGenerator(
 
     private readonly CsProjReader _csProjReader = csProjReader;
 
+    /// <summary>
+    ///     The effective project one run compiles against. It is never written into a pod: the references a
+    ///     person authored (no <c>&lt;Private&gt;false&lt;/Private&gt;</c> fingerprint) plus this machine's own.
+    /// </summary>
     public string GenerateProjectContent(
         string? existingProjectContent,
         string workspaceRoot,
@@ -54,6 +58,7 @@ public sealed class ScriptProjectGenerator(
         var usings = NormalizeUsings(existingProject.Usings);
 
         return CreateProjectContent(
+            """<Project Sdk="Microsoft.NET.Sdk">""",
             targetFramework,
             preservedReferences,
             preservedPackageReferences,
@@ -62,26 +67,23 @@ public sealed class ScriptProjectGenerator(
         );
     }
 
-    public string GeneratePortableProjectContent(
-        string? existingProjectContent,
-        string workspaceRoot,
-        string targetFramework
-    ) {
-        var existingProject = this._csProjReader.Read(existingProjectContent ?? "<Project />", workspaceRoot);
-        var effectiveTargetFramework = string.IsNullOrWhiteSpace(existingProject.TargetFramework)
-            ? targetFramework
-            : existingProject.TargetFramework;
-
-        return CreateProjectContent(
-            effectiveTargetFramework,
+    /// <summary>
+    ///     The per-machine half of a pod's project (homes freeze shape 8): build settings and this machine's Revit
+    ///     and Pe assembly paths, written to the one props file every authored <c>PeScripts.csproj</c> imports.
+    ///     The authored file keeps only what a person adds, so it is byte-identical on every machine.
+    /// </summary>
+    public string GenerateMachineProps(string targetFramework, string runtimeAssemblyPath) =>
+        CreateProjectContent(
+            "<Project>",
+            targetFramework,
             [],
-            NormalizePackageReferences(existingProject.PackageReferences, null),
             [],
-            NormalizeUsings(existingProject.Usings)
+            GetGeneratedRuntimeReferences(runtimeAssemblyPath),
+            NormalizeUsings([])
         );
-    }
 
     private static string CreateProjectContent(
+        string projectOpenTag,
         string targetFramework,
         IReadOnlyList<ScriptReferenceDeclaration> preservedReferences,
         IReadOnlyList<ScriptPackageReference> preservedPackageReferences,
@@ -89,7 +91,7 @@ public sealed class ScriptProjectGenerator(
         IReadOnlyList<string> usings
     ) {
         var builder = new StringBuilder();
-        _ = builder.AppendLine("""<Project Sdk="Microsoft.NET.Sdk">""");
+        _ = builder.AppendLine(projectOpenTag);
         _ = builder.AppendLine("  <PropertyGroup>");
         _ = builder.AppendLine($"    <TargetFramework>{EscapeXml(targetFramework)}</TargetFramework>");
         _ = builder.AppendLine("    <LangVersion>latest</LangVersion>");

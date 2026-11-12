@@ -7,22 +7,31 @@ public record ScriptWorkspaceBootstrapRequest(
     string WorkspaceKey = "default"
 );
 
+/// <summary>
+///     What bootstrap seeded. `ProductAgentsPath` is the agent's guide in the agent's working directory and
+///     `MachinePropsPath` the per-machine props file the pod's project imports; both are machine state, outside
+///     every home. The workspace paths are the pod's own folder, in whichever home holds it.
+/// </summary>
 public record ScriptWorkspaceBootstrapData(
     string WorkspaceKey,
     string ProductHomePath,
     string ProductAgentsPath,
-    string ProductReadmePath,
     string WorkspaceRootPath,
     string WorkspaceAgentsPath,
     string WorkspaceReadmePath,
     string ProjectFilePath,
     string PodManifestPath,
+    string MachinePropsPath,
     string RevitVersion,
     string TargetFramework,
     string RuntimeAssemblyPath,
     List<string> GeneratedFiles
 );
 
+/// <summary>
+///     `WorkspaceKey` is the host's pod selector when no `SourceBundle` is supplied. Native execution never
+///     resolves it to a path: the captured manifest's id names the pod, and the host says which folder holds it.
+/// </summary>
 public record ExecuteRevitScriptRequest(
     string? ScriptContent = null,
     string? SourcePath = null,
@@ -103,7 +112,7 @@ public sealed record PodReceipt {
         string? planHash, PodRunOutcome outcome, List<string> outputs, string? reason) =>
         new(podId, path, sha256, PodRunOrigin.SavedMember, operation, planHash, outcome, outputs, reason);
 
-    public static PodReceipt ForOperation(string podId, string operation, string? planHash,
+    public static PodReceipt ForOperation(string? podId, string operation, string? planHash,
         PodRunOutcome outcome, List<string> outputs, string? reason) =>
         new(podId, null, null, PodRunOrigin.Operation, operation, planHash, outcome, outputs, reason);
 

@@ -1,83 +1,68 @@
+using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Scripting.Storage;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Product;
 
 namespace Pe.Revit.Scripting.Bootstrap;
 
+/// <summary>
+///     Seeds a pod for script authoring (homes freeze shape 8). A pod may sit in a shared home, so bootstrap
+///     writes into it only authored seeds, each create-exclusive: the same bytes on every machine, and never over
+///     a file that exists. Everything this machine derives goes outside every home: the props file the pod's
+///     project imports, and the agent's guide in the agent's working directory.
+/// </summary>
 public sealed class ScriptWorkspaceBootstrapService(
     ScriptProjectGenerator projectGenerator,
-    Func<string, string>? workspaceRootResolver = null,
-    string? productHomePath = null
+    Func<string, string>? podFolderResolver = null,
+    string? agentDirectory = null,
+    string? machinePropsPath = null
 ) {
     private readonly ScriptProjectGenerator _projectGenerator = projectGenerator;
-    private readonly Func<string, string> _workspaceRootResolver = workspaceRootResolver ?? RevitScriptingStorageLocations.ResolveWorkspaceRoot;
-    private readonly string _productHomePath = productHomePath ?? RevitScriptingStorageLocations.ResolveProductHomePath();
+    private readonly Func<string, string> _podFolderResolver = podFolderResolver ?? new ScriptPodPreparationService().ResolveBootstrapFolder;
+    private readonly string? _agentDirectory = agentDirectory;
+    private readonly string _machinePropsPath = machinePropsPath ?? ProductPathing.MachinePropsPath;
 
     public ScriptWorkspaceBootstrapData Bootstrap(
         string workspaceKey,
         string revitVersion,
         string targetFramework,
-        string runtimeAssemblyPath,
-        bool preserveProject = false
+        string runtimeAssemblyPath
     ) {
         var generatedFiles = new List<string>();
-        var productHomePath = this._productHomePath;
-        var productAgentsPath = Path.Combine(productHomePath, RevitScriptingStorageLocations.AgentsFileName);
-        var productReadmePath = Path.Combine(productHomePath, RevitScriptingStorageLocations.ReadmeFileName);
-        var workspaceRoot = this._workspaceRootResolver(workspaceKey);
-        var projectFilePath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.ProjectFileName);
-        var sourceDirectory = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.SourceDirectoryName);
-        var settingsDirectory = Path.Combine(workspaceRoot, ProductPathNames.SettingsDirectoryName);
-        var assetsDirectory = Path.Combine(workspaceRoot, ProductPathNames.AssetsDirectoryName);
-        var outputDirectory = Path.Combine(workspaceRoot, ProductPathNames.OutputDirectoryName);
-        var vscodeDirectory = Path.Combine(workspaceRoot, ".vscode");
-        var podManifestPath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.PodManifestFileName);
-        var agentsPath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.AgentsFileName);
-        var readmePath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.ReadmeFileName);
-        var vscodeSettingsPath = Path.Combine(vscodeDirectory, "settings.json");
+        var podFolder = this._podFolderResolver(workspaceKey);
+        var agentsPath = Path.Combine(podFolder, RevitScriptingStorageLocations.AgentsFileName);
+        var readmePath = Path.Combine(podFolder, RevitScriptingStorageLocations.ReadmeFileName);
+        var projectFilePath = Path.Combine(podFolder, RevitScriptingStorageLocations.ProjectFileName);
+        var podManifestPath = Path.Combine(podFolder, RevitScriptingStorageLocations.PodManifestFileName);
+        var agentGuidePath = Path.Combine(
+            this._agentDirectory ?? ProductRuntimeLayout.Current.State.AgentPath, ProductPathNames.AgentInstructionsFileName);
 
-        _ = Directory.CreateDirectory(productHomePath);
-        _ = Directory.CreateDirectory(workspaceRoot);
-        _ = Directory.CreateDirectory(sourceDirectory);
-        _ = Directory.CreateDirectory(settingsDirectory);
-        _ = Directory.CreateDirectory(assetsDirectory);
-        _ = Directory.CreateDirectory(outputDirectory);
-        _ = Directory.CreateDirectory(vscodeDirectory);
+        foreach (var directoryName in new[] {
+                     RevitScriptingStorageLocations.SourceDirectoryName, ProductPathNames.SettingsDirectoryName, ProductPathNames.AssetsDirectoryName
+                 })
+            _ = Directory.CreateDirectory(Path.Combine(podFolder, directoryName));
 
-        var existingProjectContent = File.Exists(projectFilePath)
-            ? File.ReadAllText(projectFilePath)
-            : null;
-        var generatedProjectContent = this._projectGenerator.GenerateProjectContent(
-            existingProjectContent,
-            workspaceRoot,
-            revitVersion,
-            targetFramework,
-            runtimeAssemblyPath
-        );
-        if (!preserveProject)
-            WriteIfChanged(projectFilePath, generatedProjectContent, generatedFiles);
-
-        // The root AGENTS.md is the one high-level guide and the only file rewritten: an existing
-        // tree picks corrected guidance up on the next bootstrap. Everything else is create-once,
-        // because a pod's own AGENTS.md and both READMEs are the user's to edit.
-        WriteIfChanged(productAgentsPath, ScriptFileTemplates.CreateRootAgents(), generatedFiles);
-        EnsureFile(productReadmePath, ScriptFileTemplates.CreateRootReadme(), generatedFiles);
-        EnsureFile(agentsPath, ScriptFileTemplates.CreatePodAgents(), generatedFiles);
-        EnsureFile(readmePath, ScriptFileTemplates.CreatePodReadme(), generatedFiles);
-        EnsureFile(vscodeSettingsPath, ScriptFileTemplates.CreateVscodeSettings(), generatedFiles);
         // An empty pod: a manifest with no entrypoints. Shipped examples arrive by import, never by bootstrap.
-        EnsureFile(podManifestPath, ScriptFileTemplates.CreatePodManifest(workspaceKey), generatedFiles);
+        Seed(podManifestPath, ScriptFileTemplates.CreatePodManifest(workspaceKey), generatedFiles);
+        Seed(projectFilePath, ScriptFileTemplates.CreateProject(), generatedFiles);
+        Seed(agentsPath, ScriptFileTemplates.CreatePodAgents(), generatedFiles);
+        Seed(readmePath, ScriptFileTemplates.CreatePodReadme(), generatedFiles);
+
+        // The two machine files are the only ones rewritten: a later bootstrap corrects them in place.
+        WriteIfChanged(this._machinePropsPath,
+            this._projectGenerator.GenerateMachineProps(targetFramework, runtimeAssemblyPath), generatedFiles);
+        WriteIfChanged(agentGuidePath, ScriptFileTemplates.CreateAgentGuide(), generatedFiles);
 
         return new ScriptWorkspaceBootstrapData(
             workspaceKey,
-            productHomePath,
-            productAgentsPath,
-            productReadmePath,
-            workspaceRoot,
+            ProductPathing.UserRoot(),
+            agentGuidePath,
+            podFolder,
             agentsPath,
             readmePath,
             projectFilePath,
             podManifestPath,
+            this._machinePropsPath,
             revitVersion,
             targetFramework,
             runtimeAssemblyPath,
@@ -85,12 +70,16 @@ public sealed class ScriptWorkspaceBootstrapService(
         );
     }
 
-    private static void EnsureFile(string path, string content, List<string> generatedFiles) {
-        if (File.Exists(path))
-            return;
-
+    /// <summary>Create-exclusive: a file that exists, written by this machine or another, is left alone.</summary>
+    private static void Seed(string path, string content, List<string> generatedFiles) {
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, content);
+        try {
+            using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            using var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false));
+            writer.Write(content);
+        } catch (IOException) when (File.Exists(path)) {
+            return;
+        }
         generatedFiles.Add(path);
     }
 

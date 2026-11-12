@@ -13,9 +13,9 @@ Owns the Revit-side scripting runtime: workspace bootstrap, source normalization
 - `Execution/RevitScriptExecutionService.cs` - normalize -> policy -> resolve -> compile -> load -> instantiate -> execute -> complete.
 - `Pods/ScriptPodPreparationService.cs` - pod capture gated on manifest and entrypoints only; member list, read, create, per-member `Compose`, and `@<id>` resolution by installed manifest id.
 - `Pods/ScriptPodArchiveService.cs` - archive export (vendors foreign fragments into `settings/_vendor/<id>/`) and byte-exact import with `imported.json` provenance.
-- `Pods/PodRuns.cs` - the one run shape: `output/<runId>/` with `receipt.json`, for every apply and every execution.
+- `Pods/PodRuns.cs` - the one run shape: `<state root>\state\Runs\<pod-id>\<runId>\` with `receipt.json`, for every apply and every execution. A pod may sit in a shared home (ADR 0037), so a run writes no byte into it.
 - `Transport/ScriptingBridgeMessageHandler.cs` - `ExternalEvent` handoff to the Revit thread.
-- `Bootstrap/ScriptWorkspaceBootstrapService.cs` and `Bootstrap/ScriptFileTemplates.cs` - generated workspace shape and guidance.
+- `Bootstrap/ScriptWorkspaceBootstrapService.cs` and `Bootstrap/ScriptFileTemplates.cs` - a pod's create-exclusive authored seeds, and the two per-machine files outside every home: `ProductPathing.MachinePropsPath` (the Revit and Pe references every pod's `PeScripts.csproj` imports) and the agent guide under `state\Agent`.
 - `References/ScriptReferenceResolver.cs` - script project reference/package resolution.
 - `Execution/ScriptAssemblyLoadService.cs` - runtime assembly map and load context.
 - `Storage/ScriptArtifactWriter.cs` - path-safe CSV/JSON/text artifacts into the run `PodRuns` opens, beside that run's `receipt.json`.
@@ -48,7 +48,8 @@ Owns the Revit-side scripting runtime: workspace bootstrap, source normalization
 - Scripts are trusted in-process C# inside Revit, not an OS/process security sandbox. Keep the single Pea scripting surface autonomous; enforce document safety and resource bounds inside this runtime.
 - Script-authored `new Transaction(...)`, `new SubTransaction(...)`, and `new TransactionGroup(...)` are rejected by policy in `ReadOnly` and `WriteTransaction`, and permitted only in explicit `NoTransaction` mode.
 - `WriteLine(...)` is the short diagnostic path. `Artifacts.WriteJson(...)`, `WriteCsv(...)`, and `WriteText(...)` are for durable output.
-- One output convention: an execution writes `output/<runId>/` in the pod it ran from, with `receipt.json` beside its artifacts, through the same `PodRuns` shape every apply uses. An inline snippet acts from no pod, so its run lands in the default pod. The run owns `receipt.json`; a script artifact may not take that name.
+- One output convention: an execution writes `state\Runs\<pod-id>\<runId>\` under the machine state root, keyed on the pod's manifest id, with `receipt.json` beside its artifacts, through the same `PodRuns` shape every apply uses. An inline snippet acts from no pod, so its run lands in `Runs\_no-pod`. The run owns `receipt.json`; a script artifact may not take that name.
+- The host names a pod's absolute folder (`pod.capture` `directory`, by manifest id). Native code never joins a folder name onto the user's Pods to find one; only a pod that does not exist yet is placed by name, in the user home.
 - Inline snippets should stay isolated from broken workspace files and keep writing trace files for visibility.
 - Keep generated workspace docs orienting. Specific operation guidance should come from operation metadata, diagnostics, and examples.
 - Keep host concerns out of this package. HTTP routes, session gating, and host process management belong elsewhere.

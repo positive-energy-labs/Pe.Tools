@@ -26,7 +26,11 @@ public sealed record ProductRuntimeLayout(ProductLane Lane, string OwnerRoot, st
 
     /// <summary>Resolve the told owner against this machine's content homes and installed namespace.</summary>
     public static ProductRuntimeLayout For(ProductLane lane, string ownerRoot, string? productHome) {
-        var root = ProductPathing.StateRoot(lane, ownerRoot, productHome, ProductPathing.SharedRoot(), ProductPathing.DocumentsUserRoot);
+        // ponytail: the fence is the dev override only. A firm home found by the drive probe is not fenced,
+        // because probing every drive at each shell's startup can block on a dead mapped drive. Fence the
+        // probed home too if a checkout or install ever lands on the shared drive.
+        var root = ProductPathing.StateRoot(lane, ownerRoot, productHome,
+            Environment.GetEnvironmentVariable(ProductPathNames.SharedRootVariable), ProductPathing.DocumentsUserRoot);
         // Only an override can aim dev state at the installed namespace; refuse it where the override is read.
         if (lane == ProductLane.Dev && (Path.GetFullPath(root) + Path.DirectorySeparatorChar).StartsWith(
                 Path.GetFullPath(ProductPathing.InstalledNamespace) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
@@ -64,7 +68,40 @@ public sealed record ProductRuntimeLayout(ProductLane Lane, string OwnerRoot, st
     public ProductRuntimeCacheLayout Cache => new(Path.Combine(this.RootPath, ProductPathNames.CacheDirectoryName));
 }
 
+/// <summary>
+///     <c>&lt;state root&gt;\state</c>. Everything a content home may not hold lives here (homes freeze shape 7),
+///     under the one folder name an MSI upgrade keeps: Work, Page state, run output, the safety-net blobs, the T3
+///     home and the agent's working directory. The shared fixture's <c>stateTree</c> rows pin these with TS.
+/// </summary>
 public sealed record ProductRuntimeStateLayout(string RootPath) {
+    public string WorkPath => Path.Combine(this.RootPath, "Work");
+    public string T3Path => Path.Combine(this.RootPath, "T3");
+    /// <summary>The agent's working directory: its <c>AGENTS.md</c> and the harness projections.</summary>
+    public string AgentPath => Path.Combine(this.RootPath, "Agent");
+    public string AgentInstructionsPath => Path.Combine(this.AgentPath, ProductPathNames.AgentInstructionsFileName);
+    public string RunsPath => Path.Combine(this.RootPath, "Runs");
+    /// <summary>Where a run with no pod writes: the runs of inline snippets and unfiled drafts, and per-module task output.</summary>
+    public string PodlessRunsPath => Path.Combine(this.RunsPath, ProductPathNames.PodlessRunsDirectoryName);
+
+    public string PageStatePath(string pageSlug) => Path.Combine(this.RootPath, "Pages", Segment(pageSlug, nameof(pageSlug)));
+
+    /// <summary>One run's folder, keyed on the pod's manifest id (unique across homes); a null pod is a pod-less run.</summary>
+    public string RunPath(string? podId, string runId) => Path.Combine(
+        podId is null ? this.PodlessRunsPath : Path.Combine(this.RunsPath, PodSegment(podId)), Segment(runId, nameof(runId)));
+
+    public string BlobPath(string sha256) => Path.Combine(this.RootPath, "Blobs", "sha256", Segment(sha256, nameof(sha256)));
+
+    private static string PodSegment(string podId) => podId.StartsWith("_", StringComparison.Ordinal)
+        ? throw new ArgumentException($"Pod id '{podId}' cannot start with an underscore; that prefix is reserved under Runs.", nameof(podId))
+        : Segment(podId, nameof(podId));
+
+    // An id becomes exactly one folder name, or the path would leave its parent.
+    private static string Segment(string value, string paramName) =>
+        string.IsNullOrWhiteSpace(value) || value is "." or ".." || value.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+        || value != value.Trim() || value.EndsWith(".", StringComparison.Ordinal)
+            ? throw new ArgumentException($"'{value}' is not one folder name.", paramName)
+            : value;
+
     public string GlobalStatePath => Path.Combine(this.RootPath, ProductPathNames.GlobalDirectoryName);
     public string ApsAuthStatePath => Path.Combine(this.RootPath, "aps-auth");
     public string ApsTokenStorePath => Path.Combine(this.ApsAuthStatePath, "tokens.json");
