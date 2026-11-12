@@ -18,7 +18,10 @@ import * as actionClient from "../../../packages/mcps/src/shared/takeoff-action-
 import { nativeFixture } from "./fans-work-fixture.ts";
 import { heldSends, releaseSend } from "../src/guards.ts";
 import { noticeRows } from "../src/notice-feed.ts";
-import { actAs } from "./callers.ts";
+import { actAs, contextHeaders, serviceHeaders } from "./callers.ts";
+import { Effect, Layer } from "effect";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { requestIdentityLayer } from "../src/request-identity.ts";
 import { familySpecAsset } from "../src/family-spec.ts";
 
 const pdf = fileURLToPath(new URL("../../web/public/acme-fcu400-submittal.pdf", import.meta.url));
@@ -45,7 +48,7 @@ afterEach(async () => {
   for (const close of closes.splice(0).reverse()) await close();
 });
 
-async function lab(beforeParse?: () => Promise<void>) {
+async function lab(beforeParse?: (file: File) => Promise<void>) {
   vi.stubEnv("LLAMA_CLOUD_API_KEY", "fixture-key");
   const pods = await mkdtemp(join(tmpdir(), "pe-doc-lab-"));
   closes.push(() => rm(pods, { recursive: true, force: true }));
@@ -84,7 +87,7 @@ async function lab(beforeParse?: () => Promise<void>) {
       parsePdf: async ({ sender, file, apiKey }) => {
         expect(sender).toBe("person");
         expect(apiKey).toBe("fixture-key");
-        await beforeParse?.();
+        await beforeParse?.(file);
         const bytes = Buffer.from(await file.arrayBuffer());
         if (bytes.subarray(0, 5).toString() !== "%PDF-") throw Error("The parser was not handed a PDF");
         parsed.push({ name: file.name, bytes: bytes.length });
@@ -151,17 +154,11 @@ async function lab(beforeParse?: () => Promise<void>) {
     const send = heldSends().find((send) => send.thread === run.thread);
     expect(send).toBeDefined();
     const response = await outward(send!.id);
-    expect(response.status, await response.clone().text()).toBe(200);
-    return confirmed();
+    expect(response.status, await response.clone().text()).toBe(202);
+    const receipt = await response.json() as { id: string };
+    return f.journal.wait(receipt.id);
   };
-  /** The latest confirmed run of the held attach: each Confirm attempt is its own action. */
-  const confirmed = async () => {
-    const rows = await f.journal.list();
-    const heldRow = rows.find(row => row.key === "family.attach-spec" && row.refusal?.kind === "held")!;
-    const runs = rows.filter(row => row.id.startsWith(`${heldRow.id}:confirmed:`)).map(row => row.id).sort();
-    return f.journal.wait(runs.at(-1)!);
-  };
-  return { f, pods, pea, parsed, png, renderFetches: () => renderFetches, handle, doc, act, stage, save, confirm, confirmed, outward };
+  return { f, pods, pea, parsed, png, renderFetches: () => renderFetches, handle, doc, act, stage, save, confirm, outward };
 }
 
 test("blocker 3: a capture refused for its keys tells Pea where the input goes", async () => {
@@ -338,7 +335,7 @@ test("the chain: Pea captures and saves a family, attaches its sheet by path, an
 }, 60_000);
 
 /** A member where attach looks, so each narrowing test is red for its source alone. */
-async function boxed(beforeParse?: () => Promise<void>) {
+async function boxed(beforeParse?: (file: File) => Promise<void>) {
   const l = await lab(beforeParse);
   const member = { pod: "lab", path: "settings/family/box.json" };
   await mkdir(join(l.pods, "lab", "settings/family"), { recursive: true });
@@ -453,27 +450,36 @@ test("narrow 3: Pea attach is held before source reads; the notice Confirm attac
   }
 }, 60_000);
 
-// Mutants: reuse one action id across Confirm attempts (the journal replays the failed receipt and
-// the parser is never called again); admit the confirmed run as a made-up local human.
-test("narrow 4: a failed confirmed attach retries on the next Confirm, as the person who confirmed", async () => {
+// A consumed hold never admits again, even after failure; retry requires a new held request.
+test("narrow 4: a failed confirmed attach is receipted, and a new hold runs as its confirming person", async () => {
   let calls = 0;
-  const { pea, attach, parsed, confirmed, outward } = await boxed(async () => {
+  const { f, pea, attach, parsed, outward } = await boxed(async () => {
     if (++calls === 1) throw Error("LlamaCloud 503");
   });
   const person: Caller = { kind: "human", via: "tailnet", login: "kai@tailnet", device: "laptop" };
   expect(await attach({ path: pdf }, pea)).toContain("Held, not done");
-  const send = heldSends().find(row => row.thread === pea.thread)!;
-  const failed = await outward(send.id, person);
-  expect(failed.status).toBe(502);
-  expect(await failed.text()).toContain("LlamaCloud 503");
-  expect(heldSends()).toEqual([send]);
-  expect((await outward(send.id, person)).status).toBe(200);
+  const send = heldSends().find((row) => row.thread === pea.thread)!;
+  const accepted = await outward(send.id, person);
+  expect(accepted.status).toBe(202);
+  const first = (await accepted.json()) as { id: string };
+  const failed = await f.journal.wait(first.id);
+  expect(failed.state).toBe("failed");
+  expect("error" in failed && failed.error).toContain("LlamaCloud 503");
+  expect(heldSends()).toEqual([]);
+  expect((await outward(send.id, person)).status).toBe(404);
+  expect(calls).toBe(1);
+  expect(await attach({ path: pdf }, pea)).toContain("Held, not done");
+  const retry = heldSends().find((row) => row.thread === pea.thread)!;
+  expect(retry.id).not.toBe(send.id);
+  const response = await outward(retry.id, person);
+  expect(response.status).toBe(202);
+  const next = (await response.json()) as { id: string };
+  const receipt = await f.journal.wait(next.id);
+  expect(receipt.state).toBe("succeeded");
+  expect(receipt.caller).toEqual(person);
   expect(calls).toBe(2);
   expect(parsed).toHaveLength(1);
   expect(heldSends()).toEqual([]);
-  const receipt = await confirmed();
-  expect(receipt.state).toBe("succeeded");
-  expect(receipt.caller).toEqual(person);
 }, 60_000);
 
 // Mutant: family-spec re-reads source.path when retaining source.pdf instead of using admitted bytes.
@@ -520,4 +526,111 @@ test("an injected parser failure fails the attach without any network request", 
   } finally {
     network.mockRestore();
   }
+}, 60_000);
+
+// Mutant: await the confirmed action's settlement before answering Confirm.
+test("Confirm admits over HTTP before a two-second parse finishes, uploads once and leaves a succeeded receipt", async () => {
+  let uploads = 0;
+  let parseFinished = false;
+  let uploadUrl = "";
+  const { f, pea, attach, serve } = await boxed(async (file) => {
+    await fetch(uploadUrl, { method: "POST", body: file });
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    parseFinished = true;
+  });
+  uploadUrl = await serve((request, response) => {
+    if (request.method === "POST") uploads++;
+    request.resume();
+    response.end("uploaded");
+  });
+  expect(await attach({ path: pdf }, pea)).toContain("Held, not done");
+  const send = heldSends().find((row) => row.thread === pea.thread)!;
+  let base = "";
+  const identity = requestIdentityLayer({
+    port: () => Number(new URL(base).port),
+    frontendOrigin: Effect.succeed(undefined),
+    share: {
+      read: async () => {
+        throw Error("local only");
+      },
+      observe: () => {},
+    },
+  });
+  const web = HttpRouter.toWebHandler(
+    HttpRouter.add(
+      "POST",
+      "/pe/outward/held/:id/confirm",
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        return HttpServerResponse.fromWeb(
+          yield* Effect.promise(() =>
+            f.api.fetch(new Request(new URL(request.url, base), { method: "POST" })),
+          ),
+        );
+      }),
+    ).pipe(Layer.provide(identity)),
+    { disableLogger: true },
+  );
+  closes.push(() => web.dispose());
+  base = await serve(async (request, response) => {
+    const answer = await web.handler(
+      new Request(new URL(request.url!, base), {
+        method: request.method,
+        headers: request.headers as Record<string, string>,
+      }),
+    );
+    response.writeHead(answer.status, Object.fromEntries(answer.headers));
+    response.end(Buffer.from(await answer.arrayBuffer()));
+  });
+  const confirm = (headers = contextHeaders()) =>
+    fetch(`${base}/pe/outward/held/${send.id}/confirm`, {
+      method: "POST",
+      headers: { ...serviceHeaders(), ...headers },
+    });
+  expect((await confirm(contextHeaders({ kind: "pea", thread: pea.thread }))).status).toBe(403);
+  expect(uploads).toBe(0);
+  const start = performance.now();
+  const response = await confirm();
+  const elapsed = performance.now() - start;
+  expect(elapsed, "Confirm must answer before the two-second parse").toBeLessThan(1500);
+  expect(parseFinished).toBe(false);
+  expect(response.status).toBe(202);
+  const accepted = (await response.json()) as { id: string };
+  expect(accepted.id).toBeTruthy();
+  expect(
+    noticeRows(
+      {
+        threads: [],
+        receipts: (await f.journal.list()).map((action) => ({ revision: 1, action })),
+        works: [],
+        machine: null,
+        stored: [],
+        held: heldSends(),
+      },
+      Date.now(),
+    ),
+  ).toContainEqual(expect.objectContaining({ key: `action:${accepted.id}`, group: "working" }));
+  expect((await confirm()).status).toBe(404);
+  const receipt = await f.journal.wait(accepted.id);
+  expect(receipt.state).toBe("succeeded");
+  expect(receipt.caller).toMatchObject({ kind: "human", via: "cli" });
+  expect(parseFinished).toBe(true);
+  expect(uploads).toBe(1);
+  expect((await confirm()).status).toBe(404);
+  expect(uploads).toBe(1);
+  expect(
+    noticeRows(
+      {
+        threads: [],
+        receipts: (await f.journal.list()).map((action) => ({ revision: 1, action })),
+        works: [],
+        machine: null,
+        stored: [],
+        held: heldSends(),
+      },
+      Date.now(),
+    ).some(
+      (row) => row.verb === "held" && row.act?.kind === "confirm-send" && row.act.id === send.id,
+    ),
+  ).toBe(false);
 }, 60_000);

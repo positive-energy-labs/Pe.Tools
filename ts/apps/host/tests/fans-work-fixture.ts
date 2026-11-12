@@ -341,6 +341,7 @@ export async function nativeFixture(
     };
     const publications = new Publications();
     const api = createPeRoutes({
+      journal,
       workspace: saved,
       registrations: [],
       store: fileRouteDocumentStore(join(dir, "work")),

@@ -1326,19 +1326,14 @@ export class ActionJournal implements ReceiptReader {
       await gate(row, "admit");
     } catch (error) {
       if (!prior && error instanceof SendHeld) {
-        // Each Confirm is its own action: a known id replays its receipt, so one shared id would
-        // replay a failed send forever. A success releases the row, so it is never confirmed twice.
-        let attempt = 0;
+        // A hold is consumed on Confirm; a new held request gets a fresh action id.
         // The digest leaves the action id out: the same ask made again is the same hold, one row.
         const { id: _id, ...ask } = admission;
         holdSendCommand({ ...error.send,
           sha256: createHash("sha256").update(canonicalRouteInput(ask)).digest("hex"), pages: "all" },
-          crossing.caller.kind === "pea" ? crossing.caller.thread : null, async (person) => {
-            const receipt = await this.invoke({ ...admission, id: `${admission.id}:confirmed:${++attempt}` },
-              { caller: person, basis: null });
-            const settled = await this.wait(receipt.id);
-            if (settled.state !== "succeeded") throw Error("error" in settled ? settled.error ?? "Attach failed" : "Attach failed");
-          });
+          crossing.caller.kind === "pea" ? crossing.caller.thread : null, (person) =>
+            this.invoke({ ...admission, id: `${admission.id}:confirmed:${randomUUID()}` },
+              { caller: person, basis: null }));
       }
       observed = { error };
     }
