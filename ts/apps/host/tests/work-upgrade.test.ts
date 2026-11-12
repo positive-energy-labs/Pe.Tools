@@ -55,6 +55,38 @@ for (const [spec, previous, removed, staged, dropped] of [
   [ductsRouteState, 2, "designFriction", { labelParameter: { edit: { value: "Mark" } } }, { edit: { value: 0.12 } }],
   [fansRouteState, 1, "parameters", { writeIntent: { edit: { value: { walk: { unitId: 42, portIndex: 0 } } } } }, { fanFlow: { edit: { value: "Design Flow" } } }],
 ] as const) {
+  test(`${spec.route} accepted replay upgrades history before any load`, async () => {
+    const dir = await mkdtemp(join(tmpdir(), "pe-work-replay-upgrade-"));
+    const store = fileRouteDocumentStore(dir);
+    const key = bindWork(spec.route, null), targetKey = workKey(key);
+    const workspace = new RouteWorkspace({ store, registrations: [{ spec }] });
+    const doc = { ...spec.schema.parse({}), ...staged, [removed]: dropped };
+    let stop = () => {};
+    try {
+      await store.setState({ targetKey, route: spec.route, value: {
+        version: 1, schemaVersion: previous, revision: 7, doc,
+        history: [{ write: {
+          key, kind: "apply", by: "human", press: "old-edit", step: "old-edit",
+          base: 6, revision: 7, undoable: true, at: Date.now(),
+          patches: [{ path: [removed], value: dropped }],
+          inverse: [{ path: [removed], value: null }],
+        }, after: doc }],
+      } });
+      // No read/view/load before subscription: its callback must already see upgraded history.
+      const saved = await new Promise<unknown>((resolve, reject) => {
+        stop = workspace.observeAccepted(key, (ack) => {
+          expect(ack).toMatchObject({ revision: 7, replay: true });
+          void store.getState({ targetKey, route: spec.route }).then(resolve, reject);
+        }, reject);
+      });
+      expect(saved).not.toHaveProperty(`history.0.after.${removed}`);
+      expect(saved).toMatchObject({ schemaVersion: spec.schemaVersion, history: [{ after: staged }] });
+    } finally {
+      stop();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test.each([false, true])(`${spec.route} upgrades pre-h2 Work and notices non-empty settings: %s`, async (nonempty) => {
     const dir = await mkdtemp(join(tmpdir(), "pe-work-upgrade-"));
     const store = fileRouteDocumentStore(dir);

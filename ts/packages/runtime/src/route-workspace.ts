@@ -853,7 +853,8 @@ export class RouteWorkspace {
     void this.#serialized(async () => {
       const spec = this.#registry.get(scope.route)?.spec;
       if (!spec || disposed) return;
-      const raw = await this.#carryOver(scope, spec.route);
+      const decoded = await this.#decodeStored(key, spec, await this.#carryOver(scope, spec.route));
+      const raw = decoded?.raw;
       this.#inverses.set(
         key,
         this.#retain(
