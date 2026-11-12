@@ -184,22 +184,28 @@ export const hostInputGraph = <A, E, R, B, F, S>(
   recording: () => Layer.Layer<B, F, S>,
 ): Layer.Layer<A & B, E | F, R | S> => (inputs.lane.kind === "live" ? live() : recording());
 
-/** Both source graphs retire browser sockets after the platform listener closes. */
+/**
+ * Both source graphs stop listening and retire browser sockets before the platform's own
+ * shutdown waits on them. The platform detaches its request handler when the serve scope closes,
+ * seconds before it calls `server.close()`; a request landing in between is never answered, and a
+ * `close()` that only waits would wait on that socket for good. This finalizer depends on the
+ * server, so it runs after the routes are released and before that wait.
+ */
 const hostServerLayer = (server: Server, port: number) =>
-  NodeHttpServer.layer(() => server, {
-    host: "127.0.0.1",
-    port,
-    disablePreemptiveShutdown: true,
-  }).pipe(
-    Layer.provide(
-      Layer.effectDiscard(
-        Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            server.closeIdleConnections();
-            server.closeAllConnections();
-          }),
-        ),
-      ),
+  Layer.effectDiscard(
+    Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        server.close();
+        server.closeAllConnections();
+      }),
+    ),
+  ).pipe(
+    Layer.provideMerge(
+      NodeHttpServer.layer(() => server, {
+        host: "127.0.0.1",
+        port,
+        disablePreemptiveShutdown: true,
+      }),
     ),
   );
 
