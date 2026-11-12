@@ -108,7 +108,7 @@ export async function parseWithLlamaCloud(
   const result = await client.parsing.waitForCompletion(
     job.id,
     { expand: request.expand },
-    { timeout: 10 * 60_000 },
+    { timeout: 10 * 60 }, // seconds: the SDK poll deadline (core/polling.js), not milliseconds
   );
   if (result.job.status !== "COMPLETED") {
     throw new Error(result.job.error_message ?? `Parse job ${result.job.status}`);
