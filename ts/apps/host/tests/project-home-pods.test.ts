@@ -63,7 +63,7 @@ test("a call that targets a document lists and writes its project home's Pods; a
       ["mine", { tier: "user", path: user }],
       ["site", { tier: "project", path: project }],
     ]);
-    expect(targeted.projectPods).toBeUndefined();
+    expect(targeted.projectPods).toMatch(/serve no Pages, skills or entrypoints and do not run/);
 
     // The write door lands in the project home, and makes no user twin.
     const member = { pod: "site", path: "settings/a.json" };

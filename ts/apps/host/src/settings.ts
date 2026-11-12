@@ -104,8 +104,15 @@ const withHome = (directory: string, ctx: PodContext) => {
 const podsRoots = (ctx: PodContext) => ctx.podsRoot ?? productPodsRoots(ctx.pointer);
 /** A listing with no project home says why, so "no project Pods" is never read as "none exist". */
 const projectPodsNote = (ctx: PodContext) =>
-  ctx.podsRoot !== undefined || projectPodsRoot(ctx.pointer)
+  ctx.podsRoot !== undefined
     ? {}
+    : projectPodsRoot(ctx.pointer)
+    ? {
+        // Only the user and firm homes are censused at start, so a project Pod's entrypoints and
+        // contributions are served by no door. Say so, or Pea calls one and meets a bare not-found.
+        projectPods:
+          "Project-home Pods list, read, write and compose here. They serve no Pages, skills or entrypoints and do not run, because only the user and firm homes are censused at start.",
+      }
     : {
         projectPods:
           ctx.pointer === undefined
