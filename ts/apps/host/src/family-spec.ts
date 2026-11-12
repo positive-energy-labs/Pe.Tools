@@ -1,7 +1,7 @@
 import { blobRefSchema } from "@pe/agent-contracts";
 import { put, get } from "./action-blobs.ts";
-import { randomUUID, createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Context, Effect } from "effect";
@@ -9,8 +9,7 @@ import { commands, parsedDocViewSchema, tools, type ActionStep } from "@pe/agent
 import { z } from "zod";
 import { command, io, refused, type CommandExecutor } from "./command-executor.ts";
 import { runPods, type PodDependencies } from "./family-actions.ts";
-import { podFolder } from "./settings.ts";
-import { userWritable } from "./content-homes.ts";
+import { podFolder, writeHome } from "./settings.ts";
 /** The app owns the parser address; commands never infer a frontend from a port or file. */
 export class FamilyPdfParser extends Context.Service<FamilyPdfParser, {
   parse(file: File): Promise<unknown>;
@@ -70,10 +69,8 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
         cells: [],
         facts: [["reading"], ["spec"]],
       }));
-      // Attaching writes the spec and its assets into the Pod: a shared Pod is copied to the user root first.
-      const root = userWritable(
-        await runPods(deps, podFolder(member.pod, { podsRoot: deps.podsRoot })),
-      );
+      // Attaching writes the spec and its assets into the Pod, in whichever home holds it.
+      const root = await runPods(deps, podFolder(member.pod, { podsRoot: deps.podsRoot }));
       if (!member.path.startsWith("settings/family/") || !member.path.endsWith(".json"))
         throw Error("Attach to a captured member in settings/family/");
       const memberBytes = await readFile(safePath(root, member.path));
@@ -139,10 +136,15 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
       >;
       for (const asset of assets)
         yield* execution.step("file", "family.spec.asset", asset, () => io(async () => {
-          await mkdir(dirname(asset.path), { recursive: true });
-          const temporary = `${asset.path}.${randomUUID()}.tmp`;
-          await writeFile(temporary, await get(asset.blob), { flag: "wx" });
-          await rename(temporary, asset.path);
+          // Through the one write door: a resumed step finds its own bytes and stops; any other
+          // bytes at the path are replaced only as read, and rest in the blob store first.
+          const current = await readFile(asset.path).catch(() => null);
+          const held = current && createHash("sha256").update(current).digest("hex");
+          if (held !== asset.blob.digest) {
+            const wrote = writeHome(asset.path, await get(asset.blob), held);
+            if (!wrote.ok)
+              throw Error(`Spec asset '${asset.path}' changed while it was being written.`);
+          }
           return { path: asset.path, sha256: asset.blob.digest };
         }));
       yield* execution.publishWork(ctx.admission.input.work!.key, "family", [

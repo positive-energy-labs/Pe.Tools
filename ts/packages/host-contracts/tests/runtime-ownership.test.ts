@@ -51,6 +51,7 @@ const fixture = JSON.parse(
     project: string | null;
     firm: string | null;
     sharedDriveRoot: string | null;
+    firmConflict: string[];
     homes: string[];
     firmSettings: string | null;
     firmPreferences: string | null;
@@ -92,24 +93,13 @@ test.each(fixture.markers)("marker: $name", (row) => {
   expect(markerTier(row.text)).toBe(row.tier);
 });
 
-// Freeze shape 3 as amended at crusade/homes c3340423 (24 s after the fixture): two firm markers
-// refuse both. These two rows still expect the first to win; writer F owes their correction, and
-// "two firm markers refuse both" in product-paths.test.ts holds the rule meanwhile.
-const overruled = (name: string) => /^two (shared )?drives hold a firm home/.test(name);
-test("the overruled first-wins rows are exactly two, and both resolve to no firm home", () => {
-  vi.stubEnv("PE_TOOLS_SHARED_ROOT", undefined);
-  vi.stubEnv("PE_TEST_HOME_ROOT", "");
-  const rows = fixture.homes.filter((row) => overruled(row.name));
-  expect(rows).toHaveLength(2);
-  for (const row of rows) expect(firmHome(factsOf(row))).toMatchObject({ root: null });
-});
 const factsOf = (row: (typeof fixture.homes)[number]): HomeFacts => ({
   drives: row.drives,
   list: (directory) => row.folders[directory] ?? [],
   marker: (folder) => row.markerFiles[folder] ?? null,
 });
 
-test.each(fixture.homes.filter((row) => !overruled(row.name)))("homes: $name", (row) => {
+test.each(fixture.homes)("homes: $name", (row) => {
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", row.productHome ?? undefined);
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", row.sharedRoot ?? undefined);
   vi.stubEnv("PE_TEST_HOME_ROOT", "");
@@ -122,6 +112,7 @@ test.each(fixture.homes.filter((row) => !overruled(row.name)))("homes: $name", (
   expect(of("project")).toBe(row.project);
   expect(of("firm")).toBe(row.firm);
   expect(firmHome(facts).root).toBe(row.firm);
+  expect(firmHome(facts).refused ?? []).toEqual(row.firmConflict);
   expect(sharedDriveRoot(facts)).toBe(row.sharedDriveRoot);
   expect(firmSettingsDir(facts)).toBe(row.firmSettings);
   expect(firmSettingsDir(facts) && join(firmSettingsDir(facts)!, "preferences.json")).toBe(
