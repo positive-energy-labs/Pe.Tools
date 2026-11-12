@@ -240,6 +240,7 @@ function storedRow(notice: StoredNotice, now: number): NoticeDraft | null {
       at: notice.at,
       url: routeAddress("settings").link(),
       detail: notice.reason.match(/Receipt [^.]+\./)?.[0],
+      visibleDetail: notice.reason.match(/Receipt [^.]+\./)?.[0],
     };
   if (notice.place === FIRM_HOME_PLACE)
     return {

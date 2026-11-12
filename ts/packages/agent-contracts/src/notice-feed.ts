@@ -61,6 +61,8 @@ export const noticeRowSchema = z.strictObject({
   refusal: z.string().optional(),
   /** The raw failure text `says` folds; the row offers it to copy. */
   detail: z.string().optional(),
+  /** Display-ready second line; only tier-save receipts opt in. Raw detail stays folded. */
+  visibleDetail: z.string().optional(),
   act: noticeActSchema.optional(),
   /** Only in the tray follower's feed: a person is looking at this row's thread now, so no card. */
   attended: z.literal(true).optional(),
