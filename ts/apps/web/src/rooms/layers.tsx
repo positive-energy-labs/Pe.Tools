@@ -27,9 +27,6 @@ export const LAYER_SAYS: Record<Layer, string> = {
   faces: "layer 1's faces before judgment, per zone",
 };
 
-/** The one host error that means "nothing partitioned here yet"; every other error is an error. */
-export const NO_TRACE = /traced (no|a) zone on/;
-
 /** Every zone file carries the whole capture's rails; each rail once, by its (A, B). */
 export const railsOf = (trace: TraceData): Rail[] => {
   const seen = new Map<string, Rail>();

@@ -6,7 +6,7 @@ import { executionTargetSchema, roomsRouteState } from "@pe/agent-contracts";
 import { read, workScope, documentMark } from "@pe/host/read-graph";
 import { roomsArgs, roomsData } from "@pe/agent-contracts";
 import { planOf } from "./rooms-plan.ts";
-import { roomsGoal } from "./goal.ts";
+import { roomsGoal, traceRefusal } from "./goal.ts";
 const workspaceArgs = roomsArgs.extend({ target: executionTargetSchema });
 export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<typeof roomsData>> } = {
   workspace: read("rooms.workspace", {
@@ -36,7 +36,8 @@ export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<t
             })
           ).body;
         } catch (error) {
-          traceError = String(error);
+          console.warn("rooms.trace", view, error);
+          traceError = traceRefusal(String(error));
         }
         try {
           plan = planOf(
