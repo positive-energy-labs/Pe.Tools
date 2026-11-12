@@ -124,8 +124,8 @@ public static class TakeoffAtlas
             TakeoffCarriers.WriteIdentity(fr, TakeoffCarriers.RoleZoningRegion, guid);
             // Read first, as every door does: a zone blob this build cannot read stops the adopt with its reason,
             // and the keys other doors wrote (flags, run id, a merge) are kept under the three this door sets.
-            var data = Pe.Shared.RevitData.Serialization.OwnerBlob.Parse(TakeoffCarriers.ReadProvenanceBlob(fr), stored => stored).OrThrow() ?? new Newtonsoft.Json.Linq.JObject();
-            _ = data.Remove("v");
+            _ = TakeoffCarriers.ReadRegion(fr).OrThrow();
+            var data = TakeoffCarriers.ReadProvenanceBlob(fr).Data ?? new Newtonsoft.Json.Linq.JObject();
             data.Merge(Newtonsoft.Json.Linq.JObject.Parse(
                 TakeoffJson.Serialize(new TakeoffZoneProvenance(request.View, item.Name.Trim(), item.SystemTag.Trim()))));
             TakeoffCarriers.WriteProvenance(fr, data);

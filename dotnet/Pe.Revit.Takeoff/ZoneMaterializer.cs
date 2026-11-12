@@ -61,7 +61,17 @@ public sealed record RegionProvenance(
             ? new(Default, null)
             : Pe.Shared.RevitData.Serialization.OwnerBlob.Parse(read, data => FromJson(data.ToString(Formatting.None)));
 
-    // The data text, fail-closed. The envelope version is the only gate: data that holds its own version is refused.
+    /// <summary>
+    ///     A zone's provenance: the same read and the same refusals, then a zone that adoption wrote (View, Name,
+    ///     SystemTag, no RunId) is called drawn, with its keys riding in Unknown.
+    /// </summary>
+    public static Pe.Shared.RevitData.Serialization.OwnerValue<RegionProvenance> ReadZone(Pe.Shared.RevitData.Serialization.OwnerBlobRead read) =>
+        Read(read) is { Value: { } zone } && string.IsNullOrEmpty(zone.RunId)
+            ? new(zone with { RunId = Rooms.RunDrawn }, null)
+            : Read(read);
+
+    // The data text, fail-closed. The envelope version is the only gate: data that holds its own version, under
+    // either spelling an earlier build wrote (`version` on a region, `v` on a zone), is refused.
     public static RegionProvenance FromJson(string json)
     {
         RegionProvenance provenance;
@@ -74,7 +84,8 @@ public sealed record RegionProvenance(
         {
             throw new InvalidOperationException($"provenance blob is not valid JSON: {ex.Message}");
         }
-        return provenance.Unknown.Keys.Any(key => string.Equals(key, "version", StringComparison.OrdinalIgnoreCase))
+        return provenance.Unknown.Keys.Any(key => string.Equals(key, "version", StringComparison.OrdinalIgnoreCase)
+                                                  || string.Equals(key, "v", StringComparison.OrdinalIgnoreCase))
             ? throw new InvalidOperationException("provenance data holds a version; the version belongs to the envelope")
             : provenance;
     }

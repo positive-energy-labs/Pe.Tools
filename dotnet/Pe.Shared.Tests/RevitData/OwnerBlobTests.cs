@@ -229,7 +229,7 @@ public sealed class OwnerBlobTests {
 
     [TestCase(null)]
     [TestCase("""{"version":1,"zoneGuid":"6d52156a-3876-4d76-b641-341454252f26","runId":"run-1"}""", Description = "an old un-enveloped region blob")]
-    [TestCase("""{"v":1,"view":"L1","name":"Zone","systemTag":"FC-8"}""", Description = "an old un-enveloped zone blob")]
+    [TestCase("""{"v":1,"view":"L1","name":"Zone","systemTag":"FC-8"}""", Description = "an old un-enveloped zone blob: no envelope, so its v is never read")]
     public void A_region_with_no_envelope_reads_as_the_drawn_default_not_a_refusal(string? stored) {
         var read = RegionProvenance.Read(OwnerBlob.Decode(RegionProvenance.Owner, stored));
 
@@ -251,6 +251,29 @@ public sealed class OwnerBlobTests {
         Assert.That(RegionProvenance.Read(OwnerBlob.Decode(RegionProvenance.Owner, stored)).Value!.ZoneGuid, Is.EqualTo(provenance.ZoneGuid));
         var withVersion = """{"owner":"takeoff-region","version":1,"data":{"version":1,"zoneGuid":"6d52156a-3876-4d76-b641-341454252f26"}}""";
         Assert.That(RegionProvenance.Read(OwnerBlob.Decode(RegionProvenance.Owner, withVersion)).Refusal, Does.Contain("belongs to the envelope"));
+    }
+
+    [TestCase("""{"version":1,"view":"L1","name":"Zone","systemTag":"FC-8"}""")]
+    [TestCase("""{"v":1,"view":"L1","name":"Zone","systemTag":"FC-8"}""")]
+    [TestCase("""{"Version":1,"zoneGuid":"6d52156a-3876-4d76-b641-341454252f26","runId":"run-1"}""")]
+    public void A_blob_with_a_version_inside_its_data_is_refused_as_a_region_and_as_a_zone(string data) {
+        var blob = OwnerBlob.Decode(RegionProvenance.Owner, $$$"""{"owner":"takeoff-region","version":1,"data":{{{data}}}}""");
+
+        Assert.That(blob.Status, Is.EqualTo(OwnerBlobStatus.Ok));
+        Assert.That(RegionProvenance.Read(blob).Refusal, Does.Contain("belongs to the envelope"));
+        Assert.That(RegionProvenance.ReadZone(blob).Refusal, Does.Contain("belongs to the envelope"));
+        Assert.That(RegionProvenance.ReadZone(blob).Value, Is.Null);
+    }
+
+    [Test]
+    public void An_adopted_zone_reads_as_drawn_and_keeps_its_keys() {
+        var blob = OwnerBlob.Decode(RegionProvenance.Owner,
+            """{"owner":"takeoff-region","version":1,"data":{"view":"L1","name":"Zone","systemTag":"FC-8"}}""");
+        var zone = RegionProvenance.ReadZone(blob).Value!;
+
+        Assert.That(zone.RunId, Is.EqualTo(Rooms.RunDrawn));
+        Assert.That(zone.Unknown.Keys, Is.EquivalentTo(new[] { "view", "name", "systemTag" }));
+        Assert.That(RegionProvenance.ReadZone(OwnerBlob.Decode(RegionProvenance.Owner, null)).Value!.RunId, Is.EqualTo(Rooms.RunDrawn));
     }
 
     // ---- the one write decision (ADR 0026 D4)
