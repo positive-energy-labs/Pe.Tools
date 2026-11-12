@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vite-plus/test";
-import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { z } from "zod";
 import { fileURLToPath } from "node:url";
 import { buildRouteArtifact, routeModuleHash } from "./route-module-hash.ts";
 import { routeSourceHash } from "./route-source-hash.ts";
@@ -317,4 +318,27 @@ test("overlapping edits rebuild the latest sources once and reload once", async 
   expect(served).toBe(true);
   expect(server.moduleGraph.invalidateAll).toHaveBeenCalledOnce();
   expect(server.ws.send).toHaveBeenCalledOnce();
+});
+
+const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
+const podsRoot = join(repoRoot, "examples/pods");
+const exampleArtifacts = readdirSync(podsRoot, { withFileTypes: true })
+  .filter((pod) => pod.isDirectory() && existsSync(join(podsRoot, pod.name, "routes")))
+  .flatMap((pod) => readdirSync(join(podsRoot, pod.name, "routes"), { withFileTypes: true })
+    .filter((route) => route.isDirectory())
+    .map((route) => join("examples/pods", pod.name, "routes", route.name, "route.artifact")))
+  .filter((artifact) => existsSync(join(repoRoot, artifact)));
+const artifactContracts = z.object({
+  contracts: z.array(z.object({ id: z.string(), bytes: z.array(z.number().int().min(0).max(255)) })).min(1),
+});
+
+test("the example Pod contract freshness census finds artifacts", () => {
+  expect(exampleArtifacts.length).toBeGreaterThan(0);
+});
+
+test.each(exampleArtifacts)("example Pod contracts match current source: %s", (artifact) => {
+  const { contracts } = artifactContracts.parse(JSON.parse(readFileSync(join(repoRoot, artifact), "utf8")));
+  for (const contract of contracts)
+    expect(Buffer.from(contract.bytes).equals(readFileSync(join(repoRoot, contract.id))),
+      `${artifact}: ${contract.id} is stale; republish this Pod route`).toBe(true);
 });
