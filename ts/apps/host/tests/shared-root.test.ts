@@ -82,19 +82,18 @@ test("without a shared root the host's resolvers all answer, on the user root al
   expect(paths.productPodsRootPath()).toBe(join(user, "Pods"));
 });
 
-test("every content path and all Work sit in the user root; machine paths stay with their owner", () => {
+test("every content path sits in the user root; Work and every machine path stay with their owner", () => {
   const content = new Set([
     "productUserContentRootPath",
     "productPodsRootPath",
     "productPagesRootPath",
-    "productRouteWorkPath",
   ]);
   for (const [name, resolver] of Object.entries(paths)) {
     const path = resolver();
     expect(under(shared, path), `${name}: ${path}`).toBe(false);
     expect(under(content.has(name) ? user : hostOwnership.rootPath, path), name).toBe(true);
   }
-  expect(paths.productRouteWorkPath()).toBe(join(userRoot(), "Work"));
+  expect(paths.productRouteWorkPath()).toBe(join(hostOwnership.rootPath, "state", "Work"));
 });
 
 test("a Pod in both homes resolves to the user's copy; a shared-only Pod still lists", async () => {

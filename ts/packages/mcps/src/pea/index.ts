@@ -29,7 +29,6 @@ export {
   publishPeaSkills,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
-  resolvePeaStandardSkillsRoot,
   peaStandardSkillsRoot,
 } from "./skills.ts";
 

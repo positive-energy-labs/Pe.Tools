@@ -24,6 +24,8 @@ type SkillDirectoryCapture = (
   directory: string,
 ) => Promise<{ members: SkillFile[]; diagnostics: { severity: string; message: string }[] }>;
 export type SkillPublicationOptions = PeaProductHomeOptions & {
+  /** The agent's working directory: the projections land under it, never in a home. */
+  agentPath: string;
   captureDirectory: SkillDirectoryCapture;
 };
 export type SkillPublication = { skills: SkillSnapshot[]; notices: string[] };
@@ -53,7 +55,10 @@ export function builtinPeaSkillSnapshots(): SkillSnapshot[] {
   });
 }
 
-/** Personal roots are adapters of Skills/, not competing writable skill registries. */
+/**
+ * `<home>/Skills` is the one personal source. The harness roots under the agent's working directory
+ * are projections of it: written, never read back as a source, and nothing here writes into a home.
+ */
 export async function publishPeaSkills(
   options: SkillPublicationOptions,
   packaged: readonly SkillSnapshot[] = [],
@@ -66,7 +71,7 @@ export async function publishPeaSkills(
     return admitted.members.map(({ path, bytes, sha256 }) => ({ path, bytes, sha256 }));
   };
   const home = resolvePeaProductHomePath(options);
-  const roots = resolvePeaSkillPaths(options);
+  const roots = resolvePeaSkillPaths(options.agentPath);
   const bundled = builtins;
   const canonicalRoot = join(home, "Skills");
   const personal = new Map<string, SkillFile[]>();
@@ -87,23 +92,17 @@ export async function publishPeaSkills(
   );
   for (const [i, root] of roots.entries()) {
     for (const name of await directories(root)) {
-      const files = await capture(join(root, name));
-      if (managed[i]![name] && managed[i]![name] === signature(files)) {
-        proven[i]!.add(name);
-        continue;
-      }
-      if (retiredPeaSkillNames.includes(name)) {
+      const receipt = managed[i]![name];
+      if (receipt && receipt === signature(await capture(join(root, name)))) proven[i]!.add(name);
+      else if (retiredPeaSkillNames.includes(name))
         notices.push(
           `Skill folder ${join(root, name)} carries a retired product name but no matching product receipt, so it was left untouched; delete it if it is not yours.`,
         );
-        continue;
-      }
       // ponytail: product skills overwrite same-named folders outright (kaitpw 2026-10-17); owed: user edits that survive product updates.
-      if (bundled.some((s) => s.name === name)) continue;
-      const previous = personal.get(name);
-      if (previous && signature(previous) !== signature(files))
-        throw Error(`Conflicting personal skill copies: ${name}`);
-      personal.set(name, files);
+      else if (!receipt && !bundled.some((s) => s.name === name) && !personal.has(name))
+        notices.push(
+          `Skill folder ${join(root, name)} is not a source, so only that harness sees it; move it to ${join(canonicalRoot, name)} to publish it.`,
+        );
     }
   }
   const skills = [
@@ -120,8 +119,7 @@ export async function publishPeaSkills(
     if (destinations.has(name.toLowerCase())) throw Error(`Conflicting skill projection: ${name}`);
     destinations.set(name.toLowerCase(), skill);
   }
-  // Admission completes before any destination changes. Personal source bytes remain canonical.
-  for (const [name, files] of personal) await writeFiles(join(canonicalRoot, name), files);
+  // Admission completes before any destination changes.
   for (const root of roots) {
     await mkdir(root, { recursive: true });
     const receipt: Record<string, string> = {};

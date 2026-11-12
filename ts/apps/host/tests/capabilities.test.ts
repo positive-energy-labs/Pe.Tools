@@ -202,6 +202,7 @@ test("one admitted content snapshot waits for import, publishes exact skill byte
   };
   const content = createContributionContent({
     worldRoot: home,
+    homeRoot: home,
     bootstrap: async () => {
       imports++;
       for (const [path, text] of Object.entries(input)) {

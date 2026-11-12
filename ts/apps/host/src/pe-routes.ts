@@ -44,7 +44,6 @@ import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/re
 import {
   createCapabilityCatalogSource,
   createRouteRegistrations,
-  resolvePeaProductHomePath,
   publishPeaSkills,
   peaAgentInstructions,
 } from "@pe/mcps";
@@ -70,7 +69,7 @@ import {
   HttpServerResponse,
 } from "effect/http";
 import { createHash } from "node:crypto";
-import { unwatchFile, watchFile } from "node:fs";
+import { mkdirSync, unwatchFile, watchFile } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readStoredNotices } from "@pe/host-contracts/store";
@@ -157,9 +156,11 @@ import { createPluginsHandler } from "./plugins-handler.ts";
 import { createPodRoutes } from "./pod-routes.ts";
 import { productRouteSettingsPath } from "./product-paths.ts";
 import {
+  productAgentPath,
   productDuctsAnalysesPath,
   productHarnessThreadsPath,
   productRouteWorkPath,
+  productUserContentRootPath,
 } from "./product-paths.ts";
 import { graphRouteIds } from "./reads/routes.ts";
 import {
@@ -879,8 +880,11 @@ function workKey(url: URL, route: string, shape: "read" | "write"): WorkKey | Re
  * document-close sweep.
  */
 export function createContributionContent(options: {
+  /** The agent's working directory: the harness skill projections land here, never in a home. */
   worldRoot: string;
-  /** Scratch Pages in read order; the world root's `Pages` when omitted (an isolated test world). */
+  /** The user home that authors `Skills/` and, by default, `Pages/`; the user root when omitted. */
+  homeRoot?: string;
+  /** Scratch Pages in read order; the home's `Pages` when omitted (an isolated test world). */
   pagesRoots?: readonly string[];
   packages?: typeof listPackages;
   pages?: (packages: readonly AdmittedPackage[]) => Promise<readonly PageDescriptor[]>;
@@ -889,7 +893,8 @@ export function createContributionContent(options: {
   decisionsPath?: string;
   changed?: () => void;
 }) {
-  const pagesRoots = options.pagesRoots ?? [join(options.worldRoot, "Pages")];
+  const homeRoot = options.homeRoot ?? productUserContentRootPath();
+  const pagesRoots = options.pagesRoots ?? [join(homeRoot, "Pages")];
   const revisions = new Map<string, Map<string, unknown>>();
   const latest = new Map<string, unknown>();
   let snapshot: Promise<CapabilityContent> | undefined;
@@ -1043,7 +1048,7 @@ export function createContributionContent(options: {
             }),
     );
     const publication = await publishPeaSkills(
-      { productHomePath: options.worldRoot, captureDirectory },
+      { productHomePath: homeRoot, agentPath: options.worldRoot, captureDirectory },
       packagedSkills,
       lifecycle.skills(),
     );
@@ -1141,7 +1146,10 @@ function* hostPeRoutes(
   const files = yield* DuctFiles;
   const inputContext = yield* Effect.serviceOption(HostInputContext);
   const sourceRoot = hostOwnership.sourceRoot;
-  const worldRoot = resolvePeaProductHomePath();
+  // Fixed once, under the machine state root and outside every home (ADR 0037 rule 6): the harness
+  // child's cwd must exist before the first spawn, and T3 keys its project on this path.
+  const worldRoot = productAgentPath();
+  mkdirSync(worldRoot, { recursive: true });
   let invalidateCatalog = () => {};
   const content = createContributionContent({
     worldRoot,
@@ -1158,7 +1166,7 @@ function* hostPeRoutes(
     },
   });
   bindPackageLifecycle(content.lifecycle);
-  // The user's own Codex MCP servers stay out of Pea threads: a project-level config in the world root.
+  // The user's own Codex MCP servers stay out of Pea threads: a project-level config in the agent's working directory.
   void userCodexMcpServers(userCodexConfigPath())
     .then((names) => writePeaCodexProjectConfig(worldRoot, names))
     .catch((error) =>

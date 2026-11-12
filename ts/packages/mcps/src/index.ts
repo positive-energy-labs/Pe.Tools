@@ -12,7 +12,6 @@ export {
   peaStandardSkillsRoot,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
-  resolvePeaStandardSkillsRoot,
 } from "./pea/index.ts";
 export type { CapabilityCatalogSource, RouteRegistration } from "./pea/index.ts";
 export type { PeaCliCommandOptions } from "./pea/PeaCliCommands.ts";

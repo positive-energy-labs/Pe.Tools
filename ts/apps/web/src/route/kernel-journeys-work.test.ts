@@ -1037,7 +1037,8 @@ test("JZ audit page Bind validates its live HTTP contract before dispatch and pe
   const pages = join(dir, "Pages"), pods = join(dir, "Pods");
   await mkdir(join(pages, "todo"), { recursive: true }); await mkdir(pods);
   await writeFile(join(pages, "todo", "index.html"), "<title>Audit Page</title><p>Bind this page</p>", "utf8");
-  const handle = createPagesHandler(pages, pods);
+  const state = join(dir, "state", "Pages");
+  const handle = createPagesHandler(pages, pods, undefined, undefined, { root: state, notices: join(dir, "state", "stored-notices.jsonl") });
   let dispatches = 0;
   vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
     dispatches++; return withInvocationContext({ caller: who }, () => handle(new Request(new URL(url, "http://host"), init)));
@@ -1047,7 +1048,7 @@ test("JZ audit page Bind validates its live HTTP contract before dispatch and pe
     expect(dispatches, "Malformed input fails before the HTTP door").toBe(0);
     await pageBindRpc.run({ slug: "todo", binding: { kind: "none" } });
     expect(dispatches).toBe(1);
-    expect(JSON.parse(await readFile(join(pages, "todo", ".state", "binding.json"), "utf8"))).toMatchObject({
+    expect(JSON.parse(await readFile(join(state, "todo", "binding.json"), "utf8"))).toMatchObject({
       slots: { default: { kind: "none" } }, boundBy: { default: "human" },
     });
   } finally { vi.unstubAllGlobals(); await rm(dir, { recursive: true, force: true }); }
