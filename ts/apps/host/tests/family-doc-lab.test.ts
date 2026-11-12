@@ -312,7 +312,10 @@ async function boxed() {
 
 test("narrow 1: a path source is an absolute local regular PDF under the cap", async () => {
   const { pods, attach, parsed } = await boxed();
-  expect(await attach({ path: "sheets/acme.pdf" })).toMatch(/absolute path/);
+  // The refusal's own sentence: the unreadable-file refusal also says "absolute path", and passed for it.
+  expect(await attach({ path: "sheets/acme.pdf" })).toMatch(/'sheets\/acme\.pdf' is not an absolute path/);
+  // A relative path that does resolve, against the host's working directory, is refused the same.
+  expect(await attach({ path: "package.json" })).toMatch(/'package\.json' is not an absolute path/);
   expect(await attach({ path: "\\\\server\\share\\acme.pdf" })).toMatch(/network or device path/);
   expect(await attach({ path: "\\\\?\\C:\\acme.pdf" })).toMatch(/network or device path/);
   expect(await attach({ path: pods })).toMatch(/not a regular file/);

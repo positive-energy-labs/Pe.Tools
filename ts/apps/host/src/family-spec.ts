@@ -65,7 +65,7 @@ const overCap = (what: string) =>
   sourceRefused(
     `${what} is over the ${SPEC_SOURCE_MAX_BYTES / 1024 / 1024} MB limit for a cut sheet. Attach the pages that hold the product data as a smaller PDF.`,
   );
-/** A file on the host's own disk: absolute, local, regular, under the cap, and a PDF by its magic. */
+/** A file on the host's own disk: absolute, local, regular and under the cap. The caller checks the PDF magic, for every source. */
 async function readPdfPath(path: string): Promise<Uint8Array> {
   if (path.startsWith("\\\\") || path.startsWith("//"))
     throw sourceRefused(
@@ -85,12 +85,6 @@ async function readPdfPath(path: string): Promise<Uint8Array> {
     if (!stat.isFile())
       throw sourceRefused(`'${path}' is not a regular file. Give the path to the PDF itself.`);
     if (stat.size > SPEC_SOURCE_MAX_BYTES) throw overCap(`'${path}'`);
-    const magic = Buffer.alloc(5);
-    await file.read(magic, 0, 5, 0);
-    if (magic.toString() !== "%PDF-")
-      throw sourceRefused(
-        `'${path}' is not a PDF (its bytes do not begin with %PDF-). Export or print it to PDF and attach that.`,
-      );
     return await file.readFile();
   } finally {
     await file.close();

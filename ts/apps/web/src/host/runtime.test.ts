@@ -154,3 +154,58 @@ test("GET and other refusal codes never reload", async () => {
     vi.unstubAllGlobals();
   }
 });
+
+/* purge-2 c103cdbc: a write sent while the frame loaded was admitted at once, ahead of the refused write's replay. */
+test("a write sent during a re-admission waits for it, so the host receives writes in send order", async () => {
+  vi.stubGlobal("window", { location: { reload: vi.fn(), origin: location.origin, search: "" } });
+  let admitted = false;
+  const received: unknown[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init: RequestInit) => {
+      if (!admitted) return Response.json(refusedBody, { status: 403 });
+      received.push(init.body);
+      return Response.json({ revision: received.length });
+    }),
+  );
+  sessionStorage.clear();
+  try {
+    const first = hostFetch("/pe/route-view/fans", { method: "PUT", body: "first" });
+    await vi.waitFor(() => expect(document.querySelector("iframe")).not.toBeNull());
+    // The navigation's response headers have minted the context; its `load` has not fired yet.
+    admitted = true;
+    const second = hostFetch("/pe/route-view/fans", { method: "PUT", body: "second" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await answerNavigation();
+    expect((await first).status).toBe(200);
+    expect((await second).status).toBe(200);
+    expect(received).toEqual(["first", "second"]);
+  } finally {
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
+
+test("the admission layer's { refusal } envelope re-admits as the { error } one does", async () => {
+  vi.stubGlobal("window", { location: { reload: vi.fn(), origin: location.origin, search: "" } });
+  let admitted = false;
+  const fetcher = vi.fn(async () =>
+    admitted
+      ? Response.json({ revision: 1 })
+      : Response.json({ refusal: { code: "context.missing", detail: "anonymous" } }, { status: 403 }),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  sessionStorage.clear();
+  try {
+    const write = hostFetch("/pe/route-view/fans", { method: "PUT", body: "{}" });
+    admitted = true;
+    await answerNavigation();
+    expect((await write).status).toBe(200);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  } finally {
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});

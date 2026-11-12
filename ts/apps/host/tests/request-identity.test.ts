@@ -54,6 +54,39 @@ effectTest("EventSource query ownership carries its minted human into native adm
   }),
 );
 
+/* purge-2 c103cdbc: a cross-site frame's navigation minted a browser context, and nothing refused the framing. */
+effectTest("only this origin's own navigation mints a browser context, and a page refuses a foreign frame", () =>
+  Effect.gen(function* () {
+    const server = createServer();
+    yield* Effect.addFinalizer(() => Effect.sync(() => server.closeAllConnections()));
+    const port = () => (server.address() as import("node:net").AddressInfo).port;
+    const identity = requestIdentityLayer({ port, frontendOrigin: Effect.succeed(undefined),
+      share: { read: async () => { throw Error("local requests never read sharing"); }, observe: () => {} } });
+    const routes = HttpRouter.add("GET", "/", () => Effect.succeed(HttpServerResponse.html("page")));
+    yield* Layer.build(HttpRouter.serve(routes.pipe(Layer.provide(identity))).pipe(
+      Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: 0 })),
+    ));
+    yield* Effect.promise(async () => {
+      const navigate = async (site?: string, dest = "iframe") => {
+        const response = await fetch(`http://127.0.0.1:${port()}/`, { headers: { accept: "text/html",
+          "sec-fetch-mode": "navigate", "sec-fetch-dest": dest, ...(site ? { "sec-fetch-site": site } : {}) } });
+        await response.body?.cancel();
+        return { status: response.status, minted: response.headers.has("set-cookie"),
+          frames: response.headers.get("content-security-policy") };
+      };
+      const page = { status: 200, frames: "frame-ancestors 'self'" };
+      // The re-admission frame, a typed address, and a client that sends no fetch metadata.
+      expect(await navigate("same-origin")).toEqual({ ...page, minted: true });
+      expect(await navigate("none", "document")).toEqual({ ...page, minted: true });
+      expect(await navigate(undefined, "document")).toEqual({ ...page, minted: true });
+      // Another site's frame or link still reads the page, as the anonymous caller it arrived as.
+      expect(await navigate("cross-site")).toEqual({ ...page, minted: false });
+      expect(await navigate("same-site")).toEqual({ ...page, minted: false });
+      expect(await navigate("cross-site", "document")).toEqual({ ...page, minted: false });
+    });
+  }),
+);
+
 const turns = () =>
   Effect.promise(async () => {
     for (let i = 0; i < 30; i++) await new Promise<void>((resolve) => setImmediate(resolve));

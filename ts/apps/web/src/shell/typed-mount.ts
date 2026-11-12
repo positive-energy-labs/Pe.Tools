@@ -413,14 +413,20 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   // findings history door uses: the route's own document-bound Work key, as the host resolved it; a route whose
   // Work is keyed by a member, or that keeps none, binds the document itself.
   // ponytail: Pea's write shows on the next of those; subscribe the findings Work's acks if it must show at once.
-  let findings: readonly Finding[] = [], findingsAt: string | null = null;
+  let findings: readonly Finding[] = [], findingsAt: string | null = null, findingsRead = 0;
   const findingsKey = () => (!edits?.key && owners.get(own)?.handle?.key)
     || (input.work.address || input.work.open ? bindWork(FINDINGS_OWNER, input.work.address, undefined, input.work.open ?? undefined) : null);
   const loadFindings = () => {
     const key = findingsKey();
     if (findingsAt === null || input.fixture !== null || input.history || !key) return;
     findingsAt = workKey(key);
-    void readFindings(key, ports.findings).then((read) => { if (read && !disposed) { findings = read; notify(); } }).catch(() => {});
+    // Only the newest read lands; a read the host fails keeps what the pane shows and is a fault.
+    const read = ++findingsRead;
+    void readFindings(key, ports.findings).then((answer) => {
+      if (disposed || read !== findingsRead) return;
+      if (!answer) throw Error("The host did not answer the findings read");
+      findings = answer; notify();
+    }).catch((error) => reportFault({ code: "reading.failed", routeCode: spec.key, readingKind: FINDINGS_OWNER }, error));
   };
   const results = new Map<string,unknown>();
   const pending = new Set<string>();
@@ -565,7 +571,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.journal.discardIntent(id); notify(); },
     // The person's own findings live in the document's findings Work, not this route's: their undo is that door's.
     undoFinding: async () => {
-      const key = owners.get(own)?.handle?.key;
+      const key = findingsKey();
       if (!key) return { message: "Wait for this route's Work before undoing a finding" };
       const refused = await undoOwnFinding(key, ports.findings);
       // ponytail: the History entry lives for this Place; a durable one needs the findings Work's own moves here.
@@ -573,7 +579,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       return refused;
     },
     findings: () => { const key = findingsKey(); if (findingsAt !== (key ? workKey(key) : "")) { findingsAt = ""; loadFindings(); } return findings; },
-    ownFindingsLeft: () => { const key = owners.get(own)?.handle?.key; return key ? ownFindingsLeft(key, ports.findings) : Promise.resolve(null); },
+    ownFindingsLeft: () => { const key = findingsKey(); return key ? ownFindingsLeft(key, ports.findings) : Promise.resolve(null); },
     restoreWork: restore, journalRefusal: () => input.readOnly || input.history ? "needs live Revit" : [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {

@@ -12,7 +12,9 @@ const readFetch = createReadFetch((...args) => fetch(...args));
 // Frozen into the served page's module graph: a reused port must never change its owner.
 const serviceName: string = import.meta.env.PE_RUNTIME_SERVICE;
 
-const contextRefusal = z.object({ error: z.object({ code: z.literal("context.missing") }) });
+// A door answers `{ error }`; the admission layer, ahead of every door, answers `{ refusal }`.
+const contextCode = z.object({ code: z.literal("context.missing") });
+const contextRefusal = z.union([z.object({ error: contextCode }), z.object({ refusal: contextCode })]);
 const contextReloadKey = "pe.context-reload-at";
 const refusedForContext = async (response: Response) =>
   response.status === 403 &&
@@ -63,9 +65,12 @@ export async function hostFetch(url: string, init?: RequestInit): Promise<Respon
   }
   headers.set(HOST_RUNTIME_SERVICE_HEADER, serviceName);
   headers.set("x-pe-web-build", webBuildStamp.build);
+  const write = (init?.method ?? "GET").toUpperCase() !== "GET";
+  // A write sent while a re-admission is pending waits behind the refused write it will replay,
+  // so the host receives writes in the order the page sent them.
+  if (write && readmitting) await readmitting;
   const response = await readFetch(url, { ...init, headers });
-  if ((init?.method ?? "GET").toUpperCase() === "GET" || !(await refusedForContext(response)))
-    return response;
+  if (!write || !(await refusedForContext(response))) return response;
   // A stream body is spent; every other write is sent again under the context the navigation minted.
   const again =
     init?.body instanceof ReadableStream

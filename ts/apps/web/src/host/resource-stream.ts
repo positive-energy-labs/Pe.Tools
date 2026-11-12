@@ -529,7 +529,7 @@ export type Liveness = Pick<PeReadings, "onResync">;
 
 /**
  * A periodic call to the host (a presence beat, a view lease) under the retry rule above: it beats
- * now and every `everyMs`; a failed beat backs off, and the stream's recovery beats at once. The
+ * now and every `everyMs`, measured from the send; a failed beat backs off, and the stream's recovery beats at once. The
  * beat reports its own failure; this only paces it.
  */
 export function followBeat(
@@ -538,26 +538,39 @@ export function followBeat(
   owner: Liveness = peReadings,
 ): () => void {
   let failures = 0;
-  let turn = 0;
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+  let period: ReturnType<typeof setInterval> | undefined;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  // A healthy beat is an interval from the send, never a timer chained on the answer: a slow answer
+  // cannot stretch a lease past its expiry. Only a failed beat leaves the interval, for the backoff.
+  const healthy = () => {
+    clearTimeout(retry);
+    period ??= setInterval(run, everyMs);
+  };
   const run = () => {
-    const mine = ++turn;
-    clearTimeout(timer);
-    void beat()
-      .then(
-        () => (failures = 0),
-        () => failures++,
-      )
-      .then(() => {
-        if (mine !== turn) return;
-        timer = setTimeout(run, failures ? retryDelayMs(failures + 1, everyMs) : everyMs);
-      });
+    if (failures) clearTimeout(retry);
+    else healthy();
+    void beat().then(
+      () => {
+        failures = 0;
+        if (!stopped) healthy();
+      },
+      () => {
+        if (stopped) return;
+        failures++;
+        clearInterval(period);
+        period = undefined;
+        clearTimeout(retry);
+        retry = setTimeout(run, retryDelayMs(failures + 1, everyMs));
+      },
+    );
   };
   const unfollow = owner.onResync(run);
   run();
   return () => {
-    turn++;
-    clearTimeout(timer);
+    stopped = true;
+    clearInterval(period);
+    clearTimeout(retry);
     unfollow();
   };
 }
