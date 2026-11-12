@@ -48,3 +48,9 @@ export function roomsGoal(
       : { kind: "complete", value: `${rooms} room${rooms === 1 ? "" : "s"} on ${view}` },
   };
 }
+
+/**
+ * The one `rooms.trace` failure that means "nothing partitioned here yet" is a plain sentence in
+ * the pane; the bridge's own words go to the host log. Every other failure keeps its words.
+ */
+export const traceRefusal = (raw: string) => (/traced (no|a) zone on/.test(raw) ? "No zones traced yet" : raw);
