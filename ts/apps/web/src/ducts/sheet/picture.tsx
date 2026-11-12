@@ -125,6 +125,33 @@ export function beyondPicture(beyond: Beyond, walked: ReadonlySet<number>, on: b
   return { markOf, cuts, ids: new Set(markOf.keys()) as ReadonlySet<number> };
 }
 
+/**
+ * The stub captions past each stopping unit: one per unit, not one per element (drive 10: about 20
+ * copies of one sentence swamped the picture). It sits on the unit's first element with a point and
+ * carries every such element's id, so the caption anchors on the nearest cut and any of them lights it.
+ */
+export const beyondLabels = (
+  markOf: ReadonlyMap<number, string>,
+  pointOf: (id: number) => readonly number[] | null,
+) => {
+  const byMark = new Map<string, { at: readonly number[]; ids: number[] }>();
+  for (const [id, mark] of markOf) {
+    const at = pointOf(id);
+    if (!at) continue;
+    const unit = byMark.get(mark);
+    if (unit) unit.ids.push(id);
+    else byMark.set(mark, { at, ids: [id] });
+  }
+  return [...byMark].map(([mark, { at, ids }]) => ({
+    key: `beyond:${mark}`,
+    at,
+    text: beyondWords(mark),
+    priced: false,
+    ids,
+    stub: true,
+  }));
+};
+
 export function SheetPicture({
   props,
   snapshot,
@@ -321,12 +348,7 @@ export function SheetPicture({
         ]
       : [],
   );
-  const stubLabels = [...beyond.markOf].flatMap(([id, mark]) => {
-    const at = pointOf(id);
-    return at
-      ? [{ key: `beyond:${id}`, at, text: beyondWords(mark), priced: false, ids: [id], stub: true }]
-      : [];
-  });
+  const stubLabels = beyondLabels(beyond.markOf, pointOf);
   const overlay = (frame: PictureOverlayFrame) => (
     <DuctsOverlay
       frame={frame}
