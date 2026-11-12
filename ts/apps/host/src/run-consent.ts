@@ -335,6 +335,7 @@ const makeRunConsents = Effect.gen(function* () {
     origin: Origin,
     id: string,
     footprint: Footprint,
+    discloses?: string,
   ) {
     if (origin.caller.kind === "human") return { by: "press" } as CommandConsent;
     if (origin.caller.kind !== "pea") return null;
@@ -387,7 +388,7 @@ const makeRunConsents = Effect.gen(function* () {
             commands: [id],
             toolCall: {
               toolCallId: `writes:${run.ref.turn}`,
-              title: `First write: ${describe(footprint, sink.documentName)}. Then all writes in this thread until Stop.`,
+              title: `First write: ${describe(footprint, sink.documentName)}. ${discloses ? `${discloses} ` : ""}Then all writes in this thread until Stop.`,
             },
             options: [
               { optionId: "allow_now", name: auto ? "Allow now" : "Allow", kind: "allow_once" },
@@ -564,9 +565,9 @@ export const runConsentsPromise = (consents: RunConsents["Service"]) => {
     close: (ref: RunRef, reason: CloseReason) => now(consents.close(ref, reason)),
     revoke: (thread: string) => now(consents.revoke(thread)),
     closeAll: () => now(consents.closeAll),
-    authorize: (origin: Origin, id: string, footprint: Footprint) =>
+    authorize: (origin: Origin, id: string, footprint: Footprint, discloses?: string) =>
       new Promise<CommandConsent | null>((resolve, reject) =>
-        edge(consents.authorize(origin, id, footprint)).addObserver((exit) =>
+        edge(consents.authorize(origin, id, footprint, discloses)).addObserver((exit) =>
           Exit.isSuccess(exit)
             ? resolve(exit.value)
             : reject(thrown(exit)),

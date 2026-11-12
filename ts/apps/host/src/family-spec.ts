@@ -1,8 +1,8 @@
 import { blobRefSchema, FAMILY_MEMBER_DIR, isFamilyMember, type Consumed } from "@pe/agent-contracts";
 import { put, get } from "./action-blobs.ts";
 import { randomUUID, createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute, join, posix, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Context, Effect } from "effect";
 import { commands, parsedDocViewSchema, tools, type ActionStep } from "@pe/agent-contracts";
@@ -22,16 +22,20 @@ const safePath = (root: string, path: string) => {
   if (!local || local.startsWith("..") || isAbsolute(local)) throw Error("Invalid pod asset path");
   return full;
 };
-const folderFor = (pod: string) =>
+const folderFor = (pod: string, podsRoot?: PodDependencies["podsRoot"]) =>
   // effect-edge: island, phase 5
-  Effect.runPromise(podFolder(pod).pipe(Effect.provide(NodeServices.layer)));
+  Effect.runPromise(podFolder(pod, { podsRoot }).pipe(Effect.provide(NodeServices.layer)));
 
 /** Assets and sidecars are served from the selected pod, without a parse cache or API key. */
-export async function familySpecAsset(url: URL): Promise<Response> {
+export async function familySpecAsset(
+  url: URL,
+  podsRoot?: PodDependencies["podsRoot"],
+): Promise<Response> {
   try {
-    const path = url.searchParams.get("path") ?? "";
+    // Normalized before the prefix test: `settings/family/../../x` names another Pod file.
+    const path = posix.normalize((url.searchParams.get("path") ?? "").replaceAll("\\", "/"));
     if (!path.startsWith(FAMILY_MEMBER_DIR)) throw Error("Expected a family spec asset");
-    const file = safePath(await folderFor(url.searchParams.get("pod") ?? ""), path);
+    const file = safePath(await folderFor(url.searchParams.get("pod") ?? "", podsRoot), path);
     const bytes = await readFile(file);
     const mime =
       (
@@ -53,6 +57,80 @@ export async function familySpecAsset(url: URL): Promise<Response> {
   }
 }
 
+/** The largest PDF either source door reads; a cut sheet is a few MB. */
+export const SPEC_SOURCE_MAX_BYTES = 64 * 1024 * 1024;
+export const SPEC_SOURCE_TIMEOUT_MS = 30_000;
+const sourceRefused = (message: string) => refused(message, "family.spec.source");
+const overCap = (what: string) =>
+  sourceRefused(
+    `${what} is over the ${SPEC_SOURCE_MAX_BYTES / 1024 / 1024} MB limit for a cut sheet. Attach the pages that hold the product data as a smaller PDF.`,
+  );
+/** A file on the host's own disk: absolute, local, regular, under the cap, and a PDF by its magic. */
+async function readPdfPath(path: string): Promise<Uint8Array> {
+  if (path.startsWith("\\\\") || path.startsWith("//"))
+    throw sourceRefused(
+      `'${path}' is a network or device path. Copy the PDF to a local drive and give that path, or upload the file.`,
+    );
+  if (!isAbsolute(path))
+    throw sourceRefused(
+      `'${path}' is not an absolute path. Give the full path to the PDF on the host's machine, a URL, or upload the file.`,
+    );
+  const file = await open(path, "r").catch((error: NodeJS.ErrnoException) => {
+    throw sourceRefused(
+      `The host cannot read '${path}' (${error.code ?? error.message}). Give an absolute path to a PDF on the host's machine, a URL, or upload the file.`,
+    );
+  });
+  try {
+    const stat = await file.stat();
+    if (!stat.isFile())
+      throw sourceRefused(`'${path}' is not a regular file. Give the path to the PDF itself.`);
+    if (stat.size > SPEC_SOURCE_MAX_BYTES) throw overCap(`'${path}'`);
+    const magic = Buffer.alloc(5);
+    await file.read(magic, 0, 5, 0);
+    if (magic.toString() !== "%PDF-")
+      throw sourceRefused(
+        `'${path}' is not a PDF (its bytes do not begin with %PDF-). Export or print it to PDF and attach that.`,
+      );
+    return await file.readFile();
+  } finally {
+    await file.close();
+  }
+}
+/** A PDF fetched once: http(s) only, no redirect followed, timed, and cut off at the cap. */
+async function readPdfUrl(url: string): Promise<Uint8Array> {
+  if (!["http:", "https:"].includes(new URL(url).protocol))
+    throw sourceRefused(
+      `Only http and https URLs are fetched, not '${url}'. For a file on this machine give { path }.`,
+    );
+  const failed = (error: Error) =>
+    sourceRefused(
+      error.name === "TimeoutError"
+        ? `PDF download did not finish within ${SPEC_SOURCE_TIMEOUT_MS / 1000} s for ${url}. Download it and attach by { path }.`
+        : `PDF download failed for ${url}: ${(error.cause as Error | undefined)?.message ?? error.message}. A redirect is not followed: give the PDF's final URL, or download it and attach by { path }.`,
+    );
+  const response = await fetch(url, {
+    redirect: "error",
+    signal: AbortSignal.timeout(SPEC_SOURCE_TIMEOUT_MS),
+  }).catch((error: Error) => {
+    throw failed(error);
+  });
+  if (!response.ok || !response.body)
+    throw sourceRefused(`PDF download failed (${response.status}) for ${url}`);
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for await (const chunk of response.body) {
+      size += chunk.length;
+      if (size > SPEC_SOURCE_MAX_BYTES) throw overCap(url);
+      chunks.push(chunk);
+    }
+  } catch (error) {
+    await response.body.cancel().catch(() => {});
+    throw error instanceof Error && !("refusal" in error) ? failed(error) : error;
+  }
+  return Buffer.concat(chunks);
+}
+
 const assetSchema = z.strictObject({ path: z.string(), blob: blobRefSchema });
 const preparedSpecSchema = z.strictObject({
   member: z.strictObject({ pod: z.string(), path: z.string() }),
@@ -63,6 +141,10 @@ const preparedSpecSchema = z.strictObject({
 
 export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor {
   return command(commands["family.attach-spec"], preparedSpecSchema, {
+    // The read happens in bind, before the Reject window; the send happens after it (the parser is
+    // LlamaCloud behind the web endpoint). The card names what leaves the machine.
+    discloses: ({ source }) =>
+      `The PDF ${"path" in source ? source.path : "url" in source ? source.url : source.fileName} is sent to the LlamaCloud parser for parsing.`,
     bind: async (ctx) => {
       const { member, source, work: handle } = ctx.admission.input;
       if (!handle) throw refused("Reviewed Family Work is required");
@@ -94,23 +176,9 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
       // consumed fact, so resume and recovery see the same PDF the admission saw (cdb265c9).
       const read = async (): Promise<{ bytes: Uint8Array; name: string }> => {
         if ("digest" in source) return { bytes: await get(source), name: source.fileName };
-        if ("path" in source)
-          return {
-            bytes: await readFile(source.path).catch((error: NodeJS.ErrnoException) => {
-              throw refused(
-                `The host cannot read '${source.path}' (${error.code ?? error.message}). Give an absolute path to a PDF on the host's machine, a URL, or upload the file.`,
-                "family.spec.source",
-              );
-            }),
-            name: source.path,
-          };
-        const response = await fetch(source.url).catch((error: Error) => {
-          throw refused(`PDF download failed: ${error.message}`, "family.spec.source");
-        });
-        if (!response.ok)
-          throw refused(`PDF download failed (${response.status}) for ${source.url}`, "family.spec.source");
+        if ("path" in source) return { bytes: await readPdfPath(source.path), name: source.path };
         return {
-          bytes: new Uint8Array(await response.arrayBuffer()),
+          bytes: await readPdfUrl(source.url),
           name: new URL(source.url).pathname || "document.pdf",
         };
       };
@@ -120,7 +188,9 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
       });
       const bytes = await file.arrayBuffer();
       if (Buffer.from(bytes).subarray(0, 5).toString() !== "%PDF-")
-        throw refused("Source is not a PDF: its bytes do not begin with %PDF-", "family.spec.source");
+        throw sourceRefused(
+          "Source is not a PDF: its bytes do not begin with %PDF-. Export or print it to PDF and attach that.",
+        );
       const sha256 = createHash("sha256").update(Buffer.from(bytes)).digest("hex");
       const sourceFact: Consumed[] =
         "path" in source

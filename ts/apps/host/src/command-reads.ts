@@ -60,6 +60,12 @@ export function commandResources(
             .update(await get(dependency.probe.blob))
             .digest("hex");
         case "file":
+          // Bytes retained at admission are the input (cdb265c9): the path is not read again, so an
+          // edit to it after admission changes nothing. A file with no retained bytes is still re-read.
+          if (dependency.blob)
+            return createHash("sha256")
+              .update(await get(dependency.blob))
+              .digest("hex");
           return readFile(dependency.probe.path).then(
             (bytes) => createHash("sha256").update(bytes).digest("hex"),
             (error: NodeJS.ErrnoException) => {

@@ -395,12 +395,13 @@ export const authorizeCommand = async (
   origin: Origin,
   id: string,
   footprint: Footprint,
+  discloses?: string,
 ): Promise<CommandConsent | null> => {
   if (origin.caller.kind === "human") return { by: "press" };
   if (origin.caller.kind !== "pea") return null;
   if (!footprint.length) return null;
   assertRunAdmission(origin);
-  return sources.runs!.authorize(origin, id, footprint);
+  return sources.runs!.authorize(origin, id, footprint, discloses);
 };
 export const commandCheckpoint = (origin: Origin, consent: CommandConsent | null) => {
   if (origin.caller.kind === "pea") {

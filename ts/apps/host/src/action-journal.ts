@@ -1795,7 +1795,12 @@ export class ActionJournal implements ReceiptReader {
             consent = await Promise.race([
               retirementOnly
                 ? Promise.resolve(row.consent)
-                : authorizeCommand(originOf(row.caller), row.id, row.effects),
+                : authorizeCommand(
+                    originOf(row.caller),
+                    row.id,
+                    row.effects,
+                    executor.discloses?.(row.input),
+                  ),
               cancelled,
             ]);
           } catch (error) {

@@ -1,3 +1,4 @@
+import { packageMemberPathSchema } from "./contribution.ts";
 import { blobRefSchema } from "./blob-ref.ts";
 import type { Command } from "./command.ts";
 import { z } from "zod";
@@ -98,9 +99,7 @@ export const familyMemberPath = (name: string) => `${FAMILY_MEMBER_DIR}${name}.j
 /** Where a capture lands: the route's current pod, and a new member path the host may choose. */
 const captureInto = {
   pod: z.string().min(1),
-  path: z
-    .string()
-    .min(1)
+  path: packageMemberPathSchema
     .refine(isFamilyMember, `A family saves under ${FAMILY_MEMBER_DIR} as a .json member`)
     .optional(),
 };
