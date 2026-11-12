@@ -60,3 +60,35 @@ test("ducts v1 is discarded rather than upgraded as pre-h2 Work", async () => {
     ]);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("upgrade strips obsolete history snapshots and refuses undo without losing other edits", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-work-upgrade-history-"));
+  const store = fileRouteDocumentStore(dir);
+  const spec = ductsRouteState;
+  const key = bindWork(spec.route, null), targetKey = workKey(key);
+  const workspace = new RouteWorkspace({ store, registrations: [{ spec }] });
+  const staged = { labelParameter: { edit: { value: "Mark" } } };
+  const doc = { ...spec.schema.parse({}), ...staged, designFriction: { edit: { value: 0.12 } } };
+  try {
+    await store.setState({ targetKey, route: spec.route, value: {
+      version: 1, schemaVersion: 2, revision: 7, doc,
+      history: [{ write: {
+        key, kind: "apply", by: "human", press: "friction-edit", step: "friction-edit",
+        base: 6, revision: 7, undoable: true,
+        patches: [{ path: ["designFriction", "edit"], value: { value: 0.12 } }],
+        inverse: [{ path: ["designFriction", "edit"], value: null }],
+      }, after: doc }],
+    } });
+    const upgraded = await workspace.readUncaptured(key, spec.route);
+    expect(upgraded).toMatchObject({ revision: 7, doc: staged });
+    const saved = await store.getState({ targetKey, route: spec.route });
+    expect(saved).toMatchObject({ history: [{ after: staged }] });
+    expect(saved).not.toHaveProperty("history.0.after.designFriction");
+    // The public undo door must refuse the obsolete patch, without throwing or changing Work.
+    await expect(workspace.step(key, spec.route, "human", "undo", 7)).resolves.toMatchObject({
+      ok: false, kind: "refused",
+    });
+    expect(await workspace.readUncaptured(key, spec.route)).toEqual(upgraded);
+    expect(await store.getState({ targetKey, route: spec.route })).toEqual(saved);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
