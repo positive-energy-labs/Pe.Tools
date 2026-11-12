@@ -7,6 +7,7 @@
  */
 import {
   DUCTS_CRITERIA_CELLS,
+  DUCTS_DEFAULT_CRITERIA,
   serveSetting,
   stagedDucts,
   type DuctsCriteriaCell,
@@ -23,14 +24,7 @@ import type { FirmValue } from "./reads/door.ts";
 // 3 in and 36 in are the Q5 auto-join gap and the Q6 heal box. The firm's own numbers belong in the file.
 export const FIRM_SEED: DuctsFirm = {
   version: "seed",
-  criteria: {
-    velocityLimitFpm: { supply: 900, return: 700 },
-    terminalDropInWg: 0.03,
-    autoJoinGapIn: 3,
-    healBoxIn: 36,
-    splitPolicy: "even",
-    allowanceInWg: { supply: 0, return: 0 },
-  },
+  criteria: DUCTS_DEFAULT_CRITERIA,
 };
 
 /** The ducts firm file as read through `ctx.firm("ducts", …)` / `DuctFiles.firm("ducts")`, or refused without a firm home. */
@@ -41,7 +35,7 @@ export type FirmReading = FirmValue<DuctsFirmFile>;
  * else the firm home's, else the engine default, with the tier that served it. A firm home that was
  * not found, or holds no file, serves nothing: its criteria are `default`, never `firm`.
  */
-export function firmLayer(reading: FirmReading, settings?: readonly SettingTierRead[] | null): DuctsFirm {
+export function firmLayer(reading: FirmReading, settings: readonly SettingTierRead[]): DuctsFirm {
   const firmFile = "refused" in reading || !reading.present ? null : reading.firm;
   const criteria: Record<string, unknown> = structuredClone(FIRM_SEED.criteria);
   const served: Record<string, "project" | "firm" | "default"> = {};

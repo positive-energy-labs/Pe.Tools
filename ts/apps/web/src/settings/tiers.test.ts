@@ -109,7 +109,7 @@ test.each(["firm", "project"] as const)("%s serves valid cells despite invalid s
 test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served, and an unmounted firm home is never firm", async () => {
   // Before any write no home states a value: every label is the engine default.
   let at = await sheet();
-  expect(at.cell("terminalDropInWg")).toMatchObject({ value: null, source: "default" });
+  expect(at.cell("terminalDropInWg")).toMatchObject({ value: 0.03, source: "default" });
   expect(at.terminalDrop).toMatchObject({ value: 0.03, source: "default" });
 
   // Step 1: A sets terminal drop 0.03 to 0.05 at the firm tier. One notice names file, writer and receipt.
@@ -181,7 +181,7 @@ test("a declared cell can be cleared, but an undeclared owner or path cannot be 
   expect(writeSettingTier({ ...request, owner: "unknown" }, { pointer })).toMatchObject({ ok: false, status: 422 });
   expect(writeSettingTier({ ...request, value: null, expectedSha256 }, { pointer })).toMatchObject({ ok: true });
   const at = await sheet();
-  expect(at.cell("terminalDropInWg")).toMatchObject({ value: null, source: "default" });
+  expect(at.cell("terminalDropInWg")).toMatchObject({ value: 0.03, source: "default" });
   expect(at.criteria.terminalDropInWg).toMatchObject({ value: 0.03, source: "default" });
 });
 
@@ -217,4 +217,32 @@ test("snapshot slot names come from the project home, never Fans Work", () => {
   expect(ductParameterSlots(tiers)).toEqual({ fanFlow: "Project flow" });
   expect(fansDocumentSchema.parse({})).not.toHaveProperty("parameters");
   expect(fansDocumentSchema.safeParse({ parameters: {} }).success).toBe(false);
+});
+
+// Mutant H5-caption: claim a missing firm file supplied the seed.
+test("the pricing caption calls an absent firm file defaults, never firm seed", () => {
+  const read = { ductsRevision: 0, sheetView: { firm: { version: "seed", path: "Settings/ducts.json", present: false } } } as unknown as Parameters<typeof fansSheet.from>[0];
+  const caption = fansSheet.from(read, {})!.says;
+  expect(caption).toContain("defaults");
+  expect(caption).not.toContain("over firm");
+});
+
+// Mutant H5-empty-default: omit the binding fallback while the engine still prices it.
+test("all eight criteria display the engine defaults when the firm marker is gone", async () => {
+  rmSync(join(firm, "pe-home.json"));
+  const at = await sheet();
+  const expected = { velocitySupplyFpm: 900, velocityReturnFpm: 700, terminalDropInWg: 0.03, autoJoinGapIn: 3, healBoxIn: 36, splitPolicy: "even", allowanceSupplyInWg: 0, allowanceReturnInWg: 0 };
+  for (const [cell, value] of Object.entries(expected))
+    expect(at.cell(cell as DuctsCriteriaCell)).toMatchObject({ value, source: "default" });
+});
+
+// Mutant H5-marker-blame: skip the shared-drive-root absence branch.
+test("a present project marker is not blamed when the firm home cannot anchor its relative pointer", () => {
+  rmSync(join(firm, "pe-home.json"));
+  expect(existsSync(join(project, "pe-home.json"))).toBe(true);
+  const reason = readSettingTiers("ducts", pointer).find(read => read.tier === "project")!.notFound!;
+  expect(reason).toContain(pointer);
+  expect(reason).toContain("relative to the shared drive root");
+  expect(reason).toContain("no firm home");
+  expect(reason).not.toContain("no folder with");
 });

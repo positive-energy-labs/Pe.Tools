@@ -250,7 +250,7 @@ function SideTable({
         <span className="t-small face-mono text-ink-2" data-worksheet-caption={side}>
           {sideCaption(runs)} · {branchesKnown(runs)}
           {worstKnownInWg != null && ` · worst known ${pressure(worstKnownInWg)} in-wg`} · over {limit} fpm (
-          {ws.limits.source})
+          {side === "supply" ? ws.limits.supplySource : ws.limits.returnSource})
         </span>
       </header>
       {/* The table is the size container its rows answer to; below its numbers' width it scrolls. */}

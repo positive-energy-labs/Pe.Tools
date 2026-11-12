@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DUCT_PARAMETER_KEYS, DUCTS_CRITERIA_CELLS, type DuctsCriteriaCell } from "@pe/agent-contracts";
+import { DUCT_PARAMETER_KEYS, DUCTS_CRITERIA_CELLS, DUCTS_DEFAULT_CRITERIA, type DuctsCriteriaCell } from "@pe/agent-contracts";
 import { setting, store, type CellLayer, type SheetBinding, type SheetSlot } from "@pe/agent-contracts/slots";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { criterionLabel } from "./sheet/criterion-words.neutral.ts";
@@ -35,8 +35,11 @@ const cellLabel = (cell: DuctsCriteriaCell) => {
 const criteriaSettings = Object.fromEntries(
   (Object.keys(DUCTS_CRITERIA_CELLS) as DuctsCriteriaCell[]).map((cell) => {
     const declared = DUCTS_CRITERIA_CELLS[cell];
+    const [key, side] = declared.layer;
+    const base = DUCTS_DEFAULT_CRITERIA[key];
+    const fallback = side ? (base as Record<string, number>)[side] : base;
     return [`setting.ducts.${cell}`, setting("ducts", ["criteria", ...declared.layer], declared.value, ["project", "firm"], {
-      label: cellLabel(cell), ...(declared.unit ? { unit: declared.unit } : {}), ...(cell === "splitPolicy" ? {} : { min: 0 }),
+      default: fallback, label: cellLabel(cell), ...(declared.unit ? { unit: declared.unit } : {}), ...(cell === "splitPolicy" ? {} : { min: 0 }),
     })];
   }),
 ) as Readonly<Record<string, SheetBinding>>;

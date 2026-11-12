@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -103,4 +103,29 @@ test("the dev PostHog key is the firm's alone: the user home's preferences.json 
   expect(analyticsConfig("dev")?.apiKey).toBe("phc_shared");
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
   expect(analyticsConfig("dev")).toBeNull();
+});
+
+// Mutant H5-pinned-home: keep the construction-time firm root and ignore its marker.
+test("a marker-only loss invalidates the firm leaf and restoring it reacquires the unchanged file", async () => {
+  const shared = firmHome();
+  mkdirSync(join(shared, "Settings"));
+  const path = join(shared, "Settings", "ducts.json");
+  const bytes = JSON.stringify({ version: "marker-test", criteria: { terminalDropInWg: 0.05 } });
+  writeFileSync(path, bytes);
+  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer())));
+  const changes: string[] = [];
+  const stop = files.subscribe!(name => changes.push(name));
+  try {
+    expect(await Effect.runPromise(files.firm("ducts"))).toMatchObject({ path, json: { version: "marker-test" } });
+    renameSync(join(shared, "pe-home.json"), join(shared, "marker-away.json"));
+    await expect.poll(() => changes.length).toBe(1);
+    expect(await Effect.runPromise(files.firm("ducts"))).toEqual({ refused: "no-shared-root" });
+    renameSync(join(shared, "marker-away.json"), join(shared, "pe-home.json"));
+    await expect.poll(() => changes.length).toBe(2);
+    expect(await Effect.runPromise(files.firm("ducts"))).toMatchObject({ path, json: { version: "marker-test" } });
+    expect(readFileSync(path, "utf8")).toBe(bytes);
+  } finally {
+    stop();
+    rmSync(shared, { recursive: true, force: true });
+  }
 });

@@ -68,7 +68,7 @@ it("a shared louver keeps its authored flow empty and shows the computed consume
     target: { session: "s", openId: "o" },
     basis: "b",
     kind: "worksheet",
-    limits: { supplyFpm: 900, returnFpm: 700, source: "firm:seed" },
+    limits: { supplyFpm: 900, returnFpm: 700, supplySource: "firm:seed", returnSource: "firm:seed" },
     supply: { runs: [], sections: [], worstKnownInWg: null, elementSections: {} },
     return: { runs: [run], sections: [], worstKnownInWg: 0.0469, elementSections: {} },
     legs: { [leg.id]: leg },
@@ -127,7 +127,7 @@ it("an incomplete branch shows no zero, and the caption names the known count", 
   const side = (runs: unknown[], worst: number | null) => ({ runs, sections: [], worstKnownInWg: worst, elementSections: {} });
   const ws = (runs: unknown[], worst: number | null = null) => ({
     target: { session: "s", openId: "o" }, basis: "b", kind: "worksheet",
-    limits: { supplyFpm: 900, returnFpm: 700, source: "firm:seed" },
+    limits: { supplyFpm: 900, returnFpm: 700, supplySource: "firm:seed", returnSource: "firm:seed" },
     supply: side(runs, worst), return: side([], null),
     legs: { l1: leg("l1", 200, 0.05), l2: leg("l2", null, null) },
   }) as unknown as Ws;
@@ -149,4 +149,12 @@ it("an incomplete branch shows no zero, and the caption names the known count", 
   const bare = none.container.querySelector("[data-worksheet-caption='supply']")!.textContent!;
   expect(bare).toContain("0 of 1 branches known");
   expect(bare).not.toMatch(/worst|0\.0000/);
+});
+
+it("each side labels the home that served its own velocity limit", () => {
+  const side = (name: string) => ({ runs: [{ id: name, side: name, end: { kind: "terminal", elementId: 1 }, legIds: [], sectionIds: [], complete: true, telFt: 20, knownInWg: 0.03, residualInWg: null, maxFpm: null, cfm: 100, overLegIds: [] }], sections: [], worstKnownInWg: null, elementSections: {} });
+  const ws = { kind: "worksheet", limits: { supplyFpm: 800, returnFpm: 700, supplySource: "project", returnSource: "firm" }, supply: side("supply"), return: side("return"), legs: {} } as unknown as Ws;
+  const { container } = render(<Worksheet ws={ws} editing={{ inputs: null, changeInputs: () => {}, busy: false }} />);
+  expect(container.querySelector("[data-worksheet-caption='supply']")!.textContent).toContain("over 800 fpm (project)");
+  expect(container.querySelector("[data-worksheet-caption='return']")!.textContent).toContain("over 700 fpm (firm)");
 });
