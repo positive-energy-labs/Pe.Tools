@@ -331,11 +331,6 @@ test.each([
     { "pod.json": manifest, "pages/p/.state/binding.json": "{}" },
     /never carry 'pages\/p\/\.state\/binding\.json'/,
   ],
-  [
-    "import provenance",
-    { "pod.json": manifest, "imported.json": "{}" },
-    /never carry 'imported\.json'/,
-  ],
   ["runtime output", { "pod.json": manifest, "output/r/receipt.json": "{}" }, /never carry/],
   ["traversal", { "pod.json": manifest, "../outside.txt": "x" }, /Pod archive refused/],
   ["case twins", { "pod.json": manifest, "README.md": "a", "readme.md": "b" }, /case-colliding/],

@@ -67,6 +67,16 @@ const ledgerPath = () =>
 let firstRun: Promise<ShippedPodsReport> | undefined;
 
 /**
+ * Resolves when this process's shipped-pod import has finished, at once when none has started.
+ * It never rejects: a failed import is reported by its own caller, and a reader only needs it over.
+ */
+export const shippedPodsSettled = (): Promise<void> =>
+  (firstRun ?? Promise.resolve()).then(
+    () => {},
+    () => {},
+  );
+
+/**
  * Import every shipped pod not yet offered. Memoized per process: every caller awaits the same run.
  * Resolves with per-archive outcomes; it rejects only if the ledger itself cannot be written.
  */
@@ -165,9 +175,15 @@ async function offer(
       };
       if (!matches(readZip(bytes), installed)) {
         try {
-          const provenance = JSON.parse(await readFile(importRecordPath(id, options), "utf8"));
-          if (!/^[a-f0-9]{64}$/.test(provenance.archiveSha256))
-            throw Error("its original import record is incomplete");
+          // Derived machine state (ADR 0039): a record that does not decode is discarded with a notice.
+          const record = readStored(
+            importRecordPath(id, options),
+            z.object({ archiveSha256: z.string().regex(/^[a-f0-9]{64}$/) }),
+            { class: "discard", place: `Import record for ${id}`, notices: storedNoticesPath() },
+          );
+          if (record.kind === "missing") throw Error("no import record");
+          if (record.kind !== "ok") throw Error("its original import record is incomplete");
+          const provenance = record.value;
           // The record holds no machine path: the original is found by its hash in this machine's store.
           const original = await readFile(join(options.originalsRoot, `${provenance.archiveSha256}.zip`))
             .catch(() => { throw Error("its original archive is unavailable"); });

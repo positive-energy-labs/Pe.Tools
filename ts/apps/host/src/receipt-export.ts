@@ -8,6 +8,8 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from "node:path";
 import { PostHog } from "posthog-node";
 import { z } from "zod";
+import { readStored } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "./notice-feed.ts";
 import {
   receiptSchema,
   receiptStampSchema,
@@ -534,8 +536,14 @@ export function createReceiptExport(options: {
     if (!r || r.body.kind !== "feedback") return null;
     let event: ExportEvent | null;
     try {
-      const saved = JSON.parse(readFileSync(r.body.localRef.path, "utf8")) as { feedback: unknown };
-      const { component: ui_component, ...content } = feedbackSchema.parse(saved.feedback);
+      // A person's words (ADR 0039 keep): a note that does not decode is refused and its bytes stay.
+      const saved = readStored(r.body.localRef.path, z.object({ feedback: feedbackSchema }), {
+        class: "keep",
+        place: "Saved feedback",
+        notices: storedNoticesPath(),
+      });
+      if (saved.kind !== "ok") throw Error(saved.kind === "missing" ? "The saved feedback is missing" : saved.reason);
+      const { component: ui_component, ...content } = saved.value.feedback;
       event = projectReceipt(r, { ...content, ui_component });
       if (!event || !send)
         throw Error("Telemetry export is not configured with verified web identity");

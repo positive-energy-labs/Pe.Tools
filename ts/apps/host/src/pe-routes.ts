@@ -136,6 +136,7 @@ import {
 import {
   createNoticeFeed,
   noticeRows,
+  noteNoFirmHome,
   storedNoticesPath,
   type NoticeSources,
 } from "./notice-feed.ts";
@@ -1159,6 +1160,8 @@ function* hostPeRoutes(
   // child's cwd must exist before the first spawn, and T3 keys its project on this path.
   const worldRoot = productAgentPath();
   mkdirSync(worldRoot, { recursive: true });
+  // Unbound is a working state (ADR 0037 rule 2): the host starts, and the feed says where it looked.
+  noteNoFirmHome();
   let invalidateCatalog = () => {};
   const content = createContributionContent({
     worldRoot,
