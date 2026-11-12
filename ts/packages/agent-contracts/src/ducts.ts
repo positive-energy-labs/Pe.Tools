@@ -20,7 +20,7 @@
 import { decode, subjectOf, subjectRefCodeSchema } from "./subject-ref.ts";
 import { z } from "zod";
 import { serveSetting, type SettingTierRead } from "./tiered-setting.ts";
-import { DUCT_UNIT_KINDS, DUCTS_CRITERIA_CELLS, criteriaLayer } from "./ducts-sheet.ts";
+import { DUCT_PARAMETER_KEYS, DUCT_UNIT_KINDS, DUCTS_CRITERIA_CELLS, criteriaLayer } from "./ducts-sheet.ts";
 
 import { draftCellSchema } from "./draft.ts";
 import type { DuctFlow, DuctUnitRole, FansDocument } from "./fans.ts";
@@ -50,15 +50,7 @@ const kindOfKey = (key: string): DuctAssumption["kind"] => {
   return (OVERRIDES as readonly string[]).includes(head) ? (head as DuctOverrideKind) : "verdict";
 };
 
-/** The parameter slots `ducts.snapshot` reads and `ducts.apply` writes through. */
-export const DUCT_PARAMETER_KEYS = [
-  "fanStatic",
-  "fanFlow",
-  "componentDrop",
-  "terminalDrop",
-  "fittingCoefficient",
-  "terminalFlow",
-] as const;
+export { DUCT_PARAMETER_KEYS } from "./ducts-sheet.ts";
 export type DuctParameterKey = (typeof DUCT_PARAMETER_KEYS)[number];
 
 export const DUCT_AIR_TYPES = ["supply", "return", "exhaust", "fresh", "unknown"] as const;

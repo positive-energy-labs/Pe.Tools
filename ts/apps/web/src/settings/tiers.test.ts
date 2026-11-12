@@ -246,3 +246,11 @@ test("a present project marker is not blamed when the firm home cannot anchor it
   expect(reason).toContain("no firm home");
   expect(reason).not.toContain("no folder with");
 });
+
+ test("the write door refuses an unknown parameter slot", () => {
+  const before = readSettingTiers("ducts", pointer);
+  const notices = readStoredNotices(storedNoticesPath());
+  expect(writeSettingTier({ owner: "ducts", tier: "firm", path: ["parameters", "bogusSlot"], value: "X", expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422 });
+  expect(readSettingTiers("ducts", pointer)).toEqual(before);
+  expect(readStoredNotices(storedNoticesPath())).toEqual(notices);
+});

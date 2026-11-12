@@ -178,11 +178,21 @@ export type DuctsInputs = z.infer<typeof ductsInputsSchema>;
  * rule 8). It states any subset of the criteria; a criterion it leaves out falls to the next tier,
  * then to the engine default. `written` is the write door's stamp: who last wrote the file, and when.
  */
+/** The parameter slots `ducts.snapshot` reads and `ducts.apply` writes through. */
+export const DUCT_PARAMETER_KEYS = [
+  "fanStatic",
+  "fanFlow",
+  "componentDrop",
+  "terminalDrop",
+  "fittingCoefficient",
+  "terminalFlow",
+] as const;
+
 export const ductsFirmSchema = z.strictObject({
   version: z.string().min(1).optional(),
   criteria: ductsCriteriaLayerSchema.optional(),
   designFriction: z.number().positive().optional(),
-  parameters: z.record(z.string(), z.string().min(1)).optional(),
+  parameters: z.partialRecord(z.enum(DUCT_PARAMETER_KEYS), z.string().min(1)).optional(),
   written: settingWrittenSchema.optional(),
 });
 export type DuctsFirmFile = z.infer<typeof ductsFirmSchema>;
