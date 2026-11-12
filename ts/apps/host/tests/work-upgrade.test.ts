@@ -55,6 +55,38 @@ for (const [spec, previous, removed, staged, dropped] of [
   [ductsRouteState, 2, "designFriction", { labelParameter: { edit: { value: "Mark" } } }, { edit: { value: 0.12 } }],
   [fansRouteState, 1, "parameters", { writeIntent: { edit: { value: { walk: { unitId: 42, portIndex: 0 } } } } }, { fanFlow: { edit: { value: "Design Flow" } } }],
 ] as const) {
+  test(`${spec.route} accepted replay upgrades history before any load`, async () => {
+    const dir = await mkdtemp(join(tmpdir(), "pe-work-replay-upgrade-"));
+    const store = fileRouteDocumentStore(dir);
+    const key = bindWork(spec.route, null), targetKey = workKey(key);
+    const workspace = new RouteWorkspace({ store, registrations: [{ spec }] });
+    const doc = { ...spec.schema.parse({}), ...staged, [removed]: dropped };
+    let stop = () => {};
+    try {
+      await store.setState({ targetKey, route: spec.route, value: {
+        version: 1, schemaVersion: previous, revision: 7, doc,
+        history: [{ write: {
+          key, kind: "apply", by: "human", press: "old-edit", step: "old-edit",
+          base: 6, revision: 7, undoable: true, at: Date.now(),
+          patches: [{ path: [removed], value: dropped }],
+          inverse: [{ path: [removed], value: null }],
+        }, after: doc }],
+      } });
+      // No read/view/load before subscription: its callback must already see upgraded history.
+      const saved = await new Promise<unknown>((resolve, reject) => {
+        stop = workspace.observeAccepted(key, (ack) => {
+          expect(ack).toMatchObject({ revision: 7, replay: true });
+          void store.getState({ targetKey, route: spec.route }).then(resolve, reject);
+        }, reject);
+      });
+      expect(saved).not.toHaveProperty(`history.0.after.${removed}`);
+      expect(saved).toMatchObject({ schemaVersion: spec.schemaVersion, history: [{ after: staged }] });
+    } finally {
+      stop();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test.each([false, true])(`${spec.route} upgrades pre-h2 Work and notices non-empty settings: %s`, async (nonempty) => {
     const dir = await mkdtemp(join(tmpdir(), "pe-work-upgrade-"));
     const store = fileRouteDocumentStore(dir);
@@ -91,6 +123,61 @@ for (const [spec, previous, removed, staged, dropped] of [
     } finally { await rm(dir, { recursive: true, force: true }); }
   });
 }
+
+test("census upgrade holds the load lock and preserves prior bytes once", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-work-census-lock-"));
+  const store = fileRouteDocumentStore(dir);
+  const spec = ductsRouteState, key = bindWork(spec.route, null), targetKey = workKey(key);
+  const workspace = new RouteWorkspace({ store, registrations: [{ spec }] });
+  const before = readStoredNotices(storedNoticesPath());
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let settled: Promise<PromiseSettledResult<unknown>[]> | undefined;
+  try {
+    await store.setState({ targetKey, route: spec.route, value: {
+      version: 1, schemaVersion: 2, revision: 9,
+      doc: { ...spec.schema.parse({}), designFriction: { edit: { value: 0.13 } } }, history: [],
+    } });
+    const path = join(dir, (await readdir(dir))[0]!);
+    const prior = await readFile(path);
+    const setState = store.setState.bind(store);
+    const writes = vi.spyOn(store, "setState").mockImplementation(async (request) => {
+      if (request.preservePrior) {
+        entered.resolve();
+        await release.promise;
+      }
+      await setState(request);
+    });
+    const reads = vi.spyOn(store, "getState");
+    const census = workspace.instances();
+    await entered.promise;
+    const load = workspace.readUncaptured(key, spec.route);
+    settled = Promise.allSettled([census, load]);
+    // Let queued microtasks run: the load must not enter the store during the census write.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(reads).not.toHaveBeenCalled();
+    release.resolve();
+    expect(await settled).toMatchObject([
+      { status: "fulfilled", value: { works: [{ revision: 9, state: "ready" }] } },
+      { status: "fulfilled", value: { revision: 9, schemaVersion: spec.schemaVersion } },
+    ]);
+    expect(writes.mock.calls.filter(([request]) => request.preservePrior)).toHaveLength(1);
+    const saved = await store.getState({ targetKey, route: spec.route });
+    expect(saved).toMatchObject({ schemaVersion: spec.schemaVersion, revision: 9 });
+    expect(saved).not.toHaveProperty("doc.designFriction");
+    const hash = sha256Hex(prior), blob = join(storedBlobsPath(), "sha256", hash);
+    expect(await readFile(blob)).toEqual(prior);
+    expect((await readdir(join(storedBlobsPath(), "sha256"))).filter(name => name === hash)).toHaveLength(1);
+    expect(readStoredNotices(storedNoticesPath()).slice(before.length)).toMatchObject([
+      { sha256: hash, reason: expect.stringContaining(blob) },
+    ]);
+  } finally {
+    release.resolve();
+    await settled;
+    vi.restoreAllMocks();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 
 test("ducts v1 is discarded rather than upgraded as pre-h2 Work", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-upgrade-old-"));
