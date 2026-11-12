@@ -9,18 +9,23 @@ public sealed class LocalDiskJsonFile<T>(string filePath, StoredPolicy policy, s
 
     private T? _cachedData;
     private DateTimeOffset _cachedModifiedUtc;
+    private bool _kept;
 
     public string FilePath { get; } = Initialize(filePath);
 
     public T Read() {
         var data = StoredFile.Read(this.FilePath, policy, place,
             content => JsonConvert.DeserializeObject<T>(content, SerializerSettings)
-                ?? throw new JsonSerializationException("Expected a JSON value.")) ?? new T();
+                ?? throw new JsonSerializationException("Expected a JSON value."), out var kept);
+        if (data != null || kept) this._kept = kept;
+        data ??= new T();
         this.UpdateCache(data);
         return data;
     }
 
     public string Write(T data) {
+        if (this._kept)
+            throw new InvalidOperationException($"kept: {place} could not be read; not overwriting");
         StorageFileUtils.EnsureDirectoryExists(this.FilePath);
         var content = JsonConvert.SerializeObject(data, SerializerSettings);
         content = JsonFormatting.NormalizeTrailingNewline(content);
