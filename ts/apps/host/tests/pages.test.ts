@@ -1,4 +1,13 @@
-import { access, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  appendFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
@@ -107,6 +116,43 @@ describe("pages", () => {
     await writeFile(join(pods, "twin", "pod.json"), JSON.stringify({ id: "ductkit" }));
     await writeFile(join(pods, "twin", "pages", "tour", "index.html"), "<p>twin</p>");
     expect((await fetch("/pages/ductkit--tour/")).status).toBe(404);
+  });
+
+  it("a torn last line in a Page's event log is left out with one notice and the file is not rewritten", async () => {
+    const { state, fetch } = await pagesRoot();
+    const post = (event: unknown) =>
+      fetch("/pages/todo/events", { method: "POST", body: JSON.stringify(event) });
+    const read = async () =>
+      (await (await fetch("/pages/todo/state")).json()) as {
+        seq: number;
+        events: { seq: number; event: unknown }[];
+      };
+    await post({ type: "one" });
+    await post({ type: "two" });
+    const log = join(state, "todo", "events.jsonl");
+    // A crash mid-append: half a row, no newline.
+    await appendFile(log, '{"seq":3,"at":"2026-11-11T00:00:00.000Z","orig');
+    const torn = await readFile(log);
+    const notices = async () =>
+      (await readFile(join(state, "..", "stored-notices.jsonl"), "utf8")).split("\n").filter(Boolean);
+    for (const _ of [1, 2]) {
+      const { seq, events } = await read();
+      expect(events.map((row) => row.event)).toEqual([{ type: "one" }, { type: "two" }]);
+      expect(seq).toBe(2);
+    }
+    // Two reads, one notice, and the bytes a person would inspect are still there.
+    expect(await notices()).toHaveLength(1);
+    expect(JSON.parse((await notices())[0]!)).toMatchObject({ class: "keep", place: "Page todo" });
+    expect((await readFile(log)).equals(torn)).toBe(true);
+    // The next append closes the torn tail and takes the next number after the last row that reads.
+    expect(await (await post({ type: "three" })).json()).toMatchObject({ seq: 3 });
+    expect((await read()).events.map((row) => row.event)).toEqual([
+      { type: "one" },
+      { type: "two" },
+      { type: "three" },
+    ]);
+    expect((await readFile(log)).subarray(0, torn.length).equals(torn)).toBe(true);
+    expect(await notices()).toHaveLength(1);
   });
 
   it("keeps dot-files private and refuses anything that is not a page path", async () => {
