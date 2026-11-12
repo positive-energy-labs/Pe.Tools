@@ -234,7 +234,7 @@ function storedRow(notice: StoredNotice, now: number): NoticeDraft | null {
       verb: "saved",
       what: notice.place,
       where: notice.path,
-      // The file, the writer and the receipt (the hash of the bytes it replaced) are in the reason.
+      // The file, writer, action receipt id and prior bytes hash are in the reason.
       says: notice.reason,
       at: notice.at,
       url: routeAddress("settings").link(),

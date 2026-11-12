@@ -113,7 +113,7 @@ function ductsCellAccepts(path: readonly string[], value: unknown): boolean {
  */
 export function writeSettingTier(
   request: { owner: string; tier: SettingTier; path: readonly string[]; value: unknown; expectedSha256: string | null },
-  context: { pointer?: string | null; writer?: string; now?: () => Date } = {},
+  context: { pointer?: string | null; writer?: string; now?: () => Date; receiptId?: string } = {},
 ): SettingWrite {
   if (request.path.some((key) => ["written", "__proto__", "constructor", "prototype"].includes(key)))
     return { ok: false, status: 422, message: "The setting path contains a reserved key." };
@@ -148,7 +148,7 @@ export function writeSettingTier(
     sha256: wrote.sha256,
     reason: `${by} ${request.value == null ? "cleared" : `set ${JSON.stringify(request.value)} at`} ${request.owner} ${request.path.join(".")} in the ${request.tier} home${read.name ? ` (${read.name})` : ""}. ${
       wrote.priorSha256 ? `The bytes before it are kept: sha256 ${wrote.priorSha256}.` : "The file is new."
-    }`,
+    }${context.receiptId ? ` Receipt ${context.receiptId}.` : ""}`,
   });
   for (const listener of listeners) listener();
   return { ok: true, tier: request.tier, path: read.path, sha256: wrote.sha256, priorSha256: wrote.priorSha256, by, at };
