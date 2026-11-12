@@ -1,5 +1,5 @@
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
-import type { DocumentRef, HeldSend, Receipt } from "@pe/agent-contracts";
+import type { DocumentRef, Receipt } from "@pe/agent-contracts";
 import { held, heldSendRequestSchema } from "@pe/agent-contracts";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import {
@@ -142,7 +142,7 @@ import {
 } from "./notice-feed.ts";
 import { homeLogLines } from "@pe/host-contracts/product-paths";
 import { heldSend, heldSends, holdSend, confirmSend, subscribeHeldSends } from "./guards.ts";
-import { sendHeldParse } from "@pe/mcps/held-parse";
+import type { ActionJournal } from "./action-journal.ts";
 import { observePageTarget } from "./pages-route.ts";
 import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
 import {
@@ -197,8 +197,8 @@ export interface HostWork {
 
 export interface PeRoutesOptions {
   inputs?: HostInputContext["Service"];
-  /** The person's Confirm on a held outward send; the product sends through the one upload path. */
-  sendHeld?: (send: HeldSend) => Promise<void>;
+  /** The receipt owner for a confirmed document-reader send. */
+  journal?: ActionJournal;
   workspace?: RouteWorkspace;
   registrations: readonly RouteWorkspaceRegistration[];
   store?: RouteDocumentStore;
@@ -600,11 +600,17 @@ export function createPeRoutes(options: PeRoutesOptions) {
       const send = heldSend(declared.params.id!);
       if (!send) return json({ error: "No held send with that id; it was confirmed or the host restarted." }, 404);
       try {
-        await confirmSend(send, person, options.sendHeld ?? sendHeldParse);
+        const receipt = await confirmSend(send, person, (held, caller) => {
+          const { id, at: _at, thread: _thread, ...input } = held;
+          return (options.journal ?? telemetryOf(options).journal).invoke(
+            { id, key: "outward.send", target: { kind: "host" }, input },
+            { caller, basis: null },
+          );
+        });
+        return json(receipt, 202);
       } catch (error) {
         return json({ error: message(error) }, 502);
       }
-      return json({ ok: true });
     }
     if (method === "POST" && declared.id === "outward.person") {
       requireHuman(caller, url.pathname, "sending a file outward");

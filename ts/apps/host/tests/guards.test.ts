@@ -5,12 +5,14 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
-import { GUARDED_ACTS, heldSendSchema, type Caller, type HeldSend } from "@pe/agent-contracts";
+import { GUARDED_ACTS, heldSendSchema, type Caller, type HeldSendRequest } from "@pe/agent-contracts";
 import { z } from "zod";
 import { CommandRejected } from "../src/command-executor.ts";
 import { guardDiscard, guardSave, guardSend, guards, heldSends } from "../src/guards.ts";
 import { noticeRows } from "../src/notice-feed.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
+import { testJournal } from "./effect-test.ts";
+import { outwardSendExecutor } from "../src/outward-send.ts";
 import { actAs, human, pea } from "./callers.ts";
 
 const project = { title: "Office", isFamily: false, isModified: true };
@@ -83,13 +85,15 @@ test("only the person is not guarded: Pea, a Page, an MCP device, a service and 
 // Guard 3 at the host's door (R3). Mutant that turns this red: in `src/pe-routes.ts` delete the
 // `requireHuman` line of `outward.confirm` (Pea's own confirm then sends).
 test("guard 3: Pea's send is held at once with one notice row; only the person's Confirm sends it", async () => {
-  const sent: HeldSend[] = [];
-  const sendHeld = vi.fn(async (send: HeldSend) => void sent.push(send));
+  const sent: HeldSendRequest[] = [];
+  const sendHeld = vi.fn(async (send: HeldSendRequest) => void sent.push(send));
+  const journal = testJournal();
+  journal.bindCommands({ resolve: () => outwardSendExecutor(sendHeld), probe: async () => null });
   const routes = createPeRoutes({
     registrations: [],
     heads: { observe: () => () => {} },
     store: { getState: async () => null, setState: async () => {} },
-    sendHeld,
+    journal,
   });
   const post = (caller: Caller, path: string, body?: unknown) =>
     actAs(caller, () =>
@@ -132,8 +136,12 @@ test("guard 3: Pea's send is held at once with one notice row; only the person's
     post(human, `/pe/outward/held/${held.id}/confirm`),
     post(human, `/pe/outward/held/${held.id}/confirm`),
   ]);
-  expect(confirmations.map(response => response.status)).toEqual([200, 200]);
-  expect(sent).toEqual([held]);
+  expect(confirmations.map(response => response.status)).toEqual([202, 404]);
+  const accepted = await confirmations[0]!.json() as { id: string };
+  const settled = await journal.wait(accepted.id);
+  expect(settled.state, JSON.stringify(settled)).toBe("succeeded");
+  const { id: _id, at: _at, thread: _thread, ...requestSent } = held;
+  expect(sent).toEqual([requestSent]);
   expect(heldSends()).toHaveLength(before);
   expect((await post(human, `/pe/outward/held/${held.id}/confirm`)).status).toBe(404);
   expect(sendHeld).toHaveBeenCalledTimes(1);

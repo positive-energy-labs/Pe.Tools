@@ -7,6 +7,7 @@
 import { randomUUID } from "node:crypto";
 import {
   held,
+  type ActionReceipt,
   type Caller,
   type GuardedAct,
   type HeldSend,
@@ -76,8 +77,7 @@ export function guardSend(caller: Caller, send: SendHeld["send"], where: string)
 
 const sends = new Map<string, HeldSend>();
 type Person = Extract<Caller, { kind: "human" }>;
-const continuations = new Map<string, (person: Person) => Promise<void>>();
-const confirming = new Map<string, Promise<void>>();
+const continuations = new Map<string, (person: Person) => Promise<ActionReceipt>>();
 const listeners = new Set<() => void>();
 const sendKey = (send: HeldSendRequest) => `${send.service}:${send.sha256}:${send.pages}`;
 
@@ -96,20 +96,22 @@ export function holdSend(request: HeldSendRequest, thread: string | null, at: st
 export const heldSends = (): HeldSend[] => [...sends.values()];
 export const heldSend = (id: string) => sends.get(id);
 /** A command held before reading a source has an intent digest, not a digest of unread bytes. */
-export function holdSendCommand(request: HeldSendRequest, thread: string | null, run: (person: Person) => Promise<void>) {
+export function holdSendCommand(request: HeldSendRequest, thread: string | null, run: (person: Person) => Promise<ActionReceipt>) {
   const send = holdSend(request, thread, new Date().toISOString());
   if (!continuations.has(send.id)) continuations.set(send.id, run);
   return send;
 }
-/** Runs as `person`, the caller the confirm route authenticated. A failed run keeps its row for the next Confirm. */
-export function confirmSend(send: HeldSend, person: Person, fallback: (send: HeldSend) => Promise<void>): Promise<void> {
-  const pending = confirming.get(send.id);
-  if (pending) return pending;
-  const run = Promise.resolve().then(() => continuations.get(send.id)?.(person) ?? fallback(send)).then(() => releaseSend(send.id));
-  confirming.set(send.id, run);
-  return run.finally(() => confirming.delete(send.id));
+/** Consume before admission yields: only the authenticated person's first Confirm can start a send. */
+export function confirmSend(
+  send: HeldSend,
+  person: Person,
+  fallback: (send: HeldSend, person: Person) => Promise<ActionReceipt>,
+): Promise<ActionReceipt> {
+  const run = continuations.get(send.id);
+  releaseSend(send.id);
+  return run ? run(person) : fallback(send, person);
 }
-/** The person confirmed it and the send ran, or the row is void: either way it leaves the feed. */
+/** The person consumed the hold, or the row is void: either way it leaves the feed. */
 export function releaseSend(id: string) {
   continuations.delete(id);
   if (sends.delete(id)) for (const listener of listeners) listener();
