@@ -104,10 +104,11 @@ export function AnatomyDrawing({
     );
 
   return (
-    // The drawing takes what its column leaves after the table and members list, with a 12rem
-    // floor; at size-full it took the whole column and the table bar fell onto the members line.
-    // ponytail: 12rem is a first guess (M1).
-    <div className="flex min-h-48 w-full flex-[1_1_0]">
+    // A fixed 12rem band. The pane body scrolls, so its column has no height to share: a growing
+    // drawing split the table's full height with it, and the ground ran off-screen with the shape
+    // centred below the fold (drive 7: blank white columns). The support scrolls inside the band.
+    // ponytail: 12rem is a first guess (M1); a container-width rule if wide routes want it taller.
+    <div className="flex h-48 w-full shrink-0">
       <div className="flex min-w-0 flex-1">{views}</div>
       {/* The support takes a third of the anatomy, 10rem to 18rem, so the subject (the shape)
           keeps the larger ground at every pane width (SURFACE-PHILOSOPHY L3, L4). */}

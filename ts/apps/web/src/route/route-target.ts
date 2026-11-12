@@ -133,8 +133,19 @@ export function useRouteTarget(
   );
   const sole = target || seed ? null : held.request;
   lastSole.current = sole;
+  // With no pin and more than one document open, no census can make one of them the sole
+  // document: the person must choose, so nothing is pending (drive 7: /fans spun 300 s here).
+  const several =
+    !target &&
+    !sole &&
+    inventoryView.kind === "ready" &&
+    Object.values(inventoryView.sessions).reduce(
+      (count, session) => count + (session.kind === "ready" ? session.values.length : 0),
+      0,
+    ) > 1;
   const busy =
     !seed &&
+    !several &&
     (inventoryResult.state !== "ready" ||
       (!target && (held.busy || machineResult?.state !== "ready")));
   const soleKey = JSON.stringify(sole);
