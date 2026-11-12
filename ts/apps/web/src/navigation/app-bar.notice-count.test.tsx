@@ -121,3 +121,19 @@ test("with nothing asking, the bar draws no count", async () => {
   await screen.findByRole("navigation");
   expect(view.container.querySelector("[data-notice-count]")).toBeNull();
 });
+
+test.each<[string, string | null, string]>([
+  ["done", null, "Full action receipt detail"],
+  ["discarded", "Nothing to open: the file is gone", "C:/state/Work/pods.json"],
+  ["stale", "No address yet: this receipt has no page", "The target document closed before binding"],
+])("%s keeps its full detail in the accessible tooltip", async (verb, refusal, detail) => {
+  const { Ledger } = await import("./ledger");
+  const { LEDGER_PRESENTATIONS } = await import("./ledger-model");
+  state.feed = { id: 4, tray: false, rows: [{ ...row("detail", "failed", verb), refusal, detail, says: null }] };
+  const view = render(<Ledger presentation={LEDGER_PRESENTATIONS.overlay} />);
+  await waitFor(() => {
+    const descriptions = [...view.container.querySelectorAll("[aria-description]")].map(el => el.getAttribute("aria-description"));
+    expect(descriptions).toContain(refusal ? `${refusal}\n${detail}` : detail);
+  });
+  expect(view.container.textContent).not.toContain(detail);
+});
