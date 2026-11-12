@@ -6,12 +6,6 @@ export type InvocationRecord = { id: string; admission?: ActionAdmission };
 
 export type RequestPrincipal =
   | { readonly kind: "local" }
-  | {
-      readonly kind: "remote";
-      readonly transport: "lan" | "ssh";
-      readonly authority: string;
-      readonly login?: string;
-    }
   | { readonly kind: "tailnet"; readonly login: string; readonly authority: string };
 
 export interface InvocationContext {

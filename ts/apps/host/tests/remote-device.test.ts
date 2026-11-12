@@ -52,30 +52,29 @@ test("access-084: one device persists across LAN, tailnet and SSH; revoke refuse
     expect(readFileSync(path, "utf8")).not.toContain(claimed.token);
     devices = createDevices(path);
     expect(devices.list().environmentId).toBe(pairing.environmentId);
-    const settings = {
-      ...options,
-      devices,
-      remoteIngress: [
-        { origin: "http://office.lan:5180", transport: "lan" as const },
-        { origin: "http://localhost:65180", transport: "ssh" as const },
-      ],
-    };
-    for (const host of [remote.host, "office.lan:5180", "localhost:65180"]) {
-      const result = await readRequestIdentity(
-        {
-          ...(host === remote.host ? remote : { host }),
-          cookie: `${DEVICE_COOKIE}=${claimed.token}`,
-        },
+    const settings = { ...options, devices };
+    expect(
+      await readRequestIdentity(
+        { ...remote, cookie: `${DEVICE_COOKIE}=${claimed.token}` },
         "/pe/threads",
         settings,
-      );
-      expect(result).toMatchObject({
-        device: claimed.session.id,
-        caller: { kind: "human", device: claimed.session.id },
-      });
-    }
+      ),
+    ).toMatchObject({
+      device: claimed.session.id,
+      caller: { kind: "human", device: claimed.session.id },
+    });
+    // A host name that is neither loopback nor the sharing authority is no door (remote ingress
+    // was deleted in homes slice 4), even with a paired credential.
+    for (const host of ["office.lan:5180", "localhost:65180"])
+      expect(
+        await readRequestIdentity(
+          { host, cookie: `${DEVICE_COOKIE}=${claimed.token}` },
+          "/pe/threads",
+          settings,
+        ),
+      ).toMatchObject({ refusal: { code: "identity.host" } });
     expect(devices.list().sessions).toHaveLength(1);
-    expect(devices.list().sessions[0]?.transports).toEqual(["tailnet", "lan", "ssh"]);
+    expect(devices.list().sessions[0]?.transports).toEqual(["tailnet"]);
     devices.revoke(claimed.session.id);
     expect(
       await readRequestIdentity(
