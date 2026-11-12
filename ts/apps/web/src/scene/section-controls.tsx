@@ -243,7 +243,6 @@ export function SectionHandles({
           >
             <Button
               label={`Drag section ${handle.label}; arrow keys adjust by 0.25 feet`}
-              kind="framed"
               onPointerDown={(e) => {
                 if (e.button !== 0 || edgeOn) return;
                 e.preventDefault();

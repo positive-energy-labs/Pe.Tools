@@ -301,7 +301,6 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
                   <Button
                     label="remove"
                     reason={`Drop the "${columnKey}" column from every row of this table. The change lives in the form until save writes it.`}
-                    kind="framed"
                     onClick={() => removeColumn(columnKey)}
                   >
                     remove
@@ -326,7 +325,6 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
               <Button
                 label="remove"
                 reason={`Drop row ${index + 1} from this table. The change lives in the form until save writes it.`}
-                kind="framed"
                 onClick={() => field.remove(index)}
               >
                 remove
@@ -346,7 +344,6 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
           <Button
             label="add column"
             reason="Add a dynamic column to this table. Every existing row gains the key, empty. The change lives in the form until save writes it."
-            kind="framed"
             onClick={addColumn}
           >
             add column
@@ -354,7 +351,6 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
           <Button
             label="add row"
             reason="Append a row built from the schema's own defaults for this table. The change lives in the form until save writes it."
-            kind="framed"
             onClick={addRow}
           >
             add row

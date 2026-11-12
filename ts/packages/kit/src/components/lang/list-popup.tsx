@@ -1,3 +1,4 @@
+import { ButtonKind } from "./button";
 import { reachProps } from "./reach";
 import { rowRevit, rowUniqueIds } from "./revit-target";
 import { rowDamage } from "../master-table/model";
@@ -308,7 +309,7 @@ export function List<T>(props: ListProps<T>) {
       ) : null}
       {hasContent(footer) ? (
         <div data-list-footer="" className="hairline-t px-1 pt-1">
-          {footer}
+          <ButtonKind value="quiet">{footer}</ButtonKind>
         </div>
       ) : null}
     </div>

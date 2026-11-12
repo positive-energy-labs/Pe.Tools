@@ -218,7 +218,7 @@ export function LadderPanel({ say }: { say: (text: string) => void }) {
       empty="no Revit session is running"
       onPick={(item, path) => say(`bound ${[...path, item].map((i) => i.label).join(" › ")}`)}
       footer={
-        <Button kind="quiet" label="Clear target" onClick={() => say("target cleared")}>
+        <Button label="Clear target" onClick={() => say("target cleared")}>
           Clear target
         </Button>
       }

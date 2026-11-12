@@ -170,7 +170,6 @@ export function QuestionForm({
       <div className="flex items-center justify-end gap-2 py-2">
         <span data-question-action="decline">
           <Button
-            kind="framed"
             label="Skip"
             reason="Continue without answering this question"
             busy={busy}

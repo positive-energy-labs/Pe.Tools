@@ -19,7 +19,7 @@ import {
 } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { reportFault } from "#/host/diagnostics";
-import { useHostEvents } from "#/host/resource-stream";
+import { followBeat, useHostEvents } from "#/host/resource-stream";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { applyPageIntent, type PageIntent } from "./view-owner";
 import { useRouteCurrent, useRouteSearchSlice } from "./activity";
@@ -223,11 +223,12 @@ export function useRouteViewBridge({
   }, [hasView]);
   useEffect(() => {
     if (!view) return;
-    void publish(view).catch((error) => { console.error("view-bridge: asynchronous operation failed", error); });
-    const timer = setInterval(() => {
-      if (current.current) void publish(current.current).catch((error) => { console.error("view-bridge: asynchronous operation failed", error); });
-    }, 5_000);
-    return () => clearInterval(timer);
+    // The lease renews every 5 s, and backs off while the host does not answer (`followBeat`).
+    return followBeat(
+      () =>
+        (current.current ? publish(current.current) : Promise.resolve()).catch((error) => { console.error("view-bridge: asynchronous operation failed", error); throw error; }),
+      5_000,
+    );
   }, [view, publish]);
   const applyIntent = useCallback(
     (event: Intent) => {

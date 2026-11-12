@@ -35,6 +35,19 @@ type Source = Pick<EventSource, "onopen" | "onmessage" | "onerror" | "close">;
 const READING_DEADLINE_MS = 30_000;
 /** Reconnect delays double from 1 s to this ceiling, and reset on the first fresh frame. */
 const RETRY_CEILING_MS = 30_000;
+/**
+ * The one retry rule for a host that does not answer: retry `attempt` (from 1) waits `baseMs`
+ * doubled each time up to the ceiling, drawn from the upper half so tabs do not retry in step.
+ */
+export const retryDelayMs = (
+  attempt: number,
+  baseMs = 1000,
+  ceilingMs = RETRY_CEILING_MS,
+  random: () => number = Math.random,
+) => {
+  const full = Math.min(ceilingMs, baseMs * 2 ** (attempt - 1));
+  return full / 2 + random() * (full / 2);
+};
 
 /** One browser connection. This map owns subscriptions and retained evidence, never owner truth. */
 export class PeReadings {
@@ -308,7 +321,7 @@ export class PeReadings {
         this.retry = undefined;
         this.open();
       },
-      Math.min(RETRY_CEILING_MS, 1000 * 2 ** this.attempts++),
+      retryDelayMs(++this.attempts),
     );
   }
 
@@ -513,6 +526,54 @@ export function bindActionReadings(source: Readings = peReadings): () => void {
 }
 /** What a follower of the owner's liveness holds: `onResync` only. */
 export type Liveness = Pick<PeReadings, "onResync">;
+
+/**
+ * A periodic call to the host (a presence beat, a view lease) under the retry rule above: it beats
+ * now and every `everyMs`, measured from the send; a failed beat backs off, and the stream's recovery beats at once. The
+ * beat reports its own failure; this only paces it.
+ */
+export function followBeat(
+  beat: () => Promise<unknown>,
+  everyMs: number,
+  owner: Liveness = peReadings,
+): () => void {
+  let failures = 0;
+  let stopped = false;
+  let period: ReturnType<typeof setInterval> | undefined;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  // A healthy beat is an interval from the send, never a timer chained on the answer: a slow answer
+  // cannot stretch a lease past its expiry. Only a failed beat leaves the interval, for the backoff.
+  const healthy = () => {
+    clearTimeout(retry);
+    period ??= setInterval(run, everyMs);
+  };
+  const run = () => {
+    if (failures) clearTimeout(retry);
+    else healthy();
+    void beat().then(
+      () => {
+        failures = 0;
+        if (!stopped) healthy();
+      },
+      () => {
+        if (stopped) return;
+        failures++;
+        clearInterval(period);
+        period = undefined;
+        clearTimeout(retry);
+        retry = setTimeout(run, retryDelayMs(failures + 1, everyMs));
+      },
+    );
+  };
+  const unfollow = owner.onResync(run);
+  run();
+  return () => {
+    stopped = true;
+    clearInterval(period);
+    clearTimeout(retry);
+    unfollow();
+  };
+}
 
 /** An Action succeeded; this subject's snapshot is reacquired from the host. */
 export const dirty = (request: ReadingRequest, source: Readings = peReadings) =>

@@ -40,7 +40,6 @@ export function PageMap({
       {picture.regions.map((region, index) => (
         <Button
           key={region.key}
-          kind="framed"
           label={`Show ${region.label} controls`}
           pressed={value === region.key}
           data-map-region={region.key}

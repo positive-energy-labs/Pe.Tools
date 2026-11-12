@@ -408,6 +408,40 @@ export class ActionResultError extends Error {
     super(`${action.id}: ${action.state}: ${"error" in action ? action.error : "outcome pending"}`);
   }
 }
+/**
+ * A receipt as a model reads it. The journal row keeps each step's native bytes, the prepared value
+ * and the consumed member bytes; a field family capture is 300 KB in each (gate-9d6ce645), which
+ * leaves a tool result no room for its answer. The bound is a trigger on the whole receipt, not a
+ * size the copy is cut to: a receipt at or under it passes whole, and over it only those three
+ * copies are cut and counted. `result`, `input`, `recovery`, the refusal and a consumed Work fact's
+ * `expected` stay whole, so the copy can still be over the bound. A failed `scripting.execute`
+ * receipt never comes here: `pe_do` relays it whole as the script result's `problem`.
+ */
+export const RECEIPT_RELAY_BYTES = 16_000;
+export function receiptForModel(row: unknown): unknown {
+  const size = (value: unknown) => JSON.stringify(value ?? null).length;
+  if (!row || typeof row !== "object" || size(row) <= RECEIPT_RELAY_BYTES) return row;
+  const receipt = row as {
+    id?: string;
+    steps?: Record<string, unknown>[];
+    consumes?: Record<string, unknown>[];
+    prepared?: unknown;
+  };
+  return {
+    ...receipt,
+    ...(receipt.steps && {
+      steps: receipt.steps.map(({ input, result, ...step }) => ({
+        ...step,
+        omittedBytes: size(input) + size(result),
+      })),
+    }),
+    ...(receipt.consumes && {
+      consumes: receipt.consumes.map(({ bytesBase64: _, ...fact }) => fact),
+    }),
+    ...(receipt.prepared !== undefined && { prepared: { omittedBytes: size(receipt.prepared) } }),
+    relay: `This receipt is ${size(row)} bytes in the journal (action ${receipt.id}), over the ${RECEIPT_RELAY_BYTES}-byte relay trigger, so step inputs and results, the prepared value and consumed bytesBase64 are cut from this copy. The result, input, recovery and consumed Work facts are whole.`,
+  };
+}
 export function actionResult(row: ActionReceipt | DetachedAction): unknown {
   if (row.state !== "succeeded") throw new ActionResultError(row);
   return row.result;

@@ -1,5 +1,6 @@
 import { SheetPane } from "../route/slots/sheet/pane.tsx";
 import { GoalPane } from "../route/slots/goal/pane.tsx";
+import { lazy, Suspense } from "react";
 import type { Goal } from "@pe/agent-contracts/slots";
 import { refuse } from "../route/refusal";
 import * as Atom from "effect/reactivity/Atom";
@@ -43,6 +44,9 @@ import type { TypedRoute } from "../route/typed-route";
 import type { RouteFingerprint } from "@pe/agent-contracts";
 import type { AdmittedAddressPort } from "./typed-address";
 import { hostedRouteAddress, type HostedRouteProps } from "../workbench/hosted-route";
+
+// The picture brings the 3D renderer: loaded with the first picture pane, never with the shell.
+const PicturePane = lazy(() => import("../route/slots/picture/pane.tsx").then((module) => ({ default: module.PicturePane })));
 
 /** A typed route bypasses web admission. Only its host Work registration needs the closure stamp. */
 export function TypedRouteView({ module, fingerprint, address: supplied }: { module: TypedRoute; fingerprint: RouteFingerprint; address?: AdmittedAddressPort }) {
@@ -183,7 +187,7 @@ const still = () => () => {};
 const paneBusy = (mount: TypedMount, pane: TypedMount["spec"]["panes"][string]) =>
   [pane.read ?? mount.spec.core, pane.subjectList ? mount.spec.subject?.read : undefined].some(read => !!read && mount.value(read).status === "pending");
 function layout(node: TypedRoute["spec"]["layout"]): LayoutNode {
-  return node.kind==="split"?{...node,sized:node.sized??"end",minSize:node.minSize??80,minOtherSize:node.minOtherSize??80,children:node.children.map(layout)}:node.kind==="gate"?{...node,child:layout(node.child)}:node;
+  return node.kind==="split"?{...node,sized:node.sized??"end",children:node.children.map(layout)}:node.kind==="gate"?{...node,child:layout(node.child)}:node;
 }
 export function TypedShell(props: Parameters<typeof TypedRouteView>[0]) {
   return <PaneActionSlots><TypedRouteView {...props} /></PaneActionSlots>;
@@ -193,7 +197,8 @@ export function HostedTypedRoute({ module, fingerprint, ...props }: Parameters<t
   return props.visible ? <TypedShell module={module} fingerprint={fingerprint} address={address} /> : null;
 }
 
-function TypedPane({mount,id,ctx}: {mount:TypedMount;id:string;ctx:DrawContext<any,any,any,any>}) {
+/** One pane as the shell draws it: the route's bindings as its attention scope, then the kernel's slot pane or the route's body. */
+export function TypedPane({mount,id,ctx}: {mount:TypedMount;id:string;ctx:DrawContext<any,any,any,any>}) {
   const bindings=mount.spec.panes[id]!.bindings?.(ctx);
   const document=ctx.target?.kind === "document"?ctx.target.ref:null;
   const doc=document?`${document.session}/${document.openId}`:`${mount.spec.key}:unbound`;
@@ -263,9 +268,11 @@ export function PublishedPlaceViews({ views }: { views: ReturnType<typeof create
 }
 function PublishedView({ view }: { view: View }) { useRouteViewBridge(view); return null; }
 
-/** ADR 0035 rules 3 and 8: the sheet and goal slots draw here, the same way on every route, builtin or Pod. */
-function kernelPane(mount: TypedMount, id: string, ctx: Parameters<TypedMount["spec"]["panes"][string]["draw"]>[0]): ReactNode | null {
-  const kernel = (mount.spec.panes[id] as { kernel?: "sheet" | "goal" }).kernel;
+/** ADR 0035 rules 2, 3 and 8: the sheet, goal and picture slots draw here, the same way on every route, builtin or Pod. */
+export function kernelPane(mount: TypedMount, id: string, ctx: Parameters<TypedMount["spec"]["panes"][string]["draw"]>[0]): ReactNode | null {
+  const kernel = (mount.spec.panes[id] as { kernel?: "sheet" | "goal" | "picture" }).kernel;
+  if (kernel === "picture" && mount.spec.picture)
+    return <Suspense fallback="Loading drawing"><PicturePane ctx={{ draw: ctx as never, slot: mount.spec.picture as never, name: mount.spec.name, subjectField: mount.spec.subject?.field, findings: mount.findings() }} /></Suspense>;
   if (kernel === "sheet" && mount.spec.sheet)
     return <SheetPane ctx={{ draw: ctx as never, slot: mount.spec.sheet, field: mount.spec.subject?.field }} />;
   if (kernel === "goal") return <GoalPane ctx={{ goal: ctx.value.value as Goal | undefined }} />;

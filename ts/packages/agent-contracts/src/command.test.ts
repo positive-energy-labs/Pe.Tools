@@ -3,7 +3,7 @@ import { z } from "zod";
 import { tools } from "./semantic-actions.ts";
 import type { Command, WorkHandle } from "./command.ts";
 import { bindWork } from "./route-state.ts";
-import { familyApplyResultSchema, type FamilyApplyResult } from "./family-actions.ts";
+import { familyActions, familyApplyResultSchema, type FamilyApplyResult } from "./family-actions.ts";
 
 describe("portable tool consumers", () => {
   it("lets the host choose sealed preview hashes and rejects competing apply intent", () => {
@@ -68,5 +68,14 @@ describe("portable tool consumers", () => {
       readingId: "capture",
       work: handle,
     });
+  });
+});
+
+describe("family.capture destination", () => {
+  it("refuses a path that leaves the family folder, as the host does", () => {
+    const input = familyActions["family.capture"].input;
+    expect(input.safeParse({ pod: "lab", path: "settings/family/box.json" }).success).toBe(true);
+    expect(input.safeParse({ pod: "lab", path: "settings/family/../../x.json" }).success).toBe(false);
+    expect(input.safeParse({ pod: "lab", path: "settings/family/a\b.json" }).success).toBe(false);
   });
 });

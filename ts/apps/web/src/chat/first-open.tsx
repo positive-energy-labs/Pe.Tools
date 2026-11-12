@@ -73,7 +73,6 @@ export function ProviderRepair({
           {word ? (
             <Button
               label={word}
-              kind="framed"
               reason="open the harness installer or login in a console on this machine"
               onClick={() => void providers.openLogin(provider.id)}
             >

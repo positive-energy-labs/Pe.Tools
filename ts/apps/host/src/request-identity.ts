@@ -369,7 +369,12 @@ export async function readRequestIdentity(
         },
       };
     }
-    if ("principal" in result && !isRemote && navigation && !pathname.startsWith("/pages"))
+    // Only this origin's own navigation mints: the page's hidden re-admission frame (same-origin), a
+    // typed or opened address (none), or a client that sends no fetch metadata. Another site's frame
+    // or link reads the page as the anonymous caller it arrived as.
+    const ownNavigation =
+      navigation && ["same-origin", "none", undefined].includes(headers["sec-fetch-site"]);
+    if ("principal" in result && !isRemote && ownNavigation && !pathname.startsWith("/pages"))
       result = { ...result, setCookie: mintBrowserContext(result.principal) };
   }
   options.share.observe(result, pathname, host);
@@ -491,9 +496,13 @@ export const requestIdentityLayer = (options: IdentityLayerOptions) =>
         const response = yield* exit;
         const refused = response.headers[REFUSAL_HEADER];
         if (response.status === 403 && refused) countRefusal(options.telemetry, refused);
+        // No other site frames a host page; a response that names its own policy keeps it.
+        const framed = response.headers["content-security-policy"]
+          ? response
+          : HttpServerResponse.setHeader(response, "content-security-policy", "frame-ancestors 'self'");
         return identity.setCookie
-          ? HttpServerResponse.setHeader(response, "set-cookie", identity.setCookie)
-          : response;
+          ? HttpServerResponse.setHeader(framed, "set-cookie", identity.setCookie)
+          : framed;
       }).pipe(
         // Effect 4.0.2 HttpEffect enters uninterruptibly; route interruptibility begins
         // inside the legacy ALS child. The Node close must interrupt this outer wait too.

@@ -4,7 +4,7 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronRight, Ellipsis, Flame } from "lucide-react";
 
 import { tv } from "../../lib/tv";
-import { ButtonIcon } from "./button";
+import { ButtonIcon, ButtonKind } from "./button";
 import { TooltipHint } from "./tooltip";
 import { rowRevit, useRevitTarget, type RevitElementReference } from "./revit-target";
 import type { StateCellProps } from "./cell-state";
@@ -275,7 +275,9 @@ function ListRow({
             ) : null}
           </span>
           {props.lines !== 1 && props.sub != null ? (
-            <span className={slots.sub()}>{props.sub}</span>
+            <span className={slots.sub()}>
+              <ButtonKind value="quiet">{props.sub}</ButtonKind>
+            </span>
           ) : null}
         </span>
       </div>

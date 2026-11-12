@@ -1,5 +1,6 @@
 import type { ComponentProps, KeyboardEvent, ReactNode } from "react";
 import { Search } from "lucide-react";
+import { ButtonKind } from "./button";
 import { cn, focusQuiet } from "../../lib/utils";
 import "./lang.css";
 
@@ -23,7 +24,7 @@ export function SearchControl({
   lead?: ReactNode;
   /** A press at the field's end that modifies the query (`not`); it keeps its own frame. */
   trail?: ReactNode;
-  /** Words already in the query, drawn ahead of the input. */
+  /** Words already in the query, drawn ahead of the input; a chip's button is quiet. */
   chips?: ReactNode;
   /** `framed`: the control frame. `bar`: a full-bleed command line with a hairline under it. */
   face?: "framed" | "bar";
@@ -59,7 +60,7 @@ export function SearchControl({
         data-search-field=""
         className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-px px-(--control-pad-x)"
       >
-        {chips}
+        <ButtonKind value="quiet">{chips}</ButtonKind>
         <span className="flex min-w-[min(100%,var(--search-input-min,26ch))] flex-1 items-center gap-1">
           <Search aria-hidden data-search-glyph="" className="size-3 shrink-0" />
           {children}

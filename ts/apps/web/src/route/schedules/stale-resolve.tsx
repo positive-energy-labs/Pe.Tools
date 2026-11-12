@@ -36,7 +36,7 @@ export function StaleResolve({
         <span className="text-ink-2">
           {unread} refused as changed in Revit; the readback failed, so what Revit holds is unread
         </span>
-        <Button kind="framed" label="read again" onClick={() => void readAgain()}>
+        <Button label="read again" onClick={() => void readAgain()}>
           read again
         </Button>
       </div>
@@ -62,7 +62,6 @@ export function StaleResolve({
       {n ? (
         <span className="flex flex-wrap items-baseline gap-2">
           <Button
-            kind="framed"
             label={`Overwrite ${values(n)}`}
             refusal={
               others > 0
@@ -79,7 +78,6 @@ export function StaleResolve({
             Overwrite {values(n)}
           </Button>
           <Button
-            kind="framed"
             label={`Keep Revit's ${n} value${n === 1 ? "" : "s"}`}
             reason="Unstage each; Revit's value stands. Nothing is pushed."
             onClick={() => void answer("clear")}

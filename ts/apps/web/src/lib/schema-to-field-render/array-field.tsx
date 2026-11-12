@@ -100,7 +100,6 @@ export function ArrayField({
             <Button
               label="add item"
               reason="Append an item built from the schema's own defaults for this list. The change lives in the form until save writes it."
-              kind="framed"
               onClick={() => {
                 field.push(buildDefaultArrayItem(itemNodeRef));
               }}
@@ -118,7 +117,6 @@ export function ArrayField({
                     <Button
                       label="remove"
                       reason={`Drop item ${index + 1} from this list. The change lives in the form until save writes it.`}
-                      kind="framed"
                       onClick={() => {
                         field.remove(index);
                       }}

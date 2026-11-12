@@ -126,7 +126,7 @@ export function StructureLaws({ owner }: { owner: (name: string) => string }) {
           sync to .r10
         </Button>
         <CounterExample why="a bare Button with no refusal stays live, so a world action that cannot run still looks available">
-          <Button kind="framed" label="sync to .r10" onClick={noop}>
+          <Button label="sync to .r10" onClick={noop}>
             sync to .r10
           </Button>
         </CounterExample>

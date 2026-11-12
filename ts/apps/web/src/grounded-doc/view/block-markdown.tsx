@@ -152,7 +152,6 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
           <Button
             label="parse"
             reason="Send the URL to LlamaCloud and ground the parse against its pages"
-            kind="framed"
             refusal={url.trim() ? null : "paste a public PDF URL first"}
             onClick={submitUrl}
           >
