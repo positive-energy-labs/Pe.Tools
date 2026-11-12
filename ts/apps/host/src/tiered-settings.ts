@@ -113,13 +113,15 @@ function ductsCellAccepts(path: readonly string[], value: unknown): boolean {
  */
 export function writeSettingTier(
   request: { owner: string; tier: SettingTier; path: readonly string[]; value: unknown; expectedSha256: string | null },
-  context: { pointer?: string | null; writer?: string; now?: () => Date; receiptId?: string } = {},
+  context: { pointer?: string | null; writer?: string; now?: () => Date; receiptId?: string; expectedPath?: string } = {},
 ): SettingWrite {
   if (request.path.some((key) => ["written", "__proto__", "constructor", "prototype"].includes(key)))
     return { ok: false, status: 422, message: "The setting path contains a reserved key." };
   const read = readTier(request.tier, request.owner, context.pointer);
   if (read.home === null || read.path === null)
     return { ok: false, status: 404, message: read.notFound ?? `No ${request.tier} home` };
+  if (context.expectedPath !== undefined && read.path !== context.expectedPath)
+    return { ok: false, status: 409, message: `The setting home changed since binding: expected ${context.expectedPath}, now ${read.path}. Nothing was written.` };
   if (read.error !== undefined)
     return { ok: false, status: 422, message: `${read.path} can't be read, so it is kept as it is: ${read.error}` };
   if (read.sha256 !== request.expectedSha256)

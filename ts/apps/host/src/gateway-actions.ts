@@ -174,6 +174,7 @@ const preparedGatewaySchema = z.discriminatedUnion("kind", [
       })
       .optional(),
     promotedPage: z.string().optional(),
+    settingPath: z.string().optional(),
   }),
   z.strictObject({
     kind: z.literal("native-leaf"),
@@ -194,7 +195,8 @@ export const gatewayNativeLeaves = (key: string): readonly string[] =>
   isTsOnlyOperationKey(key) ? [] : ["host.ops.catalog", key];
 
 /** A host-leaf operation, run on the journal-owned attempt fiber with the journal's services. */
-export type GatewayLocal = (key: string, input: unknown, scope?: HostSessionScope, receiptId?: string) => Effect.Effect<unknown, unknown, AttemptHost>;
+export type GatewayLocalContext = { receiptId: string; settingPath?: string };
+export type GatewayLocal = (key: string, input: unknown, scope?: HostSessionScope, context?: GatewayLocalContext) => Effect.Effect<unknown, unknown, AttemptHost>;
 
 /** Generated native metadata is the fallback contract; public semantic implementations are hidden. */
 export function gatewayExecutor(
@@ -357,6 +359,7 @@ export function gatewayExecutor(
             const { pointer } = await Effect.runPromise(targetHomes(bridge, { openDocumentId: target?.openId }));
             const tier = readSettingTiers(String(authored.owner), pointer).find(tier => tier.tier === authored.tier);
             if (!tier?.path) throw refused(tier?.notFound ?? "The setting home was not found");
+            payload = { kind: "host-leaf", settingPath: tier.path };
             effects.push({ kind: "file", path: tier.path });
             break;
           }
@@ -522,7 +525,7 @@ export function gatewayExecutor(
               );
             return local(key, input, admission.target.kind === "document"
               ? { bridgeSessionId: admission.target.ref.session, openDocumentId: admission.target.ref.openId }
-              : undefined, admission.id);
+              : undefined, { receiptId: admission.id, settingPath: prepared.settingPath });
           }
           const target = admission.target;
           if (target.kind !== "document" && target.kind !== "session")
