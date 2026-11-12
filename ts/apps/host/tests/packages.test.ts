@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, open, rename, rm, symlink, writeFile } from "node:fs/pr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
-import { capturePackage, kindOfMember, listPackages, readPackage } from "../src/packages.ts";
+import {
+  capturePackage,
+  isPackageMember,
+  kindOfMember,
+  listPackages,
+  readPackage,
+} from "../src/packages.ts";
 import { createHash } from "node:crypto";
 import { routeFingerprint } from "../../../packages/agent-contracts/src/route-module.ts";
 import { builtinData } from "../../../packages/agent-contracts/src/route-kernel.fixtures.ts";
@@ -18,8 +24,6 @@ const authored: Record<string, string | Uint8Array> = {
   "skills/inspect/SKILL.md": "Inspect",
   "skills/inspect/references/data.bin": new Uint8Array([0, 255, 1]),
   "pages/tour/index.html": "<title>Tour</title>",
-  "pages/tour/.state/events.jsonl": "{}",
-  "pages/tour/.state/snapshot.json": "{}",
   "settings/checks.json": '{"$schema":"https://pe/schema"}',
 };
 async function put(folder: string, path: string, content: string | Uint8Array) {
@@ -34,6 +38,20 @@ beforeEach(async () => {
 // Windows holds fresh files open for a moment (scanners, a timed-out writer still finishing): retry.
 afterEach(() => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }));
 
+// Mutant, run red once (2026-11-11): drop ".state" from the debris set in packages.ts.
+test("a Page's .state folder in a Pod is stale debris, never a member", () => {
+  // The sentinel: the filter does admit the authored file beside it.
+  expect(isPackageMember("Pages/x/index.html")).toBe(true);
+  for (const path of [
+    "Pages/x/.state/a.json",
+    "pages/x/.state/events.jsonl",
+    "pages/x/.state/snapshot.json",
+    "pages/x/.state/binding.json",
+    "pages/x/.state/exports/abc.html",
+  ])
+    expect(isPackageMember(path), path).toBe(false);
+});
+
 test("one snapshot lists and captures every authored byte, excluding authority and debris", async () => {
   for (const path of [
     "output/run/input.json",
@@ -42,6 +60,8 @@ test("one snapshot lists and captures every authored byte, excluding authority a
     "imported.json",
     "pages/tour/.state/binding.json",
     "pages/tour/.state/grants.json",
+    "pages/tour/.state/events.jsonl",
+    "pages/tour/.state/snapshot.json",
     "node_modules/a",
     ".env",
   ])
