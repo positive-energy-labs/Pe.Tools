@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
@@ -19,6 +19,8 @@ async function fixture(html: string) {
   await writeFile(join(directory, "index.html"), html);
   return { root, directory };
 }
+/** Exports are machine state: beside the fixture's Pages root, never inside the Page's folder. */
+const exportsOf = (directory: string) => join(directory, "..", "state", "exports");
 const basis = {
   page: "page:@pages/test",
   exportedAt: "2026-10-13T12:00:00.000Z",
@@ -44,6 +46,7 @@ it("pins local scripts, imported CSS and relative assets, snapshot, document and
   await writeFile(join(directory, "app.js"), app);
   const result = await exportPage({
     directory,
+    exports: exportsOf(directory),
     ...basis,
     library: async (path) =>
       path === "/pages/pe.js"
@@ -97,7 +100,12 @@ it("downloads the same host-persisted artifact and rejects destination path inje
   const { root, directory } = await fixture(
     "<head><title>Independent Page</title></head><p>presentation</p>",
   );
-  const handle = createPagesHandler(root);
+  const state = await mkdtemp(join(tmpdir(), "pe-export-state-"));
+  roots.push(state);
+  const handle = createPagesHandler(root, undefined, undefined, undefined, {
+    root: join(state, "Pages"),
+    notices: join(state, "stored-notices.jsonl"),
+  });
   const response = await handle(
     new Request("http://host/pages/page/export", {
       method: "POST",
@@ -108,7 +116,11 @@ it("downloads the same host-persisted artifact and rejects destination path inje
   expect(response.headers.get("content-disposition")).toBe('attachment; filename="page.html"');
   const html = await response.text();
   const hash = response.headers.get("x-pe-export-sha256")!;
-  expect(await readFile(join(directory, ".state", "exports", `${hash}.html`), "utf8")).toBe(html);
+  // The export is kept with the Page's state, keyed by the slug; the Page's own folder gains nothing.
+  expect(
+    await readFile(join(state, "Pages", "page", "exports", `${hash}.html`), "utf8"),
+  ).toBe(html);
+  await expect(access(join(directory, ".state"))).rejects.toThrow();
   const manifest = JSON.parse(
     /<script id="pe-export" type="application\/json">([\s\S]*?)<\/script>/.exec(html)![1]!,
   );
@@ -123,14 +135,18 @@ it("downloads the same host-persisted artifact and rejects destination path inje
   expect(rejected.status).toBe(400);
 });
 
-it("refuses an artifact directory junction before creating anything outside the Page", async () => {
+it("a `.state` junction planted in a Page's folder is never followed: the export lands in machine state", async () => {
   const { root, directory } = await fixture("<p>hello</p>");
   const outside = join(root, "external");
   await mkdir(outside);
   await symlink(outside, join(directory, ".state"), "junction");
-  await expect(exportPage({ directory, ...basis, library: async () => "" })).rejects.toThrow(
-    /outside/i,
-  );
+  const result = await exportPage({
+    directory,
+    exports: exportsOf(directory),
+    ...basis,
+    library: async () => "",
+  });
+  expect(result.path).toBe(join(exportsOf(directory), `${result.sha256}.html`));
   await expect(readFile(join(outside, "exports"))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
@@ -141,7 +157,7 @@ it.each([
   "<script>import(variable)</script>",
 ])("refuses unsupported executable dependencies: %s", async (html) => {
   const { directory } = await fixture(html);
-  await expect(exportPage({ directory, ...basis, library: async () => "" })).rejects.toThrow(
+  await expect(exportPage({ directory, exports: exportsOf(directory), ...basis, library: async () => "" })).rejects.toThrow(
     /unsupported|external/i,
   );
 });
@@ -149,7 +165,7 @@ it.each([
 it("refuses traversal and symlinks outside the Page", async () => {
   const { root, directory } = await fixture('<script src="../outside.js"></script>');
   await writeFile(join(root, "outside.js"), "secret");
-  await expect(exportPage({ directory, ...basis, library: async () => "" })).rejects.toThrow(
+  await expect(exportPage({ directory, exports: exportsOf(directory), ...basis, library: async () => "" })).rejects.toThrow(
     /outside/i,
   );
   const outside = join(root, "external");
@@ -160,7 +176,7 @@ it("refuses traversal and symlinks outside the Page", async () => {
     join(directory, "index.html"),
     '<script src="assets/linked/outside.js"></script>',
   );
-  await expect(exportPage({ directory, ...basis, library: async () => "" })).rejects.toThrow(
+  await expect(exportPage({ directory, exports: exportsOf(directory), ...basis, library: async () => "" })).rejects.toThrow(
     /outside/i,
   );
 });
@@ -172,7 +188,7 @@ it("embeds local module dependencies as data URLs and preserves dollar expressio
     'import { value } from "./value.mjs"; window.value=value;',
   );
   await writeFile(join(directory, "value.mjs"), 'export const value = "$&$1";');
-  const result = await exportPage({ directory, ...basis, library: async () => "" });
+  const result = await exportPage({ directory, exports: exportsOf(directory), ...basis, library: async () => "" });
   expect(result.html).toContain('from "data:text/javascript;base64,');
   expect(result.provenance.files.map((file) => file.path)).toContain("value.mjs");
 });
@@ -182,7 +198,7 @@ it.each(["async", "defer"])(
   async (flag) => {
     const { directory } = await fixture(`<script ${flag} src="app.js"></script>`);
     await writeFile(join(directory, "app.js"), "window.test = true;");
-    await expect(exportPage({ directory, ...basis, library: async () => "" })).rejects.toThrow(
+    await expect(exportPage({ directory, exports: exportsOf(directory), ...basis, library: async () => "" })).rejects.toThrow(
       /unsupported.*(?:async|defer)/i,
     );
   },

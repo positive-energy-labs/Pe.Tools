@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
 import { z } from "zod";
 import type { Receipt, ReceiptReader } from "@pe/agent-contracts";
+import { readStored, writeAtomic } from "@pe/host-contracts/store";
 import { currentCaller, Refused, refusalHeaders, requireHuman } from "./control.ts";
+import { storedNoticesPath } from "./notice-feed.ts";
 
 const scheduleSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("interval"), everyMs: z.number().finite().int().min(60_000) }),
@@ -107,9 +107,13 @@ export function createScheduledTasks(options: {
   launch: (input: ScheduledLaunch) => { threadId: string; completion: Promise<void> };
 }) {
   const now = options.now ?? (() => new Date());
-  const stored = existsSync(options.path)
-    ? z.array(taskSchema).parse(JSON.parse(readFileSync(options.path, "utf8")))
-    : [];
+  // Machine state (ADR 0039): rows that do not decode are discarded with a notice, and the host starts.
+  const read = readStored(options.path, z.array(taskSchema), {
+    class: "discard",
+    place: "Scheduled tasks",
+    notices: storedNoticesPath(),
+  });
+  const stored = read.kind === "ok" ? read.value : [];
   // A shipped task's definition comes from this build; only its enabled flag and run state persist,
   // so a release can change the miner's prompt, gate or schedule on machines that already ran it.
   const shipped = feedbackMiner(now());
@@ -130,11 +134,7 @@ export function createScheduledTasks(options: {
         }
       : shipped,
   ];
-  const save = () => {
-    mkdirSync(dirname(options.path), { recursive: true });
-    writeFileSync(`${options.path}.tmp`, JSON.stringify(rows, null, 2));
-    renameSync(`${options.path}.tmp`, options.path);
-  };
+  const save = () => writeAtomic(options.path, JSON.stringify(rows, null, 2));
   for (const row of rows)
     if (row.lastStatus === "running") {
       row.lastStatus = "failed";

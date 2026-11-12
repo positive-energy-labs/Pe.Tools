@@ -1,6 +1,6 @@
 import { currentDocument as current, lifetime } from "./document-lifetime.ts";
 import { createHash } from "node:crypto";
-import { join, resolve, win32 } from "node:path";
+import { resolve, win32 } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { NodeFileSystem } from "@effect/platform-node";
 import {
@@ -68,10 +68,6 @@ import type {
   RevitCatalogLoadedFamilies,
   RevitMatrixLoadedFamilies,
 } from "@pe/host-contracts/generated";
-import {
-  productPathNames,
-  scriptingWorkspaceIdentity,
-} from "@pe/host-contracts/contracts";
 import { CANCEL_OPERATION_KEY, invokeBridge as invoke, type RevitBridge } from "./bridge.ts";
 import { assertFresh, type DocumentMarks } from "./document-marks.ts";
 import type { ActionExecution } from "./action-journal.ts";

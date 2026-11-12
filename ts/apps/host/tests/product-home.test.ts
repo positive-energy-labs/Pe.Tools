@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { join, relative, isAbsolute } from "node:path";
+import { join, relative, isAbsolute, sep } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { Effect } from "effect";
 import { resolvePeaProductHomePath, resolvePeaSkillPaths } from "@pe/mcps";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import {
@@ -9,9 +10,11 @@ import {
   hostContextTokenPath,
   productRoot,
   productScratchPath,
+  stateRoot,
 } from "@pe/host-contracts/service-identity";
 import * as productPaths from "../src/product-paths.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
+import { getHostStatus } from "../src/local-ops.ts";
 
 // Most tests here compute paths from invented roots and touch no disk, so the test-isolation
 // tripwire (which only polices real resolution) stands down for this file.
@@ -34,7 +37,6 @@ test("every production resolver output follows one locally selected product envi
       "productUserContentRootPath",
       "productPodsRootPath",
       "productPagesRootPath",
-      "productRouteWorkPath",
     ]);
     for (const [name, resolver] of Object.entries(productPaths).filter(
       ([name]) => !content.has(name),
@@ -49,8 +51,7 @@ test("every production resolver output follows one locally selected product envi
       runtime: runtime(),
       scratch: productScratchPath(runtime()),
       serviceToken: hostContextTokenPath(runtime(), "environment-proof"),
-      world: resolvePeaProductHomePath(),
-      ...Object.fromEntries(resolvePeaSkillPaths().map((path, i) => [`skill${i}`, path])),
+      skillsHome: resolvePeaProductHomePath(),
     };
     for (const [name, path] of Object.entries(paths)) {
       const child = relative(home, path);
@@ -64,4 +65,48 @@ test("every production resolver output follows one locally selected product envi
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+test("Work, Page state and the agent's working directory are machine state under the state root", () => {
+  const state = join(hostOwnership.rootPath, "state");
+  const agent = productPaths.productAgentPath();
+  expect(agent).toBe(join(state, "Agent"));
+  expect(productPaths.productRouteWorkPath()).toBe(join(state, "Work"));
+  expect(productPaths.productPageStatePath()).toBe(join(state, "Pages"));
+  expect(productPaths.productT3Path()).toBe(join(state, "T3"));
+  // The harness projections follow the agent's working directory, and the Pea world is that directory.
+  for (const path of resolvePeaSkillPaths(agent))
+    expect(relative(agent, path).startsWith(".."), path).toBe(false);
+  const { world } = Effect.runSync(getHostStatus({ connected: false }));
+  expect(world.root).toBe(agent);
+  expect(world.id).toBe(`pea:${Buffer.from(agent).toString("base64url")}`);
+});
+
+test("without an isolated home, the agent's working directory is never under a content home", () => {
+  const user = "C:\\Users\\Alice\\OneDrive\\Documents\\Pe.Tools";
+  const shared = "S:\\Pe.Tools";
+  // The state-root fence takes the home list (ADR 0037 rule 6): every home in it refuses machine state.
+  const fences = [
+    { tier: "user", root: user },
+    { tier: "firm", root: shared },
+  ] as const;
+  const under = (home: string, path: string) => {
+    const away = relative(home, path);
+    return !isAbsolute(away) && away !== ".." && !away.startsWith(`..${sep}`);
+  };
+  for (const [lane, owner] of [
+    ["installed", "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools"],
+    ["dev", "C:\\src\\Pe.Tools"],
+  ] as const) {
+    const agent = join(stateRoot(lane, owner, undefined, fences), "state", "Agent");
+    for (const home of [user, shared]) expect(under(home, agent), `${lane}: ${agent}`).toBe(false);
+  }
+  // The sentinel: the check does see a path inside a home, and such a state root never resolves.
+  expect(under(user, join(user, "state", "Agent"))).toBe(true);
+  expect(() => stateRoot("installed", join(user, "install"), undefined, fences)).toThrow(
+    "user content root",
+  );
+  expect(() => stateRoot("dev", join(shared, "checkout"), undefined, fences)).toThrow(
+    "PE_TOOLS_SHARED_ROOT",
+  );
 });

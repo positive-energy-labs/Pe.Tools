@@ -73,7 +73,8 @@ describe("writeAtomic", () => {
 });
 
 describe("writeHomeFile", () => {
-  const blobRoot = () => join(root, "Blobs");
+  // Freeze shape 7: the host passes `<machine state root>/state/Blobs`.
+  const blobRoot = () => join(root, "state", "Blobs");
   const home = () => join(root, "home", "Pods", "a", "pod.json");
 
   test("a changed sha is a conflict: no write, no blob", () => {

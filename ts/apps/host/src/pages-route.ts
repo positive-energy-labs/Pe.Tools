@@ -6,9 +6,9 @@ import {
   peRouteUrl,
 } from "@pe/agent-contracts/pe-api";
 /** Scratch Pages and admitted Pod Pages share serving, binding and event state. See pe.js for the author API. */
-import { existsSync, readFileSync, watch } from "node:fs";
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, extname, join } from "node:path";
+import { readFileSync, watch } from "node:fs";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { Effect, Option } from "effect";
@@ -73,11 +73,13 @@ import {
   type PagesRoots,
 } from "./page-libraries.ts";
 import { exportPage } from "./page-export.ts";
-import { userTwin, userWritable } from "./content-homes.ts";
 import { escapeHtml, withPageKey } from "./page-publication.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import { ActionJournalService } from "./receipt-services.ts";
-import { PAGE_MEDIA, readJson } from "./page-artifacts.ts";
+import { PAGE_MEDIA } from "./page-artifacts.ts";
+import { readStored, writeAtomic, type StoredPolicy } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "./notice-feed.ts";
+import { productPageStatePath } from "./product-paths.ts";
 
 /**
  * Each library file beside its source on the dev lane, so an edit is live on the next request;
@@ -155,12 +157,18 @@ export const pageLibrary = (path: string): string | null => {
     : null;
 };
 
-/** One file segment: a leading dot is refused, so `.state/` and editor droppings stay private. */
+/** One file segment: a leading dot is refused, so editor droppings stay private. */
 const SEGMENT = /^[a-z0-9_-][a-z0-9_.-]*$/i;
 const HEARTBEAT_MS = 15_000;
 const isMissing = (error: unknown) => (error as { code?: string } | null)?.code === "ENOENT";
 
-export type PageEventRow = { seq: number; at: string; origin: string; event: unknown };
+const pageEventRowSchema = z.object({
+  seq: z.number(),
+  at: z.string(),
+  origin: z.string(),
+  event: z.unknown(),
+});
+export type PageEventRow = z.infer<typeof pageEventRowSchema>;
 /** One `GET /pages` row; `pod` is the package id when an admitted package contributes the page. */
 export type PageRow = {
   slug: string;
@@ -250,39 +258,39 @@ const unboundRefusal = (door: string): Refusal => ({
 });
 
 /**
- * One page's log and snapshot, under `<page>/.state/`. Appends are serial per page. A shared Page
- * writes its state into its user copy (made on the first write) and reads from it once it exists.
+ * One page's log, snapshot and binding. They are machine state (ADR 0037 rule 6): `dir` is the
+ * Page's folder under the state root, never the Page's own folder in a home. Appends are serial
+ * per page. Page state is discard class (ADR 0039): a file that does not decode is deleted with
+ * one notice and reads as absent.
  */
 class PageState {
   private readonly listeners = new Set<Listener>();
   private readonly signals = new Set<Signal>();
   private unwatch: (() => void) | null = null;
   private queue: Promise<unknown> = Promise.resolve();
-  constructor(private readonly pageDir: string) {}
-  private get dir() {
-    const twin = userTwin(this.pageDir);
-    return join(twin && existsSync(twin) ? twin : this.pageDir, ".state");
-  }
-  private writable() {
-    return join(userWritable(this.pageDir), ".state");
+  constructor(
+    private readonly pageDir: string,
+    private readonly dir: string,
+    private readonly policy: StoredPolicy,
+  ) {}
+  private stored<T>(file: string, schema: z.ZodType<T>, missing: T, parse?: StoredPolicy["parse"]) {
+    const read = readStored(join(this.dir, file), schema, { ...this.policy, parse });
+    return read.kind === "ok" ? read.value : missing;
   }
   async rows(): Promise<PageEventRow[]> {
-    const text = await readFile(join(this.dir, "events.jsonl"), "utf8").catch((error) => {
-      if (isMissing(error)) return "";
-      throw error;
-    });
-    return text
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as PageEventRow);
+    return this.stored("events.jsonl", z.array(pageEventRowSchema), [], (text) =>
+      text
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as unknown),
+    );
   }
   append(event: unknown, origin: string): Promise<PageEventRow> {
     const job = this.queue.then(async () => {
       const seq = (await this.rows()).length + 1;
       const row: PageEventRow = { seq, at: new Date().toISOString(), origin, event };
-      const dir = this.writable();
-      await mkdir(dir, { recursive: true });
-      await appendFile(join(dir, "events.jsonl"), JSON.stringify(row) + "\n", "utf8");
+      await mkdir(this.dir, { recursive: true });
+      await appendFile(join(this.dir, "events.jsonl"), JSON.stringify(row) + "\n", "utf8");
       for (const listen of this.listeners) listen(row);
       return row;
     });
@@ -292,13 +300,19 @@ class PageState {
     });
     return job;
   }
-  snapshot(): Promise<unknown> {
-    return readJson(join(this.dir, "snapshot.json"), z.unknown(), null);
+  async snapshot(): Promise<unknown> {
+    return this.stored("snapshot.json", z.unknown(), null);
   }
   async writeSnapshot(value: unknown) {
-    const dir = this.writable();
-    await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, "snapshot.json"), JSON.stringify(value, null, 2), "utf8");
+    writeAtomic(join(this.dir, "snapshot.json"), JSON.stringify(value, null, 2));
+  }
+  /** A binding names a thread or a document as data in the file, never in its path. */
+  binding(): PageBinding {
+    return this.stored("binding.json", pageBindingSchema, unboundPage);
+  }
+  writeBinding(value: PageBinding) {
+    writeAtomic(join(this.dir, "binding.json"), JSON.stringify(value, null, 2));
+    this.signal("binding", {});
   }
   /** The page's text projection (`pe.describe`): markdown an agent reads instead of the snapshot. */
   async text(): Promise<string | null> {
@@ -308,9 +322,7 @@ class PageState {
     });
   }
   async writeText(text: string) {
-    const dir = this.writable();
-    await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, "snapshot.md"), text, "utf8");
+    writeAtomic(join(this.dir, "snapshot.md"), text);
   }
   follow(listen: Listener) {
     this.listeners.add(listen);
@@ -390,17 +402,25 @@ export function createPagesHandler(
   pods?: PodsRoots,
   live: PageLive = noLive,
   journal?: ActionJournal,
+  /** Where Page state lives: one folder per slug under the machine state root, never in a home. */
+  stored: { root: string; notices: string } = {
+    root: productPageStatePath(),
+    notices: storedNoticesPath(),
+  },
 ) {
   /**
    * Where a slug's folder is: `<root>/<slug>`, or for `<id>--<page>` the folder of the one admitted
    * package with that id that contributes `pages/<page>` (a duplicated id contributes nothing).
    * ponytail: a pod page's request lists the packages once; cache by snapshot if pods get large.
+   * `state` is the Page's state folder, named by its slug alone: a Page id is unique across homes,
+   * so no key names a home. A scratch slug matches its folder in any casing, so the folder's own
+   * name is the one spelling.
    */
   const dirOf = async (slug: string) => {
     const [id, page, ...more] = slug.split("--");
     if (page === undefined) {
       const found = await scratchPageDirectory(slug, root);
-      return found && { ...found, pod: null };
+      return found && { ...found, pod: null, state: join(stored.root, basename(found.dir)) };
     }
     if (more.length || !pods) return null;
     for (const pod of await activePackages((await listPackages(pods)).packages, pods)) {
@@ -408,15 +428,27 @@ export function createPagesHandler(
         (one) => one.kind === "page" && one.path === `pages/${page}`,
       );
       if (pod.id === id && row)
-        return { dir: join(pod.directory, row.path), pod: pod.id, key: row.key };
+        return {
+          dir: join(pod.directory, row.path),
+          pod: pod.id,
+          key: row.key,
+          state: join(stored.root, slug),
+        };
     }
     return null;
   };
   const states = new Map<string, PageState>();
   /** By folder: a renamed pod's page keeps its slug and opens its state where it lives now. */
-  const stateOf = (dir: string) => {
-    let state = states.get(dir);
-    if (!state) states.set(dir, (state = new PageState(dir)));
+  const stateOf = (where: { dir: string; state: string }) => {
+    let state = states.get(where.dir);
+    if (!state) {
+      const policy = {
+        class: "discard",
+        place: `Page ${basename(where.state)}`,
+        notices: stored.notices,
+      } as const;
+      states.set(where.dir, (state = new PageState(where.dir, where.state, policy)));
+    }
     return state;
   };
 
@@ -555,13 +587,9 @@ export function createPagesHandler(
     });
   }
 
-  const bindingFile = (dir: string) => join(dir, ".state", "binding.json");
-  const bindingOf = (dir: string): Promise<PageBinding> =>
-    readJson(bindingFile(dir), pageBindingSchema, unboundPage);
-
-  async function target(page: string, dir: string): Promise<PageTargetReading> {
+  async function target(page: string, state: PageState): Promise<PageTargetReading> {
     const actDoor = pageActDoor(page);
-    const slot = (await bindingOf(dir)).slots.default;
+    const slot = state.binding().slots.default;
     const sessions = await live.sessions();
     const resolution = resolveSlot(slot, sessions);
     const ref =
@@ -639,7 +667,7 @@ export function createPagesHandler(
   async function door(
     verb: "call" | "act",
     slug: string,
-    dir: string,
+    state: PageState,
     page: string,
     request: Request,
     caller: Caller,
@@ -651,7 +679,7 @@ export function createPagesHandler(
       console.error("pages-route: asynchronous operation failed", error);
       return undefined;
     });
-    const binding = await bindingOf(dir);
+    const binding = state.binding();
     const slot = binding.slots.default;
     // Only a person's pin consents to ReadOnly on its resolved document; thread bindings need a human-added target.
     const humanBound = binding.boundBy.default === "human" && slot.kind === "pinned";
@@ -740,7 +768,7 @@ export function createPagesHandler(
    * `page.bind`: a person binds anything; Pea (or an MCP client) only pins a
    * document open in one of Pea's own Revits.
    */
-  async function bind(slug: string, dir: string, page: string, request: Request, caller: Caller) {
+  async function bind(slug: string, state: PageState, page: string, request: Request, caller: Caller) {
     const at = peRouteUrl("page.bind", { params: { slug } });
     const parsed = pageChoiceSchema.safeParse(
       await request.json().catch((error) => {
@@ -782,17 +810,12 @@ export function createPagesHandler(
           reason: "Pea may pin a Page only to a document it acquired.",
         });
     }
-    const current = await bindingOf(dir);
-    // A shared Page binds in its user copy: every write goes to the user root (ADR 0035 rule 11).
-    const home = userWritable(dir);
-    await mkdir(join(home, ".state"), { recursive: true });
-    const next: PageBinding = {
+    const current = state.binding();
+    state.writeBinding({
       slots: { ...current.slots, default: slot },
       boundBy: { ...current.boundBy, default: caller.kind === "human" ? "human" : "agent" },
-    };
-    await writeFile(bindingFile(home), JSON.stringify(next, null, 2), "utf8");
-    stateOf(dir).signal("binding", {});
-    return json(await target(page, home));
+    });
+    return json(await target(page, state));
   }
 
   /**
@@ -812,13 +835,13 @@ export function createPagesHandler(
       if (!where) return fail(`no page ${slug}`);
       const send = () => {
         const mine = ++turn;
-        void target(where.key, where.dir).then((value) => {
+        void target(where.key, stateOf(where)).then((value) => {
           if (!closed && mine === turn) publish({ value });
         }, fail);
       };
       stops = [
         subscribeHeads(send),
-        stateOf(where.dir).hear((event) => {
+        stateOf(where).hear((event) => {
           if (event === "binding") send();
         }),
       ];
@@ -867,7 +890,7 @@ export function createPagesHandler(
           404,
           `the binding door is ${peRoutes["page.bind"].method} ${peRoutes["page.bind"].path}`,
         );
-      return bind(slug, where.dir, where.key, request, caller);
+      return bind(slug, stateOf(where), where.key, request, caller);
     }
     const wantsHtml = (request.headers.get("accept") ?? "").includes("text/html");
     if (parts.length === 1)
@@ -890,7 +913,7 @@ export function createPagesHandler(
     if (!where) return problem(404, `no page ${slug}: no admitted package contributes it`);
     if (rest.length === 0 && !url.pathname.endsWith("/"))
       return Response.redirect(`${url.origin}/pages/${slug}/${url.search}`, 308); // relative links need the slash
-    const state = stateOf(where.dir);
+    const state = stateOf(where);
     const verb = rest.length === 1 ? rest[0] : undefined;
     if (verb === "export" && (request.method === "GET" || request.method === "POST")) {
       const sent: unknown =
@@ -906,9 +929,10 @@ export function createPagesHandler(
       try {
         const result = await exportPage({
           directory: where.dir,
+          exports: join(where.state, "exports"),
           page: where.key,
           exportedAt: new Date().toISOString(),
-          document: (await target(where.key, where.dir)).document,
+          document: (await target(where.key, state)).document,
           snapshot:
             parsed.data.snapshot === undefined ? await state.snapshot() : parsed.data.snapshot,
           events: await state.rows(),
@@ -953,9 +977,9 @@ export function createPagesHandler(
       return json(await state.append(event, originOf(caller)), 201);
     }
     if (verb === "target" && request.method === "GET")
-      return json(await target(where.key, where.dir));
+      return json(await target(where.key, state));
     if ((verb === "call" || verb === "act") && request.method === "POST")
-      return door(verb, slug, where.dir, where.key, request, caller);
+      return door(verb, slug, state, where.key, request, caller);
     if (verb === "events" && request.method === "GET") {
       const after = Number(
         url.searchParams.get("after") ?? request.headers.get("last-event-id") ?? 0,

@@ -101,19 +101,18 @@ test("a told firm folder with no firm marker is no firm home: its pods are not r
   expect((await listPackages()).packages).toEqual([]);
 });
 
-test("every content path and all Work sit in the user home; machine paths stay with their owner", () => {
+test("every content path sits in the user home; Work and every machine path stay with their owner", () => {
   const content = new Set([
     "productUserContentRootPath",
     "productPodsRootPath",
     "productPagesRootPath",
-    "productRouteWorkPath",
   ]);
   for (const [name, resolver] of Object.entries(paths)) {
     const path = resolver();
     expect(under(firm, path), `${name}: ${path}`).toBe(false);
     expect(under(content.has(name) ? user : hostOwnership.rootPath, path), name).toBe(true);
   }
-  expect(paths.productRouteWorkPath()).toBe(join(userRoot(), "Work"));
+  expect(paths.productRouteWorkPath()).toBe(join(hostOwnership.rootPath, "state", "Work"));
 });
 
 // H2 (homes MAP slice 6). Mutant: restore the first-by-id filter in `listPackages`
