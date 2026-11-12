@@ -1583,3 +1583,52 @@ test("a quarantined launch refused through /actions reads refused in the feed an
   expect(bareRows).toMatchObject([{ group: "waits", verb: "refused", says: expect.stringMatching(/clean up/) }]);
 });
 
+
+// Mutant: skip removeEmptyAcquisitionRoot; the empty-root assertion must fail.
+test.each([false, true])("cleanup through /actions removes empty instance folders and preserves stray files: %s", async (stray) => {
+  const f = await setup(async (args) => {
+    if (args[0] === "session") return args[1] === "start" ? startedAnswer : { result: { state: "ok" } };
+    if (args[1] === "close") f.census.documents = [];
+    return { result: { state: "ok", document: { openId, path: args[2] } } };
+  }, [controlledRow({ shape: shape("background") })]);
+  const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
+  const server = await serveRoutes(
+    callRouteOver(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(Layer.provide(testHostInputs)),
+    sdkOnlyBridge,
+  );
+  cleanup.push(() => server.close());
+  const opening = await fetch(`${server.base}/actions`, {
+    method: "POST", headers: { "content-type": "application/json", ...contextHeaders() },
+    body: JSON.stringify({ id: "plant", key: "instances.open", target: { kind: "host" },
+      input: { source, into: newRevit({ owner: "pea" }) } }),
+  });
+  expect(opening.status).toBe(202);
+  const acquired = await f.owner.wait((await opening.json() as { id: string }).id);
+  expect(acquired.state, JSON.stringify(acquired)).toBe("succeeded");
+  const acquisition = foldAcquisitions(await f.owner.list())[0]!;
+  const root = acquisition.intent.root;
+  const origin = acquisition.intent.document!.origin;
+  if (origin.kind !== "file-copy") throw Error("expected file copy");
+  expect(existsSync(origin.work)).toBe(true);
+  expect(existsSync(origin.baseline)).toBe(true);
+  const extra = join(dirname(origin.work), "stray.txt");
+  if (stray) await writeFile(extra, "keep me");
+  const response = await fetch(`${server.base}/actions`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...contextHeaders() },
+    body: JSON.stringify({ id: "cleanup-folders", key: "instances.cleanup", target: { kind: "host" },
+      input: { acquisition: acquired.id, unsaved: "discard" } }),
+  });
+  expect(response.status).toBe(202);
+  const receipt = await f.owner.wait((await response.json() as { id: string }).id);
+  expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
+  expect(existsSync(root)).toBe(stray);
+  if (!("result" in receipt)) throw Error("cleanup did not return a result");
+  const result = receipt.result as { removed: string[]; kept: string[] };
+  expect(receipt.effects.filter(effect => effect.kind === "file").map(effect => effect.path)).toEqual(result.removed);
+  expect(JSON.stringify(receipt.effects)).not.toContain(".part");
+  if (stray) {
+    expect(await readFile(extra, "utf8")).toBe("keep me");
+    expect(result.kept).toContain(extra);
+  }
+});
