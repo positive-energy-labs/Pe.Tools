@@ -28,7 +28,7 @@
             "executable": "C:\\Program Files\\Autodesk\\Revit 2025\\Revit.exe"
           },
           "input": {
-            "specJson": "{\n  \"$schema\": \"http://127.0.0.1:61340/schemas/settings/FamilyFoundry/patches.json\",\n  \"select\": {\n    \"names\": [\n      \"Broan_B1X0E65RT_ERV\"\n    ]\n  },\n  \"patch\": {\n    \"types\": {\n      \"B130E65RT\": {\n        \"PE_G___Model\": \"B130E65RT-U2I3\",\n        \"PE_G_Dim_Height1\": {\n          \"value\": \"1.6666666666666665\",\n          \"unit\": \"Feet and fractional inches\"\n        }\n      }\n    }\n  }\n}\n",
+            "specJson": "{\n  \"$schema\": \"/schemas/settings/FamilyFoundry/patches.json\",\n  \"select\": {\n    \"names\": [\n      \"Broan_B1X0E65RT_ERV\"\n    ]\n  },\n  \"patch\": {\n    \"types\": {\n      \"B130E65RT\": {\n        \"PE_G___Model\": \"B130E65RT-U2I3\",\n        \"PE_G_Dim_Height1\": {\n          \"value\": \"1.6666666666666665\",\n          \"unit\": \"Feet and fractional inches\"\n        }\n      }\n    }\n  }\n}\n",
             "expectedPlanHashes": {
               "10965101": "8525C51940CCF677"
             },
@@ -252,7 +252,7 @@
     "previewOnly": true,
     "derivedRequest": [
       {
-        "specJson": "{\n  \"$schema\": \"http://127.0.0.1:56146/schemas/settings/FamilyFoundry/patches.json\",\n  \"select\": {\n    \"names\": [\n      \"Broan_B1X0E65RT_ERV\"\n    ]\n  },\n  \"patch\": {\n    \"types\": {\n      \"B130E65RT\": {\n        \"PE_G___Model\": \"B130E65RT-U2F3A\"\n      },\n      \"B160E65RT\": {\n        \"PE_G___Model\": \"B160E65RT-U2F3A\"\n      }\n    }\n  }\n}\n",
+        "specJson": "{\n  \"$schema\": \"/schemas/settings/FamilyFoundry/patches.json\",\n  \"select\": {\n    \"names\": [\n      \"Broan_B1X0E65RT_ERV\"\n    ]\n  },\n  \"patch\": {\n    \"types\": {\n      \"B130E65RT\": {\n        \"PE_G___Model\": \"B130E65RT-U2F3A\"\n      },\n      \"B160E65RT\": {\n        \"PE_G___Model\": \"B160E65RT-U2F3A\"\n      }\n    }\n  }\n}\n",
         "expectedPlanHashes": {
           "10965101": "E17870FACDEA43E8"
         },

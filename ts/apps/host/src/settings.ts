@@ -296,16 +296,15 @@ export const writeMember = (request: PodMemberWriteRequest, ctx: PodContext = {}
       const path = yield* writablePath(request, ctx, key);
       const fs = yield* FileSystem.FileSystem;
       yield* makeDirectory(win32.dirname(path), key);
-      const created = yield* Effect.result(
-        fs.writeFileString(path, request.content, { flag: "wx" }),
-      );
+      const content = storedSchemaPaths(request.content);
+      const created = yield* Effect.result(fs.writeFileString(path, content, { flag: "wx" }));
       if (created._tag === "Failure")
         return yield* Effect.fail(
           created.failure.reason._tag === "AlreadyExists"
             ? new LocalOpError(key, `Member '${request.path}' already exists.`, 409)
             : localOpFileError(key, created.failure),
         );
-      return written(request);
+      return written({ ...request, content });
     }),
   );
 
@@ -321,8 +320,9 @@ export const saveMember = (request: PodMemberSaveRequest, ctx: PodContext = {}) 
         return yield* Effect.fail(
           new LocalOpError(key, `Member '${request.path}' changed since it was read.`, 409),
         );
-      yield* writeFileStringAtomic(path, request.content, key);
-      return written(request);
+      const content = storedSchemaPaths(request.content);
+      yield* writeFileStringAtomic(path, content, key);
+      return written({ ...request, content });
     }),
   );
 
@@ -404,7 +404,7 @@ export const composeMember = Effect.fnUntraced(function* (
     } satisfies PodMemberComposeResponse;
   }
   const schemaUrl = isRecord(value) && typeof value.$schema === "string" ? value.$schema : null;
-  const library = schemaUrl && isSettingsSchemaUrl(schemaUrl) ? schemaUrl : null;
+  const library = schemaUrl && settingsSchemaPath(schemaUrl);
   const diagnostics: MemberIssue[] = [];
   let composed: unknown = value;
   let dependencies: PodMemberComposeResponse["dependencies"] = [];
@@ -639,16 +639,26 @@ function issue(code: string, message: string, severity: MemberIssue["severity"] 
 }
 
 /**
- * A `$schema` URL a C# settings library serves: `/schemas/settings/<library>/<root>.json`. The URL is the
- * member's only identity claim and the bridge resolves it as-is.
+ * The library path a `$schema` names: `/schemas/settings/<library>/<root>.json` (C# `SettingsSchemaUrl.Path`),
+ * or null when it names no settings library. The path is the member's only identity claim and the only
+ * stored form (homes freeze shape 6). Any origin, drive or share in front of it is read through, so a
+ * file written before the freeze still resolves; nothing migrates it.
  */
-export function isSettingsSchemaUrl(schemaUrl: string): boolean {
-  try {
-    return /\/schemas\/settings\/[^/]+\/[^/]+\.json$/.test(new URL(schemaUrl).pathname);
-  } catch {
-    return false;
-  }
-}
+export const settingsSchemaPath = (schema: string): string | null =>
+  /\/schemas\/settings\/[^/]+\/[^/]+\.json$/i.exec(
+    schema.replace(/[?#].*$/, "").replaceAll("\\", "/"),
+  )?.[0] ?? null;
+
+/** Member text with every library `$schema` stored as its path. Other bytes, and other schemas, are untouched. */
+export const storedSchemaPaths = (content: string): string =>
+  content.replace(/("\$schema"\s*:\s*)("(?:[^"\\]|\\.)*")/g, (whole, key: string, literal: string) => {
+    try {
+      const path = settingsSchemaPath(JSON.parse(literal) as string);
+      return path ? `${key}${JSON.stringify(path)}` : whole;
+    } catch {
+      return whole;
+    }
+  });
 
 function hasDirectives(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(hasDirectives);

@@ -18,8 +18,8 @@ export interface DemoSpec {
   fields?: Record<string, SettingsFieldState>;
 }
 
-const SCHEDULE_SCHEMA = "http://localhost:5150/schemas/settings/CmdScheduleManager/schedules.json";
-const FAMILIES_SCHEMA = "http://localhost:5150/schemas/settings/FamilyFoundry/patches.json";
+const SCHEDULE_SCHEMA = "/schemas/settings/CmdScheduleManager/schedules.json";
+const FAMILIES_SCHEMA = "/schemas/settings/FamilyFoundry/patches.json";
 const hash = (n: number) => String(n).repeat(64).slice(0, 64);
 
 export const DEMO_SPEC_PATH = "settings/schedule/DX Fan Coil Unit.json";

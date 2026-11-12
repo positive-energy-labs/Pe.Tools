@@ -27,11 +27,13 @@ public sealed record TakeoffRegionFacts(
     double Sqft,
     string? Role,
     Guid? Guid,
+    // Empty when the region holds none, and when Unreadable says the stored blob can't be read (it is kept).
     string Blob,
     List<List<double[]>> Loops,
     // Where the region lies against its own view's model crop; null when that view has no active crop. Outside: that
     // view's image can never show it (D4 leg B: project-a zones C-F lie outside the views they are owned by).
-    RevitCropCoverage? OwnerCrop);
+    RevitCropCoverage? OwnerCrop,
+    string? Unreadable = null);
 public sealed record TakeoffLiveRegion(
     long ElementId,
     string Role,
@@ -48,7 +50,15 @@ public sealed record TakeoffRegionAnalysis(
 public sealed record TakeoffSnapshotData(
     TakeoffModelStatus Status,
     IReadOnlyList<TakeoffRegionFacts> ZoneFrs,
-    IReadOnlyDictionary<string, List<TakeoffLiveRegion>> RegionsByZone);
+    IReadOnlyDictionary<string, List<TakeoffLiveRegion>> RegionsByZone,
+    IReadOnlyList<TakeoffUnreadableBlob>? Unreadable = null);
+
+/// <summary>
+///     A stored takeoff blob this build can't read; it is kept as it is (ADR 0039 keep). ElementId is the region that
+///     holds it, or null for the System registry on Project Information. A listing reports these and goes on: the
+///     region is left out of what it lists, and no write goes over the blob.
+/// </summary>
+public sealed record TakeoffUnreadableBlob(long? ElementId, string Parameter, string Reason);
 public sealed record TakeoffSnapshotResponse(Reading Reading, TakeoffSnapshotData Snapshot);
 
 public sealed record TakeoffCandidatesRequest(string View);
@@ -156,7 +166,8 @@ public sealed record RoomsRegion(
     bool Touched,
     bool Locked,
     bool Stale);
-public sealed record RoomsSnapshotData(IReadOnlyList<RoomsLevel> Levels, IReadOnlyList<RoomsRegion> Regions);
+public sealed record RoomsSnapshotData(IReadOnlyList<RoomsLevel> Levels, IReadOnlyList<RoomsRegion> Regions,
+    IReadOnlyList<TakeoffUnreadableBlob>? Unreadable = null);
 
 // Rejected: a person's standing "not a room" marks, each an outer ring of x y points in model feet on the view. A face
 // overlapping one at IoU 0.6 or more is held as rejected instead of becoming a room.

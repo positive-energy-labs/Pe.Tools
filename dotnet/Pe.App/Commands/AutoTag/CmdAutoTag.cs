@@ -117,6 +117,10 @@ public class CmdAutoTag : IExternalCommand {
 
     private static string BuildStatusSummary(AutoTagStatus status) {
         var sb = new StringBuilder();
+        if (status.StoredSettingsRefusal is { } refusal) {
+            _ = sb.AppendLine($"Stored settings: can't read, kept. {refusal}");
+            _ = sb.AppendLine();
+        }
         _ = sb.AppendLine(
             $"Configurations: {status.ConfigurationCount} total, {status.EnabledConfigurationCount} active");
 
@@ -471,11 +475,9 @@ public class CmdAutoTag : IExternalCommand {
         if (dir != null && !Directory.Exists(dir))
             _ = Directory.CreateDirectory(dir);
 
-        // $schema points at the host's live schema endpoint; IDE JSON LSPs fetch it,
-        // so value-domain samples always reflect the current session.
+        // $schema is the library path with no origin (homes freeze shape 6); the host resolves it.
         var document = JObject.Parse(JsonConvert.SerializeObject(settings, JsonSettings));
-        document["$schema"] =
-            $"{HostEndpoint.ResolveHostBaseUrl().TrimEnd('/')}/schemas/settings/AutoTag/autotag.json";
+        document["$schema"] = "/schemas/settings/AutoTag/autotag.json";
         File.WriteAllText(settingsFilePath, JsonConvert.SerializeObject(document, Formatting.Indented));
 
         FileUtils.OpenInDefaultApp(settingsFilePath);

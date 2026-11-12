@@ -48,7 +48,6 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 - Slices 0 to 10 are in [MAP.md](MAP.md); each lands with its red falsifier. Journeys and end-gate targets are in [JOURNEYS.md](JOURNEYS.md).
 - The T3 cutover rows, falsifiers F1 to F11 and the flip rule are in [T3-CUTOVER.md](T3-CUTOVER.md). The purger holds that file. No row may end as "both exist".
 - kaitpw ticks the classified standards list that slice 0 produces (real, test, proof, WIP, archive, one-off, no registered library, dangling reference). Until then no file is called a standard.
-- kaitpw renames or deletes the installer-harvest folders under `04 PE Software Files\Pe.Tools` before a marker is written there. The purger's census C0 checks that the folder holds no harvest when the firm home lands.
 - kaitpw rules the second drive lane after reading about a second Windows profile. One Autodesk licence per named user on a second profile is UNPROVEN[not tried].
 - The three assumption spikes in the MAP: the Drive revision spike (census C5, wave 1), the pre-event spike (slice 8), and the pointer write on a cloud workshared model (slice 6).
 - The written promise (freeze item 11) has no home yet: what survives an update, the three guards, the honest limit, and the plain statement that inference sends what Pea reads to the model provider. Slice 6 writes it where a coworker reads it.
@@ -58,3 +57,7 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 - The remote MCP gateway stays on its branch until its send tools have a door that returns "held".
 - The driver observed at dfaed397 that per-terminal rows label 0.03 as "firm" while the firm read is refused. FS's provenance target is the falsifier; the fix belongs to slice 6b.
 - The comment at `ductsFirmSchema` in `ts/packages/agent-contracts/src/ducts-sheet.ts` names `<user content>/Firm/ducts.json`; the code reads the shared root. Correct it in the commit that renames `Firm/` to `Settings/`.
+- The takeoffs and rooms sheets do not yet show the `unreadable` lists that slice 2 puts on the wire (`TakeoffUnreadableBlob`, homes/c-carriers f8baf399). A TS writer surfaces them as "can't read, kept".
+- `ops-catalog.sha` hashes every C# source, and merges of C# edits from separate branches leave it stale. Regenerate it at each integration checkpoint before the purger's suite.
+- `settingsSchemaPath` lives in `ts/apps/host/src/settings.ts`, which boots host lane resolution at import, so the `$schema` census guard restates its regex instead of importing it. Move it into `host-contracts` and make the guard import it.
+- Four C# stores discard silently (the color ledger, the palette CSV, the family snapshot store, the geometry pack; paths in the purger's census C1, `.artifacts/runs/homes-crusade-20261111/purge/C1.md`). Slice 4 has no C# helper yet. A C# round gives them the same `keep`/`discard` policy with a notice.

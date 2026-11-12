@@ -1,4 +1,5 @@
-using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Pe.Shared.RevitData.Serialization;
 
 namespace Pe.Revit.Takeoff;
 
@@ -9,47 +10,53 @@ namespace Pe.Revit.Takeoff;
 //
 // FOOTGUN: the registry rides ONE hidden text param on Project Information, so its whole capacity
 // question is "how big can that string be". Live-proven 2026-08-14 on the project-a clone: a
-// 1,048,571-char blob round-trips byte-identical (1 KB / 32 KB / 256 KB / 1 MB all tested) — orders
-// of magnitude above any realistic registry, so serialize freely and never shard. Evidence:
-// docs/features/takeoffs/LEDGER.md 2026-08-14 (live Revit).
+// 1,048,571-char blob round-trips byte-identical (1 KB / 32 KB / 256 KB / 1 MB all tested). The
+// owner-blob codec caps every owner at 256 KiB (ADR 0032), far above any realistic registry, so
+// never shard. Evidence: docs/features/takeoffs/LEDGER.md 2026-08-14 (live Revit).
 //
-// This file is deliberately Revit-free: pure model + versioned fail-closed codec + reconciliation.
-// The storage adapter (a hidden text param on Project Information, exactly the
-// ParameterLinksProfileStorage pattern in Pe.Revit.Global) lands together with the FR-carrier
-// write probe — nothing here may grow a Revit dependency.
+// This file is deliberately Revit-free: pure model + fail-closed data shape + reconciliation. The
+// envelope and its version rule belong to OwnerBlob; the storage is OwnerBlobStore's project anchor
+// (TakeoffCarriers) — nothing here may grow a Revit dependency.
 public sealed class SystemRegistry
 {
-    public const int CurrentVersion = 1;
+    /// <summary>Stable carrier identity. Changing the GUID orphans deployed models — never reuse.</summary>
+    public static readonly OwnerDescriptor Owner = new("takeoff-systems", 1,
+        new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9004"), "_PE_TakeoffSystemRegistry",
+        "Versioned Pe takeoff System registry (GUID <-> tag).");
 
-    public int Version = CurrentVersion;
     public List<SystemEntry> Systems = new();
 
-    public string Serialize()
+    public JObject ToData()
     {
         Validate();
-        return JsonConvert.SerializeObject(this, Formatting.None);
+        return new JObject
+        {
+            ["systems"] = new JArray(this.Systems.Select(s => new JObject { ["guid"] = s.Guid.ToString("D"), ["tag"] = s.Tag })),
+        };
     }
 
-    // Fail-closed: any unreadable, wrong-version, or inconsistent blob throws — callers surface
-    // the error and stop; nobody proceeds against a half-understood registry.
-    public static SystemRegistry Deserialize(string json)
+    // Fail-closed: any data that is not exactly { systems: [{ guid, tag }] } or is inconsistent throws —
+    // callers surface the error and stop; nobody proceeds against a half-understood registry.
+    private static SystemRegistry FromData(JObject data)
     {
-        SystemRegistry registry;
-        try
+        if (data.Count != 1 || data["systems"] is not JArray systems)
+            throw new InvalidOperationException("registry data is not exactly { systems: [...] }");
+        var registry = new SystemRegistry();
+        foreach (var item in systems)
         {
-            registry = JsonConvert.DeserializeObject<SystemRegistry>(json)
-                       ?? throw new InvalidOperationException("registry blob is empty");
+            if (item is not JObject { Count: 2 } entry
+                || entry["guid"] is not JValue { Type: JTokenType.String } guid
+                || !Guid.TryParse((string?)guid, out var parsed)
+                || entry["tag"] is not JValue { Type: JTokenType.String } tag)
+                throw new InvalidOperationException("a registry entry is not exactly { guid, tag }");
+            registry.Systems.Add(new SystemEntry { Guid = parsed, Tag = (string)tag! });
         }
-        catch (JsonException ex)
-        {
-            throw new InvalidOperationException($"registry blob is not valid JSON: {ex.Message}");
-        }
-        if (registry.Version != CurrentVersion)
-            throw new InvalidOperationException(
-                $"registry blob is v{registry.Version}; this build reads v{CurrentVersion}");
         registry.Validate();
         return registry;
     }
+
+    /// <summary>The model's registry, or the reason it is "can't read, kept".</summary>
+    public static OwnerValue<SystemRegistry> Read(OwnerBlobRead read) => read.Parse(FromData);
 
     public SystemEntry Register(string tag)
     {

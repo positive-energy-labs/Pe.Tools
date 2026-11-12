@@ -1,5 +1,5 @@
 {
-  "$schema": "http://127.0.0.1:64681/schemas/settings/FamilyFoundry/models.json",
+  "$schema": "/schemas/settings/FamilyFoundry/models.json",
   "family": {
     "name": "w6-air-terminal",
     "category": "AirTerminals",

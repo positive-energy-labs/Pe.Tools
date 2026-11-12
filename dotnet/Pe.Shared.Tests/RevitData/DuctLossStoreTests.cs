@@ -1,12 +1,17 @@
 using NUnit.Framework;
 using Pe.Shared.RevitData.Ducts;
+using Pe.Shared.RevitData.Serialization;
 
 namespace Pe.Shared.Tests.RevitData;
 
-/// <summary>The `_PE_DuctLosses` blob: round-trips, keeps unknown keys, and fails closed on any other version.</summary>
+/// <summary>The `_PE_DuctLosses` blob: round-trips in the owner envelope, keeps unknown keys, and fails closed on any other shape or version.</summary>
 [TestFixture]
 public sealed class DuctLossStoreTests {
     private static readonly DateTimeOffset At = new(2026, 10, 4, 12, 0, 0, TimeSpan.Zero);
+
+    private static OwnerValue<DuctLossStore> Read(string? stored) => DuctLossStore.Read(OwnerBlob.Decode(DuctLossStore.Owner, stored));
+
+    private static string Stored(string data, int version = 2) => $$"""{"owner":"duct-losses","version":{{version}},"data":{{data}}}""";
 
     [Test]
     public void Round_trips_every_field() {
@@ -24,7 +29,7 @@ public sealed class DuctLossStoreTests {
             AppliedAt = At
         };
 
-        var back = DuctLossStore.FromJson(store.ToJson());
+        var back = Read(store.ToJson()).Value!;
 
         Assert.That(back.Version, Is.EqualTo(2));
         Assert.That(back.Rules["Round Elbow:Standard|r/D 1.0"].Table, Is.EqualTo("CD3-1"));
@@ -38,25 +43,17 @@ public sealed class DuctLossStoreTests {
         Assert.That(back.WorkRevision, Is.EqualTo(3));
         Assert.That(back.AppliedAt, Is.EqualTo(At));
         Assert.That(back.ToJson(), Is.EqualTo(store.ToJson()));
+        Assert.That(store.ToJson(), Does.StartWith("""{"owner":"duct-losses","version":2,"data":{"rules":"""), "one version, in the envelope");
     }
 
     [Test]
-    public void A_store_written_before_flows_reads_with_none() {
-        var back = DuctLossStore.FromJson("""{"version":1,"workRevision":2}""");
+    public void A_store_with_only_a_revision_reads_with_empty_maps() {
+        var back = Read(Stored("""{"workRevision":2}""")).Value!;
 
+        Assert.That(back.Version, Is.EqualTo(DuctLossStore.CurrentVersion));
         Assert.That(back.TerminalFlows, Is.Empty);
-        Assert.That(back.EquipmentFlows, Is.Empty);
-    }
-
-    [Test]
-    public void A_v1_store_reads_with_no_rulings() {
-        var back = DuctLossStore.FromJson("""{"version":1,"workRevision":4,"slots":{"terminalFlow":"Flow"}}""");
-
-        Assert.That(back.Version, Is.EqualTo(1));
         Assert.That(back.Verdicts, Is.Empty);
-        Assert.That(back.Roles, Is.Empty);
-        Assert.That(back.Slots!.TerminalFlow, Is.EqualTo("Flow"));
-        Assert.That(back.WorkRevision, Is.EqualTo(4));
+        Assert.That(back.WorkRevision, Is.EqualTo(2));
     }
 
     [Test]
@@ -66,24 +63,34 @@ public sealed class DuctLossStoreTests {
             Slots = new DuctParameterSlotOverrides(TerminalFlow: "Actual Supply Air Flow")
         };
 
-        Assert.That(DuctLossStore.FromJson(store.ToJson()).Slots!.TerminalFlow, Is.EqualTo("Actual Supply Air Flow"));
+        Assert.That(Read(store.ToJson()).Value!.Slots!.TerminalFlow, Is.EqualTo("Actual Supply Air Flow"));
     }
 
     [Test]
     public void Keeps_unknown_keys_through_read_modify_write() {
-        var back = DuctLossStore.FromJson("""{"version":1,"workRevision":2,"futureField":{"a":1}}""");
-        var written = DuctLossStore.FromJson((back with { WorkRevision = 3 }).ToJson());
+        var back = Read(Stored("""{"workRevision":2,"futureField":{"a":1}}""")).Value!;
+        var written = Read((back with { WorkRevision = 3 }).ToJson()).Value!;
 
         Assert.That(written.Unknown.ContainsKey("futureField"), Is.True);
         Assert.That(written.WorkRevision, Is.EqualTo(3));
     }
 
-    [TestCase("""{"version":3,"workRevision":1}""", "v3")]
-    [TestCase("""{"workRevision":1}""", "v0")]
-    [TestCase("""{"version":1,""", "not valid JSON")]
-    [TestCase("null", "empty")]
-    public void Fails_closed(string json, string message) =>
-        Assert.That(() => DuctLossStore.FromJson(json), Throws.InvalidOperationException.With.Message.Contains(message));
+    [TestCase("""{"owner":"duct-losses","version":3,"data":{"workRevision":1}}""", "version 3")]
+    [TestCase("""{"owner":"duct-losses","version":1,"data":{"workRevision":1}}""", "version 1")]
+    [TestCase("""{"owner":"duct-losses","version":2,"data":{"version":2,"workRevision":1}}""", "belongs to the envelope")]
+    [TestCase("""{"owner":"duct-losses","version":2,""", "not strict JSON")]
+    public void A_store_this_build_cannot_read_is_a_refusal(string json, string message) {
+        var read = Read(json);
+
+        Assert.That(read.Value, Is.Null);
+        Assert.That(read.Refusal, Does.Contain(message).And.Contain("refused and kept"));
+    }
+
+    [TestCase(null)]
+    [TestCase("null")]
+    [TestCase("""{"version":2,"workRevision":1}""", Description = "an old un-enveloped store")]
+    public void No_envelope_is_no_store(string? json) =>
+        Assert.That(Read(json), Is.EqualTo(new OwnerValue<DuctLossStore>(null, null)));
 
     [Test]
     public void Partial_slots_from_the_wire_fall_back_to_the_defaults() {

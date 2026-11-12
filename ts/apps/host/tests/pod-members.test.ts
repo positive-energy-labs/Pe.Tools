@@ -80,10 +80,41 @@ test("write creates once, save replaces only the reviewed bytes, and refuses run
     ).value.sha256,
   );
 });
-test("with a session, the draft composes natively, then schema and semantic checks run", async () => {
+// Mutant: settingsSchemaPath parses with `new URL(schema)` and no base. Each written form then
+// keeps its origin, drive or share on disk.
+test.each([
+  "http://127.0.0.1:5180/schemas/settings/X/y.json",
+  "C:\\Users\\x\\schemas\\settings\\X\\y.json",
+  "\\\\srv\\share\\schemas\\settings\\X\\y.json",
+  "file:///C:/Users/x/schemas/settings/X/y.json",
+])("the member write path stores %s as the library path", async (written) => {
+  const body = (schema: string, width: number) =>
+    `{\n  "$schema": ${JSON.stringify(schema)},\n  "width": ${width}\n}\n`;
+  const content = (width: number) => body(written, width);
+  const stored = (width: number) => body("/schemas/settings/X/y.json", width);
+  const created = await run(writeMember({ ...member, content: content(1) }, ctx()));
+  expect(await readFile(file(), "utf8")).toBe(stored(1));
+  expect(created.sha256).toBe(digest(stored(1)));
+  const saved = await run(
+    saveMember({ ...member, content: content(2), expectedSha256: created.sha256 }, ctx()),
+  );
+  expect(await readFile(file(), "utf8")).toBe(stored(2));
+  expect(saved.sha256).toBe(digest(stored(2)));
+});
+test("a schema that names no settings library is written as authored", async () => {
+  const content = '{"$schema":"http://json-schema.org/draft-07/schema#","type":"object"}';
+  await run(writeMember({ ...member, content }, ctx()));
+  expect(await readFile(file(), "utf8")).toBe(content);
+});
+// Mutant: the same `new URL(schema)` parse. The path-only row then composes with no library, the
+// bridge is never asked for the schema, and validation reads "unavailable".
+test.each([
+  "/schemas/settings/FamilyFoundry/models.json",
+  "http://127.0.0.1:5180/schemas/settings/FamilyFoundry/models.json",
+])("with a session, a draft whose $schema is %s composes natively, then schema and semantic checks run", async (written) => {
   const calls: [string, unknown][] = [];
-  const schemaUrl = "http://127.0.0.1:5180/schemas/settings/FamilyFoundry/models.json";
-  const draft = JSON.stringify({ $schema: schemaUrl, $preset: "@local/base.json" });
+  const schemaUrl = "/schemas/settings/FamilyFoundry/models.json";
+  const draft = JSON.stringify({ $schema: written, $preset: "@local/base.json" });
   const withBridge: PodContext = {
     podsRoot: root,
     invokeBridge: (key, payload) => {

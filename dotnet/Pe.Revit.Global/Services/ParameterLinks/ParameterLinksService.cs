@@ -77,6 +77,9 @@ public sealed class ParameterLinksService {
         }
 
         var evaluated = ParameterLinksEngine.Evaluate(document, profile);
+        // ADR 0026 D4: a stored profile this build cannot read is never written over. The error issue stops the apply.
+        if (request.Profile != null && state.ReadError != null)
+            evaluated = AddStorageIssue(evaluated, $"Refusing to overwrite the stored profile: {state.ReadError}");
         if (preview || evaluated.Issues.Any(issue => issue.Severity == ParameterLinkIssueSeverity.Error)) {
             return new ParameterLinksData(profile, evaluated, this.BuildStatus(state, profile), false, 0);
         }
