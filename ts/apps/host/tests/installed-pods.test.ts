@@ -4,7 +4,8 @@ import { pictureCaptures } from "./effect-test.ts";
  * The shipped archive is written by the production exporter, never a fixture zip writer.
  */
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { readStoredNotices } from "@pe/host-contracts/store";
@@ -12,10 +13,11 @@ import { PictureCaptures } from "../src/captures-route.ts";
 import { storedNoticesPath } from "../src/notice-feed.ts";
 import { importShippedPods } from "../src/installed-pods.ts";
 import { listPackages } from "../src/packages.ts";
-import { exportPod, importRecordPath } from "../src/pod-transfer.ts";
+import { exportPod, importPod, importRecordPath } from "../src/pod-transfer.ts";
 import * as settings from "../src/settings.ts";
 import { productPodsRootPath } from "../src/product-paths.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
+import { shippedPodUpdateRefusals } from "../src/shipped-pod-status.ts";
 
 let root: string;
 let shipped: string;
@@ -50,6 +52,76 @@ beforeEach(async () => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); return rm(root, { recursive: true, force: true }); });
 
 const boot = () => importShippedPods({ shippedRoot: shipped, ledger, podsRoot: pods, captures });
+
+test.each(["io", "cas"] as const)("import rolls back a second-member failure (%s) and a retry succeeds", async (mode) => {
+  const write = settings.writeHome;
+  let count = 0;
+  const spy = vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
+    if (++count === 2) {
+      if (mode === "io") throw Error("injected second-member failure");
+      return { ok: false, kind: "conflict", actualSha256: null };
+    }
+    return write(...args);
+  });
+  const start = () => importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures });
+  await expect(start()).rejects.toThrow(mode === "io" ? "injected second-member failure" : "Pod member changed during import");
+  expect(await readdir(pods)).toEqual([]);
+  spy.mockRestore();
+  await expect(start()).resolves.toMatchObject({ id: "example" });
+});
+
+test.each(["io", "cas"] as const)("update rolls back a second-member failure (%s) byte for byte and a retry succeeds", async (mode) => {
+  await boot();
+  const original = (await listPackages(pods)).packages.find(p => p.id === "example")!;
+  await writeFile(join(root, "examples", "example", "pages", "tour", "index.html"), "<title>Updated</title>");
+  await rm(join(shipped, "example.zip"));
+  await exportPod({ pod: "example", archivePath: join(shipped, "example.zip") },
+    { podsRoot: join(root, "examples"), captures });
+  const write = settings.writeHome;
+  let count = 0;
+  const spy = vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
+    if (++count === 2) {
+      if (mode === "io") throw Error("injected second-member failure");
+      return { ok: false, kind: "conflict", actualSha256: null };
+    }
+    return write(...args);
+  });
+  expect((await boot()).outcomes).toMatchObject([{ outcome: "present" }]);
+  for (const member of original.members)
+    expect(await readFile(join(original.directory, member.path))).toEqual(Buffer.from(member.bytes));
+  spy.mockRestore();
+  expect((await boot()).outcomes).toMatchObject([{ outcome: "updated" }]);
+});
+
+test.each(["import", "update"] as const)("%s rollback keeps and names a concurrent edit", async (mode) => {
+  if (mode === "update") {
+    await boot();
+    await writeFile(join(root, "examples", "example", "pages", "tour", "index.html"), "<title>Updated</title>");
+    await rm(join(shipped, "example.zip"));
+    await exportPod({ pod: "example", archivePath: join(shipped, "example.zip") },
+      { podsRoot: join(root, "examples"), captures });
+  }
+  const write = settings.writeHome;
+  let count = 0;
+  let first = "";
+  vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
+    if (++count === 1) first = args[0];
+    if (count === 2) {
+      writeFileSync(first, "concurrent edit");
+      throw Error("injected second-member failure");
+    }
+    return write(...args);
+  });
+  if (mode === "import") {
+    const result = importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures });
+    await expect(result).rejects.toThrow("rollback kept:");
+    await expect(result).rejects.toThrow(first);
+  } else {
+    await boot();
+    expect(shippedPodUpdateRefusals.get("example")).toContain(first);
+  }
+  expect(await readFile(first, "utf8")).toBe("concurrent edit");
+});
 
 test("host-start examples use the override home and the write door, never the Documents home", async () => {
   const override = join(root, "override");

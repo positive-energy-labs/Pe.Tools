@@ -26,7 +26,7 @@ import { captureDirectory, isPackageMember, listPackages, productPodsRoots, type
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { activateImportedPackage } from "./package-lifecycle.ts";
 import { productPodsRootPath } from "./product-paths.ts";
-import { writeHome } from "./settings.ts";
+import { rollbackHomeMembers, writeHome, type HomeMemberUndo } from "./settings.ts";
 
 type ShippedPodOutcome =
   | { archive: string; sha256: string; outcome: "imported"; id: string; folder: string }
@@ -213,6 +213,7 @@ async function offer(
           pod.members.some(member => member.path === path && Buffer.from(member.bytes).equals(bytes)));
       };
       if (!matches(readZip(bytes), installed)) {
+        const writes: HomeMemberUndo[] = [];
         try {
           // Derived machine state (ADR 0039): a record that does not decode is discarded with a notice.
           const record = readStored(
@@ -247,16 +248,25 @@ async function offer(
           // rather than bypassing CAS or moving its home folder across volumes.
           if (fresh.members.some(member => !next.has(member.path)))
             throw Error("its update removes members; import the example into a separate workspace");
-          for (const [member, content] of [...next].sort(([a], [b]) => Number(a === "pod.json") - Number(b === "pod.json"))) {
-            const prior = fresh.members.find(m => m.path === member);
-            if (!writeHome(join(installed.directory, member), content, prior?.sha256 ?? null).ok)
-              throw Error("its members changed during the update write");
+          try {
+            for (const [member, content] of [...next].sort(([a], [b]) => Number(a === "pod.json") - Number(b === "pod.json"))) {
+              const prior = fresh.members.find(m => m.path === member);
+              const target = join(installed.directory, member);
+              const wrote = writeHome(target, content, prior?.sha256 ?? null);
+              if (!wrote.ok)
+                throw Error(`its member changed during the update write: ${target}`);
+              writes.push({ path: target, sha256: wrote.sha256, prior: prior?.bytes ?? null });
+            }
+            for (const [member, content] of next)
+              if (/^captures\/[0-9a-f]{64}\.png$/.test(member)) await options.captures!.adopt(content);
+            await activateImportedPackage(id, options.podsRoot ?? productPodsRootPath());
+            writeAtomic(importRecordPath(id, options), `${JSON.stringify({ archiveSha256: sha256, archive, date: new Date().toISOString() })}\n`);
+            return { archive, sha256, outcome: "updated", id, folder: installed.folder };
+          } catch (error) {
+            const kept = rollbackHomeMembers(writes);
+            if (kept.length) throw Error(`its update failed: ${String(error)}; rollback kept: ${kept.join("; ")}`, { cause: error });
+            throw error;
           }
-          writeAtomic(importRecordPath(id, options), `${JSON.stringify({ archiveSha256: sha256, archive, date: new Date().toISOString() })}\n`);
-          for (const [member, content] of next)
-            if (/^captures\/[0-9a-f]{64}\.png$/.test(member)) await options.captures!.adopt(content);
-          await activateImportedPackage(id, options.podsRoot ?? productPodsRootPath());
-          return { archive, sha256, outcome: "updated", id, folder: installed.folder };
         } catch (error) {
           console.error("Shipped example update kept", { id, error });
           const reason = error instanceof Error && /^(its |the replacement )/.test(error.message)
