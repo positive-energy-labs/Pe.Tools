@@ -133,10 +133,10 @@ async function fixture() {
   };
 }
 
-test("GET carries the full validated plan, POST returns persisted request and receipt evidence", async () => {
-  const f = await fixture();
+/** The lifecycle service the update routes need; one island for every test in this file. */
+const hostLifecycle = () =>
   // effect-edge: island, phase 5
-  const lifecycle = await Effect.runPromise(
+  Effect.runPromise(
     Effect.gen(function* () {
       return {
         latch: yield* Deferred.make<void>(),
@@ -144,6 +144,10 @@ test("GET carries the full validated plan, POST returns persisted request and re
       };
     }),
   );
+
+test("GET carries the full validated plan, POST returns persisted request and receipt evidence", async () => {
+  const f = await fixture();
+  const lifecycle = await hostLifecycle();
   const web = HttpRouter.toWebHandler(
     updateRoutes.pipe(
       Layer.provideMerge(
@@ -458,15 +462,7 @@ test("U-02/U-04: a lost acknowledgement is unknown, and late recovery of a runni
 test("an admission that does not decode is discarded on the request that meets it, not a 500", async () => {
   const f = await fixture();
   await writeFile(f.path, "{ this is not JSON");
-  // effect-edge: island, phase 5
-  const lifecycle = await Effect.runPromise(
-    Effect.gen(function* () {
-      return {
-        latch: yield* Deferred.make<void>(),
-        handle: yield* Deferred.make<ServiceHostHandle>(),
-      };
-    }),
-  );
+  const lifecycle = await hostLifecycle();
   const web = HttpRouter.toWebHandler(
     updateRoutes.pipe(
       Layer.provideMerge(
