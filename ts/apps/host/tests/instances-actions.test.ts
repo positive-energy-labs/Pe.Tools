@@ -1553,8 +1553,8 @@ test("guard 2: Pea's discard cleanup is held over unsaved changes on its open pr
   expect((await f.admit("instances.cleanup", input, undefined, "agent")).state).toBe("succeeded");
 });
 
-// Mutant H9-feed: classify every incomplete receipt as waiting, ignoring the refused step.
-test("a quarantined launch refused through /actions is refused in the feed, with its local-copy evidence kept", async () => {
+// Mutant: drop the refused-tail branch, so the row reads "incomplete" with no reason or cleanup line.
+test("a quarantined launch refused through /actions reads refused in the feed and still waits on cleanup of its local copies", async () => {
   const f = await setup(() => ({
     result: null, exitCode: 2,
     diagnostics: [{ code: "session.quarantine-unavailable", detail: "Another session holds the quarantine lease.", fix: null }],
@@ -1575,7 +1575,11 @@ test("a quarantined launch refused through /actions is refused in the feed, with
   expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "incomplete" });
   expect(receipt.steps.at(-1)).toMatchObject({ state: "failed", notDispatched: true });
   const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: receipt }] }, Date.now());
-  expect(rows).toMatchObject([{ group: "failed", verb: "refused", says: expect.stringContaining("quarantine") }]);
-  expect(rows.some(row => row.group === "waits")).toBe(false);
+  // Its local copies were made before the refused launch, so the row still waits on cleanup.
+  expect(rows).toMatchObject([{ group: "waits", verb: "refused", says: expect.stringMatching(/quarantine[\s\S]*clean up/) }]);
+  // The cleanup line rides on the refused tail itself, not on the receipt carrying an error.
+  const { error: _error, ...bare } = receipt;
+  const bareRows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: bare }] }, Date.now());
+  expect(bareRows).toMatchObject([{ group: "waits", verb: "refused", says: expect.stringMatching(/clean up/) }]);
 });
 

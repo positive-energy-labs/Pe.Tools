@@ -155,7 +155,7 @@ export type FirmValue<T> =
 /** The firm file layer (ADR 0026): the firm's per-owner `<owner>.json` as read, before `resolveFirm` decodes it. */
 export const firm = leaf("file:firm", firmOwner, firmFileSchema);
 /**
- * Every home tier's `Settings/<owner>.json` for a target model, as read (ADR 0037 rule 8; homes MAP
+ * Every home tier's per-owner settings file for a target model, as read (ADR 0037 rule 8; homes MAP
  * slice 6b). The project tier is the home the model's pointer names; `target: null` has none.
  */
 export const settingsFile = leaf(

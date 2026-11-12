@@ -410,19 +410,11 @@ export class RouteWorkspace {
         let unfinished = 0;
         let state: "ready" | "unreadable" | "unregistered" = spec ? "unreadable" : "unregistered";
         if (spec) {
-          try {
-            const envelope = parseEnvelope(
-              record.value,
-              spec,
-            );
-            revision = envelope.revision;
-            ({ unfinished } = workCounts(envelope.doc, spec.editable ?? []));
-            state = "ready";
-          } catch (error) {
-            await this.#store.setState({ targetKey: record.targetKey, route: record.route, value: null,
-              reason: error instanceof Error ? error.message : String(error) });
-            return [];
-          }
+          const decoded = await this.#decodeStored(record.targetKey, spec, record.value);
+          if (!decoded) return [];
+          revision = decoded.envelope.revision;
+          ({ unfinished } = workCounts(decoded.envelope.doc, spec.editable ?? []));
+          state = "ready";
         }
         return [
           {
@@ -479,23 +471,20 @@ export class RouteWorkspace {
     return { value, carriage };
   }
 
-  /**
-   * The saved document exactly as stored, not validated against the route's schema.
-   * Consumers must validate the whole document before using it. Null when no Work exists;
-   * `doc` is null when even the envelope is unreadable. Retained under the C402/K4 fence.
-   */
+  /** Saved Work without view metadata, upgraded and validated through the same door as reads.
+   * Null when no readable Work exists. Retained under the C402/K4 capture fence. */
   async readRaw(
     scope: WorkKey,
     route: string,
     context?: WorkReadContext,
   ): Promise<{ doc: unknown; revision: number; handle: WorkHandle } | null> {
-    if (!this.#registry.has(route)) return null;
+    const spec = this.#registry.get(route)?.spec;
+    if (!spec) return null;
     return (await this.#captured(scope, "raw", context, async () => {
-      const raw = await this.#serialized(() => this.#carryOver(scope, route));
-      if (raw == null) return null;
-      const envelope = envelopeSchema.safeParse(raw);
-      const revision = envelope.success ? envelope.data.revision : 0;
-      return { doc: envelope.success ? envelope.data.doc : null, revision, handle: workHandle(scope, revision) };
+      const envelope = await this.#serialized(() => this.#load(scope, spec, false));
+      if (!envelope) return null;
+      const { doc, revision } = envelope;
+      return { doc, revision, handle: workHandle(scope, revision) };
     })).value;
   }
 
@@ -1110,6 +1099,26 @@ export class RouteWorkspace {
     }
   }
 
+  async #decodeStored(targetKey: string, spec: RouteStateSpec<z.ZodType>, raw: unknown) {
+    if (raw == null) return null;
+    let upgrade: ReturnType<NonNullable<typeof spec.upgrade>>;
+    let envelope: RouteEnvelope<unknown>;
+    try {
+      upgrade = spec.upgrade?.(raw) ?? null;
+      envelope = parseEnvelope(upgrade?.value ?? raw, spec);
+    } catch (error) {
+      await this.#store.setState({ targetKey, route: spec.route, value: null,
+        reason: error instanceof Error ? error.message : String(error) });
+      return null;
+    }
+    if (upgrade) {
+      raw = { ...upgrade.value as object, doc: envelope.doc };
+      await this.#store.setState({ targetKey, route: spec.route, value: raw,
+        reason: upgrade.reason, preservePrior: true });
+    }
+    return { raw, envelope };
+  }
+
   #load(
     scope: WorkKey,
     spec: RouteStateSpec<z.ZodType>,
@@ -1120,25 +1129,12 @@ export class RouteWorkspace {
     spec: RouteStateSpec<z.ZodType>,
     create = true,
   ): Promise<RouteEnvelope<unknown> | null> {
-    let raw = await this.#carryOver(scope, spec.route);
-    const upgrade = upgradeSettingsWork(raw, spec);
-    let envelope: RouteEnvelope<unknown> | null = null;
-    if (raw != null) {
-      try { envelope = parseEnvelope(upgrade?.value ?? raw, spec); }
-      catch (error) {
-        await this.#store.setState({ targetKey: workKey(scope), route: spec.route, value: null,
-          reason: error instanceof Error ? error.message : String(error) });
-      }
-    }
-    if (!envelope) {
+    const decoded = await this.#decodeStored(workKey(scope), spec, await this.#carryOver(scope, spec.route));
+    if (!decoded) {
       this.#inverses.delete(workKey(scope));
       return create ? emptyEnvelope(spec) : null;
     }
-    if (upgrade) {
-      raw = { ...upgrade.value, doc: envelope.doc };
-      await this.#store.setState({ targetKey: workKey(scope), route: spec.route, value: raw,
-        reason: upgrade.reason, preservePrior: true });
-    }
+    const { raw, envelope } = decoded;
     this.#inverses.set(workKey(scope), this.#retain(
       this.#stored((raw as { history?: unknown }).history, scope), envelope.revision,
     ));
@@ -1329,33 +1325,3 @@ function unknownRoute(route: string): RouteStateWriteResult {
   };
 }
 
-// ADR 0039 normally discards changed Work. The h6 ruling preserves pre-h2 cells while these two
-// settings move out of Work; no other old version or invalid remaining cell is accepted.
-function upgradeSettingsWork(raw: unknown, spec: RouteStateSpec<z.ZodType>) {
-  const removed = spec.route === "ducts" && spec.schemaVersion === 3 ? "designFriction"
-    : spec.route === "fans" && spec.schemaVersion === 2 ? "parameters" : null;
-  const record = z.record(z.string(), z.unknown());
-  const saved = record.safeParse(raw);
-  if (!removed || !saved.success || saved.data.schemaVersion !== spec.schemaVersion! - 1) return null;
-  const doc = record.safeParse(saved.data.doc);
-  if (!doc.success) return null;
-  const dropped = doc.data[removed];
-  const strip = (value: unknown) => {
-    const parsed = record.safeParse(value);
-    if (!parsed.success) return value;
-    const { [removed]: _, ...rest } = parsed.data;
-    return rest;
-  };
-  const history = Array.isArray(saved.data.history) ? saved.data.history.map(entry => {
-    const parsed = record.safeParse(entry);
-    return parsed.success ? { ...parsed.data, after: strip(parsed.data.after) } : entry;
-  }) : saved.data.history;
-  const hasEdit = (cell: unknown) => cell != null &&
-    (typeof cell !== "object" || ("edit" in cell && cell.edit != null));
-  const nonempty = removed === "parameters" && dropped != null && typeof dropped === "object"
-    ? Object.values(dropped).some(hasEdit) : hasEdit(dropped);
-  return {
-    value: { ...saved.data, schemaVersion: spec.schemaVersion, doc: strip(doc.data), history },
-    reason: nonempty ? `Dropped ${removed}: ${JSON.stringify(dropped)}. These values are now settings at the project or firm tier; set them there explicitly.` : undefined,
-  };
-}

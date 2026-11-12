@@ -27,7 +27,7 @@ const MISPLACED = "Stored Work identity does not match its address";
 export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
   mkdirSync(dir, { recursive: true });
   const work = (place: string) =>
-    ({ class: "discard", place, notices: storedNoticesPath() }) as const;
+    ({ class: "discard", place, notices: storedNoticesPath(), blobRoot: storedBlobsPath() }) as const;
   return {
     getState: async ({ targetKey, route }) => {
       const read = readStored(

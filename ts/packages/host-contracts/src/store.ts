@@ -231,7 +231,16 @@ export function noteStored(file: string, notice: Omit<StoredNotice, "at">): void
  * never recurses: `rmSync` without `recursive` refuses a directory, and the refusal is swallowed.
  */
 function refuse(path: string, bytes: Buffer | null, policy: StoredPolicy, why: string) {
-  const reason = oneLine(why);
+  let reason = oneLine(why);
+  if (policy.class === "discard" && policy.blobRoot && bytes)
+    try {
+      const blob = restBlob(policy.blobRoot, sha256Hex(bytes), bytes);
+      reason = `Prior bytes: ${blob}. ${reason}`;
+    } catch (error) {
+      // ponytail: the discard goes on without its copy, because the owner is about to write a
+      // fresh file over these bytes either way. Hold the discard instead if a full disk is seen.
+      console.warn(`Could not keep a copy of '${path}' before its discard: ${message(error)}`);
+    }
   if (policy.notices)
     noteStored(policy.notices, {
       class: policy.class,
@@ -241,14 +250,6 @@ function refuse(path: string, bytes: Buffer | null, policy: StoredPolicy, why: s
       reason,
     });
   if (policy.class === "keep") return { kind: "kept", reason } as const;
-  if (policy.blobRoot && bytes)
-    try {
-      restBlob(policy.blobRoot, sha256Hex(bytes), bytes);
-    } catch (error) {
-      // ponytail: the discard goes on without its copy, because the owner is about to write a
-      // fresh file over these bytes either way. Hold the discard instead if a full disk is seen.
-      console.warn(`Could not keep a copy of '${path}' before its discard: ${message(error)}`);
-    }
   try {
     rmSync(path, { force: true });
   } catch {

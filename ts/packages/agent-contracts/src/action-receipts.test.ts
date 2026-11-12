@@ -7,7 +7,7 @@ test.each([
   ["unknown", "outcome-unknown", "reconcile"],
   ["incomplete", "outcome-unknown", "resume"],
   ["cancelled", "cancelled", undefined],
-  ["failed", "failed", "retry"],
+  ["failed", "refused", "retry"],
   ["succeeded", "succeeded", undefined],
 ])("%s has one public outcome and preserves its input", (state, outcome, recovery) => {
   const row = actionStatusSchema.parse({
@@ -54,6 +54,20 @@ test("not-dispatched Families receipts retain defaults and outcomes", () => {
   expect(rows[0]).toMatchObject({
     effects: [],
     consumes: [],
-    outcome: { state: "failed", recovery: "retry" },
+    outcome: { state: "refused", recovery: "retry" },
   });
+});
+
+// Held acts wait for the person; stale observations must be read again before another attempt.
+test.each([
+  { kind: "held", act: "synchronize", message: "Held for the person" },
+  { kind: "stale", consumed: [] },
+  { kind: "stale_revision", handle: { key: { route: "fans", binding: "host", target: null }, revision: 1 }, live: 2 },
+])("undispatched $kind refusals do not offer retry", (refusal) => {
+  const row = actionStatusSchema.parse({
+    id: "refusal", key: "write", state: "failed", notDispatched: true,
+    caller: { kind: "human", via: "local" }, basis: null, target: { kind: "host" },
+    input: {}, startedAt: "now", error: "Read again", status: 409, refusal,
+  });
+  expect(row.outcome?.recovery).toBeUndefined();
 });
