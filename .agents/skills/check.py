@@ -228,13 +228,15 @@ def main():
                 fail(where, 'names a model (%s); name the tier and put the model in .agents/models.toml' % ', '.join(hits))
 
     # 7. the commit hook that stamps T3-Thread trailers is installed via core.hooksPath
-    cur = subprocess.run(['git', 'config', '--get', 'core.hooksPath'], cwd=REPO, capture_output=True, text=True).stdout.strip()
-    if cur != 'tools/git-hooks':
-        if do_fix:
-            subprocess.run(['git', 'config', 'core.hooksPath', 'tools/git-hooks'], cwd=REPO, check=True)
-            fixes.append('set core.hooksPath = tools/git-hooks')
-        else:
-            fail('hooks', 'core.hooksPath is %r, not tools/git-hooks; run --fix' % cur)
+    # and the `regen` merge driver .gitattributes names: keep the current side, the freshness guard demands the regen
+    for key, want in (('core.hooksPath', 'tools/git-hooks'), ('merge.regen.driver', 'true')):
+        cur = subprocess.run(['git', 'config', '--get', key], cwd=REPO, capture_output=True, text=True).stdout.strip()
+        if cur != want:
+            if do_fix:
+                subprocess.run(['git', 'config', key, want], cwd=REPO, check=True)
+                fixes.append('set %s = %s' % (key, want))
+            else:
+                fail('hooks', '%s is %r, not %s; run --fix' % (key, cur, want))
 
     # 8. the user-global skills dir carries nothing; the set has one home
     home = os.path.join(os.path.expanduser('~'), '.claude', 'skills')
