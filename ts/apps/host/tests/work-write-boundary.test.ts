@@ -56,7 +56,7 @@ async function fixture() {
         ...ownedSession,
         processId: 42,
         processStartUtcUnixMs: 1000,
-        state: { openDocuments: [{ ...ref, isFamilyDocument: false }] },
+        state: { openDocuments: [{ ...ref, isFamilyDocument: false, projectHome: null }] },
       }),
     ]),
   } as never);

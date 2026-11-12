@@ -307,6 +307,9 @@ function parseReceipt(content: string): PodReceipt | string {
 }
 
 export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: PodContext = {}) {
+  // A fresh home activates shipped pods only when the background import lands; reading before
+  // it would answer "inactive" for a pod that is about to be active (bounded, installed-pods.ts).
+  yield* shippedPodsImported(ctx);
   yield* Effect.tryPromise({
     try: async () =>
       requirePackageEnabled(member.pod, ctx.podsRoot, await projectPodIds(ctx.pointer)),
@@ -614,6 +617,9 @@ export const composedSpec = Effect.fnUntraced(function* (
 });
 
 export const podFolder = Effect.fnUntraced(function* (podId: string, ctx: PodContext = {}) {
+  // A fresh home activates shipped pods only when the background import lands; reading before
+  // it would answer "inactive" for a pod that is about to be active (bounded, installed-pods.ts).
+  yield* shippedPodsImported(ctx);
   const root = podsRoots(ctx);
   yield* Effect.tryPromise({
     try: async () => requirePackageEnabled(podId, root, await projectPodIds(ctx.pointer)),

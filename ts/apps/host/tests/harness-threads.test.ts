@@ -251,7 +251,7 @@ test.each(["claude", "codex"] as const)(
           ...hostOwnership,
           processId: 42,
           processStartUtcUnixMs: 1000,
-          state: { openDocuments: [{ ...target, address, isFamilyDocument: false }] },
+          state: { openDocuments: [{ ...target, address, isFamilyDocument: false, projectHome: null }] },
         }),
       ]),
       invoke: invokeFixture,

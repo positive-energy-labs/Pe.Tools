@@ -246,7 +246,7 @@ effectTest(
                 {
                   openId: activeOpen,
                   isActive: true,
-                  isFamilyDocument: false,
+                  isFamilyDocument: false, projectHome: null,
                   title: "Model",
                   address: "C:/model.rvt",
                 },
@@ -393,7 +393,7 @@ test("retained /fans acquisition admits every caller and keeps miss, refresh and
     list: Effect.sync(() => [sessionView({
       connected: true, sessionId: target.session, sdkSessionId: "dev", ...hostOwnership,
       processId: 42, processStartUtcUnixMs: observedStart,
-      state: { openDocuments: [{ openId: target.openId, address: "C:/HVAC.rvt", title: "HVAC", isFamilyDocument: false }] },
+      state: { openDocuments: [{ openId: target.openId, address: "C:/HVAC.rvt", title: "HVAC", isFamilyDocument: false, projectHome: null }] },
     })]),
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     invokeHandle: (key, _input, _session, openId, id) => Effect.gen(function* () {

@@ -1201,7 +1201,12 @@ export class ActionJournal implements ReceiptReader {
         "journal.discarded",
       );
     if (prior && !sameCaller(prior.caller, crossing.caller))
-      throw Error("Command id belongs to another authenticated caller");
+      // A replay of another caller's id ran nothing here, so it says so (notDispatched via refused):
+      // a bare Error left the client holding the slot and re-sending forever.
+      throw refused(
+        `Action '${admission.id}' belongs to another caller; nothing was run for this request. Submit a new action if it is still wanted.`,
+        "context.foreign-caller",
+      );
     if (prior) {
       const identity = { id: prior.id, key: prior.key, target: prior.target, input: prior.input };
       if (canonicalRouteInput(identity) !== canonicalRouteInput(admission))

@@ -142,7 +142,7 @@ export async function setup(options: { cold?: boolean } = {}) {
             openId: reopened && target === b ? "reopened-B" : target.openId,
             title: "Same",
             address: document,
-            isFamilyDocument: false,
+            isFamilyDocument: false, projectHome: null,
             isActive: true,
           },
         ],
