@@ -18,17 +18,23 @@ public static class StoredFile {
     private static extern bool MoveFileEx(string existing, string destination, uint flags);
     private static readonly object NoticeLock = new();
 
-    public static T? Read<T>(string path, StoredPolicy policy, string place, Func<string, T> decode, string? notices = null) {
+    public static T? Read<T>(string path, StoredPolicy policy, string place, Func<string, T> decode, string? notices = null) =>
+        Read(path, policy, place, decode, out _, notices);
+
+    public static T? Read<T>(string path, StoredPolicy policy, string place, Func<string, T> decode, out bool kept, string? notices = null) {
+        kept = false;
         string text;
         try { text = File.ReadAllText(path); }
         catch (FileNotFoundException) { return default; }
         catch (DirectoryNotFoundException) { return default; }
         catch (Exception exception) {
+            kept = policy == StoredPolicy.Keep;
             Log.Warning(exception, "Could not read {Place} at {Path}", place, path);
             return default;
         }
         try { return decode(text); }
         catch (Exception exception) {
+            kept = policy == StoredPolicy.Keep;
             Refuse(path, policy, place, exception, notices);
             return default;
         }
