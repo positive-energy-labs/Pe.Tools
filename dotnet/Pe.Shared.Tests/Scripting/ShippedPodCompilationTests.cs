@@ -72,8 +72,14 @@ public sealed class ShippedPodCompilationTests {
         Assert.That(exercised, Is.EquivalentTo(EntrypointPolicies.Keys), "Every declared shipped entrypoint must be exercised.");
     }
 
+    // The bundle production hands C#: capturePackage's sourceBundle, filtered by isCompilerInput
+    // (ts/apps/host/src/packages.ts:65): pod.json, PeScripts.csproj and src/**/*.cs. Never the whole folder:
+    // a pod that is a pnpm workspace member holds node_modules junctions into the TS workspace (~400k files).
     private static ScriptPodSourceBundle Capture(string folder) => new(
-        Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
+        new[] { "pod.json", "PeScripts.csproj" }.Select(name => Path.Combine(folder, name)).Where(File.Exists)
+            .Concat(Directory.Exists(Path.Combine(folder, "src"))
+                ? Directory.EnumerateFiles(Path.Combine(folder, "src"), "*.cs", SearchOption.AllDirectories)
+                : Enumerable.Empty<string>())
             .OrderBy(path => path, StringComparer.Ordinal)
             .Select(path => new ScriptPodSourceFile(
                 Path.GetRelativePath(folder, path).Replace(Path.DirectorySeparatorChar, '/'),
