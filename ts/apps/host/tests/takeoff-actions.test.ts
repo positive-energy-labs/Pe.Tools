@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
 import { address, roomEditKey, tools } from "@pe/agent-contracts";
-import { captureStore, testConsents, testDocumentMarks } from "./effect-test.ts";
+import { captureStore, testRegistry, testDocumentMarks } from "./effect-test.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordingRequest } from "./native-recordings.ts";
 import { bindControl } from "../src/control.ts";
@@ -22,7 +22,7 @@ test.each(["selected", "unrelated", "none"] as const)(
     const work = new RouteWorkspace({ registrations: [{ spec: tools.rooms.work }], store: {
       getState: async () => state, setState: async ({ value }) => { state = structuredClone(value); },
     } });
-    const runs = testConsents();
+    const runs = testRegistry();
     const run = { thread: "rooms-recorded", turn: "write" };
     runs.open(run); bindControl({ runs });
     const post = native.actions({ workspace: work, marks: testDocumentMarks(native.bridge) }, captureStore(directory));

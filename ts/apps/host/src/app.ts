@@ -52,7 +52,7 @@ import { ReceiptExport, type ReceiptExporter } from "./receipt-export.ts";
 import { createDevices, type Devices } from "./remote-device.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
 import { RequestIdentity } from "./request-services.ts";
-import { RunConsents } from "./run-consent.ts";
+import { RunRegistry } from "./run-registry.ts";
 import { SdkDriverLive } from "./sdk-session.ts";
 import { instancesReadingsRoute } from "./session-route.ts";
 import { settingsSchemaPath } from "./settings.ts";
@@ -418,7 +418,7 @@ function liveHttpLive(options: HttpLiveOptions) {
     Layer.provide(composition.provider),
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
     Layer.provide(UpdateLive),
-    Layer.provide(RunConsents.layer),
+    Layer.provide(RunRegistry.layer),
     Layer.provide(Spawner.live),
     Layer.provide(CaptureStore.layer()),
     Layer.provide(builtinFileLayer()),

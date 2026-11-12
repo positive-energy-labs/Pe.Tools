@@ -156,7 +156,7 @@ Type extraction is `typeof S.Type` or `Schema.Schema.Type<typeof S>`. Use `Schem
 
 ## 2. House rules, as code (ADR 0029)
 
-The host still carries islands, so a file you open may contradict this section. Treat the island as the finding, not the precedent. At f734953f: 124 `effect-edge: island, phase 5` markers, 91 `Effect.fnUntraced` against 48 `Effect.fn`, 38 `Effect.promise`, `AsyncLocalStorage` in 5 host files, and module singletons in `gateway-owner.ts` (since replaced by the two journal services in `receipt-services.ts`). Copy from the four places where Effect is real: `ts/packages/host-internal/src/dispatch.ts` (the serial worker), `ts/apps/host/src/native-reads.ts`, `ts/apps/host/src/run-consent.ts` (settlement) and `ts/apps/host/src/harness/spawner.ts`.
+The host still carries islands, so a file you open may contradict this section. Treat the island as the finding, not the precedent. At f734953f: 124 `effect-edge: island, phase 5` markers, 91 `Effect.fnUntraced` against 48 `Effect.fn`, 38 `Effect.promise`, `AsyncLocalStorage` in 5 host files, and module singletons in `gateway-owner.ts` (since replaced by the two journal services in `receipt-services.ts`). Copy from the four places where Effect is real: `ts/packages/host-internal/src/dispatch.ts` (the serial worker), `ts/apps/host/src/native-reads.ts`, `ts/apps/host/src/run-registry.ts` (settlement) and `ts/apps/host/src/harness/spawner.ts`.
 
 ### 2a. The run family runs only at a marked edge (rule 2)
 
@@ -179,7 +179,7 @@ export class Spawner extends Context.Service<Spawner, Effect.Success<typeof make
 }
 ```
 
-- Anything with a lifetime is a service, built in `make` with `Effect.gen` and provided once in `app.ts` `makeHttpLive`. The scoped services today are `RevitBridge`, `NativeReads`, `RunConsents`, `HarnessThreads`, `FamiliesReader`, `MachineOwner`, `CaptureStore`, `ReceiptExport`, `Spawner`, `HostLifecycle`, `UpdateReader`, `AdmittedBuiltins`, `HostLogService` and `ActionJournalService` (`receipt-services.ts`; the journal's Layer is the one closer, so provide it outermost and everything that uses it releases first).
+- Anything with a lifetime is a service, built in `make` with `Effect.gen` and provided once in `app.ts` `makeHttpLive`. The scoped services today are `RevitBridge`, `NativeReads`, `RunRegistry`, `HarnessThreads`, `FamiliesReader`, `MachineOwner`, `CaptureStore`, `ReceiptExport`, `Spawner`, `HostLifecycle`, `UpdateReader`, `AdmittedBuiltins`, `HostLogService` and `ActionJournalService` (`receipt-services.ts`; the journal's Layer is the one closer, so provide it outermost and everything that uses it releases first).
 - Configured bounds are a `Context.Reference` with a default, so a test can swap them. For example, `NativeReadLimits` in `native-reads.ts:15` and `DispatchLimits` in `dispatch.ts:113`.
 - Hold the shape in a closure inside `make`. A module `let`, a WeakMap registry or a lazy singleton beside a service is a second owner.
 - A test swaps a layer, never a module.
@@ -220,7 +220,7 @@ Durable work captures causal identity and journal ownership explicitly when it i
 The obligatory step must be guaranteed, and the persist must be typed. Never write "persist, then settle the waiter" as two statements, because a persist failure skips the settle. Transition state first, run the persist, and settle in `Effect.onExit`, so that every exit, interruption included, reaches the waiter:
 
 ```ts
-// run-consent.ts: the one settlement
+// run-registry.ts: the one settlement
 body.pipe(
   Effect.onExit((exit) =>
     Effect.sync(() => {
@@ -303,7 +303,7 @@ export const hostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthP
 ```ts
 HttpRouter.serve(Layer.mergeAll(routes, CommonAppLive).pipe(Layer.provide(identity)))
   .pipe(Layer.provideMerge(ServerLive))          // NodeHttpServer.layer(() => nodeServer, { ... })
-  .pipe(Layer.provide(NodeHttpClient.layerUndici), Layer.provide(RunConsents.layer),
+  .pipe(Layer.provide(NodeHttpClient.layerUndici), Layer.provide(RunRegistry.layer),
         Layer.provide(Spawner.live), Layer.provide(NodeServices.layer) /* ... */);
 // host-program.ts
 yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch));

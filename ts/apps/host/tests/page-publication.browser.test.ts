@@ -1,5 +1,5 @@
 import { pictureCaptures, journalAt } from "./effect-test.ts";
-import { testConsents } from "./effect-test.ts";
+import { testRegistry } from "./effect-test.ts";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -153,7 +153,7 @@ it("captures through real Edge, publishes only on success, and preserves authore
 
 it("a publication from a stopped run is refused and leaves the existing source untouched", async () => {
   const ref = { thread: "publication", turn: "one" };
-  const runs = testConsents();
+  const runs = testRegistry();
   bindControl({ runs });
   runs.open(ref);
   try {

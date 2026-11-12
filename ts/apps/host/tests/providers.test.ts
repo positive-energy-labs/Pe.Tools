@@ -1,4 +1,4 @@
-import { consentService, harnessThreads, testSpawner } from "./effect-test.ts";
+import { registryService, harnessThreads, testSpawner } from "./effect-test.ts";
 import { asCaller, human } from "./callers.ts";
 import { HostLog } from "../src/host-log.ts";
 import { emptyThreadLifecycle } from "@pe/agent-contracts";
@@ -386,7 +386,7 @@ test("witness: a thread event and meta echoing a shared key are written redacted
   const threads = await harnessThreads({
     root: threadsRoot, log: new HostLog(join(threadsRoot, ".log"), Date.now), worldRoot: threadsRoot,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }), providers,
-    runs: consentService(),
+    runs: registryService(),
   });
   try {
     const put = await asCaller(human, threads.fetch)(

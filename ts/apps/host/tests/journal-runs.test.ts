@@ -1,4 +1,4 @@
-import { detachedBridge, settle, testConsents, journalAt } from "./effect-test.ts";
+import { detachedBridge, settle, testRegistry, journalAt } from "./effect-test.ts";
 import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,13 +20,13 @@ import type { PodMemberSaveRequest } from "@pe/host-contracts/operation-types";
 
 // Only external native facts are absent. The command, preparation, probes and writer are real.
 async function files() {
-  const dir = await mkdtemp(join(tmpdir(), "pe-save-consent-"));
+  const dir = await mkdtemp(join(tmpdir(), "pe-save-run-"));
   const podsRoot = join(dir, "Pods");
   await mkdir(join(podsRoot, "design"), { recursive: true });
   await writeFile(join(podsRoot, "design", "pod.json"), JSON.stringify({ id: "design" }));
   for (const file of ["a.txt", "b.txt", "c.txt"])
     await writeFile(join(podsRoot, "design", file), "original");
-  const runs = testConsents();
+  const runs = testRegistry();
   runs.open(run);
   bindControl({ runs, acquired: () => null });
   const bridge = detachedBridge();

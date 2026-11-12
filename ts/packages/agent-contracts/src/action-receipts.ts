@@ -1,7 +1,7 @@
 import { basisSchema, callerSchema } from "./caller.ts";
 import { z } from "zod";
 import { workKeySchema } from "./route-state.ts";
-import { footprintSchema } from "./run-consent.ts";
+import { footprintSchema } from "./run-registry.ts";
 import { executionTargetSchema } from "./target.ts";
 import { consumedSchema, claimSchema, commandRefusalSchema } from "./command.ts";
 import { nativeProcessSchema } from "./native-process.ts";

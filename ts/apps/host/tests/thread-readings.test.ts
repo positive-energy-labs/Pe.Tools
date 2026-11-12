@@ -1,4 +1,4 @@
-import { consentService, harnessThreads, testSpawner } from "./effect-test.ts";
+import { registryService, harnessThreads, testSpawner } from "./effect-test.ts";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -31,7 +31,7 @@ afterAll(async () => {
 async function host(limits?: { segmentBytes: number; segments: number; entryBytes: number }) {
   const log = new HostLog(join(root, "log", randomUUID()), Date.now, limits);
   const threads = await harnessThreads({
-    runs: consentService(),
+    runs: registryService(),
     root: join(root, "threads"),
     log,
     worldRoot: tmpdir(),

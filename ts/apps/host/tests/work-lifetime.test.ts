@@ -33,7 +33,7 @@ import { MachineOwner } from "../src/machine.ts";
 import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src/pe-routes.ts";
 import { createReceiptExport } from "../src/receipt-export.ts";
 import { human, pea, actAs } from "./callers.ts";
-import { detachedBridge, consentService } from "./effect-test.ts";
+import { detachedBridge, registryService } from "./effect-test.ts";
 
 afterEach(() =>
   bindControl({
@@ -374,7 +374,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
           const { routes: host, machineSpec } = yield* makeHostPeRoutes(
             "http://127.0.0.1:0",
             bridge,
-            consentService(),
+            registryService(),
             () => registrations,
             undefined,
             undefined,
