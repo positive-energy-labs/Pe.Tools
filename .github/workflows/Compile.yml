@@ -22,17 +22,17 @@ jobs:
       # family is published to a feed the runner can reach.
       # The same gap leaves out the `pnpm verify` steps that shell to dotnet (codegen:check, r24).
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          package_json_file: ts/package.json
-
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: pnpm
-          cache-dependency-path: ts/pnpm-lock.yaml
+
+      # corepack reads packageManager from ts/package.json. The repo's Actions policy allows only
+      # GitHub-owned and verified actions, and pnpm/action-setup is neither: naming it fails the
+      # whole run at startup.
+      # ponytail: no pnpm store cache; add one when install time hurts.
+      - name: Setup pnpm
+        run: corepack enable
 
       # Format, lint, tsc per package, projections, catalog source hash, repo guards (ts/scripts/gate.ts).
       - name: gate
