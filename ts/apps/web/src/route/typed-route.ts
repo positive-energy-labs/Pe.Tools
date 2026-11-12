@@ -141,7 +141,6 @@ export interface ActionHandle extends importPlanHandle {
   readonly pending: boolean;
   readonly refusal: string | null;
   readonly failure: string | null;
-  readonly consent: { until: string; run(): void } | null;
   run(input?: unknown): Promise<unknown>;
 }
 

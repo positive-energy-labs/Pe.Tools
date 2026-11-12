@@ -70,8 +70,6 @@ export function harnessClient(origin: string) {
     prompt: (id: string, body: PromptRequest) =>
       client.call("thread.prompt", { params: { id }, body: { id: crypto.randomUUID(), ...body } }),
     cancel: (id: string) => client.call("thread.cancel", { params: { id } }),
-    permission: (id: string, requestId: string, optionId: string) =>
-      client.call("thread.permission", { params: { id }, body: { requestId, optionId } }),
     question: (
       id: string,
       requestId: string,

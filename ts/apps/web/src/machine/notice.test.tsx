@@ -8,14 +8,13 @@ import { MACHINE_SEEDS } from "#/design-system/open-examples";
 
 import { NoticeCard } from "./notice";
 
-const permission = vi.fn<(id: string, requestId: string, optionId: string) => Promise<void>>();
 const question =
   vi.fn<(id: string, requestId: string, action: string, content?: object) => Promise<void>>();
 const prompt = vi.fn<(id: string, input: { text: string }) => Promise<{ turnId: string }>>();
 const cancel = vi.fn<(id: string) => Promise<void>>();
 vi.mock("#/workbench/provider/harness-client", async (actual) => ({
   ...(await actual<typeof import("#/workbench/provider/harness-client")>()),
-  harnessClient: () => ({ permission, question, prompt, cancel }),
+  harnessClient: () => ({ question, prompt, cancel }),
 }));
 
 // The feed is a key on the tab's one Readings stream. Each follower is stood in as the key it
@@ -42,20 +41,6 @@ const base = {
   at: null,
   url: "/pea?thread=t1",
 } as const;
-const asking: NoticeRow = {
-  ...base,
-  key: "thread:t1",
-  verb: "approve",
-  what: "ducts",
-  says: "pe_do revit.ducts.resize",
-  act: {
-    kind: "consent",
-    threadId: "t1",
-    requestId: "r1",
-    allow: { optionId: "allow" },
-    reject: { optionId: "deny" },
-  },
-};
 const finished: NoticeRow = {
   ...base,
   key: "thread:t2",
@@ -91,7 +76,6 @@ const level: NoticeRow = {
 
 let postMessage: ReturnType<typeof vi.fn<(message: string) => void>>;
 let listeners: Set<(event: NativeMessageEvent) => void>;
-const sent = (type: string) => postMessage.mock.calls.some(([m]) => JSON.parse(m).type === type);
 /** The host's notice feed as the card's follower sees it: each frame is the whole feed. */
 let streams: { url: string; onmessage: ((m: MessageEvent<string>) => void) | null }[];
 const feed = (value: unknown) =>
@@ -120,7 +104,7 @@ beforeEach(() => {
       removeEventListener: (_event, receive) => void listeners.delete(receive),
     },
   };
-  for (const door of [permission, question, prompt, cancel]) door.mockReset();
+  for (const door of [question, prompt, cancel]) door.mockReset();
   // The ledger is per-page storage; each test starts with none.
   // A card that followed before: its first feed raises what moved, not a baseline.
   const store = new Map<string, string>([["pe.notices.card-seen", "{}"]]);
@@ -157,36 +141,6 @@ test("the card follows the feed as the tray, and a malformed feed never enters i
   expect(screen.getByText("1/1")).toBeTruthy();
 });
 
-test("a permission answer goes to the thread's door; its item leaves only when the door accepts", async () => {
-  permission.mockRejectedValueOnce(Error("no request r1")).mockResolvedValueOnce();
-  render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture={false} />);
-  show(asking, revit);
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Allow pe_do revit.ducts.resize" })));
-  expect(permission).toHaveBeenCalledWith("t1", "r1", "allow");
-  expect(screen.getByText(/Pea did not take this answer: Error: no request r1/)).toBeTruthy();
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Allow pe_do revit.ducts.resize" })));
-  // The other item stays: the card pages on.
-  expect(screen.getByText("1/1")).toBeTruthy();
-  expect(screen.getByText("revit.start · failed")).toBeTruthy();
-  expect(sent("notice-hide")).toBe(false);
-});
-
-test("the card is the sweep: Reject sends the window's reject option while it counts down", async () => {
-  permission.mockResolvedValue();
-  render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture={false} />);
-  const deadline = new Date(Date.now() + 60_000).toISOString();
-  show({
-    ...asking,
-    act: { ...(asking.act as Extract<NoticeRow["act"], { kind: "consent" }>), deadline },
-  });
-  expect(screen.getByRole("timer").textContent).toMatch(/^(59|60)s$/);
-  await act(async () =>
-    fireEvent.click(screen.getByRole("button", { name: "Reject pe_do revit.ducts.resize" })),
-  );
-  expect(permission).toHaveBeenCalledExactlyOnceWith("t1", "r1", "deny");
-  expect(card()).toBeNull();
-});
-
 test("a question is answered through the thread's question door, and the last item ends the card", async () => {
   question.mockResolvedValue();
   render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture={false} />);
@@ -199,9 +153,9 @@ test("a question is answered through the thread's question door, and the last it
 
 test("a fixture card refuses to answer or reply for Pea", () => {
   render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
-  show(asking, finished);
-  fireEvent.click(screen.getByRole("button", { name: "Allow pe_do revit.ducts.resize" }));
-  expect(permission).not.toHaveBeenCalled();
+  show(level, finished);
+  fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+  expect(question).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "next" }));
   fireEvent.change(screen.getByRole("textbox", { name: "reply to Pea" }), {
     target: { value: "go" },

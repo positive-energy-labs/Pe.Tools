@@ -1,7 +1,7 @@
 import { basisSchema, callerSchema } from "./caller.ts";
 import { z } from "zod";
 import { workKeySchema } from "./route-state.ts";
-import { footprintSchema, commandConsentSchema } from "./run-consent.ts";
+import { footprintSchema } from "./run-consent.ts";
 import { executionTargetSchema } from "./target.ts";
 import { consumedSchema, claimSchema, commandRefusalSchema } from "./command.ts";
 import { nativeProcessSchema } from "./native-process.ts";
@@ -12,7 +12,6 @@ export { nativeProcessSchema, type NativeProcess } from "./native-process.ts";
 export const invocationOutcomeSchema = z.strictObject({
   id: z.string(),
   state: z.enum([
-    "queued",
     "running",
     "refused",
     "stale",
@@ -25,9 +24,6 @@ export const invocationOutcomeSchema = z.strictObject({
   reason: z.string().optional(),
   recovery: z.enum(["retry", "reconcile", "resume"]).optional(),
   receiptId: z.string().optional(),
-  consentWindow: z
-    .strictObject({ requestId: z.string(), deadline: z.string().optional() })
-    .optional(),
   snapshots: z.array(z.string()).optional(),
 });
 export type InvocationOutcome = z.infer<typeof invocationOutcomeSchema>;
@@ -112,11 +108,7 @@ const actionAttempt = z.object({
   consumes: z.array(consumedSchema).default([]),
   claims: z.array(claimSchema).default([]),
   refusal: commandRefusalSchema.optional(),
-  consent: commandConsentSchema.nullable().default(null),
   cancellationRequested: z.boolean().optional(),
-  consentWindow: z
-    .strictObject({ requestId: z.string(), deadline: z.string().optional() })
-    .optional(),
   /** Why the crossing was admitted; null for a host leaf that crosses into no Revit document. */
   basis: basisSchema.nullable(),
   target: executionTargetSchema,
@@ -130,7 +122,6 @@ const actionAttempt = z.object({
   startedAt: z.string(),
 });
 const actionReceiptDefinition = z.discriminatedUnion("state", [
-  actionAttempt.extend({ state: z.literal("waiting") }).strict(),
   actionAttempt.extend({ state: z.literal("running") }).strict(),
   actionAttempt
     .extend({ state: z.literal("succeeded"), result: z.unknown().refine((v) => v !== undefined) })
@@ -171,7 +162,6 @@ export function actionReceiptListDecoder(): z.ZodType<ActionReceipt[]> {
 
 const statusAttempt = actionAttempt.omit({ steps: true, prepared: true, recovery: true });
 const actionStatusDefinition = z.discriminatedUnion("state", [
-  statusAttempt.extend({ state: z.literal("waiting") }),
   statusAttempt.extend({ state: z.literal("running") }),
   statusAttempt.extend({ state: z.literal("succeeded") }),
   statusAttempt.extend({
@@ -216,9 +206,7 @@ export function invocationOutcome(row: ActionReceipt | ActionStatus): Invocation
         ? row.refusal.kind === "stale" || row.refusal.kind === "stale_revision"
           ? "stale"
           : "refused"
-        : row.state === "waiting"
-          ? "queued"
-          : row.state;
+        : row.state;
   return {
     id: row.id,
     state,
@@ -231,6 +219,5 @@ export function invocationOutcome(row: ActionReceipt | ActionStatus): Invocation
       : state === "failed" && "notDispatched" in row && row.notDispatched
         ? { recovery: "retry" as const }
         : {}),
-    ...(row.consentWindow ? { consentWindow: row.consentWindow } : {}),
   };
 }

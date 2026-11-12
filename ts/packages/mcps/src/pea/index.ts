@@ -1,5 +1,6 @@
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import { readImage } from "../shared/read-image.ts";
+import { readDocument } from "../shared/read-document.ts";
 import { createCaptureViewTool } from "../shared/capture-view.ts";
 import { diagram } from "../shared/diagram.ts";
 import { revitDocsFetch, revitDocsSearch } from "../shared/revit-docs.ts";
@@ -85,6 +86,7 @@ export const peaProductTools = {
   [peFeedback.id]: peFeedback,
   [captureView.id]: captureView,
   [readImage.id]: readImage,
+  [readDocument.id]: readDocument,
   [diagram.id]: diagram,
   [revitDocsSearch.id]: revitDocsSearch,
   [revitDocsFetch.id]: revitDocsFetch,

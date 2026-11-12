@@ -18,6 +18,7 @@ import {
   type ActionReceipt,
   type HarnessEvent,
   type HarnessThreadSummary,
+  type HeldSend,
   type Machine,
   type NavigationWork,
   type NoticeAct,
@@ -52,10 +53,14 @@ export interface NoticeSources {
   readonly machine: Machine | null;
   /** `readStoredNotices(storedNoticesPath())`: files refused as kept or discarded. */
   readonly stored: readonly StoredNotice[];
+  /** Outward sends held for the person (ADR 0038 guard 3); a held door act is its receipt. */
+  readonly held: readonly HeldSend[];
 }
 
 /** A host-restart death leaves the feed after this long; Pea's thread list still holds it. */
 const INTERRUPTED_FOR_MS = 24 * 3_600_000;
+/** A held act leaves the feed after this long; its receipt still holds it. */
+const HELD_FOR_MS = 24 * 3_600_000;
 
 /** A waiting thread's open ask, in its own words, and the door that answers it. */
 function openAsk(
@@ -63,15 +68,9 @@ function openAsk(
   events: readonly HarnessEvent[],
 ): { verb: string; says: string; act: NoticeAct } | null {
   const resolved = new Set(
-    events.flatMap((e) =>
-      e.kind === "permission_resolved" || e.kind === "question_resolved" ? [e.requestId] : [],
-    ),
+    events.flatMap((e) => (e.kind === "question_resolved" ? [e.requestId] : [])),
   );
-  const open = events.findLast(
-    (e) =>
-      (e.kind === "question_request" || e.kind === "permission_request") &&
-      !resolved.has(e.requestId),
-  );
+  const open = events.findLast((e) => e.kind === "question_request" && !resolved.has(e.requestId));
   if (open?.kind === "question_request")
     return {
       verb: "asks",
@@ -83,25 +82,7 @@ function openAsk(
         requestedSchema: open.requestedSchema as Record<string, unknown>,
       },
     };
-  if (open?.kind !== "permission_request") return null;
-  const option = (kind: string) => {
-    const found = open.options.find((o) => o.kind.startsWith(kind));
-    return found ? { optionId: found.optionId } : undefined;
-  };
-  const reject = option("reject"),
-    allow = option("allow");
-  return {
-    verb: "approve",
-    says: open.toolCall.title ?? "a tool call",
-    act: {
-      kind: "consent",
-      threadId,
-      requestId: open.requestId,
-      ...(open.deadline ? { deadline: open.deadline } : {}),
-      ...(reject ? { reject } : {}),
-      ...(allow ? { allow } : {}),
-    },
-  };
+  return null;
 }
 
 /** Pea's words in the thread's last turn: what an unread row says. */
@@ -201,7 +182,26 @@ const RECEIPT_GROUP: Partial<Record<ActionReceipt["state"], NoticeDraft["group"]
   failed: "failed",
 };
 
-function receiptRow({ revision, action: receipt }: NoticeSources["receipts"][number]): NoticeDraft | null {
+function receiptRow(
+  { revision, action: receipt }: NoticeSources["receipts"][number],
+  now: number,
+): NoticeDraft | null {
+  // A held act (ADR 0038) is one row that waits on the person, in its own words, never a failure.
+  if (receipt.refusal?.kind === "held")
+    return now - Date.parse(receipt.startedAt) > HELD_FOR_MS
+      ? null
+      : {
+          key: `action:${receipt.id}`,
+          group: "waits",
+          revision,
+          verb: "held",
+          what: receipt.key,
+          where: callerWord(receipt.caller),
+          says: receipt.refusal.message,
+          at: receipt.startedAt,
+          url: null,
+          refusal: "Nothing to open: do this in Revit or the web app yourself",
+        };
   const group = RECEIPT_GROUP[receipt.state];
   if (!group) return null;
   const failure =
@@ -248,8 +248,21 @@ export function noticeRows(sources: NoticeSources, now: number): NoticeDraft[] {
     ...sources.threads
       .filter((thread) => thread.lifecycle.status === "active")
       .flatMap((thread) => threadRow(thread, now) ?? []),
-    ...sources.receipts.flatMap((receipt) => receiptRow(receipt) ?? []),
+    ...sources.receipts.flatMap((receipt) => receiptRow(receipt, now) ?? []),
     ...sources.stored.flatMap((notice) => storedRow(notice, now) ?? []),
+    ...sources.held.map((send) => ({
+      key: `held:${send.id}`,
+      group: "waits" as const,
+      revision: 0,
+      verb: "held",
+      what: send.path,
+      where: "Pea",
+      says: `Pea wants to send pages ${send.pages} of this file to LlamaCloud to read it. Nothing was sent. Confirm to send it; Pea's next read of the same file finds the result.`,
+      at: send.at,
+      url: send.thread ? routeAddress("pea").link({}, { thread: send.thread }) : null,
+      ...(send.thread ? {} : { refusal: "No thread asked for this" }),
+      act: { kind: "confirm-send" as const, id: send.id },
+    })),
     // Staged Work includes human edits and scope choices; it carries no proposal-actor count.
     ...sources.works
       .filter((work) => work.staged > 0)

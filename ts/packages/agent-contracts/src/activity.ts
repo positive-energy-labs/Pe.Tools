@@ -87,6 +87,7 @@ export const TOOL_TITLES: Record<string, string> = {
   target_set: "Propose the default Target",
   pe_feedback: "Report a tooling defect",
   read_image: "Look at an image",
+  read_document: "Read a document",
   capture_view: "Capture a view",
   diagram: "Draw a diagram",
   revit_docs_search: "Search the Revit docs",

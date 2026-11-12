@@ -1,9 +1,6 @@
 import { ownFindingsLeft, undoOwnFinding } from "../route/host";
 import { findingCommand } from "../route/slots/findings/index.ts";
 import { hostReadSource } from "./host-read-source.ts";
-import { writeReject } from "./catalog-work-reviews";
-import { harnessClient } from "../workbench/provider/harness-client";
-import { resolveWorkbenchConfig } from "../workbench/config";
 import { z } from "zod";
 import { readableRefusal } from "../route/readable-refusal";
 import { reportFault } from "../host/diagnostics";
@@ -521,7 +518,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       };
       return {label:"Start",get pending(){return pending.has("work.start");},get refusal(){return refusal();},
         get failure(){return problems.get("work.start")??null;},
-        get consent(){return writeReject(mounted.timeline(),["work.start"],(thread,request)=>void harnessClient(resolveWorkbenchConfig().origin).permission(thread,request,"stop_writes"));},
         run,plan:run,apply:run,cancel:()=>{},read:()=>null};
     },
     action(id: string): import("../route/typed-route").ActionHandle {
@@ -536,7 +532,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       };
       return {label:command.label, get pending(){return pending.has(id);},
         get refusal(){return mounted.commandRefusal(id);}, get failure(){return problems.get(id)??null;},
-        get consent(){return writeReject(mounted.timeline(),[command.entry],(thread,request)=>void harnessClient(resolveWorkbenchConfig().origin).permission(thread,request,"stop_writes"));},
         run:(supplied)=>perform(false,supplied),plan:()=>perform(),apply:()=>perform(true),
         cancel:()=>mounted.cancel(id),read:()=>mounted.review(id)};
     },

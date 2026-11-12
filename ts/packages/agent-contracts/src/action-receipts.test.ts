@@ -3,7 +3,6 @@ import { z } from "zod";
 import { actionReceiptListDecoder, actionStatusSchema } from "./action-receipts.ts";
 
 test.each([
-  ["waiting", "queued", undefined],
   ["running", "running", undefined],
   ["unknown", "outcome-unknown", "reconcile"],
   ["incomplete", "outcome-unknown", "resume"],
@@ -53,7 +52,6 @@ test("not-dispatched Families receipts retain defaults and outcomes", () => {
     },
   ]);
   expect(rows[0]).toMatchObject({
-    consent: null,
     effects: [],
     consumes: [],
     outcome: { state: "failed", recovery: "retry" },

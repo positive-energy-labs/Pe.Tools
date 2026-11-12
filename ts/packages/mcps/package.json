@@ -22,7 +22,9 @@
       "import": "./src/index.ts"
     },
     "./server": "./src/server.ts",
-    "./takeoff-ops": "./src/shared/takeoff-ops.ts"
+    "./takeoff-ops": "./src/shared/takeoff-ops.ts",
+    "./llama-parse": "./src/shared/llama-parse.ts",
+    "./held-parse": "./src/shared/held-parse.ts"
   },
   "publishConfig": {
     "access": "public"
@@ -35,6 +37,8 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
+    "@llamaindex/liteparse": "catalog:",
+    "@llamaindex/llama-cloud": "^2.10.0",
     "@modelcontextprotocol/client": "catalog:",
     "@modelcontextprotocol/server": "catalog:",
     "@pe/agent-contracts": "workspace:*",
@@ -45,10 +49,12 @@
     "effect": "4.0.2",
     "gunshi": "^0.29.5",
     "parse5": "^8.0.1",
+    "pngjs": "catalog:",
     "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
+    "@types/pngjs": "catalog:",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
     "bumpp": "^11.1.0",
     "typescript": "^6.0.3",

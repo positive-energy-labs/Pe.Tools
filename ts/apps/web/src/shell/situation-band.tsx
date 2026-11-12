@@ -71,13 +71,6 @@ export function rankVerbs(ids: readonly string[], verbs: Readonly<Record<string,
   return primary === undefined ? [] : [primary, ...ids.filter((id) => id !== primary)];
 }
 
-/** The thread whose run consent a receipt waits on: Pea's own, else the route's bound thread. */
-export function consentThread(entry: TimelineEntry, bound?: string) {
-  const caller = (entry.basis as { receipt?: { caller?: { kind: string; thread?: string } } })
-    ?.receipt?.caller;
-  return caller?.kind === "pea" ? caller.thread : bound;
-}
-
 /** Who ran an entry: a receipt names its caller; a press on this page is yours. */
 export const entryCaller = (entry: TimelineEntry) =>
   (entry.basis as { receipt?: { caller?: { kind: string } } } | undefined)?.receipt?.caller
@@ -181,8 +174,7 @@ export function JournalButtons({
 
 /**
  * The Timeline's head: the latest Work edit (who made it, its state, the Work revision), unless a
- * command ran after it; else the latest entry, in one line. Consent windows are the topbar sweep's
- * (ADR 0035 rule 6). The full history opens beneath it; it never takes a row of its own.
+ * command ran after it; else the latest entry, in one line. The full history opens beneath it; it never takes a row of its own.
  */
 export function TimelineHead({
   owner,
@@ -203,7 +195,6 @@ export function TimelineHead({
       (row) =>
         row.kind === "journal" ||
         row.kind === "receipt" ||
-        row.kind === "consent" ||
         (row.kind === "press" && verbs[row.entry.verb ?? ""]?.kind === "command"),
     ) ?? rows.at(-1);
   const step = last?.kind === "journal" ? last.step : undefined;

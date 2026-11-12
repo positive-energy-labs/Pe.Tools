@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { deepEqual, useNavigate, useSearch, useRouter } from "@tanstack/react-router";
 import { resolveWorkbenchConfig } from "../config";
 import {
-  selectApprovals,
   selectRunStatus,
   selectTurnFailure,
 } from "@pe/agent-contracts/chat-state";
@@ -149,7 +148,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         lifecycle: state.lifecycle,
         running: selectRunStatus(state) !== "idle",
         failure: selectTurnFailure(state),
-        runApprovals: selectApprovals(state).filter((ask) => ask.scope === "run"),
       })).pipe(Atom.withEquality(deepEqual)),
     [transcript],
   );
@@ -165,7 +163,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const turnFailure = chat.failure;
   const chatId = chat.id;
   const lifecycleRevision = chat.lifecycle.revision;
-  const runApprovals = chat.runApprovals;
 
   /** Every verb: clear the last complaint, run, and say what failed. */
   const attempt = useCallback(
@@ -367,7 +364,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     () => ({
       store,
       config,
-      runApprovals,
       bodyAtom,
       loading,
       error,
@@ -431,8 +427,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
           await refreshThreads();
         })),
       deleteThread,
-      resolveApproval: async (requestId, optionId) =>
-        onThread((id) => client.permission(id, requestId, optionId))(),
       answerQuestion: async (requestId, action, content) =>
         onThread((id) => client.question(id, requestId, action, content))(),
       forkThread: async (providerId, threadId) =>
@@ -443,7 +437,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [
       attempt,
       bodyAtom,
-      runApprovals,
       chatId,
       lifecycleRevision,
       client,

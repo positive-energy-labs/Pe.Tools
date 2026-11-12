@@ -77,6 +77,7 @@ const session = (sessionId) => ({
     availableModes: [
       { id: "default", name: "Default" },
       { id: "read-only", name: "Read-only" },
+      { id: "agent-full-access", name: "Full access" },
       { id: "auto", name: "Auto" },
       { id: "bypassPermissions", name: "Bypass permissions" },
     ],
@@ -93,6 +94,7 @@ const session = (sessionId) => ({
 });
 let cancelled = () => {};
 let toolEnv = {};
+let sessionMeta;
 const bindToolEnv = (mcpServers) => {
   toolEnv = Object.fromEntries(
     (mcpServers.find((server) => server.name === "pea")?.env ?? []).map(({ name, value }) => [
@@ -124,7 +126,8 @@ new AgentSideConnection(
       };
     },
     authenticate: () => {},
-    async newSession({ mcpServers }) {
+    async newSession({ mcpServers, _meta }) {
+      sessionMeta = _meta;
       bindToolEnv(mcpServers);
       const auth = process.env.FAKE_ACP_AUTH ?? "account";
       if (auth === "required") throw RequestError.authRequired();
@@ -137,8 +140,9 @@ new AgentSideConnection(
       else await report();
       return session("fake-session");
     },
-    resumeSession({ sessionId, mcpServers }) {
+    resumeSession({ sessionId, mcpServers, _meta }) {
       if (sessionId === "lost") throw RequestError.invalidParams({ sessionId });
+      sessionMeta = _meta;
       bindToolEnv(mcpServers);
       const { sessionId: _, ...rest } = session(sessionId);
       return rest;
@@ -385,6 +389,26 @@ new AgentSideConnection(
         );
         return { stopReason: "end_turn" };
       }
+      // The session `_meta` the host sent, and an init frame as the real adapter forwards it
+      // (`_claude/sdkMessage`): `init-clean` declares only Pea, `init-leak` adds connectors.
+      if (text === "meta") {
+        await say(`META=${JSON.stringify(sessionMeta ?? null)}`);
+        return { stopReason: "end_turn" };
+      }
+      if (text === "init-clean" || text === "init-leak") {
+        const leak = text === "init-leak";
+        await conn.extNotification("_claude/sdkMessage", {
+          sessionId,
+          message: {
+            type: "system",
+            subtype: "init",
+            tools: ["Bash", "Read", "mcp__pea__pe_find", ...(leak ? ["CronCreate", "mcp__claude_ai_Gmail__send_message"] : [])],
+            mcp_servers: [{ name: "pea", status: "connected" }, ...(leak ? [{ name: "claude.ai Gmail", status: "connected" }] : [])],
+          },
+        });
+        await say("init sent");
+        return new Promise((resolve) => (cancelled = () => resolve({ stopReason: "cancelled" })));
+      }
       if (text === "env") {
         for (const name of [
           "CODEX_CONFIG",
@@ -420,6 +444,37 @@ new AgentSideConnection(
           sessionId,
           update: { sessionUpdate: "session_info_update", title: "Fake title" },
         });
+        return { stopReason: "end_turn" };
+      }
+      // R1 (homes slice 3): one permission request per ACP tool kind; the agent records each answer.
+      if (text === "permission every-kind") {
+        const record = {};
+        for (const kind of [
+          "read",
+          "edit",
+          "delete",
+          "move",
+          "search",
+          "execute",
+          "think",
+          "fetch",
+          "switch_mode",
+          "other",
+        ]) {
+          const call = { toolCallId: `kind-${kind}`, title: `native ${kind}`, kind, status: "pending" };
+          await conn.sessionUpdate({ sessionId, update: { sessionUpdate: "tool_call", ...call } });
+          const answer = await conn.requestPermission({
+            sessionId,
+            toolCall: call,
+            options: [
+              { optionId: "yes", name: "Allow", kind: "allow_once" },
+              { optionId: "no", name: "Reject", kind: "reject_once" },
+            ],
+          });
+          record[kind] =
+            answer.outcome.outcome === "selected" ? answer.outcome.optionId : answer.outcome.outcome;
+        }
+        await say(`permission-record ${JSON.stringify(record)}`);
         return { stopReason: "end_turn" };
       }
       const toolCall = {

@@ -10,6 +10,7 @@ import type {
   ParsedPage,
 } from "#/grounded-doc/types";
 import { putParsedDoc } from "#/grounded-doc/parse-cache";
+import { parseWithLlamaCloud } from "@pe/mcps/llama-parse";
 
 export const Route = createFileRoute("/api/pdf-audit/parse")({
   server: {
@@ -55,29 +56,23 @@ export const Route = createFileRoute("/api/pdf-audit/parse")({
           uploadFile = fetched.file;
         }
 
-        // Dynamic import keeps the SDK out of the client bundle.
-        const { default: LlamaCloud } = await import("@llamaindex/llama-cloud");
-        const client = new LlamaCloud({ apiKey });
-
-        // Tier is LlamaParse's "thinking level": fast < cost_effective < agentic <
-        // agentic_plus. Override with PE_PDF_AUDIT_TIER; agentic_plus is the ceiling.
-        const tier = process.env.PE_PDF_AUDIT_TIER ?? "agentic";
-        const result = await client.parsing.parse(
-          {
-            tier,
-            version: "latest",
-            upload_file: uploadFile,
+        // The one LlamaParse call, shared with read_document, at its one tier (agentic_plus).
+        let result;
+        try {
+          result = await parseWithLlamaCloud({
+            // The doc lab's own parse is the person's press. Pea's sends are held at their doors
+            // (`read_document`, `family.attach-spec`) before they reach this route (ADR 0038 guard 3).
+            sender: "person",
+            file: uploadFile,
+            apiKey,
             expand: ["items", "markdown", "images_content_metadata"],
             // screenshot = full-page renders (page-lane background); embedded/layout =
             // extracted figures and layout crops shown in the images lane.
-            output_options: { images_to_save: ["screenshot", "embedded", "layout"] },
-          },
-          { timeout: 10 * 60_000 },
-        );
-
-        if (result.job.status !== "COMPLETED") {
+            imagesToSave: ["screenshot", "embedded", "layout"],
+          });
+        } catch (error) {
           return Response.json(
-            { error: result.job.error_message ?? `Parse job ${result.job.status}` },
+            { error: error instanceof Error ? error.message : "Parse job failed" },
             { status: 502 },
           );
         }

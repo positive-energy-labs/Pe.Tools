@@ -26,7 +26,6 @@ import {
 import {
   RunConsents,
   runConsentsPromise,
-  type ConsentSink,
   type RunConsentsPromise,
 } from "../src/run-consent.ts";
 
@@ -134,15 +133,8 @@ export const sessionView = ({ state, ...view }: Omit<BridgeSessionView, "state">
   },
 });
 
-/** The Promise face with a transcript sink attached; persist defaults to a no-op, auto-approve on. */
-export const testConsents = (
-  emit: ConsentSink["emit"],
-  sink: Partial<Omit<ConsentSink, "emit">> = {},
-): RunConsentsPromise => {
-  const runs = runConsentsPromise(consentService());
-  runs.attach({ emit, persist: () => {}, autoApprove: () => true, ...sink });
-  return runs;
-};
+/** The Promise face of a fresh run registry. */
+export const testConsents = (): RunConsentsPromise => runConsentsPromise(consentService());
 
 /**
  * {@link HarnessThreads} for Promise tests: the live layer over the node file system, built in a

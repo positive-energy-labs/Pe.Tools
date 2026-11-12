@@ -71,7 +71,10 @@ test("recorded Fans roster traverses the real public native admission", async ()
 test.each(["human", "pea"] as const)("D03/C07: %s plan shares admitted inputs, preserves Work and submits its derived scope", async (actor) => {
   const f = await fixture();
   const work = await stage(f);
-  const caller = actor === "human" ? human : pea("plan-inputs");
+  // Every Pea command belongs to an open run (ADR 0038), a plan with no effects included.
+  const run = { thread: "plan-inputs", turn: "plan-turn" };
+  if (actor === "pea") f.runs.open(run);
+  const caller = actor === "human" ? human : { ...pea("plan-inputs"), run, root: run };
   const fans = (await f.saved.view({ ...f.key, route: "fans" }, "fans"))!;
   const held = await settle(Deferred.make<void>());
   closes.push(() => settle(Deferred.succeed(held, undefined).pipe(Effect.asVoid)));
@@ -143,8 +146,9 @@ test("a changed SDK incarnation between plan input reads refuses without applyin
   expect((await f.saved.view(f.key, "ducts"))?.handle).toEqual(work);
 });
 
-test.each(["reject", "deadline"] as const)(
-  "W11: real Pea %s controls the admitted sealed write",
+// ADR 0038: Pea's sealed write asks nobody. The run registry still ends it: a stopped run dispatches nothing.
+test.each(["stopped", "open"] as const)(
+  "W11: real Pea's admitted sealed write runs with no ask in an %s run",
   async (mode) => {
     const f = await fixture();
     const work = await stage(f);
@@ -159,21 +163,16 @@ test.each(["reject", "deadline"] as const)(
     };
     await command(f, "preview", "sheet.plan", work, caller);
     expect((await f.journal.wait("preview")).state).toBe("succeeded");
-    await command(f, "pea-commit", "sheet.apply", work, caller);
-    await vi.waitFor(() =>
-      expect(f.events.some((event) => event.kind === "permission_request")).toBe(true),
-    );
-    const ask = f.events.findLast((event) => event.kind === "permission_request")!;
-    if (ask.kind !== "permission_request") throw Error("No consent request");
-    if (mode === "reject") f.runs.decide(run.thread, ask.requestId, "stop_writes");
-    await f.advance(60_000);
-    const receipt = await f.journal.wait("pea-commit");
-    if (mode === "reject") {
-      expect(receipt.state).not.toBe("succeeded");
+    if (mode === "stopped") {
+      f.runs.close(run, "stopped");
+      await expect(command(f, "pea-commit", "sheet.apply", work, caller)).rejects.toThrow(
+        /run\.closed/,
+      );
       expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toEqual([]);
     } else {
+      await command(f, "pea-commit", "sheet.apply", work, caller);
+      const receipt = await f.journal.wait("pea-commit");
       expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
-      expect(receipt.consent).toMatchObject({ decision: { by: "deadline" } });
     }
   },
 );

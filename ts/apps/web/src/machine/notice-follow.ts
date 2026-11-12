@@ -49,17 +49,13 @@ export function followNotices(options: {
 export function cardOf(row: NoticeRow): MachineNotice {
   const act = row.act;
   const title =
-    act?.kind === "consent"
-      ? `${act.deadline ? "Reject? Pea will write" : "Allow Pea to write?"} · ${row.what}`
-      : act?.kind === "question"
-        ? `Pea is asking · ${row.what}`
-        : act?.kind === "reply"
-          ? row.what
-          : row.key.startsWith("thread:") && row.group === "failed"
-            ? `Pea stopped · ${row.what}`
-            : `${row.what} · ${row.verb}`;
-  const option = (o: { optionId: string } | undefined, name: string, kind: string) =>
-    o ? [{ optionId: o.optionId, name, kind }] : [];
+    act?.kind === "question"
+      ? `Pea is asking · ${row.what}`
+      : act?.kind === "reply"
+        ? row.what
+        : row.key.startsWith("thread:") && row.group === "failed"
+          ? `Pea stopped · ${row.what}`
+          : `${row.what} · ${row.verb}`;
   return {
     id: row.key,
     revision: row.revision,
@@ -67,31 +63,19 @@ export function cardOf(row: NoticeRow): MachineNotice {
     body: row.says ?? "",
     ...(row.url ? { href: row.url } : {}),
     ...(row.attended ? { attended: true } : {}),
-    ...(act?.kind === "consent"
+    // A held act draws as a plain card: the person confirms a held send from its Activity row.
+    ...(act?.kind === "question"
       ? {
           act: {
-            kind: "permission" as const,
+            kind: "question" as const,
             threadId: act.threadId,
             requestId: act.requestId,
-            ...(act.deadline ? { deadline: act.deadline } : {}),
-            options: [
-              ...option(act.allow, "Allow", "allow_once"),
-              ...option(act.reject, "Reject", "reject_once"),
-            ],
+            message: row.says ?? "",
+            requestedSchema: act.requestedSchema,
           },
         }
-      : act?.kind === "question"
-        ? {
-            act: {
-              kind: "question" as const,
-              threadId: act.threadId,
-              requestId: act.requestId,
-              message: row.says ?? "",
-              requestedSchema: act.requestedSchema,
-            },
-          }
-        : act?.kind === "reply" || act?.kind === "automatic-updates"
-          ? { act }
-          : {}),
+      : act?.kind === "reply" || act?.kind === "automatic-updates"
+        ? { act }
+        : {}),
   };
 }

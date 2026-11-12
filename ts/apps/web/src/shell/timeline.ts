@@ -87,11 +87,10 @@ type Journal = ReturnType<WorkJournal["read"]>;
 export interface TimelineRow {
   key: string;
   at: TimelineEntry["at"];
-  kind: "press" | "receipt" | "consent" | "journal" | "feed" | "checkpoint";
+  kind: "press" | "receipt" | "journal" | "feed" | "checkpoint";
   verb: string;
   entry: TimelineEntry;
   outcome?: InvocationOutcome;
-  consentUntil?: string | null;
   move?: Journal["moves"][number];
   step?: Journal["undo"][number];
   barrier?: TimelineBarrier;
@@ -103,7 +102,6 @@ export function projectTimeline(
   entries: readonly TimelineEntry[],
   verbs: TimelineVerbs,
   journal?: Journal | null,
-  now = Date.now(),
 ): TimelineRow[] {
   const latest = new Map<string, TimelineEntry>();
   entries.forEach((entry, index) => {
@@ -147,20 +145,14 @@ export function projectTimeline(
         ? verbs[entry.verb]
         : undefined;
     const outcome = receipt?.state ? invocationOutcome(receipt) : entry.outcome;
-    const window = outcome?.consentWindow;
-    const open =
-      !!window &&
-      ["queued", "running"].includes(outcome!.state) &&
-      (!window.deadline || new Date(window.deadline).getTime() > now);
     return [
       {
         key: id ? `receipt:${id}` : `event:${index}`,
         at: entry.at,
-        kind: open ? "consent" : entry.kind === "invocation" ? "press" : entry.kind,
+        kind: entry.kind === "invocation" ? "press" : entry.kind,
         verb: declaration?.label ?? command ?? entry.verb ?? entry.kind,
         entry,
         outcome,
-        ...(open && { consentUntil: window!.deadline ?? null }),
         barrier: receiptBarrier({ ...entry, outcome }) ?? undefined,
         startedAt:
           entry.kind === "receipt" && !receipt

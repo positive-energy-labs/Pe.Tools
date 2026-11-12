@@ -15,11 +15,8 @@ export const pea = (thread = "thread-1"): Caller => ({
   thread,
 });
 
-/** Explicit approved harness fixture. Boundary tests keep using unscoped pea(). */
-const fixtureRuns = testConsents((run, event) => {
-  if (event.kind === "permission_request")
-    queueMicrotask(() => fixtureRuns.decide(run.thread, event.requestId, "allow_now"));
-});
+/** A Pea caller inside an open run. Boundary tests keep using unscoped pea(), which has none. */
+const fixtureRuns = testConsents();
 const fixtures = new Map<string, Caller>();
 export const approvedPea = (thread = "thread-1"): Caller => {
   bindControl({ runs: fixtureRuns });

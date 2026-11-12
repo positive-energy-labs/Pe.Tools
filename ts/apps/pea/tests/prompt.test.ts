@@ -61,7 +61,6 @@ type Draft = Record<string, unknown> & { kind: HarnessEvent["kind"] };
 const log: HarnessEvent[] = [];
 const subscribers = new Set<ServerResponse>();
 const calls: string[] = [];
-const answers: string[] = [];
 /** The content type of every non-GET request: the host refuses a body route without JSON. */
 const contentTypes: (string | undefined)[] = [];
 const runtimeOwners: (string | undefined)[] = [];
@@ -172,30 +171,10 @@ const server = createServer(async (request, response) => {
       { kind: "update", turnId: null, update: { sessionUpdate: "available_commands_update" } },
       { kind: "update", turnId, update: { sessionUpdate: "tool_call", toolCallId: "tc" } },
       chunk(turnId, "there"),
-      {
-        kind: "permission_request",
-        turnId,
-        requestId: `req-${turns}`,
-        toolCall: { toolCallId: "tc", title: "Write file" },
-        options: [
-          { optionId: "always", name: "Always allow", kind: "allow_always" },
-          { optionId: "allow", name: "Allow", kind: "allow_once" },
-          { optionId: "reject", name: "Reject", kind: "reject_once" },
-        ],
-      },
-    );
-    return json({ turnId, state: "running" });
-  }
-  if (route === "POST /pe/threads/t1/permission") {
-    const { requestId, optionId } = JSON.parse(body);
-    answers.push(optionId);
-    const turnId = `turn-${turns}`;
-    append(
-      { kind: "permission_resolved", turnId, requestId, optionId, by: "user" },
       chunk(turnId, " world"),
       { kind: "turn_end", turnId, stopReason: "end_turn" },
     );
-    return json({ ok: true });
+    return json({ turnId, state: "running" });
   }
   if (route === "GET /pe/resources") {
     expect(JSON.parse(url.searchParams.get("keys")!)).toEqual([{ kind: "thread", thread: "t1" }]);
@@ -233,7 +212,7 @@ afterAll(() => {
   rmSync(fixtureRoot, { recursive: true, force: true });
 });
 
-test("foreign explicit host receives no providers, prompt or permission request", async () => {
+test("foreign explicit host receives no providers and no prompt", async () => {
   const foreignCalls: string[] = [];
   const foreign = createServer((request, response) => {
     foreignCalls.push(`${request.method} ${request.url}`);
@@ -246,7 +225,7 @@ test("foreign explicit host receives no providers, prompt or permission request"
   process.env[hostProcessIdentity.hostBaseUrlVariable] = `http://127.0.0.1:${port}`;
   try {
     await expect(
-      runPeaPromptTurn({ prompt: "must never reach foreign inference", allow: true }),
+      runPeaPromptTurn({ prompt: "must never reach foreign inference" }),
     ).rejects.toThrow(/verified service/);
     expect(foreignCalls).toEqual([]);
     expect(ensureRunning).not.toHaveBeenCalled();
@@ -257,7 +236,7 @@ test("foreign explicit host receives no providers, prompt or permission request"
   }
 });
 
-test("pea --prompt creates a thread, rejects permissions by default, and continues with --allow", async () => {
+test("pea --prompt creates a thread and continues it", async () => {
   const first = await runPeaPromptTurn({ prompt: "hi", harness: "codex", modelId: "m1" });
   expect(first).toEqual({
     ok: true,
@@ -267,21 +246,17 @@ test("pea --prompt creates a thread, rejects permissions by default, and continu
     model: "m1",
     stopReason: "end_turn",
     response: "Hello\nthere world",
-    rejected: ["Write file"],
   });
-  expect(answers).toEqual(["reject"]);
   expect(calls).toContain("POST /pe/threads");
 
   // Continuing replays from the thread's last seq, so turn-1 text never leaks into turn-2.
   calls.length = 0;
-  const second = await runPeaPromptTurn({ prompt: "again", threadId: "t1", allow: true });
+  const second = await runPeaPromptTurn({ prompt: "again", threadId: "t1" });
   expect(second).toMatchObject({
     ok: true,
     threadId: "t1",
     response: "Hello\nthere world",
-    rejected: [],
   });
-  expect(answers).toEqual(["reject", "allow"]);
   expect(calls).not.toContain("POST /pe/threads");
   expect(calls).toContain("GET /pe/threads/t1");
 
@@ -320,7 +295,7 @@ test("same-owner SDK startup ignores arbitrary launch command and revalidates it
   ensureRunning.mockReset();
   ensureRunning.mockImplementationOnce(async () => ({ state: "started", file: ownReceipt(port) }));
   try {
-    const result = await runPeaPromptTurn({ prompt: "hi", harness: "codex", allow: true });
+    const result = await runPeaPromptTurn({ prompt: "hi", harness: "codex" });
     expect(result.ok).toBe(true);
     expect(ensureRunning).toHaveBeenCalledExactlyOnceWith(
       runtimeRoot(),
@@ -427,7 +402,7 @@ test("same-address owner replacement receives the original owner label and refus
   const headerOffset = runtimeOwners.length;
   changeOwnerAfterProviders = true;
   try {
-    await expect(runPeaPromptTurn({ prompt: "must not infer", allow: true })).rejects.toThrow(
+    await expect(runPeaPromptTurn({ prompt: "must not infer" })).rejects.toThrow(
       /403/,
     );
     expect(calls.slice(offset)).toEqual(["GET /pe/providers", "POST /pe/threads"]);
@@ -441,7 +416,7 @@ test("same-address owner replacement receives the original owner label and refus
 test("held prompt context retains owner labels and cannot bind a foreign address", async () => {
   const offset = runtimeOwners.length;
   const own = await withInvocationContext({ hostBaseUrl: ownUrl }, () =>
-    runPeaPromptTurn({ prompt: "hi", allow: true }),
+    runPeaPromptTurn({ prompt: "hi" }),
   );
   expect(own.ok).toBe(true);
   expect(runtimeOwners.slice(offset).every((value) => value === owner)).toBe(true);

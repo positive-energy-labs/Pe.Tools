@@ -35,7 +35,6 @@ const config = defineConfig(({ mode, command }) => {
     "LLAMA_CLOUD_API_KEY",
     "ANTHROPIC_API_KEY",
     "PE_PDF_AUDIT_MODEL",
-    "PE_PDF_AUDIT_TIER",
   ];
   for (const key of serverKeys) {
     if (rootEnv[key] && !process.env[key]) process.env[key] = rootEnv[key];

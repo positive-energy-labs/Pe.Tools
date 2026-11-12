@@ -158,8 +158,7 @@ export function TypedChrome({ mount, document, recorded, thread }: { mount: Type
 export function TypedWrite({ mount, id }: { mount: TypedMount; id: string }) {
   const command=mount.spec.commands[id]!,handle=mount.action(id);
   if("kind" in command) return <><Button label={handle.label} refusal={handle.refusal} busy={handle.pending} onClick={()=>void handle.run().catch(()=>{})}>{handle.label}</Button>
-    {handle.failure?<span role="alert">{handle.failure}</span>:null}
-    {handle.consent?<Button label={`Reject ${handle.label}`} onClick={handle.consent.run}>Reject? {handle.consent.until}</Button>:null}</>;
+    {handle.failure?<span role="alert">{handle.failure}</span>:null}</>;
   return <PreviewAction handle={handle} label={handle.label} />;
 }
 /** Subject discovery precedes Work selection and acquisition. */
@@ -218,7 +217,6 @@ function TypedStart({mount}:{mount:TypedMount}) {
   if(!action) return null;
   return <><Button label="Start" refusal={action.refusal} busy={action.pending} onClick={()=>void action.run().catch(()=>{})}>Start</Button>
     {action.refusal?<span role="status">Start unavailable: {action.refusal}</span>:null}
-    {action.consent?<Button label="Reject Start" onClick={action.consent.run}>Reject? {action.consent.until}</Button>:null}
     {action.failure?<span role="alert">{action.failure}</span>:null}</>;
 }
 

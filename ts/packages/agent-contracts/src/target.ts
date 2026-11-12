@@ -23,11 +23,29 @@ export const sameAddress = (a: Address, b: Address): boolean =>
 
 // The bridge identity already includes process incarnation. SDK labels are recovery choices,
 // never execution identities. openId must be minted for each Document lifetime by Revit.
+// Exception (bridgeSessionFor): results and the machine map print the SDK id (`pe.app-25`), and a
+// caller copies it into `session`. The caller's label is mapped to the one connected bridge id at the
+// tool boundary, so execution, admission and receipts still carry only the bridge id.
 export const documentRefSchema = z.strictObject({
   session: z.string().min(1),
   openId: z.string().min(1),
 });
 export type DocumentRef = z.infer<typeof documentRefSchema>;
+
+/**
+ * The bridge session id a caller's `session` names: a bridge id as it is, else the one connected
+ * attachment whose SDK id it is. An unknown or shared label is returned unchanged for the resolver to refuse.
+ */
+export function bridgeSessionFor(
+  session: string,
+  attachments: readonly { sessionId?: string | null; sdkSessionId?: string | null; connected: boolean }[],
+): string {
+  if (attachments.some((attachment) => attachment.sessionId === session)) return session;
+  const named = attachments.filter(
+    (attachment) => attachment.connected && attachment.sessionId && attachment.sdkSessionId === session,
+  );
+  return named.length === 1 ? named[0]!.sessionId! : session;
+}
 
 export const documentRequestSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("open"), ref: documentRefSchema }),

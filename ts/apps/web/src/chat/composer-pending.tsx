@@ -4,7 +4,7 @@ import { Button } from "@pe/kit/lang/button";
 import type { Question } from "@pe/agent-contracts/chat-state";
 import { QuestionForm } from "./question-form";
 
-/** Pending questions keep their own identities; run consent is the topbar sweep's (ADR 0035 rule 6). */
+/** Pending questions keep their own identities. */
 export function ComposerPending({
   questions,
   answerQuestion,

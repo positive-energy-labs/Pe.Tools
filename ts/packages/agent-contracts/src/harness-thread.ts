@@ -505,7 +505,6 @@ export const queueRequestSchema = z.object({
   turnId: z.string(),
   action: z.enum(["steer", "cancel"]),
 });
-export const permissionResponseSchema = z.object({ requestId: z.string(), optionId: z.string() });
 /** `accept` carries the form's answers keyed by property; `decline` is "skip", the harness goes on. */
 export const questionResponseSchema = z.object({
   requestId: z.string(),

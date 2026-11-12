@@ -5,12 +5,6 @@ import { documentRefSchema } from "./target.ts";
 /** Immutable causal identity, minted before the harness receives a prompt. */
 export const runRefSchema = z.strictObject({ thread: z.string().min(1), turn: z.string().min(1) });
 export type RunRef = z.infer<typeof runRefSchema>;
-export const allowDecisionSchema = z.strictObject({
-  id: z.string().min(1),
-  by: z.enum(["human", "deadline"]),
-  at: z.string(),
-});
-export type AllowDecision = z.infer<typeof allowDecisionSchema>;
 export const originSchema = z.strictObject({
   caller: callerSchema,
   run: runRefSchema.nullable(),
@@ -35,19 +29,10 @@ export const effectSchema = z.discriminatedUnion("kind", [
 export type Effect = z.infer<typeof effectSchema>;
 export const footprintSchema = z.array(effectSchema);
 export type Footprint = z.infer<typeof footprintSchema>;
-export const commandConsentSchema = z.union([
-  z.strictObject({ run: runRefSchema, decision: allowDecisionSchema }),
-  z.strictObject({ by: z.literal("press") }),
-]);
-export type CommandConsent = z.infer<typeof commandConsentSchema>;
+/**
+ * A run in the host's registry (ADR 0038): open while its turn may act, closed by its end, a Stop
+ * or a host restart. Nothing waits on a person here; a guarded act returns "held" (`guards.ts`).
+ */
 export type RunConsent =
-  | { state: "idle" }
-  /** No deadline: auto-approve is off and a person must allow. */
-  | { state: "waiting"; requestId: string; deadline?: string; commands: string[] }
-  | { state: "allowed"; decision: AllowDecision }
-  | {
-      state: "closed";
-      reason: "completed" | "failed" | "stopped" | "restart";
-      decision: AllowDecision | null;
-      at: string;
-    };
+  | { state: "open" }
+  | { state: "closed"; reason: "completed" | "failed" | "stopped" | "restart"; at: string };

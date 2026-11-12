@@ -49,7 +49,7 @@ export function commandResources(
       )
         throw Error("Target document lifetime or kind differs from the command contract");
     },
-    async probe(dependency) {
+    async probe(dependency, moment) {
       switch (dependency.kind) {
         case "receipt": {
           const current = await readReceipt(dependency.probe.id);
@@ -94,11 +94,19 @@ export function commandResources(
           else assertFresh(deps.marks!, dependency.probe.ref, dependency.probe.takenAt);
           return true;
         case "incarnation": {
-          const actual = await readOriginalProcess(
-            dependency.probe.process.pid,
-            Date.parse(dependency.probe.process.processStartUtc),
-            deps.sdk,
-          );
+          // One gate runs at every async boundary of an action (about nine for a script), and the SDK
+          // reading is a `pe-revit session list --all` spawn each: ~0.5 s on a clean machine, seconds on
+          // one with many session rows. The SDK proves the incarnation at the first gate and at the last
+          // one before dispatch; between them the bridge attachment below, which carries the same pid and
+          // start and must still be connected, is the proof. A missing moment is the strongest reading.
+          const sdkProof = moment === undefined || moment === "admit" || moment === "dispatch";
+          const actual = sdkProof
+            ? await readOriginalProcess(
+                dependency.probe.process.pid,
+                Date.parse(dependency.probe.process.processStartUtc),
+                deps.sdk,
+              )
+            : dependency.probe.process;
           const target = dependency.probe.target;
           if (target.kind === "document" || target.kind === "session") {
             const id = target.kind === "document" ? target.ref.session : target.session;

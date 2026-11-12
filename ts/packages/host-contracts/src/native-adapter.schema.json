@@ -270,42 +270,6 @@
               "properties": {
                 "kind": {
                   "type": "string",
-                  "const": "permission"
-                },
-                "threadId": {
-                  "$ref": "#/$defs/__schema0"
-                },
-                "requestId": {
-                  "$ref": "#/$defs/__schema0"
-                },
-                "options": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "optionId": {
-                        "$ref": "#/$defs/__schema0"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "kind": {
-                        "$ref": "#/$defs/__schema0"
-                      }
-                    },
-                    "required": ["optionId", "name", "kind"],
-                    "additionalProperties": false
-                  }
-                }
-              },
-              "required": ["kind", "threadId", "requestId", "options"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "type": "string",
                   "const": "question"
                 },
                 "threadId": {

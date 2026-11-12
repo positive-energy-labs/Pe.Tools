@@ -47,6 +47,7 @@ import {
   type HarnessThreadsOptions,
 } from "../src/harness/threads.ts";
 import * as adapter from "../src/harness/adapter.ts";
+import { claudeSessionMeta } from "../src/harness/manifest.ts";
 import { productProvidersPath } from "../src/product-paths.ts";
 import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
 import type { Envelope } from "@pe/host-contracts/pe-revit-contract";
@@ -198,7 +199,7 @@ const kinds = (events: HarnessEvent[]) =>
     .map((e) => (e.kind === "update" ? `update:${e.update.sessionUpdate}` : e.kind));
 
 test.each(["claude", "codex"] as const)(
-  "%s: canonical Address Work joins find, stage, sealed preview, 60-second consent, journal apply and receipt in one chain",
+  "%s: canonical Address Work joins find, stage, sealed preview, journal apply and receipt in one chain, asking nobody",
   async (harness) => {
     const dir = await mkdtemp(join(root, "chain-"));
     const h = await host(),
@@ -408,32 +409,23 @@ test.each(["claude", "codex"] as const)(
       const id = (await call("POST", "/pe/threads", { providerId: harness })).json.id as string;
       await until(read, id, (body) => body.models.length > 0);
       bindControl({ runs: h.runs });
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
       await call("POST", `/pe/threads/${id}/prompt`, { text: `chain ${harness}` });
-      const waiting = await untilIo(
-        () => read(id),
-        (body) => !body.running || openAsks(body).some((ask) => ask.scope === "run"),
-      );
-      expect(openAsks(waiting), String(failures[0] ?? JSON.stringify(waiting.events))).toHaveLength(1);
-      expect(JSON.stringify(waiting.events)).toContain("chain find:");
-      const preview = (await journal.list(undefined, "preview"))[0];
-      expect(preview).toMatchObject({
-        state: "succeeded",
-        result: { previewOnly: true, seal: { requestHash: expect.any(String) } },
-      });
-      expect(writes).toHaveLength(0);
-      await vi.advanceTimersByTimeAsync(59_000);
-      expect(writes).toHaveLength(0);
-      await vi.advanceTimersByTimeAsync(1_000);
       const done = await untilIo(
         () => read(id),
         (body) => !body.running && turnEnds(body).length === 1,
       );
+      // ADR 0038: a write to Work and the model is not a guarded act, so the chain never asks.
+      expect(openAsks(done), String(failures[0] ?? JSON.stringify(done.events))).toEqual([]);
+      expect(JSON.stringify(done.events)).not.toContain("permission_request");
+      expect(JSON.stringify(done.events)).toContain("chain find:");
+      expect((await journal.list(undefined, "preview"))[0]).toMatchObject({
+        state: "succeeded",
+        result: { previewOnly: true, seal: { requestHash: expect.any(String) } },
+      });
       expect(JSON.stringify(done.events)).toContain("chain apply:");
       expect(writes).toHaveLength(1);
       expect(await journal.wait("apply")).toMatchObject({
         state: "succeeded",
-        consent: { decision: { by: "deadline" } },
         steps: [
           { kind: "native", state: "succeeded", dispatchedAt: expect.any(String) },
           { kind: "publication", state: "succeeded" },
@@ -444,7 +436,6 @@ test.each(["claude", "codex"] as const)(
       expect(stagedDucts(saved, fans).equipmentFlows).toEqual({});
       expect(writes[0]).toMatchObject({ equipmentFlows: [{ id: 14577391, cfm: 975, source: "chain" }] });
     } finally {
-      vi.useRealTimers();
       await h.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
@@ -772,6 +763,34 @@ test("subscription children exclude inherited inference credentials without chan
   for (const name of names) expect(process.env[name]).toBe("synthetic-inherited-credential");
 });
 
+test("a Claude session carries the harness manifest; the kernel still rides the system prompt", async () => {
+  const threads = await host();
+  const call = caller(threads);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  await call("POST", `/pe/threads/${created.json.id}/prompt`, { text: "meta" });
+  const body = await until(reader(threads), created.json.id, (b) => turnEnds(b).length === 1);
+  const meta = JSON.parse(said(body, "META")!);
+  expect(meta.claudeCode).toEqual(claudeSessionMeta().claudeCode);
+  expect(meta.systemPrompt.append).toBe("KERNEL: You are Pea.");
+});
+
+test("a child whose init frame has an undeclared server is refused and stopped; a clean one runs on", async () => {
+  const threads = await host();
+  const call = caller(threads);
+  const clean = await call("POST", "/pe/threads", { providerId: "claude" });
+  await call("POST", `/pe/threads/${clean.json.id}/prompt`, { text: "init-clean" });
+  const ok = await until(reader(threads), clean.json.id, (b) => said(b, "init sent") !== undefined || b.events.some((e) => e.kind === "update" && JSON.stringify(e).includes("init sent")));
+  expect(ok.events.some((e) => e.kind === "error")).toBe(false);
+  expect(ok.session).not.toBe("closed");
+  const leaked = await call("POST", "/pe/threads", { providerId: "claude" });
+  await call("POST", `/pe/threads/${leaked.json.id}/prompt`, { text: "init-leak" });
+  const refused = await until(reader(threads), leaked.json.id, (b) => b.events.some((e) => e.kind === "error"));
+  const error = refused.events.find((e) => e.kind === "error") as { message: string };
+  expect(error.message).toContain("refused to start this harness");
+  expect(error.message).toContain("claude.ai Gmail");
+  expect((await until(reader(threads), leaked.json.id, (b) => b.session === "closed")).session).toBe("closed");
+});
+
 async function envOf(threads: Host, providerId: string) {
   const call = caller(threads);
   const created = await call("POST", "/pe/threads", { providerId });
@@ -1014,10 +1033,10 @@ test("an endpoint provider is checked before save, and every thread carries its 
   // measured 2026-11-02. The cost is the Spawner closing a live leader, not this test.
 }, 90_000);
 
-test("both harnesses retain journal-safe modes", async () => {
+test("both harnesses run in their ungated shell mode (ADR 0036)", async () => {
   const threads = await host();
-  expect(said(await envOf(threads, "claude"), "MODE")).toBe("default");
-  expect(said(await envOf(threads, "codex"), "MODE")).toBe("read-only");
+  expect(said(await envOf(threads, "claude"), "MODE")).toBe("bypassPermissions");
+  expect(said(await envOf(threads, "codex"), "MODE")).toBe("agent-full-access");
 });
 
 // A 1x1 PNG, the same fixture the Mastra-era attachment test used.
@@ -1288,55 +1307,6 @@ test("one huge tool result is kept bounded in the record, the log and every read
 });
 
 for (const harness of ["claude", "codex"] as const) {
-  test.each([undefined, "other", "switch_mode"] as const)(
-    `${harness}: an unclassified native approval (%s) cannot authorize an effect`,
-    async (kind) => {
-      const realOpen = adapter.openAdapter;
-      const launched = vi.spyOn(adapter, "openAdapter").mockImplementation((...args) => {
-        const createClient = args[3];
-        args[3] = (connection) => {
-          const client = createClient(connection);
-          return {
-            ...client,
-            requestPermission: (request) =>
-              client.requestPermission({ ...request, toolCall: { ...request.toolCall, kind } }),
-          };
-        };
-        return realOpen(...args);
-      });
-      const h = await host(),
-        call = caller(h),
-        read = reader(h);
-      try {
-        const id = (await call("POST", "/pe/threads", { providerId: harness })).json.id as string;
-        await until(read, id, (body) => body.models.length > 0);
-        await call("POST", `/pe/threads/${id}/prompt`, { text: "permission" });
-        const body = await until(read, id, (body) => !body.running && turnEnds(body).length === 1);
-        expect(openAsks(body)).toHaveLength(0);
-        expect(body.events.some((event) => event.kind === "permission_request")).toBe(false);
-        expect(
-          body.events.some(
-            (event) =>
-              event.kind === "update" &&
-              event.update.sessionUpdate === "tool_call_update" &&
-              event.update.status === "failed" &&
-              String(event.update.title).includes("host semantic or causal CLI commands"),
-          ),
-        ).toBe(true);
-        expect(
-          body.events.some(
-            (event) =>
-              event.kind === "update" &&
-              event.update.sessionUpdate === "agent_message_chunk" &&
-              String((event.update.content as { text?: string })?.text).includes("chose no"),
-          ),
-        ).toBe(true);
-      } finally {
-        launched.mockRestore();
-        await h.close();
-      }
-    },
-  );
   test(`${harness}: delayed invocation and CLI child retain immutable old run across the next turn`, async () => {
     const calls: { token: string; harness: string }[] = [];
     const realOpen = adapter.openAdapter;
@@ -1433,7 +1403,7 @@ for (const harness of ["claude", "codex"] as const) {
       await h.close();
     }
   });
-  test(`${harness}: a native write approval is refused with the host-command boundary`, async () => {
+  test(`${harness}: a native write approval is allowed with no card (ADR 0036)`, async () => {
     const h = await host(),
       call = caller(h),
       read = reader(h);
@@ -1447,24 +1417,18 @@ for (const harness of ["claude", "codex"] as const) {
         body.events.some(
           (event) =>
             event.kind === "update" &&
-            String(event.update.title).includes("Native unjournaled writes are unsupported"),
-        ),
-      ).toBe(true);
-      expect(
-        body.events.some(
-          (event) =>
-            event.kind === "update" &&
             event.update.sessionUpdate === "agent_message_chunk" &&
-            String((event.update.content as { text?: string })?.text).includes("chose no"),
+            String((event.update.content as { text?: string })?.text).includes("chose yes"),
         ),
       ).toBe(true);
+      expect(JSON.stringify(body.events)).not.toContain("unsupported");
     } finally {
       await h.close();
     }
   });
 }
 
-test("Codex correlated Pea approval uses recorded identity and still refuses native shell/edit", async () => {
+test("Codex native shell and edit approvals are allowed with no card (ADR 0036)", async () => {
   const h = await host(),
     call = caller(h),
     read = reader(h);
@@ -1485,17 +1449,54 @@ test("Codex correlated Pea approval uses recorded identity and still refuses nat
       const turn = turnEnds(body).at(-1)!.turnId;
       const events = body.events.filter((event) => "turnId" in event && event.turnId === turn);
       expect(openAsks(body)).toHaveLength(0);
-      expect(JSON.stringify(events)).toContain(index === 0 ? "chose yes" : "chose no");
-      expect(JSON.stringify(events).includes("Native unjournaled writes are unsupported")).toBe(
-        index !== 0,
-      );
+      expect(JSON.stringify(events)).toContain("chose yes");
+      expect(JSON.stringify(events)).not.toContain("chose no");
     }
   } finally {
     await h.close();
   }
 });
 
-test("recorded run permission answers survive reconnect and restart without approving an old run", async () => {
+// R1 (homes MAP slice 3, ADR 0036/0038): Pea's native tools run. Mutant that turns this red: in
+// `requestPermission` (harness/threads.ts) answer `cancelled` when `request.toolCall.kind` is
+// "execute" (any per-kind refusal, as the deleted `isPeaTool` rule was).
+test("R1: one permission request per ACP tool kind is allowed, read from the fake agent's record", async () => {
+  const h = await host(),
+    call = caller(h),
+    read = reader(h);
+  try {
+    const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+    await until(read, id, (body) => body.models.length > 0);
+    await call("POST", `/pe/threads/${id}/prompt`, { text: "permission every-kind" });
+    const body = await until(read, id, (body) => !body.running && turnEnds(body).length === 1);
+    const said = body.events
+      .flatMap((event) =>
+        event.kind === "update" && event.update.sessionUpdate === "agent_message_chunk"
+          ? [String((event.update.content as { text?: string })?.text ?? "")]
+          : [],
+      )
+      .join("");
+    const record = JSON.parse(/permission-record (\{.*\})/.exec(said)![1]!);
+    expect(record).toEqual({
+      read: "yes",
+      edit: "yes",
+      delete: "yes",
+      move: "yes",
+      search: "yes",
+      execute: "yes",
+      think: "yes",
+      fetch: "yes",
+      switch_mode: "yes",
+      other: "yes",
+    });
+    // Nothing asked a person: no card was written for any of them.
+    expect(body.events.some((event) => event.kind === "permission_request")).toBe(false);
+  } finally {
+    await h.close();
+  }
+});
+
+test("a host restart closes a run and Stop ends a completed turn's commands", async () => {
   const h = await host(),
     call = caller(h),
     read = reader(h),
@@ -1506,64 +1507,31 @@ test("recorded run permission answers survive reconnect and restart without appr
   await until(read, id, (body) => lastEcho(body) === "echo: hang");
   const run = { thread: id, turn },
     by: Caller = { kind: "pea", context: "host-fixture", thread: id, run, root: run };
-  const authorized = h.runs.authorize(originOf(by), "command", [
-    { kind: "file", path: "C:/user/result.json" },
-  ]);
-  const body = await until(read, id, (body) => openAsks(body).some((ask) => ask.scope === "run")),
-    ask = openAsks(body).find((ask) => ask.scope === "run")!;
-  const first = await call("POST", `/pe/threads/${id}/permission`, {
-    requestId: ask.requestId,
-    optionId: "allow_now",
-  });
-  expect(first.status).toBe(200);
-  await authorized;
-  const repeated = await call("POST", `/pe/threads/${id}/permission`, {
-    requestId: ask.requestId,
-    optionId: "stop_writes",
-  });
-  expect(repeated.json.decision).toEqual(first.json.decision);
+  // The turn's run is open with no person in the loop.
+  expect(() => h.runs.assertOpen(originOf(by))).not.toThrow();
+  expect(openAsks(await read(id))).toHaveLength(0);
   await h.close();
   const restarted = await host(),
     again = caller(restarted);
   try {
-    const recovered = await again("POST", `/pe/threads/${id}/permission`, {
-      requestId: ask.requestId,
-      optionId: "allow_now",
-    });
-    expect(recovered.json.decision).toEqual(first.json.decision);
     expect(() => restarted.runs.assertOpen(originOf(by))).toThrow("run.closed");
     const next = { thread: id, turn: randomUUID() };
     restarted.runs.open(next);
-    const allowed = await restarted.runs.authorize(
-      originOf({ ...by, run: next, root: next }),
-      "next",
-      [],
-    );
-    expect(allowed).toMatchObject({ decision: { id: ask.requestId } });
     restarted.runs.close(next, "completed");
-    expect((await again("POST", `/pe/threads/${id}/cancel`)).status).toBe(200);
+    // A command admitted in a turn that completed keeps going, until a Stop.
     expect(() =>
-      restarted.runs.checkpoint(originOf({ ...by, run: next, root: next }), allowed),
-    ).toThrow("consent.stopped");
-    const third = await host();
-    try {
-      const fresh = { thread: id, turn: randomUUID() };
-      third.runs.open(fresh);
-      const rejected = third.runs
-        .authorize(originOf({ ...by, run: fresh, root: fresh }), "fresh", [])
-        .catch((error) => error.message);
-      expect(openAsks(await reader(third)(id))).toHaveLength(1);
-      third.runs.revoke(id);
-      expect(await rejected).toContain("consent.stopped");
-    } finally {
-      await third.close();
-    }
+      restarted.runs.checkpoint(originOf({ ...by, run: next, root: next })),
+    ).not.toThrow();
+    expect((await again("POST", `/pe/threads/${id}/cancel`)).status).toBe(200);
+    expect(() => restarted.runs.checkpoint(originOf({ ...by, run: next, root: next }))).toThrow(
+      "run.stopped",
+    );
   } finally {
     await restarted.close();
   }
 });
 
-test("delegated thread processes carry host-bound root consent and Stop", async () => {
+test("delegated thread processes carry the host-bound root run and its Stop", async () => {
   const tokens: string[] = [];
   const realOpen = adapter.openAdapter;
   const launched = vi.spyOn(adapter, "openAdapter").mockImplementation((...args) => {
@@ -1602,63 +1570,16 @@ test("delegated thread processes carry host-bound root consent and Stop", async 
     await until(read, child, (body) => lastEcho(body) === "echo: hang");
     const childCaller = minted(childTurn);
     expect(childCaller.root).toEqual(parentCaller.run);
-    const pending = h.runs.authorize(originOf(childCaller), "child-command", [
-      { kind: "file", path: "C:/user/shared.json" },
-    ]);
+    expect(() => h.runs.assertOpen(originOf(childCaller))).not.toThrow();
     h.as = human;
-    const asking = await until(read, parent, (body) =>
-      openAsks(body).some((ask) => ask.scope === "run"),
-    );
-    const ask = openAsks(asking).find((ask) => ask.scope === "run")!;
-    await call("POST", `/pe/threads/${parent}/permission`, {
-      requestId: ask.requestId,
-      optionId: "allow_now",
-    });
-    const consent = await pending;
-    expect(
-      await h.runs.authorize(originOf(parentCaller), "parent-command", [
-        { kind: "file", path: "C:/user/other.json" },
-      ]),
-    ).toEqual(consent);
     await call("POST", `/pe/threads/${parent}/cancel`);
-    expect(() => h.runs.checkpoint(originOf(childCaller), consent)).toThrow("consent.stopped");
+    expect(() => h.runs.checkpoint(originOf(childCaller))).toThrow("run.stopped");
     await call("POST", `/pe/threads/${child}/cancel`);
   } finally {
     launched.mockRestore();
     await h.close();
   }
 }, 15000);
-
-test("restart rejects an open countdown and requires a fresh full window", async () => {
-  const first = await host();
-  const id = (await caller(first)("POST", "/pe/threads", { providerId: "claude" })).json
-    .id as string;
-  const run = { thread: id, turn: randomUUID() };
-  first.runs.open(run);
-  const by: Caller = { kind: "pea", context: "fixture", thread: id, run, root: run };
-  const stopped = first.runs
-    .authorize(originOf(by), "interrupted", [])
-    .catch((error) => error.message);
-  const ask = openAsks(await reader(first)(id))[0]!;
-  await first.close();
-  expect(await stopped).toContain("consent.stopped");
-  const second = await host();
-  try {
-    expect(openAsks(await reader(second)(id))).toHaveLength(0);
-    const next = { thread: id, turn: randomUUID() };
-    second.runs.open(next);
-    const rejected = second.runs
-      .authorize(originOf({ ...by, run: next, root: next }), "new", [])
-      .catch((error) => error.message);
-    const fresh = openAsks(await reader(second)(id))[0]!;
-    expect(fresh.requestId).not.toBe(ask.requestId);
-    expect(Date.parse(fresh.deadline!) - Date.now()).toBeGreaterThan(59_000);
-    second.runs.revoke(id);
-    expect(await rejected).toContain("consent.stopped");
-  } finally {
-    await second.close();
-  }
-});
 
 test("host shutdown settles a running turn and a queued prompt durably, even when the turn ignores cancel", async () => {
   const h = await host();

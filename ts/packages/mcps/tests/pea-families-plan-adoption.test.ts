@@ -1,4 +1,4 @@
-import { expect, onTestFinished, test, vi } from "vite-plus/test";
+import { expect, onTestFinished, test } from "vite-plus/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -225,14 +225,7 @@ test("Families HTTP apply adopts the same Pea thread's plan in the next minted t
     state: "succeeded",
   });
   const next = f.newTurn("reviewed-family");
-  const applying = f.invoke("next-turn-apply", next.token, "families.apply");
-  await vi.waitFor(async () => {
-    const receipt = (await f.journal.list()).find((row) => row.id === "next-turn-apply");
-    if (receipt?.state === "failed") throw Error(JSON.stringify(receipt));
-    expect(f.runs.commandWindow("next-turn-apply")).toBeDefined();
-  });
-  f.runs.decide(next.run.thread, f.runs.commandWindow("next-turn-apply")!.requestId, "allow_now");
-  const applied = await applying;
+  const applied = await f.invoke("next-turn-apply", next.token, "families.apply");
   expect(applied, JSON.stringify(applied)).toMatchObject({
     state: "succeeded",
     result: { native: { receipts: [{ familyId: 1, success: true }] } },
@@ -261,41 +254,15 @@ test("R7 Families HTTP applies reserve the adopted Plan across distinct outer pr
   expect(await f.invoke("first-preview", turn.token, "families.apply.preview")).toMatchObject({
     state: "succeeded",
   });
-  const before = f.dispatched.length;
-  const first = f.invoke("first-apply", turn.token, "families.apply");
-  let second: ReturnType<typeof f.invoke> | undefined;
-  try {
-    await vi.waitFor(() => expect(f.runs.commandWindow("first-apply")).toBeDefined());
-    // A new read-only preview must not reserve the inner plan; its later Apply must.
-    expect(await f.invoke("second-preview", turn.token, "families.apply.preview")).toMatchObject({
-      state: "succeeded",
-    });
-    second = f.invoke("second-apply", turn.token, "families.apply");
-    await vi.waitFor(async () =>
-      expect((await f.journal.list()).find((row) => row.id === "second-apply")).toBeDefined(),
-    );
-    const rows = (await f.journal.list()).filter((row) =>
-      ["first-apply", "second-apply"].includes(row.id),
-    );
-    expect(rows.filter((row) => row.refusal?.kind === "claimed")).toHaveLength(1);
-    expect(rows.find((row) => row.id === "second-apply")).toMatchObject({
-      state: "failed",
-      notDispatched: true,
-      steps: [],
-      refusal: {
-        kind: "claimed",
-        by: "first-apply",
-        claim: { kind: "receipt", id: "exclusive-plan" },
-      },
-    });
-    expect(f.dispatched.slice(before)).toEqual([]);
-    expect(f.dispatched.filter((operation) => operation === "families.apply")).toHaveLength(0);
-    f.runs.decide(turn.run.thread, f.runs.commandWindow("first-apply")!.requestId, "allow_now");
-    expect(await first).toMatchObject({ state: "succeeded" });
-    expect(await second).toMatchObject({ state: "failed", refusal: { kind: "claimed" } });
-    expect(f.dispatched.filter((operation) => operation === "families.apply")).toHaveLength(1);
-  } finally {
-    f.runs.closeAll();
-    await Promise.allSettled([first, ...(second ? [second] : [])]);
-  }
+  // A new read-only preview must not reserve the inner plan; its later Apply must.
+  expect(await f.invoke("second-preview", turn.token, "families.apply.preview")).toMatchObject({
+    state: "succeeded",
+  });
+  const rows = await Promise.all([
+    f.invoke("first-apply", turn.token, "families.apply"),
+    f.invoke("second-apply", turn.token, "families.apply"),
+  ]);
+  expect(rows.map((row) => row.state).sort()).toEqual(["failed", "succeeded"]);
+  expect(rows.find((row) => row.state === "failed")).toMatchObject({ notDispatched: true, steps: [] });
+  expect(f.dispatched.filter((operation) => operation === "families.apply")).toHaveLength(1);
 });

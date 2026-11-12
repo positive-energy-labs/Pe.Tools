@@ -40,6 +40,7 @@ import {
   type SessionStartResult,
 } from "@pe/host-contracts/pe-revit-contract";
 import { ActionIncomplete, type ActionExecution } from "./action-journal.ts";
+import { guardDiscard, guardSave, guards, type GuardedDocument } from "./guards.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { worksharingHint } from "./pea-source.ts";
@@ -345,11 +346,16 @@ async function observeLifecycle(
   return { target, effects, consumes, basis };
 }
 
+/**
+ * `guard` sees the documents the verb closes or saves, before anything is admitted or dispatched:
+ * a held act throws here, so its caller hears "held" at once (ADR 0038 rule 4).
+ */
 async function bindControl(
   ctx: CommandContext,
   read: SdkReceiptReader,
   session: Incarnation,
-  document?: SdkDocumentRef,
+  document: SdkDocumentRef | undefined,
+  guard: (documents: readonly GuardedDocument[]) => void,
 ): Promise<CommandBinding> {
   const { target, ...facts } = await observeLifecycle(
     ctx,
@@ -359,6 +365,15 @@ async function bindControl(
     document,
   );
   if (!target) throw refused("The original SDK process is unavailable");
+  // The guards' evidence is the SDK's own `doc list`: the session census carries no `isModified`.
+  // A list that cannot be read stands as one unread document, so the act is held.
+  if (guards(ctx.caller))
+    guard(
+      await listDocuments(session.selection, target.process, read).then(
+        (docs): GuardedDocument[] => docs.filter((doc) => !document || doc.openId === document.openId),
+        (): GuardedDocument[] => [{}],
+      ),
+    );
   return { ...facts, prepare: async () => ({ target, acquisition: null }) };
 }
 
@@ -680,12 +695,18 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
   const read = deps.sdk ?? readSdk;
   const entries = {
     "instances.restart": command(commands["instances.restart"], controlledPreparedSchema, {
-      bind: (ctx) => bindControl(ctx, read, ctx.admission.input.session),
+      bind: (ctx) =>
+        bindControl(ctx, read, ctx.admission.input.session, undefined, (docs) =>
+          guardDiscard(ctx.caller, docs, "restart"),
+        ),
       run: (ctx, execution) =>
         controlRun(ctx, execution, read, (session) => sessionHrArgv({ ...session, restart: true })),
     }),
     "instances.reset": command(commands["instances.reset"], controlledPreparedSchema, {
-      bind: (ctx) => bindControl(ctx, read, ctx.admission.input.session),
+      bind: (ctx) =>
+        bindControl(ctx, read, ctx.admission.input.session, undefined, (docs) =>
+          guardDiscard(ctx.caller, docs, "reset"),
+        ),
       run: (ctx, execution) =>
         controlRun(ctx, execution, read, (session) =>
           sessionResetArgv({
@@ -697,7 +718,10 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
         ),
     }),
     "instances.stop": command(commands["instances.stop"], controlledPreparedSchema, {
-      bind: (ctx) => bindControl(ctx, read, ctx.admission.input.session),
+      bind: (ctx) =>
+        bindControl(ctx, read, ctx.admission.input.session, undefined, (docs) =>
+          guardDiscard(ctx.caller, docs, "stop"),
+        ),
       run: (ctx, execution) =>
         controlRun(
           ctx,
@@ -714,7 +738,13 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
     }),
     "instances.close": command(commands["instances.close"], controlledPreparedSchema, {
       bind: (ctx) =>
-        bindControl(ctx, read, ctx.admission.input.session, ctx.admission.input.document),
+        bindControl(
+          ctx,
+          read,
+          ctx.admission.input.session,
+          ctx.admission.input.document,
+          (docs) => guardDiscard(ctx.caller, docs, "close"),
+        ),
       run: (ctx, execution) =>
         controlRun(ctx, execution, read, (session) =>
           docCloseArgv({
@@ -732,6 +762,7 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
           read,
           ctx.admission.input.session,
           ctx.admission.input.document,
+          (docs) => guardSave(ctx.caller, ctx.admission.input.to.kind, docs[0]),
         );
         const to = ctx.admission.input.to;
         if (to.kind !== "save-as") return binding;
@@ -775,7 +806,8 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
       }),
     }),
     "instances.dialogs": command(commands["instances.dialogs"], controlledPreparedSchema, {
-      bind: (ctx) => bindControl(ctx, read, ctx.admission.input.session),
+      // Dismissing a window closes no document: nothing to guard.
+      bind: (ctx) => bindControl(ctx, read, ctx.admission.input.session, undefined, () => {}),
       run: (ctx, execution) => Effect.gen(function* () {
         const { target } = execution.prepared;
         let input = execution.recorded("native", "instances.dialogs")?.input as
@@ -1022,6 +1054,17 @@ function cleanupCommand(read: SdkReceiptReader) {
     bind: async (ctx) => {
       const { acquisition: id, unsaved } = ctx.admission.input;
       const acquired = heldAcquisition(ctx, id);
+      // Guard 2 (ADR 0038), read here so a held cleanup answers at once: discarding is the person's
+      // act while the acquisition's open project document has unsaved changes.
+      if (unsaved === "discard" && acquired.document && guards(ctx.caller)) {
+        const target = await releaseTarget(acquired, read);
+        const open = target
+          ? (await listDocuments(target.selection, target.process, read)).find(
+              (doc) => doc.openId === acquired.document!.sdkOpenId,
+            )
+          : undefined;
+        if (open) guardDiscard(ctx.caller, [open], "cleanup");
+      }
       return {
         basis: releaseBasis(ctx, id),
         claims: [{ kind: "reconciliation", id }],

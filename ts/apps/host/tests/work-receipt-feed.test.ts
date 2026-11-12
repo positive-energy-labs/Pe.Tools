@@ -50,19 +50,19 @@ test("subscribe before snapshot, bound terminals by count/bytes, retain every no
   );
   deliver(row("running", "running"));
   deliver(row("unknown", "unknown"));
-  ready([row("old"), row("waiting", "waiting")]);
+  ready([row("old"), row("second", "running")]);
   await Promise.resolve();
   const snapshot = values.at(-1);
   expect(snapshot).toMatchObject({ kind: "ready", receipts: { from: 2, through: 4 } });
   if (snapshot?.kind !== "ready") throw Error("missing acquisition");
-  expect(snapshot.receipts.rows.map((row) => row.id)).toEqual(["waiting", "running", "unknown"]);
+  expect(snapshot.receipts.rows.map((row) => row.id)).toEqual(["second", "running", "unknown"]);
   deliver(row("running", "succeeded", 2));
   expect(values.at(-1)).toMatchObject({
     kind: "ready", receipts: { through: 5 },
   });
   const next = values.at(-1);
   if (next?.kind !== "ready") throw Error("missing retained range");
-  expect(next.receipts.rows.map(row => row.id)).toEqual(["waiting", "unknown"]);
+  expect(next.receipts.rows.map(row => row.id)).toEqual(["second", "unknown"]);
   const count = values.length;
   deliver(row("running", "succeeded", 2));
   expect(values).toHaveLength(count);

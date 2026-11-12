@@ -9,7 +9,7 @@
  * "checked in Revit" is the caller's, derived from the plan entry's catalog effect (a TransactRead
  * rehearsal) and never from a response flag.
  */
-import { useEffect, useState, useReducer, type ReactNode } from "react";
+import { useEffect, useState, useReducer } from "react";
 import { z } from "zod";
 import { writePreviewSchema, writeResponseSchema } from "@pe/agent-contracts";
 import { Popover } from "@base-ui/react/popover";
@@ -58,7 +58,6 @@ export interface PlanHandle {
   readonly pending?: boolean;
   readonly refusal?: string | null;
   readonly failure?: string | null;
-  readonly consent?: { until: string; run(): void; content?:ReactNode } | null;
   plan(): unknown;
   apply(): unknown;
   cancel(): unknown;
@@ -76,12 +75,11 @@ const reviewSchema = z.object({
 });
 
 /** The handle stays authoritative across remounts; local state only redraws after a gesture. */
-export function PreviewAction({ handle, label, children, says = `Plan ${label} from current Work`, ...props }: {
+export function PreviewAction({ handle, label, says = `Plan ${label} from current Work`, ...props }: {
   handle: PlanHandle;
-  children?:ReactNode;
   label: string;
   says?: string;
-} & Pick<WriteActionProps, "refusal" | "busy" | "failed" | "reject" | "icon">) {
+} & Pick<WriteActionProps, "refusal" | "busy" | "failed" | "icon">) {
   const [, redraw] = useReducer((value) => value + 1, 0);
   const raw = handle.read();
   const parsed = reviewSchema.safeParse(raw);
@@ -101,9 +99,8 @@ export function PreviewAction({ handle, label, children, says = `Plan ${label} f
     catch (error) { return { message: error instanceof Error ? error.message : String(error) }; }
     finally { redraw(); }
   };
-  const consent=handle.consent??props.reject;
   return (
-    <WriteAction {...props} busy={handle.pending ?? props.busy} refusal={handle.refusal ?? props.refusal} reject={consent?{...consent,content:children??consent.content}:null} label={`plan ${label}`} says={says}
+    <WriteAction {...props} busy={handle.pending ?? props.busy} refusal={handle.refusal ?? props.refusal} label={`plan ${label}`} says={says}
     failed={raw != null && !parsed.success ? "Plan review unavailable" : (handle.failure ?? props.failed)
       }
     held={review && !review.stale ? {
@@ -146,11 +143,6 @@ export interface WriteActionProps {
     /** What the popover says once it went through. */
     done: string;
   };
-  /**
-   * The open Reject? window (ADR 0027): apply lands at `until` unless rejected. Present only while a
-   * receipt's consent window is open; the popover keeps the before and after visible meanwhile.
-   */
-  reject?: { until: string; run: () => void; content?: ReactNode } | null;
   /** Draw the button as one glyph (a dense row); `label` is its name and tooltip. */
   icon?: LucideIcon;
 }
@@ -167,7 +159,6 @@ export function WriteAction({
   failed = null,
   plan,
   apply,
-  reject = null,
   icon,
 }: WriteActionProps) {
   const [phase, setPhase] = useState<"planning" | "applying" | null>(null);
@@ -268,24 +259,13 @@ export function WriteAction({
             {outcome.text}
           </p>
         ) : null}
-        {reject?.content}
         {/* E8-03: the action refusal is an exception to sentence-free working surfaces; a hidden Apply must explain its hold. */}
-        {armed && !reject && apply.refusal ? (
+        {armed && apply.refusal ? (
           <p role="status" data-tone="caution" className="t-small">Apply is held: {apply.refusal}</p>
         ) : null}
-        {(armed || reject) && outcome?.kind !== "done" ? (
+        {armed && outcome?.kind !== "done" ? (
           <div className="mt-2 flex items-center justify-between gap-2">
-            {reject ? (
-              <Button
-                kind="framed"
-                label="Reject?"
-                reason={`Lands at ${reject.until}`}
-                onClick={reject.run}
-                data-write-reject=""
-              >
-                Reject? · {reject.until}
-              </Button>
-            ) : !apply.hidden ? (
+            {!apply.hidden ? (
               <Button
                 kind="commit"
                 label={apply.label}

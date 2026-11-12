@@ -103,7 +103,8 @@ export interface CapabilityCatalogSource {
 
 export type CapabilityContent = Pick<CapabilitySources, "packages" | "skills" | "pages"> & {
   diagnostics: CapabilityCatalog["diagnostics"];
-  sourceDiagnostics?: string[];
+  /** What each source reports, one entry per problem; absent or empty reads "ok". */
+  sourceDiagnostics?: { packages: string[]; skills: string[] };
 };
 
 /** Native metadata is scoped; every scope shares the same admitted content snapshot. */
@@ -178,10 +179,11 @@ export function createCapabilityCatalogSource(options: {
         : opsValue.bridgeCatalogError
           ? `bridge catalog unavailable: ${opsValue.bridgeCatalogError}`
           : "ok";
-    sources.packages = sources.skills =
-      admitted.status === "rejected"
-        ? `did not answer: ${message(admitted.reason)}`
-        : admitted.value.sourceDiagnostics?.join("; ") || "ok";
+    for (const source of ["packages", "skills"] as const)
+      sources[source] =
+        admitted.status === "rejected"
+          ? `did not answer: ${message(admitted.reason)}`
+          : admitted.value.sourceDiagnostics?.[source].join("; ") || "ok";
     const catalog: Omit<CapabilityCatalog, "machine"> = {
       at: new Date().toISOString(),
       bridgeSessionId: opsValue.bridgeSessionId,

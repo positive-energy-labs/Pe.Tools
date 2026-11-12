@@ -58,8 +58,7 @@
       "ts/apps/host/src/pe-routes.ts#createPeRoutes/handle:StringLiteral:StringLiteral:\"ducts.analysis-artifact\"",
       "ts/apps/host/src/pe-routes.ts#createPeRoutes/handle:StringLiteral:StringLiteral:\"family.spec\"",
       "ts/apps/host/src/pe-routes.ts#createPeRoutes:FunctionDeclaration:Comment:/** The route-document, Reading, capability and Families-view surface, host-owned. */",
-      "ts/apps/host/src/pe-routes.ts#hostPeRoutes/routes/ductsAnalysis/resolve:StringLiteral:StringLiteral:\"Ducts analysis requires the exact open project document\"",
-      "ts/apps/host/src/pe-routes.ts#hostPeRoutes/threads/autoApprove:StringLiteral:StringLiteral:\"chat\""
+      "ts/apps/host/src/pe-routes.ts#hostPeRoutes/routes/ductsAnalysis/resolve:StringLiteral:StringLiteral:\"Ducts analysis requires the exact open project document\""
     ]
   }
 }

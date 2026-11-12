@@ -7,7 +7,8 @@ import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
 import { peRead, peDo } from "../src/pea/capability-tools.ts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
-import { mintContext, retireContext } from "../../../apps/host/src/control.ts";
+import { peaTurns } from "./pea-turn.fixture.ts";
+import { retireContext } from "../../../apps/host/src/control.ts";
 
 const contexts: string[] = [];
 afterEach(() => {
@@ -87,8 +88,8 @@ test("Schedule A/B/A reads use thread defaults; apply requires matching Work and
         )
       : inner(input as string, init),
   );
-  const context = mintContext({ kind: "pea", thread: "t" });
-  contexts.push(context);
+  // A harness child acts inside its turn's open run (ADR 0038): every Pea command needs one.
+  const context = peaTurns().newTurn("t").token;
   vi.stubEnv("PE_CONTEXT", context);
   const run = (tool: typeof peRead | typeof peDo, input: unknown) =>
     withInvocationContext({ hostBaseUrl: f.base, headers: { "x-pe-context": context } }, () =>

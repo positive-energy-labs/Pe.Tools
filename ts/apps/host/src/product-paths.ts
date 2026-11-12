@@ -44,7 +44,6 @@ export const productPageStatePath = () => productStatePath("Pages");
 export const productAgentPath = () => productStatePath("Agent");
 /** Reserved for the T3 home, whose files are foreign to Pe. Named only: nothing reads or writes it yet. */
 export const productT3Path = () => productStatePath("T3");
-export const productRouteSettingsPath = () => productStatePath("route-settings");
 
 /** Immutable headless Ducts calculations, including their complete effective inputs. */
 export const productDuctsAnalysesPath = () => productStatePath("ducts", "analyses");

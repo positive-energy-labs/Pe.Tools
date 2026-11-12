@@ -11,6 +11,7 @@ import type { ActionReadingKey } from "./reading.ts";
 import { documentRefSchema, executionTargetSchema, type ExecutionTarget } from "./target.ts";
 import { nativeProcessSchema } from "./native-process.ts";
 import { packageDiagnosticSchema } from "./contribution.ts";
+import { heldSchema } from "./guards.ts";
 
 export const workHandleSchema = z.strictObject({
   key: workKeySchema,
@@ -126,6 +127,8 @@ export const commandRefusalSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("run"), code: z.string(), message: z.string() }),
   z.strictObject({ kind: z.literal("trust"), code: z.string(), message: z.string() }),
   z.strictObject({ kind: z.literal("domain"), code: z.string(), message: z.string() }),
+  // A guarded act (ADR 0038): not done, waiting on the person. Never a person's refusal.
+  heldSchema,
 ]);
 export type CommandRefusal = z.infer<typeof commandRefusalSchema>;
 export function commandCounts(
@@ -143,7 +146,6 @@ export function commandCounts(
       case "cancelled":
         counts.cancelled++;
         break;
-      case "waiting":
       case "running":
         counts.running++;
         break;
@@ -210,7 +212,7 @@ export function busyForWork<R extends { consumes: Consumed[]; state: string }>(
   key: import("./route-state.ts").WorkKey,
 ): R[] {
   return receiptsForWork(rows, key).filter((row) =>
-    ["waiting", "running", "unknown", "incomplete"].includes(row.state),
+    ["running", "unknown", "incomplete"].includes(row.state),
   );
 }
 

@@ -60,7 +60,6 @@ const action = (thread: string, actionId: string): Receipt => ({
       effects: [],
       consumes: [],
       claims: [],
-      consent: null,
       basis: null,
       target: { kind: "host" },
       input: {},

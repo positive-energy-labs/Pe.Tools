@@ -144,7 +144,6 @@ export type PeApiSchemas = Record<
   | "turnStateSchema"
   | "queueRequestSchema"
   | "hostLogPageSchema"
-  | "permissionResponseSchema"
   | "questionResponseSchema"
   | "forkThreadRequestSchema"
   | "traitRequestSchema"
@@ -192,7 +191,8 @@ export type PeApiSchemas = Record<
   | "pageTargetReadingSchema"
   | "ductCatalogReadingSchema"
   | "parsedDocViewSchema"
-  | "routeSettingsSnapshotSchema",
+  | "heldSendRequestSchema"
+  | "heldSendSchema",
   z.ZodType
 >;
 
@@ -213,8 +213,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
   const turnStateSchema = schemas.turnStateSchema as S["turnStateSchema"];
   const queueRequestSchema = schemas.queueRequestSchema as S["queueRequestSchema"];
   const hostLogPageSchema = schemas.hostLogPageSchema as S["hostLogPageSchema"];
-  const permissionResponseSchema =
-    schemas.permissionResponseSchema as S["permissionResponseSchema"];
   const questionResponseSchema = schemas.questionResponseSchema as S["questionResponseSchema"];
   const forkThreadRequestSchema = schemas.forkThreadRequestSchema as S["forkThreadRequestSchema"];
   const traitRequestSchema = schemas.traitRequestSchema as S["traitRequestSchema"];
@@ -622,15 +620,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "threads",
       "caller",
     ),
-    "thread.permission": route(
-      "POST",
-      "/pe/threads/:id/permission",
-      permissionResponseSchema,
-      ok,
-      "human",
-      "threads",
-      "human",
-    ),
     "thread.question": route(
       "POST",
       "/pe/threads/:id/question",
@@ -771,6 +760,29 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "pe",
       "caller",
     ),
+    /**
+     * Guard 3 (ADR 0038): an outward send that is not the person's own is held here at once. The
+     * answer is the held record and its one notice row, never a wait and never the send.
+     */
+    "outward.hold": route(
+      "POST",
+      "/pe/outward/held",
+      schemas.heldSendRequestSchema as S["heldSendRequestSchema"],
+      z.object({ held: schemas.heldSendSchema as S["heldSendSchema"], message: z.string() }),
+      "caller",
+      "pe",
+      "caller",
+    ),
+    /** The person's Confirm on that notice row: Pe sends the held bytes and keeps the result. */
+    "outward.confirm": route(
+      "POST",
+      "/pe/outward/held/:id/confirm",
+      none,
+      ok,
+      "human",
+      "pe",
+      "human",
+    ),
     "diagnostics.submit": route(
       "POST",
       "/pe/diagnostics",
@@ -794,27 +806,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
     /** Query `after`, `kind`, `thread`, `limit`: one page of the host log after a cursor. */
     "log.read": route("GET", "/pe/log", none, hostLogPageSchema, "read", "pe", "read"),
     "work.list": route("GET", "/pe/route-state", none, z.array(object), "read", "pe", "read"),
-    "route-settings.get": route(
-      "GET",
-      "/pe/route-settings/:route",
-      none,
-      schemas.routeSettingsSnapshotSchema as S["routeSettingsSnapshotSchema"],
-      "read",
-      "pe",
-      "read",
-    ),
-    "route-settings.set": route(
-      "POST",
-      "/pe/route-settings/:route",
-      z.strictObject({
-        patch: z.record(z.string(), z.json()),
-        expectedRevision: z.number().int().nonnegative(),
-      }),
-      schemas.routeSettingsSnapshotSchema as S["routeSettingsSnapshotSchema"],
-      "human-or-pea",
-      "pe",
-      "human-or-pea",
-    ),
     "work.get": route("GET", "/pe/route-state/:route", none, object, "read", "pe", "read"),
     "work.apply": route(
       "POST",

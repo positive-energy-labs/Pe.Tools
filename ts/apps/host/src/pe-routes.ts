@@ -1,5 +1,6 @@
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
-import type { DocumentRef, Receipt } from "@pe/agent-contracts";
+import type { DocumentRef, HeldSend, Receipt } from "@pe/agent-contracts";
+import { held, heldSendRequestSchema } from "@pe/agent-contracts";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import {
   addressSchema,
@@ -82,6 +83,7 @@ import { PictureCaptureStore } from "./captures-route.ts";
 import {
   bindControl,
   callerThread,
+  requireHuman,
   currentCaller,
   refusalHeaders,
   workAuthorOf,
@@ -117,6 +119,7 @@ import type { MachineShareAdapter } from "./machine.ts";
 import {
   MachineOwner,
   hostMachineFace,
+  machineForRead,
   type MachineOptions,
   machineAcquisition,
   machineSessionAcquisition,
@@ -136,6 +139,8 @@ import {
   storedNoticesPath,
   type NoticeSources,
 } from "./notice-feed.ts";
+import { heldSend, heldSends, holdSend, releaseSend, subscribeHeldSends } from "./guards.ts";
+import { sendHeldParse } from "@pe/mcps/held-parse";
 import { observePageTarget } from "./pages-route.ts";
 import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
 import {
@@ -154,7 +159,6 @@ import {
 import { observePluginOperations } from "./plugin-receipts.ts";
 import { createPluginsHandler } from "./plugins-handler.ts";
 import { createPodRoutes } from "./pod-routes.ts";
-import { productRouteSettingsPath } from "./product-paths.ts";
 import {
   productAgentPath,
   productDuctsAnalysesPath,
@@ -172,7 +176,6 @@ import {
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
 import { bindRevoke } from "./revoke.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
-import { createRouteSettings } from "./route-settings.ts";
 import { RunConsents } from "./run-consent.ts";
 import { createScheduledTasks } from "./scheduled-tasks.ts";
 import { resolveSdkSession } from "./sdk-session.ts";
@@ -192,7 +195,8 @@ export interface HostWork {
 
 export interface PeRoutesOptions {
   inputs?: HostInputContext["Service"];
-  routeSettings?: ReturnType<typeof createRouteSettings>;
+  /** The person's Confirm on a held outward send; the product sends through the one upload path. */
+  sendHeld?: (send: HeldSend) => Promise<void>;
   workspace?: RouteWorkspace;
   registrations: readonly RouteWorkspaceRegistration[];
   store?: RouteDocumentStore;
@@ -245,7 +249,6 @@ const historicalPeRefusal = (inputs: HostInputContext["Service"] | undefined, me
 /** The route-document, Reading, capability and Families-view surface, host-owned. */
 export function createPeRoutes(options: PeRoutesOptions) {
   if (!options.workspace && !options.store) throw Error("Pe routes require their canonical workspace or live store");
-  const settings = options.routeSettings ?? createRouteSettings(productRouteSettingsPath());
   const work =
     options.workspace ??
     new RouteWorkspace({ registrations: options.registrations, store: options.store! });
@@ -356,15 +359,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const releaseViews = views.subscribe((intent) =>
       publish({ kind: "event", key: readingKey(request), value: intent }),
     );
-    const releaseSettings = settings.subscribe((route) =>
-      publish({
-        kind: "event",
-        key: readingKey(request),
-        value: { type: "route-settings-changed", route },
-      }),
-    );
     return () => {
-      releaseSettings();
       releaseViews();
       release();
     };
@@ -407,18 +402,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
     if (!declared || declared.route.owner !== "pe") return json({ error: "Unknown Pe route" }, 404);
     const denied = historicalPeRefusal(options.inputs, method, declared.id);
     if (denied) throw denied;
-    if (declared.id === "route-settings.get" || declared.id === "route-settings.set") {
-      try {
-        const route = declared.params.route!;
-        if (declared.id === "route-settings.get") return json(settings.read(route));
-        const { patch, expectedRevision } = peRoutes["route-settings.set"].body.parse(
-          await request.json(),
-        );
-        return json(settings.set(route, patch, expectedRevision));
-      } catch (error) {
-        return json({ error: message(error) }, error instanceof z.ZodError ? 400 : 409);
-      }
-    }
     if (declared.id === "space.scene-artifact") {
       const id = declared.params.id!;
       if (!/^[a-f0-9]{64}$/.test(id)) return json({ error: "Invalid scene id" }, 400);
@@ -594,6 +577,29 @@ export function createPeRoutes(options: PeRoutesOptions) {
       return updateResourceSubscriptions(request, observe, invocation.resourceOwner);
     if (method === "GET" && declared.id === "resources.stream")
       return resourceResponse(request, invocation.observe ?? observe, undefined, observe, invocation.closeResources, invocation.resourceOwner);
+    // Guard 3 (ADR 0038): a send that is not the person's own is recorded and answered "held" at
+    // once, with one notice row. The person's Confirm on that row runs it through the one upload path.
+    if (method === "POST" && declared.id === "outward.hold") {
+      const parsed = heldSendRequestSchema.safeParse(await body());
+      if (!parsed.success) return json({ error: "invalid held send" }, 400);
+      const send = holdSend(parsed.data, callerThread(caller), new Date().toISOString());
+      return json({
+        held: send,
+        message: held("send-outward", `'${send.path}'`, "The person confirms it from its notice.").message,
+      });
+    }
+    if (method === "POST" && declared.id === "outward.confirm") {
+      requireHuman(caller, url.pathname, "confirming an outward send");
+      const send = heldSend(declared.params.id!);
+      if (!send) return json({ error: "No held send with that id; it was confirmed or the host restarted." }, 404);
+      try {
+        await (options.sendHeld ?? sendHeldParse)(send);
+      } catch (error) {
+        return json({ error: message(error) }, 502);
+      }
+      releaseSend(send.id);
+      return json({ ok: true });
+    }
     // Agent feedback (owner ruling 2026-10-14): any admitted caller may file; the host stamps it.
     if (method === "POST" && declared.id === "agent-feedback.submit") {
       const parsed = agentFeedbackSchema.safeParse(await body());
@@ -1081,18 +1087,21 @@ export function createContributionContent(options: {
       skills: publication.skills,
       pages,
       diagnostics,
-      sourceDiagnostics: [
-        ...(bootstrapProblem ? [bootstrapProblem] : []),
-        ...publication.notices,
-        ...listing.unreadable.map((d) => `${d.folder}: ${d.message}`),
-        ...listing.packages.flatMap((p) =>
-          p.diagnostics.map((d) => `${p.id}/${d.path}: ${d.message}`),
-        ),
-        ...lifecycle
-          .inventory()
-          .filter((p) => p.status !== "active")
-          .map((p) => `${p.id}: ${p.status}${p.error ? `: ${p.error}` : ""}`),
-      ],
+      // Pod problems answer for `packages`; only the skill publication's own notices answer for `skills`.
+      sourceDiagnostics: {
+        packages: [
+          ...(bootstrapProblem ? [bootstrapProblem] : []),
+          ...listing.unreadable.map((d) => `${d.folder}: ${d.message}`),
+          ...listing.packages.flatMap((p) =>
+            p.diagnostics.map((d) => `${p.id}/${d.path}: ${d.message}`),
+          ),
+          ...lifecycle
+            .inventory()
+            .filter((p) => p.status !== "active")
+            .map((p) => `${p.id}: ${p.status}${p.error ? `: ${p.error}` : ""}`),
+        ],
+        skills: [...publication.notices],
+      },
     };
   }
   return {
@@ -1191,19 +1200,9 @@ function* hostPeRoutes(
   const providers = createProviders({ shellPath, spawner: yield* Spawner });
   const stopOperationHooks = observePluginOperations(journal, content.lifecycle.emit);
   const receiptThreads = createThreadReceiptAdapter(telemetry, () => threads.receiptSnapshot());
-  const routeSettings = createRouteSettings(productRouteSettingsPath());
   const threads = yield* makeHarnessThreads({
     admittedRoutes: () => routes.workspace.admittedRoutes(),
     runs,
-    // An unreadable settings file asks a person: unknown consent never applies by itself.
-    autoApprove: () => {
-      try {
-        return routeSettings.read("chat").values["autoApprove"] !== false;
-      } catch (error) {
-        console.warn(`Pea auto-approve unreadable; writes ask a person: ${String(error)}`);
-        return false;
-      }
-    },
     prepare: () => content.read(),
     providers,
     updatePending: update.automaticPending,
@@ -1330,6 +1329,7 @@ function* hostPeRoutes(
             works: noticeCache.works,
             machine,
             stored: readStoredNotices(storedNoticesPath()),
+            held: heldSends(),
           },
           Date.now(),
         ),
@@ -1350,6 +1350,7 @@ function* hostPeRoutes(
           .catch((error) => console.warn("Notice feed: Works unread", error));
       const releases = [
         journal.subscribe({ kinds: ["action"] }, receipt),
+        subscribeHeldSends(changed),
         threads.observe({ kind: "threads" }, changed) ?? (() => {}),
         routes.workspace.subscribeUncaptured(readWorks),
         bridge?.subscribe(readWorks) ?? (() => {}),
@@ -1394,7 +1395,9 @@ function* hostPeRoutes(
   const catalog = createCapabilityCatalogSource({
     hostBaseUrl,
     registrations,
-    machine: () => hostMachineFace.refresh(),
+    // A catalog read used to start a census pass of its own (`session list --all` plus holdings per
+    // session: 1 to 3 s here, far more with a big cloud model) although the poll already ran one.
+    machine: () => machineForRead(hostMachineFace.current(), () => hostMachineFace.refresh()),
     content: async () => {
       await podRoutes.list();
       return content.read();
@@ -1412,7 +1415,6 @@ function* hostPeRoutes(
     hostMachineFace,
   );
   const routes = createPeRoutes({
-    routeSettings,
     inputs: inputContext._tag === "Some" ? inputContext.value : undefined,
     workspace: hostWork?.workspace,
     registrations,

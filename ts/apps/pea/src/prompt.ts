@@ -3,8 +3,8 @@ import { createPeClient } from "@pe/agent-contracts/pe-api";
  * `pea --prompt` - one headless turn on a harness thread (ADR 0015: the harness drives).
  *
  * Creates (or, with `--thread`, continues) a host harness thread, posts the prompt, and follows
- * the thread's SSE event log until that turn ends. Permission requests are answered with
- * `reject_once` unless `--allow`. A question card ends the turn with `stopReason: "question"` and the
+ * the thread's SSE event log until that turn ends. Nothing asks for permission (ADR 0038): a
+ * guarded act comes back held in the tool result. A question card ends the turn with `stopReason: "question"` and the
  * questions as the response; the next `--thread` prompt carries the answers. Prints `{ ok, host,
  * threadId, harness, model, stopReason, response }`.
  */
@@ -40,8 +40,6 @@ export interface PeaPromptRequest {
   modelId?: string;
   json?: boolean;
   timeoutSeconds?: number;
-  /** Answer permission requests with `allow_once`; otherwise `reject_once`. */
-  allow?: boolean;
 }
 
 export interface PeaPromptResult {
@@ -53,8 +51,6 @@ export interface PeaPromptResult {
   model: string | null;
   stopReason: string;
   response: string;
-  /** Tool calls whose permission request this run rejected (pass --allow to approve them). */
-  rejected: string[];
 }
 
 /** Run one headless prompt, print the result, and return the process exit code. */
@@ -71,7 +67,6 @@ export async function runPeaPrompt(request: PeaPromptRequest): Promise<number> {
       model: request.modelId ?? null,
       stopReason: "error",
       response: error instanceof Error ? error.message : String(error),
-      rejected: [],
     };
   }
 
@@ -79,8 +74,6 @@ export async function runPeaPrompt(request: PeaPromptRequest): Promise<number> {
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } else {
     process.stdout.write(`${result.response}\n`);
-    if (result.rejected.length > 0)
-      process.stdout.write(`rejected: ${result.rejected.join(", ")} (pass --allow)\n`);
     process.stdout.write(`threadId: ${result.threadId || "(none)"}\n`);
   }
   return result.ok ? 0 : 1;
@@ -108,7 +101,6 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
     model: request.modelId ?? thread.modelId,
     stopReason: "",
     response: "",
-    rejected: [],
   };
   const timeoutSeconds = request.timeoutSeconds ?? 900;
   const signal = AbortSignal.timeout(timeoutSeconds * 1000);
@@ -139,9 +131,7 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
       }
       if (event.kind === "error" && event.turnId === null)
         return { ...result, stopReason: "error", response: event.message };
-      if (!("turnId" in event) || event.turnId === null) {
-        if (event.kind !== "permission_request") continue;
-      } else if (event.turnId !== turnId) continue;
+      if (!("turnId" in event) || event.turnId !== turnId) continue;
       if (event.kind === "update") {
         if (event.turnId === null) continue;
         if (event.update.sessionUpdate !== "agent_message_chunk") breakBeforeNextChunk = true;
@@ -153,21 +143,6 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
             chunks.push(content.text);
           }
         }
-      } else if (event.kind === "permission_request") {
-        const want = request.allow ? "allow" : "reject";
-        // `allow_always` would outlive this one headless turn; take it only when nothing else allows.
-        const option =
-          event.options.find((candidate) => candidate.kind === `${want}_once`) ??
-          event.options.find((candidate) => candidate.kind.startsWith(want));
-        if (!option) throw new Error(`Permission ${event.requestId} offers no ${want} option.`);
-        if (!request.allow) result.rejected.push(event.toolCall?.title ?? event.requestId);
-        await client.call("thread.permission", {
-          params,
-          body: {
-            requestId: event.requestId,
-            optionId: option.optionId,
-          },
-        });
       } else if (event.kind === "question_request") {
         // Headless has no one to fill the question card: the turn ends here with the questions as
         // the response, and the caller's next `--prompt --thread` carries the answers.

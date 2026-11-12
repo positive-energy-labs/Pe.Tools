@@ -247,7 +247,8 @@ nodeTest("a replay gap keeps every new target part linked to its prompt sequence
     expect(response.status).toBe(200);
     const events = threads.historySnapshot()[0]?.events ?? [];
     const delivered = events.find((event) => event.kind === "prompt" && event.seq > 3);
-    expect(delivered).toMatchObject({ kind: "prompt", seq: 5 });
+    // The prompt is the first event after the damaged log: opening its run writes no event (ADR 0038).
+    expect(delivered).toMatchObject({ kind: "prompt", seq: 4 });
     const parts = events.filter((event) => event.kind === "turn_element_targets").filter((event) => event.seq > 3);
     expect(parts.length).toBeGreaterThan(0);
     for (const part of parts) expect(part.promptSeq).toBe(delivered?.seq);
