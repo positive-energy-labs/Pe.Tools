@@ -19,8 +19,8 @@ import { z } from "zod";
 import { command, io, refused, type CommandContext, type CommandBinding } from "./command-executor.ts";
 import { Effect } from "effect";
 import { createReadStream, existsSync } from "node:fs";
-import { constants, copyFile, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, extname, isAbsolute, relative, resolve } from "node:path";
+import { constants, copyFile, lstat, mkdir, readdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   docCloseArgv,
   docListArgv,
@@ -136,6 +136,34 @@ async function removeReserved(root: string, path: string) {
   }
   await rm(path);
   return { removed: true };
+}
+
+/** Only empty directories may go: unrecorded files and links stay visible in the receipt. */
+async function removeEmptyAcquisitionRoot(root: string): Promise<string[]> {
+  const kept: string[] = [];
+  async function prune(path: string): Promise<void> {
+    const stat = await lstat(path).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!stat) return;
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      kept.push(path);
+      return;
+    }
+    const before = kept.length;
+    for (const name of await readdir(path)) await prune(join(path, name));
+    try {
+      await rmdir(path);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") return;
+      if (code !== "ENOTEMPTY" && code !== "EEXIST") throw error;
+      if (kept.length === before) kept.push(path);
+    }
+  }
+  await prune(root);
+  return kept;
 }
 
 /**
@@ -1058,6 +1086,7 @@ function cleanupCommand(read: SdkReceiptReader) {
     bind: async (ctx) => {
       const { acquisition: id, unsaved } = ctx.admission.input;
       const acquired = heldAcquisition(ctx, id);
+      const removals = temporaryFiles(acquired).filter((path) => existsSync(path));
       // Guard 2 (ADR 0038), read here so a held cleanup answers at once: discarding is the person's
       // act while the acquisition's open project document has unsaved changes.
       if (unsaved === "discard" && acquired.document && guards(ctx.caller)) {
@@ -1081,7 +1110,7 @@ function cleanupCommand(read: SdkReceiptReader) {
                 },
               ]
             : []),
-          ...temporaryFiles(acquired).map((path) => ({ kind: "file" as const, path })),
+          ...removals.map((path) => ({ kind: "file" as const, path })),
         ],
         prepare: async () => {
           const target = await releaseTarget(acquired, read);
@@ -1108,7 +1137,7 @@ function cleanupCommand(read: SdkReceiptReader) {
             target,
             open: held !== undefined,
             acquired,
-            removals: temporaryFiles(acquired).filter((path) => existsSync(path)),
+            removals: removals.filter((path) => existsSync(path)),
           };
         },
       };
@@ -1122,6 +1151,7 @@ function cleanupCommand(read: SdkReceiptReader) {
         acquisition: id,
         closed: null as string | null,
         removed: [] as string[],
+        kept: [] as string[],
         stopped: null as { pid: number; processStartUtc: string } | null,
       };
       if (open) {
@@ -1142,10 +1172,11 @@ function cleanupCommand(read: SdkReceiptReader) {
         outcome.closed = sdkOpenId!;
       }
       for (const path of removals) {
-        yield* execution.step("file", "acquisition.remove", { to: path }, () => io(() => removeReserved(acquired.intent.root, path)),
+        const removed = yield* execution.step("file", "acquisition.remove", { to: path }, () => io(() => removeReserved(acquired.intent.root, path)),
         );
-        outcome.removed.push(path);
+        if (removed.removed) outcome.removed.push(path);
       }
+      outcome.kept = yield* io(() => removeEmptyAcquisitionRoot(acquired.intent.root));
       if (acquired.process && target) {
         // Only the Revit this acquisition started, and only once nothing else is open there.
         const left = yield* io(() => listDocuments(target.selection, target.process, read));
