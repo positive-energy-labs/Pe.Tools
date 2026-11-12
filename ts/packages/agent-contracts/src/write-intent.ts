@@ -86,11 +86,29 @@ interface WorkIntentOptions {
   derive?: (work: unknown) => unknown;
 }
 
-const workWriteInputSchema = (route: string) =>
-  z.strictObject({
-    work: route === ANY_ROUTE ? workHandleSchema : workHandleForRoute(route),
-    readWorks: z.record(z.string(), workHandleSchema).optional(),
-  });
+/**
+ * A Work command takes only its Work handle. A caller that sends the authored fields here is told
+ * where they go, in the refusal, so nobody reads this file to learn it.
+ */
+const workWriteInputSchema = (route: string, key?: string, authored?: z.ZodType | null) =>
+  z.strictObject(
+    {
+      work: route === ANY_ROUTE ? workHandleSchema : workHandleForRoute(route),
+      readWorks: z.record(z.string(), workHandleSchema).optional(),
+    },
+    {
+      error: (issue) => {
+        if (issue.code !== "unrecognized_keys" || !key) return undefined;
+        const work = route === ANY_ROUTE ? "the route's Work" : `route:${route} Work`;
+        const fields = authored instanceof z.ZodObject ? Object.keys(authored.shape) : issue.keys;
+        // A command with its own `derive` reads the whole staged Work, not one writeIntent cell.
+        const where = authored
+          ? `stage writeIntent["${key}"].edit = { "value": { ${fields.join(", ")} } } in ${work}`
+          : `stage it in ${work}`;
+        return `${key} takes only { work: { key, revision } }; its input is read from Work. To set it, ${where}, then send the accepted Work revision. Unrecognized here: ${issue.keys.join(", ")}.`;
+      },
+    },
+  );
 
 /** Named boundaries keep declaration emit out of the local generic entry closure (TS 6.0.3). */
 type IntentEntry<D extends Command> = Omit<D, "input" | "work"> & {
@@ -114,13 +132,15 @@ function intentEntry<D extends Command>(
   source: D,
   route: string,
   intent: WorkIntentBinding,
+  /** The command reads `writeIntent[key]`: its refusal can name that cell's fields. */
+  cell: boolean,
 ): IntentEntry<D> {
   const { input: _input, work: _work, ...metadata } = source;
   return {
     ...metadata,
     authoredInput: source.input as D["input"],
     workIntent: intent,
-    input: workWriteInputSchema(route),
+    input: workWriteInputSchema(route, intent.key, cell ? source.input : null),
     work: { route, bind: (_input: unknown, handle: WorkHandle) => ({ work: handle }) },
   };
 }
@@ -153,7 +173,10 @@ export function workIntent<const K extends string, const C extends Command>(
 ): { [P in K]: IntentEntry<C> & { derivation: Pick<WorkIntentBinding, "derive"> } } {
   const intent = bindIntent(route, key, definition, options);
   return {
-    [key]: { ...intentEntry(definition, route, intent), derivation: { derive: intent.derive } },
+    [key]: {
+      ...intentEntry(definition, route, intent, !options.derive),
+      derivation: { derive: intent.derive },
+    },
   } as {
     [P in K]: IntentEntry<C> & { derivation: Pick<WorkIntentBinding, "derive"> };
   };
@@ -190,7 +213,7 @@ export function workWriteCommands<
     source: D,
     phase: P,
   ): WriteEntry<D, P> => {
-    const { result: _result, ...metadata } = intentEntry(source, route, intent);
+    const { result: _result, ...metadata } = intentEntry(source, route, intent, !options.derive);
     return {
       ...metadata,
       result: writeCommandResultSchema(source.result as NonNullable<D["result"]>),

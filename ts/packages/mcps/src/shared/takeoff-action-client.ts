@@ -408,6 +408,37 @@ export class ActionResultError extends Error {
     super(`${action.id}: ${action.state}: ${"error" in action ? action.error : "outcome pending"}`);
   }
 }
+/**
+ * A receipt as a model reads it. The journal row keeps each step's native bytes, the prepared value
+ * and the consumed member bytes; a field family capture is 300 KB in each (gate-9d6ce645), which
+ * leaves a tool result no room for its answer. Over the bound those copies are cut and counted; the
+ * command's `result`, its state and its refusal are never touched. The journal keeps the rest.
+ */
+export const RECEIPT_RELAY_BYTES = 16_000;
+export function receiptForModel(row: unknown): unknown {
+  const size = (value: unknown) => JSON.stringify(value ?? null).length;
+  if (!row || typeof row !== "object" || size(row) <= RECEIPT_RELAY_BYTES) return row;
+  const receipt = row as {
+    id?: string;
+    steps?: Record<string, unknown>[];
+    consumes?: Record<string, unknown>[];
+    prepared?: unknown;
+  };
+  return {
+    ...receipt,
+    ...(receipt.steps && {
+      steps: receipt.steps.map(({ input, result, ...step }) => ({
+        ...step,
+        omittedBytes: size(input) + size(result),
+      })),
+    }),
+    ...(receipt.consumes && {
+      consumes: receipt.consumes.map(({ bytesBase64: _, ...fact }) => fact),
+    }),
+    ...(receipt.prepared !== undefined && { prepared: { omittedBytes: size(receipt.prepared) } }),
+    relay: `Step inputs and results, prepared values and consumed bytes are cut from this copy (${size(row)} bytes in the journal, action ${receipt.id}). The result is whole.`,
+  };
+}
 export function actionResult(row: ActionReceipt | DetachedAction): unknown {
   if (row.state !== "succeeded") throw new ActionResultError(row);
   return row.result;

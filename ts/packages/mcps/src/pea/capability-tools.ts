@@ -19,7 +19,7 @@ import {
   type ActionReceipt,
   actionReceiptSchema,
 } from "@pe/agent-contracts";
-import { type DetachedAction, recoverAction } from "../shared/takeoff-action-client.ts";
+import { type DetachedAction, receiptForModel, recoverAction } from "../shared/takeoff-action-client.ts";
 import { runCapability, readCapabilityIntent, type CapabilityIntent } from "../shared/admission.ts";
 /**
  * The three doors plus the one Scope door.
@@ -489,7 +489,9 @@ async function executeTool(
               ? call.ok
                 ? call.response
                 : call
-              : result,
+              : action
+                ? receiptForModel(result)
+                : result,
         ...(call ? { elapsedMs: call.elapsedMs } : {}),
       };
     } catch (error) {

@@ -1,4 +1,4 @@
-import { blobRefSchema } from "@pe/agent-contracts";
+import { blobRefSchema, FAMILY_MEMBER_DIR, isFamilyMember, type Consumed } from "@pe/agent-contracts";
 import { put, get } from "./action-blobs.ts";
 import { randomUUID, createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -30,7 +30,7 @@ const folderFor = (pod: string) =>
 export async function familySpecAsset(url: URL): Promise<Response> {
   try {
     const path = url.searchParams.get("path") ?? "";
-    if (!path.startsWith("settings/family/")) throw Error("Expected a family spec asset");
+    if (!path.startsWith(FAMILY_MEMBER_DIR)) throw Error("Expected a family spec asset");
     const file = safePath(await folderFor(url.searchParams.get("pod") ?? ""), path);
     const bytes = await readFile(file);
     const mime =
@@ -74,17 +74,77 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
       const root = userWritable(
         await runPods(deps, podFolder(member.pod, { podsRoot: deps.podsRoot })),
       );
-      if (!member.path.startsWith("settings/family/") || !member.path.endsWith(".json"))
-        throw Error("Attach to a captured member in settings/family/");
-      const memberBytes = await readFile(safePath(root, member.path));
+      // Every refusal here names the next step: the caller is a person or Pea, neither reads this file.
+      const save = `Save the open family first: stage writeIntent["family.capture"].edit = { "value": { "pod": "${member.pod}" } } in Family Work and run family.capture; it files the family under ${FAMILY_MEMBER_DIR} and returns the member to attach to.`;
+      if (!isFamilyMember(member.path))
+        throw refused(
+          `'${member.path}' is not a saved family: a cut sheet attaches to a .json member under ${FAMILY_MEMBER_DIR}. ${save}`,
+          "family.spec.member",
+        );
+      const memberBytes = await readFile(safePath(root, member.path)).catch(() => {
+        throw refused(`Pod '${member.pod}' has no member '${member.path}'. ${save}`, "family.spec.member");
+      });
       const family = JSON.parse(memberBytes.toString("utf8"));
-      if (!family.family?.name) throw Error("The member is not a family capture");
-      const file = new File([new Uint8Array(await get(source))], basename(source.fileName), {
+      if (!family.family?.name)
+        throw refused(
+          `'${member.path}' is not a family model (it has no family.name). ${save}`,
+          "family.spec.member",
+        );
+      // A path or URL is read once, here; its bytes are retained by digest and the read is a
+      // consumed fact, so resume and recovery see the same PDF the admission saw (cdb265c9).
+      const read = async (): Promise<{ bytes: Uint8Array; name: string }> => {
+        if ("digest" in source) return { bytes: await get(source), name: source.fileName };
+        if ("path" in source)
+          return {
+            bytes: await readFile(source.path).catch((error: NodeJS.ErrnoException) => {
+              throw refused(
+                `The host cannot read '${source.path}' (${error.code ?? error.message}). Give an absolute path to a PDF on the host's machine, a URL, or upload the file.`,
+                "family.spec.source",
+              );
+            }),
+            name: source.path,
+          };
+        const response = await fetch(source.url).catch((error: Error) => {
+          throw refused(`PDF download failed: ${error.message}`, "family.spec.source");
+        });
+        if (!response.ok)
+          throw refused(`PDF download failed (${response.status}) for ${source.url}`, "family.spec.source");
+        return {
+          bytes: new Uint8Array(await response.arrayBuffer()),
+          name: new URL(source.url).pathname || "document.pdf",
+        };
+      };
+      const fetched = await read();
+      const file = new File([new Uint8Array(fetched.bytes)], basename(fetched.name) || "document.pdf", {
         type: "application/pdf",
       });
       const bytes = await file.arrayBuffer();
       if (Buffer.from(bytes).subarray(0, 5).toString() !== "%PDF-")
-        throw Error("Source is not a PDF");
+        throw refused("Source is not a PDF: its bytes do not begin with %PDF-", "family.spec.source");
+      const sha256 = createHash("sha256").update(Buffer.from(bytes)).digest("hex");
+      const sourceFact: Consumed[] =
+        "path" in source
+          ? [
+              {
+                kind: "file",
+                probe: { path: source.path },
+                expected: sha256,
+                blob: await put(Buffer.from(bytes), file.name),
+              },
+            ]
+          : "url" in source
+            ? [
+                {
+                  kind: "capture",
+                  expected: sha256,
+                  probe: {
+                    blob: await put(Buffer.from(bytes), file.name),
+                    origin: { kind: "url", url: source.url },
+                    capturedAt: new Date().toISOString(),
+                  },
+                },
+              ]
+            : [];
       return {
         consumes: [
           {
@@ -92,7 +152,7 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
             probe: member,
             expected: createHash("sha256").update(memberBytes).digest("hex"),
           },
-
+          ...sourceFact,
         ],
         effects: [{ kind: "directory", path: dirname(safePath(root, member.path)) }],
         prepare: async () => {
