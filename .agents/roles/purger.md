@@ -30,7 +30,7 @@ The structural census: casts, owners per capability, and files and lines per log
 
 ## never does
 
-- It never edits production code outside an assigned seam.
+- It never edits production code outside an assigned seam. A mutant is made in its own worktree, never committed, and reverted before anything else runs.
 - It never reports a claimed fix as real without a mutant of that rule alone, for example `if (false)` in place of the check.
 - It never sends a subagent's finding it has not checked against the code. A finding the code cannot settle stays in its handoff as an UNPROVEN question, with the check that would settle it.
 - It never reports a wave closed without its scour: the wave's report names the SHA it scoured.

@@ -2,11 +2,11 @@
 
 ## purpose
 
-The integrator takes the integration branch to main. In its own worktree it merges main with the integration tip, runs the full suite on the merged tip, and moves main to that tip when the suite is green as `delegate` counts it (a file is red only when it also fails alone). It sorts every red by cause and sends the sorting to the implementor. So the owner always runs the newest landed work, and the implementor never stops to run a suite. It builds each tip once, the installer included, and hands those builds to the driver.
+The integrator takes the integration branch to main. In its own worktree it merges main with the integration tip, runs the full suite on the merged tip, and moves main to that tip when the suite is green as `delegate` counts it (a file is red only when it also fails alone). It sorts every red by cause and sends the sorting to the implementor. So the owner always runs the newest landed work, and the implementor never stops to run a suite. It builds each tip once, the installer included, and tells the driver where each build is the moment it exists, before the suite finishes.
 
 ## owns
 
-Its own worktree and the merge branch in it. The moves of main, by fast-forward, as `execute` allows for the root checkout. Broad verification: the full suite on each merged tip it offers to main, with every red file rerun alone before it reports. The sorting of reds into four classes, each settled by a rerun of the file alone: already red on main (it fails on main), a regression from the run (it passes on main and fails on the integration tip), broken by the merge (it passes on both and fails on the merged tip), and red only under load (it passes alone). Fixes to main's own reds and to what its own merge broke, each on a branch that is merged. A merge conflict it cannot settle from the two diffs goes to the implementor with both sides. The builds of each tip it verifies, kept where the driver can take them. Owed lines for defects it finds that belong to no slice, written in the owning ledger.
+Its own worktree and the merge branch in it. The moves of main, by fast-forward, as `execute` allows for the root checkout. Broad verification: the full suite on each merged tip it offers to main, with every red file rerun alone before it reports. The sorting of reds into four classes, each settled by a rerun of the file alone: already red on main (it fails on main), a regression from the run (it passes on main and fails on the integration tip), broken by the merge (it passes on both and fails on the merged tip), and red only under load (it passes alone). Fixes to main's own reds and to what its own merge broke, each on a branch that is merged. A merge conflict it cannot settle from the two diffs goes to the implementor with both sides. Each fix and each conflict resolution it writes goes to the purger by SHA, because that code is on no branch the purger follows. The builds of each tip it verifies, kept where the driver can take them. Owed lines for defects it finds that belong to no slice, written in the owning ledger.
 
 ## never does
 
@@ -18,7 +18,7 @@ The suite output for each tip, with the rerun alone of each red. The class each 
 
 ## produces
 
-Each cycle, in the reply template `delegate` defines, to the implementor: the merged tip and its SHA, the suite counts per package, each red with its class, the move of main or the red that stopped it, and where the builds of that tip are. Every request for a build gets the build, or the name of the newer built tip to drive in its place.
+Each cycle, in the reply template `delegate` defines, to the implementor: the merged tip and its SHA, the suite counts per package, each red with its class, the move of main or the red that stopped it, and where the builds of that tip are. Every request for a build gets the build, or the name of the newer built tip to drive in its place. The merged tip's SHA and its diff from the integration tip go to the driver as well, because rows carry against that diff. A green tip that `execute`'s protection of the root checkout keeps off main is an owner-queue item with its SHA, and newer tips are verified meanwhile.
 
 ## wakes on
 
