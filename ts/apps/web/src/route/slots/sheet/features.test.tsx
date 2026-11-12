@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState } from "react";
 import { RegistryContext } from "@effect/atom-react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -105,4 +106,35 @@ test.each([null, { kind: "document" as const, ref: { session: "session", openId:
   }));
   expect(refresh).toHaveBeenCalledOnce();
   expect((await screen.findByRole("status")).textContent).toContain("Saved at firm");
+});
+
+// Mutant: omit the re-read after a refused stale-hash save; the sheet stays at 800.
+test("a refused stale-hash save re-reads the tier and draws the value now on disk", async () => {
+  action.mockClear();
+  const disk = { value: 800, sha256: "read-hash" };
+  const read = () => ({ settings: { ducts: [{ tier: "project", home: "project", name: "project",
+    path: "project/Settings/ducts.json", sha256: disk.sha256,
+    json: { criteria: { velocity: disk.value } } }] } });
+  const slot = { bindings: { velocity: setting("ducts", ["criteria", "velocity"], z.number(), ["project"], { label: "Supply velocity" }) } };
+  function Pane() {
+    const [value, setValue] = useState(read);
+    const ctx = { cells: { doc: {} }, page: { read: () => ({}) }, refresh: () => setValue(read()),
+      value: { status: "ready", current: true, value } };
+    return <SheetPane ctx={{ draw: ctx as never, slot }} />;
+  }
+  render(<RegistryContext value={makeAtomRegistry()}><Pane /></RegistryContext>);
+  expect(screen.getByText("800")).toBeTruthy();
+  disk.value = 820;
+  disk.sha256 = "outside-write-hash";
+  action.mockImplementation(async (request) => {
+    expect(request.input.expectedSha256).toBe("read-hash");
+    return { state: "failed", notDispatched: true, outcome: { state: "refused", reason: "project/Settings/ducts.json changed since it was read." },
+      error: "project/Settings/ducts.json changed since it was read." };
+  });
+  fireEvent.change(screen.getByRole("textbox", { name: "Supply velocity: value to save" }), { target: { value: "830" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save Supply velocity at the project home" }));
+  expect((await screen.findByRole("status")).textContent).toContain("changed since it was read");
+  expect(await screen.findByText("820")).toBeTruthy();
+  expect(screen.queryByText("800")).toBeNull();
+  expect(disk.value).toBe(820);
 });

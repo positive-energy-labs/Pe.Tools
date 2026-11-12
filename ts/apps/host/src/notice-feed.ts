@@ -238,7 +238,7 @@ function storedRow(notice: StoredNotice, now: number): NoticeDraft | null {
       says: notice.reason,
       at: notice.at,
       url: routeAddress("settings").link(),
-      detail: notice.path,
+      detail: notice.reason,
     };
   if (notice.place === FIRM_HOME_PLACE)
     return {
