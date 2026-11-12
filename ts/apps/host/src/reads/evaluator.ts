@@ -124,7 +124,7 @@ export interface ReadContext {
   native<K extends CatalogReadKey>(key: K, args: NativeArgs<K>): Promise<NativeValue<K>>;
   /** The firm file layer (ADR 0026): the firm's per-owner `<owner>.json` decoded by `schema`, else `seed` with why. */
   firm<T>(owner: string, schema: z.ZodType<T>, seed: T): Promise<FirmValue<T>>;
-  /** Every home tier's `Settings/<owner>.json` for the target model (ADR 0037 rule 8), most specific first. */
+  /** Every home tier's per-owner settings file for the target model (ADR 0037 rule 8), most specific first. */
   settings(owner: string, target: z.output<typeof documentRefSchema> | null): Promise<SettingTierRead[]>;
   collect<K, I, O>(
     keys: readonly K[],

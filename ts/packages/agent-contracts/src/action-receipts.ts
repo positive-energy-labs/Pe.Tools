@@ -218,7 +218,11 @@ export function invocationOutcome(row: ActionReceipt | ActionStatus): Invocation
     snapshots: row.snapshots?.map((snapshot) => snapshot.id) ?? [],
     ...(state === "outcome-unknown"
       ? { recovery: row.state === "incomplete" ? ("resume" as const) : ("reconcile" as const) }
-      : state === "failed" && "notDispatched" in row && row.notDispatched
+      : state === "refused" &&
+          row.state === "failed" &&
+          row.notDispatched &&
+          row.refusal?.kind !== "held" &&
+          row.refusal?.kind !== "claimed"
         ? { recovery: "retry" as const }
         : {}),
   };

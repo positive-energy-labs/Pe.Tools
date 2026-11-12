@@ -5,7 +5,8 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
-import { GUARDED_ACTS, type Caller, type HeldSend } from "@pe/agent-contracts";
+import { GUARDED_ACTS, heldSendSchema, type Caller, type HeldSend } from "@pe/agent-contracts";
+import { z } from "zod";
 import { CommandRejected } from "../src/command-executor.ts";
 import { guardDiscard, guardSave, guardSend, guards, heldSends } from "../src/guards.ts";
 import { noticeRows } from "../src/notice-feed.ts";
@@ -58,9 +59,9 @@ test("only the person is not guarded: Pea, a Page, an MCP device, a service and 
   const callers: Caller[] = [
     pea(),
     { kind: "anonymous" },
-    { kind: "page", page: "p", context: "c" } as unknown as Caller,
-    { kind: "external-mcp", device: "d" } as unknown as Caller,
-    { kind: "service", service: "s" } as unknown as Caller,
+    { kind: "page", page: "page:@pages/p" },
+    { kind: "external-mcp", device: "d", context: "c", label: "Device" },
+    { kind: "service", service: "s" },
   ];
   for (const caller of callers) expect(guards(caller), caller.kind).toBe(true);
   expect(guards(human)).toBe(false);
@@ -105,13 +106,13 @@ test("guard 3: Pea's send is held at once with one notice row; only the person's
 
   const hold = await post(pea("sender"), "/pe/outward/held", request);
   expect(hold.status).toBe(200);
-  const { held, message } = (await hold.json()) as { held: HeldSend; message: string };
+  const { held, message } = z.object({ held: heldSendSchema, message: z.string() }).parse(await hold.json());
   expect(message).toMatch(/^Held, not done/);
   expect(message).not.toMatch(/refus|reject|declin|denied/i);
   expect(held).toMatchObject({ ...request, thread: "sender" });
   expect(sendHeld).not.toHaveBeenCalled();
   // The same bytes and pages asked twice are one held send, so one notice row.
-  expect(((await (await post(pea("sender"), "/pe/outward/held", request)).json()) as { held: HeldSend }).held.id).toBe(held.id);
+  expect(z.object({ held: heldSendSchema }).parse(await (await post(pea("sender"), "/pe/outward/held", request)).json()).held.id).toBe(held.id);
   expect(heldSends()).toHaveLength(before + 1);
   const rows = noticeRows(
     { threads: [], receipts: [], works: [], machine: null, stored: [], held: heldSends() },

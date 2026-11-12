@@ -46,7 +46,7 @@ const drawn = (read: object, doc: Record<string, unknown>, at: (path: readonly s
 const snapshot = { nodes: [], segments: [], slots: { fanStatic: "Old ESP" } };
 
 test("slot names use project and firm settings and never stage Work", () => {
-  const binding = (fansSheet.bindings as Record<string, import("@pe/agent-contracts/slots").SheetBinding>)["setting.ducts.parameters.fanStatic"];
+  const binding = Object.entries(fansSheet.bindings).find(([key]) => key === "setting.ducts.parameters.fanStatic")?.[1];
   expect(binding).toMatchObject({ kind: "setting", owner: "ducts", path: ["parameters", "fanStatic"], tiers: ["project", "firm"] });
   expect(fansDocumentSchema.parse({})).not.toHaveProperty("parameters");
 });

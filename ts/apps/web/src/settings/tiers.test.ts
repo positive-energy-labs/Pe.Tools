@@ -13,10 +13,10 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { ductsFirmSchema, ductsDocumentSchema, fansDocumentSchema, ductParameterSlots, neutralFansWork, type DuctsCriteriaCell } from "@pe/agent-contracts";
+import { fansSheetData, ductsFirmSchema, ductsDocumentSchema, fansDocumentSchema, ductParameterSlots, neutralFansWork, type DuctsCriteriaCell } from "@pe/agent-contracts";
 import { readStoredNotices } from "@pe/host-contracts/store";
 import { resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
-import type { SheetSnapshot } from "@pe/ducts-domain/sheet/build";
+import { nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
 import { DuctFiles } from "../../../host/src/ducts-files.ts";
 import { firmLayer } from "../../../host/src/ducts-inputs.ts";
 import { SETTING_WRITE_PLACE, storedBlobsPath, storedNoticesPath } from "../../../host/src/notice-feed.ts";
@@ -51,10 +51,7 @@ afterEach(() => {
   rmSync(drive, { recursive: true, force: true });
 });
 
-const terminal = {
-  nodes: [{ uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000001", id: 1, kind: "terminal", facts: [], connectors: [] }],
-  segments: [],
-} as unknown as SheetSnapshot;
+const terminal = snapshotOf({ nodes: [nodeOf(1, "terminal")] });
 const PATHS: Partial<Record<DuctsCriteriaCell, readonly string[]>> = {
   terminalDropInWg: ["criteria", "terminalDropInWg"],
   velocitySupplyFpm: ["criteria", "velocityLimitFpm", "supply"],
@@ -65,7 +62,7 @@ const servedBy = (cell: DuctsCriteriaCell, mounted: boolean) => {
   if (mounted)
     for (const [tier, root] of [["project", project], ["firm", firm]] as const) {
       const file = join(root, "Settings", "ducts.json");
-      const stated = existsSync(file) ? PATHS[cell]!.reduce<unknown>((at, key) => (at as Record<string, unknown> | undefined)?.[key], JSON.parse(readFileSync(file, "utf8"))) : undefined;
+      const stated = existsSync(file) ? PATHS[cell]!.reduce<unknown>((at, key) => (at !== null && typeof at === "object" ? Reflect.get(at, key) : undefined), JSON.parse(readFileSync(file, "utf8"))) : undefined;
       if (stated != null) return { tier, home: root, value: stated };
     }
   return { tier: "default" as const, home: null };
@@ -146,7 +143,7 @@ test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served
   expect(at.cell("velocitySupplyFpm")).toMatchObject({ value: 850, source: "project" });
   expect(at.cell("velocitySupplyFpm").ref).toContain(" · B · ");
   const notices = readStoredNotices(storedNoticesPath()).filter((notice) => notice.place === SETTING_WRITE_PLACE && [join(firm, "Settings", "ducts.json"), join(project, "Settings", "ducts.json")].includes(notice.path ?? ""));
-  expect(notices.map((notice) => notice.path)).toEqual([first, firm900, { path: join(project, "Settings", "ducts.json") }, second].map((wrote) => (wrote as { path: string }).path));
+  expect(notices.map((notice) => notice.path)).toEqual([first, firm900, { path: join(project, "Settings", "ducts.json") }, second].map((wrote) => "path" in wrote ? wrote.path : undefined));
   expect(notices.at(-1)!.reason).toContain(`B set 850 at ducts criteria.velocityLimitFpm.supply in the project home`);
   expect(notices.at(-1)!.reason).toContain(`sha256 ${second.ok && second.priorSha256}`);
 
@@ -221,7 +218,14 @@ test("snapshot slot names come from the project home, never Fans Work", () => {
 
 // Mutant H5-caption: claim a missing firm file supplied the seed.
 test("the pricing caption calls an absent firm file defaults, never firm seed", () => {
-  const read = { ductsRevision: 0, sheetView: { firm: { version: "seed", path: "Settings/ducts.json", present: false } } } as unknown as Parameters<typeof fansSheet.from>[0];
+  const read = fansSheetData.parse({
+    open: null, rows: [], progress: null, espOptions: null, espOptionsError: null,
+    ductsRevision: 0, ductsWork: {}, fansWork: {}, design: {}, settings: {},
+    sheetSnapshot: { kind: "absent" },
+    fans: { target: { session: "test", openId: "doc" }, slots: [], activeSlot: "", rows: [] },
+    sheetView: { blockers: [], tiers: { taken: 0, accept: 0, preview: 0 }, taken: [], inputs: null,
+      firm: { version: "seed", path: "Settings/ducts.json", present: false } },
+  });
   const caption = fansSheet.from(read, {})!.says;
   expect(caption).toContain("defaults");
   expect(caption).not.toContain("over firm");
@@ -232,8 +236,8 @@ test("all eight criteria display the engine defaults when the firm marker is gon
   rmSync(join(firm, "pe-home.json"));
   const at = await sheet();
   const expected = { velocitySupplyFpm: 900, velocityReturnFpm: 700, terminalDropInWg: 0.03, autoJoinGapIn: 3, healBoxIn: 36, splitPolicy: "even", allowanceSupplyInWg: 0, allowanceReturnInWg: 0 };
-  for (const [cell, value] of Object.entries(expected))
-    expect(at.cell(cell as DuctsCriteriaCell)).toMatchObject({ value, source: "default" });
+  for (const cell of ductsDocumentSchema.shape.criteria.unwrap().keyof().options)
+    expect(at.cell(cell)).toMatchObject({ value: expected[cell], source: "default" });
 });
 
 // Mutant H5-marker-blame: skip the shared-drive-root absence branch.

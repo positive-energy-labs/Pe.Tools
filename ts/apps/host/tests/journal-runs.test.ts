@@ -11,12 +11,12 @@ import { observePluginOperations } from "../src/plugin-receipts.ts";
 const run = { thread: "thread", turn: "turn" };
 const caller: Caller = { kind: "pea", context: "host-minted", thread: run.thread, run, root: run };
 import { createHash } from "node:crypto";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { saveMember } from "../src/settings.ts";
-import type { PodMemberSaveRequest } from "@pe/host-contracts/operation-types";
+import { podMemberSaveRequestSchema } from "@pe/host-contracts/operation-types";
 
 // Only external native facts are absent. The command, preparation, probes and writer are real.
 async function files() {
@@ -41,7 +41,7 @@ async function files() {
       Effect.gen(function* () {
         if (key !== "pod.member.save") throw Error(`Unexpected local operation ${key}`);
         writes++;
-        const saved = yield* saveMember(input as PodMemberSaveRequest, { podsRoot });
+        const saved = yield* saveMember(Schema.decodeUnknownSync(podMemberSaveRequestSchema)(input), { podsRoot });
         if (loseResult) {
           loseResult = false;
           return yield* Effect.fail(Error("File result lost after commit"));
