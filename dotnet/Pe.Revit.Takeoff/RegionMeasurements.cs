@@ -75,7 +75,7 @@ internal static class RegionMeasurements
                 : ceiling is null ? "no-ceiling"
                 : ceiling - floor < knobs.MinHeadroomFt ? "low-headroom" : null;
             var fr = (FilledRegion)doc.GetElement(region.ElementId.ToElementId());
-            var provenance = RegionProvenance.FromJson(TakeoffCarriers.ReadProvenance(fr)!);
+            var provenance = TakeoffCarriers.ReadRegion(fr).OrThrow()!;
             TakeoffCarriers.WriteProvenance(fr, (provenance with {
                 Measurement = new(key + GeometryKey(levelZ, [region.Loops]), runId, floor, ceiling, hold)
             }).ToJson());

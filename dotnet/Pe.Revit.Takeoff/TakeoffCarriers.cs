@@ -153,18 +153,23 @@ public static class TakeoffCarriers
     {
         // Dates stay strings so the stored data is the consumer's text, not a reformatted copy.
         using var reader = new JsonTextReader(new StringReader(json)) { DateParseHandling = DateParseHandling.None };
-        _ = OwnerBlobStore.Write(region, Provenance, JObject.Load(reader));
+        WriteProvenance(region, JObject.Load(reader));
     }
+
+    public static void WriteProvenance(FilledRegion region, JObject data) =>
+        _ = OwnerBlobStore.Write(region, Provenance, data);
 
     // A read never throws for a blob this build cannot read: the refusal is the value (ADR 0039 keep).
     internal static OwnerBlobRead ReadProvenanceBlob(FilledRegion region) => OwnerBlobStore.Read(region, Provenance);
 
+    // The stored data text for the wire; null when the region holds no envelope.
     public static OwnerValue<string> TryReadProvenance(FilledRegion region) =>
         ReadProvenanceBlob(region).Parse(data => data.ToString(Formatting.None));
 
-    // For a write run only: null when the region holds no blob; a blob that cannot be read stops the run with its
-    // reason, because a run that cannot say which zone a region belongs to must not write around it.
-    public static string? ReadProvenance(FilledRegion region) => TryReadProvenance(region).OrThrow();
+    // The one region read. No envelope is RegionProvenance.Default. A listing reports a refusal and goes on; a
+    // write run calls OrThrow, because a run that cannot say which zone a region belongs to must not write around it.
+    public static OwnerValue<RegionProvenance> ReadRegion(FilledRegion region) =>
+        RegionProvenance.Read(ReadProvenanceBlob(region));
 
     public static void WriteRoomType(FilledRegion region, string roomType) =>
         Set(region, RoomTypeGuid, roomType);

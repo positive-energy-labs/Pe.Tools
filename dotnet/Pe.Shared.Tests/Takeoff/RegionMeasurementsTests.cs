@@ -13,7 +13,7 @@ public class RegionMeasurementsTests
     {
         List<List<double[]>> loops = [Square(0, 0, 10), Square(2, 2, 1)];
         var key = RegionMeasurements.GeometryKey(0, [loops]);
-        var provenance = new RegionProvenance(1, Guid.NewGuid(), "original", "R01", 99) {
+        var provenance = new RegionProvenance(Guid.NewGuid(), "original", "R01", 99) {
             Measurement = new(key, "measurement-1", 0, 8, null)
         };
         Assert.That(RegionMeasurements.Read(provenance, key).State, Is.EqualTo("current"));
@@ -58,7 +58,7 @@ public class RegionMeasurementsTests
         var resolutions = JToken.Parse("""[{"subject":"R01","flag":"orphaned-region","verb":"dismiss","at":"2026-08-01T00:00:00Z","runId":"run-1"}]""");
         var unknown = JToken.Parse("""{"Kept":{"MixedCase":[1,2.5,null]}}""");
         var blob = new JObject {
-            ["version"] = 1, ["zoneGuid"] = Guid.NewGuid(), ["runId"] = "run-1", ["sourceRoomId"] = "R01", ["sourceSqft"] = 99,
+            ["zoneGuid"] = Guid.NewGuid(), ["runId"] = "run-1", ["sourceRoomId"] = "R01", ["sourceSqft"] = 99,
             ["flags"] = new JArray("orphaned-region"), ["resolutions"] = resolutions.DeepClone(), ["futureKey"] = unknown.DeepClone(), ["LegacyPascal"] = "kept"
         }.ToString();
 
