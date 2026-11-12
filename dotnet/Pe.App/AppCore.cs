@@ -70,6 +70,8 @@ public sealed class AppCore : IPePayload {
         RevitTaskAccessor.RunAsync = action => revitTaskQueue.Run(_ => action());
 
         RevitReceipts.Boot(context.Application.ControlledApplication.VersionNumber);
+        // Raw Revit pre-events, not the SDK tracker: the tracker carries no cancellable save event.
+        Pe.Revit.Scripting.Execution.ScriptSaveHold.Register(context.Application.ControlledApplication);
         Autodesk.Windows.ComponentManager.ItemExecuted += OnRibbonItemExecuted;
 
         HostRuntime.Initialize(
