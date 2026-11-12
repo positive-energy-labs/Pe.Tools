@@ -159,3 +159,34 @@ test.each(["override", "probe"] as const)("marker loss with no Settings file fir
     rmSync(drive, { recursive: true, force: true });
   }
 });
+
+// Mutant W3-firm: drop the missing-home probe; the mounted drive never invalidates the input.
+test("a firm drive mounted after subscription is discovered and then watched", async () => {
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
+  const drive = mkdtempSync(join(tmpdir(), "pe-late-firm-"));
+  const shared = join(drive, "04 PE Software Files", "Pe.Tools");
+  const facts = machineFacts([drive]);
+  vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer({
+    firm: () => firmSettingsDir(facts), catalogs: [],
+  }))));
+  const changes: string[] = [];
+  const stop = files.subscribe!(name => changes.push(name));
+  try {
+    expect(await Effect.runPromise(files.firm("ducts"))).toEqual({ refused: "no-shared-root" });
+    mkdirSync(join(shared, "Settings"), { recursive: true });
+    writeFileSync(join(shared, "pe-home.json"), '{"tier":"firm"}');
+    const path = join(shared, "Settings", "ducts.json");
+    writeFileSync(path, JSON.stringify({ version: "firm" }));
+    await vi.advanceTimersByTimeAsync(30_001);
+    await expect.poll(() => changes).toEqual(["firm"]);
+    expect(await Effect.runPromise(files.firm("ducts"))).toEqual({ path, json: { version: "firm" } });
+    writeFileSync(path, JSON.stringify({ version: "updated" }));
+    await expect.poll(() => changes).toEqual(["firm", "firm"]);
+    expect(await Effect.runPromise(files.firm("ducts"))).toMatchObject({ json: { version: "updated" } });
+  } finally {
+    stop();
+    vi.useRealTimers();
+    rmSync(drive, { recursive: true, force: true });
+  }
+});

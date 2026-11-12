@@ -21,7 +21,7 @@ import { DuctFiles } from "../../../host/src/ducts-files.ts";
 import { firmLayer } from "../../../host/src/ducts-inputs.ts";
 import { SETTING_WRITE_PLACE, storedBlobsPath, storedNoticesPath } from "../../../host/src/notice-feed.ts";
 import { resolveFirm } from "../../../host/src/reads/door.ts";
-import { readSettingTiers, writeSettingTier } from "../../../host/src/tiered-settings.ts";
+import { readSettingTiers, writeSettingTier, watchSettingTiers } from "../../../host/src/tiered-settings.ts";
 import { ductsSettings } from "../ducts/design-sheet.ts";
 import { sheetCells } from "../route/slots/sheet/index.ts";
 
@@ -280,4 +280,29 @@ test("design friction can be cleared with null", () => {
   const read = readSettingTiers("ducts", pointer).find(read => read.tier === "project")!;
   expect(read.json).not.toHaveProperty("designFriction");
   expect(price(snapshot, {}, null, neutralFansWork, {}, readSettingTiers("ducts", pointer)).edit.designFriction).toBe(0.08);
+});
+
+// Mutant W3-project: drop watchSettingTiers' filesystem watch; an outside writer stays silent.
+test("an outside project rewrite invalidates once and the sheet reads its value and source", async () => {
+  const tier = "project";
+  const root = project;
+  mkdirSync(join(root, "Settings"), { recursive: true });
+  const path = join(root, "Settings", "ducts.json");
+  const bytes = (value: number) => JSON.stringify({ criteria: { velocityLimitFpm: { supply: value } } });
+  writeFileSync(path, bytes(800));
+  let changes = 0;
+  const watching = watchSettingTiers(() => changes++);
+  try {
+    watching.read("ducts", pointer);
+    expect((await sheet()).cell("velocitySupplyFpm")).toMatchObject({ value: 800, source: tier });
+    writeFileSync(path, bytes(850));
+    await expect.poll(() => changes).toBe(1);
+    expect((await sheet()).cell("velocitySupplyFpm")).toMatchObject({ value: 850, source: tier });
+    // Repeated hints with identical bytes must not publish another change.
+    writeFileSync(path, bytes(850));
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(changes).toBe(1);
+  } finally {
+    watching.close();
+  }
 });

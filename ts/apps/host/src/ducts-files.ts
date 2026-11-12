@@ -98,8 +98,7 @@ export class DuctFiles extends Context.Service<
       ductCatalogs: Effect.promise(() => readDuctCatalogs(roots.catalogs)),
       subscribe: (changed) => {
         const stops = [
-          // No firm home, no firm file to watch: the refusal holds until the host restarts.
-          ...(firmRoot() === null ? [] : [["firm", firmRoot()!] as const]),
+          ["firm", firmRoot()] as const,
           ...[roots.catalogs].flat().map((path) => ["catalogs", path] as const),
         ].map(
           ([name, path]) => {
@@ -112,34 +111,49 @@ export class DuctFiles extends Context.Service<
               } : () => readDuctCatalogs(roots.catalogs);
             let closed = false;
             let previous = read().then((value) => JSON.stringify(value));
+            let watchedPath = path;
+            let watcher: ReturnType<typeof watch> | undefined;
             const refresh = () => {
               previous = previous.then(async (before) => {
                 if (closed) return before;
+                if (name === "firm" && firmRoot() !== watchedPath) bind(firmRoot());
                 const next = JSON.stringify(await read());
                 if (!closed && next !== before) changed(name);
                 return next;
               });
             };
             // Watch an existing ancestor: absence, directory creation and atomic replacement still notify.
-            let base = dirname(resolve(path));
-            while (!existsSync(base) && dirname(base) !== base) base = dirname(base);
-            const watcher = watch(base, { recursive: true, persistent: false }, (_event, file) => {
-              const changedPath = file === null ? null : resolve(base, file.toString());
-              const child = changedPath === null ? "" : relative(resolve(path), changedPath);
-              const ancestor = changedPath === null ? "" : relative(changedPath, resolve(path));
-              if (
-                (name === "firm" && changedPath === resolve(base, "pe-home.json")) ||
-                changedPath === null ||
-                child === "" ||
-                (!child.startsWith(`..${sep}`) && child !== "..") ||
-                (!ancestor.startsWith(`..${sep}`) && ancestor !== "..")
-              )
-                refresh();
-            });
-            watcher.on("error", () => changed(name));
+            const bind = (path: string | null) => {
+              watchedPath = path;
+              if (path === null) return;
+              watcher?.close();
+              let base = dirname(resolve(path));
+              while (!existsSync(base) && dirname(base) !== base) base = dirname(base);
+              watcher = watch(base, { recursive: true, persistent: false }, (_event, file) => {
+                const changedPath = file === null ? null : resolve(base, file.toString());
+                const child = changedPath === null ? "" : relative(resolve(path), changedPath);
+                const ancestor = changedPath === null ? "" : relative(changedPath, resolve(path));
+                if (
+                  (name === "firm" && changedPath === resolve(base, "pe-home.json")) ||
+                  changedPath === null ||
+                  child === "" ||
+                  (!child.startsWith(`..${sep}`) && child !== "..") ||
+                  (!ancestor.startsWith(`..${sep}`) && ancestor !== "..")
+                )
+                  refresh();
+              });
+              watcher.on("error", () => changed(name));
+            };
+            bind(path);
+            // A missing drive supplies no filesystem hints. Retry on the firm probe cadence.
+            const probe = name === "firm" ? setInterval(() => {
+              if (firmRoot() !== watchedPath) refresh();
+            }, 30_001) : undefined;
+            probe?.unref();
             return () => {
               closed = true;
-              watcher.close();
+              clearInterval(probe);
+              watcher?.close();
             };
           },
         );
