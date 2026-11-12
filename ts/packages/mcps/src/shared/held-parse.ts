@@ -1,46 +1,53 @@
 /**
- * Where a hosted parse is kept, keyed by the bytes it read (ADR 0038 guard 3). Pea's
- * `read_document` never uploads: it reads a kept parse or holds the send. The person's Confirm
- * (`sendHeldParse`, run by the host) sends exactly the held bytes and keeps the result here, so
- * Pea's next read of the same file and pages finds it.
+ * Where a document parse is kept (ADR 0037 rule 6; ADR 0038 guard 3): once, write-once, in the
+ * derived store of the project the source sits in, keyed by the source bytes and the parser's
+ * identity. A second person on the project finds it and parses nothing. Pea's `read_document`
+ * never uploads: it reads a kept parse or holds the send, and the person's Confirm
+ * (`sendHeldParse`, run by the host) sends exactly the held bytes and keeps the result here.
  */
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { createHash } from "node:crypto";
 import { z } from "zod";
-import { stateTree } from "@pe/host-contracts/service-identity";
-import { readStored, storedNoticesFile, writeAtomic } from "@pe/host-contracts/store";
+import { derivedStore } from "@pe/host-contracts/service-identity";
+import {
+  derivedKey,
+  discardDerived,
+  readDerived,
+  sha256Hex,
+  writeDerived,
+  type DerivedStore,
+} from "@pe/host-contracts/store";
 import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import { LLAMA_TIER, parseWithLlamaCloud, requireLlamaCloudKey } from "./llama-parse.ts";
 
-const keptParseSchema = z.strictObject({
-  tier: z.string(),
+export const parsedPagesSchema = z.strictObject({
+  /** Pages in the whole document; null when the parser does not say. */
+  totalPages: z.number().nullable(),
   pages: z.array(z.strictObject({ pageNum: z.number(), text: z.string() })),
 });
-export type KeptParse = z.infer<typeof keptParseSchema>;
+export type ParsedPages = z.infer<typeof parsedPagesSchema>;
 
-export const sha256Of = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+export const sha256Of = sha256Hex;
+
+/** The derived store of the project home `file` (or the first of `near`) sits in; else this machine's. */
+export const parseStore = (...near: string[]): DerivedStore => derivedStore(runtimeRoot(), ...near);
 
 /**
- * Under `state\Parses`, the tree an MSI upgrade keeps: a purged scratch would lose a send the person
- * paid for. `pages` is free text, so the file name carries its hash.
+ * A hosted parse's identity. The tier and the pages are part of what was derived, so they are part
+ * of the key. Bump the trailing revision when the kept shape or the request changes.
  */
-const keptPath = (sha256: string, pages: string) =>
-  path.join(
-    stateTree(runtimeRoot()).parses,
-    "llamaparse",
-    `${sha256}-${sha256Of(Buffer.from(pages)).slice(0, 8)}.json`,
-  );
+export const llamaParser = (pages: string) => `llamaparse/${LLAMA_TIER}/markdown/1/${pages}`;
 
-/** A kept parse is derived (ADR 0039): one that does not decode is discarded with a notice and reads as absent. */
-export function keptParse(sha256: string, pages: string): KeptParse | null {
-  const read = readStored(keptPath(sha256, pages), keptParseSchema, {
-    class: "discard",
-    place: "Kept hosted parse",
-    notices: storedNoticesFile(runtimeRoot()),
-    blobRoot: stateTree(runtimeRoot()).blobs,
-  });
-  return read.kind === "ok" ? read.value : null;
+/** A derived JSON file; one that does not decode is discarded with a notice and reads as absent (ADR 0039). */
+export function readDerivedJson<T>(store: DerivedStore, key: string, schema: z.ZodType<T>): T | null {
+  const found = readDerived(store, key);
+  if (!found) return null;
+  try {
+    return schema.parse(JSON.parse(found.bytes.toString("utf8")));
+  } catch (error) {
+    discardDerived(store, found.path, error instanceof Error ? error.message : String(error));
+    return null;
+  }
 }
 
 /**
@@ -51,12 +58,16 @@ export async function sendHeldParse(
   send: { path: string; sha256: string; pages: string },
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
-  const apiKey = requireLlamaCloudKey(env);
   const bytes = await fs.readFile(send.path);
   if (sha256Of(bytes) !== send.sha256)
     throw new Error(
       `${send.path} changed since Pea asked to send it, so nothing was sent. Pea's next read holds the new bytes.`,
     );
+  // A parse someone on the project already paid for is not sent again.
+  const store = parseStore(send.path);
+  const key = derivedKey(bytes, llamaParser(send.pages));
+  if (readDerivedJson(store, key, parsedPagesSchema)) return;
+  const apiKey = requireLlamaCloudKey(env);
   const result = await parseWithLlamaCloud({
     sender: "person",
     file: new File([new Uint8Array(bytes)], path.basename(send.path), {
@@ -67,12 +78,12 @@ export async function sendHeldParse(
     // Markdown, not text: agentic_plus marks a struck cell <s> in its HTML tables; its text mode drops the strike.
     expand: ["markdown"],
   });
-  const kept: KeptParse = {
-    tier: LLAMA_TIER,
+  const kept: ParsedPages = {
+    totalPages: null,
     pages: (result.markdown?.pages ?? []).map((page) => ({
       pageNum: page.page_number,
       text: "markdown" in page ? page.markdown : "",
     })),
   };
-  writeAtomic(keptPath(send.sha256, send.pages), JSON.stringify(kept));
+  writeDerived(store, key, JSON.stringify(kept));
 }

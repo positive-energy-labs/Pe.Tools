@@ -7,7 +7,8 @@
  */
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createServer } from "node:http";
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -50,6 +51,8 @@ async function lab(beforeParse?: () => Promise<void>) {
   closes.push(() => rm(pods, { recursive: true, force: true }));
   await mkdir(join(pods, "lab"), { recursive: true });
   await writeFile(join(pods, "lab", "pod.json"), JSON.stringify({ id: "lab" }));
+  // The Pods folder is its own project home here, so each fixture has its own derived store.
+  await writeFile(join(pods, "pe-home.json"), JSON.stringify({ tier: "project" }));
   const parsed: { name: string; bytes: number }[] = [];
   const f = await nativeFixture("real", undefined, null, {
     state: {
@@ -219,7 +222,9 @@ test("blocker 1: attach takes a path and a URL as well as an upload", async () =
   });
   expect(byPath.state, JSON.stringify(byPath).slice(0, 2000)).toBe("succeeded");
   expect(parsed).toEqual([{ name: "acme-fcu400-submittal.pdf", bytes: pdfSize }]);
+  let fetched = 0;
   const server = createServer((_request, response) => {
+    fetched++;
     response.writeHead(200, { "content-type": "application/pdf" });
     response.end(readFileSync(pdf));
   });
@@ -232,7 +237,17 @@ test("blocker 1: attach takes a path and a URL as well as an upload", async () =
     work: await handle(),
   });
   expect(byUrl.state, JSON.stringify(byUrl).slice(0, 2000)).toBe("succeeded");
-  expect(parsed[1]).toEqual({ name: "acme-by-url.pdf", bytes: pdfSize });
+  // Homes slice 9: the same bytes were parsed by the path attach, so the parser is not called
+  // again, and a second attach of the URL fetches no vendor file again (JOURNEYS target 13).
+  // Mutant: in family-spec.ts replace `keptFamilyParse(store, pdf) ??` with nothing.
+  expect(parsed).toHaveLength(1);
+  const again = await act("family.attach-spec", host, { member, source: { url }, work: await handle() });
+  expect(again.state, JSON.stringify(again).slice(0, 2000)).toBe("succeeded");
+  expect([parsed.length, fetched]).toEqual([1, 1]);
+  const derived = readdirSync(join(pods, "Derived"));
+  expect(derived).toHaveLength(2);
+  for (const name of derived)
+    expect(name.split(".")[1]).toBe(createHash("sha256").update(readFileSync(join(pods, "Derived", name))).digest("hex"));
   expect((await doc()).spec).toMatchObject({ member, doc: { blocks: [block] } });
   // The original PDF is a portable member asset beside the family.
   const sidecar = JSON.parse(

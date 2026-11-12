@@ -210,6 +210,19 @@ export function projectHome(pointer: string | null | undefined, facts?: HomeFact
   return markerTier((facts ?? machineFacts([])).marker(root)) === "project" ? root : null;
 }
 
+/**
+ * The project home a file sits in: the nearest folder above it that is a project home, or holds
+ * one as its `Pe.Tools` child (freeze shape 4). For a caller with a file and no target document
+ * (a document parse in an MCP child, a Pod's own folder); null when the file is in no project.
+ */
+export function projectHomeAbove(path: string, facts: HomeFacts = machineFacts([])): string | null {
+  for (let dir = resolve(path); ; dir = dirname(dir)) {
+    for (const home of [dir, join(dir, productIdentity.productName)])
+      if (markerTier(facts.marker(home)) === "project") return insideTestRoot(home);
+    if (dirname(dir) === dir) return null;
+  }
+}
+
 export type HomesInput = {
   /** `data.path` of the target document's project-home blob; absent or unusable is unbound. */
   readonly pointer?: string | null;

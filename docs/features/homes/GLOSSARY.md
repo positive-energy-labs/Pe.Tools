@@ -51,7 +51,7 @@ An explicit copy of a pod into another home under a new id.
 _Avoid_: shadow, override, user copy
 
 **Derived file**:
-A write-once file in a shared home whose name carries the source hash, the reader and the reader's version.
+A write-once file in a project home's `Derived/` folder (or the machine's `state\Derived` for a source in no project), named `<key>.<sha256 of its own bytes>`. The key hashes the source bytes with the producer's identity and revision, so a second person finds it; a file whose name does not match its bytes is discarded with one notice.
 _Avoid_: cache, output (run output never lives in a home)
 
 ## Values
