@@ -370,7 +370,7 @@ export async function installArchive(
     for (const path of [...directories].sort((a, b) => b.length - a.length)) {
       try { await rmdir(path); }
       catch (undoError) {
-        if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes((undoError as NodeJS.ErrnoException).code ?? ""))
+        if ((undoError as NodeJS.ErrnoException).code !== "ENOENT")
           kept.push(`${path} (${String(undoError)})`);
       }
     }

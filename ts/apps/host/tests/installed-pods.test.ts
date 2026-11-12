@@ -127,6 +127,24 @@ test.each([true, false])("a throwing second write rolls back only matching bytes
   }
 });
 
+test("rollback names a directory kept because a concurrent writer added a file", async () => {
+  const write = settings.writeHome;
+  let count = 0;
+  let directory = "";
+  vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
+    if (++count === 2) {
+      directory = dirname(args[0]);
+      writeFileSync(join(directory, "later.txt"), "mine");
+      throw Error("injected write failure");
+    }
+    return write(...args);
+  });
+  const result = importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures });
+  await expect(result).rejects.toThrow("ENOTEMPTY");
+  await expect(result).rejects.toThrow(directory);
+  expect(await readFile(join(directory, "later.txt"), "utf8")).toBe("mine");
+});
+
 test.each(["io", "cas"] as const)("update rolls back a second-member failure (%s) byte for byte and a retry succeeds", async (mode) => {
   await boot();
   const original = (await listPackages(pods)).packages.find(p => p.id === "example")!;
