@@ -13,7 +13,7 @@ import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import { bindControl } from "../src/control.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { captureStore, settle, testConsents, journalAt } from "./effect-test.ts";
+import { captureStore, settle, testRegistry, journalAt } from "./effect-test.ts";
 
 test.each([
   { later: null, pea: false, crash: true },
@@ -29,7 +29,7 @@ test.each([
     const services = await settle(Layer.buildWithScope(RevitBridgeLive, bridgeScope));
     const bridge = Context.get(services, RevitBridge);
     const captures = captureStore(join(directory, "captures"));
-    const runs = testConsents();
+    const runs = testRegistry();
     const run = { thread: "retirement", turn: "original" };
     runs.open(run);
     bindControl({ runs });

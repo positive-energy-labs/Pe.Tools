@@ -7,7 +7,7 @@ import { bindWork, type Caller } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { bindControl } from "../src/control.ts";
-import { testConsents, journalAt, callRouteOver } from "./effect-test.ts";
+import { testRegistry, journalAt, callRouteOver } from "./effect-test.ts";
 import { pictureCaptures } from "./effect-test.ts";
 import { detachedBridge } from "./effect-test.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
@@ -116,7 +116,7 @@ test.skipIf(!existsSync((nativeRecordings("retained-view-image").responses["revi
   }
 });
 
-test("Work start validates seeds, waits for consent, and cannot overwrite a winner after consent", async () => {
+test("Work start validates seeds and cannot overwrite a winner under an open run", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-start-"));
   const workspace = new RouteWorkspace({
     registrations: [],
@@ -130,7 +130,7 @@ test("Work start validates seeds, waits for consent, and cannot overwrite a winn
       schema: z.object({ count: z.number() }),
     },
   });
-  const runs = testConsents();
+  const runs = testRegistry();
   const run = { thread: "start-thread", turn: "start-turn" };
   runs.open(run);
   bindControl({ runs, acquired: () => null });

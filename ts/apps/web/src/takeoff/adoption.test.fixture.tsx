@@ -13,7 +13,7 @@ import type {
   AcceptedResult,
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { bindControl } from "../../../host/src/control";
-import { testConsents } from "../../../host/tests/effect-test";
+import { testRegistry } from "../../../host/tests/effect-test";
 import { fixture, ref, path, gate } from "../../../host/tests/host-read-graph.test-support";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { completion } from "../shell/work-door-observation";
@@ -33,7 +33,7 @@ export async function journey(options: { catalogue?: ReturnType<typeof gate>; sn
   const nativeCalls: { key: string; input: unknown }[] = [];
   const nativeScopes: unknown[] = [];
   const actions: { key: string; input: Record<string, unknown> }[] = [];
-  bindControl({runs:testConsents(), acquired:() => null});
+  bindControl({runs:testRegistry(), acquired:() => null});
   const host = await fixture(true, {
     actions: true,
     inventory: {

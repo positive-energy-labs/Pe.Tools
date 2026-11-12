@@ -31,7 +31,7 @@ import { PictureCaptureStore } from "../../../host/src/captures-route";
 import { createPeRoutes } from "../../../host/src/pe-routes";
 import { RequestIdentity, admittedRequestIdentity } from "../../../host/src/request-services";
 import { bindControl } from "../../../host/src/control";
-import { testConsents } from "../../../host/tests/effect-test";
+import { testRegistry } from "../../../host/tests/effect-test";
 import { module as fans } from "../fans/route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import type { PlaceInput } from "../shell/typed-place";
@@ -135,7 +135,7 @@ test.each([
   const ref = socket.target;
   const path = address("C:/model.rvt");
   const { bridge, journal } = native;
-  const runs = testConsents();
+  const runs = testRegistry();
   bindControl({ runs, acquired: () => null });
   const captures = captureStore(dir);
   const identity = { fileName: "recorded.r10", projectTitle: "Journey", clientName: "", stamp: "recorded" };
@@ -223,7 +223,7 @@ async function journey(module: TypedRoute = fans) {
   const roster = await host.send(0, []);
   const fan = roster.value!.data.fans.rows.find((row) => row.mark === "MUAS-1")!;
   const journal = journalAt(join(host.dir, "actions.jsonl"), Date.now);
-  const runs = testConsents();
+  const runs = testRegistry();
   bindControl({ runs, acquired: () => null });
   const web = HttpRouter.toWebHandler(
     callRouteOver(journal, undefined, { workspace: host.workspace }).pipe(

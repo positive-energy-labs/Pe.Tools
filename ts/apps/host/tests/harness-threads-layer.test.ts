@@ -10,7 +10,7 @@ import { HostLog } from "../src/host-log.ts";
 import { HarnessThreads, type HarnessThreadsOptions } from "../src/harness/threads.ts";
 import { loadThread } from "../src/harness/thread-store.ts";
 import type { Providers } from "../src/harness/providers.ts";
-import { captureLogs, consentService, effectTest } from "./effect-test.ts";
+import { captureLogs, registryService, effectTest } from "./effect-test.ts";
 
 /** An Effect test over the node file system, for fixtures that live on disk. */
 const nodeTest = <A, E>(
@@ -46,7 +46,7 @@ const store = Effect.fn("test.store")(function* (
 ) {
   const options: HarnessThreadsOptions = {
     root,
-    runs: consentService(),
+    runs: registryService(),
     log: new HostLog(`${root}.log`, Date.now),
     worldRoot: root,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),

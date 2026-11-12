@@ -96,7 +96,7 @@ import {
   sessionAcquisition,
 } from "../control.ts";
 import { Clock, Context, DateTime, Effect, Layer, Schema } from "effect";
-import { runConsentsPromise, type RunConsents } from "../run-consent.ts";
+import { runRegistryPromise, type RunRegistry } from "../run-registry.ts";
 import { z } from "zod";
 
 /** Tolerant decode of a thread's stored pointers; a stale shape reads as none, never as an error. */
@@ -191,7 +191,7 @@ export type HarnessThreadsOptions = {
   /** Providers: the child's auth env and the keys a record never keeps. */
   providers: Providers;
   /** The run registry, provided once by the host layer: a turn opens its run and a Stop closes it. */
-  runs: RunConsents["Service"];
+  runs: RunRegistry["Service"];
   /** Automatic update admission excludes new harness work through installer handoff. */
   updatePending?: () => boolean;
   /** Admission/import and skill publication must settle before either harness starts. */
@@ -453,7 +453,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
   const nowMs = () => clock.currentTimeMillisUnsafe();
   const stamp = () => DateTime.formatIso(DateTime.makeUnsafe(nowMs()));
   const threads = new Map<string, Thread>();
-  const runs = runConsentsPromise(options.runs);
+  const runs = runRegistryPromise(options.runs);
   bindControl({ runs });
   /** Synchronization only. Observations and pins are always reconstructed from thread events. */
   const elementNameReads = new Map<string, Promise<void>>();

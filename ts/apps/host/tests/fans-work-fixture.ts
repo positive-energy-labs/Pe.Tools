@@ -25,7 +25,7 @@ import { connectTestBridge } from "./bridge-fixture.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { RevitBridge, RevitBridgeLive, BridgeError } from "../src/bridge.ts";
 import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
-import { RunConsents, runConsentsPromise } from "../src/run-consent.ts";
+import { RunRegistry, runRegistryPromise } from "../src/run-registry.ts";
 import { bindControl } from "../src/control.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import type { ReadSources } from "../src/reads/inputs.ts";
@@ -39,7 +39,7 @@ import { RequestIdentity, admittedRequestIdentity } from "../src/request-service
 import { readSessionScope, SdkSession, SdkDriver } from "../src/sdk-session.ts";
 import { snapshot } from "../../web/src/ducts/test-fixture.ts";
 
-/** Only the native socket and SDK observation are substituted. Work, seals and consent are real. */
+/** Only the native socket and SDK observation are substituted. Work, seals and the run registry are real. */
 export async function nativeFixture(
   clockMode: "real" | "test" = "real",
   snapshotFor: (key: string, input: Record<string, any>) => DuctSnapshot = () => snapshot,
@@ -64,7 +64,7 @@ export async function nativeFixture(
       Layer.buildWithScope(
         Layer.mergeAll(
           admittedBuiltinsLayer(saved),
-          RunConsents.layer.pipe(Layer.provide(NodeCrypto.layer)),
+          RunRegistry.layer.pipe(Layer.provide(NodeCrypto.layer)),
           RevitBridgeLive,
           CaptureStore.layer(join(dir, "captures")),
         ),
@@ -75,7 +75,7 @@ export async function nativeFixture(
       clockMode === "test"
         ? await settle(Layer.buildWithScope(TestClock.layer(), scope))
         : Context.empty();
-    const runs = runConsentsPromise(Context.get(context, RunConsents));
+    const runs = runRegistryPromise(Context.get(context, RunRegistry));
     bindControl({ runs });
     const actualBridge = Context.get(context, RevitBridge);
     const nativeCallers: RequestIdentityData[] = [];

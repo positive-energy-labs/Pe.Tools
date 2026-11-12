@@ -8,7 +8,7 @@ import { RouteWorkspace } from "@pe/runtime";
 import { address, catalogWorkSpecs, tools, roomEditKey, type Caller, type WorkKey } from "@pe/agent-contracts";
 import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordings, nativeRecordingRequest } from "./native-recordings.ts";
-import { testConsents } from "./effect-test.ts";
+import { testRegistry } from "./effect-test.ts";
 import { bindControl } from "../src/control.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { nativeFixture } from "./fans-native.fixture.ts";
@@ -28,7 +28,7 @@ async function fixture(withPage = false) {
   const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "parameter-links" };
   const body = nativeRecordings("sdk-revit.detail.parameter-links").responses["revit.detail.parameter-links"] as any;
   const { id: _id, ...definition } = body.profile.definitions[0];
-  const runs = testConsents();
+  const runs = testRegistry();
   const run = { thread: crypto.randomUUID(), turn: "write" };
   runs.open(run); bindControl({ runs });
   const caller: Caller = { kind: "pea", context: "safety", thread: run.thread, run, root: run };

@@ -2,7 +2,7 @@ import { markReadings } from "../src/resource-adapters.ts";
 import { openRecordingWriter, openRecordingReader, nativeCatalogIdentity } from "../src/native-recording.ts";
 import { fansDocumentSchema } from "@pe/agent-contracts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { detachedBridge, sessionView, consentService, harnessThreads, testSpawner, settle, testHostInputs, captureStore, journalAt } from "./effect-test.ts";
+import { detachedBridge, sessionView, registryService, harnessThreads, testSpawner, settle, testHostInputs, captureStore, journalAt } from "./effect-test.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { RevitBridge } from "../src/bridge.ts";
@@ -100,7 +100,7 @@ const host = async (
   });
   const log = new HostLog(join(root, ".log", randomUUID()), Date.now);
   const threads = await harnessThreads({
-    runs: consentService(),
+    runs: registryService(),
     log,
     prepare,
     pluginHook,
@@ -1623,14 +1623,14 @@ test("a harness that exits mid-turn writes one terminal: a short sentence, stder
   expect(ends[0].failure.raw).toMatch(/^\[session\/create\] .*\n[\s\S]*durationMs=79$/);
 }, 30_000);
 
-test("Stop with a failing consent persist still cancels, then kills a child that ignores cancel, recording unknown", async () => {
-  const consents = consentService();
+test("Stop with a failing run close still cancels, then kills a child that ignores cancel, recording unknown", async () => {
+  const registry = registryService();
   let failed = false;
-  const runs: typeof consents = {
-    ...consents,
-    // The first grant-revocation persist fails, as ConsentPersistFailed would.
+  const runs: typeof registry = {
+    ...registry,
+    // The first run close fails.
     close: (ref, reason) =>
-      failed ? consents.close(ref, reason) : ((failed = true), Effect.die(Error("persist failed"))),
+      failed ? registry.close(ref, reason) : ((failed = true), Effect.die(Error("close failed"))),
   };
   const h = await host(undefined, undefined, undefined, undefined, { runs, stopGraceMs: 500 });
   const call = caller(h);

@@ -35,7 +35,7 @@ export * from "./schedule-grid-data.ts";
 export * from "./world.ts";
 export * from "./target.ts";
 export * from "./caller.ts";
-export * from "./run-consent.ts";
+export * from "./run-registry.ts";
 export * from "./guards.ts";
 export * from "./principal.ts";
 export * from "./instances.ts";

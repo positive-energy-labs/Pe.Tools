@@ -24,10 +24,10 @@ import {
   type MachineSources,
 } from "../src/machine.ts";
 import {
-  RunConsents,
-  runConsentsPromise,
-  type RunConsentsPromise,
-} from "../src/run-consent.ts";
+  RunRegistry,
+  runRegistryPromise,
+  type RunRegistryPromise,
+} from "../src/run-registry.ts";
 
 const runRoot =
   <A, E>(body: () => Effect.Effect<A, E, Scope.Scope>) =>
@@ -100,11 +100,11 @@ const testScoped = <S, E>(layer: Layer.Layer<S, E>) => {
 };
 
 /**
- * {@link RunConsents} for Promise tests: the live layer, built in a scope the running test closes
- * (a module-level fixture's scope lives with its worker). Closing it interrupts open windows.
+ * {@link RunRegistry} for Promise tests: the live layer, built in a scope the running test closes
+ * (a module-level fixture's scope lives with its worker). Closing it closes every registered run.
  */
-export const consentService = (): RunConsents["Service"] => {
-  return Context.get(testScoped(RunConsents.layer.pipe(Layer.provide(NodeCrypto.layer))), RunConsents);
+export const registryService = (): RunRegistry["Service"] => {
+  return Context.get(testScoped(RunRegistry.layer.pipe(Layer.provide(NodeCrypto.layer))), RunRegistry);
 };
 
 /** {@link RevitBridgeDetached} as a value, built in a scope the running test closes. */
@@ -134,7 +134,7 @@ export const sessionView = ({ state, ...view }: Omit<BridgeSessionView, "state">
 });
 
 /** The Promise face of a fresh run registry. */
-export const testConsents = (): RunConsentsPromise => runConsentsPromise(consentService());
+export const testRegistry = (): RunRegistryPromise => runRegistryPromise(registryService());
 
 /**
  * {@link HarnessThreads} for Promise tests: the live layer over the node file system, built in a

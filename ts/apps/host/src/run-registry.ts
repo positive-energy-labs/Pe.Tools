@@ -1,22 +1,22 @@
 import { Cause, Context, DateTime, Effect, Exit, Layer, Option, Schema } from "effect";
-import type { Origin, RunConsent, RunRef } from "@pe/agent-contracts";
+import type { Origin, RegisteredRun, RunRef } from "@pe/agent-contracts";
 
 /** A run refuses this command: no run, an ended run, or a run a person stopped. */
-export class ConsentRefused extends Schema.TaggedError<ConsentRefused>()("ConsentRefused", {
+export class RunRefused extends Schema.TaggedError<RunRefused>()("RunRefused", {
   code: Schema.Literals(["run.none", "run.closed", "run.stopped"]),
   message: Schema.String,
 }) {}
 
-const refused = (code: ConsentRefused["code"], message: string) =>
-  new ConsentRefused({ code, message: `${code}: ${message}` });
+const refused = (code: RunRefused["code"], message: string) =>
+  new RunRefused({ code, message: `${code}: ${message}` });
 
-type Run = { ref: RunRef; root: RunRef; state: RunConsent };
+type Run = { ref: RunRef; root: RunRef; state: RegisteredRun };
 type CloseReason = "completed" | "failed" | "stopped" | "restart";
 
 const key = (run: RunRef) => JSON.stringify([run.thread, run.turn]);
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
-const makeRunConsents = Effect.gen(function* () {
+const makeRunRegistry = Effect.gen(function* () {
   const runs = new Map<string, Run>();
   const listeners = new Set<() => void>();
 
@@ -117,22 +117,21 @@ const makeRunConsents = Effect.gen(function* () {
  * The run registry (ADR 0038). A run is a turn's causal identity: a Pea command needs an open run
  * to start, and a Stop, a failed turn or a host restart ends the commands of its run. Nothing here
  * asks a person and nothing waits: the three guarded acts return "held" at their own doors
- * (`guards.ts`). Runs live in memory only, so a host restart closes every one. The name is kept:
- * splitting the registry out of the old consent service is deliberately unbuilt (homes MAP).
+ * (`guards.ts`). Runs live in memory only, so a host restart closes every one.
  */
-export class RunConsents extends Context.Service<
-  RunConsents,
-  Effect.Success<typeof makeRunConsents>
->()("pe/RunConsents") {
-  static readonly layer = Layer.effect(RunConsents, makeRunConsents);
+export class RunRegistry extends Context.Service<
+  RunRegistry,
+  Effect.Success<typeof makeRunRegistry>
+>()("pe/RunRegistry") {
+  static readonly layer = Layer.effect(RunRegistry, makeRunRegistry);
 }
 
 /**
- * The Promise face of {@link RunConsents} for the thread store, control and the journal, which
+ * The Promise face of {@link RunRegistry} for the thread store, control and the journal, which
  * are Promise code until phase 5. Every operation settles synchronously; a refusal is thrown as
  * its tagged value.
  */
-export const runConsentsPromise = (consents: RunConsents["Service"]) => {
+export const runRegistryPromise = (registry: RunRegistry["Service"]) => {
   const now = <A, E>(effect: Effect.Effect<A, E>): A => {
     // effect-edge: island, phase 5
     const exit = Effect.runFork(effect).pollUnsafe();
@@ -141,13 +140,13 @@ export const runConsentsPromise = (consents: RunConsents["Service"]) => {
     throw Option.getOrElse(Exit.findErrorOption(exit), () => Cause.squash(exit.cause));
   };
   return {
-    subscribe: consents.subscribe,
-    open: (ref: RunRef, root?: RunRef) => now(consents.open(ref, root)),
-    assertOpen: (origin: Origin) => now(consents.assertOpen(origin)),
-    checkpoint: (origin: Origin) => now(consents.checkpoint(origin)),
-    close: (ref: RunRef, reason: CloseReason) => now(consents.close(ref, reason)),
-    revoke: (thread: string) => now(consents.revoke(thread)),
-    closeAll: () => now(consents.closeAll),
+    subscribe: registry.subscribe,
+    open: (ref: RunRef, root?: RunRef) => now(registry.open(ref, root)),
+    assertOpen: (origin: Origin) => now(registry.assertOpen(origin)),
+    checkpoint: (origin: Origin) => now(registry.checkpoint(origin)),
+    close: (ref: RunRef, reason: CloseReason) => now(registry.close(ref, reason)),
+    revoke: (thread: string) => now(registry.revoke(thread)),
+    closeAll: () => now(registry.closeAll),
   };
 };
-export type RunConsentsPromise = ReturnType<typeof runConsentsPromise>;
+export type RunRegistryPromise = ReturnType<typeof runRegistryPromise>;

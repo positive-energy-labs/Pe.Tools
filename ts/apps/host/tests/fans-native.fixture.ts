@@ -27,7 +27,7 @@ import { RevitBridge, BridgeError } from "../src/bridge.ts";
 
 
 import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
-import { RunConsents, runConsentsPromise } from "../src/run-consent.ts";
+import { RunRegistry, runRegistryPromise } from "../src/run-registry.ts";
 import { bindControl } from "../src/control.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import type { ReadSources } from "../src/reads/inputs.ts";
@@ -43,7 +43,7 @@ import { SdkSession, SdkDriver } from "../src/sdk-session.ts";
 
 import { fixtureNative } from "./fixture-native.ts";
 import { captureStore } from "./effect-test.ts";
-/** Recorded bridge data only; Work, admission, seals and consent run in the host. */
+/** Recorded bridge data only; Work, admission, seals and the run registry run in the host. */
 export async function nativeFixture(
   clockMode: "real" | "test" = "real",
   _recordings?: undefined,
@@ -53,9 +53,9 @@ export async function nativeFixture(
   const dir = await mkdtemp(join(tmpdir(), "fans-recorded-"));
   const saved = new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(join(dir, "work")) });
   const context = await settle(Layer.buildWithScope(Layer.mergeAll(admittedBuiltinsLayer(saved),
-    RunConsents.layer.pipe(Layer.provide(NodeCrypto.layer))), scope));
+    RunRegistry.layer.pipe(Layer.provide(NodeCrypto.layer))), scope));
   const clock = clockMode === "test" ? await settle(Layer.buildWithScope(TestClock.layer(), scope)) : Context.empty();
-  const runs = runConsentsPromise(Context.get(context, RunConsents));
+  const runs = runRegistryPromise(Context.get(context, RunRegistry));
   bindControl({ runs });
   const transport = await fixtureNative(join(dir, "native"), "driver-ducts.snapshot.walk", "driver-ducts.snapshot.roster",
     "driver-ducts.tables", "driver-revit.catalog.field-options", "fans-accessory-initial", "sdk-ducts.apply", "driver-op.cancel");
