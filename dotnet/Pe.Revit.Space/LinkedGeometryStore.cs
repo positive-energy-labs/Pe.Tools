@@ -47,6 +47,7 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
     internal LinkedGeometryStore Open() {
         if (this._operation) return this;
         this._operation = true;
+        var badHeader = false;
         try {
             Directory.CreateDirectory(directory);
             this._hash = SHA256.Create();
@@ -57,8 +58,10 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
                 this._stream.Position = 0;
                 using var writer = new BinaryWriter(this._stream, Encoding.UTF8, true);
                 writer.Write(PackMagic); writer.Write(Schema); writer.Flush();
-            } else if (this._stream.Length < 8 || reader.ReadInt32() != PackMagic || reader.ReadInt32() != Schema)
+            } else if (this._stream.Length < 8 || reader.ReadInt32() != PackMagic || reader.ReadInt32() != Schema) {
+                badHeader = true;
                 throw new InvalidDataException("Invalid geometry pack header");
+            }
             long complete = 8;
             this._stream.Position = complete;
             while (this._stream.Length - this._stream.Position >= RecordHeaderBytes) {
@@ -73,12 +76,11 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
                 complete = this._stream.Position;
             }
             // Only a complete structural prefix is authoritative after an interrupted append.
-            if (complete != this._stream.Length) throw new InvalidDataException("Incomplete geometry pack record");
+            if (complete != this._stream.Length) this._stream.SetLength(complete);
         } catch (Exception ex) {
             this._unavailable = true;
             this._index.Clear();
-            if (ex is InvalidDataException) this.Discard(ex);
-            else StoredFile.Note(this.PackPath, StoredPolicy.Discard, "Geometry cache", ex);
+            if (badHeader) this.Discard(ex);
             Log.Debug(ex, "Linked geometry pack unavailable at {Path}; extracting current geometry", this.PackPath);
         }
         return this;
@@ -101,8 +103,7 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
                         throw new InvalidDataException("Geometry pack checksum mismatch");
                     return Decode(bytes);
                 } catch (Exception ex) {
-                    this._index.Clear();
-                    this.Discard(ex);
+                    this._index.Remove(name);
                     Log.Debug(ex, "Linked geometry pack entry miss at {Path}", this.PackPath);
                 }
             }
@@ -137,7 +138,6 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
             } catch (Exception ex) {
                 this._unavailable = true;
                 this._index.Clear();
-                StoredFile.Note(this.PackPath, StoredPolicy.Discard, "Geometry cache", ex);
                 Log.Debug(ex, "Linked geometry pack append ignored at {Path}", this.PackPath);
             }
             return geometry;

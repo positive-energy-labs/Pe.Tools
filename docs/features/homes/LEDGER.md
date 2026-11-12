@@ -52,6 +52,9 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
   - 26e75c8f: a failed cancel send kept apart from a persistence failure. Apply it after 90cdd00b.
 
   The T3 partner checked both on a throwaway index at cac368a0. The restart point is `.artifacts/runs/homes-crusade-20261111/t3/SPIKE.md` (parked handoff).
+
+- `LocalDiskJsonFile` (`StateStorage.cs:19-22`) is a second C# state door beside `StoredFile`. Route its `Write` through `StoredFile.WriteAtomic`, and add `Json<T>(name, policy, place)` whose read uses `StoredFile.Read`. Class the remaining callers: `ParametersServiceCache.cs:22`, `ExportApsParametersTask.cs:26`, `ApsParameterCacheReader.cs:10`, and `OutputStorage.cs:30,33`.
+- `PodRuns` can leave `*.tmp` files after a crash between write and move. Nothing sweeps them; they do not affect readers because the receipt names published outputs. Sweep them at run-folder listing when the recovery is built.
 - Run paths carry no project pointer. `family-actions.ts:202` `podContext`, `schedule-actions.ts:492` and `family-spec.ts:27,77` resolve the Pod folder over user and firm only, so Pea can compose a project Pod's spec through `pod.member.compose`, and then no family or schedule run finds that Pod. The `projectPods` sentence on `pod.list` says project Pods do not run. Boundary for whoever adds the pointer to a run path: a run needs a per-home census, never only the pointer. Purger, tip 29898faa.
 
 - R3: `capability-tools.ts` page-branch comment wrongly said a harness re-invocation is a marked re-send, because each re-invocation is a new MCP request id.

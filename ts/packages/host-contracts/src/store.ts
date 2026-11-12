@@ -24,6 +24,7 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
+import { productPathNames } from "./contracts/product.ts";
 
 export const sha256Hex = (bytes: Uint8Array | string) =>
   createHash("sha256").update(bytes).digest("hex");
@@ -141,7 +142,7 @@ function restBlob(blobRoot: string, sha256: string, bytes: Uint8Array): string {
  * The machine's one notice file under a product root. The host's feed reads it, and every process
  * that refuses a stored file (the host, an MCP child) posts to the same one.
  */
-export const storedNoticesFile = (root: string) => join(root, "state", "stored-notices.jsonl");
+export const storedNoticesFile = (root: string) => join(root, "state", productPathNames.storedNoticesFileName);
 
 /** One durable line per stored file that did not decode; the host's notice feed draws them. */
 export const storedNoticeSchema = z.strictObject({

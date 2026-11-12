@@ -2,6 +2,7 @@ using Pe.Revit.Extensions.ProjDocument;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;
 using Newtonsoft.Json;
+using Serilog;
 using System.Windows.Media;
 using WpfColor = System.Windows.Media.Color;
 
@@ -112,7 +113,7 @@ public static class DocumentColorLedger {
         try {
             StoredFile.WriteAtomic(File.FilePath, System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(Data)), overwrite: true);
         } catch (Exception exception) {
-            StoredFile.Note(File.FilePath, StoredPolicy.Keep, "Document colors", exception);
+            Log.Warning(exception, "Could not save document colors at {Path}", File.FilePath);
         }
     }
 }

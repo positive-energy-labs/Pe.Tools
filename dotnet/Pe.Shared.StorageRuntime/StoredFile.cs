@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Runtime.InteropServices;
 using System.ComponentModel;
+using Serilog;
 
 namespace Pe.Shared.StorageRuntime;
 
@@ -18,9 +19,15 @@ public static class StoredFile {
     private static readonly object NoticeLock = new();
 
     public static T? Read<T>(string path, StoredPolicy policy, string place, Func<string, T> decode, string? notices = null) {
-        try { return decode(File.ReadAllText(path)); }
+        string text;
+        try { text = File.ReadAllText(path); }
         catch (FileNotFoundException) { return default; }
         catch (DirectoryNotFoundException) { return default; }
+        catch (Exception exception) {
+            Log.Warning(exception, "Could not read {Place} at {Path}", place, path);
+            return default;
+        }
+        try { return decode(text); }
         catch (Exception exception) {
             Refuse(path, policy, place, exception, notices);
             return default;
@@ -31,7 +38,7 @@ public static class StoredFile {
         Note(path, policy, place, exception, notices);
         if (policy != StoredPolicy.Discard) return;
         try { File.Delete(path); }
-        catch (Exception deletion) { Note(path, policy, place, deletion); }
+        catch (Exception deletion) { Note(path, policy, place, deletion, notices); }
     }
 
     public static void Note(string path, StoredPolicy policy, string place, Exception exception, string? notices = null) {
@@ -42,10 +49,12 @@ public static class StoredFile {
                 using var sha = SHA256.Create();
                 hash = BitConverter.ToString(sha.ComputeHash(File.ReadAllBytes(path))).Replace("-", "").ToLowerInvariant();
             } catch (Exception read) when (read is IOException or UnauthorizedAccessException) { }
-            notices ??= Path.Combine(ProductRuntimeLayout.Current.State.RootPath, "stored-notices.jsonl");
+            notices ??= Path.Combine(ProductRuntimeLayout.Current.State.RootPath, ProductPathNames.StoredNoticesFileName);
             lock (NoticeLock) {
                 if (File.Exists(notices)) {
-                    foreach (var line in File.ReadLines(notices)) {
+                    using var stream = new FileStream(notices, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var reader = new StreamReader(stream);
+                    while (reader.ReadLine() is { } line) {
                         try {
                             var row = JObject.Parse(line);
                             if (row.Value<string>("path") == path && row.Value<string>("sha256") == hash) return;
@@ -56,7 +65,9 @@ public static class StoredFile {
                 var reason = System.Text.RegularExpressions.Regex.Replace(exception.Message, @"\s+", " ");
                 var notice = new { @class = policy == StoredPolicy.Keep ? "keep" : "discard", place, path, sha256 = hash,
                     reason = reason.Substring(0, Math.Min(reason.Length, 500)), at = DateTimeOffset.UtcNow.ToString("o") };
-                File.AppendAllText(notices, JsonConvert.SerializeObject(notice) + "\n", new UTF8Encoding(false));
+                using var append = new FileStream(notices, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+                using var writer = new StreamWriter(append, new UTF8Encoding(false));
+                writer.Write(JsonConvert.SerializeObject(notice) + "\n");
             }
         } catch (Exception) {
             // The notice feed cannot report its own write failure or stop a caller (ADR 0039).

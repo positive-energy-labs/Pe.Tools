@@ -1,8 +1,10 @@
 using Pe.Shared.StorageRuntime.Json;
+using Serilog;
+using System.Text;
 
 namespace Pe.Shared.StorageRuntime;
 
-public sealed class Csv<T>(string filePath) : CsvReadWriter<T> where T : class, new() {
+public sealed class Csv<T>(string filePath, string place) : CsvReadWriter<T> where T : class, new() {
     public string FilePath { get; } = Initialize(filePath);
 
     public Dictionary<string, T> Read() {
@@ -10,16 +12,16 @@ public sealed class Csv<T>(string filePath) : CsvReadWriter<T> where T : class, 
             if (!File.Exists(this.FilePath))
                 return [];
 
-            var lines = File.ReadAllLines(this.FilePath);
-            if (lines.Length == 0 || lines[0].Split(',')[0] != "Key")
-                throw new InvalidDataException("Invalid palette usage CSV header");
+            var lines = Parse(File.ReadAllText(this.FilePath));
+            if (lines.Count == 0 || lines[0][0] != "Key")
+                throw new InvalidDataException("Invalid CSV header");
 
-            var headers = lines[0].Split(',');
+            var headers = lines[0];
             var rows = new Dictionary<string, T>(StringComparer.OrdinalIgnoreCase);
 
-            for (var rowIndex = 1; rowIndex < lines.Length; rowIndex++) {
-                var values = lines[rowIndex].Split(',');
-                if (values.Length != headers.Length) throw new InvalidDataException("Invalid palette usage CSV row");
+            for (var rowIndex = 1; rowIndex < lines.Count; rowIndex++) {
+                var values = lines[rowIndex];
+                if (values.Length != headers.Length) throw new InvalidDataException("Invalid CSV row");
                 if (values.Length == 0 || string.IsNullOrWhiteSpace(values[0]))
                     continue;
 
@@ -40,8 +42,11 @@ public sealed class Csv<T>(string filePath) : CsvReadWriter<T> where T : class, 
             }
 
             return rows;
+        } catch (Exception exception) when (exception is IOException && exception is not InvalidDataException || exception is UnauthorizedAccessException) {
+            Log.Warning(exception, "Could not read {Place} at {Path}", place, this.FilePath);
+            return [];
         } catch (Exception exception) {
-            StoredFile.Refuse(this.FilePath, StoredPolicy.Discard, "Palette command usage", exception);
+            StoredFile.Refuse(this.FilePath, StoredPolicy.Discard, place, exception);
             return [];
         }
     }
@@ -59,20 +64,20 @@ public sealed class Csv<T>(string filePath) : CsvReadWriter<T> where T : class, 
             StorageFileUtils.EnsureDirectoryExists(this.FilePath);
             var properties = typeof(T).GetProperties().Where(property => property.CanRead).ToList();
             var lines = new List<string> {
-                string.Join(",", new[] { "Key" }.Concat(properties.Select(property => property.Name)))
+                string.Join(",", new[] { "Key" }.Concat(properties.Select(property => property.Name)).Select(Quote))
             };
 
             foreach (var entry in data) {
                 var values = new List<string> { entry.Key };
                 values.AddRange(
                     properties.Select(property => property.GetValue(entry.Value)?.ToString() ?? string.Empty));
-                lines.Add(string.Join(",", values));
+                lines.Add(string.Join(",", values.Select(Quote)));
             }
 
             StoredFile.WriteAtomic(this.FilePath, System.Text.Encoding.UTF8.GetBytes(string.Join(Environment.NewLine, lines) + Environment.NewLine), overwrite: true);
             return this.FilePath;
         } catch (Exception exception) {
-            StoredFile.Note(this.FilePath, StoredPolicy.Discard, "Palette command usage", exception);
+            Log.Warning(exception, "Could not write {Place} at {Path}", place, this.FilePath);
             return string.Empty;
         }
     }
@@ -87,6 +92,37 @@ public sealed class Csv<T>(string filePath) : CsvReadWriter<T> where T : class, 
         StorageFileUtils.ValidateFileNameAndExtension(filePath, ".csv");
         StorageFileUtils.EnsureDirectoryExists(filePath);
         return filePath;
+    }
+
+    private static string Quote(string value) => value.IndexOfAny([',', '"', '\r', '\n']) < 0
+        ? value : "\"" + value.Replace("\"", "\"\"") + "\"";
+
+    private static List<string[]> Parse(string text) {
+        var rows = new List<string[]>();
+        var fields = new List<string>();
+        var field = new StringBuilder();
+        var quoted = false;
+        var closed = false;
+        void EndField() { fields.Add(field.ToString()); field.Clear(); closed = false; }
+        for (var index = 0; index < text.Length; index++) {
+            var character = text[index];
+            if (quoted) {
+                if (character != '"') field.Append(character);
+                else if (index + 1 < text.Length && text[index + 1] == '"') { field.Append('"'); index++; }
+                else { quoted = false; closed = true; }
+            } else if (character == ',') EndField();
+            else if (character is '\r' or '\n') {
+                EndField(); rows.Add(fields.ToArray()); fields.Clear();
+                if (character == '\r' && index + 1 < text.Length && text[index + 1] == '\n') index++;
+            } else if (character == '"' && field.Length == 0 && !closed) quoted = true;
+            else {
+                if (closed || character == '"') throw new InvalidDataException("Invalid CSV quote");
+                field.Append(character);
+            }
+        }
+        if (quoted) throw new InvalidDataException("Unterminated CSV quote");
+        if (field.Length > 0 || closed || fields.Count > 0) { EndField(); rows.Add(fields.ToArray()); }
+        return rows;
     }
 
     private static object? ConvertValue(string value, Type targetType) {
