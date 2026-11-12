@@ -1,5 +1,5 @@
 {
-  "$schema": "http://127.0.0.1:50802/schemas/settings/FamilyFoundry/models.json",
+  "$schema": "/schemas/settings/FamilyFoundry/models.json",
   "family": {
     "name": "Sprinkler - Dry - Horizontal Sidewall - Hosted",
     "category": "Sprinklers",

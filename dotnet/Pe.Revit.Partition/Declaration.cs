@@ -47,30 +47,23 @@ public static class EnclosureDeclaration {
             return (Enclosure.Default, IsBound(document)
                 ? "default: enclosure parameter is bound but unset"
                 : "default: enclosure parameter is not bound on this document");
-        return Parse(read) is { Declared: { } declared }
+        var parsed = Parse(read);
+        return parsed.Value is { } declared
             ? (declared.ToEnclosure(), $"declared: {Owner.Name} on Project Information")
-            : (Enclosure.Default, "default: " + Parse(read).Error);
+            : (Enclosure.Default, "default: " + parsed.Refusal);
     }
 
     /// <summary>Writes a declaration. Caller owns the transaction. A stored blob this build cannot read is never written over.</summary>
     public static void Write(Document document, Enclosure enclosure) {
-        var stored = OwnerBlobStore.Read(document, Owner);
-        if (stored.Status == OwnerBlobStatus.Ok && Parse(stored).Error is { } error)
-            throw new InvalidOperationException($"Refusing to overwrite: {error}.");
+        _ = Parse(OwnerBlobStore.Read(document, Owner)).OrThrow();
         _ = OwnerBlobStore.Write(document, Owner, JObject.FromObject(Declared.From(enclosure), Json));
     }
 
-    private static (Declared? Declared, string? Error) Parse(OwnerBlobRead read) {
-        if (read.Status != OwnerBlobStatus.Ok) return (null, read.Error);
-        try {
-            var d = read.Data!.ToObject<Declared>(Json)!;
-            return d.SolidCategories is null && d.RibbonLayers is null
-                ? (null, "the enclosure declaration names no categories and no layers")
-                : (d, null);
-        } catch (JsonException e) {
-            return (null, "the enclosure declaration data is not valid (" + e.Message + ")");
-        }
-    }
+    /// <summary>The declaration, or the reason it is "can't read, kept" (the default then applies).</summary>
+    internal static OwnerValue<Declared> Parse(OwnerBlobRead read) =>
+        read.Parse(data => data.ToObject<Declared>(Json) is { } d && (d.SolidCategories is not null || d.RibbonLayers is not null)
+            ? d
+            : throw new InvalidOperationException("the enclosure declaration names no categories and no layers"));
 
     /// <summary>The stored data shape. Flat on purpose.</summary>
     internal sealed class Declared {

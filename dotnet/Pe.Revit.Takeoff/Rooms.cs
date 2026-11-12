@@ -206,9 +206,16 @@ public static class Rooms
         var zones = ours.Where(r => r.Role == TakeoffCarriers.RoleZoningRegion)
             .Select(r => (r.View.Id.Value(), r.Guid)).ToHashSet();
         var regions = new List<RoomsRegion>();
+        // ADR 0039 keep: a blob this build can't read is reported with its reason and the listing goes on.
+        var unreadable = new List<TakeoffUnreadableBlob>();
         foreach (var (fr, view, role, guid) in ours)
         {
-            var provenance = ReadProvenance(fr, role);
+            var read = TryReadProvenance(fr, role);
+            if (read.Value is not { } provenance)
+            {
+                unreadable.Add(new TakeoffUnreadableBlob(fr.Id.Value(), TakeoffCarriers.Provenance.Name, read.Refusal!));
+                continue;
+            }
             var loops = TakeoffAtlas.Boundaries(fr);
             if (loops.Count == 0) continue;
             var outer = loops.OrderByDescending(loop => Math.Abs(Kernel.Shoelace(loop))).First();
@@ -233,7 +240,7 @@ public static class Rooms
                 touched, role != TakeoffCarriers.RoleZoningRegion && Locked(provenance, loops),   // an authored held row reads locked too (Astra ad180f8f)
                 provenance.Flags.Contains(FlagStale)));
         }
-        return new RoomsSnapshotData(levels, regions);
+        return new RoomsSnapshotData(levels, regions, unreadable);
     }
 
     /// <summary>
@@ -266,7 +273,6 @@ public static class Rooms
         var level = view.GenLevel;
         var runId = string.IsNullOrWhiteSpace(request.RunId) ? Guid.NewGuid().ToString("N") : request.RunId!;
         if (runId == RunDrawn) throw new InvalidOperationException($"runId '{RunDrawn}' is reserved");
-        RequireRunId(runId);
         var scope = ScopeGuid(level);
         var onView = new FilteredElementCollector(doc, view.Id).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
             .OrderBy(fr => fr.Id.Value())
@@ -492,7 +498,7 @@ public static class Rooms
             holds.Count > 0 ? string.Join("; ", holds) : null, Math.Round(sw.Elapsed.TotalMilliseconds, 3));
     }
 
-    // ---------------------------------------------------------------- traces: <state>/rooms/<runId>/<zoneGuid:N>.json
+    // ---------------------------------------------------------------- traces: RoomsRunTraces names the folder
 
     private static readonly Newtonsoft.Json.JsonSerializerSettings TraceJson = new()
     {
@@ -502,18 +508,9 @@ public static class Rooms
 
     private static string TraceRoot => new Pe.Shared.StorageRuntime.ModuleStorage("rooms").State().DirectoryPath;
 
-    private static void RequireRunId(string runId)
-    {
-        if (runId is "." or ".." || runId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-            throw new InvalidOperationException($"runId '{runId}' is not a folder name");
-    }
-
-    private static void WriteTrace(string runId, Guid zone, string label, Pe.Revit.Partition.PartitionAnswer answer)
-    {
-        var dir = Directory.CreateDirectory(Path.Combine(TraceRoot, runId)).FullName;
-        File.WriteAllText(Path.Combine(dir, zone.ToString("N") + ".json"), Newtonsoft.Json.JsonConvert.SerializeObject(
-            new { ZoneGuid = zone, Label = label, answer.Trace, answer.Accounting }, TraceJson));
-    }
+    private static void WriteTrace(string runId, Guid zone, string label, Pe.Revit.Partition.PartitionAnswer answer) =>
+        RoomsRunTraces.Write(TraceRoot, runId, zone.ToString("N") + ".json", Newtonsoft.Json.Linq.JObject.FromObject(
+            new { ZoneGuid = zone, Label = label, answer.Trace, answer.Accounting }, Newtonsoft.Json.JsonSerializer.Create(TraceJson)));
 
     /// <summary>
     ///     rooms.trace: layer 1 per zone for one run on a view. The view's regions name the zones; a run without
@@ -525,9 +522,8 @@ public static class Rooms
         var files = new FilteredElementCollector(doc, view.Id).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
             .Select(fr => TakeoffCarriers.ReadIdentity(fr).Guid).OfType<Guid>()
             .Select(g => g.ToString("N") + ".json").ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (request.RunId != null) RequireRunId(request.RunId);
         var runs = request.RunId != null
-            ? [new DirectoryInfo(Path.Combine(TraceRoot, request.RunId))]
+            ? [new DirectoryInfo(RoomsRunTraces.Folder(TraceRoot, request.RunId))]
             : new DirectoryInfo(TraceRoot).EnumerateDirectories().ToList();
         var run = runs.Where(d => d.Exists)
             .Select(d => (Dir: d, Files: d.EnumerateFiles("*.json").Where(f => files.Contains(f.Name)).ToList()))
@@ -538,7 +534,7 @@ public static class Rooms
             throw new InvalidOperationException(request.RunId != null
                 ? $"run '{request.RunId}' traced no zone on '{view.Name}'"
                 : $"no rooms.partition run has traced a zone on '{view.Name}'");
-        return new RoomsTraceData(run.Dir.Name, run.Files.OrderBy(f => f.Name, StringComparer.Ordinal)
+        return new RoomsTraceData(RoomsRunTraces.RunId(File.ReadAllText(run.Files[0].FullName)), run.Files.OrderBy(f => f.Name, StringComparer.Ordinal)
             .Select(f => Newtonsoft.Json.JsonConvert.DeserializeObject<RoomsZoneTrace>(File.ReadAllText(f.FullName), TraceJson)!)
             .ToList());
     }
@@ -731,19 +727,25 @@ public static class Rooms
             ? provenance
             : provenance with { Flags = [.. provenance.Flags, FlagAuthored] };
 
-    private static RegionProvenance ReadProvenance(FilledRegion fr, string? role)
+    // For a write run: a blob that cannot be read stops the run with its reason and is never written over.
+    private static RegionProvenance ReadProvenance(FilledRegion fr, string? role) =>
+        TryReadProvenance(fr, role).OrThrow()!;
+
+    private static Pe.Shared.RevitData.Serialization.OwnerValue<RegionProvenance> TryReadProvenance(FilledRegion fr, string? role)
     {
-        var json = TakeoffCarriers.ReadProvenance(fr);
-        if (role != TakeoffCarriers.RoleZoningRegion)
-            return RegionProvenance.FromJson(json ?? throw new InvalidOperationException($"region {fr.Id} has no provenance blob"));
+        var blob = TakeoffCarriers.ReadProvenanceBlob(fr);
+        if (role != TakeoffCarriers.RoleZoningRegion) return RegionProvenance.Read(blob);
         // A zone takeoffs adopted carries TakeoffZoneProvenance (V, View, Name, SystemTag): read it with defaults
         // (Version 0, no RunId), call it drawn, and let its keys ride in Unknown. The next write stores it as v1.
-        var read = json == null ? null : Newtonsoft.Json.JsonConvert.DeserializeObject<RegionProvenance>(json);
-        return (read ?? new RegionProvenance(1, Guid.Empty, RunDrawn, "", 0)) with
+        // A zone with no blob at all reads as drawn too.
+        var read = Pe.Shared.RevitData.Serialization.OwnerBlob.Parse(blob, data =>
+            Newtonsoft.Json.JsonConvert.DeserializeObject<RegionProvenance>(data.ToString(Newtonsoft.Json.Formatting.None)));
+        if (read.Refusal != null) return read;
+        return new((read.Value ?? new RegionProvenance(1, Guid.Empty, RunDrawn, "", 0)) with
         {
             Version = 1,
-            RunId = string.IsNullOrEmpty(read?.RunId) ? RunDrawn : read!.RunId,
-        };
+            RunId = string.IsNullOrEmpty(read.Value?.RunId) ? RunDrawn : read.Value!.RunId,
+        }, null);
     }
 
     private static ViewPlan LevelView(Document doc, string name)

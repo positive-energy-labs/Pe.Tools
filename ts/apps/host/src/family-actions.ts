@@ -69,7 +69,6 @@ import type {
   RevitMatrixLoadedFamilies,
 } from "@pe/host-contracts/generated";
 import {
-  hostProcessIdentity,
   productPathNames,
   scriptingWorkspaceIdentity,
 } from "@pe/host-contracts/contracts";
@@ -152,12 +151,9 @@ export const writeMemberOnce = (
     throw error;
   });
 
-/**
- * The `$schema` a family model member carries; C# owns the URL shape. The origin is the host that
- * is running, never the preferred port: another checkout's host must not serve our members' schema.
- */
-const familyModelSchema = () =>
-  `${process.env[hostProcessIdentity.hostBaseUrlVariable] || hostProcessIdentity.defaultHostBaseUrl}/schemas/settings/FamilyFoundry/models.json`;
+/** The `$schema` a family member carries: the library path, no origin. C# owns the shape (`SettingsSchemaUrl.Path`). */
+const familyModelSchema = "/schemas/settings/FamilyFoundry/models.json";
+const familyPatchSchema = "/schemas/settings/FamilyFoundry/patches.json";
 
 /**
  * The composed member as authored, and the exact root and dependency bytes that one composition read.
@@ -183,7 +179,7 @@ const familySpec = async (
 const familyMember = (modelJson: string) => {
   const { unmodeled = [], ...model } = JSON.parse(modelJson) as { unmodeled?: unknown[] };
   return {
-    content: `${JSON.stringify({ $schema: familyModelSchema(), ...model }, null, 2)}\n`,
+    content: `${JSON.stringify({ $schema: familyModelSchema, ...model }, null, 2)}\n`,
     unmodeled,
   };
 };
@@ -193,7 +189,7 @@ const draftContent = (spec: string) => {
   const { $schema: _, ...model } = JSON.parse(spec.replace(/^\uFEFF/, "")) as object & {
     $schema?: string;
   };
-  return `${JSON.stringify({ $schema: familyModelSchema(), ...model }, null, 2)}
+  return `${JSON.stringify({ $schema: familyModelSchema, ...model }, null, 2)}
 `;
 };
 
@@ -462,7 +458,7 @@ const familiesDrafts = (doc: FamiliesRouteDocument): DraftSource[] => {
     source: {
       ...(doc.pod ? { pod: doc.pod } : {}),
       path: `edit/${familyName.replace(/[^\w.-]+/g, "-")}.json`,
-      content: `${JSON.stringify({ $schema: familyModelSchema().replace("/models.json", "/patches.json"), ...familyStagedPatch(doc.cells, familyName)!.spec }, null, 2)}\n`,
+      content: `${JSON.stringify({ $schema: familyPatchSchema, ...familyStagedPatch(doc.cells, familyName)!.spec }, null, 2)}\n`,
     },
     familyNames: [familyName],
     executionOptions: doc.executionOptions,

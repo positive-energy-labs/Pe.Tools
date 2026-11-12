@@ -34,6 +34,8 @@ Each step has one owner and writes to one home. "Op" means a `takeoff.*`/`rhvac.
 | Pending proposals (unaccepted rerun diffs) | nowhere — session-ephemeral | admissible because reruns are deterministic and every decision writes through immediately |
 | Run artifacts (replay, ink, evidence) | project-scoped artifact directory | diagnostics, never state |
 
+Every blob in this table is an owner blob: the `{owner, version, data}` envelope in a hidden shared text parameter, written through `OwnerBlobStore` (ADR 0032 storage amendment). An old un-enveloped blob reads as absent and the next write replaces it. An enveloped blob this build can't read is refused and kept: a read reports it as "can't read, kept" with its reason and goes on, and no write goes over it (ADR 0039). Extensible storage is banned. The one exception in the repo is the duct per-fitting results entity, which Revit's pressure-drop server API requires.
+
 ## Identity spine
 
 Two tiers everywhere: a stable GUID for machine joins, a mutable human tag or name for display and export. Designers type tags; validate resolves them against the registry and asks when a tag vanishes while another appears (rename vs new System). The equipment↔zone relationship is a tag join computed at query time — no persisted element-to-element links. The `.r10` link is `{file identity, room Identifier}` stored in the Room Region's provenance blob, so revision export matches on `Identifier` instead of fragile name strings.

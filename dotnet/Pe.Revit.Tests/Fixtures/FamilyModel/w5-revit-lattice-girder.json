@@ -1,5 +1,5 @@
 {
-  "$schema": "http://127.0.0.1:65251/schemas/settings/FamilyFoundry/models.json",
+  "$schema": "/schemas/settings/FamilyFoundry/models.json",
   "family": {
     "name": "w5-fam",
     "category": "GenericModels",

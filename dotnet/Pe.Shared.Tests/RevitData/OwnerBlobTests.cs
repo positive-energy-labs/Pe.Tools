@@ -41,13 +41,27 @@ public sealed class OwnerBlobTests {
 
         Assert.That(read.Status, Is.EqualTo(OwnerBlobStatus.Absent));
         Assert.That(read.MayOverwrite, Is.True);
-        Assert.That(read.DataOrThrow(), Is.Null);
+        Assert.That(read.Parse(data => data), Is.EqualTo(new OwnerValue<JObject>(null, null)), "absent is neither a value nor a refusal");
     }
 
-    [TestCase("not json at all")]
     [TestCase("null")]
     [TestCase("[]")]
     [TestCase("""{"version":3,"workRevision":1}""", Description = "an old flat shape")]
+    [TestCase("""{"Version":1,"Systems":[]}""")]
+    public void An_old_unenveloped_shape_is_absent_and_may_be_written_over(string raw) {
+        var read = OwnerBlob.Decode(Owner, raw);
+
+        Assert.Multiple(() => {
+            Assert.That(read.Status, Is.EqualTo(OwnerBlobStatus.Absent));
+            Assert.That(read.MayOverwrite, Is.True);
+            Assert.That(read.Error, Is.Null);
+            Assert.That(read.Raw, Is.EqualTo(raw));
+            Assert.That(read.Parse(data => data), Is.EqualTo(new OwnerValue<JObject>(null, null)), "the owner starts from its defaults");
+        });
+    }
+
+    [TestCase("not json at all", Description = "not provably old")]
+    [TestCase("""{"version":3,"workRevision":1""", Description = "truncated")]
     [TestCase("""{"owner":"test-owner","version":3}""")]
     [TestCase("""{"owner":"test-owner","version":3,"data":[]}""")]
     [TestCase("""{"owner":"test-owner","version":3,"data":{},"extra":1}""")]
@@ -66,7 +80,8 @@ public sealed class OwnerBlobTests {
             Assert.That(read.Raw, Is.EqualTo(raw), "the refused bytes are handed back unchanged");
             Assert.That(read.MayOverwrite, Is.False);
             Assert.That(read.Error, Does.Contain("refused and kept"));
-            Assert.That(() => read.DataOrThrow(), Throws.InvalidOperationException);
+            Assert.That(read.Parse(data => data).Refusal, Is.EqualTo(read.Error), "a read hands the refusal back as a value");
+            Assert.That(() => read.Parse(data => data).OrThrow(), Throws.InvalidOperationException, "only a write door throws it");
         });
     }
 
@@ -154,6 +169,70 @@ public sealed class OwnerBlobTests {
     public void The_project_pointer_refuses_data_that_is_not_exactly_a_path(string data) =>
         Assert.That(ProjectHomePointer.FromData(JObject.Parse(data)).Pointer, Is.Null);
 
+    // ---- the keep policy (ADR 0039): one refused blob never throws past its reader
+
+    private static IEnumerable<TestCaseData> OwnerReads() {
+        static TestCaseData Case<T>(OwnerDescriptor owner, Func<OwnerBlobRead, OwnerValue<T>> read, string? unparseableData) where T : class =>
+            new TestCaseData(owner, (Func<OwnerBlobRead, (bool HasValue, string? Refusal)>)(blob => {
+                var value = read(blob);
+                return (value.Value is not null, value.Refusal);
+            }), unparseableData) { TestName = $"A_refused_{owner.Owner}_blob_is_a_refusal_value_not_an_exception" };
+
+        yield return Case(DuctLossStore.Owner, DuctLossStore.Read, """{"version":2,"workRevision":1}""");
+        yield return Case(ParameterLinkProfile.Owner, ParameterLinkProfile.Read, """{"definitions":[]}""");
+        yield return Case(ProjectHomePointer.Owner, ProjectHomePointer.Read, """{"path":"C:/Projects"}""");
+        yield return Case(SystemRegistry.Owner, SystemRegistry.Read, """{"systems":[{"guid":"not-a-guid","tag":"FC-1"}]}""");
+        yield return Case(RegionProvenance.Owner, RegionProvenance.Read, """{"zoneGuid":"not-a-guid"}""");
+        yield return Case(Pe.Revit.Partition.EnclosureDeclaration.Owner, Pe.Revit.Partition.EnclosureDeclaration.Parse, """{"solidSources":["Host"]}""");
+        // AutoTag's data names Revit categories, so parsing it needs RevitAPI; the envelope refusals do not.
+        yield return Case(Pe.Revit.SettingsRuntime.Modules.AutoTag.AutoTagSettings.Owner,
+            Pe.Revit.SettingsRuntime.Modules.AutoTag.AutoTagSettings.Read, null);
+    }
+
+    [TestCaseSource(nameof(OwnerReads))]
+    public void A_refused_blob_is_a_refusal_value_not_an_exception(
+        OwnerDescriptor owner, Func<OwnerBlobRead, (bool HasValue, string? Refusal)> read, string? unparseableData) {
+        var future = $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version + 998}}},"data":{"fromTheFuture":true}}""";
+        var broken = $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version}}},"data":[]}""";
+
+        Assert.Multiple(() => {
+            foreach (var raw in new[] { future, broken, "not json" }) {
+                var blob = OwnerBlob.Decode(owner, raw);
+                (bool HasValue, string? Refusal) result = default;
+                Assert.That(() => result = read(blob), Throws.Nothing, raw);
+                Assert.That(result.HasValue, Is.False, raw);
+                Assert.That(result.Refusal, Does.Contain("refused and kept"), raw);
+                Assert.That(blob.Raw, Is.EqualTo(raw), "the bytes are handed back unchanged");
+            }
+            if (unparseableData is null) return;
+            var enveloped = OwnerBlob.Decode(owner, $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version}}},"data":{{{unparseableData}}}}""");
+            Assert.That(enveloped.Status, Is.EqualTo(OwnerBlobStatus.Ok), "the envelope reads; the owner's data does not");
+            (bool HasValue, string? Refusal) parsed = default;
+            Assert.That(() => parsed = read(enveloped), Throws.Nothing);
+            Assert.That(parsed.HasValue, Is.False);
+            Assert.That(parsed.Refusal, Does.Contain("refused and kept"));
+        });
+    }
+
+    [Test]
+    public void An_old_unenveloped_blob_gives_every_owner_its_defaults() {
+        var old = """{"version":1,"enabled":true,"workRevision":2,"Systems":[]}""";
+
+        Assert.Multiple(() => {
+            Assert.That(DuctLossStore.Read(OwnerBlob.Decode(DuctLossStore.Owner, old)), Is.EqualTo(new OwnerValue<DuctLossStore>(null, null)));
+            Assert.That(ParameterLinkProfile.Read(OwnerBlob.Decode(ParameterLinkProfile.Owner, old)), Is.EqualTo(new OwnerValue<ParameterLinkProfile>(null, null)));
+            Assert.That(SystemRegistry.Read(OwnerBlob.Decode(SystemRegistry.Owner, old)), Is.EqualTo(new OwnerValue<SystemRegistry>(null, null)));
+            Assert.That(ProjectHomePointer.Read(OwnerBlob.Decode(ProjectHomePointer.Owner, old)), Is.EqualTo(new OwnerValue<ProjectHomePointer>(null, null)));
+            Assert.That(DuctLossResult.Decode("""[{"VelocityPressureInWg":0.5,"Coefficient":1.25}]"""), Is.Null, "an old bare list prices nothing until losses are reapplied");
+        });
+    }
+
+    [Test]
+    public void A_region_with_no_blob_is_a_refusal_and_an_absent_registry_is_empty() {
+        Assert.That(RegionProvenance.Read(OwnerBlob.Decode(RegionProvenance.Owner, null)).Refusal, Does.Contain("no provenance blob"));
+        Assert.That(SystemRegistry.Read(OwnerBlob.Decode(SystemRegistry.Owner, null)), Is.EqualTo(new OwnerValue<SystemRegistry>(null, null)));
+    }
+
     // ---- owner shapes
 
     [Test]
@@ -184,7 +263,10 @@ public sealed class OwnerBlobTests {
 
     [Test]
     public void Every_owner_has_its_own_name_parameter_and_guid() {
-        OwnerDescriptor[] owners = [ProjectHomePointer.Owner, DuctLossStore.Owner, DuctLossResult.Owner, ParameterLinkProfile.Owner, SystemRegistry.Owner];
+        OwnerDescriptor[] owners = [
+            ProjectHomePointer.Owner, DuctLossStore.Owner, DuctLossResult.Owner, ParameterLinkProfile.Owner, SystemRegistry.Owner,
+            RegionProvenance.Owner, Pe.Revit.Partition.EnclosureDeclaration.Owner, Pe.Revit.SettingsRuntime.Modules.AutoTag.AutoTagSettings.Owner
+        ];
 
         Assert.Multiple(() => {
             Assert.That(owners.Select(o => o.Owner), Is.Unique);

@@ -40,6 +40,21 @@ public sealed record RegionProvenance(
 
     public string ToJson() => TakeoffJson.Serialize(this);
 
+    /// <summary>
+    ///     The per-region blob, on the element anchor. Its data is this record on rooms and residue and
+    ///     TakeoffZoneProvenance on an adopted zone; the envelope version gates both. Changing the GUID orphans
+    ///     deployed models — never reuse.
+    /// </summary>
+    public static readonly Pe.Shared.RevitData.Serialization.OwnerDescriptor Owner = new("takeoff-region", 1,
+        new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9003"), "_PE_TakeoffProvenance",
+        "Pe takeoff machine bookkeeping blob (run id, source hash, .r10 link, holds).");
+
+    /// <summary>A room or residue region's provenance, or the reason its blob is "can't read, kept". Absent is a refusal too.</summary>
+    public static Pe.Shared.RevitData.Serialization.OwnerValue<RegionProvenance> Read(Pe.Shared.RevitData.Serialization.OwnerBlobRead read) =>
+        read.Status == Pe.Shared.RevitData.Serialization.OwnerBlobStatus.Absent
+            ? new(null, "the region has no provenance blob")
+            : Pe.Shared.RevitData.Serialization.OwnerBlob.Parse(read, data => FromJson(data.ToString(Formatting.None)));
+
     // Fail-closed: an unreadable or wrong-version blob throws; callers surface and stop.
     public static RegionProvenance FromJson(string json)
     {

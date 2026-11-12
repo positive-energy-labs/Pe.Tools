@@ -1,7 +1,6 @@
 using Pe.Revit.Scripting.Pods;
 using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Shared.HostContracts.Operations;
-using Pe.Shared.HostContracts.Transport;
 using Pe.Shared.StorageRuntime.Modules;
 using System.IO;
 
@@ -9,9 +8,6 @@ namespace Pe.App.Pods;
 
 /// <summary>Palette-side view of the pod library: members selected by `$schema`, loading, and apply-source checks.</summary>
 internal static class PodMembers {
-    public static string SchemaUrl(ISettingsRootBinding library) =>
-        HostEndpoint.ResolveHostBaseUrl().TrimEnd('/') + SettingsSchemaUrl.Path(library);
-
     /// <summary>Host-admitted snapshots whose manifest and entrypoint source passed native validation.</summary>
     public static IReadOnlyList<PreparedPod> Pods() =>
         new ScriptPodPreparationService().List().OfType<PreparedPod>().ToList();

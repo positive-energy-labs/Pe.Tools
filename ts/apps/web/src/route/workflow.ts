@@ -18,7 +18,7 @@ export interface PlanSheet {
   entries: readonly PlanEntry[];
 }
 
-/** `$schema` is an absolute URL on whichever host served it; the path is what names the library. */
+/** A stored `$schema` is the library path; a file written with an origin still names its library by path. */
 export const isSpecOf = (schema: string | null | undefined, path: string | readonly string[]) => {
   if (!schema) return false;
   try {

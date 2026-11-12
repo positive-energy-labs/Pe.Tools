@@ -134,7 +134,7 @@ public sealed record DuctRoleRecord(string Role, DateTimeOffset RuledAt);
 ///     carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
 ///     v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
 ///     finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-///     edits. Any other stored version or shape is refused and kept: there is no migration.
+///     edits. An envelope at any other version is refused and kept; an old un-enveloped store reads as absent.
 /// </summary>
 public sealed record DuctLossStore {
     public const int CurrentVersion = 2;
@@ -188,6 +188,9 @@ public sealed record DuctLossStore {
             ? FromData(read.Data!)
             : throw new InvalidOperationException(read.Error ?? "duct loss store is empty");
     }
+
+    /// <summary>The model's store, or the reason it is "can't read, kept".</summary>
+    public static OwnerValue<DuctLossStore> Read(OwnerBlobRead read) => read.Parse(FromData);
 
     /// <summary>Fail-closed: data this build cannot read as a store throws.</summary>
     public static DuctLossStore FromData(JObject data) {

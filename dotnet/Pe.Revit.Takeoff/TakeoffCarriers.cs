@@ -24,11 +24,8 @@ public static class TakeoffCarriers
     // Stable carrier identities. Changing any of these orphans deployed models — never reuse.
     internal static readonly Guid RoleGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9001");
     internal static readonly Guid RegionGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9002");
-    // The per-region blob's data is the consumer's (RegionProvenance on rooms and residue, TakeoffZoneProvenance
-    // on an adopted zone); the envelope version gates both. The registry's descriptor is SystemRegistry.Owner.
-    internal static readonly OwnerDescriptor Provenance = new("takeoff-region", 1,
-        new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9003"), "_PE_TakeoffProvenance",
-        "Pe takeoff machine bookkeeping blob (run id, source hash, .r10 link, holds).");
+    // The per-region blob's descriptor is RegionProvenance.Owner; the registry's is SystemRegistry.Owner.
+    internal static OwnerDescriptor Provenance => RegionProvenance.Owner;
     internal static readonly Guid RoomTypeGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9005");
 
     internal static readonly Guid RoomNameGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9010");
@@ -159,9 +156,15 @@ public static class TakeoffCarriers
         _ = OwnerBlobStore.Write(region, Provenance, JObject.Load(reader));
     }
 
-    // Null when the region holds no blob. A blob this build cannot read throws: fail closed, bytes kept.
-    public static string? ReadProvenance(FilledRegion region) =>
-        OwnerBlobStore.Read(region, Provenance).DataOrThrow()?.ToString(Formatting.None);
+    // A read never throws for a blob this build cannot read: the refusal is the value (ADR 0039 keep).
+    internal static OwnerBlobRead ReadProvenanceBlob(FilledRegion region) => OwnerBlobStore.Read(region, Provenance);
+
+    public static OwnerValue<string> TryReadProvenance(FilledRegion region) =>
+        ReadProvenanceBlob(region).Parse(data => data.ToString(Formatting.None));
+
+    // For a write run only: null when the region holds no blob; a blob that cannot be read stops the run with its
+    // reason, because a run that cannot say which zone a region belongs to must not write around it.
+    public static string? ReadProvenance(FilledRegion region) => TryReadProvenance(region).OrThrow();
 
     public static void WriteRoomType(FilledRegion region, string roomType) =>
         Set(region, RoomTypeGuid, roomType);
@@ -196,12 +199,12 @@ public static class TakeoffCarriers
     private static double? Number(FilledRegion region, Guid guid) =>
         region.get_Parameter(guid) is { HasValue: true } p ? p.AsDouble() : null;
 
-    // Absent blob = empty registry (a model that never registered a System). Any stored blob that
-    // fails the codec throws — fail closed, never proceed against a half-read registry.
-    public static SystemRegistry ReadRegistry(Document document) =>
-        OwnerBlobStore.Read(document, SystemRegistry.Owner).DataOrThrow() is { } data
-            ? SystemRegistry.FromData(data)
-            : new SystemRegistry();
+    // Absent blob = empty registry (a model that never registered a System). A stored blob that fails the codec is
+    // a refusal value for a read (ADR 0039 keep), and stops a write run with its reason.
+    public static OwnerValue<SystemRegistry> TryReadRegistry(Document document) =>
+        SystemRegistry.Read(OwnerBlobStore.Read(document, SystemRegistry.Owner));
+
+    public static SystemRegistry ReadRegistry(Document document) => TryReadRegistry(document).OrThrow() ?? new SystemRegistry();
 
     public static void WriteRegistry(Document document, SystemRegistry registry) =>
         _ = OwnerBlobStore.Write(document, SystemRegistry.Owner, registry.ToData());

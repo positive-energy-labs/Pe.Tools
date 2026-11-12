@@ -10,12 +10,21 @@ const inside = (root: string, path: string) => {
   return path;
 };
 
+/**
+ * The one path segment a thread id becomes; the id itself stays data (homes MAP slice 7).
+ * Exception to "an id in a path is hashed": an id that is already a plain folder name is its own
+ * segment, because the harness thread store names its folders by raw id and is do-not-invest
+ * (T3-CUTOVER). The boundary that holds: no other id shape reaches a path unhashed, so a T3 id
+ * (`thread:delegated-task:command%3A…`) never does.
+ */
+export const threadSegment = (threadId: string) =>
+  /^[a-z0-9][a-z0-9_-]*$/i.test(threadId) ? threadId : sha(threadId);
+
 /** The durable thread writer is synchronous. These reads occupy the same JS turn, so a live
  * append or metadata write cannot interleave. The captured tail may still be a running turn. */
 export async function exportThread(root: string, threadId: string, hostLog: HostLog) {
-  if (!/^[a-z0-9][a-z0-9_-]*$/i.test(threadId)) throw Error("Invalid thread export id");
   const store = realpathSync(root);
-  const directory = inside(store, join(store, threadId));
+  const directory = inside(store, join(store, threadSegment(threadId)));
   const sources = (["meta.json", "events.jsonl"] as const).map((path) => {
     const file = join(directory, path);
     let present = true;
@@ -66,7 +75,7 @@ export async function exportThread(root: string, threadId: string, hostLog: Host
   return new Response(content, {
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "content-disposition": `attachment; filename="${threadId}-${sha256.slice(0, 12)}.json"`,
+      "content-disposition": `attachment; filename="${threadSegment(threadId)}-${sha256.slice(0, 12)}.json"`,
       "x-pe-export-sha256": sha256,
       "cache-control": "no-store",
     },

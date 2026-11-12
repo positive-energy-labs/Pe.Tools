@@ -312,9 +312,10 @@ effectTest(
       const afterWrite = yield* resolve({ elementIds: [3, 2], contextRepresentation: "overview" });
       expect(afterWrite.body.freshnessGeneration).not.toBe(first.body.freshnessGeneration);
       expect((yield* resolve({}, "missing.operation")).status).toBe(409);
+      // The GET route reads by library path, the stored `$schema` form, so it shares a /call that passes it.
       const schemaUrl = "http://host/schemas/settings/ff/Family.json";
       const request = (call = false, anonymous = false) => Effect.promise(() => web.handler(
-        call ? new Request("http://host/call", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: "settings.schema", request: { schemaUrl } }) }) : new Request(schemaUrl, { headers: { host: "host" } }),
+        call ? new Request("http://host/call", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: "settings.schema", request: { schemaUrl: new URL(schemaUrl).pathname } }) }) : new Request(schemaUrl, { headers: { host: "host" } }),
         Context.make(RequestIdentity, admittedRequestIdentity(anonymous ? { kind: "anonymous" } : { kind: "human", via: "local" }, { bridgeSessionId: "session" })),
       ));
       const call = yield* request(true).pipe(Effect.forkScoped);
