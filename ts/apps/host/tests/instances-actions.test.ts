@@ -727,7 +727,7 @@ test("handover saves the acquired copy to its create-only result with a diff pla
   ).work;
   expect(cleaned).toMatchObject({
     state: "succeeded",
-    basis: { kind: "acquisition", id: acquired.id, scope: { kind: "release" } },
+    basis: { kind: "human" },
     result: {
       closed: openId,
       removed: [work],

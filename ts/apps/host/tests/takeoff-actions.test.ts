@@ -36,12 +36,12 @@ test.each(["selected", "unrelated", "none"] as const)(
       const revision = (await work.read(key, "rooms"))!.revision;
       expect(await submit("preview", "rooms.write.preview", revision, { kind: "pea", context: "rooms-recorded", thread: run.thread, run, root: run })).toMatchObject({ state: "succeeded" });
       expect(native.calls).toEqual([]);
-      // Pea's write asks nobody (ADR 0038); Work that moved after its preview still refuses it as stale.
+      // Pea's write asks nobody (ADR 0038); Work that moved after its preview refuses it at admission.
       if (changed !== "none") await work.publish(key, "rooms", [{ path: ["edits", changed === "selected" ? a : b, "edit", "value"], value: "newer" }], revision);
       const receipt = await submit("write", "rooms.write", revision, { kind: "pea", context: "rooms-recorded", thread: run.thread, run, root: run });
       if (changed === "none") expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded" });
       else {
-        expect(receipt).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "stale" } });
+        expect(receipt).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "stale_revision" } });
         expect(native.calls).toEqual([]);
         const latest = (await work.read(key, "rooms"))!.revision;
         expect(await submit("fresh-preview", "rooms.write.preview", latest)).toMatchObject({ state: "succeeded" });

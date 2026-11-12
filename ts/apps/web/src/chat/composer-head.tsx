@@ -394,8 +394,7 @@ export function ComposerState(_: { situation: ChatSituation }) {
 
 export type ComposerStatus = { text: string; caution: boolean; detail?: string };
 
-/** Pea's live questions, then the Work the bound document holds: the top of the composer box.
- *  Run consent is the topbar sweep's (ADR 0035 rule 6), never a composer card. */
+/** Pea's live questions, then the Work the bound document holds: the top of the composer box. */
 export function ComposerWork({ situation }: { situation: ChatSituation }) {
   const { answerQuestion, store, cancel, currentThreadId } = useWorkbench();
   const questions = useTranscript(selectQuestions);

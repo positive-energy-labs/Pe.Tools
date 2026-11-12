@@ -71,7 +71,10 @@ test("recorded Fans roster traverses the real public native admission", async ()
 test.each(["human", "pea"] as const)("D03/C07: %s plan shares admitted inputs, preserves Work and submits its derived scope", async (actor) => {
   const f = await fixture();
   const work = await stage(f);
-  const caller = actor === "human" ? human : pea("plan-inputs");
+  // Every Pea command belongs to an open run (ADR 0038), a plan with no effects included.
+  const run = { thread: "plan-inputs", turn: "plan-turn" };
+  if (actor === "pea") f.runs.open(run);
+  const caller = actor === "human" ? human : { ...pea("plan-inputs"), run, root: run };
   const fans = (await f.saved.view({ ...f.key, route: "fans" }, "fans"))!;
   const held = await settle(Deferred.make<void>());
   closes.push(() => settle(Deferred.succeed(held, undefined).pipe(Effect.asVoid)));

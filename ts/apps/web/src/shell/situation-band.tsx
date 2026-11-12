@@ -174,8 +174,7 @@ export function JournalButtons({
 
 /**
  * The Timeline's head: the latest Work edit (who made it, its state, the Work revision), unless a
- * command ran after it; else the latest entry, in one line. Consent windows are the topbar sweep's
- * (ADR 0035 rule 6). The full history opens beneath it; it never takes a row of its own.
+ * command ran after it; else the latest entry, in one line. The full history opens beneath it; it never takes a row of its own.
  */
 export function TimelineHead({
   owner,

@@ -51,7 +51,7 @@ export const machineHostSchema = z
   })
   .readonly();
 
-/** Host-owned access evidence (ADR 0017/0021), never a substitute for run consent. */
+/** Host-owned access evidence (ADR 0017/0021): where a document came from, never a grant to write it. */
 export const machineAccessSchema = z
   .discriminatedUnion("kind", [
     z.object({ kind: z.literal("pea"), acquisition: z.string() }),

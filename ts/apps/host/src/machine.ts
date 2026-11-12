@@ -85,7 +85,7 @@ export type AttachmentRead = Omit<MachineAttachment, "documents"> & {
  * Acquisitions are Pea's; exact-lifetime human-added targets are a thread's. Both join product
  * openIds to SDK ids, so a socket that did not attest SDK identity is read-only here.
  */
-/** Acquisition and Page/device target provenance only; Pea write capability comes from run consent. */
+/** Acquisition and Page/device target provenance only; Pea's commands need an open run, and the three guards hold at their own doors (ADR 0038). */
 function withAccess(
   attachment: AttachmentRead,
   acquired: ReadonlyMap<string, string>,

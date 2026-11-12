@@ -270,8 +270,6 @@ async function observeLifecycle(
   const target = selection ? await readTarget(selection, expected, read) : null;
   const effects: Footprint = [];
   const consumes: Consumed[] = [];
-  /** What the act touches, as the SDK census reads it: the guards' evidence (ADR 0038). */
-  let documents: readonly GuardedDocument[] = [];
   let basis = ctx.basis;
   if (target) {
     const census = await readMachineSession(target.process).catch((error: unknown) => {
@@ -291,7 +289,6 @@ async function observeLifecycle(
       );
     const attached = census.attachment;
     const affected = census.documents.filter((doc) => !document || doc.openId === document.openId);
-    documents = affected;
     if (
       (document && !affected.length) ||
       (attached &&
@@ -346,7 +343,7 @@ async function observeLifecycle(
         throw refused("The SDK document lifetime is not open in the original process");
     }
   }
-  return { target, effects, consumes, basis, documents };
+  return { target, effects, consumes, basis };
 }
 
 /**
@@ -360,7 +357,7 @@ async function bindControl(
   document: SdkDocumentRef | undefined,
   guard: (documents: readonly GuardedDocument[]) => void,
 ): Promise<CommandBinding> {
-  const { target, documents, ...facts } = await observeLifecycle(
+  const { target, ...facts } = await observeLifecycle(
     ctx,
     read,
     session.selection,
@@ -368,7 +365,15 @@ async function bindControl(
     document,
   );
   if (!target) throw refused("The original SDK process is unavailable");
-  guard(documents);
+  // The guards' evidence is the SDK's own `doc list`: the session census carries no `isModified`.
+  // A list that cannot be read stands as one unread document, so the act is held.
+  if (guards(ctx.caller))
+    guard(
+      await listDocuments(session.selection, target.process, read).then(
+        (docs): GuardedDocument[] => docs.filter((doc) => !document || doc.openId === document.openId),
+        (): GuardedDocument[] => [{}],
+      ),
+    );
   return { ...facts, prepare: async () => ({ target, acquisition: null }) };
 }
 

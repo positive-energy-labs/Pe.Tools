@@ -199,7 +199,7 @@ const kinds = (events: HarnessEvent[]) =>
     .map((e) => (e.kind === "update" ? `update:${e.update.sessionUpdate}` : e.kind));
 
 test.each(["claude", "codex"] as const)(
-  "%s: canonical Address Work joins find, stage, sealed preview, 60-second consent, journal apply and receipt in one chain",
+  "%s: canonical Address Work joins find, stage, sealed preview, journal apply and receipt in one chain, asking nobody",
   async (harness) => {
     const dir = await mkdtemp(join(root, "chain-"));
     const h = await host(),
@@ -409,32 +409,23 @@ test.each(["claude", "codex"] as const)(
       const id = (await call("POST", "/pe/threads", { providerId: harness })).json.id as string;
       await until(read, id, (body) => body.models.length > 0);
       bindControl({ runs: h.runs });
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
       await call("POST", `/pe/threads/${id}/prompt`, { text: `chain ${harness}` });
-      const waiting = await untilIo(
-        () => read(id),
-        (body) => !body.running || openAsks(body).some((ask) => ask.scope === "run"),
-      );
-      expect(openAsks(waiting), String(failures[0] ?? JSON.stringify(waiting.events))).toHaveLength(1);
-      expect(JSON.stringify(waiting.events)).toContain("chain find:");
-      const preview = (await journal.list(undefined, "preview"))[0];
-      expect(preview).toMatchObject({
-        state: "succeeded",
-        result: { previewOnly: true, seal: { requestHash: expect.any(String) } },
-      });
-      expect(writes).toHaveLength(0);
-      await vi.advanceTimersByTimeAsync(59_000);
-      expect(writes).toHaveLength(0);
-      await vi.advanceTimersByTimeAsync(1_000);
       const done = await untilIo(
         () => read(id),
         (body) => !body.running && turnEnds(body).length === 1,
       );
+      // ADR 0038: a write to Work and the model is not a guarded act, so the chain never asks.
+      expect(openAsks(done), String(failures[0] ?? JSON.stringify(done.events))).toEqual([]);
+      expect(JSON.stringify(done.events)).not.toContain("permission_request");
+      expect(JSON.stringify(done.events)).toContain("chain find:");
+      expect((await journal.list(undefined, "preview"))[0]).toMatchObject({
+        state: "succeeded",
+        result: { previewOnly: true, seal: { requestHash: expect.any(String) } },
+      });
       expect(JSON.stringify(done.events)).toContain("chain apply:");
       expect(writes).toHaveLength(1);
       expect(await journal.wait("apply")).toMatchObject({
         state: "succeeded",
-        consent: { decision: { by: "deadline" } },
         steps: [
           { kind: "native", state: "succeeded", dispatchedAt: expect.any(String) },
           { kind: "publication", state: "succeeded" },
@@ -445,7 +436,6 @@ test.each(["claude", "codex"] as const)(
       expect(stagedDucts(saved, fans).equipmentFlows).toEqual({});
       expect(writes[0]).toMatchObject({ equipmentFlows: [{ id: 14577391, cfm: 975, source: "chain" }] });
     } finally {
-      vi.useRealTimers();
       await h.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
