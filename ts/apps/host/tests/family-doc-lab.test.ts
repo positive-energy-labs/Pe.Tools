@@ -637,3 +637,19 @@ test("Confirm admits over HTTP before a two-second parse finishes, uploads once 
     ),
   ).toBe(false);
 }, 60_000);
+
+// ADR 0038 guard 3: Confirm is the only way a held send runs. `outward.send` is human-only
+// (`outward-send.ts` `principal`), so Pea posting it straight to /actions is refused before dispatch.
+test("Pea cannot run outward.send directly; the hold stays for the person", async () => {
+  const { f, pea, attach, parsed } = await boxed();
+  expect(await attach({ path: pdf }, pea)).toContain("Held, not done");
+  const send = heldSends().find((row) => row.thread === pea.thread)!;
+  const { id: _id, at: _at, thread: _thread, ...input } = send;
+  const response = await f.post("/actions", { id: "pea-direct-send", key: "outward.send", target: { kind: "host" }, input }, pea);
+  const receipt = response.ok ? await f.journal.wait("pea-direct-send") : null;
+  const text = receipt ? JSON.stringify(receipt) : await response.text();
+  expect(text).toContain("caller.ineligible");
+  if (receipt) expect(receipt).toMatchObject({ state: "failed", notDispatched: true });
+  expect(parsed).toEqual([]);
+  expect(heldSends().map((row) => row.id)).toContain(send.id);
+}, 60_000);
