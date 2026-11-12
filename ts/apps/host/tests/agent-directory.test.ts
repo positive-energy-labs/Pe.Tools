@@ -6,6 +6,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -22,6 +23,9 @@ import { bootHost } from "./real-server.ts";
 import { Deferred, Effect } from "effect";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { peaAgentInstructions } from "@pe/mcps";
+import * as store from "@pe/host-contracts/store";
+import { storedNoticesPath } from "../src/notice-feed.ts";
+import { prepareAgentDirectory } from "../src/agent-directory.ts";
 
 const instructions = () => join(productAgentPath(), "AGENTS.md");
 
@@ -38,6 +42,27 @@ const composeHost = () =>
     },
   });
 
+test("host preparation continues after an instructions write failure and posts one notice", () => {
+  mkdirSync(productAgentPath(), { recursive: true });
+  writeFileSync(instructions(), "outdated instructions");
+  const writeAtomic = store.writeAtomic;
+  const write = vi.spyOn(store, "writeAtomic").mockImplementation((path, bytes) => {
+    if (path === instructions()) throw Error("locked file");
+    return writeAtomic(path, bytes);
+  });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(composeHost).not.toThrow();
+    const notices = store.readStoredNotices(storedNoticesPath()).filter(n => n.path === instructions());
+    expect(notices).toHaveLength(1);
+    expect(notices[0]!.reason).toContain("locked file");
+    expect(log).toHaveBeenCalledOnce();
+  } finally {
+    write.mockRestore();
+    log.mockRestore();
+  }
+});
+
 test.each(["directory", "file"])("host start refuses a .git %s above the override home", (kind) => {
   const home = process.env.PE_TOOLS_PRODUCT_HOME!;
   expect(productAgentPath()).toBe(join(home, ".local-state", "state", "Agent"));
@@ -49,6 +74,36 @@ test.each(["directory", "file"])("host start refuses a .git %s above the overrid
     expect(composeHost).toThrow(/Agent directory.*git checkout ancestor.*PE_TOOLS_PRODUCT_HOME/);
   } finally {
     rmSync(marker, { recursive: true, force: true });
+  }
+});
+
+test("dev override refuses a junction into a checkout", () => {
+  const root = mkdtempSync(join(process.env.PE_TEST_HOME_ROOT!, "agent-junction-"));
+  const checkout = join(root, "checkout");
+  const target = join(checkout, "agent");
+  const junction = join(root, "outside");
+  mkdirSync(target, { recursive: true });
+  mkdirSync(join(checkout, ".git"));
+  symlinkSync(target, junction, "junction");
+  const path = vi.spyOn(productPaths, "productAgentPath").mockReturnValue(junction);
+  try {
+    expect(prepareAgentDirectory).toThrow(/git checkout ancestor/);
+  } finally {
+    path.mockRestore();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("instructions replacement uses the atomic write door", () => {
+  mkdirSync(productAgentPath(), { recursive: true });
+  writeFileSync(instructions(), "old bytes");
+  const write = vi.spyOn(store, "writeAtomic");
+  try {
+    prepareAgentDirectory();
+    expect(write).toHaveBeenCalledExactlyOnceWith(instructions(), peaAgentInstructions);
+    expect(readFileSync(instructions(), "utf8")).toBe(peaAgentInstructions);
+  } finally {
+    write.mockRestore();
   }
 });
 

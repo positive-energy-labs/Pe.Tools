@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { writeAtomic } from "@pe/host-contracts/store";
+import { noteStored, writeAtomic } from "@pe/host-contracts/store";
 import { peaAgentInstructions } from "@pe/mcps";
 import { productAgentPath } from "./product-paths.ts";
 import { hostOwnership } from "./host-ownership.ts";
+import { storedNoticesPath } from "./notice-feed.ts";
 
 /** Refuse checkout inheritance before composing a host that can spawn a harness child. */
 export function prepareAgentDirectory(): void {
@@ -24,8 +25,16 @@ export function prepareAgentDirectory(): void {
       if (dirname(ancestor) === ancestor) break;
     }
   }
-  mkdirSync(agent, { recursive: true });
   const instructions = join(agent, productPathNames.agentInstructionsFileName);
-  if (!existsSync(instructions) || readFileSync(instructions, "utf8") !== peaAgentInstructions)
-    writeAtomic(instructions, peaAgentInstructions);
+  try {
+    mkdirSync(agent, { recursive: true });
+    if (!existsSync(instructions) || readFileSync(instructions, "utf8") !== peaAgentInstructions)
+      writeAtomic(instructions, peaAgentInstructions);
+  } catch (error) {
+    console.error("Agent instructions unavailable", { path: instructions, error });
+    noteStored(storedNoticesPath(), {
+      class: "keep", place: "Agent instructions", path: instructions,
+      sha256: null, reason: `Instructions unavailable: ${String(error)}`,
+    });
+  }
 }
