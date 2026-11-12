@@ -26,13 +26,19 @@ export async function activateImportedPackage(id: string, podsRoot: string) {
   await serving.refresh();
   await serving.setEnabled(`pod:${id}`, true);
 }
-/** Machine state (ADR 0039): choices that do not decode are discarded with a notice; defaults hold. */
-const readDecisions = async (path: string) => {
-  const read = readStored(path, decisionsSchema, {
-    class: "discard",
+/**
+ * A person's choices, so `keep` (MAP decision log 92bdf2df names `plugins.json`). A file that does
+ * not decode is refused with a notice and its bytes stay. Defaults hold, and no choice is saved
+ * over it until a person fixes or removes the file.
+ */
+const storedDecisions = (path: string) =>
+  readStored(path, decisionsSchema, {
+    class: "keep",
     place: "Pod on and off choices",
     notices: storedNoticesPath(),
   });
+const readDecisions = async (path: string) => {
+  const read = storedDecisions(path);
   return read.kind === "ok" ? read.value : {};
 };
 /** Runtime policy only. Membership and export remain exact authored bytes. */
@@ -77,6 +83,11 @@ export function createPackageLifecycle(
   const runtime = createPluginRuntime<Contribution>({
     changed,
     persist: async (id, enabled) => {
+      const stored = storedDecisions(decisionsPath);
+      if (stored.kind === "kept")
+        throw Error(
+          `Pod on and off choices can't be read, so the file is kept and this choice is not saved: ${stored.reason}`,
+        );
       const next = { ...decisions, [id]: enabled };
       writeAtomic(decisionsPath, JSON.stringify(next));
       decisions = next;

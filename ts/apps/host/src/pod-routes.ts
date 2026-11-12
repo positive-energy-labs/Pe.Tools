@@ -64,14 +64,17 @@ export function createPodRoutes(
   const registrations = new Map<string, { hash: string; dispose: () => void }>();
   let closed = false;
   let tail = Promise.resolve();
-  // Machine state (ADR 0039): trust that does not decode is discarded with a notice, and every
-  // route reads as untrusted until a person trusts its current bytes again.
-  const decisions = async () => {
-    const read = readStored(path, trustSchema, {
-      class: "discard",
+  // A person's trust decisions, so `keep` (MAP decision log 92bdf2df names `route-trust.json`). A
+  // file that does not decode is refused with a notice and its bytes stay. Every route reads as
+  // untrusted, and no decision is saved over it until a person fixes or removes the file.
+  const stored = () =>
+    readStored(path, trustSchema, {
+      class: "keep",
       place: "Pod route trust",
       notices: storedNoticesPath(),
     });
+  const decisions = async () => {
+    const read = stored();
     return read.kind === "ok" ? read.value : {};
   };
   let listing = Promise.resolve<PodRouteDescriptor[]>([]);
@@ -158,10 +161,15 @@ export function createPodRoutes(
     list,
     async trust(key: string, hash: string, trusted: boolean) {
       const write = tail.then(async () => {
+        const read = stored();
+        if (read.kind === "kept")
+          throw Error(
+            `Pod route trust can't be read, so the file is kept and this decision is not saved: ${read.reason}`,
+          );
         const route = (await list()).find((route) => route.key === key);
         if (!route || route.fingerprint !== hash)
           throw Error("Route changed or is inactive; inspect its current bytes before trusting");
-        const trust = await decisions();
+        const trust = read.kind === "ok" ? read.value : {};
         if (trusted) trust[key] = hash;
         else delete trust[key];
         writeAtomic(path, JSON.stringify(trust));

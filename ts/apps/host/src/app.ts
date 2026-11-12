@@ -50,7 +50,6 @@ import { pagesRoute } from "./pages-route.ts";
 import { peApiErrorsLayer, peRoutesLayer } from "./pe-routes.ts";
 import { ReceiptExport, type ReceiptExporter } from "./receipt-export.ts";
 import { createDevices, type Devices } from "./remote-device.ts";
-import { readRemoteIngress, remoteListener } from "./remote-ingress.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
 import { RequestIdentity } from "./request-services.ts";
 import { RunConsents } from "./run-consent.ts";
@@ -294,20 +293,6 @@ function liveHttpLive(options: HttpLiveOptions) {
   const nodeServer = options.nodeServer ?? createServer();
   // Both lanes wait for explicit reads until completion or disconnect; upload limits stay intact.
   nodeServer.setTimeout(0);
-  const remoteConfig = readRemoteIngress(
-    join(hostOwnership.rootPath, "state", hostOwnership.serviceName, "remote-ingress.json"),
-  );
-  const remoteRequests = new WeakSet<object>();
-  const remote = remoteConfig ? remoteListener(nodeServer, remoteRequests) : null;
-  const RemoteLive =
-    remote && remoteConfig
-      ? Layer.effectDiscard(
-          Effect.acquireRelease(
-            Effect.promise(() => remote.start(remoteConfig.listenHost, remoteConfig.port)),
-            () => Effect.promise(() => remote.close()),
-          ),
-        )
-      : Layer.empty;
   const ServerLive = hostServerLayer(nodeServer, options.port);
 
   const port = () => {
@@ -335,8 +320,7 @@ function liveHttpLive(options: HttpLiveOptions) {
   bindControl({ deviceThread: (device) => devices.active(device).thread });
   const identity = requestIdentityLayer({
     devices,
-    remoteRequests,
-    remoteIngress: options.remoteIngress ?? remoteConfig?.origins,
+    remoteIngress: options.remoteIngress,
     port,
     // Read on each request's fiber: the dev frontend's URL settles after the layer is built.
     frontendOrigin: options.webUrl
@@ -394,7 +378,6 @@ function liveHttpLive(options: HttpLiveOptions) {
       });
       const work = reads.work;
       const CommonAppLive = Layer.mergeAll(
-        RemoteLive,
         shareRoute(share),
         deviceRoutes(devices),
         mcpRoute(() => `http://127.0.0.1:${port()}`),

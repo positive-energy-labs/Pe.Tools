@@ -13,8 +13,10 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import {
+  appendStoredLine,
   discardStored,
   readStored,
+  readStoredLines,
   readStoredNotices,
   sha256Hex,
   writeAtomic,
@@ -238,5 +240,112 @@ describe("readStored", () => {
     discardStored(path, discard(), "identity does not match");
     expect(existsSync(path)).toBe(false);
     expect(readStoredNotices(notices())).toMatchObject([{ reason: "identity does not match" }]);
+  });
+});
+
+describe("a discard names exactly one file", () => {
+  const notices = () => join(root, "state", "stored-notices.jsonl");
+  const tree = (dir: string): Record<string, string> =>
+    Object.fromEntries(
+      readdirSync(dir, { recursive: true, withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => {
+          const path = join(entry.parentPath, entry.name);
+          return [path.slice(dir.length + 1), sha256Hex(readFileSync(path))];
+        }),
+    );
+
+  test("inside a pod folder, every sibling stays byte-identical", () => {
+    // Discard-class files live inside keep-class folders: provenance, run output, Page state.
+    const pod = join(root, "Pods", "ducts");
+    writeAtomic(join(pod, "pod.json"), '{"id":"ducts"}');
+    writeAtomic(join(pod, "settings", "sizing.json"), '{"velocity":900}');
+    writeAtomic(join(pod, "output", "run-1", "receipt.json"), '{"ok":true}');
+    writeAtomic(join(pod, "output", "run-1", "input.json"), "{ torn");
+    writeAtomic(join(pod, "imported.json"), "{ torn");
+    const before = tree(pod);
+
+    const read = readStored(join(pod, "imported.json"), z.strictObject({ name: z.string() }), {
+      class: "discard",
+      place: "Pod ducts provenance",
+      notices: notices(),
+    });
+
+    expect(read.kind).toBe("discarded");
+    const { "imported.json": gone, ...siblings } = before;
+    expect(gone).toBeDefined();
+    expect(tree(pod)).toEqual(siblings);
+  });
+
+  test("a discard aimed at a folder removes nothing", () => {
+    const pod = join(root, "Pods", "ducts");
+    writeAtomic(join(pod, "pod.json"), '{"id":"ducts"}');
+    writeAtomic(join(pod, "output", "run-1", "receipt.json"), '{"ok":true}');
+    const before = tree(pod);
+    const policy = { class: "discard", place: "Pod ducts", notices: notices() } as const;
+
+    expect(readStored(pod, z.unknown(), policy).kind).toBe("discarded");
+    expect(readStored(join(pod, "output"), z.unknown(), policy).kind).toBe("discarded");
+    expect(() => discardStored(pod, policy, "stale")).not.toThrow();
+
+    expect(tree(pod)).toEqual(before);
+  });
+});
+
+describe("an append-only log decodes per line", () => {
+  const schema = z.strictObject({ id: z.number() });
+  const notices = () => join(root, "state", "stored-notices.jsonl");
+  const log = () => join(root, "log", "receipts.jsonl");
+  const policy = () => ({ place: "Capture receipts", notices: notices() });
+
+  test("a missing log is missing; a whole one lists every line", () => {
+    expect(readStoredLines(log(), schema, policy())).toEqual({ kind: "missing" });
+    appendStoredLine(log(), '{"id":1}');
+    appendStoredLine(log(), '{"id":2}');
+    expect(readStoredLines(log(), schema, policy())).toEqual({
+      kind: "ok",
+      values: [{ id: 1 }, { id: 2 }],
+      skipped: 0,
+    });
+    expect(readStoredNotices(notices())).toEqual([]);
+  });
+
+  test("a torn last line leaves every other line listed, posts one notice, and changes no byte", () => {
+    appendStoredLine(log(), '{"id":1}');
+    appendStoredLine(log(), '{"id":2}');
+    writeFileSync(log(), '{"id":3', { flag: "a" });
+    const bytes = readFileSync(log());
+
+    const read = () => readStoredLines(log(), schema, policy());
+    expect(read()).toEqual({ kind: "ok", values: [{ id: 1 }, { id: 2 }], skipped: 1 });
+    expect(read()).toMatchObject({ skipped: 1 });
+    expect(readFileSync(log())).toEqual(bytes);
+    expect(readStoredNotices(notices())).toMatchObject([
+      { class: "keep", place: "Capture receipts", path: log(), sha256: sha256Hex('{"id":3') },
+    ]);
+  });
+
+  test("appends continue after a torn tail, and the new line is not joined onto it", () => {
+    appendStoredLine(log(), '{"id":1}');
+    writeFileSync(log(), '{"id":2', { flag: "a" });
+    appendStoredLine(log(), '{"id":3}');
+    expect(readFileSync(log(), "utf8")).toBe('{"id":1}\n{"id":2\n{"id":3}\n');
+    expect(readStoredLines(log(), schema, policy())).toEqual({
+      kind: "ok",
+      values: [{ id: 1 }, { id: 3 }],
+      skipped: 1,
+    });
+  });
+
+  test("a bad line in the middle, or of the wrong shape, is one notice each by its own hash", () => {
+    writeAtomic(log(), '{"id":1}\nnot json\n{"id":"two"}\n{"id":4}\n');
+    expect(readStoredLines(log(), schema, policy())).toMatchObject({
+      values: [{ id: 1 }, { id: 4 }],
+      skipped: 2,
+    });
+    expect(readStoredNotices(notices()).map((notice) => notice.sha256)).toEqual([
+      sha256Hex("not json"),
+      sha256Hex('{"id":"two"}'),
+    ]);
   });
 });

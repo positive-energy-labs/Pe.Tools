@@ -10,7 +10,7 @@ export { sha256Hex };
 
 /**
  * A JSON file through its schema; a missing file reads as `missing`.
- * ponytail: the one shim left by the store kernel. It still throws on a file that does not decode.
+ * ponytail: the one throwing reader the store kernel leaves. It throws on a file that does not decode.
  * `pages-route.ts` is its last caller (the Page snapshot and binding); writer G2 moves those to
  * `readStored` when Page state moves to the state root, and deletes this.
  */

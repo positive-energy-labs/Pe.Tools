@@ -9,7 +9,7 @@
  * the installed host draw the same `<img src="/captures/<sha>.png">`.
  */
 import { randomUUID } from "node:crypto";
-import { appendFile, readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/http";
@@ -19,7 +19,9 @@ import {
   type CaptureReceipt,
 } from "@pe/agent-contracts";
 import { productPathNames } from "@pe/host-contracts/contracts";
+import { appendStoredLine, readStoredLines } from "@pe/host-contracts/store";
 import { hostOwnership } from "./host-ownership.ts";
+import { storedNoticesPath } from "./notice-feed.ts";
 import { isNavigation, type SpaFallback } from "./ops-catalog.ts";
 import { sha256Hex, writeArtifact } from "./page-artifacts.ts";
 
@@ -108,9 +110,9 @@ export class PictureCaptures {
     // Every taking keeps its own receipt; only the blob is shared by sha.
     await this.reserve(((await this.isNew(sha)) ? bytes.length : 0) + Buffer.byteLength(line));
     await this.write(sha, bytes);
-    // ponytail: one small appendFile per taking is one write call; two hosts appending at once do
-    // not interleave a line. A lock arrives only if a torn line is ever seen.
-    await appendFile(this.receipts, line);
+    // One write call per taking, through the kernel: it closes a tail a crash tore, so this
+    // receipt never joins a bad line.
+    appendStoredLine(this.receipts, line.trimEnd());
     return receipt;
   }
 
@@ -125,24 +127,17 @@ export class PictureCaptures {
     return sha;
   }
 
-  /** Every receipt, newest first. A line that is not a receipt is a corrupt store and throws. */
+  /**
+   * Every receipt, newest first. The log decodes per line (MAP decision log, 2026-11-11): a line
+   * that is not a receipt is left out with one notice, the file is never rewritten, and every
+   * other receipt stays listed. Before this, one bad line failed every listing with a 500.
+   */
   async list(): Promise<CaptureReceipt[]> {
-    const text = await readFile(this.receipts, "utf8").catch((error: unknown) => {
-      if (isMissing(error)) return "";
-      throw error;
+    const read = readStoredLines(this.receipts, captureReceiptSchema, {
+      place: "Capture receipts",
+      notices: storedNoticesPath(),
     });
-    return text
-      .split("\n")
-      .flatMap((line, index) => {
-        if (!line.trim()) return [];
-        const parsed = captureReceiptSchema.safeParse(JSON.parse(line));
-        if (!parsed.success)
-          throw Error(
-            `${this.receipts}:${index + 1} is not a capture receipt: ${parsed.error.message}`,
-          );
-        return [parsed.data];
-      })
-      .reverse();
+    return read.kind === "ok" ? read.values.reverse() : [];
   }
 
   async blob(sha: string): Promise<Buffer | null> {

@@ -12,10 +12,12 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   appendFileSync,
   closeSync,
+  fstatSync,
   fsyncSync,
   mkdirSync,
   openSync,
   readFileSync,
+  readSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -176,31 +178,52 @@ export type StoredRead<T> =
   | { kind: "kept"; reason: string }
   | { kind: "discarded"; reason: string };
 
-/** Apply a class to bytes that were refused: one notice per path and hash, then delete if `discard`. */
+const oneLine = (why: string) => why.replace(/\s+/g, " ").slice(0, 500);
+
+/**
+ * Post one durable notice, de-duplicated by path and hash: the same bytes at the same path never
+ * post twice. It never throws, because a notice that cannot be written must not stop its caller.
+ * `readStored` posts through this; call it directly for a refusal that is not one decoded file
+ * (a recording bundle that will not open).
+ */
+export function noteStored(file: string, notice: Omit<StoredNotice, "at">): void {
+  try {
+    const path = resolve(notice.path);
+    // ponytail: a scan of an append-only file per refusal, and no pruning. A refusal is rare;
+    // prune by age when the file is measured large.
+    const posted = readStoredNotices(file).some(
+      (row) => row.path === path && row.sha256 === notice.sha256,
+    );
+    if (posted) return;
+    mkdirSync(dirname(file), { recursive: true });
+    const row: StoredNotice = {
+      ...notice,
+      path,
+      reason: oneLine(notice.reason),
+      at: new Date().toISOString(),
+    };
+    appendFileSync(file, `${JSON.stringify(row)}\n`);
+  } catch (error) {
+    console.warn(`Could not post the notice for '${notice.path}': ${message(error)}`);
+  }
+}
+
+/**
+ * Apply a class to bytes that were refused: one notice per path and hash, then delete if `discard`.
+ * A discard names exactly one file. Discard-class files sit inside keep-class folders
+ * (`Pods/<pod>/imported.json`, `Pages/<slug>/.state/**`), so this never removes a folder and
+ * never recurses: `rmSync` without `recursive` refuses a directory, and the refusal is swallowed.
+ */
 function refuse(path: string, bytes: Buffer | null, policy: StoredPolicy, why: string) {
-  const reason = why.replace(/\s+/g, " ").slice(0, 500);
+  const reason = oneLine(why);
   if (policy.notices)
-    try {
-      const notice = { path: resolve(path), sha256: bytes && sha256Hex(bytes) };
-      // ponytail: a scan of an append-only file per refusal, and no pruning. A refusal is rare;
-      // prune by age when the file is measured large.
-      const posted = readStoredNotices(policy.notices).some(
-        (row) => row.path === notice.path && row.sha256 === notice.sha256,
-      );
-      if (!posted) {
-        mkdirSync(dirname(policy.notices), { recursive: true });
-        const row: StoredNotice = {
-          class: policy.class,
-          place: policy.place,
-          ...notice,
-          reason,
-          at: new Date().toISOString(),
-        };
-        appendFileSync(policy.notices, `${JSON.stringify(row)}\n`);
-      }
-    } catch (error) {
-      console.warn(`Could not post the notice for '${path}': ${message(error)}`);
-    }
+    noteStored(policy.notices, {
+      class: policy.class,
+      place: policy.place,
+      path,
+      sha256: bytes && sha256Hex(bytes),
+      reason,
+    });
   if (policy.class === "keep") return { kind: "kept", reason } as const;
   try {
     rmSync(path, { force: true });
@@ -238,12 +261,84 @@ export function readStored<T>(
   }
 }
 
+/**
+ * Decode an append-only log one line at a time (MAP decision log, 2026-11-11). A line that does not
+ * decode is left out of the read and posts one notice, de-duplicated by path and the line's hash.
+ * The file is never rewritten on a read, so every other line stays listed and the bad line's bytes
+ * stay for a person to inspect. `skipped` counts the lines left out of this read.
+ */
+export function readStoredLines<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  policy: { place: string; notices: string },
+): { kind: "ok"; values: T[]; skipped: number } | { kind: "missing" } {
+  const skip = (line: string | null, why: string) =>
+    noteStored(policy.notices, {
+      class: "keep",
+      place: policy.place,
+      path,
+      sha256: line === null ? null : sha256Hex(line),
+      reason: why,
+    });
+  let text: string;
+  try {
+    const bytes = readOrNull(path);
+    if (!bytes) return { kind: "missing" };
+    text = bytes.toString("utf8");
+  } catch (error) {
+    skip(null, message(error));
+    return { kind: "ok", values: [], skipped: 1 };
+  }
+  const values: T[] = [];
+  let skipped = 0;
+  text.split("\n").forEach((line, index) => {
+    if (!line.trim()) return;
+    let why: string;
+    try {
+      const parsed = schema.safeParse(JSON.parse(line));
+      if (parsed.success) return void values.push(parsed.data);
+      why = z.prettifyError(parsed.error);
+    } catch (error) {
+      why = message(error);
+    }
+    skipped++;
+    skip(line, `Line ${index + 1} is left out: ${why}`);
+  });
+  return { kind: "ok", values, skipped };
+}
+
+/**
+ * Append one line to an append-only log. A tail torn by a crash has no newline, and a plain append
+ * would join the new line onto it and lose both; this closes the torn tail first, so appends
+ * continue after a bad line.
+ */
+export function appendStoredLine(path: string, line: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const file = openSync(path, "a+");
+  try {
+    const size = fstatSync(file).size;
+    const last = Buffer.alloc(1);
+    const torn = size > 0 && readSync(file, last, 0, 1, size - 1) === 1 && last[0] !== 0x0a;
+    // ponytail: one write call per line, as before; two processes appending at once can still
+    // interleave on a network drive. These logs are machine state on a local disk.
+    writeFileSync(file, `${torn ? "\n" : ""}${line}\n`);
+  } finally {
+    closeSync(file);
+  }
+}
+
 /** Discard a file its owner refused after decoding (a stale identity, an unsupported epoch). */
 export function discardStored(
   path: string,
   policy: Extract<StoredPolicy, { class: "discard" }>,
   reason: string,
 ): void {
-  const bytes = readOrNull(path);
+  let bytes: Buffer | null;
+  try {
+    bytes = readOrNull(path);
+  } catch {
+    // Not a readable file (a folder, a held file): post the notice, and the delete refuses it.
+    return void refuse(path, null, policy, reason);
+  }
   if (bytes) refuse(path, bytes, policy, reason);
 }

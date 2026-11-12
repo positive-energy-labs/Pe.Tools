@@ -4,22 +4,33 @@
  * bytes are gone, with exactly one notice that a second read or start does not repeat. No reader
  * throws, so no stored file can stop the host.
  */
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 import { readStoredNotices } from "@pe/host-contracts/store";
+import { hostInputs } from "../src/host-program.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 import { noticeRows, storedNoticesPath } from "../src/notice-feed.ts";
 import { createPackageLifecycle } from "../src/package-lifecycle.ts";
 import { listPackages } from "../src/packages.ts";
 import { createPodRoutes } from "../src/pod-routes.ts";
 import { createDevices } from "../src/remote-device.ts";
-import { readRemoteIngress } from "../src/remote-ingress.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { createScheduledTasks } from "../src/scheduled-tasks.ts";
 import { shareIntentFile } from "../src/share.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
+import { admitBuild } from "../src/receipt-export.ts";
 import { createUpdateReader } from "../src/update-reader.ts";
 import { journalAt } from "./effect-test.ts";
 
@@ -87,29 +98,6 @@ const kinds: Kind[] = [
       }).refresh(false),
   },
   {
-    name: "Pod on and off choices",
-    place: "Pod on and off choices",
-    file: () => join(root, "plugins.json"),
-    read: (path) =>
-      createPackageLifecycle({
-        packages: () => listPackages(join(root, "Pods")),
-        decisionsPath: path,
-      }).ready,
-  },
-  {
-    name: "Pod route trust",
-    place: "Pod route trust",
-    file: () => join(root, "route-trust.json"),
-    read: (path) =>
-      createPodRoutes(
-        createPackageLifecycle({
-          packages: () => listPackages(join(root, "Pods")),
-          decisionsPath: join(root, "none.json"),
-        }),
-        { trustPath: path },
-      ).list(),
-  },
-  {
     name: "a retained schedule reading",
     place: "Captures",
     file: () => join(root, "captures", "schedules", `${HEX}.json`),
@@ -170,6 +158,7 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
     ["a header that is not JSON", `${CORRUPT}\n`],
     ["a corrupt line", `{"version":8}\n${CORRUPT}\n{"mapping":["k","${crypto.randomUUID()}"]}\n`],
     ["a line of the wrong shape", `{"version":8}\n${WRONG_SHAPE}\n\n`],
+    ["another epoch, which used to be a silent console.warn", `{"version":7}\n{"old":"row"}\n`],
   ])("the action journal with %s is discarded and the journal still works", async (_, bytes) => {
     const path = seed(join(root, "journal", "journal.jsonl"), bytes);
     const journal = journalAt(path, Date.now);
@@ -203,34 +192,84 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
   });
 });
 
-describe("keep: an authored file is listed \"can't read, kept\" and its bytes never change", () => {
-  test.each([CORRUPT, WRONG_SHAPE])("remote ingress holding %s", (bytes) => {
-    const path = seed(join(root, "remote-ingress.json"), bytes);
-    expect(readRemoteIngress(path)).toBeNull();
-    expect(readRemoteIngress(path)).toBeNull();
-    expect(readFileSync(path, "utf8")).toBe(bytes);
-    const notices = posted(path);
-    expect(notices).toMatchObject([{ class: "keep", place: "Remote ingress configuration" }]);
-    // The feed lists it, once, in those words.
-    const rows = noticeRows(
-      { threads: [], receipts: [], works: [], machine: null, stored: notices },
-      Date.now(),
-    );
-    expect(rows).toMatchObject([
-      { group: "failed", verb: "kept", what: "Remote ingress configuration", detail: path },
-    ]);
-    expect(rows[0]!.says).toMatch(/^Can't read, kept: .+/);
-  });
+describe("keep: a person's file is listed \"can't read, kept\", its bytes never change, and no write lands over it", () => {
+  const lifecycle = (decisionsPath: string) =>
+    createPackageLifecycle({ packages: () => listPackages(join(root, "Pods")), decisionsPath });
+  const kinds = [
+    {
+      name: "Pod on and off choices",
+      file: () => join(root, "plugins.json"),
+      read: (path: string) => lifecycle(path).ready,
+      // `product:skills` is always installed, so this write reaches the file's own door.
+      write: async (path: string) => {
+        const owner = lifecycle(path);
+        await owner.ready;
+        return owner.setEnabled("product:skills", false);
+      },
+    },
+    {
+      name: "Pod route trust",
+      file: () => join(root, "route-trust.json"),
+      read: (path: string) =>
+        createPodRoutes(lifecycle(join(root, "none.json")), { trustPath: path }).list(),
+      write: (path: string) =>
+        createPodRoutes(lifecycle(join(root, "none.json")), { trustPath: path }).trust(
+          "route:@pod/routes/a",
+          HEX,
+          true,
+        ),
+    },
+  ];
+  test.each(kinds.flatMap((kind) => [CORRUPT, WRONG_SHAPE].map((bytes) => ({ ...kind, bytes }))))(
+    "$name holding $bytes",
+    async ({ name, file, read, write, bytes }) => {
+      const path = seed(file(), bytes);
+      await read(path);
+      await read(path);
+      expect(readFileSync(path, "utf8")).toBe(bytes);
+      const notices = posted(path);
+      expect(notices).toMatchObject([{ class: "keep", place: name }]);
+      // The feed lists it, once, in those words.
+      const rows = noticeRows(
+        { threads: [], receipts: [], works: [], machine: null, stored: notices },
+        Date.now(),
+      );
+      expect(rows).toMatchObject([{ group: "failed", verb: "kept", what: name, detail: path }]);
+      expect(rows[0]!.says).toMatch(/^Can't read, kept: .+/);
+      // A write is refused with the reason, so the kept bytes are never rewritten.
+      await expect(write(path)).rejects.toThrow(/can't be read, so the file is kept/);
+      expect(readFileSync(path, "utf8")).toBe(bytes);
+      expect(posted(path)).toHaveLength(1);
+    },
+  );
 });
 
-test("host start throws 0 times over corrupt scheduled tasks, devices and remote ingress", async () => {
+test("host start throws 0 times over corrupt scheduled tasks, devices, a torn journal and a torn recording", async () => {
   const tasks = seed(join(root, "scheduled-tasks.json"), CORRUPT);
   const devices = seed(join(root, "devices.json"), CORRUPT);
-  const ingress = seed(join(root, "remote-ingress.json"), CORRUPT);
+  const journal = seed(join(root, "journal", "journal.jsonl"), CORRUPT);
+  // The recording bundle lives under the host's own state root: open it once, then tear a line.
+  const stamp = admitBuild(
+    "host",
+    { version: "1.0.0", build: "b".repeat(12), commit: "b".repeat(40) },
+    randomUUID(),
+    randomUUID(),
+  )!;
+  const record = () => Effect.runPromise(hostInputs(stamp, { kind: "live", capture: "automatic" }));
+  expect((await record()).source).toEqual({ kind: "live", capturing: true });
+  const recordings = join(hostOwnership.rootPath, "state", "recordings");
+  const bundle = readdirSync(recordings, { recursive: true, withFileTypes: true }).find(
+    (entry) => entry.isFile() && entry.name === "manifest.json",
+  )!.parentPath;
+  writeFileSync(join(bundle, "takings.jsonl"), '{"torn', { flag: "a" });
+  const torn = readFileSync(join(bundle, "takings.jsonl"));
+
   let thrown = 0;
-  // The three reads `app.ts` and `pe-routes.ts` make while the host starts, in their order.
+  // What `host-program.ts`, `app.ts` and `pe-routes.ts` read while the host starts, in their order.
+  let inputs: Awaited<ReturnType<typeof record>> | undefined;
   for (const start of [
-    () => readRemoteIngress(ingress),
+    async () => void (inputs = await record()),
+    () => journalAt(journal, Date.now).list(),
     () => createDevices(devices).list(),
     () => scheduler(tasks),
   ])
@@ -240,10 +279,16 @@ test("host start throws 0 times over corrupt scheduled tasks, devices and remote
       thrown++;
     }
   expect(thrown).toBe(0);
-  // The host then runs on fresh machine state, and the hand-written file is untouched.
+  // The host runs on fresh machine state, with recording off and the torn bundle untouched.
   expect(JSON.parse(readFileSync(tasks, "utf8"))).toBeInstanceOf(Array);
   expect(JSON.parse(readFileSync(devices, "utf8"))).toMatchObject({ sessions: [] });
-  expect(readFileSync(ingress, "utf8")).toBe(CORRUPT);
+  expect(inputs!.source).toMatchObject({ kind: "live", capturing: false, truncated: { reason: "setup" } });
+  expect(readFileSync(join(bundle, "takings.jsonl"))).toEqual(torn);
+  expect(posted(bundle)).toMatchObject([{ class: "keep", place: "Recording history" }]);
+  expect(posted(bundle)[0]!.reason).toContain("recording.tamper");
+  // A second start stops recording again and posts nothing new.
+  expect((await record()).source).toMatchObject({ capturing: false });
+  expect(posted(bundle)).toHaveLength(1);
 });
 
 test("a discard is a feed row for a week, and its card can raise only once", () => {

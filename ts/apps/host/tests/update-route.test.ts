@@ -452,3 +452,50 @@ test("U-02/U-04: a lost acknowledgement is unknown, and late recovery of a runni
     await f.close();
   }
 });
+
+// ADR 0039 per-request witness: a corrupt admission used to reject every apply and mark every
+// read with an error, for as long as the file stayed.
+test("an admission that does not decode is discarded on the request that meets it, not a 500", async () => {
+  const f = await fixture();
+  await writeFile(f.path, "{ this is not JSON");
+  // effect-edge: island, phase 5
+  const lifecycle = await Effect.runPromise(
+    Effect.gen(function* () {
+      return {
+        latch: yield* Deferred.make<void>(),
+        handle: yield* Deferred.make<ServiceHostHandle>(),
+      };
+    }),
+  );
+  const web = HttpRouter.toWebHandler(
+    updateRoutes.pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Layer.succeed(UpdateReader, f.make()),
+          Layer.succeed(HostLifecycle, lifecycle),
+        ),
+      ),
+    ),
+    { disableLogger: true },
+  );
+  try {
+    const read = await web.handler(new Request("http://host/host/update"), Context.empty() as never);
+    expect(read.status, await read.clone().text()).toBe(200);
+    expect(await read.json()).toMatchObject({ receipt: null, receiptLeg: { error: null } });
+    const admitted = await web.handler(
+      new Request("http://host/host/update", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId: plan.planId }),
+      }),
+      Context.empty() as never,
+    );
+    expect(admitted.status, await admitted.clone().text()).toBe(202);
+    expect(
+      readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === f.path),
+    ).toMatchObject([{ class: "discard", place: "Update status" }]);
+  } finally {
+    await web.dispose();
+    await f.close();
+  }
+});
