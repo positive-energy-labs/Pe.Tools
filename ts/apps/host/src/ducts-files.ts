@@ -87,25 +87,29 @@ export class DuctFiles extends Context.Service<
   }
 >()("pe/DuctFiles") {
   static readonly layer = (
-    roots: { readonly firm: string | null; readonly catalogs: string | readonly string[] } = {
-      firm: firmRootPath(),
+    roots: { readonly firm: string | null | (() => string | null); readonly catalogs: string | readonly string[] } = {
+      firm: firmRootPath,
       catalogs: productCatalogsRoots(),
     },
-  ) =>
-    Layer.succeed(DuctFiles, {
-      firm: (owner) => Effect.promise(() => readFirmFile(roots.firm, owner)),
+  ) => {
+    const firmRoot = () => typeof roots.firm === "function" ? roots.firm() : roots.firm;
+    return Layer.succeed(DuctFiles, {
+      firm: (owner) => Effect.promise(() => readFirmFile(firmRoot(), owner)),
       ductCatalogs: Effect.promise(() => readDuctCatalogs(roots.catalogs)),
       subscribe: (changed) => {
         const stops = [
           // No firm home, no firm file to watch: the refusal holds until the host restarts.
-          ...(roots.firm === null ? [] : [["firm", roots.firm] as const]),
+          ...(firmRoot() === null ? [] : [["firm", firmRoot()!] as const]),
           ...[roots.catalogs].flat().map((path) => ["catalogs", path] as const),
         ].map(
           ([name, path]) => {
             // A filesystem hint (including an ancestor change) is not a changed input.
             // Compare the producer's answer so absent files and access metadata stay quiet.
             const read =
-              name === "firm" ? () => readFirmRoot(roots.firm) : () => readDuctCatalogs(roots.catalogs);
+              name === "firm" ? async () => {
+                const root = firmRoot();
+                return { root, files: await readFirmRoot(root) };
+              } : () => readDuctCatalogs(roots.catalogs);
             let closed = false;
             let previous = read().then((value) => JSON.stringify(value));
             const refresh = () => {
@@ -124,6 +128,7 @@ export class DuctFiles extends Context.Service<
               const child = changedPath === null ? "" : relative(resolve(path), changedPath);
               const ancestor = changedPath === null ? "" : relative(changedPath, resolve(path));
               if (
+                (name === "firm" && changedPath === resolve(base, "pe-home.json")) ||
                 changedPath === null ||
                 child === "" ||
                 (!child.startsWith(`..${sep}`) && child !== "..") ||
@@ -141,6 +146,7 @@ export class DuctFiles extends Context.Service<
         return () => stops.forEach((stop) => stop());
       },
     });
+  };
   /** The live files, each read kept as a taking: absence, fallback and findings included. */
   static readonly capturing = (writer: RecordingWriter, observed?: TakingObserver) =>
     Layer.effect(
