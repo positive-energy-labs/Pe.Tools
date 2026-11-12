@@ -192,6 +192,7 @@ export function projectTakeoffSnapshot(
   return {
     reading: observationSchema.parse(response.reading),
     carriers: takeoffCarrierPreflightSchema.parse(snapshot.status.carriers),
+    unreadable: snapshot.unreadable ?? [],
     zoneFrs,
     regionsByZone,
     world: {
