@@ -18,8 +18,8 @@ It is not the installed-layout authority. `product.payloads.json` is the single 
 - `ProductIdentity` — vendor, product, and user-visible names.
 - `ProductPathNames` — product-owned state and user-content names.
 - `ProductLane` / `ProductRuntimeLayout` — the process's one runtime record (lane, owner root, state root) and its state/log/cache/scratch trees, including APS tokens. No binary paths.
-- `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — content preferences and portable Pods.
-- `ProductPathing` — the two content homes (ADR 0035 rule 11): `UserRoot()` always (isolated `PE_TOOLS_PRODUCT_HOME`, else the Documents known folder's `Pe.Tools`, OneDrive when it redirects Documents) takes every write and all Work; optional `SharedRoot()` (`PE_TOOLS_SHARED_ROOT`) reads after it, so `ContentHomes()` is `[user, shared?]` and the user's copy wins; `SharedFirmDir()` / `SharedKeysPath()` are `<shared>\Firm` and `<shared>\keys.json`, null without a shared root. The host resolves the same names. Also safe subdirectory resolution and the pure `StateRoot(lane, ownerRoot, home, shared, user)`: `<home>\.local-state` under the override (an isolated run shares no state with the owner's host), else the dev checkout's `.artifacts\pe-tools`, else the SDK install root verbatim; it refuses a root at or under the shared root or the Documents user root. TS `stateRoot` and PowerShell `Resolve-ProductRuntimeRoot` assert the same `ts/packages/host-contracts/tests/runtime-ownership.fixture.json`.
+- `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — the user home's root and the names inside a pod. `ProductPathing.MachinePropsPath` is the per-machine half of a pod's script project (`%LocalAppData%\Positive Energy\PeScripts.props`), outside every home and outside the installed root.
+- `ProductPathing` — the content homes (ADR 0037): `Homes(pointer)` returns `ProductHomes` (`User`, `Project?`, `Firm?`, `SharedDriveRoot?`, `FirmConflict`), read order `[user, project, firm]`. A folder is a home only when its `pe-home.json` reads exactly `{"tier":"<tier>"}` (`MarkerTier`). The user home is `UserRoot()` (isolated `PE_TOOLS_PRODUCT_HOME`, else the Documents known folder's `Pe.Tools`). The firm home is probed on every drive (`<L>:\Shared drives\<child>\04 PE Software Files\Pe.Tools`, then `<L>:\04 PE Software Files\Pe.Tools`); two firm markers are a conflict and none is accepted. `PE_TOOLS_SHARED_ROOT` is a dev override that names the firm home itself and still needs the marker. The project home is `<shared drive root>\<pointer>\Pe.Tools`, where the shared drive root is the firm home's grandparent. Firm settings are `<firm>\Settings\<owner>.json` and `<firm>\keys.json`. The pure overload takes every fact as an argument, and TS asserts the same `ts/packages/host-contracts/tests/runtime-ownership.fixture.json` (`markers`, `homes`, `stateTree`). Also safe subdirectory resolution and the pure `StateRoot(lane, ownerRoot, home, shared, user)`: `<home>\.local-state` under the override (an isolated run shares no state with the owner's host), else the dev checkout's `.artifacts\pe-tools`, else the SDK install root verbatim; it refuses a root at or under the firm override or the Documents user root. TS `stateRoot` and PowerShell `Resolve-ProductRuntimeRoot` assert the fixture's `stateRoots`; PowerShell resolves no home.
 
 ## Hard Dependency Rule
 
@@ -32,26 +32,31 @@ Transport lives in `Pe.Shared.HostContracts`: `HostEndpoint`, `TsHostCallClient`
 ## Target Local Contract
 
 ```text
-%LocalAppData%\Positive Energy\Pe.Tools\
+%LocalAppData%\Positive Energy\Pe.Tools\      (the machine state root; a dev checkout uses .artifacts\pe-tools)
   state\
+    Work\  T3\
+    Agent\AGENTS.md                           (the agent's guide, rewritten by bootstrap)
+    Pages\<slug>\
+    Runs\<pod-id>\<run-id>\                    (every run's input, outputs and receipt)
+    Runs\_no-pod\                             (runs with no pod, and per-module task output)
+    Runs\_inline\                             (the source of each inline snippet that ran; no run id)
+    Blobs\sha256\<hash>
   logs\
   cache\
 
-<user root: PE_TOOLS_PRODUCT_HOME, else Documents\Pe.Tools>\   (every write; also Work\)
-  AGENTS.md
-  README.md
-  preferences.json
-  Pods\<local-folder>\{pod.json,settings\,src\,assets\,output\,AGENTS.md,README.md,PeScripts.csproj,.vscode\}
+%LocalAppData%\Positive Energy\PeScripts.props  (this machine's script references; bootstrap rewrites it)
 
-<PE_TOOLS_SHARED_ROOT>\   (optional, read after the user root, never written)
-  Pods\  Pages\  Catalogs\
-  Firm\<owner>.json
-  keys.json
+<a home: user, project or firm>\              (found by pe-home.json; the user home takes new pods)
+  pe-home.json
+  Pods\<local-folder>\{pod.json,settings\,src\,assets\,AGENTS.md,README.md,PeScripts.csproj}
+  Pages\  Catalogs\
+  Settings\<owner>.json                       (the firm's Settings\preferences.json holds the firm ids)
+  keys.json                                   (firm home only)
 ```
 
 The installer also lays binaries under the product root; their names and shape come from `product.payloads.json`, not this package.
 
-The local folder is a filesystem address, not pod identity. Authored JSON, scripts, assets, and useful output stay inside that pod folder. Do not add legacy path fallbacks or dual-read/dual-write behavior here.
+The local folder is a filesystem address, not pod identity. A pod holds authored files only: a home may be shared, so nothing a machine derives and no run output is written into it. Native code never joins a folder name onto a home to find a pod; the host names the pod's absolute folder. Do not add legacy path fallbacks or dual-read/dual-write behavior here.
 
 ## Consumer Guidance
 

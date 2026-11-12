@@ -42,5 +42,5 @@ Authored settings document open/save/validate/composition is TS-owned in `ts/app
 - Prefer explicit metadata contracts over scattering storage and schema assumptions across settings types.
 - `SettingsRuntimeRegistry` is intentionally idempotent only when a structural module or `$schema` URL maps to the same contract. Reusing a key for a different contract should fail fast.
 - Host structural schemas and live-document field options are different concerns. Keep those seams obvious.
-- Product preferences live at `Documents\Pe.Tools\preferences.json`; authored settings and useful output live inside ordinary pod folders; runtime state and credentials live under LocalAppData.
+- The firm ids live in the firm home's `Settings\preferences.json`, read only; the user home holds no preferences file. Authored settings live inside ordinary pod folders; run output, runtime state and credentials live under the machine state root.
 - Product root names belong in `Pe.Shared.Product`; storage runtime composes those layouts rather than defining its own roots.

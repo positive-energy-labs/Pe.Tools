@@ -71,11 +71,14 @@ public sealed record PodContribution(string Key, string Kind, string MemberPath)
 public sealed record PodCapture(string Id, string Folder, string Directory, IReadOnlyList<PodContribution> Contributions, ScriptPodSourceBundle MemberBundle, ScriptPodSourceBundle SourceBundle);
 public sealed record PodCaptureResult(PodCapture? Capture, string? Code, string? Reason);
 
-/// <summary>Native composition and bundle validation. The host alone admits package membership.</summary>
-public sealed class ScriptPodPreparationService(string? podsRoot = null, Func<string, object, JObject>? admission = null) {
+/// <summary>
+///     Native composition and bundle validation. The host alone admits package membership, and the host alone
+///     says where a pod is: a pod lives in any of three homes (ADR 0037), so native code never joins a folder
+///     name onto the user's Pods. It takes the absolute folder from the host's capture.
+/// </summary>
+public sealed class ScriptPodPreparationService(Func<string, object, JObject>? admission = null) {
     public const string Stage = "pod";
     private const long MaxFileBytes = ScriptPodMemberBounds.MaxFileBytes;
-    public string PodsRoot { get; } = podsRoot ?? RevitScriptingStorageLocations.GetDefaultBasePath();
 
     // These two reads are host-local; neither may enter the Revit bridge while native code awaits it.
     private JObject ReadAdmission(string key, object request) {
@@ -93,7 +96,9 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null, Func<st
         try {
             var capture = this.ReadAdmission("pod.capture", new { pod = podId }).ToObject<PodCapture>()
                 ?? throw new InvalidDataException("Host returned no package capture.");
-            if (capture.Id != podId || !string.Equals(Path.GetFullPath(capture.Directory), Path.GetFullPath(FullPath(this.PodsRoot, capture.Folder)), StringComparison.OrdinalIgnoreCase))
+            // The directory is the host's word. It is checked only for shape: absolute, and ending in the folder it names.
+            if (capture.Id != podId || !Path.IsPathRooted(capture.Directory)
+                || !string.Equals(Path.GetFileName(Path.GetFullPath(capture.Directory)), capture.Folder, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Host package capture identity or local folder disagrees.");
             return new(capture, null, null);
         } catch (Exception exception) {
@@ -106,7 +111,7 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null, Func<st
         try { listing = this.ReadAdmission("pod.list", new { }); }
         catch (Exception exception) {
             Serilog.Log.Warning(exception, "package.unavailable: host admission could not list Pods");
-            return [new RefusedPod(this.PodsRoot, [], [ScriptDiagnosticFactory.Error("package.unavailable", exception.Message)])];
+            return [new RefusedPod(Pe.Shared.Product.ProductPathNames.PodsDirectoryName, [], [ScriptDiagnosticFactory.Error("package.unavailable", exception.Message)])];
         }
         var pods = new List<PodPreparation>();
         foreach (var row in listing["pods"] ?? new JArray()) {
@@ -153,28 +158,32 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null, Func<st
             : new PreparedPod(folder, manifest.Manifest, members, diagnostics);
     }
 
-    /// <summary>The one installed pod folder whose manifest id matches. Zero or several matches fail and name the folders.</summary>
+    /// <summary>
+    ///     The absolute folder of the one admitted pod with this manifest id, in whichever home holds it. The host
+    ///     refuses an unknown id and an id two folders claim, and its reason is the error.
+    /// </summary>
     public string ResolveFolder(string podId) {
-        var matches = (this.ReadAdmission("pod.list", new { })["pods"] ?? new JArray())
-            .Where(row => row.Value<string>("id") == podId).Select(row => row.Value<string>("folder")!).ToList();
-        return matches.Count switch {
-            1 => FullPath(this.PodsRoot, matches[0]),
-            0 => throw new InvalidDataException($"No installed pod has id '{podId}'."),
-            _ => throw new InvalidDataException($"Pod id '{podId}' is ambiguous between folders: {string.Join(", ", matches)}.")
-        };
+        var admitted = this.Capture(podId);
+        return admitted.Capture is { } capture
+            ? Path.GetFullPath(capture.Directory)
+            : throw new InvalidDataException($"No admitted pod has id '{podId}': {admitted.Reason}");
     }
 
-    /// <summary>Resolve a local output folder through the same admitted host inventory.</summary>
-    public string ResolveId(string folder) {
-        var relative = BclCompat.GetRelativePath(this.PodsRoot, folder).Replace('\\', '/');
-        _ = FullPath(this.PodsRoot, relative);
-        var response = this.ReadAdmission("pod.list", new { projection = "identity", folder = relative });
-        var identity = response["identity"];
-        if (response.Value<string>("projection") != "identity" || identity?.Value<string>("id") is not { } id
-            || identity.Value<string>("folder") is not { } selected
-            || !string.Equals(FullPath(this.PodsRoot, selected), Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"No unique admitted pod owns output folder '{folder}'.");
-        return id;
+    /// <summary>
+    ///     Where bootstrap seeds: the admitted pod's own folder when the host knows a pod by this folder name or
+    ///     this id, in whichever home holds it, else a new pod in the user home. Asking first is what keeps
+    ///     bootstrap from minting a second pod with an id another home already holds, which refuses both.
+    /// </summary>
+    public string ResolveBootstrapFolder(string workspaceKey) {
+        var ids = (this.ReadAdmission("pod.list", new { })["pods"] ?? new JArray())
+            .Where(row => string.Equals(row.Value<string>("folder"), workspaceKey, StringComparison.OrdinalIgnoreCase)
+                          || row.Value<string>("id") == workspaceKey)
+            .Select(row => row.Value<string>("id")!).Distinct(StringComparer.Ordinal).ToList();
+        return ids.Count switch {
+            0 => RevitScriptingStorageLocations.ResolveNewPodFolder(workspaceKey),
+            1 => this.ResolveFolder(ids[0]),
+            _ => throw new InvalidDataException($"'{workspaceKey}' names more than one admitted pod ({string.Join(", ", ids)}); bootstrap one by its id.")
+        };
     }
 
     internal static PodCapturedSource CaptureComposeSource(PodMemberComposeRequest request) {
@@ -194,11 +203,12 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null, Func<st
         path = NormalizeMemberPath(path);
         if (!path.StartsWith("settings/", StringComparison.Ordinal))
             throw new InvalidDataException("A settings capture must name settings/<path>.");
-        var fullPath = FullPath(this.ResolveFolder(podId), path);
+        var podFolder = this.ResolveFolder(podId);
+        var fullPath = FullPath(podFolder, path);
         var bytes = Encoding.UTF8.GetBytes(content);
         if (bytes.LongLength > MaxFileBytes) throw new InvalidDataException($"Settings capture exceeds {MaxFileBytes} bytes.");
         var parent = Path.GetDirectoryName(fullPath);
-        while (parent is not null && parent.Length >= this.PodsRoot.Length) {
+        while (parent is not null && parent.Length >= podFolder.Length) {
             if (Directory.Exists(parent) && (File.GetAttributes(parent) & FileAttributes.ReparsePoint) != 0)
                 throw new InvalidDataException("Settings capture cannot follow directory links.");
             parent = Path.GetDirectoryName(parent);

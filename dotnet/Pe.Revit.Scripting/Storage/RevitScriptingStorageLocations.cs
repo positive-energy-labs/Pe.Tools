@@ -1,70 +1,31 @@
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Product;
-using Pe.Shared.StorageRuntime;
 
 namespace Pe.Revit.Scripting.Storage;
 
+/// <summary>
+///     File names of a pod's script workspace, and the two places scripting writes that are not a pod: the
+///     inline traces and the user's own Pods folder, where a person's new pod is created. A pod that already
+///     exists is found by the host, in whichever home holds it.
+/// </summary>
 public static class RevitScriptingStorageLocations {
     public const string ProjectFileName = ScriptingWorkspaceLayout.ProjectFileName;
     public const string AgentsFileName = ScriptingWorkspaceLayout.AgentInstructionsFileName;
     public const string ReadmeFileName = ScriptingWorkspaceLayout.ReadmeFileName;
     public const string PodManifestFileName = ScriptingWorkspaceLayout.PodManifestFileName;
     public const string SourceDirectoryName = ScriptingWorkspaceLayout.SourceDirectoryName;
-    public const string InlineTraceDirectoryName = "inline";
+    /// <summary>The <c>Runs</c> segment for inline traces. Reserved like <c>_no-pod</c>: a pod id cannot start with an underscore.</summary>
+    public const string InlineTraceDirectoryName = "_inline";
     public const string SampleFileName = ScriptingWorkspaceLayout.SampleScriptFileName;
 
-    public static string GetDefaultBasePath() => ScriptingWorkspaceLocations.GetDefaultBasePath();
-
+    /// <summary>
+    ///     Machine state: <c>state\Runs\_inline\&lt;utc&gt;-&lt;execution id&gt;-&lt;name&gt;</c>. A trace has no pod and no run id,
+    ///     so it is not a run folder and does not sit among the pod-less runs, whose every child is one run.
+    /// </summary>
     public static string ResolveInlineTraceDirectory() =>
-        ProductUserContentLayout.ForCurrentUser().InlineScripts.RootPath;
+        Path.Combine(ProductRuntimeLayout.Current.State.RunsPath, InlineTraceDirectoryName);
 
-    public static string ResolveWorkspaceRoot(string workspaceKey) =>
+    /// <summary>The folder of a new pod in the user home. Never the address of a pod the host already admits.</summary>
+    public static string ResolveNewPodFolder(string workspaceKey) =>
         ScriptingWorkspaceLocations.ResolveWorkspaceRoot(workspaceKey);
-
-    public static string ResolveProjectFilePath(string workspaceKey) =>
-        Path.Combine(ResolveWorkspaceRoot(workspaceKey), ProjectFileName);
-
-    public static string ResolvePodManifestPath(string workspaceKey) =>
-        Path.Combine(ResolveWorkspaceRoot(workspaceKey), PodManifestFileName);
-
-    public static string ResolveSourceDirectory(string workspaceKey) =>
-        Path.Combine(ResolveWorkspaceRoot(workspaceKey), SourceDirectoryName);
-
-    public static string ResolveWorkspaceSourceFilePath(string workspaceKey, string relativePath) {
-        var workspaceRoot = ResolveWorkspaceRoot(workspaceKey);
-        var normalizedRelativePath = SettingsPathing.NormalizeRelativePath(relativePath, nameof(relativePath));
-        if (string.IsNullOrWhiteSpace(normalizedRelativePath))
-            throw new ArgumentException("Workspace source path is required.", nameof(relativePath));
-
-        var fullPath = Path.GetFullPath(Path.Combine(
-            workspaceRoot,
-            normalizedRelativePath.Replace('/', Path.DirectorySeparatorChar)
-        ));
-        SettingsPathing.EnsurePathUnderRoot(fullPath, workspaceRoot, nameof(relativePath));
-        return fullPath;
-    }
-
-    public static string ResolveGeneratedDirectory(string workspaceKey) =>
-        Path.Combine(ResolveWorkspaceRoot(workspaceKey), ".vscode");
-
-    public static string ResolveSampleScriptPath(string workspaceKey) =>
-        Path.Combine(ResolveSourceDirectory(workspaceKey), SampleFileName);
-
-    public static string ResolveReadmePath(string workspaceKey) =>
-        Path.Combine(ResolveWorkspaceRoot(workspaceKey), ReadmeFileName);
-
-    public static string ResolveAgentsPath(string workspaceKey) =>
-        Path.Combine(ResolveWorkspaceRoot(workspaceKey), AgentsFileName);
-
-    public static string ResolveVscodeSettingsPath(string workspaceKey) =>
-        Path.Combine(ResolveGeneratedDirectory(workspaceKey), "settings.json");
-
-    public static string ResolveProductHomePath() =>
-        ProductUserContentLayout.ForCurrentUser().RootPath;
-
-    public static string ResolveProductAgentsPath() =>
-        ProductUserContentLayout.ForCurrentUser().AgentInstructionsPath;
-
-    public static string ResolveProductReadmePath() =>
-        ProductUserContentLayout.ForCurrentUser().ReadmePath;
 }
