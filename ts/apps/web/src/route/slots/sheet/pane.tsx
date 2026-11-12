@@ -3,7 +3,7 @@ import { decode, type SubjectRefCode } from "../../../../../../packages/agent-co
 import type { SheetSlot } from "@pe/agent-contracts/slots";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
-import { submitAction } from "../../../../../../packages/mcps/src/shared/takeoff-action-client";
+import { submitAction } from "@pe/mcps/actions";
 import type { OpResponseOf } from "@pe/host-contracts/operation-types";
 import { StateCell } from "@pe/kit/lang/cell";
 import { useRouteSearchSlice } from "../../activity";

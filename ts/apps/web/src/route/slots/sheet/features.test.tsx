@@ -85,13 +85,14 @@ test("empty state: a sheet whose read has nothing for it says so and where to go
 });
 
 const action = vi.hoisted(() => vi.fn());
-vi.mock("../../../../../../packages/mcps/src/shared/takeoff-action-client", () => ({ submitAction: action }));
+vi.mock("@pe/mcps/actions", () => ({ submitAction: action }));
 
-test("save at submits the exact tier hash and typed value through the action door", async () => {
+test.each([null, { kind: "document" as const, ref: { session: "session", openId: "open" } }])("save at submits the exact tier hash, typed value and target %j through the action door", async (target) => {
+  action.mockClear();
   const refresh = vi.fn();
   action.mockResolvedValue({ state: "succeeded", result: { tier: "firm", path: "shared/Settings/ducts.json" } });
   const slot = { bindings: { allowance: setting("ducts", ["criteria", "allowanceReturnInWg"], z.number(), ["firm"], { label: "Return allowance" }) } };
-  const ctx = { cells: { doc: {} }, page: { read: () => ({}) }, refresh,
+  const ctx = { target, cells: { doc: {} }, page: { read: () => ({}) }, refresh,
     value: { status: "ready", current: true, value: { settings: { ducts: [
       { tier: "firm", home: "shared", name: "shared", path: "shared/Settings/ducts.json", sha256: "prior", json: { criteria: { allowanceReturnInWg: 0.2 } } },
     ] } } } };
@@ -99,7 +100,7 @@ test("save at submits the exact tier hash and typed value through the action doo
   fireEvent.change(screen.getByRole("textbox", { name: "Return allowance: value to save" }), { target: { value: "0.35" } });
   fireEvent.click(screen.getByRole("button", { name: "Save Return allowance at the firm home" }));
   await vi.waitFor(() => expect(action).toHaveBeenCalledWith({
-    id: expect.any(String), key: "settings.tiers.write", target: { kind: "host" },
+    id: expect.any(String), key: "settings.tiers.write", target: target ?? { kind: "host" },
     input: { owner: "ducts", tier: "firm", path: ["criteria", "allowanceReturnInWg"], value: 0.35, expectedSha256: "prior" },
   }));
   expect(refresh).toHaveBeenCalledOnce();
