@@ -47,6 +47,47 @@ def test_copy_hashed(tmp: Path) -> None:
         assert target.stat().st_mtime_ns == source.stat().st_mtime_ns  # copy2's metadata survives
 
 
+def test_isolated_home(tmp: Path) -> None:
+    """Stop setup at its first custody save, before it can launch any process."""
+    checkout = tmp / "checkout"
+    (checkout / ".git").mkdir(parents=True)
+    model = tmp / "model.rvt"
+    touch(model)
+    owner = tmp / "owner"
+    owner.mkdir()
+    names = ("CHECKOUT", "owner_home", "main_checkout", "save", "git", "revit_pids", "owner_files")
+    prior = {name: getattr(a, name) for name in names}
+    captured = {}
+    class Saved(Exception): pass
+    def save(_, state):
+        captured.update(state)
+        raise Saved()
+    a.CHECKOUT = checkout
+    a.owner_home = lambda: owner
+    a.main_checkout = lambda: checkout
+    a.save = save
+    a.git = lambda *_: "test-head"
+    a.revit_pids = lambda: []
+    a.owner_files = lambda _: {}
+    try:
+        try:
+            a.setup("isolated", ["--model", str(model)])
+            raise AssertionError("setup did not save custody")
+        except Saved:
+            pass
+        home = Path(captured["home"])
+        assert home.is_dir() and home.name == "Pe.Tools", home
+        assert home.parent.name.startswith("pe-accept-"), home
+        assert home.parent.parent.resolve() == Path(tempfile.gettempdir()).resolve(), home
+        assert not any((p / ".git").exists() for p in (home, *home.parents)), home
+        evidence = checkout / ".artifacts" / "accept" / "isolated"
+        assert Path(captured["ownerBefore"]).parent == evidence
+        assert Path(captured["docs"][0]).parent == evidence / "docs"
+    finally:
+        for name, value in prior.items(): setattr(a, name, value)
+        if captured: shutil.rmtree(Path(captured["home"]).parent)
+
+
 def test_host_wait(tmp: Path) -> None:
     """A python sleeper stands in for the host launcher; a hand-written service file stands in for the host."""
     run, home = "t", tmp / "home"
@@ -89,6 +130,6 @@ def test_host_wait(tmp: Path) -> None:
 
 
 with tempfile.TemporaryDirectory() as t:
-    for test in (test_pod_build_skip, test_pick_models, test_copy_hashed, test_host_wait):
+    for test in (test_pod_build_skip, test_pick_models, test_copy_hashed, test_isolated_home, test_host_wait):
         test(Path(tempfile.mkdtemp(dir=t)))
 print("ok")

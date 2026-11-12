@@ -42,6 +42,7 @@ import {
   ServiceFileLive,
 } from "./host-lifecycle.ts";
 import { hostOwnership } from "./host-ownership.ts";
+import { prepareAgentDirectory } from "./agent-directory.ts";
 import { getHostStatus } from "./local-ops.ts";
 import { currentMachine } from "./machine.ts";
 import { mcpRoute } from "./mcp-route.ts";
@@ -280,6 +281,7 @@ export interface HttpLiveOptions {
  * (via `NodeHttpServer.layer`) and shared by the router and the service-file writer.
  */
 export function makeHttpLive(options: HttpLiveOptions) {
+  prepareAgentDirectory();
   return hostInputGraph(
     options.inputs,
     () => liveHttpLive(options),

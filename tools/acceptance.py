@@ -6,14 +6,15 @@
     python tools/acceptance.py census <run> [label]
     python tools/acceptance.py teardown <run>
 
-Everything lives under <checkout>/.artifacts/accept/<run>/ (run.json is the custody record).
+Evidence lives under <checkout>/.artifacts/accept/<run>/ (run.json is the custody record).
+The isolated dev product home lives under the system temp directory, outside the checkout.
 Without --model, setup copies the Chadds model from the main checkout's .artifacts/revit/detached, or refuses.
 Dev copies the product home. Installed uses the actual MSI and product home; its writes are censused.
 `who` is cli (this host's human/cli context), anon, or ctx:<token>. Teardown stops only the
 session ids and host this run recorded; anything else it finds is printed as residue.
 """
 
-import hashlib, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.request
+import hashlib, json, os, re, shutil, subprocess, sys, tempfile, time, urllib.error, urllib.request
 from pathlib import Path
 
 CHECKOUT = Path(__file__).resolve().parents[1]
@@ -306,7 +307,7 @@ def setup(run: str, args: list[str]) -> None:
     models = pick_models(args, main_checkout() / DEFAULT_MODEL)  # refuse before anything is created
     (root / "ev").mkdir(parents=True)
     (root / "docs").mkdir()
-    home = owner if installed else root / "home" / "Pe.Tools"
+    home = owner if installed else Path(tempfile.mkdtemp(prefix="pe-accept-")) / "Pe.Tools"
     if not installed:
         home.mkdir(parents=True)
     for name in ([] if installed else COPIED):

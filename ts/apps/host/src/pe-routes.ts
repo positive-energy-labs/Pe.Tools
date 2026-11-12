@@ -72,7 +72,7 @@ import {
   HttpServerResponse,
 } from "effect/http";
 import { createHash } from "node:crypto";
-import { mkdirSync, unwatchFile, watchFile } from "node:fs";
+import { unwatchFile, watchFile } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readStoredNotices } from "@pe/host-contracts/store";
@@ -1179,10 +1179,8 @@ function* hostPeRoutes(
   const files = yield* DuctFiles;
   const inputContext = yield* Effect.serviceOption(HostInputContext);
   const sourceRoot = hostOwnership.sourceRoot;
-  // Fixed once, under the machine state root and outside every home (ADR 0037 rule 6): the harness
-  // child's cwd must exist before the first spawn, and T3 keys its project on this path.
+  // Host startup prepares this fixed machine-state directory before any harness can spawn.
   const worldRoot = productAgentPath();
-  mkdirSync(worldRoot, { recursive: true });
   // Unbound is a working state (ADR 0037 rule 2): the host starts, and the feed says where it looked.
   noteStartupHomes();
   // One host log line per home, with its tier and how it was found; with no firm home, where it looked.
