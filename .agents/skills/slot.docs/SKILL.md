@@ -77,7 +77,7 @@ A large change gets a `MAP.md` in its feature directory, with these headings in 
 ## Decision log
 ```
 
-The decision log is append-only. The map is deleted when the effort ends, after the sweep the Ledgers rules describe.
+Each slice row names its falsifier and the paths that falsifier observes, because the driver's proof rows and the rule for carrying a stamp to a later tip both read them. The decision log is append-only. The map is deleted when the effort ends, after the sweep the Ledgers rules describe.
 
 ## ADRs
 
