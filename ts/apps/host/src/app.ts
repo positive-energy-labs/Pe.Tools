@@ -55,7 +55,7 @@ import { RequestIdentity } from "./request-services.ts";
 import { RunRegistry } from "./run-registry.ts";
 import { SdkDriverLive } from "./sdk-session.ts";
 import { instancesReadingsRoute } from "./session-route.ts";
-import { settingsSchemaPath } from "./settings.ts";
+import { settingsSchemaPath } from "@pe/host-contracts/settings-schema";
 import {
   createShare,
   shareIntentFile,
