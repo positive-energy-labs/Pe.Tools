@@ -23,6 +23,8 @@ import { SituationDrawer } from "./situation-drawer";
 import { locationLabel, admittedDestination, shellButtons } from "./model";
 import { useDestination, useNavigation } from "./state";
 import { GlobalSearch } from "./global-search";
+import { openNotices, useNoticeFeed } from "./notice-feed";
+import { previousOf } from "#/host/resource-state";
 import { RouteControlsOutlet, usePalette } from "./route-controls";
 import { useRouteControlPresence } from "./route-controls";
 import { RouteHelpButton } from "#/route/help";
@@ -152,6 +154,8 @@ export function AppBar() {
       options: { ignoreInputs: false },
     },
   ]);
+  // Every route's bar says how many feed rows ask for a person; the rows themselves are the overlay's.
+  const notices = openNotices(previousOf(useNoticeFeed()));
   const hasRouteHelp = useRouteControlPresence("controls");
   const hasSituation = useRouteControlPresence("situation");
   useEffect(() => {
@@ -348,6 +352,16 @@ export function AppBar() {
       >
         {compact && <SituationDrawer barAnchor={shellRef.current} rail={actions} />}
         {pageSlug && <PageBindingChip slug={pageSlug} />}
+        {shell.field === "global" && notices && (
+          <Button
+            kind="quiet"
+            label={`${notices.count} open: ${notices.says}. Show them · Ctrl+Shift+K`}
+            data-notice-count={notices.count}
+            onClick={showSearch}
+          >
+            {notices.count} open
+          </Button>
+        )}
         <RecordedSourceChip />
         {!compact && actions}
       </div>
