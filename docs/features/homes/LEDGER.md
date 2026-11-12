@@ -48,6 +48,8 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 - R3: `capability-tools.ts` page-branch comment wrongly said a harness re-invocation is a marked re-send, because each re-invocation is a new MCP request id.
 - A hand-deleted action journal is indistinguishable from a fresh machine, so a re-send after one is admitted and may run again.
 - A second update apply while an older one still runs after a discard (`update-reader.ts:381-385`): the installer mutex is UNPROVEN for `pe-revit update`; drive two applies one second apart after a discard.
+- A re-send whose first-send time lies in the future is admitted, so a tailnet browser with a fast clock could pass a send from before the discard as new (`ts/apps/host/src/action-journal.ts:1196-1198`). Fix: also refuse a `sentAt` later than the host's clock plus about 5 minutes. Purger, tip 7402f478 (B2).
+- `await lifecycle.ready` at `ts/apps/host/src/package-lifecycle.ts:27` deadlocks when `bootstrapInBackground` is false and an import inside that bootstrap lands in the serving Pods root. Production always passes true (`pe-routes.ts:1182`), so nothing hangs today. Fix: delete the non-background path if no product caller needs it, or name the case at the await. Purger, tip 7402f478 (B5).
 - Slices 0 to 10 are in [MAP.md](MAP.md); each lands with its red falsifier. Journeys and end-gate targets are in [JOURNEYS.md](JOURNEYS.md).
 - The T3 cutover rows, falsifiers F1 to F11 and the flip rule are in [T3-CUTOVER.md](T3-CUTOVER.md). The purger holds that file. No row may end as "both exist".
 - kaitpw ticks the classified standards list that slice 0 produces (real, test, proof, WIP, archive, one-off, no registered library, dangling reference). Until then no file is called a standard.

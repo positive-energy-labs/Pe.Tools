@@ -1192,10 +1192,10 @@ export class ActionJournal implements ReceiptReader {
     await this.loadOnce();
     const prior = this.rows.get(admission.id);
     // A retry predating the discard may already have run. Missing or malformed first-send times
-    // cannot establish that it is new, so they refuse on the safe side.
+    // cannot establish that it is new, so they refuse on the safe side; so does a discard time that does not parse (NaN).
     const sentAt = z.iso.datetime().safeParse(crossing.sentAt);
     if (!prior && crossing.resent && this.discarded &&
-      (!sentAt.success || Date.parse(sentAt.data) <= Date.parse(this.discarded)))
+      (!sentAt.success || !(Date.parse(sentAt.data) > Date.parse(this.discarded))))
       throw refused(
         `Action '${admission.id}' was sent before, and the action journal that knew whether it ran could not be read and was discarded. It is not run again. Check its result, then submit it as a new action if it is still wanted.`,
         "journal.discarded",
