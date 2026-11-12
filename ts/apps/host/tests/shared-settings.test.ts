@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { PostHog } from "posthog-node";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { analyticsConfig } from "@pe/runtime";
+import { firmSettingsDir, machineFacts } from "@pe/host-contracts/product-paths";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { Effect } from "effect";
 import { ductsFirmSchema } from "@pe/agent-contracts";
@@ -127,5 +128,34 @@ test("a marker-only loss invalidates the firm leaf and restoring it reacquires t
   } finally {
     stop();
     rmSync(shared, { recursive: true, force: true });
+  }
+});
+
+// K2: files alone stay [] across marker loss; the watcher key must include the root.
+test.each(["override", "probe"] as const)("marker loss with no Settings file fires exactly one change (%s)", async (source) => {
+  const drive = mkdtempSync(join(tmpdir(), "pe-firm-drive-"));
+  const shared = source === "override" ? drive : join(drive, "04 PE Software Files", "Pe.Tools");
+  mkdirSync(shared, { recursive: true });
+  writeFileSync(join(shared, "pe-home.json"), '{"tier":"firm"}');
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", source === "override" ? shared : "");
+  const facts = machineFacts([drive]);
+  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer({
+    firm: source === "override" ? firmRootPath : () => firmSettingsDir(facts),
+    catalogs: [],
+  }))));
+  const changes: string[] = [];
+  const stop = files.subscribe!(name => changes.push(name));
+  try {
+    expect(await Effect.runPromise(files.firm("ducts"))).toEqual({ path: join(shared, "Settings", "ducts.json") });
+    renameSync(join(shared, "pe-home.json"), join(shared, "marker-away.json"));
+    await expect.poll(() => changes).toEqual(["firm"]);
+    expect(await Effect.runPromise(files.firm("ducts"))).toEqual({ refused: "no-shared-root" });
+    // A later filesystem hint drains after the first change and must stay quiet.
+    writeFileSync(join(shared, "unrelated.txt"), "hint");
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(changes).toEqual(["firm"]);
+  } finally {
+    stop();
+    rmSync(drive, { recursive: true, force: true });
   }
 });
