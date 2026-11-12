@@ -25,8 +25,9 @@ import "./button.css";
 const NAV_ICON = { back: ArrowLeft, forward: ArrowRight, out: ExternalLink };
 /** Row action slots draw glyphs even when a composed control supplies words. */
 export const ButtonIcon = createContext<LucideIcon | null>(null);
-/** A container whose buttons read as its own furniture (a list bar, a frame's head, a floater)
- *  sets their kind once; a button there states `kind` only to differ. */
+/** A container whose buttons read as its own furniture (a list bar, a popup list's footer, a
+ *  floater, a row's second line, a search field's chips) sets their kind once; a button there
+ *  states `kind` only to differ. */
 export const ButtonKind = createContext<"quiet" | "framed" | null>(null);
 
 /** A composing surface supplies state; its button owns the anchored overlay. */
