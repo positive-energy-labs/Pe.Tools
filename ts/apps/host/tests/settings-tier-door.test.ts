@@ -74,7 +74,8 @@ test.each(["firm", "project"] as const)("settings.tiers.write crosses /actions, 
     });
     const [refused] = await (await fetch(`${host.base}/actions?id=${refusedId}&wait=10000`, { headers })).json();
     expect(readFileSync(path)).toEqual(beforeRefusal);
-    expect(refused).toMatchObject({ state: "failed", notDispatched: true, outcome: { state: "refused", reason: expect.stringContaining("changed since it was read") } });
+    expect(refused).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "stale" }, outcome: { state: "stale", reason: expect.stringContaining("changed since it was read") } });
+    expect(refused.outcome.recovery).not.toBe("retry");
     const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: refused }] }, Date.now());
     expect(rows).toMatchObject([{ group: "failed", verb: "refused", says: expect.stringContaining("changed since it was read") }]);
     expect(rows.some(row => row.group === "waits")).toBe(false);
