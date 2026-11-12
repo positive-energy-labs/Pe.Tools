@@ -6,29 +6,59 @@ import { expect, test, vi } from "vite-plus/test";
 import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
 import { storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
 import { bootHost } from "./real-server.ts";
+import { BRIDGE_CONTRACT_VERSION, BRIDGE_PATH, HOST_RUNTIME_SERVICE_QUERY, type BridgeFrame } from "@pe/host-contracts/contracts";
+import { ownedSession } from "./callers.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 vi.mock("../src/pe-revit-launch.ts", async original => ({
   ...(await original<typeof import("../src/pe-revit-launch.ts")>()),
   peRevitLauncher: () => ({ cmd: process.execPath, args: [] }),
 }));
 
-// Mutant: remove settings.tiers.write's effect adapter. The HTTP receipt fails before writing.
-test("settings.tiers.write crosses /actions, keeps prior firm bytes and posts one notice", async () => {
-  const firm = mkdtempSync(join(tmpdir(), "pe-tier-door-"));
+// Mutants: remove the effect adapter, or drop its project pointer. The HTTP receipt fails before writing.
+test.each(["firm", "project"] as const)("settings.tiers.write crosses /actions, keeps prior %s bytes and posts one notice", async (tier) => {
+  const drive = mkdtempSync(join(tmpdir(), "pe-tier-door-"));
+  const firm = join(drive, "04 PE Software Files", "Pe.Tools");
+  mkdirSync(firm, { recursive: true });
   writeFileSync(join(firm, "pe-home.json"), JSON.stringify({ tier: "firm" }));
-  mkdirSync(join(firm, "Settings"));
-  const path = join(firm, "Settings", "ducts.json");
+  const pointer = "Projects/target";
+  const home = tier === "firm" ? firm : join(drive, pointer, "Pe.Tools");
+  mkdirSync(join(home, "Settings"), { recursive: true });
+  writeFileSync(join(home, "pe-home.json"), JSON.stringify({ tier }));
+  const path = join(home, "Settings", "ducts.json");
   const prior = Buffer.from('{"criteria":{"allowanceInWg":{"return":0.2}}}\n');
   writeFileSync(path, prior);
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", firm);
   const host = await bootHost();
+  let socket: WebSocket | undefined;
   try {
+    let target: unknown = { kind: "host" };
+    if (tier === "project") {
+      socket = new WebSocket(`${host.base.replace("http:", "ws:")}${BRIDGE_PATH}?${HOST_RUNTIME_SERVICE_QUERY}=${hostOwnership.serviceName}`);
+      await new Promise<void>((resolve, reject) => {
+        socket!.addEventListener("open", () => resolve(), { once: true });
+        socket!.addEventListener("error", reject, { once: true });
+      });
+      const ack = new Promise<BridgeFrame>(resolve => socket!.addEventListener("message", event => resolve(JSON.parse(String(event.data))), { once: true }));
+      socket.send(JSON.stringify({ kind: "Registration", registration: {
+        contractVersion: BRIDGE_CONTRACT_VERSION, processId: 42, processStartUtcUnixMs: 1000, ...ownedSession,
+        state: {
+          activeDocumentIsFamilyDocument: false, activeDocumentIsModelInCloud: false,
+          activeDocumentIsWorkshared: false, activeDocumentObservedAtUnixMs: 1,
+          hasActiveDocument: false, revitVersion: "fixture", runtimeFramework: "test", runtimeAssemblies: [],
+          openDocuments: [{ openId: "target-open", title: "Target", address: null, isActive: false, isFamilyDocument: false, projectHome: pointer }],
+        },
+      } }));
+      const registered = await ack;
+      expect(registered.registrationAck?.accepted).toBe(true);
+      target = { kind: "document", ref: { session: registered.registrationAck!.sessionId, openId: "target-open" } };
+    }
     const headers = { "content-type": "application/json", "x-pe-context": host.terminal };
     const id = randomUUID();
     const posted = await fetch(`${host.base}/actions`, {
       method: "POST", headers,
-      body: JSON.stringify({ id, key: "settings.tiers.write", target: { kind: "host" },
-        input: { owner: "ducts", tier: "firm", path: ["criteria", "allowanceInWg", "return"], value: 0.35, expectedSha256: sha256Hex(prior) } }),
+      body: JSON.stringify({ id, key: "settings.tiers.write", target,
+        input: { owner: "ducts", tier, path: ["criteria", "allowanceInWg", "return"], value: 0.35, expectedSha256: sha256Hex(prior) } }),
     });
     expect(posted.status, await posted.clone().text()).toBeLessThan(400);
     const settled = await fetch(`${host.base}/actions?id=${id}&wait=10000`, { headers });
@@ -43,8 +73,13 @@ test("settings.tiers.write crosses /actions, keeps prior firm bytes and posts on
       { class: "keep", sha256: sha256Hex(bytes), reason: expect.stringContaining(sha256Hex(prior)) },
     ]);
   } finally {
+    if (socket) {
+      const closed = new Promise<void>(resolve => socket!.addEventListener("close", () => resolve(), { once: true }));
+      socket.close();
+      await closed;
+    }
     await host.close();
     vi.unstubAllEnvs();
-    rmSync(firm, { recursive: true, force: true });
+    rmSync(drive, { recursive: true, force: true });
   }
 }, 30000);

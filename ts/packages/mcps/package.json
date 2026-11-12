@@ -22,6 +22,7 @@
       "import": "./src/index.ts"
     },
     "./server": "./src/server.ts",
+    "./actions": "./src/shared/takeoff-action-client.ts",
     "./build": "./scripts/stage-liteparse.ts",
     "./takeoff-ops": "./src/shared/takeoff-ops.ts",
     "./family-pdf": "./src/shared/family-pdf.ts",

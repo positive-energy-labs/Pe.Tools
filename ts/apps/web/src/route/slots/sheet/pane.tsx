@@ -3,7 +3,7 @@ import { decode, type SubjectRefCode } from "../../../../../../packages/agent-co
 import type { SheetSlot } from "@pe/agent-contracts/slots";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
-import { submitAction } from "../../../../../../packages/mcps/src/shared/takeoff-action-client";
+import { submitAction } from "@pe/mcps/actions";
 import type { OpResponseOf } from "@pe/host-contracts/operation-types";
 import { StateCell } from "@pe/kit/lang/cell";
 import { useRouteSearchSlice } from "../../activity";
@@ -99,7 +99,7 @@ function SettingCell({ ctx, cell, schema }: { ctx: Ctx; cell: SheetCell; schema:
       const receipt = await submitAction({
         id: crypto.randomUUID(),
         key: "settings.tiers.write",
-        target: { kind: "host" },
+        target: ctx.target?.kind === "document" ? { kind: "document", ref: ctx.target.ref } : { kind: "host" },
         input: { owner: cell.setting!.owner, tier: tier.tier, path: [...cell.setting!.path], value: parsed ? parsed.data : null, expectedSha256: tier.sha256 },
       });
       if (receipt.state !== "succeeded")

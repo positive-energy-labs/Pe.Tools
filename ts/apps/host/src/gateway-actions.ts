@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { readSettingTiers } from "./tiered-settings.ts";
+import { targetHomes } from "./call-route.ts";
 import { captureDirectory } from "./packages.ts";
 import { directorySnapshot } from "./command-reads.ts";
 import {
@@ -36,6 +37,7 @@ import {
   isTsOnlyOperationKey,
   tsOnlyOperationCatalog,
   tsOnlyOperationSchemas,
+  type HostSessionScope,
 } from "@pe/host-contracts/operation-types";
 import type { ActionExecution, AttemptHost } from "./action-journal.ts";
 import { invokeBridge, type RevitBridge } from "./bridge.ts";
@@ -192,7 +194,7 @@ export const gatewayNativeLeaves = (key: string): readonly string[] =>
   isTsOnlyOperationKey(key) ? [] : ["host.ops.catalog", key];
 
 /** A host-leaf operation, run on the journal-owned attempt fiber with the journal's services. */
-export type GatewayLocal = (key: string, input: unknown) => Effect.Effect<unknown, unknown, AttemptHost>;
+export type GatewayLocal = (key: string, input: unknown, scope?: HostSessionScope) => Effect.Effect<unknown, unknown, AttemptHost>;
 
 /** Generated native metadata is the fallback contract; public semantic implementations are hidden. */
 export function gatewayExecutor(
@@ -212,7 +214,7 @@ export function gatewayExecutor(
     if (admission.target.kind === "sdk-session")
       throw refused("Native operations require an exact attachment");
     const session =
-      admission.target.kind === "host"
+      admission.target.kind === "host" || isTsOnlyOperationKey(key)
         ? undefined
         : await resolveSdkSession(
             bridge,
@@ -247,6 +249,7 @@ export function gatewayExecutor(
         native: gatewayNativeLeaves(key),
         says: metadata.description ?? key,
         needs:
+          key === "settings.tiers.write" && ctx.admission.target.kind === "document" ? "document" :
           !isTsOnlyOperationKey(key) && metadata.needs === "nothing" ? "session" : metadata.needs,
         principal: metadata.principal,
         effect: "command",
@@ -268,7 +271,9 @@ export function gatewayExecutor(
       requireEligibleCaller(metadata, caller, "/actions");
       if (metadata.intent !== "Mutate" && key !== "scripting.execute")
         throw refused("Only catalogued commands enter action admission");
-      const expected = gatewayTarget(key, metadata.needs, session, target?.openId);
+      const expected = key === "settings.tiers.write" && target
+        ? { kind: "document" as const, ref: target }
+        : gatewayTarget(key, metadata.needs, session, target?.openId);
       if (canonicalRouteInput(expected) !== canonicalRouteInput(admission.target))
         throw refused("Target does not match operation needs");
       validateInput(admission.input, metadata);
@@ -348,7 +353,9 @@ export function gatewayExecutor(
         const authored = admission.input;
         switch (key) {
           case "settings.tiers.write": {
-            const tier = readSettingTiers(String(authored.owner)).find(tier => tier.tier === authored.tier);
+            // Host-owned settings use the document pointer, without dispatching a native operation.
+            const { pointer } = await Effect.runPromise(targetHomes(bridge, { openDocumentId: target?.openId }));
+            const tier = readSettingTiers(String(authored.owner), pointer).find(tier => tier.tier === authored.tier);
             if (!tier?.path) throw refused(tier?.notFound ?? "The setting home was not found");
             effects.push({ kind: "file", path: tier.path });
             break;
@@ -513,7 +520,9 @@ export function gatewayExecutor(
               return io(() =>
                 writePodExport(exported as Awaited<ReturnType<typeof preparePodExport>>),
               );
-            return local(key, input);
+            return local(key, input, admission.target.kind === "document"
+              ? { bridgeSessionId: admission.target.ref.session, openDocumentId: admission.target.ref.openId }
+              : undefined);
           }
           const target = admission.target;
           if (target.kind !== "document" && target.kind !== "session")
