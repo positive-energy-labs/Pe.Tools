@@ -110,4 +110,4 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
   - A kept vendor PDF never refreshes (MAP decision log, 2026-11-12). Owed if a revised sheet at the same URL shows up live: a refresh verb.
   - Nothing prunes a derived store, and no census verb walks one. End-gate target 5 is checked by the tests' own walk and, per key, on every read.
   - `state\Parses\llamaparse` on the owner's machine holds hosted parses nothing reads now. The owner deletes it by hand.
-- Runbook row 3 proved cleanup with no second Revit beside Pea's, because the one-Revit cap stopped the driver's session first. "Cleanup leaves a person's live Revit untouched" is UNPROVEN until the cap allows two. Implementor default, re-openable: not a landing gate, since the cap itself prevents the case today.
+- Runbook row 3 proved cleanup with no second Revit beside Pea's, because the one-Revit cap stopped the driver's session first. "Cleanup leaves a person's live Revit untouched" is UNPROVEN. kaitpw 2026-11-12: "please prove this. you have a budget of three revits"; the driver runs it as runbook row 3b.
