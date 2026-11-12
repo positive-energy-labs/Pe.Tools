@@ -2,6 +2,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
 import { join } from "node:path";
+import { createServer } from "node:http";
+import { once } from "node:events";
+import { claimServiceHost, type ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
+import { createServiceFile, discoverService } from "@pe/host-contracts/pe-service";
 import { afterEach, expect, test } from "vite-plus/test";
 import { chooseServicePort } from "@pe/host-contracts/pe-service-host";
 import { hostServiceName } from "@pe/host-contracts/service-identity";
@@ -16,6 +20,89 @@ const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
+
+test("a second installed launch waits for the booting host and leaves its request running", async () => {
+  const ownership = { ...owner("installed", temp()), executablePath: process.execPath };
+  let finishRequest!: () => void;
+  let requestEntered!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    requestEntered = resolve;
+  });
+  const finish = new Promise<void>((resolve) => {
+    finishRequest = resolve;
+  });
+  let shutdowns = 0;
+  const servers: ReturnType<typeof createServer>[] = [];
+  const claims: ServiceHostHandle[] = [];
+  const first = createServer(async (request, response) => {
+    if (request.url === "/call") {
+      requestEntered();
+      await finish;
+      response.end("completed by first host");
+    } else {
+      if (request.url === "/admin/shutdown") shutdowns++;
+      response.end("ok");
+    }
+  });
+  servers.push(first);
+  first.listen(0, "127.0.0.1");
+  await once(first, "listening");
+  const address = first.address();
+  if (!address || typeof address === "string") throw Error("no TCP listener");
+  const call = fetch(`http://127.0.0.1:${address.port}/call`);
+  await entered;
+  // Hold the real first claim until the second launch has observed the bind-without-record window.
+  let sawBootWindow!: () => void;
+  const bootWindow = new Promise<void>((resolve) => {
+    sawBootWindow = resolve;
+  });
+  const dependencies = {
+    ...machine(new Map()),
+    discover: discoverService,
+    portAvailable: async () => false,
+    occupants: async () => {
+      sawBootWindow();
+      return [{ pid: process.pid, executable: process.execPath }];
+    },
+  };
+  const descriptor = (port: number) => ({
+    name: ownership.serviceName,
+    lane: "installed",
+    version: "0.7.31",
+    port,
+    executablePath: process.execPath,
+    health: "/health",
+    shutdown: "/admin/shutdown",
+    policy: { evicts: [] },
+  });
+  try {
+    const secondLaunch = prepareHostBinding(false, "0.7.31", ownership, dependencies);
+    await bootWindow;
+    const claimed = await claimServiceHost(ownership.rootPath, descriptor(address.port));
+    if (!claimed.claimed) throw Error(claimed.reason);
+    claims.push(claimed.handle);
+    const binding = await secondLaunch;
+    if (typeof binding === "number") {
+      const second = createServer((_request, response) => response.end("second"));
+      servers.push(second);
+      second.listen(binding === installedPort ? address.port : binding, "127.0.0.1");
+      await once(second, "listening");
+    }
+    finishRequest();
+    expect(await (await call).text()).toBe("completed by first host");
+    expect(shutdowns).toBe(0);
+    expect(servers).toHaveLength(1);
+    expect(binding).toEqual(claimed.handle.serviceFile);
+  } finally {
+    finishRequest();
+    await call;
+    for (const server of servers) {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+    for (const claim of claims) await claim.release();
+  }
+}, 15_000);
 const temp = () => {
   const root = mkdtempSync(join(tmpdir(), "pe-binding-"));
   roots.push(root);
@@ -70,6 +157,41 @@ test("an installed host binds a free port when a foreign process holds 5180", as
   expect(await prepareHostBinding(false, "0.7.31", owner("installed", temp()), machine(held))).toBe(
     0,
   );
+});
+
+test("an installed launch refuses when its booting peer never publishes a record", async () => {
+  const ownership = owner("installed", temp());
+  const dependencies = {
+    ...machine(new Map([[installedPort, ownership.executablePath]])),
+    sleep: async () => {},
+  };
+  await expect(prepareHostBinding(false, "0.7.31", ownership, dependencies)).rejects.toThrow(
+    "did not publish",
+  );
+});
+
+test("a peer launch never retires a serving host of another version", async () => {
+  const ownership = owner("installed", temp());
+  const file = createServiceFile(
+    installedPort,
+    "0.7.30",
+    "installed",
+    "token",
+    ownership.executablePath,
+  );
+  let shutdowns = 0;
+  const dependencies = {
+    ...machine(new Map()),
+    discover: async () => file,
+    occupants: async () => [{ pid: file.pid, executable: ownership.executablePath }],
+    retire: async () => {
+      shutdowns++;
+    },
+  };
+  await expect(prepareHostBinding(false, "0.7.31", ownership, dependencies)).rejects.toThrow(
+    "explicitly stop",
+  );
+  expect(shutdowns).toBe(0);
 });
 
 test.each(["dev first", "installed first"])(

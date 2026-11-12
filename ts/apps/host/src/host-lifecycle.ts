@@ -125,28 +125,11 @@ const bindingDependencies = {
       return false;
     }
   },
-  retire: async (file: ServiceFile) => {
-    const response = await fetch(
-      `http://127.0.0.1:${file.port}${hostProcessIdentity.shutdownPath}`,
-      {
-        method: "POST",
-        headers: { "x-pe-service-token": file.token },
-        signal: AbortSignal.timeout(5_000),
-      },
-    );
-    await response.body?.cancel();
-    if (!response.ok) throw new Error(`shutdown returned HTTP ${response.status}`);
-  },
-  sleep,
-  alive: (pid: number) => {
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch {
-      return false;
-    }
-  },
+  sleep: (ms: number) => sleep(ms),
 };
+
+const sameExecutable = (a: string, b: string) =>
+  a.replaceAll("\\", "/").toLowerCase() === b.replaceAll("\\", "/").toLowerCase();
 
 function describeOccupant(occupant: PortOccupant): string {
   return `pid ${occupant.pid}, executable ${occupant.executable}${occupant.serviceName ? `, service '${occupant.serviceName}'` : ""}`;
@@ -160,7 +143,7 @@ export async function prepareHostBinding(
   dependencies = bindingDependencies,
 ): Promise<number | ServiceFile> {
   const appBase = ownership.rootPath;
-  const live =
+  let live =
     ownership.lane === "installed" || open
       ? await dependencies.discover(appBase, ownership.serviceName, { verifyOwner: true })
       : null;
@@ -178,16 +161,31 @@ export async function prepareHostBinding(
     const port = await dependencies.choosePort(appBase, ownership.serviceName, 0);
     return port === installedPort ? 0 : port;
   }
+  if (!live && !(await dependencies.portAvailable(installedPort))) {
+    const owners = await dependencies.occupants(appBase, installedPort);
+    if (owners.some((owner) => sameExecutable(owner.executable, ownership.executablePath))) {
+      // The socket precedes the SDK record. Binding elsewhere here creates a second claimant,
+      // whose SDK takeover can shut down the first after waiting on its claim lease.
+      for (let attempt = 0; attempt <= 60; attempt++) {
+        live = await dependencies.discover(appBase, ownership.serviceName, { verifyOwner: true });
+        if (live) break;
+        if (await dependencies.portAvailable(installedPort)) return installedPort;
+        if (attempt === 60)
+          throw Error(
+            "Installed host refused: booting peer did not publish its service record within 30 seconds.",
+          );
+        await dependencies.sleep(500);
+      }
+    }
+  }
   if (live) {
     const owners = await dependencies.occupants(appBase, live.port);
-    const samePath = (a: string, b: string) =>
-      a.replaceAll("\\", "/").toLowerCase() === b.replaceAll("\\", "/").toLowerCase();
     const verified =
       live.lane === "installed" &&
       live.executablePath &&
-      samePath(live.executablePath, ownership.executablePath) &&
+      sameExecutable(live.executablePath, ownership.executablePath) &&
       owners.some(
-        (owner) => owner.pid === live.pid && samePath(owner.executable, live.executablePath!),
+        (owner) => owner.pid === live.pid && sameExecutable(owner.executable, live.executablePath!),
       ) &&
       (await dependencies.healthy(live));
     if (!verified)
@@ -195,26 +193,10 @@ export async function prepareHostBinding(
         `Installed host refused: service '${ownership.serviceName}' has a live ${live.lane} record (${describeOccupant({ pid: live.pid, executable: live.executablePath ?? "unknown", serviceName: ownership.serviceName })}); not a verified serving installed incumbent. ${owners.map(describeOccupant).join("; ")}`,
       );
     if (live.version === version) return live;
-    console.log(`pe-host retiring ${live.version} incumbent pid ${live.pid} on port ${live.port}`);
-    try {
-      await dependencies.retire(live);
-    } catch (cause) {
-      throw new Error(
-        `Installed host refused: stale incumbent pid ${live.pid}, version ${live.version} failed to retire.`,
-        { cause },
-      );
-    }
-    // Wait for the PROCESS to exit, not just the port: the SDK claim refuses while the retiring pid
-    // is alive (installed policy evicts nothing), and a host disposing its tray releases the port
-    // seconds before it exits. That race left 0.7.4's stub-relaunched host a silent claim loser.
-    for (let attempt = 0; attempt <= 30; attempt++) {
-      if (!dependencies.alive(live.pid)) break;
-      if (attempt === 30)
-        throw new Error(
-          `Installed host refused: stale incumbent pid ${live.pid}, version ${live.version} is still running after shutdown.`,
-        );
-      await dependencies.sleep(1_000);
-    }
+    // A peer launch cannot interrupt work, even across versions; update/stop is explicit.
+    throw Error(
+      `Installed host refused: version ${live.version} is serving on ${live.port}; explicitly stop it before launching ${version}.`,
+    );
   }
   if (await dependencies.portAvailable(installedPort)) return installedPort;
   let detail: string;
