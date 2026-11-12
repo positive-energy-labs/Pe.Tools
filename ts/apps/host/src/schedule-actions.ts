@@ -458,7 +458,7 @@ export function scheduleExecutors(
         effects: [
           { kind: "document", ref: target },
           ...(input.pod
-            ? [{ kind: "directory" as const, path: await sourceRunOutput(input.pod, deps) }]
+            ? [{ kind: "directory" as const, path: await sourceRunOutput(input.pod, deps, await podContext(deps, bridge, target)) }]
             : []),
         ],
         consumes: [
@@ -489,7 +489,7 @@ export function scheduleExecutors(
             );
           if (!reading.snapshot.scheduleUniqueId)
             throw refused("Schedule unique identity is missing");
-          if (input.pod) await runPods(deps, podFolder(input.pod, podContext(deps, bridge)));
+          if (input.pod) await runPods(deps, podFolder(input.pod, await podContext(deps, bridge, scheduleTarget(ctx))));
           return {
             process: reading.process,
             document,
@@ -618,7 +618,7 @@ export function scheduleExecutors(
       );
       // One run per admission: a resume overwrites the same folder (`writeRun`).
       const run = pod
-        ? yield* io(() => runPods(
+        ? yield* io(async () => runPods(
             deps,
             writeRun(
               pod,
@@ -627,7 +627,7 @@ export function scheduleExecutors(
                 "receipt.json": `${JSON.stringify(receipt, null, 2)}
 `,
               },
-              podContext(deps, bridge),
+              await podContext(deps, bridge, scheduleTarget(ctx)),
             ),
           ))
         : null;
@@ -648,11 +648,11 @@ export function scheduleExecutors(
         ],
         effects: [
           { kind: "document", ref: target },
-          { kind: "directory", path: await sourceRunOutput(input.pod, deps) },
+          { kind: "directory", path: await sourceRunOutput(input.pod, deps, await podContext(deps, bridge, target)) },
           { kind: "member", pod: input.pod, path },
         ],
         prepare: async () => {
-          await runPods(deps, podFolder(input.pod, podContext(deps, bridge, target)));
+          await runPods(deps, podFolder(input.pod, await podContext(deps, bridge, target)));
           return {
             process,
             scheduleId: input.scheduleId,
@@ -674,7 +674,7 @@ export function scheduleExecutors(
         (id) => nativeStep<ScheduleCapture.Res.Response>(bridge, target, "schedule.capture", input, id),
         { process: prepared.process },
       );
-      const pods = podContext(deps, bridge, target);
+      const pods = yield* io(() => podContext(deps, bridge, target));
       const request = { pod: prepared.pod, path: prepared.path, content: result.specJson };
       const member = (yield* execution.step("file", "pod.member.write", request, () => io(() => writeMemberOnce(deps, request, pods)),
       )) as PodMemberWritten;
@@ -689,7 +689,7 @@ export function scheduleExecutors(
       const process = (await lifetime(bridge, target, "project", deps)).process;
       const frozen = await runPods(
         deps,
-        composedSpec(ctx.admission.input.source, podContext(deps, bridge, target)),
+        composedSpec(ctx.admission.input.source, await podContext(deps, bridge, target)),
       );
       const { spec, source, dependencies } = frozen;
       return {
@@ -710,7 +710,7 @@ export function scheduleExecutors(
         ],
         effects: [
           { kind: "document", ref: target },
-          { kind: "directory", path: await sourceRunOutput(source.id, deps) },
+          { kind: "directory", path: await sourceRunOutput(source.id, deps, await podContext(deps, bridge, target)) },
         ],
         prepare: async () => {
           return { process, input: { specJson: spec, source: { root: source, dependencies } } };
