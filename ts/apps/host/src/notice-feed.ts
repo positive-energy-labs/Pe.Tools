@@ -14,6 +14,7 @@ import { opendirSync } from "node:fs";
 import { join } from "node:path";
 import {
   attention,
+  invocationOutcome,
   NOTICE_GROUPS,
   readingKey,
   routeAddress,
@@ -310,7 +311,7 @@ function receiptRow(
           url: null,
           refusal: "Nothing to open: do this in Revit or the web app yourself",
         };
-  // A known refusal is not a human hold and reads as refused, with its reason. An incomplete act
+  // A known refusal is not a human hold and reads as stale or refused, with its reason. An incomplete act
   // whose last step was refused still waits on the person, because its earlier steps changed
   // something (an acquisition's local copies) that needs cleanup before it runs again.
   const last = receipt.steps?.at(-1);
@@ -330,7 +331,7 @@ function receiptRow(
     key: `action:${receipt.id}`,
     group,
     revision,
-    verb: refused ? "refused" : receipt.state,
+    verb: refused ? (invocationOutcome(receipt).state === "stale" ? "stale" : "refused") : receipt.state,
     what: receipt.key,
     where: callerWord(receipt.caller),
     says: `${refused && "error" in receipt ? receipt.error : failure.summary}${refusedTail ? " Earlier steps already changed something; clean up before running it again." : ""}`,
