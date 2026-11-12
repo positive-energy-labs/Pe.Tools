@@ -195,7 +195,9 @@ async function shared(store: PictureCaptures) {
     "PeScripts.csproj": machineProject,
     "settings/checks.json": '{"$preset":"@global/_fields/Header","x":1}',
     "settings/leaf.json": '{ "untouched": true }',
-    "pages/tour/.state/events.jsonl": `{"seq":1,"event":{"img":"/captures/${kept.sha}.png"}}\n`,
+    "pages/tour/shots.md": `![shot](/captures/${kept.sha}.png)\n`,
+    // Page state left from before it moved to the machine state root: debris, never carried.
+    "pages/tour/.state/events.jsonl": '{"seq":1}\n',
     "README.md": "# Ducts",
   });
   return kept.sha;
@@ -254,7 +256,8 @@ test("export vendors, ports the project, closes captures; import into a renamed 
     '<PackageReference Include="Humanizer" Version="2.14.1" />',
   );
   expect(await read("PeScripts.csproj")).toContain('<Using Include="My.Namespace" />');
-  expect(await read("pages/tour/.state/events.jsonl")).toContain(sha);
+  expect(await read("pages/tour/shots.md")).toContain(sha);
+  await expect(read("pages/tour/.state/events.jsonl")).rejects.toThrow();
   await expect(read("pages/tour/.state/binding.json")).rejects.toThrow();
   expect(JSON.parse(await read("imported.json"))).toMatchObject({
     archiveSha256: exported.archiveSha256,
@@ -371,8 +374,10 @@ test("pod.promote wraps a scratch Page byte for byte, unbound, without touching 
   expect(JSON.stringify(promoted)).toContain('"key":"page:@my-notes/pages/notes"');
   const inPod = join(pods, "my-notes", "pages", "notes");
   expect(await readFile(join(inPod, "index.html"), "utf8")).toBe(html);
-  expect(await readFile(join(inPod, ".state", "events.jsonl"), "utf8")).toBe('{"seq":1}\n');
+  // No Page state travels: it is machine state, and a stale `.state` folder is debris.
+  await expect(readFile(join(inPod, ".state", "events.jsonl"))).rejects.toThrow();
   await expect(readFile(join(inPod, ".state", "binding.json"))).rejects.toThrow();
+  expect(await readFile(join(pages, "notes", ".state", "events.jsonl"), "utf8")).toBe('{"seq":1}\n');
   expect(await readFile(join(pages, "notes", ".state", "binding.json"), "utf8")).toBe("{}");
   expect(JSON.stringify(await act("pod.promote", { page: "notes", id: "my-notes" }))).toContain(
     "already installed",

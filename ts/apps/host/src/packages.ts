@@ -65,8 +65,10 @@ export const isCompilerSource = (path: string) => path.startsWith("src/") && /\.
 export const isCompilerInput = (path: string) =>
   path === "pod.json" || path === "PeScripts.csproj" || isCompilerSource(path);
 
-// One exclusion policy for authored input. Portable .state observations remain ordinary members.
+// One exclusion policy for authored input. Page state is machine state under the state root
+// (ADR 0037 rule 6), so a `.state` folder left in a Pod is stale debris, never a member.
 const debris = new Set([
+  ".state",
   "output",
   "bin",
   "obj",
@@ -79,21 +81,12 @@ const debris = new Set([
   "dist",
   ".artifacts",
 ]);
-const authority = new Set([
-  "binding.json",
-  "grants.json",
-  "grant.json",
-  "context-token",
-  "context-token.json",
-  "context-token.txt",
-]);
 
 export function isPackageMember(path: string): boolean {
   const parts = packageMemberPathSchema.parse(path).toLowerCase().split("/");
   return (
     !parts.some((part) => debris.has(part)) &&
     !(parts.length === 1 && parts[0] === "imported.json") &&
-    !parts.some((part, index) => part === ".state" && authority.has(parts[index + 1] ?? "")) &&
     !parts.some((part) => part === ".env" || part.startsWith(".env.") || part === "context.token")
   );
 }
