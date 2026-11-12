@@ -10,6 +10,7 @@ public static class ProductPathNames {
     public const string LogsDirectoryName = "logs";
     public const string CacheDirectoryName = "cache";
     public const string PreferencesFileName = "preferences.json";
+    public const string StoredNoticesFileName = "stored-notices.jsonl";
     public const string PodsDirectoryName = "Pods";
     public const string SettingsDirectoryName = "settings";
     public const string AssetsDirectoryName = "assets";

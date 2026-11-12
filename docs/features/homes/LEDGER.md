@@ -46,6 +46,9 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 - 2026-11-11, banning every Revit API entity that can save, as the first choice of guard: Family Foundry and the base modules save family files, and scripted family saves are non-negotiable. It survives only as the fallback for assumption A, limited to project documents.
 
 ## Owed
+
+- `LocalDiskJsonFile` (`StateStorage.cs:19-22`) is a second C# state door beside `StoredFile`. Route its `Write` through `StoredFile.WriteAtomic`, and add `Json<T>(name, policy, place)` whose read uses `StoredFile.Read`. Class the remaining callers: `ParametersServiceCache.cs:22`, `ExportApsParametersTask.cs:26`, `ApsParameterCacheReader.cs:10`, and `OutputStorage.cs:30,33`.
+- `PodRuns` can leave `*.tmp` files after a crash between write and move. Nothing sweeps them; they do not affect readers because the receipt names published outputs. Sweep them at run-folder listing when the recovery is built.
 - Run paths carry no project pointer. `family-actions.ts:202` `podContext`, `schedule-actions.ts:492` and `family-spec.ts:27,77` resolve the Pod folder over user and firm only, so Pea can compose a project Pod's spec through `pod.member.compose`, and then no family or schedule run finds that Pod. The `projectPods` sentence on `pod.list` says project Pods do not run. Boundary for whoever adds the pointer to a run path: a run needs a per-home census, never only the pointer. Purger, tip 29898faa.
 
 - R3: `capability-tools.ts` page-branch comment wrongly said a harness re-invocation is a marked re-send, because each re-invocation is a new MCP request id.

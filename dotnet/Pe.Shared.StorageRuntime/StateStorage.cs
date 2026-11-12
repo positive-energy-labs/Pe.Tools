@@ -22,10 +22,10 @@ public sealed class StateStorage {
         new LocalDiskJsonFile<T>(this.GetJsonPath(filename));
 
     public CsvReadWriter<T> Csv<T>() where T : class, new() =>
-        new Csv<T>(this.GetCsvPath(DefaultName));
+        new Csv<T>(this.GetCsvPath(DefaultName), "Palette command usage");
 
     public CsvReadWriter<T> Csv<T>(string filename) where T : class, new() =>
-        new Csv<T>(this.GetCsvPath(filename));
+        new Csv<T>(this.GetCsvPath(filename), "Palette command usage");
 
     public string ResolveSafeRelativeJsonPath(string relativePath) =>
         SettingsPathing.ResolveSafeRelativeJsonPath(this.DirectoryPath, relativePath, nameof(relativePath));

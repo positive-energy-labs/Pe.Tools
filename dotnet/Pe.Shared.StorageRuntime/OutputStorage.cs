@@ -33,10 +33,10 @@ public sealed class OutputStorage {
         new LocalDiskJsonFile<object>(this.GetDatedJsonPath(filename));
 
     public CsvWriter<object> Csv(string filename) =>
-        new Csv<object>(this.GetCsvPath(filename));
+        new Csv<object>(this.GetCsvPath(filename), $"CSV output {filename}");
 
     public CsvWriter<object> CsvDated(string filename) =>
-        new Csv<object>(this.GetDatedCsvPath(filename));
+        new Csv<object>(this.GetDatedCsvPath(filename), $"CSV output {filename}");
 
     public OutputStorage SubDir(string subdirectory) =>
         new(this.DirectoryPath, SettingsPathing.NormalizeRelativePath(subdirectory, nameof(subdirectory)));

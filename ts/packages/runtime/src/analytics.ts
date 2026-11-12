@@ -5,6 +5,7 @@ import { z } from "zod";
 import { resolveKey } from "@pe/host-contracts/shared-keys";
 import { readStored, writeAtomic } from "@pe/host-contracts/store";
 import { runtimeRoot } from "./runtime-owner.ts";
+import { productPathNames } from "@pe/host-contracts/contracts";
 
 export interface AnalyticsConfig {
   apiKey: string;
@@ -66,7 +67,7 @@ export function readOrCreateInstallId(): string | null {
       readStored(path, installFile, {
         class: "discard",
         place: "Install identity",
-        notices: join(state, "stored-notices.jsonl"),
+        notices: join(state, productPathNames.storedNoticesFileName),
       });
     const existing = read();
     if (existing.kind === "ok") return existing.value.installId;

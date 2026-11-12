@@ -61,7 +61,6 @@ internal static class FamilySnapshotStore {
                 entries.Count
             );
         } catch (Exception ex) {
-            if (path != null) StoredFile.Note(path, StoredPolicy.Discard, "Family snapshots", ex);
             Log.Debug(ex, "Family snapshot store persist failed (ignored).");
         }
     }
