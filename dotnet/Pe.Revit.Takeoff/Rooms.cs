@@ -734,16 +734,7 @@ public static class Rooms
     private static Pe.Shared.RevitData.Serialization.OwnerValue<RegionProvenance> TryReadProvenance(FilledRegion fr, string? role)
     {
         var blob = TakeoffCarriers.ReadProvenanceBlob(fr);
-        if (role != TakeoffCarriers.RoleZoningRegion) return RegionProvenance.Read(blob);
-        // A zone takeoffs adopted carries TakeoffZoneProvenance (View, Name, SystemTag): read it with defaults (no
-        // RunId), call it drawn, and let its keys ride in Unknown. A zone with no envelope reads as drawn too.
-        var read = Pe.Shared.RevitData.Serialization.OwnerBlob.Parse(blob, data =>
-            Newtonsoft.Json.JsonConvert.DeserializeObject<RegionProvenance>(data.ToString(Newtonsoft.Json.Formatting.None)));
-        if (read.Refusal != null) return read;
-        return new((read.Value ?? RegionProvenance.Default) with
-        {
-            RunId = string.IsNullOrEmpty(read.Value?.RunId) ? RunDrawn : read.Value!.RunId,
-        }, null);
+        return role == TakeoffCarriers.RoleZoningRegion ? RegionProvenance.ReadZone(blob) : RegionProvenance.Read(blob);
     }
 
     private static ViewPlan LevelView(Document doc, string name)
