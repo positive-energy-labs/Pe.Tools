@@ -160,9 +160,13 @@ export function useLedgerList(
       label: shown.what,
       aside: shown.where,
       meta: <span className="face-mono tabular-nums">{shown.fact}</span>,
-      ...(presentation.says && shown.says ? { lines: 2 as const, sub: shown.says } : {}),
+      ...(presentation.says && shown.says
+        ? { lines: 2 as const, sub: shown.says }
+        : item.kind === "row" && item.row.detail
+          ? { lines: 2 as const, sub: item.row.detail }
+          : {}),
       refusal: shown.refusal,
-      // The failure's raw text folds behind the row: its tooltip, and the copy press.
+      // Keep the accessible description and copy press in step with the visible detail.
       title: item.kind === "row" ? item.row.detail : undefined,
       actions:
         item.kind === "row" && item.row.act?.kind === "resume" ? (

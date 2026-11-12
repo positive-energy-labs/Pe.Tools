@@ -50,6 +50,19 @@ const receipt = (id: string, state: string, revision = 1, error?: string) => ({
 });
 const none: NoticeSources = { threads: [], receipts: [], works: [], machine: null, stored: [], held: [] };
 
+test.each(["stale", "invalid"] as const)("a %s tier-write refusal keeps its outcome verb in Failed", (kind) => {
+  const action = actionReceiptSchema.parse({
+    id: `tier-${kind}`, key: "settings.tiers.write", state: "failed",
+    caller: { kind: "human", via: "local" }, startedAt: at,
+    basis: null, target: { kind: "host" }, input: {}, steps: [],
+    prepared: { state: "unprepared" }, recovery: [],
+    error: "The setting changed since it was read.", status: 409, notDispatched: true,
+    refusal: kind === "stale" ? { kind, consumed: [] } : { kind },
+  });
+  const [row] = noticeRows({ ...none, receipts: [{ revision: 1, action }] }, NOW);
+  expect(row).toMatchObject({ group: "failed", verb: kind === "stale" ? "stale" : "refused" });
+});
+
 test("every source speaks in its own words, grouped waits, working, interrupted, failed, unread", () => {
   const rows = noticeRows(
     {
