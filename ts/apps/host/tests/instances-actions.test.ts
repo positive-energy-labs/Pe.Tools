@@ -3,7 +3,7 @@ import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
 import { Layer, Effect } from "effect";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, rmdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, rmdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { instancesSessionSelection } from "@pe/agent-contracts";
@@ -23,6 +23,10 @@ import { acquisitionSessionId, foldAcquisitions } from "../src/acquisition.ts";
 import { runSemanticAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 // Instances owns its SDK transport. These HTTP witnesses expose no bridge attachment or dispatch.
 const sdkOnlyBridge = detachedBridge();
+vi.mock("../src/acquisition.ts", async (original) => {
+  const acquisition = await original<typeof import("../src/acquisition.ts")>();
+  return { ...acquisition, foldAcquisitions: vi.fn(acquisition.foldAcquisitions) };
+});
 vi.mock("node:fs/promises", async (original) => {
   const fs = await original<typeof import("node:fs/promises")>();
   return { ...fs, rmdir: vi.fn(fs.rmdir) };
@@ -42,6 +46,28 @@ test.each(["EBUSY", "EPERM", "ENOTEMPTY"])("cleanup keeps a folder on rmdir %s a
   expect(existsSync(blocked)).toBe(true);
 });
 
+test.each(["absolute", "parent", "junction"])("cleanup refuses a tampered %s prune root", async (kind) => {
+  const { f, acquired, acquisition } = await acquisitionSetup();
+  await rm(acquisition.intent.root, { recursive: true });
+  const outside = join(f.dir, "outside");
+  await mkdir(join(outside, "empty"), { recursive: true });
+  let root = outside;
+  if (kind === "parent") root = join(f.peaWork, "..", "outside");
+  if (kind === "junction") {
+    root = join(f.peaWork, "junction");
+    await symlink(outside, root, "junction");
+  }
+  const actual = vi.mocked(foldAcquisitions).getMockImplementation()!;
+  vi.mocked(foldAcquisitions).mockImplementation((...args) =>
+    actual(...args).map(row => ({ ...row, intent: { ...row.intent, root } })));
+  try {
+    const receipt = await f.admit("instances.cleanup", { acquisition: acquired.id, unsaved: "discard" });
+    expect(existsSync(join(outside, "empty"))).toBe(true);
+    expect((receipt as { result?: { kept: string[] } }).result?.kept).toContain(root);
+  } finally {
+    vi.mocked(foldAcquisitions).mockImplementation(actual);
+  }
+});
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const f of cleanup.splice(0).reverse()) await f();
