@@ -43,6 +43,8 @@ export const heldSendRequestSchema = z.strictObject({
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
   /** LlamaParse `target_pages`, e.g. "1-5", or "all" for a held command. */
   pages: z.string().min(1),
+  /** What a held command would write the result to, in the person's words; a reader has none. */
+  target: z.string().min(1).optional(),
 });
 export type HeldSendRequest = z.infer<typeof heldSendRequestSchema>;
 export const heldSendSchema = heldSendRequestSchema.extend({

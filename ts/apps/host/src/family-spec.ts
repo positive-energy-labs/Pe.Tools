@@ -140,7 +140,11 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
       // anyone else's is held before a byte is read or sent.
       guardSend(
         ctx.caller,
-        { service: "llamaparse", path: "path" in source ? source.path : "url" in source ? source.url : basename(source.fileName) },
+        {
+          service: "llamaparse",
+          path: "path" in source ? source.path : "url" in source ? source.url : basename(source.fileName),
+          target: `${member.pod}: ${member.path}`,
+        },
         "LlamaCloud, the hosted PDF parser",
       );
       if (!handle) throw refused("Reviewed Family Work is required");

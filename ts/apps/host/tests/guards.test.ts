@@ -118,7 +118,7 @@ test("guard 3: Pea's send is held at once with one notice row; only the person's
     Date.now(),
   ).filter((row) => row.key === `held:${held.id}`);
   expect(rows).toMatchObject([
-    { group: "waits", verb: "held", act: { kind: "confirm-send", id: held.id, to: "LlamaCloud" } },
+    { group: "waits", verb: "held", act: { kind: "confirm-send", id: held.id, to: "LlamaCloud", detail: `pages ${held.pages}` } },
   ]);
 
   // Pea cannot confirm its own send.

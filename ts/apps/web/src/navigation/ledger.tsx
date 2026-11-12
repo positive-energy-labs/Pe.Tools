@@ -174,7 +174,7 @@ export function useLedgerList(
           />
         ) : item.kind === "row" && item.row.act?.kind === "confirm-send" ? (
           <Button
-            label={`Confirm: send ${item.row.what} to ${item.row.act.to}`}
+            label={`Confirm: send ${item.row.what} to ${item.row.act.to}, ${item.row.act.detail}`}
             icon={Send}
             busy={resuming === item.row.act.id}
             onClick={() => confirm((item.row.act as { id: string }).id)}

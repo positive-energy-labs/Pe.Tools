@@ -158,13 +158,17 @@ test("a held act is one row that waits on the person, in held words; only a held
       refusal,
     } as unknown as ActionReceipt,
   });
+  const outward = door("out", at);
+  const sent = { ...outward, action: { ...outward.action, key: "family.attach-spec", refusal: held("send-outward", "'C:/p/spec.pdf'", "It waits.") } as unknown as ActionReceipt };
   const rows = noticeRows(
     {
       ...none,
       // A day-old held act has left the feed; its receipt still holds it.
-      receipts: [door("h1", at), door("old", "2026-11-09T11:00:00.000Z")],
+      // A held send's receipt is not a second row: its held send is the one row, with Confirm.
+      receipts: [door("h1", at), door("old", "2026-11-09T11:00:00.000Z"), sent],
       held: [
         { id: "s1", service: "llamaparse", path: "C:/p/spec.pdf", sha256: "a".repeat(64), pages: "1-5", at, thread: "t1" },
+        { id: "s2", service: "llamaparse", path: "C:/p/spec.pdf", sha256: "b".repeat(64), pages: "6-9", at, thread: "t1" },
       ],
     },
     NOW,
@@ -172,12 +176,16 @@ test("a held act is one row that waits on the person, in held words; only a held
   expect(rows.map((row) => [row.key, row.group, row.verb])).toEqual([
     ["action:h1", "waits", "held"],
     ["held:s1", "waits", "held"],
+    ["held:s2", "waits", "held"],
   ]);
   expect(rows[0]!.says).toMatch(/^Held, not done/);
   // Held is never worded as the person saying no.
   for (const row of rows) expect(row.says).not.toMatch(/refus|reject|declin|denied/i);
   expect(rows[0]!.act).toBeUndefined();
-  expect(rows[1]!.act).toEqual({ kind: "confirm-send", id: "s1", to: "LlamaCloud" });
+  // Two holds naming one file tell their Confirms apart by a detail the row shows.
+  expect(rows[1]!.act).toEqual({ kind: "confirm-send", id: "s1", to: "LlamaCloud", detail: "pages 1-5" });
+  expect(rows[2]!.act).toEqual({ kind: "confirm-send", id: "s2", to: "LlamaCloud", detail: "pages 6-9" });
+  expect(rows[1]!.says).toContain("pages 1-5");
   noticeFeedSchema.parse({ id: 0, tray: false, rows });
 });
 

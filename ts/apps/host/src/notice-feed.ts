@@ -224,8 +224,9 @@ function receiptRow(
   now: number,
 ): NoticeDraft | null {
   // A held act (ADR 0038) is one row that waits on the person, in its own words, never a failure.
+  // A held send's one row is its `held` source, which carries Confirm; its receipt adds no second.
   if (receipt.refusal?.kind === "held")
-    return now - Date.parse(receipt.startedAt) > HELD_FOR_MS
+    return receipt.refusal.act === "send-outward" || now - Date.parse(receipt.startedAt) > HELD_FOR_MS
       ? null
       : {
           key: `action:${receipt.id}`,
@@ -293,12 +294,19 @@ export function noticeRows(sources: NoticeSources, now: number): NoticeDraft[] {
       revision: 0,
       verb: "held",
       what: send.path,
-      where: "Pea",
-      says: `Pea wants to send pages ${send.pages} of this source to LlamaCloud to read it. Nothing was sent. Confirm to send it and keep the result for Pea.`,
+      where: send.target ?? "Pea",
+      says: send.target
+        ? `Pea wants to attach this source to ${send.target}, which sends it to LlamaCloud to read. Nothing was sent. Confirm to send it and attach the result.`
+        : `Pea wants to send pages ${send.pages} of this source to LlamaCloud to read it. Nothing was sent. Confirm to send it and keep the result for Pea.`,
       at: send.at,
       url: send.thread ? routeAddress("pea").link({}, { thread: send.thread }) : null,
       ...(send.thread ? {} : { refusal: "No thread asked for this" }),
-      act: { kind: "confirm-send" as const, id: send.id, to: "LlamaCloud" },
+      act: {
+        kind: "confirm-send" as const,
+        id: send.id,
+        to: "LlamaCloud",
+        detail: send.target ? `for ${send.target}` : `pages ${send.pages}`,
+      },
     })),
     // Staged Work includes human edits and scope choices; it carries no proposal-actor count.
     ...sources.works
