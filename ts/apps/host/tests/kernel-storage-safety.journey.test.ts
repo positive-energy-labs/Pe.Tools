@@ -146,3 +146,23 @@ test("E8 a new admission first sent after discard survives a lost first POST", a
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("E8 a re-send refuses when the journal's own discard time does not parse", async () => {
+  const f = await setup();
+  const admission = await f.admission();
+  const dir = await mkdtemp(join(tmpdir(), "pe-unparsed-discard-"));
+  await writeFile(join(dir, "partition-operations.json"), '{"version":8,"discarded":"x"}\n');
+  const cold = await fixtureNative(dir);
+  try {
+    const response = await cold.actions().request(new Request("http://host/actions", {
+      method: "POST",
+      headers: { "content-type": "application/json", [ADMISSION_RESEND_HEADER]: new Date().toISOString() },
+      body: JSON.stringify(admission),
+    }));
+    expect(response.status, await response.clone().text()).toBe(409);
+    expect(cold.calls).toEqual([]);
+  } finally {
+    await cold.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
