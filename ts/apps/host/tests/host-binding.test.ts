@@ -172,15 +172,17 @@ test("an installed launch binds a free port when the owner census fails", async 
   expect(await prepareHostBinding(false, "0.7.31", owner("installed", temp()), dependencies)).toBe(0);
 });
 
-test("an installed launch refuses when its booting peer never publishes a record", async () => {
+test("an installed launch binds a free port after its peer never publishes a record", async () => {
   const ownership = owner("installed", temp());
+  const waits: number[] = [];
   const dependencies = {
     ...machine(new Map([[installedPort, ownership.executablePath]])),
-    sleep: async () => {},
+    sleep: async (ms: number) => {
+      waits.push(ms);
+    },
   };
-  await expect(prepareHostBinding(false, "0.7.31", ownership, dependencies)).rejects.toThrow(
-    "did not publish",
-  );
+  expect(await prepareHostBinding(false, "0.7.31", ownership, dependencies)).toBe(0);
+  expect(waits).toEqual(Array(60).fill(500));
 });
 
 test.each([false, true])(

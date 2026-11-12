@@ -195,10 +195,8 @@ export async function prepareHostBinding(
         live = await dependencies.discover(appBase, ownership.serviceName, { verifyOwner: true });
         if (live) break;
         if (await dependencies.portAvailable(installedPort)) return installedPort;
-        if (attempt === 60)
-          throw Error(
-            "Installed host refused: booting peer did not publish its service record within 30 seconds.",
-          );
+        // With no record the SDK has no incumbent to shut down; preserve the free-port fallback.
+        if (attempt === 60) break;
         await dependencies.sleep(500);
       }
     }
