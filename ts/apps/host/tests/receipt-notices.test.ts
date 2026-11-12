@@ -46,7 +46,7 @@ const receipt = (id: string, state: string, revision = 1, error?: string) => ({
     ...(error ? { error } : {}),
   } as unknown as ActionReceipt,
 });
-const none: NoticeSources = { threads: [], receipts: [], works: [], machine: null };
+const none: NoticeSources = { threads: [], receipts: [], works: [], machine: null, stored: [] };
 
 test("every source speaks in its own words, grouped waits, working, interrupted, failed, unread", () => {
   const rows = noticeRows(

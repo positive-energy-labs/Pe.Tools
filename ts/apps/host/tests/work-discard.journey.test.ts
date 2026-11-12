@@ -2,9 +2,11 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test, vi } from "vite-plus/test";
+import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { bindWork, workKey } from "@pe/agent-contracts";
+import { readStoredNotices } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "../src/notice-feed.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { human, actAs } from "./callers.ts";
@@ -13,7 +15,8 @@ test("D rule 5 opens discarded disk Work empty and saves the first edit without 
   const dir = await mkdtemp(join(tmpdir(), "pe-work-discard-http-"));
   const key = bindWork("discard-journey", null), targetKey = workKey(key);
   const name = createHash("sha256").update(`${key.route}:${targetKey}`).digest("hex") + ".json";
-  const path = join(dir, name), log = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const path = join(dir, name);
+  const posted = () => readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === path);
   const spec = { route: key.route, title: "Work", description: "Authored Work", schemaVersion: 2,
     schema: z.object({ note: z.string().default("") }) };
   const store = fileRouteDocumentStore(dir);
@@ -47,11 +50,12 @@ test("D rule 5 opens discarded disk Work empty and saves the first edit without 
       expect((await app.fetch(request("POST", "/start-fresh", {}))).status).toBe(404);
       expect((await app.fetch(request("GET", "/salvage"))).status).toBe(404);
     }
-    expect(log).toHaveBeenCalledTimes(3);
-    for (const [line] of log.mock.calls) {
-      expect(line).toContain(path);
-      expect(line).toMatch(/Discarded stored Work .*: .+/);
-      expect(line).not.toMatch(/[\r\n]/);
+    // One notice per discarded file in the feed's durable source, naming the Place (ADR 0039 rule 1).
+    expect(posted()).toHaveLength(3);
+    for (const notice of posted()) {
+      expect(notice).toMatchObject({ class: "discard", place: `Work for ${key.route} (${targetKey})` });
+      expect(notice.reason).toMatch(/.+/);
+      expect(notice.reason).not.toMatch(/[\r\n]/);
     }
     // A failed disk access has a different boundary: it must not become empty Work.
     const io = createPeRoutes({ registrations: [{ spec }], store: { ...store,
@@ -60,6 +64,6 @@ test("D rule 5 opens discarded disk Work empty and saves the first edit without 
     expect(failed.status).toBe(403);
     expect(await failed.json()).toMatchObject({ error: "disk access denied" });
     expect(await readdir(dir)).toEqual([name]);
-    expect(log).toHaveBeenCalledTimes(3);
-  } finally { log.mockRestore(); await rm(dir, { recursive: true, force: true }); }
+    expect(posted()).toHaveLength(3);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

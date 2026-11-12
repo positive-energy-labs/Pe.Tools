@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Context } from "effect";
 import { z } from "zod";
@@ -13,6 +13,8 @@ import {
   type UpdatePlan,
   type UpdateReceipt,
 } from "@pe/host-contracts/pe-revit-contract";
+import { readStored, writeAtomic } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "./notice-feed.ts";
 
 const blocker = z.object({ code: z.string(), detail: z.string() });
 const processIdentity = z.object({ pid: z.number().int(), processStartUtc: z.string().nullable() });
@@ -111,6 +113,12 @@ const admissionSchema = z.object({
   automatic: z.boolean().nullable().default(null),
 });
 type Admission = z.infer<typeof admissionSchema>;
+/** The stored record: a receipt must answer the request and plan it is stored beside. */
+const storedAdmissionSchema = admissionSchema.refine((stored) => {
+  // A mismatch throws, and `readStored` refuses a file whose decode throws.
+  if (stored.receipt) validateReceipt(stored.receipt, stored.requestId, stored.planId);
+  return true;
+});
 export type UpdateRunner = (args: string[], detached?: boolean) => Promise<Envelope<unknown>>;
 export const isUpdatePlanId = (id: unknown): id is string =>
   typeof id === "string" && z.uuid().safeParse(id).success && id === id.toLowerCase();
@@ -177,10 +185,15 @@ export function createUpdateReader(options: {
 
   const load = () =>
     (loading ??= (async () => {
-      try {
-        admission = admissionSchema.parse(JSON.parse(await readFile(options.path, "utf8")));
-        if (admission.receipt)
-          validateReceipt(admission.receipt, admission.requestId, admission.planId);
+      // Machine state (ADR 0039): an admission that does not decode, or whose receipt answers
+      // another request, is discarded with a notice. The update then reads as never admitted.
+      const read = readStored(options.path, storedAdmissionSchema, {
+        class: "discard",
+        place: "Update status",
+        notices: storedNoticesPath(),
+      });
+      if (read.kind === "ok") {
+        admission = read.value;
         terminalDiagnosticPending =
           admission.receipt?.state === "failed" && !admission.receiptError;
         value = {
@@ -200,8 +213,6 @@ export function createUpdateReader(options: {
         if (settled === "ok" || settled === "failed" || settled === "refused")
           options.fact?.(settledFact(admission, settled));
         if (hasHandoff(admission.receipt)) handedOff.add(admission.requestId);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
       loaded = true;
     })().catch((error) => {
@@ -210,38 +221,25 @@ export function createUpdateReader(options: {
     }));
 
   async function persist(record: Admission) {
-    await mkdir(dirname(options.path), { recursive: true });
-    const temporary = `${options.path}.${randomUUID()}.tmp`;
-    try {
-      const file = await open(temporary, "wx");
-      try {
-        await file.writeFile(JSON.stringify(record));
-        await file.sync();
-      } finally {
-        await file.close();
-      }
-      await rename(temporary, options.path);
-      const before = admission?.requestId === record.requestId ? admission.receipt?.state : null;
-      admission = record;
-      const after = record.receipt?.state;
-      terminalDiagnosticPending = false;
-      if (record.receipt && ["ok", "failed", "refused"].includes(record.receipt.state))
-        automaticPending = false;
-      if (after !== before && (after === "ok" || after === "failed" || after === "refused"))
-        options.fact?.(settledFact(record, after));
-      if (hasHandoff(record.receipt) && !handedOff.has(record.requestId)) {
-        handedOff.add(record.requestId);
-        options.handoff?.();
-      }
-      value = {
-        ...value,
-        requestId: record.requestId,
-        admittedPlanId: record.planId,
-        receipt: record.receipt,
-      };
-    } finally {
-      await rm(temporary, { force: true });
+    writeAtomic(options.path, JSON.stringify(record));
+    const before = admission?.requestId === record.requestId ? admission.receipt?.state : null;
+    admission = record;
+    const after = record.receipt?.state;
+    terminalDiagnosticPending = false;
+    if (record.receipt && ["ok", "failed", "refused"].includes(record.receipt.state))
+      automaticPending = false;
+    if (after !== before && (after === "ok" || after === "failed" || after === "refused"))
+      options.fact?.(settledFact(record, after));
+    if (hasHandoff(record.receipt) && !handedOff.has(record.requestId)) {
+      handedOff.add(record.requestId);
+      options.handoff?.();
     }
+    value = {
+      ...value,
+      requestId: record.requestId,
+      admittedPlanId: record.planId,
+      receipt: record.receipt,
+    };
   }
 
   async function recover() {

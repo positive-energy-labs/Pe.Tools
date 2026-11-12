@@ -42,7 +42,7 @@ export const noticeActSchema = z.discriminatedUnion("kind", [
 export type NoticeAct = z.infer<typeof noticeActSchema>;
 
 export const noticeRowSchema = z.strictObject({
-  /** Stable per subject: `thread:<id>`, `action:<id>`, `work:<id>`, `machine:<line>`. */
+  /** Stable per subject: `thread:<id>`, `action:<id>`, `work:<id>`, `machine:<line>`, `stored:<path>:<sha256>`. */
   key: z.string().min(1),
   group: noticeGroupSchema,
   /** Monotonic per key: a card re-raises only when the revision moves. */

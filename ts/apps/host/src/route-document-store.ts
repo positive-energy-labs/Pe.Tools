@@ -1,9 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, rmSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store";
 import type { RouteDocumentStore } from "@pe/runtime";
+import { storedNoticesPath } from "./notice-feed.ts";
 
 const recordSchema = z.object({
   format: z.literal("route-state-record-v2"),
@@ -15,54 +17,45 @@ const filename = (targetKey: string, route: string) =>
   `${createHash("sha256").update(`${route}:${targetKey}`).digest("hex")}.json`;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+const MISPLACED = "Stored Work identity does not match its address";
 
-/** Indexed Work carries its identity; invalid records are discarded on read (ADR 0033 rule 5). */
+/**
+ * Indexed Work carries its identity. Work is `discard` (ADR 0039 rule 1, ADR 0033 rule 5): a record
+ * that does not decode, or sits at another address, is deleted with one notice in the feed when
+ * it is read at its address. The listing only counts such a file; see the note on `listState`.
+ */
 export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
   mkdirSync(dir, { recursive: true });
+  const work = (place: string) =>
+    ({ class: "discard", place, notices: storedNoticesPath() }) as const;
   return {
     getState: async ({ targetKey, route }) => {
-      const path = join(dir, filename(targetKey, route));
-      if (!existsSync(path)) return null;
-      const discard = (reason: string) => {
-        rmSync(path);
-        console.warn(`Discarded stored Work '${path}': ${reason.replace(/\s+/g, " ")}`);
-        return null;
-      };
-      let raw: unknown;
-      try {
-        raw = JSON.parse(readFileSync(path, "utf8"));
-      } catch (error) {
-        if (error instanceof SyntaxError) return discard(error.message);
-        throw error;
-      }
-      const parsed = recordSchema.safeParse(raw);
-      if (!parsed.success) return discard(parsed.error.message);
-      const record = parsed.data;
-      if (record.targetKey !== targetKey || record.route !== route)
-        return discard("Stored Work identity does not match its address");
-      return record.value;
+      const read = readStored(
+        join(dir, filename(targetKey, route)),
+        recordSchema.refine((r) => r.targetKey === targetKey && r.route === route, MISPLACED),
+        work(`Work for ${route} (${targetKey})`),
+      );
+      return read.kind === "ok" ? read.value.value : null;
     },
     setState: async ({ targetKey, route, value, reason }) => {
       const path = join(dir, filename(targetKey, route));
       if (value == null) {
-        rmSync(path, { force: true });
-        if (reason) console.warn(`Discarded stored Work '${path}': ${reason.replace(/\s+/g, " ")}`);
+        // With a reason, the runtime refused the staged values inside a record that decoded here:
+        // the same discard, in its words. Without one, a person cleared their own Work.
+        if (reason) discardStored(path, work(`Work for ${route} (${targetKey})`), reason);
+        else rmSync(path, { force: true });
         return;
       }
-      // A random name keeps two writers from tearing one temp file; a failed write removes its own,
-      // because on the shared mount nothing else would.
-      const temporary = `${path}.${randomUUID()}.tmp`;
-      try {
-        writeFileSync(
-          temporary,
-          JSON.stringify({ format: "route-state-record-v2", targetKey, route, value }),
-        );
-        renameSync(temporary, path);
-      } catch (error) {
-        rmSync(temporary, { force: true });
-        throw error;
-      }
+      writeAtomic(
+        path,
+        JSON.stringify({ format: "route-state-record-v2", targetKey, route, value }),
+      );
     },
+    // The listing is read-only, and ADR 0039's discard does not apply here. Ruling: commit 556652bc
+    // (2026-11-07) moved deletion of a misplaced record to the addressed read and left discovery
+    // reporting without mutating. A listing meets every Work file in a folder other hosts share, so
+    // it only counts what it cannot use. The boundary that holds: `getState` on the same file
+    // discards it with its one notice.
     listState: async () => {
       const files = (await readdir(dir)).filter((file) => /^[a-f0-9]{64}\.json$/.test(file)).sort();
       const records: { targetKey: string; route: string; value: unknown }[] = [];

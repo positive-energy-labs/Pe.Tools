@@ -4,7 +4,8 @@
  * unread. Push (the tray card, the OS notification) and pull (home and tray Activity, Mod+Shift+K)
  * read these rows; nothing else projects receipts into cards or joins threads in the browser.
  * Sources, all host-owned: thread summaries and each waiting thread's open ask, action receipts,
- * Works with staged edits, and the Machine's attention lines.
+ * Works with staged edits, the Machine's attention lines, and the machine's stored-file notices
+ * (ADR 0039: one durable line per stored file that did not decode).
  *
  * Plain functions, not Effect: this sits beside the thread store's Readings in the
  * `observeHostResource` island (ADR 0029 phase 5 converts them together).
@@ -26,8 +27,16 @@ import {
   type ReadingRequest,
 } from "@pe/agent-contracts";
 import { HOST_RESTARTED } from "@pe/agent-contracts/chat-state";
+import { join } from "node:path";
+import { productPathNames } from "@pe/host-contracts/contracts";
 import { summarizeFailure } from "@pe/host-contracts/failure-summary";
 import type { ThreadPresence } from "@pe/host-contracts/pe-api";
+import type { StoredNotice } from "@pe/host-contracts/store";
+import { hostOwnership } from "./host-ownership.ts";
+
+/** The machine's notice file: every `discard` in the host names it, so no file goes without a trace. */
+export const storedNoticesPath = () =>
+  join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "stored-notices.jsonl");
 
 /**
  * A row as built. Its revision is its source's own durable counter (a thread's last seq, a
@@ -41,6 +50,8 @@ export interface NoticeSources {
   readonly receipts: readonly { readonly revision: number; readonly action: ActionReceipt }[];
   readonly works: readonly NavigationWork[];
   readonly machine: Machine | null;
+  /** `readStoredNotices(storedNoticesPath())`: files refused as kept or discarded. */
+  readonly stored: readonly StoredNotice[];
 }
 
 /** A host-restart death leaves the feed after this long; Pea's thread list still holds it. */
@@ -147,6 +158,32 @@ function threadRow(thread: NoticeSources["threads"][number], now: number): Notic
     : null;
 }
 
+/** A stored-file notice leaves the feed after this long; its line stays, so it is never posted twice. */
+const STORED_FOR_MS = 7 * 24 * 3_600_000;
+
+/** A file that did not decode: discarded, or "can't read, kept" (ADR 0039 rule 1). */
+function storedRow(notice: StoredNotice, now: number): NoticeDraft | null {
+  // ponytail: a fixed window and no dismiss door; add a dismiss act when a person asks for one.
+  if (now - Date.parse(notice.at) > STORED_FOR_MS) return null;
+  const kept = notice.class === "keep";
+  return {
+    key: `stored:${notice.path}:${notice.sha256}`,
+    group: "failed",
+    // One line per path and hash, never rewritten: the row cannot move, so its card raises once.
+    revision: 0,
+    verb: kept ? "kept" : "discarded",
+    what: notice.place,
+    where: "this computer",
+    says: kept
+      ? `Can't read, kept: ${notice.reason}`
+      : `Could not be read, so it was discarded: ${notice.reason}`,
+    at: notice.at,
+    url: null,
+    refusal: kept ? "No address yet: fix or remove the file by hand" : "Nothing to open: the file is gone",
+    detail: notice.path,
+  };
+}
+
 /** Who admitted the action, in words: a principal, never a password. */
 const callerWord = (caller: ActionReceipt["caller"]) =>
   caller.kind === "pea"
@@ -212,6 +249,7 @@ export function noticeRows(sources: NoticeSources, now: number): NoticeDraft[] {
       .filter((thread) => thread.lifecycle.status === "active")
       .flatMap((thread) => threadRow(thread, now) ?? []),
     ...sources.receipts.flatMap((receipt) => receiptRow(receipt) ?? []),
+    ...sources.stored.flatMap((notice) => storedRow(notice, now) ?? []),
     // Staged Work includes human edits and scope choices; it carries no proposal-actor count.
     ...sources.works
       .filter((work) => work.staged > 0)

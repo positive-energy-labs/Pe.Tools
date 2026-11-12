@@ -1,6 +1,5 @@
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync } from "node:fs";
 import { z } from "zod";
 import {
   deviceSessionSchema,
@@ -8,8 +7,10 @@ import {
   type DeviceTransport,
   type Pairing,
 } from "@pe/host-contracts/pe-api";
+import { readStored, writeAtomic } from "@pe/host-contracts/store";
 import { Refused } from "./control.ts";
 import { hostOwnership } from "./host-ownership.ts";
+import { storedNoticesPath } from "./notice-feed.ts";
 
 const persistedSchema = z.strictObject({
   environmentId: z.uuid(),
@@ -28,17 +29,22 @@ const denied = (code: "device.unpaired" | "device.revoked" | "device.pairing", r
 
 /** One host identity and one credential per device, independent of the connection address. */
 export function createDevices(path?: string, now = () => Date.now()) {
+  // Machine state (ADR 0039): a store that does not decode is discarded with a notice, the host
+  // starts as a new environment, and every device pairs once more.
+  const read = path
+    ? readStored(path, persistedSchema, {
+        class: "discard",
+        place: "Paired devices",
+        notices: storedNoticesPath(),
+      })
+    : null;
   let state =
-    path && existsSync(path)
-      ? persistedSchema.parse(JSON.parse(readFileSync(path, "utf8")))
+    read?.kind === "ok"
+      ? read.value
       : { environmentId: randomUUID(), sessions: [] as Array<DeviceSession & { digest: string }> };
   let pending: (Pairing & { digest: string; attempts: number }) | undefined;
   const save = (next: typeof state) => {
-    if (path) {
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path + ".tmp", JSON.stringify(next), { mode: 0o600 });
-      renameSync(path + ".tmp", path);
-    }
+    if (path) writeAtomic(path, JSON.stringify(next));
     state = next;
   };
   if (path && !existsSync(path)) save(state);

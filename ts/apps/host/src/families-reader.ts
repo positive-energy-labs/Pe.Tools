@@ -1,7 +1,8 @@
 import { SdkSession } from "./sdk-session.ts";
 import { Clock, Context, Effect, Layer, Semaphore } from "effect";
 import { randomUUID } from "node:crypto";
-import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { writeAtomic } from "@pe/host-contracts/store";
 import { join } from "node:path";
 import { freemem } from "node:os";
 import { productScratchPath } from "@pe/host-contracts/service-identity";
@@ -383,15 +384,10 @@ async function readFamiliesProgressively(
       .catch((error) => {
         console.error("families-reader: asynchronous operation failed", error);
       });
-    const temp = `${costsPath}.${randomUUID()}.tmp`;
     try {
-      await mkdir(join(captures.directory, "families"), { recursive: true });
-      await writeFile(temp, JSON.stringify(costs));
-      await rename(temp, costsPath);
+      writeAtomic(costsPath, JSON.stringify(costs));
     } catch {
-      await rm(temp, { force: true }).catch((error) => {
-        console.error("families-reader: asynchronous operation failed", error);
-      });
+      // Costs only order the next read; a failed write loses nothing.
     }
   }
 }

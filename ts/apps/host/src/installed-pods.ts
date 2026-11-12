@@ -6,6 +6,9 @@
 import { join, dirname } from "node:path";
 import { mkdir, readFile, readdir, writeFile, rename } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
+import { z } from "zod";
+import { readStored, writeAtomic } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "./notice-feed.ts";
 import { writeArtifact } from "./page-artifacts.ts";
 import { productPathNames, scriptingWorkspaceIdentity } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "./host-ownership.ts";
@@ -31,7 +34,9 @@ type ShippedPodOutcome =
 
 export type ShippedPodsReport = { shippedRoot: string | null; outcomes: ShippedPodOutcome[] };
 
-type Ledger = { offered: Record<string, { archive: string; at: string; outcome: string }> };
+const ledgerSchema = z.object({
+  offered: z.record(z.string(), z.object({ archive: z.string(), at: z.string(), outcome: z.string() })),
+});
 
 /** Dev offers the checkout's examples through the same archive importer; trust stays explicit. */
 async function shippedPodsRoot(options: TransferOptions & { ledger?: string }): Promise<string> {
@@ -102,10 +107,14 @@ async function run(
   if (!archives.length) return { shippedRoot, outcomes: [] };
 
   const ledgerFile = options.ledger ?? ledgerPath();
-  const ledger: Ledger = await readFile(ledgerFile, "utf8").then(
-    (text) => JSON.parse(text) as Ledger,
-    () => ({ offered: {} }),
-  );
+  // Machine state (ADR 0039): a ledger that does not decode is discarded with a notice, and every
+  // shipped Pod is offered once more.
+  const read = readStored(ledgerFile, ledgerSchema, {
+    class: "discard",
+    place: "Shipped Pods ledger",
+    notices: storedNoticesPath(),
+  });
+  const ledger = read.kind === "ok" ? read.value : { offered: {} };
   const podsRoot = options.podsRoot ?? productPodsRootPath();
   const outcomes: ShippedPodOutcome[] = [];
   for (const archive of archives) {
@@ -128,12 +137,7 @@ async function run(
       outcome: outcomes.at(-1)!.outcome,
     };
   }
-  await writeArtifact(
-    dirname(ledgerFile),
-    ledgerFile,
-    `${JSON.stringify(ledger, null, 2)}\n`,
-    true,
-  );
+  writeAtomic(ledgerFile, `${JSON.stringify(ledger, null, 2)}\n`);
   return { shippedRoot, outcomes };
 }
 

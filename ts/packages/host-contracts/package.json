@@ -22,6 +22,11 @@
       "import": "./src/shared-keys.ts",
       "default": "./src/shared-keys.ts"
     },
+    "./store": {
+      "types": "./src/store.ts",
+      "import": "./src/store.ts",
+      "default": "./src/store.ts"
+    },
     "./product-paths": {
       "types": "./src/product-paths.ts",
       "import": "./src/product-paths.ts",

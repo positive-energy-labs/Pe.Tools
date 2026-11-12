@@ -21,7 +21,9 @@ import { sdkSessions } from "./native-receipt-fixture.ts";
 
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { readStoredNotices } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "../src/notice-feed.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
@@ -198,6 +200,54 @@ test("Work start validates seeds, waits for consent, and cannot overwrite a winn
     runs.closeAll();
     await web.dispose();
     await journal.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// MAP decision log, 2026-11-11: an append-only log decodes per line. Before this, one bad line in
+// `receipts.jsonl` failed every listing with a 500.
+test("a torn last receipt line leaves every other receipt listed, posts one notice, and changes no byte", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-captures-torn-"));
+  const root = join(dir, "store");
+  const store = pictureCaptures(root);
+  const web = HttpRouter.toWebHandler(
+    capturesRoute(() => Effect.succeed(HttpServerResponse.text("spa"))),
+  );
+  const list = () =>
+    web.handler(new Request("http://host/captures"), Context.make(PictureCaptureStore, store));
+  const facts = { origin: "human", document: { title: "Sample.rvt" }, view: { name: "Level 1" }, focus: null, registration: null } as const;
+  const receipts = join(root, "receipts.jsonl");
+  const posted = () =>
+    readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === receipts);
+  try {
+    const first = await store.keep(Buffer.from("one"), facts);
+    const second = await store.keep(Buffer.from("two"), facts);
+    // A crash mid-append: half a receipt and no newline.
+    await appendFile(receipts, '{"id":"torn","sha":"');
+    const bytes = await readFile(receipts);
+
+    for (const _ of [1, 2]) {
+      const response = await list();
+      expect(response.status, await response.clone().text()).toBe(200);
+      expect((await response.json()).captures.map((receipt: { id: string }) => receipt.id)).toEqual([
+        second.id,
+        first.id,
+      ]);
+    }
+    expect(await readFile(receipts)).toEqual(bytes);
+    expect(posted()).toMatchObject([{ class: "keep", place: "Capture receipts" }]);
+
+    // Appends continue after it: the next taking is listed, and the torn line is still there.
+    const third = await store.keep(Buffer.from("three"), facts);
+    expect((await (await list()).json()).captures.map((receipt: { id: string }) => receipt.id)).toEqual([
+      third.id,
+      second.id,
+      first.id,
+    ]);
+    expect((await readFile(receipts, "utf8")).includes('{"id":"torn","sha":"\n')).toBe(true);
+    expect(posted()).toHaveLength(1);
+  } finally {
+    await web.dispose();
     await rm(dir, { recursive: true, force: true });
   }
 });

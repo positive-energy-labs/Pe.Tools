@@ -6,6 +6,8 @@ import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import type { Envelope, UpdatePlan, UpdateReceipt } from "@pe/host-contracts/pe-revit-contract";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
+import { readStoredNotices } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "../src/notice-feed.ts";
 import {
   createUpdateReader,
   UpdateReader,
@@ -131,10 +133,10 @@ async function fixture() {
   };
 }
 
-test("GET carries the full validated plan, POST returns persisted request and receipt evidence", async () => {
-  const f = await fixture();
+/** The lifecycle service the update routes need; one island for every test in this file. */
+const hostLifecycle = () =>
   // effect-edge: island, phase 5
-  const lifecycle = await Effect.runPromise(
+  Effect.runPromise(
     Effect.gen(function* () {
       return {
         latch: yield* Deferred.make<void>(),
@@ -142,6 +144,10 @@ test("GET carries the full validated plan, POST returns persisted request and re
       };
     }),
   );
+
+test("GET carries the full validated plan, POST returns persisted request and receipt evidence", async () => {
+  const f = await fixture();
+  const lifecycle = await hostLifecycle();
   const web = HttpRouter.toWebHandler(
     updateRoutes.pipe(
       Layer.provideMerge(
@@ -306,7 +312,7 @@ test("a disconnected admission stays pending across restart and blocks a second 
   }
 });
 
-test("wrong request or plan cannot overwrite a confirmed receipt, and corrupt admission fails closed", async () => {
+test("wrong request or plan cannot overwrite a confirmed receipt, and a corrupt admission is discarded with a notice", async () => {
   const f = await fixture();
   try {
     const admitted = await f.reader.apply(plan.planId);
@@ -322,10 +328,16 @@ test("wrong request or plan cannot overwrite a confirmed receipt, and corrupt ad
       args[0] === "op" ? recovered(receipt("different-request")) : envelope(plan),
     );
     expect((await wrongRequest.refresh()).receiptLeg.error).toContain("different update request");
+    // ADR 0039: the admission is machine state. One that does not decode is discarded with one
+    // notice, the update reads as never admitted, and the next apply is admitted fresh. The SDK,
+    // not this record, refuses an apply while another update runs.
     await writeFile(f.path, "{}");
-    const broken = f.make();
-    await expect(broken.apply(plan.planId)).rejects.toThrow();
-    expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(1);
+    const again = await f.make().apply(plan.planId);
+    expect(again.requestId).not.toBe(admitted.requestId);
+    expect(
+      readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === f.path),
+    ).toMatchObject([{ class: "discard", place: "Update status" }]);
+    expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(2);
   } finally {
     await f.close();
   }
@@ -441,6 +453,45 @@ test("U-02/U-04: a lost acknowledgement is unknown, and late recovery of a runni
     await reader.refresh(false);
     expect(handoff).toHaveBeenCalledTimes(1);
   } finally {
+    await f.close();
+  }
+});
+
+// ADR 0039 per-request witness: a corrupt admission used to reject every apply and mark every
+// read with an error, for as long as the file stayed.
+test("an admission that does not decode is discarded on the request that meets it, not a 500", async () => {
+  const f = await fixture();
+  await writeFile(f.path, "{ this is not JSON");
+  const lifecycle = await hostLifecycle();
+  const web = HttpRouter.toWebHandler(
+    updateRoutes.pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Layer.succeed(UpdateReader, f.make()),
+          Layer.succeed(HostLifecycle, lifecycle),
+        ),
+      ),
+    ),
+    { disableLogger: true },
+  );
+  try {
+    const read = await web.handler(new Request("http://host/host/update"), Context.empty() as never);
+    expect(read.status, await read.clone().text()).toBe(200);
+    expect(await read.json()).toMatchObject({ receipt: null, receiptLeg: { error: null } });
+    const admitted = await web.handler(
+      new Request("http://host/host/update", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId: plan.planId }),
+      }),
+      Context.empty() as never,
+    );
+    expect(admitted.status, await admitted.clone().text()).toBe(202);
+    expect(
+      readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === f.path),
+    ).toMatchObject([{ class: "discard", place: "Update status" }]);
+  } finally {
+    await web.dispose();
     await f.close();
   }
 });

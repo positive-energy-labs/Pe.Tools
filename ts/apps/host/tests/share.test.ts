@@ -7,6 +7,8 @@ import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { createShare, shareIntentFile, tailscaleCommand, shareRoute } from "../src/share.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
+import { readStoredNotices } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "../src/notice-feed.ts";
 
 test("fake tailscale binary: foreign rule refused; own changes re-read status; observations stay bounded", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-share-fake-"));
@@ -215,4 +217,51 @@ test("Off persists cancellation even when Tailscale status is unavailable", asyn
   expect(await share.set(false)).toMatchObject({ desired: "off", state: "refused", url: null });
   expect(intent.desired).toBe("off");
   expect(commands).toBe(2);
+});
+
+// ADR 0039 per-request witness: the intent used to be re-read and refused on every request
+// (`share.unavailable`) until someone fixed the file by hand.
+test("a share intent that does not decode is discarded on the request that meets it, not refused", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-share-corrupt-"));
+  const path = join(dir, "share.json");
+  await writeFile(path, "{ this is not JSON");
+  const share = createShare({
+    installed: true,
+    port: () => 5180,
+    ...shareIntentFile(path),
+    // A running tailnet with nothing served: the only thing wrong on this machine is the intent.
+    run: async (args) =>
+      args[0] === "status"
+        ? JSON.stringify({ BackendState: "Running", Self: { DNSName: "box.tailabc.ts.net." } })
+        : "{}",
+  });
+  const app = HttpRouter.toWebHandler(
+    Layer.mergeAll(
+      shareRoute(share),
+      requestIdentityLayer({
+        port: () => 5180,
+        frontendOrigin: Effect.succeed(undefined),
+        share: { observe: () => {}, read: () => share.read() },
+      }),
+    ),
+    { disableLogger: true },
+  );
+  try {
+    const response = await app.handler(
+      new Request("http://127.0.0.1:5180/pe/share", {
+        method: "PUT",
+        headers: { "content-type": "application/json", host: "127.0.0.1:5180", ...contextHeaders() },
+        body: JSON.stringify({ on: false }),
+      }),
+    );
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(await response.json()).toMatchObject({ desired: "off", refusal: null });
+    expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({ desired: "off" });
+    expect(
+      readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === path),
+    ).toMatchObject([{ class: "discard", place: "Sharing" }]);
+  } finally {
+    await app.dispose();
+    await rm(dir, { recursive: true, force: true });
+  }
 });

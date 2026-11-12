@@ -12,8 +12,10 @@ import {
   type ApsTokenRequest,
   type ApsTokenResult,
 } from "@pe/host-contracts/operation-types";
+import { discardStored } from "@pe/host-contracts/store";
 import { LocalOpError } from "./local-error.ts";
 import { runHostChild } from "./host-child.ts";
+import { storedNoticesPath } from "./notice-feed.ts";
 import { productApsCredentialsPath, productApsTokensPath } from "./product-paths.ts";
 
 const APS_AUTH_BASE_URL = "https://developer.api.autodesk.com/authentication/v2";
@@ -472,10 +474,22 @@ const loadPersistedTokenMap = Effect.fnUntraced(function* () {
     catch: (error) => new LocalOpError("aps.auth.token", errorMessage(error)),
   }).pipe(
     Effect.flatMap((parsed) => Schema.decodeUnknownEffect(persistedTokenFileSchema)(parsed)),
-    Effect.mapError((error) => new LocalOpError("aps.auth.token", errorMessage(error))),
+    // `tokens.json` is `discard` (MAP decision log 92bdf2df): tokens that do not decode are
+    // deleted with one notice, and the person signs in to Autodesk again. Before this the read
+    // refused on every call until someone deleted the file by hand.
+    Effect.catch((error) =>
+      Effect.sync(() => {
+        discardStored(
+          productApsTokensPath(),
+          { class: "discard", place: "Autodesk sign-in", notices: storedNoticesPath() },
+          errorMessage(error),
+        );
+        return null;
+      }),
+    ),
   );
   const map = new Map<string, PersistedTokenRecord>();
-  for (const entry of file.entries ?? []) {
+  for (const entry of file?.entries ?? []) {
     if (!entry.key || !entry.protectedPayload) continue;
     const record = yield* Effect.result(unprotectUserSecret(entry.protectedPayload));
     if (record._tag !== "Success") continue;

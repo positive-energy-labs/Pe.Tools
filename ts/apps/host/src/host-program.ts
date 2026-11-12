@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { productPathNames } from "@pe/host-contracts/contracts";
+import { noteStored } from "@pe/host-contracts/store";
 import type { ReceiptStamp } from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
 import {
@@ -9,6 +10,7 @@ import {
   type HostInputLane,
 } from "./native-recording.ts";
 import { InvalidRead } from "./native-reads.ts";
+import { storedNoticesPath } from "./notice-feed.ts";
 
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { execFile, spawn } from "node:child_process";
@@ -59,14 +61,25 @@ export const hostInputs = (stamp: ReceiptStamp | null, selection: HostInputSelec
     return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null, bindings: selection.bindings && new Map(selection.bindings) })));
   }
   const directory = join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "recordings", createHash("sha256").update(identity.build).digest("hex"), identity.catalog, hostOwnership.serviceName, "history");
-  // Automatic capture is ancillary to live input: a store that cannot open (full or I/O) stops
-  // recording before its first taking, not the host. Identity and tamper problems stay strict.
+  // Automatic capture is ancillary to live input: a store that cannot open stops recording before
+  // its first taking, not the host. That now covers every writer error, so a `takings.jsonl` line
+  // torn by a crash (`recording.tamper`) no longer fails host start (ADR 0039: nothing stops the
+  // host). The bundle is never opened for writing and its bytes stay, so tamper stays strict as
+  // evidence; the stop is one notice, de-duplicated by the bundle's path. An explicit
+  // `--recording` read above still fails on the same problems, because that is what was asked for.
   const lane = yield* openRecordingWriter(directory, identity, bounds).pipe(
     Effect.map((writer): HostInputLane => ({ kind: "live", captureStore: writer })),
     Effect.catch((error) =>
-      error.problem === "recording.full" || error.problem === "recording.io"
-        ? Effect.succeed<HostInputLane>({ kind: "live", captureSetup: { at: 1, stoppedAt: Date.now(), reason: "setup", site: "builtin", op: "capture.setup" } })
-        : Effect.fail(error),
+      Effect.sync((): HostInputLane => {
+        noteStored(storedNoticesPath(), {
+          class: "keep",
+          place: "Recording history",
+          path: directory,
+          sha256: null,
+          reason: `Recording is off for this build (${error.problem}): ${error.message}`,
+        });
+        return { kind: "live", captureSetup: { at: 1, stoppedAt: Date.now(), reason: "setup", site: "builtin", op: "capture.setup" } };
+      }),
     ),
   );
   return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer(lane)));

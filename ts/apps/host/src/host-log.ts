@@ -4,13 +4,13 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
-  renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import { HOST_LOG_MAX_ENTRY_BYTES, type HostEvent, type HostLogEntry } from "@pe/agent-contracts";
+import { writeAtomic } from "@pe/host-contracts/store";
 
 /** 8 segments of 8 MiB: the newest ~64 MiB of host history replays; older reads as a gap. */
 const HOST_LOG_LIMITS = {
@@ -128,8 +128,7 @@ export class HostLog {
       const file = join(this.dir, segmentName(segment.first));
       const kept = this.entries(segment.first).filter((entry) => !match(entry));
       const text = kept.map((entry) => `${JSON.stringify(entry)}\n`).join("");
-      writeFileSync(`${file}.tmp`, text);
-      renameSync(`${file}.tmp`, file);
+      writeAtomic(file, text);
       segment.bytes = Buffer.byteLength(text);
     }
   }

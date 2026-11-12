@@ -1,17 +1,18 @@
 import { peRoutes, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { execFile } from "node:child_process";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import { HttpRouter, HttpEffect } from "effect/http";
+import { z } from "zod";
 import type { MachineShare } from "@pe/agent-contracts";
+import { readStored, writeAtomic } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "./notice-feed.ts";
 import type { IdentityResult } from "./request-identity.ts";
 
-type Mapping = { authority: string; target: string };
-type Intent = {
-  desired: "on" | "off";
-  mapping: Mapping | null;
-  allowRemoteAdministration?: boolean;
-};
+const intentSchema = z.object({
+  desired: z.enum(["on", "off"]),
+  mapping: z.object({ authority: z.string(), target: z.string() }).nullable(),
+  allowRemoteAdministration: z.boolean().optional(),
+});
+type Intent = z.infer<typeof intentSchema>;
 type ServeStatus = {
   TCP?: Record<string, unknown>;
   Web?: Record<string, { Handlers?: Record<string, unknown> }>;
@@ -40,28 +41,18 @@ export function tailscaleCommand(binary = "tailscale", prefix: readonly string[]
 
 export function shareIntentFile(path: string): Pick<ShareOptions, "load" | "save"> {
   return {
+    // Machine state (ADR 0039): an intent that does not decode is discarded with a notice, and
+    // sharing reads as never turned on.
     async load() {
-      try {
-        const value = JSON.parse(await readFile(path, "utf8")) as Intent;
-        if (
-          (value.desired !== "on" && value.desired !== "off") ||
-          (value.allowRemoteAdministration !== undefined &&
-            typeof value.allowRemoteAdministration !== "boolean") ||
-          (value.mapping !== null &&
-            (typeof value.mapping?.authority !== "string" ||
-              typeof value.mapping?.target !== "string"))
-        )
-          throw Error("Invalid installed share intent");
-        return value;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-        throw error;
-      }
+      const read = readStored(path, intentSchema, {
+        class: "discard",
+        place: "Sharing",
+        notices: storedNoticesPath(),
+      });
+      return read.kind === "ok" ? read.value : null;
     },
     async save(value) {
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(path + ".tmp", JSON.stringify(value));
-      await rename(path + ".tmp", path);
+      writeAtomic(path, JSON.stringify(value));
     },
   };
 }
