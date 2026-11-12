@@ -80,6 +80,9 @@ export type ToolCall = {
   parentMessageId?: string;
   /** Images the call produced so far. */
   images: string[];
+  /** The host's run-consent ask (`writes:<turn>`, run-consent.ts): a row in the run, never a tool
+   *  the agent called, so no count of tools includes it. */
+  consent?: true;
 } & ToolOutcome;
 
 /** One open ACP permission request, answered by `optionId`. */
@@ -327,6 +330,7 @@ function fold(state: ChatState): Fold {
       case "permission_request": {
         const toolCallId = event.toolCall.toolCallId;
         applyCall(event, event.toolCall as AcpToolCall);
+        if (event.scope === "run") calls.get(toolCallId)!.consent = true;
         approvals.set(event.requestId, {
           requestId: event.requestId,
           // The host's run-consent deadline is the auto-approve fact (run-consent.ts): dropping
@@ -351,6 +355,9 @@ function fold(state: ChatState): Fold {
           const optionId = event.optionId;
           if (ask!.options.find((o) => o.optionId === optionId)?.kind.startsWith("reject"))
             Object.assign(call, { status: "denied" });
+          // The host's run-consent ask rides its own `writes:<turn>` id (run-consent.ts): no harness
+          // call settles it, so its allow is its end. Left open, `turn_end` drew it failed.
+          else if (ask!.scope === "run") Object.assign(call, { status: "completed" });
         }
         break;
       }

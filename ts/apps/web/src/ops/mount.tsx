@@ -4,6 +4,7 @@ import { useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Code, stringify } from "@pe/kit/lang/code";
 import { Button } from "@pe/kit/lang/button";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Operation } from "./workspace";
 import { outputRenderers } from "./renderers";
 import type { OpsContext } from "./route";
@@ -33,7 +34,7 @@ export function OpsBody({ ctx }: { ctx: OpsContext }) {
           }}
           row={(row) => ({ label: row.key, meta: row.state, sub: row.startedAt, title: row.id })}
         />
-        {failure && <p role="alert">{failure}</p>}
+        {failure && <OutcomeLine kind="refused" label="Receipt control refused" says={failure} />}
         {receipt ? (
           <>
             <p>
@@ -53,7 +54,7 @@ export function OpsBody({ ctx }: { ctx: OpsContext }) {
                       .write("control")
                       .run({ key, id: receipt.id })
                       .then(() => ctx.refresh())
-                      .catch((error) => setFailure(String(error)))
+                      .catch((error) => setFailure(error instanceof Error ? error.message : String(error)))
                   }
                 >
                   {key}

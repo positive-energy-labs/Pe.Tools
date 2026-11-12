@@ -146,8 +146,7 @@ export const module = route({
             says: "Open in Family",
             href: routeAddress("family").link({
               stage: "apply",
-              pod: read.scope.pod,
-              path: read.scope.path,
+              member: { kind: "ids", ids: [podMemberCode({ pod: read.scope.pod, path: read.scope.path })] },
               ...(typeof search.thread === "string" ? { thread: search.thread } : {}),
             }),
           }

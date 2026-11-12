@@ -7,7 +7,7 @@ export function publicationSource<T extends { generation: number; version: numbe
 }): UseSource<T> {
   return { kind: "use", dirties: ["snapshot"], open(ctx, deliver) {
     const publication = ctx.publication ?? { subscription: crypto.randomUUID(), generation: 0 };
-    let closed = false, refreshing = false, invalidated = false, races = 0;
+    let closed = false, refreshing = false, invalidated = false, held = false;
     let unfollow: (() => void) | undefined;
     const refresh = async () => {
       if (closed) return;
@@ -25,21 +25,19 @@ export function publicationSource<T extends { generation: number; version: numbe
             if (closed || frame.kind === "stale") return;
             if (frame.kind === "failure") return deliver({ kind: "stale" });
             const state = z.object({ generation: z.number(), state: z.string() }).safeParse(frame.kind === "snapshot" && !frame.stale ? frame.value : null);
-            if (state.success && state.data.generation === publication.generation && state.data.state === "refresh-needed") {
+            if (!state.success || state.data.generation !== publication.generation) return;
+            // `absent` is a host with no slot for this subscription (a restart under a live tab): a
+            // value still drawn is nobody's publication, so it is re-read like `refresh-needed`. A
+            // refusal draws no value and retains no slot, so its `absent` is no news and no re-read.
+            if (state.data.state === "refresh-needed" || (state.data.state === "absent" && held)) {
               deliver({ kind: "stale" }); void refresh();
             }
           });
         }
         if (result.state === "superseded") return;
-        // The host answers refresh-needed when an input moved under its evaluation (the machine
-        // census changing mid-read) and sends no event for it, so this source re-reads.
-        // ponytail: two re-reads for any refusal, since the host does not type a race apart from a
-        // lasting one; a typed retry flag on the publication is the upgrade.
-        if (result.state === "refresh-needed" && races < 2) {
-          await new Promise(resolve => setTimeout(resolve, 250 * ++races));
-          invalidated = true;
-          if (closed || !result.value) return;
-        } else races = 0;
+        // The host settles a raced read itself (`Publications.publish`), so a refusal here lasts:
+        // it is shown with the host's reason, and a retained Value is re-read on its event above.
+        held = !!result.value;
         if (!result.value) return deliver({ kind: "failure", error: result.reason ?? "Refresh needed" });
         deliver({ kind: "complete", value: result, revision: result.version, sourceVersion: result.value.evaluation,
           fresh: result.state === "current" && !result.value.coverage.refused.length && !result.value.coverage.unknown.length,

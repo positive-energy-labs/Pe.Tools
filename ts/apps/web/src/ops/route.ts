@@ -58,10 +58,12 @@ export const module = route({
     },
   },
   commands: {
-    run: { ...queryAction(opRead), label: "Run read", input: (_context, supplied) => supplied },
+    // Both verbs take what only the pane holds (the request form, the receipt in view): `pane`.
+    run: { ...queryAction(opRead), label: "Run read", pane: true, input: (_context, supplied) => supplied },
     control: {
       ...queryAction(receiptControlRpc),
       label: "Receipt control",
+      pane: true,
       input: (_context, supplied) => supplied,
     },
   },
