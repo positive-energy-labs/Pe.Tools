@@ -170,29 +170,45 @@ test("an installed launch refuses when its booting peer never publishes a record
   );
 });
 
-test("a peer launch never retires a serving host of another version", async () => {
-  const ownership = owner("installed", temp());
-  const file = createServiceFile(
-    installedPort,
-    "0.7.30",
-    "installed",
-    "token",
-    ownership.executablePath,
-  );
-  let shutdowns = 0;
-  const dependencies = {
-    ...machine(new Map()),
-    discover: async () => file,
-    occupants: async () => [{ pid: file.pid, executable: ownership.executablePath }],
-    retire: async () => {
-      shutdowns++;
-    },
-  };
-  await expect(prepareHostBinding(false, "0.7.31", ownership, dependencies)).rejects.toThrow(
-    "explicitly stop",
-  );
-  expect(shutdowns).toBe(0);
-});
+test.each([false, true])(
+  "an older verified incumbent is retired after discovery (boot window: %s)",
+  async (bootWindow) => {
+    const ownership = owner("installed", temp());
+    const file = createServiceFile(
+      installedPort,
+      "0.7.30",
+      "installed",
+      "token",
+      ownership.executablePath,
+    );
+    let shutdowns = 0;
+    let discoveries = 0;
+    let aliveChecks = 0;
+    const waits: number[] = [];
+    const dependencies = {
+      ...machine(new Map()),
+      discover: async () => (++discoveries === 1 && bootWindow ? null : file),
+      portAvailable: async () => shutdowns === 1 && aliveChecks === 2,
+      occupants: async () => [{ pid: file.pid, executable: ownership.executablePath }],
+      retire: async (incumbent: typeof file) => {
+        expect(incumbent).toEqual(file);
+        shutdowns++;
+      },
+      alive: (pid: number) => {
+        expect(pid).toBe(file.pid);
+        expect(shutdowns).toBe(1);
+        return ++aliveChecks === 1;
+      },
+      sleep: async (ms: number) => {
+        waits.push(ms);
+      },
+    };
+    expect(await prepareHostBinding(false, "0.7.31", ownership, dependencies)).toBe(installedPort);
+    expect(shutdowns).toBe(1);
+    expect(aliveChecks).toBe(2);
+    expect(waits).toEqual([1_000]);
+  },
+);
 
 test.each(["dev first", "installed first"])(
   "dev and installed hosts both start (%s) and never share a port",

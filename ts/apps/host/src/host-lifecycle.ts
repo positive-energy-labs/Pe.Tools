@@ -125,7 +125,27 @@ const bindingDependencies = {
       return false;
     }
   },
+  retire: async (file: ServiceFile) => {
+    const response = await fetch(
+      `http://127.0.0.1:${file.port}${hostProcessIdentity.shutdownPath}`,
+      {
+        method: "POST",
+        headers: { "x-pe-service-token": file.token },
+        signal: AbortSignal.timeout(5_000),
+      },
+    );
+    await response.body?.cancel();
+    if (!response.ok) throw new Error(`shutdown returned HTTP ${response.status}`);
+  },
   sleep: (ms: number) => sleep(ms),
+  alive: (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  },
 };
 
 const sameExecutable = (a: string, b: string) =>
@@ -193,10 +213,26 @@ export async function prepareHostBinding(
         `Installed host refused: service '${ownership.serviceName}' has a live ${live.lane} record (${describeOccupant({ pid: live.pid, executable: live.executablePath ?? "unknown", serviceName: ownership.serviceName })}); not a verified serving installed incumbent. ${owners.map(describeOccupant).join("; ")}`,
       );
     if (live.version === version) return live;
-    // A peer launch cannot interrupt work, even across versions; update/stop is explicit.
-    throw Error(
-      `Installed host refused: version ${live.version} is serving on ${live.port}; explicitly stop it before launching ${version}.`,
-    );
+    console.log(`pe-host retiring ${live.version} incumbent pid ${live.pid} on port ${live.port}`);
+    try {
+      await dependencies.retire(live);
+    } catch (cause) {
+      throw new Error(
+        `Installed host refused: stale incumbent pid ${live.pid}, version ${live.version} failed to retire.`,
+        { cause },
+      );
+    }
+    // Wait for the PROCESS to exit, not just the port: the SDK claim refuses while the retiring pid
+    // is alive (installed policy evicts nothing), and a host disposing its tray releases the port
+    // seconds before it exits. That race left 0.7.4's stub-relaunched host a silent claim loser.
+    for (let attempt = 0; attempt <= 30; attempt++) {
+      if (!dependencies.alive(live.pid)) break;
+      if (attempt === 30)
+        throw new Error(
+          `Installed host refused: stale incumbent pid ${live.pid}, version ${live.version} is still running after shutdown.`,
+        );
+      await dependencies.sleep(1_000);
+    }
   }
   if (await dependencies.portAvailable(installedPort)) return installedPort;
   let detail: string;
