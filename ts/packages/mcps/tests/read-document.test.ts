@@ -3,17 +3,21 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { crc32, deflateRawSync } from "node:zlib";
 import { PNG } from "pngjs";
+import http from "node:http";
+import https from "node:https";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { withInvocationContext } from "@pe/runtime/context";
 import { sendHeldParse, sha256Of } from "../src/shared/held-parse.ts";
 import { runReadDocument } from "../src/shared/read-document.ts";
 
 /** One 612x792 page with a schedule row near the top and a footer note near the bottom, offsets exact. */
-function schedulePdf(): Buffer {
-  const content = [
-    "BT /F1 14 Tf 72 700 Td (TAG AHU-1 SUPPLY 6000 CFM) Tj ET",
-    "BT /F1 14 Tf 72 90 Td (NOTE FOOTER-ONLY-TEXT) Tj ET",
-  ].join("\n");
+function schedulePdf(withText = true): Buffer {
+  const content = withText
+    ? [
+        "BT /F1 14 Tf 72 700 Td (TAG AHU-1 SUPPLY 6000 CFM) Tj ET",
+        "BT /F1 14 Tf 72 90 Td (NOTE FOOTER-ONLY-TEXT) Tj ET",
+      ].join("\n")
+    : "0 0 100 100 re f";
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -34,7 +38,14 @@ function schedulePdf(): Buffer {
   return Buffer.from(pdf, "latin1");
 }
 
-test("read_document returns located text and a page render, and a crop narrows both", async () => {
+test("read_document returns text and renders with network requests blocked, and a crop narrows both", async () => {
+  const blocked = vi.fn(() => {
+    throw new Error("Local parser attempted a network request");
+  });
+  vi.stubGlobal("fetch", blocked);
+  const requests = ["get", "request"] as const;
+  for (const module of [http, https])
+    for (const method of requests) vi.spyOn(module, method).mockImplementation(blocked);
   const dir = mkdtempSync(join(tmpdir(), "read-document-test-"));
   const scratch = new Set<string>();
   try {
@@ -64,9 +75,34 @@ test("read_document returns located text and a page render, and a crop narrows b
     expect(cropPng.width / cropPng.height).toBeGreaterThan(fullPng.width / fullPng.height);
     expect(cropped.images[0]!.path).toContain("read-document");
     expect(cropped.images[0]!.path).not.toContain(dir);
+    expect(whole.warnings).toBeUndefined();
+    expect(blocked).not.toHaveBeenCalled();
   } finally {
     // The renders live in the tool's product scratch folder, outside `dir`.
     for (const folder of scratch) rmSync(folder, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a page without a text layer reports a typed warning and still renders locally", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "read-document-no-text-"));
+  let scratch: string | undefined;
+  const blocked = vi.fn(() => {
+    throw new Error("Unexpected network request");
+  });
+  vi.stubGlobal("fetch", blocked);
+  try {
+    const file = join(dir, "scan.pdf");
+    writeFileSync(file, schedulePdf(false));
+    const result = await runReadDocument({ path: file, pages: "1", image: true });
+    scratch = dirname(result.images[0]!.path);
+    expect(result.warnings).toEqual([{ code: "no-text-layer", page: 1 }]);
+    expect(result.text).toContain("No text layer was extracted");
+    expect(result.text).toContain("Local OCR is disabled");
+    expect(result.images).toHaveLength(1);
+    expect(blocked).not.toHaveBeenCalled();
+  } finally {
+    if (scratch) rmSync(scratch, { recursive: true, force: true });
     rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -166,6 +202,7 @@ test("read_document reads an xlsx and a docx from their XML, with cell refs and 
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
@@ -178,12 +215,16 @@ test("a failed Confirm uploads once and surfaces the error; a later Confirm can 
     writeFileSync(path, bytes);
     vi.stubEnv("LLAMA_CLOUD_API_KEY", "fixture-key");
     let uploads = 0;
-    vi.stubGlobal("fetch", vi.fn(async (input: Request | string | URL) => {
-      const url = new URL(input instanceof Request ? input.url : String(input));
-      if (url.pathname !== "/api/v2/parse/upload") throw Error("Unexpected polling after failed upload");
-      uploads++;
-      return Response.json({ detail: "Upload failed" }, { status: 500 });
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Request | string | URL) => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        if (url.pathname !== "/api/v2/parse/upload")
+          throw Error("Unexpected polling after failed upload");
+        uploads++;
+        return Response.json({ detail: "Upload failed" }, { status: 500 });
+      }),
+    );
     const request = { path, sha256: sha256Of(bytes), pages: "1" };
     await expect(sendHeldParse(request)).rejects.toThrow(/500/);
     expect(uploads).toBe(1);
@@ -228,7 +269,9 @@ test("parser llamaparse is held at once for Pea and sends nothing; the person's 
         }
         return Response.json({
           job: { id: "job-1", project_id: "p", status: "COMPLETED" },
-          markdown: { pages: [{ page_number: 1, success: true, markdown: "TAG AHU-1 SUPPLY 6000 CFM" }] },
+          markdown: {
+            pages: [{ page_number: 1, success: true, markdown: "TAG AHU-1 SUPPLY 6000 CFM" }],
+          },
         });
       }),
     );
@@ -239,9 +282,9 @@ test("parser llamaparse is held at once for Pea and sends nothing; the person's 
     const read = (input: Parameters<typeof runReadDocument>[0]) =>
       withInvocationContext({ hostBaseUrl: "http://host.test" }, () => runReadDocument(input));
 
-    await expect(read({ path: file, pages: "1", parser: "llamaparse", crop: { top: 0.5 } })).rejects.toThrow(
-      /crop is not available/,
-    );
+    await expect(
+      read({ path: file, pages: "1", parser: "llamaparse", crop: { top: 0.5 } }),
+    ).rejects.toThrow(/crop is not available/);
 
     // Pea's call: held in the tool result, one notice posted to the host, no byte sent, key unread.
     const heldRead = await read({ path: file, pages: "1", parser: "llamaparse" });
@@ -278,7 +321,9 @@ test("parser llamaparse is held at once for Pea and sends nothing; the person's 
     expect(llama.text).not.toContain(secret);
     expect(llama.images).toEqual([]);
     // Other pages of the same file were never confirmed: held again.
-    expect((await read({ path: file, pages: "2", parser: "llamaparse" })).text).toMatch(/^Held, not done/);
+    expect((await read({ path: file, pages: "2", parser: "llamaparse" })).text).toMatch(
+      /^Held, not done/,
+    );
     expect(uploads()).toHaveLength(sent);
   } finally {
     rmSync(dir, { recursive: true, force: true });
