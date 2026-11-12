@@ -1629,8 +1629,11 @@ test("Stop with a failing run close still cancels, then kills a child that ignor
   const runs: typeof registry = {
     ...registry,
     // The first run close fails.
-    close: (ref, reason) =>
-      failed ? registry.close(ref, reason) : ((failed = true), Effect.die(Error("close failed"))),
+    close: (ref, reason) => {
+      if (failed) return registry.close(ref, reason);
+      failed = true;
+      throw Error("close failed");
+    },
   };
   const h = await host(undefined, undefined, undefined, undefined, { runs, stopGraceMs: 500 });
   const call = caller(h);
