@@ -84,26 +84,21 @@ const kinds: Kind[] = [
     read: (path) => shareIntentFile(path).load(),
   },
   {
-    name: "update admission",
-    place: "Update status",
-    file: () => join(root, "update.json"),
-    read: (path) =>
-      createUpdateReader({
-        path,
-        run: async () => {
-          throw Error("no SDK in this test");
-        },
-        installed: true,
-        pid: 1,
-      }).refresh(false),
-  },
-  {
     name: "a retained schedule reading",
     place: "Captures",
     file: () => join(root, "captures", "schedules", `${HEX}.json`),
     read: () => captures().scheduleHistory("any-workspace"),
   },
 ];
+const updates = (path: string) =>
+  createUpdateReader({
+    path,
+    run: async () => {
+      throw Error("no SDK in this test");
+    },
+    installed: true,
+    pid: 1,
+  });
 const captures = () =>
   new TakeoffCaptures(join(root, "captures"), join(root, "aps.json"), () => "2026-11-11T00:00:00Z");
 
@@ -154,17 +149,12 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
     expect(await store.listState!()).toMatchObject({ records: [], unreadable: 1, unindexed: 0 });
   });
 
-  test.each([
-    ["a header that is not JSON", `${CORRUPT}\n`],
-    ["a corrupt line", `{"version":8}\n${CORRUPT}\n{"mapping":["k","${crypto.randomUUID()}"]}\n`],
-    ["a line of the wrong shape", `{"version":8}\n${WRONG_SHAPE}\n\n`],
-    ["another epoch, which used to be a silent console.warn", `{"version":7}\n{"old":"row"}\n`],
-  ])("the action journal with %s is discarded and the journal still works", async (_, bytes) => {
-    const path = seed(join(root, "journal", "journal.jsonl"), bytes);
+  // A known older epoch grants no authority, so it stays `discard` (MAP ruling 59d4f336).
+  test("the action journal of a known older epoch is discarded and the journal still works", async () => {
+    const path = seed(join(root, "journal", "journal.jsonl"), `{"version":7}\n{"old":"row"}\n`);
     const journal = journalAt(path, Date.now);
     expect(await journal.list()).toEqual([]);
     expect(posted(path)).toMatchObject([{ class: "discard", place: "Action journal" }]);
-    // Before this, the throw was cached and every later journal write rejected.
     const join_ = await journal.actionJoin("first-action");
     expect(readFileSync(path, "utf8").split("\n")[0]).toBe('{"version":8}');
     // A second start over the journal it left reads it, and posts nothing.
@@ -192,7 +182,7 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
   });
 });
 
-describe("keep: a person's file is listed \"can't read, kept\", its bytes never change, and no write lands over it", () => {
+describe("keep: the file is listed\"can't read, kept\", its bytes never change, and no write lands over it", () => {
   const lifecycle = (decisionsPath: string) =>
     createPackageLifecycle({ packages: () => listPackages(join(root, "Pods")), decisionsPath });
   const kinds = [
@@ -219,6 +209,14 @@ describe("keep: a person's file is listed \"can't read, kept\", its bytes never 
           true,
         ),
     },
+    // Not a person's file: machine state kept because it holds authority (MAP ruling 59d4f336,
+    // fail closed). A new apply is the write that must not land.
+    {
+      name: "Update status",
+      file: () => join(root, "update.json"),
+      read: (path: string) => updates(path).refresh(false),
+      write: (path: string) => updates(path).apply(randomUUID()),
+    },
   ];
   test.each(kinds.flatMap((kind) => [CORRUPT, WRONG_SHAPE].map((bytes) => ({ ...kind, bytes }))))(
     "$name holding $bytes",
@@ -242,6 +240,34 @@ describe("keep: a person's file is listed \"can't read, kept\", its bytes never 
       expect(posted(path)).toHaveLength(1);
     },
   );
+});
+
+// The journal holds authority over writes whose outcome may be unknown, so one that does not
+// decode is kept, not discarded (MAP ruling 59d4f336). The refusal of a real action is E8, in
+// `kernel-storage-safety.journey.test.ts`.
+test.each([
+  ["a header that is not JSON", `${CORRUPT}\n`],
+  ["a corrupt line", `{"version":8}\n${CORRUPT}\n{"mapping":["k","${randomUUID()}"]}\n`],
+  ["a line of the wrong shape", `{"version":8}\n${WRONG_SHAPE}\n\n`],
+  ["a version this build does not know", `{"version":9}\n`],
+])("the action journal with %s is kept, never written, and works again once removed", async (_, bytes) => {
+  const path = seed(join(root, "journal", "journal.jsonl"), bytes);
+  const journal = journalAt(path, Date.now);
+  expect(await journal.list()).toEqual([]);
+  expect(posted(path)).toMatchObject([{ class: "keep", place: "Action journal" }]);
+  // The host's start-time fact and its opaque ids still resolve, in memory only.
+  await journal.recordFact({ kind: "usage", event: "app_boot", counters: {} });
+  const join_ = await journal.actionJoin("first-action");
+  expect(readFileSync(path, "utf8")).toBe(bytes);
+  // A second start keeps it again and posts nothing new.
+  expect(await journalAt(path, Date.now).list()).toEqual([]);
+  expect(readFileSync(path, "utf8")).toBe(bytes);
+  expect(posted(path)).toHaveLength(1);
+  // A person removes the file: the same host writes again, with the ids it minted while kept.
+  rmSync(path);
+  await journal.recordFact({ kind: "usage", event: "app_boot", counters: {} });
+  expect(readFileSync(path, "utf8").split("\n")[0]).toBe('{"version":8}');
+  expect(await journalAt(path, Date.now).actionJoin("first-action")).toEqual(join_);
 });
 
 test("host start throws 0 times over corrupt scheduled tasks, devices, a torn journal and a torn recording", async () => {
@@ -270,6 +296,8 @@ test("host start throws 0 times over corrupt scheduled tasks, devices, a torn jo
   for (const start of [
     async () => void (inputs = await record()),
     () => journalAt(journal, Date.now).list(),
+    // `host-program.ts` records `app_boot` through the journal before it serves anything.
+    () => journalAt(journal, Date.now).recordFact({ kind: "usage", event: "app_boot", counters: {} }),
     () => createDevices(devices).list(),
     () => scheduler(tasks),
   ])
@@ -279,7 +307,10 @@ test("host start throws 0 times over corrupt scheduled tasks, devices, a torn jo
       thrown++;
     }
   expect(thrown).toBe(0);
-  // The host runs on fresh machine state, with recording off and the torn bundle untouched.
+  // The host runs on fresh machine state, with the journal kept, recording off and the torn bundle
+  // untouched.
+  expect(readFileSync(journal, "utf8")).toBe(CORRUPT);
+  expect(posted(journal)).toMatchObject([{ class: "keep", place: "Action journal" }]);
   expect(JSON.parse(readFileSync(tasks, "utf8"))).toBeInstanceOf(Array);
   expect(JSON.parse(readFileSync(devices, "utf8"))).toMatchObject({ sessions: [] });
   expect(inputs!.source).toMatchObject({ kind: "live", capturing: false, truncated: { reason: "setup" } });

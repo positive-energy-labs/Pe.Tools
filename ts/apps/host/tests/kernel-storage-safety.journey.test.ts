@@ -30,25 +30,36 @@ test("E8 cold HTTP reentry converts a real running native write to unknown witho
   } finally { release(); await pending; await cold?.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
-// ADR 0039 rule 1 reverses this journey. It used to assert that a corrupt journal refuses every
-// action and keeps its malformed bytes, which left the host unable to act until a person deleted
-// the file. The journal is `discard`: it is deleted with one notice and the host acts on an empty
-// journal. The boundary that still holds is the test above: a journal that decodes never
-// redispatches a write it knows was running. A journal that does not decode knows nothing.
-test("E8 corrupt journal is discarded with one notice, and a real action then runs", async () => {
+// Fail closed (MAP ruling 59d4f336, departing from ADR 0039 rule 1 for the journal): a journal
+// that does not decode may hide a write whose outcome is unknown, so it is kept. The host starts,
+// the action is refused with the file's path and reason, nothing is dispatched, the bytes do not
+// change, and removing the file is the recovery.
+test("E8 corrupt journal refuses a real action with its path and reason, keeps the exact bytes, and acts again once removed", async () => {
   const f = await setup();
   const admission = await f.admission();
   const dir = await mkdtemp(join(tmpdir(), "pe-corrupt-journal-"));
   const path = join(dir, "partition-operations.json");
-  await writeFile(path, Buffer.from("corrupt journal header\n", "utf8"));
+  const corrupt = Buffer.from("corrupt journal header\n", "utf8");
+  await writeFile(path, corrupt);
   const cold = await fixtureNative(dir);
   try {
-    const response = await cold.actions()(admission);
-    expect(response.status, await response.clone().text()).toBeLessThan(400);
-    expect((await readFile(path, "utf8")).split("\n")[0]).toBe('{"version":8}');
+    // One handler for both calls: the route binds the journal's command environment once.
+    const act = cold.actions();
+    const response = await act(admission);
+    const said = await response.text();
+    expect(response.status, said).toBeGreaterThanOrEqual(400);
+    expect(said).toContain(JSON.stringify(path).slice(1, -1));
+    expect(said).toContain("so the file is kept and no action runs until it is removed");
+    expect(said).toContain("Journal header is not JSON");
+    expect(cold.calls).toEqual([]);
+    expect(await readFile(path)).toEqual(corrupt);
     expect(
       readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === path),
-    ).toMatchObject([{ class: "discard", place: "Action journal" }]);
+    ).toMatchObject([{ class: "keep", place: "Action journal" }]);
+    await rm(path);
+    const recovered = await act(admission);
+    expect(recovered.status, await recovered.clone().text()).toBeLessThan(400);
+    expect((await readFile(path, "utf8")).split("\n")[0]).toBe('{"version":8}');
   } finally {
     await cold.close();
     await rm(dir, { recursive: true, force: true });
