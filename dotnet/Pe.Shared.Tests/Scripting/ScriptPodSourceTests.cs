@@ -122,9 +122,10 @@ public sealed class ScriptPodSourceTests {
         Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Main.cs"));
     }
 
-    // Mutant, run red once: drop the pod.json check in `ScriptPodSourceNormalizer.Normalize` (keep the
-    // `TryGetValue`, remove its throw). The null manifest then fails later as an ArgumentNullException, which is
-    // still an ArgumentException, so only the message and stage asserts catch it.
+    // Mutants, each run red once. Drop the pod.json check in `ScriptPodSourceNormalizer.Normalize` (keep the
+    // `TryGetValue`, remove its throw): the null manifest fails later as an ArgumentNullException, and
+    // `Assert.Throws` wants the exact type. Drop the stage from that throw (no `DiagnosticStage` argument):
+    // the type and message still hold, and only the stage assert catches it.
     [Test]
     public void Duplicates_limits_a_missing_manifest_and_a_missing_entrypoint_are_refused() {
         ArgumentException Reject(ScriptPodSourceBundle bundle) => Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Main.cs"))!;
