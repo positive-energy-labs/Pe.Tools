@@ -135,9 +135,16 @@ async function lab(beforeParse?: () => Promise<void>) {
     expect(send).toBeDefined();
     const response = await outward(send!.id);
     expect(response.status, await response.clone().text()).toBe(200);
-    return f.journal.wait(`${(await f.journal.list()).find(row => row.key === "family.attach-spec" && row.refusal?.kind === "held")!.id}:confirmed`);
+    return confirmed();
   };
-  return { f, pods, pea, parsed, handle, doc, act, stage, save, confirm, outward };
+  /** The latest confirmed run of the held attach: each Confirm attempt is its own action. */
+  const confirmed = async () => {
+    const rows = await f.journal.list();
+    const heldRow = rows.find(row => row.key === "family.attach-spec" && row.refusal?.kind === "held")!;
+    const runs = rows.filter(row => row.id.startsWith(`${heldRow.id}:confirmed:`)).map(row => row.id).sort();
+    return f.journal.wait(runs.at(-1)!);
+  };
+  return { f, pods, pea, parsed, handle, doc, act, stage, save, confirm, confirmed, outward };
 }
 
 test("blocker 3: a capture refused for its keys tells Pea where the input goes", async () => {
@@ -394,6 +401,29 @@ test("narrow 3: Pea attach is held before source reads; the notice Confirm attac
     expect((await outward(send.id)).status).toBe(404);
     expect(parsed).toHaveLength(1);
   }
+}, 60_000);
+
+// Mutants: reuse one action id across Confirm attempts (the journal replays the failed receipt and
+// the parser is never called again); admit the confirmed run as a made-up local human.
+test("narrow 4: a failed confirmed attach retries on the next Confirm, as the person who confirmed", async () => {
+  let calls = 0;
+  const { pea, attach, parsed, confirmed, outward } = await boxed(async () => {
+    if (++calls === 1) throw Error("LlamaCloud 503");
+  });
+  const person: Caller = { kind: "human", via: "tailnet", login: "kai@tailnet", device: "laptop" };
+  expect(await attach({ path: pdf }, pea)).toContain("Held, not done");
+  const send = heldSends().find(row => row.thread === pea.thread)!;
+  const failed = await outward(send.id, person);
+  expect(failed.status).toBe(502);
+  expect(await failed.text()).toContain("LlamaCloud 503");
+  expect(heldSends()).toEqual([send]);
+  expect((await outward(send.id, person)).status).toBe(200);
+  expect(calls).toBe(2);
+  expect(parsed).toHaveLength(1);
+  expect(heldSends()).toEqual([]);
+  const receipt = await confirmed();
+  expect(receipt.state).toBe("succeeded");
+  expect(receipt.caller).toEqual(person);
 }, 60_000);
 
 // Mutant: family-spec re-reads source.path when retaining source.pdf instead of using admitted bytes.

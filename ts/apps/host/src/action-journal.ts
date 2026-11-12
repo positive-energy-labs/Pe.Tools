@@ -14,7 +14,7 @@ import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store
 import { storedBlobsPath, storedNoticesPath } from "./notice-feed.ts";
 import { dirname, join, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import { holdSendCommand } from "./guards.ts";
+import { holdSendCommand, SendHeld } from "./guards.ts";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
 import { Cause, Effect, Exit, FiberMap, type Fiber } from "effect";
 import type { HttpClient } from "effect/http";
@@ -1325,14 +1325,15 @@ export class ActionJournal implements ReceiptReader {
       }
       await gate(row, "admit");
     } catch (error) {
-      if (!prior && admission.key === "family.attach-spec" && error instanceof CommandRejected &&
-          error.refusal.kind === "held" && error.refusal.act === "send-outward") {
-        const { source } = commands["family.attach-spec"].input.parse(admission.input);
-        holdSendCommand({ service: "llamaparse", path: "path" in source ? source.path : "url" in source ? source.url : source.fileName,
+      if (!prior && error instanceof SendHeld) {
+        // Each Confirm is its own action: a known id replays its receipt, so one shared id would
+        // replay a failed send forever. A success releases the row, so it is never confirmed twice.
+        let attempt = 0;
+        holdSendCommand({ ...error.send,
           sha256: createHash("sha256").update(canonicalRouteInput(admission)).digest("hex"), pages: "all" },
-          crossing.caller.kind === "pea" ? crossing.caller.thread : null, async () => {
-            const receipt = await this.invoke({ ...admission, id: `${admission.id}:confirmed` },
-              { caller: { kind: "human", via: "local" }, basis: null });
+          crossing.caller.kind === "pea" ? crossing.caller.thread : null, async (person) => {
+            const receipt = await this.invoke({ ...admission, id: `${admission.id}:confirmed:${++attempt}` },
+              { caller: person, basis: null });
             const settled = await this.wait(receipt.id);
             if (settled.state !== "succeeded") throw Error("error" in settled ? settled.error ?? "Attach failed" : "Attach failed");
           });
