@@ -1,10 +1,11 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PostHog } from "posthog-node";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { analyticsConfig } from "@pe/runtime";
+import { firmSettingsDir, machineFacts } from "@pe/host-contracts/product-paths";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { Effect } from "effect";
 import { ductsFirmSchema } from "@pe/agent-contracts";
@@ -103,4 +104,58 @@ test("the dev PostHog key is the firm's alone: the user home's preferences.json 
   expect(analyticsConfig("dev")?.apiKey).toBe("phc_shared");
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
   expect(analyticsConfig("dev")).toBeNull();
+});
+
+// Mutant H5-pinned-home: keep the construction-time firm root and ignore its marker.
+test("a marker-only loss invalidates the firm leaf and restoring it reacquires the unchanged file", async () => {
+  const shared = firmHome();
+  mkdirSync(join(shared, "Settings"));
+  const path = join(shared, "Settings", "ducts.json");
+  const bytes = JSON.stringify({ version: "marker-test", criteria: { terminalDropInWg: 0.05 } });
+  writeFileSync(path, bytes);
+  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer())));
+  const changes: string[] = [];
+  const stop = files.subscribe!(name => changes.push(name));
+  try {
+    expect(await Effect.runPromise(files.firm("ducts"))).toMatchObject({ path, json: { version: "marker-test" } });
+    renameSync(join(shared, "pe-home.json"), join(shared, "marker-away.json"));
+    await expect.poll(() => changes.length).toBe(1);
+    expect(await Effect.runPromise(files.firm("ducts"))).toEqual({ refused: "no-shared-root" });
+    renameSync(join(shared, "marker-away.json"), join(shared, "pe-home.json"));
+    await expect.poll(() => changes.length).toBe(2);
+    expect(await Effect.runPromise(files.firm("ducts"))).toMatchObject({ path, json: { version: "marker-test" } });
+    expect(readFileSync(path, "utf8")).toBe(bytes);
+  } finally {
+    stop();
+    rmSync(shared, { recursive: true, force: true });
+  }
+});
+
+// K2: files alone stay [] across marker loss; the watcher key must include the root.
+test.each(["override", "probe"] as const)("marker loss with no Settings file fires exactly one change (%s)", async (source) => {
+  const drive = mkdtempSync(join(tmpdir(), "pe-firm-drive-"));
+  const shared = source === "override" ? drive : join(drive, "04 PE Software Files", "Pe.Tools");
+  mkdirSync(shared, { recursive: true });
+  writeFileSync(join(shared, "pe-home.json"), '{"tier":"firm"}');
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", source === "override" ? shared : "");
+  const facts = machineFacts([drive]);
+  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer({
+    firm: source === "override" ? firmRootPath : () => firmSettingsDir(facts),
+    catalogs: [],
+  }))));
+  const changes: string[] = [];
+  const stop = files.subscribe!(name => changes.push(name));
+  try {
+    expect(await Effect.runPromise(files.firm("ducts"))).toEqual({ path: join(shared, "Settings", "ducts.json") });
+    renameSync(join(shared, "pe-home.json"), join(shared, "marker-away.json"));
+    await expect.poll(() => changes).toEqual(["firm"]);
+    expect(await Effect.runPromise(files.firm("ducts"))).toEqual({ refused: "no-shared-root" });
+    // A later filesystem hint drains after the first change and must stay quiet.
+    writeFileSync(join(shared, "unrelated.txt"), "hint");
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(changes).toEqual(["firm"]);
+  } finally {
+    stop();
+    rmSync(drive, { recursive: true, force: true });
+  }
 });

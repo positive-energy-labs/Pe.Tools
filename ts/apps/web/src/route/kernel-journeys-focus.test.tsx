@@ -255,7 +255,7 @@ test("JZ numeric cells refuse bounds and fractional integers without changing Wo
   const { TakeoffEditCell } = await import("../takeoff/proposals");
   const { NumberCell } = await import("@pe/kit/table/cells");
   const f = await createWitness(closes);
-  // Design friction is /ducts design data (ruling 2026-11-10): its sheet draws on the /ducts mount.
+  // Velocity limit supply is /ducts design data (ruling 2026-11-10): its sheet draws on the /ducts mount.
   const ducts = f.owner.native;
   await waitFor(() => expect(ducts.work()).not.toBeNull());
   function Journey() {
@@ -279,7 +279,7 @@ test("JZ numeric cells refuse bounds and fractional integers without changing Wo
   const router = createRouter({ routeTree: createRootRoute({ component: Journey }), history: createMemoryHistory({ initialEntries: ["/ducts"] }) });
   const user = userEvent.setup();
   render(<RouterProvider router={router} />);
-  const friction = await screen.findByRole("textbox", { name: "Design friction" });
+  const friction = await screen.findByRole("textbox", { name: "Velocity limit supply" });
   const before = structuredClone(f.saved.get("ducts"));
   const revision = ducts.work()!.revision;
   await user.click(friction);
@@ -288,11 +288,11 @@ test("JZ numeric cells refuse bounds and fractional integers without changing Wo
   expect.soft(f.saved.get("ducts")).toEqual(before);
   expect.soft(ducts.work()!.revision).toBe(revision);
   expect.soft(friction.closest("[data-sheet-cell]")?.textContent).toContain("at least 0");
-  await user.click(screen.getByRole("textbox", { name: "Design friction" }));
+  await user.click(screen.getByRole("textbox", { name: "Velocity limit supply" }));
   await user.keyboard("{Control>}a{/Control}0.123456789{Enter}");
-  await waitFor(() => expect(ducts.owner()?.doc.designFriction?.edit).toBeDefined());
-  expect.soft(ducts.owner()?.doc.designFriction?.edit?.value).toBe(0.123456789);
-  expect.soft((f.saved.get("ducts") as { doc: { designFriction?: { edit?: { value: number } } } }).doc.designFriction?.edit?.value).toBe(0.123456789);
+  await waitFor(() => expect(ducts.owner()?.doc.criteria?.velocitySupplyFpm?.edit).toBeDefined());
+  expect.soft(ducts.owner()?.doc.criteria?.velocitySupplyFpm?.edit?.value).toBe(0.123456789);
+  expect.soft((f.saved.get("ducts") as { doc: { criteria?: { velocitySupplyFpm?: { edit?: { value: number } } } } }).doc.criteria?.velocitySupplyFpm?.edit?.value).toBe(0.123456789);
   const occupants = within(screen.getByRole("region", { name: "Takeoff occupants" }));
   await user.click(occupants.getByRole("textbox"));
   await user.keyboard("{Control>}a{/Control}2.7{Enter}");
@@ -647,7 +647,7 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
     ], "Choose fan walk");
     await stage("fans", [
       { path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!), "edit"], value: { value: { cfm: 250 } } },
-      { path: ["parameters", "terminalFlow", "edit"], value: { value: "PE_M_Grd_AirFlow" } },
+      { path: ["calculation", "terminalFlow", "edit"], value: { value: { kind: "balanced-design", source: "test" } } },
     ], "Edit fan airflow");
     await screen.findByRole("button", { name: "Undo Edit fan airflow" });
     const command = async (id: string, commandKey: string) => {

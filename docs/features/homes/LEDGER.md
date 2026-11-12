@@ -32,6 +32,8 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 
 - 2026-11-12, implementor default, re-openable: "notice, never delete" for earlier-version Work left in the user home's `Work/` folder. The host start census posts once per folder through `noteStartupHomes`, without reading, moving, importing or deleting its files; the person may delete the folder. This exception keeps old files visible while homes never hold current Work.
 
+- 2026-11-12, slice 6b: a value's tier label is the home whose file states it; a home that was not found, or holds no file, is never the label. The driver's dfaed397 finding (0.03 labelled "firm" with the firm read refused) was `firmLayer` handing the engine default to the resolver as the firm layer. Falsifier: `ts/apps/web/src/settings/tiers.test.ts`.
+
 ## Tried & rejected
 
 - 2026-11-11, a home qualifier on addresses (`home/kind/name`): it changes the frozen names (the contribution key `member:@<pod>/<path>`, the SubjectRef name tuple, the `/pods` `member` field) and puts a machine-local fact into Work keys. The duplicate-id refusal ends shadowing with no qualifier.
@@ -48,6 +50,7 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 - 2026-11-11, banning every Revit API entity that can save, as the first choice of guard: Family Foundry and the base modules save family files, and scripted family saves are non-negotiable. It survives only as the fallback for assumption A, limited to project documents.
 
 ## Owed
+- A firm home that is null when `DuctFiles.subscribe` starts is never watched afterwards, so a firm drive mounted after host start is seen only after a restart (`ts/apps/host/src/ducts-files.ts`).
 - Tool defect: a `pea browser` Runtime.evaluate whose params reach about 10 KB or more never returns, and small calls stall now and then. It blocked the driver's A2 doc-lab journey at a706c709. Workaround: keep evaluates under 1 KB, and serve files from a URL instead of passing them inline. Evidence: `.artifacts/runs/homes-crusade-20261111/drive/gate-a706c709*/VERDICT.md`.
 - Harness-neutral fixes parked on `crusade/t3` would help Pea under ACP too. Harvest them when a homes or kernel journey needs an interrupt that really stops Revit:
   - 90cdd00b: MCP abort forwarding, and the journal cancelling a stopped run's native step. The parts that apply cleanly are `action-journal.ts`, `invocation-context.ts` and its browser twin, and the journal test. `server.ts` needs a hand port of about 3 lines.
@@ -73,8 +76,9 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 - J1 is red on main by design. It depends on three Ducts route defects that the ducts ledger owns on `t3/pea-muas-retest` (the missing ERV taps on MUAS-1, the discharge priced at about twice the walked value, the unnamed in-line units), and on a render-based struck-row read that the agent ledger owns there.
 - Still open after `t3/pea-muas-retest` merges, owned by the host and agent ledgers: the gateway sign-in race, the LiteParse binaries in the installed build, and the stale `session-slot` claim with no recovery verb.
 - The remote MCP gateway stays on its branch until its send tools have a door that returns "held".
-- The driver observed at dfaed397 that per-terminal rows label 0.03 as "firm" while the firm read is refused. FS's provenance target is the falsifier; the fix belongs to slice 6b.
-- The comment at `ductsFirmSchema` in `ts/packages/agent-contracts/src/ducts-sheet.ts` names `<user content>/Firm/ducts.json`; the code reads the shared root. Correct it in the commit that renames `Firm/` to `Settings/`.
+- Slice 6b, FS on real lanes: the falsifier `ts/apps/web/src/settings/tiers.test.ts` covers FS steps 1, 2, 6 and 7 on temp homes with no Revit. The `settings.tiers.read` and `settings.tiers.write` ops, the save-at control in a browser, and steps 3 to 5 are UNPROVEN[two hosts; dev session for step 3].
+- Slice 6b, freshness: another machine's write to a project or user tier is not watched (`ponytail:` in `ts/apps/host/src/builtin-inputs.ts`). A sheet shows it after a local write, a firm-folder change, or a host restart. FS step 6 ("A sees 850 on refresh") needs a watch or a read that is not cached.
+- Slice 6b, user tier: no binding declares `user`. Appearance (theme) still lives in browser storage through `ts/apps/web/src/settings/options.tsx`, with the option catalogue beside it. Move it to a `user` setting and delete the catalogue, or rule that browser state is not a setting.
 - The takeoffs and rooms sheets do not yet show the `unreadable` lists that slice 2 puts on the wire (`TakeoffUnreadableBlob`, homes/c-carriers f8baf399). A TS writer surfaces them as "can't read, kept".
 - `ops-catalog.sha` hashes every C# source, and merges of C# edits from separate branches leave it stale. Regenerate it at each integration checkpoint before the purger's suite.
 - `settingsSchemaPath` lives in `ts/apps/host/src/settings.ts`, which boots host lane resolution at import, so the `$schema` census guard restates its regex instead of importing it. Move it into `host-contracts` and make the guard import it.
@@ -98,3 +102,11 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 - The Confirm request on a held outward send (`outward.confirm`, `ts/apps/host/src/pe-routes.ts`) stays open for the whole attach, and a LlamaCloud parse can run up to 10 min (`ts/packages/mcps/src/shared/llama-parse.ts:106`). A client timeout would report failure for a run that later succeeds. Owed: answer Confirm with the confirmed action's id at admission and let the notice follow its receipt.
 - A held outward send lives only in memory, and R5a (772c1b19) made it the hold's only notice row by dropping the held `send-outward` receipt row (`notice-feed.ts` `receiptRow`). So after a host restart, a held attach shows no row until Pea asks again. Nothing is lost, because the send never ran, but the person's "waits on you" is gone. This is accepted under kaitpw's "memory only" ruling (MAP, Q2). Owed if a restart-surviving hold is wanted: persist the held send with its continuation input.
 - Two attaches of one file to one member, at different Work revisions, are still two holds with identical Confirm labels (R5a). Owed: add the Work revision to the label detail when this shows up live.
+- Owner runbook on e7b565c4 (driver, drive/runbook-e7b565c4…/VERDICT.md), owed: `instances.cleanup` leaves an empty `pea-work/<id>/{work,baseline}` folder; its effects name `.rvt.part` paths that `removed` does not list, and none exist on disk; `pe-revit open --detach` on a standalone file prints `op.failed` yet opens the file.
+- Slice 9 (derived store, `homes/i-9-derived`), owed:
+  - The web doc-lab parse route (`ts/apps/web/src/routes/api/pdf-audit/parse.ts`) still uploads on every press and keeps the view in memory by job id (`grounded-doc/parse-cache.ts`). It writes no file, and its fate waits on the owner's Q14, so it was not moved onto the derived store.
+  - J2 itself (two hosts, the Chadds clone, wall time under a third of J1) is UNPROVEN: the slice is proved on two temp homes in package tests, not on a shared drive. A Drive conflict copy of a derived file fails the name check and is discarded with a notice; nobody has watched Drive do it.
+  - A kept vendor PDF never refreshes (MAP decision log, 2026-11-12). Owed if a revised sheet at the same URL shows up live: a refresh verb.
+  - Nothing prunes a derived store, and no census verb walks one. End-gate target 5 is checked by the tests' own walk and, per key, on every read.
+  - `state\Parses\llamaparse` on the owner's machine holds hosted parses nothing reads now. The owner deletes it by hand.
+- Runbook row 3 proved cleanup with no second Revit beside Pea's, because the one-Revit cap stopped the driver's session first. "Cleanup leaves a person's live Revit untouched" is UNPROVEN. kaitpw 2026-11-12: "please prove this. you have a budget of three revits"; the driver runs it as runbook row 3b.

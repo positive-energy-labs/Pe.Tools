@@ -1,3 +1,4 @@
+import { noticeRows } from "../src/notice-feed.ts";
 import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
 import { Layer, Effect } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -1551,3 +1552,30 @@ test("guard 2: Pea's discard cleanup is held over unsaved changes on its open pr
   f.census.family = true;
   expect((await f.admit("instances.cleanup", input, undefined, "agent")).state).toBe("succeeded");
 });
+
+// Mutant H9-feed: classify every incomplete receipt as waiting, ignoring the refused step.
+test("a quarantined launch refused through /actions is refused in the feed, with its local-copy evidence kept", async () => {
+  const f = await setup(() => ({
+    result: null, exitCode: 2,
+    diagnostics: [{ code: "session.quarantine-unavailable", detail: "Another session holds the quarantine lease.", fix: null }],
+  }));
+  const path = await f.file("refused.rvt", "Worksharing: Not enabled");
+  const server = await serveRoutes(
+    callRouteOver(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(Layer.provide(testHostInputs)),
+    sdkOnlyBridge,
+  );
+  cleanup.push(() => server.close());
+  const headers = { "content-type": "application/json", ...contextHeaders() };
+  const posted = await fetch(`${server.base}/actions`, { method: "POST", headers,
+    body: JSON.stringify({ id: "quarantine-refused", key: "instances.open", target: { kind: "host" },
+      input: { source: path, into: newRevit({ owner: "pea", addins: "off" }) } }),
+  });
+  expect(posted.status, await posted.clone().text()).toBeLessThan(300);
+  const [receipt] = await (await fetch(`${server.base}/actions?id=quarantine-refused&wait=10000`, { headers })).json();
+  expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "incomplete" });
+  expect(receipt.steps.at(-1)).toMatchObject({ state: "failed", notDispatched: true });
+  const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: receipt }] }, Date.now());
+  expect(rows).toMatchObject([{ group: "failed", verb: "refused", says: expect.stringContaining("quarantine") }]);
+  expect(rows.some(row => row.group === "waits")).toBe(false);
+});
+

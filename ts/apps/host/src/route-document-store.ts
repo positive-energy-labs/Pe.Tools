@@ -3,9 +3,9 @@ import { mkdirSync, rmSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store";
+import { discardStored, noteStored, readStored, sha256Hex, writeAtomic, writeHomeFile } from "@pe/host-contracts/store";
 import type { RouteDocumentStore } from "@pe/runtime";
-import { storedNoticesPath } from "./notice-feed.ts";
+import { storedBlobsPath, storedNoticesPath } from "./notice-feed.ts";
 
 const recordSchema = z.object({
   format: z.literal("route-state-record-v2"),
@@ -37,7 +37,7 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
       );
       return read.kind === "ok" ? read.value.value : null;
     },
-    setState: async ({ targetKey, route, value, reason }) => {
+    setState: async ({ targetKey, route, value, reason, preservePrior }) => {
       const path = join(dir, filename(targetKey, route));
       if (value == null) {
         // With a reason, the runtime refused the staged values inside a record that decoded here:
@@ -46,10 +46,21 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
         else rmSync(path, { force: true });
         return;
       }
-      writeAtomic(
-        path,
-        JSON.stringify({ format: "route-state-record-v2", targetKey, route, value }),
-      );
+      const bytes = JSON.stringify({ format: "route-state-record-v2", targetKey, route, value });
+      let priorSha256: string | undefined;
+      let priorBlob: string | null = null;
+      if (preservePrior) {
+        priorSha256 = sha256Hex(await readFile(path));
+        // Work is machine state, but an upgrade needs the same prior-byte safety net as a home write.
+        const saved = writeHomeFile(path, bytes, { expectSha256: priorSha256, blobRoot: storedBlobsPath() });
+        if (!saved.ok) throw Error("Work changed before its schema upgrade");
+        priorBlob = saved.priorBlob;
+      } else writeAtomic(path, bytes);
+      if (reason) noteStored(storedNoticesPath(), {
+        class: "discard", place: `Work for ${route} (${targetKey})`, path,
+        sha256: priorSha256 ?? sha256Hex(bytes),
+        reason: priorBlob ? `Prior bytes: ${priorBlob}. ${reason}` : reason,
+      });
     },
     // The listing is read-only, and ADR 0039's discard does not apply here. Ruling: commit 556652bc
     // (2026-11-07) moved deletion of a misplaced record to the addressed read and left discovery

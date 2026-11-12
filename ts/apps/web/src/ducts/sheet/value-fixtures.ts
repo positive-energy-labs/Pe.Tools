@@ -60,6 +60,8 @@ const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly strin
     sheetView: sheetState(open),
     ductsWork,
     ductsRevision: 0,
+    // The fixture lane reads no home: every setting cell says its home was not read.
+    settings: {},
     fansWork,
     design: ductsDesign(ductsWork, fansWork),
   });

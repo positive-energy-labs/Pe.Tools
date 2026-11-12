@@ -1,9 +1,11 @@
 // U4 wires the real fans Work for callers without one.
-import { neutralFansWork } from "@pe/agent-contracts";
+import { serveSetting, type SettingTierRead, neutralFansWork } from "@pe/agent-contracts";
+import { z } from "zod";
 import { flowWriteSlot } from "./flow-write-slot.ts";
 /** The losses view's model, pure: what Revit holds now (the applied tables), what the person edit on top, the two solves, and the `ducts.apply` request built from the edit cells. */
 import {
   stagedDucts,
+  ductParameterSlots,
   ductsDesign,
   type FansDocument,
   type DuctsRouteDocument,
@@ -159,7 +161,7 @@ export interface Priced extends Survey {
   now: LossResult;
   /** The solve with every edit cell landed. */
   next: LossResult;
-  edit: ReturnType<typeof stagedDucts>;
+  edit: ReturnType<typeof stagedDucts> & { designFriction: number; parameters: ReturnType<typeof ductParameterSlots> };
 }
 
 const completed = new WeakMap<
@@ -232,20 +234,21 @@ export function price(
   ducts: DuctsRouteDocument | null,
   fans: FansDocument,
   catalogs: Catalogs = EMPTY_CATALOGS,
+  settings?: readonly SettingTierRead[],
 ): Priced {
+  const rate = serveSetting(settings, ["project", "firm"], ["designFriction"], z.number().positive(), DEFAULT_DESIGN_FRICTION_RATE).value!;
   const hit = completed.get(raw);
-  if (hit?.grids === grids && hit.catalogs === catalogs && hit.doc === ducts && hit.fans === fans)
+  if (hit?.grids === grids && hit.catalogs === catalogs && hit.doc === ducts && hit.fans === fans && hit.priced.edit.designFriction === rate && JSON.stringify(hit.priced.edit.parameters) === JSON.stringify(ductParameterSlots(settings)))
     return hit.priced;
   const doc: DuctsDesign = ductsDesign(ducts, fans);
   const surveyed = survey(raw, doc);
   const { snapshot } = surveyed;
   const units = appliedUnits(raw);
   const entry = solvedFor(snapshot, grids, catalogs, surveyed.inferred, units);
-  if (entry.last?.doc === ducts && entry.last.fans === fans) return entry.last.priced;
+  if (entry.last?.doc === ducts && entry.last.fans === fans && entry.last.priced.edit.designFriction === rate && JSON.stringify(entry.last.priced.edit.parameters) === JSON.stringify(ductParameterSlots(settings))) return entry.last.priced;
   // The model's stored rulings under Work's pending ones (`rulings.ts`), as the survey read them.
   const stored = withStoredRulings(doc, raw.store, raw);
-  const edit = stagedDucts(stored, stored ?? fans);
-  const rate = edit.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
+  const edit = { ...stagedDucts(stored, stored ?? fans), designFriction: rate, parameters: ductParameterSlots(settings) };
   if (entry.rate !== rate) {
     entry.now = computeLosses(
       snapshot,

@@ -162,9 +162,6 @@
             "workingPhase"
           ],
           [
-            "designFriction"
-          ],
-          [
             "systemColours"
           ]
         ],
@@ -237,9 +234,6 @@
           ],
           [
             "workingPhase"
-          ],
-          [
-            "designFriction"
           ],
           [
             "systemColours"
@@ -319,9 +313,6 @@
           ],
           [
             "workingPhase"
-          ],
-          [
-            "designFriction"
           ],
           [
             "systemColours"
@@ -430,7 +421,6 @@
         "claims": {},
         "labelParameter": {},
         "workingPhase": {},
-        "designFriction": {},
         "systemColours": {}
       }
     },

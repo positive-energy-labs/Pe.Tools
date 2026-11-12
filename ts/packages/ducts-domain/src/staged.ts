@@ -29,7 +29,6 @@ export const WRITTEN = [
   "flows",
   "esp",
   "equipmentFlows",
-  "parameters",
 ] as const;
 
 export const stagedCells = (doc: DuctsDesign | null) =>
@@ -78,7 +77,6 @@ export function appliedCellPaths(
   for (const write of succeeded) {
     if (write.kind === "verdict" && write.key) paths.push(["assumptions", write.key]);
     if (write.kind === "role" && write.id != null) paths.push(...cells.filter(([s, key]) => s === "roles" && subjects[key] === String(write.id)));
-    if (write.kind === "slot" && write.key) paths.push(["parameters", write.key]);
   }
   return paths;
 }

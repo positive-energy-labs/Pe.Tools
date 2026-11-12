@@ -2,6 +2,7 @@ import { expect, it } from "vite-plus/test";
 
 import {
   ductsCriteriaLayerSchema,
+  ductsBaseSchema,
   ductsFirmSchema,
   ductsSheetEditsSchema,
   fittingPricingSchema,
@@ -48,7 +49,7 @@ it("a proposed fitting is identified by its key and pair, with no element id (fi
   );
 });
 
-it("lets the project layer hold one side of a sided criterion; the firm file states both", () => {
+it("lets a layer or a tier file hold one side of a sided criterion; the engine base states both", () => {
   expect(ductsCriteriaLayerSchema.parse({ velocityLimitFpm: { supply: 850 } })).toEqual({
     velocityLimitFpm: { supply: 850 },
   });
@@ -68,5 +69,7 @@ it("lets the project layer hold one side of a sided criterion; the firm file sta
       allowanceInWg: { supply: 0, return: 0 },
     },
   };
-  expect(ductsFirmSchema.safeParse(firm).success).toBe(false);
+  // Slice 6b: a home tier's file states any subset (the write door saves one value); the base the engine runs on states both sides.
+  expect(ductsFirmSchema.safeParse(firm).success).toBe(true);
+  expect(ductsBaseSchema.safeParse(firm).success).toBe(false);
 });

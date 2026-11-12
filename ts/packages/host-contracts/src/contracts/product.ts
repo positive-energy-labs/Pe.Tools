@@ -56,6 +56,8 @@ export const productPathNames = {
   /** The `Runs` segment for per-module task output, reserved like `_no-pod`. */
   moduleOutputDirectoryName: "_modules",
   blobsDirectoryName: "Blobs",
+  /** Write-once derived files, in a project home and under the machine's `state` folder (ADR 0037 rule 6). */
+  derivedDirectoryName: "Derived",
   /** Under an override, machine-local state, logs and service files live in `<home>\.local-state`. */
   localStateDirectoryName: ".local-state",
 } as const;

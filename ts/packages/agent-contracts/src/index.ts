@@ -60,6 +60,7 @@ export * from "./pods-read.ts";
 export * from "./rooms-read.ts";
 export * from "./schedules-read.ts";
 export * from "./settings-read.ts";
+export * from "./tiered-setting.ts";
 
 export {isRecord} from "./route-state.ts";
 

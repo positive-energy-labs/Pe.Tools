@@ -18,6 +18,7 @@ import {
   openSync,
   readFileSync,
   readSync,
+  readdirSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -364,4 +365,49 @@ export function discardStored(
     return void refuse(path, null, policy, reason);
   }
   if (bytes) refuse(path, bytes, policy, reason);
+}
+
+/**
+ * The derived store (ADR 0037 rule 6): one flat folder of write-once files, `<key>.<sha256 of the
+ * file's own bytes>`. The key names what the file was derived from, so a second person finds it;
+ * the second half lets any reader prove the bytes are intact, not who wrote them.
+ * `dir` is a project home's `Derived` folder, or the machine's `state\Derived` when there is none.
+ */
+export type DerivedStore = { dir: string; notices: string; blobRoot: string };
+
+/** What a derived file is derived from: the source bytes and the producer's identity, options included. */
+export const derivedKey = (source: Uint8Array | string, producer: string) =>
+  sha256Hex(`${sha256Hex(source)}
+${producer}`);
+export const derivedName = (key: string, bytes: Uint8Array | string) => `${key}.${sha256Hex(bytes)}`;
+
+/** Refuse one derived file: discard class (ADR 0039), one notice, the bytes rest in the blob store. */
+export const discardDerived = (store: DerivedStore, path: string, reason: string) =>
+  discardStored(path, { class: "discard", place: "Derived file", notices: store.notices, blobRoot: store.blobRoot }, reason);
+
+/** The file a key names, proven by its own hash. One whose name does not match its bytes is discarded with one notice. */
+export function readDerived(store: DerivedStore, key: string): { path: string; bytes: Buffer } | null {
+  let names: string[];
+  try {
+    names = readdirSync(store.dir);
+  } catch {
+    return null;
+  }
+  for (const name of names.filter((name) => name.startsWith(`${key}.`)).sort()) {
+    const path = join(store.dir, name);
+    const bytes = readOrNull(path);
+    if (!bytes) continue;
+    if (name === derivedName(key, bytes)) return { path, bytes };
+    // ponytail: a file another process is still writing reads as torn and is discarded; its writer
+    // then finds nothing on the next read and derives again. Write by temp and link if that shows.
+    discardDerived(store, path, "Its name does not match its bytes.");
+  }
+  return null;
+}
+
+/** Write once through the write door: create-exclusive, so a second writer of the same name is a no-op. */
+export function writeDerived(store: DerivedStore, key: string, bytes: Uint8Array | string): string {
+  const path = join(store.dir, derivedName(key, bytes));
+  writeHomeFile(path, bytes, { expectSha256: null, blobRoot: store.blobRoot });
+  return path;
 }

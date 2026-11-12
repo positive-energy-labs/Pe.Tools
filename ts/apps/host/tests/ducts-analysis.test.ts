@@ -1,3 +1,4 @@
+import * as tieredSettings from "../src/tiered-settings.ts";
 import { testDuctFiles, settle } from "./effect-test.ts";
 // U4 wires the real fans Work for callers without one.
 import { neutralFansWork, fansRouteState } from "@pe/agent-contracts";
@@ -23,12 +24,13 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync, gunzipSync } from "node:zlib";
-import { afterEach, expect, test } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createDuctsAnalysis, type DuctsAnalysisSources } from "../src/ducts-analysis.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 
 const roots: string[] = [];
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
@@ -194,15 +196,12 @@ const works =
   (fans: () => unknown, revision = 1, ducts: () => unknown = () => ({})) =>
   async (key: WorkKey) => ({ doc: key.route === "fans" ? fans() : ducts(), revision });
 
-test("headless acquisition uses project Work slots", async () => {
+test("headless acquisition uses project setting slots", async () => {
   const f = fixture();
-  f.sources.readWork = works(() =>
-    fansDocumentSchema.parse({
-      parameters: Object.fromEntries(
-        DUCT_PARAMETER_KEYS.map((key) => [key, { edit: { value: `Project ${key}` } }]),
-      ),
-    }),
-  );
+  vi.spyOn(tieredSettings, "readSettingTiers").mockReturnValue([{
+    tier: "project", home: "project", name: "Project", path: "project/Settings/ducts.json", sha256: null,
+    json: { parameters: Object.fromEntries(DUCT_PARAMETER_KEYS.map(key => [key, `Project ${key}`])) },
+  }]);
   const call = f.sources.call;
   let requested: unknown;
   f.sources.call = async (key, request, target) => {
@@ -817,7 +816,6 @@ function candidateWork() {
       },
     },
     componentDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000003": { edit: { value: { inWg: 0.02, source: "Stated component" } } } },
-    parameters: { terminalDrop: { edit: { value: "TerminalDrop" } } },
   });
 }
 const candidateRead = (id: string, selector: unknown = { kind: "document" }) =>
@@ -1116,8 +1114,8 @@ test("apply-request refuses a terminal without an observed slot before dispatch"
   expect(() => applyRequest(f.snapshot, price(f.snapshot, {}, ductsDesign(null, doc), (ductsDesign(null, doc)) ?? neutralFansWork), "fixed", []))
     .toThrow("Element 2 has no observed airflow parameter");
   f.snapshot.nodes[1]!.flowParameter = "revit:Flow";
-  doc.parameters.terminalFlow = { edit: { value: "PE_M_Grd_AirFlow" } };
-  expect(() => applyRequest(f.snapshot, price(f.snapshot, {}, ductsDesign(null, doc), (ductsDesign(null, doc)) ?? neutralFansWork), "fixed", []))
+  const settings = [{ tier: "project" as const, home: "project", name: "Project", path: "project/Settings/ducts.json", sha256: null, json: { parameters: { terminalFlow: "PE_M_Grd_AirFlow" } } }];
+  expect(() => applyRequest(f.snapshot, price(f.snapshot, {}, ductsDesign(null, doc), (ductsDesign(null, doc)) ?? neutralFansWork, {}, settings), "fixed", []))
     .toThrow("PE_M_Grd_AirFlow");
 });
 

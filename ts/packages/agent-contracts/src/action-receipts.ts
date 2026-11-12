@@ -206,7 +206,9 @@ export function invocationOutcome(row: ActionReceipt | ActionStatus): Invocation
         ? row.refusal.kind === "stale" || row.refusal.kind === "stale_revision"
           ? "stale"
           : "refused"
-        : row.state;
+        : row.state === "failed" && row.notDispatched
+          ? "refused"
+          : row.state;
   return {
     id: row.id,
     state,

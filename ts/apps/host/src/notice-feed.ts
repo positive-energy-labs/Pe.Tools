@@ -10,7 +10,7 @@
  * Plain functions, not Effect: this sits beside the thread store's Readings in the
  * `observeHostResource` island (ADR 0029 phase 5 converts them together).
  */
-import { readdirSync } from "node:fs";
+import { opendirSync } from "node:fs";
 import { join } from "node:path";
 import {
   attention,
@@ -45,6 +45,20 @@ export const storedBlobsPath = () => stateTree(hostOwnership.rootPath).blobs;
 /** The Place a no-firm-home notice is filed under; its row is a finding, not a file that did not decode. */
 const FIRM_HOME_PLACE = "Firm home";
 const EARLIER_WORK_PLACE = "Work saved by an earlier version";
+/** A setting saved at a home tier (homes MAP slice 6b): the row says what happened; nothing was refused. */
+export const SETTING_WRITE_PLACE = "Setting saved";
+
+function holdsFile(path: string): boolean {
+  const directory = opendirSync(path);
+  try {
+    for (let entry = directory.readSync(); entry; entry = directory.readSync()) {
+      if (entry.isFile() || (entry.isDirectory() && holdsFile(join(path, entry.name)))) return true;
+    }
+    return false;
+  } finally {
+    directory.closeSync();
+  }
+}
 
 /** The start census posts findings to the same durable feed as stored-file refusals. */
 export function noteStartupHomes(
@@ -56,8 +70,7 @@ export function noteStartupHomes(
   const path = join(user, "Work");
   // Homes never hold Work; old Work is noticed, not migrated.
   try {
-    if (!readdirSync(path, { withFileTypes: true, recursive: true }).some((entry) => entry.isFile()))
-      return;
+    if (!holdsFile(path)) return;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT")
       console.warn(`Could not check earlier Work at '${path}': ${String(error)}`);
@@ -213,6 +226,20 @@ function storedRow(notice: StoredNotice, now: number): NoticeDraft | null {
       refusal: "This version no longer reads this folder",
       detail: notice.path,
     };
+  if (notice.place === SETTING_WRITE_PLACE)
+    return {
+      key: `stored:${notice.path}:${notice.sha256}`,
+      group: "unread",
+      revision: 0,
+      verb: "saved",
+      what: notice.place,
+      where: notice.path,
+      // The file, writer, action receipt id and prior bytes hash are in the reason.
+      says: notice.reason,
+      at: notice.at,
+      url: routeAddress("settings").link(),
+      detail: notice.path,
+    };
   if (notice.place === FIRM_HOME_PLACE)
     return {
       key: `stored:${notice.path}:${notice.sha256}`,
@@ -283,7 +310,11 @@ function receiptRow(
           url: null,
           refusal: "Nothing to open: do this in Revit or the web app yourself",
         };
-  const group = RECEIPT_GROUP[receipt.state];
+  // A known refusal is not a human hold, even when earlier local effects leave cleanup to do.
+  const last = receipt.steps?.at(-1);
+  const refused = receipt.state === "failed" && receipt.notDispatched === true ||
+    receipt.state === "incomplete" && last?.state === "failed" && last.notDispatched === true;
+  const group = refused ? "failed" : RECEIPT_GROUP[receipt.state];
   if (!group) return null;
   const failure =
     "error" in receipt
@@ -297,10 +328,10 @@ function receiptRow(
     key: `action:${receipt.id}`,
     group,
     revision,
-    verb: receipt.state,
+    verb: refused ? "refused" : receipt.state,
     what: receipt.key,
     where: callerWord(receipt.caller),
-    says: failure.summary,
+    says: refused && "error" in receipt ? receipt.error : failure.summary,
     at: receipt.startedAt,
     // The failure's door is the row's address; a receipt itself has no page yet.
     url: failure.door

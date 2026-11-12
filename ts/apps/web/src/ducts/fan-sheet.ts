@@ -7,7 +7,7 @@ import {
   ductsSheetOverviewSchema,
   ductsSheetRequestSchema,
   ductsSheetResponseSchema,
-  stagedDucts,
+  ductParameterSlots,
   type DuctsInputs,
   type DuctsSheetOverview,
   type DuctsSheetRequest,
@@ -160,12 +160,12 @@ const sheetModel = read("fans.calculation", {
     const saved = await ctx.read(designLayers, request.target);
     const design = ductsDesign(saved.ducts, saved.fans),
       work = workLayer(design);
-    const criteria = resolveCriteria(work, null, firmLayer(saved.firm));
+    const criteria = resolveCriteria(work, null, firmLayer(saved.firm, saved.settings));
     const tolerances = {
       autoJoinGapIn: criteria.autoJoinGapIn.value,
       candidateBoxIn: criteria.healBoxIn.value,
     };
-    const slots = stagedDucts(design, design).parameters;
+    const slots = ductParameterSlots(saved.settings);
     const acquisition = {
       ...(Object.keys(slots).length ? { slots } : {}),
       selector:
@@ -196,7 +196,7 @@ const sheetModel = read("fans.calculation", {
       work,
       versions: { Work: saved.revision },
       store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
-      firm: firmLayer(saved.firm),
+      firm: firmLayer(saved.firm, saved.settings),
       catalogs: catalog.tables,
     });
     const first = response.body;
@@ -291,7 +291,7 @@ const sheetModel = read("fans.calculation", {
       firm:
         "refused" in saved.firm
           ? saved.firm
-          : { version: saved.firm.firm.version, path: saved.firm.path, present: saved.firm.present },
+          : { version: firmLayer(saved.firm, saved.settings).version, path: saved.firm.path, present: saved.firm.present },
       titles: titlesOf(grids),
       beyond,
     };
@@ -455,7 +455,8 @@ export const fanWorksheet = read("fans.worksheet", {
       limits: {
         supplyFpm: limits.supply,
         returnFpm: limits.return,
-        source: `${limit.supply.source}${limit.supply.ref ? `:${limit.supply.ref}` : ""}`,
+        supplySource: `${limit.supply.source}${limit.supply.ref ? `:${limit.supply.ref}` : ""}`,
+        returnSource: `${limit.return.source}${limit.return.ref ? `:${limit.return.ref}` : ""}`,
       },
       ...result,
       legs: Object.fromEntries([...named].map((id) => [id, entry.value.legs[id]])),
@@ -504,7 +505,7 @@ export const fanRoster = read("fans.roster", {
   async run(ctx, { target }) {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
-    const slots = stagedDucts(design, design).parameters;
+    const slots = ductParameterSlots(saved.settings);
     const response = await ctx.native("ducts.snapshot.roster", {
       role: "acquire",
       target: { kind: "document", ref: target },
@@ -517,7 +518,7 @@ export const fanRoster = read("fans.roster", {
       work: workLayer(design),
       versions: { Work: saved.revision },
       store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
-      firm: firmLayer(saved.firm),
+      firm: firmLayer(saved.firm, saved.settings),
     });
     const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),
       label = elementLabeler(snapshot);

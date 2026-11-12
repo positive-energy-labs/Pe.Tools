@@ -5,6 +5,7 @@ import {
   fansSheetData,
   openFanSheetSchema,
   stagedDucts,
+  ductParameterSlots,
   subjectCode,
   subjectOf,
 
@@ -124,7 +125,7 @@ export const fansSheet = read("fans.sheet", {
           }
         : row;
     });
-    const { ducts: ductsDoc, fans: fansDoc, revision: ductsRevision } = await ctx.read(designLayers, args.target);
+    const { ducts: ductsDoc, fans: fansDoc, revision: ductsRevision, settings } = await ctx.read(designLayers, args.target);
     const design = ductsDesign(ductsDoc, fansDoc),
       staged = stagedDucts(design, design);
     const ids = [
@@ -147,7 +148,7 @@ export const fansSheet = read("fans.sheet", {
       ? await ctx.native("ducts.snapshot.walk", {
           role: "acquire",
           request: {
-            slots: staged.parameters,
+            slots: ductParameterSlots(settings),
             labelParameter: staged.labelParameter ?? undefined,
             selector: { kind: "ids", ids },
           },
@@ -162,6 +163,7 @@ export const fansSheet = read("fans.sheet", {
       progress: null,
       sheetView: fansSheetData.shape.sheetView.parse(sheetState(data.opened[0] ?? null)),
       design: fansSheetData.shape.design.parse(design),
+      settings: { ducts: settings },
       fans: { ...data.fans, rows: data.rows },
       ductsWork: ductsDoc,
       ductsRevision,

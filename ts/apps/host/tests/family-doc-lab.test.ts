@@ -7,7 +7,8 @@
  */
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createServer } from "node:http";
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,12 +45,24 @@ afterEach(async () => {
   for (const close of closes.splice(0).reverse()) await close();
 });
 
-async function lab(beforeParse?: () => Promise<void>, omitParser = false) {
+async function lab(beforeParse?: () => Promise<void>) {
   vi.stubEnv("LLAMA_CLOUD_API_KEY", "fixture-key");
   const pods = await mkdtemp(join(tmpdir(), "pe-doc-lab-"));
   closes.push(() => rm(pods, { recursive: true, force: true }));
   await mkdir(join(pods, "lab"), { recursive: true });
   await writeFile(join(pods, "lab", "pod.json"), JSON.stringify({ id: "lab" }));
+  // The Pods folder is its own project home here, so each fixture has its own derived store.
+  await writeFile(join(pods, "pe-home.json"), JSON.stringify({ tier: "project" }));
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aSacAAAAASUVORK5CYII=", "base64");
+  let renderFetches = 0;
+  const renders = createServer((_request, response) => {
+    renderFetches++;
+    response.writeHead(200, { "content-type": "image/png" });
+    response.end(png);
+  });
+  await new Promise<void>((resolve) => renders.listen(0, "127.0.0.1", resolve));
+  closes.push(() => new Promise((resolve) => { renders.closeAllConnections(); renders.close(resolve); }));
+  const screenshotUrl = `http://127.0.0.1:${(renders.address() as { port: number }).port}/page.png`;
   const parsed: { name: string; bytes: number }[] = [];
   const f = await nativeFixture("real", undefined, null, {
     state: {
@@ -68,14 +81,14 @@ async function lab(beforeParse?: () => Promise<void>, omitParser = false) {
     },
     deps: {
       podsRoot: pods,
-      parsePdf: omitParser ? undefined : async ({ sender, file, apiKey }) => {
+      parsePdf: async ({ sender, file, apiKey }) => {
         expect(sender).toBe("person");
         expect(apiKey).toBe("fixture-key");
         await beforeParse?.();
         const bytes = Buffer.from(await file.arrayBuffer());
         if (bytes.subarray(0, 5).toString() !== "%PDF-") throw Error("The parser was not handed a PDF");
         parsed.push({ name: file.name, bytes: bytes.length });
-        return { jobId: "acme", fileName: file.name, pages: [], blocks: [block], images: [] };
+        return { jobId: "acme", fileName: file.name, pages: [{ page: 1, width: 1, height: 1, screenshotUrl, markdown: "sheet" }], blocks: [block], images: [] };
       },
     },
     native: (key) =>
@@ -148,7 +161,7 @@ async function lab(beforeParse?: () => Promise<void>, omitParser = false) {
     const runs = rows.filter(row => row.id.startsWith(`${heldRow.id}:confirmed:`)).map(row => row.id).sort();
     return f.journal.wait(runs.at(-1)!);
   };
-  return { f, pods, pea, parsed, handle, doc, act, stage, save, confirm, confirmed, outward };
+  return { f, pods, pea, parsed, png, renderFetches: () => renderFetches, handle, doc, act, stage, save, confirm, confirmed, outward };
 }
 
 test("blocker 3: a capture refused for its keys tells Pea where the input goes", async () => {
@@ -207,7 +220,7 @@ test("blocker 2: the page's own save is a member attach accepts", async () => {
 }, 60_000);
 
 test("blocker 1: attach takes a path and a URL as well as an upload", async () => {
-  const { pods, parsed, act, handle, doc } = await lab();
+  const { pods, parsed, png, renderFetches, act, handle, doc } = await lab();
   // A member where attach has always looked, so this test is red for the source alone.
   const member = { pod: "lab", path: "settings/family/box.json" };
   await mkdir(join(pods, "lab", "settings/family"), { recursive: true });
@@ -219,7 +232,9 @@ test("blocker 1: attach takes a path and a URL as well as an upload", async () =
   });
   expect(byPath.state, JSON.stringify(byPath).slice(0, 2000)).toBe("succeeded");
   expect(parsed).toEqual([{ name: "acme-fcu400-submittal.pdf", bytes: pdfSize }]);
+  let fetched = 0;
   const server = createServer((_request, response) => {
+    fetched++;
     response.writeHead(200, { "content-type": "application/pdf" });
     response.end(readFileSync(pdf));
   });
@@ -232,7 +247,18 @@ test("blocker 1: attach takes a path and a URL as well as an upload", async () =
     work: await handle(),
   });
   expect(byUrl.state, JSON.stringify(byUrl).slice(0, 2000)).toBe("succeeded");
-  expect(parsed[1]).toEqual({ name: "acme-by-url.pdf", bytes: pdfSize });
+  // Homes slice 9: the same bytes were parsed by the path attach, so the parser is not called
+  // again, and a second attach of the URL fetches no vendor file again (JOURNEYS target 13).
+  // Mutant: in family-spec.ts replace `keptFamilyParse(store, pdf) ??` with nothing.
+  expect(parsed).toHaveLength(1);
+  const again = await act("family.attach-spec", host, { member, source: { url }, work: await handle() });
+  expect(again.state, JSON.stringify(again).slice(0, 2000)).toBe("succeeded");
+  expect([parsed.length, fetched]).toEqual([1, 1]);
+  const derived = readdirSync(join(pods, "Derived"));
+  expect(derived).toHaveLength(3);
+  expect(renderFetches()).toBe(1);
+  for (const name of derived)
+    expect(name.split(".")[1]).toBe(createHash("sha256").update(readFileSync(join(pods, "Derived", name))).digest("hex"));
   expect((await doc()).spec).toMatchObject({ member, doc: { blocks: [block] } });
   // The original PDF is a portable member asset beside the family.
   const sidecar = JSON.parse(
@@ -240,6 +266,15 @@ test("blocker 1: attach takes a path and a URL as well as an upload", async () =
   ) as { path: string };
   const folder = join(pods, "lab", sidecar.path.replace(/\.json$/, ""));
   expect((await readFile(join(folder, "source.pdf"))).length).toBe(pdfSize);
+  expect(await readFile(join(folder, "page-1.png"))).toEqual(png);
+  // M12: a view without its render must be reparsed, never accepted as a complete hit.
+  const render = derived.find((name) => readFileSync(join(pods, "Derived", name)).equals(png))!;
+  await rm(join(pods, "Derived", render));
+  const recovered = await act("family.attach-spec", host, { member, source: { url }, work: await handle() });
+  expect(recovered.state, JSON.stringify(recovered)).toBe("succeeded");
+  expect(parsed).toHaveLength(2);
+  expect(renderFetches()).toBe(2);
+  expect(await readFile(join(folder, "page-1.png"))).toEqual(png);
 }, 60_000);
 
 test("an attach refusal names what to do, without the repo's source", async () => {
@@ -469,8 +504,8 @@ test("narrow 6: the spec asset door serves only what normalizes under the family
   expect((await ask("settings/family/..\\..\\pod.json")).status).toBe(404);
 }, 60_000);
 
-test("an attach without an injected parser fails before any network request", async () => {
-  const { save, act, handle } = await lab(undefined, true);
+test("an injected parser failure fails the attach without any network request", async () => {
+  const { save, act, handle } = await lab(async () => { throw Error("Parser failed"); });
   const { member } = (await save("human")).result;
   const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(Error("Unexpected network request"));
   try {
@@ -480,7 +515,7 @@ test("an attach without an injected parser fails before any network request", as
       work: await handle(),
     });
     expect(attached.state).toBe("failed");
-    expect(attached.error).toContain("must provide parsePdf");
+    expect(attached.error).toContain("Parser failed");
     expect(network).not.toHaveBeenCalled();
   } finally {
     network.mockRestore();

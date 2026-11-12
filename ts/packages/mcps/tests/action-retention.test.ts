@@ -27,7 +27,7 @@ const receipt = (
         : {}),
   });
 const base = () => `http://${crypto.randomUUID()}.test`;
-const client = () => import("../src/shared/takeoff-action-client.ts");
+const client = () => import("@pe/mcps/actions");
 afterEach(() => vi.unstubAllGlobals());
 
 function host(

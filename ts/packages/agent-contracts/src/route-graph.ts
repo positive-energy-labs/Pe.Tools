@@ -25,7 +25,6 @@ export type FieldRole =
   | "query"
   | "draft"
   | "device"
-  | "setting"
   | "transient";
 
 export interface FieldPolicy {
@@ -59,13 +58,11 @@ export const fieldRoleDefaults: Readonly<Record<FieldRole, Readonly<FieldPolicy>
   query: { url: "replace", share: true, agent: "set" },
   draft: { url: "replace", share: false, agent: "set" },
   device: { url: false, share: false, agent: "read" },
-  setting: { url: false, share: false, agent: "set" },
   transient: { url: false, share: false, agent: false },
 };
 
 export function graphFieldPolicy(field: Partial<FieldPolicy> & { role: FieldRole }): FieldPolicy {
   const defaults = fieldRoleDefaults[field.role];
-  if (field.role === "setting") return defaults;
   return {
     url: field.url ?? defaults.url,
     share: field.share ?? defaults.share,

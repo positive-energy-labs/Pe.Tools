@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { DUCT_PARAMETER_KEYS, DUCT_UNIT_ROLES, type fansSheetData, type Immutable, type Resolved } from "@pe/agent-contracts";
+import { DUCT_UNIT_ROLES, type fansSheetData, type Immutable, type Resolved } from "@pe/agent-contracts";
 import { local, parameter, store, type CellLayer, type SheetChoice, type SheetSlot } from "@pe/agent-contracts/slots";
-import { airflowOptions } from "@pe/ducts-domain/airflow";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
 import { sheetSystems } from "@pe/ducts-domain/sheet/scoped-snapshot";
@@ -9,7 +8,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { elementSubject, workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { ductsLink } from "../ducts/identity.ts";
-import { ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "../ducts/design-sheet.ts";
+import { ductsSettings, ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "../ducts/design-sheet.ts";
 
 /*
  * /fans' sheet (ruling 2026-11-10: /fans keeps Fans Work only). Every binding stages Fans Work; the
@@ -40,38 +39,22 @@ const nameOf = (read: Read, row: string, word: string) => {
 const rowsOf = (read: Read, ids: readonly string[]) =>
   ids.flatMap((id) => { const s = subjectOf(snapshotOf(read), id); return s ? [s] : []; });
 
-/** A resolved input as a model layer under Work, in the cell's shape (`{ inWg }`, `{ cfm }`). */
-const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { "model-store": "model-store", firm: "firm", default: "default" };
-const layer = (resolved: Immutable<Resolved<unknown>> | undefined, wrap: (v: unknown) => unknown): CellLayer | null =>
-  resolved && resolved.value != null
-    ? { value: wrap(resolved.value), source: SOURCES[resolved.source] ?? "model", ...(resolved.units ? { unit: resolved.units } : {}) }
-    : null;
+/**
+ * A resolved input as a model layer under Work, in the cell's shape (`{ inWg }`, `{ cfm }`). The
+ * source is the tier the host served: `project` or `firm` only when that home's file states the
+ * value; a criterion no home states is `default`, and says so when the firm home was not found.
+ */
+const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { "model-store": "model-store", project: "project", firm: "firm", default: "default" };
+const layer = (resolved: Immutable<Resolved<unknown>> | undefined, wrap: (v: unknown) => unknown, read?: Read): CellLayer | null => {
+  if (!resolved || resolved.value == null) return null;
+  const source = SOURCES[resolved.source] ?? "model";
+  const firm = read?.sheetView.firm;
+  return { value: wrap(resolved.value), source, ...(resolved.units ? { unit: resolved.units } : {}),
+    ...(source === "default" && firm && "refused" in firm ? { ref: ENGINE_DEFAULT_NO_SHARED_ROOT } : {}) };
+};
 
 const units = (read: Read) => Object.keys(inputsOf(read)?.units ?? {});
 const fanUnit = (read: Read) => read?.open?.overview.fan?.unitId ?? null;
-const SLOT_WORDS: Readonly<Record<(typeof DUCT_PARAMETER_KEYS)[number], string>> = {
-  fanStatic: "Unit ESP slot", fanFlow: "Fan flow slot", componentDrop: "Component drop slot",
-  terminalDrop: "Grille drop slot", fittingCoefficient: "Fitting coefficient slot", terminalFlow: "Airflow slot",
-};
-const slotChoices = (read: Read, row: string | undefined): readonly SheetChoice[] => {
-  const snapshot = snapshotOf(read);
-  if (row === "fanStatic") {
-    const offered = read?.espOptions;
-    const options = (offered?.items ?? []).flatMap((item) => item.metadata?.name ? [{
-      key: item.value, label: item.label, value: item.metadata.name,
-      description: [item.metadata.kind, item.metadata.storageType, item.metadata.dataTypeId].filter(Boolean).join(" · "),
-    }] : []);
-    // Absent or failed options never let a stale name stage: one disabled option says why.
-    const refusal = read?.espOptionsError ?? (!offered ? "Read unit parameter options"
-      : offered.result.kind !== "Success" ? offered.result.message : !options.length ? "No numeric parameters on these units" : null);
-    return refusal ? [{ key: "unread", label: refusal, disabled: refusal }] : options;
-  }
-  if (row === "terminalFlow")
-    return (read?.fans.slots ?? []).map((s) => ({ key: s.slot, label: s.slot, value: s.slot, description: `${s.covered} of ${s.total} terminals in the document carry it` }));
-  if (row === "fanFlow" && snapshot)
-    return airflowOptions(snapshot, null, "unit").options.map((o) => ({ key: o.slot, label: o.label, value: o.slot, description: `${o.have} of ${o.of} units on this fan's walk carry it` }));
-  return [];
-};
 /** The write scope offered from the open fan, with how many staged cells it writes; a standing scope on another fan stays listed. */
 const scopeChoices = (read: Read): readonly SheetChoice[] => {
   const snapshot = snapshotOf(read);
@@ -100,22 +83,16 @@ export const fansSheet = {
       // Slice 2b: without a shared root the firm layer is refused and the design runs on the engine seed.
       says: `Priced with the /ducts design, Work r${read.ductsRevision}${!firm ? "" : "refused" in firm
         ? `: ${ENGINE_DEFAULT_NO_SHARED_ROOT}. ${NO_SHARED_ROOT}`
+        : !firm.present ? " over defaults where no home states a value"
         : ` over firm ${firm.version} · ${firm.path.split(/[\\/]/).at(-1)}`}`,
       href: ductsLink(snapshot ? sheetSystems(snapshot) : [], search),
     };
   },
   bindings: {
+    // The design criteria this fan prices under, each with the home tier that served it; "save at" writes that home.
+    // Design friction stays /ducts design data (ducts ledger Q2a), so Fans omits it.
+    ...Object.fromEntries(Object.entries(ductsSettings).filter(([key]) => key !== "setting.ducts.designFriction")),
     writeIntent: local(z.unknown(), "route", { label: "Write scope", choices: scopeChoices }),
-    // Slot names are Pe-side configuration (which Revit parameter each slot reads and writes), never a Revit value: `local`.
-    parameters: local(z.string().min(1), "subject", {
-      rows: () => DUCT_PARAMETER_KEYS,
-      rowLabel: (_read, row) => SLOT_WORDS[row as keyof typeof SLOT_WORDS] ?? row,
-      model: (read: Read, row) => {
-        const slot = snapshotOf(read)?.slots[row as keyof Snapshot["slots"]];
-        return slot ? { value: slot } : null;
-      },
-      choices: slotChoices,
-    }),
     roles: store("_PE_DuctLosses", z.strictObject({ role: z.enum(DUCT_UNIT_ROLES) }), "subject", {
       rows: (read: Read) => rowsOf(read, (snapshotOf(read)?.nodes ?? []).filter((n) => n.kind === "equipment").map((n) => String(n.id))),
       rowLabel: (read, row) => nameOf(read, row, "Unit role"),
@@ -160,7 +137,7 @@ export const fansSheet = {
       field: "inWg", unit: "in-wg", min: 0, digits: 4,
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal drop"),
-      model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.drop, (v) => ({ inWg: v })),
+      model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.drop, (v) => ({ inWg: v }), read),
     }),
     componentDrops: parameter("componentDrop", inWg, undefined, {
       field: "inWg", unit: "in-wg", min: 0, digits: 4,

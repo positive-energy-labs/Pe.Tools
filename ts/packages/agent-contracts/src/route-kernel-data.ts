@@ -35,7 +35,6 @@ export const routeFieldJsonSchema = z.discriminatedUnion("role", [
     kinds: refs,
     allowAll: z.literal(true).optional(),
   }),
-  z.strictObject({ role: z.literal("setting"), schema: ref, codec: ref, initial }),
   z.strictObject({
     role: z.enum(["pose", "stage", "query", "draft", "device", "transient"]),
     ...scalar,

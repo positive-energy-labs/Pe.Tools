@@ -8,6 +8,7 @@
 import { z } from "zod";
 import { documentRefSchema, executionTargetSchema } from "@pe/agent-contracts/target";
 import { workKeySchema } from "@pe/agent-contracts/route-state";
+import { settingTiersSchema } from "@pe/agent-contracts/tiered-setting";
 import { nativeOutputAssets, nativeOutputSchema, type NativeReadOutput } from "@pe/agent-contracts/native-output-read";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { nativeRequestSchema } from "@pe/host-contracts/native-schemas";
@@ -153,6 +154,15 @@ export type FirmValue<T> =
   | z.output<typeof noSharedRoot>;
 /** The firm file layer (ADR 0026): the firm's per-owner `<owner>.json` as read, before `resolveFirm` decodes it. */
 export const firm = leaf("file:firm", firmOwner, firmFileSchema);
+/**
+ * Every home tier's `Settings/<owner>.json` for a target model, as read (ADR 0037 rule 8; homes MAP
+ * slice 6b). The project tier is the home the model's pointer names; `target: null` has none.
+ */
+export const settingsFile = leaf(
+  "file:settings",
+  z.strictObject({ owner: firmOwner, target: documentRefSchema.nullable() }),
+  settingTiersSchema,
+);
 /** Each value carries its source: the firm file when it decodes, else the engine default (seed). */
 export function resolveFirm<T>(file: FirmFile, schema: z.ZodType<T>, seed: T): FirmValue<T> {
   if ("refused" in file) return file;

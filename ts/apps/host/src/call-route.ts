@@ -55,7 +55,7 @@ import { CommandRejected, StepFailure } from "./command-executor.ts";
 import { bindCommandRuntime } from "./command-registry.ts";
 import { ActionJournalService } from "./receipt-services.ts";
 import type { AttemptHost } from "./action-journal.ts";
-import type { GatewayLocal } from "./gateway-actions.ts";
+import type { GatewayLocal, GatewayLocalContext } from "./gateway-actions.ts";
 import {
   admitCrossing,
   admitScript,
@@ -113,6 +113,7 @@ import {
   writeMember,
   type PodContext,
 } from "./settings.ts";
+import { readSettingTiers, writeSettingTier } from "./tiered-settings.ts";
 import { fileVersion } from "./takeoff-actions.ts";
 import { CaptureStore as TakeoffCaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
 import { pointerThread, type ThreadPointers } from "./thread-pointers.ts";
@@ -869,8 +870,8 @@ function callRoutes(
             observations(),
             { ...actionDeps, families: composition?.families, nativeRead: yield* HostNativeRead },
             composition?.local ??
-              ((key, input) =>
-                executeGatewayLocal(key, input, bridge, observations(), actionDeps.pictures!, actionDeps.launchShell)),
+              ((key, input, scope, context) =>
+                executeGatewayLocal(key, input, bridge, observations(), actionDeps.pictures!, actionDeps.launchShell, scope, context)),
             composition?.origin,
           );
         }),
@@ -999,7 +1000,7 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   scope: HostSessionScope | undefined,
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
-  via: { caller: Caller; pointers?: ThreadPointers },
+  via: { caller: Caller; pointers?: ThreadPointers; action?: GatewayLocalContext },
 ) {
   return yield* localEntries[key]({ request, scope, bridge, captures, ...via });
 });
@@ -1011,6 +1012,7 @@ type LocalCall = {
   captures: TakeoffCaptures;
   caller: Caller;
   pointers?: ThreadPointers;
+  action?: GatewayLocalContext;
 };
 const pointerOwner = (pointers: ThreadPointers | undefined) => {
   if (!pointers) throw Error("Pointers need this host's thread store.");
@@ -1108,6 +1110,22 @@ const localEntries = {
   }),
   "pod.runs": Effect.fnUntraced(function* ({ request }: LocalCall) {
     return yield* listRuns(yield* decodeRequest("pod.runs", request));
+  }),
+  "settings.tiers.read": Effect.fnUntraced(function* ({ request, scope, bridge }: LocalCall) {
+    const { owner } = yield* decodeRequest("settings.tiers.read", request);
+    return { tiers: readSettingTiers(owner, (yield* targetHomes(bridge, scope)).pointer) };
+  }),
+  "settings.tiers.write": Effect.fnUntraced(function* ({ request, scope, bridge, action }: LocalCall) {
+    const key = "settings.tiers.write";
+    const input = yield* decodeRequest(key, request);
+    const { pointer } = yield* targetHomes(bridge, scope);
+    const wrote = yield* Effect.try({
+      try: () => writeSettingTier(input, { pointer, receiptId: action?.receiptId, expectedPath: action?.settingPath }),
+      catch: (error) => new LocalOpError(key, error instanceof Error ? error.message : String(error), 500),
+    });
+    if (!wrote.ok) return yield* Effect.fail(new StepFailure(wrote.message, wrote.status, "refused"));
+    const { ok: _ok, ...written } = wrote;
+    return written;
   }),
   "pod.member.read": Effect.fnUntraced(function* ({ request, scope, bridge }: LocalCall) {
     return yield* readMember(
@@ -1326,13 +1344,15 @@ function executeGatewayLocal(
   captures: TakeoffCaptures,
   pictures: PictureCaptureStore["Service"],
   launch?: (path: string) => Promise<void>,
+  scope?: HostSessionScope,
+  action?: GatewayLocalContext,
 ): Effect.Effect<unknown, unknown, AttemptHost> {
   if (!isTsOnlyOperationKey(key))
     return Effect.fail(new BridgeError("Unknown host operation", 409, { notDispatched: true }));
   // The journal Layer holds the node and HTTP services; the picture store is this route's value.
   if (!linkedCatalog().entries.get(key)?.call?.shell)
-    return dispatchTsOnlyOperation(key, input, undefined, bridge, captures, {
-      caller: { kind: "anonymous" },
+    return dispatchTsOnlyOperation(key, input, scope, bridge, captures, {
+      caller: { kind: "anonymous" }, action,
     }).pipe(Effect.provideService(PictureCaptureStore, pictures));
   return Effect.flatMap(decodeRequest("host.shell.open", input), (input) =>
     openShellPath(input, launch),

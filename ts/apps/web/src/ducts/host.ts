@@ -8,6 +8,7 @@ import {
   ductsPricingData,
   ductsDesign,
   stagedDucts,
+  ductParameterSlots,
 } from "@pe/agent-contracts";
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
@@ -33,7 +34,7 @@ export const ductsRoster = read("ducts.roster", {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
-        slots: staged.parameters,
+        slots: ductParameterSlots(saved.settings),
         labelParameter: staged.labelParameter ?? undefined,
         selector: { kind: "roster" },
       },
@@ -54,7 +55,7 @@ const systems = read("ducts.systems", {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
-        slots: staged.parameters,
+        slots: ductParameterSlots(saved.settings),
         labelParameter: staged.labelParameter ?? undefined,
         selector: { kind: "systems", systemIds },
       },
@@ -168,6 +169,7 @@ export const ductsPricing = read("ducts.pricing", {
             catalogFindings: true,
             criteria: true,
             firm: true,
+            settings: true,
           })
           .parse(
             wire(
@@ -176,6 +178,7 @@ export const ductsPricing = read("ducts.pricing", {
                 toGrids(tables.body),
                 catalog.tables,
                 ductsDesign(layers.ducts, layers.fans),
+                layers.settings,
               ),
             ),
           );
@@ -196,9 +199,10 @@ export const ductsPricing = read("ducts.pricing", {
           fansWork: layers.fans,
           catalogFindings: catalog.findings,
           // Under Work: the store over the firm file, so a staged criterion draws beside what it replaces.
-          criteria: resolveCriteria(null, snapshot.store as Parameters<typeof resolveCriteria>[1], firmLayer(layers.firm)),
+          criteria: resolveCriteria(null, snapshot.store as Parameters<typeof resolveCriteria>[1], firmLayer(layers.firm, layers.settings)),
           firm: "refused" in layers.firm ? layers.firm
-            : { version: layers.firm.firm.version, path: layers.firm.path, present: layers.firm.present },
+            : { version: firmLayer(layers.firm, layers.settings).version, path: layers.firm.path, present: layers.firm.present },
+          settings: { ducts: layers.settings } as Readonly<Record<string, typeof layers.settings>>,
         };
       },
     );

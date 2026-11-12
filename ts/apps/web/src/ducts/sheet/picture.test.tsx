@@ -258,7 +258,7 @@ it("reads a selected duct and run from the current sheet, including missing data
       target: sheetFixture.legs.target,
       basis: "picture-readout",
       kind: "worksheet",
-      limits: { supplyFpm: 900, returnFpm: 700, source: "firm" },
+      limits: { supplyFpm: 900, returnFpm: 700, supplySource: "firm", returnSource: "firm" },
       legs: { [leg.id]: leg },
       supply: {
         ...emptySide,

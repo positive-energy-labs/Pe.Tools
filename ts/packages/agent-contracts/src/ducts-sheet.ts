@@ -2,6 +2,17 @@ import { z } from "zod";
 import { decode, uniqueIdSchema, subjectRefCodeSchema } from "./subject-ref.ts";
 import { documentRefSchema } from "./target.ts";
 import { VALUE_SOURCES } from "./work-value.ts";
+import { settingWrittenSchema } from "./tiered-setting.ts";
+/** The parameter slots `ducts.snapshot` reads and `ducts.apply` writes through. */
+export const DUCT_PARAMETER_KEYS = [
+  "fanStatic",
+  "fanFlow",
+  "componentDrop",
+  "terminalDrop",
+  "fittingCoefficient",
+  "terminalFlow",
+] as const;
+
 const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(code => {
   const ref = decode(code); return ref.ok && ref.value.keyKind === "UniqueId";
 });
@@ -49,6 +60,16 @@ export const ductsCriteriaValuesSchema = z.strictObject({
   allowanceInWg: sided(nonneg),
 });
 export type DuctsCriteriaValues = z.infer<typeof ductsCriteriaValuesSchema>;
+/** Engine defaults used when no home states a criterion; shared by pricing and sheet cells. */
+export const DUCTS_DEFAULT_CRITERIA: DuctsCriteriaValues = {
+    velocityLimitFpm: { supply: 900, return: 700 },
+    terminalDropInWg: 0.03,
+    autoJoinGapIn: 3,
+    healBoxIn: 36,
+    splitPolicy: "even",
+    allowanceInWg: { supply: 0, return: 0 },
+  };
+
 /**
  * The project layer over the firm file (Work `criteria`, the model's store): every criterion, and
  * each side of a sided one, optional on its own, so typing return never restates supply. The firm
@@ -162,12 +183,29 @@ export const ductsInputsSchema = z.strictObject({
   fittingDrops: z.record(z.string(), resolved(nonneg)),
 });
 export type DuctsInputs = z.infer<typeof ductsInputsSchema>;
-/** The versioned firm file (`Settings/ducts.json` in the firm home): the base layer under every project rule. */
+/**
+ * A home tier's ducts file: `Settings/ducts.json` in the firm home or in a project home (ADR 0037
+ * rule 8). It states any subset of the criteria; a criterion it leaves out falls to the next tier,
+ * then to the engine default. `written` is the write door's stamp: who last wrote the file, and when.
+ */
 export const ductsFirmSchema = z.strictObject({
+  version: z.string().min(1).optional(),
+  criteria: ductsCriteriaLayerSchema.optional(),
+  designFriction: z.number().positive().optional(),
+  parameters: z.partialRecord(z.enum(DUCT_PARAMETER_KEYS), z.string().min(1)).optional(),
+  written: settingWrittenSchema.optional(),
+});
+export type DuctsFirmFile = z.infer<typeof ductsFirmSchema>;
+/**
+ * The base layer the engine resolves under Work and the model store: every criterion, with the
+ * tier that served each cell. A cell absent from `served` came from the firm file.
+ */
+export const ductsBaseSchema = z.strictObject({
   version: z.string().min(1),
   criteria: ductsCriteriaValuesSchema,
+  served: z.record(z.string(), z.enum(["project", "firm", "default"])).optional(),
 });
-export type DuctsFirm = z.infer<typeof ductsFirmSchema>;
+export type DuctsFirm = z.infer<typeof ductsBaseSchema>;
 /**
  * What a cell or Pea writes: Work's own keys, one record per key, `null` deleting the pending edit.
  * The host applies them to document Work and recomputes; nothing here reaches Revit until apply.
@@ -509,7 +547,7 @@ export const ductsSheetResponseSchema = z.discriminatedUnion("kind", [
   z.object({
     ...responseBase,
     kind: z.literal("worksheet"),
-    limits: z.object({ supplyFpm: z.number(), returnFpm: z.number(), source: z.string() }),
+    limits: z.object({ supplyFpm: z.number(), returnFpm: z.number(), supplySource: z.string(), returnSource: z.string() }),
     supply: worksheetSide,
     return: worksheetSide,
     /** Every leg a run names, by leg id. */

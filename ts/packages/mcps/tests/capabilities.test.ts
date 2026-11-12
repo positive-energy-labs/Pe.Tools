@@ -508,7 +508,6 @@ test("Pea discovers the sheet plan, decodes any route's handle, and previews Duc
       "human",
       [
         { path: ["flows", elementSubject(capturedWalk.nodes.find((node) => node.id === 8718801)!), "edit"], value: { value: { cfm: 250 } } },
-        { path: ["parameters", "terminalFlow", "edit"], value: { value: "PE_M_Grd_AirFlow" } },
       ],
       0,
     );

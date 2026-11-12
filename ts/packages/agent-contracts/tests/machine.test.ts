@@ -10,7 +10,7 @@ const machine = () => machineFixture([{ session: "revit", documents: [] }]);
 test("Settings refuses malformed nested Machine evidence instead of accepting a typed assertion", () => {
   const value = machine();
   expect(machineSchema.safeParse(JSON.parse(JSON.stringify(value))).success).toBe(true);
-  expect(settingsValue.safeParse({ machine: value }).success).toBe(true);
+  expect(settingsValue.safeParse({ machine: value, settings: {} }).success).toBe(true);
   for (const broken of [
     {
       ...value,
@@ -42,7 +42,7 @@ test("Settings refuses malformed nested Machine evidence instead of accepting a 
       },
     },
   ])
-    expect(settingsValue.safeParse({ machine: broken }).success).toBe(false);
+    expect(settingsValue.safeParse({ machine: broken, settings: {} }).success).toBe(false);
 });
 
 test("bounded discovery evidence validates its counts and detail request", () => {
@@ -73,7 +73,7 @@ test("bounded discovery evidence validates its counts and detail request", () =>
       ],
     },
   });
-  expect(settingsValue.safeParse({ machine: JSON.parse(JSON.stringify(bounded)) }).success).toBe(
+  expect(settingsValue.safeParse({ machine: JSON.parse(JSON.stringify(bounded)), settings: {} }).success).toBe(
     true,
   );
   const row = bounded.revit.sessions![0]!;
@@ -95,7 +95,7 @@ test("bounded discovery evidence validates its counts and detail request", () =>
       ],
     },
   };
-  expect(settingsValue.safeParse({ machine: invalid }).success).toBe(false);
+  expect(settingsValue.safeParse({ machine: invalid, settings: {} }).success).toBe(false);
 });
 
 test("Chat validates Machine evidence inside its capability catalog through the same authority", () => {

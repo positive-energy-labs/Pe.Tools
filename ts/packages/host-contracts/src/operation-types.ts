@@ -846,7 +846,45 @@ export const rhvacTakeoffDataSchema = Schema.Struct({
 });
 export type RhvacTakeoffData = Schema.Schema.Type<typeof rhvacTakeoffDataSchema>;
 
+/** Homes MAP slice 6b: one tier's `Settings/<owner>.json` as read. agent-contracts' `settingTierSchema` is the same shape for the read graph. */
+const settingTier = Schema.Literals(["user", "project", "firm"]);
+export const settingsTiersReadRequestSchema = Schema.Struct({ owner: Schema.String });
+export const settingsTiersDataSchema = Schema.Struct({
+  tiers: Schema.Array(
+    Schema.Struct({
+      tier: settingTier,
+      home: Schema.NullOr(Schema.String),
+      name: Schema.NullOr(Schema.String),
+      notFound: Schema.optional(Schema.String),
+      path: Schema.NullOr(Schema.String),
+      sha256: Schema.NullOr(Schema.String),
+      json: Schema.optional(Schema.Unknown),
+      error: Schema.optional(Schema.String),
+    }),
+  ),
+});
+export const settingsTiersWriteRequestSchema = Schema.Struct({
+  owner: Schema.String,
+  tier: settingTier,
+  path: Schema.NonEmptyArray(Schema.String),
+  /** Null removes the value from this tier, so the next tier serves it. */
+  value: Schema.Unknown,
+  /** The tier's `sha256` as read; null when the home holds no file yet. */
+  expectedSha256: Schema.NullOr(Schema.String),
+});
+export const settingsTiersWrittenSchema = Schema.Struct({
+  tier: settingTier,
+  path: Schema.String,
+  sha256: Schema.String,
+  /** The receipt: the hash of the bytes this write replaced, kept in this machine's blob store. */
+  priorSha256: Schema.NullOr(Schema.String),
+  by: Schema.String,
+  at: Schema.String,
+});
+
 export const tsOnlyOperationSchemas = {
+  "settings.tiers.read": { request: settingsTiersReadRequestSchema, response: settingsTiersDataSchema },
+  "settings.tiers.write": { request: settingsTiersWriteRequestSchema, response: settingsTiersWrittenSchema },
   "takeoffs.saved": {
     request: Schema.Struct({
       captureId: Schema.optional(Schema.String),

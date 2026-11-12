@@ -41,7 +41,7 @@ const ws = {
   kind: "worksheet",
   target: {} as never,
   basis: "b",
-  limits: { supplyFpm: 900, returnFpm: 700, source: "shim" },
+  limits: { supplyFpm: 900, returnFpm: 700, supplySource: "shim", returnSource: "shim" },
   legs: { a: leg("a", 1), b: leg("b", 2), c: leg("c", 3), d: leg("d", 4) },
   supply: {
     runs: [run("s1", "supply", ["a", "b"], false, [])],

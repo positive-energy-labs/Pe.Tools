@@ -207,7 +207,7 @@
   "work": {
     "schema": "work",
     "route": "ducts",
-    "version": 2
+    "version": 3
   },
   "readings": {
     "value": {
@@ -310,20 +310,250 @@
   "sheet": {
     "draft": true,
     "bindings": {
-      "criteria": {
-        "kind": "store",
-        "store": "_PE_DuctLosses",
-        "per": "subject",
+      "setting.ducts.velocitySupplyFpm": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "velocityLimitFpm",
+          "supply"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Velocity limit supply",
+        "unit": "fpm",
+        "default": 900,
         "min": 0
       },
-      "designFriction": {
-        "kind": "local",
+      "setting.ducts.velocityReturnFpm": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "velocityLimitFpm",
+          "return"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Velocity limit return",
+        "unit": "fpm",
+        "default": 700,
+        "min": 0
+      },
+      "setting.ducts.terminalDropInWg": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "terminalDropInWg"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Default terminal drop",
+        "unit": "in-wg",
+        "default": 0.03,
+        "min": 0
+      },
+      "setting.ducts.autoJoinGapIn": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "autoJoinGapIn"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Auto-join gap",
+        "unit": "in",
+        "default": 3,
+        "min": 0
+      },
+      "setting.ducts.healBoxIn": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "healBoxIn"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Heal box",
+        "unit": "in",
+        "default": 36,
+        "min": 0
+      },
+      "setting.ducts.splitPolicy": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "splitPolicy"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Split policy",
+        "default": "even"
+      },
+      "setting.ducts.allowanceSupplyInWg": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "allowanceInWg",
+          "supply"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Allowance supply",
+        "unit": "in-wg",
+        "default": 0,
+        "min": 0
+      },
+      "setting.ducts.allowanceReturnInWg": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "criteria",
+          "allowanceInWg",
+          "return"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Allowance return",
+        "unit": "in-wg",
+        "default": 0,
+        "min": 0
+      },
+      "setting.ducts.parameters.fanStatic": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "parameters",
+          "fanStatic"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "fanStatic slot"
+      },
+      "setting.ducts.parameters.fanFlow": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "parameters",
+          "fanFlow"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "fanFlow slot"
+      },
+      "setting.ducts.parameters.componentDrop": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "parameters",
+          "componentDrop"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "componentDrop slot"
+      },
+      "setting.ducts.parameters.terminalDrop": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "parameters",
+          "terminalDrop"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "terminalDrop slot"
+      },
+      "setting.ducts.parameters.fittingCoefficient": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "parameters",
+          "fittingCoefficient"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "fittingCoefficient slot"
+      },
+      "setting.ducts.parameters.terminalFlow": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "parameters",
+          "terminalFlow"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "terminalFlow slot"
+      },
+      "setting.ducts.designFriction": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "designFriction"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
         "per": "route",
         "label": "Design friction",
         "unit": "in-wg/100 ft",
         "default": 0.08,
         "min": 0,
         "digits": 3
+      },
+      "criteria": {
+        "kind": "store",
+        "store": "_PE_DuctLosses",
+        "per": "subject",
+        "min": 0
       }
     }
   },
@@ -343,7 +573,6 @@
         ],
         "work": [
           "criteria",
-          "designFriction",
           "kinds",
           "writeIntent",
           "assumptions",
@@ -376,7 +605,6 @@
         ],
         "work": [
           "criteria",
-          "designFriction",
           "kinds",
           "writeIntent",
           "assumptions",
@@ -409,7 +637,6 @@
         ],
         "work": [
           "criteria",
-          "designFriction",
           "kinds",
           "writeIntent",
           "assumptions",
