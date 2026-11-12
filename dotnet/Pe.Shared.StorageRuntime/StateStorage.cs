@@ -15,11 +15,8 @@ public sealed class StateStorage {
         return new StateStorage(resolvedDirectoryPath, useExactDirectory: true);
     }
 
-    public JsonReadWriter<T> Json<T>() where T : class, new() =>
-        new LocalDiskJsonFile<T>(this.GetJsonPath(DefaultName));
-
-    public JsonReadWriter<T> Json<T>(string filename) where T : class, new() =>
-        new LocalDiskJsonFile<T>(this.GetJsonPath(filename));
+    public JsonReadWriter<T> Json<T>(string filename, StoredPolicy policy, string place) where T : class, new() =>
+        new LocalDiskJsonFile<T>(this.GetJsonPath(filename), policy, place);
 
     public CsvReadWriter<T> Csv<T>() where T : class, new() =>
         new Csv<T>(this.GetCsvPath(DefaultName), "Palette command usage");

@@ -36,7 +36,7 @@ public static class DocumentColorLedger {
     }
 
     private static readonly JsonReader<DocumentColorLedgerData> File =
-        StorageClient.Default.Global().State().Json<DocumentColorLedgerData>("document-colors");
+        StorageClient.Default.Global().State().Json<DocumentColorLedgerData>("document-colors", StoredPolicy.Keep, "Document colors");
 
     private static DocumentColorLedgerData? _data;
     private static bool _kept;

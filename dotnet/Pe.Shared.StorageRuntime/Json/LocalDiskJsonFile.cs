@@ -1,8 +1,9 @@
 using Newtonsoft.Json;
+using System.Text;
 
 namespace Pe.Shared.StorageRuntime.Json;
 
-public sealed class LocalDiskJsonFile<T>(string filePath) : JsonReadWriter<T> where T : class, new() {
+public sealed class LocalDiskJsonFile<T>(string filePath, StoredPolicy policy, string place) : JsonReadWriter<T> where T : class, new() {
     private static readonly JsonSerializerSettings SerializerSettings =
         JsonFormatting.CreateIndentedSettings();
 
@@ -12,9 +13,9 @@ public sealed class LocalDiskJsonFile<T>(string filePath) : JsonReadWriter<T> wh
     public string FilePath { get; } = Initialize(filePath);
 
     public T Read() {
-        this.EnsureFileExists();
-        var content = File.ReadAllText(this.FilePath);
-        var data = JsonConvert.DeserializeObject<T>(content, SerializerSettings) ?? new T();
+        var data = StoredFile.Read(this.FilePath, policy, place,
+            content => JsonConvert.DeserializeObject<T>(content, SerializerSettings)
+                ?? throw new JsonSerializationException("Expected a JSON value.")) ?? new T();
         this.UpdateCache(data);
         return data;
     }
@@ -23,7 +24,7 @@ public sealed class LocalDiskJsonFile<T>(string filePath) : JsonReadWriter<T> wh
         StorageFileUtils.EnsureDirectoryExists(this.FilePath);
         var content = JsonConvert.SerializeObject(data, SerializerSettings);
         content = JsonFormatting.NormalizeTrailingNewline(content);
-        File.WriteAllText(this.FilePath, content);
+        StoredFile.WriteAtomic(this.FilePath, Encoding.UTF8.GetBytes(content), overwrite: true);
         this.UpdateCache(data);
         return this.FilePath;
     }
@@ -47,13 +48,6 @@ public sealed class LocalDiskJsonFile<T>(string filePath) : JsonReadWriter<T> wh
         StorageFileUtils.ValidateFileNameAndExtension(filePath, ".json");
         StorageFileUtils.EnsureDirectoryExists(filePath);
         return filePath;
-    }
-
-    private void EnsureFileExists() {
-        if (File.Exists(this.FilePath))
-            return;
-
-        _ = this.Write(new T());
     }
 
     private void UpdateCache(T data) {
