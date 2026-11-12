@@ -36,7 +36,6 @@ async function stage(f: Awaited<ReturnType<typeof nativeFixture>>) {
     "human",
     [
       { path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 250 } } },
-      { path: ["parameters", "terminalFlow", "edit"], value: { value: "revit:Flow" } },
 
     ],
     0,

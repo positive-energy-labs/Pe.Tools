@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DUCTS_CRITERIA_CELLS, type DuctsCriteriaCell } from "@pe/agent-contracts";
+import { DUCT_PARAMETER_KEYS, DUCTS_CRITERIA_CELLS, type DuctsCriteriaCell } from "@pe/agent-contracts";
 import { setting, store, type CellLayer, type SheetBinding, type SheetSlot } from "@pe/agent-contracts/slots";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { criterionLabel } from "./sheet/criterion-words.neutral.ts";
@@ -42,6 +42,7 @@ const criteriaSettings = Object.fromEntries(
 ) as Readonly<Record<string, SheetBinding>>;
 export const ductsSettings = {
   ...criteriaSettings,
+  ...Object.fromEntries(DUCT_PARAMETER_KEYS.map(key => [`setting.ducts.parameters.${key}`, setting("ducts", ["parameters", key], z.string().min(1), ["project", "firm"], { label: `${key} slot` })])),
   "setting.ducts.designFriction": setting("ducts", ["designFriction"], z.number().positive(), ["project", "firm"], {
     label: "Design friction", default: DEFAULT_DESIGN_FRICTION_RATE, unit: "in-wg/100 ft", min: 0, digits: 3,
   }),

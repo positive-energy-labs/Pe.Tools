@@ -647,7 +647,7 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
     ], "Choose fan walk");
     await stage("fans", [
       { path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!), "edit"], value: { value: { cfm: 250 } } },
-      { path: ["parameters", "terminalFlow", "edit"], value: { value: "PE_M_Grd_AirFlow" } },
+      { path: ["calculation", "terminalFlow", "edit"], value: { value: { kind: "balanced-design", source: "test" } } },
     ], "Edit fan airflow");
     await screen.findByRole("button", { name: "Undo Edit fan airflow" });
     const command = async (id: string, commandKey: string) => {

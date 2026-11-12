@@ -7,7 +7,7 @@ import {
   ductsSheetOverviewSchema,
   ductsSheetRequestSchema,
   ductsSheetResponseSchema,
-  stagedDucts,
+  ductParameterSlots,
   type DuctsInputs,
   type DuctsSheetOverview,
   type DuctsSheetRequest,
@@ -165,7 +165,7 @@ const sheetModel = read("fans.calculation", {
       autoJoinGapIn: criteria.autoJoinGapIn.value,
       candidateBoxIn: criteria.healBoxIn.value,
     };
-    const slots = stagedDucts(design, design).parameters;
+    const slots = ductParameterSlots(saved.settings);
     const acquisition = {
       ...(Object.keys(slots).length ? { slots } : {}),
       selector:
@@ -504,7 +504,7 @@ export const fanRoster = read("fans.roster", {
   async run(ctx, { target }) {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
-    const slots = stagedDucts(design, design).parameters;
+    const slots = ductParameterSlots(saved.settings);
     const response = await ctx.native("ducts.snapshot.roster", {
       role: "acquire",
       target: { kind: "document", ref: target },

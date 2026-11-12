@@ -7,7 +7,7 @@ import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
 import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { ductsDesign, ductsFirmSchema, stagedDucts, subjectOf, workHandleSchema } from "@pe/agent-contracts";
+import { ductsDesign, ductsFirmSchema, ductParameterSlots, stagedDucts, subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { Effect } from "effect";
@@ -242,7 +242,7 @@ export function ductsExecutors(
                 autoJoinGapIn: criteria.autoJoinGapIn.value,
                 candidateBoxIn: criteria.healBoxIn.value,
               } : selector,
-              slots: stagedDucts(doc, fans).parameters,
+              slots: ductParameterSlots(settings),
             });
         let snapshot = await {
           "assign-fan": () => {

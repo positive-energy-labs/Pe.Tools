@@ -20,7 +20,6 @@ import {
 } from "#/revit/element-target";
 import { observedElements, useNativeObservation } from "#/revit/observation";
 
-import { airflowPatches } from "../../airflow";
 import { rulingPatches, verdictPatches } from "../../assumptions";
 import {
   compactStatus,
@@ -35,7 +34,6 @@ import {
 } from "../../inbox-rows";
 import { inboxWriteRows, type WriteVerbs, type RulingRow } from "./inbox-write";
 
-import { SlotPicker } from "./slot-picker";
 import { SubjectText, citedReferences, subjectDocument } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { RuleAssignment } from "./rule-assignment";
@@ -186,17 +184,7 @@ export function Inbox({
           );
         case "airflow":
           // The choice is the shared compact picker, in the open row only.
-          return worded ? (
-            <SlotPicker
-              key={`a${i}`}
-              word={verb.of === "unit" ? "Unit airflow" : "Grille airflow"}
-              current={verb.current}
-              options={verb.options}
-              noun={verb.of === "unit" ? "units" : "grilles"}
-              where="in this scope"
-              onPick={(slot) => void work.write(airflowPatches(work.doc, slot, verb.of))}
-            />
-          ) : null;
+          return worded ? <a key={`a${i}`} href="/fans">Choose {verb.of === "unit" ? "fanFlow" : "terminalFlow"} slot in Fans settings</a> : null;
         case "focus":
           return make(`f${i}`, Pencil, verb.label, verb.says, () => onFocusCell(verb.cell));
         case "command":

@@ -54,7 +54,6 @@ it("retires only transmitted successful writes, retaining held ESP and partially
     ["rules", "complete"],
     ["assumptions", "open-end:4:1"],
     ["roles", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000008"],
-    ["parameters", "terminalFlow"],
   ]);
   expect(appliedCellPaths(input, { ...response, previewOnly: true }, subjects, cells)).toEqual([]);
 });

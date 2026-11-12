@@ -9,6 +9,7 @@ import {
   ductsApplyInputSchema,
   ductsApplyRequestProducerSchema,
   stagedDucts,
+  ductParameterSlots,
   type SettingTierRead,
   type DuctPortPin,
   type DuctComponentWitness,
@@ -364,7 +365,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       return JSON.parse(bodyUtf8) as unknown;
     }
     const staged = stagedDucts(work, fans);
-    const slots = staged.parameters;
+    const slots = ductParameterSlots(settings);
     const readOptions = {
       ...(Object.keys(slots).length ? { slots } : {}),
       ...(staged.labelParameter ? { labelParameter: staged.labelParameter } : {}),
@@ -490,7 +491,6 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
         priced.edit.terminalDrops,
         priced.edit.componentDrops,
         priced.edit.esp,
-        priced.edit.parameters,
       ].some((cells) => Object.keys(cells).length)
     )
       throw Error(

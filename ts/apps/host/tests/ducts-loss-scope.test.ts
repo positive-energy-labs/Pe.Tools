@@ -152,7 +152,6 @@ test("an authored terminal flow inside a fan walk with no network groups reaches
     const s = { ...snapshot, nodes, walk: walk ? { startId: 14577391, hops: 1, elementsReached: snapshot.nodes.length, openEnds: 0, candidates: [], truncated: false, elapsedMs: 1 } : undefined };
     const work = ductsDesign(null, fansDocumentSchema.parse({
       flows: { [elementSubject(authored!)]: { edit: { value: { cfm: 123, source: "controlled sample proof" } } } },
-      parameters: { terminalFlow: { edit: { value: "Flow" } } },
     }));
     return scopeApplyRequest(applyRequest(s, price(s, {}, work, work ?? neutralFansWork, EMPTY_CATALOGS), "", []), s.store, [["flows", elementSubject(authored!)]], s);
   };

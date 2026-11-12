@@ -23,14 +23,13 @@ test("joined Fans edits reach the pricing solve and input layer", () => {
   const fans = fansDocumentSchema.parse({
     flows: { "UniqueId:fixture%3a4": { edit: { value: { cfm: 250 } } } },
     terminalDrops: { "UniqueId:fixture%3a4": { edit: { value: { inWg: 0.27 } } } },
-    parameters: { fanFlow: { edit: { value: "Project fan flow" } } },
   });
   const joined = ductsDesign(ductsDocumentSchema.parse({}), fans);
   const layer = workLayer(joined);
   expect(layer.flows).toEqual({ "UniqueId:fixture%3a4": { cfm: 250 } });
   expect(layer.terminalDrops).toEqual({ "UniqueId:fixture%3a4": { inWg: 0.27 } });
   const priced = price(snapshot, {}, joined, joined);
-  expect(priced.edit.parameters.fanFlow).toBe("Project fan flow");
+  expect(priced.edit.parameters).toEqual({});
   expect(priced.flows.get(4)).toMatchObject({ cfm: 250 });
   expect(priced.next.paths[4]?.rows.find((row) => row.id === 4)).toMatchObject({ dp: 0.27 });
   expect(priced.overrides.terminalPs).toEqual({ "4": 0.27 });

@@ -392,6 +392,90 @@
         "unit": "in-wg",
         "min": 0
       },
+      "setting.ducts.parameters.fanStatic": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "parameters",
+          "fanStatic"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "fanStatic slot"
+      },
+      "setting.ducts.parameters.fanFlow": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "parameters",
+          "fanFlow"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "fanFlow slot"
+      },
+      "setting.ducts.parameters.componentDrop": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "parameters",
+          "componentDrop"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "componentDrop slot"
+      },
+      "setting.ducts.parameters.terminalDrop": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "parameters",
+          "terminalDrop"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "terminalDrop slot"
+      },
+      "setting.ducts.parameters.fittingCoefficient": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "parameters",
+          "fittingCoefficient"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "fittingCoefficient slot"
+      },
+      "setting.ducts.parameters.terminalFlow": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "parameters",
+          "terminalFlow"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "terminalFlow slot"
+      },
       "setting.ducts.designFriction": {
         "kind": "setting",
         "owner": "ducts",
@@ -413,10 +497,6 @@
         "kind": "local",
         "per": "route",
         "label": "Write scope"
-      },
-      "parameters": {
-        "kind": "local",
-        "per": "subject"
       },
       "roles": {
         "kind": "store",
@@ -492,8 +572,7 @@
           "esp",
           "equipmentFlows",
           "roles",
-          "flows",
-          "parameters"
+          "flows"
         ],
         "readings": [
           "value"
