@@ -1,3 +1,4 @@
+import { ButtonKind } from "./button";
 import { Popover, PopoverTrigger } from "./popover";
 import { PopoverContent } from "./popover-internal";
 import {
@@ -279,11 +280,15 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
               collisionAvoidance={{ side: "flip", align: "shift" }}
               initialFocus={(type) => (type === "keyboard" ? popup.current : false)}
             >
-              <div data-slot="floater-content">{spec.render()}</div>
+              <div data-slot="floater-content">
+                <ButtonKind value="quiet">{spec.render()}</ButtonKind>
+              </div>
             </PopoverContent>
           </Popover>
         ) : (
-          <div data-slot="floater-content">{spec.render()}</div>
+          <div data-slot="floater-content">
+            <ButtonKind value="quiet">{spec.render()}</ButtonKind>
+          </div>
         )}
         <div
           data-slot="floater-grip"

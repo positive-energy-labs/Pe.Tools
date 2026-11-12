@@ -214,7 +214,6 @@ export function WriteAction({
       <Popover.Trigger
         render={
           <Button
-            kind="framed"
             icon={icon}
             label={word}
             reason={armed ? `${says}. Planned; press to see it again` : reason}
@@ -277,7 +276,6 @@ export function WriteAction({
           <div className="mt-2 flex items-center justify-between gap-2">
             {reject ? (
               <Button
-                kind="framed"
                 label="Reject?"
                 reason={`Lands at ${reject.until}`}
                 onClick={reject.run}

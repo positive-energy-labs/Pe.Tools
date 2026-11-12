@@ -893,10 +893,10 @@ const SystemsList = memo(function SystemsList({
         <>
           {header}
           <div className="flex gap-1 px-1">
-            <Button kind="quiet" label="All systems" onPress={() => door?.all()}>
+            <Button label="All systems" onPress={() => door?.all()}>
               All
             </Button>
-            <Button kind="quiet" label="Clear systems" onPress={() => door?.clear()}>
+            <Button label="Clear systems" onPress={() => door?.clear()}>
               Clear
             </Button>
           </div>

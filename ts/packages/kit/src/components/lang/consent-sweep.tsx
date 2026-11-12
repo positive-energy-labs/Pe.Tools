@@ -122,7 +122,6 @@ export function ConsentSweep({ windows, onReject, onAllow, shell }: ConsentSweep
             </span>
             <span className={slots.controls()}>
               <Button
-                kind="framed"
                 label={`Reject ${window.verb}`}
                 refusal={window.reject ? null : "This consent window offers no reject option"}
                 onPress={() => onReject(window)}

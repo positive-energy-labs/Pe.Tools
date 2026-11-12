@@ -99,7 +99,6 @@ function ArmingRoute() {
                 />
                 <div className="flex items-center gap-2">
                   <Button
-                    kind="framed"
                     label="arm another write"
                     onClick={reset}
                     reason="Puts the strip back to unarmed with the original plan"
@@ -137,7 +136,6 @@ function ArmingRoute() {
               </Tag>
               {reason.trim().length === 0 ? null : (
                 <Button
-                  kind="framed"
                   label="reset"
                   onClick={reset}
                   reason="Back to unarmed on the original plan"

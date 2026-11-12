@@ -122,7 +122,6 @@ export function SituationAction({
                 running <span className="face-mono">{busy.seconds} s</span>
               </span>
               <Button
-                kind="framed"
                 label="stop"
                 reason="Signal the running operation. It stops at its next checkpoint; what it already wrote stands."
                 onClick={handle.stop}

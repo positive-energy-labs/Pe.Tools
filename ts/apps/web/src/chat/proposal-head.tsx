@@ -98,7 +98,7 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
         </p>
       ))}
       {rest.length ? (
-        <Button kind="framed" label="Show the remaining routes" onClick={() => setAll(true)}>
+        <Button label="Show the remaining routes" onClick={() => setAll(true)}>
           {[
             `+${rest.length} more route${rest.length === 1 ? "" : "s"} with changes`,
             ...(["staged", "byPea"] as const).flatMap((field) => {
@@ -127,7 +127,6 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
     <div className="flex flex-col" data-work={work.id}>
       <div className="flex min-h-(--control-h) min-w-0 flex-wrap items-center gap-x-2">
         <Button
-          kind="framed"
           aria-expanded={open}
           // The e2e journeys press this by name (`review ▾`); the face says what is edit.
           label={`review ${open ? "▴" : "▾"}`}
@@ -155,7 +154,7 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
           {work.conflict ? " · changed elsewhere" : ""}
         </span>
         {work.conflict && work.reload ? (
-          <Button kind="framed" label="reload" onClick={work.reload}>
+          <Button label="reload" onClick={work.reload}>
             reload
           </Button>
         ) : null}
@@ -163,21 +162,19 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
           <span key={edit.press} className="flex items-center gap-1">
             <span data-tone="caution">unaccepted edit</span>
             <Button
-              kind="framed"
               label="retry edit"
               refusal={work.conflict ? "Reload Work first" : null}
               onClick={() => void edit.retry()}
             >
               retry
             </Button>
-            <Button kind="framed" label="discard edit" onClick={edit.discard}>
+            <Button label="discard edit" onClick={edit.discard}>
               discard
             </Button>
           </span>
         ))}
         <span className="ml-auto">
           <Button
-            kind="framed"
             label={work.commit.word}
             reason={COMMIT_REASON}
             refusal={work.refusal ?? (counts.staged ? null : "nothing edit")}

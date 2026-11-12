@@ -5,7 +5,7 @@ import { PaneReveal } from "./pane-reveal";
 import { declaredTeaching, type TeachingLayout } from "./teach";
 import { TeachingLayoutView, type TeachingPaneRender } from "./teaching-layout";
 import { TeachReference } from "./use-teach";
-import type { PaneSide } from "./pane-resize";
+import { SPLIT_FLOOR, type PaneSide } from "./pane-resize";
 
 export type PaneApi = TeachingPaneRender;
 export type GraphPaneState = {
@@ -51,12 +51,14 @@ function project(layout: LayoutNode, panes: GraphLayoutViewProps["panes"]) {
       const startId = "axis" in start ? (node.rails?.start ? start.id : undefined) : start.id;
       const endId = "axis" in end ? (node.rails?.end ? end.id : undefined) : end.id;
       bindings.push({ id, owner, start: startId, end: endId });
+      const axis = node.axis === "h" ? "horizontal" : "vertical";
       return {
         id,
-        axis: node.axis === "h" ? "horizontal" : "vertical",
+        axis,
         target: node.sized,
         size: node.size,
-        minSize: node.minSize,
+        // An unset `minOtherSize` stays unset: PaneSplit mirrors the sized side's floor.
+        minSize: node.minSize ?? SPLIT_FLOOR[axis],
         maxSize: node.maxSize,
         minOtherSize: node.minOtherSize,
         persist: node.persist,

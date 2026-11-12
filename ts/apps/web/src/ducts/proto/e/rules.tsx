@@ -86,6 +86,7 @@ export function Chips({
         return (
           <Button
             key={table}
+            // A row's second line sets its buttons quiet; a table chip is a framed pick.
             kind="framed"
             label={table}
             reason={

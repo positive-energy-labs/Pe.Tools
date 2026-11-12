@@ -87,7 +87,6 @@ export function ObjectField({
               <Button
                 label="remove key"
                 reason={`Drop ${key} from ${label}. The change lives in the form until save writes it.`}
-                kind="framed"
                 onClick={() => {
                   const { [key]: _dropped, ...rest } = value;
                   field.change(rest);
@@ -111,7 +110,6 @@ export function ObjectField({
           <Button
             label="add key"
             reason={`Add ${newKey} to ${label}, built from the schema's defaults. The change lives in the form until save writes it.`}
-            kind="framed"
             refusal={keyRefusal}
             onClick={() => {
               field.change({

@@ -95,7 +95,7 @@ export function InstallGate({
           </span>
           {expired ? (
             <span className="flex items-center gap-2">
-              <Button label="reload" kind="framed" onClick={reload}>
+              <Button label="reload" onClick={reload}>
                 reload
               </Button>
               <Button kind="quiet" label="dismiss" onClick={() => setDismissed(true)}>

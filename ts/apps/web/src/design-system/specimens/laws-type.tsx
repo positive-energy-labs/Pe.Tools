@@ -90,7 +90,7 @@ export function TypeLaws({ owner }: { owner: (name: string) => string }) {
           <span className="w-48">
             <Input placeholder="Search threads" aria-label="family field" />
           </span>
-          <Button kind="framed" label="fork">
+          <Button label="fork">
             fork
           </Button>
           <Button icon={Plus} label="New thread" kind="framed" />

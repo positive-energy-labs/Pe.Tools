@@ -311,7 +311,7 @@ function QueryPicker({
       searchTrail={(level) => {
         const op = level === 2 ? target(live.current?.path ?? [])?.op : undefined;
         return level < 2 || op === "~" || op === "=" ? (
-          <Button kind="framed" label="negate" pressed={not} onClick={() => setNot(!not)}>
+          <Button label="negate" pressed={not} onClick={() => setNot(!not)}>
             not
           </Button>
         ) : null;
@@ -334,7 +334,7 @@ function QueryPicker({
               vocabulary.filters?.some(
                 (filter) => filter.default && !hasQueryFilter(state.query, filter),
               ) && (
-                <Button kind="quiet"
+                <Button
                   label="Restore default filters"
                   onClick={() => {
                     write(restoreQueryFilters(state.query, vocabulary.filters!));
@@ -401,7 +401,7 @@ function QueryPicker({
                     />
                   ))}
                 </div>
-                <Button kind="quiet"
+                <Button
                   label={only ? `clear ${only}` : "clear conditions and sorts"}
                   onClick={() => {
                     onStateChange(

@@ -96,7 +96,7 @@ export function NoticePreview({
         }
       >
         <Markdown text={body} />
-        <Button kind="framed" label="Open thread" onClick={onOpen}>
+        <Button label="Open thread" onClick={onOpen}>
           Open thread
         </Button>
       </HoverCardContent>

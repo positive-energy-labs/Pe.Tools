@@ -265,7 +265,7 @@ function AddEndpoint({ providers }: { providers: ProvidersState }) {
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
-        <Button label="Save" kind="framed" busy={busy} onClick={() => void save()}>
+        <Button label="Save" busy={busy} onClick={() => void save()}>
           Save
         </Button>
       </span>

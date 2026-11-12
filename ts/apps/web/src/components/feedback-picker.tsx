@@ -192,7 +192,6 @@ export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean 
           className="fixed bottom-(--gutter) left-(--gutter) z-popup flex h-(--rail-h) items-center"
         >
           <Button
-            kind="framed"
             label={picking ? "cancel feedback" : "feedback"}
             icon={MessageSquarePlus}
             onClick={() => (picking ? close() : setPicking(true))}
@@ -239,7 +238,7 @@ export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean 
               ) : null}
               {deliver.error && <OutcomeLine kind="error" label={deliver.error.message} />}
               <div className="flex justify-end gap-2">
-                <Button kind="framed" label="cancel" onClick={close} reason="Drop this note">
+                <Button label="cancel" onClick={close} reason="Drop this note">
                   cancel
                 </Button>
                 {kept ? (

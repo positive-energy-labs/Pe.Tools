@@ -164,7 +164,6 @@ export class PaneErrorBoundary extends Component<
         </span>
         <span className="text-ink-2">{this.state.message}</span>
         <Button
-          kind="framed"
           label="retry"
           onClick={() => {
             this.setState({ failed: false, message: "" });
