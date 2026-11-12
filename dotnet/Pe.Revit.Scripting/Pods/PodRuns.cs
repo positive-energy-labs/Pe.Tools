@@ -29,8 +29,17 @@ public static class PodRuns {
     ///     that must write its output before the receipt exists. Keyed on the id, never on where the pod sits.
     /// </summary>
     public static string NewRunFolder(string? podId) {
+        var started = DateTime.UtcNow;
         var runFolder = ProductRuntimeLayout.Current.State.RunPath(podId, RunId());
         _ = Directory.CreateDirectory(runFolder);
+        foreach (var folder in Directory.EnumerateDirectories(Path.GetDirectoryName(runFolder)!))
+            foreach (var temporary in Directory.EnumerateFiles(folder, "*.tmp", SearchOption.AllDirectories)) {
+                try {
+                    if (File.GetLastWriteTimeUtc(temporary) < started) File.Delete(temporary);
+                } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+                    Serilog.Log.Warning(exception, "Could not sweep abandoned run temporary file {Path}", temporary);
+                }
+            }
         return runFolder;
     }
 
