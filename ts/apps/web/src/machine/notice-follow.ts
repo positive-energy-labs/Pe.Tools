@@ -13,7 +13,7 @@ import { peReadings, type Readings } from "#/host/resource-stream";
 export type NoticeSeen = Readonly<Record<string, number>>;
 
 /** Rows that interrupt a person: working rows and staged Work stay in Activity, never a card. */
-const pushes = (row: NoticeRow) => row.group !== "working" && row.verb !== "review";
+export const pushes = (row: NoticeRow) => row.group !== "working" && row.verb !== "review";
 
 export function followNotices(options: {
   /** The tray's own card follows `as: "tray"`: its rows carry `attended`. */

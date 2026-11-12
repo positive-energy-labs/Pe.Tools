@@ -1,7 +1,13 @@
 import { createHash } from "node:crypto";
 import { createPluginRuntime, type PluginContext } from "@pe/agent-contracts";
 import { z } from "zod";
-import { listPackages, productPodsRoots, type AdmittedPackage, type PodsRoots } from "./packages.ts";
+import {
+  listPackages,
+  productPodsRoots,
+  projectPodsRoot,
+  type AdmittedPackage,
+  type PodsRoots,
+} from "./packages.ts";
 import { readStored, writeAtomic } from "@pe/host-contracts/store";
 import { storedNoticesPath } from "./notice-feed.ts";
 import { productPluginDecisionsPath, productPodsRootPath } from "./product-paths.ts";
@@ -43,11 +49,23 @@ const readDecisions = async (path: string) => {
   const read = storedDecisions(path);
   return read.kind === "ok" ? read.value : {};
 };
+/**
+ * Ids of the Pods in the project home a target document's pointer names. The start census has no
+ * document, so these are outside it: only a person's off choice gates one.
+ */
+export const projectPodIds = async (pointer: string | null | undefined) => {
+  const root = projectPodsRoot(pointer);
+  return root ? (await listPackages(root)).packages.map((pod) => pod.id) : [];
+};
 /** Runtime policy only. Membership and export remain exact authored bytes. */
-export async function requirePackageEnabled(id: string, podsRoots: PodsRoots = productPodsRoots()) {
+export async function requirePackageEnabled(
+  id: string,
+  podsRoots: PodsRoots = productPodsRoots(),
+  outsideCensus: readonly string[] = [],
+) {
   // Only the product's Pods carry policy: the content homes, or the user's Pods an import writes.
   if (typeof podsRoots === "string" && podsRoots !== productPodsRootPath()) return;
-  if (serving) {
+  if (serving && !outsideCensus.includes(id)) {
     await serving.ready;
     if (!serving.active(id)) throw Error(`Pod '${id}' is inactive`);
   }
@@ -58,9 +76,10 @@ export async function requirePackageEnabled(id: string, podsRoots: PodsRoots = p
 export async function activePackages(
   packages: readonly AdmittedPackage[],
   podsRoots: PodsRoots = productPodsRoots(),
+  outsideCensus: readonly string[] = [],
 ) {
   const enabled = await Promise.allSettled(
-    packages.map((pod) => requirePackageEnabled(pod.id, podsRoots)),
+    packages.map((pod) => requirePackageEnabled(pod.id, podsRoots, outsideCensus)),
   );
   return packages.filter((_, index) => enabled[index]!.status === "fulfilled");
 }

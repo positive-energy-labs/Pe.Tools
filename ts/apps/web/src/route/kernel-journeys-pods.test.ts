@@ -464,7 +464,11 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
       await writeFile(resolve(source, "routes/voltage-drop/index.js"), "throw Error('Obsolete Pod must never execute');");
       const old = await exportPod({ pod: manifest.id, archivePath: resolve(host.dir, "old.zip") },
         { podsRoot: resolve(host.dir, "old"), captures });
-      await installArchive(await readFile(old.archivePath), old.archivePath, undefined, { podsRoot: root, captures });
+      // An earlier shipped import, as the bootstrap left it: the import record in the state root its
+      // ledger sits in, and the original archive retained there by its hash.
+      await installArchive(await readFile(old.archivePath), old.archivePath, undefined,
+        { podsRoot: root, stateRoot: resolve(host.dir, "state"), captures });
+      await cp(old.archivePath, resolve(host.dir, "state/shipped-pod-originals", `${old.archiveSha256}.zip`));
       await exportPod({ pod: manifest.id, archivePath: resolve(shipped, "snowdon-circuits.zip") }, { podsRoot: examples, captures });
       const pod = resolve(root, manifest.id), key = `route:@${manifest.id}/${current.artifact}`;
       const oldTrust = `pod-bytes:${old.archiveSha256}`;
@@ -473,7 +477,7 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
       if (modified) await writeFile(resolve(pod, "README.md"), "Keep this authored worksheet note.");
       const before = (await listPackages(root)).packages.find(p => p.id === manifest.id)!.members.map(m => [m.path, m.sha256]);
       content = createContributionContent({ worldRoot: host.dir, homeRoot: host.dir, packages: () => listPackages(root),
-        decisionsPath: resolve(host.dir, "enabled.json"), bootstrapInBackground: true,
+        decisionsPath: resolve(host.dir, "enabled.json"),
         bootstrap: async () => {
           await gate.promise;
           try {

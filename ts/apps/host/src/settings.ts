@@ -30,10 +30,11 @@ import {
   podHome,
   podStatePath,
   productPodsRoots,
+  projectPodsRoot,
   readPackage,
   resolvePackageIdentity,
 } from "./packages.ts";
-import { requirePackageEnabled, activePackages } from "./package-lifecycle.ts";
+import { requirePackageEnabled, activePackages, projectPodIds } from "./package-lifecycle.ts";
 import { shippedPodsSettled } from "./installed-pods.ts";
 import { LocalOpError } from "./local-error.ts";
 import { hostOwnership } from "./host-ownership.ts";
@@ -54,6 +55,11 @@ import {
  */
 export type PodContext = {
   readonly podsRoot?: string;
+  /**
+   * `data.path` of the target document's project-home blob (ADR 0037): undefined when the call
+   * targets no document, null when the document names no project home.
+   */
+  readonly pointer?: string | null;
   readonly invokeBridge?: (key: string, payload: unknown) => Effect.Effect<unknown, unknown>;
 };
 
@@ -89,33 +95,50 @@ const schemaCache = new Map<string, ValidateFunction | string>();
  * supplies its own Pods root has no import to wait for.
  */
 /** Provenance on a read (ADR 0037): the home a pod's folder sits in, when it sits in one. */
-const withHome = (directory: string) => {
-  const home = podHome(directory);
+const withHome = (directory: string, ctx: PodContext) => {
+  const home = podHome(directory, ctx.pointer);
   return home ? { home } : {};
 };
+
+/** The Pods a call reads: the owner's own folder, else every home's, the target document's project home among them. */
+const podsRoots = (ctx: PodContext) => ctx.podsRoot ?? productPodsRoots(ctx.pointer);
+/** A listing with no project home says why, so "no project Pods" is never read as "none exist". */
+const projectPodsNote = (ctx: PodContext) =>
+  ctx.podsRoot !== undefined || projectPodsRoot(ctx.pointer)
+    ? {}
+    : {
+        projectPods:
+          ctx.pointer === undefined
+            ? "No document is targeted, so only the user and firm homes are listed. A project home's Pods appear when the call targets a document."
+            : ctx.pointer === null
+              ? "The targeted document names no project home, so only the user and firm homes are listed."
+              : `The targeted document names the project home '${ctx.pointer}', which was not found on this computer, so only the user and firm homes are listed.`,
+      };
 
 const shippedPodsImported = (ctx: PodContext) =>
   ctx.podsRoot === undefined ? Effect.promise(shippedPodsSettled) : Effect.void;
 
 export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
   yield* shippedPodsImported(ctx);
-  const root = ctx.podsRoot ?? productPodsRoots();
+  const root = podsRoots(ctx);
   const found = yield* Effect.tryPromise({
     try: () => listPackages(root),
     catch: (error) => new LocalOpError("pod.list", errorMessage(error), 400),
   });
+  const project = yield* Effect.promise(() => projectPodIds(ctx.pointer));
   return {
-    pods: (yield* Effect.promise(() => activePackages(found.packages, root))).map((pod) => ({
+    pods: (yield* Effect.promise(() => activePackages(found.packages, root, project))).map((pod) => ({
       id: pod.id,
       name: pod.name,
       version: pod.version,
       folder: pod.folder,
-      ...withHome(pod.directory),
+      ...withHome(pod.directory, ctx),
       entrypoints: pod.entrypoints,
       contributions: pod.contributions,
       members: pod.members.map(({ path, sha256, schema }) => ({ path, sha256, schema })),
       diagnostics: pod.diagnostics,
     })),
+    ...projectPodsNote(ctx),
     unreadable: found.unreadable,
   } satisfies PodList;
 });
@@ -125,11 +148,11 @@ export const resolvePodIdentity = Effect.fnUntraced(function* (
   ctx: PodContext = {},
 ) {
   yield* shippedPodsImported(ctx);
-  const root = ctx.podsRoot ?? productPodsRoots();
+  const root = podsRoots(ctx);
   return yield* Effect.tryPromise({
     try: async () => {
       const identity = await resolvePackageIdentity(folder, root);
-      await requirePackageEnabled(identity.id, root);
+      await requirePackageEnabled(identity.id, root, await projectPodIds(ctx.pointer));
       return { projection: "identity" as const, identity };
     },
     catch: (error) => new LocalOpError("pod.list", errorMessage(error), 400),
@@ -278,11 +301,12 @@ function parseReceipt(content: string): PodReceipt | string {
 
 export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: PodContext = {}) {
   yield* Effect.tryPromise({
-    try: () => requirePackageEnabled(member.pod, ctx.podsRoot),
+    try: async () =>
+      requirePackageEnabled(member.pod, ctx.podsRoot, await projectPodIds(ctx.pointer)),
     catch: (error) => new LocalOpError("pod.member.read", errorMessage(error), 403),
   });
   const admitted = yield* Effect.tryPromise({
-    try: () => readPackage(member.pod, ctx.podsRoot ?? productPodsRoots()),
+    try: () => readPackage(member.pod, podsRoots(ctx)),
     catch: (error) =>
       new LocalOpError(
         "pod.member.read",
@@ -313,7 +337,7 @@ export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: P
     content: new TextDecoder("utf-8", { ignoreBOM: true }).decode(captured.bytes),
     sha256: captured.sha256,
     bytesBase64: Buffer.from(captured.bytes).toString("base64"),
-    ...withHome(admitted.directory),
+    ...withHome(admitted.directory, ctx),
     ...(written ? { modifiedAt: written } : {}),
   };
 });
@@ -583,9 +607,9 @@ export const composedSpec = Effect.fnUntraced(function* (
 });
 
 export const podFolder = Effect.fnUntraced(function* (podId: string, ctx: PodContext = {}) {
-  const root = ctx.podsRoot ?? productPodsRoots();
+  const root = podsRoots(ctx);
   yield* Effect.tryPromise({
-    try: () => requirePackageEnabled(podId, root),
+    try: async () => requirePackageEnabled(podId, root, await projectPodIds(ctx.pointer)),
     catch: (error) => new LocalOpError("pod.resolve", errorMessage(error), 403),
   });
   const pod = yield* Effect.tryPromise({

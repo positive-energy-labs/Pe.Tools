@@ -96,6 +96,9 @@ export const bridgeDocumentSnapshotSchema = Schema.Struct({
   address: nullableString,
   isFamilyDocument: Schema.Boolean,
   isActive: Schema.Boolean,
+  // `data.path` of the document's project-home blob (homes freeze shape 4): the pointer a
+  // target-scoped call resolves its project home from. Absent until the C# snapshot sends it.
+  projectHome: Schema.optional(nullableString),
 });
 
 export const bridgeStateSnapshotSchema = Schema.Struct({

@@ -1067,11 +1067,12 @@ const localEntries = {
   "host.shell.open": Effect.fnUntraced(function* ({ request }: LocalCall) {
     return yield* openShellPath(yield* decodeRequest("host.shell.open", request));
   }),
-  "pod.list": Effect.fnUntraced(function* ({ request }: LocalCall) {
+  "pod.list": Effect.fnUntraced(function* ({ request, scope, bridge }: LocalCall) {
     const input = yield* decodeRequest("pod.list", request);
+    const homes = yield* targetHomes(bridge, scope);
     return input.projection === "identity"
-      ? yield* resolvePodIdentity(input.folder)
-      : yield* listPods();
+      ? yield* resolvePodIdentity(input.folder, homes)
+      : yield* listPods(homes);
   }),
   "pod.capture": Effect.fnUntraced(function* ({ request }: LocalCall) {
     const { pod } = yield* decodeRequest("pod.capture", request);
@@ -1110,20 +1111,29 @@ const localEntries = {
   "pod.runs": Effect.fnUntraced(function* ({ request }: LocalCall) {
     return yield* listRuns(yield* decodeRequest("pod.runs", request));
   }),
-  "pod.member.read": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    return yield* readMember(yield* decodeRequest("pod.member.read", request));
+  "pod.member.read": Effect.fnUntraced(function* ({ request, scope, bridge }: LocalCall) {
+    return yield* readMember(
+      yield* decodeRequest("pod.member.read", request),
+      yield* targetHomes(bridge, scope),
+    );
   }),
-  "pod.member.write": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    return yield* writeMember(yield* decodeRequest("pod.member.write", request));
+  "pod.member.write": Effect.fnUntraced(function* ({ request, scope, bridge }: LocalCall) {
+    return yield* writeMember(
+      yield* decodeRequest("pod.member.write", request),
+      yield* targetHomes(bridge, scope),
+    );
   }),
-  "pod.member.save": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    return yield* saveMember(yield* decodeRequest("pod.member.save", request));
+  "pod.member.save": Effect.fnUntraced(function* ({ request, scope, bridge }: LocalCall) {
+    return yield* saveMember(
+      yield* decodeRequest("pod.member.save", request),
+      yield* targetHomes(bridge, scope),
+    );
   }),
   "pod.member.compose": Effect.fnUntraced(function* ({ request, scope, bridge }: LocalCall) {
-    return yield* composeMember(
-      yield* decodeRequest("pod.member.compose", request),
-      yield* podContext(bridge, scope),
-    );
+    return yield* composeMember(yield* decodeRequest("pod.member.compose", request), {
+      ...(yield* podContext(bridge, scope)),
+      ...(yield* targetHomes(bridge, scope)),
+    });
   }),
   "rhvac.open": Effect.fnUntraced(function* ({ request }: LocalCall) {
     return yield* rhvacOpen(yield* decodeRequest("rhvac.open", request));
@@ -1179,6 +1189,22 @@ const packageError = (key: string, error: unknown) => {
     note.startsWith("No installed pod") ? 404 : note.includes("is claimed by") ? 409 : 422,
   );
 };
+
+/**
+ * The home list a call reads (ADR 0037): the pointer of the document the call targets, as the
+ * bridge's open-document snapshot reports it. A call that targets no open document has no project
+ * home, and a targeted document with no pointer is `null`.
+ */
+export const targetHomes = Effect.fnUntraced(function* (
+  bridge: Pick<RevitBridge["Service"], "list">,
+  scope: HostSessionScope | undefined,
+) {
+  if (!scope?.openDocumentId) return {} satisfies PodContext;
+  const target = (yield* bridge.list)
+    .flatMap((session) => session.state?.openDocuments ?? [])
+    .find((document) => document.openId === scope.openDocumentId);
+  return (target ? { pointer: target.projectHome ?? null } : {}) satisfies PodContext;
+});
 
 /** A session-less host composes schema-only; it never pretends a bridge is there. */
 const podContext = Effect.fnUntraced(function* (
