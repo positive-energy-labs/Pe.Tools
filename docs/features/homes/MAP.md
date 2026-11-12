@@ -8,7 +8,7 @@ The goal, in the owner's words: "get us closer to pea being actually usable", wi
 
 ## Nouns and invariants
 
-- **Home**: a folder that holds authored content and proves itself with a marker file `pe-home.json` whose one field is `tier` (`user`, `project` or `firm`). The folder name is the display name. The word is reserved for content homes.
+- **Home**: a folder that holds authored content. A project or firm home proves itself with a marker file `pe-home.json`, whose one field is `tier` (`project` or `firm`). The user home is found by its location (`Documents\Pe.Tools`), carries no marker, and the product never writes one there. The driver proved that on the installed lane at 7739d09f. The folder name is the display name. The word is reserved for content homes.
 - **Layout**: every home holds `Pods/`, `Pages/`, `Catalogs/` and `Settings/<owner>.json`. The firm home adds `keys.json`. `Firm/` is renamed `Settings/` before anyone writes on G:.
 - **Home list**: `[user, project home of the open model, firm]`. It takes the target document, so it is no longer a nullary path resolver.
 - **Project pointer**: the model names its project home. The pointer is one owner blob in the in-model carrier. It stores a path with no drive letter, relative to the shared drive root that the firm home was found on. Pe's files sit in one child folder named `Pe.Tools` inside the folder the humans use.
@@ -221,3 +221,7 @@ The owner: "we need to be relient if these assumptions dont hold, but I think th
   - It makes small merge-resolution fixes itself and hands anything bigger to the implementor.
   - The implementor keeps merging writer branches into `crusade/homes` and keeps the owner queue.
   - Homes reaches main only after three gates clear: the driver's A2 drive on canonical `src/dev.ts`, the Sandbox or installed-lane run, and the owner's runbook.
+- 2026-11-12, implementor defaults from landing gate 2 (Sandbox, installed lane), re-openable by kaitpw:
+  - The user home carries no marker and is found by its location. The Home noun above now says so, and no writer is owed.
+  - Work that an earlier version left in `<user home>\Work` is noticed, never moved or deleted. One stored notice on start names the folder and says it is no longer read (R11). Deleting it is irreversible and touches synced files the person owns, so it waits for the person.
+  - On the installed host, the doc lab's parse route (`/api/pdf-audit/parse`) answers 404, while the `/pdf-audit` page itself ships. Main is the same, because the route is a web dev-server route, so this is not a homes regression and does not block the landing. Whether to delete the doc lab upload is Q14 in the owner queue.
