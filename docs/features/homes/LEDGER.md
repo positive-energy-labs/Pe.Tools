@@ -109,4 +109,4 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
   - A kept vendor PDF never refreshes (MAP decision log, 2026-11-12). Owed if a revised sheet at the same URL shows up live: a refresh verb.
   - Nothing prunes a derived store, and no census verb walks one. End-gate target 5 is checked by the tests' own walk and, per key, on every read.
   - `state\Parses\llamaparse` on the owner's machine holds hosted parses nothing reads now. The owner deletes it by hand.
-- Runbook row 3 proved cleanup with no second Revit beside Pea's, because the one-Revit cap stopped the driver's session first. "Cleanup leaves a person's live Revit untouched" is UNPROVEN. kaitpw 2026-11-12: "please prove this. you have a budget of three revits"; the driver runs it as runbook row 3b.
+- Runbook row 3b, PROVEN 2026-11-12 (driver, runbook-e7b565c4…/VERDICT.md "Row 3b, second attempt"): `instances.cleanup` stopped only Pea's Revit 2025 while a quarantined Revit 2026 with an unsaved edit kept running, its document still modified and its file hash unchanged. The SDK's quarantine lease is per Revit year, so a two-Revit drive needs two years.
