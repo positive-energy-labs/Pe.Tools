@@ -56,7 +56,7 @@ export async function exportPod(
   return writePodExport(await preparePodExport(request, options));
 }
 
-/** Freeze the archive and its dependency versions before a command waits for consent. */
+/** Freeze the archive and its dependency versions at command admission. */
 export async function preparePodExport(
   request: { pod: string; archivePath: string },
   options: TransferOptions = {},

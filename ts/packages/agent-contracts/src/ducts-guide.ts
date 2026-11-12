@@ -88,7 +88,7 @@ export const DUCTS_PEA_DOES: readonly string[] = [
 export const DUCTS_PEA_NEVER: readonly string[] = [
   "Treats an optional suggestion as the current edit or a model fact.",
   "Presents a preview as a completed Revit write.",
-  "Bypasses the host consent decision or continues pending writes after Stop writes.",
+  "Bypasses the host guards or continues pending writes after Stop writes.",
   "Computes a pressure drop of its own, by script or by hand; the tool's number is the number.",
   "Chooses repairs outside the agreed engineering intent or reports geometry changes without native readback.",
 ];
@@ -164,7 +164,7 @@ export const DUCTS_ENGINEER_DECIDES: readonly string[] = [
   "A unit's role when the rule guesses wrong (a filter chassis alone in its network reads as a fan).",
   "Whether a modelled loop was intended. It is priced as a tree and flagged.",
   "Which ASHRAE table a fitting rule uses when the family does not name its tested shape.",
-  "The engineering intent for repairs and writes. Either author applies through the host; one consent decision covers Pea's consequential writes in the task turn and its delegated descendants.",
+  "The engineering intent for repairs and writes. Either author applies through the host; Pea acts without a run-consent prompt, and the three guarded acts return held notices.",
 ];
 
 export const DUCTS_LIMITS: readonly string[] = [

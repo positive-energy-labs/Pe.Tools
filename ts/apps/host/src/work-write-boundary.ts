@@ -306,7 +306,7 @@ export function workWriteBoundary(
           ...(bound.claims ?? []),
           ...(!previewOnly && preview ? [{ kind: "receipt" as const, id: preview.id }] : []),
         ],
-        // Seal eligibility is read-only; rederive again after consent to catch intervening changes.
+        // Seal eligibility is read-only; rederive again at preparation to catch intervening changes.
         preflight: previewOnly
           ? undefined
           : async () => {

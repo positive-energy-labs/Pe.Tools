@@ -372,7 +372,7 @@ export async function preparePagePublication(
   return { input, capture, origin };
 }
 
-/** The frozen version is checked at the actual file effect, after consent and capture. */
+/** The frozen version is checked at the actual file effect, after admission and capture. */
 export async function pageVersion(source: PagesSource, slug: string): Promise<string | null> {
   const index = join(await pageHomeRoot(source, slug), slug, "index.html");
   await ordinaryPath(index);

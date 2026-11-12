@@ -67,7 +67,7 @@ export function useSend(_handle: ChatHandle, draft: ChatDraft, onSent?: (sent: C
     refusal: workbench.sendRefusal ?? emptyPrompt(draft),
     run: async () => {
       try {
-        // SHIM: S gap 9 must expose typed host commands before this can use the shared consent door.
+        // SHIM: S gap 9 must expose typed host commands before this can use the shared command door.
         await workbench.sendPrompt(input);
         onSent?.(draft);
         return null;
