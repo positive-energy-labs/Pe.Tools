@@ -325,7 +325,7 @@ After that rebuild and before signing, `CreateInstallerModule.MakeGuiSubsystem` 
 executable's PE subsystem from console to windowed: Node's apphost is a console image, and a host
 started from the login Run value or the Start Menu shortcut would otherwise own a console window
 whose close kills the host and its tray. Node black-holes stdout without a console; the installed
-lane tees its console to `logs/host.log` under the product root (`host-main.ts`).
+lane tees its console to `logs/host.log.txt` under the product root (`host-main.ts`, name from `productPathNames.hostLogFileName`).
 
 Installer packaging is deliberately complete-family: it rejects `--configuration`, requires every
 `Directory.Build.props` Revit year publish root, and requires the manifest `years` transport contract
