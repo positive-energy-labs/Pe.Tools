@@ -10,6 +10,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
+import { productAgentPath } from "../src/product-paths.ts";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 
@@ -165,11 +166,11 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     });
     expect(shutdown.status).toBe(200);
 
-    // Host bootstrap config belongs to the fixture's content home, never the user's Documents.
+    // Host bootstrap config belongs to the agent's machine state, outside content homes.
     expect(
       await waitFor(async () => {
         try {
-          return readFileSync(join(localAppData, "content", ".codex", "config.toml"), "utf8");
+          return readFileSync(join(productAgentPath(), ".codex", "config.toml"), "utf8");
         } catch {
           return null;
         }
