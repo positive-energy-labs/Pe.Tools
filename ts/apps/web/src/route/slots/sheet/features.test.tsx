@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, test } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { local, sheetSlotData, store } from "@pe/agent-contracts/slots";
+import { local, setting, sheetSlotData, store } from "@pe/agent-contracts/slots";
 import { makeAtomRegistry } from "../../../shell/owner";
 import { sheetCells } from "./index.ts";
 import { SheetPane } from "./pane.tsx";
@@ -82,4 +82,26 @@ test("empty state: a sheet whose read has nothing for it says so and where to go
   const slot = { draft: true as const, empty: (read: { open: unknown }) => (read.open ? null : "Open a fan from the roster."), bindings: { a: local(z.number()) } };
   render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: ctx as never, slot }} /></RegistryContext>);
   expect(screen.getByText("Open a fan from the roster.")).toBeTruthy();
+});
+
+const action = vi.hoisted(() => vi.fn());
+vi.mock("../../../../../../packages/mcps/src/shared/takeoff-action-client", () => ({ submitAction: action }));
+
+test("save at submits the exact tier hash and typed value through the action door", async () => {
+  const refresh = vi.fn();
+  action.mockResolvedValue({ state: "succeeded", result: { tier: "firm", path: "shared/Settings/ducts.json" } });
+  const slot = { bindings: { allowance: setting("ducts", ["criteria", "allowanceReturnInWg"], z.number(), ["firm"], { label: "Return allowance" }) } };
+  const ctx = { cells: { doc: {} }, page: { read: () => ({}) }, refresh,
+    value: { status: "ready", current: true, value: { settings: { ducts: [
+      { tier: "firm", home: "shared", name: "shared", path: "shared/Settings/ducts.json", sha256: "prior", json: { criteria: { allowanceReturnInWg: 0.2 } } },
+    ] } } } };
+  render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: ctx as never, slot }} /></RegistryContext>);
+  fireEvent.change(screen.getByRole("textbox", { name: "Return allowance: value to save" }), { target: { value: "0.35" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save Return allowance at the firm home" }));
+  await vi.waitFor(() => expect(action).toHaveBeenCalledWith({
+    id: expect.any(String), key: "settings.tiers.write", target: { kind: "host" },
+    input: { owner: "ducts", tier: "firm", path: ["criteria", "allowanceReturnInWg"], value: 0.35, expectedSha256: "prior" },
+  }));
+  expect(refresh).toHaveBeenCalledOnce();
+  expect((await screen.findByRole("status")).textContent).toContain("Saved at firm");
 });

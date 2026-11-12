@@ -3,7 +3,8 @@ import { decode, type SubjectRefCode } from "../../../../../../packages/agent-co
 import type { SheetSlot } from "@pe/agent-contracts/slots";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
-import { callHostRpc } from "#/host/client";
+import { submitAction } from "../../../../../../packages/mcps/src/shared/takeoff-action-client";
+import type { OpResponseOf } from "@pe/host-contracts/operation-types";
 import { StateCell } from "@pe/kit/lang/cell";
 import { useRouteSearchSlice } from "../../activity";
 import type { DrawContext, Fields } from "../../typed-route.ts";
@@ -88,7 +89,6 @@ function SettingCell({ ctx, cell, schema }: { ctx: Ctx; cell: SheetCell; schema:
   const [text, setText] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
-  const target = ctx.target?.kind === "document" ? ctx.target.ref : null;
   const save = async (tier: NonNullable<SheetCell["setting"]>["tiers"][number]) => {
     const typed = text.trim();
     const value = typed === "" ? null : cell.numeric || typeof cell.value === "number" ? Number(typed) : typed;
@@ -96,11 +96,15 @@ function SettingCell({ ctx, cell, schema }: { ctx: Ctx; cell: SheetCell; schema:
     if (parsed && !parsed.success) return setSaid(`Not saved: ${parsed.error.issues[0]?.message ?? "the value is not valid"}`);
     setBusy(tier.tier);
     try {
-      const wrote = await callHostRpc(
-        "settings.tiers.write",
-        { owner: cell.setting!.owner, tier: tier.tier, path: [...cell.setting!.path] as [string, ...string[]], value: parsed ? parsed.data : null, expectedSha256: tier.sha256 },
-        target ? { bridgeSessionId: target.session, openDocumentId: target.openId } : {},
-      );
+      const receipt = await submitAction({
+        id: crypto.randomUUID(),
+        key: "settings.tiers.write",
+        target: { kind: "host" },
+        input: { owner: cell.setting!.owner, tier: tier.tier, path: [...cell.setting!.path], value: parsed ? parsed.data : null, expectedSha256: tier.sha256 },
+      });
+      if (receipt.state !== "succeeded")
+        throw Error(`Save ${receipt.state}${"error" in receipt ? `: ${receipt.error}` : ""}`);
+      const wrote = receipt.result as OpResponseOf<"settings.tiers.write">;
       setSaid(`${value === null ? "Cleared" : "Saved"} at ${wrote.tier}: ${wrote.path}`);
       setText("");
       ctx.refresh();
@@ -111,14 +115,16 @@ function SettingCell({ ctx, cell, schema }: { ctx: Ctx; cell: SheetCell; schema:
     }
   };
   return (
-    <div className="contents" data-sheet-cell={cell.label} data-sheet-address={cell.binding} data-source={cell.source}>
-      <span className="min-w-0 truncate">{cell.label}</span>
-      <span className="flex min-w-0 items-center gap-1">
-        <span className="shrink-0">{cell.value == null ? "\u2014" : String(cell.value)}{cell.unit ? ` ${cell.unit}` : ""}</span>
+    <div className="col-span-full flex min-w-0 flex-col gap-1" data-sheet-cell={cell.label} data-sheet-address={cell.binding} data-source={cell.source}>
+      <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+        <span className="min-w-0 truncate">{cell.label}</span>
+        <span className="min-w-0 truncate text-ink-2" data-input-source={cell.source}>{[layerWord(cell), cell.note].filter(Boolean).join(" \u00b7 ")}</span>
+      </span>
+      <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-center gap-1">
+        <span className="min-w-0 truncate">{cell.value == null ? "\u2014" : String(cell.value)}{cell.unit ? ` ${cell.unit}` : ""}</span>
         <Input aria-label={`${cell.label}: value to save`} value={text} placeholder="save at" onChange={(event) => setText(event.target.value)} />
       </span>
-      <span className="t-small min-w-0 truncate text-ink-2" data-input-source={cell.source}>{[layerWord(cell), cell.note].filter(Boolean).join(" \u00b7 ")}</span>
-      <span className="flex gap-1">
+      <span className="flex min-w-0 flex-wrap gap-1">
         {cell.setting!.tiers.map((tier) => (
           <Button key={tier.tier} kind="quiet" label={`Save ${cell.label} at the ${tier.tier} home${text.trim() ? "" : " (empty clears it there)"}`}
             busy={busy === tier.tier} {...(tier.home ? {} : { refusal: tier.notFound ?? `No ${tier.tier} home` })} onPress={() => void save(tier)}>
