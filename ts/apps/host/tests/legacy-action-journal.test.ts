@@ -17,10 +17,16 @@ test.each([4, 5, 6, 7])("journal epoch %s is discarded without conversion, archi
       "unsupported old row payload", ""].join("\n"), "utf8");
     const owner = journalAt(path, Date.now);
     expect(await owner.list()).toEqual([]);
-    expect(await readdir(dir)).toEqual([]); // No archive or converted uncertain command survives.
+    // No archive or converted uncertain command survives: the folder holds only the fresh journal,
+    // which is one header line that records the discard for the replay guard.
+    expect(await readdir(dir)).toEqual(["journal.jsonl"]);
+    expect((await readFile(path, "utf8")).trim().split("\n")).toHaveLength(1);
     const current = await owner.actionJoin("old-action");
     expect(current.actionId).not.toBe(oldAction);
-    expect((await readFile(path, "utf8")).split("\n")[0]).toBe('{"version":8}');
+    expect(JSON.parse((await readFile(path, "utf8")).split("\n")[0]!)).toEqual({
+      version: 8,
+      discarded: expect.any(String),
+    });
     expect(await journalAt(path, Date.now).actionJoin("old-action")).toEqual(current);
     expect(await journalAt(path, Date.now).list()).toEqual([]);
   } finally { await rm(dir, { recursive: true, force: true }); }

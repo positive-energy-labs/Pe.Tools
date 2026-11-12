@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { createPeaMcpServer } from "../src/server.ts";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -15,8 +16,13 @@ test("a delayed MCP invocation keeps its immutable run transport across a later 
   });
   const headers = { "x-pe-context": "host-run-one" };
   const seen: string[] = [];
-  vi.stubGlobal("fetch", async (_url: unknown, init: RequestInit) => {
+  const posted: { path: string; key: unknown }[] = [];
+  vi.stubGlobal("fetch", async (url: unknown, init: RequestInit) => {
     seen.push(new Headers(init.headers).get("x-pe-context")!);
+    posted.push({
+      path: new URL(String(url)).pathname,
+      key: JSON.parse(String(init.body)).key,
+    });
     return Response.json({ ok: true });
   });
   const old = await createPeaMcpServer({
@@ -47,6 +53,8 @@ test("a delayed MCP invocation keeps its immutable run transport across a later 
     release();
     await pending;
     expect(seen).toEqual(["host-run-one"]);
+    // A Page is published through the one admission door, where a re-sent tool call is guarded.
+    expect(posted).toEqual([{ path: peRoutes["actions.admit"].path, key: "page.publish" }]);
   } finally {
     release();
     await client.close();

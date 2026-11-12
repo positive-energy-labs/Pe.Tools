@@ -57,6 +57,11 @@ export default defineConfig({
       // DIAG-N03-REPORT.md: the intentionally red old-loader falsifier is retired with the legacy Families suite.
       "**/families/workflow.test.tsx",
     ],
+    // A run from this folder (`vp test run apps/host/tests/x.test.ts`) uses this config, not the
+    // package's. Without these it resolved the checkout's real state root and wrote test rows into
+    // its notice file. Every package config names the same two files.
+    globalSetup: ["./tests/isolated-home/global-setup.ts"],
+    setupFiles: ["./tests/isolated-home/setup.ts"],
   },
   run: {
     cache: true,

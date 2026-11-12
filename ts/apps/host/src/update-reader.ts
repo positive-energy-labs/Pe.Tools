@@ -111,8 +111,12 @@ const admissionSchema = z.object({
   candidate: z.string().nullable().default(null),
   /** Whether the machine admitted this request on its own; null on admissions older than 0.7.31. */
   automatic: z.boolean().nullable().default(null),
+  /** When an earlier record at this path was discarded; every later record carries it forward. */
+  discardedAtUtc: z.string().nullable().default(null),
 });
 type Admission = z.infer<typeof admissionSchema>;
+/** What a discard leaves in the file until the next admission: only when it happened. */
+const discardedSchema = z.strictObject({ discardedAtUtc: z.string() });
 /** The stored record: a receipt must answer the request and plan it is stored beside. */
 const storedAdmissionSchema = admissionSchema.refine((stored) => {
   // A mismatch throws, and `readStored` refuses a file whose decode throws.
@@ -163,6 +167,8 @@ export function createUpdateReader(options: {
 }) {
   const now = options.now ?? (() => new Date().toISOString());
   let admission: Admission | null = null;
+  /** Set when a record at this path was discarded: the reader no longer knows what was applied. */
+  let discardedAtUtc: string | null = null;
   let loaded = false;
   let loading: Promise<void> | undefined;
   let refreshing: Promise<MachineUpdate> | undefined;
@@ -188,13 +194,25 @@ export function createUpdateReader(options: {
       // Machine state (ADR 0039): an admission that does not decode, or whose receipt answers
       // another request, is discarded with a notice. The update then reads as never admitted. Its
       // bytes rest in the blob store first, under the hash the notice names.
-      const read = readStored(options.path, storedAdmissionSchema, {
+      const read = readStored(options.path, z.union([storedAdmissionSchema, discardedSchema]), {
         class: "discard",
         place: "Update status",
         notices: storedNoticesPath(),
         blobRoot: storedBlobsPath(),
       });
-      if (read.kind === "ok") {
+      // The replay guard's record rides this file, like the journal's header: a discard leaves
+      // when it happened, and every admission after it carries that forward.
+      if (read.kind === "discarded") {
+        discardedAtUtc = now();
+        try {
+          writeAtomic(options.path, JSON.stringify({ discardedAtUtc }));
+        } catch (error) {
+          // The flag stays in memory, and the next admission writes it.
+          console.warn(`Could not record the update status discard: ${String(error)}`);
+        }
+      }
+      if (read.kind === "ok") discardedAtUtc = read.value.discardedAtUtc;
+      if (read.kind === "ok" && "requestId" in read.value) {
         admission = read.value;
         terminalDiagnosticPending =
           admission.receipt?.state === "failed" && !admission.receiptError;
@@ -365,6 +383,21 @@ export function createUpdateReader(options: {
         (!admission.receipt || !["ok", "failed", "refused"].includes(admission.receipt.state))
       )
         throw Error("The previous update has no confirmed terminal receipt.");
+      // The replay guard (MAP decision log 2026-11-12). After a discard this reader cannot say
+      // whether a plan it is handed was already applied or is still running, and the installer
+      // refuses only a plan whose installed version already changed. So it admits only a plan
+      // this host checked after the discard. Every check mints a new plan id, so a re-sent apply
+      // of an older plan is refused here and never reaches the installer.
+      if (
+        discardedAtUtc &&
+        !(
+          value.plan?.planId === planId &&
+          Date.parse(value.plan.observedAtUtc) > Date.parse(discardedAtUtc)
+        )
+      )
+        throw Error(
+          "The update status could not be read and was discarded, so whether this plan was already applied is unknown. It is not applied again. Check for updates, then apply the plan that check returns.",
+        );
       const record: Admission = {
         requestId: randomUUID(),
         planId,
@@ -374,6 +407,7 @@ export function createUpdateReader(options: {
         receiptError: null,
         candidate: value.plan?.planId === planId ? value.plan.latest : null,
         automatic: noShortcutArgs,
+        discardedAtUtc,
       };
       // Flush and atomically install identity BEFORE the detached child can have effects.
       await persist(record);

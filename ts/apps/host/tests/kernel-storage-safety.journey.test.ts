@@ -47,7 +47,10 @@ test("E8 corrupt journal is discarded with one notice, and a real action then ru
   try {
     const response = await cold.actions()(admission);
     expect(response.status, await response.clone().text()).toBeLessThan(400);
-    expect((await readFile(path, "utf8")).split("\n")[0]).toBe('{"version":8}');
+    expect(JSON.parse((await readFile(path, "utf8")).split("\n")[0]!)).toEqual({
+      version: 8,
+      discarded: expect.any(String),
+    });
     expect(
       readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === path),
     ).toMatchObject([{ class: "discard", place: "Action journal", sha256: sha256Hex(corrupt) }]);
@@ -62,7 +65,8 @@ test("E8 corrupt journal is discarded with one notice, and a real action then ru
 // The replay guard (MAP decision log 2026-11-12). A discarded journal knows nothing, so an
 // admission that is re-sent to it (`ADMISSION_RESEND_HEADER`: an earlier send may have arrived)
 // may already have run. It is refused with the reason and never dispatched as a new action. The
-// refusal holds across a restart, because the discard's notice is its durable record.
+// refusal holds across a restart with the notice file gone, because the discard rides the
+// journal's own header.
 test("E8 a re-sent admission that a discarded journal does not know is refused, and nothing dispatches", async () => {
   const f = await setup();
   const admission = await f.admission();
@@ -92,6 +96,8 @@ test("E8 a re-sent admission that a discarded journal does not know is refused, 
       expect(await cold.journal.list(undefined, admission.id), start).toEqual([]);
       await cold.close();
       cold = undefined;
+      // The notice is only the feed's row: losing the whole file changes nothing for the guard.
+      await rm(storedNoticesPath(), { force: true });
     }
     // The guard reads the discard, not the re-send: a journal that kept its history (here, one
     // that never existed) admits the same re-sent bytes, because it knows it never ran them.

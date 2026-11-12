@@ -312,7 +312,7 @@ test("a disconnected admission stays pending across restart and blocks a second 
   }
 });
 
-test("wrong request or plan cannot overwrite a confirmed receipt, and a corrupt admission is discarded with a notice", async () => {
+test("wrong request or plan cannot overwrite a confirmed receipt; a corrupt admission is discarded, and a re-sent apply of its plan is refused", async () => {
   const f = await fixture();
   try {
     const admitted = await f.reader.apply(plan.planId);
@@ -329,17 +329,45 @@ test("wrong request or plan cannot overwrite a confirmed receipt, and a corrupt 
     );
     expect((await wrongRequest.refresh()).receiptLeg.error).toContain("different update request");
     // ADR 0039: the admission is machine state. One that does not decode is discarded with one
-    // notice, the update reads as never admitted, and the next apply is admitted fresh. The SDK,
-    // not this record, refuses an apply while another update runs.
+    // notice. The replay guard: the reader no longer knows whether the plan was applied, so a
+    // re-sent apply of it is refused with the reason and never reaches the installer. The record
+    // of the discard rides the file itself, so the next start refuses too.
     await writeFile(f.path, "{}");
-    const again = await f.make().apply(plan.planId);
-    expect(again.requestId).not.toBe(admitted.requestId);
+    for (const start of ["the start that discards", "the next start"])
+      await expect(f.make().apply(plan.planId), start).rejects.toThrow(
+        /was discarded, so whether this plan was already applied is unknown\. It is not applied again/,
+      );
+    expect(JSON.parse(await readFile(f.path, "utf8"))).toEqual({
+      discardedAtUtc: expect.any(String),
+    });
     expect(
       readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === f.path),
     ).toMatchObject([{ class: "discard", place: "Update status", sha256: sha256Hex("{}") }]);
     // Nothing is lost: the discarded bytes rest in the blob store under the hash the notice names.
     expect(await readFile(join(storedBlobsPath(), "sha256", sha256Hex("{}")), "utf8")).toBe("{}");
-    expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(2);
+    expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(1);
+    // A plan this host checks after the discard is a new decision: it is admitted, and its record
+    // carries the discard forward.
+    const fresh = {
+      ...plan,
+      planId: crypto.randomUUID(),
+      observedAtUtc: new Date(Date.now() + 60_000).toISOString(),
+    };
+    const applied: string[][] = [];
+    const next = f.make(async (args) => {
+      if (args[0] === "update" && args[1] === "check") return envelope(fresh);
+      if (args[0] === "op") throw Error("successor not answering");
+      applied.push(args);
+      const saved = JSON.parse(await readFile(f.path, "utf8"));
+      return envelope({ ...receipt(saved.requestId), planId: fresh.planId }, 4);
+    });
+    await next.refresh();
+    expect((await next.apply(fresh.planId)).requestId).not.toBe(admitted.requestId);
+    expect(applied).toHaveLength(1);
+    expect(JSON.parse(await readFile(f.path, "utf8"))).toMatchObject({
+      planId: fresh.planId,
+      discardedAtUtc: expect.any(String),
+    });
   } finally {
     await f.close();
   }
@@ -461,7 +489,7 @@ test("U-02/U-04: a lost acknowledgement is unknown, and late recovery of a runni
 
 // ADR 0039 per-request witness: a corrupt admission used to reject every apply and mark every
 // read with an error, for as long as the file stayed.
-test("an admission that does not decode is discarded on the request that meets it, not a 500", async () => {
+test("an admission that does not decode is discarded on the request that meets it: the read answers and a re-sent apply is a 409, not a 500", async () => {
   const f = await fixture();
   const corrupt = "{ this is not JSON";
   await writeFile(f.path, corrupt);
@@ -489,7 +517,12 @@ test("an admission that does not decode is discarded on the request that meets i
       }),
       Context.empty() as never,
     );
-    expect(admitted.status, await admitted.clone().text()).toBe(202);
+    // The replay guard at the door: a plan checked before the discard is a typed 409 with the
+    // reason, and no apply is dispatched.
+    const said = await admitted.text();
+    expect(admitted.status, said).toBe(409);
+    expect(said).toContain("was discarded, so whether this plan was already applied is unknown");
+    expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(0);
     expect(
       readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === f.path),
     ).toMatchObject([{ class: "discard", place: "Update status", sha256: sha256Hex(corrupt) }]);
