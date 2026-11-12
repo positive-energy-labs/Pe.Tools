@@ -284,7 +284,7 @@ test("parser llamaparse is held at once for Pea and sends nothing; the person's 
           sentKey = new Headers(init?.headers).get("authorization") === `Bearer ${secret}`;
           return Response.json({ id: "job-1", project_id: "p", status: "PENDING" });
         }
-        if (++polls === 1) return Response.json({ detail: "Transient poll failure" }, { status: 500 });
+        if (url.pathname.startsWith("/api/v2/parse/job-") && ++polls === 1) return Response.json({ detail: "Transient poll failure" }, { status: 500 });
         return Response.json({
           job: { id: "job-1", project_id: "p", status: "COMPLETED" },
           markdown: {
