@@ -392,6 +392,23 @@
         "unit": "in-wg",
         "min": 0
       },
+      "setting.ducts.designFriction": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "designFriction"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
+        "per": "route",
+        "label": "Design friction",
+        "unit": "in-wg/100 ft",
+        "default": 0.08,
+        "min": 0,
+        "digits": 3
+      },
       "writeIntent": {
         "kind": "local",
         "per": "route",

@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { ductsFirmSchema, type DuctsCriteriaCell } from "@pe/agent-contracts";
+import { ductsFirmSchema, ductsDocumentSchema, neutralFansWork, type DuctsCriteriaCell } from "@pe/agent-contracts";
 import { readStoredNotices } from "@pe/host-contracts/store";
 import { resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
 import type { SheetSnapshot } from "@pe/ducts-domain/sheet/build";
@@ -24,6 +24,9 @@ import { resolveFirm } from "../../../host/src/reads/door.ts";
 import { readSettingTiers, writeSettingTier } from "../../../host/src/tiered-settings.ts";
 import { ductsSettings } from "../ducts/design-sheet.ts";
 import { sheetCells } from "../route/slots/sheet/index.ts";
+
+import { price } from "@pe/ducts-domain/pricing";
+import { snapshot } from "../ducts/test-fixture.ts";
 
 const pointer = "Projects/2026-014 Chadds Ford";
 let user: string, drive: string, firm: string, project: string;
@@ -137,4 +140,16 @@ test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served
   expect(at.tiers.find((read) => read.tier === "firm")).toMatchObject({ home: null });
   // A write at a home that was not found is refused, never written somewhere else.
   expect(writeSettingTier({ owner: "ducts", tier: "firm", path: PATHS.terminalDropInWg!, value: 0.07, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 404 });
+});
+
+// Mutant: keep design friction as a Work cell instead of reading the project setting.
+test("design friction comes from the project home, never Work", async () => {
+  expect(writeSettingTier({ owner: "ducts", tier: "firm", path: ["designFriction"], value: 0.08, expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
+  expect(writeSettingTier({ owner: "ducts", tier: "project", path: ["designFriction"], value: 0.12, expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
+  const tiers = readSettingTiers("ducts", pointer);
+  const cells = sheetCells({ bindings: ductsSettings }, { rows: [], work: null, model: [], read: { settings: { ducts: tiers } } });
+  expect(cells.find(cell => cell.binding === "setting.ducts.designFriction")).toMatchObject({ value: 0.12, source: "project" });
+  expect(price(snapshot, {}, null, neutralFansWork, {}, tiers).edit.designFriction).toBe(0.12);
+  expect(ductsDocumentSchema.parse({})).not.toHaveProperty("designFriction");
+  expect(ductsDocumentSchema.safeParse({ designFriction: {} }).success).toBe(false);
 });

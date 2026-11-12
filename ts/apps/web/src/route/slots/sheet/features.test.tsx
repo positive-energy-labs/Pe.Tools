@@ -17,11 +17,11 @@ const draft = (value: unknown, by = "human") => ({ edit: { value, by } });
 
 test("default layer: an unstaged, unread cell draws its default with its unit and limits, and the data projection keeps them", () => {
   const slot = { draft: true as const, bindings: {
-    designFriction: local(z.number(), "route", { label: "Design friction", default: 0.08, unit: "in-wg/100 ft", min: 0, digits: 3 }),
+    localRate: local(z.number(), "route", { label: "Design friction", default: 0.08, unit: "in-wg/100 ft", min: 0, digits: 3 }),
   } };
-  const [cell] = sheetCells(slot, { rows: [], work: { designFriction: {} }, model: [] });
+  const [cell] = sheetCells(slot, { rows: [], work: { localRate: {} }, model: [] });
   expect([cell!.value, cell!.source, cell!.label, cell!.unit, cell!.numeric]).toEqual([0.08, "default", "Design friction", "in-wg/100 ft", { min: 0, digits: 3 }]);
-  expect(sheetSlotData(slot).bindings.designFriction).toEqual({ kind: "local", per: "route", label: "Design friction", default: 0.08, unit: "in-wg/100 ft", min: 0, digits: 3 });
+  expect(sheetSlotData(slot).bindings.localRate).toEqual({ kind: "local", per: "route", label: "Design friction", default: 0.08, unit: "in-wg/100 ft", min: 0, digits: 3 });
 });
 
 test("model value from the read: a binding reads its row's model value out of the route's core read", () => {

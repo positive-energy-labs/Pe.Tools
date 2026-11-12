@@ -350,7 +350,6 @@ export const tools = {
         ["systemColours"],
         ["kinds", "*"],
         ["criteria", "*"],
-        ["designFriction"],
       ],
     },
     commands: {

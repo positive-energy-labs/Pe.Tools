@@ -171,6 +171,7 @@ export type DuctsInputs = z.infer<typeof ductsInputsSchema>;
 export const ductsFirmSchema = z.strictObject({
   version: z.string().min(1).optional(),
   criteria: ductsCriteriaLayerSchema.optional(),
+  designFriction: z.number().positive().optional(),
   written: settingWrittenSchema.optional(),
 });
 export type DuctsFirmFile = z.infer<typeof ductsFirmSchema>;

@@ -440,20 +440,28 @@
         "unit": "in-wg",
         "min": 0
       },
-      "criteria": {
-        "kind": "store",
-        "store": "_PE_DuctLosses",
-        "per": "subject",
-        "min": 0
-      },
-      "designFriction": {
-        "kind": "local",
+      "setting.ducts.designFriction": {
+        "kind": "setting",
+        "owner": "ducts",
+        "path": [
+          "designFriction"
+        ],
+        "tiers": [
+          "project",
+          "firm"
+        ],
         "per": "route",
         "label": "Design friction",
         "unit": "in-wg/100 ft",
         "default": 0.08,
         "min": 0,
         "digits": 3
+      },
+      "criteria": {
+        "kind": "store",
+        "store": "_PE_DuctLosses",
+        "per": "subject",
+        "min": 0
       }
     }
   },
@@ -473,7 +481,6 @@
         ],
         "work": [
           "criteria",
-          "designFriction",
           "kinds",
           "writeIntent",
           "assumptions",
@@ -506,7 +513,6 @@
         ],
         "work": [
           "criteria",
-          "designFriction",
           "kinds",
           "writeIntent",
           "assumptions",
@@ -539,7 +545,6 @@
         ],
         "work": [
           "criteria",
-          "designFriction",
           "kinds",
           "writeIntent",
           "assumptions",

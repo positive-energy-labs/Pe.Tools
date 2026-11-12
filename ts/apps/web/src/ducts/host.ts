@@ -177,6 +177,7 @@ export const ductsPricing = read("ducts.pricing", {
                 toGrids(tables.body),
                 catalog.tables,
                 ductsDesign(layers.ducts, layers.fans),
+                layers.settings,
               ),
             ),
           );

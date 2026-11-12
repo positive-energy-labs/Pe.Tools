@@ -27,11 +27,11 @@ test("/fans stages no /ducts Work, and /ducts' sheet stages its criteria", () =>
     expect(binding === "writeIntent" || !ductsKeys.includes(binding), binding).toBe(true);
   }
   // /ducts' sheet stages its criteria (a row per cell) and the design friction rate, in /ducts Work.
-  expect(staged(designSheet)).toEqual(["criteria", "designFriction"]);
+  expect(staged(designSheet)).toEqual(["criteria"]);
   for (const binding of staged(designSheet)) expect(ductsKeys).toContain(binding);
   const rows = sheetCells(designSheet, { rows: [], work: { criteria: { velocitySupplyFpm: { edit: { value: 850, by: "human" } } } }, model: [], read: null });
   expect(rows.find((c) => c.row === "velocitySupplyFpm")).toMatchObject({ value: 850, source: "work", label: "Velocity limit supply" });
-  expect(rows.find((c) => c.binding === "designFriction")).toMatchObject({ value: 0.08, source: "default", unit: "in-wg/100 ft" });
+  expect(rows.find((c) => c.binding === "setting.ducts.designFriction")).toMatchObject({ value: 0.08, source: "default", unit: "in-wg/100 ft" });
 });
 
 const handle = (value: object, stage = vi.fn(async () => null)) => ({

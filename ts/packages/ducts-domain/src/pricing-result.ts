@@ -1,4 +1,4 @@
-import { neutralFansWork } from "@pe/agent-contracts";
+import { type SettingTierRead, neutralFansWork } from "@pe/agent-contracts";
 import type { DuctsDesign } from "@pe/agent-contracts";
 import type { Catalogs } from "@pe/ducts-domain/catalog";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
@@ -17,6 +17,7 @@ export function pricingResult(
   grids: Grids,
   catalogs: Catalogs,
   doc: DuctsDesign | null,
+  settings?: readonly SettingTierRead[],
 ) {
   const unpriceable = snapshot.groups.filter(
     (group) => group.rootIds.length && group.terminalCount === 0,
@@ -37,7 +38,7 @@ export function pricingResult(
       `${names} has no terminal${outlets.length ? `: its air leaves at open end ${outlets.join(", ")}` : " and no fan-to-terminal path"}; nothing to price`,
     );
   }
-  const priced = price(snapshot, grids, doc, doc ?? neutralFansWork, catalogs);
+  const priced = price(snapshot, grids, doc, doc ?? neutralFansWork, catalogs, settings);
   const heal = healPlan(snapshot, doc);
   return {
     priced,

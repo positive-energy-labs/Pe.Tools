@@ -9,6 +9,7 @@ import {
   ductsApplyInputSchema,
   ductsApplyRequestProducerSchema,
   stagedDucts,
+  type SettingTierRead,
   type DuctPortPin,
   type DuctComponentWitness,
   type DocumentRef,
@@ -29,6 +30,7 @@ import {
   proposedStatic,
   TABLE_IDS,
 } from "@pe/ducts-domain/pricing";
+import { readSettingTiers } from "./tiered-settings.ts";
 import { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import {
@@ -45,6 +47,7 @@ import { sha256Hex, writeArtifact } from "./page-artifacts.ts";
 type Observation = {
   target: DocumentRef;
   address: string | null;
+  projectHome?: string | null;
   title: string;
   process: { pid: number; startUtcUnixMs: number };
   provenance: unknown;
@@ -70,6 +73,7 @@ type EffectiveInputs = {
   fans: FansRouteDocument;
   catalogs?: Catalogs;
   catalogFindings?: string[];
+  settings?: SettingTierRead[];
 };
 const solve = ({
   snapshot: raw,
@@ -78,9 +82,10 @@ const solve = ({
   fans,
   catalogs = EMPTY_CATALOGS,
   catalogFindings = [],
+  settings,
 }: EffectiveInputs) => {
   const design = ductsDesign(work, fans);
-  const priced = price(raw, toGrids(tables), design, fans, catalogs);
+  const priced = price(raw, toGrids(tables), design, fans, catalogs, settings);
   // The surveyed snapshot: gaps joined and taps inferred, as the solves saw it.
   const { snapshot } = priced;
   const equipmentIds = [
@@ -334,6 +339,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     const fansOwned = await sources.readWork(fansKey);
     if (!fansOwned) throw Error("Fans Work is unreadable at this binding");
     const fans = fansDocumentSchema.parse(fansOwned.doc);
+    const settings = readSettingTiers("ducts", observation.projectHome);
     const acquisition: Artifact["acquisition"] = [];
     async function read(key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables", request: unknown) {
       const response = await sources.call(key, request, target);
@@ -378,6 +384,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       fans,
       catalogs: catalogs.tables,
       catalogFindings: catalogs.findings,
+      settings,
     } satisfies EffectiveInputs);
     if (Buffer.byteLength(inputJson) > MAX_BYTES)
       throw Error("Full analysis inputs exceed the byte budget; graph was not clipped");
@@ -474,7 +481,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       input.snapshot,
       toGrids(input.tables),
       ductsDesign(work, input.fans), input.fans,
-      input.catalogs,
+      input.catalogs, input.settings,
     );
     if (
       ![
