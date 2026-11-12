@@ -1008,24 +1008,20 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
 import { SheetPane } from "./slots/sheet/pane.tsx";
 import { fansSheet } from "../fans/sheet.ts";
-import { PreviewAction } from "@pe/kit/lang/write-action";
 
 // Plan reviews seal model inputs, never browser pane visibility or Page pose.
 import { useEffect, useReducer } from "react";
 import realMuas from "../../../../packages/ducts-domain/src/sheet/fixtures/muas-local-20261102.json";
 import { createWitness } from "../fans/cutover.test-support";
-import { StateCell } from "@pe/kit/lang/cell";
-import { actionStatusSchema } from "@pe/agent-contracts";
-import type { ReceiptFeedState, ReceiptCursor } from "../../../../packages/agent-contracts/src/work-journal-door";
+import type { ReceiptFeedState } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { TypedWrite } from "../shell/typed-shell";
 import type { ReadingDelivery } from "../shell/source-contract";
-const native = vi.hoisted(() => ({ submit: vi.fn(), permission:vi.fn(), retained: [] as unknown[] }));
+const native = vi.hoisted(() => ({ submit: vi.fn(), retained: [] as unknown[] }));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (actual) => ({
   ...(await actual<object>()),
   submitAction: native.submit,
 }));
 
-vi.mock("../workbench/provider/harness-client",()=>({harnessClient:()=>({permission:native.permission})}));
 
 const closes: (() => void)[] = [];
 afterEach(() => {
@@ -1141,7 +1137,6 @@ test.each([false, true])(
           plan = resolve;
         }),
     );
-    native.permission.mockClear();
     const receiptSubscribers=new Set<(state:ReceiptFeedState)=>void>();
     const receipts:WorkJournalDoor["receipts"]=()=>({subscribe(deliver){receiptSubscribers.add(deliver);return ()=>{receiptSubscribers.delete(deliver);};}});
     const f = await createWitness(closes, new Map(), {
@@ -1266,25 +1261,6 @@ test.each([false, true])(
     expect((await screen.findByRole("button", { name: "Write to Revit" })).hasAttribute("disabled")).toBe(false);
     expect(document.querySelector("[data-write-cell]")?.textContent).toContain("925 cfm");
     expect(f.fans.work()!.revision).toBe(stagedRevision);
-    // Broad route-surface witness: the real typed action consumes its receipt feed, and the
-    // consent review contains the exact owned Work cell rather than a parallel fake handle.
-    const receipt=actionStatusSchema.parse({id:"consent-review",key:"sheet.apply",state:"waiting",
-      caller:{kind:"pea",thread:"consent-thread",context:"surface-test"},basis:null,target:{kind:"host"},input:{},startedAt:new Date().toISOString(),
-      consentWindow:{requestId:"consent-request",deadline:new Date(Date.now()+60_000).toISOString()}});
-    act(()=>{for(const deliver of receiptSubscribers)deliver({kind:"ready",receipts:{rows:[receipt],from:0 as ReceiptCursor,through:1 as ReceiptCursor}});});
-    expect(f.typed.action("losses").consent).not.toBeNull();
-    cleanup();
-    function ConsentReview(){return <PreviewAction handle={f.typed.action("losses")} label="Write to Revit">
-      {f.typed.draw("sheet-inputs",ctx=><StateCell label="Equipment flow" cell={ctx.cells.at(["equipmentFlows",elementSubject(realMuas.nodes.find(node => node.id === 14577391)!)],"fans",{
-        format:value=>typeof value==="object"&&value!==null&&"cfm" in value?String(value.cfm):String(value),
-      })}/> ) as import("react").ReactNode}
-    </PreviewAction>;}
-    render(<ConsentReview/>);
-    await act(async()=>fireEvent.click(screen.getByRole("button",{name:/Write to Revit.*planned/})));
-    expect(screen.getByDisplayValue("925")).toBeTruthy();
-    expect(screen.queryByRole("button",{name:"Write to Revit"})).toBeNull();
-    fireEvent.click(document.querySelector("[data-write-reject]")!);
-    expect(native.permission).toHaveBeenCalledWith("consent-thread","consent-request","stop_writes");
     // New naming evidence must revoke the old before/after review rather than silently re-present it.
     const moved = structuredClone(capture);
     moved.document.title = "changed model evidence";

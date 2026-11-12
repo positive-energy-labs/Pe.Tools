@@ -64,9 +64,6 @@ export function GraphHistory({
         row.kind === "feed"
           ? (row.entry.subject as { message?: string } | null)?.message
           : undefined,
-        row.kind === "consent"
-          ? `Consent open${row.consentUntil ? ` until ${activityTime(row.consentUntil)}` : "; awaiting approval"}`
-          : undefined,
       ]
         .filter(Boolean)
         .join(" / "),
@@ -91,7 +88,7 @@ export function GraphHistory({
             </Button>
           )}
           {row.entry.receiptId &&
-            ["queued", "running", "outcome-unknown"].includes(row.outcome?.state ?? "") && (
+            ["running", "outcome-unknown"].includes(row.outcome?.state ?? "") && (
               <Button kind="quiet"
                 label="Stop command"
                 onClick={() => void owner.stopCommand(row.entry.receiptId!)}

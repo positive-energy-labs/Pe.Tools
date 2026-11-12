@@ -2,7 +2,6 @@ import { join } from "node:path";
 import { Effect, FileSystem, Schema, SchemaGetter } from "effect";
 import type { Types } from "effect";
 import {
-  allowDecisionSchema,
   emptyThreadHead,
   emptyThreadLifecycle,
   harnessEventSchema,
@@ -55,7 +54,6 @@ const fields = {
   /** "Pea is pointing at" (ADR 0030 rule 10), newest last, kept until dismissed; `readPointers` decodes. */
   pointers: Schema.optionalKey(Schema.Unknown),
   consentRoot: Schema.optionalKey(contract(runRefSchema, "RunRef")),
-  runConsent: Schema.optionalKey(Schema.NullOr(contract(allowDecisionSchema, "AllowDecision"))),
   acpSessionId: Schema.NullOr(Schema.String),
   models: contract(harnessModelSchema.array(), "HarnessModels"),
   traits: contract(traitOptionSchema.array(), "TraitOptions").pipe(

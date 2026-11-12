@@ -639,7 +639,7 @@ function callRoutes(
         catch: (error) => error,
       });
       return Response.jsonUnsafe(row, {
-        status: row.state === "running" || row.state === "waiting" ? 202 : 200,
+        status: row.state === "running" ? 202 : 200,
       });
     }).pipe(
       Effect.catch((error) =>
@@ -754,7 +754,7 @@ function callRoutes(
             };
             const row = await owner().resume(body.id, crossing);
             return Response.jsonUnsafe(row, {
-              status: row.state === "running" || row.state === "waiting" ? 202 : 200,
+              status: row.state === "running" ? 202 : 200,
             });
           },
           catch: (error) => error,

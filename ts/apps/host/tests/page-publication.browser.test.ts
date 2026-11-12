@@ -150,10 +150,9 @@ it("captures through real Edge, publishes only on success, and preserves authore
   expect(await readFile(join(root, "flow", "index.html"), "utf8")).toContain("<h1>Flow</h1>");
 }, 45000);
 
-it("records publication before waiting and Stop leaves the existing source untouched", async () => {
+it("a publication from a stopped run is refused and leaves the existing source untouched", async () => {
   const ref = { thread: "publication", turn: "one" };
-  const events: Array<{ kind: string; requestId?: string }> = [];
-  const runs = testConsents((_run, event) => events.push(event));
+  const runs = testConsents();
   bindControl({ runs });
   runs.open(ref);
   try {
@@ -164,25 +163,13 @@ it("records publication before waiting and Stop leaves the existing source untou
       run: ref,
       root: ref,
     });
-    const pending = fixtureValue.publish(page, "publish-once");
-    await expect
-      .poll(async () => (await fixtureValue.journal.list(undefined, "publish-once"))[0]?.state)
-      .toBe("waiting");
-    const row = (await fixtureValue.journal.list(undefined, "publish-once"))[0]!;
-    expect(row).toMatchObject({
-      state: "waiting",
-      input: page,
-      prepared: { state: "unprepared" },
-      effects: [{ kind: "publication", page: "page:@pages/flow" }],
-    });
-    expect(await readFile(join(fixtureValue.root, "flow", "index.html"), "utf8")).toBe("old");
-    const ask = events.find((event) => event.kind === "permission_request")!;
-    expect(runs.decide(ref.thread, ask.requestId!, "stop_writes")).toBe(true);
-    expect((await pending).status).toBe(409);
-    expect((await fixtureValue.journal.list(undefined, "publish-once"))[0]?.state).toBe(
-      "cancelled",
-    );
-    expect((await fixtureValue.publish(page, "publish-once")).status).toBe(409);
+    runs.close(ref, "stopped");
+    expect((await fixtureValue.publish(page, "publish-once")).status).toBeGreaterThanOrEqual(400);
+    expect(
+      (await fixtureValue.journal.list(undefined, "publish-once")).some(
+        (row) => row.state === "succeeded" || row.state === "running",
+      ),
+    ).toBe(false);
     expect(await readFile(join(fixtureValue.root, "flow", "index.html"), "utf8")).toBe("old");
   } finally {
     runs.closeAll();

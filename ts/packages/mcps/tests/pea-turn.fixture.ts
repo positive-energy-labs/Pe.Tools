@@ -11,7 +11,7 @@ export function peaTurns(): {
   newTurn: (thread: string, root?: Turn) => { run: Turn; token: ReturnType<typeof mintContext> };
 } {
   const tokens: string[] = [];
-  const runs = testConsents(() => {}, { autoApprove: () => false });
+  const runs = testConsents();
   bindControl({ runs });
   onTestFinished(() => {
     runs.closeAll();

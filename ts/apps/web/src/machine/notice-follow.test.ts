@@ -87,40 +87,21 @@ test("a malformed feed moves nothing", () => {
   h.stop();
 });
 
-test("a consent row becomes a card the native contract accepts, with its allow and reject doors", () => {
+test("a held send becomes a plain card the native contract accepts: Confirm is its Activity row's", () => {
   const card = cardOf(
-    row("thread:t1", 4, {
+    row("held:h1", 4, {
       group: "waits",
-      verb: "approve",
-      what: "Wiring",
-      says: "Delete the schedule",
-      url: "/pea?thread=t1",
-      act: {
-        kind: "consent",
-        threadId: "t1",
-        requestId: "r1",
-        deadline: "2026-11-10T12:00:00.000Z",
-        allow: { optionId: "allow_now" },
-        reject: { optionId: "stop_writes" },
-      },
+      verb: "held",
+      what: "spec.pdf",
+      says: "Held, not done",
+      url: null,
+      act: { kind: "confirm-send", id: "h1" },
     }),
   );
   expect(machineNoticeSchema.parse(card)).toEqual({
-    id: "thread:t1",
+    id: "held:h1",
     revision: 4,
-    title: "Reject? Pea will write · Wiring",
-    body: "Delete the schedule",
-    href: "/pea?thread=t1",
-    act: {
-      kind: "permission",
-      threadId: "t1",
-      requestId: "r1",
-      // The card's sweep counts down from the host's deadline.
-      deadline: "2026-11-10T12:00:00.000Z",
-      options: [
-        { optionId: "allow_now", name: "Allow", kind: "allow_once" },
-        { optionId: "stop_writes", name: "Reject", kind: "reject_once" },
-      ],
-    },
+    title: "spec.pdf · held",
+    body: "Held, not done",
   });
 });

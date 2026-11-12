@@ -27,7 +27,7 @@ import { RevitBridge, BridgeError } from "../src/bridge.ts";
 
 
 import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
-import { RunConsents, runConsentsPromise, type ConsentEvent } from "../src/run-consent.ts";
+import { RunConsents, runConsentsPromise } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import type { ReadSources } from "../src/reads/inputs.ts";
@@ -55,10 +55,7 @@ export async function nativeFixture(
   const context = await settle(Layer.buildWithScope(Layer.mergeAll(admittedBuiltinsLayer(saved),
     RunConsents.layer.pipe(Layer.provide(NodeCrypto.layer))), scope));
   const clock = clockMode === "test" ? await settle(Layer.buildWithScope(TestClock.layer(), scope)) : Context.empty();
-  const consent = Context.get(context, RunConsents);
-  const runs = runConsentsPromise({ ...consent, authorize: (...args: Parameters<typeof consent.authorize>) => consent.authorize(...args).pipe(Effect.provide(clock)) });
-  const events: ConsentEvent[] = [];
-  runs.attach({ emit: (_run, event) => events.push(event), persist() {}, autoApprove: () => true });
+  const runs = runConsentsPromise(Context.get(context, RunConsents));
   bindControl({ runs });
   const transport = await fixtureNative(join(dir, "native"), "driver-ducts.snapshot.walk", "driver-ducts.snapshot.roster",
     "driver-ducts.tables", "driver-revit.catalog.field-options", "fans-accessory-initial", "sdk-ducts.apply", "driver-op.cancel");
@@ -143,7 +140,7 @@ export async function nativeFixture(
       observeHostResource,
     });
   return {
-    api, dir, target, key, saved, journal, runs, events, rootReads, sdkInput, readPause,
+    api, dir, target, key, saved, journal, runs, rootReads, sdkInput, readPause,
     dispatched: transport.calls, readDucts, observeHostResource, post, request,
     select: (...names: string[]) => transport.select(...names),
     advance: (milliseconds: number) => settle(TestClock.adjust(milliseconds).pipe(Effect.provide(clock))),

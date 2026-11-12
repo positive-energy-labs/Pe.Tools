@@ -330,7 +330,7 @@ export async function waitForAction(
   try {
     if (
       actionObserver &&
-      (row.state === "waiting" || row.state === "running") &&
+      row.state === "running" &&
       Date.now() < deadline
     ) {
       const original = row;
@@ -366,7 +366,7 @@ export async function waitForAction(
           async (next) => {
             try {
               await assertIdentity(original, next);
-              if (next.state !== "waiting" && next.state !== "running") finish(() => resolve(next));
+              if (next.state !== "running") finish(() => resolve(next));
             } catch (error) {
               finish(() => reject(error));
             }
@@ -377,7 +377,7 @@ export async function waitForAction(
         else unsubscribe = release;
       });
     }
-    while (row.state === "waiting" || row.state === "running") {
+    while (row.state === "running") {
       if (Date.now() >= deadline)
         return { state: "detached", id, key: row.key, acceptance: "admitted" };
       const timeout = Math.max(1, Math.min(25_000, deadline - Date.now()));

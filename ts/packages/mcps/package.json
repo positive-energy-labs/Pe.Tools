@@ -23,7 +23,8 @@
     },
     "./server": "./src/server.ts",
     "./takeoff-ops": "./src/shared/takeoff-ops.ts",
-    "./llama-parse": "./src/shared/llama-parse.ts"
+    "./llama-parse": "./src/shared/llama-parse.ts",
+    "./held-parse": "./src/shared/held-parse.ts"
   },
   "publishConfig": {
     "access": "public"

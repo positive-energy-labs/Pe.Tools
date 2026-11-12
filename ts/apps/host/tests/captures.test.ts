@@ -8,7 +8,6 @@ import { RouteWorkspace } from "@pe/runtime";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { bindControl } from "../src/control.ts";
 import { testConsents, journalAt, callRouteOver } from "./effect-test.ts";
-import type { ConsentEvent } from "../src/run-consent.ts";
 import { pictureCaptures } from "./effect-test.ts";
 import { detachedBridge } from "./effect-test.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
@@ -129,8 +128,7 @@ test("Work start validates seeds, waits for consent, and cannot overwrite a winn
       schema: z.object({ count: z.number() }),
     },
   });
-  const events: ConsentEvent[] = [],
-    runs = testConsents((_, event) => events.push(event));
+  const runs = testConsents();
   const run = { thread: "start-thread", turn: "start-turn" };
   runs.open(run);
   bindControl({ runs, acquired: () => null });
@@ -175,19 +173,12 @@ test("Work start validates seeds, waits for consent, and cannot overwrite a winn
   try {
     expect((await invoke("invalid", { count: "wrong" })).state).toBe("failed");
     expect(await workspace.readRaw(key, "sample")).toBeNull();
-    const pending = invoke("race", { count: 1 });
-    const ask = await vi.waitFor(() => {
-      const row = events.find((e) => e.kind === "permission_request");
-      if (row?.kind !== "permission_request") throw Error("No consent request");
-      return row;
-    });
-    expect(await workspace.readRaw(key, "sample")).toBeNull();
+    // Pea's start asks nobody (ADR 0038); it loses to a person's start that landed first.
     expect(await workspace.start(key, { count: 2 }, "human")).toMatchObject({
       ok: true,
       revision: 1,
     });
-    runs.decide(run.thread, ask.requestId, "allow_now");
-    expect((await pending).state).toBe("failed");
+    expect((await invoke("race", { count: 1 })).state).toBe("failed");
     expect((await workspace.readRaw(key, "sample"))?.doc).toEqual({ count: 2 });
     const results = await Promise.all([
       workspace.start(key, { count: 3 }, "human"),

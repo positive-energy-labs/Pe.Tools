@@ -318,13 +318,6 @@ describe("run consent window (chaos defect 4)", () => {
       ...(deadline ? { deadline } : {}),
     },
   ];
-  it("carries the host's auto-approve deadline and scope onto the approval", () => {
-    expect(selectApprovals(state(ask("2026-10-01T12:01:00.000Z")))[0]).toMatchObject({
-      deadline: "2026-10-01T12:01:00.000Z",
-      scope: "run",
-    });
-    expect(selectApprovals(state(ask()))[0]!.deadline).toBeUndefined();
-  });
   it("a deadline answer applies the option; the call is not drawn cancelled", () => {
     const calls = selectToolCalls(
       state([

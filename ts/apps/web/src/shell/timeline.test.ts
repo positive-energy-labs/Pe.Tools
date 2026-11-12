@@ -80,30 +80,28 @@ test("callers and subscribers cannot mutate recorded timeline evidence", () => {
   expect(timeline.read()[0]!.paths).toEqual([["width"]]);
 });
 
-test("a press shows immediately; latest receipt identity and declaration replace its text and consent", () => {
+test("a press shows immediately; latest receipt identity and declaration replace its text", () => {
   const timeline = createRouteTimeline();
   const verbs: TimelineVerbs = { start: { kind: "command", label: "Old declaration", does: "old.command" },
     current: { kind: "command", label: "Current declaration", does: "new.command" } };
-  timeline.append({ kind: "invocation", at: 1, press: "p", verb: "start", outcome: { id: "p", state: "queued", input: { value: 13 } } });
+  timeline.append({ kind: "invocation", at: 1, press: "p", verb: "start", outcome: { id: "p", state: "running", input: { value: 13 } } });
   timeline.outcome("p", { id: "p", state: "running", input: { value: 13 } });
   expect(timeline.read()).toMatchObject([{ at: 1, press: "p", outcome: { state: "running", input: { value: 13 } } }]);
   expect(projectTimeline(timeline.read(), verbs)).toMatchObject([{ kind: "press", verb: "Old declaration" }]);
-  const consentWindow = { requestId: "ask", deadline: "2099-01-01T00:00:00Z" };
-  const receipt = (state: "waiting" | "cancelled" | "unknown") => ({
+  const receipt = (state: "running" | "cancelled" | "unknown") => ({
     kind: "receipt" as const, at: 2, press: "p", receiptId: "r", paths: [["width"]],
     // A receipt wins even when earlier presentation and outcome disagree with it.
     verb: "start", outcome: { id: "r", state: "running" as const, input: {} },
-    basis: { receipt: { id: "r", key: "new.command", state, input: {}, consentWindow } },
+    basis: { receipt: { id: "r", key: "new.command", state, input: {} } },
   });
-  timeline.append(receipt("waiting"));
+  timeline.append(receipt("running"));
   expect(projectTimeline(timeline.read(), verbs)).toMatchObject([
-    { kind: "consent", verb: "Current declaration", outcome: { state: "queued" } },
+    { verb: "Current declaration", outcome: { state: "running" } },
   ]);
   timeline.append(receipt("cancelled"));
   const resolved = projectTimeline(timeline.read(), verbs);
   expect(resolved).toHaveLength(1);
   expect(resolved[0]).toMatchObject({ kind: "receipt", outcome: { state: "cancelled" } });
-  expect(resolved[0]?.consentUntil).toBeUndefined();
   expect(resolved[0]?.barrier).toBeUndefined();
   timeline.append(receipt("unknown"));
   expect(projectTimeline(timeline.read(), verbs)[0]).toMatchObject({

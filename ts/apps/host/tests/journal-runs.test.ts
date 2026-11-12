@@ -2,10 +2,9 @@ import { detachedBridge, settle, testConsents, journalAt } from "./effect-test.t
 import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test, vi } from "vite-plus/test";
+import { expect, test } from "vite-plus/test";
 import { type ActionJournal } from "../src/action-journal.ts";
 import { bindControl } from "../src/control.ts";
-import type { ConsentEvent } from "../src/run-consent.ts";
 import { createPluginRuntime, type Caller, type PluginHooks } from "@pe/agent-contracts";
 import { observePluginOperations } from "../src/plugin-receipts.ts";
 
@@ -27,8 +26,7 @@ async function files() {
   await writeFile(join(podsRoot, "design", "pod.json"), JSON.stringify({ id: "design" }));
   for (const file of ["a.txt", "b.txt", "c.txt"])
     await writeFile(join(podsRoot, "design", file), "original");
-  const events: ConsentEvent[] = [];
-  const runs = testConsents((_, event) => events.push(event));
+  const runs = testConsents();
   runs.open(run);
   bindControl({ runs, acquired: () => null });
   const bridge = detachedBridge();
@@ -77,22 +75,12 @@ async function files() {
     target: { kind: "host" as const },
     input: input(file),
   });
-  const ready = () =>
-    vi.waitFor(() => expect(events.some((e) => e.kind === "permission_request")).toBe(true));
-  const decide = (decision: "allow_now" | "stop_writes" = "allow_now") => {
-    const event = events.findLast((e) => e.kind === "permission_request");
-    if (!event || event.kind !== "permission_request") throw Error("No pending consent");
-    runs.decide(run.thread, event.requestId, decision);
-  };
   return {
     dir,
     path,
     journal,
     runs,
-    events,
     request,
-    ready,
-    decide,
     compose,
     observed,
     writes: () => writes,
@@ -112,7 +100,7 @@ async function files() {
   };
 }
 
-test("real member saves share consent, freeze input and preserve identity through compaction and restart", async () => {
+test("Pea's real member saves ask nobody, freeze input and preserve identity through compaction and restart", async () => {
   const f = await files();
   const crossing = { caller, basis: null };
   try {
@@ -120,17 +108,11 @@ test("real member saves share consent, freeze input and preserve identity throug
       b = f.request("b", "b.txt");
     await f.journal.invoke(a, crossing);
     await f.journal.invoke(b, crossing);
-    await f.ready();
-    expect(f.events.filter((e) => e.kind === "permission_request")).toHaveLength(1);
-    expect(await f.read()).toBe("original");
-    expect(f.observed).toEqual([]);
     a.input.content = "caller mutation";
-    f.decide();
     const [done, other] = await Promise.all([f.journal.wait("a"), f.journal.wait("b")]);
     expect([done.state, other.state]).toEqual(["succeeded", "succeeded"]);
     if (done.state !== "succeeded" || other.state !== "succeeded")
       throw Error("Member saves did not commit");
-    expect(done.consent).toEqual(other.consent);
     expect(f.observed.map((event) => event.result)).toEqual(
       expect.arrayContaining([done.result, other.result]),
     );
@@ -178,8 +160,9 @@ test("real member saves share consent, freeze input and preserve identity throug
   }
 });
 
-test.each(["cancel", "reject", "child-completed", "stop", "restart"] as const)(
-  "%s before approval leaves real member bytes unchanged",
+// The run registry is what Stop and `run.closed` need (ADR 0038): a run that is not open admits nothing.
+test.each(["stop", "child-completed", "restart"] as const)(
+  "a Pea save after %s is refused run.closed and leaves real member bytes unchanged",
   async (mode) => {
     const f = await files();
     const child = { thread: "child", turn: "child-turn" };
@@ -189,25 +172,14 @@ test.each(["cancel", "reject", "child-completed", "stop", "restart"] as const)(
         ? { kind: "pea", context: "child", thread: child.thread, run: child, root: run }
         : caller;
     try {
-      await f.journal.invoke(f.request("cancelled"), { caller: author, basis: null });
-      await f.ready();
-      expect(f.observed).toEqual([]);
-      if (mode === "cancel") {
-        await f.journal.cancel("cancelled");
-        f.decide();
-      }
-      if (mode === "reject") f.decide("stop_writes");
-      if (mode === "child-completed") {
-        f.runs.close(child, "completed");
-        f.decide();
-      }
       if (mode === "stop") f.runs.close(run, "stopped");
-      if (mode === "restart") {
-        expect((await journalAt(f.path, Date.now).list())[0]?.state).toBe("cancelled");
-        f.runs.closeAll();
-      }
-      expect((await f.journal.wait("cancelled")).state).toBe("cancelled");
-      expect(f.observed).toMatchObject([{ kind: "action", outcome: "cancelled" }]);
+      if (mode === "child-completed") f.runs.close(child, "completed");
+      if (mode === "restart") f.runs.closeAll();
+      await expect(
+        f.journal.invoke(f.request("late"), { caller: author, basis: null }),
+      ).rejects.toThrow(/run\.closed/);
+      expect(await f.journal.list(undefined, "late")).toEqual([]);
+      expect(f.observed).toEqual([]);
       expect(await f.read()).toBe("original");
       expect(f.writes()).toBe(0);
     } finally {
@@ -216,23 +188,17 @@ test.each(["cancel", "reject", "child-completed", "stop", "restart"] as const)(
   },
 );
 
-test("human press commits directly; consumed member edits during Pea approval refuse before the writer", async () => {
+test("a human press and a Pea save both commit directly; a consumed member edit refuses before the writer", async () => {
   const f = await files();
   try {
     await f.journal.invoke(f.request("human", "b.txt"), {
       caller: { kind: "human", via: "local" },
       basis: null,
     });
-    expect(await f.journal.wait("human")).toMatchObject({
-      state: "succeeded",
-      consent: { by: "press" },
-    });
+    expect(await f.journal.wait("human")).toMatchObject({ state: "succeeded" });
     expect(await f.read("b.txt")).toBe("reviewed");
-    expect(f.events.some((e) => e.kind === "permission_request")).toBe(false);
-    await f.journal.invoke(f.request("stale"), { caller, basis: null });
-    await f.ready();
     await f.edit("external edit");
-    f.decide();
+    await f.journal.invoke(f.request("stale"), { caller, basis: null });
     expect(await f.journal.wait("stale")).toMatchObject({
       state: "failed",
       notDispatched: true,

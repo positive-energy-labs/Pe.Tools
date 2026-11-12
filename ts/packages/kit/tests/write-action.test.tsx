@@ -145,8 +145,7 @@ test("a plan is never checked in Revit; only a successful declared rehearsal is"
   expect(writeWord("heal", 3, true)).toBe("heal · checked in Revit 3");
 });
 
-test("before, after and each author are drawn; the open window offers Reject? instead of apply", async () => {
-  const reject = vi.fn();
+test("before, after and each author are drawn; apply is the one way on", async () => {
   render(
     <TooltipProvider delay={0}>
       <WriteAction
@@ -161,7 +160,6 @@ test("before, after and each author are drawn; the open window offers Reject? in
         }}
         plan={async () => null}
         apply={{ label: "apply heal", says: "Heal", run: async () => null, done: "healed" }}
-        reject={{ until: "17s", run: reject }}
       />
     </TooltipProvider>,
   );
@@ -172,9 +170,8 @@ test("before, after and each author are drawn; the open window offers Reject? in
   expect(cell.querySelector("[data-write-author]")!.textContent).toBe("Pea");
   expect(document.querySelector('[data-write-cell="b"] [data-write-author]')!.textContent).toBe("you");
   expect(document.querySelector('[data-write-cell="b"]')!.textContent).toContain("unavailable");
-  expect(screen.queryByRole("button", { name: "apply heal" })).toBeNull();
-  await act(async () => fireEvent.click(document.querySelector("[data-write-reject]")!));
-  expect(reject).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("button", { name: "apply heal" })).toBeTruthy();
+  expect(document.querySelector("[data-write-reject]")).toBeNull();
 });
 
 test("apply without a seal is refused at the button and never runs", async () => {

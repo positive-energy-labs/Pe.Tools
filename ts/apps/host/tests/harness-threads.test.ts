@@ -1467,7 +1467,46 @@ test("Codex native shell and edit approvals are allowed with no card (ADR 0036)"
   }
 });
 
-test("recorded run permission answers survive reconnect and restart without approving an old run", async () => {
+// R1 (homes MAP slice 3, ADR 0036/0038): Pea's native tools run. Mutant that turns this red: in
+// `requestPermission` (harness/threads.ts) answer `cancelled` when `request.toolCall.kind` is
+// "execute" (any per-kind refusal, as the deleted `isPeaTool` rule was).
+test("R1: one permission request per ACP tool kind is allowed, read from the fake agent's record", async () => {
+  const h = await host(),
+    call = caller(h),
+    read = reader(h);
+  try {
+    const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+    await until(read, id, (body) => body.models.length > 0);
+    await call("POST", `/pe/threads/${id}/prompt`, { text: "permission every-kind" });
+    const body = await until(read, id, (body) => !body.running && turnEnds(body).length === 1);
+    const said = body.events
+      .flatMap((event) =>
+        event.kind === "update" && event.update.sessionUpdate === "agent_message_chunk"
+          ? [String((event.update.content as { text?: string })?.text ?? "")]
+          : [],
+      )
+      .join("");
+    const record = JSON.parse(/permission-record (\{.*\})/.exec(said)![1]!);
+    expect(record).toEqual({
+      read: "yes",
+      edit: "yes",
+      delete: "yes",
+      move: "yes",
+      search: "yes",
+      execute: "yes",
+      think: "yes",
+      fetch: "yes",
+      switch_mode: "yes",
+      other: "yes",
+    });
+    // Nothing asked a person: no card was written for any of them.
+    expect(body.events.some((event) => event.kind === "permission_request")).toBe(false);
+  } finally {
+    await h.close();
+  }
+});
+
+test("a host restart closes a run and Stop ends a completed turn's commands", async () => {
   const h = await host(),
     call = caller(h),
     read = reader(h),
@@ -1478,64 +1517,31 @@ test("recorded run permission answers survive reconnect and restart without appr
   await until(read, id, (body) => lastEcho(body) === "echo: hang");
   const run = { thread: id, turn },
     by: Caller = { kind: "pea", context: "host-fixture", thread: id, run, root: run };
-  const authorized = h.runs.authorize(originOf(by), "command", [
-    { kind: "file", path: "C:/user/result.json" },
-  ]);
-  const body = await until(read, id, (body) => openAsks(body).some((ask) => ask.scope === "run")),
-    ask = openAsks(body).find((ask) => ask.scope === "run")!;
-  const first = await call("POST", `/pe/threads/${id}/permission`, {
-    requestId: ask.requestId,
-    optionId: "allow_now",
-  });
-  expect(first.status).toBe(200);
-  await authorized;
-  const repeated = await call("POST", `/pe/threads/${id}/permission`, {
-    requestId: ask.requestId,
-    optionId: "stop_writes",
-  });
-  expect(repeated.json.decision).toEqual(first.json.decision);
+  // The turn's run is open with no person in the loop.
+  expect(() => h.runs.assertOpen(originOf(by))).not.toThrow();
+  expect(openAsks(await read(id))).toHaveLength(0);
   await h.close();
   const restarted = await host(),
     again = caller(restarted);
   try {
-    const recovered = await again("POST", `/pe/threads/${id}/permission`, {
-      requestId: ask.requestId,
-      optionId: "allow_now",
-    });
-    expect(recovered.json.decision).toEqual(first.json.decision);
     expect(() => restarted.runs.assertOpen(originOf(by))).toThrow("run.closed");
     const next = { thread: id, turn: randomUUID() };
     restarted.runs.open(next);
-    const allowed = await restarted.runs.authorize(
-      originOf({ ...by, run: next, root: next }),
-      "next",
-      [],
-    );
-    expect(allowed).toMatchObject({ decision: { id: ask.requestId } });
     restarted.runs.close(next, "completed");
-    expect((await again("POST", `/pe/threads/${id}/cancel`)).status).toBe(200);
+    // A command admitted in a turn that completed keeps going, until a Stop.
     expect(() =>
-      restarted.runs.checkpoint(originOf({ ...by, run: next, root: next }), allowed),
-    ).toThrow("consent.stopped");
-    const third = await host();
-    try {
-      const fresh = { thread: id, turn: randomUUID() };
-      third.runs.open(fresh);
-      const rejected = third.runs
-        .authorize(originOf({ ...by, run: fresh, root: fresh }), "fresh", [])
-        .catch((error) => error.message);
-      expect(openAsks(await reader(third)(id))).toHaveLength(1);
-      third.runs.revoke(id);
-      expect(await rejected).toContain("consent.stopped");
-    } finally {
-      await third.close();
-    }
+      restarted.runs.checkpoint(originOf({ ...by, run: next, root: next })),
+    ).not.toThrow();
+    expect((await again("POST", `/pe/threads/${id}/cancel`)).status).toBe(200);
+    expect(() => restarted.runs.checkpoint(originOf({ ...by, run: next, root: next }))).toThrow(
+      "run.stopped",
+    );
   } finally {
     await restarted.close();
   }
 });
 
-test("delegated thread processes carry host-bound root consent and Stop", async () => {
+test("delegated thread processes carry the host-bound root run and its Stop", async () => {
   const tokens: string[] = [];
   const realOpen = adapter.openAdapter;
   const launched = vi.spyOn(adapter, "openAdapter").mockImplementation((...args) => {
@@ -1574,63 +1580,16 @@ test("delegated thread processes carry host-bound root consent and Stop", async 
     await until(read, child, (body) => lastEcho(body) === "echo: hang");
     const childCaller = minted(childTurn);
     expect(childCaller.root).toEqual(parentCaller.run);
-    const pending = h.runs.authorize(originOf(childCaller), "child-command", [
-      { kind: "file", path: "C:/user/shared.json" },
-    ]);
+    expect(() => h.runs.assertOpen(originOf(childCaller))).not.toThrow();
     h.as = human;
-    const asking = await until(read, parent, (body) =>
-      openAsks(body).some((ask) => ask.scope === "run"),
-    );
-    const ask = openAsks(asking).find((ask) => ask.scope === "run")!;
-    await call("POST", `/pe/threads/${parent}/permission`, {
-      requestId: ask.requestId,
-      optionId: "allow_now",
-    });
-    const consent = await pending;
-    expect(
-      await h.runs.authorize(originOf(parentCaller), "parent-command", [
-        { kind: "file", path: "C:/user/other.json" },
-      ]),
-    ).toEqual(consent);
     await call("POST", `/pe/threads/${parent}/cancel`);
-    expect(() => h.runs.checkpoint(originOf(childCaller), consent)).toThrow("consent.stopped");
+    expect(() => h.runs.checkpoint(originOf(childCaller))).toThrow("run.stopped");
     await call("POST", `/pe/threads/${child}/cancel`);
   } finally {
     launched.mockRestore();
     await h.close();
   }
 }, 15000);
-
-test("restart rejects an open countdown and requires a fresh full window", async () => {
-  const first = await host();
-  const id = (await caller(first)("POST", "/pe/threads", { providerId: "claude" })).json
-    .id as string;
-  const run = { thread: id, turn: randomUUID() };
-  first.runs.open(run);
-  const by: Caller = { kind: "pea", context: "fixture", thread: id, run, root: run };
-  const stopped = first.runs
-    .authorize(originOf(by), "interrupted", [])
-    .catch((error) => error.message);
-  const ask = openAsks(await reader(first)(id))[0]!;
-  await first.close();
-  expect(await stopped).toContain("consent.stopped");
-  const second = await host();
-  try {
-    expect(openAsks(await reader(second)(id))).toHaveLength(0);
-    const next = { thread: id, turn: randomUUID() };
-    second.runs.open(next);
-    const rejected = second.runs
-      .authorize(originOf({ ...by, run: next, root: next }), "new", [])
-      .catch((error) => error.message);
-    const fresh = openAsks(await reader(second)(id))[0]!;
-    expect(fresh.requestId).not.toBe(ask.requestId);
-    expect(Date.parse(fresh.deadline!) - Date.now()).toBeGreaterThan(59_000);
-    second.runs.revoke(id);
-    expect(await rejected).toContain("consent.stopped");
-  } finally {
-    await second.close();
-  }
-});
 
 test("host shutdown settles a running turn and a queued prompt durably, even when the turn ignores cancel", async () => {
   const h = await host();

@@ -10,7 +10,6 @@ import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordings, nativeRecordingRequest } from "./native-recordings.ts";
 import { testConsents } from "./effect-test.ts";
 import { bindControl } from "../src/control.ts";
-import type { ConsentEvent } from "../src/run-consent.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { nativeFixture } from "./fans-native.fixture.ts";
 import { pagesRoute } from "../src/pages-route.ts";
@@ -29,8 +28,7 @@ async function fixture(withPage = false) {
   const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "parameter-links" };
   const body = nativeRecordings("sdk-revit.detail.parameter-links").responses["revit.detail.parameter-links"] as any;
   const { id: _id, ...definition } = body.profile.definitions[0];
-  const events: ConsentEvent[] = [];
-  const runs = testConsents((_run, event) => events.push(event));
+  const runs = testConsents();
   const run = { thread: crypto.randomUUID(), turn: "write" };
   runs.open(run); bindControl({ runs });
   const caller: Caller = { kind: "pea", context: "safety", thread: run.thread, run, root: run };
@@ -46,21 +44,9 @@ async function fixture(withPage = false) {
     return response.json();
   };
   const submit = async (id: string, command: string, actor: Caller = caller) => { await admit(id, command, actor); return native.journal.wait(id); };
-  const approve = async () => {
-    await vi.waitFor(() => expect(events.some(e => e.kind === "permission_request")).toBe(true));
-    const ask = events.findLast(e => e.kind === "permission_request");
-    if (ask?.kind !== "permission_request") throw Error("Missing real consent");
-    runs.decide(run.thread, ask.requestId, "allow_now");
-  };
-  const apply = async (id = "apply", actor: Caller = caller) => {
-    let done = false;
-    const from = events.length;
-    const pending = submit(id, "parameter-links.apply", actor).finally(() => { done = true; });
-    await vi.waitFor(() => expect(done || events.slice(from).some(e => e.kind === "permission_request")).toBe(true));
-    if (!done) await approve();
-    return pending;
-  };
-  return { get native() { return native; }, get workspace() { return workspace; }, get target() { return socket.target; }, key, definition, patch, admit, submit, approve, apply, events,
+  // Pea's apply asks nobody (ADR 0038): it is admitted and runs.
+  const apply = (id = "apply", actor: Caller = caller) => submit(id, "parameter-links.apply", actor);
+  return { get native() { return native; }, get workspace() { return workspace; }, get target() { return socket.target; }, key, definition, patch, admit, submit, apply,
     send: (body: unknown, actor: Caller = caller) => post(body, actor),
     async control(verb: string, id: string) {
       const response = await post.request(new Request(`http://host/actions/${verb}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) }), caller);
@@ -104,7 +90,6 @@ test("R1 a fresh Work handle with identical native intent cannot redeem an older
     expect((await f.workspace.read(f.key, "parameter-links"))!.doc).toEqual(before.doc);
     expect(await f.apply()).toMatchObject({ state: "failed", notDispatched: true, refusal: { code: "preview.stale" } });
     expect(f.native.calls.some(c => c.key === "revit.apply.parameter-links")).toBe(false);
-    expect(f.events.some(e => e.kind === "permission_request")).toBe(false);
   } finally { await f.close(); }
 });
 
@@ -157,31 +142,23 @@ test("R4 a received change still queued in the mark tail refuses the sealed writ
   } finally { await f.close(); }
 });
 
-test("R7 two apply admissions cannot reserve the same reviewed Plan while consent waits", async () => {
+test("R7 two apply admissions cannot both redeem the same reviewed Plan", async () => {
   const f = await fixture();
   try {
     expect(await f.submit("plan", "parameter-links.apply.plan")).toMatchObject({ state: "succeeded" });
-    await f.admit("first", "parameter-links.apply");
-    await vi.waitFor(() => expect(f.events.some(e => e.kind === "permission_request")).toBe(true));
-    await f.admit("second", "parameter-links.apply");
-    const second = (await f.native.journal.list()).find(row => row.id === "second");
-    expect(second).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "claimed", by: "first" } });
-    expect(f.native.calls.some(c => c.key === "revit.apply.parameter-links")).toBe(false);
-    await f.approve();
-    expect(await f.native.journal.wait("first")).toMatchObject({ state: "succeeded" });
+    const [first, second] = await Promise.all([f.apply("first"), f.apply("second")]);
+    expect([first.state, second.state].sort()).toEqual(["failed", "succeeded"]);
+    expect([first, second].find(row => row.state === "failed")).toMatchObject({ notDispatched: true });
     expect(f.native.calls.filter(c => c.key === "revit.apply.parameter-links")).toHaveLength(1);
   } finally { await f.close(); }
 });
 
-test("R2 a preparation dependency moved during real consent is rederived before writing", async () => {
+test("R2 a preparation dependency moved after the Plan is rederived before writing", async () => {
   const f = await fixture();
   try {
     expect(await f.submit("plan", "parameter-links.apply.plan")).toMatchObject({ state: "succeeded" });
-    const pending = f.submit("apply", "parameter-links.apply");
-    await vi.waitFor(() => expect(f.events.some(e => e.kind === "permission_request")).toBe(true));
     f.native.select("sdk-earlier-parameter-links");
-    await f.approve();
-    expect(await pending).toMatchObject({ state: "failed", notDispatched: true, refusal: { code: "preview.stale" } });
+    expect(await f.apply()).toMatchObject({ state: "failed", notDispatched: true, refusal: { code: "preview.stale" } });
     expect(f.native.calls.some(c => c.key === "revit.apply.parameter-links")).toBe(false);
   } finally { await f.close(); }
 });

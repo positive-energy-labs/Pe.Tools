@@ -6,6 +6,7 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   harnessEventSchema,
+  held,
   noticeFeedSchema,
   type ActionReceipt,
   type HarnessEvent,
@@ -46,31 +47,13 @@ const receipt = (id: string, state: string, revision = 1, error?: string) => ({
     ...(error ? { error } : {}),
   } as unknown as ActionReceipt,
 });
-const none: NoticeSources = { threads: [], receipts: [], works: [], machine: null };
+const none: NoticeSources = { threads: [], receipts: [], works: [], machine: null, held: [] };
 
 test("every source speaks in its own words, grouped waits, working, interrupted, failed, unread", () => {
   const rows = noticeRows(
     {
       ...none,
       threads: [
-        thread(
-          "ask",
-          { state: "waiting" },
-          events(
-            { kind: "prompt", text: "write" },
-            {
-              kind: "permission_request",
-              requestId: "r1",
-              toolCall: { toolCallId: "w", title: "First write: Office.rvt" },
-              options: [
-                { optionId: "allow_now", name: "Allow", kind: "allow_once" },
-                { optionId: "stop_writes", name: "Reject", kind: "reject_once" },
-              ],
-              deadline: "2026-11-10T12:01:00.000Z",
-              scope: "run",
-            },
-          ),
-        ),
         thread(
           "q",
           { state: "waiting" },
@@ -116,21 +99,8 @@ test("every source speaks in its own words, grouped waits, working, interrupted,
   );
   const by = Object.fromEntries(rows.map((row) => [row.key, row]));
   expect(rows.map((row) => row.group)).toEqual([
-    "waits", "waits", "waits", "working", "interrupted", "failed", "failed", "unread",
+    "waits", "waits", "working", "interrupted", "failed", "failed", "unread",
   ]);
-  expect(by["thread:ask"]).toMatchObject({
-    verb: "approve",
-    says: "First write: Office.rvt",
-    revision: 2,
-    act: {
-      kind: "consent",
-      threadId: "ask",
-      requestId: "r1",
-      deadline: "2026-11-10T12:01:00.000Z",
-      reject: { optionId: "stop_writes" },
-      allow: { optionId: "allow_now" },
-    },
-  });
   expect(by["thread:q"]).toMatchObject({
     verb: "asks",
     says: "Which level?",
@@ -170,6 +140,45 @@ test("an answered ask is no longer one: the waiting thread asks in its own messa
   );
   expect(row).toMatchObject({ verb: "asks", says: "Waiting on a tool" });
   expect(row?.act).toBeUndefined();
+});
+
+test("a held act is one row that waits on the person, in held words; only a held send carries Confirm", () => {
+  const refusal = held("overwrite-or-discard", "project document 'Office'", "The person presses Save in Revit.");
+  const door = (id: string, startedAt: string) => ({
+    revision: 4,
+    action: {
+      id,
+      key: "instances.save",
+      state: "failed",
+      error: refusal.message,
+      status: 409,
+      notDispatched: true,
+      caller: { kind: "pea" },
+      startedAt,
+      refusal,
+    } as unknown as ActionReceipt,
+  });
+  const rows = noticeRows(
+    {
+      ...none,
+      // A day-old held act has left the feed; its receipt still holds it.
+      receipts: [door("h1", at), door("old", "2026-11-09T11:00:00.000Z")],
+      held: [
+        { id: "s1", service: "llamaparse", path: "C:/p/spec.pdf", sha256: "a".repeat(64), pages: "1-5", at, thread: "t1" },
+      ],
+    },
+    NOW,
+  );
+  expect(rows.map((row) => [row.key, row.group, row.verb])).toEqual([
+    ["action:h1", "waits", "held"],
+    ["held:s1", "waits", "held"],
+  ]);
+  expect(rows[0]!.says).toMatch(/^Held, not done/);
+  // Held is never worded as the person saying no.
+  for (const row of rows) expect(row.says).not.toMatch(/refus|reject|declin|denied/i);
+  expect(rows[0]!.act).toBeUndefined();
+  expect(rows[1]!.act).toEqual({ kind: "confirm-send", id: "s1" });
+  noticeFeedSchema.parse({ id: 0, tray: false, rows });
 });
 
 afterEach(() => vi.useRealTimers());

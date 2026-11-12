@@ -85,8 +85,6 @@ export type ToolCall = {
 /** One open ACP permission request, answered by `optionId`. */
 export interface Approval {
   requestId: string;
-  deadline?: string;
-  scope?: "run";
   toolCallId: string;
   toolName: string;
   options: Extract<HarnessEvent, { kind: "permission_request" }>["options"];
@@ -329,10 +327,6 @@ function fold(state: ChatState): Fold {
         applyCall(event, event.toolCall as AcpToolCall);
         approvals.set(event.requestId, {
           requestId: event.requestId,
-          // The host's run-consent deadline is the auto-approve fact (run-consent.ts): dropping
-          // it drew "Auto-approve is off" on a window that then applied itself (chaos defect 4).
-          ...(event.deadline ? { deadline: event.deadline } : {}),
-          ...(event.scope ? { scope: event.scope } : {}),
           toolCallId,
           toolName: calls.get(toolCallId)?.title ?? "tool",
           options: event.options,
@@ -344,7 +338,7 @@ function fold(state: ChatState): Fold {
         approvals.delete(event.requestId);
         const call = ask && calls.get(ask.toolCallId);
         if (call?.status !== "in_progress") break;
-        // A deadline answer is the auto-approve applying its option; only cancel/expired carry none.
+        // Only cancel/expired carry no option.
         if (!("optionId" in event))
           Object.assign(call, { status: event.by === "expired" ? "expired" : "cancelled" });
         else {

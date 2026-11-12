@@ -25,7 +25,7 @@ import { connectTestBridge } from "./bridge-fixture.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { RevitBridge, RevitBridgeLive, BridgeError } from "../src/bridge.ts";
 import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
-import { RunConsents, runConsentsPromise, type ConsentEvent } from "../src/run-consent.ts";
+import { RunConsents, runConsentsPromise } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import type { ReadSources } from "../src/reads/inputs.ts";
@@ -69,18 +69,7 @@ export async function nativeFixture(
       clockMode === "test"
         ? await settle(Layer.buildWithScope(TestClock.layer(), scope))
         : Context.empty();
-    const consent = Context.get(context, RunConsents);
-    const runs = runConsentsPromise({
-      ...consent,
-      authorize: (...args: Parameters<typeof consent.authorize>) =>
-        consent.authorize(...args).pipe(Effect.provide(clock)),
-    });
-    const events: ConsentEvent[] = [];
-    runs.attach({
-      emit: (_run, event) => events.push(event),
-      persist() {},
-      autoApprove: () => true,
-    });
+    const runs = runConsentsPromise(Context.get(context, RunConsents));
     bindControl({ runs });
     const actualBridge = Context.get(context, RevitBridge);
     const nativeCallers: RequestIdentityData[] = [];
@@ -369,7 +358,6 @@ export async function nativeFixture(
       saved,
       journal,
       runs,
-      events,
       native,
       dispatched,
       rootReads,

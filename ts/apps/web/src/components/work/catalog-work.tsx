@@ -6,7 +6,7 @@
  * before says "(none)". Every owner reads its stored base at plan (K3), so a plan that discloses no touched
  * cell arms nothing.
  */
-import { useEffect, useState, type ComponentProps } from "react";
+import { useEffect, useState } from "react";
 import {
   catalogWorkCommands,
   catalogWorks,
@@ -99,14 +99,12 @@ export function CatalogWorkReview({
   at,
   target,
   client,
-  reject,
 }: {
   owner: Owner;
   /** The owner's Work key at this document (the route's key with `route: owner`). */
   at: WorkKey;
   target: DocumentRef;
   client: CatalogWorkClient;
-  reject?: ComponentProps<typeof WriteAction>["reject"];
 }) {
   const key = applyKeyOf(owner);
   const [work, setWork] = useState<{ doc: unknown; handle: WorkHandle } | null>(null);
@@ -226,7 +224,6 @@ export function CatalogWorkReview({
         }
         stale={plan && !held ? "changed since plan" : null}
         plan={runPlan}
-        reject={reject}
         apply={{
           label: `apply ${owner}`,
           says: `Apply what the plan sealed to ${owner}`,

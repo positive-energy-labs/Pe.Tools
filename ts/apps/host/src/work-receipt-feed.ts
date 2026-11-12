@@ -74,7 +74,7 @@ export function observeWorkReceipts(
     // Non-terminal rows survive both bounds, even if they alone exceed the budget.
     for (const [id, row] of rows) {
       if (rows.size <= limits.maxCount && totalBytes <= limits.maxBytes) break;
-      if (["waiting", "running", "unknown"].includes(row.receipt.state)) continue;
+      if (["running", "unknown"].includes(row.receipt.state)) continue;
       removeRow(id);
       from = Math.max(from, row.cursor + 1);
     }

@@ -60,6 +60,9 @@ export const Route = createFileRoute("/api/pdf-audit/parse")({
         let result;
         try {
           result = await parseWithLlamaCloud({
+            // The doc lab's own parse is the person's press. Pea's sends are held at their doors
+            // (`read_document`, `family.attach-spec`) before they reach this route (ADR 0038 guard 3).
+            sender: "person",
             file: uploadFile,
             apiKey,
             expand: ["items", "markdown", "images_content_metadata"],

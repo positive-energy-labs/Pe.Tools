@@ -23,7 +23,6 @@ import type {
   ThreadHead,
   Origin,
   Footprint,
-  CommandConsent,
   RunRef,
 } from "@pe/agent-contracts";
 
@@ -123,7 +122,7 @@ export const originOf = (caller: Caller): Origin => ({
 /**
  * BUILD-RULES ruling 1: the owner's own terminal is a human. The host writes one `human/cli`
  * token beside its service receipt; the `pea` CLI reads it when it carries no context of its own.
- * Anything running as this Windows user can read it, Pea's shell included: this is a consent
+ * Anything running as this Windows user can read it, Pea's shell included: this is a caller
  * marker for a cooperating agent, not a boundary against one.
  */
 export function writeTerminalContext(serviceName: string) {
@@ -360,11 +359,10 @@ const sources: Sources = {
   acquired: () => null,
   acquiredSession: () => null,
 };
-/** Bound at boot: independent device/Page targets, acquisition evidence and run consent. */
+/** Bound at boot: independent device/Page targets, acquisition evidence and the run registry. */
 export const bindControl = (bound: Partial<Sources>) => void Object.assign(sources, bound);
 export const documentAcquisition = (lifetime: DocumentRef) => sources.acquired(lifetime);
 export const sessionAcquisition = (session: string) => sources.acquiredSession(session);
-export const commandConsentWindow = (id: string) => sources.runs?.commandWindow(id);
 export const subscribeRunChanges = (listener: () => void) =>
   sources.runs?.subscribe(listener) ?? (() => {});
 export const assertRunAdmission = (origin: Origin) => {
@@ -391,21 +389,11 @@ export const validateFootprintCaller = (caller: Caller, footprint: Footprint) =>
     admitCrossing(caller, { kind: "document", ref: effect.ref }, "/actions");
   }
 };
-export const authorizeCommand = async (
-  origin: Origin,
-  id: string,
-  footprint: Footprint,
-): Promise<CommandConsent | null> => {
-  if (origin.caller.kind === "human") return { by: "press" };
-  if (origin.caller.kind !== "pea") return null;
-  if (!footprint.length) return null;
-  assertRunAdmission(origin);
-  return sources.runs!.authorize(origin, id, footprint);
-};
-export const commandCheckpoint = (origin: Origin, consent: CommandConsent | null) => {
+/** A Pea command already admitted stops when its run is stopped, fails or the host restarts. */
+export const commandCheckpoint = (origin: Origin) => {
   if (origin.caller.kind === "pea") {
     if (!sources.runs) throw Error("run.closed: no active host run registry");
-    sources.runs.checkpoint(origin, consent);
+    sources.runs.checkpoint(origin);
   }
 };
 
@@ -565,7 +553,8 @@ export function admitCrossing(
     return null;
   const acquired = acquisitionBasis(destination);
   if (acquired) return acquired;
-  // Pea product capability is independent of thread targets. Run consent is journal-owned.
+  // Pea product capability is independent of thread targets. Nothing asks a person here: the three
+  // guarded acts return "held" at their own doors (ADR 0038, guards.ts).
   return null;
 }
 

@@ -106,7 +106,12 @@ async function setup(
       const reply = replayAnswer(args, {
         result: {
           state: "ok",
-          documents: census.documents.map((id) => ({ openId: id, isModified: census.modified })),
+          documents: census.documents.map((id) => ({
+            openId: id,
+            title: id,
+            isModified: census.modified,
+            isFamily: census.family,
+          })),
         },
         resolved: { pid, processStartUtc, id: "dev" },
       });
@@ -150,8 +155,10 @@ async function setup(
       isWorkshared?: boolean;
       isDetached?: boolean;
     },
-    /** What `doc list` says about unsaved edits. */
-    modified: false,
+    /** What `doc list` says about unsaved edits; null is a read that failed. */
+    modified: false as boolean | null,
+    /** What `doc list` says each document is: a family document, or a project document. */
+    family: false,
     /** The bridge snapshot's SDK identity marker; null is a payload that did not attest. */
     identity: "sdk-open-v1" as "sdk-open-v1" | null,
     /** External SDK session-list input can change between successive census reads. */
@@ -235,11 +242,12 @@ async function setup(
   });
   let serial = 0;
   let bound = false;
-  const admit = async (
+  /** The admission's own answer, with no wait after it. */
+  const invoke = async (
     key: string,
     input: Record<string, unknown>,
-    resume?: string,
     actor: "human" | "agent" = "human",
+    resume?: string,
     id?: string,
   ) => {
     if (!bound) {
@@ -253,7 +261,7 @@ async function setup(
       bound = true;
     }
     const selection = instancesSessionSelection(input);
-    const row = await owner.invoke(
+    return owner.invoke(
       {
         id: resume ?? id ?? `${key}-${++serial}`,
         key,
@@ -263,15 +271,21 @@ async function setup(
       crossingOf(actor),
       resume !== undefined,
     );
-    return owner.wait(row.id);
   };
+  const admit = async (
+    key: string,
+    input: Record<string, unknown>,
+    resume?: string,
+    actor: "human" | "agent" = "human",
+    id?: string,
+  ) => owner.wait((await invoke(key, input, actor, resume, id)).id);
   /** A file a launch can name, written under the test directory. */
   const file = async (name: string, text: string) => {
     const path = join(dir, name);
     await writeFile(path, Buffer.from(text, "utf16le"));
     return path;
   };
-  return { calls, owner, deps, admit, dir, peaWork, file, census, machine };
+  return { calls, owner, deps, admit, invoke, dir, peaWork, file, census, machine };
 }
 const into = (id = "dev") => ({ session: { id } });
 const newRevit = (over: Record<string, unknown> = {}) => ({
@@ -687,11 +701,24 @@ test("handover saves the acquired copy to its create-only result with a diff pla
     notDispatched: true,
     refusal: { code: "acquisition.changed-after-handover" },
   });
+  // Discarding unsaved changes on a project document is the person's act (ADR 0038 guard 2).
+  expect(
+    await f.admit(
+      "instances.cleanup",
+      { acquisition: acquired.id, unsaved: "discard" },
+      undefined,
+      "agent",
+    ),
+  ).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    refusal: { kind: "held", act: "overwrite-or-discard" },
+  });
   const cleaned = await f.admit(
     "instances.cleanup",
     { acquisition: acquired.id, unsaved: "discard" },
     undefined,
-    "agent",
+    "human",
   );
   const work = (
     intent.origin as {
@@ -765,12 +792,12 @@ test("a Save As of an acquired document records its new file as the acquisition'
     document: { sdkOpenId: openId },
     artifacts: [{ path: out, bytes: "saved result".length }],
   });
-  // A save in place moves nothing: no artifact step.
+  // A save in place moves nothing: no artifact step. (The person's: Pea's would be held.)
   const inPlace = await f.admit(
     "instances.save",
     { session, document: sdkDocument, to: { kind: "self" } },
     undefined,
-    "agent",
+    "human",
   );
   expect(inPlace.steps.map((step) => step.key)).toEqual(["instances.save"]);
   const cleaned = await f.admit(
@@ -1306,7 +1333,12 @@ test("an agent save is one document crossing: the granted lifetime admits, anoth
   const f = await setup(() => ({ result: { state: "ok", document: { openId } } }));
   bindControl({ heads: grantHead });
   f.census.documents = [openId, "b".repeat(32)];
-  const input = { session, document: sdkDocument, to: { kind: "self" } };
+  // A Save As: Pea's save in place over a project document is held (the guard tests below).
+  const input = {
+    session,
+    document: sdkDocument,
+    to: { kind: "save-as", out: join(f.dir, "copy-a.rvt") },
+  };
   expect(await f.admit("instances.save", input, undefined, "agent")).toMatchObject({
     state: "succeeded",
     basis: null,
@@ -1315,7 +1347,11 @@ test("an agent save is one document crossing: the granted lifetime admits, anoth
     (
       await f.admit(
         "instances.save",
-        { ...input, document: { ...sdkDocument, openId: "b".repeat(32) } },
+        {
+          ...input,
+          document: { ...sdkDocument, openId: "b".repeat(32) },
+          to: { kind: "save-as", out: join(f.dir, "copy-b.rvt") },
+        },
         undefined,
         "agent",
       )
@@ -1409,3 +1445,109 @@ test.each([
     expect(f.calls.at(-1)!.slice(0, 2)).toEqual(["session", verb]);
   },
 );
+
+/* ── ADR 0038: the host's own doors hold Pea's guarded acts ───────────────────────────── */
+// Mutant that turns every held expectation below red: `guards` in src/guards.ts returning `false`
+// (the caller check replaced by false). `guards` returning `true` turns the person's rows red, and
+// `isProject` returning `true` turns the family rows red.
+const guardedDocument = { source: "sdk", session: { id: "dev" }, openId };
+const discardDoors: Record<string, Record<string, unknown>> = {
+  "instances.stop": { session, unsaved: "discard" },
+  "instances.reset": { session, unsaved: "discard" },
+  "instances.restart": { session },
+  "instances.close": { session, document: guardedDocument, unsaved: "discard" },
+};
+/** What the SDK was asked to do, the census reads aside. */
+const sdkActs = (f: { calls: string[][] }) => f.calls.filter((argv) => argv[1] !== "list");
+const guardSetup = async () => {
+  const f = await setup((args) =>
+    args[0] === "session"
+      ? { result: { id: "dev", state: "ok", phase: args[1] === "stop" ? "stopped" : "ready" } }
+      : { result: { state: "ok", document: { openId } } },
+  );
+  bindControl({ heads: grantHead });
+  return f;
+};
+test.each(Object.keys(discardDoors))(
+  "guard 2: %s is held at once for Pea over unsaved changes on a project document",
+  async (key) => {
+    const f = await guardSetup();
+    f.census.modified = true;
+    // R3: the admission's own answer is the settled receipt. Nothing waited and nothing was dispatched.
+    const row = await f.invoke(key, discardDoors[key]!, "agent");
+    expect(row).toMatchObject({
+      state: "failed",
+      notDispatched: true,
+      refusal: { kind: "held", act: "overwrite-or-discard" },
+    });
+    expect("error" in row && row.error).toMatch(/^Held, not done/);
+    expect("error" in row && row.error).not.toMatch(/refus|reject|declin|denied/i);
+    expect(sdkActs(f)).toEqual([]);
+    // An `isModified` that cannot be read is held too.
+    f.census.modified = null;
+    expect(await f.invoke(key, discardDoors[key]!, "agent")).toMatchObject({
+      state: "failed",
+      refusal: { kind: "held" },
+    });
+    expect(sdkActs(f)).toEqual([]);
+  },
+);
+test.each(
+  Object.keys(discardDoors).flatMap((key) =>
+    (["person", "family document", "saved project document"] as const).map(
+      (who) => [key, who] as const,
+    ),
+  ),
+)("guard 2: %s is not held for a %s", async (key, who) => {
+  const f = await guardSetup();
+  f.census.modified = who !== "saved project document";
+  f.census.family = who === "family document";
+  const row = await f.admit(key, discardDoors[key]!, undefined, who === "person" ? "human" : "agent");
+  expect(row.state, JSON.stringify(row)).toBe("succeeded");
+  expect(sdkActs(f)).toHaveLength(1);
+});
+test("guards 1 and 2: Pea's save over a project document is held; a Save As, a family document and the person's save are not", async () => {
+  const f = await guardSetup();
+  const input = (to: Record<string, unknown>) => ({ session, document: sdkDocument, to });
+  // Held whether or not the document is modified: a save writes over the model either way.
+  expect(await f.invoke("instances.save", input({ kind: "self" }), "agent")).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    refusal: { kind: "held", act: "overwrite-or-discard" },
+  });
+  const central = await f.invoke("instances.save", input({ kind: "central" }), "agent");
+  expect(central).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    refusal: { kind: "held", act: "synchronize" },
+  });
+  expect("error" in central && central.error).toMatch(/^Held, not done/);
+  expect(sdkActs(f)).toEqual([]);
+  // Not held: a Save As to a new path by Pea, and the person's own save and synchronize.
+  for (const [to, actor] of [
+    [{ kind: "save-as", out: join(f.dir, "new-path.rvt") }, "agent"],
+    [{ kind: "self" }, "human"],
+    [{ kind: "central" }, "human"],
+  ] as const)
+    expect((await f.admit("instances.save", input(to), undefined, actor)).state).toBe("succeeded");
+  // Not held: Pea saving a family document in place (ADR 0038 rule 3).
+  f.census.family = true;
+  expect(
+    (await f.admit("instances.save", input({ kind: "self" }), undefined, "agent")).state,
+  ).toBe("succeeded");
+  expect(sdkActs(f).filter((argv) => argv[1] === "save")).toHaveLength(4);
+});
+test("guard 2: Pea's discard cleanup is held over unsaved changes on its open project document; a family document is not", async () => {
+  const { f, acquired } = await acquisitionSetup();
+  const input = { acquisition: acquired.id, unsaved: "discard" };
+  f.census.modified = true;
+  const before = sdkActs(f).length;
+  expect(await f.invoke("instances.cleanup", input, "agent")).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    refusal: { kind: "held", act: "overwrite-or-discard" },
+  });
+  expect(sdkActs(f)).toHaveLength(before);
+  f.census.family = true;
+  expect((await f.admit("instances.cleanup", input, undefined, "agent")).state).toBe("succeeded");
+});

@@ -144,7 +144,6 @@ export type PeApiSchemas = Record<
   | "turnStateSchema"
   | "queueRequestSchema"
   | "hostLogPageSchema"
-  | "permissionResponseSchema"
   | "questionResponseSchema"
   | "forkThreadRequestSchema"
   | "traitRequestSchema"
@@ -191,7 +190,9 @@ export type PeApiSchemas = Record<
   | "captureListSchema"
   | "pageTargetReadingSchema"
   | "ductCatalogReadingSchema"
-  | "parsedDocViewSchema",
+  | "parsedDocViewSchema"
+  | "heldSendRequestSchema"
+  | "heldSendSchema",
   z.ZodType
 >;
 
@@ -212,8 +213,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
   const turnStateSchema = schemas.turnStateSchema as S["turnStateSchema"];
   const queueRequestSchema = schemas.queueRequestSchema as S["queueRequestSchema"];
   const hostLogPageSchema = schemas.hostLogPageSchema as S["hostLogPageSchema"];
-  const permissionResponseSchema =
-    schemas.permissionResponseSchema as S["permissionResponseSchema"];
   const questionResponseSchema = schemas.questionResponseSchema as S["questionResponseSchema"];
   const forkThreadRequestSchema = schemas.forkThreadRequestSchema as S["forkThreadRequestSchema"];
   const traitRequestSchema = schemas.traitRequestSchema as S["traitRequestSchema"];
@@ -760,6 +759,29 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "caller",
       "pe",
       "caller",
+    ),
+    /**
+     * Guard 3 (ADR 0038): an outward send that is not the person's own is held here at once. The
+     * answer is the held record and its one notice row, never a wait and never the send.
+     */
+    "outward.hold": route(
+      "POST",
+      "/pe/outward/held",
+      schemas.heldSendRequestSchema as S["heldSendRequestSchema"],
+      z.object({ held: schemas.heldSendSchema as S["heldSendSchema"], message: z.string() }),
+      "caller",
+      "pe",
+      "caller",
+    ),
+    /** The person's Confirm on that notice row: Pe sends the held bytes and keeps the result. */
+    "outward.confirm": route(
+      "POST",
+      "/pe/outward/held/:id/confirm",
+      none,
+      ok,
+      "human",
+      "pe",
+      "human",
     ),
     "diagnostics.submit": route(
       "POST",

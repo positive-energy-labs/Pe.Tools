@@ -8,7 +8,7 @@ export function observePluginOperations(
   return source.subscribe({}, (receipt) => {
     const body = receipt.body;
     const operation =
-      body.kind === "action" && body.value.state !== "running" && body.value.state !== "waiting"
+      body.kind === "action" && body.value.state !== "running"
         ? {
             key: body.value.key,
             outcome: body.value.state,

@@ -1,19 +1,16 @@
 import { ownedSession } from "./callers.ts";
-import { NodeCrypto } from "@effect/platform-node";
 import { commands, tools, writePreviewSchema, type Command, type ActionReceipt } from "@pe/agent-contracts";
-import { Context, Effect, Fiber, Layer } from "effect";
-import { TestClock } from "effect/testing";
+import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import type { ActionExecution } from "../src/action-journal.ts";
 import type { CommandContext } from "../src/command-executor.ts";
 import { assertSealed } from "../src/document-marks.ts";
-import { RunConsents } from "../src/run-consent.ts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import { settle, testDocumentMarks } from "./effect-test.ts";
 // These fakes read no attempt service; the journal provides them in production.
 const runOwned = (run: Effect.Effect<unknown, unknown, unknown>) => settle(run as Effect.Effect<unknown, unknown>);
-import { detachedBridge, sessionView, effectTest } from "./effect-test.ts";
+import { detachedBridge, sessionView } from "./effect-test.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
 const writes = Object.entries(commands).filter(([, definition]) => "writeBoundary" in definition);
@@ -153,7 +150,6 @@ async function fixture() {
       effects: [],
       consumes: [],
       claims: [],
-      consent: null,
       steps: [],
       prepared: { state: "unprepared" },
       recovery: [],
@@ -302,33 +298,6 @@ test("an older preview refuses changed request and Work; a fresh preview keeps i
     expect(fresh.run).toHaveBeenCalledOnce();
   } finally { vi.useRealTimers(); }
 });
-
-effectTest("preview seal survives the real 60-second run-consent auto-approval", () =>
-  Effect.gen(function* () {
-    const f = yield* Effect.promise(fixture);
-    const bound = yield* Effect.promise(() => f.executor.bind(f.ctx));
-    const prepared = yield* Effect.promise(() => bound.prepare!());
-    const preview = writePreviewSchema.parse(yield* Effect.promise(() => runOwned(f.executor.run(f.ctx, { prepared } as ActionExecution))));
-    f.recordPreview("preview", preview);
-    const runs = Context.get(yield* Layer.build(RunConsents.layer.pipe(Layer.provide(NodeCrypto.layer))), RunConsents);
-    runs.attach({ emit: () => {}, persist: () => {}, autoApprove: () => true });
-    const run = { thread: "sealed-write", turn: "one" };
-    yield* runs.open(run);
-    const pending = yield* Effect.forkScoped(runs.authorize({ caller: { kind: "pea", context: "minted",
-      thread: run.thread, run, root: run }, run, root: run }, "apply", [{ kind: "document", ref: { session: "A", openId: "open-A" } }]));
-    yield* TestClock.adjust("59 seconds");
-    expect(pending.pollUnsafe()).toBeUndefined();
-    yield* TestClock.adjust("1 second");
-    expect(yield* Fiber.join(pending)).toMatchObject({ decision: { by: "deadline" } });
-    f.apply();
-    const apply = yield* Effect.promise(() => f.executor.bind(f.ctx));
-    yield* Effect.promise(() => apply.preflight!());
-    const ready = yield* Effect.promise(() => apply.prepare!());
-    expect(ready).toMatchObject({ seal: preview.seal });
-    yield* Effect.promise(() => runOwned(f.executor.run(f.ctx, { prepared: ready } as ActionExecution)));
-    expect(f.run).toHaveBeenCalledOnce();
-  }),
-);
 
 /** Plan, then a change at each seal key; apply must say "Plan changed (key)" and never run the write. */
 async function plannedThenApply() {

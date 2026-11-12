@@ -8,7 +8,6 @@ import { captureStore, testConsents, testDocumentMarks } from "./effect-test.ts"
 import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordingRequest } from "./native-recordings.ts";
 import { bindControl } from "../src/control.ts";
-import type { ConsentEvent } from "../src/run-consent.ts";
 
 test.each(["selected", "unrelated", "none"] as const)(
   "recorded rooms.write admission fences %s changes and a current preview reaches both declared leaves",
@@ -23,8 +22,7 @@ test.each(["selected", "unrelated", "none"] as const)(
     const work = new RouteWorkspace({ registrations: [{ spec: tools.rooms.work }], store: {
       getState: async () => state, setState: async ({ value }) => { state = structuredClone(value); },
     } });
-    const events: ConsentEvent[] = [];
-    const runs = testConsents((_run, event) => events.push(event));
+    const runs = testConsents();
     const run = { thread: "rooms-recorded", turn: "write" };
     runs.open(run); bindControl({ runs });
     const post = native.actions({ workspace: work, marks: testDocumentMarks(native.bridge) }, captureStore(directory));
@@ -38,13 +36,9 @@ test.each(["selected", "unrelated", "none"] as const)(
       const revision = (await work.read(key, "rooms"))!.revision;
       expect(await submit("preview", "rooms.write.preview", revision, { kind: "pea", context: "rooms-recorded", thread: run.thread, run, root: run })).toMatchObject({ state: "succeeded" });
       expect(native.calls).toEqual([]);
-      const pending = submit("write", "rooms.write", revision, { kind: "pea", context: "rooms-recorded", thread: run.thread, run, root: run });
-      await vi.waitFor(async () => expect(events.some(event => event.kind === "permission_request"), JSON.stringify(await native.journal.list())).toBe(true));
+      // Pea's write asks nobody (ADR 0038); Work that moved after its preview still refuses it as stale.
       if (changed !== "none") await work.publish(key, "rooms", [{ path: ["edits", changed === "selected" ? a : b, "edit", "value"], value: "newer" }], revision);
-      const ask = events.find(event => event.kind === "permission_request");
-      if (ask?.kind !== "permission_request") throw Error("Missing actual consent request");
-      runs.decide(run.thread, ask.requestId, "allow_now");
-      const receipt = await pending;
+      const receipt = await submit("write", "rooms.write", revision, { kind: "pea", context: "rooms-recorded", thread: run.thread, run, root: run });
       if (changed === "none") expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded" });
       else {
         expect(receipt).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "stale" } });

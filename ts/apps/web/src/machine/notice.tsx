@@ -22,7 +22,6 @@ import {
 
 import { QuestionForm } from "#/chat/question-form";
 import { Button } from "@pe/kit/lang/button";
-import { ConsentSweep, type ConsentWindow } from "@pe/kit/lang/consent-sweep";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Row } from "@pe/kit/lang/row";
 import { Composer } from "#/components/lang/conversation";
@@ -146,9 +145,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   }, []);
 
   const live = items.length > 0;
-  const needsAnswer = items.some(
-    (item) => item.act?.kind === "question" || item.act?.kind === "permission",
-  );
+  const needsAnswer = items.some((item) => item.act?.kind === "question");
   const last = at >= items.length - 1;
   useEffect(() => {
     if (!live || needsAnswer || held || typed || previewHeight > 0) return;
@@ -218,14 +215,6 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
       item.href && openFullWindow(item.href) ? { type: "notice-hide" } : { type: "notice-panel" },
     );
   const act = item.act;
-  /** One answer to the thread's door; the item leaves only when the door accepts. */
-  const answer = (option: { optionId: string } | null | undefined) => {
-    if (fixture) return setError(FIXTURE);
-    if (act?.kind !== "permission" || !option) return;
-    return harness()
-      .permission(act.threadId, act.requestId, option.optionId)
-      .then(() => settle(item.id), refused);
-  };
   /** A failure's door opens in the tray panel at that route; the card steps aside. */
   const door = (href: string) => {
     close({ type: "notice-panel", url: href });
@@ -298,14 +287,6 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
                     .then(() => settle(item.id), refused)
             }
           />
-        ) : act?.kind === "permission" ? (
-          // The tray's consent is the sweep in its card shell (ADR 0035 rule 6); the head names the thread.
-          <ConsentSweep
-            shell="card"
-            windows={[consentOf(item.title, item.body, act)]}
-            onReject={(ask) => answer(ask.reject)}
-            onAllow={(ask) => answer(ask.allow)}
-          />
         ) : (
           <div className="min-h-0 overflow-auto">
             <FailureNote text={item.body} onDoor={door} />
@@ -326,23 +307,6 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
       </div>
     </div>
   );
-}
-
-type PermissionAct = Extract<NonNullable<MachineNotice["act"]>, { kind: "permission" }>;
-
-/** The card's one consent window: the reject and allow options the feed row carried. */
-function consentOf(thread: string, says: string, act: PermissionAct): ConsentWindow {
-  const option = (kind: string) => act.options.find((o) => o.kind.startsWith(kind));
-  const allow = option("allow");
-  return {
-    requestId: act.requestId,
-    threadId: act.threadId,
-    thread,
-    verb: says || "Pea writes",
-    ...(act.deadline ? { deadline: act.deadline } : {}),
-    reject: option("reject") ?? null,
-    ...(allow ? { allow } : {}),
-  };
 }
 
 /** The reply composer (draft and one Send/Stop slot); the response lives in the title preview. */

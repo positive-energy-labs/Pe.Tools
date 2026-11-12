@@ -12,7 +12,6 @@ export { nativeProcessSchema, type NativeProcess } from "./native-process.ts";
 export const invocationOutcomeSchema = z.strictObject({
   id: z.string(),
   state: z.enum([
-    "queued",
     "running",
     "refused",
     "stale",

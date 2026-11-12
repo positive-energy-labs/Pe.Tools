@@ -9,7 +9,7 @@ export const GUARDED_ACTS = ["synchronize", "overwrite-or-discard", "send-outwar
 export const guardedActSchema = z.enum(GUARDED_ACTS);
 export type GuardedAct = z.infer<typeof guardedActSchema>;
 
-/** What a held door tells its caller: the act was not done, and who can do it. Never "refused". */
+/** What a held door tells its caller: the act was not done, and who can do it. Never a person's "no". */
 export const heldSchema = z.strictObject({
   kind: z.literal("held"),
   act: guardedActSchema,
@@ -28,5 +28,26 @@ const WHAT: Record<GuardedAct, string> = {
 export const held = (act: GuardedAct, subject: string, how: string): Held => ({
   kind: "held",
   act,
-  message: `Held, not done: ${WHAT[act]} is the person's act, and ${subject} was not touched. ${how} Nobody refused; continue with the rest of the work and say this is waiting on them.`,
+  message: `Held, not done: ${WHAT[act]} is the person's act, and ${subject} was not touched. ${how} The person has not been asked and has not said no: carry on with the rest of the work and tell them this is waiting on them.`,
 });
+
+/**
+ * An outward send Pea asked for and did not make (guard 3). The person confirms it from its one
+ * notice row; Pe then sends exactly these bytes (`sha256`) and keeps the result for Pea's next read.
+ */
+export const heldSendRequestSchema = z.strictObject({
+  service: z.literal("llamaparse"),
+  /** Absolute local path of the file whose bytes would leave this machine. */
+  path: z.string().min(1),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  /** LlamaParse `target_pages`, e.g. "1-5". */
+  pages: z.string().min(1),
+});
+export type HeldSendRequest = z.infer<typeof heldSendRequestSchema>;
+export const heldSendSchema = heldSendRequestSchema.extend({
+  id: z.string().min(1),
+  at: z.string(),
+  /** The Pea thread that asked; null for any other caller. */
+  thread: z.string().nullable(),
+});
+export type HeldSend = z.infer<typeof heldSendSchema>;

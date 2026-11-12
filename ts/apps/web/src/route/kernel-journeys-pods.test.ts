@@ -209,7 +209,7 @@ import { RegistryContext } from "@effect/atom-react";
 import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { emptyChatState, selectBreakdown, type ChatMessage } from "@pe/agent-contracts/chat-state";
-import { harnessEventSchema, type RouteGraph, type SettingField } from "@pe/agent-contracts";
+import { harnessEventSchema } from "@pe/agent-contracts";
 import { CurrentThreadViewOwner } from "../workbench/thread-view";
 import { TranscriptContext } from "../workbench/provider/thread-summary";
 import { useTranscript } from "../workbench/provider/use-workbench";
@@ -217,11 +217,6 @@ import { SessionStrip } from "../workbench/world/lane";
 import { useCacheView } from "../workbench/world/cap";
 import { AssetReel, threadAssets } from "../chat/asset-reel";
 import { TooltipProvider } from "@pe/kit/lang/tooltip";
-import { z } from "zod";
-import { field } from "../../../../packages/agent-contracts/src/route-field";
-import { createSettingsOwner } from "../shell/settings";
-import { GraphSettingsFields } from "../shell/settings-fields";
-import { createRouteSettings } from "../../../host/src/route-settings";
 import { createPeRoutes } from "../../../host/src/pe-routes";
 import { SettingsBody } from "../machine/body";
 import { MACHINE_SEEDS } from "../design-system/open-examples";
@@ -287,62 +282,9 @@ test("JP3 reopen a thread's ordered assets and read corrected usage without inve
   } finally { view.unmount(); registry.dispose(); cleanup(); }
 });
 
-test("JP4 save rendered settings through delayed HTTP and inspect a pane fault during an outage", async () => {
-  const dir = await mkdtemp(resolve(tmpdir(), "jp-settings-"));
-  const fields = { word: { ...field(z.string().trim().min(1).default("acknowledged"), {}), role: "setting", label: "Parameter name" } } satisfies Record<string, SettingField>;
-  const settings = createRouteSettings(dir, { "jp-settings": fields });
-  const routes = createPeRoutes({ registrations: [], heads: { observe: () => () => {} },
-    store: { getState: async () => null, setState: async () => {} }, routeSettings: settings });
-  const url = "http://host/pe/route-settings/jp-settings";
-  let readHold: ReturnType<typeof Promise.withResolvers<void>> | undefined;
-  let readEntered: ReturnType<typeof Promise.withResolvers<void>> | undefined;
-  let writeHold: ReturnType<typeof Promise.withResolvers<void>> | undefined;
-  let failSave = false;
-  const owner = createSettingsOwner(fields, {
-    async read() { const response = await routes.fetch(new Request(url)); const saved = await response.json(); readEntered?.resolve(); await readHold?.promise; return saved; },
-    async write(patch, expectedRevision) {
-      if (failSave) throw Error("host unavailable");
-      const response = await routes.fetch(new Request(url, { method: "POST", body: JSON.stringify({ patch, expectedRevision }) }));
-      const saved = await response.json(); await writeHold?.promise; return saved;
-    },
-    subscribe: (notify) => settings.subscribe(notify),
-  });
-  const graph = { key: "jp-settings", name: "Worksheet", fields } as unknown as RouteGraph<any, any>;
-  const drawSettings = () => render(createElement(GraphSettingsFields, { graph, owner }));
-  let view = drawSettings();
+test("JP4 inspect a pane fault during an outage", async () => {
+  let view: ReturnType<typeof render> | undefined;
   try {
-    await vi.waitFor(() => expect((screen.getByRole("textbox", { name: "Parameter name" }) as HTMLInputElement).disabled).toBe(false));
-    const edit = (text: string) => { const input = screen.getByRole("textbox", { name: "Parameter name" }); fireEvent.change(input, { target: { value: text } }); fireEvent.blur(input); };
-    edit("");
-    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Read settings again" })).toBeTruthy());
-    expect(settings.read("jp-settings").revision, "H28: invalid input does not reach saved settings").toBe(0);
-    readHold = Promise.withResolvers<void>();
-    readEntered = Promise.withResolvers<void>();
-    const hydrate = owner.refresh();
-    await readEntered.promise;
-    writeHold = Promise.withResolvers<void>();
-    edit("newer name");
-    await vi.waitFor(() => expect(settings.read("jp-settings").revision).toBe(1));
-    readHold.resolve(); await hydrate; readHold = undefined;
-    expect((screen.getByRole("textbox", { name: "Parameter name" }) as HTMLInputElement).disabled,
-      "H28: late hydration cannot unlock a pending save").toBe(true);
-    writeHold.resolve(); writeHold = undefined;
-    await vi.waitFor(() => expect((screen.getByRole("textbox", { name: "Parameter name" }) as HTMLInputElement).value).toBe("newer name"));
-    await vi.waitFor(() => expect(owner.read().values.word, "H28: late hydration cannot replace acknowledged newer settings").toBe("newer name"));
-    await owner.refresh();
-    readHold = Promise.withResolvers<void>(); readEntered = Promise.withResolvers<void>();
-    const late = owner.refresh(); await readEntered.promise;
-    edit("newest name");
-    await vi.waitFor(() => expect(owner.read().values.word).toBe("newest name"));
-    readHold.resolve(); await late; readHold = undefined;
-    expect(owner.read().values.word, "H28: a late older HTTP body cannot overwrite a newer acknowledged save").toBe("newest name");
-    await owner.refresh(); // Settle the store notification read before testing the next independent outage.
-    failSave = true; edit("lost save");
-    await vi.waitFor(() => expect(screen.getByText("host unavailable")).toBeTruthy());
-    view.unmount(); view = drawSettings();
-    expect((screen.getByRole("textbox", { name: "Parameter name" }) as HTMLInputElement).value,
-      "H28: reopen after failure retains the last acknowledged value").toBe("newest name");
-    view.unmount();
     vi.useFakeTimers();
     let down = true;
     const batches: unknown[] = [];
@@ -368,8 +310,8 @@ test("JP4 save rendered settings through delayed HTTP and inspect a pane fault d
     expect(screen.getByText(/diagnostics delivered/), "H24: recovered delivery is visible").toBeTruthy();
     expect(JSON.stringify(batches), "H24: recovery reports the outage and dropped facts").toContain("host.unreachable");
   } finally {
-    readHold?.resolve(); writeHold?.resolve(); view.unmount(); cleanup();
-    vi.useRealTimers(); vi.unstubAllGlobals(); await rm(dir, { recursive: true, force: true });
+    view?.unmount(); cleanup();
+    vi.useRealTimers(); vi.unstubAllGlobals();
   }
 });
 

@@ -270,49 +270,6 @@ test("native receipt source identity is retained, deduped, and never replaced wi
   }
 });
 
-test("the countdown ask names the first frozen footprint and deadline without exporting paths", async () => {
-  const f = fixture();
-  const events: HarnessEvent[] = [];
-  const run = { thread: "private-thread", turn: "private-turn" };
-  const adapter = createThreadReceiptAdapter(f.exporter, () => [
-    { id: run.thread, title: "Design", events },
-  ]);
-  const runs = testConsents((_, event) => {
-    const durable = harnessEventSchema.parse({
-      ...event,
-      seq: events.length + 1,
-      at: new Date().toISOString(),
-    });
-    events.push(durable);
-    adapter.accept(run.thread, "Design", durable);
-  });
-  runs.open(run);
-  const approval = runs.authorize(
-    {
-      caller: { kind: "pea", context: "minted", thread: run.thread, run, root: run },
-      run,
-      root: run,
-    },
-    "command",
-    [{ kind: "file", path: "C:/private/design.json" }],
-  );
-  try {
-    await expect.poll(async () => (await f.journal.read({ kinds: ["permission"] })).length).toBe(1);
-    // The ask's words stay in the local thread log (the notice feed reads them there).
-    const ask = events.find((event) => event.kind === "permission_request")!;
-    expect(ask.toolCall.title).toContain("First write: file C:/private/design.json");
-    expect(ask.deadline).toBeTruthy();
-    expect(ask.options.map((o) => o.optionId)).toEqual(["allow_now", "stop_writes"]);
-    runs.decide(run.thread, ask.requestId, "allow_now");
-    await approval;
-    expect(JSON.stringify(f.sent)).not.toContain("C:/private");
-  } finally {
-    runs.closeAll();
-    await approval.catch(() => null);
-    await f.close();
-  }
-});
-
 test("thread and update adapters keep opaque joins and honest endings", async () => {
   const f = fixture();
   try {

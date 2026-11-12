@@ -193,12 +193,7 @@ export function projectReceipt(
   const body = r.body;
   switch (body.kind) {
     case "action": {
-      if (
-        !isAnyOperationKey(body.value.key) ||
-        body.value.state === "running" ||
-        body.value.state === "waiting"
-      )
-        return null;
+      if (!isAnyOperationKey(body.value.key) || body.value.state === "running") return null;
       event = "host_op";
       const caller = body.value.caller.kind;
       const settled = body.value;

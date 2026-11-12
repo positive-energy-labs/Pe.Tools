@@ -49,7 +49,6 @@ import {
   type ActionStep,
   type Basis,
   type Footprint,
-  type CommandConsent,
   type Caller,
   type DocumentRef,
   type ActionReceipt,
@@ -70,10 +69,8 @@ import {
   live,
   originOf,
   assertRunAdmission,
-  authorizeCommand,
   commandCheckpoint,
   subscribeRunChanges,
-  commandConsentWindow,
   validateFootprintCaller,
   Refused,
   retainActionCaller,
@@ -359,7 +356,7 @@ type SettleCause =
   | { kind: "recovered" }
   | { kind: "interrupted" };
 /** A terminal state and its fields; every caller parses the whole receipt against the schema. */
-type Settled = { state: Exclude<ActionReceipt["state"], "running" | "waiting"> } & Record<
+type Settled = { state: Exclude<ActionReceipt["state"], "running"> } & Record<
   string,
   unknown
 >;
@@ -481,7 +478,6 @@ const unsettled = (row: ActionReceipt) => {
 const RETAIN_RECEIPTS = 10_000;
 /** A row that blocks overlapping admissions and must stay visible until recovered. */
 const isOpen = (row: ActionReceipt) =>
-  row.state === "waiting" ||
   row.state === "running" ||
   row.state === "unknown" ||
   row.state === "incomplete";
@@ -524,7 +520,6 @@ export class ActionJournal implements ReceiptReader {
     if (this.inputContext) throw Error("Journal input context is already bound");
     this.inputContext = inputs;
   }
-  private readonly cancelWaits = new Map<string, () => void>();
   private readonly listeners = new Set<() => void>();
   private readonly reads = new OwnerReads();
   constructor(
@@ -719,7 +714,7 @@ export class ActionJournal implements ReceiptReader {
         message: "Action checkpoint is uncertain; resolve before dispatch",
       };
     try {
-      if (row.effects.length) commandCheckpoint(originOf(row.caller), row.consent);
+      commandCheckpoint(originOf(row.caller));
     } catch (error) {
       return { kind: "cancelled", message: messageOf(error) };
     }
@@ -1028,22 +1023,22 @@ export class ActionJournal implements ReceiptReader {
   /** One predicate at every async boundary; domain executors declare only the facts it reads. */
   private async gate(
     row: ActionReceipt,
-    moment: "admit" | "authorize" | "consented" | "turn" | "prepared" | "step" | "dispatch",
+    moment: "admit" | "authorize" | "turn" | "prepared" | "step" | "dispatch",
     postcondition = false,
   ): Promise<void> {
     const inputRefusal = this.inputContext?.check({ kind: "command", key: row.key });
     if (inputRefusal) throw inputRefusal;
     if (row.cancellationRequested)
       throw new StepFailure("Command cancelled before dispatch", 499, "refused");
-    if (row.effects.length) {
-      if (moment === "admit" || moment === "authorize") assertRunAdmission(originOf(row.caller));
-      else
-        try {
-          commandCheckpoint(originOf(row.caller), row.consent);
-        } catch (error) {
-          throw new StepFailure(messageOf(error), 499, "refused");
-        }
-    }
+    // Every Pea command belongs to a run (ADR 0038): it starts in an open one, and a Stop, a failed
+    // turn or a host restart ends it. Whether it has effects decides nothing here.
+    if (moment === "admit" || moment === "authorize") assertRunAdmission(originOf(row.caller));
+    else
+      try {
+        commandCheckpoint(originOf(row.caller));
+      } catch (error) {
+        throw new StepFailure(messageOf(error), 499, "refused");
+      }
     const dead = live(row.basis, moment);
     if (dead)
       throw new CommandRejected({ kind: "trust", code: dead.refusal.code, message: dead.message });
@@ -1228,7 +1223,6 @@ export class ActionJournal implements ReceiptReader {
       consumes: prior?.consumes ?? [],
       claims: prior?.claims ?? [],
       effects: prior?.effects ?? [],
-      consent: null,
       steps: prior?.steps ?? [],
       prepared: prior?.prepared ?? { state: "unprepared" },
       recovery: prior?.recovery ?? [],
@@ -1339,7 +1333,6 @@ export class ActionJournal implements ReceiptReader {
             original.prepared.state !== "ready" ||
             (this.owners && FiberMap.hasUnsafe(this.owners.attempts.map, original.id)) ||
             original.state === "running" ||
-            original.state === "waiting" ||
             original.steps.some((step) => step.state === "unknown" || step.state === "running")
           )
             throw new CommandRejected({
@@ -1392,7 +1385,7 @@ export class ActionJournal implements ReceiptReader {
       }
       row = actionReceiptSchema.parse({
         ...row,
-        state: row.caller.kind === "pea" && row.effects.length ? "waiting" : "running",
+        state: "running",
       });
       try {
         await this.commit([row]);
@@ -1478,7 +1471,6 @@ export class ActionJournal implements ReceiptReader {
               { work: key, route, paths: outstanding },
               () => io(async () => {
                 if (
-                  !row.effects.length ||
                   !row.steps.some(
                     (step) =>
                       step.state === "succeeded" &&
@@ -1747,29 +1739,21 @@ export class ActionJournal implements ReceiptReader {
       };
       let validated = row.prepared.state === "ready";
       const persistenceFailed = (error: unknown) => {
-        console.error("Action consent checkpoint could not be persisted", error);
-        this.cancelWaits.get(row.id)?.();
+        console.error("Action cancellation could not be persisted", error);
         this.index({
           ...row,
           state: "unknown",
           cancellationRequested: true,
           status: 503,
-          error: `Consent checkpoint could not be persisted: ${String(error)}`,
+          error: `Cancellation could not be persisted: ${String(error)}`,
         });
         this.notify();
       };
+      // A Stop (or any close but a completed turn) of the command's run cancels it at its next step.
       const releaseRun = subscribeRunChanges(() => {
-        const consentWindow = commandConsentWindow(row.id);
-        if (
-          canonicalRouteInput(row.consentWindow ?? null) !==
-          canonicalRouteInput(consentWindow ?? null)
-        )
-          void save((current) => ({ ...current, consentWindow })).catch(persistenceFailed);
         try {
-          if (!retirementOnly && row.effects.length)
-            commandCheckpoint(originOf(row.caller), row.consent);
+          if (!retirementOnly) commandCheckpoint(originOf(row.caller));
         } catch {
-          if (row.consent) this.cancelWaits.get(row.id)?.();
           void save((current) => ({ ...current, cancellationRequested: true })).catch(
             persistenceFailed,
           );
@@ -1785,26 +1769,6 @@ export class ActionJournal implements ReceiptReader {
             });
           await gate(row, "authorize");
           if (!retirementOnly) await binding?.preflight?.();
-          const cancelled = new Promise<never>((_, reject) =>
-            this.cancelWaits.set(row.id, () =>
-              reject(new StepFailure("Command cancelled before authorization", 499, "refused")),
-            ),
-          );
-          let consent: CommandConsent | null;
-          try {
-            consent = await Promise.race([
-              retirementOnly
-                ? Promise.resolve(row.consent)
-                : authorizeCommand(originOf(row.caller), row.id, row.effects),
-              cancelled,
-            ]);
-          } catch (error) {
-            throw new StepFailure(String(error), 499, "refused");
-          } finally {
-            this.cancelWaits.delete(row.id);
-          }
-          await save((current) => ({ ...current, state: "running", consent }));
-          await gate(row, "consented");
           await this.waitForTurn(row.id, retirementOnly);
           if (row.prepared.state !== "ready") {
             const value = structuredClone(
@@ -1885,14 +1849,13 @@ export class ActionJournal implements ReceiptReader {
   async cancel(id: string): Promise<ActionReceipt> {
     const row = (await this.list(undefined, id))[0];
     if (!row) throw Error(`Action '${id}' has no admitted receipt`);
-    if (row.state !== "running" && row.state !== "waiting")
+    if (row.state !== "running")
       throw Error(`Action '${id}' is ${row.state}; only an active action can be cancelled`);
     await this.serial(async () => {
       const current = this.rows.get(id)!;
       await this.commit([{ ...current, cancellationRequested: true }]);
       this.notify();
     });
-    this.cancelWaits.get(id)?.();
     const step = row.steps.find((step) => step.state === "running" && step.kind === "native");
     if (step) {
       const cancel = this.environment?.resolve(row.key).cancel;
@@ -2102,14 +2065,7 @@ export class ActionJournal implements ReceiptReader {
     const changed: ActionReceipt[] = [];
     for (const row of current) {
       let next = row;
-      if (row.state === "waiting") {
-        next = {
-          ...row,
-          state: "cancelled",
-          error: "consent.stopped: host restarted during approval",
-          status: 499,
-        };
-      } else if (row.state === "running") {
+      if (row.state === "running") {
         const steps = interruptedSteps(row.steps);
         next = {
           ...unsettled(row),

@@ -50,7 +50,6 @@ import {
   threadPlaceRequestSchema,
   updateThreadRequestSchema,
   forkThreadRequestSchema,
-  permissionResponseSchema,
   promptRequestSchema,
   putTargetSchema,
   queueRequestSchema,
@@ -191,9 +190,7 @@ export type HarnessThreadsOptions = {
   developerInstructions?: () => Promise<string>;
   /** Providers: the child's auth env and the keys a record never keeps. */
   providers: Providers;
-  /** Pea's auto-approve setting (route `chat`): on, a thread's first write applies at its deadline. */
-  autoApprove?: () => boolean;
-  /** Run consent, provided once by the host layer; this store attaches its transcript and grants. */
+  /** The run registry, provided once by the host layer: a turn opens its run and a Stop closes it. */
   runs: RunConsents["Service"];
   /** Automatic update admission excludes new harness work through installer handoff. */
   updatePending?: () => boolean;
@@ -465,20 +462,6 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
   const stamp = () => DateTime.formatIso(DateTime.makeUnsafe(nowMs()));
   const threads = new Map<string, Thread>();
   const runs = runConsentsPromise(options.runs);
-  runs.attach({
-    emit: (run, event) => {
-      const t = threads.get(run.thread);
-      if (t) append(t, event);
-    },
-    documentName: (ref) => options.observeDocument?.({ kind: "open", ref })?.name,
-    autoApprove: options.autoApprove ?? (() => true),
-    persist: (thread, decision) => {
-      const t = threads.get(thread);
-      if (!t) return; // Deletion removes the record before its cancelled turn unwinds.
-      t.meta.runConsent = decision;
-      writeMeta(t);
-    },
-  });
   bindControl({ runs });
   /** Synchronization only. Observations and pins are always reconstructed from thread events. */
   const elementNameReads = new Map<string, Promise<void>>();
@@ -493,7 +476,6 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     try {
       const before = JSON.stringify(meta.workContext);
       threads.set(id, fresh(meta, events));
-      runs.restore(id, meta.runConsent);
       // Backfill only observed context. Work documents and native admission stay untouched.
       if (before !== JSON.stringify(meta.workContext))
         writeJson(join(options.root, id, "meta.json"), redactKeys(meta, options.providers.keys()));
@@ -1141,7 +1123,8 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       },
       // The harness's own tools (shell, files, edits) are ungated (ADR 0036): this host answers every
       // per-call approval with allow and shows no card. Revit and product state still change only
-      // through Pea's host commands (pe_do, run consent, the ActionJournal); the harness has no Revit door.
+      // through Pea's host commands (pe_do, the ActionJournal); the harness has no Revit door. The three
+      // guarded acts return "held" at the host's own doors (ADR 0038); a shell gets past them.
       requestPermission: async (request: RequestPermissionRequest) => {
         if (t.child !== child || t.stopped) return { outcome: { outcome: "cancelled" } };
         const option =
@@ -1634,7 +1617,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     await options
       .pluginHook?.("turn.after", { threadId: t.meta.id, turnId, outcome })
       .catch((error) => warn(`turn.after failed after the run closed: ${String(error)}`));
-    // Only a Stop closes the thread's consent window; a failed turn keeps it.
+    // The run ends with its turn: Pea's commands already admitted keep going only after a completed turn.
     runs.close(
       runRef,
       outcome === "cancelled" ? "stopped" : outcome === "failed" ? "failed" : "completed",
@@ -1756,7 +1739,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     const connecting = t.live;
     const child = t.child;
     append(t, { kind: "cancel_requested", turnId, by, door });
-    // Consent persistence may fail; it never prevents the cancel or the escalation below.
+    // A failed close or ask settlement never prevents the cancel or the escalation below.
     let persist: unknown;
     try {
       runs.close({ thread: t.meta.id, turn: turnId }, "stopped");
@@ -2135,21 +2118,6 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       case "thread.cancel":
         runs.revoke(t.meta.id);
         return json({ cancelled: await cancel(t, caller, url.pathname) });
-      case "thread.permission": {
-        requireHuman(caller, url.pathname, "answering a run consent");
-        const { requestId, optionId } = await input(permissionResponseSchema);
-        const recorded = t.events.findLast(
-          (event) => event.kind === "permission_resolved" && event.requestId === requestId,
-        );
-        if (recorded) return json({ ok: true, decision: recorded });
-        const accepted = runs.decide(t.meta.id, requestId, optionId);
-        const decision = t.events.findLast(
-          (event) => event.kind === "permission_resolved" && event.requestId === requestId,
-        );
-        return accepted
-          ? json({ ok: true, decision })
-          : json({ error: `No pending permission ${requestId}` }, 409);
-      }
       case "thread.question": {
         requireHuman(caller, url.pathname, "answering a human question");
         const { requestId, ...answer } = await input(questionResponseSchema);
@@ -2169,7 +2137,6 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         const forked = create(
           {
             ...t.meta,
-            runConsent: null,
             consentRoot: undefined,
             // A fork copies the targets but no human authority (ADR 0017 rule 4).
             head: {
@@ -2295,22 +2262,6 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
   // Restart recovery: a turn open in the log ended with the host that ran it. Its open asks expire
   // and the turn ends in an error.
   for (const t of threads.values()) {
-    const consentByRun = new Map<string, Extract<HarnessEvent, { kind: "run_consent" }>>();
-    for (const event of t.events)
-      if (event.kind === "run_consent") consentByRun.set(JSON.stringify(event.run), event);
-    for (const event of consentByRun.values())
-      if (event.consent.state !== "closed") {
-        append(t, {
-          kind: "run_consent",
-          run: event.run,
-          consent: {
-            state: "closed",
-            reason: "restart",
-            decision: event.consent.state === "allowed" ? event.consent.decision : null,
-            at: stamp(),
-          },
-        });
-      }
     const resolved = new Set(
       t.events.flatMap((e) =>
         e.kind === "permission_resolved" || e.kind === "question_resolved" ? [e.requestId] : [],
@@ -2504,7 +2455,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
               ),
       ),
     /**
-     * Host shutdown, in order: consent windows close; every admitted turn gets its durable terminal
+     * Host shutdown, in order: every run closes; every admitted turn gets its durable terminal
      * (running: unknown, queued: dropped), because a stopped turn writes none of its own; children
      * die; then each turn's own fiber is joined. Killing first is what makes the join safe: a turn
      * awaiting its child rejects once the child is gone, so the join cannot deadlock.

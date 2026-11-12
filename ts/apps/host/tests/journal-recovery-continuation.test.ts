@@ -29,10 +29,7 @@ test.each([
     const services = await settle(Layer.buildWithScope(RevitBridgeLive, bridgeScope));
     const bridge = Context.get(services, RevitBridge);
     const captures = captureStore(join(directory, "captures"));
-    const runs = testConsents((run, event) => {
-      if (event.kind === "permission_request")
-        queueMicrotask(() => runs.decide(run.thread, event.requestId, "allow_now"));
-    });
+    const runs = testConsents();
     const run = { thread: "retirement", turn: "original" };
     runs.open(run);
     bindControl({ runs });

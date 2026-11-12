@@ -446,6 +446,37 @@ new AgentSideConnection(
         });
         return { stopReason: "end_turn" };
       }
+      // R1 (homes slice 3): one permission request per ACP tool kind; the agent records each answer.
+      if (text === "permission every-kind") {
+        const record = {};
+        for (const kind of [
+          "read",
+          "edit",
+          "delete",
+          "move",
+          "search",
+          "execute",
+          "think",
+          "fetch",
+          "switch_mode",
+          "other",
+        ]) {
+          const call = { toolCallId: `kind-${kind}`, title: `native ${kind}`, kind, status: "pending" };
+          await conn.sessionUpdate({ sessionId, update: { sessionUpdate: "tool_call", ...call } });
+          const answer = await conn.requestPermission({
+            sessionId,
+            toolCall: call,
+            options: [
+              { optionId: "yes", name: "Allow", kind: "allow_once" },
+              { optionId: "no", name: "Reject", kind: "reject_once" },
+            ],
+          });
+          record[kind] =
+            answer.outcome.outcome === "selected" ? answer.outcome.optionId : answer.outcome.outcome;
+        }
+        await say(`permission-record ${JSON.stringify(record)}`);
+        return { stopReason: "end_turn" };
+      }
       const toolCall = {
         toolCallId: `t-${text}`,
         title: text.includes("mcp") ? "mcp__pea__pe_find" : "fake tool",

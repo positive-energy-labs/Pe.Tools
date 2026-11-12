@@ -8,6 +8,7 @@ import { Context, Effect } from "effect";
 import { commands, parsedDocViewSchema, tools, type ActionStep } from "@pe/agent-contracts";
 import { z } from "zod";
 import { command, io, refused, type CommandExecutor } from "./command-executor.ts";
+import { guardSend } from "./guards.ts";
 import { runPods, type PodDependencies } from "./family-actions.ts";
 import { podFolder } from "./settings.ts";
 import { userWritable } from "./content-homes.ts";
@@ -65,6 +66,9 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
   return command(commands["family.attach-spec"], preparedSpecSchema, {
     bind: async (ctx) => {
       const { member, source, work: handle } = ctx.admission.input;
+      // Guard 3 (ADR 0038): the parse below uploads this PDF to LlamaCloud. A person's attach runs;
+      // anyone else's is held before a byte is read or sent.
+      guardSend(ctx.caller, basename(source.fileName), "LlamaCloud, the hosted PDF parser");
       if (!handle) throw refused("Reviewed Family Work is required");
       await ctx.selectWork(tools.family.work, handle, () => ({
         cells: [],

@@ -114,7 +114,6 @@ function parsePeaRootPromptOptions(args: string[]): PeaPromptRequest {
   );
   const harness = parseStringArg(args, consumed, "--harness") ?? "claude";
   const json = parseBooleanArg(args, consumed, "--json");
-  const allow = parseBooleanArg(args, consumed, "--allow");
 
   const unexpected = args.filter((_, index) => !consumed.has(index));
   if (unexpected.length > 0) {
@@ -142,7 +141,6 @@ function parsePeaRootPromptOptions(args: string[]): PeaPromptRequest {
     modelId,
     json,
     timeoutSeconds,
-    allow,
   };
 }
 
@@ -197,11 +195,6 @@ const protocolArgs = {
   thread: {
     type: "string",
     description: "Existing harness thread id to continue in --prompt mode.",
-  },
-  allow: {
-    type: "boolean",
-    description: "Answer --prompt permission requests with allow_once (default reject_once).",
-    default: false,
   },
   json: {
     type: "boolean",

@@ -245,6 +245,8 @@ async function readFamiliesProgressively(
         let acquired = false;
         const stop = async () => {
           if (acquired) {
+            // Not a guarded discard (ADR 0038 guard 2): this session is the reader's own, started
+            // below with only family documents it opened to read, so no person's model state is in it.
             await lifecycle(() =>
               sdk(
                 sessionStopArgv({ id, unsaved: "discard", force: true, requestId: randomUUID() }),

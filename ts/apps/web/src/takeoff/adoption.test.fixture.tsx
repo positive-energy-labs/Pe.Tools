@@ -33,7 +33,7 @@ export async function journey(options: { catalogue?: ReturnType<typeof gate>; sn
   const nativeCalls: { key: string; input: unknown }[] = [];
   const nativeScopes: unknown[] = [];
   const actions: { key: string; input: Record<string, unknown> }[] = [];
-  bindControl({runs:testConsents(() => {}), acquired:() => null});
+  bindControl({runs:testConsents(), acquired:() => null});
   const host = await fixture(true, {
     actions: true,
     inventory: {

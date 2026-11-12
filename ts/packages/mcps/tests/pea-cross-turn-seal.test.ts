@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vite-plus/test";
+import { expect, test } from "vite-plus/test";
 import { setup } from "../../../apps/host/tests/schedule-test-fixture.ts";
 import { peaTurns } from "./pea-turn.fixture.ts";
 
@@ -34,15 +34,8 @@ test("same Pea thread plans in N and applies in a freshly minted N+1", async () 
   const next = f.newTurn("reviewed");
   expect(next.run.turn).not.toBe(first.run.turn);
   expect(next.token).not.toBe(first.token);
-  const pending = f.command("apply", next.token);
-  // A refusal must fail immediately, rather than looking like a stalled consent window.
-  await vi.waitFor(async () => {
-    const receipt = (await f.owner().list()).find((row) => row.id === "apply");
-    if (receipt?.state === "failed") throw Error(JSON.stringify(receipt));
-    expect(f.runs.commandWindow("apply")).toBeDefined();
-  });
-  f.runs.decide(next.run.thread, f.runs.commandWindow("apply")!.requestId, "allow_now");
-  const applied = await pending;
+  // No window stands between a reviewed Plan and its Apply (ADR 0038): the next turn applies at once.
+  const applied = await f.command("apply", next.token);
   expect(applied, JSON.stringify(applied)).toMatchObject({
     state: "succeeded",
     result: { applied: 1 },
@@ -86,41 +79,15 @@ test("closed old turn stays refused after a new turn opens", async () => {
 });
 
 // Port of R7 from d65a96e7:ts/apps/host/tests/kernel-write-safety.journey.test.ts.
-test("R7 Schedule HTTP applies atomically reserve one Plan while consent waits", async () => {
+test("R7 Schedule HTTP applies atomically reserve one Plan", async () => {
   const f = await fixture();
   const turn = f.newTurn("exclusive-schedule");
   expect(await f.command("exclusive-plan", turn.token, true)).toMatchObject({ state: "succeeded" });
-  const before = f.sent.length;
-  const first = f.command("first-apply", turn.token);
-  let second: ReturnType<typeof f.command> | undefined;
-  try {
-    await vi.waitFor(() => expect(f.runs.commandWindow("first-apply")).toBeDefined());
-    second = f.command("second-apply", turn.token);
-    await vi.waitFor(async () =>
-      expect((await f.owner().list()).find((row) => row.id === "second-apply")).toBeDefined(),
-    );
-    const rows = (await f.owner().list()).filter((row) =>
-      ["first-apply", "second-apply"].includes(row.id),
-    );
-    expect(rows.filter((row) => row.refusal?.kind === "claimed")).toHaveLength(1);
-    expect(rows.find((row) => row.id === "second-apply")).toMatchObject({
-      state: "failed",
-      notDispatched: true,
-      steps: [],
-      refusal: {
-        kind: "claimed",
-        by: "first-apply",
-        claim: { kind: "receipt", id: "exclusive-plan" },
-      },
-    });
-    expect(f.sent.slice(before)).toEqual([]);
-    expect(f.sent.filter((call) => call.key === "schedule.cells.apply")).toHaveLength(0);
-    f.runs.decide(turn.run.thread, f.runs.commandWindow("first-apply")!.requestId, "allow_now");
-    expect(await first).toMatchObject({ state: "succeeded", result: { applied: 1 } });
-    expect(await second).toMatchObject({ state: "failed", refusal: { kind: "claimed" } });
-    expect(f.sent.filter((call) => call.key === "schedule.cells.apply")).toHaveLength(1);
-  } finally {
-    f.runs.closeAll();
-    await Promise.allSettled([first, ...(second ? [second] : [])]);
-  }
+  const rows = await Promise.all([
+    f.command("first-apply", turn.token),
+    f.command("second-apply", turn.token),
+  ]);
+  expect(rows.map((row) => row.state).sort()).toEqual(["failed", "succeeded"]);
+  expect(rows.find((row) => row.state === "failed")).toMatchObject({ notDispatched: true, steps: [] });
+  expect(f.sent.filter((call) => call.key === "schedule.cells.apply")).toHaveLength(1);
 });
