@@ -1122,7 +1122,7 @@ const localEntries = {
       try: () => writeSettingTier(input, { pointer }),
       catch: (error) => new LocalOpError(key, error instanceof Error ? error.message : String(error), 500),
     });
-    if (!wrote.ok) return yield* Effect.fail(new LocalOpError(key, wrote.message, wrote.status));
+    if (!wrote.ok) return yield* Effect.fail(new StepFailure(wrote.message, wrote.status, "refused"));
     const { ok: _ok, ...written } = wrote;
     return written;
   }),

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
 import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
-import { storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
+import { noticeRows, storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
 import { bootHost } from "./real-server.ts";
 import { BRIDGE_CONTRACT_VERSION, BRIDGE_PATH, HOST_RUNTIME_SERVICE_QUERY, type BridgeFrame } from "@pe/host-contracts/contracts";
 import { ownedSession } from "./callers.ts";
@@ -64,6 +64,20 @@ test.each(["firm", "project"] as const)("settings.tiers.write crosses /actions, 
     const settled = await fetch(`${host.base}/actions?id=${id}&wait=10000`, { headers });
     const [receipt] = await settled.json();
     expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded", result: { path, priorSha256: sha256Hex(prior) } });
+    // Mutant H9-refusal: return LocalOpError for a known CAS refusal.
+    const refusedId = randomUUID();
+    const beforeRefusal = readFileSync(path);
+    await fetch(`${host.base}/actions`, {
+      method: "POST", headers,
+      body: JSON.stringify({ id: refusedId, key: "settings.tiers.write", target,
+        input: { owner: "ducts", tier, path: ["criteria", "allowanceInWg", "return"], value: 0.9, expectedSha256: sha256Hex(prior) } }),
+    });
+    const [refused] = await (await fetch(`${host.base}/actions?id=${refusedId}&wait=10000`, { headers })).json();
+    expect(readFileSync(path)).toEqual(beforeRefusal);
+    expect(refused).toMatchObject({ state: "failed", notDispatched: true, outcome: { state: "refused", reason: expect.stringContaining("changed since it was read") } });
+    const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: refused }] }, Date.now());
+    expect(rows).toMatchObject([{ group: "failed", verb: "refused", says: expect.stringContaining("changed since it was read") }]);
+    expect(rows.some(row => row.group === "waits")).toBe(false);
     const bytes = readFileSync(path);
     expect(sha256Hex(bytes)).not.toBe(sha256Hex(prior));
     expect(JSON.parse(bytes.toString())).toMatchObject({ criteria: { allowanceInWg: { return: 0.35 } } });
