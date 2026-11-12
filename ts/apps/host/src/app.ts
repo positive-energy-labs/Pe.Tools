@@ -244,7 +244,6 @@ export interface HttpLiveOptions {
   readonly nodeServer?: Server;
   readonly share?: ShareOwner;
   readonly devices?: Devices;
-  readonly remoteIngress?: readonly { origin: string; transport: "lan" | "ssh" }[];
   /** Browser origin of the separately owned dev frontend. API requests stay here. */
   readonly webUrl?: Deferred.Deferred<string>;
   /** Boot-scoped shutdown latch + service token, injected by the launch root. */
@@ -320,7 +319,6 @@ function liveHttpLive(options: HttpLiveOptions) {
   bindControl({ deviceThread: (device) => devices.active(device).thread });
   const identity = requestIdentityLayer({
     devices,
-    remoteIngress: options.remoteIngress,
     port,
     // Read on each request's fiber: the dev frontend's URL settles after the layer is built.
     frontendOrigin: options.webUrl

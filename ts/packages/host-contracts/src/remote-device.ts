@@ -1,10 +1,6 @@
 import { z } from "zod";
 
 export const deviceTransportSchema = z.enum(["lan", "tailnet", "ssh"]);
-export const remoteIngressSchema = z.strictObject({
-  origin: z.url(),
-  transport: z.enum(["lan", "ssh"]),
-});
 export const deviceSessionSchema = z.strictObject({
   id: z.uuid(),
   label: z.string().min(1).max(80),

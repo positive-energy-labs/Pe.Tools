@@ -53,9 +53,10 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
     },
     // The listing is read-only, and ADR 0039's discard does not apply here. Ruling: commit 556652bc
     // (2026-11-07) moved deletion of a misplaced record to the addressed read and left discovery
-    // reporting without mutating. A listing meets every Work file in a folder other hosts share, so
-    // it only counts what it cannot use. The boundary that holds: `getState` on the same file
-    // discards it with its one notice.
+    // reporting without mutating. Work is machine state under the state root, owned by this host
+    // alone. A listing still only counts what it cannot use, because it is a read of many files
+    // that names none of them. The boundary that holds: `getState` on the same file discards it
+    // with its one notice.
     listState: async () => {
       const files = (await readdir(dir)).filter((file) => /^[a-f0-9]{64}\.json$/.test(file)).sort();
       const records: { targetKey: string; route: string; value: unknown }[] = [];

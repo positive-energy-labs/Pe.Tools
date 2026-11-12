@@ -9,9 +9,11 @@ import {
 } from "@pe/host-contracts/contracts";
 import { resolveLaneAndRoot, runtimeRoot } from "./runtime-owner.ts";
 import { createHash } from "node:crypto";
-import { readFileSync, unlinkSync } from "node:fs";
+import { unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { writeAtomic } from "@pe/host-contracts/store";
+import { z } from "zod";
+import { actionAdmissionSchema } from "@pe/agent-contracts";
+import { readStored, writeAtomic } from "@pe/host-contracts/store";
 import type { InvocationContext } from "./invocation-context.browser.ts";
 export type {
   InvocationContext,
@@ -49,20 +51,36 @@ function outboxPath(slot: string) {
     `${hash}.json`,
   );
 }
+const outboxSchema = z.looseObject({
+  id: z.string(),
+  admission: actionAdmissionSchema.optional(),
+  contextHash: z.string().optional(),
+});
+/** The host's notice file, `storedNoticesPath()` there: the same product root, read by its feed. */
+const storedNotices = () => join(runtimeRoot(), "state", "stored-notices.jsonl");
+/**
+ * Pending intent holds a caller's causal authority, so it is `keep` (ADR 0039): an outbox that does
+ * not decode stays, posts one notice that names it, and closes its slot to every read, clear and
+ * write until a person removes the file. The context mismatch below keeps its bytes the same way.
+ */
 export function readOutbox(slot: string): InvocationRecord | undefined {
-  try {
-    const { contextHash, ...record } = JSON.parse(
-      readFileSync(outboxPath(slot), "utf8"),
-    ) as InvocationRecord & { contextHash?: string };
-    if (record.admission && contextHash !== capturedContextHash())
-      throw Error(
-        `Unacknowledged action '${record.id}' belongs to a different or unproven captured caller context; its original bytes remain retained`,
-      );
-    return record;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
-  }
+  const path = outboxPath(slot);
+  const read = readStored(path, outboxSchema, {
+    class: "keep",
+    place: "Pending action",
+    notices: storedNotices(),
+  });
+  if (read.kind === "missing") return undefined;
+  if (read.kind !== "ok")
+    throw Error(
+      `A pending action can't be read, so the file is kept and its slot stays closed until it is removed: ${path}: ${read.reason}`,
+    );
+  const { contextHash, ...record } = read.value;
+  if (record.admission && contextHash !== capturedContextHash())
+    throw Error(
+      `Unacknowledged action '${record.id}' belongs to a different or unproven captured caller context; its original bytes remain retained`,
+    );
+  return record;
 }
 export function writeOutbox(slot: string, value?: InvocationRecord): void {
   const path = outboxPath(slot);

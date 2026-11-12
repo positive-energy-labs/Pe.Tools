@@ -52,9 +52,6 @@ export interface IdentityOptions {
   readonly devices?: Devices;
   /** Where refusals are counted; the host's own receipt export when absent. */
   readonly telemetry?: ReceiptExporter;
-  readonly remoteRequests?: WeakSet<object>;
-  /** Host-configured addresses. Never inferred from Forwarded or caller-supplied transport headers. */
-  readonly remoteIngress?: readonly { origin: string; transport: "lan" | "ssh" }[];
   readonly port: () => number;
   /** The recorded checkout frontend origin, if one has settled. */
   readonly frontendOrigin: string | undefined;
@@ -82,7 +79,6 @@ export async function readRequestIdentity(
   method = "GET",
   serviceAuthorized = false,
   peerAddress?: string,
-  remoteOnly = false,
 ): Promise<IdentityResult> {
   const expectedService = headers[HOST_RUNTIME_SERVICE_HEADER];
   let queryServices: string[];
@@ -151,29 +147,12 @@ export async function readRequestIdentity(
       "Browser API requests require their original runtime service identity.",
     );
   const anonymous: Caller = { kind: "anonymous" };
-  const ingress = options.remoteIngress?.find((entry) => new URL(entry.origin).host === host);
-  if (remoteOnly && !ingress)
-    return refuse("identity.host", "Use a configured remote origin on the remote listener.");
+  // The host listens on loopback only; a tailnet caller arrives through Serve, a local peer.
   const localPeer =
     peerAddress === undefined || ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(peerAddress);
-  if (!localPeer && !ingress)
-    return refuse("identity.host", "A network peer must use a configured remote ingress.");
+  if (!localPeer) return refuse("identity.host", "A network peer is never admitted.");
   let result: IdentityResult;
-  if (ingress) {
-    const share = await options.share.read();
-    result =
-      share.desired !== "on"
-        ? refuse("identity.host", "Remote access is switched off.")
-        : origin !== undefined && origin !== new URL(ingress.origin).origin
-          ? refuse("identity.origin", "Origin is not the configured remote origin.")
-          : Object.keys(headers).some((key) => key.startsWith("tailscale-"))
-            ? refuse("identity.forged-proxy", "Tailnet identity is not accepted on this transport.")
-            : {
-                principal: { kind: "remote", transport: ingress.transport, authority: host },
-                headers: {},
-                caller: anonymous,
-              };
-  } else if (host === `127.0.0.1:${options.port()}`) {
+  if (host === `127.0.0.1:${options.port()}`) {
     const proxyIdentity = Object.keys(headers).some((key) => key.startsWith("tailscale-"));
     result = proxyIdentity
       ? refuse("identity.forged-proxy", "Proxy identity is not accepted on the local authority.")
@@ -240,12 +219,7 @@ export async function readRequestIdentity(
       (staticResource && (pathname.startsWith("/assets/") || pathname.startsWith("/pages/"))) ||
       (method === "GET" && /^\/captures\/[0-9a-f]{64}\.png$/.test(pathname));
     const pairingDoor = pathname === "/pe/pair" || pathname === "/pe/environment";
-    const transport: DeviceTransport =
-      result.principal.kind === "tailnet"
-        ? "tailnet"
-        : result.principal.kind === "remote"
-          ? result.principal.transport
-          : "ssh";
+    const transport: DeviceTransport = result.principal.kind === "tailnet" ? "tailnet" : "ssh";
     let device: ReturnType<Devices["authenticate"]> | undefined;
     if (credential) {
       try {
@@ -364,7 +338,6 @@ export async function readRequestIdentity(
         headers: {
           ...result.headers,
           ...selected,
-          ...(result.principal.kind === "remote" ? { host: result.principal.authority } : {}),
           ...(cookies.length ? { cookie: cookies.join("; ") } : {}),
         },
       };
@@ -439,7 +412,6 @@ export const requestIdentityLayer = (options: IdentityLayerOptions) =>
             request.method,
             serviceAuthorized,
             Option.getOrUndefined(request.remoteAddress),
-            options.remoteRequests?.has(request.source),
           ),
         );
         if ("refusal" in identity) {

@@ -54,12 +54,7 @@ export const deviceRoutes = (devices: Devices) =>
                 if (id === "device.claim") {
                   const body = peRoutes[id].body.parse(await request.json());
                   const principal = context?.principal;
-                  const transport =
-                    principal?.kind === "tailnet"
-                      ? "tailnet"
-                      : principal?.kind === "remote"
-                        ? principal.transport
-                        : "ssh";
+                  const transport = principal?.kind === "tailnet" ? "tailnet" : "ssh";
                   const claimed = devices.claim(
                     body.code,
                     body.label,

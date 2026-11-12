@@ -43,7 +43,7 @@ Paths are under `ts/` unless they start with another root.
 | Row | Pe path | Fate | Done-test |
 |---|---|---|---|
 | Scheduled tasks | `apps/host/src/scheduled-tasks.ts` (280 lines), its state file | Deleted; T3's scheduler runs the one built-in task | the file and its state path are gone; the built-in task fires once from T3's scheduler on the dev lane; a corrupt row can no longer stop the host |
-| SSH remote ingress | `apps/host/src/remote-ingress.ts`, its strict read at host start | Deleted | the file and the start read are gone; nothing reads `remote-ingress.json` |
+| SSH remote ingress | `apps/host/src/remote-ingress.ts`, its strict read at host start | Deleted in slice 4 | the file, the start read, the `remoteIngress` and `remoteRequests` identity options, `HttpLiveOptions.remoteIngress` and the `remote` request principal are gone; nothing reads `remote-ingress.json` |
 | Doors with no client | the `receipts.read` and `log.read` doors | Deleted | the type checker finds no caller; the generated catalog no longer lists them |
 
 ### Used today, replaced
@@ -98,7 +98,7 @@ Until the flip rule fires, add no code to these. A deletion in them is free.
 - `apps/web/src/workbench/provider/harness-client.ts` and `thread-stream.ts`.
 - `apps/pea/src/prompt.ts` as written; the ACP patches.
 - Any new Pe-side store for provider keys. The firm-key resolver is needed under both engines and survives.
-- A bet zone, where investment may be thrown away: `scheduled-tasks.ts`, devices, `share.ts`, `remote-ingress.ts`, `apps/web/src/chat/*`.
+- A bet zone, where investment may be thrown away: `scheduled-tasks.ts`, devices, `share.ts`, `apps/web/src/chat/*`.
 
 Safe to invest: `packages/mcps` tools, the operation catalog, scripting, `control.ts`, `request-identity.ts`, `run-consent.ts`, `mcp-route.ts`, Work, receipts, the action journal, Pods, `aps-auth.ts`.
 

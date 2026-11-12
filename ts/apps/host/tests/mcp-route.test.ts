@@ -39,7 +39,6 @@ const asPea = (headers: Record<string, string>) => {
 const devices = createDevices();
 const options: IdentityOptions = {
   devices,
-  remoteIngress: [{ origin: "http://localhost:65180", transport: "ssh" }],
   port: () => 5180,
   frontendOrigin: undefined,
   share: {
@@ -78,20 +77,17 @@ const operations: HostOperationDefinition[] = [
   },
 ];
 const dispose: Array<() => Promise<void>> = [];
-test("access-084/086: one paired MCP session crosses transports and revoke refuses its next HTTP request", async () => {
+test("access-084/086: revoke refuses the next HTTP request of a paired MCP session", async () => {
   const f = await fixture();
   const claimed = devices.claim(devices.pair("mcp").code, "Laptop MCP", "tailnet", "one");
   const session = await f.init({ ...remote("one"), authorization: `Bearer ${claimed.token}` });
-  const tunneled: Record<string, string> = { ...session, host: "localhost:65180" };
-  delete tunneled["tailscale-user-login"];
   const message = { jsonrpc: "2.0", id: 2, method: "tools/list" };
-  expect((await f.send(message, tunneled)).status).toBe(200);
+  expect((await f.send(message, session)).status).toBe(200);
   expect(devices.list().sessions.find((row) => row.id === claimed.session.id)?.transports).toEqual([
     "tailnet",
-    "ssh",
   ]);
   devices.revoke(claimed.session.id);
-  const refused = await f.send(message, tunneled);
+  const refused = await f.send(message, session);
   expect(refused.status).toBe(403);
   expect(await refused.json()).toMatchObject({ refusal: { code: "device.revoked" } });
 });

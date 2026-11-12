@@ -9,8 +9,15 @@ import { CommandRejected, StepFailure, io, refused } from "./command-executor.ts
 import { readJournalSnapshot } from "./journal-snapshot.ts";
 import { nativeEffect, validateNativeInput } from "./native-input.ts";
 import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
+import { existsSync } from "node:fs";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
-import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store";
+import {
+  discardStored,
+  noteStored,
+  readStored,
+  sha256Hex,
+  writeAtomic,
+} from "@pe/host-contracts/store";
 import { storedNoticesPath } from "./notice-feed.ts";
 import { dirname, join, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -513,6 +520,8 @@ export class ActionJournal implements ReceiptReader {
   private committed: Receipt[] = [];
   private readonly subscribers = new Set<(receipt: Receipt) => void>();
   private loaded?: Promise<void>;
+  /** Why the stored journal was refused at load. While set, no action runs and nothing is written. */
+  private kept?: string;
   private tail: Promise<unknown> = Promise.resolve();
   /** `closing` refuses admission; `flushed` refuses every write after the final flush. */
   private closing = false;
@@ -545,6 +554,15 @@ export class ActionJournal implements ReceiptReader {
 
   private loadOnce(): Promise<void> {
     return (this.loaded ??= this.load());
+  }
+  /** The kept reason. Removing the kept file is the recovery, so a missing file clears it. */
+  private keptNow(): string | undefined {
+    if (this.kept !== undefined && !existsSync(this.path)) {
+      this.kept = undefined;
+      // Mappings minted while kept were never written; the next commit writes them.
+      this.fresh = [...this.mappings.keys()];
+    }
+    return this.kept;
   }
 
   async read(query: ReceiptQuery): Promise<Receipt[]> {
@@ -1182,6 +1200,12 @@ export class ActionJournal implements ReceiptReader {
     if (portable)
       admission.input = portable.input.parse(admission.input) as Record<string, unknown>;
     await this.loadOnce();
+    const kept = this.keptNow();
+    if (kept !== undefined)
+      throw refused(
+        `The action journal can't be read, so the file is kept and no action runs until it is removed: ${this.path}: ${kept}`,
+        "journal.kept",
+      );
     const prior = this.rows.get(admission.id);
     if (prior && !sameCaller(prior.caller, crossing.caller))
       throw Error("Command id belongs to another authenticated caller");
@@ -2069,15 +2093,13 @@ export class ActionJournal implements ReceiptReader {
       throw error;
     });
     if (originalBytes === null) return;
-    // The journal is `discard` (ADR 0039 rule 1): one that does not decode, or contradicts
-    // itself, is deleted with one notice and the host runs on an empty journal. Before this, a
-    // throw here rejected every later journal write for the life of the host.
-    const discard = (reason: string) => {
-      discardStored(
-        this.path,
-        { class: "discard", place: "Action journal", notices: storedNoticesPath() },
-        reason,
-      );
+    // Departs from ADR 0039 rule 1, which makes the journal `discard`. A journal that does not
+    // decode, or contradicts itself, is `keep` (MAP ruling 59d4f336): it holds authority over
+    // writes whose outcome may be unknown, and docs/features/host/LEDGER.md:235 says "Authority
+    // recovery must fail closed". The bytes stay, one notice names the file, `invoke` refuses
+    // every action, and `commit` writes nothing until a person removes the file. The boundary
+    // that still holds: the host starts, and a known older epoch is still discarded.
+    const reset = () => {
       for (const held of [
         this.rows,
         this.receipts,
@@ -2094,20 +2116,40 @@ export class ActionJournal implements ReceiptReader {
       this.header = false;
       this.torn = false;
     };
-    let changed: ActionReceipt[];
+    let changed: ActionReceipt[] | null;
     try {
       changed = this.fold(originalBytes);
     } catch (error) {
-      return discard(error instanceof Error ? error.message : String(error));
+      reset();
+      const reason = error instanceof Error ? error.message : String(error);
+      noteStored(storedNoticesPath(), {
+        class: "keep",
+        place: "Action journal",
+        path: this.path,
+        sha256: sha256Hex(originalBytes),
+        reason,
+      });
+      this.kept = reason;
+      return;
+    }
+    if (changed === null) {
+      reset();
+      discardStored(
+        this.path,
+        { class: "discard", place: "Action journal", notices: storedNoticesPath() },
+        "Unsupported journal version",
+      );
+      return;
     }
     if (this.torn) await this.compact();
     if (changed.length) await this.commit(changed);
     this.notify();
   }
-  /** Replay stored lines into memory. Throws on corruption; `load` turns the throw into a discard. */
-  private fold(originalBytes: Buffer): ActionReceipt[] {
+  /** Replay stored lines into memory. Null is a known older epoch, which `load` discards. Throws
+   * on corruption, which `load` keeps. */
+  private fold(originalBytes: Buffer): ActionReceipt[] | null {
     const snapshot = readJournalSnapshot(originalBytes);
-    if (!snapshot) throw Error("Unsupported journal version");
+    if (!snapshot) return null;
     const { receipts, mappings } = snapshot;
     this.torn = snapshot.torn;
     this.lines = snapshot.lines;
@@ -2162,6 +2204,9 @@ export class ActionJournal implements ReceiptReader {
 
   /** Append the revisions these rows and facts make, and any freshly minted mappings. */
   private async commit(rows: readonly ActionReceipt[] = [], facts: readonly Receipt[] = []) {
+    // Asked first: a removed kept file puts every unwritten mapping back in `fresh`, used below.
+    // A kept journal is never written: facts and mappings live in memory for this host's life.
+    const kept = this.keptNow() !== undefined;
     // File checkpoints in the same append as the confirmed receipt, including recovery.
     rows = rows.map((row) => {
       if (row.state !== "succeeded" || !row.steps.some((step) => step.state === "succeeded"))
@@ -2222,7 +2267,7 @@ export class ActionJournal implements ReceiptReader {
       ...this.fresh.map((key) => ({ mapping: [key, this.mappings.get(key)] })),
       ...receipts.map((receipt) => ({ receipt })),
     ];
-    if (lines.length) {
+    if (lines.length && !kept) {
       if (!this.header) await mkdir(dirname(this.path), { recursive: true });
       const text = `${this.torn ? "\n" : ""}${this.header ? "" : '{"version":8}\n'}${lines
         .map((line) => `${JSON.stringify(line)}\n`)
@@ -2242,8 +2287,9 @@ export class ActionJournal implements ReceiptReader {
     for (const receipt of receipts) this.keep(receipt);
     this.committed.push(...receipts);
     if (
-      this.lines > 2 * Math.max(this.receipts.size, 1000) ||
-      this.factCount > this.retain + Math.max(this.retain / 10, 1)
+      !kept &&
+      (this.lines > 2 * Math.max(this.receipts.size, 1000) ||
+        this.factCount > this.retain + Math.max(this.retain / 10, 1))
     )
       await this.compact();
   }

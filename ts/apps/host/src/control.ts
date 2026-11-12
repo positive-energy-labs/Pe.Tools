@@ -90,7 +90,7 @@ export function mintBrowserContext(principal: RequestPrincipal): string {
         ? { kind: "human", via: "local" }
         : {
             kind: "human",
-            via: principal.kind === "tailnet" ? "tailnet" : principal.transport,
+            via: "tailnet",
             login: principal.login,
           },
   });
