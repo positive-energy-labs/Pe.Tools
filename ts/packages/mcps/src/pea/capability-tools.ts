@@ -19,7 +19,11 @@ import {
   type ActionReceipt,
   actionReceiptSchema,
 } from "@pe/agent-contracts";
-import { type DetachedAction, recoverAction } from "../shared/takeoff-action-client.ts";
+import {
+  type DetachedAction,
+  recoverAction,
+  submitAction,
+} from "../shared/takeoff-action-client.ts";
 import { runCapability, readCapabilityIntent, type CapabilityIntent } from "../shared/admission.ts";
 /**
  * The three doors plus the one Scope door.
@@ -375,14 +379,24 @@ export const peDo = createTool({
     };
   },
   execute: async (input, context) => {
-    if (input.kind === "page")
-      return createPeClient(base(), fetch).call(
-        "page.publish",
+    if (input.kind === "page") {
+      // The one admission door, like every other command: a re-sent tool call is a marked re-send
+      // there, so a host whose journal was discarded refuses it instead of publishing twice.
+      const row = await submitAction(
         {
-          body: pagePublicationSchema.parse(input),
+          id: requestIdentity(context),
+          key: "page.publish",
+          target: { kind: "host" },
+          input: pagePublicationSchema.parse(input),
         },
-        { headers: { "x-pe-command-id": requestIdentity(context) } },
+        base(),
       );
+      if (row.state !== "succeeded")
+        throw Error(
+          `Page publication did not complete: ${"error" in row && row.error ? row.error : row.state}`,
+        );
+      return row.result;
+    }
     return executeTool(
       runInputSchema.parse(input),
       context,

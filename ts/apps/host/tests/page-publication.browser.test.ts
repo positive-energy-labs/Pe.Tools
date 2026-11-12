@@ -42,11 +42,12 @@ async function fixture(caller: Caller = human) {
     },
   });
   const handle = asCaller(caller, createPagesHandler(root, join(home, "Pods"), undefined, journal));
-  const publish = (body: unknown, id?: string) =>
+  // The door mints its own command id; a caller that retries goes through `actions.admit`.
+  const publish = (body: unknown) =>
     servePeRoute(
       new Request("http://fixture/pe/pages/publish", {
         method: "POST",
-        headers: { "content-type": "application/json", ...(id ? { "x-pe-command-id": id } : {}) },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       }),
       handle,
@@ -164,9 +165,9 @@ it("a publication from a stopped run is refused and leaves the existing source u
       root: ref,
     });
     runs.close(ref, "stopped");
-    expect((await fixtureValue.publish(page, "publish-once")).status).toBeGreaterThanOrEqual(400);
+    expect((await fixtureValue.publish(page)).status).toBeGreaterThanOrEqual(400);
     expect(
-      (await fixtureValue.journal.list(undefined, "publish-once")).some(
+      (await fixtureValue.journal.list()).some(
         (row) => row.state === "succeeded" || row.state === "running",
       ),
     ).toBe(false);

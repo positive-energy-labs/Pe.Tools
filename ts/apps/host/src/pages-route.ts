@@ -869,7 +869,9 @@ export function createPagesHandler(
       try {
         if (!journal) throw Error("Page publication requires ActionJournalService.");
         const owner = journal;
-        const id = request.headers.get("x-pe-command-id") ?? randomUUID();
+        // This door mints its own id, so it cannot re-send one. A caller that retries (Pea) goes
+        // through `actions.admit`, where the replay guard sees the re-send.
+        const id = randomUUID();
         await owner.invoke(
           { id, key: "page.publish", target: { kind: "host" }, input: input.data },
           { caller, basis: null },
