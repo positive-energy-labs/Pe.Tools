@@ -28,17 +28,17 @@ import {
   type ReadingRequest,
 } from "@pe/agent-contracts";
 import { HOST_RESTARTED } from "@pe/agent-contracts/chat-state";
-import { join } from "node:path";
-import { productPathNames } from "@pe/host-contracts/contracts";
 import { summarizeFailure } from "@pe/host-contracts/failure-summary";
 import type { ThreadPresence } from "@pe/host-contracts/pe-api";
 import { firmHome, noFirmHomeText, type FirmHome } from "@pe/host-contracts/product-paths";
-import { noteStored, sha256Hex, type StoredNotice } from "@pe/host-contracts/store";
+import { stateTree } from "@pe/host-contracts/service-identity";
+import { noteStored, sha256Hex, storedNoticesFile, type StoredNotice } from "@pe/host-contracts/store";
 import { hostOwnership } from "./host-ownership.ts";
 
 /** The machine's notice file: every `discard` in the host names it, so no file goes without a trace. */
-export const storedNoticesPath = () =>
-  join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "stored-notices.jsonl");
+export const storedNoticesPath = () => storedNoticesFile(hostOwnership.rootPath);
+/** Where a discard that holds authority rests its bytes first (`state\\Blobs`, the write door's store). */
+export const storedBlobsPath = () => stateTree(hostOwnership.rootPath).blobs;
 
 /** The Place a no-firm-home notice is filed under; its row is a finding, not a file that did not decode. */
 const FIRM_HOME_PLACE = "Firm home";

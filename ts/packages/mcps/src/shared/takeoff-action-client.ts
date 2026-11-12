@@ -15,6 +15,7 @@ import {
   commands,
   commandTarget,
   actionAdmissionSchema,
+  ADMISSION_RESEND_HEADER,
   type ExecutionTarget,
   type Command,
   type WorkHandle,
@@ -266,6 +267,8 @@ export async function submitAction(
   const prior = getRetained(slot);
   if (prior?.admission && canonicalRouteInput(prior.admission) !== canonicalRouteInput(retainedAdmission))
     throw Error(`Action '${prior.id}' has an unacknowledged immutable request`);
+  // Retained pre-ACK bytes mean an earlier send may have arrived; so does a transport lost below.
+  let resent = prior?.admission !== undefined;
   // Upload bytes travel in the POST only. Recovery retains the same digest intent, not a PDF in localStorage.
   retain(slot, { id: admission.id, admission: retainedAdmission });
   const deadline = Date.now() + waitMs;
@@ -279,9 +282,13 @@ export async function submitAction(
         response = await createPeClient(base, fetch).response(
           "actions.admit",
           { body: admission },
-          { signal: AbortSignal.timeout(Math.max(1, Math.min(30_000, deadline - Date.now()))) },
+          {
+            signal: AbortSignal.timeout(Math.max(1, Math.min(30_000, deadline - Date.now()))),
+            ...(resent ? { headers: { [ADMISSION_RESEND_HEADER]: "1" } } : {}),
+          },
         );
       } catch {
+        resent = true;
         row = await readAction(admission.id, base, AbortSignal.timeout(5000)).catch(transportLost);
         if (row) await assertIdentity(admission, row);
         if (!row) {

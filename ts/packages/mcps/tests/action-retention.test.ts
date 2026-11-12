@@ -115,12 +115,14 @@ test("a running attempt is reattached without submitting newer intent and the st
 
 test("pre-admission loss survives a client reload and resends exact bytes despite newer Work", async () => {
   const endpoint = base(),
-    posted: ActionAdmission[] = [];
+    posted: ActionAdmission[] = [],
+    resent: (string | null)[] = [];
   let lose = true;
   vi.stubGlobal("fetch", async (_input: unknown, init?: RequestInit) => {
     if (init?.method !== "POST") return Response.json([]);
     const body = JSON.parse(await bodyText(init));
     posted.push(body);
+    resent.push(new Headers(init.headers).get("x-pe-admission-resend"));
     if (lose) throw Error("connection lost before admission");
     return Response.json(receipt(body));
   });
@@ -153,6 +155,9 @@ test("pre-admission loss survives a client reload and resends exact bytes despit
   );
   expect(retry).toMatchObject({ id: first.id, state: "succeeded" });
   expect(posted).toEqual([posted[0], posted[0]]);
+  // The first send is plain. The re-send of retained bytes says an earlier send may have arrived,
+  // so a host whose journal was discarded refuses it instead of running it as new.
+  expect(resent).toEqual([null, "1"]);
   expect(posted[1]!.input.work).toEqual(work);
 });
 

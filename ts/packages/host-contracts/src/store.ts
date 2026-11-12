@@ -114,15 +114,7 @@ export function writeHomeFile(
   const prior = readOrNull(path);
   const priorSha256 = prior && sha256Hex(prior);
   if (!prior || priorSha256 !== opts.expectSha256) return conflict(priorSha256);
-  const priorBlob = join(opts.blobRoot, "sha256", opts.expectSha256);
-  mkdirSync(dirname(priorBlob), { recursive: true });
-  try {
-    writeFileSync(priorBlob, prior, { flag: "wx" });
-  } catch (error) {
-    if (errno(error) !== "EEXIST") throw error;
-    // A blob torn by an earlier crash is rewritten; a whole one is the same bytes already.
-    if (sha256Hex(readFileSync(priorBlob)) !== opts.expectSha256) writeAtomic(priorBlob, prior);
-  }
+  const priorBlob = restBlob(opts.blobRoot, opts.expectSha256, prior);
   // ponytail: the compare above and the rename below are not one step. Two processes on this
   // machine can both pass the compare and the later rename wins; the loser's bytes are still in
   // the blob store. Ceiling: one machine, rare. A race across machines belongs to Drive, which
@@ -130,6 +122,26 @@ export function writeHomeFile(
   writeAtomic(path, next);
   return { ok: true, sha256: sha256Hex(next), priorSha256, priorBlob };
 }
+
+/** Rest bytes in the content-addressed blob store, `<blobRoot>/sha256/<hash>`, create-exclusive. */
+function restBlob(blobRoot: string, sha256: string, bytes: Uint8Array): string {
+  const blob = join(blobRoot, "sha256", sha256);
+  mkdirSync(dirname(blob), { recursive: true });
+  try {
+    writeFileSync(blob, bytes, { flag: "wx" });
+  } catch (error) {
+    if (errno(error) !== "EEXIST") throw error;
+    // A blob torn by an earlier crash is rewritten; a whole one is the same bytes already.
+    if (sha256Hex(readFileSync(blob)) !== sha256) writeAtomic(blob, bytes);
+  }
+  return blob;
+}
+
+/**
+ * The machine's one notice file under a product root. The host's feed reads it, and every process
+ * that refuses a stored file (the host, an MCP child) posts to the same one.
+ */
+export const storedNoticesFile = (root: string) => join(root, "state", "stored-notices.jsonl");
 
 /** One durable line per stored file that did not decode; the host's notice feed draws them. */
 export const storedNoticeSchema = z.strictObject({
@@ -166,10 +178,12 @@ export function readStoredNotices(file: string): StoredNotice[] {
  * `notices` is the machine's notice file (`<machine state root>/state/stored-notices.jsonl` in the
  * host). A discard must name it, so nothing is deleted without a trace; a keep may, when no listing
  * of its own shows the refusal. `parse` replaces `JSON.parse` for a file that is not one JSON value.
+ * `blobRoot` makes a discard lose nothing: the refused bytes rest in `<blobRoot>/sha256/<hash>`
+ * before the file goes, and the notice's `sha256` is that hash.
  */
 export type StoredPolicy = { place: string; parse?: (text: string) => unknown } & (
-  | { class: "keep"; notices?: string }
-  | { class: "discard"; notices: string }
+  | { class: "keep"; notices?: string; blobRoot?: undefined }
+  | { class: "discard"; notices: string; blobRoot?: string }
 );
 
 export type StoredRead<T> =
@@ -225,6 +239,14 @@ function refuse(path: string, bytes: Buffer | null, policy: StoredPolicy, why: s
       reason,
     });
   if (policy.class === "keep") return { kind: "kept", reason } as const;
+  if (policy.blobRoot && bytes)
+    try {
+      restBlob(policy.blobRoot, sha256Hex(bytes), bytes);
+    } catch (error) {
+      // ponytail: the discard goes on without its copy, because the owner is about to write a
+      // fresh file over these bytes either way. Hold the discard instead if a full disk is seen.
+      console.warn(`Could not keep a copy of '${path}' before its discard: ${message(error)}`);
+    }
   try {
     rmSync(path, { force: true });
   } catch {

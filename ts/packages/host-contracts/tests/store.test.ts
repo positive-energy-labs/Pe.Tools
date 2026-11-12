@@ -19,6 +19,7 @@ import {
   readStoredLines,
   readStoredNotices,
   sha256Hex,
+  storedNoticesFile,
   writeAtomic,
   writeHomeFile,
 } from "../src/store.ts";
@@ -240,6 +241,25 @@ describe("readStored", () => {
     discardStored(path, discard(), "identity does not match");
     expect(existsSync(path)).toBe(false);
     expect(readStoredNotices(notices())).toMatchObject([{ reason: "identity does not match" }]);
+  });
+
+  test("a discard with a blobRoot rests the bytes under the hash its notice names, then deletes", () => {
+    const blobRoot = join(root, "state", "Blobs");
+    const kept = { ...discard(), blobRoot };
+    const path = join(root, "journal.jsonl");
+    const torn = '{"name":';
+    writeFileSync(path, torn);
+    expect(readStored(path, schema, kept)).toMatchObject({ kind: "discarded" });
+    expect(existsSync(path)).toBe(false);
+    expect(readFileSync(join(blobRoot, "sha256", sha256Hex(torn)), "utf8")).toBe(torn);
+    expect(readStoredNotices(notices())).toMatchObject([{ sha256: sha256Hex(torn) }]);
+    // An owner's own refusal takes the same path, and the same bytes twice are one blob.
+    writeFileSync(path, torn);
+    discardStored(path, kept, "another epoch");
+    expect(existsSync(path)).toBe(false);
+    expect(readdirSync(join(blobRoot, "sha256"))).toEqual([sha256Hex(torn)]);
+    // `storedNoticesFile` is the path every poster and the host's feed agree on.
+    expect(storedNoticesFile(root)).toBe(notices());
   });
 });
 

@@ -13,7 +13,7 @@ import { unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { actionAdmissionSchema } from "@pe/agent-contracts";
-import { readStored, writeAtomic } from "@pe/host-contracts/store";
+import { readStored, storedNoticesFile, writeAtomic } from "@pe/host-contracts/store";
 import type { InvocationContext } from "./invocation-context.browser.ts";
 export type {
   InvocationContext,
@@ -56,8 +56,6 @@ const outboxSchema = z.looseObject({
   admission: actionAdmissionSchema.optional(),
   contextHash: z.string().optional(),
 });
-/** The host's notice file, `storedNoticesPath()` there: the same product root, read by its feed. */
-const storedNotices = () => join(runtimeRoot(), "state", "stored-notices.jsonl");
 /**
  * Pending intent holds a caller's causal authority, so it is `keep` (ADR 0039): an outbox that does
  * not decode stays, posts one notice that names it, and closes its slot to every read, clear and
@@ -68,7 +66,7 @@ export function readOutbox(slot: string): InvocationRecord | undefined {
   const read = readStored(path, outboxSchema, {
     class: "keep",
     place: "Pending action",
-    notices: storedNotices(),
+    notices: storedNoticesFile(runtimeRoot()),
   });
   if (read.kind === "missing") return undefined;
   if (read.kind !== "ok")

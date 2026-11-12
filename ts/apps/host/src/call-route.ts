@@ -8,7 +8,7 @@ import {
 } from "@pe/agent-contracts";
 import { actionControls, commandTool, receiptsForWork } from "@pe/agent-contracts";
 import type { Caller } from "@pe/agent-contracts";
-import { actionAdmissionSchema, workKeySchema } from "@pe/agent-contracts";
+import { ADMISSION_RESEND_HEADER, actionAdmissionSchema, workKeySchema } from "@pe/agent-contracts";
 import {
   addressSchema,
   sameAddress,
@@ -191,11 +191,12 @@ function callRoutes(
     return captures;
   };
   const owner = () => operations;
-  const admit = async (raw: unknown, caller: Caller, parent: string) => {
+  const admit = async (raw: unknown, caller: Caller, parent: string, resent: boolean) => {
     const input = actionAdmissionSchema.parse(raw);
     const crossing = {
       caller,
       parent,
+      resent,
       basis: admitCrossing(caller, input.target, "/actions", readsOnly(input.key, input.input)),
     };
     return owner().invoke(input, crossing);
@@ -631,11 +632,12 @@ function callRoutes(
       if (req.headers["x-pe-history-point"]) return Response.jsonUnsafe({ error: { code: "history.read-only", message: "needs live Revit" } }, { status: 409 });
       // The caller lives in AsyncLocalStorage; the Node body read resumes outside it. Read first.
       const caller = currentCaller();
+      const resent = req.headers[ADMISSION_RESEND_HEADER] !== undefined;
       const body = yield* req.json;
       // The submitting request is the command's causal parent; the journal owns the attempt.
       const { requestId } = yield* RequestIdentity;
       const row = yield* Effect.tryPromise({
-        try: () => admit(body, caller, requestId),
+        try: () => admit(body, caller, requestId, resent),
         catch: (error) => error,
       });
       return Response.jsonUnsafe(row, {
@@ -653,6 +655,9 @@ function callRoutes(
                     typeof error === "object" && error && "message" in error
                       ? String(error.message)
                       : String(error),
+                  // A command rejected before admission ran nothing, so the caller may let go of
+                  // the bytes it retained for a retry.
+                  ...(error instanceof CommandRejected ? { notDispatched: true } : {}),
                 },
                 { status: 409 },
               ),

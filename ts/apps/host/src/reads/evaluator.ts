@@ -120,7 +120,7 @@ export interface ReadContext {
   work(owner: string, scope: unknown): Promise<unknown>;
   /** The one native door: any catalog Read, typed and decoded by the host's generated catalog. */
   native<K extends CatalogReadKey>(key: K, args: NativeArgs<K>): Promise<NativeValue<K>>;
-  /** The firm file layer (ADR 0026): the firm home's `Settings/<owner>.json` decoded by `schema`, else `seed` with why. */
+  /** The firm file layer (ADR 0026): the firm's per-owner `<owner>.json` decoded by `schema`, else `seed` with why. */
   firm<T>(owner: string, schema: z.ZodType<T>, seed: T): Promise<FirmValue<T>>;
   collect<K, I, O>(
     keys: readonly K[],

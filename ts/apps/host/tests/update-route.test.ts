@@ -6,8 +6,8 @@ import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import type { Envelope, UpdatePlan, UpdateReceipt } from "@pe/host-contracts/pe-revit-contract";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
-import { readStoredNotices } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "../src/notice-feed.ts";
+import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
+import { storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
 import {
   createUpdateReader,
   UpdateReader,
@@ -312,7 +312,7 @@ test("a disconnected admission stays pending across restart and blocks a second 
   }
 });
 
-test("wrong request or plan cannot overwrite a confirmed receipt, and a corrupt admission refuses a new apply and is kept", async () => {
+test("wrong request or plan cannot overwrite a confirmed receipt, and a corrupt admission is discarded with a notice", async () => {
   const f = await fixture();
   try {
     const admitted = await f.reader.apply(plan.planId);
@@ -328,19 +328,18 @@ test("wrong request or plan cannot overwrite a confirmed receipt, and a corrupt 
       args[0] === "op" ? recovered(receipt("different-request")) : envelope(plan),
     );
     expect((await wrongRequest.refresh()).receiptLeg.error).toContain("different update request");
-    // Fail closed (MAP ruling 59d4f336, departing from ADR 0039 rule 1): this record is the only
-    // one that says an update may be running, so one that does not decode is kept. A new apply is
-    // refused with the file's path and reason, the bytes do not change, and nothing is dispatched.
+    // ADR 0039: the admission is machine state. One that does not decode is discarded with one
+    // notice, the update reads as never admitted, and the next apply is admitted fresh. The SDK,
+    // not this record, refuses an apply while another update runs.
     await writeFile(f.path, "{}");
-    await expect(f.make().apply(plan.planId)).rejects.toThrow(
-      /can't be read, so the file is kept and no update applies until it is removed/,
-    );
-    await expect(f.make().apply(plan.planId)).rejects.toThrow(f.path);
-    expect(await readFile(f.path, "utf8")).toBe("{}");
+    const again = await f.make().apply(plan.planId);
+    expect(again.requestId).not.toBe(admitted.requestId);
     expect(
       readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === f.path),
-    ).toMatchObject([{ class: "keep", place: "Update status" }]);
-    expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(1);
+    ).toMatchObject([{ class: "discard", place: "Update status", sha256: sha256Hex("{}") }]);
+    // Nothing is lost: the discarded bytes rest in the blob store under the hash the notice names.
+    expect(await readFile(join(storedBlobsPath(), "sha256", sha256Hex("{}")), "utf8")).toBe("{}");
+    expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(2);
   } finally {
     await f.close();
   }
@@ -460,10 +459,9 @@ test("U-02/U-04: a lost acknowledgement is unknown, and late recovery of a runni
   }
 });
 
-// Per-request witness of the fail-closed ruling (MAP 59d4f336): the read still answers and says
-// why, the apply is a typed 409 with the file's path and reason, never a 500, and the same host
-// applies again once a person removes the file.
-test("an admission that does not decode is kept: the read answers, the apply is a 409 with path and reason, and removing the file recovers", async () => {
+// ADR 0039 per-request witness: a corrupt admission used to reject every apply and mark every
+// read with an error, for as long as the file stayed.
+test("an admission that does not decode is discarded on the request that meets it, not a 500", async () => {
   const f = await fixture();
   const corrupt = "{ this is not JSON";
   await writeFile(f.path, corrupt);
@@ -480,35 +478,24 @@ test("an admission that does not decode is kept: the read answers, the apply is 
     { disableLogger: true },
   );
   try {
-    const get = () => web.handler(new Request("http://host/host/update"), Context.empty() as never);
-    const post = () =>
-      web.handler(
-        new Request("http://host/host/update", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ planId: plan.planId }),
-        }),
-        Context.empty() as never,
-      );
-    const read = await get();
+    const read = await web.handler(new Request("http://host/host/update"), Context.empty() as never);
     expect(read.status, await read.clone().text()).toBe(200);
-    expect(await read.json()).toMatchObject({
-      receipt: null,
-      receiptLeg: { error: expect.stringContaining(f.path) },
-    });
-    const refused = await post();
-    const said = await refused.text();
-    expect(refused.status, said).toBe(409);
-    expect(said).toContain(JSON.stringify(f.path).slice(1, -1));
-    expect(said).toContain("so the file is kept and no update applies until it is removed");
-    expect(await readFile(f.path, "utf8")).toBe(corrupt);
-    expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(0);
+    expect(await read.json()).toMatchObject({ receipt: null, receiptLeg: { error: null } });
+    const admitted = await web.handler(
+      new Request("http://host/host/update", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId: plan.planId }),
+      }),
+      Context.empty() as never,
+    );
+    expect(admitted.status, await admitted.clone().text()).toBe(202);
     expect(
       readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === f.path),
-    ).toMatchObject([{ class: "keep", place: "Update status" }]);
-    await rm(f.path);
-    const admitted = await post();
-    expect(admitted.status, await admitted.clone().text()).toBe(202);
+    ).toMatchObject([{ class: "discard", place: "Update status", sha256: sha256Hex(corrupt) }]);
+    expect(await readFile(join(storedBlobsPath(), "sha256", sha256Hex(corrupt)), "utf8")).toBe(
+      corrupt,
+    );
   } finally {
     await web.dispose();
     await f.close();

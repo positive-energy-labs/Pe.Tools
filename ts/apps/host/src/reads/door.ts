@@ -151,7 +151,7 @@ export type FirmValue<T> =
       error?: string;
     }
   | z.output<typeof noSharedRoot>;
-/** The firm file layer (ADR 0026): the firm home's `Settings/<owner>.json` as read, before `resolveFirm` decodes it. */
+/** The firm file layer (ADR 0026): the firm's per-owner `<owner>.json` as read, before `resolveFirm` decodes it. */
 export const firm = leaf("file:firm", firmOwner, firmFileSchema);
 /** Each value carries its source: the firm file when it decodes, else the engine default (seed). */
 export function resolveFirm<T>(file: FirmFile, schema: z.ZodType<T>, seed: T): FirmValue<T> {

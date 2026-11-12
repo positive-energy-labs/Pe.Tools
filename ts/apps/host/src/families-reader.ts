@@ -166,7 +166,7 @@ async function readFamiliesProgressively(
   // Derived (ADR 0039): a damaged timing file is discarded with a notice and the estimate starts cold.
   const stored = readStored(
     costsPath,
-    z.object({ startupMs: z.number().min(1_000), families: z.record(z.string(), z.custom<Sample>()) }),
+    z.object({ startupMs: z.number().min(1_000), families: z.record(z.string(), z.object({ ms: z.number(), types: z.number() })) }),
     { class: "discard", place: "Family read timings", notices: storedNoticesPath() },
   );
   if (stored.kind === "ok") costs = stored.value;

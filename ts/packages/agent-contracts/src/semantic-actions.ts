@@ -194,6 +194,12 @@ export const actionAdmissionSchema = z.strictObject({
   input: z.record(z.string(), z.unknown()),
 });
 export type ActionAdmission = z.infer<typeof actionAdmissionSchema>;
+/**
+ * Set on an admission POST that re-sends bytes an earlier POST may already have delivered (a lost
+ * acknowledgement, a retained outbox). A journal that still has its history answers by id; one
+ * that was discarded cannot know whether the action ran, so it refuses instead of running it again.
+ */
+export const ADMISSION_RESEND_HEADER = "x-pe-admission-resend";
 
 import { workCommand, type Tool } from "./command.ts";
 import { settingsRouteState } from "./settings.ts";
