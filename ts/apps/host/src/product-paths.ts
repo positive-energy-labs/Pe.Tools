@@ -15,7 +15,11 @@ export function productPagesRootPath(): string {
   return join(userRoot(), productPathNames.pagesDirectoryName);
 }
 
-/** A path under machine-local product state (`<productRoot>\state`): keys and per-machine data, not Documents. */
+/**
+ * A path under machine-local product state (`<productRoot>\state`): keys and per-machine data, not
+ * Documents. The installer never clears `state\` (it refuses any path with that segment), so what
+ * sits here outlives an upgrade; a new sibling of `bin\` would have no such promise.
+ */
 const productStatePath = (...segments: string[]) =>
   join(hostOwnership.rootPath, productPathNames.stateDirectoryName, ...segments);
 
@@ -26,8 +30,20 @@ export const productApsTokensPath = () => productStatePath("aps-auth", "tokens.j
 /** One directory per harness thread (`harness/threads.ts`): `meta.json` + `events.jsonl`. */
 export const productHarnessThreadsPath = () => productStatePath("harness-threads");
 
+// A home holds only authored files (ADR 0037 rule 6). Work, Page state and the agent's working
+// directory are machine state; `state\Runs` and `state\Blobs` join them from their own writers.
 /** Route Work documents (`pe-routes.ts`): one JSON file per route and Work key. */
-export const productRouteWorkPath = () => join(userRoot(), "Work");
+export const productRouteWorkPath = () => productStatePath("Work");
+/** Page state (`pages-route.ts`): one folder per Page slug, holding its event log, snapshot and binding. */
+export const productPageStatePath = () => productStatePath("Pages");
+/**
+ * The agent's working directory, fixed once: the harness child's cwd, the Pea world's root, and the
+ * home of the harness projections (`.agents/skills`, `.claude/skills`, `.codex/config.toml`). T3
+ * keys its project on this path, so moving it strands every thread.
+ */
+export const productAgentPath = () => productStatePath("Agent");
+/** Reserved for the T3 home, whose files are foreign to Pe. Named only: nothing reads or writes it yet. */
+export const productT3Path = () => productStatePath("T3");
 export const productRouteSettingsPath = () => productStatePath("route-settings");
 
 /** Immutable headless Ducts calculations, including their complete effective inputs. */

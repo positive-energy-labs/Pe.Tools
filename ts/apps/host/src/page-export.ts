@@ -10,6 +10,8 @@ import {
 
 export type PageExportInput = {
   directory: string;
+  /** Where the export is kept: the Page's machine-state folder, never the Page's own folder in a home. */
+  exports: string;
   page: string;
   exportedAt: string;
   document: unknown;
@@ -242,6 +244,6 @@ window.pe = pe;
     ? html.replace(/<head\b[^>]*>/i, (head) => head + pinned)
     : pinned + html;
   const sha256 = sha(html);
-  const path = await writeArtifact(root, join(root, ".state", "exports", `${sha256}.html`), html);
+  const path = await writeArtifact(input.exports, join(input.exports, `${sha256}.html`), html);
   return { html, sha256, path, provenance };
 }

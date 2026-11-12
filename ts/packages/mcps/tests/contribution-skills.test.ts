@@ -21,19 +21,32 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+/** A user home and, apart from it, the agent's working directory that holds the projections. */
+async function world(prefix: string) {
+  const root = await mkdtemp(join(tmpdir(), prefix));
+  const home = join(root, "home");
+  const agent = join(root, "agent");
+  return {
+    root,
+    home,
+    agent,
+    options: { productHomePath: home, agentPath: agent, captureDirectory },
+  };
+}
+
 test("one admitted user revision reaches both harnesses, discovery and reads after its source changes", async () => {
   fakeRuntimeHost("http://127.0.0.1:9");
   vi.stubEnv("PE_CONTEXT", "");
-  const home = await mkdtemp(join(tmpdir(), "pe-skill-cut-"));
+  const { root: temp, home, agent, options } = await world("pe-skill-cut-");
   try {
     await mkdir(join(home, "Skills", "office"), { recursive: true });
     const content = "---\nname: office\ndescription: Office rules.\n---\n\nExact bytes.\r\n";
     await writeFile(join(home, "Skills", "office", "SKILL.md"), content);
     await writeFile(join(home, "Skills", "office", "support.txt"), "support\r\n");
-    const snapshot = await publishPeaSkills({ productHomePath: home, captureDirectory });
+    const snapshot = await publishPeaSkills(options);
     const skill = snapshot.skills.find((s) => s.key === "skill:@skills/skills/office")!;
     expect(skill.content).toBe(content);
-    for (const root of resolvePeaSkillPaths({ productHomePath: home })) {
+    for (const root of resolvePeaSkillPaths(agent)) {
       expect(await readFile(join(root, "office", "SKILL.md"), "utf8")).toBe(content);
       expect(await readFile(join(root, "office", "support.txt"), "utf8")).toBe("support\r\n");
     }
@@ -82,71 +95,75 @@ test("one admitted user revision reaches both harnesses, discovery and reads aft
     });
     expect(requests.filter((url) => url.pathname === "/pe/contributions")).toHaveLength(1);
   } finally {
-    await rm(home, { recursive: true, force: true });
+    await rm(temp, { recursive: true, force: true });
   }
 });
 
-test("conflicting personal harness copies refuse publication without overwriting either", async () => {
-  const home = await mkdtemp(join(tmpdir(), "pe-skill-conflict-"));
+test("a harness root is never read back as a source: copies there publish nothing and write nothing into the home", async () => {
+  const { root: temp, home, agent, options } = await world("pe-skill-readback-");
   try {
-    const roots = resolvePeaSkillPaths({ productHomePath: home });
+    const roots = resolvePeaSkillPaths(agent);
     for (const [i, root] of roots.entries()) {
       await mkdir(join(root, "office"), { recursive: true });
       await writeFile(join(root, "office", "SKILL.md"), `copy ${i}`);
     }
-    await expect(publishPeaSkills({ productHomePath: home, captureDirectory })).rejects.toThrow(
-      /conflict/i,
-    );
+    const publication = await publishPeaSkills(options);
+    expect(publication.skills.map((skill) => skill.name)).not.toContain("office");
+    // The read-back wrote `<home>/Skills/office`; the home is not even created now.
+    await expect(access(home)).rejects.toThrow();
     expect(await readFile(join(roots[0]!, "office", "SKILL.md"), "utf8")).toBe("copy 0");
     expect(await readFile(join(roots[1]!, "office", "SKILL.md"), "utf8")).toBe("copy 1");
+    expect(publication.notices).toHaveLength(2);
+    expect(publication.notices[0]).toContain(join(home, "Skills", "office"));
   } finally {
-    await rm(home, { recursive: true, force: true });
+    await rm(temp, { recursive: true, force: true });
   }
 });
 
 test("a corrupt projection receipt cannot turn skill retirement into a path escape", async () => {
-  const home = await mkdtemp(join(tmpdir(), "pe-skill-receipt-"));
+  const { root: temp, agent, options } = await world("pe-skill-receipt-");
   try {
-    const root = resolvePeaSkillPaths({ productHomePath: home })[0]!;
+    const root = resolvePeaSkillPaths(agent)[0]!;
     await mkdir(root, { recursive: true });
     await writeFile(
       join(root, ".pe-projection.json"),
       JSON.stringify({ "../../outside": "a".repeat(64) }),
     );
-    await writeFile(join(home, "outside"), "keep");
-    await expect(publishPeaSkills({ productHomePath: home, captureDirectory })).rejects.toThrow();
-    expect(await readFile(join(home, "outside"), "utf8")).toBe("keep");
+    await writeFile(join(agent, "outside"), "keep");
+    await expect(publishPeaSkills(options)).rejects.toThrow();
+    expect(await readFile(join(agent, "outside"), "utf8")).toBe("keep");
   } finally {
-    await rm(home, { recursive: true, force: true });
+    await rm(temp, { recursive: true, force: true });
   }
 });
 
 test("a same-named skill folder without a receipt is overwritten by the product's skill", async () => {
-  const home = await mkdtemp(join(tmpdir(), "pe-skill-shipped-"));
+  const { root: temp, agent, options } = await world("pe-skill-shipped-");
   try {
-    const roots = resolvePeaSkillPaths({ productHomePath: home });
+    const roots = resolvePeaSkillPaths(agent);
     for (const [i, root] of roots.entries()) {
       await mkdir(join(root, "build-pod"), { recursive: true });
       await writeFile(join(root, "build-pod", "SKILL.md"), `older projection ${i}`);
     }
     await mkdir(join(roots[0]!, "mine"), { recursive: true });
     await writeFile(join(roots[0]!, "mine", "SKILL.md"), "user skill");
-    const publication = await publishPeaSkills({ productHomePath: home, captureDirectory });
+    const publication = await publishPeaSkills(options);
     const shipped = publication.skills.find((s) => s.key === "skill:@product/skills/build-pod")!;
     for (const root of roots)
       expect(await readFile(join(root, "build-pod", "SKILL.md"), "utf8")).toBe(shipped.content);
     expect(await readFile(join(roots[0]!, "mine", "SKILL.md"), "utf8")).toBe("user skill");
-    expect(publication.notices).toEqual([]);
+    // The overwritten folders raise nothing; the stray one is named once, as not a source.
+    expect(publication.notices).toHaveLength(1);
+    expect(publication.notices[0]).toContain(join(roots[0]!, "mine"));
   } finally {
-    await rm(home, { recursive: true, force: true });
+    await rm(temp, { recursive: true, force: true });
   }
 });
 
 test("materialization deletes a retired skill folder only when the product receipt proves its bytes", async () => {
-  const home = await mkdtemp(join(tmpdir(), "pe-skill-retirement-"));
-  const options = { productHomePath: home, captureDirectory };
+  const { root: temp, agent, options } = await world("pe-skill-retirement-");
   try {
-    const [codexRoot, claudeRoot] = resolvePeaSkillPaths(options);
+    const [codexRoot, claudeRoot] = resolvePeaSkillPaths(agent);
     const retiredName = retiredPeaSkillNames[0]!;
     const userOwned = path.join(codexRoot!, "my-office-standards", "SKILL.md");
     const receipted = path.join(codexRoot!, retiredName, "SKILL.md");
@@ -167,8 +184,9 @@ test("materialization deletes a retired skill folder only when the product recei
 
     const materialized = await publishPeaSkills(options);
 
-    expect(materialized.skills.map((skill) => skill.name)).toContain("my-office-standards");
-    for (const root of resolvePeaSkillPaths(options))
+    // A folder a person or an agent left in a harness root stays where it is and is no source.
+    expect(materialized.skills.map((skill) => skill.name)).not.toContain("my-office-standards");
+    for (const root of resolvePeaSkillPaths(agent))
       for (const skill of bundledPeaSkills)
         expect(await readFile(path.join(root, skill.name, "SKILL.md"), "utf8")).toBe(
           `${skill.content.trimEnd()}\n`,
@@ -183,6 +201,6 @@ test("materialization deletes a retired skill folder only when the product recei
       false,
     );
   } finally {
-    await rm(home, { recursive: true, force: true });
+    await rm(temp, { recursive: true, force: true });
   }
 });

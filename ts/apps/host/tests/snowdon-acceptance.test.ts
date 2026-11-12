@@ -68,6 +68,7 @@ test.each(["snowdon-ducts", "snowdon-circuits"])(
       const snapshot = null;
       const standalone = await exportPage({
         directory: join(to, "Elsewhere/pages/tour"),
+        exports: join(root, "state", "exports"),
         page: `page:@${id}/pages/tour`,
         exportedAt: "2026-10-13T00:00:00.000Z",
         document: null,

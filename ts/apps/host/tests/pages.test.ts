@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
@@ -21,10 +21,15 @@ afterEach(async () => {
   while (cleanup.length) await cleanup.pop()!();
 });
 
-/** A product home: `Pages/` holding the todo page, `Pods/` empty until a test fills it. */
+/**
+ * A product home (`Pages/` holding the todo page, `Pods/` empty until a test fills it) and, apart
+ * from it, the machine's Page state: one folder per slug.
+ */
 async function pagesRoot(live?: PageLive) {
-  const home = await mkdtemp(join(tmpdir(), "pe-pages-"));
-  cleanup.push(() => rm(home, { recursive: true, force: true }));
+  const world = await mkdtemp(join(tmpdir(), "pe-pages-"));
+  cleanup.push(() => rm(world, { recursive: true, force: true }));
+  const home = join(world, "home");
+  const state = join(world, "state", "Pages");
   const root = join(home, "Pages");
   const pods = join(home, "Pods");
   await mkdir(join(root, "todo"), { recursive: true });
@@ -36,15 +41,18 @@ async function pagesRoot(live?: PageLive) {
   await mkdir(join(root, "todo", ".state"), { recursive: true });
   await writeFile(join(root, "todo", ".state", "secret.txt"), "private");
   await writeFile(join(root, "loose.html"), "<p>not a page: a file, not a folder</p>");
-  const handle = createPagesHandler(root, pods, live);
+  const handle = createPagesHandler(root, pods, live, undefined, {
+    root: state,
+    notices: join(world, "state", "stored-notices.jsonl"),
+  });
   const fetch = (path: string, init?: RequestInit) =>
     handle(new Request(`http://host${path}`, init));
-  return { root, pods, fetch, handle };
+  return { root, pods, state, fetch, handle };
 }
 
 describe("pages", () => {
-  it("lists and serves a package's pages as <id>--<page>, keyed by manifest id, state inside the pod", async () => {
-    const { root, pods, fetch } = await pagesRoot();
+  it("lists and serves a package's pages as <id>--<page>, keyed by manifest id, state outside the pod", async () => {
+    const { root, pods, state: stateRoot, fetch } = await pagesRoot();
     const folder = join(pods, "duct-kit-v1");
     const tour = join(folder, "pages", "tour");
     await mkdir(tour, { recursive: true });
@@ -81,11 +89,15 @@ describe("pages", () => {
       body: JSON.stringify({ type: "note" }),
     });
     expect(posted.status).toBe(201);
-    expect(await readFile(join(tour, ".state", "events.jsonl"), "utf8")).toContain('"type":"note"');
+    // Page state is machine state, keyed by the slug: the pod's folder holds only what was authored.
+    expect(await readFile(join(stateRoot, "ductkit--tour", "events.jsonl"), "utf8")).toContain(
+      '"type":"note"',
+    );
+    await expect(access(join(tour, ".state"))).rejects.toThrow();
     expect(await (await fetch("/pages", { headers: { accept: "text/html" } })).text()).toContain(
       "pod ductkit",
     );
-    // A folder rename keeps the slug, the key, and the state that travels inside the pod.
+    // A folder rename keeps the slug, the key, and the state, which the slug names.
     await rename(folder, join(pods, "renamed"));
     expect(await listed()).toEqual(expected);
     const state = (await (await fetch("/pages/ductkit--tour/state")).json()) as { seq: number };
@@ -552,7 +564,7 @@ describe("pages", () => {
 
     it("binding: a person binds anything; Pea pins only its own documents; a page cannot bind itself", async () => {
       bind("S2");
-      const { as, page, root } = await host([
+      const { as, page, state } = await host([
         session("S1", MODEL),
         session("S2", "C:\\Pea\\Copy.rvt"),
       ]);
@@ -573,7 +585,7 @@ describe("pages", () => {
         200,
       );
       expect(
-        JSON.parse(await readFile(join(root, "todo", ".state", "binding.json"), "utf8")),
+        JSON.parse(await readFile(join(state, "todo", "binding.json"), "utf8")),
       ).toEqual({
         slots: { default: { kind: "pinned", address: "C:\\Pea\\Copy.rvt" } },
         // Pea set it, so it is no person's consent to the Page's ReadOnly scripts.

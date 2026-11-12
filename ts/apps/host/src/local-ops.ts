@@ -19,10 +19,10 @@ import {
 } from "@pe/host-contracts/operation-types";
 import type { BridgeSessionView } from "./bridge.ts";
 import { readFileStringOrEmpty, statOrNull } from "./files/index.ts";
-import { resolvePeaProductHomePath } from "@pe/mcps";
 import type { PeaRuntimeCapabilities } from "@pe/runtime";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
+import { productAgentPath } from "./product-paths.ts";
 import { processCustody } from "./machine.ts";
 
 /** Status must answer even when the installed manifest is unreadable; the throw belongs to boot. */
@@ -38,7 +38,8 @@ import { LocalOpError } from "./local-error.ts";
 const RUNTIME_IDENTITY = `pe-host-ts/${process.version}`;
 
 function resolvePeaWorld() {
-  const root = resolve(resolvePeaProductHomePath());
+  // The agent's working directory, not a home: the id follows the one place Pea works in.
+  const root = resolve(productAgentPath());
   return {
     id: `pea:${Buffer.from(root).toString("base64url")}`,
     root,

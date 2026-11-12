@@ -453,6 +453,7 @@ export const retiredPeaSkillNames: readonly string[] = [
 export const peaStandardSkillsRoot = path.join(".agents", "skills");
 const peaClaudeSkillsRoot = path.join(".claude", "skills");
 
+/** The user home, where `Skills/` is authored; the Documents user root when omitted. */
 export interface PeaProductHomeOptions {
   productHomePath?: string;
 }
@@ -461,13 +462,12 @@ export function resolvePeaProductHomePath(options: PeaProductHomeOptions = {}): 
   return path.resolve(readEnvPath(options.productHomePath) ?? userRoot());
 }
 
-export function resolvePeaStandardSkillsRoot(options: PeaProductHomeOptions = {}): string {
-  return path.join(resolvePeaProductHomePath(options), peaStandardSkillsRoot);
-}
-
-export function resolvePeaSkillPaths(options: PeaProductHomeOptions = {}): string[] {
-  const home = resolvePeaProductHomePath(options);
-  return [path.join(home, peaStandardSkillsRoot), path.join(home, peaClaudeSkillsRoot)];
+/**
+ * The harness skill projections under the agent's working directory. They are machine state: the
+ * host names that directory under its state root, and no home holds one (ADR 0037 rule 6).
+ */
+export function resolvePeaSkillPaths(agentPath: string): string[] {
+  return [path.join(agentPath, peaStandardSkillsRoot), path.join(agentPath, peaClaudeSkillsRoot)];
 }
 
 export { publishPeaSkills } from "./skill-publication.ts";

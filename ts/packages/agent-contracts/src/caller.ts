@@ -143,7 +143,8 @@ export const pageChoiceSchema = z.discriminatedUnion("kind", [
 export type PageChoice = z.infer<typeof pageChoiceSchema>;
 
 /**
- * A Page's binding record, host-written to `<page>/.state/binding.json`. Named slots let a
+ * A Page's binding record, host-written to `binding.json` in the Page's machine-state folder
+ * (never in the Page's own folder: a binding names a thread, and a home holds no ids). Named slots let a
  * cross-document report bind several documents later; wave 1 builds and renders `default` only.
  * `boundBy` names who set each slot: a human's bind is their consent to the Page's ReadOnly
  * scripts on that document. A slot with no entry was not bound by a human.
