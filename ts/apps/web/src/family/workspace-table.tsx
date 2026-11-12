@@ -89,7 +89,6 @@ export function FamilyWorkspaceTable() {
       <Button
         label={`capture ${drillType}`}
         reason={`Let Revit win on every drifting parameter of the ${drillType} type. Each live value is written into the profile as a ${drillType} override; the model is not touched, so this stays a safe verb.`}
-        kind="framed"
         refusal={
           driftCells.every((cell) => cell.typeName !== drillType)
             ? `Nothing is drifting at ${drillType}, so there is nothing to pull back.`
@@ -105,7 +104,6 @@ export function FamilyWorkspaceTable() {
       <Button
         label="capture all"
         reason={`Let Revit win on all ${driftCells.length} drifting cells, across every type — every alarm cell you can see right now. Each live value lands in the profile as that type's override; Revit is not touched.`}
-        kind="framed"
         refusal={
           overlay !== "live"
             ? "Switch to the ⇄ live overlay first. Capture rewrites the profile with Revit's numbers in bulk, and this is the one view where those numbers are on screen — pressing it from here would be a write you cannot see the far side of."

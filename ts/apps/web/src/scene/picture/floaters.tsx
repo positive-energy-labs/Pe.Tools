@@ -94,7 +94,6 @@ export function usePictureFloaters({
             onOpenChange: setCorner,
             render: () => (
               <Button
-                kind="quiet"
                 label={`swap: the ${picture === "model" ? flat.label : "model"} large`}
                 data-picture-corner={picture === "model" ? flat.key : "model"}
                 onClick={swap}

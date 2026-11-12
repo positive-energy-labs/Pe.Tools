@@ -310,7 +310,6 @@ export function AppBar() {
       ))}
       {shell.field === "page" && (
         <Button
-          kind="framed"
           label={`${label}: open this page's palette · Ctrl+K`}
           aria-keyshortcuts="Control+K"
           pressed={palette.open === "page"}

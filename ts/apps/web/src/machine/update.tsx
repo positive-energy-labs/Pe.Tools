@@ -139,7 +139,6 @@ export function UpdateGroup({
     <>
       <Button
         label="recheck"
-        kind="framed"
         reason={
           fixture ? SEED_REFUSAL : "read the update feed again and re-plan against every Revit"
         }

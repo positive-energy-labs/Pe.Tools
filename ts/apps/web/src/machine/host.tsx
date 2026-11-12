@@ -62,12 +62,11 @@ export function HostGroup({
       )}
       {host.runtimeRefusal && <p data-tone="caution">{host.runtimeRefusal}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button label="open window" kind="framed" refusal={refusal} onClick={() => run("window")}>
+        <Button label="open window" refusal={refusal} onClick={() => run("window")}>
           open window
         </Button>
         <Button
           label="quit host"
-          kind="framed"
           reason="Stop this host; every Revit keeps running."
           refusal={refusal}
           onClick={() => run("shutdown")}
