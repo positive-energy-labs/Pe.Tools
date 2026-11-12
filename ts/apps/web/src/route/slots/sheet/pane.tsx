@@ -99,7 +99,7 @@ function SettingCell({ ctx, cell, schema }: { ctx: Ctx; cell: SheetCell; schema:
       const receipt = await submitAction({
         id: crypto.randomUUID(),
         key: "settings.tiers.write",
-        target: { kind: "host" },
+        target: ctx.target?.kind === "document" ? { kind: "document", ref: ctx.target.ref } : { kind: "host" },
         input: { owner: cell.setting!.owner, tier: tier.tier, path: [...cell.setting!.path], value: parsed ? parsed.data : null, expectedSha256: tier.sha256 },
       });
       if (receipt.state !== "succeeded")
