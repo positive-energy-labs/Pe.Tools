@@ -190,3 +190,21 @@ test("a firm drive mounted after subscription is discovered and then watched", a
     rmSync(drive, { recursive: true, force: true });
   }
 });
+
+test("W3e outside rewrite of the user tier fires exactly one change", async () => {
+  const { watchSettingTiers } = await import("../src/tiered-settings.ts");
+  const home = mkdtempSync(join(tmpdir(), "pe-user-watch-"));
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", home);
+  mkdirSync(join(home, "Settings"));
+  const path = join(home, "Settings", "ducts.json");
+  writeFileSync(path, '{"version":"before"}');
+  let changes = 0;
+  const watches = watchSettingTiers(() => changes++);
+  try {
+    expect(watches.read("ducts").find(tier => tier.tier === "user")).toMatchObject({ path, json: { version: "before" } });
+    writeFileSync(path, '{"version":"after"}');
+    await expect.poll(() => changes).toBe(1);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(changes).toBe(1);
+  } finally { watches.close(); rmSync(home, { recursive: true, force: true }); }
+});
