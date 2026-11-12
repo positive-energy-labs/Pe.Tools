@@ -213,12 +213,9 @@ def stop(pids):
             print(f"pid {pid}: refused, {p['kind']} is never stopped by this tool ({p['name']})")
             rc = 3
             continue
-        if p["kind"] == "build-server":
-            res = subprocess.run(["dotnet", "build-server", "shutdown"], capture_output=True, text=True)
-            how = "dotnet build-server shutdown"
-        else:
-            res = subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, text=True)
-            how = "taskkill /T /F"
+        # Build servers too: `dotnet build-server shutdown` stops every server on the machine, not this pid.
+        res = subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, text=True)
+        how = "taskkill /T /F"
         ok = res.returncode == 0
         receipt = {"at": dt.datetime.now(dt.timezone.utc).isoformat(), "caller": caller, "pid": pid, "kind": p["kind"],
                    "gib": p["gib"], "age_min": p["age_min"], "checkout": p["checkout"], "cmd": p["cmd"][:300],
@@ -243,7 +240,7 @@ def main():
     if verb == "who":
         return who(show_all, as_json)
     if verb == "stop":
-        pids = [int(a) for a in args[1:] if a.isdigit()]
+        pids = [int(a) for a in args[1:] if a.strip().isdigit()]  # strip: a Git Bash list from Python output ends in \r
         if not pids:
             print("stop needs one or more pids from `who`")
             return 2
