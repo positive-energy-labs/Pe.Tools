@@ -195,9 +195,15 @@ public sealed class PodRunInputTests {
         member.AddFirst(new JProperty("$preset", "@local/base.json"));
         File.WriteAllText(Path.Combine(folder, "settings", "base.json"), new JObject(first) + "  \r\n", new UTF8Encoding(true));
         File.WriteAllText(Path.Combine(folder, "settings", "input.json"), member.ToString(), new UTF8Encoding(false));
-        var composition = pods.Compose(id, "settings/input.json", null);
-        Assert.That(composition.Composed, Is.Not.Null, string.Join("; ", composition.Diagnostics.Select(d => d.Message)));
-        return (folder, composition.ToSource(), composition.Composed!);
+        // The pod sits in the real user home, so a host that does not answer must not leave it behind.
+        try {
+            var composition = pods.Compose(id, "settings/input.json", null);
+            Assert.That(composition.Composed, Is.Not.Null, string.Join("; ", composition.Diagnostics.Select(d => d.Message)));
+            return (folder, composition.ToSource(), composition.Composed!);
+        } catch {
+            DeletePod(folder);
+            throw;
+        }
     }
 
     private static void AssertRun(string receiptPath, string outcome, string exact, string sample, string? plan = null) {
