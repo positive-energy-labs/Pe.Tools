@@ -929,7 +929,7 @@ export function createContributionContent(options: {
   });
   // Shipped examples are optional content, not a prerequisite for the host door. The import races
   // the start census, and `activateImportedPackage` waits for that census, so what the import adds
-  // is activated by name either way. Reconcile after import and invalidate the catalog so Home
+  // is activated by name either way. Reconcile after import and invalidate the catalog so the home page
   // discovers them without restarting.
   const bootstrap = Promise.resolve().then(async () => {
     if (!options.bootstrap) return;
