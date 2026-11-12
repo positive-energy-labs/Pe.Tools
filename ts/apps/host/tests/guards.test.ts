@@ -34,7 +34,7 @@ test("R2: exactly three acts hold, and every guard answers with one of them", ()
     heldAct(() => guardSave(pea(), "central", project)),
     heldAct(() => guardSave(pea(), "self", project)),
     heldAct(() => guardDiscard(pea(), [project], "close")),
-    heldAct(() => guardSend(pea(), "spec.pdf", "LlamaCloud")),
+    heldAct(() => guardSend(pea(), { service: "llamaparse", path: "spec.pdf" }, "LlamaCloud")),
   ];
   expect(acts).toEqual(["synchronize", "overwrite-or-discard", "overwrite-or-discard", "send-outward"]);
   // Census: every place the product words a held act names one of the three. The sentinel keeps
@@ -67,7 +67,7 @@ test("only the person is not guarded: Pea, a Page, an MCP device, a service and 
   // The person's own act is never held, whatever the document.
   expect(heldAct(() => guardSave(human, "central", project))).toBeNull();
   expect(heldAct(() => guardDiscard(human, [project], "stop"))).toBeNull();
-  expect(heldAct(() => guardSend(human, "spec.pdf", "LlamaCloud"))).toBeNull();
+  expect(heldAct(() => guardSend(human, { service: "llamaparse", path: "spec.pdf" }, "LlamaCloud"))).toBeNull();
   // Not held for Pea: a Save As, a family document, a saved project document.
   expect(heldAct(() => guardSave(pea(), "save-as", project))).toBeNull();
   expect(heldAct(() => guardSave(pea(), "self", { ...project, isFamily: true }))).toBeNull();
