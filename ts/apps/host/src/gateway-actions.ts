@@ -547,12 +547,16 @@ export function gatewayExecutor(
           },
         },
       ).pipe(Effect.mapError((error) => {
-        if (key !== "settings.tiers.write" || !(error instanceof StepFailure) || error.status !== 409)
+        if (key !== "settings.tiers.write" || !(error instanceof StepFailure) ||
+            (error.status !== 409 && error.status !== 422))
           return error;
         // Classify after the step records its undispatched refusal, keeping its status and words.
-        const stale = new CommandRejected({ kind: "stale", consumed: [] });
-        stale.message = error.message;
-        return stale;
+        const refusal = new CommandRejected(
+          error.status === 409 ? { kind: "stale", consumed: [] } : { kind: "invalid" },
+          error.status,
+        );
+        refusal.message = error.message;
+        return refusal;
       }));
     }),
     recover: async (step: import("@pe/agent-contracts").ActionStep, raw: unknown) => {

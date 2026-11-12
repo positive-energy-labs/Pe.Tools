@@ -24,7 +24,7 @@ import { Effect } from "effect";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 
 export class CommandRejected extends Error {
-  constructor(readonly refusal: CommandRefusal) {
+  constructor(readonly refusal: CommandRefusal, readonly status = 409) {
     super(
       "message" in refusal
         ? refusal.message
