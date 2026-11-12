@@ -30,6 +30,8 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 - 2026-11-11, muse default, re-openable: resolver order for a secret is the person's own key, then the firm `keys.json`. No environment step is added. Secrets are named by role: `openai.api-key`, `anthropic.api-key`, `llamaparse.api-key`.
 - 2026-11-11, muse default, re-openable: the second drive lane is Windows Sandbox for install and upgrade, and a second Windows profile for first run with Revit.
 
+- 2026-11-12, implementor default, re-openable: "notice, never delete" for earlier-version Work left in the user home's `Work/` folder. The host start census posts once per folder through `noteStartupHomes`, without reading, moving, importing or deleting its files; the person may delete the folder. This exception keeps old files visible while homes never hold current Work.
+
 ## Tried & rejected
 
 - 2026-11-11, a home qualifier on addresses (`home/kind/name`): it changes the frozen names (the contribution key `member:@<pod>/<path>`, the SubjectRef name tuple, the `/pods` `member` field) and puts a machine-local fact into Work keys. The duplicate-id refusal ends shadowing with no qualifier.

@@ -5,6 +5,71 @@
 import { expect, test } from "vite-plus/test";
 import { NOTICE_GROUPS, noticeFeedSchema, type ReadingFrame } from "@pe/agent-contracts";
 import { createNoticeFeed } from "../src/notice-feed.ts";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { readStoredNotices } from "@pe/host-contracts/store";
+import { noteStartupHomes, noticeRows } from "../src/notice-feed.ts";
+
+test("start census notices earlier Work once per folder without changing files", () => {
+  const user = mkdtempSync(join(tmpdir(), "pe-earlier-work-"));
+  const notices = join(user, "state", "stored-notices.jsonl");
+  const work = join(user, "Work");
+  const file = join(work, "a.json");
+  const bytes = Buffer.from('{"staged":"keep me"}\r\n');
+  mkdirSync(work);
+  writeFileSync(file, bytes);
+  const before = statSync(file, { bigint: true });
+  try {
+    noteStartupHomes(user, { root: null, looked: [] }, notices);
+    const stored = readStoredNotices(notices);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ class: "keep", path: work });
+    const text = `Work saved by an earlier version is at ${work}. This version no longer reads it. Nothing was changed or deleted. You may delete the folder.`;
+    expect(stored[0]!.reason).toBe(text);
+    const rows = noticeRows(
+      { threads: [], receipts: [], works: [], machine: null, stored, held: [] },
+      Date.parse(stored[0]!.at),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.says).toBe(text);
+    const feedBytes = readFileSync(notices);
+    noteStartupHomes(user, { root: null, looked: [] }, notices);
+    expect(readStoredNotices(notices)).toHaveLength(1);
+    expect(readFileSync(notices)).toEqual(feedBytes);
+    expect(readdirSync(work)).toEqual(["a.json"]);
+    expect(readFileSync(file)).toEqual(bytes);
+    expect(statSync(file, { bigint: true }).mtimeNs).toBe(before.mtimeNs);
+    // A different file in the same folder is still the same finding, not a new digest.
+    writeFileSync(join(work, "b.txt"), "also kept");
+    noteStartupHomes(user, { root: null, looked: [] }, notices);
+    expect(readStoredNotices(notices)).toHaveLength(1);
+  } finally {
+    rmSync(user, { recursive: true, force: true });
+  }
+});
+
+test("start census is silent for a missing or empty earlier Work folder", () => {
+  const user = mkdtempSync(join(tmpdir(), "pe-no-earlier-work-"));
+  const notices = join(user, "state", "stored-notices.jsonl");
+  try {
+    noteStartupHomes(user, { root: null, looked: [] }, notices);
+    expect(readStoredNotices(notices)).toEqual([]);
+    mkdirSync(join(user, "Work"));
+    noteStartupHomes(user, { root: null, looked: [] }, notices);
+    expect(readStoredNotices(notices)).toEqual([]);
+  } finally {
+    rmSync(user, { recursive: true, force: true });
+  }
+});
 
 test("red (slice 6 seam c): the notices Reading serves one grouped feed snapshot", () => {
   const frames: ReadingFrame[] = [];
