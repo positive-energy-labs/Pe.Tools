@@ -4,13 +4,19 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { join } from "node:path";
 import { createServer } from "node:http";
 import { once } from "node:events";
+import { execFile } from "node:child_process";
 import { claimServiceHost, type ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
-import { createServiceFile, discoverService } from "@pe/host-contracts/pe-service";
-import { afterEach, expect, test } from "vite-plus/test";
+import { createServiceFile, discoverService, readServiceFile } from "@pe/host-contracts/pe-service";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import { chooseServicePort } from "@pe/host-contracts/pe-service-host";
 import { hostServiceName } from "@pe/host-contracts/service-identity";
 import { installedPort, prepareHostBinding } from "../src/host-lifecycle.ts";
 import type { HostOwnership } from "../src/host-ownership.ts";
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return { ...actual, execFile: vi.fn(actual.execFile) };
+});
 
 // 2026-11-03: a test Revit's orphaned dev host held 127.0.0.1:5180 and the user's installed v0.7.30
 // host refused to start. A dev host must never take the installed port or name, and a foreign holder
@@ -20,6 +26,43 @@ const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
+
+test.skipIf(process.platform !== "win32")(
+  "SDK verified discovery loses a live claimed incumbent when its identity query times out",
+  async () => {
+    const root = temp();
+    const claimed = await claimServiceHost(root, {
+      name: "host",
+      lane: "installed",
+      version: "0.7.31",
+      port: installedPort,
+      executablePath: process.execPath,
+      shutdown: "/admin/shutdown",
+      policy: { evicts: [] },
+    });
+    if (!claimed.claimed) throw Error(claimed.reason);
+    try {
+      expect(await discoverService(root, "host")).toEqual(claimed.handle.serviceFile);
+      vi.mocked(execFile).mockImplementationOnce(((...args: unknown[]) => {
+        const callback = args.at(-1) as (error: Error, stdout: string, stderr: string) => void;
+        callback(Error("identity query timed out"), "", "");
+        return {} as ReturnType<typeof execFile>;
+      }) as typeof execFile);
+      // SDK pe-service.ts recordedProcessAlive treats an unreadable identity as no live owner.
+      expect(await discoverService(root, "host", { verifyOwner: true })).toBeNull();
+      expect(execFile).toHaveBeenLastCalledWith(
+        "powershell",
+        expect.arrayContaining(["-NoProfile", "-NonInteractive"]),
+        { timeout: 3_000, windowsHide: true },
+        expect.any(Function),
+      );
+      expect(await readServiceFile(root, "host")).toEqual(claimed.handle.serviceFile);
+      expect(await discoverService(root, "host")).toEqual(claimed.handle.serviceFile);
+    } finally {
+      await claimed.handle.release();
+    }
+  },
+);
 
 test("a second installed launch waits for the booting host and leaves its request running", async () => {
   const ownership = { ...owner("installed", temp()), executablePath: process.execPath };
