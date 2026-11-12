@@ -32,7 +32,8 @@ public static class MepSystemReads {
         var selected = request.SystemUniqueId is null ? null : systems.SingleOrDefault(system => system.UniqueId == request.SystemUniqueId)
             ?? throw new ArgumentException("SystemUniqueId must identify an MEP system in this document.");
         var members = selected is null ? [] : Network(selected).Where(element => KindOf(element) is not null)
-            .DistinctBy(element => element.Id.Value()).OrderBy(element => element.Id.Value()).Take(request.MaxElements + 1).ToArray();
+            .GroupBy(element => element.Id.Value()).Select(group => group.First())
+            .OrderBy(element => element.Id.Value()).Take(request.MaxElements + 1).ToArray();
         RequireCount(members.Length, request.MaxElements, "system members");
         return new(systems.Select(Row).ToArray(), request.SystemUniqueId,
             members.Select(element => Member(element, SpecOf(selected!))).ToArray());
@@ -98,7 +99,8 @@ public static class MepSystemReads {
 
     private static double? Param(Element element, BuiltInParameter id) =>
         element.get_Parameter(id) is { HasValue: true, StorageType: StorageType.Double } parameter
-            ? double.IsFinite(parameter.AsDouble()) ? parameter.AsDouble() : throw new InvalidOperationException($"{id} is not finite.") : null;
+            ? !double.IsNaN(parameter.AsDouble()) && !double.IsInfinity(parameter.AsDouble())
+                ? parameter.AsDouble() : throw new InvalidOperationException($"{id} is not finite.") : null;
     private static MepFact<double?> Number(Element element, BuiltInParameter? id) =>
         id is { } parameter ? Read(() => Param(element, parameter)) : new(MepReadState.Absent, null);
     private static MepFact<MepElementRef> Reference(Func<Element?> read) => Read(() => read() is { } element ? Ref(element) : null);

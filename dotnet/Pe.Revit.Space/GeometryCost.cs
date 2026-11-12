@@ -20,14 +20,18 @@ internal static class GeometryLedger {
     internal static void Closed(string key) {
         lock (Sync) {
             // The tracker excludes linked documents; their ids live until the last host releases them.
-            SourcesByHost.Remove(key, out var sources);
+            SourcesByHost.TryGetValue(key, out var sources);
+            SourcesByHost.Remove(key);
             foreach (var source in (sources ?? []).Append(key))
                 if (!SourcesByHost.Values.Any(keys => keys.Contains(source))) Retained.Remove(source);
         }
     }
     internal static void Renamed(string oldKey, string newKey) {
         lock (Sync) {
-            if (SourcesByHost.Remove(oldKey, out var sources)) Sources(newKey, sources);
+            if (SourcesByHost.TryGetValue(oldKey, out var sources)) {
+                SourcesByHost.Remove(oldKey);
+                Sources(newKey, sources);
+            }
         }
     }
     internal static void Touch(Element element) {
