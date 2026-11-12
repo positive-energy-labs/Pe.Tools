@@ -1,16 +1,15 @@
 import { detachedBridge, captureStore, journalAt } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
-import { Effect, FileSystem, PlatformError } from "effect";
+import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memberWork, settingsRouteState } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
-import { writeFileStringAtomic } from "../src/files/index.ts";
 import {
   composeMember,
   listPods,
@@ -258,39 +257,6 @@ test("settings.write refuses a save from member Work that has no saved basis", a
   expect(refusal.state, JSON.stringify(refusal)).toBe("failed");
   expect(JSON.stringify(refusal)).toContain("this Work has no saved basis");
   expect(await readFile(file(), "utf8")).toBe('{"width":1,"depth":2}');
-});
-test("partial temp write failure cleans only the acquired temp and preserves destination", async () => {
-  await writeFile(file(), "original");
-  const failure = PlatformError.systemError({
-    _tag: "Unknown",
-    module: "FileSystem",
-    method: "writeAll",
-    description: "injected partial write",
-  });
-  await expect(
-    run(
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        return yield* writeFileStringAtomic(file(), "candidate", "test").pipe(
-          Effect.provideService(FileSystem.FileSystem, {
-            ...fs,
-            open: (path, options) =>
-              fs.open(path, options).pipe(
-                Effect.map((handle) => ({
-                  ...handle,
-                  writeAll: (bytes) =>
-                    handle
-                      .writeAll(bytes.subarray(0, 2))
-                      .pipe(Effect.andThen(Effect.fail(failure))),
-                })),
-              ),
-          }),
-        );
-      }),
-    ),
-  ).rejects.toMatchObject({ note: expect.stringContaining("injected partial write") });
-  expect(await readFile(file(), "utf8")).toBe("original");
-  expect(await readdir(join(root, "Renamed In Explorer", "settings"))).toEqual(["file.json"]);
 });
 test("listing hashes current bytes even when file size and timestamp are unchanged", async () => {
   await writeFile(file(), '{"width":1}');

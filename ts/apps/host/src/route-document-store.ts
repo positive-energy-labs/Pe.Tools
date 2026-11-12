@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store";
@@ -21,8 +21,8 @@ const MISPLACED = "Stored Work identity does not match its address";
 
 /**
  * Indexed Work carries its identity. Work is `discard` (ADR 0039 rule 1, ADR 0033 rule 5): a record
- * that does not decode, or sits at another address, is deleted with one notice in the feed. A read
- * and a listing apply the same rule, so no bad file is deleted by one and counted by the other.
+ * that does not decode, or sits at another address, is deleted with one notice in the feed when
+ * it is read at its address. The listing only counts such a file; see the note on `listState`.
  */
 export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
   mkdirSync(dir, { recursive: true });
@@ -51,6 +51,11 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
         JSON.stringify({ format: "route-state-record-v2", targetKey, route, value }),
       );
     },
+    // The listing is read-only, and ADR 0039's discard does not apply here. Ruling: commit 556652bc
+    // (2026-11-07) moved deletion of a misplaced record to the addressed read and left discovery
+    // reporting without mutating. A listing meets every Work file in a folder other hosts share, so
+    // it only counts what it cannot use. The boundary that holds: `getState` on the same file
+    // discards it with its one notice.
     listState: async () => {
       const files = (await readdir(dir)).filter((file) => /^[a-f0-9]{64}\.json$/.test(file)).sort();
       const records: { targetKey: string; route: string; value: unknown }[] = [];
@@ -72,23 +77,17 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
             continue;
           }
           bytesRead += size;
-          // The counts say what this listing met; the files themselves are gone after it.
-          let indexed = true;
-          const read = readStored(
-            path,
-            recordSchema.refine((r) => filename(r.targetKey, r.route) === file, MISPLACED),
-            {
-              ...work("Work"),
-              parse: (text) => {
-                const raw: unknown = JSON.parse(text);
-                indexed = isRecord(raw) && "format" in raw;
-                return raw;
-              },
-            },
-          );
-          if (read.kind === "ok") {
-            if (read.value.value != null) records.push(read.value);
-          } else if (read.kind === "discarded") indexed ? unreadable++ : unindexed++;
+          const raw: unknown = JSON.parse(await readFile(path, "utf8"));
+          if (!isRecord(raw) || !("format" in raw)) {
+            unindexed++;
+            continue;
+          }
+          const record = recordSchema.safeParse(raw);
+          if (!record.success || filename(record.data.targetKey, record.data.route) !== file) {
+            unreadable++;
+            continue;
+          }
+          if (record.data.value != null) records.push(record.data);
         } catch {
           unreadable++;
         }

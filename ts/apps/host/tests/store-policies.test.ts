@@ -137,7 +137,7 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
     expect(posted(path)).toHaveLength(2);
   });
 
-  test("Work: a read and a listing discard the same file the same way", async () => {
+  test("Work: the addressed read discards; the listing reports and never mutates", async () => {
     const dir = join(root, "Work");
     const store = fileRouteDocumentStore(dir);
     const name = (route: string, targetKey: string) =>
@@ -154,13 +154,16 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
       join(dir, name("fans", "doc-c")),
       JSON.stringify({ format: "route-state-record-v2", targetKey: "other", route: "fans", value: 1 }),
     );
+    // Discovery is read-only (commit 556652bc): it counts both files and touches neither.
     expect(await store.listState!()).toMatchObject({ records: [], unreadable: 2, unindexed: 0 });
-    expect(existsSync(listed) || existsSync(misplaced)).toBe(false);
-    expect(posted(listed)).toHaveLength(1);
-    expect(posted(misplaced)).toHaveLength(1);
-    // The next listing meets nothing, and posts nothing.
-    expect(await store.listState!()).toMatchObject({ records: [], unreadable: 0, unindexed: 0 });
-    expect([read, listed, misplaced].map((path) => posted(path).length)).toEqual([1, 1, 1]);
+    expect(holds(listed, CORRUPT)).toBe(true);
+    expect(existsSync(misplaced)).toBe(true);
+    expect([listed, misplaced].map((path) => posted(path).length)).toEqual([0, 0]);
+    // The read door at the misplaced file's own address is where it is discarded, once.
+    expect(await store.getState({ route: "fans", targetKey: "doc-c" })).toBeNull();
+    expect(existsSync(misplaced)).toBe(false);
+    expect(posted(misplaced)).toMatchObject([{ class: "discard", place: "Work for fans (doc-c)" }]);
+    expect(await store.listState!()).toMatchObject({ records: [], unreadable: 1, unindexed: 0 });
   });
 
   test.each([

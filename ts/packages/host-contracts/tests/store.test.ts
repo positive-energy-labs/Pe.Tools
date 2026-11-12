@@ -6,6 +6,7 @@ import {
   renameSync,
   rmSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,7 +23,7 @@ import {
 
 vi.mock("node:fs", async (original) => {
   const fs = await original<typeof import("node:fs")>();
-  return { ...fs, renameSync: vi.fn(fs.renameSync) };
+  return { ...fs, renameSync: vi.fn(fs.renameSync), writeFileSync: vi.fn(fs.writeFileSync) };
 });
 
 let root: string;
@@ -51,6 +52,19 @@ describe("writeAtomic", () => {
     writeAtomic(path, "two");
     expect(renameSync).toHaveBeenCalledTimes(2);
     expect(readFileSync(path, "utf8")).toBe("two");
+  });
+
+  test("a write that fails part way removes its own temp file and keeps the old bytes", () => {
+    const path = join(root, "state.json");
+    writeAtomic(path, "original");
+    const failure = new Error("injected partial write");
+    vi.mocked(writeFileSync).mockImplementationOnce((file, bytes) => {
+      writeSync(file as number, String(bytes).slice(0, 2));
+      throw failure;
+    });
+    expect(() => writeAtomic(path, "candidate")).toThrow(failure);
+    expect(readFileSync(path, "utf8")).toBe("original");
+    expect(readdirSync(root)).toEqual(["state.json"]);
   });
 
   test("a held file is bounded, keeps the old bytes and removes the temp file", () => {

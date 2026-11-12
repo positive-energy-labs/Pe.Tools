@@ -176,11 +176,9 @@ const familyObservationId = (id: string) => familiesObservationSchema.shape.id.p
 
 /** Immutable Takeoffs and Family observations outside authored Work. Immutable files use the host's existing atomic-replace pattern. */
 type ProgressManifest = { observation: Omit<FamiliesObservation, "result">; records: string[] };
-const progressManifestSchema: z.ZodType<ProgressManifest> = z.object({
-  observation: z.custom<ProgressManifest["observation"]>(
-    (value) => typeof value === "object" && value !== null,
-  ),
-  records: z.array(z.string().regex(/^[a-f0-9]{64}$/)),
+const progressManifestSchema = z.object({
+  observation: familiesObservationSchema.omit({ result: true }),
+  records: z.array(familiesObservationSchema.shape.id),
 });
 /**
  * Captures are derived files (ADR 0039 rule 1): one that does not decode is discarded with one
