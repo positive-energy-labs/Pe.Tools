@@ -213,6 +213,8 @@ Rebuilt 2026-10-22 against `a553a15a`; C# declarations and generated metadata ow
 
 ## Owed
 
+- No gate starts the packed host. The full suite, including its net48 Release.R23 build, passed on homes integration 5c053068, but the installed Pe.Host.exe from that MSI died on every start. The cause was an unhandled rejection: LiteParse's native binary never loaded (homes driver, Sandbox gate 2). Add a smoke start of the staged Pe.Host.exe, outside node_modules, that waits for its service file and status. Put it in the pack lane or the integration gate, so native modules and the packed import graph are proven before an MSI is trusted. (2026-11-12)
+
 - Diagnose the ReadOnly scripting probe reporting Modified 1 without setters, then rolling back; receipt `527ba484` and postguard IsModified=false do not explain the modification. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/drive/gate-10da8792/DEFECTS.md:17`.
 
 - 2026-11-04, SDK `ClientContractEmitter` does not publish verb/result associations. The local `scripts/sdk-wire.ts` projection validates the nested envelope frame and leaves result payloads unknown because the SDK also emits anonymous objects; add payload authority at the SDK before selecting result decoders. (testing-world)
