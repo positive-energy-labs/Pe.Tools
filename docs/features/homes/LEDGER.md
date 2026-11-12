@@ -46,6 +46,7 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 - 2026-11-11, banning every Revit API entity that can save, as the first choice of guard: Family Foundry and the base modules save family files, and scripted family saves are non-negotiable. It survives only as the fallback for assumption A, limited to project documents.
 
 ## Owed
+- Tool defect: a `pea browser` Runtime.evaluate whose params reach about 10 KB or more never returns, and small calls stall now and then. It blocked the driver's A2 doc-lab journey at a706c709. Workaround: keep evaluates under 1 KB, and serve files from a URL instead of passing them inline. Evidence: `.artifacts/runs/homes-crusade-20261111/drive/gate-a706c709*/VERDICT.md`.
 - Harness-neutral fixes parked on `crusade/t3` would help Pea under ACP too. Harvest them when a homes or kernel journey needs an interrupt that really stops Revit:
   - 90cdd00b: MCP abort forwarding, and the journal cancelling a stopped run's native step. The parts that apply cleanly are `action-journal.ts`, `invocation-context.ts` and its browser twin, and the journal test. `server.ts` needs a hand port of about 3 lines.
   - 26e75c8f: a failed cancel send kept apart from a persistence failure. Apply it after 90cdd00b.
