@@ -111,7 +111,8 @@ test("a tier-save feed row exposes its stored receipt in the overlay DOM", async
   try {
     const { container } = render(<Ledger presentation={LEDGER_PRESENTATIONS.overlay} />);
     expect(container.innerHTML).toContain(receipt);
-    expect(feed.rows[0]?.detail).toBe(reason);
+    expect(feed.rows[0]?.detail).toBe(`Receipt ${receipt}.`);
+    expect(feed.rows[0]?.where).toBe("project/Settings/ducts.json");
   } finally {
     feed.rows = before;
   }

@@ -13,7 +13,7 @@ import {
   writePodExport,
 } from "./pod-transfer.ts";
 import { z } from "zod";
-import { io, nativeStep, refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
+import { CommandRejected, StepFailure, io, nativeStep, refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
 import { scratchPageDirectory } from "./page-libraries.ts";
 import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
 import { freezeScript, requireScriptSuccess } from "./operation-script.ts";
@@ -546,7 +546,14 @@ export function gatewayExecutor(
               throw refused("Temporary lifecycle requires reconciliation");
           },
         },
-      );
+      ).pipe(Effect.mapError((error) => {
+        if (key !== "settings.tiers.write" || !(error instanceof StepFailure) || error.status !== 409)
+          return error;
+        // Classify after the step records its undispatched refusal, keeping its status and words.
+        const stale = new CommandRejected({ kind: "stale", consumed: [] });
+        stale.message = error.message;
+        return stale;
+      }));
     }),
     recover: async (step: import("@pe/agent-contracts").ActionStep, raw: unknown) => {
       const prepared = raw as z.infer<typeof preparedGatewaySchema>;
