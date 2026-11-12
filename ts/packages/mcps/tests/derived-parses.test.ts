@@ -175,3 +175,16 @@ test("with no project home the parse lands under the machine state root, never t
   expect(existsSync(derived)).toBe(false);
   expect(machine.split(sep)).not.toContain("scratch");
 });
+// M6: accepting any marked tier as a project would write into this firm home.
+test("a PDF in a firm home derives only into machine state", async () => {
+  become("a");
+  const firm = join(dir, "firm");
+  mkdirSync(firm);
+  writeFileSync(join(firm, "pe-home.json"), JSON.stringify({ tier: "firm" }));
+  const pdf = join(firm, "sheet.pdf");
+  writeFileSync(pdf, onePagePdf("FIRM SHEET"));
+  expect((await read({ path: pdf, pages: "1" })).text).toContain("FIRM SHEET");
+  expect(existsSync(join(firm, "Derived"))).toBe(false);
+  expect(readdirSync(join(runtimeRoot(), "state", "Derived"))).toHaveLength(1);
+});
+
