@@ -3,7 +3,6 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { readStored } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "./notice-feed.ts";
 import {
   canonicalRouteInput,
   familyNativeApplyResultSchema,
@@ -52,13 +51,11 @@ const object = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-// Run output is derived machine state (ADR 0039): a file that is not JSON is discarded with a notice.
+// Run output is Revit's evidence of a native outcome, not host-derived state, and C# may still hold
+// it open mid-write (PodRuns.cs writes in place). So a file that does not decode is kept, silently, and
+// reads as "not evidence": the outcome stays unknown and is retried. Never discarded, never noticed.
 const json = (path: string): unknown => {
-  const read = readStored(path, z.unknown(), {
-    class: "discard",
-    place: "Family run output",
-    notices: storedNoticesPath(),
-  });
+  const read = readStored(path, z.unknown(), { class: "keep", place: "Family run output" });
   return read.kind === "ok" ? read.value : null;
 };
 
