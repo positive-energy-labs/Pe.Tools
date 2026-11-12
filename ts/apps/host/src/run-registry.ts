@@ -1,4 +1,15 @@
-import { Cause, Context, DateTime, Effect, Exit, Layer, Option, Schema } from "effect";
+import {
+  Cause,
+  Clock,
+  Context,
+  DateTime,
+  Effect,
+  Layer,
+  Logger,
+  LogLevel,
+  References,
+  Schema,
+} from "effect";
 import type { Origin, RegisteredRun, RunRef } from "@pe/agent-contracts";
 
 /** A run refuses this command: no run, an ended run, or a run a person stopped. */
@@ -14,101 +25,104 @@ type Run = { ref: RunRef; root: RunRef; state: RegisteredRun };
 type CloseReason = "completed" | "failed" | "stopped" | "restart";
 
 const key = (run: RunRef) => JSON.stringify([run.thread, run.turn]);
-const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
-
 const makeRunRegistry = Effect.gen(function* () {
+  const clock = yield* Clock.clockWith(Effect.succeed);
+  const fiber = yield* Effect.withFiber(Effect.succeed);
+  const loggers = yield* Logger.CurrentLoggers;
+  const minimumLogLevel = yield* References.MinimumLogLevel;
+  const nowIso = () => DateTime.formatIso(DateTime.makeUnsafe(clock.currentTimeMillisUnsafe()));
   const runs = new Map<string, Run>();
   const listeners = new Set<() => void>();
 
-  /** Notification is isolated: a throwing subscriber is logged, never decides a close. */
-  const notify = Effect.suspend(() =>
-    Effect.forEach(
-      [...listeners],
-      (listener) =>
-        Effect.try(listener).pipe(
-          Effect.catch((error) => Effect.logWarning(`run notification failed: ${String(error.cause)}`)),
-        ),
-      { discard: true },
-    ),
-  );
+  /** Synchronous state needs no Effect runner; subscribers use the owning scope's logger. */
+  const notify = () => {
+    for (const listener of [...listeners]) {
+      try {
+        listener();
+      } catch (error) {
+        if (LogLevel.isGreaterThan(minimumLogLevel, "Warn")) continue;
+        for (const logger of loggers)
+          logger.log({
+            message: [`run notification failed: ${String(error)}`],
+            logLevel: "Warn",
+            cause: Cause.empty,
+            fiber,
+            date: new Date(clock.currentTimeMillisUnsafe()),
+          });
+      }
+    }
+  };
 
-  const assertOpen = (origin: Origin) =>
-    Effect.suspend(() => {
-      if (!origin.run || !origin.root)
-        return Effect.fail(
-          refused(
-            "run.none",
-            "this Pea process has no immutable turn context; invoke from a running Pea turn",
-          ),
-        );
-      const own = runs.get(key(origin.run)),
-        root = runs.get(key(origin.root));
-      return !own ||
-        !root ||
-        key(own.root) !== key(origin.root) ||
-        own.state.state === "closed" ||
-        root.state.state === "closed"
-        ? Effect.fail(
-            refused("run.closed", "this turn has ended; submit a new command from the current turn"),
-          )
-        : Effect.void;
-    });
+  const assertOpen = (origin: Origin) => {
+    if (!origin.run || !origin.root)
+      throw refused(
+        "run.none",
+        "this Pea process has no immutable turn context; invoke from a running Pea turn",
+      );
+    const own = runs.get(key(origin.run)),
+      root = runs.get(key(origin.root));
+    if (
+      !own ||
+      !root ||
+      key(own.root) !== key(origin.root) ||
+      own.state.state === "closed" ||
+      root.state.state === "closed"
+    )
+      throw refused(
+        "run.closed",
+        "this turn has ended; submit a new command from the current turn",
+      );
+  };
 
-  const close = Effect.fn("run.close")(function* (ref: RunRef, reason: CloseReason) {
+  const close = (ref: RunRef, reason: CloseReason) => {
     const run = runs.get(key(ref));
     if (!run || run.state.state === "closed") return;
-    run.state = { state: "closed", reason, at: yield* nowIso };
-    yield* notify;
-  });
+    run.state = { state: "closed", reason, at: nowIso() };
+    notify();
+  };
 
-  const closeAll = Effect.suspend(() =>
-    Effect.forEach([...runs.values()], (run) => close(run.ref, "restart"), { discard: true }),
-  );
+  const closeAll = () => {
+    for (const run of [...runs.values()]) close(run.ref, "restart");
+  };
 
-  yield* Effect.addFinalizer(() => closeAll);
+  yield* Effect.addFinalizer(() => Effect.sync(closeAll));
 
   return {
     subscribe: (listener: () => void) => {
       listeners.add(listener);
       return () => void listeners.delete(listener);
     },
-    open: Effect.fn("run.open")(function* (ref: RunRef, root: RunRef = ref) {
-      if (key(ref) !== key(root))
-        yield* assertOpen({ caller: { kind: "anonymous" }, run: root, root });
-      if (runs.has(key(ref)))
-        return yield* refused("run.closed", "a run identity cannot be reopened");
+    open: (ref: RunRef, root: RunRef = ref) => {
+      if (key(ref) !== key(root)) assertOpen({ caller: { kind: "anonymous" }, run: root, root });
+      if (runs.has(key(ref))) throw refused("run.closed", "a run identity cannot be reopened");
       runs.set(key(ref), { ref, root, state: { state: "open" } });
-      yield* notify;
-    }),
+      notify();
+    },
     assertOpen,
     close,
     /** A Stop between turns: completed commands still at a checkpoint lose their run too. */
-    revoke: Effect.fn("run.revoke")(function* (thread: string) {
+    revoke: (thread: string) => {
       for (const run of runs.values())
         if (run.ref.thread === thread && key(run.ref) === key(run.root))
-          run.state = { state: "closed", reason: "stopped", at: yield* nowIso };
-      yield* notify;
-    }),
+          run.state = { state: "closed", reason: "stopped", at: nowIso() };
+      notify();
+    },
     /** A command already admitted keeps going after its turn completes; any other close ends it. */
-    checkpoint: (origin: Origin) =>
-      Effect.suspend(() => {
-        if (origin.caller.kind !== "pea") return Effect.void;
-        if (!origin.run || !origin.root)
-          return Effect.fail(refused("run.none", "command has no causal run"));
-        const own = runs.get(key(origin.run)),
-          root = runs.get(key(origin.root));
-        if (!own || !root || key(own.root) !== key(origin.root))
-          return Effect.fail(
-            refused("run.closed", "host restarted; old commands require explicit recovery"),
-          );
-        for (const [run, what] of [
-          [root, "root"],
-          [own, "turn"],
-        ] as const)
-          if (run.state.state === "closed" && run.state.reason !== "completed")
-            return Effect.fail(refused("run.stopped", `${what} run stopped`));
-        return Effect.void;
-      }),
+    checkpoint: (origin: Origin) => {
+      if (origin.caller.kind !== "pea") return;
+      if (!origin.run || !origin.root) throw refused("run.none", "command has no causal run");
+      const own = runs.get(key(origin.run)),
+        root = runs.get(key(origin.root));
+      if (!own || !root || key(own.root) !== key(origin.root))
+        throw refused("run.closed", "host restarted; old commands require explicit recovery");
+      for (const [run, what] of [
+        [root, "root"],
+        [own, "turn"],
+      ] as const)
+        if (run.state.state === "closed" && run.state.reason !== "completed")
+          throw refused("run.stopped", `${what} run stopped`);
+      return;
+    },
     closeAll,
   };
 });
@@ -118,6 +132,7 @@ const makeRunRegistry = Effect.gen(function* () {
  * to start, and a Stop, a failed turn or a host restart ends the commands of its run. Nothing here
  * asks a person and nothing waits: the three guarded acts return "held" at their own doors
  * (`guards.ts`). Runs live in memory only, so a host restart closes every one.
+ * Operations are synchronous so admission and Stop take effect before the caller continues.
  */
 export class RunRegistry extends Context.Service<
   RunRegistry,
@@ -125,28 +140,3 @@ export class RunRegistry extends Context.Service<
 >()("pe/RunRegistry") {
   static readonly layer = Layer.effect(RunRegistry, makeRunRegistry);
 }
-
-/**
- * The Promise face of {@link RunRegistry} for the thread store, control and the journal, which
- * are Promise code until phase 5. Every operation settles synchronously; a refusal is thrown as
- * its tagged value.
- */
-export const runRegistryPromise = (registry: RunRegistry["Service"]) => {
-  const now = <A, E>(effect: Effect.Effect<A, E>): A => {
-    // effect-edge: island, phase 5
-    const exit = Effect.runFork(effect).pollUnsafe();
-    if (!exit) throw Error("run registry operation suspended; it must settle synchronously");
-    if (Exit.isSuccess(exit)) return exit.value;
-    throw Option.getOrElse(Exit.findErrorOption(exit), () => Cause.squash(exit.cause));
-  };
-  return {
-    subscribe: registry.subscribe,
-    open: (ref: RunRef, root?: RunRef) => now(registry.open(ref, root)),
-    assertOpen: (origin: Origin) => now(registry.assertOpen(origin)),
-    checkpoint: (origin: Origin) => now(registry.checkpoint(origin)),
-    close: (ref: RunRef, reason: CloseReason) => now(registry.close(ref, reason)),
-    revoke: (thread: string) => now(registry.revoke(thread)),
-    closeAll: () => now(registry.closeAll),
-  };
-};
-export type RunRegistryPromise = ReturnType<typeof runRegistryPromise>;
