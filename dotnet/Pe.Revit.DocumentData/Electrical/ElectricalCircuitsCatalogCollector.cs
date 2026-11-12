@@ -203,7 +203,7 @@ public static class ElectricalCircuitsCatalogCollector {
         IReadOnlyList<ElectricalSystem> circuits,
         double radius
     ) {
-        if (!double.IsFinite(radius) || radius <= 0 || radius > 100)
+        if (double.IsNaN(radius) || double.IsInfinity(radius) || radius <= 0 || radius > 100)
             throw new ArgumentOutOfRangeException(nameof(radius), "Nearby radius must be between 0 and 100 feet.");
         var delta = new XYZ(radius, radius, radius);
         var bounds = circuits.SelectMany(circuit => circuit.Elements.Cast<Element>())

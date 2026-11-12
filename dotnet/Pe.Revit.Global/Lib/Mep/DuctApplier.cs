@@ -126,7 +126,7 @@ public static class DuctApplier {
         var storeRevision = stored?.WorkRevision ?? 0;
         // The store entries this write changes against the model's store, one line each, from the same merged next
         // store the write lands, so plan and apply review one truth (they land with the store).
-        items.AddRange(StoreEntries(stored, Compose(request, stored, items, DateTimeOffset.UnixEpoch, slots, storeRevision + 1)));
+        items.AddRange(StoreEntries(stored, Compose(request, stored, items, DateTimeOffset.FromUnixTimeSeconds(0), slots, storeRevision + 1)));
         var store = new Item(null, "store", stored is null ? storeError is null ? "absent" : "unreadable" : $"revision {storeRevision}") {
             After = $"revision {storeRevision + 1}"
         };

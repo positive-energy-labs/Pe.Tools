@@ -204,7 +204,7 @@ internal sealed class Partition {
     internal SceneReach Load(ReachPlan plan, bool absorbRunInsulation = false) {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var keep = plan.Keep;
-        var excluded = new Dictionary<string, int>(plan.Excluded, StringComparer.Ordinal);
+        var excluded = plan.Excluded.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
         var kept = new List<Element>();
         var rejected = 0;
         if (keep.Count > 0) {
