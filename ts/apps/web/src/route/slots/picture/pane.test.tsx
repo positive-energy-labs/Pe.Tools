@@ -3,7 +3,8 @@ import { RegistryContext } from "@effect/atom-react";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { MARK_KINDS, type Finding } from "@pe/agent-contracts/slots";
-import { route, paneLayout, picturePose, scrollBody, split } from "@pe/web/route";
+import { z } from "zod";
+import { field, route, paneLayout, picturePose, scrollBody, split } from "@pe/web/route";
 import { subjectCode, uniqueIdSchema } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
 import { AttentionRoot } from "#/attention";
 import { ElementIndexContext, elementIndex } from "#/element-index";
@@ -22,7 +23,7 @@ import { PicturePane } from "./pane.tsx";
 const io = vi.hoisted(() => ({ call: vi.fn() }));
 vi.mock("#/host/client", () => ({ callHostRpc: io.call }));
 vi.mock("#/scene/artifact", () => ({ fetchSceneArtifact: async () => new ArrayBuffer(0) }));
-const seen = vi.hoisted(() => ({ model: null as Parameters<typeof ModelPicture>[0] | null }));
+const seen = vi.hoisted((): { model: Parameters<typeof ModelPicture>[0] | null } => ({ model: null }));
 vi.mock("#/scene/picture/model", async (original) => ({
   ...(await original<typeof import("#/scene/picture/model")>()),
   ModelPicture: (props: Parameters<typeof ModelPicture>[0]) => { seen.model = props; return <div data-model-picture="" />; },
@@ -39,14 +40,20 @@ const picture = {
   scope: { derive: () => ({ kind: "subjects" as const, refs: [pipe] }) },
   marks: () => [{ kind: "ring" as const, at: pipe, ink: "viz-2" }],
 };
-// A Pod's route, as a Pod declares it: only `@pe/web/route`, the pose fields and a picture slot.
-const pod = route({ key: "pod-pipes", name: "Pipes", directory, fields: { ...picturePose }, picture,
+// A Pod's route, as both author specimens declare it: only `@pe/web/route` and a picture slot. The pose is the kernel's.
+const pod = route({ key: "pod-pipes", name: "Pipes", directory, fields: {}, picture,
   panes: { main }, layout: split("h", ["main", "picture"], { id: "pipes", size: 320, sized: "start" }) });
 
 test("a route that declares `picture` gets the kernel's picture pane; one it places itself is not added twice", () => {
   expect(pod.spec.panes).toHaveProperty("picture", expect.objectContaining({ kernel: "picture", body: "fill" }));
   expect(pod.data.panes).toHaveProperty("picture");
   expect(pod.data.picture).toEqual({ scope: "derived", marks: MARK_KINDS });
+  // The route declared no pose: the kernel's pose fields are on its Page, so the pane it added can draw.
+  expect(pod.spec.fields).toEqual(picturePose);
+  expect(Object.keys(pod.data.fields)).toEqual(expect.arrayContaining(Object.keys(picturePose)));
+  // A route's own field under a pose name is refused, never drawn as the pose.
+  expect(() => route({ key: "pod-clash", name: "Pipes", directory, fields: { layers: field(z.string(), "", "query") }, picture,
+    panes: { main }, layout: paneLayout("main") })).toThrow(/layers/);
   const placed = route({ key: "pod-placed", name: "Pipes", directory, fields: { ...picturePose }, picture,
     panes: { main, view: { title: "View", purpose: "See pipes", kernel: "picture", body: "fill", draw: main.draw as never } },
     layout: paneLayout("view") });

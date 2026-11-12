@@ -158,7 +158,7 @@ describe("kernel gaps", () => {
   test("kernel pane: picture-pane (5)", () => {
     expect(module.data.panes).toHaveProperty("picture");
     expect(module.spec.panes).toMatchObject({ picture: { kernel: "picture" } });
-    // The pose is the kernel's Page fields, spread from the Pod surface.
+    // The pose is the kernel's: the Pod declares none of its fields.
     expect(Object.keys(module.data.fields)).toEqual(expect.arrayContaining(["viewport", "layers", "context"]));
   });
   test("kernel slot: goal-slot (6)", () => {

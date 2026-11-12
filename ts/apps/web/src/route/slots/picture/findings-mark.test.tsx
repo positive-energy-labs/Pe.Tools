@@ -32,7 +32,7 @@ import { elementOf } from "./index.ts";
 const io = vi.hoisted(() => ({ call: vi.fn(() => new Promise(() => {})) }));
 vi.mock("#/host/client", () => ({ callHostRpc: io.call }));
 vi.mock("#/scene/artifact", () => ({ fetchSceneArtifact: async () => new ArrayBuffer(0) }));
-const seen = vi.hoisted(() => ({ model: null as Parameters<typeof ModelPicture>[0] | null }));
+const seen = vi.hoisted((): { model: Parameters<typeof ModelPicture>[0] | null } => ({ model: null }));
 vi.mock("#/scene/picture/model", async (original) => ({
   ...(await original<typeof import("#/scene/picture/model")>()),
   ModelPicture: (props: Parameters<typeof ModelPicture>[0]) => { seen.model = props; return <div data-model-picture="" />; },
@@ -88,7 +88,7 @@ test("a person's finding on a fan port draws one mark on the port's geometry in 
     fireEvent.change(within(pop).getByLabelText("finding text"), { target: { value: "port static reads low" } });
     fireEvent.click(within(pop).getByRole("button", { name: `Write note on ${name}` }));
     await waitFor(() => expect(submitted.map((c) => c.key)).toEqual(["findings.write"]), { timeout: 20_000 });
-    const key = { ...submitted[0]!.input.work!.key, route: "findings" } as WorkKey;
+    const key: WorkKey = { ...submitted[0]!.input.work!.key, route: "findings" };
     const written = async () => Object.values(findingsWorkSchema.parse((await host.view(key, "findings"))?.doc ?? {}).findings);
     await waitFor(async () => expect(await written()).toHaveLength(1), { timeout: 20_000 });
     const port = (await written())[0]!.subject;

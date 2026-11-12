@@ -17,7 +17,7 @@ import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "./host-read.ts";
-import { pictureSlotData, sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureScope, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
+import { picturePoseSchemas, pictureSlotData, sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureScope, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
 
 /*
  * The sheet pair's contracts, inline: importing `typed-actions` would pull the whole semantic catalog into
@@ -59,6 +59,21 @@ export const field = <S extends z.ZodType, const R extends Field["role"]>(
   role: R,
   url: Field["url"] = "replace",
 ) => ({ schema, initial, role, url });
+/**
+ * The kernel's picture pose as Page fields (ADR 0035 rule 1). Each default is the contract schema's own
+ * (`picturePoseSchemas`): nothing here states one. `route()` puts `picturePose` on the Page of every route
+ * that declares `picture`; a route spreads it into `fields` only to read the pose in its own typed context.
+ */
+export const poseFields = (s: typeof picturePoseSchemas) => ({
+  contextRadiusFt: field(s.contextRadiusFt, s.contextRadiusFt.parse(undefined), "pose", "replace"),
+  sceneView: field(s.sceneView, s.sceneView.parse(undefined), "pose", "replace"),
+  viewport: field(s.viewport, s.viewport.parse(undefined), "pose", "replace"),
+  context: field(s.context, s.context.parse(undefined), "pose", "push"),
+  layers: field(s.layers, s.layers.parse(undefined), "pose", "push"),
+  encoding: field(s.encoding, s.encoding.parse(undefined), "pose", "push"),
+  picture: field(s.picture, s.picture.parse(undefined), "pose", "push"),
+});
+export const picturePose = poseFields(picturePoseSchemas);
 /** The text keys of a subject set of plain refs (system name, workspace id); a tuple key, placement or sub is not a name and throws. */
 export const namesOf = (value: Many<SubjectRefCode>): string[] | "all" =>
   value.kind === "all"
@@ -279,8 +294,15 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     ...(spec.picture && !Object.values(spec.panes).some((p) => p.kernel === "picture") ? { picture: { title: "Picture", purpose: "See the subject in the model", read: spec.core,
       kernel: "picture", body: "fill", draw: () => fillBody(null) } } : {}),
   } as unknown as Specification<D, F, W, Edit, Reads, SubjectRead, Q>["panes"];
+  // The pose is the kernel's: a declared picture brings its fields, so the pane the kernel adds can draw for a
+  // route that named none. A route's own field under a pose name would be drawn as the pose, so it is refused.
+  const own: Fields = { ...spec.query, ...spec.fields };
+  const pose: Fields = spec.picture ? picturePose : {};
+  const clash = Object.keys(pose).find((key) => own[key] && own[key] !== pose[key]);
+  if (clash) throw Error(`Route ${spec.key}: field "${clash}" is the picture's pose; spread picturePose or rename it`);
+  const pageFields = { ...pose, ...own };
   // `query` fields mount as Page fields: the shell reads one field table (rule 1: `query` holds what no slot does).
-  const normalized = { ...spec, fields: { ...spec.query, ...spec.fields } as F & Q, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb } as NonNullable<typeof spec.commands>,
+  const normalized = { ...spec, fields: pageFields as F & Q, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb } as NonNullable<typeof spec.commands>,
     panes: { ...spec.panes, ...kernelPanes }, edits: work && edits ? {...edits,work,owners} : undefined };
   const schemas: Record<string,z.ZodType> = { none:z.strictObject({}) };
   if (work && edits) {
@@ -289,7 +311,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   }
   const fields: Record<string,RouteGraphJson["fields"][string]> = {};
   const fieldSchemas: Record<string,string> = {};
-  for (const [key,field] of Object.entries({ ...spec.query, ...spec.fields } as Fields)) {
+  for (const [key,field] of Object.entries(pageFields)) {
     let schema=key;
     while(Object.hasOwn(schemas,schema)) schema=`page:${schema}`;
     fieldSchemas[key]=schema;

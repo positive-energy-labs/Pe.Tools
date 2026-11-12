@@ -14,9 +14,8 @@ import {
 } from "@pe/agent-contracts";
 import { reads } from "./reads.ts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
-import { field, route, subjectSchema, split } from "../route/defaults.ts";
+import { field, picturePose, route, subjectSchema, split } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
-import { picturePose } from "../route/slots/picture/pose.ts";
 import { draw } from "../route/draw.tsx";
 import { fillBody, scrollBody } from "../route/body.ts";
 import { overlay } from "../route/slots/picture/overlay.tsx";

@@ -10,11 +10,10 @@ import { boundsOfInstances, boundsOfPoints, center } from "#/scene/orbit";
 import { Picture, type LayerOption, type PictureLayer, type PictureLine, type PictureOverlayFrame } from "#/scene/picture/picture";
 import type { SceneMeshes } from "#/scene/types";
 import type { SubjectRefCode } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
-import type { DrawContext } from "../../typed-route.ts";
+import type { DrawContext, picturePose } from "../../typed-route.ts";
 import { findingMark } from "../findings/index.ts";
 import { elementOf, pictureSlot, type Captured } from "./index.ts";
 import { markLayer } from "./marks.ts";
-import type { picturePose } from "./pose.ts";
 import type { PictureOverlayProps, PictureParts } from "./overlay.tsx";
 
 /*
@@ -26,7 +25,7 @@ import type { PictureOverlayProps, PictureParts } from "./overlay.tsx";
  * through the slot's one `overlay` hook (`overlay.tsx`).
  */
 export interface PicturePaneContext {
-  /** The pane's draw context; its Page carries the kernel's pose fields (`pose.ts`). */
+  /** The pane's draw context; its Page carries the kernel's pose fields (`picturePose`). */
   readonly draw: DrawContext<any, typeof picturePose, any, any>;
   readonly slot: PictureSlot<any> & { overlay?(props: PictureOverlayProps<any>): unknown };
   /** The route's name: what a retained read is labelled with. */
@@ -67,7 +66,7 @@ function capturedOf(meshes: SceneMeshes | null, lines: readonly PictureLine[], m
 function KernelPicture({ ctx, scope, subject, parts }: { ctx: PicturePaneContext; scope: PictureScope; subject: readonly SubjectRefCode[]; parts: PictureParts }) {
   const { draw, slot, findings } = ctx;
   const elements = useElementIndex();
-  // The pose is the kernel's Page fields (`pose.ts`); the selection holds SubjectKeys, and an issue is the place `issue:<key>`.
+  // The pose is the kernel's Page fields (`picturePose`); the selection holds SubjectKeys, and an issue is the place `issue:<key>`.
   const authored = draw.page.read();
   const ids = authored.selected.map(({ id }) => id);
   const selected = ids.join(",");

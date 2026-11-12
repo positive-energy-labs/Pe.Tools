@@ -3,7 +3,7 @@ import { z } from "zod";
 import { MARK_KINDS, PICTURE_CONTEXT, markSchema, picturePoseSchemas, pictureScopeSchema, pictureSlotDataSchema } from "@pe/agent-contracts/slots";
 import { documentKeyOf, subjectCode, uniqueIdSchema } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
 import { pictureSlot, resolveMark } from "./index.ts";
-import { picturePose, poseFields } from "./pose.ts";
+import { picturePose, poseFields } from "../../typed-route.ts";
 
 /*
  * Slice 8's red falsifier (routes MAP row 8). The Pod half is the Pod author's red test on
@@ -67,7 +67,7 @@ test("a mark on a port nothing captured apart from its element sits on the eleme
 });
 
 test("the pose defaults are written once: a Page field's initial is its contract schema's default", () => {
-  // A different default on the contract is the field's initial; pose.ts states none of its own.
+  // A different default on the contract is the field's initial; the kernel states none of its own.
   const moved = poseFields({ ...picturePoseSchemas, context: z.enum(PICTURE_CONTEXT).default("off"), contextRadiusFt: z.number().default(3) });
   expect([moved.context.initial, moved.contextRadiusFt.initial]).toEqual(["off", 3]);
   expect(Object.fromEntries(Object.entries(picturePose).map(([key, field]) => [key, field.initial]))).toEqual({

@@ -11,8 +11,8 @@ import {
 } from "./typed-route";
 import type { HostRead } from "./host-read";
 export * from "./typed-route";
-/** The kernel's picture pose as Page fields: a route that declares `picture` spreads it into `fields`. */
-export { picturePose } from "./slots/picture/pose.ts";
+/** A picture is declared with these; the pose fields (`picturePose`) come with `./typed-route`. */
+export type { Mark, PictureScope, PictureSlot } from "@pe/agent-contracts/slots";
 
 /** Mechanical Page policy; names and their product meaning remain at the call site. */
 export const listFields = <const P extends string>(prefix: P) =>

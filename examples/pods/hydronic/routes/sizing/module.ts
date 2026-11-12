@@ -2,12 +2,11 @@ import { z } from "zod";
 import { valueRead } from "@pe/agent-contracts/value";
 import { parameter, local } from "@pe/agent-contracts/slots";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
-import { route, read, field, split, picturePose, type ContextOf } from "@pe/web/route";
+import { route, read, field, split, type ContextOf } from "@pe/web/route";
 import { hostRead } from "@pe/web/host-read";
 import { key, address, workState, edit, args, value } from "./schema.ts";
 
-// The kernel's picture pose is Page state like any other: a route that declares `picture` spreads it in.
-const fields = { ...picturePose, system: field(z.string(), "", "query") };
+const fields = { system: field(z.string(), "", "query") };
 const core = read(hostRead(valueRead(`${key}.sizing`, args, value)), (page: { system: string }) => ({ system: page.system }));
 // Builtins get this from a generated context file; a Pod names it once with the kernel's ContextOf.
 type Context = ContextOf<typeof fields, typeof core, typeof workState, typeof edit>;
@@ -46,8 +45,8 @@ export const module = route({
       maxFriction: local(z.number().positive()),
     },
   },
-  // The picture is the system's pipes, each outlined in its status ink. The kernel adds the pane, captures
-  // the scope and draws the marks; this Pod mounts no renderer (ADR 0035 rule 9).
+  // The picture is the system's pipes, each outlined in its status ink. The kernel adds the pane and its pose,
+  // captures the scope and draws the marks; this Pod mounts no renderer (ADR 0035 rule 9).
   picture: {
     scope: { derive: (ctx: Context) => ({ kind: "subjects", refs: pipesOf(ctx).map((r) => pipeCode(r.uniqueId)) }) },
     marks: (ctx: Context) => pipesOf(ctx).map((r) => ({ kind: "outline", at: pipeCode(r.uniqueId), ink: inks[r.status], says: r.status })),
