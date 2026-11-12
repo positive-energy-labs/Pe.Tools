@@ -56,29 +56,76 @@ test("the browser contextFetch carries the runtime owner to its own origin and t
   }
 });
 
-test("a context.missing POST reloads at most once per 30 seconds and preserves the body", async () => {
+const refusedBody = { error: { code: "context.missing", message: "anonymous callers are read-only" } };
+/** The navigation door as the page reaches it: the hidden frame, answered as loaded. */
+const answerNavigation = async () => {
+  const frame = await vi.waitFor(() => {
+    const found = document.querySelector("iframe");
+    if (!found) throw Error("no navigation yet");
+    return found;
+  });
+  const seen = { src: frame.src, sandbox: frame.getAttribute("sandbox") };
+  frame.dispatchEvent(new Event("load"));
+  return seen;
+};
+
+test("a write refused context.missing after a host restart re-admits through a navigation and retries, with no reload", async () => {
   const reload = vi.fn();
-  const body = { error: { code: "context.missing", message: "anonymous callers are read-only" } };
-  vi.stubGlobal("window", { location: { reload } });
+  vi.stubGlobal("window", { location: { reload, origin: location.origin, search: "" } });
+  let admitted = false;
+  const fetcher = vi.fn(async (_url: string, _init: RequestInit) =>
+    admitted ? Response.json({ revision: 1 }) : Response.json(refusedBody, { status: 403 }),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  sessionStorage.clear();
+  try {
+    const write = hostFetch("/pe/route-view/fans", { method: "PUT", body: '{"a":1}' });
+    // The first send is already refused; the host admits what follows the navigation.
+    admitted = true;
+    const navigation = await answerNavigation();
+    // The same door a fresh load uses: a GET navigation of this origin. No script runs in it.
+    expect(navigation).toEqual({ src: `${location.origin}/`, sandbox: "allow-same-origin" });
+    const response = await write;
+    expect(response.status).toBe(200);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls.map(([, init]) => init.body)).toEqual(['{"a":1}', '{"a":1}']);
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(reload).not.toHaveBeenCalled();
+  } finally {
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
+
+test("a navigation that mints no context falls back to one reload per 30 seconds; anonymous stays refused", async () => {
+  const reload = vi.fn();
+  vi.stubGlobal("window", { location: { reload, origin: location.origin, search: "" } });
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => Response.json(body, { status: 403 })),
+    vi.fn(async () => Response.json(refusedBody, { status: 403 })),
   );
   const clock = vi.spyOn(Date, "now").mockReturnValue(100_000);
   sessionStorage.clear();
+  const refusedWrite = async () => {
+    const write = hostFetch("/pe/threads", { method: "POST" });
+    await answerNavigation();
+    return write;
+  };
   try {
-    const response = await hostFetch("/pe/threads", { method: "POST" });
+    const response = await refusedWrite();
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual(refusedBody);
     expect(reload).toHaveBeenCalledTimes(1);
-    expect(await response.json()).toEqual(body);
     clock.mockReturnValue(129_999);
-    await hostFetch("/pe/threads", { method: "POST" });
+    await refusedWrite();
     expect(reload).toHaveBeenCalledTimes(1);
     clock.mockReturnValue(130_000);
-    await hostFetch("/pe/threads", { method: "POST" });
+    await refusedWrite();
     expect(reload).toHaveBeenCalledTimes(2);
   } finally {
     sessionStorage.clear();
-    clock.mockRestore();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   }
 });
@@ -88,7 +135,7 @@ test("GET and other refusal codes never reload", async () => {
   const fetcher = vi.fn(async () =>
     Response.json({ error: { code: "context.missing" } }, { status: 403 }),
   );
-  vi.stubGlobal("window", { location: { reload } });
+  vi.stubGlobal("window", { location: { reload, origin: location.origin, search: "" } });
   vi.stubGlobal("fetch", fetcher);
   sessionStorage.clear();
   try {
@@ -99,9 +146,11 @@ test("GET and other refusal codes never reload", async () => {
     );
     await hostFetch("/pe/threads", { method: "POST" });
     expect(reload).not.toHaveBeenCalled();
+    expect(document.querySelector("iframe")).toBeNull();
     expect(sessionStorage.length).toBe(0);
   } finally {
     sessionStorage.clear();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   }
 });

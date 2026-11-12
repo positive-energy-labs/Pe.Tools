@@ -27,10 +27,10 @@ const recordBeats = () =>
   vi.stubGlobal("fetch", async (url: string | URL | Request, init?: RequestInit) => {
     if (String(url).includes("/pe/notices/presence/"))
       beats.push(JSON.parse(String(init?.body)) as (typeof beats)[number]);
-    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+    return new Response('{"ok":true}', { status: 200, headers: { "content-type": "application/json" } });
   });
 
-test("thread presence beats on focus and every 5 seconds, and stops on route departure", () => {
+test("thread presence beats on focus and every 5 seconds, and stops on route departure", async () => {
   vi.useFakeTimers();
   beats.length = 0;
   recordBeats();
@@ -41,9 +41,7 @@ test("thread presence beats on focus and every 5 seconds, and stops on route dep
   }
   const view = render(<Surface thread="t1" />);
   expect(beats.at(-1)).toEqual({ thread: "t1", visible: true, focused: true });
-  act(() => {
-    vi.advanceTimersByTime(5_000);
-  });
+  await act(() => vi.advanceTimersByTimeAsync(5_000));
   expect(beats.length).toBe(2);
   Object.defineProperty(document, "hasFocus", { configurable: true, value: () => false });
   act(() => {
@@ -54,12 +52,45 @@ test("thread presence beats on focus and every 5 seconds, and stops on route dep
   expect(beats.at(-2)).toMatchObject({ thread: "t1", visible: false, focused: false });
   view.unmount();
   const count = beats.length;
-  act(() => {
-    vi.advanceTimersByTime(15_000);
-  });
+  await act(() => vi.advanceTimersByTimeAsync(15_000));
   expect(beats.length).toBe(count);
   expect(beats.at(-1)).toMatchObject({ thread: "t2", visible: false, focused: false });
   vi.useRealTimers();
+});
+
+test("a down host gets at most 7 presence beats in 85 seconds, then the 5 second beat returns", async () => {
+  vi.useFakeTimers();
+  // The least jitter is the most attempts: the bound holds for every draw.
+  const random = vi.spyOn(Math, "random").mockReturnValue(0);
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  let attempts = 0;
+  let down = true;
+  vi.stubGlobal("fetch", async () => {
+    attempts++;
+    if (down) throw new TypeError("Failed to fetch");
+    return new Response('{"ok":true}', { status: 200, headers: { "content-type": "application/json" } });
+  });
+  function Surface() {
+    useThreadPresence("t1");
+    return null;
+  }
+  const view = render(<Surface />);
+  try {
+    await act(() => vi.advanceTimersByTimeAsync(85_000));
+    // The drive of 2026-11-12 counted 17 in this window, one every 5 s.
+    expect(attempts).toBeGreaterThanOrEqual(4);
+    expect(attempts).toBeLessThanOrEqual(7);
+    down = false;
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    attempts = 0;
+    await act(() => vi.advanceTimersByTimeAsync(15_000));
+    expect(attempts).toBe(3);
+  } finally {
+    view.unmount();
+    random.mockRestore();
+    errors.mockRestore();
+    vi.useRealTimers();
+  }
 });
 
 /** The host's `notices` Reading as each follower sees it: real Reading frames on the stood-in stream. */
