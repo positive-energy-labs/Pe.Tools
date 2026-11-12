@@ -118,7 +118,7 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
   // lands) reads as pending, never as "Document unavailable".
   const binding = !mount && !problem && (target.busy || target.resolution.kind === "checking" || target.resolution.kind === "resolved");
   return <section className="flex min-h-0 flex-1 flex-col" aria-busy={binding && visible || undefined} data-url-settled={urlSettled ? "" : undefined} data-tone={history ? "caution" : undefined} data-wash={history ? "" : undefined} aria-label={history ? "Recorded view, read-only" : undefined}>
-      {problem ? <>{document}<p role="alert">{problem}</p></> : mount ? <TypedChrome mount={mount} document={document} recorded={recorded} thread={params.get("thread") ?? undefined} /> : <>{document}{binding ? <OutcomeLine kind="busy" label="Document" says="Finding the open document" /> : <p role="status">{target.resolution.kind === "failed" ? target.resolution.message : target.bindingLost?.sentence ?? "Document unavailable; choose an exact document again."}</p>}</>}
+      {problem ? <>{document}<p role="alert">{problem}</p></> : mount ? <TypedChrome mount={mount} document={document} recorded={recorded} thread={params.get("thread") ?? undefined} /> : <>{document}{binding ? <OutcomeLine kind="busy" label="Document" says="Finding the open document" /> : <p role="status">{target.resolution.kind === "failed" ? target.resolution.message : target.bindingLost?.sentence ?? (target.several ? "Several documents are open; choose one." : "Document unavailable; choose an exact document again.")}</p>}</>}
     </section>;
 
 }

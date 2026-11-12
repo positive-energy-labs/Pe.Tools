@@ -39,4 +39,5 @@ test("two open documents: the route settles on the picker, with no busy mark", a
   await screen.findByRole("button", { name: "Choose a document" });
   expect(screen.queryByText("Finding the open document")).toBeNull();
   expect(document.querySelectorAll("[aria-busy]")).toHaveLength(0);
+  expect(screen.getByText("Several documents are open; choose one.")).toBeTruthy();
 });

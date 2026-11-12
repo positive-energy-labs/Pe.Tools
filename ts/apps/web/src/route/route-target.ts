@@ -323,6 +323,7 @@ export function useRouteTarget(
   return {
     inventoryResult,
     busy,
+    several,
     resolution,
     bindingLost,
     bindingLostRef,
