@@ -87,8 +87,33 @@ export const familyLiveReadSchema = z.object({
   executionContext: documentRefSchema,
   process: nativeProcessSchema,
 });
+/**
+ * Where a saved family lives in its Pod. One rule: the capture's default path, the path a caller
+ * may name, the member attach accepts and the spec asset door all read it here.
+ */
+export const FAMILY_MEMBER_DIR = "settings/family/";
+export const isFamilyMember = (path: string) =>
+  path.startsWith(FAMILY_MEMBER_DIR) && path.endsWith(".json");
+export const familyMemberPath = (name: string) => `${FAMILY_MEMBER_DIR}${name}.json`;
 /** Where a capture lands: the route's current pod, and a new member path the host may choose. */
-const captureInto = { pod: z.string().min(1), path: z.string().min(1).optional() };
+const captureInto = {
+  pod: z.string().min(1),
+  path: z
+    .string()
+    .min(1)
+    .refine(isFamilyMember, `A family saves under ${FAMILY_MEMBER_DIR} as a .json member`)
+    .optional(),
+};
+/**
+ * The PDF to attach: an upload already retained by `POST /actions/blobs`, a file the host can read,
+ * or a URL the host fetches. A path or URL is read once at admission and its bytes are retained by
+ * digest, so the command stays the immutable intent (cdb265c9) whichever door the bytes came through.
+ */
+const specSourceSchema = z.union([
+  blobRefSchema,
+  z.strictObject({ path: z.string().min(1) }),
+  z.strictObject({ url: z.url() }),
+]);
 /**
  * What a plan consumes: a saved member, or a draft's bytes; the run apply files captures either
  * exactly. Strict arms: a shape with both `sha256` and `content` refuses instead of losing one to
@@ -137,13 +162,13 @@ export const familyActions = {
     result: z.strictObject({ cancelled: z.literal(true) }),
   },
   "family.attach-spec": {
-    says: "Attach a PDF specification and its parsed assets to the reviewed family member.",
+    says: `Attach a PDF cut sheet and its parsed assets to a saved family member (under ${FAMILY_MEMBER_DIR}; family.capture with a pod saves one and returns it). source is { path } for a file on this machine, { url }, or an uploaded blob. Cells then cite its blocks by id.`,
     needs: "nothing",
     effect: "command",
     dirties: ["pods"],
     input: z.object({
       member: podMemberSchema,
-      source: blobRefSchema,
+      source: specSourceSchema,
     }),
     result: z.object({
       member: podMemberSchema,
@@ -187,7 +212,7 @@ export const familyActions = {
     input: z.strictObject({ destination: podMemberSchema.optional() }),
   },
   "family.capture": {
-    says: "Read the open family's spec. With a pod, file it as a new member there (the draft's `spec` text when given, else what Revit said) and write the run; without one, return the spec and write nothing.",
+    says: `Read the open family's spec. With a pod, file it as a new member under ${FAMILY_MEMBER_DIR} (the draft's \`spec\` text when given, else what Revit said), write the run and return the member; without one, return the spec and write nothing.`,
     needs: "family-document",
     effect: "command",
     dirties: ["pods"],

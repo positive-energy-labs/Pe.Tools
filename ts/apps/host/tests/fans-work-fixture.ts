@@ -44,6 +44,12 @@ export async function nativeFixture(
   clockMode: "real" | "test" = "real",
   snapshotFor: (key: string, input: Record<string, any>) => DuctSnapshot = () => snapshot,
   address: Address | null = null,
+  /** Another route's lane over the same doors: its open documents, its Pod deps, its native answers. */
+  options: {
+    state?: Parameters<typeof connectTestBridge>[2];
+    deps?: Parameters<typeof callRouteOver>[2];
+    native?: (key: string, input: Record<string, any>) => unknown;
+  } = {},
 ) {
   const scope = Scope.makeUnsafe();
   const home = process.env.LOCALAPPDATA ?? tmpdir();
@@ -94,7 +100,7 @@ export async function nativeFixture(
       }),
     };
     const connection = await settle(
-      connectTestBridge().pipe(
+      connectTestBridge(42, {}, options.state).pipe(
         Effect.provideService(RevitBridge, bridge),
         Effect.provideService(Scope.Scope, scope),
       ),
@@ -108,7 +114,7 @@ export async function nativeFixture(
       Layer.mergeAll(callRouteOver(
         journal,
         Context.get(context, CaptureStore),
-        { sdk: sdkSessions, workspace: saved },
+        { sdk: sdkSessions, workspace: saved, ...options.deps },
         {
         },
       ), Layer.effectDiscard(Effect.gen(function* () {
@@ -164,8 +170,9 @@ export async function nativeFixture(
             const input = JSON.parse(req.payloadJson);
             dispatched.push({ key: req.operationKey, input, requestId: req.requestId });
             if (req.operationKey === readPause.key) yield* readPause.wait;
-            let value: unknown;
-            if (req.operationKey.startsWith("ducts.snapshot.")) {
+            let value: unknown = options.native?.(req.operationKey, input);
+            if (value !== undefined) {
+            } else if (req.operationKey.startsWith("ducts.snapshot.")) {
               const captured = snapshotFor(req.operationKey, input);
               value = {
                 ...captured,
