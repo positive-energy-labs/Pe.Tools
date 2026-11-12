@@ -878,7 +878,7 @@ export function ThreadsSidebar({
       sub:
         compactRows || !work || !lead ? undefined : (
           <span className="pe-thread-sub">
-            <Button kind="quiet"
+            <Button
               label={`Open ${lead.intent}`}
               onClick={(event) => {
                 event.stopPropagation();

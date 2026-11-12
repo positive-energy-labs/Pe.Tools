@@ -262,7 +262,7 @@ function ReviewList({
         label: reviewLabel(shape),
         active: selected === shape.key,
         actions: onFlag ? (
-          <Button kind="quiet"
+          <Button
             label={`${flags.includes(shape.key) ? "unflag" : "flag"} ${nameOrFallback()}`}
             onClick={() => onFlag(shape.key)}
           >
