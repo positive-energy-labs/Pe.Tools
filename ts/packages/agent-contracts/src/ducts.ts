@@ -1,3 +1,4 @@
+import { upgradeSettingsWork } from "./work-settings-upgrade.ts";
 /**
  * /ducts Work, every segment a family of cells with one staged edit each. The
  * fan-side cells live in the /fans Work (`fans.ts`, FANSPLIT); pricing reads both (`ductsDesign`).
@@ -618,6 +619,7 @@ export const DUCTS_FINDS = [
 ] as const;
 
 export const ductsRouteState = {
+  upgrade: (raw: unknown) => upgradeSettingsWork(raw, 2, ["designFriction"], ["claims"]),
   schemaVersion: 3,
   route: "ducts",
   title: "Ducts",

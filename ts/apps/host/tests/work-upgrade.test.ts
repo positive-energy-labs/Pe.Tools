@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
+import { createPeRoutes } from "../src/pe-routes.ts";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
-import { bindWork, workKey, ductsRouteState, fansRouteState } from "@pe/agent-contracts";
+import { address, navigationSnapshotSchema, bindWork, workKey, ductsRouteState, fansRouteState } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { readStoredNotices, sha256Hex, writeHomeFile } from "@pe/host-contracts/store";
 import { storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
@@ -69,6 +71,7 @@ for (const [spec, previous, removed, staged, dropped] of [
       // Noncanonical whitespace distinguishes the original file from reserialized Work.
       const prior = Buffer.from(`\n  ${await readFile(path, "utf8")}\n`);
       await writeFile(path, prior);
+      expect((await new RouteWorkspace({ store, registrations: [{ spec }] }).instances()).works).toHaveLength(1);
       expect(await read()).toMatchObject({ revision: 7, schemaVersion: previous + 1, doc: staged });
       const blob = join(storedBlobsPath(), "sha256", sha256Hex(prior));
       expect(await readFile(blob)).toEqual(prior);
@@ -139,5 +142,75 @@ test("upgrade strips obsolete history snapshots and refuses undo without losing 
     });
     expect(await workspace.readUncaptured(key, spec.route)).toEqual(upgraded);
     expect(await store.getState({ targetKey, route: spec.route })).toEqual(saved);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+// Driver gate-ab5b9d5f/w4: exact pre-h2 records, with only their document address rebound.
+test.each(["navigation", "instances", "raw", "read", "view"] as const)("%s upgrades the driver's pre-h2 Work without losing cells", async (door) => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-census-upgrade-"));
+  const store = fileRouteDocumentStore(dir);
+  const registrations = [ductsRouteState, fansRouteState].map(spec => ({ spec }));
+  const app = createPeRoutes({ registrations, store, heads: { observe: () => () => {} },
+    navigation: { threads: async () => [], documents: async () => [] } });
+  const before = readStoredNotices(storedNoticesPath());
+  try {
+    const planted = [];
+    for (const spec of [ductsRouteState, fansRouteState]) {
+      const fixture = JSON.parse(await readFile(new URL(`./fixtures/pre-h2-work/planted-${spec.route}.json`, import.meta.url), "utf8"));
+      const key = bindWork(spec.route, address("C:\\Models\\Census.rvt"));
+      const targetKey = workKey(key);
+      const record = JSON.parse(JSON.stringify(fixture).replaceAll(JSON.stringify(fixture.value.history[0].write.key.target).slice(1, -1), JSON.stringify(key.target).slice(1, -1)));
+      record.targetKey = targetKey;
+      const path = join(dir, `${createHash("sha256").update(`${spec.route}:${targetKey}`).digest("hex")}.json`);
+      const prior = Buffer.from(JSON.stringify(record));
+      await writeFile(path, prior);
+      planted.push({ spec, key, targetKey, path, prior, record });
+    }
+    const read = async () => navigationSnapshotSchema.parse(await (await app.fetch(new Request("http://host/pe/navigation"))).json());
+    const workspace = new RouteWorkspace({ store, registrations });
+    if (door === "instances") expect((await workspace.instances()).works).toHaveLength(2);
+    if (door === "raw" || door === "read" || door === "view") {
+      for (const { spec, key, record } of planted) {
+        const saved = await (door === "raw" ? workspace.readRaw(key, spec.route) :
+          door === "read" ? workspace.read(key, spec.route) : workspace.view(key, spec.route));
+        const { designFriction: _, parameters: __, claims: ___, ...cells } = record.value.doc;
+        expect(saved).toMatchObject({ doc: spec.schema.parse(cells), revision: record.value.revision });
+        expect(spec.schema.safeParse(saved?.doc).success).toBe(true);
+      }
+    }
+    expect((await read()).works, JSON.stringify(readStoredNotices(storedNoticesPath()).slice(before.length))).toHaveLength(2);
+    for (const { spec, key, targetKey, path, prior, record } of planted) {
+      const saved = await store.getState({ targetKey, route: spec.route });
+      expect(saved).toMatchObject({ schemaVersion: spec.schemaVersion, revision: record.value.revision });
+      const { designFriction: _, parameters: __, claims: ___, ...cells } = record.value.doc;
+      const doc = spec.schema.parse(cells);
+      expect(saved).toHaveProperty("doc", doc);
+      expect(JSON.parse(await readFile(path, "utf8")).value).toEqual(saved);
+      expect(await readFile(join(storedBlobsPath(), "sha256", sha256Hex(prior)))).toEqual(prior);
+      expect(await new RouteWorkspace({ store, registrations }).readUncaptured(key, spec.route)).toMatchObject({ doc });
+    }
+    await read();
+    expect(readStoredNotices(storedNoticesPath()).slice(before.length)).toEqual([]);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test.each(["record", "envelope"])("unreadable Work %s keeps exact prior bytes in its notice's blob", async (kind) => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-work-discard-blob-"));
+  const store = fileRouteDocumentStore(dir);
+  const spec = ductsRouteState, key = bindWork(spec.route, null), targetKey = workKey(key);
+  const before = readStoredNotices(storedNoticesPath());
+  try {
+    await store.setState({ targetKey, route: spec.route, value: { unreadable: true } });
+    const path = join(dir, (await readdir(dir))[0]!);
+    if (kind === "record") await writeFile(path, "  {broken JSON\n");
+    const prior = await readFile(path);
+    const workspace = new RouteWorkspace({ store, registrations: [{ spec }] });
+    expect(await workspace.readUncaptured(key, spec.route)).toBeNull();
+    expect(await store.getState({ targetKey, route: spec.route })).toBeNull();
+    const blob = join(storedBlobsPath(), "sha256", sha256Hex(prior));
+    expect(await readFile(blob)).toEqual(prior);
+    const notices = readStoredNotices(storedNoticesPath()).slice(before.length);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({ class: "discard", sha256: sha256Hex(prior), reason: expect.stringContaining(blob) });
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
