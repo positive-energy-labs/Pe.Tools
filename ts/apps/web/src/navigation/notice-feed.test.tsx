@@ -96,3 +96,23 @@ test("red (slice 6 seam c): the Mod+Shift+K overlay and its empty state read the
   expect(seen!.status, GAP).toBe("ready");
   expect(seen!.labels, GAP).toContain("Wiring");
 });
+
+test("a tier-save feed row exposes its stored receipt in the overlay DOM", async () => {
+  const { noticeRows, SETTING_WRITE_PLACE } = await import("../../../host/src/notice-feed.ts");
+  const { Ledger } = await import("./ledger");
+  const { LEDGER_PRESENTATIONS } = await import("./ledger-model");
+  const receipt = "165c9d43-0e40-457b-b4fa-53d2477964e9";
+  const reason = `kaitp set 800 at ducts criteria.velocityLimitFpm.supply in the project home. Receipt ${receipt}.`;
+  const before = feed.rows;
+  feed.rows = noticeRows({ threads: [], receipts: [], works: [], machine: null, held: [], stored: [{
+    class: "keep", place: SETTING_WRITE_PLACE, path: "project/Settings/ducts.json", sha256: "saved",
+    at: new Date().toISOString(), reason,
+  }] }, Date.now());
+  try {
+    const { container } = render(<Ledger presentation={LEDGER_PRESENTATIONS.overlay} />);
+    expect(container.innerHTML).toContain(receipt);
+    expect(feed.rows[0]?.detail).toBe(reason);
+  } finally {
+    feed.rows = before;
+  }
+});
