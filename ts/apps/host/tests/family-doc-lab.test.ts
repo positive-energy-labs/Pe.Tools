@@ -44,7 +44,7 @@ afterEach(async () => {
   for (const close of closes.splice(0).reverse()) await close();
 });
 
-async function lab(beforeParse?: () => Promise<void>, omitParser = false) {
+async function lab(beforeParse?: () => Promise<void>) {
   vi.stubEnv("LLAMA_CLOUD_API_KEY", "fixture-key");
   const pods = await mkdtemp(join(tmpdir(), "pe-doc-lab-"));
   closes.push(() => rm(pods, { recursive: true, force: true }));
@@ -68,7 +68,7 @@ async function lab(beforeParse?: () => Promise<void>, omitParser = false) {
     },
     deps: {
       podsRoot: pods,
-      parsePdf: omitParser ? undefined : async ({ sender, file, apiKey }) => {
+      parsePdf: async ({ sender, file, apiKey }) => {
         expect(sender).toBe("person");
         expect(apiKey).toBe("fixture-key");
         await beforeParse?.();
@@ -469,8 +469,8 @@ test("narrow 6: the spec asset door serves only what normalizes under the family
   expect((await ask("settings/family/..\\..\\pod.json")).status).toBe(404);
 }, 60_000);
 
-test("an attach without an injected parser fails before any network request", async () => {
-  const { save, act, handle } = await lab(undefined, true);
+test("an injected parser failure fails the attach without any network request", async () => {
+  const { save, act, handle } = await lab(async () => { throw Error("Parser failed"); });
   const { member } = (await save("human")).result;
   const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(Error("Unexpected network request"));
   try {
@@ -480,7 +480,7 @@ test("an attach without an injected parser fails before any network request", as
       work: await handle(),
     });
     expect(attached.state).toBe("failed");
-    expect(attached.error).toContain("must provide parsePdf");
+    expect(attached.error).toContain("Parser failed");
     expect(network).not.toHaveBeenCalled();
   } finally {
     network.mockRestore();
