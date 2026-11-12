@@ -32,15 +32,20 @@ vi.mock("@llamaindex/liteparse", async (importOriginal) => {
   };
 });
 
-function onePagePdf(line: string): Buffer {
-  const content = `BT /F1 14 Tf 72 700 Td (${line}) Tj ET`;
+function onePagePdf(...lines: string[]): Buffer {
+
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
-    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    `<< /Type /Pages /Kids [${lines.map((_, i) => `${4 + i * 2} 0 R`).join(" ")}] /Count ${lines.length} >>`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
   ];
+  for (const [i, line] of lines.entries()) {
+    const content = `BT /F1 14 Tf 72 700 Td (${line}) Tj ET`;
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents ${5 + i * 2} 0 R /Resources << /Font << /F1 3 0 R >> >> >>`,
+      `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    );
+  }
   let pdf = "%PDF-1.4\n";
   const offsets = objects.map((body, index) => {
     const at = pdf.length;
@@ -175,6 +180,7 @@ test("with no project home the parse lands under the machine state root, never t
   expect(existsSync(derived)).toBe(false);
   expect(machine.split(sep)).not.toContain("scratch");
 });
+
 // M6: accepting any marked tier as a project would write into this firm home.
 test("a PDF in a firm home derives only into machine state", async () => {
   become("a");
@@ -188,3 +194,14 @@ test("a PDF in a firm home derives only into machine state", async () => {
   expect(readdirSync(join(runtimeRoot(), "state", "Derived"))).toHaveLength(1);
 });
 
+// M9: omitting pages from the key would return page one's text twice.
+test("page selections of the same PDF keep distinct text and derived files", async () => {
+  become("a");
+  writeFileSync(file, onePagePdf("FIRST SHEET", "SECOND SHEET"));
+  const first = await read({ path: file, pages: "1" });
+  const second = await read({ path: file, pages: "2" });
+  expect(first.text).toContain("FIRST SHEET");
+  expect(second.text).toContain("SECOND SHEET");
+  expect(second.text).not.toBe(first.text);
+  expect(readdirSync(derived)).toHaveLength(2);
+});
