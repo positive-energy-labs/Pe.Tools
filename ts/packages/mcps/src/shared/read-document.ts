@@ -7,9 +7,17 @@ import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import z from "zod";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { contextFetch, invocationContext } from "@pe/runtime/context";
-import { keptParse, sha256Of } from "./held-parse.ts";
+import { derivedKey, writeDerived } from "@pe/host-contracts/store";
+import {
+  llamaParser,
+  parsedPagesSchema,
+  parseStore,
+  readDerivedJson,
+  sha256Of,
+  type ParsedPages,
+} from "./held-parse.ts";
 import { resolveHostBaseUrl } from "./host-config.ts";
-import { parseWithLlamaCloud } from "./llama-parse.ts";
+import { LLAMA_TIER, parseWithLlamaCloud } from "./llama-parse.ts";
 import { officeExtensions, readOfficeText } from "./read-office.ts";
 import { createTool } from "./tool.ts";
 
@@ -61,6 +69,8 @@ export interface ReadDocumentResult {
   warnings?: Array<{ code: "no-text-layer"; page: number }>;
 }
 
+/** The local text parse's identity; bump the revision when its options or the kept shape change. */
+const LITE_PARSER = "liteparse/text/1";
 const MAX_RENDERED_PAGES = 4;
 const MAX_TEXT_CHARS = 60_000;
 
@@ -171,25 +181,36 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
     });
   };
 
-  let pageTexts: Array<{ pageNum: number; text: string }>;
-  let counted: string;
-  if (input.parser === "llamaparse") {
-    if (input.crop)
-      throw new Error("read_document: crop is not available with parser: llamaparse.");
-    const bytes = await fs.readFile(file);
-    const sha256 = sha256Of(bytes);
-    const kept = keptParse(sha256, input.pages);
-    if (!kept) return holdParse(file, bytes, sha256, input.pages);
-    pageTexts = kept.pages;
-    counted = `parsed by LlamaParse (${kept.tier}, markdown), sent on the person's confirm, read`;
-  } else {
+  // A parse is stored once, by the source bytes and the parser's identity (ADR 0037 rule 6): the
+  // next read, by anyone on the project, finds it and neither parses nor sends.
+  const bytes = await fs.readFile(file);
+  const hosted = input.parser === "llamaparse";
+  if (hosted && input.crop)
+    throw new Error("read_document: crop is not available with parser: llamaparse.");
+  const store = parseStore(file);
+  const key = derivedKey(
+    bytes,
+    hosted
+      ? llamaParser(input.pages)
+      : `${LITE_PARSER}/${input.pages}/${input.crop ? JSON.stringify(input.crop) : ""}`,
+  );
+  let kept: ParsedPages | null = readDerivedJson(store, key, parsedPagesSchema);
+  if (!kept) {
+    if (hosted) return holdParse(file, bytes, sha256Of(bytes), input.pages);
     // LiteParse's own failures (LibreOffice missing, file not a document, bad page range) already name the fix.
     const parsed = await (await makeParser()).parse(file).catch((error: unknown) => {
       throw new Error(`read_document: ${error instanceof Error ? error.message : String(error)}`);
     });
-    pageTexts = parsed.pages.map((page) => ({ pageNum: page.pageNum, text: page.text }));
-    counted = `${parsed.totalPages} page(s) in the document, read`;
+    kept = {
+      totalPages: parsed.totalPages,
+      pages: parsed.pages.map((page) => ({ pageNum: page.pageNum, text: page.text })),
+    };
+    writeDerived(store, key, JSON.stringify(kept));
   }
+  const pageTexts = kept.pages;
+  const counted = hosted
+    ? `parsed by LlamaParse (${LLAMA_TIER}, markdown), sent on the person's confirm, read`
+    : `${kept.totalPages} page(s) in the document, read`;
 
   const warnings: NonNullable<ReadDocumentResult["warnings"]> = [];
   if (input.parser === "liteparse") {

@@ -12,7 +12,11 @@ import { guardSend } from "./guards.ts";
 import { runPods, type PodDependencies } from "./family-actions.ts";
 import { podFolder, writeHome } from "./settings.ts";
 import { parseFamilyPdf } from "@pe/mcps/family-pdf";
-import { requireLlamaCloudKey } from "@pe/mcps/llama-parse";
+import { readDerivedJson } from "@pe/mcps/held-parse";
+import { LLAMA_TIER, requireLlamaCloudKey } from "@pe/mcps/llama-parse";
+import { derivedStore } from "@pe/host-contracts/service-identity";
+import { derivedKey, readDerived, writeDerived, type DerivedStore } from "@pe/host-contracts/store";
+import { hostOwnership } from "./host-ownership.ts";
 
 const safePath = (root: string, path: string) => {
   const full = resolve(root, path);
@@ -123,6 +127,31 @@ async function readPdfUrl(url: string): Promise<Uint8Array> {
   return Buffer.concat(chunks);
 }
 
+/** The family parse's identity; bump the revision when the request or the kept shape changes. */
+const FAMILY_PARSER = `llamaparse/${LLAMA_TIER}/family/1`;
+type ParsedDoc = z.infer<typeof parsedDocViewSchema>;
+type KeptFamilyParse = { doc: ParsedDoc; assets: Map<string, Buffer> };
+/** Every render a kept view names: there, `screenshotUrl` and `url` hold an asset name, not a URL. */
+const assetNames = (doc: ParsedDoc) => [
+  ...doc.pages.flatMap((page) => (page.screenshotUrl ? [page.screenshotUrl] : [])),
+  ...doc.images.map((image) => image.url),
+];
+/**
+ * A family parse kept in the derived store (ADR 0037 rule 6): the view and each render the parser
+ * made, keyed by the PDF's bytes. Null unless every part is there, so a hit parses and fetches nothing.
+ */
+function keptFamilyParse(store: DerivedStore, pdf: Uint8Array): KeptFamilyParse | null {
+  const doc = readDerivedJson(store, derivedKey(pdf, FAMILY_PARSER), parsedDocViewSchema);
+  if (!doc) return null;
+  const assets = new Map<string, Buffer>();
+  for (const name of assetNames(doc)) {
+    const asset = readDerived(store, derivedKey(pdf, `${FAMILY_PARSER}/${name}`));
+    if (!asset) return null;
+    assets.set(name, asset.bytes);
+  }
+  return { doc, assets };
+}
+
 const assetSchema = z.strictObject({ path: z.string(), blob: blobRefSchema });
 const preparedSpecSchema = z.strictObject({
   member: z.strictObject({ pod: z.string(), path: z.string() }),
@@ -154,6 +183,8 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
       }));
       // Attaching writes the spec and its assets into the Pod, in whichever home holds it.
       const root = await runPods(deps, podFolder(member.pod, { podsRoot: deps.podsRoot }));
+      // The parse and any vendor download are kept once for the project the Pod, or the PDF, sits in.
+      const store = derivedStore(hostOwnership.rootPath, root, ...("path" in source ? [source.path] : []));
       // Every refusal here names the next step: the caller is a person or Pea, neither reads this file.
       const save = `Save the open family first: stage writeIntent["family.capture"].edit = { "value": { "pod": "${member.pod}" } } in Family Work and run family.capture; it files the family under ${FAMILY_MEMBER_DIR} and returns the member to attach to.`;
       if (!isFamilyMember(member.path))
@@ -175,8 +206,13 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
       const read = async (): Promise<{ bytes: Uint8Array; name: string }> => {
         if ("digest" in source) return { bytes: await get(source), name: source.fileName };
         if ("path" in source) return { bytes: await readPdfPath(source.path), name: source.path };
+        // A vendor file is fetched once per project (JOURNEYS target 13), keyed by its URL.
+        // ponytail: write-once, so a sheet the vendor revises at the same URL is not seen again;
+        // attach the new one by { path } or upload. Add a refresh verb if that bites.
         return {
-          bytes: await readPdfUrl(source.url),
+          bytes:
+            readDerived(store, derivedKey(source.url, "fetch/1"))?.bytes ??
+            (await readPdfUrl(source.url)),
           name: new URL(source.url).pathname || "document.pdf",
         };
       };
@@ -189,6 +225,7 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
         throw sourceRefused(
           "Source is not a PDF: its bytes do not begin with %PDF-. Export or print it to PDF and attach that.",
         );
+      if ("url" in source) writeDerived(store, derivedKey(source.url, "fetch/1"), Buffer.from(bytes));
       const sha256 = createHash("sha256").update(Buffer.from(bytes)).digest("hex");
       const sourceFact: Consumed[] =
         "path" in source
@@ -224,8 +261,32 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
         ],
         effects: [{ kind: "directory", path: dirname(safePath(root, member.path)) }],
         prepare: async () => {
-          const payload = await parsePdf({ sender: "person", file, apiKey: requireLlamaCloudKey() });
-          const doc = parsedDocViewSchema.parse(payload);
+          const pdf = Buffer.from(bytes);
+          const fresh = async (): Promise<KeptFamilyParse> => {
+            const doc = parsedDocViewSchema.parse(
+              await parsePdf({ sender: "person", file, apiKey: requireLlamaCloudKey() }),
+            );
+            const assets = new Map<string, Buffer>();
+            const download = async (url: string, name: string) => {
+              const response = await fetch(url);
+              if (!response.ok) throw Error(`Spec asset download failed (${response.status})`);
+              const asset = Buffer.from(await response.arrayBuffer());
+              assets.set(name, asset);
+              writeDerived(store, derivedKey(pdf, `${FAMILY_PARSER}/${name}`), asset);
+              return name;
+            };
+            for (const page of doc.pages) {
+              if (!page.screenshotUrl) throw Error(`Parser returned no render for page ${page.page}`);
+              page.screenshotUrl = await download(page.screenshotUrl, `page-${page.page}`);
+            }
+            for (const [index, image] of doc.images.entries())
+              image.url = await download(image.url, `image-${index}`);
+            // Last, so a kept view always has its renders.
+            writeDerived(store, derivedKey(pdf, FAMILY_PARSER), JSON.stringify(doc));
+            return { doc, assets };
+          };
+          const { doc, assets: renders } = keptFamilyParse(store, pdf) ?? (await fresh());
+          doc.fileName = file.name;
           const dir = dirname(member.path).replaceAll("\\", "/");
           const name = basename(file.name, extname(file.name)).replace(/[^a-zA-Z0-9_-]/g, "-");
           const assetDir = `${name || "document"}-${doc.jobId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -234,23 +295,16 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
           const retain = async (path: string, bytes: Buffer) => {
             assets.push({ path, blob: await put(bytes, basename(path)) });
           };
-          await retain(join(folder, "source.pdf"), Buffer.from(bytes));
-          const download = async (url: string, name: string) => {
-            const response = await fetch(url);
-            if (!response.ok) throw Error(`Spec asset download failed (${response.status})`);
-            const extension = response.headers.get("content-type")?.includes("png")
-              ? ".png"
-              : ".jpg";
-            const path = `${name}${extension}`;
-            await retain(join(folder, path), Buffer.from(await response.arrayBuffer()));
+          await retain(join(folder, "source.pdf"), pdf);
+          // The Pod keeps its own copy of each render, so the attached sheet travels with the Pod.
+          const place = async (name: string) => {
+            const render = renders.get(name)!;
+            const path = `${name}${render[0] === 0x89 ? ".png" : ".jpg"}`;
+            await retain(join(folder, path), render);
             return `${assetDir}/${path}`;
           };
-          for (const page of doc.pages) {
-            if (!page.screenshotUrl) throw Error(`Parser returned no render for page ${page.page}`);
-            page.screenshotUrl = await download(page.screenshotUrl, `page-${page.page}`);
-          }
-          for (const [index, image] of doc.images.entries())
-            image.url = await download(image.url, `image-${index}`);
+          for (const page of doc.pages) page.screenshotUrl = await place(page.screenshotUrl!);
+          for (const image of doc.images) image.url = await place(image.url);
           // The canonical JSON is named after the PDF; a member sidecar binds a family to that JSON.
           const specPath = `${dir}/${assetDir}.json`;
           await retain(safePath(root, specPath), Buffer.from(JSON.stringify(doc, null, 2)));

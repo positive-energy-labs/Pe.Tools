@@ -12,7 +12,8 @@ import {
   productInstallLayout,
   productPathNames,
 } from "./contracts/product.ts";
-import { documentsUserRoot, firmHome, insideTestRoot, type Home } from "./product-paths.ts";
+import { documentsUserRoot, firmHome, insideTestRoot, projectHomeAbove, type Home } from "./product-paths.ts";
+import { storedNoticesFile, type DerivedStore } from "./store.ts";
 export {
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
@@ -108,8 +109,23 @@ export function stateTree(root: string) {
     blobs: state(productPathNames.blobsDirectoryName),
     t3: state("T3"),
     agent: state("Agent"),
-    /** Results of outward sends the person confirmed, `<service>\<sha256>-<pages>.json`: paid for, so kept across an upgrade. */
-    parses: state("Parses"),
+    /** Derived files of a source in no project home, `<key>.<sha256>` (the derived store's fallback). */
+    derived: state(productPathNames.derivedDirectoryName),
+  };
+}
+
+/**
+ * The derived store for a source file (ADR 0037 rule 6): the `Derived` folder of the project home
+ * the first of `near` sits in, so every person on that project finds the same files; with no
+ * project home, this machine's `state\Derived`. Never the user home, never a temp folder.
+ */
+export function derivedStore(root: string, ...near: string[]): DerivedStore {
+  const tree = stateTree(root);
+  const home = near.map((path) => projectHomeAbove(path)).find(Boolean);
+  return {
+    dir: home ? join(home, productPathNames.derivedDirectoryName) : tree.derived,
+    notices: storedNoticesFile(root),
+    blobRoot: tree.blobs,
   };
 }
 
