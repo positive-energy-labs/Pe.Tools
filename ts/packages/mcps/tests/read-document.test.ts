@@ -263,6 +263,7 @@ test("parser llamaparse is held at once for Pea and sends nothing; the person's 
     const calls: string[] = [];
     const heldPosts: unknown[] = [];
     let sentKey = false;
+    let polls = 0;
     // Only the network is mocked: the host's hold door, and LlamaCloud's upload and poll routes.
     vi.stubGlobal(
       "fetch",
@@ -283,6 +284,7 @@ test("parser llamaparse is held at once for Pea and sends nothing; the person's 
           sentKey = new Headers(init?.headers).get("authorization") === `Bearer ${secret}`;
           return Response.json({ id: "job-1", project_id: "p", status: "PENDING" });
         }
+        if (++polls === 1) return Response.json({ detail: "Transient poll failure" }, { status: 500 });
         return Response.json({
           job: { id: "job-1", project_id: "p", status: "COMPLETED" },
           markdown: {
@@ -324,6 +326,8 @@ test("parser llamaparse is held at once for Pea and sends nothing; the person's 
     expect(uploads().some((call) => call.startsWith("POST /api/v2/parse/upload"))).toBe(true);
     expect(calls.some((call) => call.includes("expand=markdown"))).toBe(true);
     expect(sentKey).toBe(true);
+    expect(polls).toBe(2);
+    expect(uploads()).toHaveLength(1);
     const sent = uploads().length;
 
     // Pea's next read of the same bytes and pages finds the kept result and sends nothing again.
