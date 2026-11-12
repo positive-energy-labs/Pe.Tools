@@ -1,4 +1,4 @@
-import { consentService, harnessThreads } from "./effect-test.ts";
+import { registryService, harnessThreads } from "./effect-test.ts";
 import { createHash } from "node:crypto";
 import { HostLog } from "../src/host-log.ts";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -139,7 +139,7 @@ test("Pea navigation reads real persisted harness summaries and preserves thread
     providers,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),
   };
-  const threads = await harnessThreads({ ...options, runs: consentService() });
+  const threads = await harnessThreads({ ...options, runs: registryService() });
   const before = await bytes(threadDirectory);
   try {
     const workspace = new RouteWorkspace({

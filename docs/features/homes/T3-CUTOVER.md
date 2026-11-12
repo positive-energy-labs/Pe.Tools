@@ -52,7 +52,7 @@ Paths are under `ts/` unless they start with another root.
 |---|---|---|---|
 | Harness, spawner, installer | `apps/host/src/harness/install.ts`, `user-shell.ts`, `endpoint-failure.ts`, `edge-schemas.ts`, `spawner.ts`, the ACP half of `harness/adapter.ts`, the ACP packages and their patches | Deleted; `peaMcpServer` in `adapter.ts` is kept | F1 and F7 green; the files are gone; no ACP package in the lockfile |
 | Thread engine | `apps/host/src/harness/threads.ts` engine parts, `harness/thread-store.ts`, the event schemas in `packages/agent-contracts/src/harness-thread.ts`, the fold in `packages/agent-contracts/src/chat-state.ts`, `apps/web/src/workbench/provider/*` | Deleted; the view types are fed by a T3 projection; `RunRef` is kept with T3 ids | F1, F5 and F9 green; old threads are discarded with a notice; the six Pe thread fields live in one store keyed by the T3 thread id as data, never as a folder name |
-| Delegated threads | the delegation paths in `harness/threads.ts` and `run-consent.ts` | Deleted; T3's `delegate_task` with lineage | F6 green; the transcript draws the subagent row with click-through |
+| Delegated threads | the delegation paths in `harness/threads.ts` and `run-registry.ts` | Deleted; T3's `delegate_task` with lineage | F6 green; the transcript draws the subagent row with click-through |
 | Attachments | the attachment paths in `harness/threads.ts` and `apps/web/src/chat/*` | Replaced by T3's | F8 green |
 | `pea --prompt` | `apps/pea/src/prompt.ts` | Rewritten against T3 or deleted; `pea host`, `pea script` and `pea mcp` stay | J1 runs headless on T3 with zero presses |
 
@@ -78,7 +78,7 @@ Paths are under `ts/` unless they start with another root.
 
 | Row | Pe path | Fate | Done-test |
 |---|---|---|---|
-| Run consent, as the three guards | `apps/host/src/run-consent.ts`, `apps/host/src/control.ts` | Kept; runs re-keyed to T3 run ids; narrowed per ADR 0038 | F4 and F5 green |
+| Run registry and the three guards | `apps/host/src/run-registry.ts`, `apps/host/src/control.ts` | Kept; runs re-keyed to T3 run ids; narrowed per ADR 0038 | F4 and F5 green |
 | Caller identity | `apps/host/src/control.ts`, `request-identity.ts` | Kept | F1 and F3 green |
 | APS auth | `apps/host/src/aps-auth.ts` | Kept unchanged | its tests pass untouched |
 | The pea MCP and capability search | `packages/mcps`, `apps/host/src/mcp-route.ts`, `apps/pea/src/cli.ts` | Kept; gains the T3 exchange and a per-call bind | F1 green on Codex and F7 green on Claude |
@@ -100,7 +100,7 @@ Until the flip rule fires, add no code to these. A deletion in them is free.
 - Any new Pe-side store for provider keys. The firm-key resolver is needed under both engines and survives.
 - A bet zone, where investment may be thrown away: `scheduled-tasks.ts`, devices, `share.ts`, `apps/web/src/chat/*`.
 
-Safe to invest: `packages/mcps` tools, the operation catalog, scripting, `control.ts`, `request-identity.ts`, `run-consent.ts`, `mcp-route.ts`, Work, receipts, the action journal, Pods, `aps-auth.ts`.
+Safe to invest: `packages/mcps` tools, the operation catalog, scripting, `control.ts`, `request-identity.ts`, `run-registry.ts`, `mcp-route.ts`, Work, receipts, the action journal, Pods, `aps-auth.ts`.
 
 ## What the storage slices do for this track
 

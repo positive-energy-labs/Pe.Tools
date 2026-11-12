@@ -1,4 +1,4 @@
-import { testConsents } from "./effect-test.ts";
+import { testRegistry } from "./effect-test.ts";
 import { randomUUID } from "node:crypto";
 import { bindControl, mintContext } from "../src/control.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -16,7 +16,7 @@ export const pea = (thread = "thread-1"): Caller => ({
 });
 
 /** A Pea caller inside an open run. Boundary tests keep using unscoped pea(), which has none. */
-const fixtureRuns = testConsents();
+const fixtureRuns = testRegistry();
 const fixtures = new Map<string, Caller>();
 export const approvedPea = (thread = "thread-1"): Caller => {
   bindControl({ runs: fixtureRuns });

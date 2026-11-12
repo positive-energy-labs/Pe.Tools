@@ -26,4 +26,4 @@ test("cold native command admission and its recorded outcome cross the real brid
   } finally { await native.close(); await rm(dir, { recursive: true, force: true }); }
 });
 // Lost/late native replies and fabricated validation failures are no longer emulated here.
-// Root Stop/consent has the real-admission Fans and harness surface homes listed in the sweep report.
+// Root Stop/run lifetime has the real-admission Fans and harness surface homes listed in the sweep report.

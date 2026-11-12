@@ -33,6 +33,6 @@ export type Footprint = z.infer<typeof footprintSchema>;
  * A run in the host's registry (ADR 0038): open while its turn may act, closed by its end, a Stop
  * or a host restart. Nothing waits on a person here; a guarded act returns "held" (`guards.ts`).
  */
-export type RunConsent =
+export type RegisteredRun =
   | { state: "open" }
   | { state: "closed"; reason: "completed" | "failed" | "stopped" | "restart"; at: string };

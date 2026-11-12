@@ -1,4 +1,4 @@
-import { consentService, harnessThreads, testSpawner } from "./effect-test.ts";
+import { registryService, harnessThreads, testSpawner } from "./effect-test.ts";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -19,7 +19,7 @@ afterAll(async () => {
 });
 const open = () =>
   harnessThreads({
-    runs: consentService(),
+    runs: registryService(),
     root: join(root, "threads"),
     log: new HostLog(join(root, "log"), Date.now),
     worldRoot: tmpdir(),

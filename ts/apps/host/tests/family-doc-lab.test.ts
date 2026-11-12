@@ -3,7 +3,7 @@
  * The /family doc-lab chain (routes MAP row 10, "/family acceptance") through the real action doors:
  * capture, save, attach, a cited value staged by Pea. Substituted: the native socket (it answers
  * `family.capture` with the a-box fixture, padded to a field family's size) and the PDF parser (the
- * in-process LlamaCloud parser). Work, the journal, consent, Pod files and the PDF bytes are real.
+ * in-process LlamaCloud parser). Work, the journal, the run registry, Pod files and the PDF bytes are real.
  */
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createServer } from "node:http";

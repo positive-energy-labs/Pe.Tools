@@ -178,7 +178,7 @@ import {
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
 import { bindRevoke } from "./revoke.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
-import { RunConsents } from "./run-consent.ts";
+import { RunRegistry } from "./run-registry.ts";
 import { createScheduledTasks } from "./scheduled-tasks.ts";
 import { resolveSdkSession } from "./sdk-session.ts";
 import type { DocumentRow } from "./session-inventory.ts";
@@ -1148,7 +1148,7 @@ const telemetryOf = (options: { telemetry?: ReceiptExporter }) =>
 function* hostPeRoutes(
   hostBaseUrl: string,
   bridge: RevitBridge["Service"] | undefined,
-  runs: RunConsents["Service"],
+  runs: RunRegistry["Service"],
   registrationsFactory: typeof createRouteRegistrations = createRouteRegistrations,
   update: UpdateReader["Service"] = makeInstalledUpdateReader(),
   share?: MachineShareAdapter,
@@ -1578,7 +1578,7 @@ export const peRoutesLayer = (
       const hostBaseUrl = `http://127.0.0.1:${address._tag === "UnixPathAddress" ? 0 : address.port}`;
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const update = yield* UpdateReader;
-      const runs = yield* RunConsents;
+      const runs = yield* RunRegistry;
       const captures = Option.getOrUndefined(yield* Effect.serviceOption(CaptureStore));
       const telemetry = yield* ReceiptExport;
       const { providers, threads, routes, catalog, machineSpec, notices, plugins, tasks } =
