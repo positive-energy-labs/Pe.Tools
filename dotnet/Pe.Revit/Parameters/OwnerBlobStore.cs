@@ -40,11 +40,8 @@ public static class OwnerBlobStore {
             owner, data);
 
     private static bool Write(Parameter parameter, OwnerDescriptor owner, JObject data) {
-        var stored = OwnerBlob.Decode(owner, parameter.AsString());
-        if (!stored.MayOverwrite)
-            throw new InvalidOperationException($"Refusing to overwrite: {stored.Error}.");
-        var text = OwnerBlob.Encode(owner, data);
-        if (string.Equals(stored.Raw, text, StringComparison.Ordinal))
+        // The refusal to write over a blob this build cannot read is OwnerBlob.Replace's, where a test can reach it.
+        if (OwnerBlob.Replace(owner, parameter.AsString(), data) is not { } text)
             return false;
         if (parameter.IsReadOnly)
             throw new InvalidOperationException($"'{owner.Name}' is read-only.");

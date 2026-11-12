@@ -97,7 +97,7 @@ public sealed class TakeoffNativeFixtureRecorder {
             }
             var members = new FilteredElementCollector(doc, view.Id).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
                 .Where(region => TakeoffCarriers.ReadIdentity(region).Role == TakeoffCarriers.RoleRoomRegion)
-                .Where(region => RegionProvenance.FromJson(TakeoffCarriers.ReadProvenance(region)!).ZoneGuid == zoneGuid)
+                .Where(region => TakeoffCarriers.ReadRegion(region).Value!.ZoneGuid == zoneGuid)
                 .Select(region => TakeoffCarriers.ReadIdentity(region).Guid!.Value).ToList();
             Assert.That(members, Has.Count.EqualTo(2));
             _ = Capture<RoomsMergeResult>("rooms.merge", "MergeRoomsCore",

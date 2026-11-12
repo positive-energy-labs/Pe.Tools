@@ -69,7 +69,7 @@ public sealed class OwnerBlobRoundTripTests {
                 var region = SeedRegion(document);
                 regionId = region.Id.Value();
                 TakeoffCarriers.WriteRegistry(document, registry);
-                TakeoffCarriers.WriteProvenance(region, new RegionProvenance(1, zoneGuid, "run-1", "R01", 100).ToJson());
+                TakeoffCarriers.WriteProvenance(region, new RegionProvenance(zoneGuid, "run-1", "R01", 100).ToJson());
                 EnclosureDeclaration.Write(document, Enclosure.Default);
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, pointer.ToData()), Is.True);
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, pointer.ToData()), Is.False, "an unchanged value is a no-op");
@@ -95,7 +95,7 @@ public sealed class OwnerBlobRoundTripTests {
                     Assert.That(AutoTagService.Instance.HasSettingsInDocument(doc), Is.True);
                     var region = (FilledRegion)doc.GetElement(regionId.ToElementId());
                     Assert.That(Raw(region), Does.StartWith("""{"owner":"takeoff-region","version":1,"data":{"""));
-                    Assert.That(RegionProvenance.FromJson(TakeoffCarriers.ReadProvenance(region)!).ZoneGuid, Is.EqualTo(zoneGuid));
+                    Assert.That(TakeoffCarriers.ReadRegion(region).Value!.ZoneGuid, Is.EqualTo(zoneGuid));
                 });
             }
 
@@ -154,6 +154,8 @@ public sealed class OwnerBlobRoundTripTests {
                 Assert.That(storage.Read(document), Is.EqualTo(new ProfileReadResult(null, false, null)));
                 Assert.That(TakeoffCarriers.ReadRegistry(document).Systems, Is.Empty);
                 Assert.That(TakeoffCarriers.TryReadProvenance(planted), Is.EqualTo(new OwnerValue<string>(null, null)));
+                Assert.That(TakeoffCarriers.ReadRegion(planted).Value!.RunId, Is.EqualTo(Rooms.RunDrawn), "no envelope reads as the drawn default");
+                Assert.That(TakeoffAtlas.Snapshot(document, new TakeoffReadRequest()).Unreadable, Is.Empty, "an old shape is not listed as unreadable");
                 Assert.That(EnclosureDeclaration.Read(document).Source, Does.StartWith("default:"));
                 Assert.That(AutoTagService.Instance.HasSettingsInDocument(document), Is.False);
                 Assert.That(AutoTagService.Instance.GetStatus(document).StoredSettingsRefusal, Is.Null);
@@ -167,7 +169,7 @@ public sealed class OwnerBlobRoundTripTests {
                 Assert.That(OwnerBlobStore.Write(document, DuctLossStore.Owner, new DuctLossStore { WorkRevision = 1 }.ToData()), Is.True);
                 Assert.That(storage.Write(document, new ParameterLinkProfile { Definitions = [], Assignments = [] }), Is.True);
                 TakeoffCarriers.WriteRegistry(document, registry);
-                TakeoffCarriers.WriteProvenance(planted, new RegionProvenance(1, Guid.NewGuid(), "run-1", "R01", 100).ToJson());
+                TakeoffCarriers.WriteProvenance(planted, new RegionProvenance(Guid.NewGuid(), "run-1", "R01", 100).ToJson());
                 EnclosureDeclaration.Write(document, Enclosure.Default);
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, ProjectHomePointer.Create("Projects/Chadds").Pointer!.ToData()), Is.True);
                 _ = transaction.Commit();
@@ -218,7 +220,7 @@ public sealed class OwnerBlobRoundTripTests {
                 Assert.That(DuctApplier.ReadStore(document).Error, Is.Not.Null);
                 Assert.That(storage.Read(document).Error, Is.Not.Null);
                 Assert.That(() => TakeoffCarriers.ReadRegistry(document), Throws.InvalidOperationException);
-                Assert.That(() => TakeoffCarriers.ReadProvenance(planted), Throws.InvalidOperationException);
+                Assert.That(() => TakeoffCarriers.ReadRegion(planted).OrThrow(), Throws.InvalidOperationException);
                 Assert.That(EnclosureDeclaration.Read(document).Source, Does.StartWith("default:").And.Contain("refused and kept"));
                 // The keep policy for reads (ADR 0039): the refusal is a value, so a listing goes on.
                 Assert.That(TakeoffCarriers.TryReadRegistry(document).Refusal, Does.Contain("refused and kept"));
@@ -237,7 +239,7 @@ public sealed class OwnerBlobRoundTripTests {
                             Throws.InvalidOperationException.With.Message.Contains("Refusing to overwrite"), owner.Name);
                     Assert.That(() => storage.Write(document, new ParameterLinkProfile { Definitions = [], Assignments = [] }), Throws.InvalidOperationException);
                     Assert.That(() => TakeoffCarriers.WriteRegistry(document, new SystemRegistry()), Throws.InvalidOperationException);
-                    Assert.That(() => TakeoffCarriers.WriteProvenance(planted, new RegionProvenance(1, Guid.NewGuid(), "run", "R01", 1).ToJson()),
+                    Assert.That(() => TakeoffCarriers.WriteProvenance(planted, new RegionProvenance(Guid.NewGuid(), "run", "R01", 1).ToJson()),
                         Throws.InvalidOperationException);
                     Assert.That(() => EnclosureDeclaration.Write(document, Enclosure.Default), Throws.InvalidOperationException);
                 });

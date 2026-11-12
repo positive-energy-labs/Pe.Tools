@@ -124,7 +124,7 @@ public static class RoomsMerge
 
     /// <summary>Drawn and a person's, so every rerun reads it locked; it keeps the one link and names what it replaced.</summary>
     public static RegionProvenance Provenance(MergePlan plan, IReadOnlyList<Guid> merged, double sqft, string geometryHash) =>
-        new(1, plan.Zone, Rooms.RunDrawn, "", sqft)
+        new(plan.Zone, Rooms.RunDrawn, "", sqft)
         {
             GeometryHash = geometryHash, Flags = [Rooms.FlagPerson, Rooms.FlagMerged], MergedFrom = [.. merged], Rhvac = plan.Rhvac,
         };
@@ -309,7 +309,7 @@ public static class Rooms
                 if (designated == TakeoffCarriers.RoleZoningRegion)
                     zones.Add((fr, drawn.Guid, loops, drawn.Guid.ToString("N").Substring(0, 8), false));
                 else
-                    rooms.Add((fr, false, drawn, new RegionProvenance(1, scope, RunDrawn, "", drawn.Sqft)));
+                    rooms.Add((fr, false, drawn, new RegionProvenance(scope, RunDrawn, "", drawn.Sqft)));
                 continue;
             }
             if (guid == null) continue;
@@ -384,7 +384,7 @@ public static class Rooms
         foreach (var (fr, role, drawn) in adopt)
         {
             TakeoffCarriers.WriteIdentity(fr, role, drawn.Guid);
-            TakeoffCarriers.WriteProvenance(fr, new RegionProvenance(1, scope, RunDrawn, "", drawn.Sqft)
+            TakeoffCarriers.WriteProvenance(fr, new RegionProvenance(scope, RunDrawn, "", drawn.Sqft)
                 { GeometryHash = GeometryHash(drawn.Loops) }.ToJson());
         }
 
@@ -449,7 +449,7 @@ public static class Rooms
                     TakeoffCarriers.WriteRoomType(fr, "hall");
                     if (ProposedName(room, "") is { } name)
                         TakeoffCarriers.WriteRoomFields(fr, new RoomFields(Name: name));
-                    created.Add((fr, new RegionProvenance(1, zoneGuid, runId, room.Id, room.RawSqft)
+                    created.Add((fr, new RegionProvenance(zoneGuid, runId, room.Id, room.RawSqft)
                         { Flags = room.Flags.ToList(), Partition = room.Partition }, true));
                     createdRooms++;
                 }
@@ -469,7 +469,7 @@ public static class Rooms
                 {
                     if (Create(doc, frType, view, elevation, residue.Polygon, residue.Holes) is not { } fr) continue;
                     TakeoffCarriers.WriteIdentity(fr, TakeoffCarriers.RoleHeldResidue, Guid.NewGuid());
-                    created.Add((fr, new RegionProvenance(1, zoneGuid, runId, residue.Id, residue.RawSqft)
+                    created.Add((fr, new RegionProvenance(zoneGuid, runId, residue.Id, residue.RawSqft)
                         { Partition = residue.Partition }, false));
                     createdHeld++;
                 }
@@ -556,7 +556,7 @@ public static class Rooms
         doc.Regenerate();
         var loops = TakeoffAtlas.Boundaries(fr);
         // WallHash stays null: no Space build here; the next partition records it.
-        TakeoffCarriers.WriteProvenance(fr, new RegionProvenance(1, ScopeGuid(view.GenLevel), RunDrawn, "", Sqft(fr, loops))
+        TakeoffCarriers.WriteProvenance(fr, new RegionProvenance(ScopeGuid(view.GenLevel), RunDrawn, "", Sqft(fr, loops))
             { GeometryHash = GeometryHash(loops), Flags = [FlagPerson] }.ToJson());
         return new RoomsDrawResult(fr.Id.Value(), guid);
     }
@@ -734,18 +734,7 @@ public static class Rooms
     private static Pe.Shared.RevitData.Serialization.OwnerValue<RegionProvenance> TryReadProvenance(FilledRegion fr, string? role)
     {
         var blob = TakeoffCarriers.ReadProvenanceBlob(fr);
-        if (role != TakeoffCarriers.RoleZoningRegion) return RegionProvenance.Read(blob);
-        // A zone takeoffs adopted carries TakeoffZoneProvenance (V, View, Name, SystemTag): read it with defaults
-        // (Version 0, no RunId), call it drawn, and let its keys ride in Unknown. The next write stores it as v1.
-        // A zone with no blob at all reads as drawn too.
-        var read = Pe.Shared.RevitData.Serialization.OwnerBlob.Parse(blob, data =>
-            Newtonsoft.Json.JsonConvert.DeserializeObject<RegionProvenance>(data.ToString(Newtonsoft.Json.Formatting.None)));
-        if (read.Refusal != null) return read;
-        return new((read.Value ?? new RegionProvenance(1, Guid.Empty, RunDrawn, "", 0)) with
-        {
-            Version = 1,
-            RunId = string.IsNullOrEmpty(read.Value?.RunId) ? RunDrawn : read.Value!.RunId,
-        }, null);
+        return role == TakeoffCarriers.RoleZoningRegion ? RegionProvenance.ReadZone(blob) : RegionProvenance.Read(blob);
     }
 
     private static ViewPlan LevelView(Document doc, string name)

@@ -14,7 +14,6 @@ internal sealed record ScriptExecutionPlan(
     string RevitVersion,
     string TargetFramework,
     string RuntimeAssemblyPath,
-    string WorkspaceKey,
     string WorkspaceRoot,
     ScriptPermissionMode PermissionMode,
     ScriptSourceSet SourceSet,

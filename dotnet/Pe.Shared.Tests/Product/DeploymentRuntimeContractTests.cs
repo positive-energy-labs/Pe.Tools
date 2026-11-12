@@ -18,22 +18,19 @@ public sealed class DeploymentRuntimeContractTests {
         try {
             var content = ProductUserContentLayout.ForCurrentUser(Path.Combine(documents, "Pe.Tools"));
             Assert.That(
-                content.PreferencesPath,
-                Is.EqualTo(Path.Combine(documents, "Pe.Tools", "preferences.json"))
-            );
-            Assert.That(
                 content.Scripting.RootPath,
                 Is.EqualTo(Path.Combine(documents, "Pe.Tools", "Pods"))
             );
-            Assert.That(
-                content.InlineScripts.RootPath,
-                Is.EqualTo(Path.Combine(documents, "Pe.Tools", "Pods", "default", "output", "inline"))
-            );
-            Assert.That(
-                content.Output.RootPath,
-                Is.EqualTo(Path.Combine(documents, "Pe.Tools", "Pods", "default", "output"))
-            );
             var runtime = ProductRuntimeLayout.For(ProductLane.Installed, Path.Combine(localAppData, "Positive Energy", "Pe.Tools"), null);
+            // Run output and the agent guide are machine state under state\, never under Documents.
+            Assert.That(
+                runtime.State.PodlessRunsPath,
+                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "state", "Runs", "_no-pod"))
+            );
+            Assert.That(
+                runtime.State.AgentInstructionsPath,
+                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "state", "Agent", "AGENTS.md"))
+            );
             Assert.That(
                 runtime.State.RootPath,
                 Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "state"))
@@ -61,7 +58,8 @@ public sealed class DeploymentRuntimeContractTests {
     }
 
     // F6 (acceptance round 3): Revit-side script output landed in the owner's OneDrive Pods because
-    // this side ignored the override the host honoured. One variable names the whole home.
+    // this side ignored the override the host honoured. One variable names the whole home. Since ADR 0037
+    // the home holds authored content only, so output and inline traces are checked out of it instead.
     [Test, NonParallelizable]
     public void Product_home_override_roots_every_user_content_path() {
         var home = Path.Combine(Path.GetTempPath(), $"pe-home-{Guid.NewGuid():N}", "Pe.Tools");
@@ -71,20 +69,22 @@ public sealed class DeploymentRuntimeContractTests {
             var content = ProductUserContentLayout.ForCurrentUser();
             var paths = new[] {
                 content.RootPath,
-                content.PreferencesPath,
-                content.AgentInstructionsPath,
-                content.ReadmePath,
                 content.Scripting.RootPath,
-                content.InlineScripts.RootPath,
-                content.Output.RootPath,
-                ScriptingWorkspaceLocations.GetDefaultBasePath(),
-                ScriptingWorkspaceLocations.ResolveWorkspaceRoot("accept-r3-snowdon"),
-                new ModuleStorage("census").Output().DirectoryPath
+                ScriptingWorkspaceLocations.ResolveWorkspaceRoot("accept-r3-snowdon")
             };
             Assert.That(content.RootPath, Is.EqualTo(home));
             Assert.That(content.Scripting.RootPath, Is.EqualTo(Path.Combine(home, "Pods")));
             foreach (var path in paths) {
                 Assert.That(path.StartsWith(home, StringComparison.OrdinalIgnoreCase), Is.True, path);
+            }
+            // Mutant, run red once: point ModuleStorage.Output back at the user home fails both lines.
+            var state = ProductRuntimeLayout.Current.State.RootPath;
+            foreach (var path in new[] {
+                         new ModuleStorage("census").Output().DirectoryPath,
+                         Pe.Revit.Scripting.Storage.RevitScriptingStorageLocations.ResolveInlineTraceDirectory()
+                     }) {
+                Assert.That(path.StartsWith(state, StringComparison.OrdinalIgnoreCase), Is.True, path);
+                Assert.That(path.StartsWith(home, StringComparison.OrdinalIgnoreCase), Is.False, path);
             }
         } finally {
             Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previous);
@@ -92,10 +92,10 @@ public sealed class DeploymentRuntimeContractTests {
         }
     }
 
-    // ADR 0035 rule 11 (amended): no shared root starts normally on the Documents user root; a shared
-    // root reads after it, takes no writes, and never moves machine state.
+    // ADR 0037: the dev override names the firm home and never moves machine state; the user home stays under
+    // Documents unless an isolated home replaces it.
     [Test, NonParallelizable]
-    public void Shared_root_is_a_second_home_after_the_user_root() {
+    public void The_firm_override_never_moves_machine_state_or_the_user_home() {
         const string sharedVariable = "PE_TOOLS_SHARED_ROOT";
         var shared = Path.Combine(Path.GetTempPath(), $"pe-shared-{Guid.NewGuid():N}");
         var isolated = Path.Combine(Path.GetTempPath(), $"pe-isolated-{Guid.NewGuid():N}");
@@ -103,20 +103,18 @@ public sealed class DeploymentRuntimeContractTests {
         var previousShared = Environment.GetEnvironmentVariable(sharedVariable);
         var documents = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Pe.Tools");
         Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, null);
-        Environment.SetEnvironmentVariable(sharedVariable, null);
+        Environment.SetEnvironmentVariable(sharedVariable, shared);
         try {
             Assert.That(ProductPathNames.SharedRootVariable, Is.EqualTo(sharedVariable));
-            Assert.That(ProductUserContentLayout.ForCurrentUser().RootPath, Is.EqualTo(documents));
-            Assert.That(ProductPathing.ContentHomes(), Is.EqualTo(new[] { documents }));
-            Assert.That(ProductPathing.SharedFirmDir(), Is.Null);
-            Assert.That(ProductPathing.SharedKeysPath(), Is.Null);
-            Environment.SetEnvironmentVariable(sharedVariable, shared);
             var content = ProductUserContentLayout.ForCurrentUser();
             Assert.That(content.RootPath, Is.EqualTo(documents));
             Assert.That(content.Scripting.RootPath, Is.EqualTo(Path.Combine(documents, "Pods")));
-            Assert.That(ProductPathing.ContentHomes(), Is.EqualTo(new[] { documents, shared }));
-            Assert.That(ProductPathing.SharedFirmDir(), Is.EqualTo(Path.Combine(shared, "Firm")));
-            Assert.That(ProductPathing.SharedKeysPath(), Is.EqualTo(Path.Combine(shared, "keys.json")));
+            // The override is read from the environment and still needs its marker: none, so no firm home.
+            Assert.That(ProductPathing.Homes().List, Is.EqualTo(new[] { documents }));
+            Directory.CreateDirectory(shared);
+            File.WriteAllText(Path.Combine(shared, ProductPathNames.HomeMarkerFileName), "{\"tier\":\"firm\"}");
+            Assert.That(ProductPathing.Homes().List, Is.EqualTo(new[] { documents, shared }));
+            Assert.That(ProductPathing.Homes().FirmSettingsDir, Is.EqualTo(Path.Combine(shared, "Settings")));
             Assert.That(ProductRuntimeLayout.For(ProductLane.Dev, @"C:\src\Pe.Tools", null).RootPath, Is.EqualTo(@"C:\src\Pe.Tools\.artifacts\pe-tools"));
             Assert.That(() => ProductRuntimeLayout.For(ProductLane.Dev, Path.Combine(documents, "checkout"), null),
                 Throws.ArgumentException.With.Message.Contains("the user content root"));
@@ -126,6 +124,7 @@ public sealed class DeploymentRuntimeContractTests {
         } finally {
             Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previousHome);
             Environment.SetEnvironmentVariable(sharedVariable, previousShared);
+            if (Directory.Exists(shared)) Directory.Delete(shared, true);
         }
     }
 

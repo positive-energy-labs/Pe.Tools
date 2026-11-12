@@ -32,7 +32,7 @@ public sealed class TakeoffNativeRefreshProofTests
                 zoneGuid = Guid.NewGuid();
                 TakeoffCarriers.WriteIdentity(zone, TakeoffCarriers.RoleZoningRegion, zoneGuid);
                 TakeoffCarriers.WriteProvenance(zone,
-                    TakeoffJson.Serialize(new TakeoffZoneProvenance(1, view.Name, "Zone", "")));
+                    TakeoffJson.Serialize(new TakeoffZoneProvenance(view.Name, "Zone", "")));
                 ZoneMaterializer.Materialize(doc, view, 0, zoneGuid, "original",
                     [new RoomResult { Id = "R01", RawSqft = 100, LabelX = 10, LabelY = 10,
                         Polygon = Square(5, 5, 10) }], [], _ => { });

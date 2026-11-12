@@ -227,11 +227,75 @@ public sealed class OwnerBlobTests {
         });
     }
 
-    [Test]
-    public void A_region_with_no_blob_is_a_refusal_and_an_absent_registry_is_empty() {
-        Assert.That(RegionProvenance.Read(OwnerBlob.Decode(RegionProvenance.Owner, null)).Refusal, Does.Contain("no provenance blob"));
-        Assert.That(SystemRegistry.Read(OwnerBlob.Decode(SystemRegistry.Owner, null)), Is.EqualTo(new OwnerValue<SystemRegistry>(null, null)));
+    [TestCase(null)]
+    [TestCase("""{"version":1,"zoneGuid":"6d52156a-3876-4d76-b641-341454252f26","runId":"run-1"}""", Description = "an old un-enveloped region blob")]
+    [TestCase("""{"v":1,"view":"L1","name":"Zone","systemTag":"FC-8"}""", Description = "an old un-enveloped zone blob: no envelope, so its v is never read")]
+    public void A_region_with_no_envelope_reads_as_the_drawn_default_not_a_refusal(string? stored) {
+        var read = RegionProvenance.Read(OwnerBlob.Decode(RegionProvenance.Owner, stored));
+
+        Assert.Multiple(() => {
+            Assert.That(read.Refusal, Is.Null);
+            Assert.That(read.Value!.RunId, Is.EqualTo(Rooms.RunDrawn));
+            Assert.That(read.Value.ZoneGuid, Is.EqualTo(Guid.Empty));
+            Assert.That(() => read.OrThrow(), Throws.Nothing, "a write run goes on too");
+        });
     }
+
+    [Test]
+    public void A_region_blob_holds_no_version_of_its_own() {
+        var provenance = new RegionProvenance(Guid.NewGuid(), "run-1", "R01", 100);
+        var stored = OwnerBlob.Encode(RegionProvenance.Owner, JObject.Parse(provenance.ToJson()));
+
+        Assert.That(stored, Does.StartWith("""{"owner":"takeoff-region","version":1,"data":{"zoneGuid":"""));
+        Assert.That(JObject.Parse(provenance.ToJson()).Properties().Select(property => property.Name), Has.None.EqualTo("version").IgnoreCase);
+        Assert.That(RegionProvenance.Read(OwnerBlob.Decode(RegionProvenance.Owner, stored)).Value!.ZoneGuid, Is.EqualTo(provenance.ZoneGuid));
+        var withVersion = """{"owner":"takeoff-region","version":1,"data":{"version":1,"zoneGuid":"6d52156a-3876-4d76-b641-341454252f26"}}""";
+        Assert.That(RegionProvenance.Read(OwnerBlob.Decode(RegionProvenance.Owner, withVersion)).Refusal, Does.Contain("belongs to the envelope"));
+    }
+
+    [TestCase("""{"version":1,"view":"L1","name":"Zone","systemTag":"FC-8"}""")]
+    [TestCase("""{"v":1,"view":"L1","name":"Zone","systemTag":"FC-8"}""")]
+    [TestCase("""{"Version":1,"zoneGuid":"6d52156a-3876-4d76-b641-341454252f26","runId":"run-1"}""")]
+    public void A_blob_with_a_version_inside_its_data_is_refused_as_a_region_and_as_a_zone(string data) {
+        var blob = OwnerBlob.Decode(RegionProvenance.Owner, $$$"""{"owner":"takeoff-region","version":1,"data":{{{data}}}}""");
+
+        Assert.That(blob.Status, Is.EqualTo(OwnerBlobStatus.Ok));
+        Assert.That(RegionProvenance.Read(blob).Refusal, Does.Contain("belongs to the envelope"));
+        Assert.That(RegionProvenance.ReadZone(blob).Refusal, Does.Contain("belongs to the envelope"));
+        Assert.That(RegionProvenance.ReadZone(blob).Value, Is.Null);
+    }
+
+    [Test]
+    public void An_adopted_zone_reads_as_drawn_and_keeps_its_keys() {
+        var blob = OwnerBlob.Decode(RegionProvenance.Owner,
+            """{"owner":"takeoff-region","version":1,"data":{"view":"L1","name":"Zone","systemTag":"FC-8"}}""");
+        var zone = RegionProvenance.ReadZone(blob).Value!;
+
+        Assert.That(zone.RunId, Is.EqualTo(Rooms.RunDrawn));
+        Assert.That(zone.Unknown.Keys, Is.EquivalentTo(new[] { "view", "name", "systemTag" }));
+        Assert.That(RegionProvenance.ReadZone(OwnerBlob.Decode(RegionProvenance.Owner, null)).Value!.RunId, Is.EqualTo(Rooms.RunDrawn));
+    }
+
+    // ---- the one write decision (ADR 0026 D4)
+
+    [TestCase("""{"owner":"test-owner","version":4,"data":{"fromTheFuture":true}}""", Description = "a future version")]
+    [TestCase("""{"owner":"test-owner","version":3,"data":[]}""", Description = "a broken envelope")]
+    [TestCase("""{"owner":"someone-else","version":3,"data":{}}""", Description = "another owner's envelope")]
+    [TestCase("not json", Description = "not provably old")]
+    public void A_write_never_replaces_a_blob_this_build_cannot_read(string stored) =>
+        Assert.That(() => OwnerBlob.Replace(Owner, stored, new JObject { ["a"] = 1 }),
+            Throws.InvalidOperationException.With.Message.Contains("Refusing to overwrite").And.Message.Contains("refused and kept"));
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("""{"version":3,"workRevision":1}""", Description = "an old un-enveloped shape")]
+    [TestCase("""{"owner":"test-owner","version":3,"data":{"a":0}}""", Description = "this owner's own envelope")]
+    public void A_write_replaces_nothing_an_old_shape_or_its_own_envelope(string? stored) =>
+        Assert.That(OwnerBlob.Replace(Owner, stored, new JObject { ["a"] = 1 }), Is.EqualTo("""{"owner":"test-owner","version":3,"data":{"a":1}}"""));
+
+    [Test]
+    public void A_write_of_the_stored_value_is_a_no_op() =>
+        Assert.That(OwnerBlob.Replace(Owner, """{"owner":"test-owner","version":3,"data":{"a":1}}""", new JObject { ["a"] = 1 }), Is.Null);
 
     // ---- owner shapes
 
@@ -257,7 +321,7 @@ public sealed class OwnerBlobTests {
         var registry = new SystemRegistry();
         var entry = registry.Register("FC-8");
 
-        Assert.That(registry.Serialize(), Is.EqualTo(
+        Assert.That(OwnerBlob.Encode(SystemRegistry.Owner, registry.ToData()), Is.EqualTo(
             $$$"""{"owner":"takeoff-systems","version":1,"data":{"systems":[{"guid":"{{{entry.Guid:D}}}","tag":"FC-8"}]}}"""));
     }
 

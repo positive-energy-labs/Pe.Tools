@@ -64,7 +64,7 @@ public class CmdFFManager : IExternalCommand {
             $"Applied {ctx.Doc.Title}: {plan.Changes.Count} changes, {receipt.Errors.Count} errors, residue {receipt.Residue.Count}. {receipt.Error}\nReceipt: {result.ReceiptPath}").Show();
     }
 
-    /// <summary>Builds into the source pod's `output/&lt;runId&gt;/` beside that run's receipt, from the member's own folder for nested models.</summary>
+    /// <summary>Builds into the source pod's run folder in machine state (`state\Runs\&lt;pod-id&gt;\&lt;runId&gt;\`) beside that run's receipt, from the member's own folder for nested models.</summary>
     private static void Build(FoundryContext ctx) {
         var (pod, member) = (ctx.SelectedProfile!.Pod, ctx.SelectedProfile.Member);
         var (_, composed, source) = member.Load<Pe.Shared.RevitData.Families.FamilyModel>(pod);

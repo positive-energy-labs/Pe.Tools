@@ -63,8 +63,9 @@ internal static class FamilyFoundryBridgeOps {
     private const string CancelledCode = "Cancelled";
 
     /// <summary>
-    ///     The one build edge: bridge op and palette both land here, and both leave a run in the source pod.
-    ///     The run folder is the output folder — a build never writes outside the pod it came from, so there
+    ///     The one build edge: bridge op and palette both land here, and both leave a run in machine state,
+    ///     keyed on the source pod's id (ADR 0037 rule 6: a pod may be shared, so a run writes nothing into it).
+    ///     The run folder is the output folder — a build never writes outside its own fresh run, so there
     ///     is nothing to overwrite and no path to validate.
     /// </summary>
     internal static FamilyBuildData BuildWithReceipt(Autodesk.Revit.ApplicationServices.Application application, FamilyBuildRequest request) {

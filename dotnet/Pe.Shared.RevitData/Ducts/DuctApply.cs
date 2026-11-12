@@ -181,19 +181,10 @@ public sealed record DuctLossStore {
         return next;
     }
 
-    /// <summary>Fail-closed: any text that is not this owner's envelope at <see cref="CurrentVersion" /> throws.</summary>
-    public static DuctLossStore FromJson(string json) {
-        var read = OwnerBlob.Decode(Owner, json);
-        return read.Status == OwnerBlobStatus.Ok
-            ? FromData(read.Data!)
-            : throw new InvalidOperationException(read.Error ?? "duct loss store is empty");
-    }
-
     /// <summary>The model's store, or the reason it is "can't read, kept".</summary>
     public static OwnerValue<DuctLossStore> Read(OwnerBlobRead read) => read.Parse(FromData);
 
-    /// <summary>Fail-closed: data this build cannot read as a store throws.</summary>
-    public static DuctLossStore FromData(JObject data) {
+    private static DuctLossStore FromData(JObject data) {
         if (data.ContainsKey("version"))
             throw new InvalidOperationException("duct loss store data holds a version; the version belongs to the envelope");
         try {

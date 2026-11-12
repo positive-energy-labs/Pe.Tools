@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Scripting;
-using Pe.Shared.StorageRuntime;
+using Pe.Shared.Product;
 using System.Text;
 
 namespace Pe.Revit.Scripting.Pods;
@@ -11,7 +11,10 @@ namespace Pe.Revit.Scripting.Pods;
 /// <summary>One file a run consumed: its role, owning pod when it has one, logical address, run-relative path, and exact bytes.</summary>
 public sealed record PodRunInputFile(string Role, string? Pod, string Address, string File, byte[] Bytes);
 
-/// <summary>One run per apply: `output/&lt;runId&gt;/receipt.json` plus its output files, in its pod or operation output.</summary>
+/// <summary>
+///     One run per apply: `receipt.json` plus its output files in `&lt;state root&gt;\state\Runs\&lt;pod-id&gt;\&lt;run-id&gt;\`.
+///     Run output is machine state (ADR 0037 rule 6): a pod may sit in a shared home, so a run writes no byte into it.
+/// </summary>
 public static class PodRuns {
     private static readonly JsonSerializerSettings Json = new() {
         Formatting = Formatting.Indented,
@@ -20,22 +23,27 @@ public static class PodRuns {
 
     private static readonly JsonSerializer Serializer = JsonSerializer.Create(Json);
 
-    /// <summary>A new empty run folder in the pod, for a caller that must write its output before the receipt exists.</summary>
-    public static string NewRunFolder(string podFolder) {
-        var runFolder = Path.Combine(podFolder, "output", RunId());
+    /// <summary>
+    ///     A new empty run folder for the pod with this manifest id, or for no pod when it is null, for a caller
+    ///     that must write its output before the receipt exists. Keyed on the id, never on where the pod sits.
+    /// </summary>
+    public static string NewRunFolder(string? podId) {
+        var runFolder = ProductRuntimeLayout.Current.State.RunPath(podId, RunId());
         _ = Directory.CreateDirectory(runFolder);
         return runFolder;
     }
 
     /// <summary>
-    ///     The native run edge: validates the captured composition, stores the run in the root's pod, and writes the
-    ///     run input before any effect. A failure here throws before the caller acts.
+    ///     The native run edge: validates the captured composition, stores the run under the root's pod id, and
+    ///     writes the run input before any effect. A failure here throws before the caller acts.
     /// </summary>
     public static (string Run, List<string> Inputs) StartComposedRun(PodComposedSource source, object metadata, string effectiveInput, string? planActionId = null) {
         var files = ComposedInput(source, effectiveInput);
-        var run = source.Root.Id is { } pod
-            ? NewRunFolder(new ScriptPodPreparationService().ResolveFolder(pod))
-            : new ModuleStorage("operations").Output().SubDir(RunId()).DirectoryPath;
+        // The run folder no longer needs the pod's folder, but a root pod the host cannot resolve still refuses here.
+        if (source.Root.Id is { } pod) _ = new ScriptPodPreparationService().ResolveFolder(pod);
+        string run;
+        try { run = NewRunFolder(source.Root.Id); }
+        catch (ArgumentException exception) { throw new InvalidDataException(exception.Message, exception); }
         var input = WithReviewBasis(metadata, planActionId);
         input["source"] = JObject.FromObject(new {
             kind = "pod-composition", origin = source.Root.Origin.ToString(), pod = source.Root.Id, path = source.Root.Path, sha256 = source.Root.Sha256
@@ -126,8 +134,8 @@ public static class PodRuns {
     }
 
     /// <summary>Writes the outputs and the receipt; returns the receipt's full path. Output names are appended to `receipt.Outputs`.</summary>
-    public static string WriteReceipt(string podFolder, PodReceipt receipt, IEnumerable<(string name, byte[] bytes)> outputs) =>
-        WriteReceiptIn(NewRunFolder(podFolder), receipt, outputs);
+    public static string WriteReceipt(string? podId, PodReceipt receipt, IEnumerable<(string name, byte[] bytes)> outputs) =>
+        WriteReceiptIn(NewRunFolder(podId), receipt, outputs);
 
     /// <summary>The same, into a run folder <see cref="NewRunFolder" /> already handed out.</summary>
     public static string WriteReceiptIn(string runFolder, PodReceipt receipt, IEnumerable<(string name, byte[] bytes)> outputs) {

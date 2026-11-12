@@ -92,6 +92,19 @@ public static class OwnerBlob {
     }
 
     /// <summary>
+    ///     The one decision every write makes (ADR 0026 D4): the text to store in place of <paramref name="storedRaw" />,
+    ///     or null when the stored text is already that. Throws when the stored text is a refusal, so a blob this
+    ///     build cannot read is never written over. An absent blob, and an old un-enveloped one, are replaced.
+    /// </summary>
+    public static string? Replace(OwnerDescriptor owner, string? storedRaw, JObject data) {
+        var stored = Decode(owner, storedRaw);
+        if (!stored.MayOverwrite)
+            throw new InvalidOperationException($"Refusing to overwrite: {stored.Error}.");
+        var text = Encode(owner, data);
+        return string.Equals(storedRaw, text, StringComparison.Ordinal) ? null : text;
+    }
+
+    /// <summary>
     ///     The keep policy for a read (ADR 0039): an owner's value, or the reason it cannot be read. A refused envelope
     ///     and data the owner cannot parse both come back as a refusal value, never an exception, so one bad blob
     ///     cannot stop a listing, a read or the host. The stored bytes are untouched either way.
