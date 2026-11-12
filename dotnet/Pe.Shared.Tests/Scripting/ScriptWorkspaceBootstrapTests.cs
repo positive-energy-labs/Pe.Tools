@@ -34,9 +34,8 @@ public sealed class ScriptWorkspaceBootstrapTests {
     }
 
     // Two machines differ in everything a machine can differ in: state root, props path, target framework and
-    // the assembly paths. Mutant, run red once: write the machine references into the seeded project
-    // (`Seed(projectFilePath, GenerateMachineProps(...))`) fails the byte-identical assert; overwrite instead of
-    // create-exclusive (`FileMode.CreateNew` to `FileMode.Create`) fails the hand-edit assert.
+    // the assembly paths. Mutant, run red once: overwrite instead of create-exclusive (`FileMode.CreateNew` to
+    // `FileMode.Create`) fails the byte-identical assert, because machine B then rewrites a person's edits.
     [Test]
     public void Two_machines_bootstrap_one_shared_pod_and_write_only_create_exclusive_seeds_into_it() {
         var first = this.Machine("A", "net8.0-windows");
@@ -67,8 +66,9 @@ public sealed class ScriptWorkspaceBootstrapTests {
         });
     }
 
-    // Mutant, run red once: bake the machine path into the import (`MachinePropsImport` to `MachinePropsPath`)
-    // fails the exact-import assert and the no-absolute-path assert.
+    // Mutants, each run red once: bake the machine path into the import (`MachinePropsImport` to
+    // `MachinePropsPath`) fails the exact-import assert and the no-absolute-path assert; write the machine
+    // references into the seeded project (`Seed(projectFilePath, GenerateMachineProps(...))`) fails every assert here.
     [Test]
     public void The_authored_project_holds_one_machine_independent_import_and_no_machine_path() {
         var machine = this.Machine("A", "net8.0-windows");

@@ -18,7 +18,7 @@ It is not the installed-layout authority. `product.payloads.json` is the single 
 - `ProductIdentity` — vendor, product, and user-visible names.
 - `ProductPathNames` — product-owned state and user-content names.
 - `ProductLane` / `ProductRuntimeLayout` — the process's one runtime record (lane, owner root, state root) and its state/log/cache/scratch trees, including APS tokens. No binary paths.
-- `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — the user home's preferences and the names inside a pod. `ProductPathing.MachinePropsPath` is the per-machine half of a pod's script project (`%LocalAppData%\Positive Energy\PeScripts.props`), outside every home and outside the installed root.
+- `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — the user home's root and the names inside a pod. `ProductPathing.MachinePropsPath` is the per-machine half of a pod's script project (`%LocalAppData%\Positive Energy\PeScripts.props`), outside every home and outside the installed root.
 - `ProductPathing` — the content homes (ADR 0037): `Homes(pointer)` returns `ProductHomes` (`User`, `Project?`, `Firm?`, `SharedDriveRoot?`, `FirmConflict`), read order `[user, project, firm]`. A folder is a home only when its `pe-home.json` reads exactly `{"tier":"<tier>"}` (`MarkerTier`). The user home is `UserRoot()` (isolated `PE_TOOLS_PRODUCT_HOME`, else the Documents known folder's `Pe.Tools`). The firm home is probed on every drive (`<L>:\Shared drives\<child>\04 PE Software Files\Pe.Tools`, then `<L>:\04 PE Software Files\Pe.Tools`); two firm markers are a conflict and none is accepted. `PE_TOOLS_SHARED_ROOT` is a dev override that names the firm home itself and still needs the marker. The project home is `<shared drive root>\<pointer>\Pe.Tools`, where the shared drive root is the firm home's grandparent. Firm settings are `<firm>\Settings\<owner>.json` and `<firm>\keys.json`. The pure overload takes every fact as an argument, and TS asserts the same `ts/packages/host-contracts/tests/runtime-ownership.fixture.json` (`markers`, `homes`, `stateTree`). Also safe subdirectory resolution and the pure `StateRoot(lane, ownerRoot, home, shared, user)`: `<home>\.local-state` under the override (an isolated run shares no state with the owner's host), else the dev checkout's `.artifacts\pe-tools`, else the SDK install root verbatim; it refuses a root at or under the firm override or the Documents user root. TS `stateRoot` and PowerShell `Resolve-ProductRuntimeRoot` assert the fixture's `stateRoots`; PowerShell resolves no home.
 
 ## Hard Dependency Rule
@@ -50,9 +50,8 @@ Transport lives in `Pe.Shared.HostContracts`: `HostEndpoint`, `TsHostCallClient`
   pe-home.json
   Pods\<local-folder>\{pod.json,settings\,src\,assets\,AGENTS.md,README.md,PeScripts.csproj}
   Pages\  Catalogs\
-  Settings\<owner>.json
+  Settings\<owner>.json                       (the firm's Settings\preferences.json holds the firm ids)
   keys.json                                   (firm home only)
-  preferences.json                            (user home only)
 ```
 
 The installer also lays binaries under the product root; their names and shape come from `product.payloads.json`, not this package.

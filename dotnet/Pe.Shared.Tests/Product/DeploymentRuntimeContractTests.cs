@@ -18,10 +18,6 @@ public sealed class DeploymentRuntimeContractTests {
         try {
             var content = ProductUserContentLayout.ForCurrentUser(Path.Combine(documents, "Pe.Tools"));
             Assert.That(
-                content.PreferencesPath,
-                Is.EqualTo(Path.Combine(documents, "Pe.Tools", "preferences.json"))
-            );
-            Assert.That(
                 content.Scripting.RootPath,
                 Is.EqualTo(Path.Combine(documents, "Pe.Tools", "Pods"))
             );
@@ -73,7 +69,6 @@ public sealed class DeploymentRuntimeContractTests {
             var content = ProductUserContentLayout.ForCurrentUser();
             var paths = new[] {
                 content.RootPath,
-                content.PreferencesPath,
                 content.Scripting.RootPath,
                 ScriptingWorkspaceLocations.ResolveWorkspaceRoot("accept-r3-snowdon")
             };
