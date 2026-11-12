@@ -6,6 +6,7 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   harnessEventSchema,
+  actionReceiptSchema,
   held,
   noticeFeedSchema,
   type ActionReceipt,
@@ -146,20 +147,22 @@ test("a held act is one row that waits on the person, in held words; only a held
   const refusal = held("overwrite-or-discard", "project document 'Office'", "The person presses Save in Revit.");
   const door = (id: string, startedAt: string) => ({
     revision: 4,
-    action: {
+    action: actionReceiptSchema.parse({
+      basis: null, target: { kind: "host" }, input: {}, steps: [],
+      prepared: { state: "unprepared" }, recovery: [],
       id,
       key: "instances.save",
       state: "failed",
       error: refusal.message,
       status: 409,
       notDispatched: true,
-      caller: { kind: "pea" },
+      caller: { kind: "pea", context: "notice", thread: "t1" },
       startedAt,
       refusal,
-    } as unknown as ActionReceipt,
+    }),
   });
   const outward = door("out", at);
-  const sent = { ...outward, action: { ...outward.action, key: "family.attach-spec", refusal: held("send-outward", "'C:/p/spec.pdf'", "It waits.") } as unknown as ActionReceipt };
+  const sent = { ...outward, action: { ...outward.action, key: "family.attach-spec", refusal: held("send-outward", "'C:/p/spec.pdf'", "It waits.") } };
   const rows = noticeRows(
     {
       ...none,
