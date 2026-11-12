@@ -17,12 +17,12 @@ A *root* frames the set, a *loop* is a workflow, a *pass* is a one-time ask, a *
 | Kind | Stance | Figure/It is | Prevents | Rounds | User-only | Stop |
 |---|---|---|---|---|---|---|
 | root | `index` | Wayfinder, who names the next island and paddles nothing | the skipped hop: work begun without a route named | - | no | - |
-| root | `reflect` | Theseus' ship and the Ulysses contract — the set refits itself, and binds its own cold reader | set drift: a skill edited by feel, never run cold | - | **yes** | - |
+| root | `reflect` | Theseus' ship and the Ulysses contract — the set refits itself, and binds its own cold reader | set drift: a skill edited by feel, never run cold | - | no | - |
 | lens | `delegate` | Falconer — the bird hunts; the falconer keeps the judgment and counts every bird home | context rot: one session carrying everything, the main agent building | no | no |  |
 | lens | `house` | Cartographer, a chart someone steers by where they cannot see the bottom | templated surfaces: a screen that fits no house | no | no |  |
 | lens | `prove` | Assayer, who stamps only the bar the fire has tested | plausible, not real: done on a mock, a count, a screenshot, or another agent's word; or built on assumed soil, a shape settled before the real model was examined | no | no |  |
 | lens | `purge` | Shiva at the winnowing floor, who lets the wind decide what returns | bloat: adding to a place that already has too much | no | no |  |
-| pass | `relay` | Herald — the message to the next session | the dropped handoff: the next session re-derives what this one knew | no | **yes** | baton delivered |
+| pass | `relay` | Herald — the message to the next session | the dropped handoff: the next session re-derives what this one knew | no | no | baton delivered |
 | pass | `release` | Ferryman — the crossing ends on the other bank | premature release closure: shipped bytes never made the crossing | no | no | exact published bytes reached the consumer, promised outcomes proven, failures and gaps recorded |
 | pass | `retro` | After-action review — what was meant, what happened, why, what to keep; no blame, no grade | the repeated cost: a costly session pattern paid again because nobody measured it | no | no | findings stated in chat, anchored, quantified, ranked by level, and handed to `reflect`, `docs`, or the owner; machine artifacts in the run directory |
 | loop | `close` | Keystone — a settled surface needs its backend real | shims for done: a settled surface over a fake backend | yes | no | shims zero or deferred, workflow driven by hand |
@@ -41,7 +41,7 @@ A *root* frames the set, a *loop* is a workflow, a *pass* is a one-time ask, a *
 | slot | `recon` | the surveyor who walks the boundary before mapping the interior | rumor about a rival: a claim about their product nobody traced to their bytes | - | - | - |
 | slot | `show-me` | the sketch on the back of the envelope | the wall of text: a topic explained in prose that a diagram would settle | - | - | - |
 
-Real work starts with the two accounts in `AGENTS.md` Always 1. A pasted failure goes to `diagnose`. `control` and `relay` are user-only, so name them and stop. Suggest `/relay` when you and the user stay misaligned.
+Real work starts with the two accounts in `AGENTS.md` Always 1. A pasted failure goes to `diagnose`. `control` is user-only, so name it and stop. Suggest `/relay` when you and the user stay misaligned.
 
 ## Approach
 

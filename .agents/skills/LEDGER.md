@@ -174,6 +174,7 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 - kaitpw on model guidance: "this guidance needs to be spatially confined and composable so i can update it to reflect the latest models as they come out." Restated: skills and charters name tiers, and one file names models. Landed as `.agents/models.toml`, with a check that refuses a model name in any skill or charter.
 - kaitpw, same day: "we homes is almost done and i think we have enough data on them to make informed edits. you do the edits." Restated: the charters and `delegate` are edited from the homes record while the run finishes. Landed: the `integrator` charter; in the implementor charter the plan check, partners at the start, the owner queue, and no gate that the charters do not name; the purger's two duties; the driver's proof rows; in `delegate` the end gate as carried row stamps, a brief that never changes a gate or a wake, and the estimate line. The implementor keeps its name, and "dispatcher" above means the implementor once the integrator holds the moves of main. Sources, which charters do not carry: the integrator from thread b66c4be9 between 06:56Z and 11:44Z on 2026-11-12; the purger's duties from the homes purger thread and the census of `integrate/homes`; the driver's rows from the homes driver's `LAST-PASSED.md`.
 - The observer panel is a driver duty only when the map declares a visual axis. kaitpw: "i had the panel purely for the ui stuff in the kernel crusade", and "i dont think itll always be beneficial". The edit is Claude's reading of those comments and is re-openable. The kernel record: four panels ran, 185 findings, 13 signatures, 11 with a fix commit, inside a vocabulary closed to six visual kinds.
+- kaitpw, 2026-11-12, as commit `e9e344bc`: "only loop.control gets disable model invocation true". Restated: an agent may invoke `reflect` and `relay` itself, and `control` alone is user-only. The index table is projected from that, and the index prose names `control` alone.
 
 ## Tried & rejected
 
@@ -258,7 +259,6 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 - Usage watch: `prove` (expected near zero, load-bearing), `diagnose`, `triangulate` (if never typed, `find-the-product` was the adopted name).
 - POTENTIAL OVERRULING: Scope & satellite policy makes sense in the abstract but in practice should be inlined if always hot (Codex will not read MODELS.md unless told, but it should because opus should always be its UI delegate).
 - The homes reposture has not been run by a real crusade. Read the first run under it for three things the cold readers could not show: whether the purger's scour happens without a reminder, whether carried row stamps let a defect through that one final drive would have caught, and whether the integrator moves main with no gate added.
-- The index table and its prose still call `reflect` and `relay` user-only, while their `disable-model-invocation` lines are gone from the working tree (not this reposture's edit). `check.py` fails on the difference until the owner keeps one of the two.
 
 ## Incidents
 
