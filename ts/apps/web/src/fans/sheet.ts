@@ -90,7 +90,8 @@ export const fansSheet = {
   },
   bindings: {
     // The design criteria this fan prices under, each with the home tier that served it; "save at" writes that home.
-    ...ductsSettings,
+    // Design friction stays /ducts design data (ducts ledger Q2a), so Fans omits it.
+    ...Object.fromEntries(Object.entries(ductsSettings).filter(([key]) => key !== "setting.ducts.designFriction")),
     writeIntent: local(z.unknown(), "route", { label: "Write scope", choices: scopeChoices }),
     roles: store("_PE_DuctLosses", z.strictObject({ role: z.enum(DUCT_UNIT_ROLES) }), "subject", {
       rows: (read: Read) => rowsOf(read, (snapshotOf(read)?.nodes ?? []).filter((n) => n.kind === "equipment").map((n) => String(n.id))),
