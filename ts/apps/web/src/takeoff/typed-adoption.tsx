@@ -146,6 +146,10 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
           says={ctx.value.reason}
         />
       )}
+      {data?.unreadable?.map((blob, index) => (
+        <OutcomeLine key={index} kind="refused" label="can't read, kept"
+          says={`${blob.parameter} / ${blob.elementId == null ? "Project Information" : `element ${blob.elementId}`}: ${blob.reason}`} />
+      ))}
       {problem && <OutcomeLine kind="error" label="Adoption" says={problem} />}
       {frozen ? (
         <>

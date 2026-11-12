@@ -130,6 +130,7 @@ export const reads = {
         observation,
         saved,
         captures: await ctx.read(captures, { kind: "takeoff-saved" }),
+        unreadable: snapshot?.unreadable ?? [],
         rows,
         initialize: {
           request: { stage: snapshot?.carriers.stage ?? "Adoption" },

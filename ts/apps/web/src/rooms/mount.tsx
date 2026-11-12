@@ -3,6 +3,7 @@ import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attent
 import { type Mark } from "@pe/agent-contracts";
 import { Ladder } from "#/route/ladder";
 import type { RoomsContext } from "./route";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { ButtonGroup } from "@pe/kit/lang/button-group";
@@ -37,6 +38,11 @@ export function ScopeBody({ page }: Body) {
         ? "reading rooms…"
         : "this document has no levels with plan views";
   return (
+    <>
+      {snapshot?.unreadable?.map((blob, index) => (
+        <OutcomeLine key={index} kind="refused" label="can't read, kept"
+          says={`${blob.parameter} / ${blob.elementId == null ? "Project Information" : `element ${blob.elementId}`}: ${blob.reason}`} />
+      ))}
     <Ladder
       disabled={!snapshot || !document}
       levels={[
@@ -71,6 +77,7 @@ export function ScopeBody({ page }: Body) {
         },
       ]}
     />
+    </>
   );
 }
 

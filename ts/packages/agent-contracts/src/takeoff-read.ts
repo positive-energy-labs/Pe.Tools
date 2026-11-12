@@ -5,6 +5,7 @@ import {
   takeoffCaptureSchema,
   takeoffCaptureSummarySchema,
   candidateRegionSchema,
+  takeoffUnreadableBlobSchema,
   commands,
   workHandleSchema,
 } from "@pe/agent-contracts";
@@ -26,6 +27,7 @@ export const adoptionData = z.object({
   observation: takeoffObservationSchema.nullable(),
   saved: takeoffCaptureSchema.nullable(),
   captures: z.array(takeoffCaptureSummarySchema),
+  unreadable: z.array(takeoffUnreadableBlobSchema).optional(),
   rows: z.array(
     z.object({
       region: candidateRegionSchema,

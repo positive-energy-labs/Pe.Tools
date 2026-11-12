@@ -1,3 +1,5 @@
+import { nativeResponseDefinitionSchema } from "@pe/host-contracts/decoders";
+import type { TakeoffsSnapshot } from "@pe/host-contracts/generated";
 import { writeIntentSchema } from "./write-intent.ts";
 import { z } from "zod";
 
@@ -279,10 +281,14 @@ const takeoffModelSchema = z.object({
 export type TakeoffModel = z.infer<typeof takeoffModelSchema>;
 export type ModelSystem = TakeoffModel["systems"][number];
 
+export const takeoffUnreadableBlobSchema = nativeResponseDefinitionSchema<TakeoffsSnapshot.Res.TakeoffUnreadableBlob>(
+  "takeoffs.snapshot", "TakeoffUnreadableBlob",
+);
 export const takeoffSnapshotSchema = z.object({
   reading: observationSchema,
   carriers: takeoffCarrierPreflightSchema,
   world: takeoffModelSchema,
+  unreadable: z.array(takeoffUnreadableBlobSchema).optional(),
   zoneFrs: z.array(candidateRegionSchema),
   regionsByZone: z.record(z.string(), z.array(liveRegionSchema)),
 });

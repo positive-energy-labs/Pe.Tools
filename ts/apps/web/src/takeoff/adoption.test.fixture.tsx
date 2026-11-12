@@ -25,7 +25,7 @@ import { AdoptionBody } from "./typed-adoption";
 import { module as familiesModule } from "../families/route";
 
 // Real HTTP read graph, disk captures and Work. Only the native boundary and router are recorded.
-export async function journey(options: { catalogue?: ReturnType<typeof gate>; snapshot?: ReturnType<typeof gate>; start?: boolean; route?: "families" } = {}) {
+export async function journey(options: { unreadable?: { elementId: number | null; parameter: string; reason: string }[]; catalogue?: ReturnType<typeof gate>; snapshot?: ReturnType<typeof gate>; start?: boolean; route?: "families" } = {}) {
   const selectedModule = options.route === "families" ? familiesModule : module;
   let carriers = "needs-initialization";
   let catalogueState: "views" | "empty" | "failed" = "views";
@@ -116,6 +116,7 @@ export async function journey(options: { catalogue?: ReturnType<typeof gate>; sn
               systems: [],
               carriers: { stage: "Adoption", status: carriers, missingCarrierGuids: [] },
             },
+            unreadable: options.unreadable,
             zoneFrs: [],
             regionsByZone: {},
           },
