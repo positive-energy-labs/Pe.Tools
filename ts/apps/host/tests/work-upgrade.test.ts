@@ -21,7 +21,8 @@ for (const [spec, previous, removed, staged, dropped] of [
     try {
       await store.setState({ targetKey, route: spec.route, value: {
         version: 1, schemaVersion: previous, revision: 7,
-        doc: { ...spec.schema.parse({}), ...staged, [removed]: nonempty ? dropped : {} }, history: [],
+        doc: { ...spec.schema.parse({}), ...staged, [removed]: nonempty ? dropped :
+          spec.route === "fans" ? { fanFlow: { edit: null }, terminalFlow: { edit: null } } : { edit: null } }, history: [],
       } });
       expect(await read()).toMatchObject({ revision: 7, schemaVersion: previous + 1, doc: staged });
       const saved = await store.getState({ targetKey, route: spec.route });

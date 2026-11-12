@@ -1347,7 +1347,10 @@ function upgradeSettingsWork(raw: unknown, spec: RouteStateSpec<z.ZodType>) {
     const parsed = record.safeParse(entry);
     return parsed.success ? { ...parsed.data, after: strip(parsed.data.after) } : entry;
   }) : saved.data.history;
-  const nonempty = dropped != null && (typeof dropped !== "object" || Object.keys(dropped).length > 0);
+  const hasEdit = (cell: unknown) => cell != null &&
+    (typeof cell !== "object" || ("edit" in cell && cell.edit != null));
+  const nonempty = removed === "parameters" && dropped != null && typeof dropped === "object"
+    ? Object.values(dropped).some(hasEdit) : hasEdit(dropped);
   return {
     value: { ...saved.data, schemaVersion: spec.schemaVersion, doc: strip(doc.data), history },
     reason: nonempty ? `Dropped ${removed}: ${JSON.stringify(dropped)}. These values are now settings at the project or firm tier; set them there explicitly.` : undefined,
