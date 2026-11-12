@@ -73,7 +73,7 @@ test("E8 a re-sent admission that a discarded journal does not know is refused, 
   const resend = () =>
     new Request("http://host/actions", {
       method: "POST",
-      headers: { "content-type": "application/json", [ADMISSION_RESEND_HEADER]: "1" },
+      headers: { "content-type": "application/json", [ADMISSION_RESEND_HEADER]: "2000-01-01T00:00:00.000Z" },
       body: JSON.stringify(admission),
     });
   const dir = await mkdtemp(join(tmpdir(), "pe-replay-journal-"));
@@ -84,16 +84,29 @@ test("E8 a re-sent admission that a discarded journal does not know is refused, 
   try {
     for (const start of ["the start that discards", "the next start"]) {
       cold = await fixtureNative(dir);
-      const refused = await cold.actions().request(resend());
+      const post = cold.actions();
+      const refused = await post.request(resend());
       const said = await refused.text();
       expect(refused.status, `${start}: ${said}`).toBe(409);
       expect(JSON.parse(said), start).toMatchObject({
-        notDispatched: true,
-        message: expect.stringContaining("was discarded. It is not run again."),
+        error: {
+          code: "journal.discarded",
+          message: expect.stringMatching(/^Action .*was discarded\. It is not run again\./),
+          details: { notDispatched: true, error: expect.stringMatching(/^Action /) },
+        },
       });
       expect(said, start).toContain(admission.id);
       expect(cold.calls, start).toEqual([]);
       expect(await cold.journal.list(undefined, admission.id), start).toEqual([]);
+      const header = JSON.parse((await readFile(path, "utf8")).split("\n")[0]!);
+      for (const sentAt of [header.discarded, "", "1", "not-a-time"]) {
+        const request = resend();
+        request.headers.set(ADMISSION_RESEND_HEADER, sentAt);
+        const invalid = await post.request(request);
+        expect(invalid.status, sentAt).toBe(409);
+        expect(await invalid.json()).toMatchObject({ error: { code: "journal.discarded", details: { notDispatched: true } } });
+      }
+      expect(cold.calls, start).toEqual([]);
       await cold.close();
       cold = undefined;
       // The notice is only the feed's row: losing the whole file changes nothing for the guard.
@@ -108,5 +121,28 @@ test("E8 a re-sent admission that a discarded journal does not know is refused, 
     await cold?.close();
     await rm(dir, { recursive: true, force: true });
     await rm(intact, { recursive: true, force: true });
+  }
+});
+
+test("E8 a new admission first sent after discard survives a lost first POST", async () => {
+  const f = await setup();
+  const admission = await f.admission();
+  const dir = await mkdtemp(join(tmpdir(), "pe-new-after-discard-"));
+  await writeFile(join(dir, "partition-operations.json"), "corrupt journal header\n");
+  const cold = await fixtureNative(dir);
+  try {
+    await cold.journal.list();
+    const header = JSON.parse((await readFile(join(dir, "partition-operations.json"), "utf8")).split("\n")[0]!);
+    const sentAt = new Date(Date.parse(header.discarded) + 1).toISOString();
+    const response = await cold.actions().request(new Request("http://host/actions", {
+      method: "POST",
+      headers: { "content-type": "application/json", [ADMISSION_RESEND_HEADER]: sentAt },
+      body: JSON.stringify(admission),
+    }));
+    expect(response.status, await response.clone().text()).toBeLessThan(400);
+    expect(await cold.journal.list(undefined, admission.id)).toHaveLength(1);
+  } finally {
+    await cold.close();
+    await rm(dir, { recursive: true, force: true });
   }
 });

@@ -141,6 +141,8 @@ test("pre-admission loss survives a client reload and resends exact bytes despit
     0,
   );
   expect(first).toMatchObject({ state: "detached", acceptance: "unknown" });
+  const sentAt = api.inspectRetainedActions().find(record => record.id === first.id)?.sentAt;
+  expect(sentAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   vi.resetModules();
   api = await client();
   lose = false;
@@ -155,9 +157,9 @@ test("pre-admission loss survives a client reload and resends exact bytes despit
   );
   expect(retry).toMatchObject({ id: first.id, state: "succeeded" });
   expect(posted).toEqual([posted[0], posted[0]]);
-  // The first send is plain. The re-send of retained bytes says an earlier send may have arrived,
-  // so a host whose journal was discarded refuses it instead of running it as new.
-  expect(resent).toEqual([null, "1"]);
+  // A retry keeps the first send time across reload, so the host can compare it with its discard.
+  expect(resent[0]).toBeNull();
+  expect(resent[1]).toBe(sentAt);
   expect(posted[1]!.input.work).toEqual(work);
 });
 
@@ -248,7 +250,7 @@ test("a schema-valid ACK for another target is rejected and preserves pre-ACK in
   await expect(api.submitAction(admission, endpoint, 100)).rejects.toThrow(
     "different intent or target",
   );
-  expect(api.inspectRetainedActions()).toContainEqual({ id: admission.id, admission });
+  expect(api.inspectRetainedActions()).toContainEqual({ id: admission.id, admission, sentAt: expect.any(String) });
 });
 
 test("browser completion follows the existing receipt observer without a GET and releases synchronous snapshots", async () => {
@@ -421,7 +423,7 @@ test("a later root cannot rebuild a lost pre-ACK id or borrow authority; the ori
     ),
   ).toMatchObject({ id, state: "detached", acceptance: "unknown" });
   const retained = withInvocationContext(contextA, () => readOutbox(slot));
-  expect(retained).toEqual({ id, admission: firstPosts[0] });
+  expect(retained).toEqual({ id, admission: firstPosts[0], sentAt: expect.any(String) });
   select.mockClear();
   const network = vi.fn(async () => Response.json([]));
   vi.stubGlobal("fetch", network);

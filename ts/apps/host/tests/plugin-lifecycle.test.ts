@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { human, actAs } from "./callers.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";
-import { bindPackageLifecycle, requirePackageEnabled } from "../src/package-lifecycle.ts";
+import { bindPackageLifecycle, createPackageLifecycle, requirePackageEnabled } from "../src/package-lifecycle.ts";
 import { listPackages } from "../src/packages.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
 import { freezeScript } from "../src/operation-script.ts";
@@ -19,6 +19,43 @@ afterEach(async () => {
   bindPackageLifecycle(undefined);
   vi.unstubAllEnvs();
   if (root) await rm(root, { recursive: true, force: true });
+});
+
+test("an import before initialization finishes becomes active after the initial census", async () => {
+  root = await mkdtemp(join(tmpdir(), "pe-plugin-early-import-"));
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", root);
+  vi.stubEnv("LOCALAPPDATA", join(root, "machine"));
+  let release = () => {};
+  let captured = () => {};
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  const census = new Promise<void>(resolve => { captured = resolve; });
+  let initial = true;
+  const lifecycle = createPackageLifecycle({ packages: async () => {
+    const listing = await listPackages(join(root, "Pods"));
+    if (initial) { initial = false; captured(); await hold; }
+    return listing;
+  } });
+  bindPackageLifecycle(lifecycle);
+  await census;
+  const archivePath = join(root, "input.zip");
+  await writeFile(archivePath, writeZip(new Map([
+    ["pod.json", Buffer.from('{"id":"early"}')],
+    ["pages/tour/index.html", Buffer.from("<title>Early</title>")],
+  ])));
+  const pending = importPod({ archivePath });
+  try {
+    await vi.waitFor(async () => expect(await readFile(join(root, "Pods/early/pod.json"), "utf8")).toContain("early"));
+    expect(lifecycle.initialized()).toBe(false);
+    release();
+    await pending;
+    await lifecycle.ready;
+    await lifecycle.refresh();
+    expect(lifecycle.inventory().find(p => p.id === "pod:early")?.status).toBe("active");
+  } finally {
+    release();
+    await pending;
+    await lifecycle.close();
+  }
 });
 
 test("import into a running production-root lifecycle activates Pages and retains export membership", async () => {

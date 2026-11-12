@@ -54,6 +54,7 @@ function outboxPath(slot: string) {
 const outboxSchema = z.looseObject({
   id: z.string(),
   admission: actionAdmissionSchema.optional(),
+  sentAt: z.string().optional(),
   contextHash: z.string().optional(),
 });
 /**

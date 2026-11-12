@@ -380,8 +380,7 @@ export const peDo = createTool({
   },
   execute: async (input, context) => {
     if (input.kind === "page") {
-      // The one admission door, like every other command: a re-sent tool call is a marked re-send
-      // there, so a host whose journal was discarded refuses it instead of publishing twice.
+      // Only submitAction's transport retries mark a re-send; a harness re-invocation has a new MCP request id.
       const row = await submitAction(
         {
           id: requestIdentity(context),

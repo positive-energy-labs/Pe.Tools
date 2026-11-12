@@ -269,8 +269,9 @@ export async function submitAction(
     throw Error(`Action '${prior.id}' has an unacknowledged immutable request`);
   // Retained pre-ACK bytes mean an earlier send may have arrived; so does a transport lost below.
   let resent = prior?.admission !== undefined;
+  const sentAt = prior?.admission ? prior.sentAt : new Date().toISOString();
   // Upload bytes travel in the POST only. Recovery retains the same digest intent, not a PDF in localStorage.
-  retain(slot, { id: admission.id, admission: retainedAdmission });
+  retain(slot, { id: admission.id, admission: retainedAdmission, sentAt });
   const deadline = Date.now() + waitMs;
   inFlight().set(admission.id, base);
   let row: ActionReceipt | undefined;
@@ -284,7 +285,7 @@ export async function submitAction(
           { body: admission },
           {
             signal: AbortSignal.timeout(Math.max(1, Math.min(30_000, deadline - Date.now()))),
-            ...(resent ? { headers: { [ADMISSION_RESEND_HEADER]: "1" } } : {}),
+            ...(resent ? { headers: { [ADMISSION_RESEND_HEADER]: sentAt ?? "" } } : {}),
           },
         );
       } catch {
