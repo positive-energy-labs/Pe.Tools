@@ -1,10 +1,12 @@
 /** Transport consumes packages.ts's captured members; source bytes and local custody stay distinct. */
 import { randomUUID } from "node:crypto";
-import { lstat, readFile, rename, rm, stat } from "node:fs/promises";
-import { dirname, isAbsolute, join } from "node:path";
+import { constants } from "node:fs";
+import { copyFile, cp, lstat, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { message, packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
 import { scriptPodMemberBounds } from "@pe/host-contracts/generated";
+import { writeAtomic } from "@pe/host-contracts/store";
 import type { PodExport, PodImport, PodPromote } from "@pe/host-contracts/operation-types";
 import { type PictureCaptures } from "./captures-route.ts";
 import {
@@ -13,6 +15,7 @@ import {
   isPackageMember,
   listPackages,
   onePackage,
+  podStatePath,
   productPodsRoots,
   type PackageListing,
 } from "./packages.ts";
@@ -23,7 +26,6 @@ import { sha256Hex as sha256, validatePageHtml, writeArtifact } from "./page-art
 import { StepFailure } from "./command-executor.ts";
 
 const VENDOR_DIRECTORY = "_vendor";
-const IMPORTED_FILE = "imported.json";
 const LOCAL_PREFIX = "@local/";
 const CAPTURE_REFERENCE = /\/captures\/([0-9a-f]{64})\.png/g;
 const CAPTURE_MEMBER = /^captures\/([0-9a-f]{64})\.(png|json)$/;
@@ -251,7 +253,10 @@ export async function importPod(
   return installArchive(archive, archivePath, request.folder, options);
 }
 
-/** Install one archive's bytes; `locator` is provenance only. Shared by import and first boot. */
+/**
+ * Install one archive's bytes. `locator` is where they came from on this machine: it names errors,
+ * and only its file name is stored. Shared by import and first boot.
+ */
 export async function installArchive(
   archive: Buffer,
   locator: string,
@@ -282,21 +287,22 @@ export async function installArchive(
   }
 
   const archiveSha256 = sha256(archive);
-  // Staged in a dot-folder of the pods root: listings skip it, and the final move is one rename.
-  const staging = join(podsRoot, `.importing-${randomUUID()}`);
+  // Staged under machine state, never in the home: a crash leaves no half folder on a synced drive.
+  const staging = podStatePath(options.podsRoot, "pod-importing", randomUUID());
   try {
     for (const [path, bytes] of entries) {
       await writeArtifact(staging, join(staging, folder, path), bytes);
     }
-    await writeArtifact(
-      staging,
-      join(staging, folder, IMPORTED_FILE),
-      `${JSON.stringify({ archiveSha256, locator, date: new Date().toISOString() }, null, 2)}\n`,
-    );
     const admitted = (await listPackages(staging)).packages[0];
     if (!admitted || admitted.id !== id)
       throw new TransferRefused(`Pod archive '${locator}' is not an admissible pod.`);
-    await rename(join(staging, folder), directory);
+    await placePod(join(staging, folder), directory);
+    // The import record is machine state (it is derived, and dated here), keyed by the pod's id.
+    // It names its archive by content hash and file name: no machine path is stored anywhere.
+    writeAtomic(
+      importRecordPath(id, options.podsRoot),
+      `${JSON.stringify({ archiveSha256, archive: basename(locator), date: new Date().toISOString() }, null, 2)}\n`,
+    );
     const store = options.captures!;
     for (const [path, bytes] of entries)
       if (CAPTURE_MEMBER.exec(path)?.[2] === "png") await store.adopt(bytes);
@@ -311,6 +317,37 @@ export async function installArchive(
     };
   } finally {
     await rm(staging, { recursive: true, force: true });
+  }
+}
+
+/** Where a pod's import record rests: `state\pod-imports\<pod-id>.json`. */
+export const importRecordPath = (id: string, podsRoot?: string) =>
+  podStatePath(podsRoot, "pod-imports", `${id}.json`);
+
+/**
+ * Move a staged pod into its home whole. One volume: one rename. Across volumes (state on C:, the
+ * home on another drive) a rename cannot be one step, so the copy lands `pod.json` last: a listing
+ * admits a pod only by its manifest, and so never sees a half copy. A failed copy is removed.
+ */
+export async function placePod(staged: string, directory: string, move = rename): Promise<void> {
+  await mkdir(dirname(directory), { recursive: true });
+  try {
+    return await move(staged, directory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
+  }
+  const manifest = join(staged, "pod.json");
+  try {
+    await cp(staged, directory, {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+      filter: (source) => source !== manifest,
+    });
+    await copyFile(manifest, join(directory, "pod.json"), constants.COPYFILE_EXCL);
+  } catch (error) {
+    await rm(directory, { recursive: true, force: true });
+    throw error;
   }
 }
 
@@ -335,7 +372,8 @@ export function archiveId(entries: ReadonlyMap<string, Buffer>): string {
 
 /**
  * Wrap a scratch Page (`Pages/<page>/`) as a new Pod `<id>` holding `pages/<page>/`, byte for byte.
- * The scratch Page stays; its binding does not travel (the promoted Page starts unbound).
+ * The scratch Page stays. Page state is machine state under the state root (homes freeze shape 7),
+ * so none of it travels: the promoted Page starts unbound with an empty log.
  */
 export async function promotePage(
   request: { page: string; id: string; name?: string },

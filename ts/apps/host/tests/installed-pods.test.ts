@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { PictureCaptures } from "../src/captures-route.ts";
 import { importShippedPods } from "../src/installed-pods.ts";
 import { listPackages } from "../src/packages.ts";
-import { exportPod } from "../src/pod-transfer.ts";
+import { exportPod, importRecordPath } from "../src/pod-transfer.ts";
 
 let root: string;
 let shipped: string;
@@ -53,9 +53,12 @@ test("first boot imports the shipped pod; a restart offers nothing again, even a
     ["default", "default"],
     ["example", "example"],
   ]);
-  expect(JSON.parse(await readFile(join(pods, "example", "imported.json"), "utf8")).locator).toBe(
-    join(shipped, "example.zip"),
-  );
+  // The import record is machine state beside this owner's Pods root, never in the pod, and it
+  // names its archive by file name: no machine path is stored.
+  await expect(readFile(join(pods, "example", "imported.json"))).rejects.toThrow();
+  const record = await readFile(importRecordPath("example", pods), "utf8");
+  expect(JSON.parse(record).archive).toBe("example.zip");
+  expect(record).not.toContain(JSON.stringify(shipped).slice(1, -1));
 
   expect((await boot()).outcomes.map((o) => o.outcome)).toEqual(["offered-before"]);
   await rm(join(pods, "example"), { recursive: true });

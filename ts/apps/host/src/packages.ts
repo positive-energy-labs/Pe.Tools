@@ -10,7 +10,7 @@ import {
 import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { lstat, open, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   scriptPodMemberBounds as memberBounds,
   type ScriptingExecute,
@@ -18,7 +18,9 @@ import {
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { homeDirs } from "@pe/host-contracts/product-paths";
+import { hostOwnership } from "./host-ownership.ts";
 import { verifyPodArtifact } from "./pod-artifact.ts";
+import { productPodsRootPath } from "./product-paths.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 
 export type PackageEntrypoint = {
@@ -85,6 +87,7 @@ export function isPackageMember(path: string): boolean {
   const parts = packageMemberPathSchema.parse(path).toLowerCase().split("/");
   return (
     !parts.some((part) => debris.has(part)) &&
+    // An import record is machine state under `state\pod-imports`; one left in a folder is never a member.
     !(parts.length === 1 && parts[0] === "imported.json") &&
     !parts.some((part) => part === ".env" || part.startsWith(".env.") || part === "context.token")
   );
@@ -101,6 +104,16 @@ export function kindOfMember(
   if (path !== "pod.json" && path.toLowerCase().endsWith(".json")) return "member";
   return undefined;
 }
+
+/**
+ * Machine state kept about pods (run output, import records, import staging): under the product's
+ * `state` folder, never in a home (ADR 0037 rule 6). An owner that supplies its own Pods root (the
+ * demo lane, a test) keeps that state beside its root, outside the product's.
+ */
+export const podStatePath = (podsRoot: string | undefined, ...segments: string[]) =>
+  podsRoot && resolve(podsRoot) !== resolve(productPodsRootPath())
+    ? join(podsRoot, "..", ...segments)
+    : join(hostOwnership.rootPath, productPathNames.stateDirectoryName, ...segments);
 
 /** One Pods folder, or the product's Pods in every home, in list order (user, project, firm). */
 export type PodsRoots = string | readonly string[];

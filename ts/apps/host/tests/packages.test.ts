@@ -18,8 +18,6 @@ const authored: Record<string, string | Uint8Array> = {
   "skills/inspect/SKILL.md": "Inspect",
   "skills/inspect/references/data.bin": new Uint8Array([0, 255, 1]),
   "pages/tour/index.html": "<title>Tour</title>",
-  "pages/tour/.state/events.jsonl": "{}",
-  "pages/tour/.state/snapshot.json": "{}",
   "settings/checks.json": '{"$schema":"https://pe/schema"}',
 };
 async function put(folder: string, path: string, content: string | Uint8Array) {
@@ -40,8 +38,10 @@ test("one snapshot lists and captures every authored byte, excluding authority a
     "obj/a",
     "bin/a",
     "imported.json",
+    // Page state is machine state (homes freeze shape 7): a pod carries none of it.
+    "pages/tour/.state/events.jsonl",
+    "pages/tour/.state/snapshot.json",
     "pages/tour/.state/binding.json",
-    "pages/tour/.state/grants.json",
     "node_modules/a",
     ".env",
   ])
@@ -67,7 +67,9 @@ test("folder rename preserves keys; duplicate manifest identities refuse resolut
   await rename(join(root, "Original"), join(root, "Renamed"));
   expect((await readPackage("mixed", root)).contributions).toEqual(before.contributions);
   await put("Twin", "pod.json", '{"id":"mixed"}');
-  await expect(readPackage("mixed", root)).rejects.toThrow(/Renamed, Twin/);
+  await expect(readPackage("mixed", root)).rejects.toThrow(
+    `is claimed by ${join(root, "Renamed")} and ${join(root, "Twin")}`,
+  );
   const listing = await listPackages(root);
   expect(listing.packages.every((pod) => pod.contributions.length === 0)).toBe(true);
   await expect(capturePackage(listing.packages[0]!)).rejects.toThrow(/claimed/);

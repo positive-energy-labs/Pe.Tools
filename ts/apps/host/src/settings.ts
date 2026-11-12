@@ -27,6 +27,7 @@ import type { PodDraftSource, PodMemberSource } from "@pe/agent-contracts";
 import {
   isPackageMember,
   listPackages,
+  podStatePath,
   productPodsRoots,
   readPackage,
   resolvePackageIdentity,
@@ -34,6 +35,7 @@ import {
 import { requirePackageEnabled, activePackages } from "./package-lifecycle.ts";
 import { LocalOpError } from "./local-error.ts";
 import { hostOwnership } from "./host-ownership.ts";
+import { productPathNames } from "@pe/host-contracts/contracts";
 import { stateTree } from "@pe/host-contracts/service-identity";
 import { writeHomeFile } from "@pe/host-contracts/store";
 import {
@@ -71,14 +73,10 @@ export const writeHome = (path: string, bytes: Uint8Array | string, expectSha256
  * `_no-pod`. A run is machine state and never sits in a home. An owner that supplies its own Pods
  * root (the demo lane, a test) keeps its runs in `Runs` beside it, outside the product's state.
  */
-export const runsFolder = (pod: string | null | undefined, ctx: Pick<PodContext, "podsRoot"> = {}) => {
-  const tree = stateTree(hostOwnership.rootPath);
-  return pod
-    ? join(ctx.podsRoot ? join(ctx.podsRoot, "..", "Runs") : tree.runs, pod)
-    : ctx.podsRoot
-      ? join(ctx.podsRoot, "..", "Runs", "_no-pod")
-      : tree.podlessRuns;
-};
+export const runsFolder = (pod: string | null | undefined, ctx: Pick<PodContext, "podsRoot"> = {}) =>
+  podStatePath(ctx.podsRoot, productPathNames.runsDirectoryName, pod ?? NO_POD);
+// The name `stateTree` gives a run no pod owns; an id cannot start with `_`.
+const NO_POD = "_no-pod";
 
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // ponytail: one host-wide write lane; per-member locks only if unrelated writes contend.

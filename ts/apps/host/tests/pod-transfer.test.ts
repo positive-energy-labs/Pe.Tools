@@ -8,10 +8,10 @@ import { pictureCaptures } from "./effect-test.ts";
 import { captureStore } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { Layer } from "effect";
-import { mkdir, mkdtemp, open, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { serveRoutes } from "./real-server.ts";
 import { mintContext } from "../src/control.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
@@ -19,7 +19,7 @@ import { productPathNames } from "@pe/host-contracts/contracts";
 const homeVariable = productPathNames.productHomeVariable;
 import type { PictureCaptures } from "../src/captures-route.ts";
 import { listPackages } from "../src/packages.ts";
-import { exportPod, importPod, writeZip } from "../src/pod-transfer.ts";
+import { exportPod, importPod, importRecordPath, placePod, writeZip } from "../src/pod-transfer.ts";
 import { productPluginDecisionsPath } from "../src/product-paths.ts";
 
 let root: string;
@@ -195,7 +195,8 @@ async function shared(store: PictureCaptures) {
     "PeScripts.csproj": machineProject,
     "settings/checks.json": '{"$preset":"@global/_fields/Header","x":1}',
     "settings/leaf.json": '{ "untouched": true }',
-    "pages/tour/.state/events.jsonl": `{"seq":1,"event":{"img":"/captures/${kept.sha}.png"}}\n`,
+    "pages/tour/notes.md": `![shot](/captures/${kept.sha}.png)\n`,
+    "pages/tour/.state/events.jsonl": '{"seq":1}\n',
     "README.md": "# Ducts",
   });
   return kept.sha;
@@ -254,12 +255,21 @@ test("export vendors, ports the project, closes captures; import into a renamed 
     '<PackageReference Include="Humanizer" Version="2.14.1" />',
   );
   expect(await read("PeScripts.csproj")).toContain('<Using Include="My.Namespace" />');
-  expect(await read("pages/tour/.state/events.jsonl")).toContain(sha);
+  expect(await read("pages/tour/notes.md")).toContain(sha);
+  // Page state never travels: it is machine state under the state root.
+  await expect(read("pages/tour/.state/events.jsonl")).rejects.toThrow();
   await expect(read("pages/tour/.state/binding.json")).rejects.toThrow();
-  expect(JSON.parse(await read("imported.json"))).toMatchObject({
+  // The import record is machine state, keyed by pod id beside this owner's Pods root: nothing
+  // machine-derived lands in the pod, and no machine path is stored (homes freeze shape 6).
+  await expect(read("imported.json")).rejects.toThrow();
+  const record = await readFile(importRecordPath("ducts", otherPods), "utf8");
+  expect(JSON.parse(record)).toMatchObject({
     archiveSha256: exported.archiveSha256,
-    locator: archivePath,
+    archive: basename(archivePath),
   });
+  expect(record).not.toContain(JSON.stringify(root).slice(1, -1));
+  // Staging was outside the home and is gone: the Pods folder holds only pods.
+  expect((await readdir(otherPods)).sort()).toEqual(["Other Name"]);
   expect(await otherStore.blob(sha)).not.toBeNull();
   // An imported capture is an old observation: held by hash, never a new taking on this host.
   expect(await otherStore.list()).toEqual([]);
@@ -274,7 +284,7 @@ test("export vendors, ports the project, closes captures; import into a renamed 
 
   await expect(
     importPod({ archivePath, folder: "Twice" }, { podsRoot: otherPods, captures: otherStore }),
-  ).rejects.toThrow(/already installed in folder 'Other Name'/);
+  ).rejects.toThrow(`already installed at '${join(otherPods, "Other Name")}'`);
   expect((await native.journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
 });
 
@@ -371,7 +381,7 @@ test("pod.promote wraps a scratch Page byte for byte, unbound, without touching 
   expect(JSON.stringify(promoted)).toContain('"key":"page:@my-notes/pages/notes"');
   const inPod = join(pods, "my-notes", "pages", "notes");
   expect(await readFile(join(inPod, "index.html"), "utf8")).toBe(html);
-  expect(await readFile(join(inPod, ".state", "events.jsonl"), "utf8")).toBe('{"seq":1}\n');
+  await expect(readFile(join(inPod, ".state", "events.jsonl"))).rejects.toThrow();
   await expect(readFile(join(inPod, ".state", "binding.json"))).rejects.toThrow();
   expect(await readFile(join(pages, "notes", ".state", "binding.json"), "utf8")).toBe("{}");
   expect(JSON.stringify(await act("pod.promote", { page: "notes", id: "my-notes" }))).toContain(
@@ -382,4 +392,28 @@ test("pod.promote wraps a scratch Page byte for byte, unbound, without touching 
   expect(missing).toMatchObject({ state: "failed", notDispatched: true, steps: [] });
   await expect(readFile(join(pods, "other", "pod.json"))).rejects.toThrow();
   expect((await native.journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
+});
+
+test("a staged pod crossing volumes is copied with pod.json last, and a failed copy leaves nothing", async () => {
+  const staged = join(root, "state", "pod-importing", "x", "pod");
+  await mkdir(join(staged, "settings"), { recursive: true });
+  await writeFile(join(staged, "pod.json"), '{"id":"pod"}');
+  await writeFile(join(staged, "settings", "a.json"), "{}");
+  const crossVolume = async () => {
+    throw Object.assign(Error("cross-device link not permitted"), { code: "EXDEV" });
+  };
+  const placed = join(root, "home", "Pods", "pod");
+  await mkdir(join(root, "home", "Pods"), { recursive: true });
+  await placePod(staged, placed, crossVolume);
+  expect((await readdir(placed, { recursive: true })).sort()).toEqual(
+    ["pod.json", "settings", join("settings", "a.json")].sort(),
+  );
+  expect(await readFile(join(placed, "pod.json"), "utf8")).toBe('{"id":"pod"}');
+  // A copy that cannot finish (the manifest is missing) removes what it placed: no manifest, no pod.
+  await rm(join(staged, "pod.json"));
+  const failed = join(root, "home", "Pods", "failed");
+  await expect(placePod(staged, failed, crossVolume)).rejects.toThrow();
+  expect(await readdir(join(root, "home", "Pods"))).toEqual(["pod"]);
+  // Any other rename failure is not papered over.
+  await expect(placePod(staged, failed, async () => { throw Error("EPERM"); })).rejects.toThrow("EPERM");
 });

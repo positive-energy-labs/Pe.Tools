@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { userRoot } from "@pe/host-contracts/product-paths";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { z } from "zod";
 import { resolveKey } from "@pe/host-contracts/shared-keys";
+import { readStored, writeAtomic } from "@pe/host-contracts/store";
 import { runtimeRoot } from "./runtime-owner.ts";
 
 export interface AnalyticsConfig {
@@ -11,24 +12,22 @@ export interface AnalyticsConfig {
 }
 export const ANALYTICS_PAYLOAD_BUDGET = 256 * 1024;
 
-/** Select the lane before reading keys. A dev host never uses an installed ingest key. */
+/**
+ * Select the lane before reading keys. A dev host never uses an installed ingest key: its key is
+ * the firm keys.json `posthog.api-key`, and with none (or no firm home) export is off. The
+ * installed lane's key and host ship in its manifest and are never a firm setting. Nothing here
+ * reads a person's own file: no home holds an analytics setting.
+ */
 export function analyticsConfig(lane: "dev" | "installed"): AnalyticsConfig | null {
-  const path =
+  const config =
     lane === "dev"
-      ? join(userRoot(), "preferences.json")
-      : join(runtimeRoot(), "product.payloads.json");
-  const file = readJson(path) as
-    | {
-        posthog?: AnalyticsConfig;
-        telemetry?: { posthog?: AnalyticsConfig };
-      }
-    | undefined;
-  const config = lane === "dev" ? file?.posthog : file?.telemetry?.posthog;
-  // A dev key is a key: the user's own, else the firm keys.json `posthog.api-key`; a refusal
-  // disables export. The installed lane's key ships in its manifest and is never a firm setting.
+      ? undefined
+      : (readJson(join(runtimeRoot(), "product.payloads.json")) as
+          | { telemetry?: { posthog?: AnalyticsConfig } }
+          | undefined)?.telemetry?.posthog;
   const key =
     lane === "dev"
-      ? resolveKey(typeof config?.apiKey === "string" ? config.apiKey : null, "posthog.api-key")
+      ? resolveKey(null, "posthog.api-key")
       : typeof config?.apiKey === "string" && config.apiKey.trim()
         ? { value: config.apiKey.trim() }
         : { refused: "no-key" as const };
@@ -49,26 +48,32 @@ function readJson(path: string): unknown {
     return undefined;
   }
 }
-const validId = (value: unknown): value is string =>
-  typeof value === "string" &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+const installFile = z.object({ installId: z.uuid() });
 
-/** Exclusive creation preserves the winner's opaque UUID. Invalid identity disables export. */
+/**
+ * This install's opaque id, from `state\install.json`. The file is machine state, so its class is
+ * `discard` (ADR 0039): one that does not decode is deleted with one notice and a new id is minted.
+ * It never yields a null id, so it cannot stop the host. Null only when the disk refuses the write.
+ * ponytail: two processes that mint in the same instant each write, and the later rename wins;
+ * both then read the file back, so they agree unless the reads straddle the second rename. Publish
+ * by exclusive hard link if two hosts ever start on one fresh root together.
+ */
 export function readOrCreateInstallId(): string | null {
   try {
-    const path = join(runtimeRoot(), "state", "install.json");
-    const read = () => (readJson(path) as { installId?: unknown } | undefined)?.installId;
+    const state = join(runtimeRoot(), "state");
+    const path = join(state, "install.json");
+    const read = () =>
+      readStored(path, installFile, {
+        class: "discard",
+        place: "Install identity",
+        notices: join(state, "stored-notices.jsonl"),
+      });
     const existing = read();
-    if (validId(existing)) return existing;
-    mkdirSync(dirname(path), { recursive: true });
+    if (existing.kind === "ok") return existing.value.installId;
     const id = randomUUID();
-    try {
-      writeFileSync(path, JSON.stringify({ installId: id }), { flag: "wx" });
-      return id;
-    } catch {
-      const winner = read();
-      return validId(winner) ? winner : null;
-    }
+    writeAtomic(path, JSON.stringify({ installId: id }));
+    const written = read();
+    return written.kind === "ok" ? written.value.installId : id;
   } catch (error) { console.warn("ts/packages/runtime/src/analytics.ts: fallback after failure", error);
     return null;
   }
