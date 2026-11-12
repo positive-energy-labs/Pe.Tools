@@ -1,5 +1,6 @@
 
 using Pe.Revit.Takeoff;
+using Pe.Shared.RevitData.Serialization;
 
 namespace Pe.Takeoff.Tests;
 
@@ -14,33 +15,43 @@ public sealed class SystemRegistryTests
         return registry;
     }
 
+    private static string Stored(SystemRegistry registry) => OwnerBlob.Encode(SystemRegistry.Owner, registry.ToData());
+
+    private static OwnerValue<SystemRegistry> Read(string? stored) => SystemRegistry.Read(OwnerBlob.Decode(SystemRegistry.Owner, stored));
+
     [Test]
     public void Codec_round_trips_and_preserves_identity()
     {
         var registry = Registry("FC-8", "FC-13", "UH-1");
-        var loaded = SystemRegistry.Deserialize(registry.Serialize());
+        var loaded = Read(Stored(registry)).Value!;
         Assert.That(loaded.Systems.Select(s => (s.Guid, s.Tag)),
             Is.EqualTo(registry.Systems.Select(s => (s.Guid, s.Tag))));
     }
 
     [TestCase("not json at all")]
-    [TestCase("null")]
-    [TestCase("{\"Version\":1,\"Systems\":[]}")]
     [TestCase("{\"owner\":\"takeoff-systems\",\"version\":99,\"data\":{\"systems\":[]}}")]
     [TestCase("{\"owner\":\"takeoff-systems\",\"version\":1,\"data\":{\"systems\":[],\"extra\":1}}")]
     [TestCase("{\"owner\":\"takeoff-systems\",\"version\":1,\"data\":{\"systems\":[{\"guid\":\"00000000-0000-0000-0000-000000000000\",\"tag\":\"FC-1\"}]}}")]
-    public void Codec_fails_closed_on_bad_blobs(string blob)
+    public void A_bad_blob_is_a_refusal_with_no_registry(string blob)
     {
-        Assert.Throws<InvalidOperationException>(() => SystemRegistry.Deserialize(blob));
+        var read = Read(blob);
+        Assert.That(read.Value, Is.Null);
+        Assert.That(read.Refusal, Does.Contain("refused and kept"));
     }
+
+    [TestCase(null)]
+    [TestCase("null")]
+    [TestCase("{\"Version\":1,\"Systems\":[]}")]
+    public void No_envelope_is_an_empty_registry(string? blob) =>
+        Assert.That(Read(blob), Is.EqualTo(new OwnerValue<SystemRegistry>(null, null)));
 
     [Test]
     public void Duplicate_tags_and_guids_are_rejected()
     {
         var registry = Registry("FC-8");
         Assert.Throws<InvalidOperationException>(() => registry.Register("fc-8"));
-        string forged = registry.Serialize().Replace("]", $",{{\"guid\":\"{registry.Systems[0].Guid}\",\"tag\":\"FC-9\"}}]");
-        Assert.Throws<InvalidOperationException>(() => SystemRegistry.Deserialize(forged));
+        string forged = Stored(registry).Replace("]", $",{{\"guid\":\"{registry.Systems[0].Guid}\",\"tag\":\"FC-9\"}}]");
+        Assert.That(Read(forged).Refusal, Does.Contain("duplicate system GUID"));
     }
 
     [Test]

@@ -8,7 +8,6 @@ namespace Pe.Revit.Takeoff;
 // regions by label-point containment + area +/-20% (the proven anchor law) and NEVER touch a
 // designer's existing region — propose, never overwrite.
 public sealed record RegionProvenance(
-    int Version,
     Guid ZoneGuid,
     string RunId,
     string SourceRoomId,
@@ -22,7 +21,7 @@ public sealed record RegionProvenance(
     public TakeoffRhvacLink? Rhvac { get; init; }
 
     // /rooms: SHA256 hex of the region's own loops at creation, and of the knee-slice evidence under it.
-    // Older blobs read both as null (Version stays 1).
+    // A blob written before them reads both as null.
     public string? GeometryHash { get; init; }
     public string? WallHash { get; init; }
 
@@ -49,13 +48,20 @@ public sealed record RegionProvenance(
         new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9003"), "_PE_TakeoffProvenance",
         "Pe takeoff machine bookkeeping blob (run id, source hash, .r10 link, holds).");
 
-    /// <summary>A room or residue region's provenance, or the reason its blob is "can't read, kept". Absent is a refusal too.</summary>
+    /// <summary>What a region with no stored blob is: drawn by a person, in no zone. The next write stores it.</summary>
+    public static RegionProvenance Default => new(Guid.Empty, Rooms.RunDrawn, "", 0);
+
+    /// <summary>
+    ///     A region's provenance. No envelope (nothing stored, or an old un-enveloped shape) reads as
+    ///     <see cref="Default" />, in listings and in write runs alike. An enveloped blob this build cannot read is
+    ///     the reason it is "can't read, kept".
+    /// </summary>
     public static Pe.Shared.RevitData.Serialization.OwnerValue<RegionProvenance> Read(Pe.Shared.RevitData.Serialization.OwnerBlobRead read) =>
         read.Status == Pe.Shared.RevitData.Serialization.OwnerBlobStatus.Absent
-            ? new(null, "the region has no provenance blob")
+            ? new(Default, null)
             : Pe.Shared.RevitData.Serialization.OwnerBlob.Parse(read, data => FromJson(data.ToString(Formatting.None)));
 
-    // Fail-closed: an unreadable or wrong-version blob throws; callers surface and stop.
+    // The data text, fail-closed. The envelope version is the only gate: data that holds its own version is refused.
     public static RegionProvenance FromJson(string json)
     {
         RegionProvenance provenance;
@@ -68,9 +74,9 @@ public sealed record RegionProvenance(
         {
             throw new InvalidOperationException($"provenance blob is not valid JSON: {ex.Message}");
         }
-        return provenance.Version == 1
-            ? provenance
-            : throw new InvalidOperationException($"provenance blob is v{provenance.Version}; this build reads v1");
+        return provenance.Unknown.Keys.Any(key => string.Equals(key, "version", StringComparison.OrdinalIgnoreCase))
+            ? throw new InvalidOperationException("provenance data holds a version; the version belongs to the envelope")
+            : provenance;
     }
 }
 
@@ -126,8 +132,7 @@ public static class ZoneMaterializer
         {
             var (frRole, frGuid) = TakeoffCarriers.ReadIdentity(region);
             if (frRole != role || frGuid == null) continue;
-            string? blob = TakeoffCarriers.ReadProvenance(region);
-            if (blob == null || RegionProvenance.FromJson(blob).ZoneGuid != zoneGuid) continue;
+            if (TakeoffCarriers.ReadRegion(region).OrThrow()!.ZoneGuid != zoneGuid) continue;
             var loops = TakeoffAtlas.Boundaries(region);
             if (loops.Count == 0) continue;
             double sqft = region.get_Parameter(BuiltInParameter.HOST_AREA_COMPUTED)?.AsDouble()
@@ -167,7 +172,7 @@ public static class ZoneMaterializer
                 var region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
                 TakeoffCarriers.WriteIdentity(region, TakeoffCarriers.RoleRoomRegion, Guid.NewGuid());
                 TakeoffCarriers.WriteProvenance(region,
-                    (new RegionProvenance(1, zoneGuid, runId, room.Id, room.RawSqft)
+                    (new RegionProvenance(zoneGuid, runId, room.Id, room.RawSqft)
                         { Flags = room.Flags.ToList(), Partition = room.Partition }).ToJson());
                 TakeoffCarriers.WriteRoomType(region, "hall");
                 createdRegions.Add(region);
@@ -190,7 +195,7 @@ public static class ZoneMaterializer
                     var region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
                     TakeoffCarriers.WriteIdentity(region, TakeoffCarriers.RoleHeldResidue, Guid.NewGuid());
                     TakeoffCarriers.WriteProvenance(region,
-                        (new RegionProvenance(1, zoneGuid, runId, residue.Id, residue.RawSqft)
+                        (new RegionProvenance(zoneGuid, runId, residue.Id, residue.RawSqft)
                             { Partition = residue.Partition }).ToJson());
                     heldDrawn++;
                 }
@@ -203,8 +208,7 @@ public static class ZoneMaterializer
         if (failures.Count > 0)
             foreach (var region in createdRegions)
             {
-                string blob = TakeoffCarriers.ReadProvenance(region)!;
-                var provenance = RegionProvenance.FromJson(blob);
+                var provenance = TakeoffCarriers.ReadRegion(region).OrThrow()!;
                 if (!provenance.Flags.Contains("materialization-failure"))
                     provenance.Flags.Add("materialization-failure");
                 TakeoffCarriers.WriteProvenance(region, provenance.ToJson());

@@ -37,7 +37,7 @@ public sealed class SystemRegistry
 
     // Fail-closed: any data that is not exactly { systems: [{ guid, tag }] } or is inconsistent throws —
     // callers surface the error and stop; nobody proceeds against a half-understood registry.
-    public static SystemRegistry FromData(JObject data)
+    private static SystemRegistry FromData(JObject data)
     {
         if (data.Count != 1 || data["systems"] is not JArray systems)
             throw new InvalidOperationException("registry data is not exactly { systems: [...] }");
@@ -57,17 +57,6 @@ public sealed class SystemRegistry
 
     /// <summary>The model's registry, or the reason it is "can't read, kept".</summary>
     public static OwnerValue<SystemRegistry> Read(OwnerBlobRead read) => read.Parse(FromData);
-
-    /// <summary>The stored text: the owner envelope around <see cref="ToData" />.</summary>
-    public string Serialize() => OwnerBlob.Encode(Owner, ToData());
-
-    public static SystemRegistry Deserialize(string json)
-    {
-        var read = OwnerBlob.Decode(Owner, json);
-        return read.Status == OwnerBlobStatus.Ok
-            ? FromData(read.Data!)
-            : throw new InvalidOperationException(read.Error ?? "registry blob is empty");
-    }
 
     public SystemEntry Register(string tag)
     {

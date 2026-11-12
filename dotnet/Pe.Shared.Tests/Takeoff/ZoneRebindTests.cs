@@ -43,7 +43,7 @@ public sealed class ZoneRebindTests
             "Architectural Room", "101", [outer, hole]);
         var room = new Pe.Revit.Partition.Room(8, disposition, reason, outer, 84, 2, 2, 1,
             null, null, [], [hole], proposal);
-        var provenance = new RegionProvenance(1, Guid.NewGuid(), "immutable-run", "R09", 84)
+        var provenance = new RegionProvenance(Guid.NewGuid(), "immutable-run", "R09", 84)
             { Partition = room };
         var loaded = RegionProvenance.FromJson(provenance.ToJson());
         // A normal provenance write must not drop fields after reading a saved blob.
@@ -121,11 +121,11 @@ public sealed class ZoneRebindTests
     [Test]
     public void Provenance_codec_round_trips_and_fails_closed()
     {
-        var provenance = new RegionProvenance(1, Guid.NewGuid(), "run-7", "R03", 212.5)
+        var provenance = new RegionProvenance(Guid.NewGuid(), "run-7", "R03", 212.5)
             { Flags = ["low-boundary-support"] };
         var loaded = RegionProvenance.FromJson(provenance.ToJson());
         Assert.Multiple(() => {
-            Assert.That(loaded.Version, Is.EqualTo(provenance.Version));
+            Assert.That(provenance.ToJson(), Does.Not.Contain("ersion"), "the envelope version is the only version");
             Assert.That(loaded.ZoneGuid, Is.EqualTo(provenance.ZoneGuid));
             Assert.That(loaded.RunId, Is.EqualTo(provenance.RunId));
             Assert.That(loaded.SourceRoomId, Is.EqualTo(provenance.SourceRoomId));
