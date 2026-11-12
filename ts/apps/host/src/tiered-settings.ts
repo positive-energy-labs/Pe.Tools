@@ -42,7 +42,9 @@ function tierHome(tier: SettingTier, pointer: string | null | undefined): Pick<S
   return {
     home: null,
     name: null,
-    notFound: pointer
+    notFound: pointer && sharedDriveRoot() === null
+      ? `No project home: the model names "${pointer}" relative to the shared drive root, which cannot be resolved because no firm home was found.`
+      : pointer
       ? `No project home: the model names "${pointer}", and no folder with a ${productPathNames.homeMarkerFileName} of tier "project" is there.`
       : "No project home: this model names none, or no model is the target.",
   };

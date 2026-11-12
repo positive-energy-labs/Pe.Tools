@@ -235,3 +235,14 @@ test("all eight criteria display the engine defaults when the firm marker is gon
   for (const [cell, value] of Object.entries(expected))
     expect(at.cell(cell as DuctsCriteriaCell)).toMatchObject({ value, source: "default" });
 });
+
+// Mutant H5-marker-blame: skip the shared-drive-root absence branch.
+test("a present project marker is not blamed when the firm home cannot anchor its relative pointer", () => {
+  rmSync(join(firm, "pe-home.json"));
+  expect(existsSync(join(project, "pe-home.json"))).toBe(true);
+  const reason = readSettingTiers("ducts", pointer).find(read => read.tier === "project")!.notFound!;
+  expect(reason).toContain(pointer);
+  expect(reason).toContain("relative to the shared drive root");
+  expect(reason).toContain("no firm home");
+  expect(reason).not.toContain("no folder with");
+});
