@@ -50,6 +50,16 @@ export const ductsCriteriaValuesSchema = z.strictObject({
   allowanceInWg: sided(nonneg),
 });
 export type DuctsCriteriaValues = z.infer<typeof ductsCriteriaValuesSchema>;
+/** Engine defaults used when no home states a criterion; shared by pricing and sheet cells. */
+export const DUCTS_DEFAULT_CRITERIA: DuctsCriteriaValues = {
+    velocityLimitFpm: { supply: 900, return: 700 },
+    terminalDropInWg: 0.03,
+    autoJoinGapIn: 3,
+    healBoxIn: 36,
+    splitPolicy: "even",
+    allowanceInWg: { supply: 0, return: 0 },
+  };
+
 /**
  * The project layer over the firm file (Work `criteria`, the model's store): every criterion, and
  * each side of a sided one, optional on its own, so typing return never restates supply. The firm
