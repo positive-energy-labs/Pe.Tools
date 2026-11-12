@@ -10,7 +10,7 @@
  * Plain functions, not Effect: this sits beside the thread store's Readings in the
  * `observeHostResource` island (ADR 0029 phase 5 converts them together).
  */
-import { readdirSync } from "node:fs";
+import { opendirSync } from "node:fs";
 import { join } from "node:path";
 import {
   attention,
@@ -46,6 +46,18 @@ export const storedBlobsPath = () => stateTree(hostOwnership.rootPath).blobs;
 const FIRM_HOME_PLACE = "Firm home";
 const EARLIER_WORK_PLACE = "Work saved by an earlier version";
 
+function holdsFile(path: string): boolean {
+  const directory = opendirSync(path);
+  try {
+    for (let entry = directory.readSync(); entry; entry = directory.readSync()) {
+      if (entry.isFile() || (entry.isDirectory() && holdsFile(join(path, entry.name)))) return true;
+    }
+    return false;
+  } finally {
+    directory.closeSync();
+  }
+}
+
 /** The start census posts findings to the same durable feed as stored-file refusals. */
 export function noteStartupHomes(
   user = userRoot(),
@@ -56,8 +68,7 @@ export function noteStartupHomes(
   const path = join(user, "Work");
   // Homes never hold Work; old Work is noticed, not migrated.
   try {
-    if (!readdirSync(path, { withFileTypes: true, recursive: true }).some((entry) => entry.isFile()))
-      return;
+    if (!holdsFile(path)) return;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT")
       console.warn(`Could not check earlier Work at '${path}': ${String(error)}`);

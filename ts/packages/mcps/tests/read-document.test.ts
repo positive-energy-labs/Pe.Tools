@@ -10,6 +10,20 @@ import { withInvocationContext } from "@pe/runtime/context";
 import { sendHeldParse, sha256Of } from "../src/shared/held-parse.ts";
 import { runReadDocument } from "../src/shared/read-document.ts";
 
+const liteParseOptions = vi.hoisted(() => [] as Array<{ ocrEnabled?: boolean }>);
+vi.mock("@llamaindex/liteparse", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@llamaindex/liteparse")>();
+  return {
+    ...original,
+    LiteParse: class extends original.LiteParse {
+      constructor(options: ConstructorParameters<typeof original.LiteParse>[0]) {
+        super(options);
+        liteParseOptions.push(options ?? {});
+      }
+    },
+  };
+});
+
 /** One 612x792 page with a schedule row near the top and a footer note near the bottom, offsets exact. */
 function schedulePdf(withText = true): Buffer {
   const content = withText
@@ -76,6 +90,8 @@ test("read_document returns text and renders with network requests blocked, and 
     expect(cropped.images[0]!.path).toContain("read-document");
     expect(cropped.images[0]!.path).not.toContain(dir);
     expect(whole.warnings).toBeUndefined();
+    for (const options of liteParseOptions) expect(options.ocrEnabled).toBe(false);
+    expect(liteParseOptions.length).toBeGreaterThan(0);
     expect(blocked).not.toHaveBeenCalled();
   } finally {
     // The renders live in the tool's product scratch folder, outside `dir`.
@@ -247,6 +263,7 @@ test("parser llamaparse is held at once for Pea and sends nothing; the person's 
     const calls: string[] = [];
     const heldPosts: unknown[] = [];
     let sentKey = false;
+    let polls = 0;
     // Only the network is mocked: the host's hold door, and LlamaCloud's upload and poll routes.
     vi.stubGlobal(
       "fetch",
@@ -267,6 +284,7 @@ test("parser llamaparse is held at once for Pea and sends nothing; the person's 
           sentKey = new Headers(init?.headers).get("authorization") === `Bearer ${secret}`;
           return Response.json({ id: "job-1", project_id: "p", status: "PENDING" });
         }
+        if (++polls === 1) return Response.json({ detail: "Transient poll failure" }, { status: 500 });
         return Response.json({
           job: { id: "job-1", project_id: "p", status: "COMPLETED" },
           markdown: {
@@ -308,6 +326,8 @@ test("parser llamaparse is held at once for Pea and sends nothing; the person's 
     expect(uploads().some((call) => call.startsWith("POST /api/v2/parse/upload"))).toBe(true);
     expect(calls.some((call) => call.includes("expand=markdown"))).toBe(true);
     expect(sentKey).toBe(true);
+    expect(polls).toBe(2);
+    expect(uploads()).toHaveLength(1);
     const sent = uploads().length;
 
     // Pea's next read of the same bytes and pages finds the kept result and sends nothing again.

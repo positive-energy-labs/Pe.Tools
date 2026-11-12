@@ -94,16 +94,20 @@ export async function parseWithLlamaCloud(
   // Dynamic import keeps the SDK out of the client bundle and out of hosts that never parse.
   const { default: LlamaCloud } = await import("@llamaindex/llama-cloud");
   // ADR 0038: one Confirm, one upload; the person retries via Confirm.
-  const client = new LlamaCloud({ apiKey: request.apiKey, maxRetries: 0 });
-  const result = await client.parsing.parse(
+  const client = new LlamaCloud({ apiKey: request.apiKey });
+  const job = await client.parsing.create(
     {
       tier: LLAMA_TIER,
       version: "latest",
       upload_file: request.file,
-      expand: request.expand,
       ...(request.targetPages ? { page_ranges: { target_pages: request.targetPages } } : {}),
       ...(request.imagesToSave ? { output_options: { images_to_save: request.imagesToSave } } : {}),
     },
+    { maxRetries: 0 },
+  );
+  const result = await client.parsing.waitForCompletion(
+    job.id,
+    { expand: request.expand },
     { timeout: 10 * 60_000 },
   );
   if (result.job.status !== "COMPLETED") {

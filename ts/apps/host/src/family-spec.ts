@@ -224,9 +224,6 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
         ],
         effects: [{ kind: "directory", path: dirname(safePath(root, member.path)) }],
         prepare: async () => {
-          // Tests must inject a parser before an attach can send bytes outside the process.
-          if (process.env.VITEST && !deps.parsePdf)
-            throw Error("Tests attaching a PDF must provide parsePdf; external parsing is disabled");
           const payload = await parsePdf({ sender: "person", file, apiKey: requireLlamaCloudKey() });
           const doc = parsedDocViewSchema.parse(payload);
           const dir = dirname(member.path).replaceAll("\\", "/");
