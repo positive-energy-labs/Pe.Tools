@@ -62,8 +62,8 @@ export function guardDiscard(caller: Caller, docs: readonly GuardedDocument[], v
 
 /** A held outward send: the command names what would leave, so its journal can hold it by subject. */
 export class SendHeld extends CommandRejected {
-  constructor(readonly send: Pick<HeldSendRequest, "service" | "path">, where: string) {
-    super(held("send-outward", `'${send.path}'`, `It would go to ${where}; the person runs this themselves from the web app.`));
+  constructor(readonly send: Pick<HeldSendRequest, "service" | "path" | "target">, where: string) {
+    super(held("send-outward", `'${send.path}'`, `It would go to ${where}; it waits in the person's notices for their Confirm.`));
   }
 }
 
