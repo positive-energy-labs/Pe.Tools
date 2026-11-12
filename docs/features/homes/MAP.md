@@ -149,6 +149,9 @@ The owner: "we need to be relient if these assumptions dont hold, but I think th
 
 ## Decision log
 
+- 2026-11-12, C# implementor default, re-openable: `DocumentColorLedger` is `keep` because it contains user preferences. Palette usage CSV, family snapshots and geometry packs are `discard` because they are derived. `StoredFile` in `Pe.Shared.StorageRuntime` posts the TS notice shape to the same `stored-notices.jsonl` feed. Geometry index-capacity refusal keeps structurally valid bytes and posts a notice; corrupt packs are discarded.
+- 2026-11-12, kaitpw, from the purger: "make it required in the snapshot contract and delete the `?? null` collapse, so that a missing field is a contract error and not a silent null." `projectHome` is required and nullable; families and models with no pointer send null.
+
 - 2026-11-11, kaitpw: three home tiers ship. "id prob say all three teirs". This amends ADR 0032 line 129.
 - 2026-11-11, kaitpw: authored files are refused and kept; Work, journal and threads are discarded with a notice; nothing stops the host. "agree".
 - 2026-11-11, kaitpw: consent is a notice. "I wanna move towards safteynets and notices, not guardrails."

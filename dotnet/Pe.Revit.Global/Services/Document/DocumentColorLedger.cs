@@ -1,6 +1,7 @@
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;
+using Newtonsoft.Json;
 using System.Windows.Media;
 using WpfColor = System.Windows.Media.Color;
 
@@ -33,24 +34,29 @@ public static class DocumentColorLedger {
         static byte Lift(byte channel) => (byte)(channel + ((255 - channel) * towardWhite));
     }
 
-    private static readonly JsonReadWriter<DocumentColorLedgerData> File =
+    private static readonly JsonReader<DocumentColorLedgerData> File =
         StorageClient.Default.Global().State().Json<DocumentColorLedgerData>("document-colors");
 
     private static DocumentColorLedgerData? _data;
+    private static bool _kept;
 
     private static DocumentColorLedgerData Data {
         get {
             if (_data != null) return _data;
-            try {
-                _data = File.Read();
-            } catch {
-                // Corrupt ledger: start fresh rather than dead-color the UI. Colors are cosmetic.
-                _data = new DocumentColorLedgerData();
-            }
+            _data = ReadData(File.FilePath);
+            _kept = _data == null && System.IO.File.Exists(File.FilePath);
+            _data ??= new DocumentColorLedgerData();
 
             return _data;
         }
     }
+
+    internal static DocumentColorLedgerData? ReadData(string path) =>
+        StoredFile.Read(path, StoredPolicy.Keep, "Document colors", text => {
+            var data = JsonConvert.DeserializeObject<DocumentColorLedgerData>(text);
+            return data is { SchemaVersion: 1, Assignments: not null } ? data
+                : throw new InvalidDataException("Invalid document color ledger");
+        });
 
     /// <summary>Whether Revit's view tabs are painted with ledger colors. Persisted.</summary>
     public static bool TabColoringEnabled {
@@ -102,10 +108,11 @@ public static class DocumentColorLedger {
     }
 
     private static void Save() {
+        if (_kept) return; // Authored preferences that cannot decode must never be overwritten.
         try {
-            _ = File.Write(Data);
-        } catch {
-            // Losing a color assignment is cosmetic; never break the UI thread over it.
+            StoredFile.WriteAtomic(File.FilePath, System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(Data)), overwrite: true);
+        } catch (Exception exception) {
+            StoredFile.Note(File.FilePath, StoredPolicy.Keep, "Document colors", exception);
         }
     }
 }

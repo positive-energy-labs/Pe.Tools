@@ -128,7 +128,7 @@ export const sessionView = ({ state, ...view }: Omit<BridgeSessionView, "state">
     ...emptyState,
     ...state,
     openDocuments: (state?.openDocuments ?? []).map((document) => ({
-      title: "", address: null, isFamilyDocument: false, isActive: false, ...document,
+      title: "", address: null, isFamilyDocument: false, isActive: false, projectHome: null, ...document,
     })),
   },
 });

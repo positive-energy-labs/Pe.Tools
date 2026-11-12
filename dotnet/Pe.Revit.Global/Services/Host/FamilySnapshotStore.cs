@@ -25,6 +25,7 @@ internal static class FamilySnapshotStore {
         if (Disabled)
             return;
 
+        string? path = null;
         try {
             if (document.IsFamilyDocument)
                 return;
@@ -52,18 +53,15 @@ internal static class FamilySnapshotStore {
             }
 
             var payload = new StorePayload(SchemaVersion, baseVersionGuid.ToString("D"), entries);
-            var path = ResolveStorePath(document);
-            var tempPath = path + ".tmp";
-            File.WriteAllText(tempPath, JsonConvert.SerializeObject(payload));
-            if (File.Exists(path))
-                File.Delete(path);
-            File.Move(tempPath, path);
+            path = ResolveStorePath(document);
+            StoredFile.WriteAtomic(path, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(payload)), overwrite: true);
             Log.Debug(
                 "Family snapshot store persisted: Document={DocumentKey}, Entries={Entries}",
                 document.GetDocumentKey(),
                 entries.Count
             );
         } catch (Exception ex) {
+            if (path != null) StoredFile.Note(path, StoredPolicy.Discard, "Family snapshots", ex);
             Log.Debug(ex, "Family snapshot store persist failed (ignored).");
         }
     }
@@ -81,9 +79,12 @@ internal static class FamilySnapshotStore {
             if (!File.Exists(path))
                 return;
 
-            var payload = JsonConvert.DeserializeObject<StorePayload>(File.ReadAllText(path));
-            if (payload == null || payload.SchemaVersion != SchemaVersion || payload.Entries == null)
-                return;
+            var payload = StoredFile.Read(path, StoredPolicy.Discard, "Family snapshots", text => {
+                var value = JsonConvert.DeserializeObject<StorePayload>(text);
+                return value is { SchemaVersion: SchemaVersion, Entries: not null } ? value
+                    : throw new InvalidDataException("Invalid family snapshot store");
+            });
+            if (payload == null) return;
 
             // Evict everything the document changed since the persisted base version. Any failure here
             // (baseline unknown to this document lineage, detached copies, ...) means full miss.
@@ -99,7 +100,7 @@ internal static class FamilySnapshotStore {
 
             var shadow = DocShadow.For(document);
             var seeded = 0;
-            foreach (var entry in payload.Entries) {
+            foreach (var entry in payload.Entries!) {
                 if (entry?.Record == null || changedIds.Contains(entry.FamilyId))
                     continue;
 
@@ -122,16 +123,11 @@ internal static class FamilySnapshotStore {
             );
         } catch (Exception ex) {
             Log.Debug(ex, "Family snapshot store warm-start failed; discarding store.");
-            try {
-                if (path != null && File.Exists(path))
-                    File.Delete(path);
-            } catch {
-                // best effort
-            }
+            if (path != null) StoredFile.Refuse(path, StoredPolicy.Discard, "Family snapshots", ex);
         }
     }
 
-    private static string ResolveStorePath(RevitDocument document) {
+    internal static string ResolveStorePath(RevitDocument document) {
         var directory = Path.Combine(StorageClient.Default.Global().State().DirectoryPath, "family-snapshots");
         _ = Directory.CreateDirectory(directory);
         var keyBytes = Encoding.UTF8.GetBytes(document.GetDocumentKey());

@@ -11,14 +11,15 @@ public sealed class Csv<T>(string filePath) : CsvReadWriter<T> where T : class, 
                 return [];
 
             var lines = File.ReadAllLines(this.FilePath);
-            if (lines.Length < 2)
-                return [];
+            if (lines.Length == 0 || lines[0].Split(',')[0] != "Key")
+                throw new InvalidDataException("Invalid palette usage CSV header");
 
             var headers = lines[0].Split(',');
             var rows = new Dictionary<string, T>(StringComparer.OrdinalIgnoreCase);
 
             for (var rowIndex = 1; rowIndex < lines.Length; rowIndex++) {
                 var values = lines[rowIndex].Split(',');
+                if (values.Length != headers.Length) throw new InvalidDataException("Invalid palette usage CSV row");
                 if (values.Length == 0 || string.IsNullOrWhiteSpace(values[0]))
                     continue;
 
@@ -39,7 +40,8 @@ public sealed class Csv<T>(string filePath) : CsvReadWriter<T> where T : class, 
             }
 
             return rows;
-        } catch {
+        } catch (Exception exception) {
+            StoredFile.Refuse(this.FilePath, StoredPolicy.Discard, "Palette command usage", exception);
             return [];
         }
     }
@@ -67,9 +69,10 @@ public sealed class Csv<T>(string filePath) : CsvReadWriter<T> where T : class, 
                 lines.Add(string.Join(",", values));
             }
 
-            File.WriteAllLines(this.FilePath, lines);
+            StoredFile.WriteAtomic(this.FilePath, System.Text.Encoding.UTF8.GetBytes(string.Join(Environment.NewLine, lines) + Environment.NewLine), overwrite: true);
             return this.FilePath;
-        } catch {
+        } catch (Exception exception) {
+            StoredFile.Note(this.FilePath, StoredPolicy.Discard, "Palette command usage", exception);
             return string.Empty;
         }
     }
@@ -115,8 +118,6 @@ public sealed class Csv<T>(string filePath) : CsvReadWriter<T> where T : class, 
             }
 
             return null;
-        } catch {
-            return null;
-        }
+        } catch (Exception exception) { throw new InvalidDataException($"Invalid CSV value for {targetType.Name}", exception); }
     }
 }

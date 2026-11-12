@@ -5,6 +5,7 @@ using System.Text;
 using Newtonsoft.Json;
 using Pe.Shared.Product;
 using Serilog;
+using Pe.Shared.StorageRuntime;
 
 namespace Pe.Revit.Space;
 
@@ -52,12 +53,12 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
             this._stream = new FileStream(this.PackPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read, 65536);
             if (this._stream.Length > MaxStoreBytes) throw new InvalidDataException("Geometry pack exceeds its storage limit");
             using var reader = new BinaryReader(this._stream, Encoding.UTF8, true);
-            if (this._stream.Length < 8 || reader.ReadInt32() != PackMagic || reader.ReadInt32() != Schema) {
-                this._stream.SetLength(0);
+            if (this._stream.Length == 0) {
                 this._stream.Position = 0;
                 using var writer = new BinaryWriter(this._stream, Encoding.UTF8, true);
                 writer.Write(PackMagic); writer.Write(Schema); writer.Flush();
-            }
+            } else if (this._stream.Length < 8 || reader.ReadInt32() != PackMagic || reader.ReadInt32() != Schema)
+                throw new InvalidDataException("Invalid geometry pack header");
             long complete = 8;
             this._stream.Position = complete;
             while (this._stream.Length - this._stream.Position >= RecordHeaderBytes) {
@@ -72,10 +73,12 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
                 complete = this._stream.Position;
             }
             // Only a complete structural prefix is authoritative after an interrupted append.
-            if (complete != this._stream.Length) this._stream.SetLength(complete);
+            if (complete != this._stream.Length) throw new InvalidDataException("Incomplete geometry pack record");
         } catch (Exception ex) {
             this._unavailable = true;
             this._index.Clear();
+            if (ex is InvalidDataException) this.Discard(ex);
+            else StoredFile.Note(this.PackPath, StoredPolicy.Discard, "Geometry cache", ex);
             Log.Debug(ex, "Linked geometry pack unavailable at {Path}; extracting current geometry", this.PackPath);
         }
         return this;
@@ -98,7 +101,8 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
                         throw new InvalidDataException("Geometry pack checksum mismatch");
                     return Decode(bytes);
                 } catch (Exception ex) {
-                    this._index.Remove(name);
+                    this._index.Clear();
+                    this.Discard(ex);
                     Log.Debug(ex, "Linked geometry pack entry miss at {Path}", this.PackPath);
                 }
             }
@@ -133,6 +137,7 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
             } catch (Exception ex) {
                 this._unavailable = true;
                 this._index.Clear();
+                StoredFile.Note(this.PackPath, StoredPolicy.Discard, "Geometry cache", ex);
                 Log.Debug(ex, "Linked geometry pack append ignored at {Path}", this.PackPath);
             }
             return geometry;
@@ -141,7 +146,14 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
 
     private void CheckIndexCapacity(string name) {
         if (this._index.Count >= MaxIndexEntries && !this._index.ContainsKey(name))
-            throw new InvalidDataException("Geometry pack exceeds its distinct-key index limit");
+            throw new InvalidOperationException("Geometry pack exceeds its distinct-key index limit");
+    }
+
+    private void Discard(Exception exception) {
+        this._unavailable = true;
+        this._stream?.Dispose();
+        this._stream = null;
+        StoredFile.Refuse(this.PackPath, StoredPolicy.Discard, "Geometry cache", exception);
     }
 
     private byte[] Digest(byte[] key, byte[] payload) {

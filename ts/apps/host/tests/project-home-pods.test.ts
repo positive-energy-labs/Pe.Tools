@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
+import { bridgeDocumentSnapshotSchema } from "@pe/host-contracts/contracts";
 import { NodeServices } from "@effect/platform-node";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -84,18 +85,21 @@ test("a call that targets a document lists and writes its project home's Pods; a
 
 // Mutant, run red once (2026-11-11): `targetHomes` returns no pointer for every scope.
 test("the pointer a call reads is its target document's, from the bridge's open-document snapshot", async () => {
-  const document = (openId: string, projectHome?: string | null) => ({ openId, projectHome });
+  const document = (openId: string, projectHome: string | null) => ({ openId, projectHome });
   const bridge = {
     list: Effect.succeed([
       { state: { openDocuments: [document("one", pointer)] } },
-      { state: { openDocuments: [document("two", null), document("three")] } },
+      { state: { openDocuments: [document("two", null)] } },
       { state: null },
     ]),
   } as never;
   const of = (openDocumentId?: string) => Effect.runPromise(targetHomes(bridge, { openDocumentId }));
   expect(await of("one")).toEqual({ pointer });
   expect(await of("two")).toEqual({ pointer: null });
-  expect(await of("three")).toEqual({ pointer: null });
+  const decode = Schema.decodeUnknownSync(bridgeDocumentSnapshotSchema);
+  const snapshot = { openId: "three", title: "Model", address: null, isFamilyDocument: false, isActive: false };
+  expect(() => decode(snapshot)).toThrow();
+  expect(decode({ ...snapshot, projectHome: null }).projectHome).toBeNull();
   // No target, or a document that is not open: no project home, and the listing says so.
   expect(await of()).toEqual({});
   expect(await of("gone")).toEqual({});

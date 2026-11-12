@@ -10,6 +10,8 @@ using Pe.Shared.Product;
 using Pe.Revit.Scripting.Transport;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
+using Pe.Shared.RevitData.Serialization;
+using Pe.Revit.Parameters;
 using Pe.Shared.StorageRuntime.Modules;
 using Pe.Revit.Loader;
 using Pe.Revit.Loader.Documents;
@@ -647,12 +649,7 @@ internal sealed class BridgeAgent : IDisposable {
                 var document = tracked.Resolve();
                 // The SDK authority, not this payload, names the lifetime; one disagreement withholds the marker.
                 attested &= PeDocumentIdentity.TryGetOpenId(document, out var authority) && authority == tracked.OpenId;
-                return new BridgeDocumentSnapshot(
-                    tracked.OpenId,
-                    document.Title,
-                    document.GetCloudModelGuid() ?? document.GetDocumentPath(),
-                    document.IsFamilyDocument,
-                    activeDocument != null && tracked.Matches(activeDocument));
+                return CaptureDocument(document, tracked.OpenId, activeDocument != null && tracked.Matches(activeDocument));
             })
             .ToList();
         var runtimeAssemblies = CaptureRuntimeAssemblies();
@@ -680,6 +677,10 @@ internal sealed class BridgeAgent : IDisposable {
             attested ? BridgeProtocol.DocumentIdentity : null
         );
     }
+
+    internal static BridgeDocumentSnapshot CaptureDocument(Autodesk.Revit.DB.Document document, string openId, bool isActive) =>
+        new(openId, document.Title, document.GetCloudModelGuid() ?? document.GetDocumentPath(), document.IsFamilyDocument, isActive,
+            document.IsFamilyDocument ? null : ProjectHomePointer.Read(OwnerBlobStore.Read(document, ProjectHomePointer.Owner)).Value?.Path);
 
     private static List<HostRuntimeAssemblyData> CaptureRuntimeAssemblies() =>
         AppDomain.CurrentDomain.GetAssemblies()
