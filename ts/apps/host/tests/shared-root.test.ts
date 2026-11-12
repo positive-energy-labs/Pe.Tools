@@ -328,6 +328,15 @@ test("W2: page.publish writes a firm Page where it is, through the door, and mak
   );
 });
 
+// Mutant, run red once (2026-11-11): `pageHomeRoot` counts a folder whether or not it holds index.html.
+test("W2: an empty leftover folder is no Page, so the firm Page of that name still publishes", async () => {
+  const theirs = page(firm, "left", "theirs");
+  mkdirSync(join(user, "Pages", "left"), { recursive: true });
+  expect(await pageVersion(productPagesRoots, "left")).toBe(
+    sha(readFileSync(join(theirs, "index.html"), "utf8")),
+  );
+});
+
 test("the harness tells its MCP child the firm home it resolved", () => {
   expect(peaMcpServer(null, "http://localhost:1234", "test").env).toContainEqual({
     name: "PE_TOOLS_SHARED_ROOT",

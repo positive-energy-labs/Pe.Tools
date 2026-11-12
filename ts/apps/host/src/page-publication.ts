@@ -2,7 +2,7 @@ import { z } from "zod";
 import { command, io, StepFailure } from "./command-executor.ts";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { lstat, readdir, readFile } from "node:fs/promises";
+import { lstat, readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { createServer } from "node:net";
 import { connectCdp, openBrowser, type BrowserSession, type CdpClient } from "@pe/browser";
@@ -331,13 +331,11 @@ export type PagesSource = PagesRoots | (() => PagesRoots);
 export async function pageHomeRoot(source: PagesSource, slug: string): Promise<string> {
   const roots = [typeof source === "function" ? source() : source].flat();
   const holding: string[] = [];
-  for (const root of roots) {
-    const names = await readdir(root).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return [] as string[];
-      throw error;
-    });
-    if (names.some((name) => name.toLowerCase() === slug.toLowerCase())) holding.push(root);
-  }
+  // The listing's rule (`scratchPages`): a folder is a Page only when its index.html is a file, so
+  // an empty leftover folder in one home claims nothing.
+  for (const root of roots)
+    if (await stat(join(root, slug, "index.html")).then((entry) => entry.isFile(), () => false))
+      holding.push(root);
   if (holding.length > 1)
     throw new StepFailure(
       `Page '${slug}' is claimed by ${holding.map((root) => join(root, slug)).join(" and ")}: none is published until the name is unique.`,

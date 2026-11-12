@@ -915,12 +915,9 @@ export function createContributionContent(options: {
   let pending = false;
   let bootstrapProblem: string | undefined;
   let admitted: readonly AdmittedPackage[] = [];
-  // In the background the start census runs first and the import after it, in that order every
-  // time: what the import adds is then activated by name, never left off by a race with the census.
-  const importing = Promise.resolve().then(async () => {
-    if (options.bootstrapInBackground) await lifecycle.ready;
-    return options.bootstrap?.();
-  });
+  // A background import races the start census; `activateImportedPackage` waits for the census, so
+  // what the import adds is activated by name either way.
+  const importing = Promise.resolve().then(() => options.bootstrap?.());
   const lifecycle = createPackageLifecycle({
     decisionsPath: options.decisionsPath,
     packages: async () => {
