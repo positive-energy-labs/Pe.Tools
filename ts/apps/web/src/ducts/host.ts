@@ -201,7 +201,7 @@ export const ductsPricing = read("ducts.pricing", {
           // Under Work: the store over the firm file, so a staged criterion draws beside what it replaces.
           criteria: resolveCriteria(null, snapshot.store as Parameters<typeof resolveCriteria>[1], firmLayer(layers.firm, layers.settings)),
           firm: "refused" in layers.firm ? layers.firm
-            : { version: firmLayer(layers.firm).version, path: layers.firm.path, present: layers.firm.present },
+            : { version: firmLayer(layers.firm, layers.settings).version, path: layers.firm.path, present: layers.firm.present },
           settings: { ducts: layers.settings } as Readonly<Record<string, typeof layers.settings>>,
         };
       },

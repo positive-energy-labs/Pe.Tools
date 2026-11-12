@@ -35,7 +35,7 @@ export type FirmReading = FirmValue<DuctsFirmFile>;
  * else the firm home's, else the engine default, with the tier that served it. A firm home that was
  * not found, or holds no file, serves nothing: its criteria are `default`, never `firm`.
  */
-export function firmLayer(reading: FirmReading, settings?: readonly SettingTierRead[] | null): DuctsFirm {
+export function firmLayer(reading: FirmReading, settings: readonly SettingTierRead[]): DuctsFirm {
   const firmFile = "refused" in reading || !reading.present ? null : reading.firm;
   const criteria: Record<string, unknown> = structuredClone(FIRM_SEED.criteria);
   const served: Record<string, "project" | "firm" | "default"> = {};

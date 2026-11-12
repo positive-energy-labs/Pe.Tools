@@ -124,6 +124,7 @@ export function writeSettingTier(
     return { ok: false, status: 422, message: `${read.path} can't be read, so it is kept as it is: ${read.error}` };
   if (read.sha256 !== request.expectedSha256)
     return { ok: false, status: 409, message: `${read.path} changed since it was read.` };
+  // setting(owner, ...) is generic; a second owner gets 422 at Save until this door uses a shared owner-to-cells registry.
   if (request.owner !== "ducts" || !ductsCellAccepts(request.path, request.value))
     return { ok: false, status: 422, message: `No declared setting accepts ${request.owner} ${request.path.join(".")} with that value.` };
   const by = context.writer ?? userInfo().username;
