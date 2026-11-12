@@ -147,6 +147,38 @@ test("E8 a new admission first sent after discard survives a lost first POST", a
   }
 });
 
+test.each([10, 1])("E8 a re-send %i minutes ahead of the host clock crosses the real actions door", async (minutes) => {
+  const f = await setup();
+  const admission = await f.admission();
+  const dir = await mkdtemp(join(tmpdir(), "pe-future-send-"));
+  await writeFile(join(dir, "partition-operations.json"), "corrupt journal header\n");
+  const cold = await fixtureNative(dir);
+  try {
+    await cold.journal.list();
+    const response = await cold.actions().request(new Request("http://host/actions", {
+      method: "POST",
+      headers: { "content-type": "application/json", [ADMISSION_RESEND_HEADER]: new Date(Date.now() + minutes * 60_000).toISOString() },
+      body: JSON.stringify(admission),
+    }));
+    if (minutes === 10) {
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({ error: {
+        code: "journal.future-send",
+        message: expect.stringContaining("five minutes ahead of the host clock"),
+        details: { notDispatched: true },
+      } });
+      expect(cold.calls).toEqual([]);
+      expect(await cold.journal.list(undefined, admission.id)).toEqual([]);
+    } else {
+      expect(response.status, await response.clone().text()).toBeLessThan(400);
+      expect(await cold.journal.list(undefined, admission.id)).toHaveLength(1);
+    }
+  } finally {
+    await cold.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("E8 a re-send refuses when the journal's own discard time does not parse", async () => {
   const f = await setup();
   const admission = await f.admission();

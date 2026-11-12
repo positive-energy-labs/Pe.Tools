@@ -6,7 +6,7 @@
  * the feed.
  */
 import type { NoticeFeed } from "@pe/agent-contracts";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 const feed: NoticeFeed = {
@@ -113,8 +113,49 @@ test("a tier-save feed row exposes its stored receipt in the overlay DOM", async
     const row = screen.getByText("Setting saved").closest('[role="option"]');
     expect(row).not.toBeNull();
     expect(row!.textContent).toContain(receipt);
+    const line = screen.getByText("Receipt " + receipt + ".");
+    expect(line.classList.contains("whitespace-normal")).toBe(true);
+    expect(line.classList.contains("break-all")).toBe(true);
+    expect(line.classList.contains("face-mono")).toBe(true);
     expect(feed.rows[0]?.detail).toBe(`Receipt ${receipt}.`);
     expect(feed.rows[0]?.where).toBe("project/Settings/ducts.json");
+  } finally {
+    feed.rows = before;
+  }
+});
+test("discard paths and harness stderr stay behind the overlay row tooltip", async () => {
+  const { noticeRows } = await import("../../../host/src/notice-feed.ts");
+  const { Ledger } = await import("./ledger");
+  const { LEDGER_PRESENTATIONS } = await import("./ledger-model");
+  const now = Date.now();
+  const at = new Date(now).toISOString();
+  const path = "C:/RAW-PATH-DETAIL/discard.json";
+  const stderr = "[session/create] durationMs=79";
+  const writeText = vi.fn(async () => {});
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  const before = feed.rows;
+  feed.rows = noticeRows({
+    threads: [{
+      id: "died", title: "Dead harness", providerName: "Claude", updatedAt: at, lastSeq: 1,
+      activity: { state: "failed", pending: 0, lastSeq: 1, message: "The claude harness exited (code 3)." },
+      lifecycle: { status: "active", explicitUnread: false, readSeq: 1 },
+      events: [{
+        kind: "error", seq: 1, at, turnId: "u1", message: "The claude harness exited (code 3).",
+        failure: { kind: "other", message: "The claude harness exited (code 3).", raw: stderr },
+      }],
+    }] as unknown as Parameters<typeof noticeRows>[0]["threads"],
+    receipts: [], works: [], machine: null, held: [],
+    stored: [{ class: "discard", place: "Broken settings", path, sha256: "bad", at, reason: "Invalid JSON" }],
+  }, now);
+  try {
+    render(<Ledger presentation={LEDGER_PRESENTATIONS.overlay} />);
+    for (const [name, detail] of [["Broken settings", path], ["Dead harness", stderr]]) {
+      const row = screen.getByText(name!).closest('[role="option"]');
+      expect(row).not.toBeNull();
+      expect(row!.textContent).not.toContain(detail);
+      fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "Copy the details" }));
+      expect(writeText).toHaveBeenLastCalledWith(detail);
+    }
   } finally {
     feed.rows = before;
   }

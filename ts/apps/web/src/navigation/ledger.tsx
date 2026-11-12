@@ -162,11 +162,15 @@ export function useLedgerList(
       meta: <span className="face-mono tabular-nums">{shown.fact}</span>,
       ...(presentation.says && shown.says
         ? { lines: 2 as const, sub: shown.says }
-        : item.kind === "row" && item.row.detail
-          ? { lines: 2 as const, sub: item.row.detail }
+        : item.kind === "row" && item.row.visibleDetail
+          ? {
+              lines: 2 as const,
+              sub: <span className="block whitespace-normal break-all face-mono">{item.row.visibleDetail}</span>,
+            }
           : {}),
       refusal: shown.refusal,
-      // Keep the accessible description and copy press in step with the visible detail.
+      // Only visibleDetail opts into a second line; raw detail folds behind the row:
+      // its tooltip and the copy press.
       title: item.kind === "row" ? item.row.detail : undefined,
       actions:
         item.kind === "row" && item.row.act?.kind === "resume" ? (
