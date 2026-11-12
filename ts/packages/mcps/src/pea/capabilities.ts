@@ -114,7 +114,7 @@ export function createCapabilityCatalogSource(options: {
   machine: () => Promise<Machine>;
   content?: () => Promise<CapabilityContent>;
   /** Scratch Pages read fresh on every catalog read, whatever the cached snapshot holds. */
-  pages?: () => Promise<readonly Capability[]>;
+  pages?: (scope: HostSessionScope) => Promise<readonly Capability[]>;
   admittedRoutes?: CapabilitySources["admittedRoutes"];
 }): CapabilityCatalogSource {
   const base = options.hostBaseUrl.replace(/\/$/, "");
@@ -129,7 +129,7 @@ export function createCapabilityCatalogSource(options: {
         readScoped(scope),
         recents(),
         options.machine(),
-        options.pages?.().catch((error) => { console.error("capabilities: asynchronous operation failed", error); return undefined; }),
+        options.pages?.(scope).catch((error) => { console.error("capabilities: asynchronous operation failed", error); return undefined; }),
       ]);
       const catalog = pages
         ? {

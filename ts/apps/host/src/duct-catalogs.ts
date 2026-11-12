@@ -7,7 +7,7 @@ import { readStored } from "@pe/host-contracts/store";
 import { storedNoticesPath } from "./notice-feed.ts";
 
 /** The product's Catalogs in every home, in list order (user, project, firm). */
-export const productCatalogsRoots = () => homeDirs(productPathNames.catalogsDirectoryName);
+export const productCatalogsRoots = (pointer?: string | null) => homeDirs(productPathNames.catalogsDirectoryName, { pointer });
 export interface CatalogReading {
   tables: Catalogs;
   findings: string[];

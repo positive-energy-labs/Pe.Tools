@@ -130,7 +130,7 @@ export const ductsPricing = read("ducts.pricing", {
   async run(ctx, args) {
     const network = await ctx.read(ductsNetwork, args);
     const layers = await ctx.read(designLayers, args.target),
-      catalog = await ctx.read(catalogs, null);
+      catalog = await ctx.read(catalogs, args.target);
     const tables = await ctx.native("ducts.tables", {
       role: "acquire",
       target: { kind: "document", ref: args.target },

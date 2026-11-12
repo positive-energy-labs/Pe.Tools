@@ -1,3 +1,6 @@
+import { targetHomes } from "./call-route.ts";
+import { RevitBridge } from "./bridge.ts";
+import { RequestIdentity } from "./request-services.ts";
 /**
  * The host's file inputs (ADR 0031 rule 1): the firm files and the duct catalogs. A body reads them
  * through this service so a test or a recording can answer instead of the disk. A firm file is
@@ -74,8 +77,9 @@ const catalogsCodec = Schema.declare(
 );
 const FIRM = { kind: "files", file: "firm" } as const;
 const CATALOGS = { kind: "files", file: "duct-catalogs" } as const;
-// A file input has no document: its scope is the host's product root, and a firm file's its owner.
+// A catalog taking names its project pointer; a document-free taking keeps the host-root scope.
 const SCOPE = "{}";
+const catalogScope = (pointer?: string | null) => pointer ? JSON.stringify({ pointer }) : SCOPE;
 const firmScope = (owner: string) => JSON.stringify({ owner });
 
 export class DuctFiles extends Context.Service<
@@ -83,6 +87,7 @@ export class DuctFiles extends Context.Service<
   {
     readonly firm: (owner: string) => Effect.Effect<FirmFile, DoorFailure>;
     readonly ductCatalogs: Effect.Effect<CatalogReading, DoorFailure>;
+    readonly catalogsFor?: (pointer: string | null | undefined) => Effect.Effect<CatalogReading, DoorFailure>;
     readonly subscribe?: (changed: (name: string) => void) => () => void;
   }
 >()("pe/DuctFiles") {
@@ -96,6 +101,7 @@ export class DuctFiles extends Context.Service<
     return Layer.succeed(DuctFiles, {
       firm: (owner) => Effect.promise(() => readFirmFile(firmRoot(), owner)),
       ductCatalogs: Effect.promise(() => readDuctCatalogs(roots.catalogs)),
+      catalogsFor: (pointer) => Effect.promise(() => readDuctCatalogs(pointer ? productCatalogsRoots(pointer) : roots.catalogs)),
       subscribe: (changed) => {
         const stops = [
           ["firm", firmRoot()] as const,
@@ -167,6 +173,7 @@ export class DuctFiles extends Context.Service<
       DuctFiles,
       Effect.map(Effect.service(DuctFiles), (live) => ({
         subscribe: live.subscribe,
+        catalogsFor: pointer => captureInput(writer, CATALOGS, catalogScope(pointer), catalogsCodec, catalogsFor(live, pointer), observed),
         firm: (owner) =>
           captureInput(writer, FIRM, firmScope(owner), firmCodec, live.firm(owner), observed),
         ductCatalogs: captureInput(
@@ -185,6 +192,7 @@ export class DuctFiles extends Context.Service<
     bindings: ReadonlyMap<string, string> = new Map(),
   ) =>
     Layer.succeed(DuctFiles, {
+      catalogsFor: pointer => replayInput(reader, CATALOGS, catalogScope(pointer), catalogsCodec, bindings.get(inputBindingKey(CATALOGS, catalogScope(pointer)))),
       firm: (owner) =>
         replayInput(
           reader,
@@ -204,11 +212,17 @@ export class DuctFiles extends Context.Service<
 }
 
 /** Under /pe so the dev proxy carries it; a bare /ducts/* belongs to the web route (404 in Vite). */
-export const ductCatalogsRoute = HttpRouter.add(
-  "GET",
-  "/pe/ducts/catalogs",
+export const ductCatalogsRoute = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const files = yield* DuctFiles;
-    return HttpServerResponse.jsonUnsafe(yield* files.ductCatalogs);
+    const bridge = yield* RevitBridge;
+    yield* router.add("GET", "/pe/ducts/catalogs", Effect.gen(function* () {
+      const identity = yield* RequestIdentity;
+      const { pointer } = yield* targetHomes(bridge, identity.scope);
+      return HttpServerResponse.jsonUnsafe(yield* catalogsFor(files, pointer));
+    }));
   }),
 );
+
+export const catalogsFor = (files: DuctFiles["Service"], pointer?: string | null) =>
+  files.catalogsFor ? files.catalogsFor(pointer) : files.ductCatalogs;

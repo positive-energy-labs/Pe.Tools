@@ -190,7 +190,7 @@ const sheetModel = read("fans.calculation", {
     });
     if (!response.version || !tables.version)
       throw Error("Ducts read did not return an observation version");
-    const catalog = await ctx.read(catalogs, null);
+    const catalog = await ctx.read(catalogs, request.target);
     const layersOf = (snapshot: z.infer<typeof snapshotSchema>) => ({
       snapshot,
       work,

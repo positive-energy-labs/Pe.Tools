@@ -2,10 +2,10 @@ import { z } from "zod";
 import { podMemberSchema, parsedDocViewSchema } from "@pe/agent-contracts";
 import { familySpecAsset } from "./family-spec.ts";
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
-export const readFamilySpec = async (raw: unknown) => {
+export const readFamilySpec = async (raw: unknown, pointer?: string | null) => {
   const member = podMemberSchema.parse(raw);
   const asset = (path: string) =>
-    familySpecAsset(new URL(`http://host/family/spec?${new URLSearchParams({ ...member, path })}`));
+    familySpecAsset(new URL(`http://host/family/spec?${new URLSearchParams({ ...member, path })}`), undefined, pointer);
   const link = await asset(`${member.path}.spec.json`);
   if (link.status === 404) return { doc: null, error: null };
   try {

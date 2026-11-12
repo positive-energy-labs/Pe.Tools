@@ -1,3 +1,5 @@
+import { catalogsFor } from "./ducts-files.ts";
+import { z } from "zod";
 import { admitNativeCaller } from "./native-read-policy.ts";
 import { captureInput, replayInput, nativeInputIdentity, type RecordedInput } from "./native-recording.ts";
 import { CaptureStore } from "./takeoff-captures.ts";
@@ -501,7 +503,11 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           : name.startsWith("local:")
           ? readLocal(name.slice(6), args)
           : name === "family-spec"
-            ? readFamilySpec(args)
+            ? (async () => {
+                const { target } = z.object({ target: documentRefSchema.optional() }).parse(args);
+                const pointer = target ? (await invoke(inventory.document(target))).projectHome : null;
+                return readFamilySpec(args, pointer);
+              })()
             : Promise.reject(Error(`Unknown file input ${name}`)),
       );
     const sources = (current: InputConsumption): ReadSources => {
@@ -526,7 +532,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           name === "firm"
             ? invoke(files.firm(String(args)))
             : name === "catalogs"
-              ? invoke(files.ductCatalogs)
+              ? (async () => { const ref = args ? documentRefSchema.parse(args) : null; const pointer = ref ? (await document(ref)).projectHome : null; return invoke(catalogsFor(files, pointer)); })()
               : name === "capture"
                 ? scoped(current)(asset(String(args), true)).then(() => String(args))
                 : takeFile(name, args, current),

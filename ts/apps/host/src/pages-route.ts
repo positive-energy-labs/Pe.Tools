@@ -1,3 +1,5 @@
+import { targetHomes } from "./call-route.ts";
+import { readSessionScope } from "./sdk-session.ts";
 import {
   peRoutes,
   servePeRoute,
@@ -1039,8 +1041,8 @@ export const observePageTarget = (
 };
 
 export const pagesRoute = (
-  root: () => PagesRoots = productPagesRoots,
-  pods: () => PodsRoots = productPodsRoots,
+  root: (pointer?: string | null) => PagesRoots = productPagesRoots,
+  pods: (pointer?: string | null) => PodsRoots = productPodsRoots,
 ) =>
   HttpRouter.use((router) =>
     Effect.gen(function* () {
@@ -1065,13 +1067,22 @@ export const pagesRoute = (
             body: JSON.stringify(body),
           }),
       };
-      const pages = createPagesHandler(root(), pods(), live, yield* ActionJournalService);
-      served = pages.observeTarget;
-      const handler = HttpEffect.fromWebHandler((request) =>
-        matchPeRoute(request.method, new URL(request.url).pathname)
-          ? servePeRoute(request, pages)
-          : pages(request),
-      );
+      const journal = yield* ActionJournalService;
+      const handlers = new Map<string, ReturnType<typeof createPagesHandler>>();
+      const handler = HttpEffect.fromWebHandler(async (request) => {
+        const scope = readSessionScope(Object.fromEntries(request.headers));
+        const { pointer } = bridge ? await Effect.runPromise(targetHomes(bridge, scope)) : {};
+        const roots = root(pointer), podRoots = pods(pointer);
+        const key = JSON.stringify([roots, podRoots]);
+        let pages = handlers.get(key);
+        if (!pages) {
+          pages = createPagesHandler(roots, podRoots, live, journal);
+          handlers.set(key, pages);
+        }
+        served = pages.observeTarget;
+        return matchPeRoute(request.method, new URL(request.url).pathname)
+          ? servePeRoute(request, pages) : pages(request);
+      });
       // One registration claims the bare `/pages` too (a second `add` is refused at boot; see captures).
       yield* router.add("*", "/pages/*", handler);
       yield* router.add(peRoutes["page.bind"].method, peRoutes["page.bind"].path, handler);

@@ -32,7 +32,7 @@ export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<t
           : null;
       const document =
         args.member && !attached
-          ? await ctx.read(familySpec, args.member)
+          ? await ctx.read(familySpec, { ...args.member, ...(target.kind === "document" ? { target: target.ref } : {}) })
           : { doc: null, error: null };
       const spec =
         attached ?? (args.member && document.doc ? { member: args.member, doc: document.doc } : null);

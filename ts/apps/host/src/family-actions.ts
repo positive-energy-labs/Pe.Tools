@@ -1,3 +1,4 @@
+import { targetHomes } from "./call-route.ts";
 import { currentDocument as current, lifetime } from "./document-lifetime.ts";
 import { createHash } from "node:crypto";
 import { resolve, win32 } from "node:path";
@@ -108,8 +109,8 @@ const digest = (value: string) => createHash("sha256").update(value).digest("hex
  * for a supplied draft (homes freeze shape 7). Pure: no write, and no pod is copied anywhere. The
  * pod must exist; its home does not matter, because a run never lands in a home.
  */
-export const sourceRunOutput = async (pod: string | null | undefined, deps: PodDependencies) => {
-  if (pod) await runPods(deps, podFolder(pod, { podsRoot: deps.podsRoot }));
+export const sourceRunOutput = async (pod: string | null | undefined, deps: PodDependencies, pods: PodContext = { podsRoot: deps.podsRoot }) => {
+  if (pod) await runPods(deps, podFolder(pod, pods));
   return runsFolder(pod, { podsRoot: deps.podsRoot });
 };
 
@@ -200,11 +201,12 @@ export const runPods = <A, E>(
       Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)));
 
 /** Pod context whose composition runs in the exact admitted session and document lifetime. */
-export const podContext = (
+export const podContext = async (
   deps: PodDependencies,
   bridge: RevitBridge["Service"],
   target?: DocumentRef,
-): PodContext => ({
+): Promise<PodContext> => ({
+  ...(await Effect.runPromise(targetHomes(bridge, { bridgeSessionId: target?.session, openDocumentId: target?.openId }))),
   podsRoot: deps.podsRoot,
   ...(target
     ? {
@@ -521,7 +523,7 @@ export function familyExecutors(
     const consumes: Dependency[] = [];
     const sealed = await Promise.all(
       sources.map(async (item) => {
-        const value = await familySpec(deps, item.source, podsFor(ctx));
+        const value = await familySpec(deps, item.source, await podsFor(ctx));
         for (const member of [value.source.root, ...value.source.dependencies])
           if ((!("origin" in member) || member.origin === "SavedMember") && member.id)
             consumes.push({
@@ -542,11 +544,11 @@ export function familyExecutors(
   };
   const mark = (target: DocumentRef, takenAt: string | null | undefined): Dependency[] =>
     takenAt ? [{ kind: "document-mark", probe: { ref: target, takenAt }, expected: true }] : [];
-  const outputs = async (sources: readonly Sealed[]) =>
+  const outputs = async (ctx: CommandContext, sources: readonly Sealed[]) =>
     Promise.all(
       [...new Set(sources.map((x) => x.source.root.id))].map(async (pod) => ({
         kind: "directory" as const,
-        path: await sourceRunOutput(pod, deps),
+        path: await sourceRunOutput(pod, deps, await podsFor(ctx)),
       })),
     );
   const native = (
@@ -967,7 +969,7 @@ export function familyExecutors(
       const run =
         target.kind === "document"
           ? await familiesApplyRun(
-              await sourceRunOutput(source.root.id, deps),
+              await sourceRunOutput(source.root.id, deps, await podContext(deps, bridge, target.ref)),
               step,
               { ...prepared, process },
               target.ref.openId,
@@ -1074,7 +1076,7 @@ export function familyExecutors(
       claims: plan ? [{ kind: "receipt" as const, id: plan.id }] : [],
       effects: [
         { kind: "document" as const, ref: bound.target },
-        ...(await outputs(sourceOutputs)),
+        ...(await outputs(ctx, sourceOutputs)),
       ],
       prepare: async () => {
         const intents = plan
@@ -1155,7 +1157,7 @@ export function familyExecutors(
       effects: input.pod
         ? [
             ...paths.map((path) => ({ kind: "member" as const, pod: input.pod!, path })),
-            { kind: "directory" as const, path: await sourceRunOutput(input.pod, deps) },
+            { kind: "directory" as const, path: await sourceRunOutput(input.pod, deps, await podsFor(ctx)) },
           ]
         : [],
       prepare: async () => {
@@ -1186,12 +1188,12 @@ export function familyExecutors(
         path: prepared.path ?? capturedMember(ctx, spec.familyId),
         content: spec.content,
       };
-      const written = yield* execution.step("file", "pod.member.write", request, () => io(() => writeMemberOnce(deps, request, podsFor(ctx))),
+      const written = yield* execution.step("file", "pod.member.write", request, () => io(async () => writeMemberOnce(deps, request, await podsFor(ctx))),
       );
       members.push(written);
       runs.set(
         spec.familyId,
-        yield* io(() => writeCaptureRun(deps, podsFor(ctx), prepared.at, written, operation, {
+        yield* io(async () => writeCaptureRun(deps, await podsFor(ctx), prepared.at, written, operation, {
           "unmodeled.json": `${JSON.stringify(spec.unmodeled, null, 2)}\n`,
         })),
       );
@@ -1340,7 +1342,7 @@ export function familyExecutors(
         }));
       if (handle.key.work !== memberWork(input.member))
         throw refused("Exact member Work and expected revision are required");
-      const saved = await runPods(deps, readMember(input.member, podsFor(ctx)));
+      const saved = await runPods(deps, readMember(input.member, await podsFor(ctx)));
       if (input.sha256 && input.sha256 !== saved.sha256)
         throw refused("Saved member changed; read it and adopt the current bytes");
       if (
@@ -1413,7 +1415,7 @@ export function familyExecutors(
           "file",
           "expectedSha256" in p.request ? "pod.member.save" : "pod.member.write",
           p.request,
-          () => io(() => writeMemberOnce(deps, p.request, podsFor(ctx))),
+          () => io(async () => writeMemberOnce(deps, p.request, await podsFor(ctx))),
         );
       if (p.destination) return { file: written };
       const handle = handleOf(ctx),
@@ -1454,7 +1456,7 @@ export function familyExecutors(
       const members = [];
       for (const member of execution.prepared.members)
         members.push(
-          yield* execution.step("file", "pod.member.write", member, () => io(() => writeMemberOnce(deps, member, podsFor(ctx))),
+          yield* execution.step("file", "pod.member.write", member, () => io(async () => writeMemberOnce(deps, member, await podsFor(ctx))),
           ),
         );
       return { saved: members.length, members };
@@ -1469,12 +1471,12 @@ export function familyExecutors(
         sources = await compose(ctx, [{ source: input.source }]),
         sealed = sources.sealed[0]!,
         file = win32.join(
-          await runPods(deps, podFolder(input.source.pod, podsFor(ctx))),
+          await runPods(deps, podFolder(input.source.pod, await podsFor(ctx))),
           input.source.path,
         );
       return {
         consumes: [...bound.consumes, ...sources.consumes],
-        effects: [{ kind: "document", ref: bound.target }, ...(await outputs([sealed]))],
+        effects: [{ kind: "document", ref: bound.target }, ...(await outputs(ctx, [sealed]))],
         prepare: async () => {
           return {
             kind: "native" as const,
@@ -1599,7 +1601,7 @@ export function familyExecutors(
     "families.apply": familiesApply,
     "families.save-draft": saveDraft,
     "family.build": build,
-    "family.attach-spec": familySpecExecutor(deps),
+    "family.attach-spec": familySpecExecutor(deps, bridge),
   } satisfies Record<FamilyActionKey, CommandExecutor>;
 }
 

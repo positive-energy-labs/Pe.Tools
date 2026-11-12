@@ -22,7 +22,7 @@ const resource = <O extends z.ZodType>(output: O) => ({
   ...leaf("resource", readingRequestSchema, output),
   content: (value: z.output<O>, args: z.output<typeof readingRequestSchema>) => resourceContent(args, value),
 });
-export const catalogs = leaf("file:catalogs", z.null(), catalogReading);
+export const catalogs = leaf("file:catalogs", documentRefSchema.nullable(), catalogReading);
 export const resources = {
   machine: resource(chatValue.shape.machine),
   capabilities: resource(chatValue.shape.capabilities),
@@ -88,7 +88,7 @@ export const captures = read("input.captures", {
 });
 export const familySpec = leaf(
   "file:family-spec",
-  podMemberSchema,
+  podMemberSchema.extend({ target: documentRefSchema.optional() }),
   z.object({ doc: parsedDocViewSchema.nullable(), error: z.string().nullable() }),
 );
 export const podProfile = read("input.pod-profile", {
