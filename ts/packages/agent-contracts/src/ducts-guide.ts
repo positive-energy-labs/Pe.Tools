@@ -88,7 +88,7 @@ export const DUCTS_PEA_DOES: readonly string[] = [
 export const DUCTS_PEA_NEVER: readonly string[] = [
   "Treats an optional suggestion as the current edit or a model fact.",
   "Presents a preview as a completed Revit write.",
-  "Bypasses the host guards or continues pending writes after Stop writes.",
+  "Bypasses the host guards or continues pending writes after Stop.",
   "Computes a pressure drop of its own, by script or by hand; the tool's number is the number.",
   "Chooses repairs outside the agreed engineering intent or reports geometry changes without native readback.",
 ];
