@@ -338,10 +338,13 @@ export async function installArchive(
         continue;
       }
       for (let parent = dirname(target); parent !== directory; parent = dirname(parent)) directories.add(parent);
+      // A write may throw after creating bytes. Undo still uses only our intended hash.
+      writes.push({ path: target, sha256: sha256(bytes), prior: null });
       const wrote = writeHome(target, bytes, null);
-      if (!wrote.ok)
+      if (!wrote.ok) {
+        writes.pop(); // A refused CAS made no write, so it owns nothing to undo.
         throw new TransferRefused(`Pod member changed during import: ${path}`, 409);
-      writes.push({ path: target, sha256: wrote.sha256, prior: null });
+      }
     }
     // The import record is machine state (it is derived, and dated here), keyed by the pod's id.
     // It names its archive by content hash and file name: no machine path is stored anywhere.

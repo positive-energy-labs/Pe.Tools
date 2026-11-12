@@ -105,6 +105,28 @@ test.each(["io", "cas"] as const)("import rolls back a second-member failure (%s
   await expect(start()).resolves.toMatchObject({ id: "example" });
 });
 
+test.each([true, false])("a throwing second write rolls back only matching bytes (%s)", async (matching) => {
+  const write = settings.writeHome;
+  let count = 0;
+  let torn = "";
+  vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
+    if (++count !== 2) return write(...args);
+    torn = args[0];
+    write(...args);
+    if (!matching) writeFileSync(torn, "concurrent edit");
+    throw Error("injected torn write");
+  });
+  const result = importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures });
+  await expect(result).rejects.toThrow("injected torn write");
+  if (matching) {
+    await expect(readFile(torn)).rejects.toThrow(/ENOENT/);
+    expect(await readdir(pods)).toEqual([]);
+  } else {
+    await expect(result).rejects.toThrow(torn);
+    expect(await readFile(torn, "utf8")).toBe("concurrent edit");
+  }
+});
+
 test.each(["io", "cas"] as const)("update rolls back a second-member failure (%s) byte for byte and a retry succeeds", async (mode) => {
   await boot();
   const original = (await listPackages(pods)).packages.find(p => p.id === "example")!;
