@@ -63,9 +63,13 @@ test("start census is silent for a missing or empty earlier Work folder", () => 
   try {
     noteStartupHomes(user, { root: null, looked: [] }, notices);
     expect(readStoredNotices(notices)).toEqual([]);
-    mkdirSync(join(user, "Work"));
+    mkdirSync(join(user, "Work", "empty"), { recursive: true });
     noteStartupHomes(user, { root: null, looked: [] }, notices);
     expect(readStoredNotices(notices)).toEqual([]);
+    writeFileSync(join(user, "Work", "empty", "nested.txt"), "kept");
+    noteStartupHomes(user, { root: null, looked: [] }, notices);
+    expect(readStoredNotices(notices)).toHaveLength(1);
+    expect(readFileSync(join(user, "Work", "empty", "nested.txt"), "utf8")).toBe("kept");
   } finally {
     rmSync(user, { recursive: true, force: true });
   }
