@@ -1,5 +1,11 @@
 import { expect, it } from "vite-plus/test";
+import { readFileSync } from "node:fs";
 import { additions, boundaryCensus } from "./unification-2-census.ts";
+
+it("generic receipt projections name no route or operation key", () => {
+  const source = readFileSync(new URL("../../../packages/agent-contracts/src/action-receipts.ts", import.meta.url), "utf8");
+  expect(source).not.toMatch(/["'`][a-z][\w-]*(?:\.[\w-]+)+["'`]/);
+});
 
 it("scans source despite mocked imports, aliases, exports and malformed fixture code", () => {
   const actual = boundaryCensus({

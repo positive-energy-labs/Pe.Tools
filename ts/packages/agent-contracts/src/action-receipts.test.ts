@@ -61,6 +61,7 @@ test("not-dispatched Families receipts retain defaults and outcomes", () => {
 // Held acts wait for the person; stale observations must be read again before another attempt.
 test.each([
   { kind: "held", act: "synchronize", message: "Held for the person" },
+  { kind: "invalid" },
   { kind: "stale", consumed: [] },
   { kind: "stale_revision", handle: { key: { route: "fans", binding: "host", target: null }, revision: 1 }, live: 2 },
 ])("undispatched $kind refusals do not offer retry", (refusal) => {
