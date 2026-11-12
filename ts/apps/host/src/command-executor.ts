@@ -127,9 +127,9 @@ export interface CommandBinding {
   claims?: Claim[];
   effects: Footprint;
   basis?: Basis | null;
-  /** Read-only eligibility check before opening consent; preparation still rechecks after it. */
+  /** Read-only eligibility check before preparation; preparation still rechecks it. */
   preflight?(): Promise<void>;
-  /** Closes over already bound source facts. It runs after consent and never on resume. */
+  /** Closes over already bound source facts. It runs after admission and never on resume. */
   prepare?(): Promise<unknown>;
 }
 export type StepRecovery = (

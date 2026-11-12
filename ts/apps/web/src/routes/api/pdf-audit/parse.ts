@@ -2,15 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 // Side-effect type import: registers the `server` route-option augmentation.
 import "@tanstack/react-start";
 
-import type {
-  DocBBox,
-  DocImage,
-  GroundedBlock,
-  ParsedDocView,
-  ParsedPage,
-} from "#/grounded-doc/types";
 import { putParsedDoc } from "#/grounded-doc/parse-cache";
-import { isPersonRequest, parseWithLlamaCloud } from "@pe/mcps/llama-parse";
+import { isPersonRequest } from "@pe/mcps/llama-parse";
+import { parseFamilyPdf } from "@pe/mcps/family-pdf";
 import { held } from "@pe/agent-contracts";
 
 export const Route = createFileRoute("/api/pdf-audit/parse")({
@@ -49,11 +43,6 @@ export const Route = createFileRoute("/api/pdf-audit/parse")({
             { status: 400 },
           );
         }
-        const fileName =
-          file instanceof File
-            ? file.name
-            : decodeURIComponent(sourceUrl?.split("/").pop() || "document.pdf");
-
         // For a URL, fetch the bytes ourselves with a browser-ish User-Agent and
         // upload them, rather than handing LlamaCloud the URL. This beats sites
         // that block LlamaCloud's fetcher on User-Agent, and lets us return a
@@ -70,103 +59,12 @@ export const Route = createFileRoute("/api/pdf-audit/parse")({
           uploadFile = fetched.file;
         }
 
-        // The one LlamaParse call, shared with read_document, at its one tier (agentic_plus).
-        let result;
+        let view;
         try {
-          result = await parseWithLlamaCloud({
-            // Proven above: only the person's request reaches this line.
-            sender: "person",
-            file: uploadFile,
-            apiKey,
-            expand: ["items", "markdown", "images_content_metadata"],
-            // screenshot = full-page renders (page-lane background); embedded/layout =
-            // extracted figures and layout crops shown in the images lane.
-            imagesToSave: ["screenshot", "embedded", "layout"],
-          });
+          view = await parseFamilyPdf(uploadFile);
         } catch (error) {
-          return Response.json(
-            { error: error instanceof Error ? error.message : "Parse job failed" },
-            { status: 502 },
-          );
+          return Response.json({ error: error instanceof Error ? error.message : "Parse job failed" }, { status: 502 });
         }
-
-        const markdownByPage = new Map<number, string>();
-        for (const page of result.markdown?.pages ?? []) {
-          if (page.success) markdownByPage.set(page.page_number, page.markdown);
-        }
-
-        // Screenshot filenames look like "page_1.jpg"; fall back to extraction order.
-        const screenshotByPage = new Map<number, string>();
-        const screenshots = (result.images_content_metadata?.images ?? []).filter(
-          (image) => image.category === "screenshot" && image.presigned_url,
-        );
-        screenshots.forEach((image, index) => {
-          const match = /(\d+)/.exec(image.filename);
-          const page = match ? Number(match[1]) : index + 1;
-          if (!screenshotByPage.has(page) && image.presigned_url) {
-            screenshotByPage.set(page, image.presigned_url);
-          }
-        });
-
-        // Extracted figures/crops for the images lane. The page number is encoded
-        // in the filename ("img_p1_1.jpg", "page_2_table_1_v2.jpg").
-        const images: DocImage[] = (result.images_content_metadata?.images ?? [])
-          .filter(
-            (image) =>
-              (image.category === "embedded" || image.category === "layout") &&
-              image.presigned_url &&
-              image.bbox,
-          )
-          .map((image) => {
-            const pageMatch = /(?:page[_-]|_p)(\d+)/i.exec(image.filename);
-            const bbox = image.bbox as DocBBox;
-            return {
-              id: `img-${image.filename}`,
-              page: pageMatch ? Number(pageMatch[1]) : 1,
-              category: image.category as DocImage["category"],
-              url: image.presigned_url as string,
-              bbox: { x: bbox.x, y: bbox.y, w: bbox.w, h: bbox.h },
-            };
-          })
-          .sort((a, b) => a.page - b.page || a.bbox.y - b.bbox.y);
-
-        const pages: ParsedPage[] = [];
-        const blocks: GroundedBlock[] = [];
-        for (const page of result.items?.pages ?? []) {
-          if (!page.success) continue;
-          pages.push({
-            page: page.page_number,
-            width: page.page_width,
-            height: page.page_height,
-            screenshotUrl: screenshotByPage.get(page.page_number) ?? null,
-            markdown: markdownByPage.get(page.page_number) ?? "",
-          });
-          page.items.forEach((item, index) => {
-            const raw = item as {
-              type?: string;
-              md?: string;
-              value?: string;
-              bbox?: DocBBox[] | null;
-            };
-            const md = raw.md ?? raw.value ?? "";
-            if (!md.trim()) return;
-            blocks.push({
-              id: `p${page.page_number}-i${index}`,
-              page: page.page_number,
-              kind: raw.type ?? "text",
-              md,
-              bboxes: (raw.bbox ?? []).map(({ x, y, w, h }) => ({ x, y, w, h })),
-            });
-          });
-        }
-
-        const view: ParsedDocView = {
-          jobId: result.job.id,
-          fileName,
-          pages,
-          blocks,
-          images,
-        };
         // Cache so other tabs (and pea's tools) can fetch the full grounded view by jobId.
         putParsedDoc(view);
         return Response.json(view);

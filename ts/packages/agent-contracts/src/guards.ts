@@ -33,14 +33,15 @@ export const held = (act: GuardedAct, subject: string, how: string): Held => ({
 
 /**
  * An outward send Pea asked for and did not make (guard 3). The person confirms it from its one
- * notice row; Pe then sends exactly these bytes (`sha256`) and keeps the result for Pea's next read.
+ * notice row. A reader holds known bytes; a command held before reading holds its intent instead.
  */
 export const heldSendRequestSchema = z.strictObject({
   service: z.literal("llamaparse"),
-  /** Absolute local path of the file whose bytes would leave this machine. */
+  /** Local path or URL of the source whose bytes would leave this machine. */
   path: z.string().min(1),
+  /** Byte digest for a reader; admission digest for a command held before its source is read. */
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
-  /** LlamaParse `target_pages`, e.g. "1-5". */
+  /** LlamaParse `target_pages`, e.g. "1-5", or "all" for a held command. */
   pages: z.string().min(1),
 });
 export type HeldSendRequest = z.infer<typeof heldSendRequestSchema>;

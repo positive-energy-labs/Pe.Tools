@@ -1,7 +1,7 @@
 /**
  * ADR 0030 rules 2, 4 and 8, step 4: one generic executor over `catalogWorkCommands`, not one adapter per op.
  * The boundary parses the Work; `prepare` reads the owner's base (what the model holds now) through its one
- * Read owner and derives the native request from both. It runs at the plan and again after consent, so the
+ * Read owner and derives the native request from both. It runs at the plan and again at preparation, so the
  * seal (request + the observed before) refuses an apply whose base moved; the sealed document mark still
  * guards dispatch. The plan never reaches the leaf. No retire: catalog Work is the authored source.
  */

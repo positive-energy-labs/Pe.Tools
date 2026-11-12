@@ -29,14 +29,14 @@ export interface CatalogTouch {
 }
 /**
  * Plan derives the one native request from the whole Work laid over `base`, what the model holds now
- * (read by the owner's host reader at plan and again after consent). Step 5's DAG linker reads this entry.
+ * (read by the owner's host reader at plan and again at preparation). Step 5's DAG linker reads this entry.
  */
 export interface CatalogWork<S extends z.ZodType = z.ZodType, B = unknown> {
   owner: string;
   op: string;
   schema: S;
   /**
-   * The native Read the plan takes, and apply retakes after consent, for the stored state `derive` lays the
+   * The native Read the plan takes, and apply retakes at preparation, for the stored state `derive` lays the
    * Work over. Required: an owner whose op omits keys must read them to resend them (K3).
    */
   base: { op: string; input(doc: z.infer<S>): unknown; project(response: unknown, doc: z.infer<S>): B };

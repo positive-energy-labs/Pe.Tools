@@ -141,7 +141,7 @@ import {
   type NoticeSources,
 } from "./notice-feed.ts";
 import { homeLogLines } from "@pe/host-contracts/product-paths";
-import { heldSend, heldSends, holdSend, releaseSend, subscribeHeldSends } from "./guards.ts";
+import { heldSend, heldSends, holdSend, confirmSend, subscribeHeldSends } from "./guards.ts";
 import { sendHeldParse } from "@pe/mcps/held-parse";
 import { observePageTarget } from "./pages-route.ts";
 import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
@@ -600,11 +600,10 @@ export function createPeRoutes(options: PeRoutesOptions) {
       const send = heldSend(declared.params.id!);
       if (!send) return json({ error: "No held send with that id; it was confirmed or the host restarted." }, 404);
       try {
-        await (options.sendHeld ?? sendHeldParse)(send);
+        await confirmSend(send, options.sendHeld ?? sendHeldParse);
       } catch (error) {
         return json({ error: message(error) }, 502);
       }
-      releaseSend(send.id);
       return json({ ok: true });
     }
     if (method === "POST" && declared.id === "outward.person") {

@@ -328,12 +328,12 @@ test("a host restart between plan and apply changes the sealed mark; apply refus
   expect(f.run).not.toHaveBeenCalled();
 });
 
-test("a plan that goes stale after consent is refused at the post-consent prepare, before the write", async () => {
+test("a plan that goes stale after preflight is refused at prepare, before the write", async () => {
   const { f } = await plannedThenApply();
   f.apply();
   const apply = await f.executor.bind(f.ctx);
-  await apply.preflight!(); // before consent: still the planned Work
-  await f.documentChanged(); // the person or Revit moves on while the Reject? window is open
+  await apply.preflight!(); // at preflight: still the planned Work
+  await f.documentChanged(); // the person or Revit moves on between preflight and prepare
   await expect(apply.prepare!()).rejects.toMatchObject({ refusal: { code: "preview.stale" } });
   expect(f.run).not.toHaveBeenCalled();
 });

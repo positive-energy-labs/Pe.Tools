@@ -127,7 +127,11 @@ test("guard 3: Pea's send is held at once with one notice row; only the person's
   expect(heldSends()).toHaveLength(before + 1);
 
   // The person's Confirm sends exactly the held request, once, and the row leaves.
-  expect((await post(human, `/pe/outward/held/${held.id}/confirm`)).status).toBe(200);
+  const confirmations = await Promise.all([
+    post(human, `/pe/outward/held/${held.id}/confirm`),
+    post(human, `/pe/outward/held/${held.id}/confirm`),
+  ]);
+  expect(confirmations.map(response => response.status)).toEqual([200, 200]);
   expect(sent).toEqual([held]);
   expect(heldSends()).toHaveLength(before);
   expect((await post(human, `/pe/outward/held/${held.id}/confirm`)).status).toBe(404);

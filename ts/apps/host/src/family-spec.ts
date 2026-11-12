@@ -11,7 +11,11 @@ import { command, io, refused, type CommandExecutor } from "./command-executor.t
 import { guardSend } from "./guards.ts";
 import { runPods, type PodDependencies } from "./family-actions.ts";
 import { podFolder, writeHome } from "./settings.ts";
-/** The app owns the parser address; commands never infer a frontend from a port or file. */
+import { parseFamilyPdf } from "@pe/mcps/family-pdf";
+
+export const familyPdfParser = { parse: parseFamilyPdf };
+
+/** Host-owned in-process parser, shared with the web route. */
 export class FamilyPdfParser extends Context.Service<FamilyPdfParser, {
   parse(file: File): Promise<unknown>;
 }>()("pe/FamilyPdfParser") {}
@@ -221,7 +225,7 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
         ],
         effects: [{ kind: "directory", path: dirname(safePath(root, member.path)) }],
         prepare: async () => {
-          if (!deps.parsePdf) throw Error("The web PDF parser is unavailable");
+          if (!deps.parsePdf) throw Error("The PDF parser is unavailable");
           const payload = await deps.parsePdf(file);
           const doc = parsedDocViewSchema.parse(payload);
           const dir = dirname(member.path).replaceAll("\\", "/");

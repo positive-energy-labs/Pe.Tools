@@ -365,7 +365,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         patches:step.transitions.slice(0,step.cursor).reverse().flatMap(t=>t.inverse)},token);
     } };
   const reviews = new Map<string, { preview: z.output<typeof writePreviewSchema>; input: Record<string, unknown>; token: InvocationToken; signature: string; presentation: any }>();
-  const consentReviews = new Map<string, ReturnType<typeof reviews.get>>();
+  const applyingReviews = new Map<string, ReturnType<typeof reviews.get>>();
   const problems = new Map<string,string>();
   const plans = new Map<string,InvocationToken>();
   const workSignature = () => canonicalRouteInput([...owners].map(([id,o]) => [id,o.ready,o.handle]));
@@ -471,11 +471,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (apply) {
       const held = reviews.get(id);
       if (!held || !reviewCurrent(id, held.token, held.signature)) throw Error("Review is stale; prepare it again");
-      consentReviews.set(id,held); reviews.delete(id); notify();
+      applyingReviews.set(id,held); reviews.delete(id); notify();
       try {
         const result = await settleNative(door.submit({ id: crypto.randomUUID(), key: cmd.entry, target: input.target!, input: held.input }));
         syncReads(true); return result;
-      } finally {consentReviews.delete(id);notify();}
+      } finally {applyingReviews.delete(id);notify();}
     }
     let token: InvocationToken | undefined;
     try {
@@ -632,7 +632,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     refresh: (read?:import("../route/host-read").HostRead) => {
       requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true); loadFindings();
     }, run, result:(id:string)=>results.get(id),
-    review: (id: string) => { const r=reviews.get(id)??consentReviews.get(id); if(!r) return null;
+    review: (id: string) => { const r=reviews.get(id)??applyingReviews.get(id); if(!r) return null;
       const stale = !reviewCurrent(id, r.token, r.signature);
       return { preview: stale || !reviews.has(id) ? undefined : r.preview, sentence: stale ? null : r.presentation.sentence,
         rows: stale ? [] : r.presentation.rows, cells: stale ? [] : r.presentation.cells, stale }; },
