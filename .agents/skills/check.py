@@ -210,6 +210,23 @@ def main():
     elif not os.path.islink(mirror) and os.path.realpath(mirror) != os.path.realpath(HERE):
         fail('mirror', '%s is a copy, not a junction; it will drift. Delete it and run --fix' % mirror)
 
+    # 6b. model guidance has one home, the tier file; a skill or a charter that names a model scatters it again
+    tiers = os.path.join(os.path.dirname(HERE), 'models.toml')
+    if not os.path.exists(tiers):
+        fail('models', '%s is missing; it is the one home of model guidance' % tiers)
+    else:
+        import tomllib
+        models = tomllib.load(open(tiers, 'rb')).get('models', {})
+        words = [n for m in models.values() for n in m.get('names', [])]
+        ids = [m['id'] for m in models.values() if m.get('id')]
+        named = re.compile(r'\b(?:%s)\b|%s' % ('|'.join(map(re.escape, words)), '|'.join(map(re.escape, ids))))
+        texts = [(d, text) for d, (kind, name, text) in sorted(skills.items())]
+        texts += [('roles/' + os.path.basename(p), read(p)) for p in sorted(glob.glob(os.path.join(os.path.dirname(HERE), 'roles', '*.md')))]
+        for where, text in texts:
+            hits = sorted(set(named.findall(text)))
+            if hits:
+                fail(where, 'names a model (%s); name the tier and put the model in .agents/models.toml' % ', '.join(hits))
+
     # 7. the commit hook that stamps T3-Thread trailers is installed via core.hooksPath
     cur = subprocess.run(['git', 'config', '--get', 'core.hooksPath'], cwd=REPO, capture_output=True, text=True).stdout.strip()
     if cur != 'tools/git-hooks':
