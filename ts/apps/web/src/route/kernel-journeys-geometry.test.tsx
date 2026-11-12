@@ -51,8 +51,9 @@ test("JZ H04 typed Fans picture demands exact elements and reach, refuses docume
   try {
     const a = open("a");
     await waitFor(() => expect(a.value(), JSON.stringify(a.value())).toMatchObject({current:true}));
-    const view = render(tree(a)); resize();
-    await waitFor(() => expect(io.call).toHaveBeenCalled());
+    // The picture pane is the kernel's, loaded lazily: it is measured once it has mounted.
+    const view = render(tree(a));
+    await waitFor(() => { resize(); expect(io.call).toHaveBeenCalled(); });
     expect(io.call.mock.calls.every(([, req]) => req.contextRepresentation === "overview"), "H04: mount acquires no detailed geometry").toBe(true);
     fireEvent.click(view.getByRole("button", { name: "Read detailed" }));
     await waitFor(() => expect(io.call.mock.calls.some(([, req]) => req.contextRepresentation === "meshes")).toBe(true));
@@ -121,8 +122,8 @@ test("JM B03/B14/B18 named Fans roster and a live gesture survive typed Page pro
   try {
     const a = open("jm-pose");
     await waitFor(() => expect(a.value().current).toBe(true));
-    const view = render(tree(a)); resize();
-    await waitFor(() => expect(io.orbit?.read()).not.toBeNull());
+    const view = render(tree(a));
+    await waitFor(() => { resize(); expect(io.orbit?.read()).not.toBeNull(); });
     const orbit = io.orbit!;
     const pose: import("../scene/orbit").OrbitViewport = { kind: "orbit", yaw: 170, elev: 17, zoom: 2, pivot: [0, 0, 0] };
     const gesture = orbit.begin();
