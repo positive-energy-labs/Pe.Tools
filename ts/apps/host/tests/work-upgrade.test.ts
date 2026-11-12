@@ -167,11 +167,11 @@ test("HTTP navigation upgrades the driver's pre-h2 Work without losing cells", a
       planted.push({ spec, key, targetKey, path, prior, record });
     }
     const read = async () => navigationSnapshotSchema.parse(await (await app.fetch(new Request("http://host/pe/navigation"))).json());
-    expect((await read()).works).toHaveLength(2);
+    expect((await read()).works, JSON.stringify(readStoredNotices(storedNoticesPath()).slice(before.length))).toHaveLength(2);
     for (const { spec, key, targetKey, path, prior, record } of planted) {
       const saved = await store.getState({ targetKey, route: spec.route });
       expect(saved).toMatchObject({ schemaVersion: spec.schemaVersion, revision: record.value.revision });
-      const { designFriction: _, parameters: __, ...cells } = record.value.doc;
+      const { designFriction: _, parameters: __, claims: ___, ...cells } = record.value.doc;
       const doc = spec.schema.parse(cells);
       expect(saved).toHaveProperty("doc", doc);
       expect(JSON.parse(await readFile(path, "utf8")).value).toEqual(saved);
