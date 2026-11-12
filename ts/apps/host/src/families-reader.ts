@@ -1,8 +1,10 @@
 import { SdkSession } from "./sdk-session.ts";
 import { Clock, Context, Effect, Layer, Semaphore } from "effect";
 import { randomUUID } from "node:crypto";
-import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
-import { writeAtomic } from "@pe/host-contracts/store";
+import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { z } from "zod";
+import { readStored, writeAtomic } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "./notice-feed.ts";
 import { join } from "node:path";
 import { freemem } from "node:os";
 import { productScratchPath } from "@pe/host-contracts/service-identity";
@@ -161,19 +163,13 @@ async function readFamiliesProgressively(
   };
   const costsPath = join(captures.directory, "families", "read-costs.json");
   let costs: Costs = { startupMs: 180_000, families: {} };
-  try {
-    const stored = JSON.parse(await readFile(costsPath, "utf8")) as Costs;
-    if (
-      Number.isFinite(stored.startupMs) &&
-      stored.startupMs >= 1_000 &&
-      stored.families &&
-      typeof stored.families === "object"
-    )
-      costs = stored;
-  } catch (error) {
-    console.warn("ts/apps/host/src/families-reader.ts: fallback after failure", error);
-    /* A missing or damaged timing file is a cold estimate, never a read failure. */
-  }
+  // Derived (ADR 0039): a damaged timing file is discarded with a notice and the estimate starts cold.
+  const stored = readStored(
+    costsPath,
+    z.object({ startupMs: z.number().min(1_000), families: z.record(z.string(), z.custom<Sample>()) }),
+    { class: "discard", place: "Family read timings", notices: storedNoticesPath() },
+  );
+  if (stored.kind === "ok") costs = stored.value;
   const samples: Sample[] = [];
   let folder: Promise<string> | undefined;
   const costKey = (item: Item) => `${item.familyUniqueId}:${item.typeCount}`;

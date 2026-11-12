@@ -33,6 +33,7 @@ import {
   resolvePackageIdentity,
 } from "./packages.ts";
 import { requirePackageEnabled, activePackages } from "./package-lifecycle.ts";
+import { shippedPodsSettled } from "./installed-pods.ts";
 import { LocalOpError } from "./local-error.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
@@ -80,7 +81,17 @@ const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 const writeLock = Semaphore.makeUnsafe(1);
 const schemaCache = new Map<string, ValidateFunction | string>();
 
+/**
+ * The host answers healthy before the shipped-pod import ends (shipped examples are optional
+ * content, not a prerequisite for the host door), so a listing of the product's own Pods waits
+ * for that import: the first `pod.list` on a fresh home names every shipped pod. An owner that
+ * supplies its own Pods root has no import to wait for.
+ */
+const shippedPodsImported = (ctx: PodContext) =>
+  ctx.podsRoot === undefined ? Effect.promise(shippedPodsSettled) : Effect.void;
+
 export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
+  yield* shippedPodsImported(ctx);
   const root = ctx.podsRoot ?? productPodsRoots();
   const found = yield* Effect.tryPromise({
     try: () => listPackages(root),
@@ -105,6 +116,7 @@ export const resolvePodIdentity = Effect.fnUntraced(function* (
   folder: string,
   ctx: PodContext = {},
 ) {
+  yield* shippedPodsImported(ctx);
   const root = ctx.podsRoot ?? productPodsRoots();
   return yield* Effect.tryPromise({
     try: async () => {

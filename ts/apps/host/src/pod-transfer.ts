@@ -279,7 +279,8 @@ export async function installArchive(
       409,
     );
   const directory = join(podsRoot, folder);
-  if (await lstat(directory).catch((error) => { console.error("pod-transfer: asynchronous operation failed", error); return null; }))
+  // An absent folder is the expected case; any other failure is not swallowed.
+  if (await lstat(directory).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return null; }))
     throw new TransferRefused(`Pod folder already exists: ${directory}`, 409);
   for (const [path, bytes] of entries) {
     if (/^pages\/[^/]+\/index\.html$/.test(path)) validatePageHtml(bytes.toString("utf8"), true);

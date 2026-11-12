@@ -87,8 +87,6 @@ export function isPackageMember(path: string): boolean {
   const parts = packageMemberPathSchema.parse(path).toLowerCase().split("/");
   return (
     !parts.some((part) => debris.has(part)) &&
-    // An import record is machine state under `state\pod-imports`; one left in a folder is never a member.
-    !(parts.length === 1 && parts[0] === "imported.json") &&
     !parts.some((part) => part === ".env" || part.startsWith(".env.") || part === "context.token")
   );
 }

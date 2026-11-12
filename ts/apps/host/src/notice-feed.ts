@@ -31,12 +31,35 @@ import { join } from "node:path";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { summarizeFailure } from "@pe/host-contracts/failure-summary";
 import type { ThreadPresence } from "@pe/host-contracts/pe-api";
-import type { StoredNotice } from "@pe/host-contracts/store";
+import { firmHome, noFirmHomeText, type FirmHome } from "@pe/host-contracts/product-paths";
+import { noteStored, sha256Hex, type StoredNotice } from "@pe/host-contracts/store";
 import { hostOwnership } from "./host-ownership.ts";
 
 /** The machine's notice file: every `discard` in the host names it, so no file goes without a trace. */
 export const storedNoticesPath = () =>
   join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "stored-notices.jsonl");
+
+/** The Place a no-firm-home notice is filed under; its row is a finding, not a file that did not decode. */
+const FIRM_HOME_PLACE = "Firm home";
+
+/**
+ * Tell a person once where the host looked for the firm home (ADR 0037 rule 2). The notice file
+ * de-duplicates by path and hash: the same finding never posts twice, and a changed one (another
+ * drive, a second marker) posts again. Silent when a firm home is bound and when nothing was
+ * probed, as in a test run: a notice that names no place tells a person nothing.
+ */
+export function noteNoFirmHome(firm: FirmHome = firmHome(), notices = storedNoticesPath()): void {
+  const places = firm.refused ?? firm.looked;
+  if (firm.root || !places.length) return;
+  const reason = noFirmHomeText(firm);
+  noteStored(notices, {
+    class: "keep",
+    place: FIRM_HOME_PLACE,
+    path: places[0]!,
+    sha256: sha256Hex(reason),
+    reason,
+  });
+}
 
 /**
  * A row as built. Its revision is its source's own durable counter (a thread's last seq, a
@@ -166,6 +189,20 @@ function storedRow(notice: StoredNotice, now: number): NoticeDraft | null {
   // ponytail: a fixed window and no dismiss door; add a dismiss act when a person asks for one.
   if (now - Date.parse(notice.at) > STORED_FOR_MS) return null;
   const kept = notice.class === "keep";
+  if (notice.place === FIRM_HOME_PLACE)
+    return {
+      key: `stored:${notice.path}:${notice.sha256}`,
+      group: "failed",
+      revision: 0,
+      verb: "not found",
+      what: notice.place,
+      where: "this computer",
+      says: notice.reason,
+      at: notice.at,
+      url: null,
+      refusal: "Nothing to open: firm Pods, Pages, Catalogs, Settings and keys are off until it is found",
+      detail: notice.reason,
+    };
   return {
     key: `stored:${notice.path}:${notice.sha256}`,
     group: "failed",

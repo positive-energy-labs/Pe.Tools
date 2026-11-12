@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { readStored } from "@pe/host-contracts/store";
+import { storedNoticesPath } from "./notice-feed.ts";
 import {
   canonicalRouteInput,
   familyNativeApplyResultSchema,
@@ -50,12 +52,14 @@ const object = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-const json = async (path: string): Promise<unknown> => {
-  try {
-    return JSON.parse(await readFile(path, "utf8"));
-  } catch (error) { console.warn("ts/apps/host/src/family-run-recovery.ts: fallback after failure", error);
-    return null;
-  }
+// Run output is derived machine state (ADR 0039): a file that is not JSON is discarded with a notice.
+const json = (path: string): unknown => {
+  const read = readStored(path, z.unknown(), {
+    class: "discard",
+    place: "Family run output",
+    notices: storedNoticesPath(),
+  });
+  return read.kind === "ok" ? read.value : null;
 };
 
 /** A FF run is evidence only when one immutable run names the sealed input and original Revit lifetime. */

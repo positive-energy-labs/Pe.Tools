@@ -57,7 +57,6 @@ test("one snapshot lists and captures every authored byte, excluding authority a
     "output/run/input.json",
     "obj/a",
     "bin/a",
-    "imported.json",
     // Page state is machine state (homes freeze shape 7): a pod carries none of it.
     "pages/tour/.state/events.jsonl",
     "pages/tour/.state/snapshot.json",
