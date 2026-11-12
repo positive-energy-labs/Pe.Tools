@@ -20,11 +20,13 @@ export function bindPackageLifecycle(
 ) {
   serving = lifecycle;
 }
-/** Import is the explicit activation action. Bootstrap imports join the initial census instead. */
+/** Import is the explicit activation action, including imports concurrent with the initial census. */
 export async function activateImportedPackage(id: string, podsRoot: string) {
-  if (podsRoot !== productPodsRootPath() || !serving?.initialized()) return;
-  await serving.refresh();
-  await serving.setEnabled(`pod:${id}`, true);
+  const lifecycle = serving;
+  if (podsRoot !== productPodsRootPath() || !lifecycle) return;
+  await lifecycle.ready;
+  await lifecycle.refresh();
+  await lifecycle.setEnabled(`pod:${id}`, true);
 }
 /**
  * A person's choices, so `keep` (MAP decision log 92bdf2df names `plugins.json`). A file that does

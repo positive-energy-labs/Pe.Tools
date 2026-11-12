@@ -85,6 +85,7 @@ export type Crossing = {
   readonly parent?: string;
   /** The caller says an earlier send of this admission may have arrived (`ADMISSION_RESEND_HEADER`). */
   readonly resent?: boolean;
+  readonly sentAt?: string;
 };
 
 const messageOf = (error: unknown) =>
@@ -1190,10 +1191,11 @@ export class ActionJournal implements ReceiptReader {
       admission.input = portable.input.parse(admission.input) as Record<string, unknown>;
     await this.loadOnce();
     const prior = this.rows.get(admission.id);
-    // The replay guard (MAP decision log 2026-11-12). A re-sent admission this journal does not
-    // know is new only if the journal kept its history. After a discard the action may already
-    // have run, so it is refused and never dispatched as new.
-    if (!prior && crossing.resent && this.discarded)
+    // A retry predating the discard may already have run. Missing or malformed first-send times
+    // cannot establish that it is new, so they refuse on the safe side.
+    const sentAt = z.iso.datetime().safeParse(crossing.sentAt);
+    if (!prior && crossing.resent && this.discarded &&
+      (!sentAt.success || Date.parse(sentAt.data) <= Date.parse(this.discarded)))
       throw refused(
         `Action '${admission.id}' was sent before, and the action journal that knew whether it ran could not be read and was discarded. It is not run again. Check its result, then submit it as a new action if it is still wanted.`,
         "journal.discarded",

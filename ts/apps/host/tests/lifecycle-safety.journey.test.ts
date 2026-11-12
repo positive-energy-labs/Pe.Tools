@@ -59,7 +59,7 @@ test("E6/E10 a copied destination never refreshes a changed source after durable
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: original.id }),
     }));
     expect(resumed.status).toBe(409);
-    expect(await resumed.json()).toMatchObject({ error: "Consumed input changed" });
+    expect(await resumed.json()).toMatchObject({ error: { code: "route.refused", message: "Consumed input changed", details: { error: "Consumed input changed" } } });
     expect(await f.native.journal.wait(original.id)).toEqual(original);
     expect(f.calls.length).toBe(before);
     expect(await readFile(f.source, "utf8")).toBe("Source changed after destination copy");

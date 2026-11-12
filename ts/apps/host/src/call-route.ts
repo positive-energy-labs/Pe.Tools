@@ -191,12 +191,13 @@ function callRoutes(
     return captures;
   };
   const owner = () => operations;
-  const admit = async (raw: unknown, caller: Caller, parent: string, resent: boolean) => {
+  const admit = async (raw: unknown, caller: Caller, parent: string, sentAt: string | undefined) => {
     const input = actionAdmissionSchema.parse(raw);
     const crossing = {
       caller,
       parent,
-      resent,
+      resent: sentAt !== undefined,
+      sentAt,
       basis: admitCrossing(caller, input.target, "/actions", readsOnly(input.key, input.input)),
     };
     return owner().invoke(input, crossing);
@@ -632,12 +633,12 @@ function callRoutes(
       if (req.headers["x-pe-history-point"]) return Response.jsonUnsafe({ error: { code: "history.read-only", message: "needs live Revit" } }, { status: 409 });
       // The caller lives in AsyncLocalStorage; the Node body read resumes outside it. Read first.
       const caller = currentCaller();
-      const resent = req.headers[ADMISSION_RESEND_HEADER] !== undefined;
+      const sentAt = req.headers[ADMISSION_RESEND_HEADER];
       const body = yield* req.json;
       // The submitting request is the command's causal parent; the journal owns the attempt.
       const { requestId } = yield* RequestIdentity;
       const row = yield* Effect.tryPromise({
-        try: () => admit(body, caller, requestId, resent),
+        try: () => admit(body, caller, requestId, sentAt),
         catch: (error) => error,
       });
       return Response.jsonUnsafe(row, {
@@ -650,7 +651,9 @@ function callRoutes(
             ? refusedResponse(error)
             : Response.jsonUnsafe(
                 {
-                  error: String(error),
+                  error: error instanceof Error ? error.message : String(error),
+                  ...(error instanceof CommandRejected && "code" in error.refusal
+                    ? { code: error.refusal.code } : {}),
                   message:
                     typeof error === "object" && error && "message" in error
                       ? String(error.message)

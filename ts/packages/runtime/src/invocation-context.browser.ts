@@ -2,7 +2,7 @@
 /// <reference types="vite-plus/client" />
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import type { ActionAdmission, Caller } from "@pe/agent-contracts";
-export type InvocationRecord = { id: string; admission?: ActionAdmission };
+export type InvocationRecord = { id: string; admission?: ActionAdmission; sentAt?: string };
 
 export type RequestPrincipal =
   | { readonly kind: "local" }

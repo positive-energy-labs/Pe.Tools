@@ -1,6 +1,6 @@
 # homes ledger
 
-Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second person finds them, and what Pea may write there. The live frontier is [MAP.md](MAP.md). The rulings that constrain other features are [ADR 0037](../../adr/0037-three-content-homes-one-write-door.md), [ADR 0038](../../adr/0038-consent-is-a-notice-three-guards-on-project-documents.md), [ADR 0039](../../adr/0039-two-failure-policies-by-class.md) and [ADR 0040](../../adr/0040-t3-is-the-agent-engine-on-a-flagged-track.md). Written 2026-11-11 at main a02b8aea from a read-only muse. Nothing below is built: every Decided line is a ruling, not a proof. Evidence: `.artifacts/runs/homes-crusade-20261111/muse/`. Retention: keep that folder until the MAP is deleted, because the MAP and the ADRs cite its files by name.
+Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second person finds them, and what Pea may write there. The live frontier is [MAP.md](MAP.md). The rulings that constrain other features are [ADR 0037](../../adr/0037-three-content-homes-one-write-door.md), [ADR 0038](../../adr/0038-consent-is-a-notice-three-guards-on-project-documents.md), [ADR 0039](../../adr/0039-two-failure-policies-by-class.md) [ADR 0040](../../adr/0040-t3-is-the-agent-engine-on-a-flagged-track.md) and [ADR 0041](../../adr/0041-pea-calls-any-target-the-users-target-is-the-default.md). Written 2026-11-11 at main a02b8aea from a read-only muse. Nothing below is built: every Decided line is a ruling, not a proof. Evidence: `.artifacts/runs/homes-crusade-20261111/muse/`. Retention: keep that folder until the MAP is deleted, because the MAP and the ADRs cite its files by name.
 
 ## Decided
 
@@ -45,6 +45,9 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 
 ## Owed
 
+- R3: `capability-tools.ts` page-branch comment wrongly said a harness re-invocation is a marked re-send, because each re-invocation is a new MCP request id.
+- A hand-deleted action journal is indistinguishable from a fresh machine, so a re-send after one is admitted and may run again.
+- A second update apply while an older one still runs after a discard (`update-reader.ts:381-385`): the installer mutex is UNPROVEN for `pe-revit update`; drive two applies one second apart after a discard.
 - Slices 0 to 10 are in [MAP.md](MAP.md); each lands with its red falsifier. Journeys and end-gate targets are in [JOURNEYS.md](JOURNEYS.md).
 - The T3 cutover rows, falsifiers F1 to F11 and the flip rule are in [T3-CUTOVER.md](T3-CUTOVER.md). The purger holds that file. No row may end as "both exist".
 - kaitpw ticks the classified standards list that slice 0 produces (real, test, proof, WIP, archive, one-off, no registered library, dangling reference). Until then no file is called a standard.
@@ -75,3 +78,5 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
   - `family.attach-spec`'s upload goes through `guardSend` and `parseWithLlamaCloud` (`ts/packages/mcps/src/shared/llama-parse.ts`). The held row names the local path or the URL, and LlamaCloud, on every send. That replaces the consent-card sites `family-spec.ts:146`, `run-consent.ts:391`, `action-journal.ts:1802`, `control.ts:398` and `command-executor.ts:154`.
   - Delete `consent?: true` on `ToolCall` and its exclusion in `moments.tsx`. The kernel ruled that one extra tool counted on an old log is cosmetic.
 - C# `PodRuns` writes run files in place: `input.json` with `CreateNew` and `FileShare.Read` (`PodRuns.cs:114`), and `receipt.json` with `File.WriteAllText` (`:153`). A host read mid-write sees a torn file. The host now keeps run output silently (1695558e). The root fix is on the C# side: write a temp file in the same folder, then `File.Move` without overwrite, so a reader sees either nothing or the whole file (purger, `tip-4223e96e-g1r2.md`).
+- A firm-key change needs a whole Pe.Host restart, because the key reaches T3 only in its spawn env and the sidecar has no restart of its own (`ts/apps/host/src/t3-sidecar.ts`). Owed: a T3-only recycle verb. Evidence: T3 spike `keychange-dummy.ndjson` and `keychange-real.ndjson` in `.artifacts/runs/homes-crusade-20261111/t3/`.
+- T3's usage meter also scans the user's own `~/.claude` and `~/.codex`, so its totals mix personal use into the Pe-owned `codex-home` and `claude-home` (T3 spike M3, `t3/revit/m3-usage.json`). Owed, with no T3 patch: point the meter at the Pe-owned homes only, or read their session files directly.
