@@ -45,7 +45,7 @@ export const FAMILY_DEMO_PODS: readonly PodList["pods"][number][] = [
     members: FAMILY_NAMES.map((name, index) => ({
       path: demoPath(name),
       sha256: demoHash(index + 1),
-      schema: `http://127.0.0.1:5180${FAMILY_MODEL_SCHEMA}`,
+      schema: FAMILY_MODEL_SCHEMA,
     })),
     diagnostics: [],
   },

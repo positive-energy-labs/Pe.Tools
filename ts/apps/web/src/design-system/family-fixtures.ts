@@ -41,7 +41,7 @@ export const DEMO_FAMILIES: readonly FamilySnapshotRecord[] = [
 export const DEMO_FAMILIES_SPEC: DemoSpec = {
   content: JSON.stringify(
     {
-      $schema: "http://localhost:5150/schemas/settings/FamilyFoundry/patches.json",
+      $schema: "/schemas/settings/FamilyFoundry/patches.json",
       select: { categoryNames: ["Mechanical Equipment"] },
       patch: { parameters: [{ name: "PE_G___Manufacturer", mapFrom: "Manufacturer" }] },
       run: { singleTransaction: true },
