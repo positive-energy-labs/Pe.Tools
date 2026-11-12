@@ -411,8 +411,11 @@ export class ActionResultError extends Error {
 /**
  * A receipt as a model reads it. The journal row keeps each step's native bytes, the prepared value
  * and the consumed member bytes; a field family capture is 300 KB in each (gate-9d6ce645), which
- * leaves a tool result no room for its answer. Over the bound those copies are cut and counted; the
- * command's `result`, its state and its refusal are never touched. The journal keeps the rest.
+ * leaves a tool result no room for its answer. The bound is a trigger on the whole receipt, not a
+ * size the copy is cut to: a receipt at or under it passes whole, and over it only those three
+ * copies are cut and counted. `result`, `input`, `recovery`, the refusal and a consumed Work fact's
+ * `expected` stay whole, so the copy can still be over the bound. A failed `scripting.execute`
+ * receipt never comes here: `pe_do` relays it whole as the script result's `problem`.
  */
 export const RECEIPT_RELAY_BYTES = 16_000;
 export function receiptForModel(row: unknown): unknown {
@@ -436,7 +439,7 @@ export function receiptForModel(row: unknown): unknown {
       consumes: receipt.consumes.map(({ bytesBase64: _, ...fact }) => fact),
     }),
     ...(receipt.prepared !== undefined && { prepared: { omittedBytes: size(receipt.prepared) } }),
-    relay: `Step inputs and results, prepared values and consumed bytes are cut from this copy (${size(row)} bytes in the journal, action ${receipt.id}). The result is whole.`,
+    relay: `This receipt is ${size(row)} bytes in the journal (action ${receipt.id}), over the ${RECEIPT_RELAY_BYTES}-byte relay trigger, so step inputs and results, the prepared value and consumed bytesBase64 are cut from this copy. The result, input, recovery and consumed Work facts are whole.`,
   };
 }
 export function actionResult(row: ActionReceipt | DetachedAction): unknown {

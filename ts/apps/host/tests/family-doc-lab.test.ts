@@ -5,16 +5,17 @@
  * `family.capture` with the a-box fixture, padded to a field family's size) and the PDF parser (the
  * web LlamaCloud endpoint). Work, the journal, consent, Pod files and the PDF bytes are real.
  */
-import { afterEach, expect, test } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createServer } from "node:http";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { address, bindWork, familyDraftRouteState, type Caller } from "@pe/agent-contracts";
 import * as actionClient from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import { nativeFixture } from "./fans-work-fixture.ts";
+import { familySpecAsset } from "../src/family-spec.ts";
 
 const pdf = fileURLToPath(new URL("../../web/public/acme-fcu400-submittal.pdf", import.meta.url));
 const aBox = JSON.parse(
@@ -282,4 +283,139 @@ test("the chain: Pea captures and saves a family, attaches its sheet by path, an
   );
   expect(work.spec?.member).toEqual(member);
   expect(f.dispatched.map((call) => call.key)).toEqual(["family.capture"]);
+}, 60_000);
+
+/** A member where attach looks, so each narrowing test is red for its source alone. */
+async function boxed() {
+  const l = await lab();
+  const member = { pod: "lab", path: "settings/family/box.json" };
+  await mkdir(join(l.pods, "lab", "settings/family"), { recursive: true });
+  await writeFile(join(l.pods, "lab", member.path), JSON.stringify(aBox));
+  const attach = async (source: unknown, caller?: Caller) =>
+    JSON.stringify(
+      await l.act("family.attach-spec", host, { member, source, work: await l.handle() }, caller),
+    );
+  const serve = async (handler: Parameters<typeof createServer>[1]) => {
+    const server = createServer(handler);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    closes.push(
+      () =>
+        new Promise((resolve) => {
+          server.closeAllConnections();
+          server.close(resolve);
+        }),
+    );
+    return `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  };
+  return { ...l, member, attach, serve };
+}
+
+test("narrow 1: a path source is an absolute local regular PDF under the cap", async () => {
+  const { pods, attach, parsed } = await boxed();
+  expect(await attach({ path: "sheets/acme.pdf" })).toMatch(/absolute path/);
+  expect(await attach({ path: "\\\\server\\share\\acme.pdf" })).toMatch(/network or device path/);
+  expect(await attach({ path: "\\\\?\\C:\\acme.pdf" })).toMatch(/network or device path/);
+  expect(await attach({ path: pods })).toMatch(/not a regular file/);
+  const big = join(pods, "big.pdf");
+  await writeFile(big, "%PDF-");
+  await truncate(big, 64 * 1024 * 1024 + 1);
+  expect(await attach({ path: big })).toMatch(/over the 64 MB/);
+  const text = join(pods, "notes.pdf");
+  await writeFile(text, "not a pdf at all");
+  expect(await attach({ path: text })).toMatch(/Export or print it to PDF/);
+  expect(parsed).toEqual([]);
+}, 60_000);
+
+test("narrow 2: a URL source is http(s), unredirected, timed and capped", async () => {
+  const { attach, serve, parsed } = await boxed();
+  expect(await attach({ url: "file:///C:/Windows/win.ini" })).toMatch(/Only http and https/);
+  const origin = await serve((request, response) => {
+    if (request.url === "/hop") return void response.writeHead(302, { location: "/sheet.pdf" }).end();
+    if (request.url === "/slow") return;
+    response.writeHead(200, { "content-type": "application/pdf" });
+    if (request.url === "/huge") {
+      const chunk = Buffer.alloc(1024 * 1024, "%");
+      let sent = 0;
+      const more = () => {
+        while (sent++ <= 65) if (!response.write(chunk)) return void response.once("drain", more);
+        response.end();
+      };
+      response.on("error", () => {});
+      return more();
+    }
+    response.end(readFileSync(pdf));
+  });
+  expect(await attach({ url: `${origin}/hop` })).toMatch(/redirect/);
+  expect(await attach({ url: `${origin}/huge` })).toMatch(/over the 64 MB/);
+  const real = AbortSignal.timeout.bind(AbortSignal);
+  const timeout = vi
+    .spyOn(AbortSignal, "timeout")
+    .mockImplementation((ms) => real(ms === 30_000 ? 200 : ms));
+  try {
+    expect(await attach({ url: `${origin}/slow` })).toMatch(/within 30 s/);
+    expect(timeout).toHaveBeenCalledWith(30_000);
+  } finally {
+    timeout.mockRestore();
+  }
+  expect(parsed).toEqual([]);
+}, 120_000);
+
+test("narrow 3: the consent card names the source and that it is sent for parsing", async () => {
+  for (const kind of ["path", "url"] as const) {
+    const { f, pea, attach, serve } = await boxed();
+    const source =
+      kind === "path"
+        ? { path: pdf }
+        : {
+            url: `${await serve((_request, response) => response.end(readFileSync(pdf)))}/acme.pdf`,
+          };
+    expect(await attach(source, pea)).toMatch(/"state":"succeeded"/);
+    const ask = f.events.find((event) => event.kind === "permission_request");
+    const title = (ask as { toolCall: { title: string } }).toolCall.title;
+    expect(title).toContain(Object.values(source)[0]);
+    expect(title).toMatch(/sent .*for parsing/);
+  }
+}, 60_000);
+
+test("narrow 5: a PDF edited after admission attaches the bytes the admission retained", async () => {
+  const { f, pods, pea, member, handle } = await boxed();
+  const sheet = join(pods, "sheet.pdf");
+  await copyFile(pdf, sheet);
+  const response = await f.post(
+    "/actions",
+    {
+      id: "edited",
+      key: "family.attach-spec",
+      target: host,
+      input: { member, source: { path: sheet }, work: await handle() },
+    },
+    pea,
+  );
+  expect(response.ok, await response.clone().text()).toBe(true);
+  const ask = await vi.waitFor(() => {
+    const event = f.events.find((event) => event.kind === "permission_request");
+    if (!event) throw Error("no consent ask yet");
+    return event as { requestId: string };
+  });
+  await appendFile(sheet, "\n% edited while the Reject window was open\n");
+  f.runs.decide(pea.run!.thread, ask.requestId, "allow_now");
+  const receipt = await f.journal.wait("edited");
+  expect(receipt.state, JSON.stringify(receipt).slice(0, 2000)).toBe("succeeded");
+  const sidecar = JSON.parse(
+    await readFile(join(pods, "lab", `${member.path}.spec.json`), "utf8"),
+  ) as { path: string };
+  const kept = await readFile(join(pods, "lab", sidecar.path.replace(/\.json$/, ""), "source.pdf"));
+  expect(kept.length).toBe(pdfSize);
+}, 60_000);
+
+test("narrow 6: the spec asset door serves only what normalizes under the family folder", async () => {
+  const { pods, member } = await boxed();
+  const ask = (path: string) =>
+    familySpecAsset(
+      new URL(`http://host/family/spec?${new URLSearchParams({ pod: "lab", path })}`),
+      pods,
+    );
+  expect((await ask(member.path)).status).toBe(200);
+  expect((await ask("settings/family/../../pod.json")).status).toBe(404);
+  expect((await ask("settings/family/..\\..\\pod.json")).status).toBe(404);
 }, 60_000);

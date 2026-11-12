@@ -150,6 +150,8 @@ export interface CommandExecutor {
   sealInput?: z.ZodType;
   seal?(prepared: unknown): { request: unknown; evidence?: unknown };
   bind(context: CommandContext): Promise<CommandBinding>;
+  /** One sentence for the consent card: what this command sends off the machine, from its input alone. */
+  discloses?(input: unknown): string | undefined;
   /** Runs on the journal-owned attempt fiber (ADR 0029 rule 10). */
   run(context: CommandContext, execution: ActionExecution): Step<unknown>;
   recover?: StepRecovery;
@@ -177,7 +179,11 @@ export interface CommandEnvironment extends CommandResources {
 export function command<C extends Command, S extends z.ZodType>(
   definition: C,
   prepared: S,
-  implementation: Omit<CommandExecutor, "definition" | "prepared" | "bind" | "run" | "recover" | "seal"> & {
+  implementation: Omit<
+    CommandExecutor,
+    "definition" | "prepared" | "bind" | "run" | "recover" | "seal" | "discloses"
+  > & {
+    discloses?(input: AuthoredInput<C>): string | undefined;
     seal?(prepared: z.output<S>): { request: unknown; evidence?: unknown };
     bind(
       context: Omit<CommandContext, "admission"> & {
