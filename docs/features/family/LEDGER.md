@@ -90,6 +90,8 @@ Recentered 2026-09-08 from the operator stories, source history, and native test
 
 ## Owed
 
+- 2026-11-12, on an installed host the doc-lab page has no parse route behind it. The homes driver proved it on main 4e8b33e2's installed host in the Sandbox: `GET /pdf-audit` returns 200 and `POST /api/pdf-audit/parse` returns 404. That parse route is a web dev-server route the installed static host does not serve (the client posts to it from `ts/apps/web/src/grounded-doc/engine.ts`). crusade/homes behaves the same. The fix waits on the owner's Q14: whether the orphaned doc-lab upload is deleted, or given a host route. Do not fix it before that ruling.
+
 - Move the Family semantic composition into one host read. The live route still composes it in the browser: `family/mount.tsx:10` mounts `FamilyProvider`, whose `useFamilyStore` calls `familySource` (`family/source.ts:124`) at `family/store.ts:200`. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:370`, and S-SCORECARD (ADR 0033 rule 2 contradicted).
 - Make PDF parsing host-owned; remove the frontend POST dependency at `app.ts:439`. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:373`.
 
