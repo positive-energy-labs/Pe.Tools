@@ -1,5 +1,6 @@
 import { useList } from "@pe/kit/lang/collection";
 import { Button } from "@pe/kit/lang/button";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { ListView } from "@pe/kit/lang/list-view";
 import { teachText } from "@pe/kit/lang/use-teach";
@@ -38,6 +39,8 @@ export function GraphHistory({
   useEffect(() => {
     if (ownFinding && owner.ownFindingsLeft) void owner.ownFindingsLeft().then(setOwnLeft, () => setOwnLeft(null));
   }, [owner, ownFinding]);
+  // A refused verb says why on the page, not only in its description.
+  const undoRefusal = ownLeft === 0 ? "Nothing of yours left to undo: Pea's findings are Pea's to undo" : null;
   const rows = [...(journal?.intents ?? []).map(intent => ({
     key: `intent:${intent.id}`, label: intent.label,
     sub: `${intent.status} / ${intent.owner.route} / expected r${intent.input.expectedRevision} / ${intent.reason ?? "Awaiting acknowledgement"}`,
@@ -77,10 +80,10 @@ export function GraphHistory({
               {row.outcome.recovery}
             </a>
           )}
-          {row.key === ownFinding && (
+          {row.key === ownFinding && (<>
             <Button
               label="Undo your last finding"
-              refusal={ownLeft === 0 ? "Nothing of yours left to undo: Pea's findings are Pea's to undo" : null}
+              refusal={undoRefusal}
               onPress={async () => {
                 const refused = await owner.undoFinding!();
                 setOwnLeft((await owner.ownFindingsLeft?.()) ?? null);
@@ -89,7 +92,8 @@ export function GraphHistory({
             >
               Undo finding
             </Button>
-          )}
+            {undoRefusal && <OutcomeLine kind="refused" label={undoRefusal} />}
+          </>)}
           {row.entry.receiptId &&
             ["queued", "running", "outcome-unknown"].includes(row.outcome?.state ?? "") && (
               <Button
