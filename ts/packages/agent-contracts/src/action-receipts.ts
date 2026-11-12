@@ -221,7 +221,7 @@ export function invocationOutcome(row: ActionReceipt | ActionStatus): Invocation
       : state === "refused" &&
           row.state === "failed" &&
           row.notDispatched &&
-          (row.key !== "settings.tiers.write" || row.status === 404 || row.status >= 500) &&
+          row.refusal?.kind !== "invalid" &&
           row.refusal?.kind !== "held" &&
           row.refusal?.kind !== "claimed"
         ? { recovery: "retry" as const }

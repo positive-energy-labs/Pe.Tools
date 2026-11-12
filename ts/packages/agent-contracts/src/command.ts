@@ -121,6 +121,7 @@ export const claimSchema = z.discriminatedUnion("kind", [
 ]);
 export type Claim = z.infer<typeof claimSchema>;
 export const commandRefusalSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("invalid") }),
   z.strictObject({ kind: z.literal("stale_revision"), handle: workHandleSchema, live: z.number() }),
   z.strictObject({ kind: z.literal("stale"), consumed: z.array(consumedSchema) }),
   z.strictObject({ kind: z.literal("claimed"), claim: claimSchema, by: z.string() }),

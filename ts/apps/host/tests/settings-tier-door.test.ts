@@ -83,7 +83,7 @@ test.each(["firm", "project"] as const)("settings.tiers.write crosses /actions, 
         input: { owner: "ducts", tier, path: ["undeclared"], value: 1, expectedSha256: sha256Hex(beforeRefusal) } }),
     });
     const [invalid] = await (await fetch(`${host.base}/actions?id=${invalidId}&wait=10000`, { headers })).json();
-    expect(invalid).toMatchObject({ state: "failed", status: 422, notDispatched: true, outcome: { state: "refused" } });
+    expect(invalid).toMatchObject({ state: "failed", status: 422, notDispatched: true, refusal: { kind: "invalid" }, outcome: { state: "refused" } });
     expect(invalid.outcome.recovery).toBeUndefined();
     expect(readFileSync(path)).toEqual(beforeRefusal);
     const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: refused }] }, Date.now());
