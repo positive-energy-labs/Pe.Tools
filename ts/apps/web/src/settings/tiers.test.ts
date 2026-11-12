@@ -80,6 +80,27 @@ const sheet = async () => {
 };
 const sha = (tiers: Awaited<ReturnType<typeof sheet>>["tiers"], tier: "project" | "firm") => tiers.find((read) => read.tier === tier)!.sha256;
 
+test.each(["firm", "project"] as const)("%s serves valid cells despite invalid siblings or unknown keys", async (tier) => {
+  const root = tier === "firm" ? firm : project;
+  expect(writeSettingTier({ owner: "ducts", tier, path: PATHS.velocitySupplyFpm!, value: 800, expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
+  // The original witness writes through the door; after validation lands, hand edits can still be invalid.
+  writeSettingTier({ owner: "ducts", tier, path: PATHS.terminalDropInWg!, value: -1, expectedSha256: sha(readSettingTiers("ducts", pointer), tier) }, { pointer });
+  const file = join(root, "Settings", "ducts.json");
+  const json = JSON.parse(readFileSync(file, "utf8"));
+  json.criteria.terminalDropInWg = -1;
+  writeFileSync(file, JSON.stringify(json));
+  for (const unknownKey of [false, true]) {
+    if (unknownKey) {
+      delete json.criteria.terminalDropInWg;
+      writeFileSync(file, JSON.stringify({ ...json, handEdited: true }));
+    }
+    const at = await sheet();
+    expect(at.cell("velocitySupplyFpm")).toMatchObject({ value: 800, source: tier });
+    expect(at.criteria.velocityLimitFpm.supply).toMatchObject({ value: 800, source: tier });
+    expect(at.criteria.terminalDropInWg).toMatchObject({ value: 0.03, source: "default" });
+  }
+});
+
 test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served, and an unmounted firm home is never firm", async () => {
   // Before any write no home states a value: every label is the engine default.
   let at = await sheet();
@@ -119,7 +140,7 @@ test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served
   at = await sheet();
   expect(at.cell("velocitySupplyFpm")).toMatchObject({ value: 850, source: "project" });
   expect(at.cell("velocitySupplyFpm").ref).toContain(" · B · ");
-  const notices = readStoredNotices(storedNoticesPath()).filter((notice) => notice.place === SETTING_WRITE_PLACE);
+  const notices = readStoredNotices(storedNoticesPath()).filter((notice) => notice.place === SETTING_WRITE_PLACE && [join(firm, "Settings", "ducts.json"), join(project, "Settings", "ducts.json")].includes(notice.path ?? ""));
   expect(notices.map((notice) => notice.path)).toEqual([first, firm900, { path: join(project, "Settings", "ducts.json") }, second].map((wrote) => (wrote as { path: string }).path));
   expect(notices.at(-1)!.reason).toContain(`B set 850 at ducts criteria.velocityLimitFpm.supply in the project home`);
   expect(notices.at(-1)!.reason).toContain(`sha256 ${second.ok && second.priorSha256}`);
