@@ -103,7 +103,7 @@ export function stateTree(root: string) {
     /** Run output, `<pod-id>\<run-id>`. */
     runs: state(productPathNames.runsDirectoryName),
     /** Where a run no pod owns writes. Not a pod id: an id cannot start with `_`. */
-    podlessRuns: state(productPathNames.runsDirectoryName, "_no-pod"),
+    podlessRuns: state(productPathNames.runsDirectoryName, productPathNames.podlessRunsDirectoryName),
     /** The write door's `blobRoot`: prior bytes rest in `sha256\<hash>` under it. */
     blobs: state(productPathNames.blobsDirectoryName),
     t3: state("T3"),

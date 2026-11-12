@@ -126,18 +126,23 @@ export type FirmHome = {
  * its marker reads `firm`. Two accepted folders (a `subst` letter beside the real drive, a second
  * mount) refuse both: the machine runs with no firm home and the notice names each.
  */
+const firmHomeSegments = [
+  productPathNames.firmSoftwareDirectoryName,
+  productIdentity.userVisibleProductName,
+] as const;
+
 export function probeFirmHome(facts: HomeFacts): FirmHome {
   const looked: string[] = [];
   const found: string[] = [];
   for (const drive of facts.drives) {
     const sharedDrives = join(drive, productPathNames.sharedDrivesDirectoryName);
     looked.push(
-      join(sharedDrives, "*", ...productPathNames.firmHomeSegments),
-      join(drive, ...productPathNames.firmHomeSegments),
+      join(sharedDrives, "*", ...firmHomeSegments),
+      join(drive, ...firmHomeSegments),
     );
     found.push(
       ...[...[...facts.list(sharedDrives)].sort().map((mount) => join(sharedDrives, mount)), drive]
-        .map((base) => join(base, ...productPathNames.firmHomeSegments))
+        .map((base) => join(base, ...firmHomeSegments))
         .filter((candidate) => markerTier(facts.marker(candidate)) === "firm"),
     );
   }

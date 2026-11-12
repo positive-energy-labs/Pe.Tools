@@ -107,13 +107,19 @@ export function kindOfMember(
 
 /**
  * Machine state kept about pods (run output, import records, import staging): under the product's
- * `state` folder, never in a home (ADR 0037 rule 6). An owner that supplies its own Pods root (the
- * demo lane, a test) keeps that state beside its root, outside the product's.
+ * `state` folder, never in a home (ADR 0037 rule 6). An owner that names its own state root keeps
+ * it there. One that supplies only a Pods root (the demo lane, a test) keeps it beside that root,
+ * outside the product's: such a root is never a home's `Pods`, or its state root is named too.
  */
-export const podStatePath = (podsRoot: string | undefined, ...segments: string[]) =>
-  podsRoot && resolve(podsRoot) !== resolve(productPodsRootPath())
-    ? join(podsRoot, "..", ...segments)
-    : join(hostOwnership.rootPath, productPathNames.stateDirectoryName, ...segments);
+export const podStatePath = (
+  owner: { readonly podsRoot?: string; readonly stateRoot?: string },
+  ...segments: string[]
+) =>
+  owner.stateRoot
+    ? join(owner.stateRoot, ...segments)
+    : owner.podsRoot && resolve(owner.podsRoot) !== resolve(productPodsRootPath())
+      ? join(owner.podsRoot, "..", ...segments)
+      : join(hostOwnership.rootPath, productPathNames.stateDirectoryName, ...segments);
 
 /** One Pods folder, or the product's Pods in every home, in list order (user, project, firm). */
 export type PodsRoots = string | readonly string[];

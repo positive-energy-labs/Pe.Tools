@@ -34,6 +34,8 @@ const MAX_ARCHIVE_BYTES = scriptPodMemberBounds.maxTotalBytes * 2;
 
 export type TransferOptions = {
   readonly podsRoot?: string;
+  /** Where this machine keeps what it derives about pods; the product's `state` folder when absent. */
+  readonly stateRoot?: string;
   readonly pagesRoot?: string;
   readonly captures?: PictureCaptures;
 };
@@ -288,7 +290,7 @@ export async function installArchive(
 
   const archiveSha256 = sha256(archive);
   // Staged under machine state, never in the home: a crash leaves no half folder on a synced drive.
-  const staging = podStatePath(options.podsRoot, "pod-importing", randomUUID());
+  const staging = podStatePath(options, "pod-importing", randomUUID());
   try {
     for (const [path, bytes] of entries) {
       await writeArtifact(staging, join(staging, folder, path), bytes);
@@ -300,7 +302,7 @@ export async function installArchive(
     // The import record is machine state (it is derived, and dated here), keyed by the pod's id.
     // It names its archive by content hash and file name: no machine path is stored anywhere.
     writeAtomic(
-      importRecordPath(id, options.podsRoot),
+      importRecordPath(id, options),
       `${JSON.stringify({ archiveSha256, archive: basename(locator), date: new Date().toISOString() }, null, 2)}\n`,
     );
     const store = options.captures!;
@@ -321,8 +323,8 @@ export async function installArchive(
 }
 
 /** Where a pod's import record rests: `state\pod-imports\<pod-id>.json`. */
-export const importRecordPath = (id: string, podsRoot?: string) =>
-  podStatePath(podsRoot, "pod-imports", `${id}.json`);
+export const importRecordPath = (id: string, owner: Pick<TransferOptions, "podsRoot" | "stateRoot"> = {}) =>
+  podStatePath(owner, "pod-imports", `${id}.json`);
 
 /**
  * Move a staged pod into its home whole. One volume: one rename. Across volumes (state on C:, the

@@ -25,7 +25,6 @@ export const productPathNames = {
   pagesDirectoryName: "Pages",
   settingsDirectoryName: "settings",
   assetsDirectoryName: "assets",
-  outputDirectoryName: "output",
   globalDirectoryName: "Global",
   agentInstructionsFileName: "AGENTS.md",
   readmeFileName: "README.md",
@@ -40,7 +39,7 @@ export const productPathNames = {
   homeMarkerFileName: "pe-home.json",
   /** The firm home under a drive root or under one folder of `<drive>\Shared drives`. */
   sharedDrivesDirectoryName: "Shared drives",
-  firmHomeSegments: ["04 PE Software Files", "Pe.Tools"],
+  firmSoftwareDirectoryName: "04 PE Software Files",
   catalogsDirectoryName: "Catalogs",
   /**
    * A home's tiered values, `Settings/<owner>.json`. Not `settingsDirectoryName`: that is a pod's
@@ -51,6 +50,8 @@ export const productPathNames = {
   keysFileName: "keys.json",
   /** Under the machine state root's `state` folder (homes freeze shape 7). */
   runsDirectoryName: "Runs",
+  /** The `Runs` segment for a run no pod owns; a pod id cannot start with an underscore. */
+  podlessRunsDirectoryName: "_no-pod",
   blobsDirectoryName: "Blobs",
   /** Under an override, machine-local state, logs and service files live in `<home>\.local-state`. */
   localStateDirectoryName: ".local-state",
@@ -86,6 +87,8 @@ export const scriptingWorkspaceIdentity = {
   podManifestFileName: "pod.json",
   sourceDirectoryName: "src",
   sampleScriptFileName: "SampleScript.cs",
+  /** The per-machine props file a pod project imports; it lives outside every home. */
+  machinePropsFileName: "PeScripts.props",
   vsCodeDirectoryName: ".vscode",
   vsCodeSettingsFileName: "settings.json",
 } as const;

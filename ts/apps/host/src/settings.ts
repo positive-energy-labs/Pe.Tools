@@ -74,9 +74,7 @@ export const writeHome = (path: string, bytes: Uint8Array | string, expectSha256
  * root (the demo lane, a test) keeps its runs in `Runs` beside it, outside the product's state.
  */
 export const runsFolder = (pod: string | null | undefined, ctx: Pick<PodContext, "podsRoot"> = {}) =>
-  podStatePath(ctx.podsRoot, productPathNames.runsDirectoryName, pod ?? NO_POD);
-// The name `stateTree` gives a run no pod owns; an id cannot start with `_`.
-const NO_POD = "_no-pod";
+  podStatePath(ctx, productPathNames.runsDirectoryName, pod ?? productPathNames.podlessRunsDirectoryName);
 
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // ponytail: one host-wide write lane; per-member locks only if unrelated writes contend.

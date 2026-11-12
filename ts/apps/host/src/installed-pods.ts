@@ -119,7 +119,8 @@ async function run(
       continue;
     }
     const outcome = await offer(archive, path, bytes, sha256, {
-      ...options, podsRoot, originalsRoot: join(dirname(ledgerFile), "shipped-pod-originals"),
+      ...options, podsRoot, stateRoot: options.stateRoot ?? dirname(ledgerFile),
+      originalsRoot: join(dirname(ledgerFile), "shipped-pod-originals"),
     }, installed);
     outcomes.push(ledger.offered[sha256] && outcome.outcome === "present" && !shippedPodUpdateRefusals.has(installed!.id)
       ? { archive, sha256, outcome: "offered-before" } : outcome);
@@ -160,7 +161,7 @@ async function offer(
       };
       if (!matches(readZip(bytes), installed)) {
         try {
-          const provenance = JSON.parse(await readFile(importRecordPath(id, options.podsRoot), "utf8"));
+          const provenance = JSON.parse(await readFile(importRecordPath(id, options), "utf8"));
           if (!/^[a-f0-9]{64}$/.test(provenance.archiveSha256))
             throw Error("its original import record is incomplete");
           // The record holds no machine path: the original is found by its hash in this machine's store.

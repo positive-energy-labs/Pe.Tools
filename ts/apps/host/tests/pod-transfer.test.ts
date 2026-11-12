@@ -262,7 +262,7 @@ test("export vendors, ports the project, closes captures; import into a renamed 
   // The import record is machine state, keyed by pod id beside this owner's Pods root: nothing
   // machine-derived lands in the pod, and no machine path is stored (homes freeze shape 6).
   await expect(read("imported.json")).rejects.toThrow();
-  const record = await readFile(importRecordPath("ducts", otherPods), "utf8");
+  const record = await readFile(importRecordPath("ducts", { podsRoot: otherPods }), "utf8");
   expect(JSON.parse(record)).toMatchObject({
     archiveSha256: exported.archiveSha256,
     archive: basename(archivePath),
