@@ -473,7 +473,7 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
       if (modified) await writeFile(resolve(pod, "README.md"), "Keep this authored worksheet note.");
       const before = (await listPackages(root)).packages.find(p => p.id === manifest.id)!.members.map(m => [m.path, m.sha256]);
       content = createContributionContent({ worldRoot: host.dir, homeRoot: host.dir, packages: () => listPackages(root),
-        decisionsPath: resolve(host.dir, "enabled.json"), bootstrapInBackground: true,
+        decisionsPath: resolve(host.dir, "enabled.json"),
         bootstrap: async () => {
           await gate.promise;
           try {

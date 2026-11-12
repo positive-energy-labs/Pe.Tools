@@ -17,7 +17,7 @@ import {
 } from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { homeDirs, homes } from "@pe/host-contracts/product-paths";
+import { homeDirs, homes, projectHome } from "@pe/host-contracts/product-paths";
 import { hostOwnership } from "./host-ownership.ts";
 import { verifyPodArtifact } from "./pod-artifact.ts";
 import { productPodsRootPath } from "./product-paths.ts";
@@ -120,16 +120,26 @@ export const podStatePath = (
       : join(hostOwnership.rootPath, productPathNames.stateDirectoryName, ...segments);
 
 /** The home a pod's folder sits in, by its tier and folder; undefined for a folder outside every home. */
-export const podHome = (directory: string) => {
-  const home = homes().find(
+export const podHome = (directory: string, pointer?: string | null) => {
+  const home = homes({ pointer }).find(
     (one) => resolve(dirname(directory)) === resolve(one.root, productPathNames.podsDirectoryName),
   );
   return home && { tier: home.tier, path: home.root };
 };
 
-/** One Pods folder, or the product's Pods in every home, in list order (user, project, firm). */
+/**
+ * One Pods folder, or the product's Pods in every home, in list order (user, project, firm). The
+ * project home is the one the target document's pointer names, so a call that targets no document
+ * has none.
+ */
 export type PodsRoots = string | readonly string[];
-export const productPodsRoots = () => homeDirs(productPathNames.podsDirectoryName);
+export const productPodsRoots = (pointer?: string | null) =>
+  homeDirs(productPathNames.podsDirectoryName, { pointer });
+/** The Pods folder of the project home a target document's pointer names; null when it names none here. */
+export const projectPodsRoot = (pointer: string | null | undefined) => {
+  const home = projectHome(pointer);
+  return home && join(home, productPathNames.podsDirectoryName);
+};
 
 /** One notice for an id claimed twice: it names every claiming folder by its full path. */
 const claimedTwice = (id: string, twins: readonly Pick<AdmittedPackage, "directory">[]) =>

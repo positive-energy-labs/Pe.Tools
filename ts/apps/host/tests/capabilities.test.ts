@@ -178,15 +178,14 @@ test("the host-owned /pe surface answers without Revit", async () => {
   }
 }, 40_000);
 
-test("one admitted content snapshot waits for import, publishes exact skill bytes and retains frozen script input", async () => {
+test("one admitted content snapshot publishes exact skill bytes and retains frozen script input", async () => {
   const home = mkdtempSync(join(tmpdir(), "pe-catalog-cut-"));
   const folder = join(home, "Pods", "renamed-folder");
   for (const name of ["Office_Page", "odd--name", "working"]) {
     mkdirSync(join(home, "Pages", name), { recursive: true });
     writeFileSync(join(home, "Pages", name, "index.html"), "<title>Scratch Page</title>");
   }
-  let imports = 0,
-    listings = 0;
+  let listings = 0;
   const input = {
     "pod.json": JSON.stringify({
       id: "shelf-test",
@@ -200,19 +199,15 @@ test("one admitted content snapshot waits for import, publishes exact skill byte
     "settings/checks.json": "{}\r\n",
     "README.md": "guide\r\n",
   };
+  for (const [path, text] of Object.entries(input)) {
+    mkdirSync(join(folder, path, ".."), { recursive: true });
+    writeFileSync(join(folder, path), text);
+  }
   const content = createContributionContent({
     worldRoot: home,
     homeRoot: home,
-    bootstrap: async () => {
-      imports++;
-      for (const [path, text] of Object.entries(input)) {
-        mkdirSync(join(folder, path, ".."), { recursive: true });
-        writeFileSync(join(folder, path), text);
-      }
-    },
     packages: async () => {
       listings++;
-      expect(imports).toBe(1);
       return listPackages(join(home, "Pods"));
     },
   });

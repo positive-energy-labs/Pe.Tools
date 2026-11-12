@@ -217,6 +217,8 @@ export const podListResponseSchema = Schema.Struct({
       diagnostics: Schema.Array(memberIssueSchema),
     }),
   ),
+  /** Why no project home's Pods are listed, in words; absent when the target document's are. */
+  projectPods: Schema.optional(Schema.String),
   /** Folders whose `pod.json` could not name a pod; they list nothing else. */
   unreadable: Schema.Array(Schema.Struct({ folder: Schema.String, message: Schema.String })),
 });

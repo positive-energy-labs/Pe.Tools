@@ -901,8 +901,8 @@ export function createContributionContent(options: {
   pagesRoots?: readonly string[];
   packages?: typeof listPackages;
   pages?: (packages: readonly AdmittedPackage[]) => Promise<readonly PageDescriptor[]>;
+  /** Runs beside the start census, never before it: the host door does not wait for an import. */
   bootstrap?: () => Promise<unknown>;
-  bootstrapInBackground?: boolean;
   decisionsPath?: string;
   changed?: () => void;
 }) {
@@ -915,25 +915,22 @@ export function createContributionContent(options: {
   let pending = false;
   let bootstrapProblem: string | undefined;
   let admitted: readonly AdmittedPackage[] = [];
-  // A background import races the start census; `activateImportedPackage` waits for the census, so
-  // what the import adds is activated by name either way.
-  const importing = Promise.resolve().then(() => options.bootstrap?.());
   const lifecycle = createPackageLifecycle({
     decisionsPath: options.decisionsPath,
-    packages: async () => {
-      if (!options.bootstrapInBackground) await importing;
-      return (options.packages ?? listPackages)();
-    },
+    packages: options.packages,
     changed: () => {
       snapshot = undefined;
       latest.clear();
       options.changed?.();
     },
   });
-  // Shipped examples are optional content, not a prerequisite for the host door. Reconcile
-  // after import and invalidate the catalog so Home discovers them without restarting.
-  const bootstrap = importing.then(async () => {
-    if (!options.bootstrap || !options.bootstrapInBackground) return;
+  // Shipped examples are optional content, not a prerequisite for the host door. The import races
+  // the start census, and `activateImportedPackage` waits for that census, so what the import adds
+  // is activated by name either way. Reconcile after import and invalidate the catalog so Home
+  // discovers them without restarting.
+  const bootstrap = Promise.resolve().then(async () => {
+    if (!options.bootstrap) return;
+    await options.bootstrap();
     await lifecycle.refresh();
     snapshot = undefined;
     options.changed?.();
@@ -1176,7 +1173,6 @@ function* hostPeRoutes(
   const content = createContributionContent({
     worldRoot,
     pagesRoots: productPagesRoots(),
-    bootstrapInBackground: true,
     changed: () => invalidateCatalog(),
     bootstrap: async () => {
       const imported = await importShippedPods({ captures: pictures });
