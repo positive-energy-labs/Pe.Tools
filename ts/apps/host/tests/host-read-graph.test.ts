@@ -402,7 +402,7 @@ test("F2 Work, same-version firm criteria and document mark changes during a mul
       }
       if (cause === "firm" || cause === "all")
         await writeFile(
-          join(f.dir, "Firm", "ducts.json"),
+          join(f.dir, "Settings", "ducts.json"),
           JSON.stringify({
             ...FIRM_SEED,
             criteria: { ...FIRM_SEED.criteria, terminalDropInWg: 0.4 },

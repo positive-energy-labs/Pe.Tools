@@ -25,7 +25,6 @@ export const productPathNames = {
   pagesDirectoryName: "Pages",
   settingsDirectoryName: "settings",
   assetsDirectoryName: "assets",
-  outputDirectoryName: "output",
   globalDirectoryName: "Global",
   agentInstructionsFileName: "AGENTS.md",
   readmeFileName: "README.md",
@@ -34,8 +33,28 @@ export const productPathNames = {
   revitAppLogFileName: "revit.log.txt",
   /** The one override for the whole product home; host, Pea and Revit read it identically. */
   productHomeVariable: "PE_TOOLS_PRODUCT_HOME",
-  /** Shared content mount; never a machine-state override. */
+  /** Dev override that names the firm home outright; a shipped machine finds it by probe (ADR 0037 rule 2). */
   sharedRootVariable: "PE_TOOLS_SHARED_ROOT",
+  /** A home proves itself with this file: `{"tier":"user"|"project"|"firm"}` and nothing else. */
+  homeMarkerFileName: "pe-home.json",
+  /** The firm home under a drive root or under one folder of `<drive>\Shared drives`. */
+  sharedDrivesDirectoryName: "Shared drives",
+  firmSoftwareDirectoryName: "04 PE Software Files",
+  catalogsDirectoryName: "Catalogs",
+  /**
+   * A home's tiered values, `Settings/<owner>.json`. Not `settingsDirectoryName`: that is a pod's
+   * own lower-case member folder, and the two never share a parent.
+   */
+  homeSettingsDirectoryName: "Settings",
+  /** The firm home's key file. */
+  keysFileName: "keys.json",
+  /** Under the machine state root's `state` folder (homes freeze shape 7). */
+  runsDirectoryName: "Runs",
+  /** The `Runs` segment for a run no pod owns; a pod id cannot start with an underscore. */
+  podlessRunsDirectoryName: "_no-pod",
+  /** The `Runs` segment for per-module task output, reserved like `_no-pod`. */
+  moduleOutputDirectoryName: "_modules",
+  blobsDirectoryName: "Blobs",
   /** Under an override, machine-local state, logs and service files live in `<home>\.local-state`. */
   localStateDirectoryName: ".local-state",
 } as const;
@@ -70,6 +89,8 @@ export const scriptingWorkspaceIdentity = {
   podManifestFileName: "pod.json",
   sourceDirectoryName: "src",
   sampleScriptFileName: "SampleScript.cs",
+  /** The per-machine props file a pod project imports; it lives outside every home. */
+  machinePropsFileName: "PeScripts.props",
   vsCodeDirectoryName: ".vscode",
   vsCodeSettingsFileName: "settings.json",
 } as const;

@@ -162,7 +162,7 @@ export const ductsInputsSchema = z.strictObject({
   fittingDrops: z.record(z.string(), resolved(nonneg)),
 });
 export type DuctsInputs = z.infer<typeof ductsInputsSchema>;
-/** The versioned firm file (`<user content>/Firm/ducts.json`): the base layer under every project rule. */
+/** The versioned firm file (`Settings/ducts.json` in the firm home): the base layer under every project rule. */
 export const ductsFirmSchema = z.strictObject({
   version: z.string().min(1),
   criteria: ductsCriteriaValuesSchema,

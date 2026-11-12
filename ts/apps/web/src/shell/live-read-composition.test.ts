@@ -40,8 +40,10 @@ async function liveHost(
   let disconnectBridge: () => Promise<void> = async () => {
     throw Error("Test bridge has not connected");
   };
-  // The firm file is a shared setting (ADR 0035 rule 11): give this host a shared root to watch.
-  vi.stubEnv("PE_TOOLS_SHARED_ROOT", await mkdtemp(join(tmpdir(), "pe-shared-")));
+  // The firm file lives in the firm home (ADR 0037): give this host a marked one to watch.
+  const firmHome = await mkdtemp(join(tmpdir(), "pe-firm-"));
+  await writeFile(join(firmHome, "pe-home.json"), `{"tier":"firm"}`);
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", firmHome);
   const inputRoot = dirname(firmRootPath()!);
   const roster = nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
   const inputs =
@@ -152,7 +154,7 @@ test("an empty ancestor directory cannot invalidate the missing firm input mid-r
       5000,
     );
     try {
-      await mkdir(join(root, "Firm"));
+      await mkdir(join(root, "Settings"));
       await observed.promise;
       await new Promise((resolve) => setImmediate(resolve));
     } finally {
@@ -190,7 +192,7 @@ test("an empty ancestor directory cannot invalidate the missing firm input mid-r
     try {
       await until("current");
       await writeFile(
-        join(host.inputRoot, "Firm", "ducts.json"),
+        join(host.inputRoot, "Settings", "ducts.json"),
         JSON.stringify({ ...FIRM_SEED, version: "changed" }),
       );
       await until("refresh-needed");

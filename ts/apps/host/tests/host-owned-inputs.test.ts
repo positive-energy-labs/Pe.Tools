@@ -108,7 +108,7 @@ test("recorded host-local inputs and immutable capture files replay without a li
                   resolve: () => Effect.die("No native resolution"),
                 }),
                 files: DuctFiles.layer({
-                  firm: join(dir, "Firm"),
+                  firm: join(dir, "Settings"),
                   catalogs: join(dir, "catalogs"),
                 }),
                 marks: Layer.succeed(

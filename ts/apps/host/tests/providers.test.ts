@@ -298,7 +298,7 @@ test("a probe launches its child through the injected Spawner, not a backend of 
   await providers.close();
 });
 
-/** ADR 0035 rule 11: the endpoint key resolves user, then the shared keys.json by provider id, then refuses. */
+/** ADR 0037 rule 9: the endpoint key resolves the person's own, then the firm keys.json by role, then refuses. */
 async function sharedKeyProbe(userKey: string, sharedKeys: Record<string, string> | null) {
   const seen: string[] = [];
   const server = createServer((req, res) => {
@@ -311,6 +311,7 @@ async function sharedKeyProbe(userKey: string, sharedKeys: Record<string, string
   if (sharedKeys) {
     const shared = join(root, "shared");
     await mkdir(shared, { recursive: true });
+    await writeFile(join(shared, "pe-home.json"), `{"tier":"firm"}`);
     await writeFile(join(shared, "keys.json"), JSON.stringify(sharedKeys));
     vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
   } else vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
@@ -335,28 +336,34 @@ async function sharedKeyProbe(userKey: string, sharedKeys: Record<string, string
 }
 
 test("a shared key is used when the user has none, and never reaches a log line or the readiness", async () => {
-  const { seen, provider, logs } = await sharedKeyProbe("", { "claude-synthetic": "shared-firm-key" });
+  const { seen, provider, logs } = await sharedKeyProbe("", {
+    // A key is named by its role. The provider record's id names nothing in keys.json.
+    "claude-synthetic": "wrong-name-key",
+    "anthropic.api-key": "shared-firm-key",
+  });
   expect(seen).toContain("shared-firm-key");
+  expect(seen).not.toContain("wrong-name-key");
   expect(provider.readiness.state).toBe("refused");
   expect(logs + JSON.stringify(provider)).not.toContain("shared-firm-key");
 });
 
 test("the user's own key overrides the shared one", async () => {
-  const { seen } = await sharedKeyProbe("user-own-key", { "claude-synthetic": "shared-firm-key" });
+  const { seen } = await sharedKeyProbe("user-own-key", { "anthropic.api-key": "shared-firm-key" });
   expect(seen).toContain("user-own-key");
   expect(seen).not.toContain("shared-firm-key");
 });
 
-test("no shared root and no user key refuses with the typed reason, before any request", async () => {
+test("no firm home and no user key refuses with the typed reason, before any request", async () => {
   const { seen, provider } = await sharedKeyProbe("", null);
   expect(seen).toEqual([]);
-  expect(provider.readiness).toMatchObject({ state: "refused", message: expect.stringContaining("no shared root") });
+  expect(provider.readiness).toMatchObject({ state: "refused", message: expect.stringContaining("No firm home") });
 });
 
 test("witness: a thread event and meta echoing a shared key are written redacted", async () => {
   const shared = join(root, "shared");
   await mkdir(shared, { recursive: true });
-  await writeFile(join(shared, "keys.json"), JSON.stringify({ "claude-synthetic": "shared-firm-key" }));
+  await writeFile(join(shared, "pe-home.json"), `{"tier":"firm"}`);
+  await writeFile(join(shared, "keys.json"), JSON.stringify({ "anthropic.api-key": "shared-firm-key" }));
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
   await mkdir(dirname(productProvidersPath()), { recursive: true });
   await writeFile(

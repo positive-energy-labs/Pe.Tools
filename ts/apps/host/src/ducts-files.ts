@@ -12,7 +12,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { catalogTableSchema, ductsFirmSchema } from "@pe/agent-contracts";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
-import { sharedFirmDir } from "@pe/host-contracts/product-paths";
+import { firmSettingsDir } from "@pe/host-contracts/product-paths";
 import { readDuctCatalogs, productCatalogsRoots, type CatalogReading } from "./duct-catalogs.ts";
 import { firmFileSchema, firmOwner, type FirmFile } from "./reads/evaluator.ts";
 import {
@@ -25,13 +25,13 @@ import {
 } from "./native-recording.ts";
 
 /**
- * Slice 2b (ADR 0035 rule 11): firm files are a shared setting with no user layer, at
- * `<shared>/Firm/<owner>.json` (ducts' is `<shared>/Firm/ducts.json`); null without a shared root.
+ * Firm files are the firm tier of a tiered value (ADR 0037 rule 8), at `<firm home>/Settings/<owner>.json`
+ * (ducts' is `Settings/ducts.json`); null on a machine with no firm home.
  */
-export const firmRootPath = (): string | null => sharedFirmDir();
+export const firmRootPath = (): string | null => firmSettingsDir();
 /** One owner's firm file as read; malformed JSON is a visible error, never a thrown defect. */
 async function readFirmFile(root: string | null, owner: string): Promise<FirmFile> {
-  // No shared root: the file has no home, so the read refuses rather than seeding silently.
+  // No firm home: the file has no home, so the read refuses rather than seeding silently.
   if (root === null) return { refused: "no-shared-root" };
   const path = join(root, `${firmOwner.parse(owner)}.json`);
   let text: string;
@@ -97,7 +97,7 @@ export class DuctFiles extends Context.Service<
       ductCatalogs: Effect.promise(() => readDuctCatalogs(roots.catalogs)),
       subscribe: (changed) => {
         const stops = [
-          // No shared root, no firm file to watch: the refusal holds until the host restarts.
+          // No firm home, no firm file to watch: the refusal holds until the host restarts.
           ...(roots.firm === null ? [] : [["firm", roots.firm] as const]),
           ...[roots.catalogs].flat().map((path) => ["catalogs", path] as const),
         ].map(

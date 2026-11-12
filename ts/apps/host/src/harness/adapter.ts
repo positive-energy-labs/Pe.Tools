@@ -15,6 +15,7 @@ import {
   productPathNames,
 } from "@pe/host-contracts/contracts";
 import { checkoutLayout, sourceRootVariable } from "@pe/host-contracts/service-identity";
+import { firmHome } from "@pe/host-contracts/product-paths";
 import { codexStandaloneRelease, installCommand } from "./install.ts";
 import { AdapterPackage, Win32Rows } from "./edge-schemas.ts";
 import { Cause, Effect, Exit, Schema, Scope, Stream } from "effect";
@@ -373,7 +374,8 @@ export function peaMcpServer(
   const ts = sourceRoot ? join(sourceRoot, checkoutLayout.ts) : null;
   const mcp = ["mcp", "--host", hostBaseUrl];
   const productHome = process.env[productPathNames.productHomeVariable]?.trim();
-  const sharedRoot = process.env[productPathNames.sharedRootVariable]?.trim();
+  // The child is told the firm home this host resolved, so the two never probe to different answers.
+  const sharedRoot = firmHome().root;
   return {
     name: "pea",
     command: ts

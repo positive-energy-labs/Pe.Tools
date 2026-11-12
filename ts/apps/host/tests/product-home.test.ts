@@ -85,6 +85,11 @@ test("Work, Page state and the agent's working directory are machine state under
 test("without an isolated home, the agent's working directory is never under a content home", () => {
   const user = "C:\\Users\\Alice\\OneDrive\\Documents\\Pe.Tools";
   const shared = "S:\\Pe.Tools";
+  // The state-root fence takes the home list (ADR 0037 rule 6): every home in it refuses machine state.
+  const fences = [
+    { tier: "user", root: user },
+    { tier: "firm", root: shared },
+  ] as const;
   const under = (home: string, path: string) => {
     const away = relative(home, path);
     return !isAbsolute(away) && away !== ".." && !away.startsWith(`..${sep}`);
@@ -93,15 +98,15 @@ test("without an isolated home, the agent's working directory is never under a c
     ["installed", "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools"],
     ["dev", "C:\\src\\Pe.Tools"],
   ] as const) {
-    const agent = join(stateRoot(lane, owner, undefined, shared, user), "state", "Agent");
+    const agent = join(stateRoot(lane, owner, undefined, fences), "state", "Agent");
     for (const home of [user, shared]) expect(under(home, agent), `${lane}: ${agent}`).toBe(false);
   }
   // The sentinel: the check does see a path inside a home, and such a state root never resolves.
   expect(under(user, join(user, "state", "Agent"))).toBe(true);
-  expect(() => stateRoot("installed", join(user, "install"), undefined, shared, user)).toThrow(
+  expect(() => stateRoot("installed", join(user, "install"), undefined, fences)).toThrow(
     "user content root",
   );
-  expect(() => stateRoot("dev", join(shared, "checkout"), undefined, shared, user)).toThrow(
+  expect(() => stateRoot("dev", join(shared, "checkout"), undefined, fences)).toThrow(
     "PE_TOOLS_SHARED_ROOT",
   );
 });

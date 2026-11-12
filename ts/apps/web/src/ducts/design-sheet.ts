@@ -16,10 +16,10 @@ type DesignRead = {
   readonly firm?: { readonly version: string; readonly path: string; readonly present: boolean } | { readonly refused: "no-shared-root" };
 } | null;
 
-/** Slice 2b (moved from the deleted inputs surface): the firm files, one per owner, live only on the shared root. */
-export const NO_SHARED_ROOT = "No shared root: set PE_TOOLS_SHARED_ROOT to read the firm files (Firm/<owner>.json)";
+/** The firm files, one per owner, live only in the firm home (ADR 0037). The host's own refusals name every place it looked. */
+export const NO_SHARED_ROOT = "No firm home: no shared drive on this machine holds 04 PE Software Files\\Pe.Tools, so the firm files (Settings/<owner>.json) are not read";
 /** A criterion's provenance when the firm layer is refused: the host resolved it on the engine seed. */
-export const ENGINE_DEFAULT_NO_SHARED_ROOT = "Engine default: no shared root, so the /ducts firm file (Firm/ducts.json) is not read";
+export const ENGINE_DEFAULT_NO_SHARED_ROOT = "Engine default: no firm home, so the /ducts firm file (Settings/ducts.json) is not read";
 
 const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { "model-store": "model-store", model: "model", firm: "firm", default: "default" };
 const resolvedOf = (read: DesignRead, cell: DuctsCriteriaCell) => {
@@ -47,7 +47,7 @@ export const designSheet = {
         const resolved = resolvedOf(read, row as DuctsCriteriaCell);
         if (!resolved || resolved.value == null) return null;
         // ADR 0035 rule 11 disables the shared firm layer, never the Work above it: a criterion on that
-        // layer with no shared root is the engine seed, says so, and stays an editable cell.
+        // layer with no firm home is the engine seed, says so, and stays an editable cell.
         if (resolved.source === "firm" && read?.firm && "refused" in read.firm)
           return { value: resolved.value, source: "default", ref: ENGINE_DEFAULT_NO_SHARED_ROOT,
             ...(resolved.units ? { unit: resolved.units } : {}) };

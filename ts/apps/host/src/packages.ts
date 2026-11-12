@@ -10,15 +10,17 @@ import {
 import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { lstat, open, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   scriptPodMemberBounds as memberBounds,
   type ScriptingExecute,
 } from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { contentDirs } from "./content-homes.ts";
+import { homeDirs } from "@pe/host-contracts/product-paths";
+import { hostOwnership } from "./host-ownership.ts";
 import { verifyPodArtifact } from "./pod-artifact.ts";
+import { productPodsRootPath } from "./product-paths.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 
 export type PackageEntrypoint = {
@@ -65,8 +67,8 @@ export const isCompilerSource = (path: string) => path.startsWith("src/") && /\.
 export const isCompilerInput = (path: string) =>
   path === "pod.json" || path === "PeScripts.csproj" || isCompilerSource(path);
 
-// One exclusion policy for authored input. Page state is machine state under the state root
-// (ADR 0037 rule 6), so a `.state` folder left in a Pod is stale debris, never a member.
+// One exclusion policy for authored input. Page state lives under the machine state root (homes
+// freeze shape 7), so a `.state` folder inside a pod is debris, never a portable member.
 const debris = new Set([
   ".state",
   "output",
@@ -81,11 +83,11 @@ const debris = new Set([
   "dist",
   ".artifacts",
 ]);
-
 export function isPackageMember(path: string): boolean {
   const parts = packageMemberPathSchema.parse(path).toLowerCase().split("/");
   return (
     !parts.some((part) => debris.has(part)) &&
+    // An import record is machine state under `state\pod-imports`; one left in a folder is never a member.
     !(parts.length === 1 && parts[0] === "imported.json") &&
     !parts.some((part) => part === ".env" || part.startsWith(".env.") || part === "context.token")
   );
@@ -103,21 +105,48 @@ export function kindOfMember(
   return undefined;
 }
 
-/** One Pods folder, or the product's Pods in every content home, read in order (user first). */
+/**
+ * Machine state kept about pods (run output, import records, import staging): under the product's
+ * `state` folder, never in a home (ADR 0037 rule 6). An owner that names its own state root keeps
+ * it there. One that supplies only a Pods root (the demo lane, a test) keeps it beside that root,
+ * outside the product's: such a root is never a home's `Pods`, or its state root is named too.
+ */
+export const podStatePath = (
+  owner: { readonly podsRoot?: string; readonly stateRoot?: string },
+  ...segments: string[]
+) =>
+  owner.stateRoot
+    ? join(owner.stateRoot, ...segments)
+    : owner.podsRoot && resolve(owner.podsRoot) !== resolve(productPodsRootPath())
+      ? join(owner.podsRoot, "..", ...segments)
+      : join(hostOwnership.rootPath, productPathNames.stateDirectoryName, ...segments);
+
+/** One Pods folder, or the product's Pods in every home, in list order (user, project, firm). */
 export type PodsRoots = string | readonly string[];
-export const productPodsRoots = () => contentDirs(productPathNames.podsDirectoryName);
+export const productPodsRoots = () => homeDirs(productPathNames.podsDirectoryName);
+
+/** One notice for an id claimed twice: it names every claiming folder by its full path. */
+const claimedTwice = (id: string, twins: readonly Pick<AdmittedPackage, "directory">[]) =>
+  `Pod id '${id}' is claimed by ${twins.map((twin) => twin.directory).join(" and ")}: none is used until the id is unique.`;
 
 /**
- * Read once per snapshot. Hashes, projection, and capture all refer to these exact bytes. Across
- * homes the first root's pod wins by manifest id: the user's copy shadows the shared one.
+ * Read once per snapshot. Hashes, projection, and capture all refer to these exact bytes. A pod id
+ * is unique across homes (ADR 0037 rule 4): an id claimed twice, in one Pods folder or in two
+ * homes, is refused in every copy. Nothing shadows.
  */
 export async function listPackages(podsRoots: PodsRoots = productPodsRoots()): Promise<PackageListing> {
   const result: PackageListing = { packages: [], unreadable: [] };
   for (const root of [podsRoots].flat()) {
     const listing = await listPodsFolder(root);
-    const claimed = new Set(result.packages.map((pod) => pod.id));
-    result.packages.push(...listing.packages.filter((pod) => !claimed.has(pod.id)));
+    result.packages.push(...listing.packages);
     result.unreadable.push(...listing.unreadable);
+  }
+  for (const pod of result.packages) {
+    const twins = result.packages.filter((other) => other.id === pod.id);
+    if (twins.length > 1) {
+      pod.diagnostics.unshift(problem("DuplicatePodId", "pod.json", claimedTwice(pod.id, twins)));
+      pod.contributions = [];
+    }
   }
   return result;
 }
@@ -147,24 +176,10 @@ async function listPodsFolder(podsRoot: string): Promise<PackageListing> {
       result.unreadable.push({ folder: entry.name, message: message(error) });
     }
   }
-  for (const pod of result.packages) {
-    const twins = result.packages.filter((other) => other.id === pod.id);
-    if (twins.length > 1) {
-      pod.diagnostics.unshift(
-        problem(
-          "DuplicatePodId",
-          "pod.json",
-          `Pod id '${pod.id}' is claimed by folders ${twins.map((twin) => twin.folder).join(", ")}.`,
-        ),
-      );
-      pod.contributions = [];
-    }
-  }
   return result;
 }
 
-/** Resolve manifest identity, never a folder alias. Diagnostics stay inspectable in listings. */
-/** The one admitted package with this id; a twice-claimed or missing id refuses with its reason. */
+/** The one admitted package with this id (manifest identity, never a folder alias); a twice-claimed or missing id refuses with its reason. */
 export function onePackage(
   listing: PackageListing,
   id: string,
@@ -173,10 +188,7 @@ export function onePackage(
   const found = listing.packages.filter((pod) => pod.id === id);
   if (found.length === 1) return found[0]!;
   throw found.length
-    ? refuse(
-        `Pod id '${id}' is claimed by folders ${found.map((pod) => pod.folder).join(", ")}.`,
-        409,
-      )
+    ? refuse(claimedTwice(id, found), 409)
     : refuse(`No installed pod has id '${id}'.`, 404);
 }
 
@@ -293,60 +305,65 @@ export async function captureDirectory(
   return { members, diagnostics };
 }
 
-/** Fresh global identity claims, followed by full admission of only the selected folder. */
+/**
+ * Fresh global identity claims, followed by full admission of only the selected folder. The folder
+ * name and the manifest id must each be claimed once across every home.
+ */
 export async function resolvePackageIdentity(folder: string, podsRoots: PodsRoots = productPodsRoots()) {
   if (packageMemberPathSchema.parse(folder).includes("/"))
     throw Error("An output folder must name one immediate Pod directory");
-  const claims: { id: string; folder: string; manifestSha256: string }[] = [];
-  // The first home holding the folder owns it: the user's folder shadows a shared one.
-  let podsRoot = "";
-  let entries: Dirent[] = [];
-  for (const root of [podsRoots].flat()) {
-    podsRoot = root;
-    entries = await readdir(root, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return [];
-      throw error;
-    });
-    if (entries.some((entry) => entry.name.toLowerCase() === folder.toLowerCase())) break;
-  }
-  if (entries.filter((entry) => entry.name.toLowerCase() === folder.toLowerCase()).length !== 1)
-    throw Error("No unique output Pod folder");
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
-    if (entry.isSymbolicLink()) {
-      if (entry.name.toLowerCase() === folder.toLowerCase())
-        throw Error("Pod folders cannot be links");
-      continue;
+  const named = (entry: { name: string }) => entry.name.toLowerCase() === folder.toLowerCase();
+  const claims: { id: string; folder: string; directory: string; manifestSha256: string }[] = [];
+  let selected: (typeof claims)[number] | undefined;
+  let folders = 0;
+  for (const podsRoot of [podsRoots].flat()) {
+    const entries = await readdir(podsRoot, { withFileTypes: true }).catch(
+      (error: NodeJS.ErrnoException): Dirent[] => {
+        if (error.code === "ENOENT") return [];
+        throw error;
+      },
+    );
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (named(entry)) folders++;
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+      if (entry.isSymbolicLink()) {
+        if (named(entry)) throw Error("Pod folders cannot be links");
+        continue;
+      }
+      try {
+        const directory = join(podsRoot, entry.name);
+        const captured = await captureDirectory(directory, true);
+        const manifest = captured.members.find((member) => member.path === "pod.json");
+        if (!manifest || captured.diagnostics.some((issue) => issue.severity === "error"))
+          throw Error("Pod has no admitted pod.json");
+        const value = JSON.parse(
+          Buffer.from(manifest.bytes)
+            .toString("utf8")
+            .replace(/^﻿/, ""),
+        );
+        const claim = {
+          id: packageIdSchema.parse(value?.id),
+          folder: entry.name,
+          directory,
+          manifestSha256: manifest.sha256,
+        };
+        claims.push(claim);
+        if (named(entry)) selected = claim;
+      } catch (error) {
+        if (named(entry)) throw error;
+      }
     }
-    try {
-      const captured = await captureDirectory(join(podsRoot, entry.name), true);
-      const manifest = captured.members.find((member) => member.path === "pod.json");
-      if (!manifest || captured.diagnostics.some((issue) => issue.severity === "error"))
-        throw Error("Pod has no admitted pod.json");
-      const value = JSON.parse(
-        Buffer.from(manifest.bytes)
-          .toString("utf8")
-          .replace(/^\uFEFF/, ""),
-      );
-      claims.push({
-        id: packageIdSchema.parse(value?.id),
-        folder: entry.name,
-        manifestSha256: manifest.sha256,
-      });
-    } catch (error) {
-      if (entry.name.toLowerCase() === folder.toLowerCase()) throw error;
-    }
   }
-  const selected = claims.find((claim) => claim.folder.toLowerCase() === folder.toLowerCase());
+  if (folders !== 1) throw Error("No unique output Pod folder");
   if (!selected || claims.filter((claim) => claim.id === selected.id).length !== 1)
     throw Error("No unique admitted Pod owns this output folder; duplicate manifest identity");
-  const pod = await readFolder(join(podsRoot, selected.folder), selected.folder);
+  const pod = await readFolder(selected.directory, selected.folder);
   if (
     pod.id !== selected.id ||
     pod.members.find((member) => member.path === "pod.json")?.sha256 !== selected.manifestSha256
   )
     throw Error("Pod manifest changed during identity admission");
-  await capturePackage(pod, podsRoot);
+  await capturePackage(pod);
   return { id: pod.id, folder: pod.folder };
 }
 

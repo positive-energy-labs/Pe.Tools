@@ -1680,7 +1680,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Export Pod",
     description:
-      "Export an installed pod (by manifest id) as a .zip archive at an absolute path, without Revit. Foreign $include/$preset fragments are vendored under settings/_vendor/<id>/ with references rewritten to @local/_vendor/<id>/...; PeScripts.csproj is made portable; captures a member names travel as captures/<sha>.png. Bindings, grants, output/ and imported.json never travel. Every rewrite is reported with hashes before and after; a missing capture or foreign member refuses.",
+      "Export an installed pod (by manifest id) as a .zip archive at an absolute path, without Revit. Foreign $include/$preset fragments are vendored under settings/_vendor/<id>/ with references rewritten to @local/_vendor/<id>/...; PeScripts.csproj is made portable; captures a member names travel as captures/<sha>.png. Bindings, grants and run output never travel. Every rewrite is reported with hashes before and after; a missing capture or foreign member refuses.",
     intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Mutation",
@@ -1698,7 +1698,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Import Pod",
     description:
-      "Import a pod .zip archive into a new folder under Pods in the content home (default: the manifest id), without Revit. Bounded, all-or-nothing: refuses an installed id, an existing folder, host state, traversal, links, case twins or oversized entries. Bytes land unchanged plus imported.json (archive sha256, locator, date); Pages start unbound; carried captures join this host's store by hash.",
+      "Import a pod .zip archive into a new folder under Pods in the content home (default: the manifest id), without Revit. Bounded, all-or-nothing: refuses an installed id, an existing folder, host state, traversal, links, case twins or oversized entries. Bytes land unchanged; the import record (archive sha256, archive name, date) is this machine's state, not a file in the pod; Pages start unbound; carried captures join this host's store by hash.",
     intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Mutation",
@@ -1734,7 +1734,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Pod Runs",
     description:
-      "Run receipts under one pod's output/<runId>/, newest first, optionally narrowed to one member path. A run folder with no readable receipt still lists, with the reason.",
+      "One pod's run receipts in this machine's state (Runs/<pod id>/<runId>/), newest first, optionally narrowed to one member path. A run folder with no readable receipt still lists, with the reason.",
     intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",

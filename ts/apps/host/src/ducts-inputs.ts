@@ -1,7 +1,7 @@
 /**
  * The host side of the inputs resolver (ducts LEDGER 2026-10-29): load the layers the pure
  * `resolveInputs` reads (Work's staged edits, the firm file) and turn a sheet's `edits` into Work
- * patches. The firm file (`Firm/ducts.json`, read through `ctx.firm`) is the base layer under every
+ * patches. The firm file (`Settings/ducts.json` in the firm home, read through `ctx.firm`) is the base layer under every
  * project criterion; absent, the seed below stands in and says so (`present: false`), so a sheet
  * never prices on an unnamed constant.
  */
@@ -24,7 +24,7 @@ export const FIRM_SEED: DuctsFirm = {
   },
 };
 
-/** The ducts firm layer as read through `ctx.firm("ducts", …)` / `DuctFiles.firm("ducts")`, or refused without a shared root. */
+/** The ducts firm layer as read through `ctx.firm("ducts", …)` / `DuctFiles.firm("ducts")`, or refused without a firm home. */
 export type FirmReading = FirmValue<DuctsFirm>;
 
 /** The firm layer a resolver runs on: the reading's firm, or the named seed when the read refused (slice 2b). */

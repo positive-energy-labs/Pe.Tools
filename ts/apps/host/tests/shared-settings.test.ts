@@ -15,42 +15,49 @@ import { createReceiptExport } from "../src/receipt-export.ts";
 import { journalAt } from "./effect-test.ts";
 
 afterEach(() => vi.unstubAllEnvs());
+/** A firm home a test names with the dev override: a folder proven by its marker. */
+const firmHome = () => {
+  const shared = mkdtempSync(join(tmpdir(), "pe-firm-"));
+  writeFileSync(join(shared, "pe-home.json"), `{"tier":"firm"}`);
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
+  return shared;
+};
 // The ducts firm layer as the host reads it: the owner-keyed file (the Pod firm door's), decoded.
 const readFirm = async () => {
   const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer())));
   return resolveFirm(await Effect.runPromise(files.firm("ducts")), ductsFirmSchema, FIRM_SEED);
 };
 
-test("no shared root: the firm read refuses with a typed reason, never the seed", async () => {
+test("no firm home: the firm read refuses with a typed reason, never the seed", async () => {
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
   expect(firmRootPath()).toBeNull();
   expect(await readFirm()).toEqual({ refused: "no-shared-root" });
 });
 
-test("a shared firm file is read from <shared>/Firm/ducts.json", async () => {
-  const shared = mkdtempSync(join(tmpdir(), "pe-shared-"));
+test("a firm file is read from <firm home>/Settings/ducts.json, and Firm/ is not read", async () => {
+  const shared = firmHome();
   mkdirSync(join(shared, "Firm"));
-  writeFileSync(join(shared, "Firm", "ducts.json"), JSON.stringify({ ...FIRM_SEED, version: "firm-7" }));
-  vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
+  writeFileSync(join(shared, "Firm", "ducts.json"), JSON.stringify({ ...FIRM_SEED, version: "old-folder" }));
+  expect(await readFirm()).toMatchObject({ present: false, path: join(shared, "Settings", "ducts.json") });
+  mkdirSync(join(shared, "Settings"));
+  writeFileSync(join(shared, "Settings", "ducts.json"), JSON.stringify({ ...FIRM_SEED, version: "firm-7" }));
   const reading = await readFirm();
-  expect(reading).toMatchObject({ present: true, path: join(shared, "Firm", "ducts.json") });
+  expect(reading).toMatchObject({ present: true, path: join(shared, "Settings", "ducts.json") });
   expect("firm" in reading && reading.firm.version).toBe("firm-7");
 });
 
 test("firm files are per owner: two owners, two files, each reader gets its own (S7-F3)", async () => {
-  const shared = mkdtempSync(join(tmpdir(), "pe-shared-"));
-  mkdirSync(join(shared, "Firm"));
-  for (const owner of ["ducts", "hydronic"]) writeFileSync(join(shared, "Firm", `${owner}.json`), JSON.stringify({ owner }));
-  vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
+  const shared = firmHome();
+  mkdirSync(join(shared, "Settings"));
+  for (const owner of ["ducts", "hydronic"]) writeFileSync(join(shared, "Settings", `${owner}.json`), JSON.stringify({ owner }));
   const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer())));
   for (const owner of ["ducts", "hydronic"])
-    expect(await Effect.runPromise(files.firm(owner))).toEqual({ path: join(shared, "Firm", `${owner}.json`), json: { owner } });
+    expect(await Effect.runPromise(files.firm(owner))).toEqual({ path: join(shared, "Settings", `${owner}.json`), json: { owner } });
 });
 
-test("a shared PostHog key exports receipts yet never lands in a receipt file or a log line", async () => {
-  const shared = mkdtempSync(join(tmpdir(), "pe-shared-"));
-  writeFileSync(join(shared, "keys.json"), JSON.stringify({ posthog: "phc_SHARED_LEAK_PROBE" }));
-  vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
+test("a firm PostHog key exports receipts yet never lands in a receipt file or a log line", async () => {
+  const shared = firmHome();
+  writeFileSync(join(shared, "keys.json"), JSON.stringify({ "posthog.api-key": "phc_SHARED_LEAK_PROBE" }));
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", mkdtempSync(join(tmpdir(), "pe-user-")));
   const config = analyticsConfig("dev");
   expect(config?.apiKey).toBe("phc_SHARED_LEAK_PROBE");
@@ -87,15 +94,13 @@ test("a shared PostHog key exports receipts yet never lands in a receipt file or
   expect(written.join(" ") + JSON.stringify(logs.map(String))).not.toContain("phc_SHARED_LEAK_PROBE");
 });
 
-test("a dev PostHog key of the user's own overrides the shared one", () => {
-  const shared = mkdtempSync(join(tmpdir(), "pe-shared-"));
-  writeFileSync(join(shared, "keys.json"), JSON.stringify({ posthog: "phc_shared" }));
+test("the dev PostHog key is the firm's alone: the user home's preferences.json is not read", () => {
+  const shared = firmHome();
+  writeFileSync(join(shared, "keys.json"), JSON.stringify({ "posthog.api-key": "phc_shared" }));
   const user = mkdtempSync(join(tmpdir(), "pe-user-"));
   writeFileSync(join(user, "preferences.json"), JSON.stringify({ posthog: { apiKey: "phc_user" } }));
-  vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", user);
-  expect(analyticsConfig("dev")?.apiKey).toBe("phc_user");
+  expect(analyticsConfig("dev")?.apiKey).toBe("phc_shared");
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
-  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", mkdtempSync(join(tmpdir(), "pe-user-")));
   expect(analyticsConfig("dev")).toBeNull();
 });

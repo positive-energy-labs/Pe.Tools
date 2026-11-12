@@ -1,6 +1,6 @@
 import { currentDocument as current, lifetime } from "./document-lifetime.ts";
 import { createHash } from "node:crypto";
-import { join, resolve, win32 } from "node:path";
+import { resolve, win32 } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { NodeFileSystem } from "@effect/platform-node";
 import {
@@ -68,10 +68,6 @@ import type {
   RevitCatalogLoadedFamilies,
   RevitMatrixLoadedFamilies,
 } from "@pe/host-contracts/generated";
-import {
-  productPathNames,
-  scriptingWorkspaceIdentity,
-} from "@pe/host-contracts/contracts";
 import { CANCEL_OPERATION_KEY, invokeBridge as invoke, type RevitBridge } from "./bridge.ts";
 import { assertFresh, type DocumentMarks } from "./document-marks.ts";
 import type { ActionExecution } from "./action-journal.ts";
@@ -94,50 +90,27 @@ import {
   saveMember,
   writeMember,
   readMember,
+  runsFolder,
   writeRun,
   type PodContext,
 } from "./settings.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { LocalOpError } from "./local-error.ts";
-import { productPodsRootPath } from "./product-paths.ts";
-import { userTwin, userWritable } from "./content-homes.ts";
 import { familiesApplyRun, isFamiliesApplyResponse } from "./family-run-recovery.ts";
 import { familySpecExecutor } from "./family-spec.ts";
 import type { FamiliesReader } from "./families-reader.ts";
 import { nativeInputSchema } from "./native-input.ts";
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
-// PodRuns.StartComposedRun writes to this source Pod's output, or operations for a supplied draft.
-const resolvedRunOutput = async (pod: string | null | undefined, deps: PodDependencies) =>
-  pod
-    ? join(
-        await runPods(deps, podFolder(pod, { podsRoot: deps.podsRoot })),
-        productPathNames.outputDirectoryName,
-      )
-    : join(
-        deps.podsRoot ?? productPodsRootPath(),
-        scriptingWorkspaceIdentity.defaultWorkspaceKey,
-        productPathNames.outputDirectoryName,
-        "operations",
-      );
-
 /**
- * The run output a command declares, before consent: pure, no write. A shared Pod's output is its
- * user twin, where the run will land once `claimRunOutput` has copied the Pod (ADR 0035 rule 11).
+ * The run output a command declares and a native run writes: `state\Runs\<pod-id>`, or `_no-pod`
+ * for a supplied draft (homes freeze shape 7). Pure: no write, and no pod is copied anywhere. The
+ * pod must exist; its home does not matter, because a run never lands in a home.
  */
 export const sourceRunOutput = async (pod: string | null | undefined, deps: PodDependencies) => {
-  const output = await resolvedRunOutput(pod, deps);
-  return userTwin(output) ?? output;
+  if (pod) await runPods(deps, podFolder(pod, { podsRoot: deps.podsRoot }));
+  return runsFolder(pod, { podsRoot: deps.podsRoot });
 };
-
-/**
- * After consent (ADR 0027), before the run writes: copy a shared Pod to the user root on its first
- * run, so the C# writer (which resolves the folder under the user's Pods) and every later read find it.
- */
-export const claimRunOutput = async (pod: string | null | undefined, deps: PodDependencies) =>
-  userWritable(await resolvedRunOutput(pod, deps));
-const claimRunOutputs = (sources: readonly Sealed[], deps: PodDependencies) =>
-  Promise.all([...new Set(sources.map((x) => x.source.root.id))].map((pod) => claimRunOutput(pod, deps)));
 
 /** Pod I/O runs against the product Pods root unless an owner (the demo lane) supplies its own. */
 export type PodDependencies = {
@@ -243,7 +216,6 @@ export const podContext = (
 const diagnosticLine = (d: { code: string; path: string; message: string }) =>
   `${d.code} · ${d.path} — ${d.message}`;
 
-/** Every capture writes a run beside the member it filed: `output/<runId>/receipt.json` plus its outputs. */
 /**
  * A capture run's receipt. A receipt's member fields name what the run consumed; a capture consumed
  * Revit (origin Operation), so they are null. The member it wrote is its product: the run lists it
@@ -994,7 +966,7 @@ export function familyExecutors(
       const run =
         target.kind === "document"
           ? await familiesApplyRun(
-              await claimRunOutput(source.root.id, deps),
+              await sourceRunOutput(source.root.id, deps),
               step,
               { ...prepared, process },
               target.ref.openId,
@@ -1104,7 +1076,6 @@ export function familyExecutors(
         ...(await outputs(sourceOutputs)),
       ],
       prepare: async () => {
-        await claimRunOutputs(sourceOutputs, deps);
         const intents = plan
           ? [plan]
           : await Promise.all(
@@ -1186,7 +1157,6 @@ export function familyExecutors(
           ]
         : [],
       prepare: async () => {
-        if (input.pod) await claimRunOutput(input.pod, deps);
         return {
           kind: "capture" as const,
           process: bound.process,
@@ -1503,7 +1473,6 @@ export function familyExecutors(
         consumes: [...bound.consumes, ...sources.consumes],
         effects: [{ kind: "document", ref: bound.target }, ...(await outputs([sealed]))],
         prepare: async () => {
-          await claimRunOutputs([sealed], deps);
           return {
             kind: "native" as const,
             process: bound.process,

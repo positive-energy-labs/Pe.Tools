@@ -172,7 +172,6 @@ test("M1: two machines bootstrap one home and leave it byte-identical apart from
   expect(Object.keys(afterA).filter((path) => !(path in seeded))).toEqual(
     [
       join("Pods", "default", "pod.json"),
-      join("Pods", "example", "imported.json"),
       join("Pods", "example", "pages", "tour", "index.html"),
       join("Pods", "example", "pod.json"),
     ].sort(),
@@ -180,9 +179,9 @@ test("M1: two machines bootstrap one home and leave it byte-identical apart from
   // The second machine found that home and changed no byte of it.
   expect(afterB).toEqual(afterA);
 
-  // No home file names a machine. `imported.json` is the one known exception: Pod import records
-  // the archive's absolute path as its locator (`pod-transfer.ts`), which is owed to its owner.
-  for (const path of Object.keys(afterB).filter((path) => !path.endsWith("imported.json"))) {
+  // No home file names a machine, with no exception: a Pod's import record is machine state
+  // (`state\pod-imports\<pod-id>.json`), never a file in the pod.
+  for (const path of Object.keys(afterB)) {
     const text = (await readFile(join(home, path))).toString("latin1");
     for (const machine of machines)
       for (const mark of [machine.state, machine.install, machine.name, `:${machine.port}`])

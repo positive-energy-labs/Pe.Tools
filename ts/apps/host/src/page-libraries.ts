@@ -1,10 +1,10 @@
 /** The Page projection, with no HTTP: one descriptor per Page the host serves. */
 import { readdir, readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { contributionKey, parseContributionKey } from "@pe/agent-contracts";
 import type { AdmittedPackage } from "./packages.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { contentDirs } from "./content-homes.ts";
+import { homeDirs } from "@pe/host-contracts/product-paths";
 import { sha256Hex as sha } from "./page-artifacts.ts";
 
 /** One Page the host serves, as anything that lists, ranks or opens Pages reads it. */
@@ -65,62 +65,82 @@ export function scratchPageKey(
       };
 }
 
-/** One Pages folder, or the product's Pages in every content home, read in order (user first). */
+/** One Pages folder, or the product's Pages in every home, in list order (user, project, firm). */
 export type PagesRoots = string | readonly string[];
-export const productPagesRoots = () => contentDirs(productPathNames.pagesDirectoryName);
+export const productPagesRoots = () => homeDirs(productPathNames.pagesDirectoryName);
 
 /**
- * The folder a scratch slug names: the first home whose folder holds an `index.html` (the same
- * rule the listing shadows by), so the user's copy wins; else the first home's, unwritten yet.
+ * Every scratch folder holding an `index.html`, in every home, with its key or why it has none.
+ * A Page slug is unique across homes (homes freeze shape 7: Page state is keyed by slug alone), so
+ * the same folder in two homes refuses both. Nothing shadows.
+ */
+async function scratchPages(pagesRoots: PagesRoots) {
+  const found: {
+    directory: string;
+    folder: string;
+    modified: Date;
+    named: ReturnType<typeof scratchPageKey>;
+  }[] = [];
+  for (const pagesRoot of [pagesRoots].flat()) {
+    const folders = await scratchPageFolders(pagesRoot);
+    const collisions = pageFolderCollisions(folders);
+    for (const folder of folders) {
+      const directory = join(pagesRoot, folder);
+      const facts = await stat(join(directory, "index.html")).catch(() => null);
+      if (facts?.isFile())
+        found.push({ directory, folder, modified: facts.mtime, named: scratchPageKey(folder, collisions) });
+    }
+  }
+  const bySlug = Map.groupBy(found, (page) => page.folder.toLowerCase());
+  return found.map((page) => {
+    const homes = new Set(bySlug.get(page.folder.toLowerCase())!.map((twin) => dirname(twin.directory)));
+    if (homes.size < 2) return page;
+    const twins = bySlug.get(page.folder.toLowerCase())!.map((twin) => twin.directory);
+    return {
+      ...page,
+      named: {
+        key: null,
+        reason: `Page '${page.folder}' is claimed by ${twins.join(" and ")}: none is a Page until the name is unique.`,
+      },
+    };
+  });
+}
+
+/**
+ * The folder a scratch slug names, in whichever home holds it; else the user home's (the first
+ * root), unwritten yet: a new Page starts in the user home. A slug with no key names no folder.
  */
 export async function scratchPageDirectory(slug: string, pagesRoots: PagesRoots = productPagesRoots()) {
   const roots = [pagesRoots].flat();
-  for (const root of roots) {
-    const folders = await scratchPageFolders(root);
-    const named = folders.find((folder) => folder.toLowerCase() === slug.toLowerCase());
-    if (named === undefined || !(await stat(join(root, named, "index.html")).catch(() => null))?.isFile())
-      continue;
+  const named = (await scratchPages(roots)).filter(
+    (page) => page.folder.toLowerCase() === slug.toLowerCase(),
+  );
+  if (named.length) {
     // A scratch Page is its folder as named: the exact name, never another spelling or a twin.
-    const { key } = scratchPageKey(slug, pageFolderCollisions(folders));
-    return key && named === slug ? { dir: join(root, slug), key } : null;
+    const page = named.find((one) => one.folder === slug);
+    return page?.named.key ? { dir: page.directory, key: page.named.key } : null;
   }
   const { key } = scratchPageKey(slug);
   return key && roots[0] ? { dir: join(roots[0], slug), key } : null;
 }
 
-/**
- * Scratch Pages: every folder under a Pages root holding an `index.html`, newest first. Across
- * homes a slug the user's root already has shadows the shared one.
- */
+/** Scratch Pages: every folder under a Pages root holding an `index.html`, newest first. */
 export async function scratchPageDescriptors(
   pagesRoots: PagesRoots = productPagesRoots(),
 ): Promise<PageDescriptor[]> {
   const pages: PageDescriptor[] = [];
-  const seen = new Set<string>();
-  for (const pagesRoot of [pagesRoots].flat()) {
-    const folders = (await scratchPageFolders(pagesRoot)).filter(
-      (folder) => !seen.has(folder.toLowerCase()),
-    );
-    const collisions = pageFolderCollisions(folders);
-    for (const folder of folders) {
-      const directory = join(pagesRoot, folder);
-      const index = join(directory, "index.html");
-      const facts = await stat(index).catch((error) => { console.error("page-libraries: asynchronous operation failed", error); return null; });
-      if (!facts?.isFile()) continue;
-      seen.add(folder.toLowerCase());
-      const bytes = await readFile(index);
-      const named = scratchPageKey(folder, collisions);
-      pages.push({
-        ...named,
-        slug: folder,
-        openUrl: named.key ? `/pages/${folder}/` : null,
-        title: titleOf(bytes.toString("utf8"), folder),
-        pod: null,
-        entry: { path: "index.html", sha256: sha(bytes), bytes },
-        modifiedAt: facts.mtime.toISOString(),
-        directory,
-      });
-    }
+  for (const { directory, folder, modified, named } of await scratchPages(pagesRoots)) {
+    const bytes = await readFile(join(directory, "index.html"));
+    pages.push({
+      ...named,
+      slug: folder,
+      openUrl: named.key ? `/pages/${folder}/` : null,
+      title: titleOf(bytes.toString("utf8"), folder),
+      pod: null,
+      entry: { path: "index.html", sha256: sha(bytes), bytes },
+      modifiedAt: modified.toISOString(),
+      directory,
+    });
   }
   return pages.sort((a, b) => (b.modifiedAt ?? "").localeCompare(a.modifiedAt ?? ""));
 }

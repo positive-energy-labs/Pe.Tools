@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
-import { writeAtomic } from "@pe/host-contracts/store";
 import { LocalOpError } from "../local-error.ts";
 
 export type DirectoryEntryInfo = { name: string; info: FileSystem.File.Info };
@@ -43,17 +42,6 @@ export const readFileStringBomAwareOrEmpty = Effect.fnUntraced(function* (
     return bytes.subarray(3).toString("utf8");
   return bytes.toString("utf8");
 });
-
-/**
- * The store kernel's `writeAtomic` as an Effect with this module's error.
- * ponytail: `settings.ts` is the only caller. Its files are authored home files, so writer G1 moves
- * them to the write door (`writeHomeFile`) and deletes this adapter.
- */
-export const writeFileStringAtomic = (path: string, content: string, operationKey: string) =>
-  Effect.try({
-    try: () => writeAtomic(path, content),
-    catch: (error) => localOpFileError(operationKey, error),
-  });
 
 export const makeDirectory = Effect.fnUntraced(function* (path: string, operationKey: string) {
   const fs = yield* FileSystem.FileSystem;

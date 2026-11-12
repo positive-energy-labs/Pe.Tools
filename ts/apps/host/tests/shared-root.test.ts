@@ -1,47 +1,57 @@
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
-import { contentHomes, sharedRoot, userRoot } from "@pe/host-contracts/product-paths";
+import { firmHome, homes, userRoot } from "@pe/host-contracts/product-paths";
+import { stateTree } from "@pe/host-contracts/service-identity";
 import * as paths from "../src/product-paths.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { listPackages, readPackage } from "../src/packages.ts";
+import { capturePackage, listPackages, readPackage } from "../src/packages.ts";
 import { scratchPageDescriptors, scratchPageDirectory } from "../src/page-libraries.ts";
 import { readDuctCatalogs } from "../src/duct-catalogs.ts";
 import { listRuns, readMember, saveMember, writeMember, writeRun } from "../src/settings.ts";
-import { claimRunOutput, sourceRunOutput } from "../src/family-actions.ts";
+import { sourceRunOutput } from "../src/family-actions.ts";
+import { importPod, writeZip } from "../src/pod-transfer.ts";
 import { peaMcpServer } from "../src/harness/adapter.ts";
 
-// ADR 0035 rule 11 (amended): the user root always, an optional shared root after it.
+// ADR 0037: the user home always, the firm home after it, each proven by its marker. A test names
+// its firm home with the dev override; the probe that finds one with no variable is H1, in
+// host-contracts `product-paths.test.ts`.
 let user: string;
-let shared: string;
+let firm: string;
 beforeEach(() => {
   user = mkdtempSync(join(tmpdir(), "pe-user-"));
-  shared = mkdtempSync(join(tmpdir(), "pe-shared-"));
+  firm = mkdtempSync(join(tmpdir(), "pe-firm-"));
+  writeFileSync(join(firm, "pe-home.json"), `{"tier":"firm"}`);
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", user);
-  vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", firm);
 });
 afterEach(() => {
   vi.unstubAllEnvs();
   rmSync(user, { recursive: true, force: true });
-  rmSync(shared, { recursive: true, force: true });
+  rmSync(firm, { recursive: true, force: true });
+  rmSync(stateTree(hostOwnership.rootPath).runs, { recursive: true, force: true });
 });
 const under = (root: string, path: string) => {
   const away = relative(root, path);
   return !isAbsolute(away) && away !== ".." && !away.startsWith("../") && !away.startsWith("..\\");
 };
-/** Every file under a root with its bytes: the shared copy must come out byte-identical. */
+/** Every file under a root with its bytes. */
 const tree = (root: string) =>
-  Object.fromEntries(
-    readdirSync(root, { recursive: true, withFileTypes: true })
-      .filter((entry) => entry.isFile())
-      .map((entry) => {
-        const path = join(entry.parentPath, entry.name);
-        return [relative(root, path), readFileSync(path, "base64")];
-      }),
-  );
+  existsSync(root)
+    ? Object.fromEntries(
+        readdirSync(root, { recursive: true, withFileTypes: true })
+          .filter((entry) => entry.isFile())
+          .map((entry) => {
+            const path = join(entry.parentPath, entry.name);
+            return [relative(root, path), readFileSync(path, "base64")];
+          }),
+      )
+    : {};
+const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 const run = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 const pod = (home: string, folder: string, id: string, name: string) => {
@@ -50,10 +60,12 @@ const pod = (home: string, folder: string, id: string, name: string) => {
     join(home, "Pods", folder, "pod.json"),
     JSON.stringify({ schemaVersion: 2, id, name, version: "0.1.0", entrypoints: [] }),
   );
+  return join(home, "Pods", folder);
 };
 const page = (home: string, slug: string, title: string) => {
   mkdirSync(join(home, "Pages", slug), { recursive: true });
   writeFileSync(join(home, "Pages", slug, "index.html"), `<title>${title}</title>`);
+  return join(home, "Pages", slug);
 };
 const catalog = (home: string, folder: string, id: string, title: string) => {
   mkdirSync(join(home, "Catalogs", folder), { recursive: true });
@@ -74,15 +86,22 @@ const catalog = (home: string, folder: string, id: string, title: string) => {
   );
 };
 
-test("without a shared root the host's resolvers all answer, on the user root alone", () => {
+test("unbound: with no firm home the host's resolvers all answer, on the user home alone", () => {
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
-  expect(sharedRoot()).toBeNull();
-  expect(contentHomes()).toEqual([user]);
+  expect(firmHome().root).toBeNull();
+  expect(homes()).toEqual([{ tier: "user", root: user }]);
   for (const [name, resolver] of Object.entries(paths)) expect(resolver, name).not.toThrow();
   expect(paths.productPodsRootPath()).toBe(join(user, "Pods"));
 });
 
-test("every content path sits in the user root; Work and every machine path stay with their owner", () => {
+test("a told firm folder with no firm marker is no firm home: its pods are not read", async () => {
+  rmSync(join(firm, "pe-home.json"));
+  pod(firm, "theirs", "theirs", "unproven");
+  expect(homes()).toEqual([{ tier: "user", root: user }]);
+  expect((await listPackages()).packages).toEqual([]);
+});
+
+test("every content path sits in the user home; Work and every machine path stay with their owner", () => {
   const content = new Set([
     "productUserContentRootPath",
     "productPodsRootPath",
@@ -90,92 +109,159 @@ test("every content path sits in the user root; Work and every machine path stay
   ]);
   for (const [name, resolver] of Object.entries(paths)) {
     const path = resolver();
-    expect(under(shared, path), `${name}: ${path}`).toBe(false);
+    expect(under(firm, path), `${name}: ${path}`).toBe(false);
     expect(under(content.has(name) ? user : hostOwnership.rootPath, path), name).toBe(true);
   }
   expect(paths.productRouteWorkPath()).toBe(join(hostOwnership.rootPath, "state", "Work"));
 });
 
-test("a Pod in both homes resolves to the user's copy; a shared-only Pod still lists", async () => {
-  pod(user, "mine", "duct-tools", "user copy");
-  pod(shared, "firm", "duct-tools", "shared copy");
-  pod(shared, "extras", "extras", "shared only");
+// H2 (homes MAP slice 6). Mutant: restore the first-by-id filter in `listPackages`
+// (`listing.packages.filter((pod) => !claimed.has(pod.id))`) and this goes red: the user's copy
+// would list alone and resolve.
+test("H2: one pod id in the user and firm homes refuses both, with one notice naming both paths", async () => {
+  const mine = pod(user, "mine", "duct-tools", "user copy");
+  const theirs = pod(firm, "firm", "duct-tools", "firm copy");
+  pod(firm, "extras", "extras", "firm only");
   const listing = await listPackages();
+  // No silent shadow: both copies list, both refused, and the firm-only pod is untouched.
   expect(listing.packages.map((p) => [p.id, p.name])).toEqual([
     ["duct-tools", "user copy"],
-    ["extras", "shared only"],
+    ["extras", "firm only"],
+    ["duct-tools", "firm copy"],
   ]);
-  expect(under(user, (await readPackage("duct-tools")).directory)).toBe(true);
+  const notices = listing.packages
+    .filter((p) => p.id === "duct-tools")
+    .map((p) => p.diagnostics.filter((d) => d.code === "DuplicatePodId").map((d) => d.message));
+  expect(notices[0]).toHaveLength(1);
+  expect(notices[1]).toEqual(notices[0]);
+  expect(notices[0]![0]).toContain(mine);
+  expect(notices[0]![0]).toContain(theirs);
+  for (const twin of listing.packages.filter((p) => p.id === "duct-tools")) {
+    expect(twin.contributions).toEqual([]);
+    await expect(capturePackage(twin)).rejects.toThrow(/is claimed by/);
+  }
+  await expect(readPackage("duct-tools")).rejects.toThrow(notices[0]![0]!);
+  // Every door refuses the id: a read, a save and a create all name the conflict; nothing is written.
+  const before = [tree(user), tree(firm)];
+  const member = { pod: "duct-tools", path: "settings/a.json" };
+  await expect(run(readMember(member))).rejects.toMatchObject({ statusCode: 409 });
+  await expect(run(writeMember({ ...member, content: "{}" }))).rejects.toThrow(/is claimed by/);
+  expect([tree(user), tree(firm)]).toEqual(before);
+  expect((await readPackage("extras")).directory).toBe(join(firm, "Pods", "extras"));
 });
 
-test("a Page in both homes resolves to the user's copy", async () => {
-  page(user, "tour", "user tour");
-  page(shared, "tour", "shared tour");
-  page(shared, "intro", "shared intro");
-  const pages = await scratchPageDescriptors();
-  expect(pages.map((p) => [p.slug, p.title]).sort()).toEqual([
-    ["intro", "shared intro"],
-    ["tour", "user tour"],
-  ]);
-  expect((await scratchPageDirectory("tour"))?.dir).toBe(join(user, "Pages", "tour"));
-  expect((await scratchPageDirectory("intro"))?.dir).toBe(join(shared, "Pages", "intro"));
-});
-
-test("a Catalog in both homes resolves to the user's copy", async () => {
-  catalog(user, "smacna", "round", "user round");
-  catalog(shared, "smacna", "square", "shadowed folder");
-  catalog(shared, "firm", "round", "shared round");
-  catalog(shared, "oval", "oval", "shared oval");
-  const reading = await readDuctCatalogs();
-  expect(reading.findings).toEqual([]);
-  expect(Object.values(reading.tables).map((t) => [t.id, t.title]).sort()).toEqual([
-    ["oval", "shared oval"],
-    ["round", "user round"],
-  ]);
-});
-
-test("declaring a run of a shared-only Pod writes nothing: rejected, the user root holds no copy", async () => {
-  pod(shared, "theirs", "theirs", "shared");
-  const before = tree(shared);
-  // Every Pod-run command's bind declares this effect before consent (ADR 0027); rejection never prepares.
-  expect(await sourceRunOutput("theirs", {})).toBe(join(user, "Pods", "theirs", "output"));
-  expect(existsSync(join(user, "Pods"))).toBe(false);
-  expect(tree(shared)).toEqual(before);
-});
-
-test("running a Pod that exists only on the shared root writes its output to the user root", async () => {
-  pod(shared, "theirs", "theirs", "shared");
-  const before = tree(shared);
-  // Consented: prepare claims the output, copying the Pod so the C# writer finds its user folder.
-  expect(await claimRunOutput("theirs", {})).toBe(join(user, "Pods", "theirs", "output"));
-  expect(existsSync(join(user, "Pods", "theirs", "pod.json"))).toBe(true);
-  expect(await run(writeRun("theirs", "run-1", { "receipt.json": "{}" }))).toBe("output/run-1");
-  expect(readFileSync(join(user, "Pods", "theirs", "output", "run-1", "receipt.json"), "utf8")).toBe("{}");
-  expect((await run(listRuns({ pod: "theirs" }))).runs.map((r) => r.runId)).toEqual(["run-1"]);
-  expect(tree(shared)).toEqual(before);
-});
-
-test("saving a shared member makes the user copy, and the next read returns it", async () => {
-  pod(shared, "theirs", "theirs", "shared");
-  writeFileSync(join(shared, "Pods", "theirs", "settings", "a.json"), "{}");
-  const before = tree(shared);
+// H2. Mutant: make `writablePath` return the user-home twin of the path again
+// (`join(userRoot(), relative(firmHome().root!, path))`) and this goes red twice: the firm bytes
+// stay unchanged and a user copy appears.
+test("H2: a write to a pod that lives only in the firm home changes the firm home's bytes and makes no user copy", async () => {
+  const theirs = pod(firm, "theirs", "theirs", "firm");
+  writeFileSync(join(theirs, "settings", "a.json"), "{}");
   const member = { pod: "theirs", path: "settings/a.json" };
   const { sha256 } = await run(readMember(member));
   await run(saveMember({ ...member, content: '{"b":1}', expectedSha256: sha256 }));
-  expect(readFileSync(join(user, "Pods", "theirs", "settings", "a.json"), "utf8")).toBe('{"b":1}');
+  await run(writeMember({ pod: "theirs", path: "settings/new.json", content: "[]" }));
+  expect(readFileSync(join(theirs, "settings", "a.json"), "utf8")).toBe('{"b":1}');
+  expect(readFileSync(join(theirs, "settings", "new.json"), "utf8")).toBe("[]");
   expect((await run(readMember(member))).content).toBe('{"b":1}');
-  expect(under(user, (await readPackage("theirs")).directory)).toBe(true);
-  expect(tree(shared)).toEqual(before);
-  // A Pod already in the user root is written in place.
-  pod(user, "mine", "mine", "user");
-  await run(writeMember({ pod: "mine", path: "settings/c.json", content: "{}" }));
-  expect(readFileSync(join(user, "Pods", "mine", "settings", "c.json"), "utf8")).toBe("{}");
+  expect((await readPackage("theirs")).directory).toBe(theirs);
+  // No user copy: the user home holds nothing at all.
+  expect(tree(user)).toEqual({});
+  expect(existsSync(join(user, "Pods"))).toBe(false);
 });
 
-test("the harness declares the shared mount for its MCP child", () => {
-  vi.stubEnv("PE_TOOLS_SHARED_ROOT", " S:\\Pe.Tools ");
+// H4 (homes MAP slice 6). Mutants: pass `sha256(current bytes)` instead of
+// `request.expectedSha256` to the door in `saveMember` and the stale save is no longer refused;
+// drop the blob write in `writeHomeFile` and the prior bytes are gone.
+test("H4: an overwrite in the firm home leaves the prior bytes in Blobs under the receipt's hash; a stale hash is refused", async () => {
+  const theirs = pod(firm, "theirs", "theirs", "firm");
+  const prior = '{"prior":true}';
+  writeFileSync(join(theirs, "settings", "a.json"), prior);
+  const member = { pod: "theirs", path: "settings/a.json" };
+  const blobs = stateTree(hostOwnership.rootPath).blobs;
+  expect(under(firm, blobs) || under(user, blobs)).toBe(false);
+  const written = await run(saveMember({ ...member, content: '{"next":1}', expectedSha256: sha(prior) }));
+  expect(written).toEqual({ ...member, sha256: sha('{"next":1}') });
+  // The receipt's prior hash is the one the caller sent, and the blob store holds those bytes.
+  expect(readFileSync(join(blobs, "sha256", sha(prior)), "utf8")).toBe(prior);
+  // A second writer still holding the first hash is stale: refused, nothing written, no new blob.
+  const held = readdirSync(join(blobs, "sha256")).length;
+  await expect(
+    run(saveMember({ ...member, content: '{"late":1}', expectedSha256: sha(prior) })),
+  ).rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining("changed since it was read") });
+  expect(readFileSync(join(theirs, "settings", "a.json"), "utf8")).toBe('{"next":1}');
+  expect(readdirSync(join(blobs, "sha256"))).toHaveLength(held);
+  // A create over an existing member is refused the same way.
+  await expect(run(writeMember({ ...member, content: "{}" }))).rejects.toMatchObject({ statusCode: 409 });
+  expect(readFileSync(join(theirs, "settings", "a.json"), "utf8")).toBe('{"next":1}');
+});
+
+test("a Page slug in two homes refuses both; a slug in one home resolves there", async () => {
+  const mine = page(user, "tour", "user tour");
+  const theirs = page(firm, "tour", "firm tour");
+  page(firm, "intro", "firm intro");
+  const pages = await scratchPageDescriptors();
+  expect(pages.map((p) => [p.slug, p.title, p.key]).sort()).toEqual([
+    ["intro", "firm intro", "page:@pages/intro"],
+    ["tour", "firm tour", null],
+    ["tour", "user tour", null],
+  ]);
+  const reason = pages.find((p) => p.slug === "tour")!.reason!;
+  expect(reason).toContain(mine);
+  expect(reason).toContain(theirs);
+  expect(await scratchPageDirectory("tour")).toBeNull();
+  expect((await scratchPageDirectory("intro"))?.dir).toBe(join(firm, "Pages", "intro"));
+  // A new Page starts in the user home.
+  expect((await scratchPageDirectory("fresh"))?.dir).toBe(join(user, "Pages", "fresh"));
+});
+
+test("a catalog table id in two homes admits no table, with a finding", async () => {
+  catalog(user, "smacna", "round", "user round");
+  catalog(firm, "smacna", "square", "same folder name, another id");
+  catalog(firm, "firm", "round", "firm round");
+  catalog(firm, "oval", "oval", "firm oval");
+  const reading = await readDuctCatalogs();
+  expect(reading.findings).toEqual(["Duplicate catalog table round; no table with this id is admitted"]);
+  expect(Object.values(reading.tables).map((t) => [t.id, t.title]).sort()).toEqual([
+    ["oval", "firm oval"],
+    ["square", "same folder name, another id"],
+  ]);
+});
+
+test("run output is machine state: declaring and filing a run of a firm-only pod writes into no home", async () => {
+  pod(firm, "theirs", "theirs", "firm");
+  const before = [tree(user), tree(firm)];
+  const runs = join(stateTree(hostOwnership.rootPath).runs, "theirs");
+  // Every Pod-run command's bind declares this effect before consent (ADR 0027): pure, no write.
+  expect(await sourceRunOutput("theirs", {})).toBe(runs);
+  expect(await sourceRunOutput(null, {})).toBe(stateTree(hostOwnership.rootPath).podlessRuns);
+  expect(existsSync(runs)).toBe(false);
+  expect(await run(writeRun("theirs", "run-1", { "receipt.json": "{}" }))).toBe(join(runs, "run-1"));
+  expect(readFileSync(join(runs, "run-1", "receipt.json"), "utf8")).toBe("{}");
+  expect((await run(listRuns({ pod: "theirs" }))).runs.map((r) => [r.runId, r.receiptPath])).toEqual([
+    ["run-1", join(runs, "run-1", "receipt.json")],
+  ]);
+  expect([tree(user), tree(firm)]).toEqual(before);
+  await expect(sourceRunOutput("absent", {})).rejects.toThrow(/No installed pod/);
+});
+
+test("importing a pod whose id the firm home already holds is refused: no duplicate is minted", async () => {
+  const theirs = pod(firm, "theirs", "theirs", "firm");
+  const archive = join(user, "theirs.zip");
+  writeFileSync(
+    archive,
+    writeZip(new Map([["pod.json", Buffer.from(JSON.stringify({ schemaVersion: 2, id: "theirs", entrypoints: [] }))]])),
+  );
+  await expect(importPod({ archivePath: archive })).rejects.toThrow(`already installed at '${theirs}'`);
+  expect(existsSync(join(user, "Pods"))).toBe(false);
+});
+
+test("the harness tells its MCP child the firm home it resolved", () => {
   expect(peaMcpServer(null, "http://localhost:1234", "test").env).toContainEqual({
     name: "PE_TOOLS_SHARED_ROOT",
-    value: "S:\\Pe.Tools",
+    value: firm,
   });
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
+  expect(
+    peaMcpServer(null, "http://localhost:1234", "test").env.map((entry) => entry.name),
+  ).not.toContain("PE_TOOLS_SHARED_ROOT");
 });

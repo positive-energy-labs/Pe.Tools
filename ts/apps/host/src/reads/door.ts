@@ -129,7 +129,7 @@ export function nativeRead<K extends HostOperationKey>(
 }
 /** A firm owner names one file under the firm root; no separators, so no path escapes it. */
 export const firmOwner = z.string().regex(/^[a-z0-9][a-z0-9.-]*$/i);
-/** No shared root (slice 2b, ADR 0035 rule 11): the firm file has no home, so its read refuses. */
+/** No firm home (ADR 0037): the firm file has no home, so its read refuses. The code keeps its first name. */
 const noSharedRoot = z.strictObject({ refused: z.literal("no-shared-root") });
 /** The file as read: absent (no json), unreadable or malformed (error), its parsed JSON, or refused. */
 export const firmFileSchema = z.union([
@@ -151,7 +151,7 @@ export type FirmValue<T> =
       error?: string;
     }
   | z.output<typeof noSharedRoot>;
-/** The firm file layer (ADR 0026): `Firm/<owner>.json` as read, before `resolveFirm` decodes it. */
+/** The firm file layer (ADR 0026): the firm home's `Settings/<owner>.json` as read, before `resolveFirm` decodes it. */
 export const firm = leaf("file:firm", firmOwner, firmFileSchema);
 /** Each value carries its source: the firm file when it decodes, else the engine default (seed). */
 export function resolveFirm<T>(file: FirmFile, schema: z.ZodType<T>, seed: T): FirmValue<T> {

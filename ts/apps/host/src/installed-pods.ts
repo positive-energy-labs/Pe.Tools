@@ -16,6 +16,7 @@ import {
   archiveId,
   preparePodExport,
   writePodExport,
+  importRecordPath,
   installArchive,
   readZip,
   TransferRefused,
@@ -127,7 +128,8 @@ async function run(
       continue;
     }
     const outcome = await offer(archive, path, bytes, sha256, {
-      ...options, podsRoot, originalsRoot: join(dirname(ledgerFile), "shipped-pod-originals"),
+      ...options, podsRoot, stateRoot: options.stateRoot ?? dirname(ledgerFile),
+      originalsRoot: join(dirname(ledgerFile), "shipped-pod-originals"),
     }, installed);
     outcomes.push(ledger.offered[sha256] && outcome.outcome === "present" && !shippedPodUpdateRefusals.has(installed!.id)
       ? { archive, sha256, outcome: "offered-before" } : outcome);
@@ -163,11 +165,11 @@ async function offer(
       };
       if (!matches(readZip(bytes), installed)) {
         try {
-          const provenance = JSON.parse(await readFile(join(installed.directory, "imported.json"), "utf8"));
-          if (typeof provenance.locator !== "string" || !/^[a-f0-9]{64}$/.test(provenance.archiveSha256))
+          const provenance = JSON.parse(await readFile(importRecordPath(id, options), "utf8"));
+          if (!/^[a-f0-9]{64}$/.test(provenance.archiveSha256))
             throw Error("its original import record is incomplete");
+          // The record holds no machine path: the original is found by its hash in this machine's store.
           const original = await readFile(join(options.originalsRoot, `${provenance.archiveSha256}.zip`))
-            .catch(() => readFile(provenance.locator))
             .catch(() => { throw Error("its original archive is unavailable"); });
           if (createHash("sha256").update(original).digest("hex") !== provenance.archiveSha256)
             throw Error("its original archive no longer matches the import record");
@@ -188,7 +190,7 @@ async function offer(
             return { archive, sha256, outcome: "updated", id, folder: imported.folder };
           } catch (error) {
             // A post-rename activation failure must preserve both folders before restoring custody.
-            if (await readFile(join(installed.directory, "imported.json")).then(() => true, () => false))
+            if (await readFile(join(installed.directory, "pod.json")).then(() => true, () => false))
               await rename(installed.directory, `${backup}-failed-update`);
             await rename(backup, installed.directory);
             throw Error("the replacement could not be activated; the original folder was restored", { cause: error });
