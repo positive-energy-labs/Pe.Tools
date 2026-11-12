@@ -23,11 +23,7 @@ import {
   type MachineOwnerPromise,
   type MachineSources,
 } from "../src/machine.ts";
-import {
-  RunRegistry,
-  runRegistryPromise,
-  type RunRegistryPromise,
-} from "../src/run-registry.ts";
+import { RunRegistry } from "../src/run-registry.ts";
 
 const runRoot =
   <A, E>(body: () => Effect.Effect<A, E, Scope.Scope>) =>
@@ -133,8 +129,8 @@ export const sessionView = ({ state, ...view }: Omit<BridgeSessionView, "state">
   },
 });
 
-/** The Promise face of a fresh run registry. */
-export const testRegistry = (): RunRegistryPromise => runRegistryPromise(registryService());
+/** A fresh synchronous run registry. */
+export const testRegistry = (): RunRegistry["Service"] => registryService();
 
 /**
  * {@link HarnessThreads} for Promise tests: the live layer over the node file system, built in a

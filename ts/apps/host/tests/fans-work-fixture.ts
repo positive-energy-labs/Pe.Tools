@@ -25,7 +25,7 @@ import { connectTestBridge } from "./bridge-fixture.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { RevitBridge, RevitBridgeLive, BridgeError } from "../src/bridge.ts";
 import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
-import { RunRegistry, runRegistryPromise } from "../src/run-registry.ts";
+import { RunRegistry } from "../src/run-registry.ts";
 import { bindControl } from "../src/control.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import type { ReadSources } from "../src/reads/inputs.ts";
@@ -75,7 +75,7 @@ export async function nativeFixture(
       clockMode === "test"
         ? await settle(Layer.buildWithScope(TestClock.layer(), scope))
         : Context.empty();
-    const runs = runRegistryPromise(Context.get(context, RunRegistry));
+    const runs = Context.get(context, RunRegistry);
     bindControl({ runs });
     const actualBridge = Context.get(context, RevitBridge);
     const nativeCallers: RequestIdentityData[] = [];

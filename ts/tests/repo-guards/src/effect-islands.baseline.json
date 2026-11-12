@@ -17,7 +17,6 @@
     "apps/host/src/pe-routes.ts": 5,
     "apps/host/src/resource-adapters.ts": 2,
     "apps/host/src/revoke.ts": 1,
-    "apps/host/src/run-registry.ts": 1,
     "apps/host/src/schedule-actions.ts": 1,
     "apps/host/src/sdk-dispatch.ts": 1,
     "apps/host/src/sdk-session.ts": 2,
