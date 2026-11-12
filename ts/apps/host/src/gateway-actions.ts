@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
+import { readSettingTiers } from "./tiered-settings.ts";
 import { captureDirectory } from "./packages.ts";
 import { directorySnapshot } from "./command-reads.ts";
 import {
@@ -346,6 +347,12 @@ export function gatewayExecutor(
       } else {
         const authored = admission.input;
         switch (key) {
+          case "settings.tiers.write": {
+            const tier = readSettingTiers(String(authored.owner)).find(tier => tier.tier === authored.tier);
+            if (!tier?.path) throw refused(tier?.notFound ?? "The setting home was not found");
+            effects.push({ kind: "file", path: tier.path });
+            break;
+          }
           case "pod.member.write":
           case "pod.member.save":
             effects.push({

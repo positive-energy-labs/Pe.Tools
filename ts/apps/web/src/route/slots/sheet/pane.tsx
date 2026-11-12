@@ -3,7 +3,8 @@ import { decode, type SubjectRefCode } from "../../../../../../packages/agent-co
 import type { SheetSlot } from "@pe/agent-contracts/slots";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
-import { callHostRpc } from "#/host/client";
+import { submitAction } from "../../../../../../packages/mcps/src/shared/takeoff-action-client";
+import type { OpResponseOf } from "@pe/host-contracts/operation-types";
 import { StateCell } from "@pe/kit/lang/cell";
 import { useRouteSearchSlice } from "../../activity";
 import type { DrawContext, Fields } from "../../typed-route.ts";
@@ -88,7 +89,6 @@ function SettingCell({ ctx, cell, schema }: { ctx: Ctx; cell: SheetCell; schema:
   const [text, setText] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
-  const target = ctx.target?.kind === "document" ? ctx.target.ref : null;
   const save = async (tier: NonNullable<SheetCell["setting"]>["tiers"][number]) => {
     const typed = text.trim();
     const value = typed === "" ? null : cell.numeric || typeof cell.value === "number" ? Number(typed) : typed;
@@ -96,11 +96,15 @@ function SettingCell({ ctx, cell, schema }: { ctx: Ctx; cell: SheetCell; schema:
     if (parsed && !parsed.success) return setSaid(`Not saved: ${parsed.error.issues[0]?.message ?? "the value is not valid"}`);
     setBusy(tier.tier);
     try {
-      const wrote = await callHostRpc(
-        "settings.tiers.write",
-        { owner: cell.setting!.owner, tier: tier.tier, path: [...cell.setting!.path] as [string, ...string[]], value: parsed ? parsed.data : null, expectedSha256: tier.sha256 },
-        target ? { bridgeSessionId: target.session, openDocumentId: target.openId } : {},
-      );
+      const receipt = await submitAction({
+        id: crypto.randomUUID(),
+        key: "settings.tiers.write",
+        target: { kind: "host" },
+        input: { owner: cell.setting!.owner, tier: tier.tier, path: [...cell.setting!.path], value: parsed ? parsed.data : null, expectedSha256: tier.sha256 },
+      });
+      if (receipt.state !== "succeeded")
+        throw Error(`Save ${receipt.state}${"error" in receipt ? `: ${receipt.error}` : ""}`);
+      const wrote = receipt.result as OpResponseOf<"settings.tiers.write">;
       setSaid(`${value === null ? "Cleared" : "Saved"} at ${wrote.tier}: ${wrote.path}`);
       setText("");
       ctx.refresh();
