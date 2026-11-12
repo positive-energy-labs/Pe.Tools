@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readStoredNotices } from "@pe/host-contracts/store";
+import { readStoredNotices, storedNoticesFile } from "@pe/host-contracts/store";
 import { noteStartupHomes, noticeRows } from "../src/notice-feed.ts";
 
 test("start census notices earlier Work once per folder without changing files", () => {
@@ -133,5 +133,35 @@ test("no firm home posts one notice that names where the host looked, and it dra
     for (const place of refused) expect(both[1]!.reason).toContain(place);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// Both notice writers and the feed reader must agree on the machine's one notice file.
+test("outbox and host writers post to the notice feed's contract path", async () => {
+  const { readOutbox, writeOutbox } = await import("@pe/runtime/context");
+  const { runtimeRoot, resolveLaneAndRoot } = await import("@pe/runtime/runtime-owner");
+  const { hostOwnership } = await import("../src/host-ownership.ts");
+  const { storedNoticesPath, noteNoFirmHome } = await import("../src/notice-feed.ts");
+  const { createHash } = await import("node:crypto");
+  const { dirname } = await import("node:path");
+  const slot = `notice-path-${crypto.randomUUID()}`;
+  const file = join(runtimeRoot(), "state", resolveLaneAndRoot().serviceName, "invocation-outbox",
+    `${createHash("sha256").update(slot).digest("hex")}.json`);
+  expect(runtimeRoot()).toBe(hostOwnership.rootPath);
+  expect(storedNoticesPath()).toBe(storedNoticesFile(runtimeRoot()));
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, "{torn");
+  const looked = [slot];
+  try {
+    expect(() => readOutbox(slot)).toThrow(file);
+    expect(() => writeOutbox(slot, { id: slot })).toThrow(file);
+    noteNoFirmHome({ root: null, looked });
+    const notices = readStoredNotices(storedNoticesPath());
+    expect(notices.filter(notice => notice.path === file)).toMatchObject([
+      { class: "keep", place: "Pending action" },
+    ]);
+    expect(notices.some(notice => notice.reason.includes(slot))).toBe(true);
+  } finally {
+    rmSync(file, { force: true });
   }
 });

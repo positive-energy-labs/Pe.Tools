@@ -1,3 +1,4 @@
+import { settingsSchemaPath } from "@pe/host-contracts/settings-schema";
 import { lstat, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { isUtf8 } from "node:buffer";
@@ -728,17 +729,6 @@ function bridgeIssue(raw: {
 function issue(code: string, message: string, severity: MemberIssue["severity"] = "error") {
   return { code, message, path: "$", severity } satisfies MemberIssue;
 }
-
-/**
- * The library path a `$schema` names: `/schemas/settings/<library>/<root>.json` (C# `SettingsSchemaUrl.Path`),
- * or null when it names no settings library. The path is the member's only identity claim and the only
- * stored form (homes freeze shape 6). Any origin, drive or share in front of it is read through, so a
- * file written before the freeze still resolves; nothing migrates it.
- */
-export const settingsSchemaPath = (schema: string): string | null =>
-  /\/schemas\/settings\/[^/]+\/[^/]+\.json$/i.exec(
-    schema.replace(/[?#].*$/, "").replaceAll("\\", "/"),
-  )?.[0] ?? null;
 
 /** Member text with every library `$schema` stored as its path. Other bytes, and other schemas, are untouched. */
 export const storedSchemaPaths = (content: string): string =>

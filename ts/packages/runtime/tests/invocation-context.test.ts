@@ -52,7 +52,7 @@ test.each(["old-run", ""])(
 test("a torn outbox is refused with its file named and kept, and a re-read posts no second notice", async () => {
   const { readOutbox, writeOutbox } = await import("@pe/runtime/context");
   const { resolveLaneAndRoot, runtimeRoot } = await import("../src/runtime-owner.ts");
-  const { readStoredNotices } = await import("@pe/host-contracts/store");
+  const { readStoredNotices, storedNoticesFile } = await import("@pe/host-contracts/store");
   const { createHash } = await import("node:crypto");
   const { join, dirname } = await import("node:path");
   const { mkdirSync, readFileSync, writeFileSync, rmSync } = await import("node:fs");
@@ -65,7 +65,7 @@ test("a torn outbox is refused with its file named and kept, and a re-read posts
     `${createHash("sha256").update(slot).digest("hex")}.json`,
   );
   const posted = () =>
-    readStoredNotices(join(runtimeRoot(), "state", "stored-notices.jsonl")).filter(
+    readStoredNotices(storedNoticesFile(runtimeRoot())).filter(
       (notice) => notice.path === file,
     );
   const torn = '{"id":"torn';
