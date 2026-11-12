@@ -97,7 +97,7 @@ internal static class ScriptFileTemplates {
 
         A run writes nothing into the pod. A pod can sit in a home that other people share, and output is never published.
 
-        `state/Runs/{{ProductPathNames.PodlessRunsDirectoryName}}/` holds what no pod owns: the runs of scripts that came from no pod, and the files the pod-less Do palette tasks write for you to open. `state/Runs/{{RevitScriptingStorageLocations.InlineTraceDirectoryName}}/` holds the source of each inline snippet that ran.
+        `state/Runs/{{ProductPathNames.PodlessRunsDirectoryName}}/` holds the runs of scripts that came from no pod, one folder per run. `state/Runs/{{ProductPathNames.ModuleOutputDirectoryName}}/` holds the files the pod-less Do palette tasks write for you to open. `state/Runs/{{RevitScriptingStorageLocations.InlineTraceDirectoryName}}/` holds the source of each inline snippet that ran.
 
         ## Where to work
 

@@ -38,7 +38,8 @@ Transport lives in `Pe.Shared.HostContracts`: `HostEndpoint`, `TsHostCallClient`
     Agent\AGENTS.md                           (the agent's guide, rewritten by bootstrap)
     Pages\<slug>\
     Runs\<pod-id>\<run-id>\                    (every run's input, outputs and receipt)
-    Runs\_no-pod\                             (runs with no pod, and per-module task output)
+    Runs\_no-pod\<run-id>\                    (runs with no pod; every child is one run)
+    Runs\_modules\<module>\                   (per-module task output; no run id)
     Runs\_inline\                             (the source of each inline snippet that ran; no run id)
     Blobs\sha256\<hash>
   logs\

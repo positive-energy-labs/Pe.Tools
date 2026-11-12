@@ -14,7 +14,7 @@ public sealed class ModuleStorage(string module) {
 
     /// <summary>Files a pod-less command writes for a person to open: machine state, never a content home (ADR 0037 rule 6).</summary>
     public OutputStorage Output() => new(
-        ProductRuntimeLayout.Current.State.PodlessRunsPath,
+        ProductRuntimeLayout.Current.State.ModuleOutputPath,
         this.ModuleKey
     );
 }
