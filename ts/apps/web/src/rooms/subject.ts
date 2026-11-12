@@ -1,6 +1,6 @@
-import { subjectCode } from "@pe/agent-contracts";
+import type { SubjectRefCode } from "@pe/agent-contracts";
 import type { SubjectKey } from "@pe/kit/lang/attention";
+import { regionCode } from "./rows";
 
-/** The carrier GUID survives replacement of the Revit FilledRegion. */
-export const regionSubject = (guid: string): SubjectKey =>
-  subjectCode({ keyKind: "region", key: guid }) as SubjectKey;
+/** The room's one SubjectRef (`./rows.ts`), typed for the kit's attention as well. */
+export const regionSubject = (guid: string) => regionCode(guid) as SubjectRefCode & SubjectKey;

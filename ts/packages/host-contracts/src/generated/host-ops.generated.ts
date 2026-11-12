@@ -10852,6 +10852,7 @@ export namespace ScriptingExecute {
       artifacts?: ScriptArtifactData[] | null;
       data?: unknown;
       attribution?: null | PodReceipt;
+      held?: null | string;
     }
     export interface ScriptDiagnostic {
       stage: string;

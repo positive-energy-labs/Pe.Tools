@@ -1,5 +1,4 @@
-import { roomSelection } from "./selection";
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attention";
 import { type Mark } from "@pe/agent-contracts";
 import { Ladder } from "#/route/ladder";
@@ -8,7 +7,7 @@ import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { ButtonGroup } from "@pe/kit/lang/button-group";
 import { cardsMarkdown, coverage, newestRun, type Card } from "./cards";
-import { cardLine, FeedbackCard, RoomsInbox } from "./inbox";
+import { cardLine, FeedbackCard } from "./card";
 import type { RoomsPage } from "./page";
 
 import { RoomsProvider, useRoomsWorkspace } from "./workspace";
@@ -94,21 +93,8 @@ function RegionsBody({ ctx }: Body) {
 }
 
 function PlanBody({ ctx, page, verbs, renderPane }: Body & { renderPane: TeachingPaneRender }) {
-  const { onView, regions, snapshot, empty, cards, labels, view, plan, planError, trace, setPage } =
+  const { onView, regions, snapshot, empty, cards, labels, view, plan, planError, trace, setPage, selected, pinned, pin: setPinned } =
     useRoomsWorkspace();
-  const selected = new Set(
-    roomSelection(
-      page.selected,
-      cards,
-      regions.map((region) => region.guid),
-    ).guids,
-  );
-  const { pinned } = roomSelection(
-    page.selected,
-    cards,
-    regions.map((region) => region.guid),
-  );
-  const setPinned = (id: string | null) => setPage({ selected: id ? [`card:${id}`] : [] });
   const level = snapshot?.levels.find((item) => item.views.includes(view))?.name ?? "";
   const onDrop = async (drop: Drop) => {
     if (!snapshot) return "the snapshot is not read yet";
@@ -153,20 +139,9 @@ function PlanBody({ ctx, page, verbs, renderPane }: Body & { renderPane: Teachin
             ? []
             : !add
               ? [guid]
-              : selected.has(guid)
-                ? roomSelection(
-                    page.selected,
-                    cards,
-                    regions.map((region) => region.guid),
-                  ).guids.filter((item) => item !== guid)
-                : [
-                    ...roomSelection(
-                      page.selected,
-                      cards,
-                      regions.map((region) => region.guid),
-                    ).guids,
-                    guid,
-                  ],
+              : selected.includes(guid)
+                ? selected.filter((item) => item !== guid)
+                : [...selected, guid],
         });
       }}
       trace={trace}
@@ -192,30 +167,6 @@ function PlanBody({ ctx, page, verbs, renderPane }: Body & { renderPane: Teachin
   );
 }
 
-function FeedbackBody({ page, renderPane }: Body & { renderPane: TeachingPaneRender }) {
-  const { work, snapshot, cards, regions, labels, view, setPage } = useRoomsWorkspace();
-  return (
-    <RoomsInbox
-      renderPane={renderPane}
-      cards={cards}
-      regions={regions}
-      labelOf={(guid) => labels.get(guid)}
-      pinned={
-        roomSelection(
-          page.selected,
-          cards,
-          regions.map((region) => region.guid),
-        ).pinned
-      }
-      onPin={(card) => setPage({ selected: [`card:${card}`] })}
-      show={page.show}
-      onShow={(show) => setPage({ show })}
-      markdown={() => (work && snapshot ? cardsMarkdown(work.doc, snapshot) : "")}
-      snap={() => snapPlan(view)}
-    />
-  );
-}
-
 function AttentionRoomsSketch(props: Omit<React.ComponentProps<typeof RoomsSketch>, "hovered">) {
   const doc = useContext(AttentionDocument)!;
   const { hovered } = useAttention(doc);
@@ -231,12 +182,12 @@ export function RoomsBody({ ctx }: { ctx: RoomsContext }) {
   );
 }
 function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
-  const { page, cards, regions } = useRoomsWorkspace();
-  const selected = roomSelection(
-    page.selected,
-    cards,
-    regions.map((region) => region.guid),
-  ).guids;
+  const { page, selected, work, snapshot, view } = useRoomsWorkspace();
+  const [said, setSaid] = useState<string | null>(null);
+  const say = (word: string) => {
+    setSaid(word);
+    setTimeout(() => setSaid(null), 1500);
+  };
   const body = {
     ctx,
     page,
@@ -308,6 +259,29 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
           >
             Stage room merge
           </Button>
+          {/* The inbox list is the kernel's goal pane; its two exports are verbs, so they sit with the verbs. */}
+          <Button
+            label="copy markdown"
+            kind="framed"
+            reason="Copies every mark on this document as markdown, for Claude or Pea"
+            refusal={work && snapshot ? null : "The rooms are not read yet"}
+            onClick={() =>
+              void navigator.clipboard.writeText(cardsMarkdown(work!.doc, snapshot!)).then(
+                () => say("copied"),
+                () => say("copy refused"),
+              )
+            }
+          >
+            {said === "copied" || said === "copy refused" ? said : "copy markdown"}
+          </Button>
+          <Button
+            label="snap PNG"
+            kind="framed"
+            reason="Downloads the plan as drawn now, callouts and marks included"
+            onClick={() => void snapPlan(view).then((missing) => say(missing ?? "saved"))}
+          >
+            {said && said !== "copied" && said !== "copy refused" ? said : "snap PNG"}
+          </Button>
         </ButtonGroup>
       </div>
       {/* The split follows the route's own width, not the viewport: docked at 1600px the route is
@@ -317,7 +291,6 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
           <PlanBody {...body} renderPane={frame} />
           <div className="flex min-h-0 flex-col">
             <RegionsBody {...body} />
-            <FeedbackBody {...body} renderPane={frame} />
           </div>
         </div>
       </div>

@@ -19,13 +19,10 @@ import type { Column, Verdict } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import {
   REGION_INK,
-  regionLabel,
   lockedStale,
   regionState,
-  unassigned,
-  type RoomRow,
-  type RoomsRegion,
 } from "./plan";
+import type { RoomRow, RoomsRegion } from "./rows";
 
 const ROOM_TYPES = roomEditSchema.shape.type.unwrap().options;
 const ROLES = roomEditSchema.shape.role.unwrap().options;
@@ -38,37 +35,6 @@ const NUMBERS = [
   ["equipLatent", "eq lat", "equipment latent load, Btu/h"],
   ["ventilationCfm", "vent", "ventilation, CFM"],
 ] as const satisfies readonly (readonly [RoomEditField, string, string])[];
-
-/**
- * Level (in the snapshot's level order), then zones, their rooms zone by zone, unassigned rooms,
- * held; area largest first within each. `R{n}` counts in that order.
- */
-export function roomRows(regions: readonly RoomsRegion[], levels: readonly string[]): RoomRow[] {
-  const rank = (level: string) => {
-    const at = levels.indexOf(level);
-    return at < 0 ? levels.length : at;
-  };
-  const zones = regions
-    .filter((region) => region.role === "zone")
-    .sort((a, b) => b.sqft - a.sqft)
-    .map((zone) => zone.guid);
-  const zoneAt = (guid: string | null | undefined) => {
-    const at = guid == null ? -1 : zones.indexOf(guid);
-    return at < 0 ? zones.length : at;
-  };
-  const group = (region: RoomsRegion) =>
-    region.role === "zone" ? 0 : region.role === "held" ? 3 : unassigned(region) ? 2 : 1;
-  return [...regions]
-    .sort(
-      (a, b) =>
-        rank(a.level) - rank(b.level) ||
-        a.level.localeCompare(b.level) ||
-        group(a) - group(b) ||
-        zoneAt(a.zone) - zoneAt(b.zone) ||
-        b.sqft - a.sqft,
-    )
-    .map((region, index) => ({ region, label: regionLabel(region, index) }));
-}
 
 /** A field as the cell shows it: Revit's null is empty, never "null". */
 const shown = (value: string | number | null | undefined) =>

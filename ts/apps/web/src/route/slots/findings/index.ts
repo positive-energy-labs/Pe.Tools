@@ -19,8 +19,10 @@ export function findingMark(finding: Finding, captured: readonly Captured[]): Ma
 
 /**
  * The route command a person's row verb (`FindingVerb`) runs: `findings.write` with the row's
- * finding. The mount binds the route's own Work handle; the host takes its binding to address the
- * same document's findings Work and stamps the author from the caller.
+ * finding. The mount (shell/typed-mount.ts) adds it to every route as `finding` and binds the
+ * route's own Work handle; the host addresses the admitted document's findings Work and stamps the
+ * author from the caller. `route()`, the Pod surface, never imports this file, because the contract
+ * is the catalog (pod-surface.guard.test.ts).
  */
 export const findingCommand = {
   ...catalogAction(FINDINGS_DOORS.write),

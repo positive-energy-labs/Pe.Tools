@@ -55,8 +55,12 @@ test("a person writes a finding from the /fans roster row; the host's findings.w
     expect(write.getAttribute("aria-disabled") ?? write.hasAttribute("disabled"), "a check refuses until its verdict").toBeTruthy();
     // A refused verb says why without a hover (gate-1ebf1fb1: disabled Undo buttons gave no reason).
     expect(write.getAttribute("aria-description")).toBe("Write what you found");
-    fireEvent.click(within(pop).getByRole("button", { name: "fail" }));
+    // With text written, a check still refuses until its verdict is chosen: nothing is defaulted.
     fireEvent.change(within(pop).getByLabelText("finding text"), { target: { value: "port 1 static reads low" } });
+    expect(write.getAttribute("aria-disabled")).toBe("true");
+    expect(write.getAttribute("aria-description")).toBe("Choose this check's verdict");
+    fireEvent.click(within(pop).getByRole("button", { name: "fail" }));
+    expect(write.getAttribute("aria-description")).toBeNull();
     fireEvent.click(write);
     await waitFor(() => expect(submitted.map((c) => c.key)).toEqual(["findings.write"]), { timeout: 20_000 });
     const key = { ...submitted[0]!.input.work!.key, route: "findings" } as WorkKey;
