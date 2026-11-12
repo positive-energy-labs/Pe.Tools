@@ -87,7 +87,7 @@ test.each(["firm", "project"] as const)("settings.tiers.write crosses /actions, 
     expect(invalid.outcome.recovery).toBeUndefined();
     expect(readFileSync(path)).toEqual(beforeRefusal);
     const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: refused }] }, Date.now());
-    expect(rows).toMatchObject([{ group: "failed", verb: "refused", says: expect.stringContaining("changed since it was read") }]);
+    expect(rows).toMatchObject([{ group: "failed", verb: "stale", says: expect.stringContaining("changed since it was read") }]);
     expect(rows.some(row => row.group === "waits")).toBe(false);
     const bytes = readFileSync(path);
     expect(sha256Hex(bytes)).not.toBe(sha256Hex(prior));
