@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { routeStartupOwner, routeStartupSourceHash, currentRouteStartupProjection } from "@pe/host-contracts/route-startup";
+import { routeStartupOwner, routeStartupSourceHash, currentRouteStartupProjection, readRouteStartupReceipt } from "@pe/host-contracts/route-startup";
 import type { RouteStartupProjection } from "@pe/host-contracts/route-startup";
 
 declare const __PE_SOURCE_COMMIT__: string;
@@ -23,17 +23,22 @@ export async function prepareSourceClosures() {
   ]);
 }
 
-/** Dev alone hands the complete producer result to its frontend; pack/source-only keep their lane. */
+/** Dev alone hands the complete producer result to its frontend; pack/source-only keep their lane.
+ * The producer (18 route closure builds, about a minute) is NOT on the start path while the receipt
+ * its last full run left (`codegen:routes`, or an earlier start) is still current by content hash.
+ * tests/source-closures.test.ts holds that. A miss produces, and the producer stores a new receipt. */
 export async function prepareDevRouteProjection(): Promise<RouteStartupProjection | undefined> {
   const root = fileURLToPath(new URL("../../../../", import.meta.url));
-  const sourceHash = routeStartupSourceHash(root);
-  const { stdout } = await promisify(execFile)(process.execPath, [
-    fileURLToPath(new URL("../../web/scripts/route-graphs.ts", import.meta.url)), "--runtime",
-  ], { maxBuffer: 16 * 1024 * 1024 });
-  const receipt: RouteStartupProjection = {
-    checkout: routeStartupOwner(root), sourceHash, projections: JSON.parse(stdout),
-  };
-  const current = currentRouteStartupProjection(root, receipt);
+  let receipt = readRouteStartupReceipt(root);
+  let current = !!receipt;
+  if (!receipt) {
+    const sourceHash = routeStartupSourceHash(root);
+    const { stdout } = await promisify(execFile)(process.execPath, [
+      fileURLToPath(new URL("../../web/scripts/route-graphs.ts", import.meta.url)), "--runtime",
+    ], { maxBuffer: 16 * 1024 * 1024 });
+    receipt = { checkout: routeStartupOwner(root), sourceHash, projections: JSON.parse(stdout) };
+    current = currentRouteStartupProjection(root, receipt);
+  }
   // The host graph still imports ignored closure pins from disk before linking under jiti.
   for (const [path, text] of Object.entries(receipt.projections)) {
     if (!path.endsWith("source-closure.generated.json")) continue;

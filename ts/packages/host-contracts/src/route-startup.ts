@@ -1,13 +1,17 @@
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
-import { readFileSync, realpathSync } from "node:fs";
-import { isAbsolute, relative, resolve } from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 export interface RouteStartupProjection {
   readonly checkout: string;
   readonly sourceHash: string;
   readonly projections: Record<string, string>;
 }
+
+/** The one on-disk receipt (ignored build output) of the last full producer run. */
+export const routeStartupReceiptPath = (root: string) =>
+  resolve(root, "ts/apps/web/node_modules/.cache/route-projection.json");
 
 export const routeStartupOwner = (root: string) => realpathSync(root).toLowerCase();
 
@@ -60,5 +64,42 @@ export function currentRouteStartupProjection(root: string, receipt: RouteStartu
   } catch {
     // A missing, malformed or racing handoff is a cache miss; the producer remains authority.
     return false;
+  }
+}
+
+/** The freshness check hashes what git lists, and the producer finds routes by reading the folder. A route
+ * folder git ignores is therefore invisible to the check, so the receipt is off while one exists.
+ * `git check-ignore` exits 1 when none of the paths is ignored. */
+const noIgnoredRouteFolder = (root: string) => {
+  const source = resolve(root, "ts/apps/web/src");
+  return spawnSync("git", ["check-ignore", ...readdirSync(source, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && existsSync(join(source, d.name, "route.ts")))
+    .map((d) => join(source, d.name))], { cwd: source }).status === 1;
+};
+
+/** The stored receipt while it is still current, else undefined: the producer remains authority. */
+export function readRouteStartupReceipt(root: string): RouteStartupProjection | undefined {
+  try {
+    if (!noIgnoredRouteFolder(root)) return undefined;
+    const receipt = JSON.parse(readFileSync(routeStartupReceiptPath(root), "utf8")) as RouteStartupProjection;
+    return currentRouteStartupProjection(root, receipt) ? receipt : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** `sourceHash` is the hash taken BEFORE producing: an edit during the run, or a producer run that
+ * rewrote tracked output, leaves no receipt rather than one the sources never matched. */
+export function writeRouteStartupReceipt(root: string, sourceHash: string, projections: Record<string, string>) {
+  if (!noIgnoredRouteFolder(root) || routeStartupSourceHash(root) !== sourceHash) return;
+  const path = routeStartupReceiptPath(root);
+  mkdirSync(dirname(path), { recursive: true });
+  const temp = `${path}.${process.pid}`;
+  writeFileSync(temp, JSON.stringify({ checkout: routeStartupOwner(root), sourceHash, projections } satisfies RouteStartupProjection));
+  try {
+    renameSync(temp, path);
+  } catch {
+    // Windows refuses a rename over a file another run has open. That run holds an equally fresh receipt.
+    rmSync(temp, { force: true });
   }
 }
