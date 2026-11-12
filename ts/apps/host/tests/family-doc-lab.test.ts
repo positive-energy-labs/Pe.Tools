@@ -384,7 +384,7 @@ test("narrow 2: a URL source is http(s), unredirected, timed and capped", async 
 // request counter are sentinels: a bind that reads early fails before the person creates the source.
 test("narrow 3: Pea attach is held before source reads; the notice Confirm attaches once", async () => {
   for (const kind of ["path", "url"] as const) {
-    const { pods, pea, attach, parsed, serve, confirm, doc, outward } = await boxed();
+    const { f, pods, pea, attach, parsed, serve, confirm, doc, outward } = await boxed();
     let reads = 0;
     const source = kind === "path" ? { path: join(pods, "not-yet-created.pdf") } : {
       url: `${await serve((_request, response) => { reads++; response.end(readFileSync(pdf)); })}/acme.pdf`,
@@ -394,8 +394,19 @@ test("narrow 3: Pea attach is held before source reads; the notice Confirm attac
     expect(reads).toBe(0);
     const send = heldSends().find(row => row.thread === pea.thread)!;
     expect(send).toBeDefined();
-    const rows = noticeRows({ threads: [], receipts: [], works: [], machine: null, stored: [], held: [send] }, Date.now());
-    expect(rows).toMatchObject([{ what: Object.values(source)[0], says: expect.stringContaining("LlamaCloud"), act: { kind: "confirm-send", id: send.id } }]);
+    // The same attach asked again is the same hold, and the message says where it waits.
+    const again = await attach(source, pea);
+    expect(again).toContain("waits in the person's notices for their Confirm");
+    expect(again).not.toContain("themselves from the web app");
+    expect(heldSends().filter(row => row.thread === pea.thread)).toEqual([send]);
+    // Mutant: project a send-outward held receipt in receiptRow. Sentinel: the journal holds the
+    // held receipts this feed is built from, so the one row is not an empty scan.
+    const receipts = (await f.journal.list()).map(action => ({ revision: 1, action }));
+    expect(receipts.filter(({ action }) => action.refusal?.kind === "held")).toHaveLength(2);
+    const rows = noticeRows({ threads: [], receipts, works: [], machine: null, stored: [], held: heldSends() }, Date.now())
+      .filter(row => row.group === "waits");
+    expect(rows).toMatchObject([{ what: Object.values(source)[0], where: "lab: settings/family/box.json", says: expect.stringContaining("LlamaCloud"),
+      act: { kind: "confirm-send", id: send.id, to: "LlamaCloud", detail: "for lab: settings/family/box.json" } }]);
     await expect(outward(send.id, pea)).rejects.toThrow(/human.only/);
     expect(parsed).toEqual([]);
     if ("path" in source) await copyFile(pdf, source.path!);

@@ -22,7 +22,13 @@ export const noticeActSchema = z.discriminatedUnion("kind", [
    * does them in Revit or the web app themselves.
    */
   /** `to` is the outside service the bytes go to: the Confirm button names it. */
-  z.strictObject({ kind: z.literal("confirm-send"), id: z.string().min(1), to: z.string().min(1) }),
+  z.strictObject({
+    kind: z.literal("confirm-send"),
+    id: z.string().min(1),
+    to: z.string().min(1),
+    /** Shown on the row too: tells this Confirm from another hold's on the same file. */
+    detail: z.string().min(1),
+  }),
   z.strictObject({
     kind: z.literal("question"),
     threadId: z.string().min(1),

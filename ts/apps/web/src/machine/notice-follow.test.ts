@@ -95,7 +95,7 @@ test("a held send becomes a plain card the native contract accepts: Confirm is i
       what: "spec.pdf",
       says: "Held, not done",
       url: null,
-      act: { kind: "confirm-send", id: "h1", to: "LlamaCloud" },
+      act: { kind: "confirm-send", id: "h1", to: "LlamaCloud", detail: "pages 1-5" },
     }),
   );
   expect(machineNoticeSchema.parse(card)).toEqual({
