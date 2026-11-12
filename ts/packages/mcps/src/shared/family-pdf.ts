@@ -1,10 +1,22 @@
-import type { DocBBox, DocImage, GroundedBlock, ParsedDocView, ParsedPage } from "@pe/agent-contracts";
-import { parseWithLlamaCloud, requireLlamaCloudKey } from "./llama-parse.ts";
+import type {
+  DocBBox,
+  DocImage,
+  GroundedBlock,
+  ParsedDocView,
+  ParsedPage,
+} from "@pe/agent-contracts";
+import { parseWithLlamaCloud, type LlamaParseRequest } from "./llama-parse.ts";
+
+export type FamilyPdfRequest = Pick<
+  Extract<LlamaParseRequest, { sender: "person" }>,
+  "sender" | "file" | "apiKey"
+>;
 
 /** Called only after the host or web route has established the person's outward send. */
-export async function parseFamilyPdf(file: File): Promise<ParsedDocView> {
+export async function parseFamilyPdf(request: FamilyPdfRequest): Promise<ParsedDocView> {
+  const { file } = request;
   const result = await parseWithLlamaCloud({
-    sender: "person", file, apiKey: requireLlamaCloudKey(),
+    ...request,
     expand: ["items", "markdown", "images_content_metadata"],
     imagesToSave: ["screenshot", "embedded", "layout"],
   });

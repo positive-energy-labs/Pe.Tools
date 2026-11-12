@@ -1,11 +1,11 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { familyPdfParser } from "../src/family-spec.ts";
+import { parseFamilyPdf } from "@pe/mcps/family-pdf";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 // Mutant: restore the old adapter's no-webUrl refusal. Only the remote HTTP boundary is substituted.
-test("FamilyPdfParser parses in-process without a webUrl", async () => {
-  vi.stubEnv("LLAMA_CLOUD_API_KEY", "fixture-key");
+test("parseFamilyPdf uses the explicit key in-process without a webUrl or environment key", async () => {
+  vi.stubEnv("LLAMA_CLOUD_API_KEY", "");
   vi.stubEnv("LLAMA_CLOUD_BASE_URL", "https://api.cloud.llamaindex.ai");
   const calls: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -20,7 +20,7 @@ test("FamilyPdfParser parses in-process without a webUrl", async () => {
       images_content_metadata: { images: [] },
     });
   }));
-  const result = await familyPdfParser.parse(new File(["%PDF-fixture"], "sheet.pdf"));
+  const result = await parseFamilyPdf({ sender: "person", file: new File(["%PDF-fixture"], "sheet.pdf"), apiKey: "fixture-key" });
   expect(result).toMatchObject({ jobId: "fixture", fileName: "sheet.pdf",
     pages: [{ page: 1, width: 100, height: 200, markdown: "Airflow 1200 CFM" }],
     blocks: [{ id: "p1-i0", md: "Airflow 1200 CFM" }], images: [] });

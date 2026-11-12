@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { open, readFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, posix, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { Context, Effect } from "effect";
+import { Effect } from "effect";
 import { commands, parsedDocViewSchema, tools, type ActionStep } from "@pe/agent-contracts";
 import { z } from "zod";
 import { command, io, refused, type CommandExecutor } from "./command-executor.ts";
@@ -12,13 +12,7 @@ import { guardSend } from "./guards.ts";
 import { runPods, type PodDependencies } from "./family-actions.ts";
 import { podFolder, writeHome } from "./settings.ts";
 import { parseFamilyPdf } from "@pe/mcps/family-pdf";
-
-export const familyPdfParser = { parse: parseFamilyPdf };
-
-/** Host-owned in-process parser, shared with the web route. */
-export class FamilyPdfParser extends Context.Service<FamilyPdfParser, {
-  parse(file: File): Promise<unknown>;
-}>()("pe/FamilyPdfParser") {}
+import { requireLlamaCloudKey } from "@pe/mcps/llama-parse";
 
 const safePath = (root: string, path: string) => {
   const full = resolve(root, path);
@@ -138,6 +132,7 @@ const preparedSpecSchema = z.strictObject({
 });
 
 export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor {
+  const parsePdf = deps.parsePdf ?? parseFamilyPdf;
   return command(commands["family.attach-spec"], preparedSpecSchema, {
     bind: async (ctx) => {
       const { member, source, work: handle } = ctx.admission.input;
@@ -225,8 +220,10 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
         ],
         effects: [{ kind: "directory", path: dirname(safePath(root, member.path)) }],
         prepare: async () => {
-          if (!deps.parsePdf) throw Error("The PDF parser is unavailable");
-          const payload = await deps.parsePdf(file);
+          // Tests must inject a parser before an attach can send bytes outside the process.
+          if (process.env.VITEST && !deps.parsePdf)
+            throw Error("Tests attaching a PDF must provide parsePdf; external parsing is disabled");
+          const payload = await parsePdf({ sender: "person", file, apiKey: requireLlamaCloudKey() });
           const doc = parsedDocViewSchema.parse(payload);
           const dir = dirname(member.path).replaceAll("\\", "/");
           const name = basename(file.name, extname(file.name)).replace(/[^a-zA-Z0-9_-]/g, "-");

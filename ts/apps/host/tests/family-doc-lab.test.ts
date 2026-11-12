@@ -39,11 +39,13 @@ const pdfSize = readFileSync(pdf).length;
 
 const closes: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
+  vi.unstubAllEnvs();
   for (const send of heldSends()) releaseSend(send.id);
   for (const close of closes.splice(0).reverse()) await close();
 });
 
-async function lab(beforeParse?: () => Promise<void>) {
+async function lab(beforeParse?: () => Promise<void>, omitParser = false) {
+  vi.stubEnv("LLAMA_CLOUD_API_KEY", "fixture-key");
   const pods = await mkdtemp(join(tmpdir(), "pe-doc-lab-"));
   closes.push(() => rm(pods, { recursive: true, force: true }));
   await mkdir(join(pods, "lab"), { recursive: true });
@@ -66,7 +68,9 @@ async function lab(beforeParse?: () => Promise<void>) {
     },
     deps: {
       podsRoot: pods,
-      parsePdf: async (file) => {
+      parsePdf: omitParser ? undefined : async ({ sender, file, apiKey }) => {
+        expect(sender).toBe("person");
+        expect(apiKey).toBe("fixture-key");
         await beforeParse?.();
         const bytes = Buffer.from(await file.arrayBuffer());
         if (bytes.subarray(0, 5).toString() !== "%PDF-") throw Error("The parser was not handed a PDF");
@@ -422,4 +426,22 @@ test("narrow 6: the spec asset door serves only what normalizes under the family
   expect((await ask(member.path)).status).toBe(200);
   expect((await ask("settings/family/../../pod.json")).status).toBe(404);
   expect((await ask("settings/family/..\\..\\pod.json")).status).toBe(404);
+}, 60_000);
+
+test("an attach without an injected parser fails before any network request", async () => {
+  const { save, act, handle } = await lab(undefined, true);
+  const { member } = (await save("human")).result;
+  const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(Error("Unexpected network request"));
+  try {
+    const attached = await act("family.attach-spec", host, {
+      member: { pod: member.pod, path: member.path },
+      source: { path: pdf },
+      work: await handle(),
+    });
+    expect(attached.state).toBe("failed");
+    expect(attached.error).toContain("must provide parsePdf");
+    expect(network).not.toHaveBeenCalled();
+  } finally {
+    network.mockRestore();
+  }
 }, 60_000);
