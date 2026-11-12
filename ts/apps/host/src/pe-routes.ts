@@ -1,3 +1,5 @@
+import { catalogsFor } from "./ducts-files.ts";
+import { targetHomes } from "./call-route.ts";
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
 import type { DocumentRef, HeldSend, Receipt } from "@pe/agent-contracts";
 import { held, heldSendRequestSchema } from "@pe/agent-contracts";
@@ -1133,10 +1135,10 @@ export function createContributionContent(options: {
       return snapshot;
     },
     /** Scratch Pages are files an agent writes at any moment; they are never served from the 30 s snapshot. */
-    pages: async () => {
+    pages: async (pointer?: string | null) => {
       const descriptors = options.pages
         ? await options.pages(admitted)
-        : await scratchPageDescriptors(pagesRoots);
+        : await scratchPageDescriptors(pointer ? productPagesRoots(pointer) : pagesRoots);
       return pageRows(descriptors);
     },
     member: (key: string, sha256?: string) =>
@@ -1420,7 +1422,7 @@ function* hostPeRoutes(
       await podRoutes.list();
       return content.read();
     },
-    pages: content.pages,
+    pages: async (scope) => content.pages(bridge ? (await Effect.runPromise(targetHomes(bridge, scope))).pointer : undefined),
     admittedRoutes: () => hostWork?.workspace.admittedRoutes() ?? [],
   });
   invalidateCatalog = () => catalog.invalidate();
@@ -1440,7 +1442,7 @@ function* hostPeRoutes(
       root: productDuctsAnalysesPath(),
       producer: { version: resolveHostVersion(), ...hostOwnership },
       marks,
-      catalogs: () => runPods({}, files.ductCatalogs),
+      catalogs: (pointer) => runPods({}, catalogsFor(files, pointer)),
       resolve: async (target) => {
         if (!bridge) throw Error("No Revit bridge is available");
         const session = await resolveSdkSession(bridge, {

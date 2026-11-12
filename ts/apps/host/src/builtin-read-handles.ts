@@ -22,7 +22,7 @@ const resource = <O extends z.ZodType>(output: O) => ({
   ...leaf("resource", readingRequestSchema, output),
   content: (value: z.output<O>, args: z.output<typeof readingRequestSchema>) => resourceContent(args, value),
 });
-export const catalogs = leaf("file:catalogs", z.null(), catalogReading);
+export const catalogs = leaf("file:catalogs", documentRefSchema.nullable(), catalogReading);
 export const resources = {
   machine: resource(chatValue.shape.machine),
   capabilities: resource(chatValue.shape.capabilities),

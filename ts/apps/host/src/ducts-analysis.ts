@@ -55,7 +55,7 @@ type Observation = {
 };
 export interface DuctsAnalysisSources {
   root: string;
-  catalogs: () => Promise<{ tables: Catalogs; findings: string[] }>;
+  catalogs: (pointer?: string | null) => Promise<{ tables: Catalogs; findings: string[] }>;
   producer: unknown;
   marks: DocumentMarks;
   resolve: (target: DocumentRef) => Promise<Observation>;
@@ -377,7 +377,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     if (!scope) throw Error("Fresh analysis requires an equipment or terminal subject; read the roster first. Document/group projections remain available on saved artifacts.");
     const snapshot = await read("ducts.snapshot.walk", { ...readOptions, selector: scope }) as DuctSnapshot;
     const tables = await read("ducts.tables", { ids: [...TABLE_IDS] });
-    const catalogs = await sources.catalogs();
+    const catalogs = await sources.catalogs(observation.projectHome);
     const inputJson = JSON.stringify({
       snapshot,
       tables,

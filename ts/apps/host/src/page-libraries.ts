@@ -67,7 +67,7 @@ export function scratchPageKey(
 
 /** One Pages folder, or the product's Pages in every home, in list order (user, project, firm). */
 export type PagesRoots = string | readonly string[];
-export const productPagesRoots = () => homeDirs(productPathNames.pagesDirectoryName);
+export const productPagesRoots = (pointer?: string | null) => homeDirs(productPathNames.pagesDirectoryName, { pointer });
 
 /**
  * Every scratch folder holding an `index.html`, in every home, with its key or why it has none.
