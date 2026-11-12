@@ -10,14 +10,9 @@ import { readJournalSnapshot } from "./journal-snapshot.ts";
 import { nativeEffect, validateNativeInput } from "./native-input.ts";
 import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
-import {
-  discardStored,
-  readStored,
-  readStoredNotices,
-  writeAtomic,
-} from "@pe/host-contracts/store";
+import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store";
 import { storedBlobsPath, storedNoticesPath } from "./notice-feed.ts";
-import { dirname, join, resolve, win32 } from "node:path";
+import { dirname, join, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
 import { Cause, Effect, Exit, FiberMap, type Fiber } from "effect";
@@ -493,7 +488,8 @@ const isOpen = (row: ActionReceipt) =>
 /**
  * One host journal. Execution never holds the authored Work lock or the journal write tail.
  *
- * Storage is append-only lines: a `{"version":8}` header, then one `{receipt}` per committed
+ * Storage is append-only lines: a `{"version":8}` header (`"discarded":"<at>"` beside it once a
+ * journal at this path was discarded), then one `{receipt}` per committed
  * revision and one `{mapping}` per minted opaque id; the last revision of an id wins. A commit
  * appends only what it changed, and compaction rewrites the newest {@link RETAIN_RECEIPTS} telemetry
  * facts plus every command once the file holds twice what is live.
@@ -548,15 +544,14 @@ export class ActionJournal implements ReceiptReader {
   private loadOnce(): Promise<void> {
     return (this.loaded ??= this.load());
   }
-  /** Whether this journal's file was ever discarded. The discard's notice is the durable record. */
-  private wasDiscarded(): boolean {
-    const path = resolve(this.path);
-    // ponytail: read on a re-sent admission only, and the notice file is never pruned. If it is
-    // ever pruned by age, an outbox older than that is admitted as new again: write the discard
-    // into the journal header then.
-    return readStoredNotices(storedNoticesPath()).some(
-      (notice) => notice.class === "discard" && notice.path === path,
-    );
+  /**
+   * When a journal at this path was last discarded, or null. It is the replay guard's only record,
+   * so it rides the journal itself: the header carries it, and every write of the header (the
+   * discard, a first commit, a compaction) writes it again. The notice is only the feed's row.
+   */
+  private discarded: string | null = null;
+  private headerLine(): string {
+    return `${JSON.stringify({ version: 8, ...(this.discarded ? { discarded: this.discarded } : {}) })}\n`;
   }
 
   async read(query: ReceiptQuery): Promise<Receipt[]> {
@@ -1198,7 +1193,7 @@ export class ActionJournal implements ReceiptReader {
     // The replay guard (MAP decision log 2026-11-12). A re-sent admission this journal does not
     // know is new only if the journal kept its history. After a discard the action may already
     // have run, so it is refused and never dispatched as new.
-    if (!prior && crossing.resent && this.wasDiscarded())
+    if (!prior && crossing.resent && this.discarded)
       throw refused(
         `Action '${admission.id}' was sent before, and the action journal that knew whether it ran could not be read and was discarded. It is not run again. Check its result, then submit it as a new action if it is still wanted.`,
         "journal.discarded",
@@ -2087,6 +2082,15 @@ export class ActionJournal implements ReceiptReader {
       this.factCount = 0;
       this.header = false;
       this.torn = false;
+      this.discarded = new Date(this.now()).toISOString();
+      // Written now, not at the next commit: a host that restarts before any write still knows.
+      try {
+        writeAtomic(this.path, this.headerLine());
+        this.header = true;
+      } catch (error) {
+        // The flag stays in memory, and the next commit writes the header that carries it.
+        console.warn(`Could not write the fresh journal header: ${messageOf(error)}`);
+      }
     };
     let changed: ActionReceipt[];
     try {
@@ -2106,6 +2110,7 @@ export class ActionJournal implements ReceiptReader {
     this.torn = snapshot.torn;
     this.lines = snapshot.lines;
     this.header = true;
+    this.discarded = snapshot.discarded;
     for (const [key, id] of mappings) this.mappings.set(key, id);
     if (new Set(this.mappings.values()).size !== this.mappings.size)
       throw Error("Duplicate opaque identity in action journal");
@@ -2211,7 +2216,7 @@ export class ActionJournal implements ReceiptReader {
     ];
     if (lines.length) {
       if (!this.header) await mkdir(dirname(this.path), { recursive: true });
-      const text = `${this.torn ? "\n" : ""}${this.header ? "" : '{"version":8}\n'}${lines
+      const text = `${this.torn ? "\n" : ""}${this.header ? "" : this.headerLine()}${lines
         .map((line) => `${JSON.stringify(line)}\n`)
         .join("")}`;
       try {
@@ -2268,7 +2273,7 @@ export class ActionJournal implements ReceiptReader {
     ];
     writeAtomic(
       this.path,
-      `{"version":8}\n${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
+      `${this.headerLine()}${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
     );
     this.header = true;
     this.torn = false;

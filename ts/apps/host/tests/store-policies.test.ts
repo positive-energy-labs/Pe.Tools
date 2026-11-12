@@ -179,12 +179,22 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
     ]);
     // Nothing is lost: the discarded bytes rest in the blob store under the hash the notice names.
     expect(rests(bytes)).toBe(true);
+    // The discard rides the fresh journal's own header, written at the discard: the replay guard
+    // reads nothing else, so a lost notice file cannot reopen a replay.
+    const header = readFileSync(path, "utf8").split("\n")[0]!;
+    expect(JSON.parse(header)).toEqual({ version: 8, discarded: expect.any(String) });
     // Before this, the throw was cached and every later journal write rejected.
     const join_ = await journal.actionJoin("first-action");
-    expect(readFileSync(path, "utf8").split("\n")[0]).toBe('{"version":8}');
+    expect(readFileSync(path, "utf8").split("\n")[0]).toBe(header);
     // A second start over the journal it left reads it, and posts nothing.
     expect(await journalAt(path, Date.now).actionJoin("first-action")).toEqual(join_);
     expect(posted(path)).toHaveLength(1);
+    // Every rewrite carries the flag: a torn tail makes the next start compact the file.
+    writeFileSync(path, '{"torn', { flag: "a" });
+    expect(await journalAt(path, Date.now).list()).toEqual([]);
+    const rewritten = readFileSync(path, "utf8");
+    expect(rewritten).not.toContain('{"torn');
+    expect(rewritten.split("\n")[0]).toBe(header);
   });
 
   test("captures read by id: a corrupt one is discarded, then reads as missing", async () => {
@@ -301,8 +311,12 @@ test("host start throws 0 times over corrupt scheduled tasks, devices, a torn jo
   // The host runs on fresh machine state, with recording off and the torn bundle untouched.
   expect(JSON.parse(readFileSync(tasks, "utf8"))).toBeInstanceOf(Array);
   expect(JSON.parse(readFileSync(devices, "utf8"))).toMatchObject({ sessions: [] });
-  expect(existsSync(journal)).toBe(false);
-  expect(existsSync(update)).toBe(false);
+  // Each discard leaves only its own record in the fresh file, for the replay guards.
+  expect(JSON.parse(readFileSync(journal, "utf8"))).toEqual({
+    version: 8,
+    discarded: expect.any(String),
+  });
+  expect(JSON.parse(readFileSync(update, "utf8"))).toEqual({ discardedAtUtc: expect.any(String) });
   expect(posted(update)).toMatchObject([{ class: "discard", place: "Update status" }]);
   expect([rests(CORRUPT), rests(TORN_UPDATE)]).toEqual([true, true]);
   expect(inputs!.source).toMatchObject({ kind: "live", capturing: false, truncated: { reason: "setup" } });
