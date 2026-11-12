@@ -21,6 +21,7 @@ import { sdkSessions } from "./native-receipt-fixture.ts";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { nativeRecordings } from "./native-recordings.ts";
+import { peApiErrorsLayer } from "../src/pe-routes.ts";
 
 const fetchRecorded = globalThis.fetch;
 
@@ -117,6 +118,7 @@ export async function fixtureNative(
         return JSON.stringify(envelope);
       } };
       const web = serveRoutes(Layer.mergeAll(routes, callRouteOver(journal, captures, dependencies, composition)).pipe(
+        Layer.provide(peApiErrorsLayer),
         Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
         Layer.provideMerge(PictureCaptureStore.layer(join(directory, "pictures"))),
       ), bridge, Layer.succeed(SdkDriver, args => Effect.promise(() => dependencies.sdk(args))));

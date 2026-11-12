@@ -196,8 +196,8 @@ export const actionAdmissionSchema = z.strictObject({
 export type ActionAdmission = z.infer<typeof actionAdmissionSchema>;
 /**
  * Set on an admission POST that re-sends bytes an earlier POST may already have delivered (a lost
- * acknowledgement, a retained outbox). A journal that still has its history answers by id; one
- * that was discarded cannot know whether the action ran, so it refuses instead of running it again.
+ * acknowledgement, a retained outbox). Carries the retained first-send UTC time. A discarded
+ * journal refuses unknown admissions sent at or before its discard, or without a valid time.
  */
 export const ADMISSION_RESEND_HEADER = "x-pe-admission-resend";
 
