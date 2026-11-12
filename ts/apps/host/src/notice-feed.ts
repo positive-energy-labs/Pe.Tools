@@ -27,16 +27,16 @@ import {
   type ReadingRequest,
 } from "@pe/agent-contracts";
 import { HOST_RESTARTED } from "@pe/agent-contracts/chat-state";
-import { join } from "node:path";
-import { productPathNames } from "@pe/host-contracts/contracts";
 import { summarizeFailure } from "@pe/host-contracts/failure-summary";
 import type { ThreadPresence } from "@pe/host-contracts/pe-api";
-import type { StoredNotice } from "@pe/host-contracts/store";
+import { stateTree } from "@pe/host-contracts/service-identity";
+import { storedNoticesFile, type StoredNotice } from "@pe/host-contracts/store";
 import { hostOwnership } from "./host-ownership.ts";
 
 /** The machine's notice file: every `discard` in the host names it, so no file goes without a trace. */
-export const storedNoticesPath = () =>
-  join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "stored-notices.jsonl");
+export const storedNoticesPath = () => storedNoticesFile(hostOwnership.rootPath);
+/** Where a discard that holds authority rests its bytes first (`state\\Blobs`, the write door's store). */
+export const storedBlobsPath = () => stateTree(hostOwnership.rootPath).blobs;
 
 /**
  * A row as built. Its revision is its source's own durable counter (a thread's last seq, a

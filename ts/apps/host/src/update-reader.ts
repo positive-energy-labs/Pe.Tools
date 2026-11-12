@@ -185,22 +185,13 @@ export function createUpdateReader(options: {
 
   const load = () =>
     (loading ??= (async () => {
-      // Departs from ADR 0039 rule 1, which makes this machine state `discard`. An admission that
-      // does not decode, or whose receipt answers another request, is `keep` (MAP ruling
-      // 59d4f336): it is the only record that an update may already be running, and
-      // docs/features/host/LEDGER.md:235 says "Authority recovery must fail closed". The bytes
-      // stay, one notice names the file, and this throw refuses every apply and marks every read
-      // until a person removes the file. The boundary that still holds: the host starts, and
-      // `loaded` stays false, so the next request re-reads and recovers without a restart.
+      // Machine state (ADR 0039): an admission that does not decode, or whose receipt answers
+      // another request, is discarded with a notice. The update then reads as never admitted.
       const read = readStored(options.path, storedAdmissionSchema, {
-        class: "keep",
+        class: "discard",
         place: "Update status",
         notices: storedNoticesPath(),
       });
-      if (read.kind === "kept")
-        throw Error(
-          `The update status can't be read, so the file is kept and no update applies until it is removed: ${options.path}: ${read.reason}`,
-        );
       if (read.kind === "ok") {
         admission = read.value;
         terminalDiagnosticPending =

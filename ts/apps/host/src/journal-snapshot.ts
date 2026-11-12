@@ -3,25 +3,18 @@ import { receiptSchema, type Receipt } from "@pe/agent-contracts";
 
 /**
  * Decode only the current epoch. Unsupported journals grant no retained or resumed authority.
- * Null is a known older epoch (a header with a whole `version` below the current one), which the
- * journal's load discards with a notice. Everything else that does not decode throws: a header
- * that is not JSON, a version this build does not know, a corrupt line. The load keeps that file
- * and refuses actions (MAP ruling 59d4f336). Nothing else calls this.
+ * Null is another epoch, which includes a header that is not JSON. A corrupt line throws. The
+ * journal's load turns both into one discard with a notice (ADR 0039); nothing else calls this.
  */
 export function readJournalSnapshot(bytes: Buffer) {
   const lines = bytes.toString("utf8").split("\n");
-  let header: { version?: unknown } | null;
+  let version: unknown;
   try {
-    header = JSON.parse(lines[0]!);
+    version = JSON.parse(lines[0]!)?.version;
   } catch {
-    throw Error("Journal header is not JSON");
+    return null;
   }
-  const version = header?.version;
-  if (version !== 8) {
-    if (typeof version === "number" && Number.isInteger(version) && version >= 1 && version < 8)
-      return null;
-    throw Error(`Unknown journal version: ${JSON.stringify(version) ?? "none"}`);
-  }
+  if (version !== 8) return null;
   const receipts: Receipt[] = [];
   const mappings: [string, string][] = [];
   let torn = false;
