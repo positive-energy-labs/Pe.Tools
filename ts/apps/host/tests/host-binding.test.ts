@@ -159,6 +159,19 @@ test("an installed host binds a free port when a foreign process holds 5180", as
   );
 });
 
+test("an installed launch binds a free port when the owner census fails", async () => {
+  const dependencies = {
+    ...machine(new Map([[installedPort, "foreign.exe"]])),
+    occupants: async () => {
+      throw Error("process exited during census");
+    },
+    sleep: async () => {
+      throw Error("a failed census must skip the boot-window wait");
+    },
+  };
+  expect(await prepareHostBinding(false, "0.7.31", owner("installed", temp()), dependencies)).toBe(0);
+});
+
 test("an installed launch refuses when its booting peer never publishes a record", async () => {
   const ownership = owner("installed", temp());
   const dependencies = {
