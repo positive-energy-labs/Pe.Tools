@@ -23,6 +23,7 @@
     },
     "./server": "./src/server.ts",
     "./takeoff-ops": "./src/shared/takeoff-ops.ts",
+    "./family-pdf": "./src/shared/family-pdf.ts",
     "./llama-parse": "./src/shared/llama-parse.ts",
     "./held-parse": "./src/shared/held-parse.ts"
   },
