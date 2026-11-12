@@ -18,7 +18,7 @@ The suite output for each tip, with the rerun alone of each red. The class each 
 
 ## produces
 
-Each cycle, in the reply template `delegate` defines, to the implementor: the merged tip and its SHA, the suite counts per package, each red with its class, the move of main or the red that stopped it, and where the builds of that tip are. With each move of main, the health line from `python .agents/skills/slot.mine/scripts/health.py <old main> <new main>`: every ratchet total with its change, the commit that raised one, and the production lines added, deleted and moved. Every request for a build gets the build, or the name of the newer built tip to drive in its place. The merged tip's SHA and its diff from the integration tip go to the driver as well, because rows carry against that diff. A green tip that `execute`'s protection of the root checkout keeps off main is an owner-queue item with its SHA, and newer tips are verified meanwhile.
+Each cycle, in the reply template `delegate` defines, to the implementor: the merged tip and its SHA, the suite counts per package, each red with its class, the move of main or the red that stopped it, and where the builds of that tip are. With each move of main, the pulse from `python .agents/skills/slot.mine/scripts/pulse.py <base> <tip>`, old main to new main: the pace, and each ratchet that changed with the commit that raised it. Every request for a build gets the build, or the name of the newer built tip to drive in its place. The merged tip's SHA and its diff from the integration tip go to the driver as well, because rows carry against that diff. A green tip that `execute`'s protection of the root checkout keeps off main is an owner-queue item with its SHA, and newer tips are verified meanwhile.
 
 ## wakes on
 
