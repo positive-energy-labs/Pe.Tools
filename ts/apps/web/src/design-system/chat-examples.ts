@@ -30,7 +30,6 @@ function log(
   ...bodies: (
     | { kind: "prompt"; text: string; attachments?: PromptAttachment[]; mentions?: Mention[] }
     | { kind: "update"; update: { sessionUpdate: string; [key: string]: unknown } }
-    | Omit<Extract<HarnessEvent, { kind: "permission_request" }>, "seq" | "at" | "turnId">
     | Omit<Extract<HarnessEvent, { kind: "question_request" }>, "seq" | "at" | "turnId">
     | { kind: "turn_end"; stopReason: string }
   )[]
@@ -73,7 +72,7 @@ const THREAD = {
   session: "started",
 } satisfies ChatState;
 
-/** Pea mid-turn: evidence read, a plan in flight, and a write waiting on a permission. */
+/** Pea mid-turn: evidence read, a plan in flight, and a write running. */
 export const CHAT_SEED_STATE: ChatState = {
   ...THREAD,
   running: true,
@@ -124,18 +123,8 @@ export const CHAT_SEED_STATE: ChatState = {
       },
     },
     { kind: "update", update: { sessionUpdate: "usage_update", used: 9_400, size: 200_000 } },
-    say("The read-only evidence is complete. The schedule change is ready for your approval."),
+    say("The read-only evidence is complete. Applying the schedule change now."),
     tool("tool-write", "mcp__pea__pe_do", { key: "op:schedules.apply" }),
-    {
-      kind: "permission_request",
-      requestId: "ask-1",
-      toolCall: { toolCallId: "tool-write" },
-      options: [
-        { optionId: "allow", name: "Allow once", kind: "allow_once" },
-        { optionId: "always", name: "Always allow", kind: "allow_always" },
-        { optionId: "reject", name: "Reject", kind: "reject_once" },
-      ],
-    },
   ),
 };
 

@@ -118,7 +118,7 @@ test("guard 3: Pea's send is held at once with one notice row; only the person's
     Date.now(),
   ).filter((row) => row.key === `held:${held.id}`);
   expect(rows).toMatchObject([
-    { group: "waits", verb: "held", act: { kind: "confirm-send", id: held.id } },
+    { group: "waits", verb: "held", act: { kind: "confirm-send", id: held.id, to: "LlamaCloud" } },
   ]);
 
   // Pea cannot confirm its own send.
@@ -132,4 +132,9 @@ test("guard 3: Pea's send is held at once with one notice row; only the person's
   expect(heldSends()).toHaveLength(before);
   expect((await post(human, `/pe/outward/held/${held.id}/confirm`)).status).toBe(404);
   expect(sendHeld).toHaveBeenCalledTimes(1);
+
+  // The proof a sending server asks for (the doc lab's parse route): only the person is answered ok.
+  await expect(post(pea("sender"), "/pe/outward/person")).rejects.toThrow(/human.only/);
+  await expect(post({ kind: "anonymous" }, "/pe/outward/person")).rejects.toThrow(/context.missing/);
+  expect((await post(human, "/pe/outward/person")).status).toBe(200);
 });

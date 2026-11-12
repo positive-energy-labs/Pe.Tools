@@ -1,6 +1,6 @@
 # Root run consent and shared Work
 
-Status: accepted; the per-turn countdown is superseded by [ADR 0027](0027-one-route-one-subject-one-consent.md) (consent per thread, auto-approve after a "Reject?" window). Shared Work, the journal and the run token still stand. "Unjournaled native mutation approvals refuse" is superseded by [ADR 0036](0036-harness-tools-are-ungated.md).
+Status: accepted; the per-turn countdown is superseded by [ADR 0027](0027-one-route-one-subject-one-consent.md) (consent per thread, auto-approve after a "Reject?" window). Shared Work, the journal and the run token still stand. "Unjournaled native mutation approvals refuse" is superseded by [ADR 0036](0036-harness-tools-are-ungated.md). Run consent itself (the ask, its window and its consent event) is deleted by [ADR 0038](0038-consent-is-a-notice-three-guards-on-project-documents.md): consent is a notice, and three acts on a project document return held.
 
 ## Context
 

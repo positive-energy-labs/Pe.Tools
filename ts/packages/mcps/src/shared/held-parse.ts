@@ -7,28 +7,40 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
-import { productScratchPath } from "@pe/host-contracts/service-identity";
+import { z } from "zod";
+import { stateTree } from "@pe/host-contracts/service-identity";
+import { readStored, storedNoticesFile, writeAtomic } from "@pe/host-contracts/store";
 import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import { LLAMA_TIER, parseWithLlamaCloud, requireLlamaCloudKey } from "./llama-parse.ts";
 
-export interface KeptParse {
-  tier: string;
-  pages: Array<{ pageNum: number; text: string }>;
-}
+const keptParseSchema = z.strictObject({
+  tier: z.string(),
+  pages: z.array(z.strictObject({ pageNum: z.number(), text: z.string() })),
+});
+export type KeptParse = z.infer<typeof keptParseSchema>;
 
 export const sha256Of = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
+/**
+ * Under `state\Parses`, the tree an MSI upgrade keeps: a purged scratch would lose a send the person
+ * paid for. `pages` is free text, so the file name carries its hash.
+ */
 const keptPath = (sha256: string, pages: string) =>
   path.join(
-    productScratchPath(runtimeRoot()),
-    "read-document",
+    stateTree(runtimeRoot()).parses,
     "llamaparse",
     `${sha256}-${sha256Of(Buffer.from(pages)).slice(0, 8)}.json`,
   );
 
-export async function keptParse(sha256: string, pages: string): Promise<KeptParse | null> {
-  const text = await fs.readFile(keptPath(sha256, pages), "utf8").catch(() => null);
-  return text === null ? null : (JSON.parse(text) as KeptParse);
+/** A kept parse is derived (ADR 0039): one that does not decode is discarded with a notice and reads as absent. */
+export function keptParse(sha256: string, pages: string): KeptParse | null {
+  const read = readStored(keptPath(sha256, pages), keptParseSchema, {
+    class: "discard",
+    place: "Kept hosted parse",
+    notices: storedNoticesFile(runtimeRoot()),
+    blobRoot: stateTree(runtimeRoot()).blobs,
+  });
+  return read.kind === "ok" ? read.value : null;
 }
 
 /**
@@ -62,7 +74,5 @@ export async function sendHeldParse(
       text: "markdown" in page ? page.markdown : "",
     })),
   };
-  const file = keptPath(send.sha256, send.pages);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, JSON.stringify(kept));
+  writeAtomic(keptPath(send.sha256, send.pages), JSON.stringify(kept));
 }

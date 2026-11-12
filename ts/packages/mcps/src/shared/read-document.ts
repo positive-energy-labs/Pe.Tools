@@ -170,7 +170,7 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
       throw new Error("read_document: crop is not available with parser: llamaparse.");
     const bytes = await fs.readFile(file);
     const sha256 = sha256Of(bytes);
-    const kept = await keptParse(sha256, input.pages);
+    const kept = keptParse(sha256, input.pages);
     if (!kept) return holdParse(file, bytes, sha256, input.pages);
     pageTexts = kept.pages;
     counted = `parsed by LlamaParse (${kept.tier}, markdown), sent on the person's confirm, read`;

@@ -7,7 +7,6 @@ import { z } from "zod";
 import {
   followThread,
   emptyChatState,
-  selectApprovals,
   selectMessages,
   selectQuestions,
   selectRunStatus,
@@ -25,12 +24,7 @@ const update = (seq: number, turnId: string, body: Record<string, unknown>): Har
 });
 const chunk = (seq: number, sessionUpdate: string, text: string) =>
   update(seq, "t1", { sessionUpdate, content: { type: "text", text } });
-const options = [
-  { optionId: "allow", name: "Allow once", kind: "allow_once" as const },
-  { optionId: "reject", name: "Reject", kind: "reject_once" as const },
-];
-
-/** One turn with thought, speech, one approved tool call, then a second turn left asking. The
+/** One turn with thought, speech and one tool call, then a second turn left running. The
  * fixture parses through the contract, so it is a log the host could have written. */
 const LOG: HarnessEvent[] = z.array(harnessEventSchema).parse([
   { seq: 1, at, kind: "prompt", turnId: "t1", text: "Read the schedule." },
@@ -46,24 +40,6 @@ const LOG: HarnessEvent[] = z.array(harnessEventSchema).parse([
     status: "pending",
     rawInput: { key: "op:schedules.read" },
   }),
-  {
-    seq: 7,
-    at,
-    kind: "permission_request",
-    turnId: "t1",
-    requestId: "r1",
-    toolCall: { toolCallId: "c1" },
-    options,
-  },
-  {
-    seq: 8,
-    at,
-    kind: "permission_resolved",
-    turnId: "t1",
-    requestId: "r1",
-    optionId: "allow",
-    by: "user",
-  },
   update(9, "t1", {
     sessionUpdate: "tool_call_update",
     toolCallId: "c1",
@@ -82,15 +58,6 @@ const LOG: HarnessEvent[] = z.array(harnessEventSchema).parse([
     status: "pending",
     rawInput: { key: "op:schedules.apply" },
   }),
-  {
-    seq: 16,
-    at,
-    kind: "permission_request",
-    turnId: "t2",
-    requestId: "r2",
-    toolCall: { toolCallId: "c2" },
-    options,
-  },
 ]);
 
 const state = (events: HarnessEvent[]): ChatState => ({ ...emptyChatState(), events });
@@ -113,7 +80,6 @@ describe("harness event projection", () => {
               status: part.call.status,
               target: part.call.target,
               result: part.call.result,
-              asks: part.approval?.options.map((option) => option.name),
             }
           : { [part.type]: "text" in part ? part.text : "" },
       ),
@@ -131,7 +97,6 @@ describe("harness event projection", () => {
             status: "completed",
             target: "op:schedules.read",
             result: "12 rows",
-            asks: undefined,
           },
           { text: "Done." },
         ],
@@ -151,13 +116,11 @@ describe("harness event projection", () => {
             status: "in_progress",
             target: "op:schedules.apply",
             result: undefined,
-            asks: ["Allow once", "Reject"],
           },
         ],
       },
     ]);
-    expect(selectRunStatus(state(LOG))).toBe("waiting");
-    expect(selectApprovals(state(LOG)).map((approval) => approval.requestId)).toEqual(["r2"]);
+    expect(selectRunStatus(state(LOG))).toBe("running");
   });
 
   it("ends the running row on turn_end and on error", () => {
@@ -173,7 +136,7 @@ describe("harness event projection", () => {
     expect(selectRunStatus(state(ended))).toBe("idle");
 
     const failed = [
-      ...LOG.slice(0, 14),
+      ...LOG.slice(0, 12),
       { seq: 15, at, kind: "error", turnId: "t2", message: "harness exited" },
     ] satisfies HarnessEvent[];
     expect(selectRunStatus(state(failed))).toBe("idle");
@@ -181,31 +144,6 @@ describe("harness event projection", () => {
       { role: "user" },
       { role: "system", parts: [{ text: "harness exited" }] },
     ]);
-  });
-
-  it("settles an ask: a reject denies the call, a host restart expires it", () => {
-    const denied = [
-      ...LOG,
-      {
-        seq: 17,
-        at,
-        kind: "permission_resolved",
-        turnId: "t2",
-        requestId: "r2",
-        by: "user",
-        optionId: "reject",
-      },
-      // The harness reports the refusal as a failed call; it stays denied.
-      update(18, "t2", { sessionUpdate: "tool_call_update", toolCallId: "c2", status: "failed" }),
-    ] satisfies HarnessEvent[];
-    expect(selectToolCalls(state(denied)).at(-1)?.status).toBe("denied");
-
-    const expired = [
-      ...LOG,
-      { seq: 17, at, kind: "permission_resolved", turnId: "t2", requestId: "r2", by: "expired" },
-    ] satisfies HarnessEvent[];
-    expect(selectToolCalls(state(expired)).at(-1)?.status).toBe("expired");
-    expect(selectApprovals(state(expired))).toEqual([]);
   });
 
   it("parks a form question until answered; a skip or a cancel leaves a quiet line", () => {
@@ -295,48 +233,5 @@ describe("following the host log", () => {
     expect(followThread(2, { kind: "gap", key, dropped: null, id: 11 })).toEqual({
       kind: "reread",
     });
-  });
-});
-
-describe("a recorded permission answer (old logs)", () => {
-  const ask = (deadline?: string): HarnessEvent[] => [
-    update(1, "t9", {
-      sessionUpdate: "tool_call",
-      toolCallId: "w1",
-      title: "pe_do",
-      status: "in_progress",
-    }),
-    {
-      seq: 2,
-      at,
-      kind: "permission_request",
-      turnId: "t9",
-      requestId: "w",
-      // The host's ask rides its own id (run-consent.ts), never the guarded call's.
-      toolCall: { toolCallId: "writes:t9", title: "First write: Office.rvt" },
-      options,
-      scope: "run",
-      ...(deadline ? { deadline } : {}),
-    },
-  ];
-  it("a deadline answer applies the option; the call is not drawn cancelled", () => {
-    const calls = selectToolCalls(
-      state([
-        ...ask("2026-10-01T12:01:00.000Z"),
-        {
-          seq: 3,
-          at,
-          kind: "permission_resolved",
-          turnId: "t9",
-          requestId: "w",
-          optionId: "allow",
-          by: "deadline",
-        },
-      ]),
-    );
-    expect(calls.map((call) => [call.id, call.status])).toEqual([
-      ["w1", "in_progress"],
-      ["writes:t9", "completed"],
-    ]);
   });
 });

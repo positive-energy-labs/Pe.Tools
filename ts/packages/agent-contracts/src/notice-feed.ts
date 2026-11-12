@@ -21,7 +21,8 @@ export const noticeActSchema = z.discriminatedUnion("kind", [
    * where Pea's next read of the same bytes finds it. Other held acts carry no act: the person
    * does them in Revit or the web app themselves.
    */
-  z.strictObject({ kind: z.literal("confirm-send"), id: z.string().min(1) }),
+  /** `to` is the outside service the bytes go to: the Confirm button names it. */
+  z.strictObject({ kind: z.literal("confirm-send"), id: z.string().min(1), to: z.string().min(1) }),
   z.strictObject({
     kind: z.literal("question"),
     threadId: z.string().min(1),

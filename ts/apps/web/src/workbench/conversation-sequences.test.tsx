@@ -117,34 +117,29 @@ test("a classified turn error survives the event projection and discloses its ra
   expect(screen.getByText(failure.raw)).toBeTruthy();
 });
 
-test("folding leaves images, diagrams, proposals, receipts and waiting records visible outside details", () => {
+test("folding leaves images, diagrams, proposals and receipts visible outside details", () => {
   const image = call("image");
   image.call.images = ["data:image/png;base64,AA=="];
   const diagram = call("diagram", "diagram");
   diagram.call.args = { title: "Inspect diagram", nodes: [{ id: "A", label: "A" }], edges: [] };
   diagram.call.result = { ok: true };
-  const pending = {
-    ...call("ask", "apply", "in_progress"),
-    approval: { requestId: "r", toolCallId: "ask", toolName: "apply", options: [] },
-  };
   const screen = show([
     message("a", [image, diagram]),
-    message("b", [call("suggestion", "propose"), call("receipt", "apply"), pending]),
+    message("b", [call("suggestion", "propose"), call("receipt", "apply")]),
   ]);
   const details = screen.container.querySelector("details")!;
   expect(screen.container.querySelectorAll("details")).toHaveLength(1);
   expect(details.open).toBe(false);
-  expect(details.querySelector("summary")?.textContent).toContain("5 tools");
+  expect(details.querySelector("summary")?.textContent).toContain("4 tools");
   for (const node of [
     screen.getByAltText("capture"),
     screen.getByLabelText("Inspect diagram"),
     screen.getByText("2 changes · open suggestion"),
     ...screen.getAllByText("action receipt · inspect"),
-    screen.getByText("waiting"),
   ]) {
     expect(node.closest("details")).toBeNull();
   }
-  // The image sits at the group's foot, below the later calls' records and the live ask.
+  // The image sits at the group's foot, below the later calls' records.
   const records = screen.container.querySelector("[data-tool-records]")!;
   expect(records.lastElementChild?.contains(screen.getByAltText("capture"))).toBe(true);
   expect(screen.container.querySelector(".dl-message-controls")).toBeNull();
@@ -159,28 +154,6 @@ test("a settled run voices its failure once: the glyph alone is toned, the count
   expect(summary.textContent).toContain("3 tools · 1 failed");
   expect(summary.textContent!.match(/restart session/g)).toHaveLength(1);
   expect([...summary.querySelectorAll("[data-tone]")].map((node) => node.tagName)).toEqual(["svg"]);
-});
-
-// The host's log shape from drive gate-c80e644a: the run-consent ask rides its own `writes:<turn>`
-// id (run-consent.ts), which no harness tool call ever settles.
-test("a consented write that succeeds counts no failure: the allowed consent ask is done", () => {
-  const at = "2026-11-11T20:02:08.000Z";
-  const tool = (seq: number, status: string, sessionUpdate = "tool_call_update") => ({
-    seq, at, kind: "update", turnId: "t", update: { sessionUpdate, toolCallId: "do", title: "mcp__pea__pe_do", status },
-  });
-  const events = harnessEventSchema.array().parse([
-    { seq: 1, at, kind: "prompt", turnId: "t", text: "Write a finding." },
-    tool(2, "pending", "tool_call"),
-    { seq: 3, at, kind: "permission_request", turnId: "t", requestId: "ask", scope: "run", deadline: at, commands: ["c"],
-      toolCall: { toolCallId: "writes:t", title: "First write: directory Work. Then all writes in this thread until Stop." },
-      options: [{ optionId: "allow_now", name: "Allow now", kind: "allow_once" }, { optionId: "stop_writes", name: "Reject", kind: "reject_once" }] },
-    { seq: 4, at, kind: "permission_resolved", turnId: "t", requestId: "ask", by: "deadline", optionId: "allow_now" },
-    tool(5, "completed"),
-    { seq: 6, at, kind: "turn_end", turnId: "t", stopReason: "end_turn" },
-  ]);
-  const view = show(selectMessages({ ...emptyChatState(), events }));
-  expect(view.container.querySelector("summary")!.textContent).toMatch(/^2 tools(?! · 1 failed)/);
-  expect(view.queryByText("failed")).toBeNull();
 });
 
 test("one streamed entry renders once at N=10 and N=200, including equal-length text changes", () => {

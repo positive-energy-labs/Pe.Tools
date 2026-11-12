@@ -177,7 +177,7 @@ test("a held act is one row that waits on the person, in held words; only a held
   // Held is never worded as the person saying no.
   for (const row of rows) expect(row.says).not.toMatch(/refus|reject|declin|denied/i);
   expect(rows[0]!.act).toBeUndefined();
-  expect(rows[1]!.act).toEqual({ kind: "confirm-send", id: "s1" });
+  expect(rows[1]!.act).toEqual({ kind: "confirm-send", id: "s1", to: "LlamaCloud" });
   noticeFeedSchema.parse({ id: 0, tray: false, rows });
 });
 

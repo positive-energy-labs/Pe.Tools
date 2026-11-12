@@ -1,4 +1,4 @@
-import { testConsents, journalAt } from "./effect-test.ts";
+import { journalAt } from "./effect-test.ts";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -20,7 +20,6 @@ import {
   abortableFetch,
 } from "../src/receipt-export.ts";
 import { mcpBeforeSend } from "../src/mcp-analytics.ts";
-import { harnessEventSchema } from "@pe/agent-contracts";
 
 const stamp = receiptGoldenEnvelope.stamp!;
 const r = (body: Receipt["body"]): Receipt => ({
@@ -285,20 +284,20 @@ test("thread and update adapters keep opaque joins and honest endings", async ()
       {
         seq: 2,
         at: "2026-10-13T16:00:01.000Z",
-        kind: "permission_request" as const,
+        kind: "question_request" as const,
         turnId: "private-turn",
         requestId: "private-request",
-        toolCall: { toolCallId: "private-tool", title: "local approval text" },
-        options: [{ optionId: "once", name: "Approve", kind: "allow_once" as const }],
+        message: "local question text",
+        requestedSchema: { type: "object" },
       },
       {
         seq: 3,
         at: "2026-10-13T16:00:02.000Z",
-        kind: "permission_resolved" as const,
+        kind: "question_resolved" as const,
         turnId: "private-turn",
         requestId: "private-request",
         by: "user" as const,
-        optionId: "once",
+        action: "accept" as const,
       },
       {
         seq: 4,
@@ -313,9 +312,9 @@ test("thread and update adapters keep opaque joins and honest endings", async ()
     ]);
     for (const event of events) adapter.accept(id, "local title", event);
     await expect
-      .poll(async () => (await f.journal.read({ kinds: ["turn", "permission"] })).length)
+      .poll(async () => (await f.journal.read({ kinds: ["turn", "question"] })).length)
       .toBe(4);
-    const rows = await f.journal.read({ kinds: ["turn", "permission"] });
+    const rows = await f.journal.read({ kinds: ["turn", "question"] });
     expect(rows[1]!.join.requestId).toBe(rows[2]!.join.requestId);
     expect(JSON.stringify(f.sent)).not.toContain("private");
     expect((f.sent.at(-1) as { properties: object }).properties).toMatchObject({

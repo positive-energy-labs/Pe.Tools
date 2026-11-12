@@ -359,7 +359,7 @@ const IDENTITY = ["sessionUpdate", "toolCallId", "title", "kind", "status"];
 
 /** One huge tool result cannot bloat the record (`HARNESS_EVENT_MAX_BYTES`). */
 function bounded(event: Append): Append {
-  if (event.kind !== "update" && event.kind !== "permission_request") return event;
+  if (event.kind !== "update") return event;
   const bytes = Buffer.byteLength(JSON.stringify(event));
   if (bytes <= HARNESS_EVENT_MAX_BYTES) return event;
   const cut = (value: unknown): unknown =>
@@ -381,19 +381,11 @@ function bounded(event: Append): Append {
     Object.fromEntries(Object.entries(body).filter(([k]) => IDENTITY.includes(k)));
   const tooBig = (body: object) =>
     Buffer.byteLength(JSON.stringify(body)) > HARNESS_EVENT_MAX_BYTES;
-  if (event.kind === "update") {
-    const kept = cutBody(event.update);
-    const body = tooBig(kept)
-      ? { ...identity(kept), sessionUpdate: event.update.sessionUpdate }
-      : kept;
-    return { ...event, update: { ...body, truncated: bytes } };
-  }
-  const { toolCallId, title } = event.toolCall;
-  const kept = cutBody(event.toolCall);
+  const kept = cutBody(event.update);
   const body = tooBig(kept)
-    ? { ...identity(kept), toolCallId, ...(title === undefined ? {} : { title }) }
+    ? { ...identity(kept), sessionUpdate: event.update.sessionUpdate }
     : kept;
-  return { ...event, toolCall: { ...body, truncated: bytes } };
+  return { ...event, update: { ...body, truncated: bytes } };
 }
 
 /**
@@ -603,7 +595,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     options.log.append({ kind: "thread", thread: t.meta.id, event: full });
     options.receiptFact?.(t.meta.id, t.meta.title, full);
     if (
-      ["turn_end", "error", "permission_request", "question_request"].includes(full.kind) &&
+      ["turn_end", "error", "question_request"].includes(full.kind) &&
       t.meta.lifecycle.snoozedUntil &&
       full.seq > t.meta.lifecycle.snoozedSeq
     ) {
@@ -849,9 +841,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         "prompt",
         "turn_end",
         "error",
-        "permission_request",
         "question_request",
-        "permission_resolved",
         "question_resolved",
       ].includes(event.kind) ||
       (event.kind === "update" &&
@@ -875,13 +865,11 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       value.state = event.kind === "error" ? "failed" : "idle";
       value.message = event.kind === "error" ? event.message : null;
     }
-    if (event.kind === "permission_request" || event.kind === "question_request")
-      t.asks.add(event.requestId);
-    if (event.kind === "permission_resolved" || event.kind === "question_resolved")
-      t.asks.delete(event.requestId);
+    if (event.kind === "question_request") t.asks.add(event.requestId);
+    if (event.kind === "question_resolved") t.asks.delete(event.requestId);
     value.pending = t.asks.size;
     if (value.pending) value.state = "waiting";
-    else if (event.kind === "permission_resolved" || event.kind === "question_resolved")
+    else if (event.kind === "question_resolved")
       value.state = t.running ? "running" : "idle";
   }
 
@@ -2264,16 +2252,13 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
   for (const t of threads.values()) {
     const resolved = new Set(
       t.events.flatMap((e) =>
-        e.kind === "permission_resolved" || e.kind === "question_resolved" ? [e.requestId] : [],
+        e.kind === "question_resolved" ? [e.requestId] : [],
       ),
     );
     for (const e of t.events)
-      if (
-        (e.kind === "permission_request" || e.kind === "question_request") &&
-        !resolved.has(e.requestId)
-      )
+      if (e.kind === "question_request" && !resolved.has(e.requestId))
         append(t, {
-          kind: e.kind === "permission_request" ? "permission_resolved" : "question_resolved",
+          kind: "question_resolved",
           turnId: e.turnId,
           requestId: e.requestId,
           by: "expired",

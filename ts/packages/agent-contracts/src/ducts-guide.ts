@@ -72,7 +72,7 @@ export const DUCTS_WALK: readonly DuctsWalkStep[] = [
 
 /** Why the walk is not one click, and what Pea does inside it. */
 export const DUCTS_NOT_ONE_CLICK =
-  "The model alone cannot settle design intent: which parameter holds the design airflow, the joins the evidence argues against, and which repairs belong in the design. The engineer owns those decisions. Either author edits Work and applies through the host. Pea's first consequential write uses the host's turn-wide countdown, with Allow now and Stop writes.";
+  "The model alone cannot settle design intent: which parameter holds the design airflow, the joins the evidence argues against, and which repairs belong in the design. The engineer owns those decisions. Either author edits Work and applies through the host.";
 
 /** How Pea works within the engineer's intent and shared host contracts. */
 export const DUCTS_PEA_DOES: readonly string[] = [

@@ -73,12 +73,12 @@ export function ConversationBody({
 export function ToolStatus({
   state,
 }: {
-  state: "working" | "waiting" | "failed" | "done" | "denied" | "cancelled" | "expired";
+  state: "working" | "failed" | "done" | "cancelled";
 }) {
   return (
     <span
       className="dl-tool-status"
-      data-tone={state === "failed" || state === "waiting" ? "caution" : undefined}
+      data-tone={state === "failed" ? "caution" : undefined}
       data-state={state}
     >
       {state}

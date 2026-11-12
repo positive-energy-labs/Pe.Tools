@@ -156,6 +156,7 @@ export function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId,
     "agent-feedback.submit": axes("Session", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "outward.hold": axes("None", "One", ["Metadata"], "SessionWrite", "Cheap", []),
     "outward.confirm": axes("None", "One", ["Metadata"], "SessionWrite", "Expensive", []),
+    "outward.person": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "diagnostics.submit": axes("None", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "receipts.read": axes("Session", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     // Resource streams dispatch by Reading kind, including native acquisitions and captures.
