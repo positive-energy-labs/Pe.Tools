@@ -264,8 +264,13 @@
   --pe-surface: var(--pe-recess);
 }
 
+/* The document ground is paper: white in both themes. Its ink is the light pair in both themes
+   too, or dark-theme ink (near-white) draws on white. `color` is restated because an inherited
+   colour is already resolved against the parent's scheme. */
 :where([data-surface="document"]) {
   --pe-surface: var(--pe-document);
+  color-scheme: light;
+  color: var(--pe-ink);
 }
 
 :where(
