@@ -46,6 +46,11 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 - 2026-11-11, banning every Revit API entity that can save, as the first choice of guard: Family Foundry and the base modules save family files, and scripted family saves are non-negotiable. It survives only as the fallback for assumption A, limited to project documents.
 
 ## Owed
+- Harness-neutral fixes parked on `crusade/t3` would help Pea under ACP too. Harvest them when a homes or kernel journey needs an interrupt that really stops Revit:
+  - 90cdd00b: MCP abort forwarding, and the journal cancelling a stopped run's native step. The parts that apply cleanly are `action-journal.ts`, `invocation-context.ts` and its browser twin, and the journal test. `server.ts` needs a hand port of about 3 lines.
+  - 26e75c8f: a failed cancel send kept apart from a persistence failure. Apply it after 90cdd00b.
+
+  The T3 partner checked both on a throwaway index at cac368a0. The restart point is `.artifacts/runs/homes-crusade-20261111/t3/SPIKE.md` (parked handoff).
 - Run paths carry no project pointer. `family-actions.ts:202` `podContext`, `schedule-actions.ts:492` and `family-spec.ts:27,77` resolve the Pod folder over user and firm only, so Pea can compose a project Pod's spec through `pod.member.compose`, and then no family or schedule run finds that Pod. The `projectPods` sentence on `pod.list` says project Pods do not run. Boundary for whoever adds the pointer to a run path: a run needs a per-home census, never only the pointer. Purger, tip 29898faa.
 
 - R3: `capability-tools.ts` page-branch comment wrongly said a harness re-invocation is a marked re-send, because each re-invocation is a new MCP request id.
