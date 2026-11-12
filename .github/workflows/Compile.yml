@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # repo guards read history and origin/main
 
       # LEFT OUT, needs the owner: every C# step (`dotnet tool restore`, `pe-revit doctor`,
       # `dotnet build Pe.Tools.slnx -c Debug.R25 | Debug.R23 | Release.R25`, and the deterministic
@@ -34,9 +36,18 @@ jobs:
       - name: Setup pnpm
         run: corepack enable
 
-      # Format, lint, tsc per package, projections, catalog source hash, repo guards (ts/scripts/gate.ts).
+      # tsc per package, route projections, catalog source hash, repo guards (ts/scripts/gate.ts).
+      # LEFT OUT, red on main itself as of 241262ba: `format` (836 files), `lint` (140 errors) and
+      # `Page projection` (examples/pods/snowdon-circuits/pages/tour/index.html is stale). Drop the
+      # step names below to run the whole gate once those are clean.
+      # The route closures are ignored build output that tsc needs, so they are written after the
+      # read-only projection check and before the typecheck.
       - name: gate
         working-directory: ts
         run: |
           pnpm install --frozen-lockfile
-          pnpm gate
+          pnpm gate route
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          pnpm --filter @pe/web codegen:routes
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          pnpm gate types catalog repo

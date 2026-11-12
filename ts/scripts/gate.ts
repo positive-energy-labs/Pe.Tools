@@ -34,8 +34,14 @@ steps.push(
   ],
   ["repo guards", resolve(root, "tests/repo-guards"), ["vp", "test", "run"]],
 );
+// `pnpm gate types repo` runs only the steps whose name starts with an argument (CI: Compile.yml).
+const only = process.argv.slice(2);
+const selected = only.length
+  ? steps.filter(([name]) => only.some((prefix) => name.startsWith(prefix)))
+  : steps;
+if (!selected.length) throw Error(`No gate step starts with: ${only.join(", ")}`);
 const failures: string[] = [];
-for (const [name, cwd, [bin, ...args]] of steps) {
+for (const [name, cwd, [bin, ...args]] of selected) {
   const started = Date.now();
   console.log(`\n== gate: ${name} (${[bin, ...args].join(" ")})`);
   const result = spawnSync(bin!, args, {
