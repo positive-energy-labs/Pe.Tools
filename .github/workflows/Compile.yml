@@ -50,4 +50,11 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           pnpm --filter @pe/web codegen:routes
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          pnpm gate types catalog repo
+          pnpm gate types catalog
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # LEFT OUT, needs the owner: host-door.guard.test.ts reads `git log 3dc3d091..HEAD`, and
+          # 3dc3d091 is on no branch and not on GitHub (it survives only as a loose object on the
+          # owner's machine), so the guard fails in every fresh clone. Rebase it on a pushed commit,
+          # then replace these lines with `repo` in the gate call above.
+          cd tests/repo-guards
+          pnpm exec vp test run --exclude "**/host-door.guard.test.ts"
