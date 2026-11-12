@@ -7,6 +7,32 @@ namespace Pe.Shared.Tests.Storage;
 [TestFixture]
 public class PodRunAtomicTests {
     [Test]
+    public void Starting_a_run_sweeps_only_stale_temporary_files_from_listed_run_folders() {
+        var pod = "sweep-proof-" + Guid.NewGuid().ToString("N");
+        var first = PodRuns.NewRunFolder(pod);
+        var root = Path.GetDirectoryName(first)!;
+        try {
+            Directory.CreateDirectory(Path.Combine(first, "source"));
+            var stale = Path.Combine(first, "source", "input.json.abandoned.tmp");
+            var active = Path.Combine(first, "active.tmp");
+            var published = Path.Combine(first, "input.json");
+            File.WriteAllText(stale, "partial");
+            File.WriteAllText(active, "in progress");
+            File.WriteAllText(published, "published");
+            var now = DateTime.UtcNow;
+            File.SetLastWriteTimeUtc(stale, now.AddHours(-2));
+            File.SetLastWriteTimeUtc(active, now.AddSeconds(-10));
+            PodRuns.NewRunFolder(pod);
+            Assert.Multiple(() => {
+                Assert.That(File.Exists(stale), Is.False);
+                Assert.That(File.Exists(active), Is.True, "Another process may still be publishing this recent temporary file");
+                if (File.Exists(active)) Assert.That(File.ReadAllText(active), Is.EqualTo("in progress"));
+                Assert.That(File.ReadAllText(published), Is.EqualTo("published"));
+            });
+        } finally { Directory.Delete(root, true); }
+    }
+
+    [Test]
     public void Receipt_is_create_only_and_duplicate_preserves_first_bytes() {
         var folder = Path.Combine(Path.GetTempPath(), "pe-run-" + Guid.NewGuid().ToString("N"));
         try {

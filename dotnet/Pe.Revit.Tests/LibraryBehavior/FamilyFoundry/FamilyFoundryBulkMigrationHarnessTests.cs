@@ -57,9 +57,9 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     private static void VerifyCompanyDefinitions(IReadOnlyList<ParametersApi.Parameters.ParametersResult> definitions,
         JObject evidence, string checkpointPath) {
         var cache = Pe.Shared.StorageRuntime.StorageClient.Default.Global().State()
-            .Json<ParametersApi.Parameters>("parameters-service-cache");
+            .Json<ParametersApi.Parameters>("parameters-service-cache", Pe.Shared.StorageRuntime.StoredPolicy.Discard, "APS parameter cache");
         var cachePath = ((Pe.Shared.StorageRuntime.Json.JsonReader<ParametersApi.Parameters>)cache).FilePath;
-        var cached = JsonConvert.DeserializeObject<ParametersApi.Parameters>(File.ReadAllText(cachePath))!.Results!;
+        var cached = cache.Read().Results!;
         var active = cached.Where(d => !d.IsArchived).ToList();
         static JObject Identity(ParametersApi.Parameters.ParametersResult d) => JObject.FromObject(new {
             d.Name, Guid = d.DownloadOptions.GetGuid(), Spec = d.DownloadOptions.GetSpecTypeId().TypeId,

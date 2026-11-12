@@ -27,10 +27,10 @@ public sealed class OutputStorage {
     }
 
     public JsonWriter<object> Json(string filename) =>
-        new LocalDiskJsonFile<object>(this.GetJsonPath(filename));
+        new LocalDiskJsonFile<object>(this.GetJsonPath(filename), StoredPolicy.Keep, "Command output");
 
     public JsonWriter<object> JsonDated(string filename) =>
-        new LocalDiskJsonFile<object>(this.GetDatedJsonPath(filename));
+        new LocalDiskJsonFile<object>(this.GetDatedJsonPath(filename), StoredPolicy.Keep, "Command output");
 
     public CsvWriter<object> Csv(string filename) =>
         new Csv<object>(this.GetCsvPath(filename), $"CSV output {filename}");

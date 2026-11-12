@@ -23,7 +23,7 @@ public sealed class ExportApsParametersTask : ITask {
             // Load cached APS parameters
             const string cacheFilename = "parameters-service-cache";
             var globalState = StorageClient.Default.Global().State();
-            var apsParamsCache = globalState.Json<ParametersApi.Parameters>(cacheFilename);
+            var apsParamsCache = globalState.Json<ParametersApi.Parameters>(cacheFilename, StoredPolicy.Discard, "APS parameter cache");
             var cacheFilePath = globalState.ResolveSafeRelativeJsonPath(cacheFilename);
 
             if (!File.Exists(cacheFilePath)) {

@@ -47,8 +47,8 @@ internal static class EngineEdge {
     ///     The run's first write, before any effect. Captured bytes that disagree with their hash, or a root pod that
     ///     does not resolve, refuse the call here and only here: nothing after an effect maps to a refusal.
     /// </summary>
-    internal static (string Run, List<string> Inputs) StartRun(PodComposedSource source, object metadata, string consumedJson, string? planActionId = null) {
-        try { return PodRuns.StartComposedRun(source, metadata, consumedJson, planActionId); }
+    internal static (string Run, List<string> Inputs) StartRun(PodComposedSource source, object metadata, string consumedJson, string? planActionId = null, ScriptPodPreparationService? pods = null) {
+        try { return PodRuns.StartComposedRun(source, metadata, consumedJson, planActionId, pods); }
         catch (InvalidDataException exception) { throw BridgeOperationExceptions.BadRequest(exception.Message); }
     }
 

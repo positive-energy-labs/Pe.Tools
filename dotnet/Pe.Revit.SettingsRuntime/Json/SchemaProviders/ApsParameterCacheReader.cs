@@ -7,12 +7,12 @@ public static class ApsParameterCacheReader {
 
     public static IReadOnlyList<ApsParameterCacheEntry> ReadEntries() {
         try {
-            var cache = StorageClient.Default.Global().State().Json<object>(CacheFilename);
+            var cache = StorageClient.Default.Global().State().Json<JObject>(CacheFilename, Pe.Shared.StorageRuntime.StoredPolicy.Discard, "APS parameter cache");
             var cachePath = ((JsonReader<object>)cache).FilePath;
             if (!File.Exists(cachePath))
                 return [];
 
-            var root = JObject.Parse(File.ReadAllText(cachePath));
+            var root = cache.Read();
             if (root[GetTokenName(root, "Results")] is not JArray results)
                 return [];
 

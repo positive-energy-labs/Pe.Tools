@@ -69,7 +69,7 @@ internal static class ScheduleBridgeOps {
     ///     The one apply edge for bridge op and palette: new schedule, then the run in the source pod. The profile is
     ///     read here from the exact JSON the run records, so the recorded input is what the engine consumed.
     /// </summary>
-    internal static (ScheduleSpecApplyData Data, ScheduleCreationResult Result) ApplySpec(Document document, string specJson, PodComposedSource composed) {
+    internal static (ScheduleSpecApplyData Data, ScheduleCreationResult Result) ApplySpec(Document document, string specJson, PodComposedSource composed, ScriptPodPreparationService? pods = null) {
         var source = composed.Root;
         var spec = ModuleSettingsStorage<SharedScheduleProfile>.ReadPrepared(
             System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(source.BytesBase64)), specJson, $"{source.Id}:{source.Path}");
@@ -77,7 +77,7 @@ internal static class ScheduleBridgeOps {
         var (run, inputOutputs) = EngineEdge.StartRun(composed, new {
             operation = "schedule.apply",
             target = EngineEdge.RunTarget(document)
-        }, specJson);
+        }, specJson, pods: pods);
         var handled = new List<(bool IsError, string Message)>();
         ScheduleCreationResult result;
         try {

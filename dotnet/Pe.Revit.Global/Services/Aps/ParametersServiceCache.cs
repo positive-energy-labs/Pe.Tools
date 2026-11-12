@@ -19,7 +19,7 @@ public static class ParametersServiceCache {
 
     public static async Task<ParametersServiceCacheData> RefreshAsync() {
         var globalState = StorageClient.Default.Global().State();
-        var cache = globalState.Json<ParametersApi.Parameters>(CacheFilename);
+        var cache = globalState.Json<ParametersApi.Parameters>(CacheFilename, StoredPolicy.Discard, "APS parameter cache");
         var cacheFilePath = ((JsonReader<ParametersApi.Parameters>)cache).FilePath;
 
         var tokenProvider = new CacheParametersServiceSettings();
