@@ -10,6 +10,20 @@ import { withInvocationContext } from "@pe/runtime/context";
 import { sendHeldParse, sha256Of } from "../src/shared/held-parse.ts";
 import { runReadDocument } from "../src/shared/read-document.ts";
 
+const liteParseOptions = vi.hoisted(() => [] as Array<{ ocrEnabled?: boolean }>);
+vi.mock("@llamaindex/liteparse", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@llamaindex/liteparse")>();
+  return {
+    ...original,
+    LiteParse: class extends original.LiteParse {
+      constructor(options: ConstructorParameters<typeof original.LiteParse>[0]) {
+        super(options);
+        liteParseOptions.push(options ?? {});
+      }
+    },
+  };
+});
+
 /** One 612x792 page with a schedule row near the top and a footer note near the bottom, offsets exact. */
 function schedulePdf(withText = true): Buffer {
   const content = withText
@@ -76,6 +90,8 @@ test("read_document returns text and renders with network requests blocked, and 
     expect(cropped.images[0]!.path).toContain("read-document");
     expect(cropped.images[0]!.path).not.toContain(dir);
     expect(whole.warnings).toBeUndefined();
+    for (const options of liteParseOptions) expect(options.ocrEnabled).toBe(false);
+    expect(liteParseOptions.length).toBeGreaterThan(0);
     expect(blocked).not.toHaveBeenCalled();
   } finally {
     // The renders live in the tool's product scratch folder, outside `dir`.
