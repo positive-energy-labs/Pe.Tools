@@ -43,7 +43,7 @@ export async function journey(options: { catalogue?: ReturnType<typeof gate>; sn
           connected: true,
           openDocumentCount: 1,
           openDocuments: [
-            { ...ref, title: "Chadds", address: path, isActive: true, isFamilyDocument: false },
+            { ...ref, title: "Chadds", address: path, isActive: true, isFamilyDocument: false, projectHome: null },
           ],
         },
       ],

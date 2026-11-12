@@ -878,7 +878,7 @@ export function ThreadsSidebar({
       sub:
         compactRows || !work || !lead ? undefined : (
           <span className="pe-thread-sub">
-            <Button kind="quiet"
+            <Button
               label={`Open ${lead.intent}`}
               onClick={(event) => {
                 event.stopPropagation();
@@ -944,7 +944,7 @@ export function ThreadsSidebar({
         <div className="flex flex-wrap items-center gap-1">
           <span>{list.state.selected.length} selected</span>
           <span className="t-small text-ink-2">use any selected row's menu</span>
-          <Button label="Clear" kind="framed" onClick={clearSelection}>
+          <Button label="Clear" onClick={clearSelection}>
             Clear
           </Button>
         </div>
@@ -1007,7 +1007,6 @@ export function NewThreadButton({ onNew }: { onNew: () => void }) {
   return (
     <Button
       type="button"
-      kind="framed"
       icon={Plus}
       label="New thread"
       reason="Open an empty draft; first send creates the thread"

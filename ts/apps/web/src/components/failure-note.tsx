@@ -16,7 +16,6 @@ export function FailureNote({ text, onDoor }: { text: string; onDoor: (href: str
       <p className="m-0">{failure.summary}</p>
       {door && (
         <Button
-          kind="framed"
           label={door.label}
           onClick={() =>
             onDoor(

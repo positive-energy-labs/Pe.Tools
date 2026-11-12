@@ -415,11 +415,21 @@ const ToolGroup = memo(
     useEffect(() => {
       if (holdsOpenCall) setOpen(true);
     }, [holdsOpenCall]);
+    // The host's consent ask is a row, not a tool: it is never counted, and a run that holds
+    // nothing else draws it plain, with no fold to count it in.
+    const tools = parts.filter((part) => !part.call.consent).map((part) => part.call);
     if (parts.length === 0) return <RunStack run={run} />;
+    if (tools.length === 0)
+      return (
+        <div className="flex min-w-0 flex-col gap-1">
+          <RunStack run={run} />
+          <RecordsStack parts={parts} />
+        </div>
+      );
     return (
       <div className="flex min-w-0 flex-col gap-1">
         <ToolRunFold
-          calls={parts.map((part) => part.call)}
+          calls={tools}
           thoughts={run.length - parts.length}
           open={open}
           onToggle={setOpen}

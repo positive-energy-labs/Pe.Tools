@@ -92,7 +92,6 @@ function BandRoute() {
                 wire={wire}
                 commit={
                   <Button
-                    kind="framed"
                     label="plan · SIMULATED"
                     reason="Plan the edit cells; the fixture writes nothing"
                     onClick={() => say(`SIMULATED · plan of ${edit} edit cells`)}
@@ -107,7 +106,6 @@ function BandRoute() {
                   search
                   actions={
                     <Button
-                      kind="framed"
                       label="clear all · Voltage"
                       reason="Clear staged Voltage values in one write"
                       onClick={() => aggregate(clearVoltage(matrix))}

@@ -79,6 +79,10 @@ interface PaneSizeSpec {
   collapse?: PaneCollapseSpec;
 }
 
+/** The floor a split side holds when its declaration names none. A horizontal side keeps a reading
+ * width, so a row too narrow for both folds to a rail or stacks; a vertical side keeps a few rows. */
+export const SPLIT_FLOOR = { horizontal: 220, vertical: 80 } as const;
+
 function clampSize(size: number, spec: PaneSizeSpec, containerSize?: number) {
   const minimum = Math.max(1, spec.minSize);
   const containerMax =

@@ -49,7 +49,6 @@ export function Lineup({ dataset }: { dataset: string }) {
         {DATASETS.map((each) => (
           <Button
             key={each.id}
-            kind="framed"
             label={`show ${each.label}`}
             pressed={each.id === active.id}
             onClick={() => go(each.id)}

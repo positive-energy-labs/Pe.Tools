@@ -385,7 +385,7 @@ export function RoomsPlan({
         <OutcomeLine
           kind="advisory"
           label={trace.none}
-          says="Partition this view to write a trace"
+          says="run partition first"
         />
       ) : null}
       {trace.data && layers.includes("faces") ? <TraceFaces trace={trace.data} /> : null}

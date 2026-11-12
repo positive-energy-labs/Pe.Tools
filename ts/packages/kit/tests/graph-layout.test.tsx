@@ -8,6 +8,7 @@ import {
   type GraphLayoutState,
   type PaneApi,
 } from "../src/components/lang/graph-layout";
+import { SPLIT_FLOOR } from "../src/components/lang/pane-resize";
 import { readTeaching } from "@pe/kit/lang/teach";
 import { TeachPage } from "@pe/kit/lang/use-teach";
 
@@ -22,7 +23,8 @@ const layout = split(
   pane("plan"),
   split(
     "review",
-    { axis: "v", sized: "start", size: 8 },
+    // A declared zero floor: these tests step a seam under the pane to fold it.
+    { axis: "v", sized: "start", size: 8, minSize: 0 },
     gate("review", pane("inbox")),
     pane("regions"),
   ),
@@ -250,4 +252,30 @@ test("graph layout passes the body's furniture and bounded persisted resizing", 
   expect(view.getByText("Plan metadata")).toBeTruthy();
   expect(view.getByRole("button", { name: "Layer action" })).toBeTruthy();
   localStorage.removeItem("graph-layout-policy");
+});
+
+// The floor an undeclared split holds is the kit's, one per axis: a horizontal side keeps a reading
+// width (and PaneSplit mirrors it to the other side), a vertical side keeps a few rows.
+test("a split that declares no floor holds the kit floor on both sides", () => {
+  const view = render(
+    <GraphLayoutView
+      layout={split(
+        "row",
+        { axis: "h", sized: "start", size: 320 },
+        pane("plan"),
+        split("column", { axis: "v", sized: "end", size: 200 }, pane("inbox"), pane("regions")),
+      )}
+      panes={panes}
+      active={() => true}
+      bodies={bodies}
+    />,
+  );
+  const floors = (id: string) => {
+    const node = [...view.container.querySelectorAll<HTMLElement>("[data-layout-split]")].find(
+      (node) => JSON.parse(node.dataset.layoutSplit!)[0] === id,
+    )!;
+    return [Number(node.dataset.paneMinSize), Number(node.dataset.paneMinOtherSize)];
+  };
+  expect(floors("row")).toEqual([SPLIT_FLOOR.horizontal, SPLIT_FLOOR.horizontal]);
+  expect(floors("column")).toEqual([SPLIT_FLOOR.vertical, SPLIT_FLOOR.vertical]);
 });

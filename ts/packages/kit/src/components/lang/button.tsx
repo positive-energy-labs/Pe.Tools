@@ -25,6 +25,10 @@ import "./button.css";
 const NAV_ICON = { back: ArrowLeft, forward: ArrowRight, out: ExternalLink };
 /** Row action slots draw glyphs even when a composed control supplies words. */
 export const ButtonIcon = createContext<LucideIcon | null>(null);
+/** A container whose buttons read as its own furniture (a list bar, a popup list's footer, a
+ *  floater, a row's second line, a search field's chips) sets their kind once; a button there
+ *  states `kind` only to differ. */
+export const ButtonKind = createContext<"quiet" | "framed" | null>(null);
 
 /** A composing surface supplies state; its button owns the anchored overlay. */
 export const ButtonOutcome = createContext<OutcomeLineProps | null>(null);
@@ -69,9 +73,11 @@ export function Button({
     icon ??= compactIcon;
     children = undefined;
   }
+  const iconOnly = children == null || children === false;
   // The plain action button is framed (design ledger 2026-10-12: hairline, no fill); an icon-only
-  // press stays quiet. A link, tab, menu item or row affordance says `kind="quiet"`.
-  const kind = kindProp ?? (children == null || children === false ? "quiet" : "framed");
+  // press stays quiet. A container sets `ButtonKind`; a lone link says `kind="quiet"`.
+  const contained = useContext(ButtonKind);
+  const kind = kindProp ?? contained ?? (iconOnly ? "quiet" : "framed");
   const [pending, setPending] = useState(false);
   const [outcome, setOutcome] = useState<OutcomeLineProps | null>(null);
   const shownOutcome = useContext(ButtonOutcome) ?? outcome;
@@ -129,7 +135,6 @@ export function Button({
   };
   const tone = toneProp ?? (kind === "commit" && !inert ? "commit" : undefined);
   const Glyph = direction ? NAV_ICON[direction] : icon;
-  const iconOnly = children == null || children === false;
   const tipped = Glyph != null || iconOnly || refusal !== undefined || reason != null;
   const tip = refusal ?? reason ?? (Glyph != null || iconOnly ? label : null);
   const named = busy ? `${label}…` : label;

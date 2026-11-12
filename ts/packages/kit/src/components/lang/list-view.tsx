@@ -15,7 +15,7 @@ import {
 } from "react";
 import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 
-import { Button } from "./button";
+import { Button, ButtonKind } from "./button";
 import {
   overscanRows,
   VIRTUAL_FROM,
@@ -217,14 +217,16 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
           { pointer: "hover", label: "move the cursor" },
         ]}
       />
-      {props.header ? (
-        <div data-list-bar="" data-surface="artifact">
-          {props.header}
-          {searching ? <ListBar list={list} label={label} /> : null}
-        </div>
-      ) : searching ? (
-        <ListBar list={list} label={label} />
-      ) : null}
+      <ButtonKind value="quiet">
+        {props.header ? (
+          <div data-list-bar="" data-surface="artifact">
+            {props.header}
+            {searching ? <ListBar list={list} label={label} /> : null}
+          </div>
+        ) : searching ? (
+          <ListBar list={list} label={label} />
+        ) : null}
+      </ButtonKind>
       {props.columns ? (
         <div className="dl-row-colhead" role="presentation" data-tree-columns="">
           <span className="dl-row-colhead-label">{props.columns.label}</span>

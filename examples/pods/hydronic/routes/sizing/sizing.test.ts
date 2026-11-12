@@ -149,8 +149,17 @@ describe("kernel gaps", () => {
       admittedRoutes: () => workspace.admittedRoutes() });
     expect(rows.map((r) => r.key)).toEqual(expect.arrayContaining([`route:${key}`, `route:${key}.edit`]));
   });
-  test.fails("kernel gap: picture-slot (5)", () => {
-    expect(module.data).toHaveProperty("picture");
+  // Closed by slice 8 (owner ruling 2026-11-11): the Pod declares `picture` through `@pe/web/route` and the
+  // kernel adds and draws the pane. The Pod writes no pane, mounts no renderer and builds no capture.
+  test("kernel slot: picture-slot (5)", () => {
+    expect(module.data).toMatchObject({ picture: { scope: "derived" } });
+    expect(module.data.picture?.marks).toContain("outline");
+  });
+  test("kernel pane: picture-pane (5)", () => {
+    expect(module.data.panes).toHaveProperty("picture");
+    expect(module.spec.panes).toMatchObject({ picture: { kernel: "picture" } });
+    // The pose is the kernel's: the Pod declares none of its fields.
+    expect(Object.keys(module.data.fields)).toEqual(expect.arrayContaining(["viewport", "layers", "context"]));
   });
   test("kernel slot: goal-slot (6)", () => {
     // The core is the Goal; the kernel's goal pane draws its unresolved list first.

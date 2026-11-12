@@ -7,6 +7,7 @@ import {
   commands,
   sameCaller,
   familyActions,
+  familyMemberPath,
   familyReads,
   familyLiveReadSchema,
   familiesCaptureEvidenceSchema,
@@ -1139,15 +1140,16 @@ export function familyExecutors(
     recover,
   });
 
+  // A capture names no family before Revit answers, so its member is named by the action that filed it.
+  const capturedMember = (ctx: CommandContext, familyId: number) =>
+    familyMemberPath(`${digest(ctx.admission.id).slice(0, 24)}-${familyId}`);
   const captureBinding = async (
     ctx: CommandContext,
     family: true | "project",
     input: { pod?: string; path?: string; spec?: string; familyIds?: number[] },
   ) => {
     const bound = await nativeBinding(ctx, family),
-      paths = (input.familyIds ?? [0]).map(
-        (id) => input.path ?? `captures/${digest(ctx.admission.id).slice(0, 24)}-${id}.json`,
-      );
+      paths = (input.familyIds ?? [0]).map((id) => input.path ?? capturedMember(ctx, id));
     return {
       consumes: bound.consumes,
       effects: input.pod
@@ -1181,9 +1183,7 @@ export function familyExecutors(
     for (const spec of specs) {
       const request = {
         pod: prepared.pod!,
-        path:
-          prepared.path ??
-          `captures/${digest(ctx.admission.id).slice(0, 24)}-${spec.familyId}.json`,
+        path: prepared.path ?? capturedMember(ctx, spec.familyId),
         content: spec.content,
       };
       const written = yield* execution.step("file", "pod.member.write", request, () => io(() => writeMemberOnce(deps, request, podsFor(ctx))),
@@ -1228,10 +1228,13 @@ export function familyExecutors(
       const { members, runs } = yield* fileCapture(ctx, execution, prepared, "family.capture", [
         spec,
       ]);
+      // The member holds the model and the run holds `unmodeled.json`: the result is their handle,
+      // not a second copy of a field family's 300 KB (gate-9d6ce645: Pea could not relay it).
+      const { modelJson: _, ...seen } = captured;
       return {
         executionContext: targetOf(ctx),
         member: members[0],
-        evidence: { ...captured, origin: "capture", rfaPath: null, run: runs.get(0) ?? null },
+        evidence: { ...seen, origin: "capture", rfaPath: null, run: runs.get(0) ?? null },
       };
     }),
     recover,

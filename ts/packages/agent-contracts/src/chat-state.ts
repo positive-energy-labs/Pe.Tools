@@ -76,6 +76,9 @@ export type ToolCall = {
   parentMessageId?: string;
   /** Images the call produced so far. */
   images: string[];
+  /** The host's run-consent ask (`writes:<turn>`, run-consent.ts): a row in the run, never a tool
+   *  the agent called, so no count of tools includes it. */
+  consent?: true;
 } & ToolOutcome;
 
 /** One open ACP form question (`question_request`): answered with content keyed by property, or

@@ -1,5 +1,6 @@
 import { useList } from "@pe/kit/lang/collection";
 import { Button } from "@pe/kit/lang/button";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { ListView } from "@pe/kit/lang/list-view";
 import { teachText } from "@pe/kit/lang/use-teach";
@@ -38,12 +39,14 @@ export function GraphHistory({
   useEffect(() => {
     if (ownFinding && owner.ownFindingsLeft) void owner.ownFindingsLeft().then(setOwnLeft, () => setOwnLeft(null));
   }, [owner, ownFinding]);
+  // A refused verb says why on the page, not only in its description.
+  const undoRefusal = ownLeft === 0 ? "Nothing of yours left to undo: Pea's findings are Pea's to undo" : null;
   const rows = [...(journal?.intents ?? []).map(intent => ({
     key: `intent:${intent.id}`, label: intent.label,
     sub: `${intent.status} / ${intent.owner.route} / expected r${intent.input.expectedRevision} / ${intent.reason ?? "Awaiting acknowledgement"}`,
     actions: <><Popover><PopoverTrigger aria-label={`Inspect ${intent.label}`}>Inspect</PopoverTrigger>
       <SubjectPopoverContent aria-label={`Original input: ${intent.label}`}><pre>{JSON.stringify(intent,null,2)}</pre></SubjectPopoverContent>
-    </Popover>{owner.discardIntent && <Button kind="quiet" label={`Discard ${intent.label}`} refusal={intent.status === "pending" ? "Awaiting acknowledgement" : null} onClick={()=>owner.discardIntent!(intent.id)}>Discard</Button>}</>,
+    </Popover>{owner.discardIntent && <Button label={`Discard ${intent.label}`} refusal={intent.status === "pending" ? "Awaiting acknowledgement" : null} onClick={()=>owner.discardIntent!(intent.id)}>Discard</Button>}</>,
   })), ...[...projected]
     .reverse()
     .filter((row) => !workOnly || row.kind === "journal")
@@ -74,10 +77,10 @@ export function GraphHistory({
               {row.outcome.recovery}
             </a>
           )}
-          {row.key === ownFinding && (
-            <Button kind="quiet"
+          {row.key === ownFinding && (<>
+            <Button
               label="Undo your last finding"
-              refusal={ownLeft === 0 ? "Nothing of yours left to undo: Pea's findings are Pea's to undo" : null}
+              refusal={undoRefusal}
               onPress={async () => {
                 const refused = await owner.undoFinding!();
                 setOwnLeft((await owner.ownFindingsLeft?.()) ?? null);
@@ -86,10 +89,11 @@ export function GraphHistory({
             >
               Undo finding
             </Button>
-          )}
+            {undoRefusal && <OutcomeLine kind="refused" label={undoRefusal} />}
+          </>)}
           {row.entry.receiptId &&
-            ["running", "outcome-unknown"].includes(row.outcome?.state ?? "") && (
-              <Button kind="quiet"
+            ["queued", "running", "outcome-unknown"].includes(row.outcome?.state ?? "") && (
+              <Button
                 label="Stop command"
                 onClick={() => void owner.stopCommand(row.entry.receiptId!)}
               >

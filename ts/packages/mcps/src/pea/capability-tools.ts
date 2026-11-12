@@ -21,6 +21,7 @@ import {
 } from "@pe/agent-contracts";
 import {
   type DetachedAction,
+  receiptForModel,
   recoverAction,
   submitAction,
 } from "../shared/takeoff-action-client.ts";
@@ -525,7 +526,9 @@ async function executeTool(
               ? call.ok
                 ? call.response
                 : call
-              : result,
+              : action
+                ? receiptForModel(result)
+                : result,
         ...(call ? { elapsedMs: call.elapsedMs } : {}),
       };
     } catch (error) {

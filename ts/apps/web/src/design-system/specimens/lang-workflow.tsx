@@ -105,7 +105,7 @@ export function LangWorkflowSpecimens() {
           cells={REVIEW_SPECIMEN}
           wire={wire}
           commit={
-            <Button kind="framed" label="save" reason="Write every edit field" onClick={noop}>
+            <Button label="save" reason="Write every edit field" onClick={noop}>
               save
             </Button>
           }

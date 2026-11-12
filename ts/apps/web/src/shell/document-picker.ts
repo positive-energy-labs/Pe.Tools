@@ -35,11 +35,13 @@ export function DocumentPicker({
   );
   const key = (ref: { session: string; openId: string }) => JSON.stringify(ref);
   const selected = target?.kind === "document" ? key(target.ref) : null;
+  const chosen = options.find((option) => key(option.ref) === selected)?.label;
   return createElement(ListPopup<(typeof options)[number]>, {
     anchor: "trigger",
     face: "control",
-    triggerLabel: "Choose a document",
-    trigger: options.find((option) => key(option.ref) === selected)?.label ?? "Choose a document",
+    // The name says what is chosen, and that pressing changes it.
+    triggerLabel: chosen ? `Document: ${chosen}; change` : "Choose a document",
+    trigger: chosen ?? "Choose a document",
     "aria-label": "Document",
     items: options,
     keyOf: (option) => key(option.ref),

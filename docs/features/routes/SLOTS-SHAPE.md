@@ -158,7 +158,7 @@ export const pictureSlotDataSchema = z.strictObject({ scope: z.enum(["subject", 
 Seam (`slots/picture/index.ts`):
 
 ```ts
-export interface Captured { readonly ref: SubjectRefCode; readonly point: Vec3; }
+export interface Captured { readonly ref: SubjectRefCode; readonly point: Vec3; readonly box?: { min: Vec3; max: Vec3 }; }   // box: what an outline or volume mark draws
 export interface PictureInput { readonly subject: readonly SubjectRefCode[]; readonly captured: readonly Captured[]; }
 export interface PictureState { readonly scope: PictureScope; readonly pointed; readonly selected; readonly viewport: { readonly center: Vec3; readonly radius: number } | null; }
 export interface PictureHandle {
@@ -184,6 +184,8 @@ The falsifier builds one fan port (`UniqueId:<fan>#port:1`) seen through two lin
 - Halo and context aliases: the `halo`/`context` layer keys `ts/packages/agent-contracts/src/routes/picture.ts:77-78` and `contextStyle` `:44`; the `contextOn` alias `ts/apps/web/src/ducts/sheet/picture.tsx:177`.
 - Selection-string bridges: `ts/apps/web/src/fans/bindings.ts:6` (`attentionSubjects` over `ductElements`), `ts/apps/web/src/ducts/cell-focus.ts:42`, `ts/apps/web/src/ducts/selection.ts:18-19`, and the kit's `elementKey`/`elementUniqueId` `ts/packages/kit/src/components/lang/attention.tsx:39-45`.
 - The borrowed picture body: `ts/apps/web/src/fans/route.ts:108` draws `ts/apps/web/src/ducts/sheet/mount.tsx:359` (`PictureBody`); ducts draws its own at `ts/apps/web/src/ducts/route.ts:133`.
+
+Filled (2026-11-11, `crusade/kernel-picture-pane`): the kernel draws the pane (`ts/apps/web/src/route/slots/picture/pane.tsx`) and the slot carries one `overlay` hook (`overlay.tsx`); the anchors above name the tree before the fill. The routes ledger's slice 8 residue holds what is owed.
 
 ### Order
 

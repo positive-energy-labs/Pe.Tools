@@ -146,7 +146,6 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
         <Button
           label="bind…"
           reason={`Bind ${slug}.${property} to a parameter — its one crossing, and the only verb that changes what CAN be said about this number. Offers every ${dataType} parameter already in the profile, or a new one named "${newName}" seeded with ${literal}. The ghost row then disappears into the parameter row that now represents it. Nothing leaves the page.`}
-          kind="framed"
           onClick={() => setBinding({ slug, property })}
         >
           bind…

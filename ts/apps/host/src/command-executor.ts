@@ -178,7 +178,10 @@ export interface CommandEnvironment extends CommandResources {
 export function command<C extends Command, S extends z.ZodType>(
   definition: C,
   prepared: S,
-  implementation: Omit<CommandExecutor, "definition" | "prepared" | "bind" | "run" | "recover" | "seal"> & {
+  implementation: Omit<
+    CommandExecutor,
+    "definition" | "prepared" | "bind" | "run" | "recover" | "seal"
+  > & {
     seal?(prepared: z.output<S>): { request: unknown; evidence?: unknown };
     bind(
       context: Omit<CommandContext, "admission"> & {

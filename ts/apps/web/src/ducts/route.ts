@@ -15,15 +15,16 @@ import { editPatches } from "@pe/ducts-domain/sheet/index";
 import {
   route,
   field,
+  picturePose,
   subjectSchema,
   namesOf,
   split,
   whenSubject,
 } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
-import { picturePose } from "../route/slots/picture/pose.ts";
 import { draw } from "../route/draw.tsx";
-import { scrollBody } from "../route/body.ts";
+import { fillBody, scrollBody } from "../route/body.ts";
+import { overlay } from "../route/slots/picture/overlay.tsx";
 import { describeInputHistory, editMetaSchema } from "./sheet/input-history.neutral.ts";
 import { reads } from "./reads.ts";
 import { presentLosses, presentHeal, presentFan } from "./reviews.ts";
@@ -91,6 +92,9 @@ export const module = route({
   fields,
   reads: { roster, network },
   sheet: designSheet,
+  // The picture is of the opened systems. A system is a name, not geometry: the overlay hands the kernel
+  // its members to capture, with the stubs, labels, rulings and schematic the closed marks cannot express.
+  picture: { scope: "subject", overlay: overlay(() => import("./proto/e/screen.tsx"), "NetworkPicture") },
   panes: {
     "e-systems": {
       subjectList: true,
@@ -125,8 +129,10 @@ export const module = route({
       title: "Picture",
       purpose: "Inspect the model or schematic",
       bindings,
-      body: "scroll",
-      draw: draw("scroll", () => import("./proto/e/screen.tsx"), "PictureBody"),
+      kernel: "picture",
+      // The shell draws this pane from the picture slot; a picture fills its pane.
+      body: "fill",
+      draw: () => fillBody(null),
     },
     design: {
       title: "Design",

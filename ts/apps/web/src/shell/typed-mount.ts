@@ -1,5 +1,6 @@
-import { ownFindingsLeft, undoOwnFinding } from "../route/host";
+import { ownFindingsLeft, readFindings, undoOwnFinding } from "../route/host";
 import { findingCommand } from "../route/slots/findings/index.ts";
+import { FINDINGS_DOORS, FINDINGS_OWNER, type Finding } from "@pe/agent-contracts/slots";
 import { hostReadSource } from "./host-read-source.ts";
 import { z } from "zod";
 import { readableRefusal } from "../route/readable-refusal";
@@ -404,6 +405,26 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     } catch { return refused(`${spec.subject?.noun ?? "Subject"} is malformed`); }
   };
   const findingMoves: import("./timeline").TimelineEntry[] = [];
+  // The document's findings Work (ADR 0035 rule 9), for the kernel's picture pane: read on first ask, when the
+  // route's Work key arrives, after this Place's own finding write or undo, and on refresh. The key is the one the
+  // findings history door uses: the route's own document-bound Work key, as the host resolved it; a route whose
+  // Work is keyed by a member, or that keeps none, binds the document itself.
+  // ponytail: Pea's write shows on the next of those; subscribe the findings Work's acks if it must show at once.
+  let findings: readonly Finding[] = [], findingsAt: string | null = null, findingsRead = 0;
+  const findingsKey = () => (!edits?.key && owners.get(own)?.handle?.key)
+    || (input.work.address || input.work.open ? bindWork(FINDINGS_OWNER, input.work.address, undefined, input.work.open ?? undefined) : null);
+  const loadFindings = () => {
+    const key = findingsKey();
+    if (findingsAt === null || input.fixture !== null || input.history || !key) return;
+    findingsAt = workKey(key);
+    // Only the newest read lands; a read the host fails keeps what the pane shows and is a fault.
+    const read = ++findingsRead;
+    void readFindings(key, ports.findings).then((answer) => {
+      if (disposed || read !== findingsRead) return;
+      if (!answer) throw Error("The host did not answer the findings read");
+      findings = answer; notify();
+    }).catch((error) => reportFault({ code: "reading.failed", routeCode: spec.key, readingKind: FINDINGS_OWNER }, error));
+  };
   const results = new Map<string,unknown>();
   const pending = new Set<string>();
   const run = async (id: string, apply = false, supplied?:unknown) => {
@@ -431,7 +452,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         } else result=await cmd.invoke!(request,{target:input.target ?? {kind:"host"},work:handle});
         if (queryPage && (disposed || !input.custody.current() || gate.read()?.pageEpoch !== queryPage))
           throw Error("This read finished for an earlier Page; run it again");
-        results.set(id,result); syncReads(true); return result;
+        results.set(id,result); syncReads(true);
+        if (cmd.entry === FINDINGS_DOORS.write) loadFindings();
+        return result;
       } catch(error) {
         // A request or an answer its contract refuses reads as one sentence, as a Value does (`valueRefusal`);
         // the issue list (a whole regex, for a format) is diagnostics' and never the person's.
@@ -543,14 +566,15 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.journal.discardIntent(id); notify(); },
     // The person's own findings live in the document's findings Work, not this route's: their undo is that door's.
     undoFinding: async () => {
-      const key = owners.get(own)?.handle?.key;
+      const key = findingsKey();
       if (!key) return { message: "Wait for this route's Work before undoing a finding" };
       const refused = await undoOwnFinding(key, ports.findings);
       // ponytail: the History entry lives for this Place; a durable one needs the findings Work's own moves here.
-      if (!refused) { findingMoves.push({ kind: "feed", at: new Date().toISOString(), verb: "findings.undo", subject: { message: "you undid your last finding" } }); notify(); }
+      if (!refused) { findingMoves.push({ kind: "feed", at: new Date().toISOString(), verb: "findings.undo", subject: { message: "you undid your last finding" } }); loadFindings(); notify(); }
       return refused;
     },
-    ownFindingsLeft: () => { const key = owners.get(own)?.handle?.key; return key ? ownFindingsLeft(key, ports.findings) : Promise.resolve(null); },
+    findings: () => { const key = findingsKey(); if (findingsAt !== (key ? workKey(key) : "")) { findingsAt = ""; loadFindings(); } return findings; },
+    ownFindingsLeft: () => { const key = findingsKey(); return key ? ownFindingsLeft(key, ports.findings) : Promise.resolve(null); },
     restoreWork: restore, journalRefusal: () => input.readOnly || input.history ? "needs live Revit" : [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
@@ -606,7 +630,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       return core?.status === "failed" ? core.reason ?? "Reading failed" : null;
     },
     refresh: (read?:import("../route/host-read").HostRead) => {
-      requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true);
+      requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true); loadFindings();
     }, run, result:(id:string)=>results.get(id),
     review: (id: string) => { const r=reviews.get(id)??consentReviews.get(id); if(!r) return null;
       const stale = !reviewCurrent(id, r.token, r.signature);

@@ -190,7 +190,7 @@ function ClosedWorkBand({
           <span className={chipRecipe().base()}>{closed.unfinished} unfinished</span>
         ) : null}
         <span className="min-w-0 truncate">{closed.intent}</span>
-        <Button kind="framed" label="Open or choose a document in Revit" onClick={onOpen}>
+        <Button label="Open or choose a document in Revit" onClick={onOpen}>
           Open in Revit…
         </Button>
       </span>

@@ -205,7 +205,6 @@ export function WriteAction({
       <Popover.Trigger
         render={
           <Button
-            kind="framed"
             icon={icon}
             label={word}
             reason={armed ? `${says}. Planned; press to see it again` : reason}

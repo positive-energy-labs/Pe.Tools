@@ -15,7 +15,7 @@ import { createPeRoutes } from "../../../../../host/src/pe-routes";
 import { GraphHistory } from "../../../shell/graph-history";
 import { observeWorkReceipts } from "../../../../../host/src/work-receipt-feed";
 import { createWitness } from "../../../fans/cutover.test-support";
-import { RosterBody } from "../../../ducts/sheet/mount";
+import { RosterBody } from "../../../fans/mount";
 
 afterEach(cleanup);
 
@@ -137,6 +137,8 @@ test("the person undoes their own finding from its History row; Pea's newer find
     expect(await screen.findByText(/you undid your last finding/)).toBeTruthy();
     await waitFor(() => expect(screen.getByRole("button", { name: "Undo your last finding" }).getAttribute("aria-description"))
       .toBe("Nothing of yours left to undo: Pea's findings are Pea's to undo"));
+    // The reason is on the page, not only in the control's description (drive 10: a disabled Undo gave no reason).
+    expect(screen.getByText("Nothing of yours left to undo: Pea's findings are Pea's to undo")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Undo your last finding" }));
     expect(await authors()).toEqual([["pea note", "pea"]]);
   } finally {

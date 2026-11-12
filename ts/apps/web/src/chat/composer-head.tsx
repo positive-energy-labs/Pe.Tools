@@ -340,8 +340,8 @@ export function ComposerPickers({
               {head.targets.length ? (
                 <div className="hairline-t mt-1 px-2 pt-1">
                   <Button
-                    kind="framed"
                     icon={X}
+                    kind="framed"
                     label="Clear targets"
                     reason="Run this chat without Revit documents"
                     refusal={targetDisabled ? "Run this chat without Revit documents" : null}

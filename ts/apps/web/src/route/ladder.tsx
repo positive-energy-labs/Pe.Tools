@@ -165,7 +165,7 @@ export function Ladder({
         <>
           {levels[level]?.extra}
           {levels[level]?.multi && level < levels.length - 1 ? (
-            <Button kind="quiet"
+            <Button
               label={`show ${levels[level + 1]?.key}`}
               onClick={() => collection.current?.backTo(level + 1)}
             >

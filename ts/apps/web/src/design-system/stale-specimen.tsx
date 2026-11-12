@@ -99,7 +99,6 @@ function StaleSpecimen({ say }: { say: (text: string) => void }) {
       />
       <span>
         <Button
-          kind="framed"
           label="reset"
           reason="Put the three stale cells back"
           onClick={() => {

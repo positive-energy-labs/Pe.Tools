@@ -24,7 +24,6 @@ export function ComposerPending({
   return (
     <section aria-label="Pending requests" className="dl-composer-pending">
       <Button
-        kind="framed"
         label={`${count} ${count === 1 ? "request needs" : "requests need"} you`}
         aria-expanded={open}
         aria-controls={panelId}
