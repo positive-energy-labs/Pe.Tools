@@ -151,16 +151,16 @@ async function removeEmptyAcquisitionRoot(peaWork: string, root: string): Promis
   async function prune(path: string): Promise<void> {
     const before = kept.length;
     try {
-    const stat = await lstat(path).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return null;
-      throw error;
-    });
-    if (!stat) return;
-    if (!stat.isDirectory() || stat.isSymbolicLink()) {
-      kept.push(path);
-      return;
-    }
-    for (const name of await readdir(path)) await prune(join(path, name));
+      const stat = await lstat(path).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (!stat) return;
+      if (!stat.isDirectory() || stat.isSymbolicLink()) {
+        kept.push(path);
+        return;
+      }
+      for (const name of await readdir(path)) await prune(join(path, name));
       await rmdir(path);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;

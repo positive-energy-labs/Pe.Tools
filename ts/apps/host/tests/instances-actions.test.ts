@@ -2,7 +2,7 @@ import { noticeRows } from "../src/notice-feed.ts";
 import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
 import { Layer, Effect } from "effect";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { existsSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, rmdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -69,6 +69,29 @@ test.each(["absolute", "parent", "junction"])("cleanup refuses a tampered %s pru
   }
 });
 const cleanup: (() => Promise<void>)[] = [];
+test.each(["prepare", "run"])("cleanup excludes a temporary file that vanishes before %s", async (phase) => {
+  let work = "";
+  const { f, acquired, acquisition } = await acquisitionSetup(() => {
+    if (phase === "run") unlinkSync(work);
+  });
+  const origin = acquisition.intent.document!.origin;
+  if (origin.kind !== "file-copy") throw Error("expected file copy");
+  work = origin.work;
+  let vanished = false;
+  f.census.beforeSdkList = () => {
+    if (phase === "prepare" && !vanished) {
+      vanished = true;
+      unlinkSync(work);
+    }
+  };
+  const receipt = await f.admit("instances.cleanup", { acquisition: acquired.id, unsaved: "discard" });
+  expect(receipt.state).toBe("succeeded");
+  expect((receipt as { result?: { removed: string[] } }).result?.removed).not.toContain(work);
+  if (phase === "prepare") {
+    expect(receipt.prepared).toMatchObject({ state: "ready", value: { removals: expect.not.arrayContaining([work]) } });
+    expect(receipt.steps.some(step => step.key === "acquisition.remove" && (step.input as { to?: string }).to === work)).toBe(false);
+  }
+});
 afterEach(async () => {
   for (const f of cleanup.splice(0).reverse()) await f();
 });
@@ -147,6 +170,7 @@ async function setup(
     if (args[0] === "session" && args[1] === "list")
       return replayAnswer(args, { result: { state: "ok", sessions: sessionRows } });
     if (args[0] === "doc" && args[1] === "list") {
+      census.beforeSdkList?.();
       const { pid, processStartUtc } =
         census.process ?? (args.includes("--pid") ? observed.process : originalProcess);
       const reply = replayAnswer(args, {
@@ -209,6 +233,7 @@ async function setup(
     identity: "sdk-open-v1" as "sdk-open-v1" | null,
     /** External SDK session-list input can change between successive census reads. */
     beforeCensus: null as null | (() => void),
+    beforeSdkList: null as null | (() => void),
     /** The incarnation `doc list` resolves; the default fixture process when null. */
     process: null as null | {
       pid: number;
@@ -646,7 +671,7 @@ test.each(["resolved-pid", "resolved-start", "session-start", "receipt"])(
   },
 );
 /** An SDK that starts, opens the copy it is given, saves create-only, closes and stops. */
-async function acquisitionSetup() {
+async function acquisitionSetup(beforeClose?: () => void) {
   const row = controlledRow({ shape: shape("background") });
   const f = await setup(
     async (args) => {
@@ -674,6 +699,7 @@ async function acquisitionSetup() {
         return { result: { state: "ok" } };
       }
       if (args[1] === "close") {
+        beforeClose?.();
         f.census.documents = f.census.documents.filter((id) => id !== flag(args, "--doc"));
         return { result: { state: "ok" } };
       }
@@ -1492,7 +1518,7 @@ test.each([
   },
 );
 
-/* â”€â”€ ADR 0038: the host's own doors hold Pea's guarded acts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── ADR 0038: the host's own doors hold Pea's guarded acts ───────────────────────────── */
 // Mutant that turns every held expectation below red: `guards` in src/guards.ts returning `false`
 // (the caller check replaced by false). `guards` returning `true` turns the person's rows red, and
 // `isProject` returning `true` turns the family rows red.
