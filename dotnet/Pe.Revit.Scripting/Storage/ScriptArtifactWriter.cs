@@ -12,21 +12,19 @@ public sealed class ScriptArtifactWriter {
     private const long MaxTotalArtifactBytes = 50 * 1024 * 1024;
 
     private readonly List<ScriptArtifactData> _artifacts = [];
-    private readonly string _podFolder;
+    private readonly string? _podId;
     private string? _resolvedRunRoot;
     private long _totalBytes;
 
-    /// <summary>One run in the pod the script ran from; pod-less runs act from the default pod.</summary>
-    public ScriptArtifactWriter(string podFolder) => this._podFolder = string.IsNullOrWhiteSpace(podFolder)
-        ? throw new ArgumentException("A run needs the pod folder it acts from.", nameof(podFolder))
-        : podFolder;
+    /// <summary>One run of the pod with this manifest id, or of no pod (an inline snippet) when it is null.</summary>
+    public ScriptArtifactWriter(string? podId) => this._podId = podId;
 
     public IReadOnlyList<ScriptArtifactData> Artifacts => this._artifacts;
 
     /// <summary>The run-relative names of the consumed input, written before compilation.</summary>
     public IReadOnlyList<string> Inputs { get; private set; } = [];
 
-    private string RunRoot => this._resolvedRunRoot ??= PodRuns.NewRunFolder(this._podFolder);
+    private string RunRoot => this._resolvedRunRoot ??= PodRuns.NewRunFolder(this._podId);
 
     /// <summary>Writes the exact consumed script source before anything compiles or runs; a failure throws before any effect.</summary>
     internal void WriteInput(object metadata, IReadOnlyList<PodRunInputFile> files) =>

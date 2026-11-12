@@ -9,13 +9,22 @@ using Pe.Shared.Scripting.Execution;
 
 namespace Pe.Revit.Tests;
 
+/// <summary>Test pods are created by name in the user home, where a person's new pod goes.</summary>
+file static class UserPods {
+    public static string Root(string workspaceKey) => ScriptingWorkspaceLocations.ResolveWorkspaceRoot(workspaceKey);
+    public static string ProjectFile(string workspaceKey) => Path.Combine(Root(workspaceKey), RevitScriptingStorageLocations.ProjectFileName);
+    public static string PodManifest(string workspaceKey) => Path.Combine(Root(workspaceKey), RevitScriptingStorageLocations.PodManifestFileName);
+    public static string SourceDirectory(string workspaceKey) => Path.Combine(Root(workspaceKey), RevitScriptingStorageLocations.SourceDirectoryName);
+    public static string SampleScript(string workspaceKey) => Path.Combine(SourceDirectory(workspaceKey), RevitScriptingStorageLocations.SampleFileName);
+}
+
 [TestFixture]
 public sealed class RevitScriptingPortTests {
     [Test]
     public void Captured_pod_script_writes_readable_output_and_a_matching_receipt(UIApplication uiApplication) {
         var document = EnsureActiveProjectDocument(uiApplication);
         var workspaceKey = "pod-output-proof-" + Guid.NewGuid().ToString("N");
-        var root = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        var root = UserPods.Root(workspaceKey);
         Assert.That(Directory.Exists(root), Is.False);
         ScriptPodSourceFile FileBytes(string path, string text) => new(path, Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text)));
         var bundle = new ScriptPodSourceBundle([
@@ -93,37 +102,6 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
-    public void Portable_project_generation_omits_references_but_preserves_packages_and_usings() {
-        var generator = CreateProjectGenerator();
-        var existingProject = """
-                              <Project Sdk="Microsoft.NET.Sdk">
-                                <PropertyGroup>
-                                  <TargetFramework>net8.0-windows</TargetFramework>
-                                </PropertyGroup>
-                                <ItemGroup>
-                                  <Reference Include="MachineSpecific">
-                                    <HintPath>C:\temp\machine-specific.dll</HintPath>
-                                  </Reference>
-                                  <PackageReference Include="Example.Package" Version="1.2.3" />
-                                  <Using Include="System.Text.Json" />
-                                </ItemGroup>
-                              </Project>
-                              """;
-
-        var generated = generator.GeneratePortableProjectContent(
-            existingProject,
-            Path.GetTempPath(),
-            "net8.0-windows"
-        );
-
-        Assert.That(generated, Does.Contain("""<Compile Include="src/**/*.cs" />"""));
-        Assert.That(generated, Does.Contain("""<PackageReference Include="Example.Package" Version="1.2.3" />"""));
-        Assert.That(generated, Does.Contain("""<Using Include="System.Text.Json" />"""));
-        Assert.That(generated, Does.Not.Contain("machine-specific.dll"));
-        Assert.That(generated, Does.Not.Contain("<Reference Include=\"MachineSpecific\">"));
-    }
-
-    [Test]
     public void Generated_project_reinjects_current_revit_year_packages() {
         var runtimeAssemblyPath = typeof(PeScriptContainer).Assembly.Location;
         var generator = CreateProjectGenerator();
@@ -151,49 +129,6 @@ public sealed class RevitScriptingPortTests {
             Does.Contain("""<PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2026.*" />"""));
         Assert.That(generated, Does.Not.Contain("Version=\"2024.*\""));
         Assert.That(generated, Does.Contain("""<PackageReference Include="Example.Package" Version="1.2.3" />"""));
-    }
-
-    [Test]
-    public void Workspace_bootstrap_creates_workspace_guidance_files() {
-        var workspaceKey = $"test-{Guid.NewGuid():N}";
-        var root = Path.Combine(Path.GetTempPath(), $"pe-pod-bootstrap-{Guid.NewGuid():N}");
-        var workspaceRoot = Path.Combine(root, "Pods", workspaceKey);
-        try {
-            var bootstrapService = new ScriptWorkspaceBootstrapService(
-                CreateProjectGenerator(),
-                key => Path.Combine(root, "Pods", key),
-                Path.Combine(root, "Pe.Tools")
-            );
-            var runtimeAssemblyPath = typeof(PeScriptContainer).Assembly.Location;
-
-            var result = bootstrapService.Bootstrap(
-                workspaceKey,
-                "2025",
-                "net8.0-windows",
-                runtimeAssemblyPath
-            );
-
-            var agentsPath = Path.Combine(workspaceRoot, "AGENTS.md");
-            Assert.That(File.Exists(agentsPath), Is.True);
-            Assert.That(File.ReadAllText(agentsPath),
-                Does.Contain("Every workspace is a Pod: `pod.json` is validated, all `src/**/*.cs` compile together, and only declared entrypoints are runnable."));
-            Assert.That(File.ReadAllText(agentsPath), Does.Contain("add new scripts to `pod.json` under `entrypoints` first"));
-            Assert.That(File.ReadAllText(agentsPath), Does.Contain("ReadOnly` (default) runs inside a rollback guard"));
-            Assert.That(File.ReadAllText(agentsPath), Does.Not.Contain("lane"));
-            Assert.That(File.Exists(result.ProductAgentsPath), Is.True);
-            Assert.That(File.Exists(result.ProductReadmePath), Is.True);
-            Assert.That(File.Exists(result.WorkspaceReadmePath), Is.True);
-            Assert.That(File.ReadAllText(result.WorkspaceReadmePath), Does.Not.Contain("lane"));
-            Assert.That(File.Exists(result.PodManifestPath), Is.True);
-            Assert.That(File.ReadAllText(result.PodManifestPath), Does.Contain("\"entrypoints\": []"));
-            Assert.That(Directory.EnumerateFiles(Path.Combine(workspaceRoot, "src")), Is.Empty);
-            Assert.That(Directory.Exists(Path.Combine(workspaceRoot, "settings")), Is.True);
-            Assert.That(Directory.Exists(Path.Combine(workspaceRoot, "assets")), Is.True);
-            Assert.That(Directory.Exists(Path.Combine(workspaceRoot, "output")), Is.True);
-            Assert.That(result.GeneratedFiles, Does.Contain(agentsPath));
-        } finally {
-            DeleteWorkspace(root);
-        }
     }
 
     [Test]
@@ -232,19 +167,12 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
-    public void Revit_scripting_storage_locations_match_shared_workspace_locations() {
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot("default");
-
-        Assert.That(workspaceRoot, Is.EqualTo(ScriptingWorkspaceLocations.ResolveWorkspaceRoot("default")));
+    public void A_new_pod_goes_to_the_user_home_and_inline_traces_to_machine_state() {
+        Assert.That(RevitScriptingStorageLocations.ResolveNewPodFolder("default"), Is.EqualTo(ScriptingWorkspaceLocations.ResolveWorkspaceRoot("default")));
         Assert.That(
-            RevitScriptingStorageLocations.ResolveProjectFilePath("default"),
-            Is.EqualTo(Path.Combine(workspaceRoot, "PeScripts.csproj"))
-        );
-        Assert.That(
-            RevitScriptingStorageLocations.ResolveInlineTraceDirectory().EndsWith(Path.Combine("Pe.Tools", "Pods", "default", "output", "inline"), StringComparison.OrdinalIgnoreCase),
+            RevitScriptingStorageLocations.ResolveInlineTraceDirectory().EndsWith(Path.Combine("state", "Runs", "_inline"), StringComparison.OrdinalIgnoreCase),
             Is.True
         );
-
     }
 
     [Test]
@@ -535,12 +463,12 @@ public sealed class RevitScriptingPortTests {
     public void Inline_execution_ignores_workspace_project_file(UIApplication uiApplication) {
         _ = EnsureActiveProjectDocument(uiApplication);
         var workspaceKey = $"test-inline-project-override-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        var workspaceRoot = UserPods.Root(workspaceKey);
         Directory.CreateDirectory(workspaceRoot);
 
         try {
             File.WriteAllText(
-                RevitScriptingStorageLocations.ResolveProjectFilePath(workspaceKey),
+                UserPods.ProjectFile(workspaceKey),
                 """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <ItemGroup>
@@ -974,7 +902,7 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Inline_snippet_execution_persists_trace_files_without_mutating_workspace_source(UIApplication uiApplication) {
         var workspaceKey = $"test-inline-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        var workspaceRoot = UserPods.Root(workspaceKey);
         try {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
@@ -1007,7 +935,7 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Inline_body_snippet_allows_leading_using_directives(UIApplication uiApplication) {
         var workspaceKey = $"test-inline-using-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        var workspaceRoot = UserPods.Root(workspaceKey);
         try {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
@@ -1033,7 +961,7 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Compile_failure_guides_document_context_name(UIApplication uiApplication) {
         var workspaceKey = $"test-document-hint-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        var workspaceRoot = UserPods.Root(workspaceKey);
         try {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
@@ -1066,7 +994,7 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Inline_compile_failure_references_submitted_source_name(UIApplication uiApplication) {
         var workspaceKey = $"test-inline-fail-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        var workspaceRoot = UserPods.Root(workspaceKey);
         try {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
@@ -1098,12 +1026,12 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Second_request_after_inline_failure_still_succeeds(UIApplication uiApplication) {
         var workspaceKey = $"test-inline-recovery-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
+        var workspaceRoot = UserPods.Root(workspaceKey);
+        Directory.CreateDirectory(UserPods.SourceDirectory(workspaceKey));
 
         try {
             File.WriteAllText(
-                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
+                UserPods.SampleScript(workspaceKey),
                 """
                 public sealed class WorkspaceScript : PeScriptContainer
                 {
@@ -1187,7 +1115,7 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Missing_workspace_file_is_rejected(UIApplication uiApplication) {
         var workspaceKey = $"test-missing-workspace-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        var workspaceRoot = UserPods.Root(workspaceKey);
         Directory.CreateDirectory(workspaceRoot);
 
         try {
@@ -1212,12 +1140,12 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Workspace_execution_without_pod_manifest_is_rejected(UIApplication uiApplication) {
         var workspaceKey = $"test-no-pod-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
+        var workspaceRoot = UserPods.Root(workspaceKey);
+        Directory.CreateDirectory(UserPods.SourceDirectory(workspaceKey));
 
         try {
             File.WriteAllText(
-                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
+                UserPods.SampleScript(workspaceKey),
                 """
                 public sealed class WorkspaceScript : PeScriptContainer
                 {
@@ -1252,12 +1180,12 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Pod_workspace_execution_compiles_all_src_and_uses_helper_files(UIApplication uiApplication) {
         var workspaceKey = $"test-pod-helper-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
+        var workspaceRoot = UserPods.Root(workspaceKey);
+        Directory.CreateDirectory(UserPods.SourceDirectory(workspaceKey));
 
         try {
             File.WriteAllText(
-                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
+                UserPods.SampleScript(workspaceKey),
                 """
                 public sealed class WorkspaceScript : PeScriptContainer
                 {
@@ -1269,7 +1197,7 @@ public sealed class RevitScriptingPortTests {
                 """
             );
             File.WriteAllText(
-                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "WorkspaceHelper.cs"),
+                Path.Combine(UserPods.SourceDirectory(workspaceKey), "WorkspaceHelper.cs"),
                 """
                 public static class WorkspaceHelper
                 {
@@ -1308,12 +1236,12 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Pod_workspace_execution_fails_when_any_src_file_fails_compilation(UIApplication uiApplication) {
         var workspaceKey = $"test-pod-broken-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
+        var workspaceRoot = UserPods.Root(workspaceKey);
+        Directory.CreateDirectory(UserPods.SourceDirectory(workspaceKey));
 
         try {
             File.WriteAllText(
-                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
+                UserPods.SampleScript(workspaceKey),
                 """
                 public sealed class WorkspaceScript : PeScriptContainer
                 {
@@ -1325,7 +1253,7 @@ public sealed class RevitScriptingPortTests {
                 """
             );
             File.WriteAllText(
-                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "BrokenSibling.cs"),
+                Path.Combine(UserPods.SourceDirectory(workspaceKey), "BrokenSibling.cs"),
                 "public sealed class BrokenSibling { public void Nope( }"
             );
             WritePodManifest(workspaceKey, "src/SampleScript.cs");
@@ -1350,12 +1278,12 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Pod_workspace_execution_requires_declared_entrypoint(UIApplication uiApplication) {
         var workspaceKey = $"test-pod-entrypoint-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
+        var workspaceRoot = UserPods.Root(workspaceKey);
+        Directory.CreateDirectory(UserPods.SourceDirectory(workspaceKey));
 
         try {
             File.WriteAllText(
-                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
+                UserPods.SampleScript(workspaceKey),
                 """
                 public sealed class WorkspaceScript : PeScriptContainer
                 {
@@ -1367,7 +1295,7 @@ public sealed class RevitScriptingPortTests {
                 """
             );
             File.WriteAllText(
-                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "Other.cs"),
+                Path.Combine(UserPods.SourceDirectory(workspaceKey), "Other.cs"),
                 """
                 public sealed class OtherScript : PeScriptContainer
                 {
@@ -1399,12 +1327,12 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Pod_workspace_execution_rejects_manifest_with_origin_field(UIApplication uiApplication) {
         var workspaceKey = $"test-pod-origin-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
+        var workspaceRoot = UserPods.Root(workspaceKey);
+        Directory.CreateDirectory(UserPods.SourceDirectory(workspaceKey));
 
         try {
             File.WriteAllText(
-                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
+                UserPods.SampleScript(workspaceKey),
                 """
                 public sealed class WorkspaceScript : PeScriptContainer
                 {
@@ -1418,7 +1346,7 @@ public sealed class RevitScriptingPortTests {
             // 'origin' was removed from the pod.json schema; the strict validator now rejects it
             // as an unknown field.
             File.WriteAllText(
-                RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey),
+                UserPods.PodManifest(workspaceKey),
                 $$"""
                 {
                   "schemaVersion": 2,
@@ -1502,7 +1430,7 @@ public sealed class RevitScriptingPortTests {
 
     private static void WritePodManifest(string workspaceKey, params string[] entrypointSourcePaths) =>
         File.WriteAllText(
-            RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey),
+            UserPods.PodManifest(workspaceKey),
             CreatePodManifestText(workspaceKey, entrypointSourcePaths)
         );
 

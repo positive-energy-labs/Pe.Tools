@@ -4,6 +4,8 @@ using Pe.App.Host;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Scripting.Pods;
 using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts.Scripting;
+using Pe.Shared.Product;
 using System.Text;
 
 namespace Pe.Revit.Tests;
@@ -37,6 +39,8 @@ public sealed class PodRunInputTests {
     public void Family_apply_refusal_cancel_and_input_failure_leave_full_native_state_unchanged(UIApplication ui) {
         var (pod, source, applySpec) = NewPod(ApplySpec);
         var (blockedPod, blockedSource, _) = NewPod(ApplySpec);
+        // A file where the pod's run folder would go: the run input cannot be written, so nothing may run.
+        var blockedRuns = Path.Combine(ProductRuntimeLayout.Current.State.RunsPath, blockedSource.Root.Id!);
         Document? document = null;
         try {
             document = NewTwoTypeFamily(ui.Application, "Input apply refusals");
@@ -54,11 +58,49 @@ public sealed class PodRunInputTests {
             AssertRun(cancelledResult.ReceiptPath!, "Cancelled", applySpec, "cancelled");
             AssertUnchanged(document, baseline);
             var validPlanHash = FamilyFoundryBridgeOps.PlanFamilies(applySpec, document).Families.Single().PlanHash;
-            File.WriteAllText(Path.Combine(blockedPod, "output"), "block run directory creation");
+            Directory.CreateDirectory(ProductRuntimeLayout.Current.State.RunsPath);
+            File.WriteAllText(blockedRuns, "block run directory creation");
             Assert.Throws<IOException>(() => FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", applySpec, blockedSource,
                 new Dictionary<long, string> { [familyId] = validPlanHash }, document, null));
             AssertUnchanged(document, baseline);
-        } finally { RevitFamilyFixtureHarness.CloseDocument(document); DeletePod(pod); DeletePod(blockedPod); }
+        } finally { RevitFamilyFixtureHarness.CloseDocument(document); DeletePod(pod); DeletePod(blockedPod); File.Delete(blockedRuns); }
+    }
+
+    // ADR 0037 rule 6, on the real run writer: a native apply through the engine edge writes its input, its
+    // outputs and its receipt under <state root>\state\Runs\<pod-id>\<run-id>, and no byte into the pod, which
+    // may sit in a home other people share. Written by the homes crusade and owed one Revit run.
+    // Mutant: put the run back under the pod (`PodRuns.NewRunFolder` to `Path.Combine(<pod folder>, "output", RunId())`)
+    // fails the snapshot assert and the state-path assert.
+    [Test]
+    public void A_native_run_writes_under_machine_state_and_no_byte_into_the_pod(UIApplication ui) {
+        var (pod, source, applySpec) = NewPod(ApplySpec);
+        Dictionary<string, string> Snapshot() => Directory.EnumerateFileSystemEntries(pod, "*", SearchOption.AllDirectories)
+            .ToDictionary(path => Path.GetRelativePath(pod, path), path => File.Exists(path) ? Convert.ToHexString(File.ReadAllBytes(path)) : "<dir>");
+        var before = Snapshot();
+        var runs = Path.Combine(ProductRuntimeLayout.Current.State.RunsPath, source.Root.Id!);
+        Document? document = null;
+        try {
+            document = NewTwoTypeFamily(ui.Application, "Run writer proof");
+            var familyId = document.OwnerFamily.Id.Value();
+            var plan = FamilyFoundryBridgeOps.PlanFamilies(applySpec, document).Families.Single();
+            var result = FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", applySpec, source,
+                new Dictionary<long, string> { [familyId] = plan.PlanHash }, document, null);
+            var run = Path.GetDirectoryName(result.ReceiptPath!)!;
+            Assert.Multiple(() => {
+                Assert.That(result.Receipts.Single().Success, Is.True);
+                Assert.That(Snapshot(), Is.EqualTo(before), "the pod is byte-identical after the run");
+                Assert.That(Directory.Exists(Path.Combine(pod, "output")), Is.False);
+                Assert.That(Path.GetDirectoryName(run), Is.EqualTo(runs));
+                Assert.That(runs, Does.Contain(Path.Combine("state", "Runs")));
+                Assert.That(runs.StartsWith(ProductPathing.UserRoot(), StringComparison.OrdinalIgnoreCase), Is.False, "run output is outside the user home");
+                Assert.That(File.Exists(Path.Combine(run, "input.json")), Is.True);
+                Assert.That(Directory.EnumerateFiles(run, "*", SearchOption.AllDirectories).Count(), Is.GreaterThan(3));
+            });
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+            DeletePod(pod);
+            if (Directory.Exists(runs)) Directory.Delete(runs, true);
+        }
     }
 
     [Test]
@@ -143,7 +185,8 @@ public sealed class PodRunInputTests {
     private static (string Folder, PodComposedSource Source, string Composed) NewPod(string spec) {
         var pods = new ScriptPodPreparationService();
         var id = "input-proof-" + Guid.NewGuid().ToString("N");
-        var folder = Path.Combine(pods.PodsRoot, id);
+        // A new pod goes to the user home; the host then admits it and names its folder back.
+        var folder = ScriptingWorkspaceLocations.ResolveWorkspaceRoot(id);
         Directory.CreateDirectory(Path.Combine(folder, "settings"));
         File.WriteAllText(Path.Combine(folder, "pod.json"), $$"""{"schemaVersion":2,"id":"{{id}}","name":"Input proof","version":"1"}""");
         var member = JObject.Parse(spec);
@@ -161,8 +204,12 @@ public sealed class PodRunInputTests {
         var run = Path.GetDirectoryName(receiptPath)!;
         var receipt = JObject.Parse(File.ReadAllText(receiptPath));
         var metadata = JObject.Parse(File.ReadAllText(Path.Combine(run, "input.json")));
-        var pod = Path.GetDirectoryName(Path.GetDirectoryName(run))!;
+        var podId = receipt["podId"]!.Value<string>()!;
+        var pod = ScriptingWorkspaceLocations.ResolveWorkspaceRoot(podId);
         Assert.Multiple(() => {
+            // The run is machine state, keyed on the pod id; the pod itself holds no output.
+            Assert.That(Path.GetDirectoryName(run), Is.EqualTo(Path.Combine(ProductRuntimeLayout.Current.State.RunsPath, podId)));
+            Assert.That(Directory.Exists(Path.Combine(pod, "output")), Is.False);
             Assert.That(receipt["outcome"]!.Value<string>(), Is.EqualTo(outcome));
             Assert.That(receipt["outputs"]!.Values<string>(), Is.SupersetOf(new[] { "input.json", "effective-input.json", "source/00-input.json", "source/01-base.json" }));
             Assert.That(metadata["operation"]?.Value<string>(), Is.Not.Empty);

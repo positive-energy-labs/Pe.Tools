@@ -106,17 +106,13 @@ public sealed class RevitScriptExecutionService(
             }
 
             var plan = planResult.Plan;
-            // A pod run acts from its own pod; an inline snippet acts from no pod, so its run lands
-            // in the default pod beside the inline traces, as operation input that names no member.
-            var runPod = plan.ExecutionMode == ScriptWorkspaceExecutionMode.Pod
-                ? plan.WorkspaceRoot
-                : RevitScriptingStorageLocations.ResolveWorkspaceRoot(ScriptingWorkspaceLayout.DefaultWorkspaceKey);
-            outputSink.Artifacts = new ScriptArtifactWriter(runPod);
+            // A pod run is keyed on its manifest id; an inline snippet acts from no pod, so its run lands
+            // in the pod-less runs beside the inline traces, as operation input that names no member.
+            outputSink.Artifacts = new ScriptArtifactWriter(plan.PodManifest?.Id);
             revitVersion = plan.RevitVersion;
             try {
                 outputSink.Attribution = plan.Attribution ?? PodReceipt.ForOperation(
-                    new ScriptPodPreparationService().ResolveId(runPod),
-                    "scripting.execute", null, PodRunOutcome.Failed, [], null);
+                    null, "scripting.execute", null, PodRunOutcome.Failed, [], null);
                 outputSink.Artifacts.WriteInput(PodRuns.WithReviewBasis(RunInputMetadata(plan, request), null), RunInputFiles(plan, request));
             } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException) {
                 AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error("run.input", $"The run input could not be saved, so nothing ran: {exception.Message}"));
@@ -439,9 +435,9 @@ public sealed class RevitScriptExecutionService(
 
         try {
             RequireTargetLifetime(uiApplication, document);
-            var workspaceKey = ScriptingWorkspaceLayout.NormalizeWorkspaceKey(request.WorkspaceKey);
-            var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-
+            // Relative reference paths resolve against the pod's own folder, and only the host knows which home
+            // holds it. An inline snippet has no pod and no authored references; its base is the pod-less runs.
+            var workspaceRoot = ProductRuntimeLayout.Current.State.PodlessRunsPath;
 
             ScriptSourceSet sourceSet;
             ScriptWorkspaceExecutionMode executionMode;
@@ -458,18 +454,18 @@ public sealed class RevitScriptExecutionService(
             } else {
                 var bundle = request.SourceBundle
                              ?? throw new ArgumentException("A pod execution requires the host-captured sourceBundle.", nameof(request.SourceBundle));
-                var preparation = ScriptPodPreparationService.Prepare(workspaceRoot, bundle) switch {
+                // The key is the caller's name for the pod: a label here, never a path native code joins.
+                var preparation = ScriptPodPreparationService.Prepare(request.WorkspaceKey, bundle) switch {
                     PreparedPod prepared => prepared,
                     RefusedPod refused => throw new ArgumentException(refused.Reason, PodManifestValidator.DiagnosticStage),
                     _ => throw new InvalidOperationException("Pod preparation is prepared or refused.")
                 };
-                var captured = ScriptPodSourceNormalizer.Normalize(bundle, workspaceKey, request.SourcePath!);
+                var captured = ScriptPodSourceNormalizer.Normalize(bundle, request.WorkspaceKey, request.SourcePath!);
                 sourceSet = captured.SourceSet;
                 executionMode = ScriptWorkspaceExecutionMode.Pod;
                 podManifest = captured.Manifest;
-                // The frozen manifest owns attribution; a renamed folder is only the current output locator.
+                // The frozen manifest owns identity; the host names the absolute folder that holds it today.
                 workspaceRoot = new ScriptPodPreparationService().ResolveFolder(podManifest.Id);
-                workspaceKey = Path.GetFileName(workspaceRoot);
                 projectSeed = captured.ProjectSeed;
                 var member = preparation.Members.Single(item => string.Equals(item.Path, "src/" + sourceSet.EntryPointSourceName, StringComparison.OrdinalIgnoreCase));
                 // Outcome and output references are settled when CreateResult observes the final result.
@@ -492,7 +488,6 @@ public sealed class RevitScriptExecutionService(
                     revitVersion,
                     targetFramework,
                     runtimeAssemblyPath,
-                    workspaceKey,
                     workspaceRoot,
                     request.PermissionMode,
                     sourceSet,

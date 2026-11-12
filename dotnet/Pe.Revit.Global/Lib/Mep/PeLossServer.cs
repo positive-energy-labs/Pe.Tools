@@ -10,7 +10,7 @@ namespace Pe.Revit.Global.Lib.Mep;
 /// <summary>Consumes host-priced results. Revit recalculation never runs a second loss engine.</summary>
 public sealed class PeLossServer : IDuctFittingAndAccessoryPressureDropServer {
     public static readonly Guid Id = new("5e1f0c0e-7e10-4c0e-9e1f-0000c0ef0001");
-    private static readonly Guid SchemaId = new("5e1f0c0e-7e10-4c0e-9e1f-0000c0ef0003");
+    private static readonly Guid SchemaId = DuctLossResult.Owner.Guid;
     public const string ResultsField = "Results";
 
     /// <summary>Registers and activates the server once per process.</summary>
@@ -33,10 +33,10 @@ public sealed class PeLossServer : IDuctFittingAndAccessoryPressureDropServer {
 
     private static Schema Build() {
         var b = new SchemaBuilder(SchemaId);
-        b.SetSchemaName("PeDuctLossResults");
+        b.SetSchemaName(DuctLossResult.Owner.Name);
         b.SetReadAccessLevel(AccessLevel.Public);
         b.SetWriteAccessLevel(AccessLevel.Public);
-        b.SetDocumentation("Host-priced coefficients and velocity-pressure bases. Reapply from Pe when the basis changes.");
+        b.SetDocumentation(DuctLossResult.Owner.Description);
         _ = b.AddSimpleField(ResultsField, typeof(string));
         return b.Finish();
     }
@@ -52,13 +52,9 @@ public sealed class PeLossServer : IDuctFittingAndAccessoryPressureDropServer {
     public bool Calculate(DuctFittingAndAccessoryPressureDropData data) {
         var entity = data.GetDuctFittingAndAccessoryData().GetEntity();
         if (!entity.IsValid()) return false;
-        IReadOnlyList<DuctLossResult>? results;
-        try {
-            results = JsonConvert.DeserializeObject<List<DuctLossResult>>(entity.Get<string>(ResultsField));
-        } catch (JsonException ex) {
-            Log.Warning(ex, "Pe loss server: invalid host results; reapply losses from Pe");
-            return false;
-        }
+        // The schema cannot gain fields, so the version rides inside the text: the owner envelope (ADR 0032 rule 7).
+        var results = DuctLossResult.Decode(entity.Get<string>(ResultsField));
+        if (results is null) Log.Warning("Pe loss server: host results are not a version {Version} envelope; reapply losses from Pe", DuctLossResult.Owner.Version);
         if (results is not { Count: > 0 } || results.Any(r => !Valid(r))) return false;
         var items = data.GetPresureDropItems();
         var coefficients = new List<double>();

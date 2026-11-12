@@ -99,7 +99,7 @@ public sealed class RoomsRerunTests
             Assert.That(plan.Create, Is.Empty);
             Assert.That(plan.Delete, Is.Empty);
             Assert.That(plan.Redesignate, Is.Null);
-            Assert.That(new RegionProvenance(1, Guid.Empty, "run", "", 0).ToJson(), Does.Not.Contain("mergedFrom"));
+            Assert.That(new RegionProvenance(Guid.Empty, "run", "", 0).ToJson(), Does.Not.Contain("mergedFrom"));
         });
     }
 
@@ -166,7 +166,7 @@ public sealed class RoomsRerunTests
         var held = new Pe.Revit.Partition.Room(0, Pe.Revit.Partition.Disposition.Held, Pe.Revit.Partition.Reasons.ZoneEdgeOnly,
             [], 737.2, 5, 6, 0, 0, 9, []);
         var sole = new RoomResult { Id = "R01", RawSqft = 737.2, Partition = held };
-        var zone = new RegionProvenance(1, Guid.Empty, Rooms.RunDrawn, "", 0);
+        var zone = new RegionProvenance(Guid.Empty, Rooms.RunDrawn, "", 0);
         var flipped = RoomsRerun.Redesignated(zone, Guid.NewGuid(), sole, "hash");
         Assert.Multiple(() => {
             Assert.That(flipped.Partition!.Reason, Is.Null);
@@ -183,9 +183,9 @@ public sealed class RoomsRerunTests
         // The w9 snapshot read the garage with no zone (the level scope guid), so /rooms called it unassigned.
         var guid = Guid.NewGuid();
         var sole = new RoomResult { Id = "R01", RawSqft = 99.5 };
-        var flipped = RoomsRerun.Redesignated(new RegionProvenance(1, Guid.NewGuid(), Rooms.RunDrawn, "", 0), guid, sole, "h");
+        var flipped = RoomsRerun.Redesignated(new RegionProvenance(Guid.NewGuid(), Rooms.RunDrawn, "", 0), guid, sole, "h");
         var live = Guid.NewGuid();
-        var scope = new RegionProvenance(1, Guid.NewGuid(), Rooms.RunDrawn, "", 0);
+        var scope = new RegionProvenance(Guid.NewGuid(), Rooms.RunDrawn, "", 0);
         Assert.Multiple(() => {
             Assert.That(flipped.ZoneGuid, Is.EqualTo(guid));
             Assert.That(RoomsRerun.ZoneOf(guid, flipped, _ => false), Is.EqualTo(guid));
@@ -244,7 +244,7 @@ public sealed class RoomsRerunTests
     [Test]
     public void Held_field_edit_claims_custody_but_noop_does_not()
     {
-        var provenance = new RegionProvenance(1, Guid.NewGuid(), "machine-run", "source-room", 12)
+        var provenance = new RegionProvenance(Guid.NewGuid(), "machine-run", "source-room", 12)
             { GeometryHash = "geometry", WallHash = "wall", Flags = ["stale"] };
         var before = new RoomFields("", "hall", null, null, null, null, null, null);
         var changed = before with { Name = "Authored Held" };

@@ -31,16 +31,6 @@ foreach ($row in $table.stateRoots) {
     }
 }
 if ($failures.Count) { throw ($failures -join [Environment]::NewLine) }
-$documents = [Environment]::GetFolderPath('MyDocuments')
-foreach ($row in $table.contentHomes) {
-    $expected = @($row.homes | ForEach-Object { $_.Replace('%DOCUMENTS%', $documents) }) -join '|'
-    $actual = @(Resolve-ContentHomes -ProductHomeOverride $row.productHome -SharedRoot $row.sharedRoot) -join '|'
-    if ($actual -ne $expected) { throw "$($row.name): homes expected '$expected', received '$actual'" }
-    $firm = Resolve-SharedFirmDir -SharedRoot $row.sharedRoot
-    $keys = Resolve-SharedKeysPath -SharedRoot $row.sharedRoot
-    if ($firm -ne $row.firm -or $keys -ne $row.keys) { throw "$($row.name): shared settings expected '$($row.firm)' / '$($row.keys)', received '$firm' / '$keys'" }
-    Write-Output "PASS $($row.name)"
-}
 # A caller that names no lane is refused rather than defaulted to installed.
 foreach ($name in 'Lane', 'Root') {
     $parameter = (Get-Command Resolve-ProductRuntimeRoot).Parameters[$name]

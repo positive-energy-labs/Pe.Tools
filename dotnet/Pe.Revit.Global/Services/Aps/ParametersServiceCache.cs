@@ -370,7 +370,7 @@ public sealed class EnrichedParameterData {
 }
 
 public sealed class CacheParametersServiceSettings : IParametersTokenProvider {
-    // Firm-level ids: user preferences.json, then the shared one, then a refusal (ADR 0035 rule 11).
+    // Firm-level ids: the firm home's Settings\preferences.json, else a refusal (ADR 0037).
     public string GetAccountId() => ProductPreferences.FirmId(p => p.Bim360AccountId, nameof(ProductPreferences.Bim360AccountId));
     public string GetGroupId() => ProductPreferences.FirmId(p => p.ParamServiceGroupId, nameof(ProductPreferences.ParamServiceGroupId));
     public string GetCollectionId() =>

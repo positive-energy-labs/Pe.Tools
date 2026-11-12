@@ -1,5 +1,6 @@
 namespace Pe.Shared.Product;
 
+/// <summary>The user home's <c>Pods</c> folder, where a person's new pod is created. A pod in another home is named by the host, by absolute folder.</summary>
 public sealed record ScriptingWorkspaceLayout(string RootPath) {
     public const string DefaultWorkspaceKey = "default";
     public const string ProjectFileName = "PeScripts.csproj";
@@ -8,8 +9,10 @@ public sealed record ScriptingWorkspaceLayout(string RootPath) {
     public const string PodManifestFileName = ProductPathNames.PodManifestFileName;
     public const string SourceDirectoryName = "src";
     public const string SampleScriptFileName = "SampleScript.cs";
-    public const string VsCodeDirectoryName = ".vscode";
-    public const string VsCodeSettingsFileName = "settings.json";
+
+    /// <summary>The per-machine props file every pod's <see cref="ProjectFileName" /> imports (homes freeze shape 8).</summary>
+    /// <remarks>Its path and its import spelling are <see cref="ProductPathing.MachinePropsPath" /> and <see cref="ProductPathing.MachinePropsImport" />.</remarks>
+    public const string MachinePropsFileName = "PeScripts.props";
 
     public string ResolveWorkspaceRoot(string? workspaceKey) =>
         ProductPathing.ResolveSafeSubDirectoryPath(
@@ -35,9 +38,6 @@ public sealed record ScriptingWorkspaceLayout(string RootPath) {
 
     public string ResolveSampleScriptPath(string? workspaceKey) =>
         Path.Combine(this.ResolveSourceDirectoryPath(workspaceKey), SampleScriptFileName);
-
-    public string ResolveVsCodeSettingsPath(string? workspaceKey) =>
-        Path.Combine(this.ResolveWorkspaceRoot(workspaceKey), VsCodeDirectoryName, VsCodeSettingsFileName);
 
     public string ResolveWorkspaceSourceFilePath(string? workspaceKey, string relativePath) =>
         ProductPathing.ResolveSafeRelativeFilePath(

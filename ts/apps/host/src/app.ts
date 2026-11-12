@@ -56,7 +56,7 @@ import { RequestIdentity } from "./request-services.ts";
 import { RunConsents } from "./run-consent.ts";
 import { SdkDriverLive } from "./sdk-session.ts";
 import { instancesReadingsRoute } from "./session-route.ts";
-import { isSettingsSchemaUrl } from "./settings.ts";
+import { settingsSchemaPath } from "./settings.ts";
 import {
   createShare,
   shareIntentFile,
@@ -76,15 +76,15 @@ const bridgeWsRoute = HttpRouter.add("GET", BRIDGE_PATH, (req) =>
   Effect.flatMap(RevitBridge, (bridge) => bridge.handleConnection(req)),
 );
 
-// Live settings authoring schema, straight from the connected session. This is
-// the $schema URL settings documents carry — IDE JSON LSPs fetch it on open.
+// Live settings authoring schema, straight from the connected session, at the
+// library path settings documents store as $schema.
 // Never persisted: value-domain samples inside are derived from the open document.
 export const settingsSchemaRoute = HttpRouter.add("GET", "/schemas/settings/*", (req) =>
   Effect.gen(function* () {
     const identity = yield* RequestIdentity;
-    const schemaUrl = new URL(req.url, `http://${req.headers.host ?? "127.0.0.1"}`).href;
-    if (!isSettingsSchemaUrl(schemaUrl))
-      return Response.jsonUnsafe({ error: `No schema at ${schemaUrl}` }, { status: 404 });
+    const schemaUrl = settingsSchemaPath(req.url);
+    if (!schemaUrl)
+      return Response.jsonUnsafe({ error: `No schema at ${req.url}` }, { status: 404 });
     const result = yield* Effect.result(
       (yield* HostNativeRead).read({
         key: "settings.schema",

@@ -1,6 +1,8 @@
 using Pe.Revit.Global.Services.Document;
 using Newtonsoft.Json;
-using Pe.Revit.Global.Lib;
+using Newtonsoft.Json.Linq;
+using Pe.Revit.Parameters;
+using Pe.Shared.RevitData.Serialization;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.Loader.Documents;
 using Pe.Revit.SettingsRuntime.Modules.AutoTag;
@@ -20,8 +22,6 @@ public class AutoTagService {
     private IDocumentTracker? _documents;
     // ponytail: the extensible-storage DataStorage store was deleted without migration (kaitpw, 2026-11-06, greenfield);
     // a document saved by the old store reads as "no settings" and the user re-enters them once.
-    private static readonly ProjectInfoText Store = new(new Guid("a89b3d96-72ad-4972-a532-81676635755b"), "_PE_AutoTag", "Pe.Tools AutoTag settings (JSON).");
-    private static readonly JsonSerializerSettings JsonSettings = RevitJsonFormatting.CreateRevitIndentedSettings();
     private AutoTagUpdater? _updater;
 
     public static AutoTagService Instance {
@@ -32,17 +32,19 @@ public class AutoTagService {
     }
 
     public AutoTagSettings? GetSettingsForDocument(Document doc) =>
-        this._documents?.Find(doc)?.State(_ => new DocState()).Settings;
+        this._documents?.Find(doc)?.State(_ => new DocState()).Read.Value;
 
     public void SaveSettingsForDocument(Document doc, AutoTagSettings settings) {
         using (var transaction = new Transaction(doc, "Save AutoTag Settings")) {
             _ = transaction.Start();
-            _ = Store.Write(doc, JsonConvert.SerializeObject(settings, JsonSettings));
+            // A stored blob this build cannot read is never written over: the parse throws, and so does the store.
+            _ = AutoTagSettings.Read(OwnerBlobStore.Read(doc, AutoTagSettings.Owner)).OrThrow();
+            _ = OwnerBlobStore.Write(doc, AutoTagSettings.Owner, settings.ToData());
             _ = transaction.Commit();
         }
         var tracked = this._documents?.Find(doc);
         if (tracked != null)
-            tracked.State(_ => new DocState()).Settings = settings;
+            tracked.State(_ => new DocState()).Read = new OwnerValue<AutoTagSettings>(settings, null);
 
         if (this._updater != null)
             this.RegisterTriggersForDocument(doc, settings);
@@ -50,20 +52,16 @@ public class AutoTagService {
         Log.Information("AutoTag: Settings saved and reloaded for '{Title}'", doc.Title);
     }
 
-    /// <summary>Null when the document holds no AutoTag settings or the stored JSON is invalid (logged).</summary>
-    private static AutoTagSettings? ReadSettings(Document doc) {
-        if (Store.Read(doc) is not { } json)
-            return null;
-        try {
-            return JsonConvert.DeserializeObject<AutoTagSettings>(json, JsonSettings);
-        } catch (JsonException ex) {
-            Log.Error(ex, "AutoTag: Stored settings in '{Title}' are invalid; AutoTag stays off", doc.Title);
-            return null;
-        }
+    /// <summary>Never throws: a stored blob this build cannot read comes back as a refusal, and AutoTag stays off.</summary>
+    private static OwnerValue<AutoTagSettings> ReadSettings(Document doc) {
+        var read = AutoTagSettings.Read(OwnerBlobStore.Read(doc, AutoTagSettings.Owner));
+        if (read.Refusal != null)
+            Log.Error("AutoTag: can't read the settings in '{Title}', kept as they are; AutoTag stays off ({Reason})", doc.Title, read.Refusal);
+        return read;
     }
 
     public bool HasSettingsInDocument(Document doc) {
-        return Store.Read(doc) != null;
+        return OwnerBlobStore.Read(doc, AutoTagSettings.Owner).Status != OwnerBlobStatus.Absent;
     }
 
     public void Initialize(AddInId addInId, IDocumentTracker documents) {
@@ -108,7 +106,9 @@ public class AutoTagService {
             HasDocumentSettings = settings != null,
             ConfigurationCount = settings?.Configurations?.Count ?? 0,
             EnabledConfigurationCount = settings?.Configurations?.Count(c => c.Enabled) ?? 0,
-            Configurations = settings?.Configurations ?? []
+            Configurations = settings?.Configurations ?? [],
+            // Read live, so a model whose blob is refused says so even before the tracker has seen it.
+            StoredSettingsRefusal = AutoTagSettings.Read(OwnerBlobStore.Read(doc, AutoTagSettings.Owner)).Refusal
         };
     }
 
@@ -118,8 +118,9 @@ public class AutoTagService {
                 return;
 
             var doc = tracked.Resolve();
-            var settings = ReadSettings(doc);
-            tracked.State(_ => new DocState()).Settings = settings;
+            var read = ReadSettings(doc);
+            tracked.State(_ => new DocState()).Read = read;
+            var settings = read.Value;
 
             if (settings == null) {
                 Log.Information("AutoTag: Disabled for '{Title}' - no document settings found", tracked.Title);
@@ -178,7 +179,7 @@ public class AutoTagService {
 
     /// <summary>Per-document settings slot, one per tracked document, dropped on close.</summary>
     private sealed class DocState {
-        public AutoTagSettings? Settings;
+        public OwnerValue<AutoTagSettings> Read = new(null, null);
     }
 }
 
@@ -189,4 +190,6 @@ public record AutoTagStatus {
     public int ConfigurationCount { get; init; }
     public int EnabledConfigurationCount { get; init; }
     public List<AutoTagConfiguration> Configurations { get; init; } = [];
+    /// <summary>Set when the model's stored settings are "can't read, kept": the reason. AutoTag is off for that model.</summary>
+    public string? StoredSettingsRefusal { get; init; }
 }

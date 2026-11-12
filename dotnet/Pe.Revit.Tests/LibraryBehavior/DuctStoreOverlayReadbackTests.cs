@@ -32,7 +32,7 @@ public sealed class DuctStoreOverlayReadbackTests {
             };
             using (var t = new Transaction(document, "Seed store")) {
                 t.Start();
-                DuctApplier.StoreText.Write(document, stored.ToJson());
+                _ = Pe.Revit.Parameters.OwnerBlobStore.Write(document, DuctLossStore.Owner, stored.ToData());
                 Assert.That(t.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
 

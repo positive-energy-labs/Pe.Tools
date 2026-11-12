@@ -1,44 +1,9 @@
 # The PowerShell form of the product path rules (ADR 0035 rule 11; C# ProductPathing, TS product-paths.ts
 # and service-identity.ts); all assert ts/packages/host-contracts/tests/runtime-ownership.fixture.json.
-# Two content homes: the user root always (an isolated PE_TOOLS_PRODUCT_HOME, else <Documents>\Pe.Tools),
-# then the optional PE_TOOLS_SHARED_ROOT. Callers own directory creation.
+# Only the machine state root is resolved here. The content homes (ADR 0037: user, project, firm, each proven by
+# its pe-home.json) are resolved by C# and TS alone; no PowerShell caller needs them. Callers own directory creation.
 function Resolve-DocumentsUserRoot {
     return [IO.Path]::Combine([Environment]::GetFolderPath('MyDocuments'), 'Pe.Tools')
-}
-
-function Resolve-UserRoot {
-    param([string]$ProductHomeOverride = $env:PE_TOOLS_PRODUCT_HOME)
-    if ([string]::IsNullOrWhiteSpace($ProductHomeOverride)) { return Resolve-DocumentsUserRoot }
-    return [IO.Path]::GetFullPath($ProductHomeOverride.Trim())
-}
-
-function Resolve-SharedRoot {
-    param([string]$SharedRoot = $env:PE_TOOLS_SHARED_ROOT)
-    if ([string]::IsNullOrWhiteSpace($SharedRoot)) { return $null }
-    return [IO.Path]::GetFullPath($SharedRoot.Trim())
-}
-
-# The read order: user first, so an item in both homes resolves to the user's copy.
-function Resolve-ContentHomes {
-    param([string]$ProductHomeOverride = $env:PE_TOOLS_PRODUCT_HOME, [string]$SharedRoot = $env:PE_TOOLS_SHARED_ROOT)
-    $shared = Resolve-SharedRoot -SharedRoot $SharedRoot
-    $homes = @(Resolve-UserRoot -ProductHomeOverride $ProductHomeOverride)
-    if ($shared) { $homes += $shared }
-    return $homes
-}
-
-function Resolve-SharedFirmDir {
-    param([string]$SharedRoot = $env:PE_TOOLS_SHARED_ROOT)
-    $shared = Resolve-SharedRoot -SharedRoot $SharedRoot
-    if ($shared) { return [IO.Path]::Combine($shared, 'Firm') }
-    return $null
-}
-
-function Resolve-SharedKeysPath {
-    param([string]$SharedRoot = $env:PE_TOOLS_SHARED_ROOT)
-    $shared = Resolve-SharedRoot -SharedRoot $SharedRoot
-    if ($shared) { return [IO.Path]::Combine($shared, 'keys.json') }
-    return $null
 }
 
 # The caller names its lane and owner root (a checkout, or the SDK install root); nothing defaults.

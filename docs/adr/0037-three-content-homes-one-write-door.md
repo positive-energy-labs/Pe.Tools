@@ -1,0 +1,31 @@
+# 0037: Three content homes, one write door
+
+Date: 2026-11-11. Status: accepted, not built. Source: kaitpw's rulings in the homes muse after seven code and disk censuses and one round with five threads (T3 research, journeys, and forks of the kernel implementor, purger and driver). Evidence: `.artifacts/runs/homes-crusade-20261111/muse/` (`POSITION-v2.md` to `POSITION-v4.md`, `round3/`). Amends [ADR 0035](0035-route-slots-subjectref-one-notice-feed.md) rules 3 and 11, [ADR 0032](0032-value-domains-declared-on-work-cells.md) line 129 and [ADR 0026](0026-one-route-shell.md) line 29. Frontier: [homes MAP](../features/homes/MAP.md). Terms: [homes glossary](../features/homes/GLOSSARY.md).
+
+## Context
+
+Coworkers cannot use Pea until the things they come to hold are settled, because the owner will not write migration code. The censuses found that the shared root is one environment variable, `PE_TOOLS_SHARED_ROOT`, unset on the owner's machine, with no instance on the shared drive. The firm standards exist only in the owner's OneDrive. A user copy shadows a shared pod by id, with no notice, and the kernel driver proved at dfaed397 that a tool write (`pod.member.save` into a shared-only Pod) mints that shadow. The user content root is also the agent's working directory and holds run output. A file model's identity is its absolute path.
+
+## Decision
+
+1. **Three home tiers: user, project, firm.** kaitpw: "id prob say all three teirs". A home is a folder with a marker `pe-home.json` whose one field is `tier`. Every home has the same layout: `Pods/`, `Pages/`, `Catalogs/`, `Settings/<owner>.json`. The firm home adds `keys.json`.
+2. **The firm home is `04 PE Software Files\Pe.Tools` on the shared drive.** kaitpw: "direct child of 04 software files". A machine finds it by probing each mounted drive for that one relative path and accepts it only when the marker reads `tier: "firm"`. No drive letter is baked in. `PE_TOOLS_SHARED_ROOT` remains only as a dev override.
+3. **The project home is the folder the humans use.** kaitpw: "I dont think that the pe.tools root for a project should be different from the root that the humans actually use." The model stores a pointer to it, "like project info style": one more owner blob in the `ProjectInfoText` carrier of ADR 0032, holding a path with no drive letter, relative to the shared drive root. Pe's files sit in one child folder named `Pe.Tools`. A walk up from the model's path and a name search only suggest the first bind, and a person confirms it. A model nobody can write stays unbound, and unbound must work.
+4. **An address has no home qualifier.** Pod ids are unique across homes. The same id in two homes is a conflict: both are refused with a notice, and a person forks under a new id.
+5. **One write door.** kaitpw: "yes tools should write, i dont think really any writes to anywhere in gdrive should be gated." Every write into a home is a compare-and-swap on SHA-256 and lands in the home the thing came from. Copy-on-write (`userTwin`, `userWritable`) is deleted.
+6. **A shared home holds only authored files and write-once derived files named by content hash.** It never holds Work, a journal, SQLite, run output, Page state or a machine-derived file. Those live under the machine state root. The agent's working directory is fixed once, outside any synced or shared home.
+7. **The safety net is set up now and filled in later.** Before an overwrite in a shared home, the prior bytes go to the writer's local blob store and the receipt names their hash. kaitpw: "the full force of this can be defered, but we need to set the kernel up for it for sure." A restore verb, retention and wider reversibility are not built.
+8. **Value tiers gain `project`:** `run`, staged `Work`, saved in model, `project`, `firm`, `default`. A tiered value is drawn by a fourth sheet binding kind, `setting(owner, path, schema, tiers)`. Staged Work stays personal; a value becomes shared through a "save at" verb with the targets model, project and firm.
+9. **Secrets are named by role** (`openai.api-key`, `anthropic.api-key`, `llamaparse.api-key`) and resolved as today: the person's own key, then the firm `keys.json`. kaitpw: "I need both! non negotiable." A personal subscription is a harness login and is not a Pe secret.
+
+## Consequences
+
+- ADR 0035 rule 11 is amended: "user's overrides shared" and "writes always go to user" are reversed; `PE_TOOLS_SHARED_ROOT` no longer selects the shared home in a shipped build; Work leaves the user content root for machine state. Its rule that machine state never lands on a share stands.
+- ADR 0035 rule 3 is amended: the closed set of binding kinds becomes four. Only the kernel adds a kind still holds.
+- ADR 0032 line 129 is amended: value tiers are no longer only default, firm and document. "A Pod is not a scope" stands. The Extensible Storage ban stands, with ADR 0032 rule 7 (duct losses) the one written exception (kaitpw: "yes").
+- ADR 0026 line 29 is amended: the layer chain gains `project`, and the per-user `setting` field role with its route-settings store is deleted when the `setting` binding kind lands.
+- Accepted ceiling: a project folder on another drive or under a per-user sync root does not resolve.
+- The net's limit: prior bytes rest on the writer's machine only. A second machine restores through Drive's revision history, which is UNPROVEN[no spike has listed revisions on G:].
+- Fallbacks are named in the MAP: if the pointer cannot be written on a cloud workshared model, a firm-home index keyed by `projectGuid` and `modelGuid` replaces it.
+- Order: content homes are cleaned of non-authored files before tools write to shared homes, or run output lands on the shared drive.
+- Rejected, in the homes ledger: a home qualifier on addresses, the firm-home cloud index as the first choice, backup files inside a home, the cloud-library shape, an immutable versions store, a marker with an id.

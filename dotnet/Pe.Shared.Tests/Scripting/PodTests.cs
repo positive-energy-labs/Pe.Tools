@@ -23,7 +23,7 @@ public sealed class PodTests {
         this._pods = Path.Combine(this._root, "Pods");
         Directory.CreateDirectory(this._pods);
         this._folders.Clear();
-        this._service = new ScriptPodPreparationService(this._pods, this.Admission);
+        this._service = new ScriptPodPreparationService(this.Admission);
     }
 
     [TearDown]
@@ -268,7 +268,7 @@ public sealed class PodTests {
         File.WriteAllText(Path.Combine(office, "settings", "family.json"), "{}");
         File.WriteAllText(Path.Combine(global, "settings", "Header.json"), "{}");
 
-        var run = PodRuns.NewRunFolder(office);
+        var run = PodRuns.NewRunFolder("office");
         var written = PodRuns.WriteInputIn(run, new { operation = "test" }, PodRuns.ComposedInput(source, composition.Composed!));
         var input = JObject.Parse(File.ReadAllText(Path.Combine(run, "input.json")));
 
@@ -292,7 +292,7 @@ public sealed class PodTests {
         var forged = source with { Root = source.Root with { BytesBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes("{\"a\":2}")) } };
         Assert.Throws<InvalidDataException>(() => PodRuns.ComposedInput(forged, "{}"));
 
-        var run = PodRuns.NewRunFolder(office);
+        var run = PodRuns.NewRunFolder("office");
         Directory.CreateDirectory(Path.Combine(run, "source", "00-family.json"));
         Assert.Throws<UnauthorizedAccessException>(() => PodRuns.WriteInputIn(run, new { operation = "test" }, PodRuns.ComposedInput(source, "{}")));
         Assert.That(Directory.EnumerateFiles(run, "*", SearchOption.AllDirectories), Is.Empty);
@@ -301,7 +301,7 @@ public sealed class PodTests {
     [Test]
     public void Receipt_that_cannot_be_saved_after_an_effect_returns_its_reason_instead_of_throwing() {
         var office = this.WritePod("Office", "office");
-        var run = PodRuns.NewRunFolder(office);
+        var run = PodRuns.NewRunFolder("office");
         Directory.CreateDirectory(Path.Combine(run, "receipt.json"));
 
         var (path, unsaved) = PodRuns.SettleReceiptIn(run, PodReceipt.ForSavedMember("office", "settings/a.json", "sha", "schedule.apply", null, PodRunOutcome.Succeeded, [], null), []);
@@ -313,7 +313,7 @@ public sealed class PodTests {
     [Test]
     public void Output_read_that_fails_after_the_effect_leaves_the_outcome_standing() {
         var office = this.WritePod("Office", "office");
-        var run = PodRuns.NewRunFolder(office);
+        var run = PodRuns.NewRunFolder("office");
         // The family apply edge passes its artifact reads lazily; the first one fails here, after the effect.
         IEnumerable<(string, byte[])> Outputs() {
             yield return ("apply.json", [1]);
@@ -329,7 +329,7 @@ public sealed class PodTests {
     [Test]
     public void Output_named_like_the_receipt_is_refused_in_any_case() {
         var office = this.WritePod("Office", "office");
-        var run = PodRuns.NewRunFolder(office);
+        var run = PodRuns.NewRunFolder("office");
         foreach (var name in new[] { "receipt.json", "Receipt.json", "RECEIPT.JSON" })
             Assert.Throws<ArgumentException>(() => PodRuns.WriteReceiptIn(run,
                 PodReceipt.ForSavedMember("office", "settings/a.json", "sha", "family.apply", null, PodRunOutcome.Succeeded, [], null), [(name, [1])]), name);
@@ -343,7 +343,7 @@ public sealed class PodTests {
             Convert.ToBase64String(draftBytes), PodRunOrigin.SuppliedDraft);
         var saved = this._service.Compose("office", "settings/family.json", null).ToSource().Root;
 
-        var draftReceipt = JObject.Parse(File.ReadAllText(PodRuns.WriteReceipt(office,
+        var draftReceipt = JObject.Parse(File.ReadAllText(PodRuns.WriteReceipt("office",
             PodReceipt.ForSource(draft, "family.apply", null, PodRunOutcome.Cancelled, [], null), [])));
         var savedReceipt = PodReceipt.ForSource(saved, "family.apply", null, PodRunOutcome.Succeeded, [], null);
 
@@ -399,22 +399,62 @@ public sealed class PodTests {
         Assert.That(Enum.GetNames(typeof(PodRunOutcome)), Is.EqualTo(new[] { "Succeeded", "Failed", "Cancelled" }));
     }
 
+    // ADR 0037 rule 6: a pod may sit in a home other people share, so a run writes no byte into it. The run is
+    // keyed on the pod's manifest id under <state root>\state\Runs. Mutant, run red once: put the run back in a
+    // pod folder (`NewRunFolder` to `Path.Combine(ProductPathing.UserRoot(), "Pods", podId, "output", RunId())`)
+    // fails the state-path assert.
     [Test]
-    public void Run_receipt_lands_in_the_pod_output_with_its_outputs() {
-        var folder = this.WritePod("Office", "office");
+    public void A_run_of_a_shared_pod_lands_in_machine_state_and_writes_no_byte_into_the_pod() {
+        var folder = this.WriteSharedPod("Shared Office", "shared-office", new() { ["settings/a.json"] = "{}" });
+        Dictionary<string, string> Snapshot() => Directory.EnumerateFileSystemEntries(folder, "*", SearchOption.AllDirectories)
+            .ToDictionary(path => Path.GetRelativePath(folder, path), path => File.Exists(path) ? Convert.ToHexString(File.ReadAllBytes(path)) : "<dir>");
+        var before = Snapshot();
+        var runs = Path.Combine(Pe.Shared.Product.ProductRuntimeLayout.Current.State.RunsPath, "shared-office");
 
-        var path = PodRuns.WriteReceipt(folder,
-            PodReceipt.ForSavedMember("office", "settings/a.json", "sha", "schedule.apply", null, PodRunOutcome.Succeeded, ["schedule:123"], null),
+        var path = PodRuns.WriteReceipt("shared-office",
+            PodReceipt.ForSavedMember("shared-office", "settings/a.json", "sha", "schedule.apply", null, PodRunOutcome.Succeeded, ["schedule:123"], null),
             [("result.csv", Encoding.UTF8.GetBytes("a,b"))]);
+        var writer = new Pe.Revit.Scripting.Storage.ScriptArtifactWriter("shared-office");
+        writer.WriteInput(new { operation = "test" }, [new PodRunInputFile("bundle", "shared-office", "src/Run.cs", "source/00-Run.cs", [1, 2, 3])]);
+        var artifact = writer.WriteText("report.txt", "from the script");
+        var scriptReceipt = writer.WriteReceipt(PodReceipt.ForSavedMember("shared-office", "src/Run.cs", "sha", "scripting.execute", null, PodRunOutcome.Succeeded, [], null));
 
         var receipt = JObject.Parse(File.ReadAllText(path));
         Assert.Multiple(() => {
+            Assert.That(Snapshot(), Is.EqualTo(before), "the shared pod is byte-identical after two runs");
+            Assert.That(Directory.Exists(Path.Combine(folder, "output")), Is.False);
             Assert.That(Path.GetFileName(path), Is.EqualTo("receipt.json"));
-            Assert.That(Path.GetDirectoryName(Path.GetDirectoryName(path)), Is.EqualTo(Path.Combine(folder, "output")));
+            foreach (var written in new[] { path, artifact.FullPath, scriptReceipt.FullPath })
+                Assert.That(Path.GetDirectoryName(Path.GetDirectoryName(written)), Is.EqualTo(runs), written);
+            Assert.That(runs, Does.Contain(Path.Combine("state", "Runs")).And.Not.Contain(this._root));
             Assert.That(File.ReadAllText(Path.Combine(Path.GetDirectoryName(path)!, "result.csv")), Is.EqualTo("a,b"));
             Assert.That(receipt["memberSha256"]!.Value<string>(), Is.EqualTo("sha"));
             Assert.That(receipt["outputs"]!.Values<string>(), Is.EqualTo(new[] { "schedule:123", "result.csv" }));
         });
+    }
+
+    // The host names the pod's absolute folder; native code never joins a folder name onto the user's Pods.
+    // Mutant, run red once: resolve by name under the user home (`ResolveFolder` to
+    // `ScriptingWorkspaceLocations.ResolveWorkspaceRoot(capture.Folder)`) fails the folder assert and the write.
+    [Test]
+    public void A_pod_in_a_shared_home_is_found_and_written_where_the_host_says() {
+        var folder = this.WriteSharedPod("Shared Office", "shared-office");
+
+        Assert.That(this._service.ResolveFolder("shared-office"), Is.EqualTo(folder));
+        Assert.That(this._service.ResolveBootstrapFolder("Shared Office"), Is.EqualTo(folder), "bootstrap seeds the admitted pod, by folder name");
+        Assert.That(this._service.ResolveBootstrapFolder("shared-office"), Is.EqualTo(folder), "and by id, so it never mints a second pod with that id");
+        var sha = this._service.WriteSettingsMember("shared-office", "settings/captured.json", "{}");
+        Assert.That(File.ReadAllText(Path.Combine(folder, "settings", "captured.json")), Is.EqualTo("{}"));
+        Assert.That(sha, Is.EqualTo(ScriptPodPreparationService.Sha256(Encoding.UTF8.GetBytes("{}"))));
+
+        // The host's word is checked only for shape: an id that disagrees, or a folder that is not absolute, refuses.
+        ScriptPodPreparationService Answering(object capture) => new((_, _) => JObject.FromObject(capture));
+        var bundle = Bundle(folder);
+        Assert.That(Answering(new { id = "other", folder = "Shared Office", directory = folder, contributions = Array.Empty<object>(), memberBundle = bundle })
+            .Capture("shared-office").Code, Is.EqualTo("package.unavailable"));
+        Assert.That(Answering(new { id = "shared-office", folder = "Shared Office", directory = "Shared Office", contributions = Array.Empty<object>(), memberBundle = bundle })
+            .Capture("shared-office").Code, Is.EqualTo("package.unavailable"));
+        Assert.Throws<InvalidDataException>(() => this._service.ResolveFolder("no-such-pod"));
     }
 
     [Test]
@@ -423,7 +463,7 @@ public sealed class PodTests {
         // `scripting.execute` joins zero error diagnostics into "" (w6-revit claim 6); the receipt still says null.
         var succeeded = PodReceipt.ForSavedMember("office", "src/Run.cs", "sha", "scripting.execute", null, PodRunOutcome.Failed, [], null) with { Outcome = PodRunOutcome.Succeeded, Reason = string.Join("; ", Array.Empty<string>()) };
         var failed = PodReceipt.ForSavedMember("office", "settings/a.json", "sha", "schedule.apply", null, PodRunOutcome.Failed, [], "Apply Schedule 'A' did not commit.");
-        var saved = (PodReceipt r) => JObject.Parse(File.ReadAllText(PodRuns.WriteReceipt(folder, r, [])))["reason"]!;
+        var saved = (PodReceipt r) => JObject.Parse(File.ReadAllText(PodRuns.WriteReceipt("office", r, [])))["reason"]!;
         Assert.Multiple(() => {
             Assert.That(saved(succeeded).Type, Is.EqualTo(JTokenType.Null));
             Assert.That(saved(PodReceipt.ForSavedMember("office", "settings/a.json", "sha", "schedule.apply", null, PodRunOutcome.Succeeded, [], "")).Type, Is.EqualTo(JTokenType.Null));
@@ -578,24 +618,10 @@ public sealed class PodTests {
     }
 
     [Test]
-    public void Output_identity_uses_the_explicit_host_projection_and_checks_its_folder() {
-        var folder = this.WritePod("Renamed", "stable-id");
-        Assert.That(this._service.ResolveId(folder), Is.EqualTo("stable-id"));
-        var wrong = new ScriptPodPreparationService(this._pods, (key, request) => {
-            var input = JObject.FromObject(request);
-            Assert.That(key, Is.EqualTo("pod.list"));
-            Assert.That(input.Value<string>("projection"), Is.EqualTo("identity"));
-            Assert.That(input.Value<string>("folder"), Is.EqualTo("Renamed"));
-            return JObject.FromObject(new { projection = "identity", identity = new { id = "stable-id", folder = "Other" } });
-        });
-        Assert.Throws<InvalidDataException>(() => wrong.ResolveId(folder));
-    }
-
-    [Test]
     public void Admission_dependency_timeout_is_not_script_cancellation() {
-        var folder = this.WritePod("Default", "default");
-        var service = new ScriptPodPreparationService(this._pods, (_, _) => throw new OperationCanceledException("HTTP deadline"));
-        var error = Assert.Throws<InvalidDataException>(() => service.ResolveId(folder));
+        this.WritePod("Default", "default");
+        var service = new ScriptPodPreparationService((_, _) => throw new OperationCanceledException("HTTP deadline"));
+        var error = Assert.Throws<InvalidDataException>(() => service.ResolveBootstrapFolder("default"));
         Assert.That(error!.Message, Does.Contain("Host admission 'pod.list'").And.Contain("10s dependency deadline"));
         Assert.That(error.InnerException, Is.TypeOf<OperationCanceledException>());
     }
@@ -632,7 +658,7 @@ public sealed class PodTests {
     [Test]
     public void Host_admission_unavailable_is_a_typed_result_without_filesystem_fallback() {
         this.WritePod("Office", "office");
-        var service = new ScriptPodPreparationService(this._pods, (_, _) => throw new IOException("Host unavailable"));
+        var service = new ScriptPodPreparationService((_, _) => throw new IOException("Host unavailable"));
         var result = service.Capture("office");
         Assert.That(result.Capture, Is.Null);
         Assert.That(result.Code, Is.EqualTo("package.unavailable"));
@@ -641,8 +667,12 @@ public sealed class PodTests {
         Assert.That(service.List().Single().Diagnostics.Single().Stage, Is.EqualTo("package.unavailable"));
     }
 
-    private string WritePod(string folderName, string id, Dictionary<string, string>? files = null, string extraManifest = "") {
-        var folder = Path.Combine(this._pods, folderName);
+    /// <summary>A pod in a second home: nowhere under the user's Pods, so only the host's directory can find it.</summary>
+    private string WriteSharedPod(string folderName, string id, Dictionary<string, string>? files = null) =>
+        this.WritePod(folderName, id, files, podsRoot: Path.Combine(this._root, "shared drive", "04 PE Software Files", "Pe.Tools", "Pods"));
+
+    private string WritePod(string folderName, string id, Dictionary<string, string>? files = null, string extraManifest = "", string? podsRoot = null) {
+        var folder = Path.Combine(podsRoot ?? this._pods, folderName);
         Directory.CreateDirectory(folder);
         this._folders[folderName] = folder;
         File.WriteAllText(Path.Combine(folder, "pod.json"), $$"""{"schemaVersion":2,"id":"{{id}}","name":"{{id}}","version":"1"{{extraManifest}}}""");

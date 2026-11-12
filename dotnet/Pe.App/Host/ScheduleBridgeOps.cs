@@ -16,6 +16,7 @@ using Pe.Revit.SettingsRuntime.Modules.Schedules;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Scripting;
+using Pe.Shared.StorageRuntime.Modules;
 using System.IO;
 using Pe.Shared.RevitData.Schedules;
 using SharedScheduleProfile = Pe.Shared.RevitData.Schedules.ScheduleProfile;
@@ -60,7 +61,7 @@ internal static class ScheduleBridgeOps {
     /// <summary>The spec a capture writes: the authored profile plus the `$schema` that says what it is.</summary>
     internal static string CaptureSpec(ViewSchedule schedule) {
         var spec = JObject.Parse(JsonConvert.SerializeObject(schedule.CaptureAuthoredScheduleProfile(), RevitJsonFormatting.CreateRevitIndentedSettings()));
-        spec.AddFirst(new JProperty("$schema", PodMembers.SchemaUrl(ScheduleManagerSettingsRegistration.Profiles)));
+        spec.AddFirst(new JProperty("$schema", SettingsSchemaUrl.Path(ScheduleManagerSettingsRegistration.Profiles)));
         return spec.ToString(Formatting.Indented);
     }
 

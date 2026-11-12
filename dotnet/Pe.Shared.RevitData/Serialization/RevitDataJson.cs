@@ -20,6 +20,13 @@ public static class RevitDataJson {
         return settings;
     }
 
+    /// <summary>For data stored in a model: defaults are written, so a stored value never depends on a DTO's default.</summary>
+    public static JsonSerializer CreateStoredSerializer() {
+        var settings = CreateSerializerSettings();
+        settings.DefaultValueHandling = DefaultValueHandling.Include;
+        return JsonSerializer.Create(settings);
+    }
+
     public static string Serialize(object value, Formatting formatting = Formatting.None) =>
         JsonConvert.SerializeObject(value, formatting, CreateSerializerSettings());
 }
