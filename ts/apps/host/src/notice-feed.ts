@@ -316,7 +316,7 @@ function receiptRow(
   const last = receipt.steps?.at(-1);
   const refusedTail = receipt.state === "incomplete" && last?.state === "failed" && last.notDispatched === true;
   const refused = receipt.state === "failed" && receipt.notDispatched === true || refusedTail;
-  const group = refused && !refusedTail ? "failed" : RECEIPT_GROUP[receipt.state];
+  const group = RECEIPT_GROUP[receipt.state];
   if (!group) return null;
   const failure =
     "error" in receipt
@@ -333,9 +333,7 @@ function receiptRow(
     verb: refused ? "refused" : receipt.state,
     what: receipt.key,
     where: callerWord(receipt.caller),
-    says: refused && "error" in receipt
-      ? refusedTail ? `${receipt.error} Earlier steps already changed something; clean up before running it again.` : receipt.error
-      : failure.summary,
+    says: `${refused && "error" in receipt ? receipt.error : failure.summary}${refusedTail ? " Earlier steps already changed something; clean up before running it again." : ""}`,
     at: receipt.startedAt,
     // The failure's door is the row's address; a receipt itself has no page yet.
     url: failure.door
