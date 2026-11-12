@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { SettingTier, SettingTierRead } from "@pe/agent-contracts";
-import { SETTING_TIERS } from "@pe/agent-contracts";
+import { DUCTS_CRITERIA_CELLS, SETTING_TIERS } from "@pe/agent-contracts";
 import {
   firmHome,
   noFirmHomeText,
@@ -96,6 +96,8 @@ export function writeSettingTier(
   request: { owner: string; tier: SettingTier; path: readonly string[]; value: unknown; expectedSha256: string | null },
   context: { pointer?: string | null; writer?: string; now?: () => Date } = {},
 ): SettingWrite {
+  if (request.path.some((key) => ["written", "__proto__", "constructor", "prototype"].includes(key)))
+    return { ok: false, status: 422, message: "The setting path contains a reserved key." };
   const read = readTier(request.tier, request.owner, context.pointer);
   if (read.home === null || read.path === null)
     return { ok: false, status: 404, message: read.notFound ?? `No ${request.tier} home` };
@@ -103,6 +105,13 @@ export function writeSettingTier(
     return { ok: false, status: 422, message: `${read.path} can't be read, so it is kept as it is: ${read.error}` };
   if (read.sha256 !== request.expectedSha256)
     return { ok: false, status: 409, message: `${read.path} changed since it was read.` };
+  const cell = request.owner === "ducts"
+    ? Object.values(DUCTS_CRITERIA_CELLS).find((declared) =>
+        ["criteria", ...declared.layer].length === request.path.length &&
+        ["criteria", ...declared.layer].every((key, index) => key === request.path[index]))
+    : undefined;
+  if (!cell || (request.value !== null && !cell.value.safeParse(request.value).success))
+    return { ok: false, status: 422, message: `No declared setting accepts ${request.owner} ${request.path.join(".")} with that value.` };
   const by = context.writer ?? userInfo().username;
   const at = (context.now?.() ?? new Date()).toISOString();
   const next = structuredClone((read.json ?? {}) as Record<string, unknown>);
