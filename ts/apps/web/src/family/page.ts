@@ -4,7 +4,6 @@ export const familyPageSchema = z.object({
   family: z.literal("current").default("current"),
   stage: z.enum(["audit", "apply", "history"]).default("audit"),
   pod: z.string().max(512).default(""),
-  path: z.string().max(1024).default(""),
   pane: z.enum(["spec", "output"]).default("spec"),
   query: z.string().max(4096).default(""),
   sort: z

@@ -21,7 +21,7 @@ import { draftToPatches, FAMILY_CELLS } from "./project";
 import { familyEditBuffer } from "./edit-buffer";
 import { displaySpec } from "./spec";
 import type { FamilySnapshot, EvidenceSlice } from "./types";
-import type { FamilyContext } from "./route";
+import { member as memberOf, type FamilyContext } from "./route";
 
 export type Inspect = { kind: "part"; slug: string } | { kind: "param"; name: string } | null;
 export type Binding = { slug: string; property: string } | null;
@@ -52,10 +52,9 @@ export function useFamilyStore(ctx: FamilyContext) {
     ctx.page.query(query);
     ctx.page.pose(Object.fromEntries(Object.entries({stage,pane,overlay,drill,inspector,doc}).filter(([,v])=>v!==undefined)));
   };
-  const member = useMemo<PodMember | null>(
-    () => (page.pod && page.path ? { pod: page.pod, path: page.path } : null),
-    [page.pod, page.path],
-  );
+  // The subject is the open family (ADR 0035 rule 1): its saved member, or none for the Work's own draft.
+  const picked = memberOf(ctx.page.read());
+  const member = useMemo<PodMember | null>(() => picked, [picked?.pod, picked?.path]);
   const table = useMemo<TableState>(
     () => ({
       sorts: page.sort.columns,

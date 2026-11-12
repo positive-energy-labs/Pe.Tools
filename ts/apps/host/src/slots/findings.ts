@@ -23,13 +23,13 @@ import { productRouteWorkPath } from "../product-paths.ts";
  */
 
 /** `reads` is the invocation's own Work reader (`CommandContext.work`), which carries its read context. */
-export async function findingsList(reads: Pick<CommandWorkReads, "view">, key: WorkKey, subject?: string): Promise<readonly Finding[]> {
+async function findingsList(reads: Pick<CommandWorkReads, "view">, key: WorkKey, subject?: string): Promise<readonly Finding[]> {
   const view = await reads.view(key, FINDINGS_OWNER);
   const { findings } = findingsWorkSchema.parse(view?.doc ?? {});
   return Object.values(findings).filter((f) => subject === undefined || f.subject === subject);
 }
 
-export async function findingsWrite(
+async function findingsWrite(
   workspace: RouteWorkspace,
   handle: z.output<typeof workHandleSchema>,
   input: FindingInput,

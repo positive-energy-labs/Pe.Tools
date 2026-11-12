@@ -160,6 +160,10 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    await vi.waitFor(()=>expect(trace.mounts.at(-1)?.owner()?.scope.key.binding).toBe("address"),{timeout:20000});
    const mount=trace.mounts.at(-1);
    await mount.whenReady();
+   // An open posts its pose once the host has published the Page, never before (gate-c80e644a: every open logged POST 409 /pe/history).
+   const poses=()=>trace.http.filter(row=>row.url==="/pe/history"&&row.request?.kind==="page");
+   await vi.waitFor(()=>expect(poses().some(row=>row.status===200)).toBe(true),{timeout:10000});
+   expect(poses().filter(row=>row.status!==200)).toEqual([]);
    expect(mount.startAction()).toBeTruthy();
    if(journey === "external Fans edit") {
      const edited = await act(async()=>forward(peRouteUrl("work.apply", {params:{route:"fans"},query:{open:`${trace.target.session}/${trace.target.openId}`}}, host.base), {

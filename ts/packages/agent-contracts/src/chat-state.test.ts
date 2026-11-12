@@ -312,7 +312,8 @@ describe("run consent window (chaos defect 4)", () => {
       kind: "permission_request",
       turnId: "t9",
       requestId: "w",
-      toolCall: { toolCallId: "w1" },
+      // The host's ask rides its own id (run-consent.ts), never the guarded call's.
+      toolCall: { toolCallId: "writes:t9", title: "First write: Office.rvt" },
       options,
       scope: "run",
       ...(deadline ? { deadline } : {}),
@@ -325,7 +326,7 @@ describe("run consent window (chaos defect 4)", () => {
     });
     expect(selectApprovals(state(ask()))[0]!.deadline).toBeUndefined();
   });
-  it("a deadline answer applies the option; the call is not drawn cancelled", () => {
+  it("a deadline answer applies the option: the ask is done, the guarded call runs on, and the turn's end fails neither", () => {
     const calls = selectToolCalls(
       state([
         ...ask("2026-10-01T12:01:00.000Z"),
@@ -340,6 +341,9 @@ describe("run consent window (chaos defect 4)", () => {
         },
       ]),
     );
-    expect(calls.find((call) => call.id === "w1")?.status).toBe("in_progress");
+    expect(calls.map((call) => [call.id, call.status])).toEqual([
+      ["w1", "in_progress"],
+      ["writes:t9", "completed"],
+    ]);
   });
 });

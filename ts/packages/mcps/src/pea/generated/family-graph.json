@@ -31,39 +31,12 @@
     "resume": "document"
   },
   "fields": {
-    "stage": {
-      "role": "pose",
-      "schema": "stage",
-      "codec": "stage",
-      "initial": "audit",
-      "url": "push",
-      "share": true,
-      "agent": "set"
-    },
     "pod": {
       "role": "query",
       "schema": "pod",
       "codec": "pod",
       "initial": "",
       "url": "push",
-      "share": true,
-      "agent": "set"
-    },
-    "path": {
-      "role": "query",
-      "schema": "path",
-      "codec": "path",
-      "initial": "",
-      "url": "push",
-      "share": true,
-      "agent": "set"
-    },
-    "pane": {
-      "role": "pose",
-      "schema": "pane",
-      "codec": "pane",
-      "initial": "spec",
-      "url": "replace",
       "share": true,
       "agent": "set"
     },
@@ -92,6 +65,41 @@
       "schema": "hidden",
       "codec": "hidden",
       "initial": {},
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "member": {
+      "role": "subject",
+      "schema": "member",
+      "codec": "member",
+      "initial": {
+        "kind": "ids",
+        "ids": []
+      },
+      "url": "push",
+      "share": true,
+      "agent": "set",
+      "cardinality": "many",
+      "picker": {
+        "reading": "value",
+        "options": "subject"
+      }
+    },
+    "stage": {
+      "role": "pose",
+      "schema": "stage",
+      "codec": "stage",
+      "initial": "audit",
+      "url": "push",
+      "share": true,
+      "agent": "set"
+    },
+    "pane": {
+      "role": "pose",
+      "schema": "pane",
+      "codec": "pane",
+      "initial": "spec",
       "url": "replace",
       "share": true,
       "agent": "set"
@@ -139,6 +147,13 @@
       ]
     }
   },
+  "subject": {
+    "field": "member",
+    "noun": "family",
+    "roster": "value",
+    "detail": "value",
+    "pane": "workspace"
+  },
   "historyDetail": "historyDetail",
   "work": {
     "schema": "work",
@@ -151,13 +166,13 @@
       "entry": "family.workspace",
       "deps": {
         "page": [
-          "stage",
           "pod",
-          "path",
-          "pane",
           "query",
           "sort",
           "hidden",
+          "member",
+          "stage",
+          "pane",
           "overlay",
           "drill",
           "inspector",
@@ -175,6 +190,7 @@
       "refresh": "dependencies"
     }
   },
+  "goal": "value",
   "verbs": {
     "read": {
       "kind": "command",
@@ -182,7 +198,9 @@
       "label": "Read family",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "member"
+        ],
         "work": [
           "writeIntent",
           "reading",
@@ -206,7 +224,9 @@
       "label": "Read saved family",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "member"
+        ],
         "work": [
           "writeIntent",
           "reading",
@@ -230,7 +250,9 @@
       "label": "Open member",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "member"
+        ],
         "work": [
           "writeIntent",
           "reading",
@@ -254,7 +276,9 @@
       "label": "Attach PDF",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "member"
+        ],
         "work": [
           "writeIntent",
           "reading",
@@ -278,7 +302,9 @@
       "label": "Save family to pod",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "member"
+        ],
         "work": [
           "writeIntent",
           "reading",
@@ -302,7 +328,9 @@
       "label": "Build .rfa",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "member"
+        ],
         "work": [
           "writeIntent",
           "reading",
@@ -326,7 +354,9 @@
       "label": "Apply family",
       "review": "shown",
       "deps": {
-        "page": [],
+        "page": [
+          "member"
+        ],
         "work": [
           "writeIntent",
           "reading",
@@ -361,17 +391,47 @@
         "build",
         "apply"
       ]
+    },
+    "goal": {
+      "label": "Unresolved",
+      "purpose": "What is left before the answer",
+      "draws": [
+        "value"
+      ],
+      "verbs": [
+        "read",
+        "saved",
+        "open",
+        "attach",
+        "capture",
+        "build",
+        "apply"
+      ]
     }
   },
   "layout": {
-    "kind": "pane",
-    "id": "workspace"
+    "kind": "split",
+    "id": "family-main",
+    "axis": "h",
+    "size": 320,
+    "children": [
+      {
+        "kind": "pane",
+        "id": "workspace"
+      },
+      {
+        "kind": "pane",
+        "id": "goal"
+      }
+    ],
+    "sized": "end"
   },
   "stages": {
     "main": {
       "word": "Family",
       "panes": [
-        "workspace"
+        "workspace",
+        "goal"
       ],
       "verbs": [
         "read",

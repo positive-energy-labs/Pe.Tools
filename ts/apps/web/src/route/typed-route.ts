@@ -239,6 +239,8 @@ export type Specification<
       } | { kind: "session" | "catalog" | "query" | "rpc"; entry: string; contract: EntryContract; label: string;
         /** A pane draws this verb on its rows, with the row's subject; the band does not. */
         row?: true;
+        /** The pane holds this verb's input (a form, a chosen row) and draws its press; the band has no input to give it. */
+        pane?: true;
         invoke?: import("@pe/agent-contracts").ReadEntry["run"];
         input?(context: { page: Page<F & NoInfer<Q>>; target: import("@pe/agent-contracts").ExecutionTarget | null;
           work: import("@pe/agent-contracts").WorkHandle | null; value: Immutable<D> | undefined },supplied?:any): unknown }
