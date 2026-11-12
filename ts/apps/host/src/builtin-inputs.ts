@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { admitNativeCaller } from "./native-read-policy.ts";
 import { captureInput, replayInput, nativeInputIdentity, type RecordedInput } from "./native-recording.ts";
 import { CaptureStore } from "./takeoff-captures.ts";
@@ -500,7 +501,11 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           : name.startsWith("local:")
           ? readLocal(name.slice(6), args)
           : name === "family-spec"
-            ? readFamilySpec(args)
+            ? (async () => {
+                const { target } = z.object({ target: documentRefSchema.optional() }).parse(args);
+                const pointer = target ? (await invoke(inventory.document(target))).projectHome : null;
+                return readFamilySpec(args, pointer);
+              })()
             : Promise.reject(Error(`Unknown file input ${name}`)),
       );
     const sources = (current: InputConsumption): ReadSources => {

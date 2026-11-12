@@ -180,7 +180,7 @@ import { bindRevoke } from "./revoke.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { RunRegistry } from "./run-registry.ts";
 import { createScheduledTasks } from "./scheduled-tasks.ts";
-import { resolveSdkSession } from "./sdk-session.ts";
+import { resolveSdkSession, readSessionScope } from "./sdk-session.ts";
 import type { DocumentRow } from "./session-inventory.ts";
 import { CaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
 import { eligibleThreads, threadHistory } from "./thread-history.ts";
@@ -465,7 +465,13 @@ export function createPeRoutes(options: PeRoutesOptions) {
       const receipt = await alignBootstrap(await request.json(), caller, telemetryOf(options).journal);
       return json(receipt);
     }
-    if (method === "GET" && declared.id === "family.spec") return familySpecAsset(url);
+    if (method === "GET" && declared.id === "family.spec") {
+      const scope = readSessionScope(Object.fromEntries(request.headers));
+      const document = scope.bridgeSessionId && scope.openDocumentId && invocation.document
+        ? await invocation.document({ session: scope.bridgeSessionId, openId: scope.openDocumentId })
+        : null;
+      return familySpecAsset(url, undefined, document?.projectHome);
+    }
     const parts = url.pathname.split("/").slice(2).map(decodeURIComponent); // drop "", "pe"
     const body = () =>
       request.json().catch((error) => {

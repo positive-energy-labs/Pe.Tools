@@ -1217,6 +1217,7 @@ export const targetHomes = Effect.fnUntraced(function* (
 ) {
   if (!scope?.openDocumentId) return {} satisfies PodContext;
   const target = (yield* bridge.list)
+    .filter((session) => !scope.bridgeSessionId || session.sessionId === scope.bridgeSessionId)
     .flatMap((session) => session.state?.openDocuments ?? [])
     .find((document) => document.openId === scope.openDocumentId);
   return (target ? { pointer: target.projectHome } : {}) satisfies PodContext;

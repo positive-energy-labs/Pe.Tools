@@ -9,13 +9,15 @@ import { commands, parsedDocViewSchema, tools, type ActionStep } from "@pe/agent
 import { z } from "zod";
 import { command, io, refused, type CommandExecutor } from "./command-executor.ts";
 import { guardSend } from "./guards.ts";
-import { runPods, type PodDependencies } from "./family-actions.ts";
+import { runPods, podContext, type PodDependencies } from "./family-actions.ts";
 import { podFolder, writeHome } from "./settings.ts";
 import { parseFamilyPdf } from "@pe/mcps/family-pdf";
 import { readDerivedJson } from "@pe/mcps/held-parse";
 import { LLAMA_TIER, requireLlamaCloudKey } from "@pe/mcps/llama-parse";
 import { derivedStore } from "@pe/host-contracts/service-identity";
 import { derivedKey, readDerived, writeDerived, type DerivedStore } from "@pe/host-contracts/store";
+import type { RevitBridge } from "./bridge.ts";
+import type { PodContext } from "./settings.ts";
 import { hostOwnership } from "./host-ownership.ts";
 
 const safePath = (root: string, path: string) => {
@@ -24,20 +26,21 @@ const safePath = (root: string, path: string) => {
   if (!local || local.startsWith("..") || isAbsolute(local)) throw Error("Invalid pod asset path");
   return full;
 };
-const folderFor = (pod: string, podsRoot?: PodDependencies["podsRoot"]) =>
+const folderFor = (pod: string, podsRoot?: PodDependencies["podsRoot"], pointer?: string | null) =>
   // effect-edge: island, phase 5
-  Effect.runPromise(podFolder(pod, { podsRoot }).pipe(Effect.provide(NodeServices.layer)));
+  Effect.runPromise(podFolder(pod, { podsRoot, pointer }).pipe(Effect.provide(NodeServices.layer)));
 
 /** Assets and sidecars are served from the selected pod, without a parse cache or API key. */
 export async function familySpecAsset(
   url: URL,
   podsRoot?: PodDependencies["podsRoot"],
+  pointer?: string | null,
 ): Promise<Response> {
   try {
     // Normalized before the prefix test: `settings/family/../../x` names another Pod file.
     const path = posix.normalize((url.searchParams.get("path") ?? "").replaceAll("\\", "/"));
     if (!path.startsWith(FAMILY_MEMBER_DIR)) throw Error("Expected a family spec asset");
-    const file = safePath(await folderFor(url.searchParams.get("pod") ?? "", podsRoot), path);
+    const file = safePath(await folderFor(url.searchParams.get("pod") ?? "", podsRoot, pointer), path);
     const bytes = await readFile(file);
     const mime =
       (
@@ -160,7 +163,7 @@ const preparedSpecSchema = z.strictObject({
   assets: z.array(assetSchema),
 });
 
-export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor {
+export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBridge["Service"]): CommandExecutor {
   const parsePdf = deps.parsePdf ?? parseFamilyPdf;
   return command(commands["family.attach-spec"], preparedSpecSchema, {
     bind: async (ctx) => {
@@ -182,7 +185,8 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
         facts: [["reading"], ["spec"]],
       }));
       // Attaching writes the spec and its assets into the Pod, in whichever home holds it.
-      const root = await runPods(deps, podFolder(member.pod, { podsRoot: deps.podsRoot }));
+      const pods: PodContext = bridge ? await podContext(deps, bridge, ctx.admission.target.kind === "document" ? ctx.admission.target.ref : undefined) : { podsRoot: deps.podsRoot };
+      const root = await runPods(deps, podFolder(member.pod, pods));
       // The parse and any vendor download are kept once for the project the Pod, or the PDF, sits in.
       const store = derivedStore(hostOwnership.rootPath, root, ...("path" in source ? [source.path] : []));
       // Every refusal here names the next step: the caller is a person or Pea, neither reads this file.

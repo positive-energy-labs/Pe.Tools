@@ -88,7 +88,7 @@ export const captures = read("input.captures", {
 });
 export const familySpec = leaf(
   "file:family-spec",
-  podMemberSchema,
+  podMemberSchema.extend({ target: documentRefSchema.optional() }),
   z.object({ doc: parsedDocViewSchema.nullable(), error: z.string().nullable() }),
 );
 export const podProfile = read("input.pod-profile", {

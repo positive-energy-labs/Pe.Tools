@@ -22,6 +22,7 @@ import type { ResourceObserver } from "../../../packages/runtime/src/resource-st
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { settle } from "./effect-test.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
+import { ActionJournalService } from "../src/receipt-services.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { RevitBridge, RevitBridgeLive, BridgeError } from "../src/bridge.ts";
 import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
@@ -49,6 +50,7 @@ export async function nativeFixture(
     state?: Parameters<typeof connectTestBridge>[2];
     deps?: Parameters<typeof callRouteOver>[2];
     native?: (key: string, input: Record<string, any>) => unknown;
+    routes?: Layer.Layer<never, never, RevitBridge | ActionJournalService | HttpRouter.HttpRouter | HttpRouter.Request<"Requires", import("@pe/host-internal/request-contracts").RequestIdentity> | HttpRouter.Request<"Error", unknown>>;
   } = {},
 ) {
   const scope = Scope.makeUnsafe();
@@ -106,7 +108,7 @@ export async function nativeFixture(
         { sdk: sdkSessions, workspace: saved, ...options.deps },
         {
         },
-      ), Layer.effectDiscard(Effect.gen(function* () {
+      ), (options.routes ?? Layer.empty).pipe(Layer.provide(Layer.succeed(ActionJournalService, journal))), Layer.effectDiscard(Effect.gen(function* () {
         rootReads.native = yield* HostNativeRead;
         rootReads.shared = yield* NativeReads;
       }))).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkInput.read(args))))).pipe(Layer.provide(testHostInputs)).pipe(
