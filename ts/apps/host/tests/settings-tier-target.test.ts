@@ -56,7 +56,8 @@ test("/actions refuses a tier write when the fixture document pointer changes af
     expect(changed).toBe(true);
     expect(receipt.prepared).toMatchObject({ state: "ready", value: { settingPath: paths[0] } });
     expect(receipt.effects).toContainEqual({ kind: "file", path: paths[0] });
-    expect(receipt, JSON.stringify(receipt)).toMatchObject({ outcome: { state: "refused", reason: expect.stringContaining("changed") } });
+    expect(receipt, JSON.stringify(receipt)).toMatchObject({ refusal: { kind: "stale" }, outcome: { state: "stale", reason: expect.stringContaining("changed") } });
+    expect(receipt.outcome.recovery).not.toBe("retry");
     for (const path of paths) expect(readFileSync(path)).toEqual(prior);
   } finally {
     gate.mockRestore();

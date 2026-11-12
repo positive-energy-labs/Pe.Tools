@@ -307,7 +307,7 @@ const failure = (error: unknown): DispatchFailure => {
       evidence: { result: error.result },
     };
   if (error instanceof CommandRejected)
-    return { state: "failed", error: error.message, status: 409, notDispatched: true };
+    return { state: "failed", error: error.message, status: error.status, notDispatched: true };
   if (error instanceof StepFailure) {
     const detail = {
       error: error.message,

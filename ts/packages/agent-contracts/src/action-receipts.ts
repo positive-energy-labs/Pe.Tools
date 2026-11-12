@@ -221,6 +221,7 @@ export function invocationOutcome(row: ActionReceipt | ActionStatus): Invocation
       : state === "refused" &&
           row.state === "failed" &&
           row.notDispatched &&
+          row.refusal?.kind !== "invalid" &&
           row.refusal?.kind !== "held" &&
           row.refusal?.kind !== "claimed"
         ? { recovery: "retry" as const }

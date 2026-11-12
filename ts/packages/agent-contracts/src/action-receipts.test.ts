@@ -32,6 +32,19 @@ test("receipt projections remain representable as the public JSON schema", () =>
   expect(z.toJSONSchema(actionStatusSchema)).toBeDefined();
 });
 
+test.each([
+  [404, "No project home"],
+  [503, "Setting store temporarily unavailable"],
+])("undispatched tier write %s offers retry", (status, error) => {
+  const [row] = actionReceiptListDecoder().parse([{
+    id: "transient-tier", key: "settings.tiers.write", state: "failed", notDispatched: true,
+    caller: { kind: "human", via: "local" }, basis: null, target: { kind: "host" },
+    input: {}, startedAt: "now", status, error,
+    steps: [], prepared: { state: "unprepared" }, recovery: [],
+  }]);
+  expect(row!.outcome).toMatchObject({ state: "refused", recovery: "retry", reason: error });
+});
+
 test("not-dispatched Families receipts retain defaults and outcomes", () => {
   const rows = actionReceiptListDecoder().parse([
     {
@@ -61,6 +74,7 @@ test("not-dispatched Families receipts retain defaults and outcomes", () => {
 // Held acts wait for the person; stale observations must be read again before another attempt.
 test.each([
   { kind: "held", act: "synchronize", message: "Held for the person" },
+  { kind: "invalid" },
   { kind: "stale", consumed: [] },
   { kind: "stale_revision", handle: { key: { route: "fans", binding: "host", target: null }, revision: 1 }, live: 2 },
 ])("undispatched $kind refusals do not offer retry", (refusal) => {
