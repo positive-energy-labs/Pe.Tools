@@ -20,7 +20,8 @@ public static class RevitScriptingStorageLocations {
 
     /// <summary>
     ///     Machine state: <c>state\Runs\_inline\&lt;utc&gt;-&lt;execution id&gt;-&lt;name&gt;</c>. A trace has no pod and no run id,
-    ///     so it is not a run folder and does not sit among the pod-less runs, whose every child is one run.
+    ///     so it is not a run folder and does not sit among the pod-less runs (<c>_no-pod</c>), whose every child
+    ///     is one run. Per-module task output has its own segment too (<c>_modules</c>).
     /// </summary>
     public static string ResolveInlineTraceDirectory() =>
         Path.Combine(ProductRuntimeLayout.Current.State.RunsPath, InlineTraceDirectoryName);

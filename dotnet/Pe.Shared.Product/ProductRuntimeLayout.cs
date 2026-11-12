@@ -80,8 +80,10 @@ public sealed record ProductRuntimeStateLayout(string RootPath) {
     public string AgentPath => Path.Combine(this.RootPath, "Agent");
     public string AgentInstructionsPath => Path.Combine(this.AgentPath, ProductPathNames.AgentInstructionsFileName);
     public string RunsPath => Path.Combine(this.RootPath, "Runs");
-    /// <summary>Where a run with no pod writes: the runs of inline snippets and unfiled drafts, and per-module task output.</summary>
+    /// <summary>Where a run with no pod writes. Every child is one run folder: <c>_no-pod\&lt;run-id&gt;</c>.</summary>
     public string PodlessRunsPath => Path.Combine(this.RunsPath, ProductPathNames.PodlessRunsDirectoryName);
+    /// <summary>Per-module task output, <c>_modules\&lt;module&gt;</c>: files a pod-less command writes, with no run id.</summary>
+    public string ModuleOutputPath => Path.Combine(this.RunsPath, ProductPathNames.ModuleOutputDirectoryName);
 
     public string PageStatePath(string pageSlug) => Path.Combine(this.RootPath, "Pages", Segment(pageSlug, nameof(pageSlug)));
 

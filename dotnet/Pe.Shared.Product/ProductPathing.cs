@@ -150,8 +150,15 @@ public static class ProductPathing {
     // carries no Exists condition: a machine that never bootstrapped fails the offline build loudly. Key the
     // file only if two of those must build pods at once; the import is one frozen spelling, so the keying has
     // to live inside the props file (a Condition on an environment variable the build is started with).
+    // The import reads $(LOCALAPPDATA), which MSBuild takes from the environment variable, so the writer reads
+    // that same variable first. The known folder ignores the variable: under a redirected or sandbox-set
+    // LOCALAPPDATA it names a different file, and the build would import a missing or stale one (census R3).
+    // This is the one environment read of that root; the state root stays on the SDK's word (InstalledNamespace).
     public static string MachinePropsPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), ProductIdentity.VendorName, ScriptingWorkspaceLayout.MachinePropsFileName);
+        Environment.GetEnvironmentVariable("LOCALAPPDATA") is { } local && !string.IsNullOrWhiteSpace(local)
+            ? local
+            : Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        ProductIdentity.VendorName, ScriptingWorkspaceLayout.MachinePropsFileName);
 
     public static string ResolveApplicationData(string? applicationData) =>
         string.IsNullOrWhiteSpace(applicationData)

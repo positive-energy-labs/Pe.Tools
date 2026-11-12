@@ -24,6 +24,8 @@ public static class ProductPathNames {
     public const string SharedDrivesDirectoryName = "Shared drives";
     /// <summary>The <c>Runs</c> segment for a run no pod owns. A pod id is a slug and cannot start with an underscore.</summary>
     public const string PodlessRunsDirectoryName = "_no-pod";
+    /// <summary>The <c>Runs</c> segment for per-module task output, which is not run-shaped. Reserved like <c>_no-pod</c>.</summary>
+    public const string ModuleOutputDirectoryName = "_modules";
     public const string AgentInstructionsFileName = "AGENTS.md";
     public const string ReadmeFileName = "README.md";
     public const string PodManifestFileName = "pod.json";
