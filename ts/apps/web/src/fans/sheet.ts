@@ -9,7 +9,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { elementSubject, workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { ductsLink } from "../ducts/identity.ts";
-import { ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "../ducts/design-sheet.ts";
+import { ductsSettings, ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "../ducts/design-sheet.ts";
 
 /*
  * /fans' sheet (ruling 2026-11-10: /fans keeps Fans Work only). Every binding stages Fans Work; the
@@ -40,12 +40,19 @@ const nameOf = (read: Read, row: string, word: string) => {
 const rowsOf = (read: Read, ids: readonly string[]) =>
   ids.flatMap((id) => { const s = subjectOf(snapshotOf(read), id); return s ? [s] : []; });
 
-/** A resolved input as a model layer under Work, in the cell's shape (`{ inWg }`, `{ cfm }`). */
-const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { "model-store": "model-store", firm: "firm", default: "default" };
-const layer = (resolved: Immutable<Resolved<unknown>> | undefined, wrap: (v: unknown) => unknown): CellLayer | null =>
-  resolved && resolved.value != null
-    ? { value: wrap(resolved.value), source: SOURCES[resolved.source] ?? "model", ...(resolved.units ? { unit: resolved.units } : {}) }
-    : null;
+/**
+ * A resolved input as a model layer under Work, in the cell's shape (`{ inWg }`, `{ cfm }`). The
+ * source is the tier the host served: `project` or `firm` only when that home's file states the
+ * value; a criterion no home states is `default`, and says so when the firm home was not found.
+ */
+const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { "model-store": "model-store", project: "project", firm: "firm", default: "default" };
+const layer = (resolved: Immutable<Resolved<unknown>> | undefined, wrap: (v: unknown) => unknown, read?: Read): CellLayer | null => {
+  if (!resolved || resolved.value == null) return null;
+  const source = SOURCES[resolved.source] ?? "model";
+  const firm = read?.sheetView.firm;
+  return { value: wrap(resolved.value), source, ...(resolved.units ? { unit: resolved.units } : {}),
+    ...(source === "default" && firm && "refused" in firm ? { ref: ENGINE_DEFAULT_NO_SHARED_ROOT } : {}) };
+};
 
 const units = (read: Read) => Object.keys(inputsOf(read)?.units ?? {});
 const fanUnit = (read: Read) => read?.open?.overview.fan?.unitId ?? null;
@@ -105,6 +112,8 @@ export const fansSheet = {
     };
   },
   bindings: {
+    // The design criteria this fan prices under, each with the home tier that served it; "save at" writes that home.
+    ...ductsSettings,
     writeIntent: local(z.unknown(), "route", { label: "Write scope", choices: scopeChoices }),
     // Slot names are Pe-side configuration (which Revit parameter each slot reads and writes), never a Revit value: `local`.
     parameters: local(z.string().min(1), "subject", {
@@ -160,7 +169,7 @@ export const fansSheet = {
       field: "inWg", unit: "in-wg", min: 0, digits: 4,
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal drop"),
-      model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.drop, (v) => ({ inWg: v })),
+      model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.drop, (v) => ({ inWg: v }), read),
     }),
     componentDrops: parameter("componentDrop", inWg, undefined, {
       field: "inWg", unit: "in-wg", min: 0, digits: 4,

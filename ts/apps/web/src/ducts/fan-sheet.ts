@@ -160,7 +160,7 @@ const sheetModel = read("fans.calculation", {
     const saved = await ctx.read(designLayers, request.target);
     const design = ductsDesign(saved.ducts, saved.fans),
       work = workLayer(design);
-    const criteria = resolveCriteria(work, null, firmLayer(saved.firm));
+    const criteria = resolveCriteria(work, null, firmLayer(saved.firm, saved.settings));
     const tolerances = {
       autoJoinGapIn: criteria.autoJoinGapIn.value,
       candidateBoxIn: criteria.healBoxIn.value,
@@ -196,7 +196,7 @@ const sheetModel = read("fans.calculation", {
       work,
       versions: { Work: saved.revision },
       store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
-      firm: firmLayer(saved.firm),
+      firm: firmLayer(saved.firm, saved.settings),
       catalogs: catalog.tables,
     });
     const first = response.body;
@@ -291,7 +291,7 @@ const sheetModel = read("fans.calculation", {
       firm:
         "refused" in saved.firm
           ? saved.firm
-          : { version: saved.firm.firm.version, path: saved.firm.path, present: saved.firm.present },
+          : { version: firmLayer(saved.firm, saved.settings).version, path: saved.firm.path, present: saved.firm.present },
       titles: titlesOf(grids),
       beyond,
     };
@@ -517,7 +517,7 @@ export const fanRoster = read("fans.roster", {
       work: workLayer(design),
       versions: { Work: saved.revision },
       store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
-      firm: firmLayer(saved.firm),
+      firm: firmLayer(saved.firm, saved.settings),
     });
     const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),
       label = elementLabeler(snapshot);

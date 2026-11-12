@@ -90,7 +90,7 @@ export const builtinData = {
       ...policy,
     },
     selected: { role: "selection", kinds: ["system", "element"] },
-    density: { role: "setting", schema: "number", codec: "number", initial: 1 },
+    density: { role: "device", schema: "number", codec: "number", initial: 1, url: false, share: false, agent: "read" },
     viewport: {
       role: "pose",
       schema: "viewport",

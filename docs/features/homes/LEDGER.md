@@ -32,6 +32,8 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 
 - 2026-11-12, implementor default, re-openable: "notice, never delete" for earlier-version Work left in the user home's `Work/` folder. The host start census posts once per folder through `noteStartupHomes`, without reading, moving, importing or deleting its files; the person may delete the folder. This exception keeps old files visible while homes never hold current Work.
 
+- 2026-11-12, slice 6b: a value's tier label is the home whose file states it; a home that was not found, or holds no file, is never the label. The driver's dfaed397 finding (0.03 labelled "firm" with the firm read refused) was `firmLayer` handing the engine default to the resolver as the firm layer. Falsifier: `ts/apps/web/src/settings/tiers.test.ts`.
+
 ## Tried & rejected
 
 - 2026-11-11, a home qualifier on addresses (`home/kind/name`): it changes the frozen names (the contribution key `member:@<pod>/<path>`, the SubjectRef name tuple, the `/pods` `member` field) and puts a machine-local fact into Work keys. The duplicate-id refusal ends shadowing with no qualifier.
@@ -73,8 +75,11 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 - J1 is red on main by design. It depends on three Ducts route defects that the ducts ledger owns on `t3/pea-muas-retest` (the missing ERV taps on MUAS-1, the discharge priced at about twice the walked value, the unnamed in-line units), and on a render-based struck-row read that the agent ledger owns there.
 - Still open after `t3/pea-muas-retest` merges, owned by the host and agent ledgers: the gateway sign-in race, the LiteParse binaries in the installed build, and the stale `session-slot` claim with no recovery verb.
 - The remote MCP gateway stays on its branch until its send tools have a door that returns "held".
-- The driver observed at dfaed397 that per-terminal rows label 0.03 as "firm" while the firm read is refused. FS's provenance target is the falsifier; the fix belongs to slice 6b.
-- The comment at `ductsFirmSchema` in `ts/packages/agent-contracts/src/ducts-sheet.ts` names `<user content>/Firm/ducts.json`; the code reads the shared root. Correct it in the commit that renames `Firm/` to `Settings/`.
+- Slice 6b, design friction: `designFriction` is still a Work-only cell (`ts/packages/agent-contracts/src/ducts.ts`, read at `ts/packages/ducts-domain/src/pricing.ts` as `edit.designFriction`). Make it a `setting("ducts", …)` under Work. It was left because its Work key sits in sealed fixtures and semantic actions, which need the full suite.
+- Slice 6b, parameter slot names: /fans' `parameters` rows are still Work-only (`staged.parameters` feeds the `slots` of every `ducts.snapshot.*` request). Make them a project and firm setting under Work. It was left because the slots reach the C# read, so the change needs the Revit lane.
+- Slice 6b, FS on real lanes: the falsifier `ts/apps/web/src/settings/tiers.test.ts` covers FS steps 1, 2, 6 and 7 on temp homes with no Revit. The `settings.tiers.read` and `settings.tiers.write` ops, the save-at control in a browser, and steps 3 to 5 are UNPROVEN[two hosts; dev session for step 3].
+- Slice 6b, freshness: another machine's write to a project or user tier is not watched (`ponytail:` in `ts/apps/host/src/builtin-inputs.ts`). A sheet shows it after a local write, a firm-folder change, or a host restart. FS step 6 ("A sees 850 on refresh") needs a watch or a read that is not cached.
+- Slice 6b, user tier: no binding declares `user`. Appearance (theme) still lives in browser storage through `ts/apps/web/src/settings/options.tsx`, with the option catalogue beside it. Move it to a `user` setting and delete the catalogue, or rule that browser state is not a setting.
 - The takeoffs and rooms sheets do not yet show the `unreadable` lists that slice 2 puts on the wire (`TakeoffUnreadableBlob`, homes/c-carriers f8baf399). A TS writer surfaces them as "can't read, kept".
 - `ops-catalog.sha` hashes every C# source, and merges of C# edits from separate branches leave it stale. Regenerate it at each integration checkpoint before the purger's suite.
 - `settingsSchemaPath` lives in `ts/apps/host/src/settings.ts`, which boots host lane resolution at import, so the `$schema` census guard restates its regex instead of importing it. Move it into `host-contracts` and make the guard import it.

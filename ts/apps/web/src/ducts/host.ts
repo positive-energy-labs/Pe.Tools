@@ -168,6 +168,7 @@ export const ductsPricing = read("ducts.pricing", {
             catalogFindings: true,
             criteria: true,
             firm: true,
+            settings: true,
           })
           .parse(
             wire(
@@ -196,9 +197,10 @@ export const ductsPricing = read("ducts.pricing", {
           fansWork: layers.fans,
           catalogFindings: catalog.findings,
           // Under Work: the store over the firm file, so a staged criterion draws beside what it replaces.
-          criteria: resolveCriteria(null, snapshot.store as Parameters<typeof resolveCriteria>[1], firmLayer(layers.firm)),
+          criteria: resolveCriteria(null, snapshot.store as Parameters<typeof resolveCriteria>[1], firmLayer(layers.firm, layers.settings)),
           firm: "refused" in layers.firm ? layers.firm
-            : { version: layers.firm.firm.version, path: layers.firm.path, present: layers.firm.present },
+            : { version: firmLayer(layers.firm).version, path: layers.firm.path, present: layers.firm.present },
+          settings: { ducts: layers.settings } as Readonly<Record<string, typeof layers.settings>>,
         };
       },
     );

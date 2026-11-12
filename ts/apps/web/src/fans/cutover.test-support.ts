@@ -146,7 +146,7 @@ export async function createWitness(
                     effectiveDesign:
                       withStoredRulings(ductsDesign(ductsWork, fansWork), snapshot.store, snapshot) ??
                       ductsDesign(ductsWork, fansWork),
-                    catalogFindings: [],espOptions:null,espOptionsError:"Fixture has no native parameter options",
+                    catalogFindings: [],settings: {},espOptions:null,espOptionsError:"Fixture has no native parameter options",
                     // The fixture's criteria as the Fans sheet fixture resolved them, over a stand-in firm file.
                     criteria: sheet.inputs.inputs.criteria,
                     firm: sheet.inputs.firm,
@@ -190,6 +190,7 @@ export async function createWitness(
           sheetView: sheetState(open),
           ductsWork,
           ductsRevision: (saved.get("ducts") as { revision?: number } | undefined)?.revision ?? 0,
+          settings: {},
           fansWork,
           design: ductsDesign(ductsWork, fansWork),
         });

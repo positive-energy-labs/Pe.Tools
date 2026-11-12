@@ -59,6 +59,7 @@
     "./takeoff-read": "./src/takeoff-read.ts",
     "./slots": "./src/slots/index.ts",
     "./target": "./src/target.ts",
+    "./tiered-setting": "./src/tiered-setting.ts",
     "./native-output-read": "./src/native-output-read.ts"
   },
   "publishConfig": {

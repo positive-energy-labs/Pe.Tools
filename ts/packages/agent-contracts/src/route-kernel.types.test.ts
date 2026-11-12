@@ -155,16 +155,16 @@ export function typeRefusals(
       return "ok";
     },
   };
-  page.set("density", 2);
+  page.device("density", 2);
   page.select([
     { kind: "system", id: local },
     { kind: "element", id: "attention-place" },
   ]);
   controls.query("search", "fan");
-  // @ts-expect-error query is not a setting
-  page.set("search", "fan");
-  // @ts-expect-error subject is not a setting
-  page.set("system", local);
+  // @ts-expect-error query is not a device field
+  page.device("search", "fan");
+  // @ts-expect-error subject is not a device field
+  page.device("system", local);
   // @ts-expect-error subject cannot hide in a camera patch
   page.pose({ system: local }, "gesture");
   const widerPose = { viewport: { x: 1, y: 2 }, system: local };
@@ -449,12 +449,6 @@ describe("S0 signature witnesses", () => {
     expect(
       RouteGraphJson.safeParse({
         ...builtinData,
-        fields: { ...builtinData.fields, density: { ...builtinData.fields.density, url: "push" } },
-      }).success,
-    ).toBe(false);
-    expect(
-      RouteGraphJson.safeParse({
-        ...builtinData,
         verbs: { ...builtinData.verbs, apply: { ...builtinData.verbs.apply, review: "required" } },
       }).success,
     ).toBe(false);
@@ -509,8 +503,8 @@ export function sourceRetention(
       const density: number = ctx.page.read().density;
       // @ts-expect-error renamed field is unavailable after admission
       void ctx.page.read().oldDensity;
-      // @ts-expect-error query field is not a setting
-      ctx.page.set("search", "bad");
+      // @ts-expect-error query field is not a device field
+      ctx.page.device("search", "bad");
       return String(density);
     },
   };

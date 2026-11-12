@@ -1,12 +1,14 @@
 import type { ContextOf } from "../route/defaults";
 import { read } from "../route/defaults";
-import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { SETTINGS_SECTIONS } from "../../../../packages/agent-contracts/src/settings-sections.ts";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
 import { field, route } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
+import { split } from "../route/typed-route.ts";
+import type { SheetSlot } from "../../../../packages/agent-contracts/src/slots/sheet.ts";
+import { ductsSettings } from "../ducts/design-sheet.ts";
 
 import {
   settingsArgs,
@@ -16,10 +18,13 @@ export const loaded = read(hostRead(valueRead("settings.machine", settingsArgs, 
 /** The Revit session row a link focuses. */
 export const fields = { session: field(z.string(), "", "pose") };
 /*
- * ADR 0035 rule 1: settings has no subject and an empty sheet. Its per-user setting fields have no
- * binding kind (rule 3 is closed to `parameter`, `store` and `local`), so the settings pane stays the
- * route's own drawing until a kind is ruled; `section` is the one route-owned query.
+ * ADR 0035 rule 1, as amended by ADR 0037 rule 8 (homes MAP slice 6b): settings has no subject, and
+ * its sheet lists every tiered setting a route declares, each with the home tier that served it and
+ * "save at" for each tier. With no target model here, the project tier says it has no home; a route
+ * with a target (/fans, /ducts) saves at it. The machine pane stays the route's own drawing: it
+ * holds acts on this machine (Revit sessions, update, sharing, providers), not values in a home.
  */
+export const settingsSheet = { bindings: { ...ductsSettings } } as const satisfies SheetSlot;
 export const query = {
   section: field(z.enum(["none", ...SETTINGS_SECTIONS]).optional(), undefined, "query", "push"),
 };
@@ -54,13 +59,14 @@ export const module = route({
   fields,
   query,
   core: loaded,
+  sheet: settingsSheet,
   panes: {
     settings: {
-      title: "Settings",
-      purpose: "Configure this machine and every route",
+      title: "This machine",
+      purpose: "Revit, updates, sharing, providers and appearance on this machine",
       body: "scroll",
       draw: draw("scroll", () => import("./drawing.tsx"), "SettingsDrawing"),
     },
   },
-  layout: paneLayout("settings"),
+  layout: split("v", ["settings", "sheet"], { id: "settings-layout", size: 320, sized: "end" }),
 });

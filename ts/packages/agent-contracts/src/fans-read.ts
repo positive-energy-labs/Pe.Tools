@@ -4,6 +4,7 @@ import { ductsDocumentSchema } from "./ducts.ts";
 import { fansDocumentSchema } from "./fans.ts";
 import { subjectRefCodeSchema } from "./subject-ref.ts";
 import { z } from "zod";
+import { settingTiersSchema } from "./tiered-setting.ts";
 import {
   ductsRosterResponseSchema,
   ductsSheetOverviewSchema,
@@ -48,6 +49,8 @@ export const fansSheetData = fanSheetSchema.extend({
     firm: detail[4].shape.firm.nullable(),
   }),
   design: z.object({ ...fansDocumentSchema.shape, ...ductsDocumentSchema.shape }),
+  /** Each owner's `Settings/<owner>.json` in every home tier, as the host read it: a `setting` cell's tiers (ADR 0037 rule 8). */
+  settings: z.record(z.string(), settingTiersSchema),
   fans: ductsRosterResponseSchema,
   ductsWork: ductsDocumentSchema,
   /** The /ducts Work revision this read priced with: the Fans sheet's read-only line to the design it depends on. */

@@ -1,8 +1,7 @@
 import { workRead } from "@pe/host/reads/inputs";
 import { z } from "zod";
-import { ductsDocumentSchema, ductsFirmSchema, fansDocumentSchema, documentRefSchema } from "@pe/agent-contracts";
+import { ductsDocumentSchema, ductsFirmSchema, fansDocumentSchema, documentRefSchema, settingTiersSchema } from "@pe/agent-contracts";
 import { firmReading } from "@pe/host/ducts-files";
-import { FIRM_SEED } from "@pe/host/ducts-inputs";
 import { read, workScope } from "@pe/host/read-graph";
 export const designLayers = read("ducts.design-layers", {
   input: documentRefSchema,
@@ -12,6 +11,8 @@ export const designLayers = read("ducts.design-layers", {
     revision: z.number(),
     fansRevision: z.number(),
     firm: firmReading,
+    /** Every home tier's `Settings/ducts.json` for this model: the project tier feeds the engine, and the sheet labels by it. */
+    settings: settingTiersSchema,
   }),
   async run(ctx, target) {
     const scope = await ctx.read(workScope, target);
@@ -22,7 +23,8 @@ export const designLayers = read("ducts.design-layers", {
       fans: fansDocumentSchema.parse(fans?.doc ?? {}),
       revision: ducts?.revision ?? 0,
       fansRevision: fans?.revision ?? 0,
-      firm: await ctx.firm("ducts", ductsFirmSchema, FIRM_SEED),
+      firm: await ctx.firm("ducts", ductsFirmSchema, {}),
+      settings: await ctx.settings("ducts", target),
     };
   },
 });

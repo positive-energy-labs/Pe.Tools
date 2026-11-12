@@ -1,4 +1,5 @@
 import type { Immutable } from "@pe/agent-contracts";
+import { serveSetting, type SettingTier, type SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 import type { ModelValue, SheetChoice, SheetSlot, StateCell } from "@pe/agent-contracts/slots";
 
 /*
@@ -26,6 +27,9 @@ import type { ModelValue, SheetChoice, SheetSlot, StateCell } from "@pe/agent-co
  *   per-fitting loss readouts                            /fans Ledger: a result, beside the ESP it explains
  *   undo, redo, revert, restore                          kernel chrome (the Timeline) and each cell's own clear
  *   typed-only filter                                    the sheet pane's chrome, cells whose source is Work
+ *
+ * A `setting` binding (homes MAP slice 6b) never stages in Work: its cell draws the tier that served
+ * it and saves at a tier through the home write door (`settings.tiers.write`).
  */
 
 export interface SheetInput<W = unknown> {
@@ -50,6 +54,44 @@ export interface SheetCell extends StateCell {
   readonly ref?: string;
   readonly refusal?: string;
   readonly note?: string;
+  /** A `setting` cell's save-at targets: each declared tier's home and the hash its next write names. */
+  readonly setting?: {
+    readonly owner: string;
+    readonly path: readonly string[];
+    readonly tiers: readonly { readonly tier: SettingTier; readonly home: string | null; readonly sha256: string | null; readonly notFound?: string }[];
+  };
+}
+
+/**
+ * A `setting` cell (ADR 0037 rule 8): the read carries each owner's tiers as the host read them
+ * (`read.settings[owner]`), and `serveSetting` picks the tier. The label is the home that served
+ * the value, so a tier whose home was not found can never be the source.
+ */
+function settingCell(binding: string, declared: Extract<SheetSlot["bindings"][string], { kind: "setting" }>, read: unknown): SheetCell {
+  const tiers = (read as { settings?: Readonly<Record<string, readonly SettingTierRead[]>> } | null | undefined)?.settings?.[declared.owner];
+  const served = serveSetting(tiers, declared.tiers, declared.path, declared.schema, declared.default);
+  const numeric = defined({ min: declared.min, max: declared.max, digits: declared.digits });
+  return {
+    binding,
+    kind: "setting",
+    value: served.value,
+    model: served.value,
+    pending: null,
+    drift: false,
+    freshness: tiers ? "fresh" : "never",
+    source: served.tier,
+    label: declared.label ?? binding,
+    ...defined({ unit: declared.unit, ref: served.ref, note: served.note }),
+    ...(Object.keys(numeric).length ? { numeric } : {}),
+    setting: {
+      owner: declared.owner,
+      path: declared.path,
+      tiers: declared.tiers.map((tier) => {
+        const at = tiers?.find((candidate) => candidate.tier === tier);
+        return { tier, home: at?.home ?? null, sha256: at?.sha256 ?? null, ...(at?.home ? {} : { notFound: at?.notFound ?? `No ${tier} home was read` }) };
+      }),
+    },
+  };
 }
 
 const defined = <T extends object>(o: T) =>
@@ -60,6 +102,7 @@ export function sheetCells(slot: SheetSlot, input: SheetInput): readonly SheetCe
   const work = (input.work ?? {}) as Readonly<Record<string, unknown>>;
   const read = input.read;
   return Object.entries(slot.bindings).flatMap(([binding, declared]) =>
+    declared.kind === "setting" ? [settingCell(binding, declared, read)] :
     (declared.per === "subject" ? (read !== undefined && declared.rows?.(read)) || input.rows : [undefined]).map((row): SheetCell => {
       const held = work[binding];
       const at = row === undefined ? held : (held as Readonly<Record<string, unknown>> | undefined)?.[row];

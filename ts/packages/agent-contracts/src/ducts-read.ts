@@ -1,5 +1,6 @@
 import { circuitReadSchema, inferenceReadSchema, overridesReadSchema, stagedDuctsReadSchema } from "./ducts-pricing-read.ts";
 import { z } from "zod";
+import { settingTiersSchema } from "./tiered-setting.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { documentRefSchema } from "./target.ts";
 import { ductsDocumentSchema } from "./ducts.ts";
@@ -161,6 +162,8 @@ export const ductsPricingData = z.object({
     z.strictObject({ version: z.string(), path: z.string(), present: z.boolean() }),
     z.strictObject({ refused: z.literal("no-shared-root") }),
   ]),
+  /** Each owner's `Settings/<owner>.json` in every home tier, as the host read it: a `setting` cell's tiers (ADR 0037 rule 8). */
+  settings: z.record(z.string(), settingTiersSchema),
   priced: z.object({
     snapshot: nativeResponseSchema("ducts.snapshot.walk"),
     flows: record(flow),
