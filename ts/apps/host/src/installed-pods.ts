@@ -4,12 +4,12 @@
  * overwritten. Callers await this before anything reads the pods root.
  */
 import { join, dirname, resolve } from "node:path";
-import { mkdir, readFile, readdir, writeFile, rename } from "node:fs/promises";
-import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, readdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { z } from "zod";
-import { readStored, writeAtomic } from "@pe/host-contracts/store";
+import { noteStored, readStored, writeAtomic } from "@pe/host-contracts/store";
 import { storedNoticesPath } from "./notice-feed.ts";
-import { writeArtifact } from "./page-artifacts.ts";
+import { sha256Hex, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 import { productPathNames, scriptingWorkspaceIdentity } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "./host-ownership.ts";
 import {
@@ -26,6 +26,7 @@ import { captureDirectory, isPackageMember, listPackages, productPodsRoots, type
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { activateImportedPackage } from "./package-lifecycle.ts";
 import { productPodsRootPath } from "./product-paths.ts";
+import { writeHome } from "./settings.ts";
 
 type ShippedPodOutcome =
   | { archive: string; sha256: string; outcome: "imported"; id: string; folder: string }
@@ -44,6 +45,7 @@ const ledgerSchema = z.object({
 async function shippedPodsRoot(options: TransferOptions & { ledger?: string }): Promise<string> {
   if (hostOwnership.lane === "installed") return join(dirname(process.execPath), "pods");
   const examples = join(hostOwnership.sourceRoot!, "examples", "pods");
+  await readdir(examples);
   const listing = await listPackages(examples);
   if (listing.unreadable.length)
     throw Error(`Unreadable shipped Pods: ${listing.unreadable.map((pod) => pod.message).join("; ")}`);
@@ -116,32 +118,37 @@ async function ensureDefaultPod(podsRoot: string | undefined): Promise<void> {
     return;
   podsRoot ??= productPodsRootPath();
   const manifest = join(podsRoot, key, "pod.json");
-  await mkdir(dirname(manifest), { recursive: true });
-  await writeFile(
+  const wrote = writeHome(
     manifest,
     `${JSON.stringify({ schemaVersion: 2, id: key, name: key, version: "0.1.0", entrypoints: [] }, null, 2)}
 `,
-    { flag: "wx" },
-  ).then(
-    // The host made this pod at this start, so it is on, like an import: a pod first seen after
-    // the start census is otherwise off, and `pod.list` would never name it. An existing manifest
-    // keeps whatever a person chose.
-    () => activateImportedPackage(key, podsRoot!),
-    (error: NodeJS.ErrnoException) => {
-      if (error.code !== "EEXIST") throw error;
-    },
+    null,
   );
+  // The host made this pod at this start, so it is on, like an import: a pod first seen after
+  // the start census is otherwise off, and `pod.list` would never name it. An existing manifest
+  // keeps whatever a person chose.
+  if (wrote.ok) await activateImportedPackage(key, podsRoot);
 }
 
 async function run(
   options: TransferOptions & { shippedRoot?: string | null; ledger?: string },
 ): Promise<ShippedPodsReport> {
   await ensureDefaultPod(options.podsRoot);
-  const shippedRoot = options.shippedRoot === undefined ? await shippedPodsRoot(options) : options.shippedRoot;
+  let shippedRoot = options.shippedRoot ?? null;
+  let archives: string[];
+  try {
+    if (options.shippedRoot === undefined) shippedRoot = await shippedPodsRoot(options);
+    if (!shippedRoot) return { shippedRoot, outcomes: [] };
+    archives = (await readdir(shippedRoot)).filter((name) => /\.zip$/i.test(name)).sort();
+  } catch (error) {
+    noteStored(storedNoticesPath(), {
+      class: "keep", place: "Shipped examples",
+      path: shippedRoot ?? join(hostOwnership.sourceRoot ?? dirname(process.execPath), "examples", "pods"),
+      sha256: null, reason: `Examples unavailable: ${String(error)}`,
+    });
+    return { shippedRoot, outcomes: [] };
+  }
   if (!shippedRoot) return { shippedRoot, outcomes: [] };
-  const archives = (await readdir(shippedRoot).catch(() => [] as string[]))
-    .filter((name) => /\.zip$/i.test(name))
-    .sort();
   if (!archives.length) return { shippedRoot, outcomes: [] };
 
   const ledgerFile = options.ledger ?? ledgerPath();
@@ -226,23 +233,30 @@ async function offer(
           const retained = join(options.originalsRoot, `${provenance.archiveSha256}.zip`);
           await mkdir(dirname(retained), { recursive: true });
           await writeArtifact(options.originalsRoot, retained, original);
-          // Preserve the full old folder too: runtime outputs and other local files are not authored members.
-          const backup = join(dirname(options.originalsRoot), "shipped-pod-backups", `${id}-${randomUUID()}`);
-          await mkdir(dirname(backup), { recursive: true });
           const fresh = await captureDirectory(installed.directory);
           if (fresh.diagnostics.length || !matches(readZip(original), { ...installed, members: fresh.members }))
             throw Error("its members changed during the update check");
-          await rename(installed.directory, backup);
-          try {
-            const imported = await installArchive(bytes, path, installed.folder, options);
-            return { archive, sha256, outcome: "updated", id, folder: imported.folder };
-          } catch (error) {
-            // A post-rename activation failure must preserve both folders before restoring custody.
-            if (await readFile(join(installed.directory, "pod.json")).then(() => true, () => false))
-              await rename(installed.directory, `${backup}-failed-update`);
-            await rename(backup, installed.directory);
-            throw Error("the replacement could not be activated; the original folder was restored", { cause: error });
+          const next = readZip(bytes);
+          for (const [member, content] of next) {
+            if (/^pages\/[^/]+\/index\.html$/.test(member)) validatePageHtml(content.toString("utf8"), true);
+            const capture = /^captures\/([0-9a-f]{64})\.png$/.exec(member);
+            if (capture && sha256Hex(content) !== capture[1])
+              throw Error(`Capture '${member}' does not hash to its name.`);
           }
+          // The write door has no delete verb. Keep an example that needs member removal,
+          // rather than bypassing CAS or moving its home folder across volumes.
+          if (fresh.members.some(member => !next.has(member.path)))
+            throw Error("its update removes members; import the example into a separate workspace");
+          for (const [member, content] of [...next].sort(([a], [b]) => Number(a === "pod.json") - Number(b === "pod.json"))) {
+            const prior = fresh.members.find(m => m.path === member);
+            if (!writeHome(join(installed.directory, member), content, prior?.sha256 ?? null).ok)
+              throw Error("its members changed during the update write");
+          }
+          writeAtomic(importRecordPath(id, options), `${JSON.stringify({ archiveSha256: sha256, archive, date: new Date().toISOString() })}\n`);
+          for (const [member, content] of next)
+            if (/^captures\/[0-9a-f]{64}\.png$/.test(member)) await options.captures!.adopt(content);
+          await activateImportedPackage(id, options.podsRoot ?? productPodsRootPath());
+          return { archive, sha256, outcome: "updated", id, folder: installed.folder };
         } catch (error) {
           console.error("Shipped example update kept", { id, error });
           const reason = error instanceof Error && /^(its |the replacement )/.test(error.message)

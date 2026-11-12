@@ -24,6 +24,7 @@ import { scratchPageDirectory } from "./page-libraries.ts";
 import { activateImportedPackage } from "./package-lifecycle.ts";
 import { sha256Hex as sha256, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 import { StepFailure } from "./command-executor.ts";
+import { writeHome } from "./settings.ts";
 
 const VENDOR_DIRECTORY = "_vendor";
 const LOCAL_PREFIX = "@local/";
@@ -302,7 +303,11 @@ export async function installArchive(
     const admitted = (await listPackages(staging)).packages[0];
     if (!admitted || admitted.id !== id)
       throw new TransferRefused(`Pod archive '${locator}' is not an admissible pod.`);
-    await placePod(join(staging, folder), directory);
+    // Manifest last: readers never admit a partially published pod. Home writes use CAS,
+    // including first imports, rather than renaming machine state onto a synced drive.
+    for (const [path, bytes] of [...entries].sort(([a], [b]) => Number(a === "pod.json") - Number(b === "pod.json")))
+      if (!writeHome(join(directory, path), bytes, null).ok)
+        throw new TransferRefused(`Pod member changed during import: ${path}`, 409);
     // The import record is machine state (it is derived, and dated here), keyed by the pod's id.
     // It names its archive by content hash and file name: no machine path is stored anywhere.
     writeAtomic(

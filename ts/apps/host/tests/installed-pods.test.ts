@@ -3,7 +3,7 @@ import { pictureCaptures } from "./effect-test.ts";
  * First-run import of shipped pods: ordinary import, once per archive, never over a user's pod.
  * The shipped archive is written by the production exporter, never a fixture zip writer.
  */
-import { afterEach, beforeEach, expect, test } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -13,6 +13,9 @@ import { storedNoticesPath } from "../src/notice-feed.ts";
 import { importShippedPods } from "../src/installed-pods.ts";
 import { listPackages } from "../src/packages.ts";
 import { exportPod, importRecordPath } from "../src/pod-transfer.ts";
+import * as settings from "../src/settings.ts";
+import { productPodsRootPath } from "../src/product-paths.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 let root: string;
 let shipped: string;
@@ -44,9 +47,66 @@ beforeEach(async () => {
     { podsRoot: source, captures },
   );
 });
-afterEach(() => rm(root, { recursive: true, force: true }));
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); return rm(root, { recursive: true, force: true }); });
 
 const boot = () => importShippedPods({ shippedRoot: shipped, ledger, podsRoot: pods, captures });
+
+test("host-start examples use the override home and the write door, never the Documents home", async () => {
+  const override = join(root, "override");
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", override);
+  const writes = vi.spyOn(settings, "writeHome");
+  // Observe resolution before any import: a real-home mutant fails without touching personal files.
+  expect(productPodsRootPath()).toBe(join(override, "Pods"));
+  const report = await importShippedPods({ shippedRoot: shipped, ledger, captures });
+  expect(report.outcomes).toMatchObject([{ outcome: "imported" }]);
+  expect(await readFile(join(override, "Pods", "example", "pod.json"), "utf8")).toContain('"example"');
+  expect(writes.mock.calls.length).toBeGreaterThanOrEqual(3);
+  expect(writes.mock.calls.every(([path]) => path.startsWith(override + "/") || path.startsWith(override + "\\"))).toBe(true);
+});
+
+test("host-start missing example source posts one notice and never throws", async () => {
+  const missing = join(root, "missing-examples");
+  const start = () => importShippedPods({ shippedRoot: missing, ledger, podsRoot: pods, captures });
+  await expect(start()).resolves.toMatchObject({ outcomes: [] });
+  await start();
+  expect(readStoredNotices(storedNoticesPath()).filter(n => n.path === missing))
+    .toMatchObject([{ class: "keep", place: "Shipped examples" }]);
+  expect(readStoredNotices(storedNoticesPath()).filter(n => n.path === missing)).toHaveLength(1);
+});
+
+test("a dev host with a missing checkout example directory still starts with one notice", async () => {
+  const sourceRoot = hostOwnership.sourceRoot;
+  const missingCheckout = join(root, "missing-checkout");
+  Object.defineProperty(hostOwnership, "sourceRoot", { value: missingCheckout });
+  try {
+    const start = () => importShippedPods({ ledger, podsRoot: pods, captures });
+    await expect(start()).resolves.toMatchObject({ outcomes: [] });
+    await start();
+    expect(readStoredNotices(storedNoticesPath()).filter(n => n.path === join(missingCheckout, "examples", "pods")))
+      .toHaveLength(1);
+  } finally {
+    Object.defineProperty(hostOwnership, "sourceRoot", { value: sourceRoot });
+  }
+});
+
+test("a shipped update uses home CAS without moving the pod, and keeps a later user edit", async () => {
+  await boot();
+  const member = join(pods, "example", "pages", "tour", "index.html");
+  const writes = vi.spyOn(settings, "writeHome");
+  const update = async (html: string) => {
+    await writeFile(join(root, "examples", "example", "pages", "tour", "index.html"), html);
+    await rm(join(shipped, "example.zip"));
+    await exportPod({ pod: "example", archivePath: join(shipped, "example.zip") },
+      { podsRoot: join(root, "examples"), captures });
+    return boot();
+  };
+  expect((await update("<title>Updated</title>")).outcomes).toMatchObject([{ outcome: "updated" }]);
+  expect(await readFile(member, "utf8")).toBe("<title>Updated</title>");
+  expect(writes.mock.calls.some(([path, , sha]) => path === member && sha !== null)).toBe(true);
+  await writeFile(member, "<title>Mine</title>");
+  expect((await update("<title>New version</title>")).outcomes).toMatchObject([{ outcome: "present" }]);
+  expect(await readFile(member, "utf8")).toBe("<title>Mine</title>");
+});
 
 test("first boot imports the shipped pod; a restart offers nothing again, even after the user deletes it", async () => {
   const first = await boot();
