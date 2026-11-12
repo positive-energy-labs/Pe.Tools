@@ -136,7 +136,7 @@ import {
 import {
   createNoticeFeed,
   noticeRows,
-  noteNoFirmHome,
+  noteStartupHomes,
   storedNoticesPath,
   type NoticeSources,
 } from "./notice-feed.ts";
@@ -1169,7 +1169,7 @@ function* hostPeRoutes(
   const worldRoot = productAgentPath();
   mkdirSync(worldRoot, { recursive: true });
   // Unbound is a working state (ADR 0037 rule 2): the host starts, and the feed says where it looked.
-  noteNoFirmHome();
+  noteStartupHomes();
   // One host log line per home, with its tier and how it was found; with no firm home, where it looked.
   for (const line of homeLogLines()) yield* Effect.logInfo(line);
   let invalidateCatalog = () => {};
