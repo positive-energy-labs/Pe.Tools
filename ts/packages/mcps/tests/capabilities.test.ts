@@ -498,6 +498,9 @@ const run = (tool: ExecutableTool, input: unknown, head = turn) =>
 test("Pea discovers the sheet plan, decodes any route's handle, and previews Ducts", async () => {
   fakeRuntimeHost("http://127.0.0.1:19999");
   const f = await nativeFixture();
+  // Pea acts inside its turn's open run (ADR 0038): every Pea command needs one.
+  const peaRun = { thread: "t1", turn: "discover" };
+  f.runs.open(peaRun);
   try {
     const staged = await f.saved.apply(
       { ...f.key, route: "fans" },
@@ -530,7 +533,7 @@ test("Pea discovers the sheet plan, decodes any route's handle, and previews Duc
       if (path === "/ops") return Response.json({ operations: [] });
       return path.startsWith("/pe/")
         ? f.api.fetch(request)
-        : f.request(request, { kind: "pea", context: "context-t1", thread: "t1" });
+        : f.request(request, { kind: "pea", context: "context-t1", thread: "t1", run: peaRun, root: peaRun });
     });
     const head: Head = {
       thread: "t1",

@@ -375,7 +375,7 @@ export async function nativeFixture(
         runs.closeAll();
         await Promise.all(
           (await journal.list())
-            .filter((row) => ["running", "waiting", "queued"].includes(row.state))
+            .filter((row) => row.state === "running")
             .map((row) => journal.cancel(row.id)),
         );
         await journal.close();

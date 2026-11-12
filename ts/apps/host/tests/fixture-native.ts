@@ -160,7 +160,7 @@ export async function fixtureNative(
           try {
             // Effect-owned preparation reads can lack the ALS-derived command on the frame.
             // Use the real journal admission; refuse ambiguous concurrent command ownership.
-            const active = req.derivedCommand ? [] : (yield* Effect.promise(() => journal.list())).filter(row => ["running", "queued", "waiting"].includes(row.state));
+            const active = req.derivedCommand ? [] : (yield* Effect.promise(() => journal.list())).filter(row => row.state === "running");
             const owners = [...new Set(active.map(row => row.key))];
             if (owners.length > 1) throw Error("Fixture cannot attribute this native read to one admitted action");
             const action = req.derivedCommand ?? owners[0] ?? `native:${req.operationKey}`;

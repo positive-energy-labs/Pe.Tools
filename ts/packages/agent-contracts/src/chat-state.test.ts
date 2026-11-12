@@ -298,7 +298,7 @@ describe("following the host log", () => {
   });
 });
 
-describe("run consent window (chaos defect 4)", () => {
+describe("a recorded permission answer (old logs)", () => {
   const ask = (deadline?: string): HarnessEvent[] => [
     update(1, "t9", {
       sessionUpdate: "tool_call",

@@ -146,7 +146,7 @@ export async function nativeFixture(
     advance: (milliseconds: number) => settle(TestClock.adjust(milliseconds).pipe(Effect.provide(clock))),
     async close() {
       runs.closeAll();
-      for (const row of await journal.list()) if (["running", "waiting", "queued"].includes(row.state)) await journal.cancel(row.id);
+      for (const row of await journal.list()) if (row.state === "running") await journal.cancel(row.id);
       await transport.close();
       await settle(Scope.close(scope, Exit.void));
       bindControl({ runs: undefined });

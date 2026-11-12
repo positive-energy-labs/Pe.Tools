@@ -198,7 +198,6 @@ function acquiring(process: { pid: number; processStartUtc: string }): ActionRec
     effects: [],
     consumes: [],
     claims: [],
-    consent: { by: "press" },
     state: "succeeded",
     target: { kind: "host" },
     input: { source: "C:/Tower.rvt", into: { start } },

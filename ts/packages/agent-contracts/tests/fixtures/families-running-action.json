@@ -145,7 +145,6 @@
     }
   ],
   "claims": [],
-  "consent": null,
   "basis": {
     "kind": "human"
   },

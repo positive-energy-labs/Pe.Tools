@@ -52,7 +52,6 @@ test("not-dispatched Families receipts retain defaults and outcomes", () => {
     },
   ]);
   expect(rows[0]).toMatchObject({
-    consent: null,
     effects: [],
     consumes: [],
     outcome: { state: "failed", recovery: "retry" },
