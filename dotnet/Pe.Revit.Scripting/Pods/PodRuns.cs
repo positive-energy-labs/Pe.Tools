@@ -17,6 +17,9 @@ public sealed record PodRunInputFile(string Role, string? Pod, string Address, s
 ///     Run output is machine state (ADR 0037 rule 6): a pod may sit in a shared home, so a run writes no byte into it.
 /// </summary>
 public static class PodRuns {
+    // Other processes may have in-flight writes in sibling folders under the shared user state root.
+    private const int TemporaryFileStaleAgeHours = 1;
+
     private static readonly JsonSerializerSettings Json = new() {
         Formatting = Formatting.Indented,
         ContractResolver = new CamelCasePropertyNamesContractResolver()
@@ -29,17 +32,19 @@ public static class PodRuns {
     ///     that must write its output before the receipt exists. Keyed on the id, never on where the pod sits.
     /// </summary>
     public static string NewRunFolder(string? podId) {
-        var started = DateTime.UtcNow;
+        var staleBefore = DateTime.UtcNow.AddHours(-TemporaryFileStaleAgeHours);
         var runFolder = ProductRuntimeLayout.Current.State.RunPath(podId, RunId());
         _ = Directory.CreateDirectory(runFolder);
-        foreach (var folder in Directory.EnumerateDirectories(Path.GetDirectoryName(runFolder)!))
+        foreach (var folder in Directory.EnumerateDirectories(Path.GetDirectoryName(runFolder)!)) {
+            if (string.Equals(folder, runFolder, StringComparison.OrdinalIgnoreCase)) continue;
             foreach (var temporary in Directory.EnumerateFiles(folder, "*.tmp", SearchOption.AllDirectories)) {
                 try {
-                    if (File.GetLastWriteTimeUtc(temporary) < started) File.Delete(temporary);
+                    if (File.GetLastWriteTimeUtc(temporary) < staleBefore) File.Delete(temporary);
                 } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
                     Serilog.Log.Warning(exception, "Could not sweep abandoned run temporary file {Path}", temporary);
                 }
             }
+        }
         return runFolder;
     }
 

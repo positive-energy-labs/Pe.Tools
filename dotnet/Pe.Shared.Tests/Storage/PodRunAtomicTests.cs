@@ -19,12 +19,14 @@ public class PodRunAtomicTests {
             File.WriteAllText(stale, "partial");
             File.WriteAllText(active, "in progress");
             File.WriteAllText(published, "published");
-            File.SetLastWriteTimeUtc(stale, new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-            File.SetLastWriteTimeUtc(active, new DateTime(2100, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+            var now = DateTime.UtcNow;
+            File.SetLastWriteTimeUtc(stale, now.AddHours(-2));
+            File.SetLastWriteTimeUtc(active, now.AddSeconds(-10));
             PodRuns.NewRunFolder(pod);
             Assert.Multiple(() => {
                 Assert.That(File.Exists(stale), Is.False);
-                Assert.That(File.ReadAllText(active), Is.EqualTo("in progress"));
+                Assert.That(File.Exists(active), Is.True, "Another process may still be publishing this recent temporary file");
+                if (File.Exists(active)) Assert.That(File.ReadAllText(active), Is.EqualTo("in progress"));
                 Assert.That(File.ReadAllText(published), Is.EqualTo("published"));
             });
         } finally { Directory.Delete(root, true); }
