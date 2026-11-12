@@ -145,6 +145,22 @@ test("rollback names a directory kept because a concurrent writer added a file",
   expect(await readFile(join(directory, "later.txt"), "utf8")).toBe("mine");
 });
 
+test("a shipped update dropping a member posts one stored keep notice across restarts", async () => {
+  await boot();
+  const directory = join(pods, "example");
+  const before = await readFile(join(directory, "pages", "tour", "index.html"));
+  await rm(join(root, "examples", "example", "pages"), { recursive: true });
+  await rm(join(shipped, "example.zip"));
+  await exportPod({ pod: "example", archivePath: join(shipped, "example.zip") },
+    { podsRoot: join(root, "examples"), captures });
+  await boot();
+  await boot();
+  const notices = readStoredNotices(storedNoticesPath()).filter(n => n.path === directory);
+  expect(notices).toHaveLength(1);
+  expect(notices[0]).toMatchObject({ class: "keep", reason: expect.stringContaining("removes members") });
+  expect(await readFile(join(directory, "pages", "tour", "index.html"))).toEqual(before);
+});
+
 test.each(["io", "cas"] as const)("update rolls back a second-member failure (%s) byte for byte and a retry succeeds", async (mode) => {
   await boot();
   const original = (await listPackages(pods)).packages.find(p => p.id === "example")!;

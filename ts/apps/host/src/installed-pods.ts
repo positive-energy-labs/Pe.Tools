@@ -249,8 +249,13 @@ async function offer(
           }
           // The write door has no delete verb. Keep an example that needs member removal,
           // rather than bypassing CAS or moving its home folder across volumes.
-          if (fresh.members.some(member => !next.has(member.path)))
+          if (fresh.members.some(member => !next.has(member.path))) {
+            noteStored(storedNoticesPath(), {
+              class: "keep", place: `Shipped example ${installed.name}`, path: installed.directory,
+              sha256, reason: "Its update removes members; the example was kept. Import the current example into a separate workspace.",
+            });
             throw Error("its update removes members; import the example into a separate workspace");
+          }
           try {
             for (const [member, content] of [...next].sort(([a], [b]) => Number(a === "pod.json") - Number(b === "pod.json"))) {
               const prior = fresh.members.find(m => m.path === member);
