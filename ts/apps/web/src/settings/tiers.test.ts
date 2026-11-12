@@ -186,7 +186,7 @@ test("a declared cell can be cleared, but an undeclared owner or path cannot be 
 });
 
 test.each(["written", "__proto__", "constructor", "prototype"])("the write door refuses reserved path key %s", (key) => {
-  for (const path of [[key], ["criteria", key], [key, "terminalDropInWg"]]) {
+  for (const path of [[key], ["criteria", key], [key, "terminalDropInWg"], ["parameters", key]]) {
     const before = readSettingTiers("ducts", pointer);
     const notices = readStoredNotices(storedNoticesPath());
     expect(writeSettingTier({ owner: "ducts", tier: "firm", path, value: 1, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422, message: expect.stringContaining("reserved") });
@@ -247,10 +247,33 @@ test("a present project marker is not blamed when the firm home cannot anchor it
   expect(reason).not.toContain("no folder with");
 });
 
- test("the write door refuses an unknown parameter slot", () => {
+test("the write door refuses an unknown parameter slot", () => {
   const before = readSettingTiers("ducts", pointer);
   const notices = readStoredNotices(storedNoticesPath());
   expect(writeSettingTier({ owner: "ducts", tier: "firm", path: ["parameters", "bogusSlot"], value: "X", expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422 });
   expect(readSettingTiers("ducts", pointer)).toEqual(before);
   expect(readStoredNotices(storedNoticesPath())).toEqual(notices);
+});
+
+test.each([
+  [["designFriction"], -1],
+  [["designFriction"], 0],
+  [["parameters", "fanFlow", "extra"], "Flow"],
+  [["parameters", "fanFlow"], ""],
+] as const)("the settings door refuses invalid %j = %j without writes or notices", (path, value) => {
+  const before = readSettingTiers("ducts", pointer);
+  const notices = readStoredNotices(storedNoticesPath());
+  expect(writeSettingTier({ owner: "ducts", tier: "firm", path, value, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422 });
+  expect(readSettingTiers("ducts", pointer)).toEqual(before);
+  expect(readStoredNotices(storedNoticesPath())).toEqual(notices);
+});
+
+test("design friction can be cleared with null", () => {
+  const request = { owner: "ducts", tier: "project" as const, path: ["designFriction"], value: 0.12, expectedSha256: null };
+  expect(writeSettingTier(request, { pointer })).toMatchObject({ ok: true });
+  const expectedSha256 = sha(readSettingTiers("ducts", pointer), "project");
+  expect(writeSettingTier({ ...request, value: null, expectedSha256 }, { pointer })).toMatchObject({ ok: true });
+  const read = readSettingTiers("ducts", pointer).find(read => read.tier === "project")!;
+  expect(read.json).not.toHaveProperty("designFriction");
+  expect(price(snapshot, {}, null, neutralFansWork, {}, readSettingTiers("ducts", pointer)).edit.designFriction).toBe(0.08);
 });
