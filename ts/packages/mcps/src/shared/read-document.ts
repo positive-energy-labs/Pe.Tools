@@ -63,12 +63,18 @@ export interface ReadDocumentResult {
 const MAX_RENDERED_PAGES = 4;
 const MAX_TEXT_CHARS = 60_000;
 
-/** The native binary loads when the module imports, so import lazily: a missing one fails this tool, not the server. */
-const liteparse = import("@llamaindex/liteparse").catch((error: unknown) => {
-  throw new Error(
-    `read_document: the LiteParse native binary did not load on ${process.platform}-${process.arch} (${error instanceof Error ? error.message : String(error)}). Reinstall the workspace dependencies (vp i) so @llamaindex/liteparse and its platform package are present.`,
-  );
-});
+/**
+ * The native binary loads when the module imports, so it is imported on first use and kept. A missing
+ * one fails the read_document call that needed it, not the server: an import at module load left a
+ * rejection nobody awaited, and Node exits on that.
+ */
+let liteparse: Promise<typeof import("@llamaindex/liteparse")> | undefined;
+const loadLiteParse = () =>
+  (liteparse ??= import("@llamaindex/liteparse").catch((error: unknown) => {
+    throw new Error(
+      `read_document: the LiteParse native binary did not load on ${process.platform}-${process.arch} (${error instanceof Error ? error.message : String(error)}). Reinstall the workspace dependencies (vp i) so @llamaindex/liteparse and its platform package are present.`,
+    );
+  }));
 
 /** Renders land beside nothing the user owns: one product scratch folder per source file and version, reused on re-read. */
 async function scratchDir(file: string, mtimeMs: number): Promise<string> {
@@ -153,7 +159,7 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
 
   // Built on first use, so parser: llamaparse without a render never loads the native binary.
   const makeParser = async () => {
-    const { LiteParse } = await liteparse;
+    const { LiteParse } = await loadLiteParse();
     return new LiteParse({
       outputFormat: "text",
       quiet: true,
