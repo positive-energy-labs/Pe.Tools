@@ -190,6 +190,10 @@ export const receiptBodySchema = z.discriminatedUnion("kind", [
     durationMs: milliseconds.optional(),
     toolCount: count.optional(),
   }),
+  // Greenfield exception: no writer emits this kind since consent became a notice (ADR 0038), but
+  // retained journals may hold it, and journal-snapshot parses every receipt strictly, so deleting
+  // it would discard a whole journal at the next start. Delete it once no retained journal can
+  // hold one, at the latest at the T3 journal reset.
   z.strictObject({
     kind: z.literal("permission"),
     phase: z.enum(["asked", "resolved"]),
