@@ -52,6 +52,8 @@ export const productPathNames = {
   runsDirectoryName: "Runs",
   /** The `Runs` segment for a run no pod owns; a pod id cannot start with an underscore. */
   podlessRunsDirectoryName: "_no-pod",
+  /** The `Runs` segment for per-module task output, reserved like `_no-pod`. */
+  moduleOutputDirectoryName: "_modules",
   blobsDirectoryName: "Blobs",
   /** Under an override, machine-local state, logs and service files live in `<home>\.local-state`. */
   localStateDirectoryName: ".local-state",
