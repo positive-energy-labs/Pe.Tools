@@ -1195,6 +1195,12 @@ export class ActionJournal implements ReceiptReader {
     // A retry predating the discard may already have run. Missing or malformed first-send times
     // cannot establish that it is new, so they refuse on the safe side; so does a discard time that does not parse (NaN).
     const sentAt = z.iso.datetime().safeParse(crossing.sentAt);
+    if (!prior && crossing.resent && this.discarded && sentAt.success &&
+      Date.parse(sentAt.data) > this.now() + 5 * 60_000)
+      throw refused(
+        `Action '${admission.id}' has a first-send time more than five minutes ahead of the host clock. Nothing was run. Check the sending device's clock, then submit it as a new action if it is still wanted.`,
+        "journal.future-send",
+      );
     if (!prior && crossing.resent && this.discarded &&
       (!sentAt.success || !(Date.parse(sentAt.data) > Date.parse(this.discarded))))
       throw refused(

@@ -318,7 +318,13 @@ test("host start throws 0 times over corrupt scheduled tasks, devices, a torn jo
   });
   expect(JSON.parse(readFileSync(update, "utf8"))).toEqual({ discardedAtUtc: expect.any(String) });
   expect(posted(update)).toMatchObject([{ class: "discard", place: "Update status" }]);
+  expect(posted(update)).toHaveLength(1);
+  expect(posted(update)[0]!.sha256).toBe(sha256Hex(TORN_UPDATE));
   expect([rests(CORRUPT), rests(TORN_UPDATE)]).toEqual([true, true]);
+  // Starting the update reader again keeps the prior bytes and does not repeat the notice.
+  await expect(updates(update).refresh(false)).resolves.toBeDefined();
+  expect(posted(update)).toHaveLength(1);
+  expect(rests(TORN_UPDATE)).toBe(true);
   expect(inputs!.source).toMatchObject({ kind: "live", capturing: false, truncated: { reason: "setup" } });
   expect(readFileSync(join(bundle, "takings.jsonl"))).toEqual(torn);
   expect(posted(bundle)).toMatchObject([{ class: "keep", place: "Recording history" }]);

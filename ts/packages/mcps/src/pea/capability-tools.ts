@@ -381,7 +381,8 @@ export const peDo = createTool({
   },
   execute: async (input, context) => {
     if (input.kind === "page") {
-      // Only submitAction's transport retries mark a re-send; a harness re-invocation has a new MCP request id.
+      // A harness re-invocation has a new MCP request id, so it is a new action.
+      // Only submitAction's transport retries retain that id and mark a re-send.
       const row = await submitAction(
         {
           id: requestIdentity(context),
