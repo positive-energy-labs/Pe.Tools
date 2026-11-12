@@ -274,6 +274,7 @@ test("the real inventory hook feeds picker labels without fabricated pid and ret
             address: null,
             isActive: true,
             isFamilyDocument: false,
+            projectHome: null,
           },
         ],
       },
