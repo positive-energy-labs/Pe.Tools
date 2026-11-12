@@ -60,7 +60,9 @@ export type RouteWorkspaceEvent = {
 
 export interface RouteDocumentStore {
   getState(input: { targetKey: string; route: string }): Promise<unknown>;
-  setState(input: { targetKey: string; route: string; value: unknown; reason?: string }): Promise<void>;
+  setState(input: { targetKey: string; route: string; value: unknown; reason?: string;
+    /** Rest the exact prior file bytes before a schema upgrade replaces them. */
+    preservePrior?: boolean }): Promise<void>;
   /** Enumerates canonical persisted records without materializing absent Work. */
   listState?(): Promise<{
     records: { targetKey: string; route: string; value: unknown }[];
@@ -1134,7 +1136,8 @@ export class RouteWorkspace {
     }
     if (upgrade) {
       raw = { ...upgrade.value, doc: envelope.doc };
-      await this.#store.setState({ targetKey: workKey(scope), route: spec.route, value: raw, reason: upgrade.reason });
+      await this.#store.setState({ targetKey: workKey(scope), route: spec.route, value: raw,
+        reason: upgrade.reason, preservePrior: true });
     }
     this.#inverses.set(workKey(scope), this.#retain(
       this.#stored((raw as { history?: unknown }).history, scope), envelope.revision,
@@ -1347,7 +1350,10 @@ function upgradeSettingsWork(raw: unknown, spec: RouteStateSpec<z.ZodType>) {
     const parsed = record.safeParse(entry);
     return parsed.success ? { ...parsed.data, after: strip(parsed.data.after) } : entry;
   }) : saved.data.history;
-  const nonempty = dropped != null && (typeof dropped !== "object" || Object.keys(dropped).length > 0);
+  const hasEdit = (cell: unknown) => cell != null &&
+    (typeof cell !== "object" || ("edit" in cell && cell.edit != null));
+  const nonempty = removed === "parameters" && dropped != null && typeof dropped === "object"
+    ? Object.values(dropped).some(hasEdit) : hasEdit(dropped);
   return {
     value: { ...saved.data, schemaVersion: spec.schemaVersion, doc: strip(doc.data), history },
     reason: nonempty ? `Dropped ${removed}: ${JSON.stringify(dropped)}. These values are now settings at the project or firm tier; set them there explicitly.` : undefined,
