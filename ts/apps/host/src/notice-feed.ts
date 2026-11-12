@@ -10,6 +10,8 @@
  * Plain functions, not Effect: this sits beside the thread store's Readings in the
  * `observeHostResource` island (ADR 0029 phase 5 converts them together).
  */
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import {
   attention,
   NOTICE_GROUPS,
@@ -30,7 +32,7 @@ import {
 import { HOST_RESTARTED } from "@pe/agent-contracts/chat-state";
 import { summarizeFailure } from "@pe/host-contracts/failure-summary";
 import type { ThreadPresence } from "@pe/host-contracts/pe-api";
-import { firmHome, noFirmHomeText, type FirmHome } from "@pe/host-contracts/product-paths";
+import { firmHome, noFirmHomeText, userRoot, type FirmHome } from "@pe/host-contracts/product-paths";
 import { stateTree } from "@pe/host-contracts/service-identity";
 import { noteStored, sha256Hex, storedNoticesFile, type StoredNotice } from "@pe/host-contracts/store";
 import { hostOwnership } from "./host-ownership.ts";
@@ -42,6 +44,33 @@ export const storedBlobsPath = () => stateTree(hostOwnership.rootPath).blobs;
 
 /** The Place a no-firm-home notice is filed under; its row is a finding, not a file that did not decode. */
 const FIRM_HOME_PLACE = "Firm home";
+const EARLIER_WORK_PLACE = "Work saved by an earlier version";
+
+/** The start census posts findings to the same durable feed as stored-file refusals. */
+export function noteStartupHomes(
+  user = userRoot(),
+  firm: FirmHome = firmHome(),
+  notices = storedNoticesPath(),
+): void {
+  noteNoFirmHome(firm, notices);
+  const path = join(user, "Work");
+  // Homes never hold Work; old Work is noticed, not migrated.
+  try {
+    if (!readdirSync(path, { withFileTypes: true, recursive: true }).some((entry) => entry.isFile()))
+      return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+      console.warn(`Could not check earlier Work at '${path}': ${String(error)}`);
+    return;
+  }
+  noteStored(notices, {
+    class: "keep",
+    place: EARLIER_WORK_PLACE,
+    path,
+    sha256: sha256Hex("earlier-version-work-folder"),
+    reason: `Work saved by an earlier version is at ${path}. This version no longer reads it. Nothing was changed or deleted. You may delete the folder.`,
+  });
+}
 
 /**
  * Tell a person once where the host looked for the firm home (ADR 0037 rule 2). The notice file
@@ -170,6 +199,20 @@ function storedRow(notice: StoredNotice, now: number): NoticeDraft | null {
   // ponytail: a fixed window and no dismiss door; add a dismiss act when a person asks for one.
   if (now - Date.parse(notice.at) > STORED_FOR_MS) return null;
   const kept = notice.class === "keep";
+  if (notice.place === EARLIER_WORK_PLACE)
+    return {
+      key: `stored:${notice.path}:${notice.sha256}`,
+      group: "failed",
+      revision: 0,
+      verb: "kept",
+      what: notice.place,
+      where: "this computer",
+      says: notice.reason,
+      at: notice.at,
+      url: null,
+      refusal: "This version no longer reads this folder",
+      detail: notice.path,
+    };
   if (notice.place === FIRM_HOME_PLACE)
     return {
       key: `stored:${notice.path}:${notice.sha256}`,
