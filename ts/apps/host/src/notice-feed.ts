@@ -310,11 +310,13 @@ function receiptRow(
           url: null,
           refusal: "Nothing to open: do this in Revit or the web app yourself",
         };
-  // A known refusal is not a human hold, even when earlier local effects leave cleanup to do.
+  // A known refusal is not a human hold and reads as refused, with its reason. An incomplete act
+  // whose last step was refused still waits on the person, because its earlier steps changed
+  // something (an acquisition's local copies) that needs cleanup before it runs again.
   const last = receipt.steps?.at(-1);
-  const refused = receipt.state === "failed" && receipt.notDispatched === true ||
-    receipt.state === "incomplete" && last?.state === "failed" && last.notDispatched === true;
-  const group = refused ? "failed" : RECEIPT_GROUP[receipt.state];
+  const refusedTail = receipt.state === "incomplete" && last?.state === "failed" && last.notDispatched === true;
+  const refused = receipt.state === "failed" && receipt.notDispatched === true || refusedTail;
+  const group = refused && !refusedTail ? "failed" : RECEIPT_GROUP[receipt.state];
   if (!group) return null;
   const failure =
     "error" in receipt
@@ -331,7 +333,9 @@ function receiptRow(
     verb: refused ? "refused" : receipt.state,
     what: receipt.key,
     where: callerWord(receipt.caller),
-    says: refused && "error" in receipt ? receipt.error : failure.summary,
+    says: refused && "error" in receipt
+      ? refusedTail ? `${receipt.error} Earlier steps already changed something; clean up before running it again.` : receipt.error
+      : failure.summary,
     at: receipt.startedAt,
     // The failure's door is the row's address; a receipt itself has no page yet.
     url: failure.door
