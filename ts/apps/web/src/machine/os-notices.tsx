@@ -12,6 +12,7 @@ import type { MachineNotice } from "@pe/agent-contracts";
 import { SwitchRow } from "@pe/kit/lang/switch-row";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { peClient } from "#/host/pe-client";
+import { followBeat } from "#/host/resource-stream";
 
 /** Each mount has its own caller id, so tabs and the flyout cannot erase one another. */
 export function useThreadPresence(thread: string | null) {
@@ -19,24 +20,25 @@ export function useThreadPresence(thread: string | null) {
     if (!thread) return;
     const caller = crypto.randomUUID();
     const send = (visible: boolean, focused: boolean) =>
-      void peClient
+      peClient
         .call("notices.presence", {
           params: { caller },
           body: { thread, visible, focused },
         })
-        .catch((error) => { console.error("os-notices: asynchronous operation failed", error); }); // A lost beat expires on the host.
+        .catch((error) => { console.error("os-notices: asynchronous operation failed", error); throw error; }); // A lost beat expires on the host.
     const beat = () => send(document.visibilityState === "visible", document.hasFocus());
-    beat();
-    const timer = setInterval(beat, 5_000);
-    document.addEventListener("visibilitychange", beat);
-    window.addEventListener("focus", beat);
-    window.addEventListener("blur", beat);
+    const now = () => void beat().catch(() => {}); // Already said above.
+    // The 5 s beat backs off while the host does not answer; a person's own move still beats at once.
+    const stop = followBeat(beat, 5_000);
+    document.addEventListener("visibilitychange", now);
+    window.addEventListener("focus", now);
+    window.addEventListener("blur", now);
     return () => {
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", beat);
-      window.removeEventListener("focus", beat);
-      window.removeEventListener("blur", beat);
-      send(false, false);
+      stop();
+      document.removeEventListener("visibilitychange", now);
+      window.removeEventListener("focus", now);
+      window.removeEventListener("blur", now);
+      void send(false, false).catch(() => {});
     };
   }, [thread]);
 }

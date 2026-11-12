@@ -466,6 +466,8 @@ test("the composer provider helper ignores Machine polling metadata but follows 
 
 test("a faulted stream goes stale, reconnects with backoff, and only fresh data clears it", async () => {
   vi.useFakeTimers();
+  // Delays are jittered within their upper half (`retryDelayMs`); the top draw is the whole delay.
+  const random = vi.spyOn(Math, "random").mockReturnValue(1);
   const { readings, sources } = owner();
   let resyncs = 0;
   readings.onResync(() => resyncs++);
@@ -507,6 +509,7 @@ test("a faulted stream goes stale, reconnects with backoff, and only fresh data 
   await vi.advanceTimersByTimeAsync(1_000);
   expect(sources).toHaveLength(5);
 
+  random.mockRestore();
   release();
   readings.close();
 });
