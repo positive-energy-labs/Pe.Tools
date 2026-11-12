@@ -607,7 +607,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
             { caller, basis: null },
           );
         });
-        return json(receipt, 202);
+        // The route contract is `ok`; the receipt id lets the caller follow the send (homes W8).
+        return json({ ok: true, id: receipt.id }, 202);
       } catch (error) {
         return json({ error: message(error) }, 502);
       }

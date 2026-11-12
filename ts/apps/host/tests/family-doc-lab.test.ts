@@ -23,6 +23,7 @@ import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { requestIdentityLayer } from "../src/request-identity.ts";
 import { familySpecAsset } from "../src/family-spec.ts";
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 
 const pdf = fileURLToPath(new URL("../../web/public/acme-fcu400-submittal.pdf", import.meta.url));
 const aBox = JSON.parse(
@@ -595,7 +596,9 @@ test("Confirm admits over HTTP before a two-second parse finishes, uploads once 
   expect(elapsed, "Confirm must answer before the two-second parse").toBeLessThan(1500);
   expect(parseFinished).toBe(false);
   expect(response.status).toBe(202);
-  const accepted = (await response.json()) as { id: string };
+  const accepted = (await response.json()) as { ok: true; id: string };
+  // The production door (`servePeRoute`) refuses a body its route output does not decode; the fixture skips it.
+  expect(peRoutes["outward.confirm"].output.safeParse(accepted).success).toBe(true);
   expect(accepted.id).toBeTruthy();
   expect(
     noticeRows(
