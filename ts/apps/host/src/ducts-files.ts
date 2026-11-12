@@ -116,7 +116,12 @@ export class DuctFiles extends Context.Service<
                 return { root, files: await readFirmRoot(root) };
               } : () => readDuctCatalogs(roots.catalogs);
             let closed = false;
-            let previous = read().then((value) => JSON.stringify(value));
+            let value: string | undefined;
+            const failed = (error: unknown) => {
+              console.warn(`Could not refresh ${name} files: ${String(error)}`);
+              return value;
+            };
+            let previous = read().then((next) => (value = JSON.stringify(next))).catch(failed);
             let watchedPath = path;
             let watcher: ReturnType<typeof watch> | undefined;
             const refresh = () => {
@@ -125,17 +130,15 @@ export class DuctFiles extends Context.Service<
                 if (name === "firm" && firmRoot() !== watchedPath) bind(firmRoot());
                 const next = JSON.stringify(await read());
                 if (!closed && next !== before) changed(name);
-                return next;
-              });
+                return (value = next);
+              }).catch(failed);
             };
             // Watch an existing ancestor: absence, directory creation and atomic replacement still notify.
             const bind = (path: string | null) => {
-              watchedPath = path;
-              if (path === null) return;
-              watcher?.close();
+              if (path === null) { watchedPath = path; return; }
               let base = dirname(resolve(path));
               while (!existsSync(base) && dirname(base) !== base) base = dirname(base);
-              watcher = watch(base, { recursive: true, persistent: false }, (_event, file) => {
+              const nextWatcher = watch(base, { recursive: true, persistent: false }, (_event, file) => {
                 const changedPath = file === null ? null : resolve(base, file.toString());
                 const child = changedPath === null ? "" : relative(resolve(path), changedPath);
                 const ancestor = changedPath === null ? "" : relative(changedPath, resolve(path));
@@ -148,7 +151,10 @@ export class DuctFiles extends Context.Service<
                 )
                   refresh();
               });
-              watcher.on("error", () => changed(name));
+              nextWatcher.on("error", () => changed(name));
+              watcher?.close();
+              watcher = nextWatcher;
+              watchedPath = path;
             };
             bind(path);
             // A missing drive supplies no filesystem hints. Retry on the firm probe cadence.

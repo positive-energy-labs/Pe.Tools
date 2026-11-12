@@ -208,3 +208,27 @@ test("W3e outside rewrite of the user tier fires exactly one change", async () =
     expect(changes).toBe(1);
   } finally { watches.close(); rmSync(home, { recursive: true, force: true }); }
 });
+
+test("a failed firm refresh keeps its value and the next refresh still notifies", async () => {
+  const shared = firmHome();
+  let fail = 0;
+  let attempts = 0;
+  const root = () => {
+    attempts++;
+    if (fail > 0 && --fail === 0) throw Error("one read failed");
+    return join(shared, "Settings");
+  };
+  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer({ firm: root, catalogs: [] }))));
+  const changes: string[] = [];
+  const stop = files.subscribe!(name => changes.push(name));
+  try {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const before = attempts;
+    fail = 2;
+    writeFileSync(join(shared, "pe-home.json"), '{"tier":"firm","name":"changed"}');
+    await expect.poll(() => attempts).toBeGreaterThan(before);
+    mkdirSync(join(shared, "Settings"));
+    writeFileSync(join(shared, "Settings", "ducts.json"), '{"version":"later"}');
+    await expect.poll(() => changes).toEqual(["firm"]);
+  } finally { stop(); rmSync(shared, { recursive: true, force: true }); }
+});
