@@ -147,9 +147,6 @@
             "flows"
           ],
           [
-            "parameters"
-          ],
-          [
             "subject"
           ],
           [
@@ -160,9 +157,6 @@
           ],
           [
             "workingPhase"
-          ],
-          [
-            "designFriction"
           ],
           [
             "systemColours"
@@ -221,10 +215,6 @@
             "*"
           ],
           [
-            "parameters",
-            "*"
-          ],
-          [
             "subject",
             "*"
           ],
@@ -237,9 +227,6 @@
           ],
           [
             "workingPhase"
-          ],
-          [
-            "designFriction"
           ],
           [
             "systemColours"
@@ -303,10 +290,6 @@
             "*"
           ],
           [
-            "parameters",
-            "*"
-          ],
-          [
             "subject",
             "*"
           ],
@@ -319,9 +302,6 @@
           ],
           [
             "workingPhase"
-          ],
-          [
-            "designFriction"
           ],
           [
             "systemColours"
@@ -418,19 +398,10 @@
         "roles": {},
         "loads": {},
         "flows": {},
-        "parameters": {
-          "fanFlow": {
-            "edit": null
-          },
-          "terminalFlow": {
-            "edit": null
-          }
-        },
         "subject": {},
         "claims": {},
         "labelParameter": {},
         "workingPhase": {},
-        "designFriction": {},
         "systemColours": {}
       }
     },

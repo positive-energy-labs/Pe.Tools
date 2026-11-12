@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { ductsDocumentSchema, fansDocumentSchema } from "@pe/agent-contracts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
@@ -27,20 +27,17 @@ test("/fans stages no /ducts Work, and /ducts' sheet stages its criteria", () =>
     expect(binding === "writeIntent" || !ductsKeys.includes(binding), binding).toBe(true);
   }
   // /ducts' sheet stages its criteria (a row per cell) and the design friction rate, in /ducts Work.
-  expect(staged(designSheet)).toEqual(["criteria", "designFriction"]);
+  expect(staged(designSheet)).toEqual(["criteria"]);
   for (const binding of staged(designSheet)) expect(ductsKeys).toContain(binding);
   const rows = sheetCells(designSheet, { rows: [], work: { criteria: { velocitySupplyFpm: { edit: { value: 850, by: "human" } } } }, model: [], read: null });
   expect(rows.find((c) => c.row === "velocitySupplyFpm")).toMatchObject({ value: 850, source: "work", label: "Velocity limit supply" });
-  expect(rows.find((c) => c.binding === "designFriction")).toMatchObject({ value: 0.08, source: "default", unit: "in-wg/100 ft" });
+  expect(rows.find((c) => c.binding === "setting.ducts.designFriction")).toMatchObject({ value: 0.08, source: "default", unit: "in-wg/100 ft" });
 });
 
 const handle = (value: object, stage = vi.fn(async () => null)) => ({
   owner: { route: "fans", label: "Work" }, refusal: null, value, freshness: "current" as const,
   transitions: () => [], stage, clear: async () => null,
 });
-const espOptions = { descriptor: { key: "parameter-identities", mode: "Suggestion", allowsCustomValue: true, dependsOn: [], requiredRuntimeMode: "LiveDocument" },
-  result: { kind: "Success", message: "" },
-  items: [{ value: "shared:esp|instance", label: "Available ESP · instance", metadata: { name: "Available ESP", kind: "Shared", scope: "instance", storageType: "Double", dataTypeId: "pressure" } }] };
 const drawn = (read: object, doc: Record<string, unknown>, at: (path: readonly string[]) => object, only: keyof typeof fansSheet.bindings) => {
   const slot = { ...fansSheet, bindings: { [only]: fansSheet.bindings[only] } };
   const ctx = { cells: { doc, at }, page: { read: () => ({}) }, value: { status: "ready", current: true, value: read }, write: () => ({ run: async () => null, refusal: null }) };
@@ -48,26 +45,10 @@ const drawn = (read: object, doc: Record<string, unknown>, at: (path: readonly s
 };
 const snapshot = { nodes: [], segments: [], slots: { fanStatic: "Old ESP" } };
 
-test("F5 live parameter metadata reaches the slot picker, which stages the name, not the identity key", async () => {
-  const stage = vi.fn(async () => null);
-  drawn({ sheetSnapshot: snapshot, espOptions, espOptionsError: null, sheetView: { inputs: null, firm: null }, fans: { slots: [] } }, {},
-    (path) => handle({}, path[1] === "fanStatic" ? stage : undefined), "parameters");
-  fireEvent.click(screen.getByRole("button", { name: "Old ESP" }));
-  expect(await screen.findByText("Shared · Double · pressure")).toBeTruthy();
-  fireEvent.click(screen.getByRole("option", { name: /Available ESP/ }));
-  await waitFor(() => expect(stage).toHaveBeenCalledWith("Available ESP", { label: "Unit ESP slot" }));
-});
-
-test("F5 absent or failed options cannot stage a stale slot name", async () => {
-  const stage = vi.fn(async () => null);
-  drawn({ sheetSnapshot: snapshot, espOptions: null, espOptionsError: "Disconnected", sheetView: { inputs: null, firm: null }, fans: { slots: [] } }, {},
-    (path) => handle({}, path[1] === "fanStatic" ? stage : undefined), "parameters");
-  const cell = screen.getByText("Unit ESP slot").parentElement!;
-  expect(cell.querySelector("input")).toBeNull();
-  fireEvent.click(screen.getAllByRole("button", { name: "Old ESP" })[0]!);
-  const option = await screen.findByRole("option", { name: /Disconnected/ });
-  fireEvent.click(option);
-  expect(stage).not.toHaveBeenCalled();
+test("slot names use project and firm settings and never stage Work", () => {
+  const binding = (fansSheet.bindings as Record<string, import("@pe/agent-contracts/slots").SheetBinding>)["setting.ducts.parameters.fanStatic"];
+  expect(binding).toMatchObject({ kind: "setting", owner: "ducts", path: ["parameters", "fanStatic"], tiers: ["project", "firm"] });
+  expect(fansDocumentSchema.parse({})).not.toHaveProperty("parameters");
 });
 
 test("F6 a staged unit role draws its option label with its author, never its object", () => {

@@ -5,6 +5,7 @@ import {
   fansSheetData,
   openFanSheetSchema,
   stagedDucts,
+  ductParameterSlots,
   subjectCode,
   subjectOf,
 
@@ -147,7 +148,7 @@ export const fansSheet = read("fans.sheet", {
       ? await ctx.native("ducts.snapshot.walk", {
           role: "acquire",
           request: {
-            slots: staged.parameters,
+            slots: ductParameterSlots(settings),
             labelParameter: staged.labelParameter ?? undefined,
             selector: { kind: "ids", ids },
           },

@@ -203,8 +203,8 @@ describe("chat plugin records", () => {
         input: {
           system: "AHU-1",
           patches: [
-            { op: "set", path: ["designFriction", "edit"], value: { value: 0.08 } },
-            { op: "set", path: ["designFriction", "edit", "value"], value: 0.1 },
+            { op: "set", path: ["localRate", "edit"], value: { value: 0.08 } },
+            { op: "set", path: ["localRate", "edit", "value"], value: 0.1 },
             { op: "set", path: ["roles", "edit", "edit"], value: { value: { role: "fan" } } },
           ],
         },

@@ -1447,6 +1447,7 @@ function* hostPeRoutes(
         return {
           target,
           address: document.address ?? null,
+          projectHome: document.projectHome,
           title: document.title,
           process: { pid: session.processId, startUtcUnixMs: session.processStartUtcUnixMs },
           provenance: {

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { DUCTS_CRITERIA_CELLS, type DuctsCriteriaCell } from "@pe/agent-contracts";
-import { local, setting, store, type CellLayer, type SheetBinding, type SheetSlot } from "@pe/agent-contracts/slots";
+import { DUCT_PARAMETER_KEYS, DUCTS_CRITERIA_CELLS, type DuctsCriteriaCell } from "@pe/agent-contracts";
+import { setting, store, type CellLayer, type SheetBinding, type SheetSlot } from "@pe/agent-contracts/slots";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { criterionLabel } from "./sheet/criterion-words.neutral.ts";
 
@@ -32,7 +32,7 @@ const cellLabel = (cell: DuctsCriteriaCell) => {
  * declared (ADR 0026: two engineers price the same thing the same way). /fans, /ducts and /settings
  * draw the same bindings, so one value has one label everywhere.
  */
-export const ductsSettings = Object.fromEntries(
+const criteriaSettings = Object.fromEntries(
   (Object.keys(DUCTS_CRITERIA_CELLS) as DuctsCriteriaCell[]).map((cell) => {
     const declared = DUCTS_CRITERIA_CELLS[cell];
     return [`setting.ducts.${cell}`, setting("ducts", ["criteria", ...declared.layer], declared.value, ["project", "firm"], {
@@ -40,6 +40,13 @@ export const ductsSettings = Object.fromEntries(
     })];
   }),
 ) as Readonly<Record<string, SheetBinding>>;
+export const ductsSettings = {
+  ...criteriaSettings,
+  ...Object.fromEntries(DUCT_PARAMETER_KEYS.map(key => [`setting.ducts.parameters.${key}`, setting("ducts", ["parameters", key], z.string().min(1), ["project", "firm"], { label: `${key} slot` })])),
+  "setting.ducts.designFriction": setting("ducts", ["designFriction"], z.number().positive(), ["project", "firm"], {
+    label: "Design friction", default: DEFAULT_DESIGN_FRICTION_RATE, unit: "in-wg/100 ft", min: 0, digits: 3,
+  }),
+};
 const resolvedOf = (read: DesignRead, cell: DuctsCriteriaCell) => {
   const [key, side] = DUCTS_CRITERIA_CELLS[cell].layer;
   const at = read?.criteria?.[key];
@@ -74,9 +81,6 @@ export const designSheet = {
       choices: (_read, row) => row === "splitPolicy"
         ? [{ key: "even", label: "even", value: "even" }, { key: "proportional", label: "proportional", value: "proportional" }]
         : [],
-    }),
-    designFriction: local(z.number().positive(), "route", {
-      label: "Design friction", default: DEFAULT_DESIGN_FRICTION_RATE, unit: "in-wg/100 ft", min: 0, digits: 3,
     }),
   },
 } as const satisfies SheetSlot;

@@ -903,7 +903,6 @@ const FOCUS_SEGMENTS = new Set([
   "esp",
   "equipmentFlows",
   "roles",
-  "parameters",
   "calculation",
 ]);
 

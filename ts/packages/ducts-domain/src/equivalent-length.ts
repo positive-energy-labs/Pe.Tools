@@ -8,7 +8,7 @@
 import type { Row } from "./losses.ts";
 
 // firm-default: 0.08 in-wg per 100 ft is a typical residential design friction rate; the firm's
-// own number belongs in firm config. Until then it is a person-owned Work cell (`designFriction`).
+// own number belongs in firm config. It is a project and firm setting (`designFriction` in Settings/ducts.json).
 export const DEFAULT_DESIGN_FRICTION_RATE = 0.08;
 
 /** A friction row's own rate, in-wg per 100 ft; null where it has no length or loses nothing. */

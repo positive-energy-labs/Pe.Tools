@@ -28,7 +28,7 @@ const settle = (write: Observation<WorkWriteOutcome>) =>
     ),
   );
 const witness = () => createWitness(closes);
-test("human slot/drop/flow edits stay in Fans Work, preserve siblings and restore named history after a cold shell reload", async () => {
+test("human calculation/drop/flow edits stay in Fans Work, preserve siblings and restore named history after a cold shell reload", async () => {
   const f = await witness();
 
   await vi.waitFor(() => {
@@ -40,9 +40,9 @@ test("human slot/drop/flow edits stay in Fans Work, preserve siblings and restor
   );
   const edits = [
     {
-      history: { label: "Fan flow slot" },
+      history: { label: "Fan calculation" },
       patches: [
-        { path: ["parameters", "fanFlow"], value: { edit: { value: "PE_M_Fan_AirFlow" } } },
+        { path: ["calculation", "fanFlow"], value: { edit: { value: { kind: "balanced-design", source: "test" } } } },
       ],
     },
     {
@@ -72,7 +72,7 @@ test("human slot/drop/flow edits stay in Fans Work, preserve siblings and restor
   expect(ductsDocumentSchema.parse(f.owner.work()!.value).rules).toEqual({});
   expect(f.owner.work()?.revision).toBe(0);
   const value = fansDocumentSchema.parse(f.fans.work()!.value);
-  expect(value.parameters.fanFlow?.edit?.value).toBe("PE_M_Fan_AirFlow");
+  expect(value.calculation.fanFlow?.edit?.value).toEqual({ kind: "balanced-design", source: "test" });
   expect(value.componentDrops[part]?.edit?.value.inWg).toBe(0.18);
   f.fans.close();
   const next = f.mount(f.admitted.presenter);

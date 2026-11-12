@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { SettingTier, SettingTierRead } from "@pe/agent-contracts";
-import { DUCTS_CRITERIA_CELLS, SETTING_TIERS } from "@pe/agent-contracts";
+import { DUCTS_CRITERIA_CELLS, SETTING_TIERS, ductsFirmSchema } from "@pe/agent-contracts";
 import {
   firmHome,
   noFirmHomeText,
@@ -92,6 +92,23 @@ export type SettingWrite =
  * the writer's stamp, on the hash the writer read; a file changed since then is a conflict, and a
  * home that was not found is refused, never written somewhere else.
  */
+/**
+ * A declared ducts cell accepts the value (`null` clears it). Criteria cells check their own
+ * schema; the whole-key settings (`designFriction`, one `parameters` slot) check through the tier
+ * file's schema on a file holding only that value, so a bad sibling never blocks a good write.
+ */
+function ductsCellAccepts(path: readonly string[], value: unknown): boolean {
+  const criteria = Object.values(DUCTS_CRITERIA_CELLS).find((declared) =>
+    ["criteria", ...declared.layer].length === path.length &&
+    ["criteria", ...declared.layer].every((key, index) => key === path[index]));
+  if (criteria) return value === null || criteria.value.safeParse(value).success;
+  const probe =
+    path.length === 1 && path[0] === "designFriction" ? { designFriction: value } :
+    path.length === 2 && path[0] === "parameters" ? { parameters: { [path[1]!]: value } } :
+    null;
+  return probe !== null && (value === null || ductsFirmSchema.safeParse(probe).success);
+}
+
 export function writeSettingTier(
   request: { owner: string; tier: SettingTier; path: readonly string[]; value: unknown; expectedSha256: string | null },
   context: { pointer?: string | null; writer?: string; now?: () => Date } = {},
@@ -105,12 +122,7 @@ export function writeSettingTier(
     return { ok: false, status: 422, message: `${read.path} can't be read, so it is kept as it is: ${read.error}` };
   if (read.sha256 !== request.expectedSha256)
     return { ok: false, status: 409, message: `${read.path} changed since it was read.` };
-  const cell = request.owner === "ducts"
-    ? Object.values(DUCTS_CRITERIA_CELLS).find((declared) =>
-        ["criteria", ...declared.layer].length === request.path.length &&
-        ["criteria", ...declared.layer].every((key, index) => key === request.path[index]))
-    : undefined;
-  if (!cell || (request.value !== null && !cell.value.safeParse(request.value).success))
+  if (request.owner !== "ducts" || !ductsCellAccepts(request.path, request.value))
     return { ok: false, status: 422, message: `No declared setting accepts ${request.owner} ${request.path.join(".")} with that value.` };
   const by = context.writer ?? userInfo().username;
   const at = (context.now?.() ?? new Date()).toISOString();

@@ -8,6 +8,7 @@ import {
   ductsPricingData,
   ductsDesign,
   stagedDucts,
+  ductParameterSlots,
 } from "@pe/agent-contracts";
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
@@ -33,7 +34,7 @@ export const ductsRoster = read("ducts.roster", {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
-        slots: staged.parameters,
+        slots: ductParameterSlots(saved.settings),
         labelParameter: staged.labelParameter ?? undefined,
         selector: { kind: "roster" },
       },
@@ -54,7 +55,7 @@ const systems = read("ducts.systems", {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
-        slots: staged.parameters,
+        slots: ductParameterSlots(saved.settings),
         labelParameter: staged.labelParameter ?? undefined,
         selector: { kind: "systems", systemIds },
       },
@@ -177,6 +178,7 @@ export const ductsPricing = read("ducts.pricing", {
                 toGrids(tables.body),
                 catalog.tables,
                 ductsDesign(layers.ducts, layers.fans),
+                layers.settings,
               ),
             ),
           );

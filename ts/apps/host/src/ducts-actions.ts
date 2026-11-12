@@ -7,7 +7,7 @@ import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
 import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { ductsDesign, ductsFirmSchema, stagedDucts, subjectOf, workHandleSchema } from "@pe/agent-contracts";
+import { ductsDesign, ductsFirmSchema, ductParameterSlots, stagedDucts, subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { Effect } from "effect";
@@ -218,7 +218,8 @@ export function ductsExecutors(
         const pointer = (await runPods(deps, bridge.list))
           .flatMap((session) => session.state?.openDocuments ?? [])
           .find((open) => open.openId === target.openId)?.projectHome;
-        const firm = firmLayer(resolveFirm(await runPods(deps, deps.files!.firm("ducts")), ductsFirmSchema, {}), readSettingTiers("ducts", pointer));
+        const settings = readSettingTiers("ducts", pointer);
+        const firm = firmLayer(resolveFirm(await runPods(deps, deps.files!.firm("ducts")), ductsFirmSchema, {}), settings);
         const criteria = resolveCriteria(workLayer(design), null, firm);
         const nativeRead = deps.nativeRead;
         if (!nativeRead) throw refused("Ducts preparation requires the root native Read capability", "read.unavailable",
@@ -241,7 +242,7 @@ export function ductsExecutors(
                 autoJoinGapIn: criteria.autoJoinGapIn.value,
                 candidateBoxIn: criteria.healBoxIn.value,
               } : selector,
-              slots: stagedDucts(doc, fans).parameters,
+              slots: ductParameterSlots(settings),
             });
         let snapshot = await {
           "assign-fan": () => {
@@ -275,7 +276,7 @@ export function ductsExecutors(
             // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
             const request = applyRequest(
               snapshot,
-              price(snapshot, grids, doc, fans, catalogs.tables),
+              price(snapshot, grids, doc, fans, catalogs.tables, settings),
               appliedAt ?? "",
               intent?.groups ?? [],
             );
