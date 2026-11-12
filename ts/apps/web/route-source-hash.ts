@@ -43,7 +43,12 @@ export interface BuiltinClosureOptions {
  * Module IDs and asset loads come from the resolver, never import-text matching.
  * No builtin runtime pinning: dependencies resolve normally and their content is included.
  */
-export async function buildBuiltinClosure(options: BuiltinClosureOptions) {
+export async function buildBuiltinClosure(
+  options: BuiltinClosureOptions,
+  /** One producer run hashes and parses a shared module once: 18 builtins share about 2,500 modules,
+   * and each build names every module twice (load, then generateBundle). Never kept across runs. */
+  seen = { hashed: new Map<string, string>(), closed: new Map<string, string>() },
+) {
   for (const path of [options.root, options.identityRoot, ...options.variants.map((v) => v.entry)])
     if (!isAbsolute(path)) throw Error(`Closure requires an absolute path: ${path}`);
   if (
@@ -58,11 +63,12 @@ export async function buildBuiltinClosure(options: BuiltinClosureOptions) {
     return id;
   };
   const member = (path: string): SourceMember => {
-    const bytes = readFileSync(path);
-    return {
-      id: idFor(path),
-      sha256: textFile.test(path) ? routeSourceHash(bytes) : exactHash(bytes),
-    };
+    let sha256 = seen.hashed.get(path);
+    if (!sha256) {
+      const bytes = readFileSync(path);
+      seen.hashed.set(path, (sha256 = textFile.test(path) ? routeSourceHash(bytes) : exactHash(bytes)));
+    }
+    return { id: idFor(path), sha256 };
   };
   const modules = new Map<string, SourceMember>();
   const externals = new Map(
@@ -84,6 +90,7 @@ export async function buildBuiltinClosure(options: BuiltinClosureOptions) {
       },
       transform(code, id) {
         // Computed import() and @vite-ignore cannot establish a closed source graph.
+        if (seen.closed.get(id) === code) return;
         const ast = ts.createSourceFile(id, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
         const visit = (node: ts.Node): void => {
           if (
@@ -97,6 +104,7 @@ export async function buildBuiltinClosure(options: BuiltinClosureOptions) {
           ts.forEachChild(node, visit);
         };
         visit(ast);
+        seen.closed.set(id, code);
       },
       generateBundle() {
         for (const id of this.getModuleIds()) {
@@ -159,10 +167,11 @@ export async function buildBuiltinClosure(options: BuiltinClosureOptions) {
 /** Each builtin hashes its own declaration and executable closure. */
 export async function buildBuiltinClosures(inventory: readonly BuiltinClosureOptions[]) {
   const closures = new Map<string, Awaited<ReturnType<typeof buildBuiltinClosure>>>();
+  const seen = { hashed: new Map<string, string>(), closed: new Map<string, string>() };
   for (const options of inventory) {
     const data = RouteGraphJson.parse(options.data);
     if (closures.has(data.key)) throw Error("Duplicate builtin route");
-    closures.set(data.key, await buildBuiltinClosure(options));
+    closures.set(data.key, await buildBuiltinClosure(options, seen));
   }
   return closures;
 }
