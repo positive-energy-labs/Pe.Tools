@@ -12,6 +12,37 @@ namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class PodRunInputTests {
+    private string _home = null!;
+    private ScriptPodPreparationService _pods = null!;
+    private readonly List<string> _podIds = [];
+
+    [SetUp]
+    public void SetUp() {
+        this._podIds.Clear();
+        this._home = Path.Combine(Path.GetTempPath(), "pe-input-home-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(this._home, "Pods"));
+        // Admit only this test's home, never the person's host or its authored Pods.
+        this._pods = new ScriptPodPreparationService((key, request) => {
+            if (key != "pod.capture") throw new InvalidOperationException($"Unexpected admission: {key}");
+            var id = JObject.FromObject(request).Value<string>("pod")!;
+            var folder = Path.Combine(this._home, "Pods", id);
+            var bundle = new ScriptPodSourceBundle(Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
+                .Select(path => new ScriptPodSourceFile(Path.GetRelativePath(folder, path).Replace('\\', '/'),
+                    Convert.ToBase64String(File.ReadAllBytes(path)))).ToList());
+            return JObject.FromObject(new { id, folder = id, directory = folder, contributions = Array.Empty<object>(), memberBundle = bundle, sourceBundle = bundle });
+        });
+    }
+
+    [TearDown]
+    public void TearDown() {
+        try {
+            foreach (var id in this._podIds) {
+                var runs = Path.Combine(ProductRuntimeLayout.Current.State.RunsPath, id);
+                if (Directory.Exists(runs)) Directory.Delete(runs, true);
+                else if (File.Exists(runs)) File.Delete(runs);
+            }
+        } finally { if (Directory.Exists(this._home)) Directory.Delete(this._home, true); }
+    }
     private const string ApplySpec = "{\r\n  \"patch\": { \"parameters\": { \"Proof\": { \"dataType\": \"Text\", \"value\": \"kept\" } } }\r\n}";
 
     [Test]
@@ -23,7 +54,7 @@ public sealed class PodRunInputTests {
             var familyId = document.OwnerFamily.Id.Value();
             var plan = FamilyFoundryBridgeOps.PlanFamilies(applySpec, document).Families.Single();
             var result = FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", applySpec, source,
-                new Dictionary<long, string> { [familyId] = plan.PlanHash }, document, null, plan: "plan-action-proof");
+                new Dictionary<long, string> { [familyId] = plan.PlanHash }, document, null, plan: "plan-action-proof", pods: this._pods);
             var proof = document.FamilyManager.get_Parameter("Proof");
             Assert.Multiple(() => {
                 Assert.That(result.Receipts.Single().Success, Is.True);
@@ -47,13 +78,13 @@ public sealed class PodRunInputTests {
             var familyId = document.OwnerFamily.Id.Value();
             var baseline = FamilyState(document);
             var failed = FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", applySpec, source,
-                new Dictionary<long, string> { [familyId] = "wrong-plan-hash" }, document, null);
+                new Dictionary<long, string> { [familyId] = "wrong-plan-hash" }, document, null, pods: this._pods);
             AssertRun(failed.ReceiptPath!, "Failed", applySpec, "failure");
             AssertUnchanged(document, baseline);
             using var cancelled = new CancellationTokenSource();
             cancelled.Cancel();
             var cancelledResult = FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", applySpec, source,
-                new Dictionary<long, string> { [familyId] = "not-read-before-cancellation" }, document, null, cancellationToken: cancelled.Token);
+                new Dictionary<long, string> { [familyId] = "not-read-before-cancellation" }, document, null, cancellationToken: cancelled.Token, pods: this._pods);
             Assert.That(cancelledResult.Receipts, Is.Empty);
             AssertRun(cancelledResult.ReceiptPath!, "Cancelled", applySpec, "cancelled");
             AssertUnchanged(document, baseline);
@@ -61,7 +92,7 @@ public sealed class PodRunInputTests {
             Directory.CreateDirectory(ProductRuntimeLayout.Current.State.RunsPath);
             File.WriteAllText(blockedRuns, "block run directory creation");
             Assert.Throws<IOException>(() => FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", applySpec, blockedSource,
-                new Dictionary<long, string> { [familyId] = validPlanHash }, document, null));
+                new Dictionary<long, string> { [familyId] = validPlanHash }, document, null, pods: this._pods));
             AssertUnchanged(document, baseline);
         } finally { RevitFamilyFixtureHarness.CloseDocument(document); DeletePod(pod); DeletePod(blockedPod); File.Delete(blockedRuns); }
     }
@@ -84,7 +115,7 @@ public sealed class PodRunInputTests {
             var familyId = document.OwnerFamily.Id.Value();
             var plan = FamilyFoundryBridgeOps.PlanFamilies(applySpec, document).Families.Single();
             var result = FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", applySpec, source,
-                new Dictionary<long, string> { [familyId] = plan.PlanHash }, document, null);
+                new Dictionary<long, string> { [familyId] = plan.PlanHash }, document, null, pods: this._pods);
             var run = Path.GetDirectoryName(result.ReceiptPath!)!;
             Assert.Multiple(() => {
                 Assert.That(result.Receipts.Single().Success, Is.True);
@@ -109,7 +140,7 @@ public sealed class PodRunInputTests {
         var (pod, source, composed) = NewPod(spec);
         Document? reopened = null;
         try {
-            var result = FamilyFoundryBridgeOps.BuildWithReceipt(ui.Application, new FamilyBuildRequest(composed, source));
+            var result = FamilyFoundryBridgeOps.BuildWithReceipt(ui.Application, new FamilyBuildRequest(composed, source), this._pods);
             reopened = ui.Application.OpenDocumentFile(result.OutputPath);
             var proof = reopened.FamilyManager.get_Parameter("Proof");
             Assert.Multiple(() => {
@@ -128,7 +159,7 @@ public sealed class PodRunInputTests {
         Document? document = null;
         try {
             document = RevitFamilyFixtureHarness.CreateProjectDocument(ui.Application);
-            var applied = ScheduleBridgeOps.ApplySpec(document, composed, source);
+            var applied = ScheduleBridgeOps.ApplySpec(document, composed, source, this._pods);
             var schedule = document.GetElement(new ElementId(applied.Data.ScheduleId)) as ViewSchedule;
             Assert.Multiple(() => {
                 Assert.That(schedule, Is.Not.Null);
@@ -182,11 +213,11 @@ public sealed class PodRunInputTests {
     ///     A pod whose member presets its first section from a dependency, so the run must keep the root and the
     ///     dependency bytes. The composed JSON is the effective input every caller passes.
     /// </summary>
-    private static (string Folder, PodComposedSource Source, string Composed) NewPod(string spec) {
-        var pods = new ScriptPodPreparationService();
+    private (string Folder, PodComposedSource Source, string Composed) NewPod(string spec) {
+        var pods = this._pods;
         var id = "input-proof-" + Guid.NewGuid().ToString("N");
-        // A new pod goes to the user home; the host then admits it and names its folder back.
-        var folder = ScriptingWorkspaceLocations.ResolveWorkspaceRoot(id);
+        this._podIds.Add(id);
+        var folder = Path.Combine(this._home, "Pods", id);
         Directory.CreateDirectory(Path.Combine(folder, "settings"));
         File.WriteAllText(Path.Combine(folder, "pod.json"), $$"""{"schemaVersion":2,"id":"{{id}}","name":"Input proof","version":"1"}""");
         var member = JObject.Parse(spec);
@@ -195,7 +226,7 @@ public sealed class PodRunInputTests {
         member.AddFirst(new JProperty("$preset", "@local/base.json"));
         File.WriteAllText(Path.Combine(folder, "settings", "base.json"), new JObject(first) + "  \r\n", new UTF8Encoding(true));
         File.WriteAllText(Path.Combine(folder, "settings", "input.json"), member.ToString(), new UTF8Encoding(false));
-        // The pod sits in the real user home, so a host that does not answer must not leave it behind.
+        // Setup and composition failures are also covered by the temp-home teardown.
         try {
             var composition = pods.Compose(id, "settings/input.json", null);
             Assert.That(composition.Composed, Is.Not.Null, string.Join("; ", composition.Diagnostics.Select(d => d.Message)));
@@ -206,12 +237,12 @@ public sealed class PodRunInputTests {
         }
     }
 
-    private static void AssertRun(string receiptPath, string outcome, string exact, string sample, string? plan = null) {
+    private void AssertRun(string receiptPath, string outcome, string exact, string sample, string? plan = null) {
         var run = Path.GetDirectoryName(receiptPath)!;
         var receipt = JObject.Parse(File.ReadAllText(receiptPath));
         var metadata = JObject.Parse(File.ReadAllText(Path.Combine(run, "input.json")));
         var podId = receipt["podId"]!.Value<string>()!;
-        var pod = ScriptingWorkspaceLocations.ResolveWorkspaceRoot(podId);
+        var pod = Path.Combine(this._home, "Pods", podId);
         Assert.Multiple(() => {
             // The run is machine state, keyed on the pod id; the pod itself holds no output.
             Assert.That(Path.GetDirectoryName(run), Is.EqualTo(Path.Combine(ProductRuntimeLayout.Current.State.RunsPath, podId)));

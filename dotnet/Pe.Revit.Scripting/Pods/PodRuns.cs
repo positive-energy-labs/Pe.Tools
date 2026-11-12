@@ -47,10 +47,10 @@ public static class PodRuns {
     ///     The native run edge: validates the captured composition, stores the run under the root's pod id, and
     ///     writes the run input before any effect. A failure here throws before the caller acts.
     /// </summary>
-    public static (string Run, List<string> Inputs) StartComposedRun(PodComposedSource source, object metadata, string effectiveInput, string? planActionId = null) {
+    public static (string Run, List<string> Inputs) StartComposedRun(PodComposedSource source, object metadata, string effectiveInput, string? planActionId = null, ScriptPodPreparationService? pods = null) {
         var files = ComposedInput(source, effectiveInput);
         // The run folder no longer needs the pod's folder, but a root pod the host cannot resolve still refuses here.
-        if (source.Root.Id is { } pod) _ = new ScriptPodPreparationService().ResolveFolder(pod);
+        if (source.Root.Id is { } pod) _ = (pods ?? new ScriptPodPreparationService()).ResolveFolder(pod);
         string run;
         try { run = NewRunFolder(source.Root.Id); }
         catch (ArgumentException exception) { throw new InvalidDataException(exception.Message, exception); }

@@ -68,7 +68,7 @@ internal static class FamilyFoundryBridgeOps {
     ///     The run folder is the output folder — a build never writes outside its own fresh run, so there
     ///     is nothing to overwrite and no path to validate.
     /// </summary>
-    internal static FamilyBuildData BuildWithReceipt(Autodesk.Revit.ApplicationServices.Application application, FamilyBuildRequest request) {
+    internal static FamilyBuildData BuildWithReceipt(Autodesk.Revit.ApplicationServices.Application application, FamilyBuildRequest request, ScriptPodPreparationService? pods = null) {
         var parsed = FamilyModelJson.Parse(request.SpecJson);
         if (parsed.Value == null || parsed.Diagnostics.Count != 0)
             throw BridgeOperationExceptions.BadRequest(string.Join(Environment.NewLine, parsed.Diagnostics.Select(item => $"{item.Path}: {item.Message}")));
@@ -76,7 +76,7 @@ internal static class FamilyFoundryBridgeOps {
             operation = "family.build",
             target = new { kind = "new-family-document", process = EngineEdge.ProcessEvidence(), revitVersion = application.VersionNumber },
             options = new { request.ModelDirectory }
-        }, request.SpecJson);
+        }, request.SpecJson, pods: pods);
         var outputPath = Path.Combine(run, $"{FileName(parsed.Value.Family.Name)}.rfa");
         var source = request.Source.Root;
         var handled = new List<(bool IsError, string Message)>();
@@ -134,7 +134,7 @@ internal static class FamilyFoundryBridgeOps {
     /// <summary>The one apply edge: bridge ops and palettes both land here, and both leave a run in the source pod.</summary>
     internal static FamilyFoundryApplyData ApplyWithReceipt(string operation, string specJson, PodComposedSource composed,
         IReadOnlyDictionary<long, string> expectedPlanHashes, Document document, ExecutionOptions? executionOptions, LoadAndSaveOptions? loadAndSave = null,
-        IReadOnlyDictionary<long, string>? familyNames = null, string? plan = null, CancellationToken cancellationToken = default) {
+        IReadOnlyDictionary<long, string>? familyNames = null, string? plan = null, CancellationToken cancellationToken = default, ScriptPodPreparationService? pods = null) {
         EngineEdge.RequireReachableCentral(document);
         var (run, inputOutputs) = EngineEdge.StartRun(composed, new {
             operation,
@@ -144,7 +144,7 @@ internal static class FamilyFoundryBridgeOps {
             expectedPlanHashes,
             familyNames,
             loadAndSave
-        }, specJson, plan);
+        }, specJson, plan, pods);
         var source = composed.Root;
         var handled = new List<(bool IsError, string Message)>();
         var artifacts = Path.Combine(ProductRuntimeLayout.Current.ScratchPath, "Pe.Tools", "family-apply", Guid.NewGuid().ToString("N"));
