@@ -234,11 +234,11 @@ function storedRow(notice: StoredNotice, now: number): NoticeDraft | null {
       verb: "saved",
       what: notice.place,
       where: notice.path,
-      // The file, writer, action receipt id and prior bytes hash are in the reason.
+      // The reason carries the writer and prior bytes; detail links the saved action.
       says: notice.reason,
       at: notice.at,
       url: routeAddress("settings").link(),
-      detail: notice.reason,
+      detail: notice.reason.match(/Receipt [^.]+\./)?.[0],
     };
   if (notice.place === FIRM_HOME_PLACE)
     return {
