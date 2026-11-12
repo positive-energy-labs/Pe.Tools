@@ -1,5 +1,6 @@
 import { defineConfig } from "vite-plus";
 import { browserGuardianPlugin } from "@pe/browser/build";
+import { liteParseNativePlugin } from "@pe/mcps/build";
 import { dirname, join } from "node:path";
 import { receiptBuildDefines } from "./src/build-stamp.ts";
 import { prepareSourceClosures } from "./src/source-closures.ts";
@@ -106,6 +107,7 @@ export default defineConfig(({ mode }) => ({
     define: receiptBuildDefines("release"),
     plugins: [
       browserGuardianPlugin(join(import.meta.dirname, "dist-installed")),
+      liteParseNativePlugin(join(import.meta.dirname, "dist-installed")),
       {
         name: "preserve-node-socket-context",
         transform: {

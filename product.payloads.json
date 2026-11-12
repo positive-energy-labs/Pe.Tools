@@ -20,6 +20,8 @@
     "smokePaths": [
       "app/bin/host/Pe.Host.exe",
       "app/bin/host/tray/Pe.Host.Tray.exe",
+      "app/bin/host/liteparse.win32-x64-msvc.node",
+      "app/bin/host/pdfium.dll",
       "app/bin/host/web/client/index.html",
       "app/bin/host/pods/snowdon-ducts.zip",
       "app/bin/host/src/Pe.Tools.slnx",
