@@ -50,7 +50,7 @@ test("no firm home posts one notice that names where the host looked, and it dra
     const stored = readStoredNotices(notices);
     expect(stored).toHaveLength(1);
     const rows = noticeRows(
-      { threads: [], receipts: [], works: [], machine: null, stored },
+      { threads: [], receipts: [], works: [], machine: null, stored, held: [] },
       Date.parse(stored[0]!.at),
     );
     expect(rows).toHaveLength(1);
