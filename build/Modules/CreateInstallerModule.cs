@@ -185,6 +185,9 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             .ShouldNotBeEmpty("Failed to publish the shared runtime for installer packaging.");
         runtimePublishDirectory.GetFile(hostExecutableName).Exists
             .ShouldBeTrue("Failed to publish TS host for installer packaging.");
+        foreach (var native in new[] { "liteparse.win32-x64-msvc.node", "pdfium.dll" })
+            runtimePublishDirectory.GetFile(native).Exists
+                .ShouldBeTrue($"Installer runtime publish should include {native}: read_document loads it from beside the executable.");
         runtimePublishDirectory.GetFile("web/client/index.html").Exists
             .ShouldBeTrue("Installer runtime publish should include the staged web SPA.");
         runtimePublishDirectory.GetFile("pods/snowdon-ducts.zip").Exists
